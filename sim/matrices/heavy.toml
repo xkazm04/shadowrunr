@@ -1,0 +1,24 @@
+# Heavy tournament: the full calibration grid.
+# 5 tones x 3 core tiers x 2 segments x 3 audience sizes x 5 seeds = 450 runs of 20 minutes.
+#
+# The five tone variants of characters/malakor/tones/. A run whose tone file is missing
+# fails on its own (error.json) and the rest of the tournament continues.
+# Resumable: a run with a verdict.json for the same instrument hash is skipped.
+id = "heavy"
+character = "malakor"
+duration_s = 1200
+tick_s = 5
+core_effort = "low"
+concurrency = 4
+judge_tiers = ["sonnet", "opus"]
+featured_every_ticks = 1
+max_featured = 8
+population = "growing_channel"
+populations = { "3" = "small_new_channel", "30" = "growing_channel", "300" = "raid_moment" }
+
+[axes]
+tones = ["theatrical", "deadpan-bureaucrat", "gleeful-chaos", "unhinged-roastmaster", "weary-middle-manager"]
+core_tiers = ["haiku", "sonnet", "opus"]
+segments = ["SEG-01", "SEG-02A"]
+audience_sizes = [3, 30, 300]
+seeds = [1, 2, 3, 4, 5]

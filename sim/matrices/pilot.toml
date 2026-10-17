@@ -1,0 +1,23 @@
+# Pilot tournament: small and cheap, to prove the harness end to end before a heavy run.
+# 1 tone x 2 core tiers x 1 segment x 2 audience sizes x 1 seed = 4 runs of 10 minutes.
+#
+# Run (after WP5 wires the CLI): shadowrunr sim tournament sim/matrices/pilot.toml
+id = "pilot"
+character = "malakor"
+duration_s = 600
+tick_s = 5
+core_effort = "low"
+concurrency = 2
+# The first tier that differs from a run's core tier judges it.
+judge_tiers = ["sonnet", "opus"]
+featured_every_ticks = 1
+max_featured = 8
+population = "growing_channel"
+populations = { "3" = "small_new_channel", "30" = "growing_channel", "300" = "raid_moment" }
+
+[axes]
+tones = ["theatrical"]
+core_tiers = ["haiku", "sonnet"]
+segments = ["SEG-01"]
+audience_sizes = [3, 30]
+seeds = [1]
