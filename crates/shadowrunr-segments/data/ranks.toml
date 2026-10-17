@@ -1,0 +1,55 @@
+# Rank ladder and vote weights for Malakor's minions.
+#
+# ASSUMPTIONS, NOT MEASURED. Every threshold and weight in this file is a starting proposal
+# from the WP3 brief. None is calibrated against real audience data yet; recalibrate after the
+# first Season 0 streams.
+#
+# Semantics (also assumptions):
+# - `tier` is the viewer's CURRENT subscription tier (1, 2 or 3); non-subscribers have none.
+# - `months` is the viewer's cumulative subscribed months, counted at the current tier.
+# - `gifted` is the number of subscriptions the viewer has gifted to others.
+# - A viewer holds the HIGHEST rank whose `min_gifted` or any `tiers` entry matches.
+# - The first rank (thrall) is the base rank and must have no qualifying conditions.
+# - Weights grow sub-linearly so a Dread Council vote never drowns out the room.
+#
+# Wire names (`rank`) are fixed by docs/spec/contract.md; display titles live in the
+# character package (characters/<id>/character.toml).
+
+# Lowest rank allowed to use `!propose` (configurable).
+propose_min_rank = "warlock"
+
+[[ranks]]
+rank = "thrall"
+weight = 1.0
+
+[[ranks]]
+rank = "acolyte"
+weight = 1.4
+tiers = [{ tier = 1, min_months = 0 }]
+
+[[ranks]]
+rank = "cultist"
+weight = 1.7
+tiers = [{ tier = 1, min_months = 3 }, { tier = 2, min_months = 0 }]
+
+[[ranks]]
+rank = "warlock"
+weight = 2.0
+min_gifted = 5
+tiers = [
+    { tier = 1, min_months = 12 },
+    { tier = 2, min_months = 6 },
+    { tier = 3, min_months = 0 },
+]
+
+[[ranks]]
+rank = "lich"
+weight = 2.2
+min_gifted = 20
+tiers = [{ tier = 2, min_months = 12 }, { tier = 3, min_months = 6 }]
+
+[[ranks]]
+rank = "dread_council"
+weight = 2.4
+min_gifted = 50
+tiers = [{ tier = 3, min_months = 12 }]

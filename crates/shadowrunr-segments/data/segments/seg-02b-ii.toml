@@ -1,0 +1,24 @@
+# SEG-02B-II Dependency Doctrine: DESCOPED. The runtime refuses to start it.
+# Design notes are kept so the segment can be revisited (digest section 5).
+
+id = "SEG-02B-II"
+title = "Dependency Doctrine"
+status = "descoped"
+initial = "descoped"
+states = ["descoped"]
+allowed_ops = []
+commands = []
+switch_to = []
+rules_prompt = ""
+
+design_notes = """
+Claude Code builds PhylacteryGuard (an anti-scam detector fed by SEG-02A patterns) and \
+LichReader on stream. Chat polls pick the next feature; `!issue` files cases; credits go to \
+CHANGELOG.md. The agent pushes only to staging/ep-XX and the owner signs each release with a \
+hardware key. Supply-chain hygiene: osv-scanner, `--ignore-scripts`, a PreToolUse npm block. \
+Table: dependency_doctrine_releases (FK linked_fraud_case_id). To revive: an `!issue` command, \
+a coding worker with a repo-scoped tool allowlist, and the release cross-references stripped \
+when descoping.
+"""
+
+[clock]

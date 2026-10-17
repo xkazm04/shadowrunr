@@ -1,23 +1,49 @@
-//! Segments as data. WP3 owns this crate; the skeleton fixes the surface sim and daemon call.
+//! Segments as data: the rank ladder and vote weights, the chat command parser, table-driven
+//! segments (SEG-01 Improvised Room, SEG-02A Hexmap Investigation, descoped SEG-02B-I/II),
+//! the deterministic [`SegmentRuntime`], and the segment portfolio lifecycle.
+//!
+//! Data files live under `data/` and are compiled in; ranks, the allowlist and cases can also
+//! be loaded from disk at runtime.
 
-use shadowrunr_types::{ChatMsg, Command, Op, Rank, SegmentContext, SegmentId, StreamEvent, TsMs};
+pub mod case;
+pub mod command;
+pub mod evidence;
+pub mod portfolio;
+pub mod ranks;
+pub mod runtime;
+pub mod table;
 
-/// Rank from subscription facts (weighted ladder). Non-subscribers are `Thrall`.
+use shadowrunr_types::{Rank, SegmentId};
+
+pub use case::{demo_case, load_case, parse_case};
+pub use command::{normalize_hex, parse_command, parse_grade};
+pub use evidence::{requires_alleged, SourceAllowlist};
+pub use portfolio::{next_status, PortfolioEntry};
+pub use ranks::RankTable;
+pub use runtime::{Lead, Proposal, SegmentConfig, SegmentRuntime};
+pub use table::{segment_name, segment_table, HandoverRule, SegmentTable};
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum SegmentError {
+    #[error("segment {} ({title}) is descoped and cannot be started", segment_name(*segment))]
+    Descoped { segment: SegmentId, title: String },
+    #[error("data file {file}: {detail}")]
+    Data { file: String, detail: String },
+    #[error("config: {detail}")]
+    Config { detail: String },
+    #[error("io {path}: {detail}")]
+    Io { path: String, detail: String },
+}
+
+/// Rank from subscription facts, using the built-in ladder (`data/ranks.toml`).
+/// Non-subscribers are `Thrall`. Use [`RankTable::rank_for`] for a table loaded at runtime.
 pub fn rank_for(sub_tier: Option<u8>, months: u32, gifted: u32) -> Rank {
-    let _ = (sub_tier, months, gifted);
-    todo!("WP3: rank ladder")
+    RankTable::builtin().rank_for(sub_tier, months, gifted)
 }
 
-/// Vote weight for a rank; grows sub-linearly. `Thrall` = 1.0.
+/// Vote weight for a rank from the built-in ladder; grows sub-linearly. `Thrall` = 1.0.
 pub fn vote_weight(rank: Rank) -> f64 {
-    let _ = rank;
-    todo!("WP3: vote weights")
-}
-
-/// Parse `!summon`, `!hint`, `!grade`, `!propose`, `!vote` from chat text.
-pub fn parse_command(text: &str) -> Option<Command> {
-    let _ = text;
-    todo!("WP3: command parser")
+    RankTable::builtin().vote_weight(rank)
 }
 
 /// Inputs to the Segment Engagement Score; each is already z-normalised by the caller.
@@ -37,35 +63,26 @@ pub fn ses(i: SesInputs) -> f64 {
         + 0.20 * i.clip_48h_watch_pct_z
 }
 
-pub struct SegmentRuntime {
-    _segment: SegmentId,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl SegmentRuntime {
-    pub fn new(segment: SegmentId) -> Self {
-        Self { _segment: segment }
+    #[test]
+    fn free_functions_use_builtin_ladder() {
+        assert_eq!(rank_for(None, 0, 0), Rank::Thrall);
+        assert_eq!(rank_for(Some(3), 12, 0), Rank::DreadCouncil);
+        assert_eq!(vote_weight(Rank::Thrall), 1.0);
+        assert_eq!(vote_weight(Rank::DreadCouncil), 2.4);
     }
 
-    pub fn context(&self, ccv: u32, elapsed_s: u32) -> SegmentContext {
-        let _ = (ccv, elapsed_s);
-        todo!("WP3: segment context")
-    }
-
-    /// Commands and votes from new chat; returns Vote/Moderation events.
-    pub fn ingest_chat(&mut self, now_ms: TsMs, msgs: &[ChatMsg]) -> Vec<StreamEvent> {
-        let _ = (now_ms, msgs);
-        todo!("WP3: ingest chat")
-    }
-
-    /// Validate and apply the brain's ops (reject ops not allowed in this segment).
-    pub fn apply_ops(&mut self, now_ms: TsMs, ops: &[Op]) -> Vec<StreamEvent> {
-        let _ = (now_ms, ops);
-        todo!("WP3: apply ops")
-    }
-
-    /// Clock: poll timeouts, handover rule (SEG-01 -> SEG-02A).
-    pub fn tick(&mut self, now_ms: TsMs, ccv: u32) -> Vec<StreamEvent> {
-        let _ = (now_ms, ccv);
-        todo!("WP3: segment clock")
+    #[test]
+    fn ses_weights() {
+        let s = ses(SesInputs {
+            chat_msgs_min_z: 1.0,
+            poll_vote_rate_z: 1.0,
+            ccv_retention_delta_z: 1.0,
+            clip_48h_watch_pct_z: 1.0,
+        });
+        assert!((s - 1.0).abs() < 1e-12);
     }
 }

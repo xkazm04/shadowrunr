@@ -1,0 +1,23 @@
+# SEG-02B-I Cartography Legion: DESCOPED. The runtime refuses to start it.
+# Design notes are kept so the segment can be revisited (digest section 5).
+
+id = "SEG-02B-I"
+title = "Cartography Legion"
+status = "descoped"
+initial = "descoped"
+states = ["descoped"]
+allowed_ops = []
+commands = []
+switch_to = []
+rules_prompt = ""
+
+design_notes = """
+Viewers map real HOT Tasking Manager tiles in their own OSM accounts (`!enlist <osm_handle>`), \
+under the hashtag #OverlordCartographyLegion and an OSM Organised Editing Guidelines wiki page. \
+Points only when a changeset is VALIDATED (buildings_added_count * 10). The runtime would poll \
+/api/0.6/changesets every 30 s. The agent never edits OSM itself. Table: \
+osm_legion_contributions. To revive: a new `!enlist` command, an OSM poller, and the season \
+goals and minion_dossier.osm_tiles_validated cross-references that were stripped when descoping.
+"""
+
+[clock]

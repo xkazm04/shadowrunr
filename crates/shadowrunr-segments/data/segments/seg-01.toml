@@ -1,0 +1,134 @@
+# SEG-01 Improvised Room: the cold-start opener (digest section 3).
+# Interpreted by `shadowrunr_segments::table`; no segment-specific code exists.
+
+id = "SEG-01"
+title = "Improvised Room"
+status = "pilot"
+initial = "opening"
+states = ["opening", "foil_vote", "foil_live", "crowd_game", "handover_pending"]
+allowed_ops = [
+    "highlight",
+    "start_poll",
+    "close_poll",
+    "summon_foil",
+    "dismiss_foil",
+    "show_card",
+    "mark_moment",
+    "switch_segment",
+    "sign_off",
+]
+commands = ["summon", "propose", "vote"]
+switch_to = ["SEG-02A"]
+
+rules_prompt = """
+SEGMENT SEG-01: THE IMPROVISED ROOM.
+You open the show and warm the room. Greet every new minion by name and induct them into the \
+Realm. When chat goes quiet, fire a fresh premise; never let the room die.
+A rotating foil may join you: an original parody archetype, never a real person. Minions \
+summon one with `!summon <foil>` and the weighted vote decides. A foil speaks at most one \
+sentence per turn; you always have the last word.
+Run crowd games with polls, one poll at a time. Minions of Warlock rank and above may \
+`!propose` premises; lower ranks may vote with `!vote <option>`.
+When the handover comes, the foil dares you to prove one real case and the show moves to the \
+Hexmap Investigation.
+"""
+
+# Clock rules. Every number is an ASSUMPTION (digest section 3, "Handover"; A/B pending).
+[clock]
+foil_vote_secs = 60
+poll_min_secs = 10
+poll_max_secs = 600
+max_poll_options = 6
+
+[clock.handover]
+to = "SEG-02A"
+# Handover when ccv >= ccv_min has held for sustain_s seconds without a dip, OR when the
+# segment has run for max_elapsed_s seconds, whichever comes first.
+ccv_min = 15
+sustain_s = 180
+max_elapsed_s = 1500
+# After the handover is announced the brain should emit `switch_segment`; if it has not after
+# grace_s seconds, the clock completes the switch itself.
+grace_s = 60
+
+# Transitions: (from, on[, guard]) -> to. "*" matches any state. First match wins; no match
+# leaves the state unchanged. Starting triggers (foil_vote_opened, poll_opened, foil_summoned,
+# foil_dismissed, hex_revealed) are refused in states with no matching row.
+[[transitions]]
+from = "opening"
+on = "foil_vote_opened"
+to = "foil_vote"
+
+[[transitions]]
+from = "foil_live"
+on = "foil_vote_opened"
+to = "foil_vote"
+
+[[transitions]]
+from = "foil_vote"
+on = "foil_vote_closed"
+guard = "foil_active"
+to = "foil_live"
+
+[[transitions]]
+from = "foil_vote"
+on = "foil_vote_closed"
+guard = "no_foil"
+to = "opening"
+
+[[transitions]]
+from = "opening"
+on = "foil_summoned"
+to = "foil_live"
+
+[[transitions]]
+from = "foil_live"
+on = "foil_summoned"
+to = "foil_live"
+
+[[transitions]]
+from = "crowd_game"
+on = "foil_summoned"
+to = "crowd_game"
+
+[[transitions]]
+from = "foil_live"
+on = "foil_dismissed"
+to = "opening"
+
+[[transitions]]
+from = "crowd_game"
+on = "foil_dismissed"
+to = "crowd_game"
+
+[[transitions]]
+from = "handover_pending"
+on = "foil_dismissed"
+to = "handover_pending"
+
+[[transitions]]
+from = "opening"
+on = "poll_opened"
+to = "crowd_game"
+
+[[transitions]]
+from = "foil_live"
+on = "poll_opened"
+to = "crowd_game"
+
+[[transitions]]
+from = "crowd_game"
+on = "poll_closed"
+guard = "foil_active"
+to = "foil_live"
+
+[[transitions]]
+from = "crowd_game"
+on = "poll_closed"
+guard = "no_foil"
+to = "opening"
+
+[[transitions]]
+from = "*"
+on = "handover_due"
+to = "handover_pending"

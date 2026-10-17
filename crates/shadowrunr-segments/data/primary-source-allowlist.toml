@@ -1,0 +1,36 @@
+# Primary-source allowlist for the SEG-02A DOC grade.
+#
+# STARTER LIST, NOT EXHAUSTIVE. A `reveal_hex` with grade DOC is accepted only when the hex has
+# at least one source URL whose host is one of these domains or a subdomain of one. Everything
+# else is at most REP and must be spoken as "alleged".
+#
+# Scope: regulators and court systems (plus court-record archives) only. Press, registries,
+# archives such as the Wayback Machine, and company sites are deliberately absent. Adding a
+# domain is strictly owner-gated (digest section 2, "Approvals").
+
+domains = [
+    # United States: regulators and enforcement
+    "sec.gov",
+    "ftc.gov",
+    "justice.gov",
+    "cftc.gov",
+    "consumerfinance.gov",
+    "fincen.gov",
+    "dfpi.ca.gov",
+    # United States: courts and court records
+    "uscourts.gov",
+    "supremecourt.gov",
+    "courtlistener.com",
+    # United Kingdom
+    "fca.org.uk",
+    "sfo.gov.uk",
+    # European Union and Australia
+    "esma.europa.eu",
+    "asic.gov.au",
+]
+
+# Reserved example domains (RFC 2606) that count as primary ONLY for cases marked
+# `fictional: true`, so the fictional demo case can exercise DOC reveals. A real case
+# (`fictional: false`) never accepts these.
+[fictional]
+domains = ["records.example"]
