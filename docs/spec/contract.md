@@ -154,3 +154,48 @@ merged.
 
 The core-thread entry is a starting point; the tournament recalibrates it. **The judge never
 runs on the same tier as the core thread it judges.**
+
+## Daemon protocol (`shadowrunr daemon --port 7717`, bound to 127.0.0.1 only)
+
+- `GET /events`: WebSocket. The server pushes one `StreamEvent` JSON per message (a live sim
+  or a replay). Clients send `{"subscribe": "<run_id>|live", "speed": 1.0}` to choose the
+  source and the replay speed.
+- `POST /rpc`: JSON `{"method": "<name>", "params": {...}}` → `{"result": ...}` or
+  `{"error": {"code": "...", "message": "..."}}`.
+
+| method | params | result |
+|---|---|---|
+| `preflight.run` | `{}` | `HealthReport[]` (PF-01..PF-08; media checks report `amber` "not in media-less phase") |
+| `runs.list` | `{ "tournament_id"?: string }` | `[{ run_id, tournament_id, spec: SimRunSpec, has_verdict }]` |
+| `run.transcript` | `{ "run_id" }` | `StreamEvent[]` |
+| `run.verdict` | `{ "run_id" }` | `JudgeVerdict` |
+| `tournament.list` | `{}` | `[{ tournament_id, instrument_hash, runs, completed }]` |
+| `tournament.results` | `{ "tournament_id" }` | the `results.json` content |
+| `sim.start` | `{ "spec": SimRunSpec, "judge": bool }` | `{ run_id }`; events stream on `/events` |
+| `reconcile.run` | `{ "source": { "tournament_id" } \| { "run_ids": [] } }` | `{ report_id }` |
+| `reconcile.report` | `{ "report_id" }` | `ReconcileReport` (below) |
+| `plan.proposals` | `{ "report_id" }` | `PlanOption[]` |
+| `plan.choose` | `{ "report_id", "option_ids": [] }` | `NextStreamPlan` |
+| `directive.add` | `{ "kind": "prevent" \| "try", "text", "scope"?: SegmentId }` | `Directive` |
+| `directive.list` | `{}` | `Directive[]` |
+| `lord.chat` | `{ "report_id"?, "message" }` | `{ reply, directives_added: Directive[] }` |
+
+These Reconcile & Plan types live in the `shadowrunr-reconcile` crate and are serialised as
+listed:
+
+```
+ReconcileReport { report_id, created_ms, source, segments: [SegmentFinding], tone: [ToneFinding],
+                  ranks: RankEngagement, red_lines: [RuleIncident], latency: LatencyStats, summary }
+SegmentFinding  { segment, runs, ses_mean?, what_worked: [Evidence], what_failed: [Evidence] }
+ToneFinding     { tone_variant, quality_rates: {dimension: {rate, n, bound}}, rule_failures }
+Evidence        { claim, refs: ["<run_id>#<line>"] }
+PlanOption      { option_id, kind: "character_change"|"segment_change"|"topic"|"experiment",
+                  title, rationale, evidence: [Evidence], diff? }   // diff never touches constitution.md
+NextStreamPlan  { plan_id, created_ms, lord_dispatch, segments: [{segment, minutes, notes}],
+                  topics: [string], directives: [Directive] }
+Directive       { id, kind: "prevent"|"try", text, scope?, created_ms, active }
+```
+
+The `lord_dispatch` of the chosen plan is the text Malakor receives as "the Lord's dispatch"
+at the next stream start. Directives are stored in `<data>/directives.json` and fed to every
+stream until they are deactivated.
