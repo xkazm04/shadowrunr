@@ -13,3 +13,10 @@ serde_json.workspace = true
 thiserror.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
+toml = "0.8"
+regex = "1"
+rusqlite = { version = "0.38", features = ["bundled"] }
+tokio-util = "0.7"
+
+[dev-dependencies]
+tempfile = "3"
