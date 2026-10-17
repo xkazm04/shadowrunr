@@ -1,0 +1,11 @@
+# contest arenas and vault: large, belong to no commit
+.contest/
+# spark vault: not version-controlled
+.spark/
+target/
+node_modules/
+dist/
+# simulation output and local stores
+runs/
+*.db
+*.db-*
