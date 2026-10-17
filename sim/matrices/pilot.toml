@@ -9,7 +9,7 @@ tick_s = 5
 core_effort = "low"
 concurrency = 2
 # The first tier that differs from a run's core tier judges it.
-judge_tiers = ["sonnet", "opus"]
+judge_tiers = ["opus", "sonnet"]
 featured_every_ticks = 1
 max_featured = 8
 population = "growing_channel"

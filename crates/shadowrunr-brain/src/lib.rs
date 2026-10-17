@@ -438,6 +438,9 @@ impl Brain {
             }
             FleetVerdict::Continue => {}
         }
+        if !ctx.hexes.is_empty() {
+            self.hexes = ctx.hexes.iter().map(HexInfo::from).collect();
+        }
         self.ticks += 1;
         self.working.expire(now_ms);
         self.collect_jobs(now_ms, &mut ev)?;

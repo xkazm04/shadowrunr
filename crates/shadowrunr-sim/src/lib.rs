@@ -106,7 +106,7 @@ impl Default for SimOptions {
         Self {
             judge: true,
             judge_tier: None,
-            judge_tiers: vec![ModelTier::Sonnet, ModelTier::Opus],
+            judge_tiers: vec![ModelTier::Opus, ModelTier::Sonnet],
             tick_s: 5,
             characters_root: PathBuf::from("characters"),
             sim_root: PathBuf::from("sim"),

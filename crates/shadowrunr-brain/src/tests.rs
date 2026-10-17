@@ -187,6 +187,7 @@ fn ctx(allowed: &[&str]) -> SegmentContext {
         allowed_ops: allowed.iter().map(|s| s.to_string()).collect(),
         ccv: 30,
         elapsed_s: 120,
+        hexes: Vec::new(),
     }
 }
 

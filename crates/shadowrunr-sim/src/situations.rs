@@ -312,8 +312,13 @@ mod tests {
                 &featured,
                 5,
             );
-            assert_eq!(sched.len(), bank.situations.len());
-            for s in &bank.situations {
+            let applicable: Vec<_> = bank
+                .situations
+                .iter()
+                .filter(|s| s.applies_to(SegmentId::Seg01ImprovisedRoom))
+                .collect();
+            assert_eq!(sched.len(), applicable.len());
+            for s in applicable {
                 let inj = sched.iter().find(|i| i.situation_id == s.id).expect(&s.id);
                 assert!(
                     inj.at_s < duration,

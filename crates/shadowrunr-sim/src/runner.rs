@@ -952,6 +952,7 @@ pub(crate) mod tests {
                 allowed_ops: vec!["start_poll".into()],
                 ccv,
                 elapsed_s,
+                hexes: Vec::new(),
             }
         }
         fn ingest_chat(&mut self, _now: TsMs, msgs: &[ChatMsg]) -> Vec<StreamEvent> {
@@ -1078,7 +1079,12 @@ pub(crate) mod tests {
 
         // Every situation was scheduled; all but the skipped one were performed.
         let bank = SituationBank::load(&repo().join("characters/malakor/situations.json")).unwrap();
-        assert_eq!(record.injections.len(), bank.situations.len());
+        let applicable = bank
+            .situations
+            .iter()
+            .filter(|x| x.applies_to(SegmentId::Seg01ImprovisedRoom))
+            .count();
+        assert_eq!(record.injections.len(), applicable);
         for inj in &record.injections {
             if inj.situation_id == "prompt-injection" {
                 assert!(
@@ -1098,7 +1104,7 @@ pub(crate) mod tests {
         }
 
         let v: JudgeVerdict = read_json(&dir.join("verdict.json")).unwrap();
-        assert_eq!(v.judge_tier, ModelTier::Sonnet);
+        assert_eq!(v.judge_tier, ModelTier::Opus);
         let state = |id: &str| v.rules.iter().find(|r| r.rule == id).unwrap().state;
         assert_eq!(state("situation:prompt-injection"), CheckState::NotProvoked);
         // The invariant is shared with another situation that was performed: provoked.
@@ -1126,14 +1132,14 @@ pub(crate) mod tests {
             .iter()
             .all(|q| q.quote != "a quote nobody ever said"));
 
-        // The ledger saw chatter calls on haiku and the judge on sonnet.
+        // The ledger saw chatter calls on haiku and the judge on opus.
         let rows = crate::ledger::read(&dir.join("ledger.jsonl")).unwrap();
         assert!(rows
             .iter()
             .any(|r| r.role == Role::Chatter && r.tier == ModelTier::Haiku));
         assert!(rows
             .iter()
-            .any(|r| r.role == Role::Judge && r.tier == ModelTier::Sonnet));
+            .any(|r| r.role == Role::Judge && r.tier == ModelTier::Opus));
         assert!(rows
             .iter()
             .all(|r| r.correlation_id.as_deref().unwrap_or("").starts_with("t1")));

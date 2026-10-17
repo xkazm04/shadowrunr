@@ -88,6 +88,22 @@ situations.json     sim situation bank (format below)
       "invariants": ["red-line:hateful-conduct"] } ] }
 ```
 
+Optional situation fields (parsed by the sim):
+- `"stimulus": "message|silence|vote|wave"`: inferred from archetype and invariants when absent.
+- `"silence_s"`: default 120.
+- `"segments": ["SEG-02A"]`: scheduled in every segment when absent.
+
+Brain wire values:
+- `job.status`: `queued`, `running`, `progress`, `done`, `failed`, `cancelled`.
+- Brain `moderation.rule`: `term:<id>`, `rate_cap`, `prompt_injection`, `flood_cluster`,
+  `copypasta_cluster`, `copypasta_repeat`, `op_not_allowed:<tag>`, `op_parse`, `alleged:<hex>`,
+  `note_blocked`, `foil_not_active:<id>`.
+- `SegmentContext.hexes` carries the SEG-02A case hexes (empty elsewhere); the brain's "alleged"
+  gate reads their grades.
+
+A `source_ids` array that is empty or holds only `"assumption"` marks an assumption;
+`["c03","assumption"]` marks a figure extrapolated from a source.
+
 ## Simulation calibration (`sim/calibration.json`, written by WPR, read by WP4)
 
 ```json

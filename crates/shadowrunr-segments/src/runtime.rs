@@ -900,6 +900,11 @@ impl SegmentRuntime {
             },
             ccv,
             elapsed_s,
+            hexes: if self.table.id == SegmentId::Seg02aHexmap {
+                self.case().hexes.clone()
+            } else {
+                Vec::new()
+            },
         }
     }
 

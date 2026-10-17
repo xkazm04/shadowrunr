@@ -70,6 +70,10 @@ pub struct SegmentContext {
     /// Concurrent viewers right now.
     pub ccv: u32,
     pub elapsed_s: u32,
+    /// SEG-02A: the case's hexes as currently revealed; their grades drive the brain's
+    /// "alleged" output gate. Empty outside SEG-02A.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hexes: Vec<Hex>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
