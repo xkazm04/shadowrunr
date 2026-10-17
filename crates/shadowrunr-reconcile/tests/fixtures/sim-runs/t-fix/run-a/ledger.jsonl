@@ -1,0 +1,4 @@
+{"ts_unix_ms":1,"role":"core_thread","tier":"haiku","effort":"low","engine":"scripted","model":"scripted","first_text_ms":800,"duration_ms":800,"usage":{"input_tokens":10,"output_tokens":5}}
+{"ts_unix_ms":2,"role":"core_thread","tier":"haiku","effort":"low","engine":"scripted","model":"scripted","first_text_ms":1200,"duration_ms":1200,"usage":{"input_tokens":10,"output_tokens":5}}
+{"ts_unix_ms":3,"role":"core_thread","tier":"haiku","effort":"low","duration_ms":30000,"error_kind":"timeout"}
+{"ts_unix_ms":4,"role":"judge","tier":"sonnet","effort":"medium","engine":"scripted","model":"scripted","duration_ms":5000,"fallback_reason":"api_key fallback","usage":{"input_tokens":100,"output_tokens":50}}

@@ -1,0 +1,18 @@
+{"type":"stream_start","ts_ms":0,"stream_id":"run-a","character":"malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":3}
+{"type":"segment_start","ts_ms":0,"segment":"SEG-01"}
+{"type":"chat","ts_ms":10000,"msg":{"id":"m1","ts_ms":10000,"viewer":{"id":"v1","name":"Grimble","platform":"sim","rank":"thrall"},"text":"hail malakor"}}
+{"type":"chat","ts_ms":20000,"msg":{"id":"m2","ts_ms":20000,"viewer":{"id":"v2","name":"Ossia","platform":"sim","rank":"cultist","sub_tier":1,"months":4},"text":"!summon the-inspector","command":{"cmd":"summon","foil":"the-inspector"}}}
+{"type":"picked","ts_ms":21000,"msg_ids":["m1","m2"],"reason":"greeting and summon"}
+{"type":"say","ts_ms":22000,"speaker":"malakor","text":"Kneel, thrall Grimble. Your hail is noted in the ledger of the damned.","replying_to":["m1"],"first_text_ms":800}
+{"type":"op","ts_ms":30000,"op":{"op":"start_poll","poll_id":"p1","question":"Which foil shall I summon?","options":["a","b"],"min_rank":"thrall","secs":30}}
+{"type":"chat","ts_ms":40000,"msg":{"id":"m3","ts_ms":40000,"viewer":{"id":"v1","name":"Grimble","platform":"sim","rank":"thrall"},"text":"!vote a","command":{"cmd":"vote","option":"a"}}}
+{"type":"vote","ts_ms":60000,"poll_id":"p1","tallies":[{"option":"a","voters":2,"weight":2.0},{"option":"b","voters":1,"weight":3.0}],"closed":true}
+{"type":"moderation","ts_ms":70000,"stage":"output","rule":"red-line:hateful-conduct","action":"block"}
+{"type":"say","ts_ms":80000,"speaker":"malakor","text":"The Inspector may enter. Wipe your boots on the bones.","replying_to":["m2"],"first_text_ms":1200}
+{"type":"handover","ts_ms":90000,"from":"SEG-01","to":"SEG-02A","reason":"planned"}
+{"type":"segment_end","ts_ms":90000,"segment":"SEG-01","ses":0.6}
+{"type":"segment_start","ts_ms":95000,"segment":"SEG-02A"}
+{"type":"chat","ts_ms":100000,"msg":{"id":"m4","ts_ms":100000,"viewer":{"id":"v3","name":"Vexmoor","platform":"sim","rank":"warlock","sub_tier":2,"months":13},"text":"!hint h1 the wallet moved twice","command":{"cmd":"hint","hex":"h1","text":"the wallet moved twice"}}}
+{"type":"say","ts_ms":110000,"speaker":"malakor","text":"Noted, Warlock Vexmoor. The wallet twitches; we shall pry it open.","replying_to":["m4"],"first_text_ms":600}
+{"type":"segment_end","ts_ms":120000,"segment":"SEG-02A","ses":0.8}
+{"type":"stream_end","ts_ms":120000,"reason":"sim_complete"}

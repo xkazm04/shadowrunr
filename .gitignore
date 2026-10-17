@@ -6,6 +6,6 @@ target/
 node_modules/
 dist/
 # simulation output and local stores
-runs/
+/runs/
 *.db
 *.db-*

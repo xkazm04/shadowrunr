@@ -1,0 +1,12 @@
+{
+  "run_id": "run-b",
+  "character": "malakor",
+  "tone_variant": "deadpan-bureaucrat",
+  "core_tier": "haiku",
+  "core_effort": "low",
+  "segment": "SEG-01",
+  "audience_size": 30,
+  "seed": 2,
+  "duration_s": 60,
+  "population": "fixture"
+}
