@@ -1,0 +1,443 @@
+{
+  "version": 1,
+  "platforms": {
+    "twitch": {
+      "hard_rules": [
+        {
+          "id": "tw-hateful-conduct",
+          "summary": "No behaviour motivated by hatred, prejudice or intolerance: no slurs, no attacks on protected characteristics (age, race, ethnicity, colour, caste, national origin, immigration status, religion, sex, gender, gender identity, sexual orientation, disability, serious medical condition, veteran status). Both Neuro-sama (2023-01) and Nothing, Forever (2023-02) were suspended under this rule for AI output.",
+          "source": "https://www.twitch.tv/p/safety/education-portal/en/articles/hateful-conduct"
+        },
+        {
+          "id": "tw-harassment",
+          "summary": "No behaviour that is mean, cruel, disrespectful, attacking, shaming or insulting toward a person, including vague threats. Roasts must stay playful and aimed at choices, never at identity or a real person off-stream.",
+          "source": "https://www.twitch.tv/p/safety/education-portal/en/articles/harassment-education/"
+        },
+        {
+          "id": "tw-violence-threats",
+          "summary": "Violence and threats are a zero-tolerance violation. Theatrical menace must never read as a threat to a viewer or a real person (no 'I will kill you').",
+          "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+        },
+        {
+          "id": "tw-self-harm",
+          "summary": "No content that glorifies, promotes or encourages self-harm. Telling anyone to harm themselves is never a joke.",
+          "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+        },
+        {
+          "id": "tw-sexual-content",
+          "summary": "No nudity, real or fictional, in any medium (digital or not); sexual content is restricted and the 2023-12 artistic-nudity loosening was rolled back within two days. Streams labelled Sexual Themes are not recommended on the homepage.",
+          "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+        },
+        {
+          "id": "tw-private-info",
+          "summary": "No unauthorised sharing of private information (addresses, phone numbers, family, private details) about anyone.",
+          "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+        },
+        {
+          "id": "tw-responsible-for-chat-and-tools",
+          "summary": "The streamer is responsible for all content in the stream, including third-party violations; streamers are expected to use moderators and the provided tools. Precedent: a streamer received a strike when a troll's TTS donation read a slur aloud. Anything Malakor reads, speaks or displays from chat is the channel's own content.",
+          "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+        },
+        {
+          "id": "tw-impersonation-spam-viewbotting",
+          "summary": "No impersonation, no spam (large amounts of repetitive unwanted messages) and no viewership tampering (artificially inflating follows or live viewers). The 2025 viewbot crackdown cut reported platform viewership about 24%.",
+          "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+        },
+        {
+          "id": "tw-content-labels",
+          "summary": "Apply Content Classification Labels when they fit: Malakor's crude roasts call for 'Significant Profanity or Vulgarity'. Mislabelling does not by itself cause a suspension, but labels drive discovery and viewer expectations.",
+          "source": "https://blog.twitch.tv/en/2023/06/20/introducing-content-classification-labels/"
+        },
+        {
+          "id": "tw-chat-bot-identity",
+          "summary": "A chat bot sends through the Send Chat Message API with an app access token; the bot account grants user:bot and the channel grants channel:bot (or mod status), which shows the Chat Bot badge. Normal accounts are limited to 20 messages per 30 s; over the limit Twitch ignores the bot for an hour.",
+          "source": "https://dev.twitch.tv/docs/chat/"
+        },
+        {
+          "id": "tw-branded-content",
+          "summary": "Use the paid-promotion disclosure when branding is a central and intentional element. Never promote risky gambling (slots, roulette sites), weapons, adult content, tobacco, cannabis or political content.",
+          "source": "https://help.twitch.tv/articles/en_US/Knowledge/branded-content-policy"
+        }
+      ],
+      "monetisation_notes": "Affiliate/Partner revenue comes from subs (Tier 1 dominates: about 85% of subs, Prime about 15%, Tier 2 and Tier 3 about 1% combined per Stream Hatchet 2026-10), gifted subs (about half of streams see a gifting event; mean about 4 subs per event; 87% are random community gifts, per Kim et al. 2025), Bits and ads. Channel Points (up to 13% more chat participation per Twitch Creator Camp) and Predictions are free engagement levers; Predictions are Affiliate/Partner only. Twitch has no AI-disclosure rule as of 2026-09 (CEO Dan Clancy), so an 'AI character' label is voluntary but recommended. Payment ops (chargebacks) have banned an AI-persona channel before (MOTHERv3, 2024-12, see 01-market-landscape.md).",
+      "automod": "Five categories: Discrimination & Slurs, Sexual Content, Harassment (older guides: Hostility), Profanity, Smart Detection. Levels: 0 off (blocked terms still apply); 1 Discrimination 'some' + Smart Detection; 2 adds Sexual 'some' and Harassment 'more'; 3 Discrimination and Sexual 'more'; 4 Harassment 'most' and Profanity 'more'. The API exposes eight 0-4 granular levels (disability, aggression, sexuality_sex_or_gender, misogyny, bullying, swearing, race_ethnicity_or_religion, sex_based_terms); setting overall_level overwrites them. Held messages wait for Allow/Deny and never time out users. Twitch recommends level 2 plus phone/email verification, 10-minute follower-only mode and Shield Mode on standby (blog 2026-10-01). An audit (arXiv 2506.07667) found recall of 0.22 at the strictest setting and up to 98.5% of benign sensitive-term messages flagged, so AutoMod is a first net, not the gate. Recommended Overlord setting [recommendation, not sourced]: race_ethnicity_or_religion, disability, sexuality_sex_or_gender and misogyny at 3; sex_based_terms, aggression and bullying at 2; swearing at 0 (adult show). Manage via Helix: PUT /helix/moderation/automod/settings (moderator:manage:automod_settings), POST/DELETE /helix/moderation/blocked_terms (moderator:manage:blocked_terms, 2-500 chars, * only at start or end, public list only), PUT /helix/moderation/shield_mode (moderator:manage:shield_mode), PATCH /helix/chat/settings (moderator:manage:chat_settings; slow 3-120 s, follower 0-129600 min, non-mod chat delay 2/4/6 s), POST /helix/moderation/automod/message ALLOW/DENY (moderator:manage:automod), EventSub automod.message.hold v2 and channel.chat.message."
+    },
+    "youtube": {
+      "hard_rules": [
+        {
+          "id": "yt-profanity-title-thumbnail",
+          "summary": "Strong profanity (f-word level) in a title or thumbnail earns no ads; moderate profanity (e.g. 'shit') there earns limited ads; 'hell'/'damn' or obscured profanity is fine. Clip titles and thumbnails must be clean.",
+          "source": "https://support.google.com/youtube/answer/6162278"
+        },
+        {
+          "id": "yt-profanity-in-video",
+          "summary": "Since 2025-07, strong profanity in the first 7 seconds can earn ads; frequent moderate profanity in the video is fine. Profanity 'throughout the majority of the video' or swearing compilations are still limited, and extreme profanity or slurs anywhere earn no ads.",
+          "source": "https://support.google.com/youtube/answer/9725604"
+        },
+        {
+          "id": "yt-hateful-content",
+          "summary": "Hate, harassment and non-educational slurs earn no ads; 'stating comedic intent alone isn't enough'. Community Guidelines removal applies beyond monetisation.",
+          "source": "https://support.google.com/youtube/answer/6162278"
+        },
+        {
+          "id": "yt-adult-violence-shock",
+          "summary": "Sexual themes in a title or thumbnail limit ads; sexual acts, even implied, earn none. Graphic violence, gore and content made purely to shock earn none.",
+          "source": "https://support.google.com/youtube/answer/6162278"
+        },
+        {
+          "id": "yt-inauthentic-content",
+          "summary": "Inauthentic (formerly repetitious) content cannot monetise: templated or mass-produced videos, 'characters put in the same situation over and over again with the same outcome', AI content made with generic templates. A Malakor clip series needs varied premises and human editorial selection.",
+          "source": "https://support.google.com/youtube/answer/1311392"
+        },
+        {
+          "id": "yt-reused-content",
+          "summary": "Reused content cannot monetise: clips edited together with little or no narrative, compilations from other sites, readings of material you did not create. Applies even with permission and can demonetise the whole channel.",
+          "source": "https://support.google.com/youtube/answer/1311392"
+        },
+        {
+          "id": "yt-synthetic-disclosure",
+          "summary": "Disclose altered or synthetic content only when it is realistic (a real person appearing to say or do something, altered real events, realistic AI music). A clearly animated villain is exempt; disclosure itself does not limit reach or monetisation.",
+          "source": "https://support.google.com/youtube/answer/14328491"
+        },
+        {
+          "id": "yt-shorts-monetisation",
+          "summary": "Shorts earn only with the Shorts Monetization Module accepted; views of non-original Shorts (unedited clips, re-uploads, compilations without original content) and non-advertiser-friendly Shorts do not count. Creators keep 45% of allocated revenue. From 2027-02-01 eligibility needs 10M qualified Shorts views in 90 days.",
+          "source": "https://support.google.com/youtube/answer/12504220"
+        }
+      ],
+      "monetisation_notes": "Advertiser-friendly guidelines apply to live streams as well as uploads; Super Chat and Super Stickers pay creators 70% and must follow Community Guidelines. For clips: keep titles and thumbnails free of strong profanity, avoid profanity-dense openings out of caution even though the 7-second rule was lifted in 2025-07, and give every clip an editorial frame (premise card, caption, citation for SEG-02A) to stay clear of the inauthentic and reused content policies. Oct 2026: recommendations show less of re-uploaded Shorts with minimal edits or automated voiceovers (reach, not monetisation). Sept 2026: graphic gaming violence at 8-15 s became ad-eligible; the first 7 s remain ineligible."
+    },
+    "tiktok": {
+      "hard_rules": [
+        {
+          "id": "tt-hate",
+          "summary": "No hateful slurs tied to a protected attribute, dehumanisation or misgendering; content that indirectly demeans protected groups may be ineligible for the For You feed (FYF). Guidelines version effective 2026-09-24.",
+          "source": "https://www.tiktok.com/community-guidelines/en/fyf-standards"
+        },
+        {
+          "id": "tt-sexual",
+          "summary": "No nudity, sexual activity or sexual services; sexually suggestive adult content is age-restricted and FYF-ineligible; sexually explicit language by adults is restricted in some regions, while sexual language in humour or stand-up is allowed.",
+          "source": "https://www.tiktok.com/community-guidelines/en/fyf-standards"
+        },
+        {
+          "id": "tt-violence-shock",
+          "summary": "No gore or moments of death; excessive blood and graphic fiction are 18+ and FYF-ineligible; content that may shock through visual or audio effects (e.g. jump scares) is FYF-ineligible.",
+          "source": "https://www.tiktok.com/community-guidelines/en/fyf-standards"
+        },
+        {
+          "id": "tt-self-harm",
+          "summary": "No detailed descriptions of suicide or self-harm methods, hoaxes or plans; non-graphic fiction is 18+ and FYF-ineligible.",
+          "source": "https://www.tiktok.com/community-guidelines/en/fyf-standards"
+        },
+        {
+          "id": "tt-live-age",
+          "summary": "Hosts must be 18+ to go LIVE (plus a market-specific follower count); gifts require 18+ to send and receive.",
+          "source": "https://www.tiktok.com/safety/en/tools-and-guides/live-safety-guide"
+        },
+        {
+          "id": "tt-live-third-party-tools",
+          "summary": "LIVE creators are responsible for everything in the session, including third-party tools such as voice-to-text, real-time translation and on-screen comment displays; repeated issues can restrict LIVE access. Malakor reading chat aloud is such a tool.",
+          "source": "https://www.tiktok.com/community-guidelines/en/fyf-standards"
+        },
+        {
+          "id": "tt-live-vulgar-attacks",
+          "summary": "In LIVE, do not degrade someone with profanity or obscene language or attack others with vulgar speech. Roasts on TikTok LIVE must drop profanity aimed at a person.",
+          "source": "https://www.tiktok.com/live/studio/help/article/Before-you-go-LIVE/Community-Guidelines?lang=en"
+        },
+        {
+          "id": "tt-live-unoriginal-low-quality",
+          "summary": "LIVE is FYF-ineligible for unoriginal content without new edits, repeated or prolonged actions lacking clear objectives, low-quality screens, and pressuring viewers for gifts; streaming pre-recorded content in LIVE is not recommended.",
+          "source": "https://www.tiktok.com/community-guidelines/en/fyf-standards"
+        },
+        {
+          "id": "tt-aigc-label",
+          "summary": "Label AI or edited content that realistically depicts people or scenes (AIGC label, caption, watermark or sticker); not required for anime-style or clearly unrealistic content, or generic TTS that is not a recognisable voice.",
+          "source": "https://www.tiktok.com/community-guidelines/en/fyf-standards"
+        },
+        {
+          "id": "tt-unoriginal-fyf",
+          "summary": "Unoriginal or reused material without anything new, and low-quality or minimally edited clips, are FYF-ineligible.",
+          "source": "https://www.tiktok.com/community-guidelines/en/fyf-standards"
+        },
+        {
+          "id": "tt-shop-live-ai-voice",
+          "summary": "Reported (secondary source, not confirmed against TikTok's own text): US TikTok Shop LIVE rules ban AI-generated voices and virtual characters covering more than half the screen in promotional/Shop LIVEs. Avoid Shop LIVE entirely.",
+          "source": "https://www.socialmediatoday.com/news/tiktok-bans-ai-generated-voices-in-shopping-livestreams/822977/"
+        }
+      ],
+      "monetisation_notes": "LIVE Gifts, LIVE Subscriptions and Creator Rewards require the Creator Code of Conduct and the LIVE Monetization Guidelines (English text not retrieved); since 2024-05 graphic, inauthentic or low-quality LIVE content is ineligible to earn. TikTok has no general rule against profanity in videos; profanity matters in LIVE (degrading someone) and in comment ranking (non-neutral or targeted profanity is sorted lower). Business accounts must use the Commercial Music Library. Best use of TikTok for Overlord is clips with varied editorial framing, not LIVE."
+    }
+  },
+  "term_rules": [
+    {
+      "id": "slur-operator-list",
+      "category": "slur",
+      "pattern": "\\b\\B__OPERATOR_INSTALLED_LIST__awdev1-better-profane-words__slur_racial+slur_gender__",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "block",
+      "source": "https://github.com/awdev1/better-profane-words"
+    },
+    {
+      "id": "slur-operator-list-alt",
+      "category": "slur",
+      "pattern": "\\b\\B__OPERATOR_INSTALLED_LIST__surge-ai-profanity-en__slur-categories__",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "block",
+      "source": "https://github.com/NVIDIA/garak/blob/main/garak/data/profanity_en.csv"
+    },
+    {
+      "id": "profanity-strong-clip",
+      "category": "profanity-advertiser",
+      "pattern": "(?i)\\b(?:mother)?f+[u*@#]*c+k+[a-z]*\\b|\\bc+u+n+t+s?\\b",
+      "platforms": [
+        "youtube",
+        "tiktok"
+      ],
+      "action": "bleep",
+      "source": "https://support.google.com/youtube/answer/6162278"
+    },
+    {
+      "id": "profanity-strong-live",
+      "category": "profanity-advertiser",
+      "pattern": "(?i)\\b(?:mother)?f+[u*@#]*c+k+[a-z]*\\b|\\bc+u+n+t+s?\\b",
+      "platforms": [
+        "twitch"
+      ],
+      "action": "warn",
+      "source": "https://blog.twitch.tv/en/2023/06/20/introducing-content-classification-labels/"
+    },
+    {
+      "id": "profanity-moderate",
+      "category": "profanity-advertiser",
+      "pattern": "(?i)\\b(?:bull)?sh[i1!*]t(?:s|ty|tier|tiest|head|show|post|e)?\\b|\\bb[i1!*]tch(?:es|y|ing)?\\b|\\bass(?:hole|holes|hat|wipe)\\b|\\barseholes?\\b|\\bbastards?\\b|\\bdick(?:head|heads)?\\b|\\bpiss(?:ed)?\\b|\\bwank(?:er|ers)?\\b|\\bbollocks\\b|\\btwats?\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "warn",
+      "source": "https://support.google.com/youtube/answer/6162278"
+    },
+    {
+      "id": "profanity-directed-tiktok",
+      "category": "profanity-advertiser",
+      "pattern": "(?i)\\b(?:you|ya|ur|u|you're|youre)\\s+(?:\\w+\\s+){0,2}(?:(?:mother)?f+[u*@#]*c+k+[a-z]*|c+u+n+t+|b[i1!*]tch|twat|sh[i1!*]t(?:head)?|dickhead|asshole|wanker|bastard)\\b",
+      "platforms": [
+        "tiktok"
+      ],
+      "action": "bleep",
+      "source": "https://www.tiktok.com/live/studio/help/article/Before-you-go-LIVE/Community-Guidelines?lang=en"
+    },
+    {
+      "id": "profanity-directed-warn",
+      "category": "profanity-advertiser",
+      "pattern": "(?i)\\b(?:you|ya|ur|u|you're|youre)\\s+(?:\\w+\\s+){0,2}(?:(?:mother)?f+[u*@#]*c+k+[a-z]*|c+u+n+t+|b[i1!*]tch|twat|sh[i1!*]t(?:head)?|dickhead|asshole|wanker|bastard)\\b",
+      "platforms": [
+        "twitch",
+        "youtube"
+      ],
+      "action": "warn",
+      "source": "https://www.twitch.tv/p/safety/education-portal/en/articles/harassment-education/"
+    },
+    {
+      "id": "sexual-explicit",
+      "category": "sexual",
+      "pattern": "(?i)\\b(?:porn(?:o|ography|hub)?|blow\\s?jobs?|hand\\s?jobs?|cumshots?|jizz|dildos?|vibrators?|anal\\s+sex|orgasms?|masturbat[a-z]*|nudes|naked\\s+pics?|sex\\s+tapes?|onlyfans|hentai|rule\\s?34)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "block",
+      "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+    },
+    {
+      "id": "sexual-minors",
+      "category": "sexual",
+      "pattern": "(?i)\\b(?:loli(?:con)?|shota(?:con)?|jailbait)\\b|\\b(?:underage|minors?|child|children|kids?|preteens?|teens?)\\b.{0,40}\\b(?:sex|sexy|nudes?|naked|porn|lewd|horny)\\b|\\b(?:sex|sexy|nudes?|naked|porn|lewd|horny)\\b.{0,40}\\b(?:underage|minors?|child|children|kids?|preteens?|teens?)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "block",
+      "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+    },
+    {
+      "id": "sexual-suggestive",
+      "category": "sexual",
+      "pattern": "(?i)\\b(?:sexy|horny|kinky|fetish(?:es)?|boobs?|tits|titties|thicc|foreplay|lewd)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "warn",
+      "source": "https://support.google.com/youtube/answer/6162278"
+    },
+    {
+      "id": "violence-direct-threat",
+      "category": "violence",
+      "pattern": "(?i)\\b(?:i'll|i\\s+will|i\\s+am\\s+going\\s+to|i'm\\s+going\\s+to|i'm\\s+gonna|im\\s+gonna|gonna|going\\s+to)\\s+(?:\\w+\\s+)?(?:kill|murder|shoot|stab|strangle|behead|rape)\\s+(?:you|u|ya|him|her|them|y'all|everyone|your\\s+\\w+)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "block",
+      "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+    },
+    {
+      "id": "violence-graphic",
+      "category": "violence",
+      "pattern": "(?i)\\b(?:gore|disembowel[a-z]*|decapitat[a-z]*|dismember[a-z]*|eviscerat[a-z]*|mutilat[a-z]*|bloodbath|entrails)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "warn",
+      "source": "https://support.google.com/youtube/answer/6162278"
+    },
+    {
+      "id": "violence-mass-casualty",
+      "category": "violence",
+      "pattern": "(?i)\\b(?:shoot\\s+up|school\\s+shooting|mass\\s+shooting|bomb\\s+threat|terror\\s+attack)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "warn",
+      "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+    },
+    {
+      "id": "harm-instructions",
+      "category": "harm-instructions",
+      "pattern": "(?i)\\bhow\\s+(?:to|do\\s+(?:i|you))\\s+(?:make|build|cook|synthesi[sz]e)\\s+(?:a\\s+|an\\s+|some\\s+)?(?:bombs?|pipe\\s*bombs?|explosives?|meth|napalm|ghost\\s+guns?|poisons?|ricin|thermite)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "block",
+      "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+    },
+    {
+      "id": "self-harm-incitement",
+      "category": "self-harm",
+      "pattern": "(?i)\\b(?:kys|kill\\s+(?:your|ur)\\s?self|go\\s+die|go\\s+hang\\s+(?:your|ur)\\s?self|unalive\\s+(?:your|ur)\\s?self|neck\\s+(?:your|ur)\\s?self|slit\\s+(?:your|ur)\\s+wrists|drink\\s+bleach)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "block",
+      "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+    },
+    {
+      "id": "self-harm-disclosure",
+      "category": "self-harm",
+      "pattern": "(?i)\\b(?:i\\s*(?:'m|am)?\\s*(?:want|wanna|going|gonna|plan(?:ning)?)\\s+(?:to\\s+)?(?:kill\\s+myself|end\\s+(?:it\\s+all|my\\s+life))|suicidal|self[- ]harm(?:ing)?|cutting\\s+myself)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "warn",
+      "source": "https://www.tiktok.com/community-guidelines/en/fyf-standards"
+    },
+    {
+      "id": "pii-email",
+      "category": "pii",
+      "pattern": "(?i)\\b[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "block",
+      "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+    },
+    {
+      "id": "pii-phone",
+      "category": "pii",
+      "pattern": "(?:\\+\\d{1,3}[\\s.-]?)?(?:\\(\\d{2,4}\\)|\\b\\d{2,4})[\\s.-]\\d{3,4}[\\s.-]\\d{3,4}\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "block",
+      "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+    },
+    {
+      "id": "pii-street-address",
+      "category": "pii",
+      "pattern": "(?i)\\b\\d{1,5}\\s+(?:[a-z]+\\s){1,3}(?:street|st|avenue|ave|road|rd|boulevard|blvd|lane|ln|drive|dr|court|ct)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "warn",
+      "source": "https://safety.twitch.tv/articles/en_US/Knowledge/Community-Guidelines"
+    },
+    {
+      "id": "brigade-call",
+      "category": "brigade",
+      "pattern": "(?i)\\b(?:review[- ]?bomb(?:ing)?|mass[- ]?report(?:ing)?|brigad(?:e|ing)|dox(?:x)?(?:ing|ed)?|go\\s+(?:raid|spam|harass|flood)\\s+(?:them|him|her|their|his)|everyone\\s+(?:report|spam|dm|call)\\s+(?:them|him|her))\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "block",
+      "source": "https://tubefilter.com/2021/09/10/twitch-hate-raid-users-lawsuit/"
+    },
+    {
+      "id": "injection-override",
+      "category": "injection",
+      "pattern": "(?i)\\bignore\\s+(?:all\\s+|your\\s+|the\\s+|previous\\s+|prior\\s+|above\\s+)*(?:instructions|rules|prompts?)\\b|\\bnew\\s+rules?\\s*:|\\bsystem\\s+prompt\\b|\\bdeveloper\\s+mode\\b|\\bdisregard\\s+(?:your|the|all|previous)\\b|\\bjailbreak|\\brepeat\\s+after\\s+me\\b|\\bsay\\s+exactly\\b|\\bpretend\\s+(?:you\\s+are|to\\s+be)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "warn",
+      "source": "https://genai.owasp.org/llmrisk/llm01-prompt-injection/"
+    },
+    {
+      "id": "injection-authority-prefix",
+      "category": "injection",
+      "pattern": "(?i)^\\s*[\\[(<]?\\s*(?:mod|moderator|admin|staff|twitch|system|lord|operator|broadcaster|streamer|dev)\\s*[\\])>:]",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "warn",
+      "source": "https://kotaku.com/scammers-are-impersonating-popular-twitch-streamers-1840326738"
+    },
+    {
+      "id": "injection-obfuscation",
+      "category": "injection",
+      "pattern": "(?i)\\b(?:decode|decrypt|rot13|rot-13|base64|caesar|cipher|acrostic|spell\\s+(?:it|this|out)|first\\s+letters?|read\\s+(?:it\\s+|this\\s+)?backwards)\\b",
+      "platforms": [
+        "twitch",
+        "youtube",
+        "tiktok"
+      ],
+      "action": "warn",
+      "source": "https://www.yahoo.com/news/elon-musk-grok-ai-cant-191034576.html"
+    }
+  ]
+}
