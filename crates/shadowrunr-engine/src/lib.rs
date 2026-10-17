@@ -1,58 +1,46 @@
-//! Universal LLM wrapper. WP1 owns this crate; the skeleton below fixes the public surface
-//! that brain, sim and daemon build against in parallel.
+//! Universal LLM wrapper. One [`Engine`] that callers never have to think about:
+//!
+//! 1. the Claude Code CLI fleet (accounts in health-aware round-robin, one-shot calls and
+//!    warm stream-json sessions),
+//! 2. then the Anthropic Messages API, when `api_key_env` is set,
+//! 3. then the experimental codex / agy CLI drivers, when named in `cli_fallbacks`.
+//!
+//! Local Gemma is out of scope in v0.1 and answers with a clear error. Every call, success or
+//! failure, appends one row to the ledger. Tests use [`ScriptedEngine`] or the
+//! `shadowrunr-fake-claude` binary and never spend quota.
 
+pub mod alt_cli;
+pub mod api;
+pub mod claude_cli;
+pub mod config;
+pub mod fleet;
+pub mod health;
+pub mod ledger;
+pub mod limits;
+pub mod model;
 pub mod scripted;
+pub mod session;
+pub mod stream;
 
 use std::sync::Arc;
 
-use shadowrunr_types::{Effort, Engine, ModelTier, Role};
+use shadowrunr_types::Engine;
 
+pub use config::{route, AccountConfig, EngineConfig, FallbackDriver, RouteOverride};
+pub use fleet::{AccountStatus, Fleet, FleetMode, FleetState};
 pub use scripted::ScriptedEngine;
 
-/// Default routing per role: (tier, effort, timeout_ms). The tournament recalibrates the
-/// core-thread entry; everything else is a starting point.
-pub fn route(role: Role) -> (ModelTier, Effort, u64) {
-    match role {
-        Role::CoreThread => (ModelTier::Haiku, Effort::Low, 30_000),
-        Role::ChatPicker => (ModelTier::Haiku, Effort::Low, 20_000),
-        Role::Planner => (ModelTier::Sonnet, Effort::Medium, 120_000),
-        Role::Researcher => (ModelTier::Sonnet, Effort::Medium, 240_000),
-        Role::Consolidator => (ModelTier::Sonnet, Effort::Medium, 300_000),
-        Role::Chatter => (ModelTier::Haiku, Effort::Low, 60_000),
-        Role::Judge => (ModelTier::Sonnet, Effort::Medium, 180_000),
-        Role::Reconciler => (ModelTier::Opus, Effort::High, 600_000),
-    }
-}
-
-/// Engine configuration, loaded from `shadowrunr.toml` `[engine]` by the daemon.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct EngineConfig {
-    /// Claude Code accounts in rotation order: label + CLAUDE_CONFIG_DIR.
-    #[serde(default)]
-    pub accounts: Vec<AccountConfig>,
-    /// Env var name holding an Anthropic API key for the first fallback (never the key itself).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api_key_env: Option<String>,
-    /// Enable the codex / agy CLI fallbacks (stubbed in v0.1).
-    #[serde(default)]
-    pub cli_fallbacks: Vec<String>,
-    /// Use the deterministic scripted engine (tests, harness smoke runs).
-    #[serde(default)]
-    pub scripted: bool,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AccountConfig {
-    pub label: String,
-    /// Path for CLAUDE_CONFIG_DIR; omitted = the default login.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub config_dir: Option<String>,
-}
-
-/// Build the engine stack (fleet + fallbacks) from config. WP1 implements the real fleet.
+/// Build the engine stack (fleet + fallbacks) from config; `scripted = true` gives the
+/// deterministic engine. Use [`build_fleet`] when you need [`Fleet::fleet_state`].
 pub fn build_engine(cfg: &EngineConfig) -> Arc<dyn Engine> {
     if cfg.scripted {
         return Arc::new(ScriptedEngine);
     }
-    todo!("WP1: Claude Code CLI fleet with fallback chain")
+    build_fleet(cfg)
+}
+
+/// The concrete fleet, for callers that read [`Fleet::fleet_state`]. It coerces to
+/// `Arc<dyn Engine>`.
+pub fn build_fleet(cfg: &EngineConfig) -> Arc<Fleet> {
+    Arc::new(Fleet::new(cfg))
 }
