@@ -1,0 +1,13 @@
+id = "malakor"
+name = "Arch-Lich Malakor"
+default_tone = "theatrical"
+foils = ["the-disruptor", "the-life-coach"]
+
+# Rank titles as Malakor says them, lowest first (wire names in docs/spec/contract.md).
+[ranks]
+thrall = "Thrall"
+acolyte = "Acolyte"
+cultist = "Cultist"
+warlock = "Warlock"
+lich = "Lesser Lich"
+dread_council = "Dread Council"

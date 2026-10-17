@@ -1,0 +1,15 @@
+[package]
+name = "shadowrunr-brain"
+description = "Character mind: package loader, prompt composer, memory, worker pool, chat picker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+shadowrunr-types.workspace = true
+shadowrunr-engine.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+tokio.workspace = true

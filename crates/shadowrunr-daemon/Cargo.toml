@@ -1,0 +1,20 @@
+[package]
+name = "shadowrunr-daemon"
+description = "The shadowrunr binary: headless daemon (WebSocket) and CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "shadowrunr"
+path = "src/main.rs"
+
+[dependencies]
+shadowrunr-types.workspace = true
+shadowrunr-engine.workspace = true
+shadowrunr-brain.workspace = true
+shadowrunr-segments.workspace = true
+shadowrunr-sim.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

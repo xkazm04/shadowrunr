@@ -1,0 +1,37 @@
+---
+product: "Shadowrunr OS / Overlord"
+stack: "Rust workspace (tokio) + TS/Tauri console + Vite React stage"
+vault: []
+vault_subdir: Spark
+base_branch: main
+---
+
+## Gates
+
+always:
+- `cargo fmt --all -- --check`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo test --workspace`
+
+when apps/ changed:
+- `pnpm -C apps/<app> build` (and `pnpm -C apps/<app> test` when a test script exists)
+
+builder:
+- the same three cargo commands, scoped with `-p <crate>` while iterating, then workspace-wide before reporting
+
+## Repo law
+
+- `crates/shadowrunr-types` is the wire contract. Builders never change it: they propose a change in their report and the Director applies it together with `docs/spec/contract.md`.
+- Stay inside your package's file scope. When you need a change outside it, report it instead of making it.
+- Never `git add -A`, never stash, never commit. The Director stages and commits.
+- No credentials in code, config or logs. Accounts are referenced by label and CLAUDE_CONFIG_DIR path only.
+- Spawned LLM CLIs run with an explicit tool allowlist, never `--dangerously-skip-permissions`.
+- Tests must not spend quota: use `ScriptedEngine` or a fake CLI binary. Live engine calls belong to explicit `--live` runs.
+- Optional JSON fields are omitted, never `null`.
+- Fabricated cases and data carry `fictional: true` and are never presented as real.
+- Malakor and all foils are original characters. No real person's name with a voice or likeness, and no Mattel or He-Man material.
+- Windows host: paths through `std::path`, no shell-specific assumptions in Rust; spawn with `CREATE_NO_WINDOW` where relevant.
+
+## Skill improvement log
+
+- 2026-10-18: Bash heredocs in this harness collapsed `\\` in a Python regex. Write scripts that contain backslashes with the Write tool, not a heredoc.
