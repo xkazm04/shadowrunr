@@ -1390,6 +1390,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "shadowrunr-brain",
  "shadowrunr-engine",
  "shadowrunr-reconcile",

@@ -221,3 +221,68 @@ Directive       { id, kind: "prevent"|"try", text, scope?, created_ms, active }
 The `lord_dispatch` of the chosen plan is the text Malakor receives as "the Lord's dispatch"
 at the next stream start. Directives are stored in `<data>/directives.json` and fed to every
 stream until they are deactivated.
+
+## Appendix (WP10): optional rules, installed lists, new moderation values
+
+These notes extend the sections above; nothing above changes.
+
+**Optional constitution rules.** The character package gains:
+
+```
+rules/<rule-id>.md  one optional rule per file: a "# Title" heading, then the rule text
+character.toml      [rules] table: <rule-id> = true|false (the default; unlisted files are off)
+```
+
+The operator's override lives in `<data>/characters/<id>/rules.json` as `{"<rule-id>": bool}`
+and wins over the defaults. A toggle writes only that file, never the tracked package. A
+malformed override is an error (pre-flight PF-02 goes red), never a silent fallback. The brain
+appends the enabled rules, sorted by id, to the stable prefix right after the constitution,
+under `# Additional rules (enabled by the operator)` with one `## <Title>` per rule; the prefix
+is byte-stable while the enabled set is unchanged. The sim and the brain find the override by
+the repo convention `<characters>/../data/characters/<id>/rules.json`. The sim instrument
+hashes `rules/*.md`, the effective enabled set (`character/rules.enabled`) and every
+`policy/local/*.txt`.
+
+Malakor ships `crisis-handoff` and `no-financial-promotion`, both on by default. Situations may
+name a rule as an invariant with the form `rule:<rule-id>`.
+
+| method | params | result |
+|---|---|---|
+| `character.rules` | `{ "character" }` | `[{ id, title, enabled, default }]` |
+| `character.rules.set` | `{ "character", "id", "enabled": bool }` | the updated list; an unknown rule is `not_found` |
+
+CLI: `shadowrunr character rules <id> [--enable <rule>]... [--disable <rule>]... [--json]`.
+
+**Operator-installed term lists.** `shadowrunr policy install-list <list-id> [--source
+<url|path>]` writes `<policy>/local/<list-id>.txt` (git-ignored, never committed) and
+`<policy>/local/<list-id>.json`:
+
+```
+ListMeta { list_id, source, licence, sha256 /* of the .txt */, source_sha256, terms, installed /* YYYY-MM-DD UTC */ }
+```
+
+The `.txt` holds one term per line, optionally followed by a tab and comma-separated
+categories; `#` starts a comment line. Default sources: `awdev1-better-profane-words` →
+`https://raw.githubusercontent.com/awdev1/better-profane-words/main/words.json` (GPL-3.0);
+`surge-ai-profanity-en` → `https://raw.githubusercontent.com/NVIDIA/garak/main/garak/data/profanity_en.csv`.
+When a term rule's pattern is the `__OPERATOR_INSTALLED_LIST__<list-id>__<cat>+<cat>__`
+placeholder and the `.txt` exists, the brain compiles the terms of those categories (untagged
+terms always count; `slur-categories` means every category naming slurs plus
+`sexual orientation / gender`) into one size-checked, case-insensitive, leetspeak-folded,
+word-bounded regex with the rule's category, action and platforms. Otherwise the built-in
+stand-in for that category stays. PF-05 reports `installed list <id> (<n> terms)` (green when
+every placeholder category is served) or `placeholder only` (amber).
+
+**New brain `moderation.rule` / `action` values.**
+- `rate_cap` with action `exempt:gift_or_sub`, `exempt:first_message` or
+  `exempt:sincere_question`: a message the cap would have dropped was kept. Gift and sub
+  announcements, a viewer's first message, and a sincere direct question (a `?` plus a mention
+  or "you") from a viewer not answered in the last 3 beats skip the rate cap; they join a
+  flood cluster only as an exact duplicate.
+- `repetition` / `suppressed` (stage `output`): a spoken line that near-duplicated one of
+  Malakor's last 8 lines was dropped. A quiet beat emptied this way adds the nudge "The room is
+  quiet; start a new bit, do not repeat yourself, stay in character." to the next turn.
+- `character_break` / `replaced` (stage `output`): a line about the stream repeating, the model
+  or stopping was replaced with an in-character line.
+- `alleged:<hex>` / `qualified` now fires only for a sentence that names a revealed hex graded
+  below DOC and makes a claim about it; the gate inserts "allegedly" next to the claim's verb.

@@ -6,9 +6,12 @@ use std::sync::Arc;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use shadowrunr_brain::rules::{self, RuleState, RulesOverride};
+use shadowrunr_brain::BrainError;
 use shadowrunr_reconcile::{DirectiveKind, ReconcileError, Source};
 use shadowrunr_types::{JudgeVerdict, SegmentId, SimRunSpec, StreamEvent};
 
+use crate::config::Config;
 use crate::preflight;
 use crate::runs;
 use crate::server::AppState;
@@ -123,6 +126,51 @@ struct DirectiveIdParams {
 }
 
 #[derive(Deserialize)]
+struct CharacterParams {
+    character: String,
+}
+
+#[derive(Deserialize)]
+struct CharacterRuleSetParams {
+    character: String,
+    id: String,
+    enabled: bool,
+}
+
+fn character_dir(cfg: &Config, character: &str) -> Result<std::path::PathBuf, RpcError> {
+    runs::check_id("character", character)?;
+    let dir = cfg.paths.characters.join(character);
+    if !dir.join("character.toml").is_file() {
+        return Err(RpcError::not_found(format!("character {character}")));
+    }
+    Ok(dir)
+}
+
+/// `character.rules`: the package's optional rules with the operator's override applied.
+pub fn character_rules(cfg: &Config, character: &str) -> Result<Vec<RuleState>, RpcError> {
+    let dir = character_dir(cfg, character)?;
+    let over = rules::override_path(&cfg.paths.data, character);
+    let list = rules::load_rules(&dir, &RulesOverride::File(over))
+        .map_err(|e| RpcError::io(e.to_string()))?;
+    Ok(list.iter().map(RuleState::from).collect())
+}
+
+/// `character.rules.set`: write one rule into `<data>/characters/<id>/rules.json`.
+pub fn character_rules_set(
+    cfg: &Config,
+    character: &str,
+    id: &str,
+    enabled: bool,
+) -> Result<Vec<RuleState>, RpcError> {
+    let dir = character_dir(cfg, character)?;
+    let over = rules::override_path(&cfg.paths.data, character);
+    rules::set_rule(&dir, character, &over, id, enabled).map_err(|e| match e {
+        BrainError::Rejected(m) => RpcError::not_found(m),
+        other => RpcError::io(other.to_string()),
+    })
+}
+
+#[derive(Deserialize)]
 struct LordChatParams {
     #[serde(default)]
     report_id: Option<String>,
@@ -215,6 +263,19 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         "directive.deactivate" => {
             let p: DirectiveIdParams = params(req.params)?;
             ok(state.reconciler.directive_deactivate(&p.id)?)
+        }
+        "character.rules" => {
+            let p: CharacterParams = params(req.params)?;
+            ok(character_rules(&state.cfg, &p.character)?)
+        }
+        "character.rules.set" => {
+            let p: CharacterRuleSetParams = params(req.params)?;
+            ok(character_rules_set(
+                &state.cfg,
+                &p.character,
+                &p.id,
+                p.enabled,
+            )?)
         }
         "lord.chat" => {
             let p: LordChatParams = params(req.params)?;

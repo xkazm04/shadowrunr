@@ -1,6 +1,7 @@
 //! Instrument identity. A run is only comparable with runs made by the same instrument: the
-//! same character package, tone file, segment tables, judge rubric, calibration and sim logic.
-//! Results from different hashes are never merged.
+//! same character package (including its optional rules and the effective enabled set after
+//! the operator's override), tone file, segment tables, judge rubric, calibration, installed
+//! moderation lists and sim logic. Results from different hashes are never merged.
 
 use std::path::{Path, PathBuf};
 
@@ -125,6 +126,32 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
     for (rel, p) in foils {
         files.push(file_entry(format!("character/foils/{rel}"), &p)?);
     }
+    let mut rules = Vec::new();
+    walk(&cd.join("rules"), "", &mut rules)?;
+    for (rel, p) in rules {
+        files.push(file_entry(format!("character/rules/{rel}"), &p)?);
+    }
+    // The effective enabled set: package defaults with the operator's override applied (the
+    // brain reads the override by the same convention, `RulesOverride::Auto`).
+    let enabled = shadowrunr_brain::rules::load_rules(cd, &shadowrunr_brain::RulesOverride::Auto)
+        .map_err(|e| SimError::Spec(format!("character rules: {e}")))?;
+    files.push(InstrumentFile {
+        path: "character/rules.enabled".into(),
+        sha256: sha_hex(shadowrunr_brain::rules::enabled_set_text(&enabled).as_bytes()),
+    });
+    // Operator-installed moderation lists the brain compiles (`<repo>/policy/local/*.txt`,
+    // beside the `platform-rules.json` that `PolicySource::Auto` reads).
+    let mut lists = Vec::new();
+    walk(
+        &cd.join("..").join("..").join("policy").join("local"),
+        "",
+        &mut lists,
+    )?;
+    for (rel, p) in lists {
+        if rel.ends_with(".txt") {
+            files.push(file_entry(format!("policy/local/{rel}"), &p)?);
+        }
+    }
     let mut seg = Vec::new();
     walk(inp.segments_dir, "", &mut seg)?;
     for (rel, p) in seg {
@@ -209,5 +236,77 @@ mod tests {
             std::fs::write(d.path().join(file), content).unwrap();
             assert_ne!(inst(d.path(), "a").instrument_hash, before, "{file}");
         }
+    }
+
+    #[test]
+    fn hash_tracks_rules_the_enabled_set_and_installed_lists() {
+        // A repo layout, so the Auto override (`<repo>/data/...`) and `<repo>/policy/local`
+        // resolve inside the temp dir.
+        let d = tempfile::tempdir().unwrap();
+        let repo = d.path().join("repo");
+        let c = repo.join("characters").join("x");
+        std::fs::create_dir_all(c.join("tones")).unwrap();
+        std::fs::create_dir_all(c.join("rules")).unwrap();
+        std::fs::write(
+            c.join("character.toml"),
+            "id = \"x\"\n[rules]\nalpha = true\n",
+        )
+        .unwrap();
+        std::fs::write(c.join("constitution.md"), "rules").unwrap();
+        std::fs::write(c.join("tones/a.md"), "tone a").unwrap();
+        std::fs::write(c.join("rules/alpha.md"), "# Alpha\n\nDo alpha.").unwrap();
+        std::fs::write(d.path().join("rubric.toml"), "v = 1").unwrap();
+        let h = || {
+            compute(&InstrumentInputs {
+                character_dir: &c,
+                tone: "a",
+                segments_dir: &d.path().join("seg"),
+                rubric_path: &d.path().join("rubric.toml"),
+                calibration_text: "{}",
+            })
+            .unwrap()
+            .instrument_hash
+        };
+        let base = h();
+        assert_eq!(h(), base, "stable");
+
+        // The rule text is hashed.
+        std::fs::write(c.join("rules/alpha.md"), "# Alpha\n\nDo alpha twice.").unwrap();
+        let edited = h();
+        assert_ne!(edited, base);
+
+        // The operator's override changes the effective set, and so the hash; setting it
+        // back to the default restores it.
+        let over = repo.join("data/characters/x/rules.json");
+        std::fs::create_dir_all(over.parent().unwrap()).unwrap();
+        std::fs::write(&over, r#"{"alpha": false}"#).unwrap();
+        let toggled = h();
+        assert_ne!(toggled, edited);
+        std::fs::write(&over, r#"{"alpha": true}"#).unwrap();
+        assert_eq!(h(), edited);
+
+        // An installed list's content is hashed; its metadata json is not needed.
+        let local = repo.join("policy/local");
+        std::fs::create_dir_all(&local).unwrap();
+        std::fs::write(local.join("fixture.txt"), "zorblax\n").unwrap();
+        let with_list = h();
+        assert_ne!(with_list, edited);
+        std::fs::write(local.join("fixture.txt"), "zorblax\nquexfin\n").unwrap();
+        assert_ne!(h(), with_list);
+        std::fs::write(local.join("fixture.json"), "{}").unwrap();
+        let i = compute(&InstrumentInputs {
+            character_dir: &c,
+            tone: "a",
+            segments_dir: &d.path().join("seg"),
+            rubric_path: &d.path().join("rubric.toml"),
+            calibration_text: "{}",
+        })
+        .unwrap();
+        assert!(i.files.iter().any(|f| f.path == "policy/local/fixture.txt"));
+        assert!(!i
+            .files
+            .iter()
+            .any(|f| f.path == "policy/local/fixture.json"));
+        assert!(i.files.iter().any(|f| f.path == "character/rules/alpha.md"));
     }
 }

@@ -54,6 +54,12 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Character packages: optional constitution rules.
+    #[command(subcommand)]
+    Character(CharacterCommand),
+    /// Moderation policy: operator-installed term lists.
+    #[command(subcommand)]
+    Policy(PolicyCommand),
     /// Serve /events (WebSocket) and /rpc on 127.0.0.1.
     Daemon {
         /// Port (default: [daemon] port, 7717).
@@ -62,6 +68,38 @@ pub enum Command {
         /// Serve with the scripted engine.
         #[arg(long)]
         scripted: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CharacterCommand {
+    /// List a character's optional rules; --enable/--disable write the operator's override
+    /// (<data>/characters/<id>/rules.json), never the package.
+    Rules {
+        /// Character package id.
+        id: String,
+        /// Rule id to enable (repeatable).
+        #[arg(long = "enable", value_name = "RULE")]
+        enable: Vec<String>,
+        /// Rule id to disable (repeatable).
+        #[arg(long = "disable", value_name = "RULE")]
+        disable: Vec<String>,
+        /// Print the list as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PolicyCommand {
+    /// Download or copy a term list into <policy>/local/<list-id>.txt (git-ignored) with its
+    /// provenance in <list-id>.json. Known ids have a default source.
+    InstallList {
+        /// e.g. awdev1-better-profane-words or surge-ai-profanity-en.
+        list_id: String,
+        /// URL or local path (default: the known source for the id).
+        #[arg(long)]
+        source: Option<String>,
     },
 }
 
@@ -215,8 +253,85 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
             scripted,
             json,
         } => reconcile_cmd(&cfg, tournament, scripted, json).await,
+        Command::Character(CharacterCommand::Rules {
+            id,
+            enable,
+            disable,
+            json,
+        }) => character_rules_cmd(&cfg, &id, &enable, &disable, json),
+        Command::Policy(PolicyCommand::InstallList { list_id, source }) => {
+            policy_install_cmd(&cfg, &list_id, source.as_deref()).await
+        }
         Command::Daemon { port, scripted } => daemon_cmd(cfg, port, scripted).await,
     }
+}
+
+fn character_rules_cmd(
+    cfg: &Config,
+    id: &str,
+    enable: &[String],
+    disable: &[String],
+    json: bool,
+) -> Result<ExitCode, String> {
+    if let Some(both) = enable.iter().find(|r| disable.contains(r)) {
+        return Err(format!("rule {both} is both enabled and disabled"));
+    }
+    let mut rules = crate::rpc::character_rules(cfg, id).map_err(|e| e.message)?;
+    for (rule, on) in enable
+        .iter()
+        .map(|r| (r, true))
+        .chain(disable.iter().map(|r| (r, false)))
+    {
+        rules = crate::rpc::character_rules_set(cfg, id, rule, on).map_err(|e| e.message)?;
+    }
+    if json {
+        print_json(&rules);
+    } else if rules.is_empty() {
+        println!("{id}: no optional rules");
+    } else {
+        for r in &rules {
+            println!(
+                "{}  {}  {}{}",
+                if r.enabled { "on " } else { "off" },
+                r.id,
+                r.title,
+                if r.enabled == r.default {
+                    String::new()
+                } else {
+                    format!(
+                        "  (operator override; default {})",
+                        if r.default { "on" } else { "off" }
+                    )
+                }
+            );
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+async fn policy_install_cmd(
+    cfg: &Config,
+    list_id: &str,
+    source: Option<&str>,
+) -> Result<ExitCode, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let meta = crate::policy_install::install(&cfg.paths.policy, list_id, source, now).await?;
+    let dir = crate::policy_install::local_dir(&cfg.paths.policy);
+    println!(
+        "installed {} ({} terms) from {}",
+        meta.list_id, meta.terms, meta.source
+    );
+    println!("licence: {}", meta.licence);
+    println!("sha256: {}", meta.sha256);
+    println!(
+        "wrote {} and {}",
+        dir.join(format!("{list_id}.txt")).display(),
+        dir.join(format!("{list_id}.json")).display()
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
 async fn preflight_cmd(cfg: &Config, json: bool, scripted: bool) -> Result<ExitCode, String> {

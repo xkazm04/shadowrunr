@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use shadowrunr_types::Rank;
 
+use crate::rules::{resolve_rules, CharacterRule, RulesOverride};
 use crate::BrainError;
 
 /// Rank titles as the character says them (`[ranks]` in character.toml).
@@ -85,11 +86,18 @@ pub struct CharacterPackage {
     pub bible: Option<String>,
     /// `situations.json`, exposed for the simulator (empty when the file is absent).
     pub situations: SituationBank,
+    /// Every optional rule (`rules/<id>.md`), sorted by id, with its effective state.
+    pub rules: Vec<CharacterRule>,
 }
 
 impl CharacterPackage {
     pub fn foil(&self, id: &str) -> Option<&Foil> {
         self.foils.iter().find(|f| f.id == id)
+    }
+
+    /// Enabled optional rules, sorted by id.
+    pub fn enabled_rules(&self) -> impl Iterator<Item = &CharacterRule> {
+        self.rules.iter().filter(|r| r.enabled)
     }
 }
 
@@ -102,6 +110,9 @@ struct CharacterToml {
     foils: Vec<String>,
     #[serde(default)]
     ranks: BTreeMap<String, String>,
+    /// `[rules]`: optional constitution rules, on or off by default.
+    #[serde(default)]
+    rules: BTreeMap<String, bool>,
 }
 
 fn read(path: &Path) -> Result<String, BrainError> {
@@ -117,8 +128,18 @@ fn is_safe_id(s: &str) -> bool {
 }
 
 /// Load `characters/<id>/` with the given tone variant. An empty `tone_variant` selects the
-/// package's `default_tone`. A missing tone file is an error.
+/// package's `default_tone`. A missing tone file is an error. The operator's rule override is
+/// found by the repo convention ([`RulesOverride::Auto`]).
 pub fn load_character(dir: &Path, tone_variant: &str) -> Result<CharacterPackage, BrainError> {
+    load_character_with(dir, tone_variant, &RulesOverride::Auto)
+}
+
+/// [`load_character`] with an explicit source for the operator's rule override.
+pub fn load_character_with(
+    dir: &Path,
+    tone_variant: &str,
+    overrides: &RulesOverride,
+) -> Result<CharacterPackage, BrainError> {
     let toml_text = read(&dir.join("character.toml"))?;
     let meta: CharacterToml = toml::from_str(&toml_text)
         .map_err(|e| BrainError::Package(format!("character.toml: {e}")))?;
@@ -205,6 +226,8 @@ pub fn load_character(dir: &Path, tone_variant: &str) -> Result<CharacterPackage
         SituationBank::default()
     };
 
+    let rules = resolve_rules(dir, &meta.id, &meta.rules, overrides)?;
+
     Ok(CharacterPackage {
         id: meta.id,
         dir: dir.to_path_buf(),
@@ -218,6 +241,7 @@ pub fn load_character(dir: &Path, tone_variant: &str) -> Result<CharacterPackage
         foils,
         bible,
         situations,
+        rules,
     })
 }
 
@@ -252,6 +276,23 @@ mod tests {
             .situations
             .iter()
             .any(|s| s.id == "prompt-injection"));
+    }
+
+    #[test]
+    fn malakor_ships_two_rules_enabled_by_default() {
+        let pkg = load_character_with(&malakor_dir(), "", &RulesOverride::None).unwrap();
+        let ids: Vec<(&str, bool)> = pkg
+            .rules
+            .iter()
+            .map(|r| (r.id.as_str(), r.default))
+            .collect();
+        assert_eq!(
+            ids,
+            [("crisis-handoff", true), ("no-financial-promotion", true)]
+        );
+        assert!(pkg.rules.iter().all(|r| r.enabled));
+        assert!(pkg.rules[0].text.contains("real help"));
+        assert!(pkg.rules[1].text.contains("Phylactery Token"));
     }
 
     #[test]

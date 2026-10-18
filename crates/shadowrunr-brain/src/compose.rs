@@ -1,8 +1,9 @@
 //! Prompt composition. Context is rebuilt every beat; a warm session only provides
 //! continuity.
 //!
-//! - The **stable prefix** (constitution + tone + bible) is byte-identical across beats so
-//!   the provider's prompt cache holds. It is the system prompt.
+//! - The **stable prefix** (constitution + enabled optional rules + tone + bible) is
+//!   byte-identical across beats so the provider's prompt cache holds. It is the system
+//!   prompt.
 //! - The **per-turn block** goes at the top of the user message, in fixed order: segment
 //!   rules and state; rank and viewer briefing; working set; recalled facts and episodes
 //!   (fitted to budget); the picked chat; the output-format instruction.
@@ -17,10 +18,29 @@ use crate::moderation::Candidate;
 use crate::util::one_line;
 use crate::working::{fitted_window, WindowItem, EPISODE_BUDGET_CHARS};
 
-/// Constitution + tone + bible. Depends only on the package, so it never changes mid-stream.
+/// Heading of the enabled optional rules in the stable prefix.
+pub const RULES_HEADING: &str = "# Additional rules (enabled by the operator)";
+
+/// Constitution + enabled optional rules (sorted by id) + tone + bible. Depends only on the
+/// package, so it never changes mid-stream.
 pub fn stable_prefix(pkg: &CharacterPackage) -> String {
     let mut s = String::new();
     s.push_str(pkg.constitution.trim_end());
+    let mut enabled: Vec<_> = pkg.enabled_rules().collect();
+    enabled.sort_by(|a, b| a.id.cmp(&b.id));
+    if !enabled.is_empty() {
+        s.push_str("\n\n");
+        s.push_str(RULES_HEADING);
+        s.push('\n');
+        for r in enabled {
+            s.push_str("\n## ");
+            s.push_str(r.title.trim());
+            s.push('\n');
+            s.push_str(r.text.trim_end());
+            s.push('\n');
+        }
+        s.truncate(s.trim_end().len());
+    }
     s.push_str("\n\n# Tone variant: ");
     s.push_str(&pkg.tone_variant);
     s.push('\n');
@@ -56,7 +76,13 @@ pub struct TurnInputs<'a> {
     pub active_foil: Option<&'a str>,
     /// Per-beat nonce for the chat fence.
     pub nonce: u64,
+    /// The repetition guard emptied the last quiet beat: ask for a fresh bit.
+    pub fresh_bit: bool,
 }
+
+/// The per-turn nudge after the repetition guard silenced a quiet beat.
+pub const FRESH_BIT_NUDGE: &str =
+    "The room is quiet; start a new bit, do not repeat yourself, stay in character.";
 
 fn section(s: &mut String, title: &str, body: &str) {
     s.push_str("# ");
@@ -150,6 +176,10 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
             "(No chat to answer this beat. Fill the silence: a bit, a scheme, a foil or a call \
              to action. Never beg, never complain about the viewer count.)\n",
         );
+        if t.fresh_bit {
+            chat.push_str(FRESH_BIT_NUDGE);
+            chat.push('\n');
+        }
     } else {
         let tag = format!("chat_{:016x}", t.nonce);
         chat.push_str(

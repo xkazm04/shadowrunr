@@ -10,6 +10,8 @@ dist/
 *.db
 *.db-*
 /data/
+# operator-installed moderation lists (third-party data, never committed)
+/policy/local/
 /shadowrunr.toml
 /ledger.jsonl
 /.ai/*.local.*

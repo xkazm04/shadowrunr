@@ -112,6 +112,48 @@ pub fn fts_query(text: &str, max: usize) -> Option<String> {
     }
 }
 
+/// Malakor lines a new line is compared with by the repetition guard.
+pub const REPEAT_WINDOW: usize = 8;
+
+/// Sentences of a line (split after `.`, `!`, `?` or `…` followed by whitespace).
+fn sentences(text: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut prev_end = false;
+    for (i, c) in text.char_indices() {
+        if prev_end && c.is_whitespace() {
+            out.push(&text[start..i]);
+            start = i;
+        }
+        prev_end = matches!(c, '.' | '!' | '?' | '…');
+    }
+    out.push(&text[start..]);
+    out
+}
+
+/// Whether `a` is a near-duplicate of `b`: the whole line is similar (trigram Jaccard of at
+/// least 0.6), or they share a sentence of 30+ chars almost verbatim (at least 0.8), the
+/// shape of a looped status line ("The throne leads five to nothing, and the poll is still
+/// open. ...").
+pub fn near_duplicate(a: &str, b: &str) -> bool {
+    let (na, nb) = (normalize(a), normalize(b));
+    if na.is_empty() || nb.is_empty() {
+        return false;
+    }
+    if similarity(&na, &nb) >= 0.6 {
+        return true;
+    }
+    let long = |s: &str| {
+        let n = normalize(s);
+        (n.chars().count() >= 30).then_some(n)
+    };
+    let sb: Vec<String> = sentences(b).into_iter().filter_map(long).collect();
+    sentences(a)
+        .into_iter()
+        .filter_map(long)
+        .any(|x| sb.iter().any(|y| similarity(&x, y) >= 0.8))
+}
+
 /// One line, at most `max` chars, with an ellipsis when cut.
 pub fn one_line(text: &str, max: usize) -> String {
     let flat: String = text
@@ -144,6 +186,22 @@ mod tests {
         assert_eq!(normalize("  Hello,   WORLD!! "), "hello world");
         assert!(similarity("all hail the lich king", "all hail the lich kingg") > 0.8);
         assert!(similarity("what is your plan", "i love pizza") < 0.2);
+    }
+
+    #[test]
+    fn near_duplicates_of_a_looped_status_line() {
+        // From the pilot's empty-room loop.
+        let a = "The throne leads five to nothing, and the poll is still open. Minions, one vote closes the case; none and the Ledger will dismiss the Inspector.";
+        let b = "The throne leads five to nothing, and the poll is still open. The Ledger is still waiting, and so is the room.";
+        let c = "The poll is still open, minions, and the throne leads five to nothing. The Ledger has run out of stalling words, and so, it seems, has everyone else.";
+        assert!(near_duplicate(b, a));
+        assert!(near_duplicate(c, a));
+        // Neighbours: different lines in the same room are not duplicates.
+        let d = "ThornToad20, the Inspector gets your vote, and it is counted.";
+        let e = "Minions, the next hex is the one to nominate. Use !hint with a hex number and your reason.";
+        assert!(!near_duplicate(d, a));
+        assert!(!near_duplicate(e, a));
+        assert!(!near_duplicate(e, d));
     }
 
     #[test]

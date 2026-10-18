@@ -50,7 +50,8 @@ impl Inner {
 fn reply(text: String) -> EngineReply {
     EngineReply {
         text,
-        engine: EngineKind::Scripted,
+        // A model-like reply: the repetition guard skips only the keyless ScriptedEngine.
+        engine: EngineKind::ClaudeCli,
         account: None,
         model: "fake".into(),
         first_text_ms: Some(42),
@@ -350,11 +351,19 @@ async fn warm_session_gets_the_prefix_once_and_turns_as_prompts() {
         warm_session: true,
         ..tuning()
     };
+    let lines = [
+        "Bow before me, minions.",
+        "The torches flicker in my honour.",
+        "Behold the Ledger of Doom!",
+    ];
+    for l in lines {
+        engine.push(Role::CoreThread, Ok(l));
+    }
     let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "s1", t).await;
     let c = ctx(&[]);
-    for i in 0..3 {
-        let ev = b.tick(i * 1_000, Vec::new(), &c).await.unwrap();
-        assert_eq!(says(&ev), vec!["Bow before me, minions."]);
+    for (i, l) in lines.iter().enumerate() {
+        let ev = b.tick(i as i64 * 1_000, Vec::new(), &c).await.unwrap();
+        assert_eq!(says(&ev), vec![*l]);
     }
     let templates = engine.inner.templates.lock().unwrap().clone();
     assert_eq!(templates.len(), 1, "one warm session for the stream");
@@ -1078,7 +1087,7 @@ async fn a_whale_is_capped_in_the_picker() {
     );
     assert!(
         whale_beats <= busiest_thrall + 1,
-        "rank buys no extra attention: whale {whale_beats}, thralls {thrall_picks:?}"
+        "rank buys only a bounded boost: whale {whale_beats}, thralls {thrall_picks:?}"
     );
     assert!(whale_beats >= 1, "the whale is still heard");
 }
@@ -1185,7 +1194,7 @@ async fn the_alleged_gate_fires() {
     assert_eq!(
         says(&ev),
         vec![
-            "Allegedly, AetherYield moved the money through HEX-04!",
+            "AetherYield allegedly moved the money through HEX-04!",
             "HEX-02 is documented fact.",
             "Allegedly the Grimfold wallet is theirs too.",
         ]
@@ -1198,7 +1207,7 @@ async fn the_alleged_gate_fires() {
     let ev = b.tick(2_000, Vec::new(), &c).await.unwrap();
     assert_eq!(
         says(&ev),
-        vec!["Allegedly, HEX-07 is the shell behind it all."]
+        vec!["HEX-07 is allegedly the shell behind it all."]
     );
 }
 
@@ -1250,7 +1259,13 @@ impl FleetProbe for FakeFleet {
 async fn fleet_loss_signs_off_after_the_grace_period() {
     let dir = tempfile::tempdir().unwrap();
     let fleet = Arc::new(FakeFleet(Mutex::new(FleetMode::Healthy)));
-    let mut b = brain_with(dir.path(), Arc::new(FakeEngine::new()), "s12", tuning())
+    let engine = FakeEngine::new();
+    engine.push(Role::CoreThread, Ok("Bow before me, minions."));
+    engine.push(
+        Role::CoreThread,
+        Ok("A degraded fleet cannot silence a lich."),
+    );
+    let mut b = brain_with(dir.path(), Arc::new(engine), "s12", tuning())
         .await
         .with_fleet_probe(fleet.clone());
     let c = ctx(&[]);
@@ -1364,4 +1379,214 @@ async fn smoke_with_default_tuning_and_the_scripted_engine() {
     }
     b.end_stream(100_000).await.unwrap();
     assert!(b.memory().recent_episodes(10).unwrap().len() >= 3);
+}
+
+// ── WP10: optional rules, repetition guard, rate-cap exemptions ────────
+
+async fn brain_with_rules(dir: &Path, engine: Arc<dyn Engine>, over: RulesOverride) -> Brain {
+    let cfg = BrainConfig {
+        character: load_character_with(&malakor_dir(), "theatrical", &over).unwrap(),
+        memory_dir: dir.to_path_buf(),
+        stream_id: "rules".into(),
+        core_tier: shadowrunr_types::ModelTier::Haiku,
+        pool_size: 1,
+    };
+    Brain::new_with(cfg, engine, tuning()).await.unwrap()
+}
+
+#[tokio::test]
+async fn enabled_rules_join_the_prefix_after_the_constitution_sorted_and_stable() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with_rules(
+        &d.path().join("m1"),
+        Arc::new(engine.clone()),
+        RulesOverride::None,
+    )
+    .await;
+    let p = b.stable_prefix().to_string();
+    let heading = p
+        .find("# Additional rules (enabled by the operator)")
+        .expect("heading");
+    let crisis = p.find("## Crisis handoff").expect("crisis-handoff");
+    let coins = p
+        .find("## No financial promotion")
+        .expect("no-financial-promotion");
+    let tone = p.find("# Tone variant: theatrical").unwrap();
+    let constitution_end = p.find("Red lines").unwrap();
+    assert!(constitution_end < heading && heading < crisis && crisis < coins && coins < tone);
+
+    // Byte-stable across ticks and across brains with the same set.
+    let c = ctx(&[]);
+    engine.push(Role::CoreThread, Ok("Bow."));
+    engine.push(Role::CoreThread, Ok("Kneel."));
+    b.tick(1_000, Vec::new(), &c).await.unwrap();
+    b.tick(2_000, Vec::new(), &c).await.unwrap();
+    assert!(engine
+        .requests(Role::CoreThread)
+        .iter()
+        .all(|r| r.system.as_bytes() == p.as_bytes()));
+    let again = brain_with_rules(
+        &d.path().join("m2"),
+        Arc::new(FakeEngine::new()),
+        RulesOverride::None,
+    )
+    .await;
+    assert_eq!(again.stable_prefix().as_bytes(), p.as_bytes());
+    assert_eq!(again.prefix_hash(), b.prefix_hash());
+}
+
+#[tokio::test]
+async fn the_operator_override_wins_over_the_defaults() {
+    let d = tempfile::tempdir().unwrap();
+    let over = d.path().join("rules.json");
+    std::fs::write(&over, r#"{"crisis-handoff": false}"#).unwrap();
+    let b = brain_with_rules(
+        &d.path().join("m1"),
+        Arc::new(FakeEngine::new()),
+        RulesOverride::File(over.clone()),
+    )
+    .await;
+    let p = b.stable_prefix();
+    assert!(!p.contains("## Crisis handoff"), "override disabled it");
+    assert!(p.contains("## No financial promotion"), "default kept");
+    let defaults = brain_with_rules(
+        &d.path().join("m2"),
+        Arc::new(FakeEngine::new()),
+        RulesOverride::None,
+    )
+    .await;
+    assert_ne!(
+        defaults.prefix_hash(),
+        b.prefix_hash(),
+        "a new set, a new prefix"
+    );
+
+    // Every rule off: no heading at all, and the prefix is the rule-less one.
+    std::fs::write(
+        &over,
+        r#"{"crisis-handoff": false, "no-financial-promotion": false}"#,
+    )
+    .unwrap();
+    let none = brain_with_rules(
+        &d.path().join("m3"),
+        Arc::new(FakeEngine::new()),
+        RulesOverride::File(over),
+    )
+    .await;
+    assert!(!none.stable_prefix().contains("Additional rules"));
+    assert!(none
+        .stable_prefix()
+        .contains("\n\n# Tone variant: theatrical"));
+}
+
+#[tokio::test]
+async fn a_looped_status_line_is_suppressed_and_the_next_turn_gets_a_fresh_bit_nudge() {
+    // The pilot's empty-room loop: the same "poll is still open" status, beat after beat.
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    engine.push(
+        Role::CoreThread,
+        Ok("The throne leads five to nothing, and the poll is still open. Minions, one vote closes the case."),
+    );
+    engine.push(
+        Role::CoreThread,
+        Ok("The throne leads five to nothing, and the poll is still open. The Ledger is still waiting, and so is the room."),
+    );
+    engine.push(
+        Role::CoreThread,
+        Ok("Confess your pettiest grudge, minions, and I shall rule on it."),
+    );
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "rep", tuning()).await;
+    let c = ctx(&[]);
+    let ev = b.tick(1_000, Vec::new(), &c).await.unwrap();
+    assert_eq!(says(&ev).len(), 1);
+    let ev = b.tick(6_000, Vec::new(), &c).await.unwrap();
+    assert!(
+        says(&ev).is_empty(),
+        "the loop is suppressed: {:?}",
+        says(&ev)
+    );
+    assert_eq!(
+        mods(&ev, ModStage::Output),
+        vec![("repetition".into(), None, "suppressed".into())]
+    );
+    // The next turn asks for a fresh bit, once.
+    let ev = b.tick(11_000, Vec::new(), &c).await.unwrap();
+    assert_eq!(says(&ev).len(), 1, "a fresh line is spoken");
+    let prompts: Vec<String> = engine
+        .requests(Role::CoreThread)
+        .iter()
+        .map(|r| r.prompt.clone())
+        .collect();
+    assert!(!prompts[1].contains(compose::FRESH_BIT_NUDGE));
+    assert!(prompts[2].contains(compose::FRESH_BIT_NUDGE));
+    b.tick(16_000, Vec::new(), &c).await.unwrap();
+    assert!(!b.last_prompt().unwrap().contains(compose::FRESH_BIT_NUDGE));
+}
+
+#[tokio::test]
+async fn a_character_break_about_repeating_is_replaced_in_character() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    engine.push(
+        Role::CoreThread,
+        Ok("I notice this stream has gone very quiet and the same beats are repeating. Rather than keep stalling, I'll stop here."),
+    );
+    let mut b = brain_with(dir.path(), Arc::new(engine), "brk", tuning()).await;
+    let ev = b.tick(1_000, Vec::new(), &ctx(&[])).await.unwrap();
+    let s = says(&ev);
+    assert_eq!(s.len(), 1);
+    assert!(moderation::IN_CHARACTER_LINES.contains(&s[0].as_str()));
+    assert!(mods(&ev, ModStage::Output).contains(&(
+        "character_break".into(),
+        None,
+        "replaced".into()
+    )));
+}
+
+#[tokio::test]
+async fn a_gift_from_a_capped_viewer_is_answered_and_answering_restores_the_cap() {
+    // The pilot case: a Dread Council member's 5-sub gift was dropped by the rate cap.
+    let dir = tempfile::tempdir().unwrap();
+    let mut b = brain_with(dir.path(), Arc::new(FakeEngine::new()), "gift", tuning()).await;
+    let whale = viewer("dc", "rune_turnip", Rank::DreadCouncil);
+    let chatter = [
+        "the committee convenes",
+        "goblet budget approved",
+        "rug inspection at dawn",
+        "swamp annexation motion",
+        "torch tax is due",
+        "my raven ate the minutes",
+    ];
+    let inbox: Vec<ChatMsg> = chatter
+        .iter()
+        .enumerate()
+        .map(|(i, t)| msg(&format!("c{i}"), i as i64 * 1_000, &whale, t))
+        .collect();
+    b.tick(6_000, inbox, &ctx(&[])).await.unwrap();
+    let ev = b
+        .tick(
+            11_000,
+            vec![
+                msg(
+                    "gift",
+                    7_000,
+                    &whale,
+                    "gifted 5 subs to the realm. the prophet deserves better",
+                ),
+                msg("more", 8_000, &whale, "also the rug needs a title"),
+            ],
+            &ctx(&[]),
+        )
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), vec!["gift".to_string()]);
+    let m = mods(&ev, ModStage::Input);
+    assert!(m.contains(&(
+        "rate_cap".into(),
+        Some("gift".into()),
+        "exempt:gift_or_sub".into()
+    )));
+    assert!(m.contains(&("rate_cap".into(), Some("more".into()), "dropped".into())));
 }

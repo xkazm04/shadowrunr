@@ -328,3 +328,116 @@ async fn sim_start_is_refused_while_preflight_is_red() {
     };
     assert_eq!(descoped["error"]["code"], "invalid_params");
 }
+
+// ── WP10: character rules and installed lists ──────────────────────────
+
+#[tokio::test]
+async fn character_rules_rpc_lists_and_toggles_into_the_data_override() {
+    let tmp = tempfile::tempdir().unwrap();
+    let chars = tmp.path().join("characters");
+    copy_dir(
+        &repo().join("characters").join("malakor"),
+        &chars.join("malakor"),
+    );
+    let toml_before = std::fs::read(chars.join("malakor/character.toml")).unwrap();
+    let addr = start(test_config(tmp.path(), chars.clone())).await;
+
+    let v = rpc(&addr, "character.rules", json!({ "character": "malakor" })).await;
+    assert_eq!(
+        v["result"],
+        json!([
+            { "id": "crisis-handoff", "title": "Crisis handoff", "enabled": true, "default": true },
+            { "id": "no-financial-promotion", "title": "No financial promotion", "enabled": true, "default": true }
+        ]),
+        "{v}"
+    );
+
+    let v = rpc(
+        &addr,
+        "character.rules.set",
+        json!({ "character": "malakor", "id": "crisis-handoff", "enabled": false }),
+    )
+    .await;
+    assert_eq!(v["result"][0]["enabled"], false, "{v}");
+    assert_eq!(v["result"][0]["default"], true);
+    let over = tmp.path().join("data/characters/malakor/rules.json");
+    let saved: Value = serde_json::from_str(&std::fs::read_to_string(&over).unwrap()).unwrap();
+    assert_eq!(saved, json!({ "crisis-handoff": false }));
+    assert_eq!(
+        std::fs::read(chars.join("malakor/character.toml")).unwrap(),
+        toml_before,
+        "the tracked package is never rewritten by a toggle"
+    );
+    let v = rpc(&addr, "character.rules", json!({ "character": "malakor" })).await;
+    assert_eq!(v["result"][0]["enabled"], false, "the override wins");
+
+    let v = rpc(
+        &addr,
+        "character.rules.set",
+        json!({ "character": "malakor", "id": "no-such-rule", "enabled": true }),
+    )
+    .await;
+    assert_eq!(v["error"]["code"], "not_found", "{v}");
+    let v = rpc(&addr, "character.rules", json!({ "character": "../x" })).await;
+    assert_eq!(v["error"]["code"], "invalid_params", "{v}");
+    let v = rpc(&addr, "character.rules", json!({ "character": "nobody" })).await;
+    assert_eq!(v["error"]["code"], "not_found", "{v}");
+}
+
+/// Invented tokens only: no real slur ever appears in a fixture.
+const FIXTURE_RULES: &str = r#"{ "version": 1, "platforms": {}, "term_rules": [
+  { "id": "slur-operator-list", "category": "slur",
+    "pattern": "\\b\\B__OPERATOR_INSTALLED_LIST__fixture-list__slur_racial__",
+    "platforms": ["twitch"], "action": "block" } ] }"#;
+
+#[tokio::test]
+async fn pf05_reports_placeholder_only_then_the_installed_list() {
+    let tmp = tempfile::tempdir().unwrap();
+    let chars = tmp.path().join("characters");
+    copy_dir(
+        &repo().join("characters").join("malakor"),
+        &chars.join("malakor"),
+    );
+    let policy = tmp.path().join("policy");
+    std::fs::create_dir_all(&policy).unwrap();
+    std::fs::write(policy.join("platform-rules.json"), FIXTURE_RULES).unwrap();
+    let mut cfg = test_config(tmp.path(), chars);
+    cfg.paths.policy = policy.clone();
+
+    let r = shadowrunr_daemon::preflight::pf05_policy(&cfg);
+    assert_eq!(
+        r.state,
+        shadowrunr_types::HealthState::Amber,
+        "{}",
+        r.detail
+    );
+    assert!(r.detail.contains("placeholder only"), "{}", r.detail);
+
+    let src = tmp.path().join("fixture.txt");
+    std::fs::write(
+        &src,
+        "zorblax\tslur_racial\nquexfin\tslur_racial\nwibblet\tinsult\n",
+    )
+    .unwrap();
+    let meta = shadowrunr_daemon::policy_install::install(
+        &policy,
+        "fixture-list",
+        Some(src.to_str().unwrap()),
+        0,
+    )
+    .await
+    .unwrap();
+    assert_eq!(meta.terms, 3);
+    let r = shadowrunr_daemon::preflight::pf05_policy(&cfg);
+    assert_eq!(
+        r.state,
+        shadowrunr_types::HealthState::Green,
+        "{}",
+        r.detail
+    );
+    assert!(
+        r.detail.contains("installed list fixture-list (2 terms)"),
+        "{}",
+        r.detail
+    );
+}

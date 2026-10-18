@@ -222,3 +222,11 @@ read events ignore it.
 
 Live events arrive in the batches the simulator flushes to `transcript.jsonl`, not one at a
 time.
+
+## Character rules and moderation lists
+
+```
+shadowrunr character rules malakor                          # list optional rules and their state
+shadowrunr character rules malakor --disable crisis-handoff  # operator override in <data>/characters/malakor/rules.json
+shadowrunr policy install-list awdev1-better-profane-words   # downloads into policy/local/ (git-ignored, GPL-3.0, never committed)
+```

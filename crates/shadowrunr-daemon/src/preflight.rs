@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use shadowrunr_brain::moderation::Policy;
+use shadowrunr_brain::moderation::{ListStatus, Policy};
 use shadowrunr_segments::{SegmentConfig, SegmentError, SegmentRuntime};
 use shadowrunr_sim::calibration::{self, CalibrationOrigin};
 use shadowrunr_types::{HealthReport, HealthState, SegmentId};
@@ -189,7 +189,9 @@ fn same_file(a: &Path, b: &Path) -> bool {
     }
 }
 
-/// PF-05: `policy/platform-rules.json` is present and parses (amber when absent).
+/// PF-05: `policy/platform-rules.json` is present and parses (amber when absent), and the
+/// operator-installed lists its placeholders name: green with "installed list <id> (<n>
+/// terms)", amber with "placeholder only".
 pub fn pf05_policy(cfg: &Config) -> HealthReport {
     let path = cfg.paths.policy.join("platform-rules.json");
     if !path.is_file() {
@@ -231,9 +233,10 @@ pub fn pf05_policy(cfg: &Config) -> HealthReport {
         .get("term_rules")
         .and_then(|r| r.as_array())
         .map_or(0, Vec::len);
-    if let Err(e) = Policy::from_file(&path) {
-        return rep("PF-05", HealthState::Red, e.to_string());
-    }
+    let policy = match Policy::from_file_with_local(&path, &cfg.paths.policy.join("local")) {
+        Ok(p) => p,
+        Err(e) => return rep("PF-05", HealthState::Red, e.to_string()),
+    };
     // The brain's PolicySource::Auto reads <characters>/../policy; say so when the
     // configured file is a different one.
     let auto = cfg
@@ -250,7 +253,12 @@ pub fn pf05_policy(cfg: &Config) -> HealthReport {
             platforms.join(", ")
         }
     );
-    let mut state = HealthState::Green;
+    let (lists_state, lists_detail) = installed_lists(&policy.lists);
+    if !lists_detail.is_empty() {
+        detail.push_str("; ");
+        detail.push_str(&lists_detail);
+    }
+    let mut state = lists_state;
     if !same_file(&path, &auto) {
         state = HealthState::Amber;
         detail.push_str(&format!(
@@ -259,6 +267,44 @@ pub fn pf05_policy(cfg: &Config) -> HealthReport {
         ));
     }
     rep("PF-05", state, detail)
+}
+
+/// The installed-list part of PF-05: green when every placeholder category is served by an
+/// installed list ("installed list <id> (<n> terms)"), amber otherwise ("placeholder only").
+pub fn installed_lists(lists: &[ListStatus]) -> (HealthState, String) {
+    let mut parts = Vec::new();
+    let mut unserved: Vec<&str> = Vec::new();
+    for l in lists {
+        match (l.installed_terms, &l.error) {
+            (Some(n), _) => parts.push(format!("installed list {} ({n} terms)", l.list_id)),
+            (None, Some(e)) => parts.push(format!(
+                "list {} unusable ({e}); built-in stand-in",
+                l.list_id
+            )),
+            (None, None) => parts.push(format!("list {}: placeholder only", l.list_id)),
+        }
+    }
+    for l in lists {
+        let served = lists
+            .iter()
+            .any(|x| x.category == l.category && x.installed_terms.is_some());
+        if !served && !unserved.contains(&l.category.as_str()) {
+            unserved.push(&l.category);
+        }
+    }
+    let state = if unserved.is_empty() {
+        HealthState::Green
+    } else {
+        HealthState::Amber
+    };
+    let mut detail = parts.join(", ");
+    if !unserved.is_empty() {
+        detail.push_str(&format!(
+            " (placeholder only for {}: run `shadowrunr policy install-list <id>`)",
+            unserved.join(", ")
+        ));
+    }
+    (state, detail)
 }
 
 /// PF-06: `sim/calibration.json` is present (amber when only the built-in defaults exist).
@@ -354,6 +400,33 @@ mod tests {
             worst(HealthState::Green, HealthState::Green),
             HealthState::Green
         );
+    }
+
+    fn status(list: &str, cat: &str, terms: Option<usize>) -> ListStatus {
+        ListStatus {
+            rule_id: format!("r-{list}"),
+            list_id: list.into(),
+            category: cat.into(),
+            installed_terms: terms,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn installed_lists_green_when_every_category_is_served() {
+        let (s, d) = installed_lists(&[
+            status("awdev1-better-profane-words", "slur", Some(528)),
+            status("surge-ai-profanity-en", "slur", None),
+        ]);
+        assert_eq!(s, HealthState::Green);
+        assert!(d.contains("installed list awdev1-better-profane-words (528 terms)"));
+        let (s, d) = installed_lists(&[
+            status("awdev1-better-profane-words", "slur", None),
+            status("surge-ai-profanity-en", "slur", None),
+        ]);
+        assert_eq!(s, HealthState::Amber);
+        assert!(d.contains("placeholder only"));
+        assert_eq!(installed_lists(&[]).0, HealthState::Green);
     }
 
     #[test]

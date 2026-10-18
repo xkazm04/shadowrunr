@@ -18,22 +18,26 @@ pub mod memory;
 pub mod moderation;
 pub mod picker;
 pub mod pool;
+pub mod rules;
 pub mod util;
 pub mod working;
 
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use shadowrunr_types::{
-    Case, ChatMsg, Engine, EngineError, EngineReply, EngineRequest, EpisodeKind, FactScope,
-    ModelTier, Op, Role, SegmentContext, Speaker, StreamEvent, TsMs, WarmSession,
+    Case, ChatMsg, Engine, EngineError, EngineKind, EngineReply, EngineRequest, EpisodeKind,
+    FactScope, ModelTier, Op, Role, SegmentContext, Speaker, StreamEvent, TsMs, WarmSession,
 };
 
-pub use character::{load_character, CharacterPackage, Foil, RankTitles, Situation, SituationBank};
+pub use character::{
+    load_character, load_character_with, CharacterPackage, Foil, RankTitles, Situation,
+    SituationBank,
+};
 pub use fleet::{FleetMode, FleetProbe};
 pub use memory::{
     consolidate, rebuild_index, should_consolidate, ConsolidationReport, FactStatus, MemoryStore,
@@ -42,13 +46,14 @@ pub use memory::{
 pub use moderation::{FilterConfig, HexInfo, PolicySource};
 pub use picker::PickerConfig;
 pub use pool::{Job, JobCtx, JobRunner, JobStatus, JobUpdate, ResearchRunner, WorkerPool};
+pub use rules::{CharacterRule, RuleState, RulesOverride};
 
 use compose::{compose_turn, stable_prefix, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line};
 use moderation::{gate_text, output_events, InputFilter, Policy, TermAction};
 use picker::{PickContext, Picker};
-use util::{fnv1a64, one_line};
+use util::{fnv1a64, near_duplicate, one_line, REPEAT_WINDOW};
 use working::{select_window, WindowItem, WorkingSet, RECENCY_FLOOR};
 
 #[derive(Debug, thiserror::Error)]
@@ -161,6 +166,10 @@ pub struct Brain {
     ticks: u64,
     salt: u64,
     names: Vec<String>,
+    /// Malakor's last spoken lines, for the repetition guard.
+    spoken: VecDeque<String>,
+    /// The repetition guard emptied the last quiet beat: nudge the next turn.
+    fresh_bit: bool,
     last_prompt: Option<String>,
     last_reply: Option<EngineReply>,
     last_consolidation: Option<Result<ConsolidationReport, String>>,
@@ -192,9 +201,11 @@ impl Brain {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos() as u64)
             .unwrap_or(0);
+        let mut filter = InputFilter::new(tuning.filter.clone());
+        filter.set_names(names.clone());
         Ok(Self {
             pool: Arc::new(WorkerPool::new(cfg.pool_size)),
-            filter: InputFilter::new(tuning.filter.clone()),
+            filter,
             picker: Picker::new(tuning.picker.clone()),
             working: WorkingSet::new(tuning.working_set_ttl_ms),
             fleet: FleetWatch::new(tuning.fleet_grace_s),
@@ -209,6 +220,8 @@ impl Brain {
             ticks: 0,
             salt,
             names,
+            spoken: VecDeque::new(),
+            fresh_bit: false,
             last_prompt: None,
             last_reply: None,
             last_consolidation: None,
@@ -489,6 +502,8 @@ impl Brain {
             .picker
             .pick(&cands, &pctx, self.engine.as_ref(), &corr)
             .await;
+        self.filter
+            .note_answered(pick.chosen.iter().map(|c| c.msg.viewer.id.as_str()));
         if !pick.chosen.is_empty() {
             ev.push(StreamEvent::Picked {
                 ts_ms: now_ms,
@@ -590,6 +605,7 @@ impl Brain {
             pkg,
             active_foil: active_foil.as_deref(),
             nonce,
+            fresh_bit: std::mem::take(&mut self.fresh_bit),
         });
         self.last_prompt = Some(prompt.clone());
 
@@ -636,6 +652,9 @@ impl Brain {
         };
         let lines = parse_reply(&reply.text, &ctx.allowed_ops, active_foil.as_deref());
         let first_text_ms = reply.first_text_ms;
+        // The keyless ScriptedEngine echoes a constant line by design (harness plumbing);
+        // guarding it would silence every scripted run.
+        let guard_repeats = reply.engine != EngineKind::Scripted;
         self.last_reply = Some(reply);
 
         // Grades revealed this beat count for lines in the same beat.
@@ -655,11 +674,22 @@ impl Brain {
         }
 
         let mut say_idx: Vec<usize> = Vec::new();
+        let mut suppressed = 0usize;
         for line in lines {
             match line {
                 Line::Say(text) => {
                     let (out, fired) = gate_text(&text, &self.policy, &self.hexes);
                     ev.extend(output_events(now_ms, &fired));
+                    // Repetition guard: never say a near-duplicate of a recent line.
+                    if guard_repeats && self.spoken.iter().any(|p| near_duplicate(&out, p)) {
+                        ev.push(moderation::output_event(now_ms, "repetition", "suppressed"));
+                        suppressed += 1;
+                        continue;
+                    }
+                    self.spoken.push_back(out.clone());
+                    while self.spoken.len() > REPEAT_WINDOW {
+                        self.spoken.pop_front();
+                    }
                     self.working.remember_line(&out);
                     turn.push(format!("Malakor: {out}"));
                     say_idx.push(ev.len());
@@ -730,6 +760,11 @@ impl Brain {
                     ev.push(moderation::output_event(now_ms, &rule, "rejected"));
                 }
             }
+        }
+
+        // A quiet beat the guard silenced: the next turn gets a fresh-bit nudge instead.
+        if say_idx.is_empty() && suppressed > 0 && pick.chosen.is_empty() {
+            self.fresh_bit = true;
         }
 
         // replying_to: lines that name a picked viewer; a single pick goes to the first line.

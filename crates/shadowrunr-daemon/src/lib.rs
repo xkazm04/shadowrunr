@@ -5,6 +5,7 @@ pub mod cli;
 pub mod config;
 pub mod engine;
 pub mod live;
+pub mod policy_install;
 pub mod preflight;
 pub mod rpc;
 pub mod runs;

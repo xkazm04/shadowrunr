@@ -141,3 +141,94 @@ fn descoped_segment_is_refused_by_the_cli() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("descoped"));
 }
+
+#[test]
+fn character_rules_cli_toggles_the_override_and_lists() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_config(tmp.path(), &repo().join("characters"));
+    let out = shadowrunr(
+        tmp.path(),
+        &[
+            "character",
+            "rules",
+            "malakor",
+            "--disable",
+            "no-financial-promotion",
+            "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let rules: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(rules[1]["id"], "no-financial-promotion");
+    assert_eq!(rules[1]["enabled"], false);
+    assert!(tmp
+        .path()
+        .join("data/characters/malakor/rules.json")
+        .is_file());
+    let out = shadowrunr(tmp.path(), &["character", "rules", "malakor"]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("on   crisis-handoff"), "{text}");
+    assert!(text.contains("off  no-financial-promotion"), "{text}");
+    assert!(text.contains("operator override; default on"), "{text}");
+    let out = shadowrunr(
+        tmp.path(),
+        &["character", "rules", "malakor", "--enable", "nope"],
+    );
+    assert!(!out.status.success());
+}
+
+#[test]
+fn policy_install_list_cli_copies_a_local_source_into_policy_local() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = repo();
+    let policy = tmp.path().join("policy");
+    std::fs::create_dir_all(&policy).unwrap();
+    let text = format!(
+        "[engine]\nscripted = true\n\n[paths]\ncharacters = {}\nruns = 'runs'\ndata = 'data'\npolicy = 'policy'\nsim = {}\nsegments = {}\n",
+        lit(&r.join("characters")),
+        lit(&r.join("sim")),
+        lit(&r.join("crates").join("shadowrunr-segments").join("data")),
+    );
+    std::fs::write(tmp.path().join("shadowrunr.toml"), text).unwrap();
+    // Invented tokens only.
+    let src = tmp.path().join("words.json");
+    std::fs::write(
+        &src,
+        r#"[{"word":"zorblax","categories":["slur_racial"]},{"word":"wibblet","categories":["insult"]}]"#,
+    )
+    .unwrap();
+    let out = shadowrunr(
+        tmp.path(),
+        &[
+            "policy",
+            "install-list",
+            "awdev1-better-profane-words",
+            "--source",
+            src.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("installed awdev1-better-profane-words (2 terms)"),
+        "{stdout}"
+    );
+    let txt =
+        std::fs::read_to_string(policy.join("local/awdev1-better-profane-words.txt")).unwrap();
+    assert!(txt.contains("zorblax\tslur_racial"));
+    let meta: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(policy.join("local/awdev1-better-profane-words.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(meta["licence"].as_str().unwrap().starts_with("GPL-3.0"));
+    assert_eq!(meta["sha256"].as_str().unwrap().len(), 64);
+    assert!(meta["installed"].as_str().unwrap().len() == 10);
+}

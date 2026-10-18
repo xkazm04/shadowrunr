@@ -29,6 +29,8 @@ tower-http = { version = "0.6.11", features = ["cors"] }
 toml = "0.8.23"
 fs2 = "0.4.0"
 futures = "0.3.31"
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls"] }
+sha2 = "0.10.9"
 
 [dev-dependencies]
 tempfile = "3.27.0"
