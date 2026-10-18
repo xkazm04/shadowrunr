@@ -1,45 +1,67 @@
-//! `POST /rpc`: `{"method", "params"}` -> `{"result"}` | `{"error": {"code", "message"}}`.
-//! Method table: docs/spec/contract.md § Daemon protocol.
+//! `POST /rpc`: `{"method", "params"}` -> `{"result"}` | `{"error": {code, message, detail?}}`.
+//! The method table, params and results are `shadowrunr_types::rpc`; error codes are the
+//! ten of `shadowrunr_types::ErrorCode` (docs/spec/contract.md § Daemon protocol and
+//! § Error taxonomy).
 
 use std::sync::Arc;
 
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{json, Value};
-use shadowrunr_brain::rules::{self, RuleState, RulesOverride};
-use shadowrunr_brain::BrainError;
-use shadowrunr_reconcile::{DirectiveKind, ReconcileError, Source};
-use shadowrunr_types::{JudgeVerdict, SegmentId, SimRunSpec, StreamEvent};
+use shadowrunr_reconcile::{self as reconcile, ReconcileError};
+use shadowrunr_types::reconcile::{DirectiveKind, Source};
+use shadowrunr_types::rpc::*;
+use shadowrunr_types::{ErrorBody, ErrorCode, ErrorEnvelope, JudgeVerdict, StreamEvent};
 
-use crate::config::Config;
-use crate::preflight;
-use crate::runs;
+pub use crate::catalog::{character_rules, character_rules_set};
 use crate::server::AppState;
+use crate::{catalog, paging, preflight, runs};
 
-#[derive(Debug, Clone, Serialize)]
+/// A failed call: one of the ten codes, a message for people, optional structured detail.
+#[derive(Debug, Clone, PartialEq)]
 pub struct RpcError {
-    pub code: String,
+    pub code: ErrorCode,
     pub message: String,
+    pub detail: Option<Value>,
 }
 
 impl RpcError {
-    pub fn new(code: &str, message: impl Into<String>) -> Self {
+    pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         Self {
-            code: code.into(),
+            code,
             message: message.into(),
+            detail: None,
         }
     }
+    pub fn with_detail(mut self, detail: Value) -> Self {
+        self.detail = Some(detail);
+        self
+    }
     pub fn invalid(m: impl Into<String>) -> Self {
-        Self::new("invalid_params", m)
+        Self::new(ErrorCode::InvalidParams, m)
     }
     pub fn not_found(m: impl Into<String>) -> Self {
-        Self::new("not_found", m)
+        Self::new(ErrorCode::NotFound, m)
     }
     pub fn io(m: impl Into<String>) -> Self {
-        Self::new("io", m)
+        Self::new(ErrorCode::Io, m)
     }
+    pub fn internal(m: impl Into<String>) -> Self {
+        Self::new(ErrorCode::Internal, m)
+    }
+    pub fn envelope(&self) -> ErrorEnvelope {
+        ErrorEnvelope {
+            error: ErrorBody {
+                code: self.code,
+                message: self.message.clone(),
+                detail: self.detail.clone(),
+            },
+        }
+    }
+    /// `{"error": {...}}` as JSON.
     pub fn body(&self) -> Value {
-        json!({ "error": self })
+        serde_json::to_value(self.envelope())
+            .unwrap_or_else(|_| json!({ "error": { "code": "internal", "message": "error" } }))
     }
 }
 
@@ -49,17 +71,19 @@ impl std::fmt::Display for RpcError {
     }
 }
 
+/// Reconcile's own codes map onto the taxonomy; a renamed code keeps its old name in
+/// `detail.reason` (`synthesis` -> `engine` + `{"reason": "synthesis"}`).
 impl From<ReconcileError> for RpcError {
     fn from(e: ReconcileError) -> Self {
-        Self::new(e.code(), e.to_string())
+        let legacy = e.code();
+        let code = ErrorCode::from_legacy(legacy);
+        let err = Self::new(code, e.to_string());
+        if code.as_str() == legacy {
+            err
+        } else {
+            err.with_detail(json!({ "reason": legacy }))
+        }
     }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RpcRequest {
-    pub method: String,
-    #[serde(default)]
-    pub params: Value,
 }
 
 fn params<T: DeserializeOwned>(v: Value) -> Result<T, RpcError> {
@@ -68,123 +92,56 @@ fn params<T: DeserializeOwned>(v: Value) -> Result<T, RpcError> {
 }
 
 fn ok<T: Serialize>(v: T) -> Result<Value, RpcError> {
-    serde_json::to_value(v).map_err(|e| RpcError::io(e.to_string()))
+    serde_json::to_value(v).map_err(|e| RpcError::internal(format!("serialize result: {e}")))
 }
 
-#[derive(Deserialize)]
-struct RunsListParams {
-    #[serde(default)]
-    tournament_id: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct RunParams {
-    run_id: String,
-    #[serde(default)]
-    tournament_id: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct TournamentParams {
-    tournament_id: String,
-}
-
-#[derive(Deserialize)]
-struct SimStartParams {
-    spec: SimRunSpec,
-    #[serde(default)]
-    judge: bool,
-}
-
-#[derive(Deserialize)]
-struct ReconcileRunParams {
-    source: Source,
-}
-
-#[derive(Deserialize)]
-struct ReportParams {
-    report_id: String,
-}
-
-#[derive(Deserialize)]
-struct ChooseParams {
-    report_id: String,
-    option_ids: Vec<String>,
-}
-
-#[derive(Deserialize)]
-struct DirectiveAddParams {
-    kind: DirectiveKind,
-    text: String,
-    #[serde(default)]
-    scope: Option<SegmentId>,
-}
-
-#[derive(Deserialize)]
-struct DirectiveIdParams {
-    id: String,
-}
-
-#[derive(Deserialize)]
-struct CharacterParams {
-    character: String,
-}
-
-#[derive(Deserialize)]
-struct CharacterRuleSetParams {
-    character: String,
-    id: String,
-    enabled: bool,
-}
-
-fn character_dir(cfg: &Config, character: &str) -> Result<std::path::PathBuf, RpcError> {
-    runs::check_id("character", character)?;
-    let dir = cfg.paths.characters.join(character);
-    if !dir.join("character.toml").is_file() {
-        return Err(RpcError::not_found(format!("character {character}")));
+fn source(s: Source) -> reconcile::Source {
+    match s {
+        Source::Tournament { tournament_id } => reconcile::Source::Tournament { tournament_id },
+        Source::Runs { run_ids } => reconcile::Source::Runs { run_ids },
     }
-    Ok(dir)
 }
 
-/// `character.rules`: the package's optional rules with the operator's override applied.
-pub fn character_rules(cfg: &Config, character: &str) -> Result<Vec<RuleState>, RpcError> {
-    let dir = character_dir(cfg, character)?;
-    let over = rules::override_path(&cfg.paths.data, character);
-    let list = rules::load_rules(&dir, &RulesOverride::File(over))
-        .map_err(|e| RpcError::io(e.to_string()))?;
-    Ok(list.iter().map(RuleState::from).collect())
+fn directive_kind(k: DirectiveKind) -> reconcile::DirectiveKind {
+    match k {
+        DirectiveKind::Prevent => reconcile::DirectiveKind::Prevent,
+        DirectiveKind::Try => reconcile::DirectiveKind::Try,
+    }
 }
 
-/// `character.rules.set`: write one rule into `<data>/characters/<id>/rules.json`.
-pub fn character_rules_set(
-    cfg: &Config,
-    character: &str,
-    id: &str,
-    enabled: bool,
-) -> Result<Vec<RuleState>, RpcError> {
-    let dir = character_dir(cfg, character)?;
-    let over = rules::override_path(&cfg.paths.data, character);
-    rules::set_rule(&dir, character, &over, id, enabled).map_err(|e| match e {
-        BrainError::Rejected(m) => RpcError::not_found(m),
-        other => RpcError::io(other.to_string()),
-    })
+fn read_verdict(state: &AppState, p: RunParams) -> Result<JudgeVerdict, RpcError> {
+    let sim_root = state.cfg.paths.sim_runs();
+    let entry = runs::find_run(&sim_root, &p.run_id, p.tournament_id.as_deref())?;
+    let path = entry.dir.join("verdict.json");
+    let text = std::fs::read_to_string(&path)
+        .map_err(|_| RpcError::not_found(format!("run {} has no verdict", entry.row.run_id)))?;
+    serde_json::from_str(&text).map_err(|e| RpcError::io(format!("{}: {e}", path.display())))
 }
 
-#[derive(Deserialize)]
-struct LordChatParams {
-    #[serde(default)]
-    report_id: Option<String>,
-    message: String,
+fn tournament_results(state: &AppState, tournament_id: &str) -> Result<Value, RpcError> {
+    runs::check_id("tournament_id", tournament_id)?;
+    let dir = state.cfg.paths.sim_runs().join(tournament_id);
+    if !dir.is_dir() {
+        return Err(RpcError::not_found(format!("tournament {tournament_id}")));
+    }
+    let path = dir.join("results.json");
+    let text = std::fs::read_to_string(&path).map_err(|_| {
+        RpcError::not_found(format!(
+            "tournament {tournament_id} has no results.json (run `shadowrunr sim summarize`)"
+        ))
+    })?;
+    serde_json::from_str(&text).map_err(|e| RpcError::io(format!("{}: {e}", path.display())))
 }
 
-/// Dispatch one call.
+/// Dispatch one call. Every method of `shadowrunr_types::rpc::visit_methods` is handled here.
 pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, RpcError> {
     let sim_root = state.cfg.paths.sim_runs();
+    let cfg = &state.cfg;
     match req.method.as_str() {
-        "preflight.run" => ok(preflight::run_all(&state.cfg, &state.engine).await),
+        "preflight.run" => ok(preflight::run_all(cfg, &state.engine).await),
         "runs.list" => {
             let p: RunsListParams = params(req.params)?;
-            let rows: Vec<runs::RunRow> = runs::list_runs(&sim_root, p.tournament_id.as_deref())?
+            let rows: Vec<RunRow> = runs::list_runs(&sim_root, p.tournament_id.as_deref())?
                 .into_iter()
                 .map(|e| e.row)
                 .collect();
@@ -200,48 +157,21 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
                     .collect();
             ok(events)
         }
-        "run.verdict" => {
-            let p: RunParams = params(req.params)?;
-            let entry = runs::find_run(&sim_root, &p.run_id, p.tournament_id.as_deref())?;
-            let path = entry.dir.join("verdict.json");
-            let text = std::fs::read_to_string(&path).map_err(|_| {
-                RpcError::not_found(format!("run {} has no verdict", entry.row.run_id))
-            })?;
-            let v: JudgeVerdict = serde_json::from_str(&text)
-                .map_err(|e| RpcError::io(format!("{}: {e}", path.display())))?;
-            ok(v)
-        }
+        "run.verdict" => ok(read_verdict(state, params(req.params)?)?),
         "tournament.list" => ok(runs::list_tournaments(&sim_root)),
         "tournament.results" => {
             let p: TournamentParams = params(req.params)?;
-            runs::check_id("tournament_id", &p.tournament_id)?;
-            let dir = sim_root.join(&p.tournament_id);
-            if !dir.is_dir() {
-                return Err(RpcError::not_found(format!(
-                    "tournament {}",
-                    p.tournament_id
-                )));
-            }
-            let path = dir.join("results.json");
-            let text = std::fs::read_to_string(&path).map_err(|_| {
-                RpcError::not_found(format!(
-                    "tournament {} has no results.json (run `shadowrunr sim summarize`)",
-                    p.tournament_id
-                ))
-            })?;
-            let v: Value = serde_json::from_str(&text)
-                .map_err(|e| RpcError::io(format!("{}: {e}", path.display())))?;
-            Ok(v)
+            tournament_results(state, &p.tournament_id)
         }
         "sim.start" => {
             let p: SimStartParams = params(req.params)?;
             let run_id = crate::live::start_sim(state.clone(), p.spec, p.judge).await?;
-            Ok(json!({ "run_id": run_id }))
+            ok(SimStartResult { run_id })
         }
         "reconcile.run" => {
             let p: ReconcileRunParams = params(req.params)?;
-            let report_id = state.reconciler.run(p.source).await?;
-            Ok(json!({ "report_id": report_id }))
+            let report_id = state.reconciler.run(source(p.source)).await?;
+            ok(ReconcileRunResult { report_id })
         }
         "reconcile.report" => {
             let p: ReportParams = params(req.params)?;
@@ -252,30 +182,19 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
             ok(state.reconciler.proposals(&p.report_id)?)
         }
         "plan.choose" => {
-            let p: ChooseParams = params(req.params)?;
+            let p: PlanChooseParams = params(req.params)?;
             ok(state.reconciler.choose(&p.report_id, &p.option_ids).await?)
         }
         "directive.add" => {
             let p: DirectiveAddParams = params(req.params)?;
-            ok(state.reconciler.directive_add(p.kind, &p.text, p.scope)?)
+            ok(state
+                .reconciler
+                .directive_add(directive_kind(p.kind), &p.text, p.scope)?)
         }
         "directive.list" => ok(state.reconciler.directive_list()?),
         "directive.deactivate" => {
             let p: DirectiveIdParams = params(req.params)?;
             ok(state.reconciler.directive_deactivate(&p.id)?)
-        }
-        "character.rules" => {
-            let p: CharacterParams = params(req.params)?;
-            ok(character_rules(&state.cfg, &p.character)?)
-        }
-        "character.rules.set" => {
-            let p: CharacterRuleSetParams = params(req.params)?;
-            ok(character_rules_set(
-                &state.cfg,
-                &p.character,
-                &p.id,
-                p.enabled,
-            )?)
         }
         "lord.chat" => {
             let p: LordChatParams = params(req.params)?;
@@ -284,8 +203,29 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
                 .lord_chat(p.report_id.as_deref(), &p.message)
                 .await?)
         }
+        "character.rules" => {
+            let p: CharacterRulesParams = params(req.params)?;
+            ok(character_rules(cfg, &p.character)?)
+        }
+        "character.rules.set" => {
+            let p: CharacterRulesSetParams = params(req.params)?;
+            ok(character_rules_set(cfg, &p.character, &p.id, p.enabled)?)
+        }
+        "character.list" => ok(catalog::character_list(cfg)),
+        "character.get" => {
+            let p: CharacterGetParams = params(req.params)?;
+            ok(catalog::character_get(cfg, &p.id)?)
+        }
+        "segments.tables" => ok(catalog::segment_tables()?),
+        "ranks.table" => {
+            let p: RanksTableParams = params(req.params)?;
+            ok(catalog::rank_table(cfg, p.character.as_deref())?)
+        }
+        "ledger.page" => ok(paging::ledger_page(cfg, params(req.params)?)?),
+        "runs.page" => ok(paging::runs_page(&sim_root, params(req.params)?)?),
+        "tournaments.page" => ok(paging::tournaments_page(&sim_root, params(req.params)?)?),
         other => Err(RpcError::new(
-            "method_not_found",
+            ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),
         )),
     }

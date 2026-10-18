@@ -3,6 +3,22 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc --noEmit -p .", "test": "vitest run --passWithNoTests" }
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "check": "node scripts/check.mjs",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "json-schema-to-typescript": "16.0.0",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  }
 }

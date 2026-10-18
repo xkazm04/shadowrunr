@@ -1,10 +1,11 @@
 //! Viewers (minions), ranks and chat messages.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::TsMs;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Platform {
     Twitch,
@@ -15,7 +16,9 @@ pub enum Platform {
 
 /// The weighted rank ladder, lowest first. `Thrall` is a non-subscriber who votes with
 /// channel points at weight 1. Rank derivation and vote weights live in shadowrunr-segments.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Rank {
     Thrall,
@@ -26,7 +29,7 @@ pub enum Rank {
     DreadCouncil,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Viewer {
     pub id: String,
     pub name: String,
@@ -43,7 +46,7 @@ pub struct Viewer {
     pub is_mod: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum EvidenceGrade {
     /// Documented by a primary source (court, regulator, registry).
@@ -58,7 +61,7 @@ pub enum EvidenceGrade {
 
 /// Parsed chat commands. Wire form in chat: `!summon <foil>`, `!hint <hex> <text>`,
 /// `!grade <hex> <DOC|REP|CLM|SPC>`, `!propose <text>`, `!vote <option>`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum Command {
     Summon { foil: String },
@@ -68,7 +71,7 @@ pub enum Command {
     Vote { option: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ChatMsg {
     pub id: String,
     pub ts_ms: TsMs,

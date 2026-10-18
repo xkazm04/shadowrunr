@@ -3,6 +3,12 @@
 //! `/events` subscribers. Subscribers that attach late get the run's history first, then the
 //! new events, with nothing lost or duplicated.
 //!
+//! Every event carries `seq`, its 1-based index in the run's transcript, so a client resumes
+//! with `since`. Fan-out is a bounded broadcast ([`BROADCAST_CAPACITY`]): a subscriber that
+//! falls further behind loses the overflow and is told so (see `server`), never slowing the
+//! run or growing memory. The run is supervised: a panic in the sim (or in its watcher)
+//! becomes an `engine` (or `internal`) error frame and the daemon keeps serving.
+//!
 //! The sim writes its transcript through a buffered writer, so events reach subscribers in
 //! buffer-sized batches rather than one by one (see the WP5 report: an event sink in
 //! `SimOptions` would make this exact).
@@ -13,39 +19,64 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use shadowrunr_types::{SegmentId, SimRunSpec, StreamEvent};
-use tokio::sync::{mpsc, watch};
+use shadowrunr_types::{ErrorCode, SegmentId, SimRunSpec, StreamEvent};
+use tokio::sync::{broadcast, watch};
+use tokio::task::JoinError;
 
 use crate::preflight;
 use crate::rpc::RpcError;
 use crate::runs;
 use crate::server::AppState;
 
-/// A frame for `/events` subscribers: a raw `StreamEvent` JSON line.
+/// A frame for `/events` subscribers: a raw `StreamEvent` JSON line (or an error frame).
 pub type Frame = Arc<str>;
+
+/// Events a subscriber may fall behind before it loses the overflow.
+pub const BROADCAST_CAPACITY: usize = 1024;
 
 const TAIL_EVERY: Duration = Duration::from_millis(100);
 
+/// What a live run broadcasts.
+#[derive(Debug, Clone)]
+pub enum LiveItem {
+    /// An event and its seq.
+    Event(u64, Frame),
+    /// The run ended, with its error frame when it failed.
+    End(Option<Frame>),
+}
+
+/// A subscriber's view at attach time.
+pub struct Attach {
+    /// Events after `since`, with their seq.
+    pub history: Vec<(u64, Frame)>,
+    /// What follows; `None` once the run is done.
+    pub rx: Option<broadcast::Receiver<LiveItem>>,
+    /// The run's error frame, when it is done and failed.
+    pub error: Option<Frame>,
+}
+
 struct LiveInner {
     history: Vec<Frame>,
-    subscribers: Vec<mpsc::UnboundedSender<Frame>>,
+    error: Option<Frame>,
     done: bool,
 }
 
 pub struct LiveRun {
     pub run_id: String,
     inner: Mutex<LiveInner>,
+    tx: broadcast::Sender<LiveItem>,
 }
 
 impl LiveRun {
-    fn new(run_id: String) -> Self {
+    pub fn new(run_id: String) -> Self {
         Self {
             run_id,
             inner: Mutex::new(LiveInner {
                 history: Vec::new(),
-                subscribers: Vec::new(),
+                error: None,
                 done: false,
             }),
+            tx: broadcast::Sender::new(BROADCAST_CAPACITY),
         }
     }
 
@@ -53,36 +84,38 @@ impl LiveRun {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    fn push(&self, frame: Frame) {
+    /// Append one event. The lock is held across the broadcast so an attach sees each event
+    /// exactly once (in its history or on its receiver).
+    pub fn push(&self, frame: Frame) {
         let mut g = self.lock();
         g.history.push(frame.clone());
-        g.subscribers.retain(|s| s.send(frame.clone()).is_ok());
+        let seq = g.history.len() as u64;
+        let _ = self.tx.send(LiveItem::Event(seq, frame));
     }
 
-    /// End the run. `error` is sent to current subscribers as a final
-    /// `{"error": {...}}` frame (not a `StreamEvent`; clients that only read events ignore it).
-    fn finish(&self, error: Option<RpcError>) {
+    /// End the run. `error` reaches current subscribers as a final `{"error": {...}}` frame.
+    pub fn finish(&self, error: Option<RpcError>) {
         let mut g = self.lock();
         g.done = true;
-        if let Some(e) = error {
-            let frame: Frame = Arc::from(e.body().to_string());
-            for s in &g.subscribers {
-                let _ = s.send(frame.clone());
-            }
-        }
-        g.subscribers.clear();
+        g.error = error.map(|e| Frame::from(e.body().to_string()));
+        let _ = self.tx.send(LiveItem::End(g.error.clone()));
     }
 
-    /// The history so far plus a receiver for what follows (`None` once the run is done).
-    pub fn attach(&self) -> (Vec<Frame>, Option<mpsc::UnboundedReceiver<Frame>>) {
-        let mut g = self.lock();
-        let history = g.history.clone();
-        if g.done {
-            return (history, None);
+    /// The events after `since` plus a receiver for what follows.
+    pub fn attach(&self, since: u64) -> Attach {
+        let g = self.lock();
+        let history = g
+            .history
+            .iter()
+            .enumerate()
+            .skip(usize::try_from(since).unwrap_or(usize::MAX))
+            .map(|(i, f)| (i as u64 + 1, f.clone()))
+            .collect();
+        Attach {
+            history,
+            rx: (!g.done).then(|| self.tx.subscribe()),
+            error: g.error.clone(),
         }
-        let (tx, rx) = mpsc::unbounded_channel();
-        g.subscribers.push(tx);
-        (history, Some(rx))
     }
 
     pub fn is_done(&self) -> bool {
@@ -123,13 +156,13 @@ impl LiveRegistry {
         let mut runs = self.runs();
         if runs.contains_key(run_id) {
             return Err(RpcError::new(
-                "busy",
+                ErrorCode::Conflict,
                 format!("run {run_id} is already running"),
             ));
         }
         if runs.len() >= max.max(1) {
             return Err(RpcError::new(
-                "busy",
+                ErrorCode::Busy,
                 format!("{} live runs already in flight (max_live_runs)", runs.len()),
             ));
         }
@@ -237,7 +270,7 @@ pub async fn start_sim(
             .map(|r| format!("{} {}", r.check, r.detail))
             .collect();
         return Err(RpcError::new(
-            "preflight_red",
+            ErrorCode::PreflightRed,
             format!("pre-flight is red: {}", red.join("; ")),
         ));
     }
@@ -256,23 +289,16 @@ pub async fn start_sim(
     let engine = state.engine.engine.clone();
     let opts = state.cfg.sim_options(judge);
     let handle = tokio::runtime::Handle::current();
-    let mut sim = tokio::task::spawn_blocking(move || {
+    let sim = tokio::task::spawn_blocking(move || {
         handle.block_on(shadowrunr_sim::run_one_with(spec, out_dir, engine, &opts))
     });
-    let mut tail = Tail::new(run_dir.join("transcript.jsonl"));
+    let tail = Tail::new(run_dir.join("transcript.jsonl"));
+    let watcher = tokio::spawn(follow(sim, tail, run.clone()));
     let registry = state.clone();
     tokio::spawn(async move {
-        let result = loop {
-            tokio::select! {
-                res = &mut sim => break res,
-                _ = tokio::time::sleep(TAIL_EVERY) => tail.drain(&run),
-            }
-        };
-        tail.drain(&run);
-        let error = match result {
-            Ok(Ok(_)) => None,
-            Ok(Err(e)) => Some(RpcError::new("sim_failed", e.to_string())),
-            Err(e) => Some(RpcError::new("sim_failed", format!("sim task: {e}"))),
+        let error = match watcher.await {
+            Ok(outcome) => outcome.err(),
+            Err(e) => Some(panic_error(ErrorCode::Internal, "run watcher", e)),
         };
         if let Some(e) = &error {
             eprintln!("sim.start {}: {e}", run.run_id);
@@ -281,4 +307,82 @@ pub async fn start_sim(
         run.finish(error);
     });
     Ok(run_id)
+}
+
+/// Tail the transcript until the sim ends, then report how it ended.
+async fn follow<T, E: std::fmt::Display>(
+    mut sim: tokio::task::JoinHandle<Result<T, E>>,
+    mut tail: Tail,
+    run: Arc<LiveRun>,
+) -> Result<(), RpcError> {
+    let result = loop {
+        tokio::select! {
+            res = &mut sim => break res,
+            _ = tokio::time::sleep(TAIL_EVERY) => tail.drain(&run),
+        }
+    };
+    tail.drain(&run);
+    sim_outcome(result)
+}
+
+/// A sim error or a panicking sim is an `engine` error; the daemon is unaffected.
+pub fn sim_outcome<T, E: std::fmt::Display>(
+    result: Result<Result<T, E>, JoinError>,
+) -> Result<(), RpcError> {
+    match result {
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(e)) => Err(RpcError::new(ErrorCode::Engine, e.to_string())
+            .with_detail(serde_json::json!({ "reason": "sim_failed" }))),
+        Err(e) => Err(panic_error(ErrorCode::Engine, "sim", e)),
+    }
+}
+
+fn panic_error(code: ErrorCode, what: &str, e: JoinError) -> RpcError {
+    if !e.is_panic() {
+        return RpcError::new(code, format!("{what} task: {e}"));
+    }
+    let payload = e.into_panic();
+    let msg = payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "non-text panic payload".into());
+    RpcError::new(code, format!("{what} panicked: {msg}"))
+        .with_detail(serde_json::json!({ "reason": "panic" }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_panicking_sim_is_an_engine_error() {
+        let res: Result<Result<(), String>, JoinError> =
+            tokio::task::spawn_blocking(|| panic!("boom")).await;
+        let e = sim_outcome(res).unwrap_err();
+        assert_eq!(e.code, ErrorCode::Engine);
+        assert!(e.message.contains("sim panicked: boom"), "{e}");
+        let failed: Result<Result<(), String>, JoinError> = Ok(Err("quota".into()));
+        assert_eq!(sim_outcome(failed).unwrap_err().code, ErrorCode::Engine);
+    }
+
+    #[test]
+    fn attach_resumes_after_since_without_gaps() {
+        let run = LiveRun::new("r".into());
+        for i in 0..5 {
+            run.push(Frame::from(format!("e{i}")));
+        }
+        let a = run.attach(3);
+        let seqs: Vec<u64> = a.history.iter().map(|(s, _)| *s).collect();
+        assert_eq!(seqs, [4, 5]);
+        let mut rx = a.rx.expect("run in flight");
+        run.push(Frame::from("e5"));
+        match rx.try_recv().unwrap() {
+            LiveItem::Event(seq, f) => assert_eq!((seq, f.as_ref()), (6, "e5")),
+            other => panic!("{other:?}"),
+        }
+        run.finish(None);
+        assert!(matches!(rx.try_recv().unwrap(), LiveItem::End(None)));
+        assert!(run.attach(0).rx.is_none());
+    }
 }

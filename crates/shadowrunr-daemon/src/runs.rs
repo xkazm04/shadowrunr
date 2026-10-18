@@ -6,9 +6,9 @@
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
 use shadowrunr_sim::instrument::Instrument;
 use shadowrunr_sim::{RunRecord, RunStatus};
+pub use shadowrunr_types::rpc::{RunRow, TournamentRow};
 use shadowrunr_types::{SimRunSpec, StreamEvent};
 
 use crate::rpc::RpcError;
@@ -31,24 +31,6 @@ pub fn check_id(kind: &str, id: &str) -> Result<(), RpcError> {
     }
 }
 
-/// One row of `runs.list`.
-#[derive(Debug, Clone, Serialize)]
-pub struct RunRow {
-    pub run_id: String,
-    pub tournament_id: String,
-    pub spec: SimRunSpec,
-    pub has_verdict: bool,
-}
-
-/// One row of `tournament.list`.
-#[derive(Debug, Clone, Serialize)]
-pub struct TournamentRow {
-    pub tournament_id: String,
-    pub instrument_hash: String,
-    pub runs: usize,
-    pub completed: usize,
-}
-
 #[derive(Debug, Clone)]
 pub struct RunEntry {
     pub row: RunRow,
@@ -60,7 +42,7 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
     serde_json::from_str(&text).ok()
 }
 
-fn subdirs(dir: &Path) -> Vec<PathBuf> {
+pub(crate) fn subdirs(dir: &Path) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
         .map(|rd| {
             rd.filter_map(Result::ok)
@@ -73,13 +55,13 @@ fn subdirs(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
-fn name_of(p: &Path) -> String {
+pub(crate) fn name_of(p: &Path) -> String {
     p.file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default()
 }
 
-fn load_entry(dir: &Path, tournament_id: &str) -> Option<RunEntry> {
+pub(crate) fn load_entry(dir: &Path, tournament_id: &str) -> Option<RunEntry> {
     let spec: SimRunSpec = read_json(&dir.join("spec.json"))?;
     if name_of(dir) != spec.run_id {
         return None;
@@ -95,7 +77,7 @@ fn load_entry(dir: &Path, tournament_id: &str) -> Option<RunEntry> {
     })
 }
 
-fn tournament_runs(sim_root: &Path, tournament_id: &str) -> Vec<RunEntry> {
+pub(crate) fn tournament_runs(sim_root: &Path, tournament_id: &str) -> Vec<RunEntry> {
     subdirs(&sim_root.join(tournament_id))
         .iter()
         .filter_map(|d| load_entry(d, tournament_id))
@@ -168,46 +150,49 @@ fn finished(dir: &Path) -> bool {
     }
 }
 
-/// `tournament.list`. The instrument hash is the base hash from `tournament.json`; a
-/// directory without one (the ad-hoc directory) reports the runs' common base hash, or
-/// `mixed`. `completed` counts runs that finished (simulated, or judged when judging was
-/// on); a void judge is not complete.
+/// One `tournament.list` row for `<sim_root>/<tournament_id>/`, or `None` when the directory
+/// is neither a tournament nor holds runs. The instrument hash is the base hash from
+/// `tournament.json`; a directory without one (the ad-hoc directory) reports the runs' common
+/// base hash, or `mixed`. `completed` counts runs that finished (simulated, or judged when
+/// judging was on); a void judge is not complete.
+pub(crate) fn tournament_row(sim_root: &Path, tid: &str) -> Option<TournamentRow> {
+    let t = sim_root.join(tid);
+    let runs = tournament_runs(sim_root, tid);
+    let meta: Option<TournamentMeta> = read_json(&t.join("tournament.json"));
+    if meta.is_none() && runs.is_empty() {
+        return None;
+    }
+    let instrument_hash = match &meta {
+        Some(m) => m.base_hash.clone(),
+        None => {
+            let mut hashes: Vec<String> = runs
+                .iter()
+                .filter_map(|r| {
+                    read_json::<Instrument>(&r.dir.join("instrument.json")).map(|i| i.base_hash)
+                })
+                .collect();
+            hashes.sort();
+            hashes.dedup();
+            match hashes.len() {
+                1 => hashes.remove(0),
+                0 => "unknown".into(),
+                _ => "mixed".into(),
+            }
+        }
+    };
+    Some(TournamentRow {
+        completed: runs.iter().filter(|r| finished(&r.dir)).count(),
+        runs: meta.and_then(|m| m.runs).unwrap_or(runs.len()),
+        instrument_hash,
+        tournament_id: tid.to_string(),
+    })
+}
+
+/// `tournament.list`.
 pub fn list_tournaments(sim_root: &Path) -> Vec<TournamentRow> {
     subdirs(sim_root)
         .iter()
-        .filter_map(|t| {
-            let tid = name_of(t);
-            let runs = tournament_runs(sim_root, &tid);
-            let meta: Option<TournamentMeta> = read_json(&t.join("tournament.json"));
-            if meta.is_none() && runs.is_empty() {
-                return None;
-            }
-            let instrument_hash = match &meta {
-                Some(m) => m.base_hash.clone(),
-                None => {
-                    let mut hashes: Vec<String> = runs
-                        .iter()
-                        .filter_map(|r| {
-                            read_json::<Instrument>(&r.dir.join("instrument.json"))
-                                .map(|i| i.base_hash)
-                        })
-                        .collect();
-                    hashes.sort();
-                    hashes.dedup();
-                    match hashes.len() {
-                        1 => hashes.remove(0),
-                        0 => "unknown".into(),
-                        _ => "mixed".into(),
-                    }
-                }
-            };
-            Some(TournamentRow {
-                completed: runs.iter().filter(|r| finished(&r.dir)).count(),
-                runs: meta.and_then(|m| m.runs).unwrap_or(runs.len()),
-                instrument_hash,
-                tournament_id: tid,
-            })
-        })
+        .filter_map(|t| tournament_row(sim_root, &name_of(t)))
         .collect()
 }
 

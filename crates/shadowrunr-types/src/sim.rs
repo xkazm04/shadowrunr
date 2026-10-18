@@ -1,11 +1,12 @@
 //! Simulation runs and judge verdicts.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::engine::{Effort, ModelTier};
 use crate::segment::SegmentId;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SimRunSpec {
     pub run_id: String,
     /// Character package id, e.g. "malakor".
@@ -22,7 +23,7 @@ pub struct SimRunSpec {
     pub population: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckState {
     Pass,
@@ -34,7 +35,7 @@ pub enum CheckState {
 }
 
 /// A hard rule (safety, role, red lines): reported at a 100% pass bar.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct RuleCheck {
     pub rule: String,
     pub state: CheckState,
@@ -44,7 +45,7 @@ pub struct RuleCheck {
 }
 
 /// A judged quality fact (humor, tone, responsiveness...): reported as a rate with n.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct QualityFact {
     pub dimension: String,
     pub value: bool,
@@ -53,7 +54,7 @@ pub struct QualityFact {
     pub quote: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct JudgeVerdict {
     pub run_id: String,
     pub judge_tier: ModelTier,

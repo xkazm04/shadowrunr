@@ -1,6 +1,7 @@
 //! The stream transcript: one `StreamEvent` per JSONL line. Produced by the runtime and the
 //! simulator, consumed by the stage (replay), Reconcile & Plan, the judge and the clip factory.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::chat::{ChatMsg, EvidenceGrade, Rank};
@@ -9,7 +10,7 @@ use crate::segment::{Case, SegmentId};
 use crate::TsMs;
 
 /// Malakor's action grammar. The model emits `OP: {json}` lines; only these ops are allowed.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Op {
     Highlight {
@@ -53,7 +54,7 @@ pub enum Op {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct VoteTally {
     pub option: String,
     pub voters: u32,
@@ -61,7 +62,7 @@ pub struct VoteTally {
     pub weight: f64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ModStage {
     /// Chat input filtered before the model sees it.
@@ -70,7 +71,7 @@ pub enum ModStage {
     Output,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum EndReason {
     Scheduled,
@@ -79,14 +80,14 @@ pub enum EndReason {
     SimComplete,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Speaker {
     Malakor,
     Foil,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StreamEvent {
     StreamStart {

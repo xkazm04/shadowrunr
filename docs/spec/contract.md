@@ -179,10 +179,12 @@ runs on the same tier as the core thread it judges.**
   source and the replay speed.
   A run id may be qualified as `<tournament_id>/<run_id>`; a bare id found in several
   tournaments is rejected as ambiguous. On failure the server sends one
-  `{"error": {"code","message"}}` frame, which is not a `StreamEvent`.
+  `{"error": {"code","message","detail"?}}` frame, which is not a `StreamEvent`.
+  Resuming from a seq: see the F2 appendix (§ Event resume).
 - Browser origins allowed: `http://localhost:*`, `tauri://localhost`, `http://tauri.localhost`.
 - `POST /rpc`: JSON `{"method": "<name>", "params": {...}}` → `{"result": ...}` or
-  `{"error": {"code": "...", "message": "..."}}`.
+  `{"error": {"code": "...", "message": "...", "detail"?: ...}}`, with `code` from the F2
+  appendix (§ Error taxonomy).
 
 | method | params | result |
 |---|---|---|
@@ -286,3 +288,113 @@ every placeholder category is served) or `placeholder only` (amber).
   or stopping was replaced with an in-character line.
 - `alleged:<hex>` / `qualified` now fires only for a sentence that names a revealed hex graded
   below DOC and makes a claim about it; the gate inserts "allegedly" next to the claim's verb.
+
+## Appendix (F2): generated contract, error taxonomy, paging, event resume
+
+These notes extend the sections above. The daemon method table, every params and result type,
+the event envelope and the error envelope now live in `crates/shadowrunr-types` (modules
+`rpc`, `catalog`, `error` and `reconcile`), and every wire type derives `schemars::JsonSchema`.
+
+**Generated TS contract.**
+- `cargo run -p shadowrunr-types --example export-schema` writes
+  `packages/contract/schema/contract.schema.json` (draft 2020-12). Its root is the
+  `RpcMethods` table (`method → {params, result}`); `$defs` holds every wire type plus
+  `ServerFrame`.
+- Schemas describe what the daemon serializes. An optional field is omitted, never `null`, so a
+  `null` there fails validation. A field with a serde default may be absent, because stored
+  transcripts are replayed verbatim.
+- `pnpm -C packages/contract generate` re-exports the schema and regenerates
+  `src/generated/{types.ts, validators.js, validators.d.ts, meta.ts}`
+  (json-schema-to-typescript plus ajv standalone validators).
+- `src/door.ts` is the only place that calls `JSON.parse` or a validator.
+  `parseRpcResult(method, body)` and `parseEvent(frame)` return a typed `Result<T, DoorError>`,
+  where the error is `parse`, `invalid` (with the first violation's path), `unknown_method`, or
+  `rpc` (with the daemon's code).
+- Drift gates: `pnpm -C packages/contract check` (re-export, regenerate, diff) and the
+  `shadowrunr-types` test `committed_schema_matches_the_rust_types`.
+- `tournament.results` stays an untyped object until the sim's `Results` types join the
+  contract.
+
+**Error taxonomy.** One envelope, `{"error": {"code", "message", "detail"?}}`, and ten codes:
+
+| code | meaning |
+|---|---|
+| `invalid_params` | malformed request or params, a bad cursor, a refused origin (HTTP 403), a wrong content type (415), an unparseable body (400) |
+| `not_found` | the run, tournament, report, character or rule does not exist |
+| `method_not_found` | unknown RPC method |
+| `preflight_red` | a pre-flight check is red, so the action is refused |
+| `busy` | a capacity limit (`max_live_runs`), or a slow `/events` consumer cut off (below) |
+| `engine` | the engine or a simulation failed, including a panicking sim |
+| `io` | a file could not be read or written, or a stored file is malformed |
+| `unavailable` | a needed dependency is not available (reserved) |
+| `conflict` | the request conflicts with current state (`sim.start` with a run id already running) |
+| `internal` | a daemon bug |
+
+Old names map onto it and keep the old name in `detail.reason`:
+- `synthesis` → `engine`; `sim_failed` → `engine`;
+- `forbidden_origin`, `unsupported_media_type`, `parse_error` → `invalid_params`;
+- `sim.start` on a run id already running (was `busy`) → `conflict`;
+- any unknown name → `internal` (`ErrorCode::from_legacy`).
+
+**New methods.** Paged methods take `limit` (1..=500; a larger value is capped at 500, and 0 is
+`invalid_params`) and an opaque `cursor`. A reply carries `next_cursor` while more items
+follow. Runs and tournaments page by key, so items added while a client pages are neither
+repeated nor skipped. Ledgers are append-only and page by offset; a trailing row that is still
+being written is not served.
+
+| method | params | result |
+|---|---|---|
+| `character.list` | `{}` | `CharacterSummary[]` |
+| `character.get` | `{ "id" }` | `CharacterDetail` |
+| `segments.tables` | `{}` | `SegmentTables` (the compiled-in tables the runtime interprets) |
+| `ranks.table` | `{ "character"? }` | `RankTableInfo` (`<segments>/ranks.toml`, titles from the character) |
+| `runs.page` | `{ "tournament_id"?, "filter"?, "cursor"?, "limit" }` | `{ items: RunRow[], next_cursor? }`, ordered by `(tournament_id, run_id)` |
+| `tournaments.page` | `{ "cursor"?, "limit" }` | `{ items: TournamentRow[], next_cursor? }`, ordered by id |
+| `ledger.page` | `{ "run_id"?, "tournament_id"?, "cursor"?, "limit" }` | `{ items: LedgerEntry[], next_cursor? }` |
+
+```
+CharacterSummary { id, name, default_tone, tones: [string], foils: [string], rules_enabled, rules_total }
+CharacterDetail  { id, name, default_tone, files: [{path, bytes}], constitution, bible?,
+                   tones: [{id, text}], foils: [{id, declared, text}], situations: [Situation],
+                   rules: [{id, title, enabled, default, text}], rank_titles: {rank: title} }
+SegmentTables    { segments: [SegmentTableInfo], op_tags: [string], command_names: [string] }
+SegmentTableInfo { id, title, status, initial, states, allowed_ops, commands, switch_to,
+                   rules_prompt, design_notes?, transitions: [{from, on, guard?, to}],
+                   clock: {foil_vote_secs, poll_min_secs, poll_max_secs, max_poll_options, handover?} }
+RankTableInfo    { character, propose_min_rank, ranks: [{rank, title, weight, min_gifted?, tiers: [{tier, min_months}]}] }
+RunFilter        { tone_variant?, core_tier?, segment?, audience_size?, has_verdict?, text? }
+LedgerEntry      { ts_ms, role, tier?, effort?, engine?, account?, model?, first_text_ms?, duration_ms,
+                   usage, cost_usd?, fallback_reason?, correlation_id?, error_kind?, warm?, run_id?, tournament_id? }
+```
+
+`ledger.page` reads one run's `ledger.jsonl` (`run_id`), a tournament's runs in run order
+(`tournament_id` alone), or the daemon's engine ledger (neither). `character.rules` and
+`character.rules.set` are unchanged, and the existing methods keep their params and results.
+
+**Event resume.** A subscribe message may carry `"since": <seq>`. With `"live"` it must also
+carry the `"run_id"` that seq belongs to; `since` without it is `invalid_params`. Sending
+`since` switches the session to enveloped frames:
+
+```
+{ "seq": 7, "run_id": "<run_id>", "event": StreamEvent }
+```
+
+- `seq` is the event's 1-based index in its run's transcript. It is identical for a live run
+  and its stored replay, so a client that reconnects resumes with `since` = the last seq it saw
+  and gets no gap and no repeat.
+- With `"live"`, `since` applies while the run in flight is `run_id`; a different run streams
+  from seq 1.
+- Without `since` the session stays in the legacy mode (bare `StreamEvent` frames), so the
+  console and stage clients are unchanged.
+
+**Resilience.**
+- Graceful shutdown (Ctrl+C on `shadowrunr daemon`): the server stops accepting, every
+  `/events` socket is closed with code 1001 and the reason `daemon shutting down`, and
+  in-flight requests drain for up to 5 s.
+- Live sims are supervised. A panic in a sim becomes an `engine` error frame
+  (`sim panicked: ...`, `detail.reason = "panic"`) on its `/events` subscribers; the run's slot
+  is released and the daemon keeps serving.
+- Live fan-out is a bounded broadcast of 1,024 events per subscriber. A subscriber that falls
+  further behind loses the overflow and receives
+  `{"error": {"code": "busy", "detail": {"skipped": n, "resume_since": seq}}}`.
+  Resubscribing with `since = resume_since` backfills from the run's history.

@@ -2,9 +2,10 @@
 //! is a fallback behind the same trait.
 
 use async_trait::async_trait;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ModelTier {
     Haiku,
@@ -12,7 +13,7 @@ pub enum ModelTier {
     Opus,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Effort {
     Low,
@@ -23,7 +24,7 @@ pub enum Effort {
 }
 
 /// Who is asking. Routing (tier, effort, tools, timeout) is a table keyed by role.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     /// Malakor's fast conversational thread.
@@ -44,7 +45,7 @@ pub enum Role {
     Reconciler,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum EngineKind {
     ClaudeCli,
@@ -56,7 +57,7 @@ pub enum EngineKind {
     Scripted,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct EngineRequest {
     pub role: Role,
     pub tier: ModelTier,
@@ -78,7 +79,7 @@ pub struct EngineRequest {
     pub correlation_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Usage {
     pub input_tokens: u64,
     pub output_tokens: u64,
@@ -88,7 +89,7 @@ pub struct Usage {
     pub cache_creation_tokens: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct EngineReply {
     pub text: String,
     pub engine: EngineKind,
@@ -110,7 +111,7 @@ pub struct EngineReply {
     pub session_id: Option<String>,
 }
 
-#[derive(Debug, Clone, thiserror::Error, Serialize, Deserialize)]
+#[derive(Debug, Clone, thiserror::Error, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EngineError {
     #[error("rate limited on account {account}")]
@@ -130,7 +131,7 @@ pub enum EngineError {
     Io { detail: String },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum HealthState {
     Green,
@@ -138,7 +139,7 @@ pub enum HealthState {
     Red,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct HealthReport {
     /// Pre-flight check id, e.g. "PF-01".
     pub check: String,

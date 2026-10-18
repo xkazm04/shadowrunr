@@ -13,6 +13,9 @@ use crate::config::Config;
 use crate::engine::EngineHandle;
 use crate::{preflight, runs, server};
 
+/// How long a graceful shutdown waits for open connections to drain.
+const SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+
 #[derive(Debug, Parser)]
 #[command(
     name = "shadowrunr",
@@ -571,16 +574,25 @@ async fn daemon_cmd(cfg: Config, port: Option<u16>, scripted: bool) -> Result<Ex
     let engine = EngineHandle::build(&cfg, scripted);
     let scripted = engine.is_scripted();
     let state = server::AppState::new(cfg, engine);
-    let (addr, serve) = server::bind(state, port)
+    let (addr, serve) = server::bind(state.clone(), port)
         .await
         .map_err(|e| format!("bind 127.0.0.1:{port}: {e}"))?;
     println!(
         "shadowrunr daemon on http://{addr} ({} engine): POST /rpc, GET /events",
         if scripted { "scripted" } else { "live" }
     );
+    let serve = tokio::spawn(serve);
     tokio::select! {
-        r = serve => r.map_err(|e| e.to_string())?,
-        _ = tokio::signal::ctrl_c() => eprintln!("shutting down"),
+        r = tokio::signal::ctrl_c() => r.map_err(|e| format!("ctrl-c handler: {e}"))?,
+        _ = state.shutdown_signal() => {}
+    }
+    // Graceful: stop accepting, close every /events socket with a reason, drain requests.
+    eprintln!("shutting down");
+    state.shutdown();
+    match tokio::time::timeout(SHUTDOWN_GRACE, serve).await {
+        Ok(Ok(r)) => r.map_err(|e| e.to_string())?,
+        Ok(Err(e)) => return Err(format!("server task: {e}")),
+        Err(_) => eprintln!("connections still open after {SHUTDOWN_GRACE:?}; exiting"),
     }
     Ok(ExitCode::SUCCESS)
 }

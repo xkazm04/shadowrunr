@@ -1,10 +1,11 @@
 //! Memory atoms. Markdown files are the source of truth; SQLite is a rebuildable index.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::TsMs;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum EpisodeKind {
     /// A stretch of stream: chat plus Malakor's lines.
@@ -17,7 +18,7 @@ pub enum EpisodeKind {
     System,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Episode {
     pub id: String,
     pub ts_ms: TsMs,
@@ -28,7 +29,7 @@ pub struct Episode {
     pub importance: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FactScope {
     /// About one viewer (keyed by viewer id).
@@ -41,7 +42,7 @@ pub enum FactScope {
     Case,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Fact {
     pub id: String,
     pub scope: FactScope,

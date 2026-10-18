@@ -1,0 +1,4170 @@
+{
+  "$defs": {
+    "Bound": {
+      "description": "A 95% interval on a rate.",
+      "properties": {
+        "hi": {
+          "format": "double",
+          "type": "number"
+        },
+        "lo": {
+          "format": "double",
+          "type": "number"
+        },
+        "method": {
+          "$ref": "#/$defs/BoundMethod"
+        }
+      },
+      "required": [
+        "lo",
+        "hi",
+        "method"
+      ],
+      "type": "object"
+    },
+    "BoundMethod": {
+      "oneOf": [
+        {
+          "const": "wilson",
+          "description": "Wilson score interval, 95%.",
+          "type": "string"
+        },
+        {
+          "const": "rule_of_three",
+          "description": "Rule of three: zero events in n trials puts the 95% bound at about 3/n.",
+          "type": "string"
+        }
+      ]
+    },
+    "Case": {
+      "properties": {
+        "fictional": {
+          "description": "True for fabricated demo or simulation cases. Must never be presented as real.",
+          "type": "boolean"
+        },
+        "hexes": {
+          "items": {
+            "$ref": "#/$defs/Hex"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "links": {
+          "description": "Pairs of hex ids.",
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "fictional",
+        "hexes"
+      ],
+      "type": "object"
+    },
+    "CharacterDetail": {
+      "description": "`character.get`: the whole package as the operator sees it.",
+      "properties": {
+        "bible": {
+          "type": "string"
+        },
+        "constitution": {
+          "description": "`constitution.md`: immutable, never edited by the brain.",
+          "type": "string"
+        },
+        "default_tone": {
+          "type": "string"
+        },
+        "files": {
+          "description": "Every file of the package, sorted by path.",
+          "items": {
+            "$ref": "#/$defs/PackageFile"
+          },
+          "type": "array"
+        },
+        "foils": {
+          "description": "Every `foils/*.md`, sorted by id.",
+          "items": {
+            "$ref": "#/$defs/FoilInfo"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "rank_titles": {
+          "additionalProperties": false,
+          "description": "Rank wire name -> the title the character says.",
+          "properties": {
+            "acolyte": {
+              "type": "string"
+            },
+            "cultist": {
+              "type": "string"
+            },
+            "dread_council": {
+              "type": "string"
+            },
+            "lich": {
+              "type": "string"
+            },
+            "thrall": {
+              "type": "string"
+            },
+            "warlock": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/CharacterRuleInfo"
+          },
+          "type": "array"
+        },
+        "situations": {
+          "items": {
+            "$ref": "#/$defs/Situation"
+          },
+          "type": "array"
+        },
+        "tones": {
+          "items": {
+            "$ref": "#/$defs/ToneInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "default_tone",
+        "files",
+        "constitution",
+        "tones",
+        "foils",
+        "situations",
+        "rules",
+        "rank_titles"
+      ],
+      "type": "object"
+    },
+    "CharacterGetParams": {
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "CharacterListResult": {
+      "items": {
+        "$ref": "#/$defs/CharacterSummary"
+      },
+      "type": "array"
+    },
+    "CharacterRuleInfo": {
+      "description": "An optional rule with its text (`character.get`).",
+      "properties": {
+        "default": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "enabled",
+        "default",
+        "text"
+      ],
+      "type": "object"
+    },
+    "CharacterRulesParams": {
+      "properties": {
+        "character": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character"
+      ],
+      "type": "object"
+    },
+    "CharacterRulesResult": {
+      "items": {
+        "$ref": "#/$defs/RuleState"
+      },
+      "type": "array"
+    },
+    "CharacterRulesSetParams": {
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "id",
+        "enabled"
+      ],
+      "type": "object"
+    },
+    "CharacterRulesSetResult": {
+      "items": {
+        "$ref": "#/$defs/RuleState"
+      },
+      "type": "array"
+    },
+    "CharacterSummary": {
+      "description": "One row of `character.list`.",
+      "properties": {
+        "default_tone": {
+          "type": "string"
+        },
+        "foils": {
+          "description": "Foil ids declared in `character.toml`, in order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "description": "Display name, e.g. \"Arch-Lich Malakor\".",
+          "type": "string"
+        },
+        "rules_enabled": {
+          "description": "Optional rules enabled after the operator's override.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rules_total": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tones": {
+          "description": "Tone variant ids (`tones/<id>.md`), sorted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "default_tone",
+        "tones",
+        "foils",
+        "rules_enabled",
+        "rules_total"
+      ],
+      "type": "object"
+    },
+    "ChatMsg": {
+      "properties": {
+        "command": {
+          "$ref": "#/$defs/Command"
+        },
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "ts_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "viewer": {
+          "$ref": "#/$defs/Viewer"
+        }
+      },
+      "required": [
+        "id",
+        "ts_ms",
+        "viewer",
+        "text"
+      ],
+      "type": "object"
+    },
+    "CheckState": {
+      "oneOf": [
+        {
+          "enum": [
+            "pass",
+            "fail"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "not_provoked",
+          "description": "The behaviour that would test this rule never happened in the run.",
+          "type": "string"
+        },
+        {
+          "const": "not_evaluable",
+          "description": "The judge's cited evidence did not verify against the transcript.",
+          "type": "string"
+        }
+      ]
+    },
+    "ClockInfo": {
+      "properties": {
+        "foil_vote_secs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "handover": {
+          "$ref": "#/$defs/HandoverInfo"
+        },
+        "max_poll_options": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "poll_max_secs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "poll_min_secs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "foil_vote_secs",
+        "poll_min_secs",
+        "poll_max_secs",
+        "max_poll_options"
+      ],
+      "type": "object"
+    },
+    "Command": {
+      "description": "Parsed chat commands. Wire form in chat: `!summon <foil>`, `!hint <hex> <text>`,\n`!grade <hex> <DOC|REP|CLM|SPC>`, `!propose <text>`, `!vote <option>`.",
+      "oneOf": [
+        {
+          "properties": {
+            "cmd": {
+              "const": "summon",
+              "type": "string"
+            },
+            "foil": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cmd",
+            "foil"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cmd": {
+              "const": "hint",
+              "type": "string"
+            },
+            "hex": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cmd",
+            "hex",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cmd": {
+              "const": "grade",
+              "type": "string"
+            },
+            "grade": {
+              "$ref": "#/$defs/EvidenceGrade"
+            },
+            "hex": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cmd",
+            "hex",
+            "grade"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cmd": {
+              "const": "propose",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cmd",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cmd": {
+              "const": "vote",
+              "type": "string"
+            },
+            "option": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cmd",
+            "option"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Directive": {
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "created_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/DirectiveKind"
+        },
+        "scope": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "text",
+        "created_ms",
+        "active"
+      ],
+      "type": "object"
+    },
+    "DirectiveAddParams": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DirectiveKind"
+        },
+        "scope": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "type": "object"
+    },
+    "DirectiveIdParams": {
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "DirectiveKind": {
+      "enum": [
+        "prevent",
+        "try"
+      ],
+      "type": "string"
+    },
+    "DirectiveListResult": {
+      "items": {
+        "$ref": "#/$defs/Directive"
+      },
+      "type": "array"
+    },
+    "DroppedItem": {
+      "description": "An LLM-proposed item that did not survive mechanical verification (the \"flag\" half of\n\"drop or flag\").",
+      "properties": {
+        "label": {
+          "description": "The claim, option title, or segment name.",
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "what": {
+          "description": "`evidence_ref`, `evidence`, `option` or `segment`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "what",
+        "label",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "Effort": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "type": "string"
+    },
+    "EmptyParams": {
+      "description": "Params of a method that takes none: `{}`.",
+      "type": "object"
+    },
+    "EndReason": {
+      "enum": [
+        "scheduled",
+        "fleet_lost",
+        "operator",
+        "sim_complete"
+      ],
+      "type": "string"
+    },
+    "EngineError": {
+      "oneOf": [
+        {
+          "properties": {
+            "account": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "rate_limited",
+              "type": "string"
+            },
+            "reset_at_ms": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "account",
+            "reset_at_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unavailable",
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "after_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "timeout",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "after_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "parse",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "io",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "detail"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EngineKind": {
+      "oneOf": [
+        {
+          "enum": [
+            "claude_cli",
+            "anthropic_api",
+            "codex_cli",
+            "agy_cli",
+            "local_gemma"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "scripted",
+          "description": "Deterministic, keyless; for tests and harness smoke runs.",
+          "type": "string"
+        }
+      ]
+    },
+    "EngineReply": {
+      "properties": {
+        "account": {
+          "description": "Fleet account label that served the call (never a credential).",
+          "type": "string"
+        },
+        "cost_usd": {
+          "format": "double",
+          "type": "number"
+        },
+        "duration_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "engine": {
+          "$ref": "#/$defs/EngineKind"
+        },
+        "fallback_reason": {
+          "description": "Set when the call was served by something other than the first choice.",
+          "type": "string"
+        },
+        "first_text_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage",
+          "default": {
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      },
+      "required": [
+        "text",
+        "engine",
+        "model",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "EngineRequest": {
+      "properties": {
+        "allowed_tools": {
+          "description": "Tool allowlist for the spawned CLI. Empty = no tools.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "correlation_id": {
+          "description": "Correlates the request with a stream, sim run or job, for the ledger.",
+          "type": "string"
+        },
+        "effort": {
+          "$ref": "#/$defs/Effort"
+        },
+        "json_schema": {
+          "description": "When set, the reply text must be JSON matching this schema."
+        },
+        "prompt": {
+          "description": "Per-turn context plus the actual ask.",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "system": {
+          "description": "Stable prefix (constitution + identity). Kept byte-identical across turns so the\nprovider's prompt cache holds.",
+          "type": "string"
+        },
+        "tier": {
+          "$ref": "#/$defs/ModelTier"
+        },
+        "timeout_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "role",
+        "tier",
+        "effort",
+        "system",
+        "prompt",
+        "timeout_ms"
+      ],
+      "type": "object"
+    },
+    "Episode": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "importance": {
+          "description": "1..=5",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/EpisodeKind"
+        },
+        "stream_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "ts_ms": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "ts_ms",
+        "stream_id",
+        "kind",
+        "text",
+        "importance"
+      ],
+      "type": "object"
+    },
+    "EpisodeKind": {
+      "oneOf": [
+        {
+          "const": "stream",
+          "description": "A stretch of stream: chat plus Malakor's lines.",
+          "type": "string"
+        },
+        {
+          "const": "job",
+          "description": "A background job's result.",
+          "type": "string"
+        },
+        {
+          "const": "reconcile",
+          "description": "Reconcile & Plan session with the owner.",
+          "type": "string"
+        },
+        {
+          "const": "system",
+          "description": "Machine-generated note (importance 1).",
+          "type": "string"
+        }
+      ]
+    },
+    "ErrorBody": {
+      "description": "The body of every error.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "detail": {
+          "description": "Structured context, e.g. `{\"reason\": \"forbidden_origin\"}` or\n`{\"resume_since\": 41}`. Omitted when there is none."
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "ErrorCode": {
+      "description": "Every error code the daemon may send. Clients branch on these and nothing else; the\n`message` is for people and `detail` carries structured context.",
+      "oneOf": [
+        {
+          "const": "invalid_params",
+          "description": "The request was malformed or its parameters are invalid (including a refused origin,\na wrong content type, an unparseable body or a bad cursor).",
+          "type": "string"
+        },
+        {
+          "const": "not_found",
+          "description": "The named run, tournament, report, character or rule does not exist.",
+          "type": "string"
+        },
+        {
+          "const": "method_not_found",
+          "description": "The RPC method does not exist.",
+          "type": "string"
+        },
+        {
+          "const": "preflight_red",
+          "description": "A pre-flight check is red, so the action is refused.",
+          "type": "string"
+        },
+        {
+          "const": "busy",
+          "description": "A capacity limit is reached (live runs in flight, a slow consumer cut off); retry later.",
+          "type": "string"
+        },
+        {
+          "const": "engine",
+          "description": "The LLM engine or a simulation failed (including a panicking sim).",
+          "type": "string"
+        },
+        {
+          "const": "io",
+          "description": "Reading or writing a file failed, or a stored file is malformed.",
+          "type": "string"
+        },
+        {
+          "const": "unavailable",
+          "description": "A dependency the call needs is not available (the daemon is shutting down, a source\nwent away).",
+          "type": "string"
+        },
+        {
+          "const": "conflict",
+          "description": "The request conflicts with the current state (the run id is already running).",
+          "type": "string"
+        },
+        {
+          "const": "internal",
+          "description": "A daemon bug: the request was fine but the daemon could not answer it.",
+          "type": "string"
+        }
+      ]
+    },
+    "ErrorEnvelope": {
+      "description": "`{\"error\": {...}}`: an RPC failure reply, or an error frame on `/events`.",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/ErrorBody"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "type": "object"
+    },
+    "EventFrame": {
+      "description": "`/events` -> client in enveloped mode: one transcript event with its position. `seq` is the\n1-based index of the event in its run's transcript, so live and stored runs agree and a\nreconnecting client resumes with `since` = the last seq it saw.",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/StreamEvent"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "seq": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seq",
+        "run_id",
+        "event"
+      ],
+      "type": "object"
+    },
+    "Evidence": {
+      "description": "A claim plus the transcript lines that back it (`<run_id>#<line>`, 1-based).",
+      "properties": {
+        "claim": {
+          "type": "string"
+        },
+        "refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "claim"
+      ],
+      "type": "object"
+    },
+    "EvidenceGrade": {
+      "oneOf": [
+        {
+          "const": "DOC",
+          "description": "Documented by a primary source (court, regulator, registry).",
+          "type": "string"
+        },
+        {
+          "const": "REP",
+          "description": "Reported by press.",
+          "type": "string"
+        },
+        {
+          "const": "CLM",
+          "description": "Community claim.",
+          "type": "string"
+        },
+        {
+          "const": "SPC",
+          "description": "Malakor's speculation.",
+          "type": "string"
+        }
+      ]
+    },
+    "Fact": {
+      "properties": {
+        "confidence": {
+          "description": "0.0..=1.0",
+          "format": "float",
+          "type": "number"
+        },
+        "id": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/FactScope"
+        },
+        "sources": {
+          "description": "Episode ids. Never empty: a fact without a source is rejected.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "supersedes": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "key",
+        "value",
+        "confidence",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "FactScope": {
+      "oneOf": [
+        {
+          "const": "viewer",
+          "description": "About one viewer (keyed by viewer id).",
+          "type": "string"
+        },
+        {
+          "const": "character",
+          "description": "About Malakor himself (lore he has established on stream).",
+          "type": "string"
+        },
+        {
+          "const": "world",
+          "description": "About the show's world and running jokes.",
+          "type": "string"
+        },
+        {
+          "const": "case",
+          "description": "About a SEG-02A case.",
+          "type": "string"
+        }
+      ]
+    },
+    "FoilInfo": {
+      "description": "A SEG-01 guest foil (`foils/<id>.md`).",
+      "properties": {
+        "declared": {
+          "description": "Listed in `character.toml` `foils` (summonable); an undeclared file is a draft.",
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "declared",
+        "text"
+      ],
+      "type": "object"
+    },
+    "HandoverInfo": {
+      "description": "SEG-01's handover clock rule.",
+      "properties": {
+        "ccv_min": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "grace_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_elapsed_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sustain_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "to": {
+          "$ref": "#/$defs/SegmentId"
+        }
+      },
+      "required": [
+        "to",
+        "ccv_min",
+        "sustain_s",
+        "max_elapsed_s",
+        "grace_s"
+      ],
+      "type": "object"
+    },
+    "HandoverTiming": {
+      "properties": {
+        "at_ms": {
+          "description": "Time from the `from` segment's start to the handover.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "from": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "gap_ms": {
+          "description": "Time from the handover to the next `segment_start`.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "to": {
+          "$ref": "#/$defs/SegmentId"
+        }
+      },
+      "required": [
+        "run_id",
+        "from",
+        "to",
+        "reason",
+        "ref"
+      ],
+      "type": "object"
+    },
+    "HealthReport": {
+      "properties": {
+        "check": {
+          "description": "Pre-flight check id, e.g. \"PF-01\".",
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/HealthState"
+        }
+      },
+      "required": [
+        "check",
+        "state",
+        "detail"
+      ],
+      "type": "object"
+    },
+    "HealthState": {
+      "enum": [
+        "green",
+        "amber",
+        "red"
+      ],
+      "type": "string"
+    },
+    "Hex": {
+      "description": "One hex of a SEG-02A case map. Axial coordinates (q, r).",
+      "properties": {
+        "fog": {
+          "type": "boolean"
+        },
+        "grade": {
+          "$ref": "#/$defs/EvidenceGrade",
+          "description": "Omitted while the hex is still fogged."
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/HexKind"
+        },
+        "label": {
+          "type": "string"
+        },
+        "q": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "r": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "sources": {
+          "description": "Source URLs; a DOC grade requires at least one allowlisted primary source.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "q",
+        "r",
+        "kind",
+        "label",
+        "fog"
+      ],
+      "type": "object"
+    },
+    "HexKind": {
+      "enum": [
+        "entity",
+        "wallet",
+        "domain",
+        "shell_company",
+        "claim"
+      ],
+      "type": "string"
+    },
+    "IncidentSource": {
+      "oneOf": [
+        {
+          "const": "verdict",
+          "description": "A hard-rule check the judge marked `fail`.",
+          "type": "string"
+        },
+        {
+          "const": "moderation",
+          "description": "A `moderation` event in the transcript.",
+          "type": "string"
+        }
+      ]
+    },
+    "JudgeVerdict": {
+      "properties": {
+        "judge_tier": {
+          "$ref": "#/$defs/ModelTier"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "quality": {
+          "items": {
+            "$ref": "#/$defs/QualityFact"
+          },
+          "type": "array"
+        },
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/RuleCheck"
+          },
+          "type": "array"
+        },
+        "run_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "judge_tier",
+        "rules",
+        "quality"
+      ],
+      "type": "object"
+    },
+    "LatencyStats": {
+      "properties": {
+        "by_role": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RoleLatency"
+          },
+          "type": "array"
+        },
+        "errors": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fallbacks": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ledger_rows": {
+          "description": "Ledger rows read (success and failure).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "say_first_text_p50_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "say_first_text_p95_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "say_n": {
+          "description": "In-stream `say` lines by Malakor that carried `first_text_ms`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ledger_rows",
+        "errors",
+        "fallbacks",
+        "say_n"
+      ],
+      "type": "object"
+    },
+    "LedgerEntry": {
+      "description": "One engine call. Never a prompt, a reply or a credential: accounts by label only.",
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "type": "string"
+        },
+        "cost_usd": {
+          "format": "double",
+          "type": "number"
+        },
+        "duration_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "effort": {
+          "$ref": "#/$defs/Effort"
+        },
+        "engine": {
+          "$ref": "#/$defs/EngineKind"
+        },
+        "error_kind": {
+          "description": "The engine error kind when the call failed.",
+          "type": "string"
+        },
+        "fallback_reason": {
+          "type": "string"
+        },
+        "first_text_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "run_id": {
+          "description": "The run the row belongs to (per-run sources).",
+          "type": "string"
+        },
+        "tier": {
+          "$ref": "#/$defs/ModelTier",
+          "description": "Present for per-run (simulation) rows."
+        },
+        "tournament_id": {
+          "type": "string"
+        },
+        "ts_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        },
+        "warm": {
+          "description": "The call was a turn of a warm session.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ts_ms",
+        "role",
+        "duration_ms",
+        "usage"
+      ],
+      "type": "object"
+    },
+    "LedgerPage": {
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/LedgerEntry"
+          },
+          "type": "array"
+        },
+        "next_cursor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "LedgerPageParams": {
+      "description": "`ledger.page` source: one run's `ledger.jsonl` (`run_id`, optionally qualified by\n`tournament_id`), every run of a tournament in run order (`tournament_id` alone), or the\ndaemon's process-wide engine ledger (neither).",
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "tournament_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "limit"
+      ],
+      "type": "object"
+    },
+    "LordChatParams": {
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "report_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "LordChatReply": {
+      "description": "`lord.chat` result.",
+      "properties": {
+        "directives_added": {
+          "items": {
+            "$ref": "#/$defs/Directive"
+          },
+          "type": "array"
+        },
+        "reply": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reply",
+        "directives_added"
+      ],
+      "type": "object"
+    },
+    "ModStage": {
+      "oneOf": [
+        {
+          "const": "input",
+          "description": "Chat input filtered before the model sees it.",
+          "type": "string"
+        },
+        {
+          "const": "output",
+          "description": "Model output filtered before speech or screen.",
+          "type": "string"
+        }
+      ]
+    },
+    "ModelTier": {
+      "enum": [
+        "haiku",
+        "sonnet",
+        "opus"
+      ],
+      "type": "string"
+    },
+    "NextStreamPlan": {
+      "properties": {
+        "created_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "directives": {
+          "items": {
+            "$ref": "#/$defs/Directive"
+          },
+          "type": "array"
+        },
+        "lord_dispatch": {
+          "type": "string"
+        },
+        "option_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "plan_id": {
+          "type": "string"
+        },
+        "report_id": {
+          "description": "Addition: the report and options this plan was composed from.",
+          "type": "string"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/PlanSegment"
+          },
+          "type": "array"
+        },
+        "topics": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "plan_id",
+        "created_ms",
+        "lord_dispatch",
+        "segments",
+        "topics",
+        "directives"
+      ],
+      "type": "object"
+    },
+    "Op": {
+      "description": "Malakor's action grammar. The model emits `OP: {json}` lines; only these ops are allowed.",
+      "oneOf": [
+        {
+          "properties": {
+            "msg_id": {
+              "type": "string"
+            },
+            "op": {
+              "const": "highlight",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "msg_id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "min_rank": {
+              "$ref": "#/$defs/Rank"
+            },
+            "op": {
+              "const": "start_poll",
+              "type": "string"
+            },
+            "options": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "poll_id": {
+              "type": "string"
+            },
+            "question": {
+              "type": "string"
+            },
+            "secs": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "op",
+            "poll_id",
+            "question",
+            "options",
+            "min_rank",
+            "secs"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "close_poll",
+              "type": "string"
+            },
+            "poll_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "poll_id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "foil": {
+              "type": "string"
+            },
+            "op": {
+              "const": "summon_foil",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "foil"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "dismiss_foil",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "grade": {
+              "$ref": "#/$defs/EvidenceGrade"
+            },
+            "hex": {
+              "type": "string"
+            },
+            "op": {
+              "const": "reveal_hex",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "hex",
+            "grade"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "brief": {
+              "type": "string"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "op": {
+              "const": "dispatch_research",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "job_id",
+            "brief"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "body": {
+              "type": "string"
+            },
+            "card_id": {
+              "type": "string"
+            },
+            "op": {
+              "const": "show_card",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "card_id",
+            "title",
+            "body"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "op": {
+              "const": "mark_moment",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "label"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "switch_segment",
+              "type": "string"
+            },
+            "to": {
+              "$ref": "#/$defs/SegmentId"
+            }
+          },
+          "required": [
+            "op",
+            "to"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "sign_off",
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OptionKind": {
+      "enum": [
+        "character_change",
+        "segment_change",
+        "topic",
+        "experiment"
+      ],
+      "type": "string"
+    },
+    "PackageFile": {
+      "description": "One file of a character package, relative to the package directory with `/` separators.",
+      "properties": {
+        "bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "bytes"
+      ],
+      "type": "object"
+    },
+    "PlanChooseParams": {
+      "properties": {
+        "option_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "report_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "report_id",
+        "option_ids"
+      ],
+      "type": "object"
+    },
+    "PlanOption": {
+      "properties": {
+        "diff": {
+          "description": "Unified diff against `bible.md` or `tones/*.md`; never `constitution.md`.",
+          "type": "string"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/OptionKind"
+        },
+        "option_id": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "option_id",
+        "kind",
+        "title",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "PlanProposalsResult": {
+      "items": {
+        "$ref": "#/$defs/PlanOption"
+      },
+      "type": "array"
+    },
+    "PlanSegment": {
+      "properties": {
+        "minutes": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "segment": {
+          "$ref": "#/$defs/SegmentId"
+        }
+      },
+      "required": [
+        "segment",
+        "minutes",
+        "notes"
+      ],
+      "type": "object"
+    },
+    "Platform": {
+      "enum": [
+        "twitch",
+        "youtube",
+        "kick",
+        "sim"
+      ],
+      "type": "string"
+    },
+    "PreflightRunResult": {
+      "items": {
+        "$ref": "#/$defs/HealthReport"
+      },
+      "type": "array"
+    },
+    "QualityFact": {
+      "description": "A judged quality fact (humor, tone, responsiveness...): reported as a rate with n.",
+      "properties": {
+        "dimension": {
+          "type": "string"
+        },
+        "quote": {
+          "description": "Verbatim quote from the transcript; verified mechanically.",
+          "type": "string"
+        },
+        "turn_ref": {
+          "type": "string"
+        },
+        "value": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "dimension",
+        "value",
+        "turn_ref",
+        "quote"
+      ],
+      "type": "object"
+    },
+    "Rank": {
+      "description": "The weighted rank ladder, lowest first. `Thrall` is a non-subscriber who votes with\nchannel points at weight 1. Rank derivation and vote weights live in shadowrunr-segments.",
+      "enum": [
+        "thrall",
+        "acolyte",
+        "cultist",
+        "warlock",
+        "lich",
+        "dread_council"
+      ],
+      "type": "string"
+    },
+    "RankEngagement": {
+      "properties": {
+        "by_rank": {
+          "default": [],
+          "description": "Lowest rank first; ranks with no messages are omitted.",
+          "items": {
+            "$ref": "#/$defs/RankRow"
+          },
+          "type": "array"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "RankInfo": {
+      "description": "One rung of the ladder.",
+      "properties": {
+        "min_gifted": {
+          "description": "Gifting at least this many subscriptions qualifies on its own.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rank": {
+          "$ref": "#/$defs/Rank"
+        },
+        "tiers": {
+          "items": {
+            "$ref": "#/$defs/TierRuleInfo"
+          },
+          "type": "array"
+        },
+        "title": {
+          "description": "The character's title for the rank.",
+          "type": "string"
+        },
+        "weight": {
+          "description": "Vote weight.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "rank",
+        "title",
+        "weight"
+      ],
+      "type": "object"
+    },
+    "RankRow": {
+      "description": "Engagement of one rank: who chatted, who got picked, who got answered.",
+      "properties": {
+        "answer_rate": {
+          "$ref": "#/$defs/Rate"
+        },
+        "answered": {
+          "description": "Messages Malakor (or a foil) answered via `replying_to`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "messages": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pick_rate": {
+          "$ref": "#/$defs/Rate"
+        },
+        "picked": {
+          "description": "Messages the chat picker chose.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rank": {
+          "$ref": "#/$defs/Rank"
+        },
+        "viewers": {
+          "description": "Distinct viewers (per run) of this rank who chatted.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rank",
+        "viewers",
+        "messages",
+        "picked",
+        "answered"
+      ],
+      "type": "object"
+    },
+    "RankTableInfo": {
+      "description": "`ranks.table`: thresholds, weights and titles, lowest rank first.",
+      "properties": {
+        "character": {
+          "description": "The character whose titles are shown.",
+          "type": "string"
+        },
+        "propose_min_rank": {
+          "$ref": "#/$defs/Rank",
+          "description": "Lowest rank allowed to use `!propose`."
+        },
+        "ranks": {
+          "items": {
+            "$ref": "#/$defs/RankInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "character",
+        "propose_min_rank",
+        "ranks"
+      ],
+      "type": "object"
+    },
+    "RanksTableParams": {
+      "properties": {
+        "character": {
+          "description": "Whose rank titles to show; the configured default character when absent.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Rate": {
+      "description": "A rate is never reported without its n and its bound. Rates with n = 0 are omitted.",
+      "properties": {
+        "bound": {
+          "$ref": "#/$defs/Bound"
+        },
+        "n": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rate": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "rate",
+        "n",
+        "bound"
+      ],
+      "type": "object"
+    },
+    "ReconcileReport": {
+      "properties": {
+        "created_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "dropped": {
+          "description": "Addition: refs, evidence and options the verifier dropped, with the reason.",
+          "items": {
+            "$ref": "#/$defs/DroppedItem"
+          },
+          "type": "array"
+        },
+        "latency": {
+          "$ref": "#/$defs/LatencyStats"
+        },
+        "ranks": {
+          "$ref": "#/$defs/RankEngagement"
+        },
+        "red_lines": {
+          "items": {
+            "$ref": "#/$defs/RuleIncident"
+          },
+          "type": "array"
+        },
+        "report_id": {
+          "type": "string"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/SegmentFinding"
+          },
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "tone": {
+          "items": {
+            "$ref": "#/$defs/ToneFinding"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "report_id",
+        "created_ms",
+        "source",
+        "segments",
+        "tone",
+        "ranks",
+        "red_lines",
+        "latency",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "ReconcileRunParams": {
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/Source"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    },
+    "ReconcileRunResult": {
+      "properties": {
+        "report_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "report_id"
+      ],
+      "type": "object"
+    },
+    "ReportParams": {
+      "properties": {
+        "report_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "report_id"
+      ],
+      "type": "object"
+    },
+    "Role": {
+      "description": "Who is asking. Routing (tier, effort, tools, timeout) is a table keyed by role.",
+      "oneOf": [
+        {
+          "const": "core_thread",
+          "description": "Malakor's fast conversational thread.",
+          "type": "string"
+        },
+        {
+          "const": "chat_picker",
+          "description": "Picks which chat messages the core thread answers (anti-bait).",
+          "type": "string"
+        },
+        {
+          "const": "planner",
+          "description": "Segment planning and directing (slow lane).",
+          "type": "string"
+        },
+        {
+          "const": "researcher",
+          "description": "Background research subagent.",
+          "type": "string"
+        },
+        {
+          "const": "consolidator",
+          "description": "Sleep-cycle memory consolidation.",
+          "type": "string"
+        },
+        {
+          "const": "chatter",
+          "description": "Plays simulated chatters.",
+          "type": "string"
+        },
+        {
+          "const": "judge",
+          "description": "Judges simulation transcripts.",
+          "type": "string"
+        },
+        {
+          "const": "reconciler",
+          "description": "Between-streams Reconcile & Plan analysis.",
+          "type": "string"
+        }
+      ]
+    },
+    "RoleLatency": {
+      "properties": {
+        "calls": {
+          "description": "Successful calls.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duration_p50_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duration_p95_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "errors": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fallbacks": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "first_text_p50_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "first_text_p95_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        }
+      },
+      "required": [
+        "role",
+        "calls",
+        "errors",
+        "fallbacks"
+      ],
+      "type": "object"
+    },
+    "RpcRequest": {
+      "description": "`{\"method\", \"params\"}`.",
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "params": {
+          "default": null
+        }
+      },
+      "required": [
+        "method"
+      ],
+      "type": "object"
+    },
+    "RuleCheck": {
+      "description": "A hard rule (safety, role, red lines): reported at a 100% pass bar.",
+      "properties": {
+        "evidence": {
+          "description": "Transcript reference: `<run_id>#<line>`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/CheckState"
+        }
+      },
+      "required": [
+        "rule",
+        "state"
+      ],
+      "type": "object"
+    },
+    "RuleFailure": {
+      "description": "Failed hard-rule checks of one rule within one tone cell.",
+      "properties": {
+        "fails": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "n": {
+          "description": "Checks that were evaluated (pass + fail); not_provoked / not_evaluable excluded.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "refs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rule": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule",
+        "fails",
+        "n"
+      ],
+      "type": "object"
+    },
+    "RuleIncident": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/IncidentSource"
+        },
+        "stage": {
+          "description": "`input` or `output` for moderation incidents.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "rule",
+        "source"
+      ],
+      "type": "object"
+    },
+    "RuleState": {
+      "description": "An optional constitution rule with its effective state (`character.rules`).",
+      "properties": {
+        "default": {
+          "description": "The package default from `character.toml` `[rules]`.",
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "enabled",
+        "default"
+      ],
+      "type": "object"
+    },
+    "RunFilter": {
+      "description": "`runs.page` filter; every present field must match.",
+      "properties": {
+        "audience_size": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "core_tier": {
+          "$ref": "#/$defs/ModelTier"
+        },
+        "has_verdict": {
+          "type": "boolean"
+        },
+        "segment": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "text": {
+          "description": "Case-insensitive substring of the run id.",
+          "type": "string"
+        },
+        "tone_variant": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "RunParams": {
+      "description": "A run by `run_id`, `<tournament_id>/<run_id>`, or `run_id` plus `tournament_id`.",
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "tournament_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "RunRow": {
+      "description": "One row of `runs.list` and `runs.page`.",
+      "properties": {
+        "has_verdict": {
+          "type": "boolean"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "spec": {
+          "$ref": "#/$defs/SimRunSpec"
+        },
+        "tournament_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "tournament_id",
+        "spec",
+        "has_verdict"
+      ],
+      "type": "object"
+    },
+    "RunTranscriptResult": {
+      "items": {
+        "$ref": "#/$defs/StreamEvent"
+      },
+      "type": "array"
+    },
+    "RunsListParams": {
+      "properties": {
+        "tournament_id": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "RunsListResult": {
+      "items": {
+        "$ref": "#/$defs/RunRow"
+      },
+      "type": "array"
+    },
+    "RunsPage": {
+      "description": "Runs ordered by `(tournament_id, run_id)`.",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/RunRow"
+          },
+          "type": "array"
+        },
+        "next_cursor": {
+          "description": "Present while more items follow.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "RunsPageParams": {
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "filter": {
+          "$ref": "#/$defs/RunFilter"
+        },
+        "limit": {
+          "description": "1..=500; larger values are capped at 500.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tournament_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "limit"
+      ],
+      "type": "object"
+    },
+    "SegmentContext": {
+      "description": "What the segment runtime tells the brain each tick. Produced by\n`shadowrunr_segments::SegmentRuntime::context`, consumed by `shadowrunr_brain::Brain::tick`.",
+      "properties": {
+        "allowed_ops": {
+          "description": "`Op` tags (serde names) the brain may emit in this segment.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ccv": {
+          "description": "Concurrent viewers right now.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "elapsed_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "hexes": {
+          "description": "SEG-02A: the case's hexes as currently revealed; their grades drive the brain's\n\"alleged\" output gate. Empty outside SEG-02A.",
+          "items": {
+            "$ref": "#/$defs/Hex"
+          },
+          "type": "array"
+        },
+        "rules_prompt": {
+          "description": "Rules of the segment as prompt text (stable within a segment, so cache-friendly).",
+          "type": "string"
+        },
+        "segment": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "state_summary": {
+          "description": "Current state: open poll, active foil, revealed hexes, elapsed time...",
+          "type": "string"
+        }
+      },
+      "required": [
+        "segment",
+        "rules_prompt",
+        "state_summary",
+        "allowed_ops",
+        "ccv",
+        "elapsed_s"
+      ],
+      "type": "object"
+    },
+    "SegmentFinding": {
+      "properties": {
+        "metrics": {
+          "$ref": "#/$defs/SegmentMetrics",
+          "description": "Addition: the deterministic per-segment metrics the findings were drawn from."
+        },
+        "runs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "segment": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "ses_mean": {
+          "format": "double",
+          "type": "number"
+        },
+        "what_failed": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "type": "array"
+        },
+        "what_worked": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "segment",
+        "runs"
+      ],
+      "type": "object"
+    },
+    "SegmentId": {
+      "oneOf": [
+        {
+          "enum": [
+            "SEG-01",
+            "SEG-02A"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "SEG-02B-I",
+          "description": "Descoped (kept in the plan): Cartography Legion.",
+          "type": "string"
+        },
+        {
+          "const": "SEG-02B-II",
+          "description": "Descoped (kept in the plan): Dependency Doctrine.",
+          "type": "string"
+        }
+      ]
+    },
+    "SegmentMetrics": {
+      "description": "Deterministic per-segment metrics, summed over runs.",
+      "properties": {
+        "answered": {
+          "$ref": "#/$defs/Rate",
+          "description": "SES proxy: share of chat messages that got an answer."
+        },
+        "chat_msgs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "chat_per_min": {
+          "format": "double",
+          "type": "number"
+        },
+        "handovers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/HandoverTiming"
+          },
+          "type": "array"
+        },
+        "malakor_lines": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "malakor_lines_per_min": {
+          "format": "double",
+          "type": "number"
+        },
+        "minutes": {
+          "format": "double",
+          "type": "number"
+        },
+        "moderation_events": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ops": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "poll_participation_mean": {
+          "description": "Mean over closed polls of voters / audience size.",
+          "format": "double",
+          "type": "number"
+        },
+        "polls": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "runs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "segment": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "ses_mean": {
+          "format": "double",
+          "type": "number"
+        },
+        "ses_n": {
+          "description": "Segment ends that carried an SES value.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "segment",
+        "runs",
+        "minutes",
+        "chat_msgs",
+        "malakor_lines",
+        "ops",
+        "moderation_events",
+        "polls",
+        "ses_n"
+      ],
+      "type": "object"
+    },
+    "SegmentStatus": {
+      "enum": [
+        "pilot",
+        "trial",
+        "regular",
+        "flagship",
+        "retired",
+        "descoped"
+      ],
+      "type": "string"
+    },
+    "SegmentTableInfo": {
+      "description": "One parsed segment table.",
+      "properties": {
+        "allowed_ops": {
+          "description": "`Op` tags the brain may emit in this segment.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "clock": {
+          "$ref": "#/$defs/ClockInfo"
+        },
+        "commands": {
+          "description": "Chat command names accepted in this segment.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "design_notes": {
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "initial": {
+          "type": "string"
+        },
+        "rules_prompt": {
+          "type": "string"
+        },
+        "states": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/SegmentStatus"
+        },
+        "switch_to": {
+          "items": {
+            "$ref": "#/$defs/SegmentId"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        },
+        "transitions": {
+          "items": {
+            "$ref": "#/$defs/TransitionInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "status",
+        "initial",
+        "states",
+        "allowed_ops",
+        "commands",
+        "switch_to",
+        "rules_prompt",
+        "clock",
+        "transitions"
+      ],
+      "type": "object"
+    },
+    "SegmentTables": {
+      "description": "`segments.tables`.",
+      "properties": {
+        "command_names": {
+          "description": "Every chat command name.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "op_tags": {
+          "description": "Every `Op` tag in the action grammar.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/SegmentTableInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "segments",
+        "op_tags",
+        "command_names"
+      ],
+      "type": "object"
+    },
+    "ServerFrame": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EventFrame"
+        },
+        {
+          "$ref": "#/$defs/ErrorEnvelope"
+        },
+        {
+          "$ref": "#/$defs/StreamEvent"
+        }
+      ],
+      "description": "Anything `/events` may push: an enveloped event (after a `since` subscribe), an error frame, or a bare StreamEvent (legacy mode)."
+    },
+    "SimRunSpec": {
+      "properties": {
+        "audience_size": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "character": {
+          "description": "Character package id, e.g. \"malakor\".",
+          "type": "string"
+        },
+        "core_effort": {
+          "$ref": "#/$defs/Effort"
+        },
+        "core_tier": {
+          "$ref": "#/$defs/ModelTier"
+        },
+        "duration_s": {
+          "description": "Simulated stream length in seconds.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "population": {
+          "description": "Archetype mix id from the sim calibration file.",
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "seed": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "segment": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "tone_variant": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "character",
+        "tone_variant",
+        "core_tier",
+        "core_effort",
+        "segment",
+        "audience_size",
+        "seed",
+        "duration_s",
+        "population"
+      ],
+      "type": "object"
+    },
+    "SimStartParams": {
+      "properties": {
+        "judge": {
+          "description": "Judge the run when it ends. Default false.",
+          "type": "boolean"
+        },
+        "spec": {
+          "$ref": "#/$defs/SimRunSpec"
+        }
+      },
+      "required": [
+        "spec"
+      ],
+      "type": "object"
+    },
+    "SimStartResult": {
+      "properties": {
+        "run_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "Situation": {
+      "description": "One situation of `situations.json` (format in docs/spec/contract.md).",
+      "properties": {
+        "archetype": {
+          "type": "string"
+        },
+        "behaviour": {
+          "type": "string"
+        },
+        "forbidden": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "invariants": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "near_miss": {
+          "default": false,
+          "type": "boolean"
+        },
+        "required": {
+          "type": "string"
+        },
+        "segments": {
+          "description": "Segments the situation is scheduled in; every segment when absent.",
+          "items": {
+            "$ref": "#/$defs/SegmentId"
+          },
+          "type": "array"
+        },
+        "silence_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stimulus": {
+          "description": "`message`, `silence`, `vote` or `wave`; inferred by the sim when absent.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "behaviour",
+        "archetype",
+        "required"
+      ],
+      "type": "object"
+    },
+    "Source": {
+      "anyOf": [
+        {
+          "properties": {
+            "tournament_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tournament_id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "run_ids": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "run_ids"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "What a reconcile run covers: a whole tournament or an explicit list of runs.\nWire: `{ \"tournament_id\": \"...\" }` or `{ \"run_ids\": [\"...\"] }`."
+    },
+    "Speaker": {
+      "enum": [
+        "malakor",
+        "foil"
+      ],
+      "type": "string"
+    },
+    "StreamEvent": {
+      "oneOf": [
+        {
+          "properties": {
+            "audience_size": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "character": {
+              "type": "string"
+            },
+            "core_tier": {
+              "$ref": "#/$defs/ModelTier"
+            },
+            "stream_id": {
+              "type": "string"
+            },
+            "tone_variant": {
+              "type": "string"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "stream_start",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "stream_id",
+            "character",
+            "tone_variant",
+            "core_tier",
+            "audience_size"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "segment": {
+              "$ref": "#/$defs/SegmentId"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "segment_start",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "segment"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "segment": {
+              "$ref": "#/$defs/SegmentId"
+            },
+            "ses": {
+              "format": "double",
+              "type": "number"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "segment_end",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "segment"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "SEG-02A: the Case being audited, emitted once right after its `segment_start`.",
+          "properties": {
+            "case": {
+              "$ref": "#/$defs/Case"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "case_open",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "case"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "msg": {
+              "$ref": "#/$defs/ChatMsg"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "chat",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "msg"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The chat picker chose these messages for the core thread.",
+          "properties": {
+            "msg_ids": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "picked",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "msg_ids",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "first_text_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "foil": {
+              "description": "Foil id when speaker = foil.",
+              "type": "string"
+            },
+            "replying_to": {
+              "description": "Message ids this line answers.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "speaker": {
+              "$ref": "#/$defs/Speaker"
+            },
+            "text": {
+              "type": "string"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "say",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "speaker",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "op": {
+              "$ref": "#/$defs/Op"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "op",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "op"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "closed": {
+              "type": "boolean"
+            },
+            "poll_id": {
+              "type": "string"
+            },
+            "tallies": {
+              "items": {
+                "$ref": "#/$defs/VoteTally"
+              },
+              "type": "array"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "vote",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "poll_id",
+            "tallies",
+            "closed"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "msg_id": {
+              "type": "string"
+            },
+            "rule": {
+              "type": "string"
+            },
+            "stage": {
+              "$ref": "#/$defs/ModStage"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "moderation",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "stage",
+            "rule",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/SegmentId"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "to": {
+              "$ref": "#/$defs/SegmentId"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "handover",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "from",
+            "to",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Background job lifecycle (research subagents etc.).",
+          "properties": {
+            "job_id": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "job",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "job_id",
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "reason": {
+              "$ref": "#/$defs/EndReason"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "stream_end",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Subscribe": {
+      "description": "Client -> `/events`: choose the source. Each message replaces the current source.\n\nSending `since` switches the session to enveloped frames ([`EventFrame`]) and resumes\nafter that seq. With `\"subscribe\": \"live\"`, `since` applies only while the run in flight\nis `run_id` (so `run_id` is required with it); a different run streams from its start.",
+      "properties": {
+        "run_id": {
+          "description": "The run `since` refers to, for `live`.",
+          "type": "string"
+        },
+        "since": {
+          "description": "Resume after this seq (0 = from the start, enveloped).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "speed": {
+          "description": "Replay speed for stored runs; 1.0 when absent.",
+          "format": "double",
+          "type": "number"
+        },
+        "subscribe": {
+          "description": "`<run_id>`, `<tournament_id>/<run_id>` or `live`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subscribe"
+      ],
+      "type": "object"
+    },
+    "TierRuleInfo": {
+      "description": "One way to qualify for a rank through a subscription.",
+      "properties": {
+        "min_months": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tier": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tier",
+        "min_months"
+      ],
+      "type": "object"
+    },
+    "ToneFinding": {
+      "properties": {
+        "instrument_hash": {
+          "description": "Addition: the instrument the cell was measured with. Different hashes are never\nmerged, so one tone can appear once per hash.",
+          "type": "string"
+        },
+        "quality_rates": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Rate"
+          },
+          "type": "object"
+        },
+        "rule_failures": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RuleFailure"
+          },
+          "type": "array"
+        },
+        "runs": {
+          "default": 0,
+          "description": "Addition: judged runs in this cell.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tone_variant": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tone_variant",
+        "quality_rates"
+      ],
+      "type": "object"
+    },
+    "ToneInfo": {
+      "description": "A tone variant (`tones/<id>.md`).",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "TournamentListResult": {
+      "items": {
+        "$ref": "#/$defs/TournamentRow"
+      },
+      "type": "array"
+    },
+    "TournamentParams": {
+      "properties": {
+        "tournament_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tournament_id"
+      ],
+      "type": "object"
+    },
+    "TournamentResults": {
+      "additionalProperties": true,
+      "description": "`tournament.results`: the tournament's `results.json` as written by the simulator (its\nshape is owned by `shadowrunr-sim`; not yet part of the typed contract).",
+      "type": "object"
+    },
+    "TournamentRow": {
+      "description": "One row of `tournament.list` and `tournaments.page`.",
+      "properties": {
+        "completed": {
+          "description": "Runs that finished (simulated, or judged when judging was on).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "instrument_hash": {
+          "description": "The tournament's base instrument hash; `mixed` or `unknown` for an ad-hoc directory.",
+          "type": "string"
+        },
+        "runs": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tournament_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tournament_id",
+        "instrument_hash",
+        "runs",
+        "completed"
+      ],
+      "type": "object"
+    },
+    "TournamentsPage": {
+      "description": "Tournaments ordered by `tournament_id`.",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/TournamentRow"
+          },
+          "type": "array"
+        },
+        "next_cursor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "TournamentsPageParams": {
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "limit"
+      ],
+      "type": "object"
+    },
+    "TransitionInfo": {
+      "description": "One transition row: `(from, on[, guard]) -> to`; `from = \"*\"` matches any state.",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "guard": {
+          "description": "Guard name, e.g. `foil_active`.",
+          "type": "string"
+        },
+        "on": {
+          "description": "Trigger name, e.g. `poll_opened`.",
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "on",
+        "to"
+      ],
+      "type": "object"
+    },
+    "Usage": {
+      "properties": {
+        "cache_creation_tokens": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cache_read_tokens": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "input_tokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_tokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens"
+      ],
+      "type": "object"
+    },
+    "Viewer": {
+      "properties": {
+        "gifted": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "is_mod": {
+          "default": false,
+          "type": "boolean"
+        },
+        "months": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "platform": {
+          "$ref": "#/$defs/Platform"
+        },
+        "rank": {
+          "$ref": "#/$defs/Rank"
+        },
+        "sub_tier": {
+          "description": "1, 2 or 3; omitted for non-subscribers.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "platform",
+        "rank"
+      ],
+      "type": "object"
+    },
+    "VoteTally": {
+      "properties": {
+        "option": {
+          "type": "string"
+        },
+        "voters": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "weight": {
+          "description": "Sum of rank-weighted votes.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "option",
+        "voters",
+        "weight"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:shadowrunr:contract",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Shadowrunr OS wire contract, generated from crates/shadowrunr-types. Do not edit; run `pnpm -C packages/contract generate`.",
+  "properties": {
+    "character.get": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/CharacterGetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/CharacterDetail"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "character.list": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/CharacterListResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "character.rules": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/CharacterRulesParams"
+        },
+        "result": {
+          "$ref": "#/$defs/CharacterRulesResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "character.rules.set": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/CharacterRulesSetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/CharacterRulesSetResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "directive.add": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/DirectiveAddParams"
+        },
+        "result": {
+          "$ref": "#/$defs/Directive"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "directive.deactivate": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/DirectiveIdParams"
+        },
+        "result": {
+          "$ref": "#/$defs/Directive"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "directive.list": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/DirectiveListResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "ledger.page": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/LedgerPageParams"
+        },
+        "result": {
+          "$ref": "#/$defs/LedgerPage"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "lord.chat": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/LordChatParams"
+        },
+        "result": {
+          "$ref": "#/$defs/LordChatReply"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "plan.choose": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/PlanChooseParams"
+        },
+        "result": {
+          "$ref": "#/$defs/NextStreamPlan"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "plan.proposals": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ReportParams"
+        },
+        "result": {
+          "$ref": "#/$defs/PlanProposalsResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "preflight.run": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/PreflightRunResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "ranks.table": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/RanksTableParams"
+        },
+        "result": {
+          "$ref": "#/$defs/RankTableInfo"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "reconcile.report": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ReportParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ReconcileReport"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "reconcile.run": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ReconcileRunParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ReconcileRunResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "run.transcript": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/RunParams"
+        },
+        "result": {
+          "$ref": "#/$defs/RunTranscriptResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "run.verdict": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/RunParams"
+        },
+        "result": {
+          "$ref": "#/$defs/JudgeVerdict"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "runs.list": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/RunsListParams"
+        },
+        "result": {
+          "$ref": "#/$defs/RunsListResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "runs.page": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/RunsPageParams"
+        },
+        "result": {
+          "$ref": "#/$defs/RunsPage"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "segments.tables": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/SegmentTables"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "sim.start": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/SimStartParams"
+        },
+        "result": {
+          "$ref": "#/$defs/SimStartResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "tournament.list": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/TournamentListResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "tournament.results": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/TournamentParams"
+        },
+        "result": {
+          "$ref": "#/$defs/TournamentResults"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "tournaments.page": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/TournamentsPageParams"
+        },
+        "result": {
+          "$ref": "#/$defs/TournamentsPage"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "character.get",
+    "character.list",
+    "character.rules",
+    "character.rules.set",
+    "directive.add",
+    "directive.deactivate",
+    "directive.list",
+    "ledger.page",
+    "lord.chat",
+    "plan.choose",
+    "plan.proposals",
+    "preflight.run",
+    "ranks.table",
+    "reconcile.report",
+    "reconcile.run",
+    "run.transcript",
+    "run.verdict",
+    "runs.list",
+    "runs.page",
+    "segments.tables",
+    "sim.start",
+    "tournament.list",
+    "tournament.results",
+    "tournaments.page"
+  ],
+  "title": "RpcMethods",
+  "type": "object"
+}

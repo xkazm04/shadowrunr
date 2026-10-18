@@ -1,10 +1,11 @@
 //! Segments, their lifecycle, and the SEG-02A investigation map.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::chat::EvidenceGrade;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub enum SegmentId {
     #[serde(rename = "SEG-01")]
     Seg01ImprovisedRoom,
@@ -18,7 +19,7 @@ pub enum SegmentId {
     Seg02bDependency,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SegmentStatus {
     Pilot,
@@ -29,7 +30,7 @@ pub enum SegmentStatus {
     Descoped,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HexKind {
     Entity,
@@ -40,7 +41,7 @@ pub enum HexKind {
 }
 
 /// One hex of a SEG-02A case map. Axial coordinates (q, r).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Hex {
     pub id: String,
     pub q: i32,
@@ -58,7 +59,7 @@ pub struct Hex {
 
 /// What the segment runtime tells the brain each tick. Produced by
 /// `shadowrunr_segments::SegmentRuntime::context`, consumed by `shadowrunr_brain::Brain::tick`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SegmentContext {
     pub segment: SegmentId,
     /// Rules of the segment as prompt text (stable within a segment, so cache-friendly).
@@ -76,7 +77,7 @@ pub struct SegmentContext {
     pub hexes: Vec<Hex>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Case {
     pub id: String,
     pub title: String,

@@ -1,0 +1,405 @@
+//! `POST /rpc` and `GET /events`: every method's params and result, the paging shapes and the
+//! event envelope. The method table is [`visit_methods`]; the JSON Schema export
+//! (`cargo run -p shadowrunr-types --example export-schema`) and the daemon's dispatch test
+//! both read it, so a method cannot exist on one side only.
+//!
+//! Paging is cursor-based: a reply carries `next_cursor` while more items follow, and the
+//! client passes it back unchanged. Cursors are opaque; `limit` is capped at [`MAX_LIMIT`].
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use crate::catalog::{CharacterDetail, CharacterSummary, RankTableInfo, RuleState, SegmentTables};
+use crate::reconcile::{
+    Directive, DirectiveKind, LordChatReply, NextStreamPlan, PlanOption, ReconcileReport, Source,
+};
+use crate::{
+    Effort, EngineKind, HealthReport, JudgeVerdict, ModelTier, Role, SegmentId, SimRunSpec,
+    StreamEvent, TsMs, Usage,
+};
+
+/// The largest page any paged method returns.
+pub const MAX_LIMIT: u32 = 500;
+
+/// `{"method", "params"}`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RpcRequest {
+    pub method: String,
+    #[serde(default)]
+    pub params: serde_json::Value,
+}
+
+/// Params of a method that takes none: `{}`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EmptyParams {}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RunsListParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tournament_id: Option<String>,
+}
+
+/// A run by `run_id`, `<tournament_id>/<run_id>`, or `run_id` plus `tournament_id`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RunParams {
+    pub run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tournament_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TournamentParams {
+    pub tournament_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SimStartParams {
+    pub spec: SimRunSpec,
+    /// Judge the run when it ends. Default false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub judge: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SimStartResult {
+    pub run_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ReconcileRunParams {
+    pub source: Source,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ReconcileRunResult {
+    pub report_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ReportParams {
+    pub report_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PlanChooseParams {
+    pub report_id: String,
+    pub option_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DirectiveAddParams {
+    pub kind: DirectiveKind,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<SegmentId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DirectiveIdParams {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CharacterRulesParams {
+    pub character: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CharacterRulesSetParams {
+    pub character: String,
+    pub id: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LordChatParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report_id: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CharacterGetParams {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RanksTableParams {
+    /// Whose rank titles to show; the configured default character when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character: Option<String>,
+}
+
+/// `tournament.results`: the tournament's `results.json` as written by the simulator (its
+/// shape is owned by `shadowrunr-sim`; not yet part of the typed contract).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+pub struct TournamentResults(pub serde_json::Map<String, serde_json::Value>);
+
+/// One row of `runs.list` and `runs.page`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RunRow {
+    pub run_id: String,
+    pub tournament_id: String,
+    pub spec: SimRunSpec,
+    pub has_verdict: bool,
+}
+
+/// One row of `tournament.list` and `tournaments.page`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TournamentRow {
+    pub tournament_id: String,
+    /// The tournament's base instrument hash; `mixed` or `unknown` for an ad-hoc directory.
+    pub instrument_hash: String,
+    pub runs: usize,
+    /// Runs that finished (simulated, or judged when judging was on).
+    pub completed: usize,
+}
+
+/// `runs.page` filter; every present field must match.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RunFilter {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tone_variant: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub core_tier: Option<ModelTier>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment: Option<SegmentId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audience_size: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub has_verdict: Option<bool>,
+    /// Case-insensitive substring of the run id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RunsPageParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tournament_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<RunFilter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    /// 1..=500; larger values are capped at 500.
+    pub limit: u32,
+}
+
+/// Runs ordered by `(tournament_id, run_id)`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RunsPage {
+    pub items: Vec<RunRow>,
+    /// Present while more items follow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TournamentsPageParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    pub limit: u32,
+}
+
+/// Tournaments ordered by `tournament_id`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TournamentsPage {
+    pub items: Vec<TournamentRow>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+/// `ledger.page` source: one run's `ledger.jsonl` (`run_id`, optionally qualified by
+/// `tournament_id`), every run of a tournament in run order (`tournament_id` alone), or the
+/// daemon's process-wide engine ledger (neither).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LedgerPageParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tournament_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    pub limit: u32,
+}
+
+/// One engine call. Never a prompt, a reply or a credential: accounts by label only.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LedgerEntry {
+    pub ts_ms: TsMs,
+    pub role: Role,
+    /// Present for per-run (simulation) rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<ModelTier>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<Effort>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<EngineKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_text_ms: Option<u64>,
+    pub duration_ms: u64,
+    pub usage: Usage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub correlation_id: Option<String>,
+    /// The engine error kind when the call failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_kind: Option<String>,
+    /// The call was a turn of a warm session.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub warm: bool,
+    /// The run the row belongs to (per-run sources).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tournament_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LedgerPage {
+    pub items: Vec<LedgerEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+/// Client -> `/events`: choose the source. Each message replaces the current source.
+///
+/// Sending `since` switches the session to enveloped frames ([`EventFrame`]) and resumes
+/// after that seq. With `"subscribe": "live"`, `since` applies only while the run in flight
+/// is `run_id` (so `run_id` is required with it); a different run streams from its start.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Subscribe {
+    /// `<run_id>`, `<tournament_id>/<run_id>` or `live`.
+    pub subscribe: String,
+    /// Replay speed for stored runs; 1.0 when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+    /// Resume after this seq (0 = from the start, enveloped).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<u64>,
+    /// The run `since` refers to, for `live`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+}
+
+/// `/events` -> client in enveloped mode: one transcript event with its position. `seq` is the
+/// 1-based index of the event in its run's transcript, so live and stored runs agree and a
+/// reconnecting client resumes with `since` = the last seq it saw.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct EventFrame {
+    pub seq: u64,
+    pub run_id: String,
+    pub event: StreamEvent,
+}
+
+/// What a method visitor is handed for each method.
+pub trait MethodVisitor {
+    fn method<P: JsonSchema, R: JsonSchema>(&mut self, name: &'static str);
+}
+
+/// The method table: `(name, params, result)` for every daemon method, in contract order.
+pub fn visit_methods(v: &mut impl MethodVisitor) {
+    v.method::<EmptyParams, Vec<HealthReport>>("preflight.run");
+    v.method::<RunsListParams, Vec<RunRow>>("runs.list");
+    v.method::<RunParams, Vec<StreamEvent>>("run.transcript");
+    v.method::<RunParams, JudgeVerdict>("run.verdict");
+    v.method::<EmptyParams, Vec<TournamentRow>>("tournament.list");
+    v.method::<TournamentParams, TournamentResults>("tournament.results");
+    v.method::<SimStartParams, SimStartResult>("sim.start");
+    v.method::<ReconcileRunParams, ReconcileRunResult>("reconcile.run");
+    v.method::<ReportParams, ReconcileReport>("reconcile.report");
+    v.method::<ReportParams, Vec<PlanOption>>("plan.proposals");
+    v.method::<PlanChooseParams, NextStreamPlan>("plan.choose");
+    v.method::<DirectiveAddParams, Directive>("directive.add");
+    v.method::<EmptyParams, Vec<Directive>>("directive.list");
+    v.method::<DirectiveIdParams, Directive>("directive.deactivate");
+    v.method::<LordChatParams, LordChatReply>("lord.chat");
+    v.method::<CharacterRulesParams, Vec<RuleState>>("character.rules");
+    v.method::<CharacterRulesSetParams, Vec<RuleState>>("character.rules.set");
+    v.method::<EmptyParams, Vec<CharacterSummary>>("character.list");
+    v.method::<CharacterGetParams, CharacterDetail>("character.get");
+    v.method::<EmptyParams, SegmentTables>("segments.tables");
+    v.method::<RanksTableParams, RankTableInfo>("ranks.table");
+    v.method::<LedgerPageParams, LedgerPage>("ledger.page");
+    v.method::<RunsPageParams, RunsPage>("runs.page");
+    v.method::<TournamentsPageParams, TournamentsPage>("tournaments.page");
+}
+
+/// Every method name, in table order.
+pub fn method_names() -> Vec<&'static str> {
+    struct Names(Vec<&'static str>);
+    impl MethodVisitor for Names {
+        fn method<P: JsonSchema, R: JsonSchema>(&mut self, name: &'static str) {
+            self.0.push(name);
+        }
+    }
+    let mut n = Names(Vec::new());
+    visit_methods(&mut n);
+    n.0
+}
+
+/// `character.rules.set` -> `CharacterRulesSet`: the prefix of the method's schema names
+/// (`<Pascal>Params`, `<Pascal>Result`).
+pub fn pascal_name(method: &str) -> String {
+    method
+        .split(['.', '_'])
+        .map(|part| {
+            let mut c = part.chars();
+            match c.next() {
+                Some(first) => first.to_ascii_uppercase().to_string() + c.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn method_names_are_unique_and_pascal_names_too() {
+        let names = method_names();
+        let mut sorted = names.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), names.len());
+        let mut pascal: Vec<String> = names.iter().map(|n| pascal_name(n)).collect();
+        pascal.sort();
+        pascal.dedup();
+        assert_eq!(pascal.len(), names.len());
+        assert_eq!(pascal_name("character.rules.set"), "CharacterRulesSet");
+    }
+
+    #[test]
+    fn optional_params_are_omitted() {
+        let p = SimStartParams {
+            spec: serde_json::from_value(serde_json::json!({
+                "run_id": "r", "character": "malakor", "tone_variant": "theatrical",
+                "core_tier": "haiku", "core_effort": "low", "segment": "SEG-01",
+                "audience_size": 3, "seed": 1, "duration_s": 60, "population": "p"
+            }))
+            .unwrap(),
+            judge: false,
+        };
+        assert!(serde_json::to_value(&p).unwrap().get("judge").is_none());
+        let s = Subscribe {
+            subscribe: "live".into(),
+            speed: None,
+            since: None,
+            run_id: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&s).unwrap(),
+            r#"{"subscribe":"live"}"#
+        );
+    }
+}

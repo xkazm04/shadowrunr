@@ -1,4 +1,6 @@
-//! Daemon tests: `/rpc` and `/events` over real sockets on 127.0.0.1, scripted engine only.
+//! End-to-end daemon tests: `/rpc` and `/events` over real sockets on 127.0.0.1, scripted
+//! engine only. They live in the lib (not `tests/`) so they run without linking the
+//! `shadowrunr` binary, which a live tournament may hold open.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -6,21 +8,27 @@ use std::time::Duration;
 
 use futures::{SinkExt, StreamExt};
 use serde_json::{json, Value};
-use shadowrunr_daemon::config::{Config, FileConfig, PathsConfig};
-use shadowrunr_daemon::engine::EngineHandle;
-use shadowrunr_daemon::server::{self, AppState};
 use shadowrunr_types::StreamEvent;
 use tokio_tungstenite::tungstenite::Message;
 
-fn repo() -> PathBuf {
+use crate::config::{Config, FileConfig, PathsConfig};
+use crate::engine::EngineHandle;
+use crate::server::{self, AppState};
+
+mod catalog;
+mod events;
+mod paging;
+mod resilience;
+
+pub(crate) fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-fn fixture_dir() -> PathBuf {
+pub(crate) fn fixture_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sim")
 }
 
-fn copy_dir(from: &Path, to: &Path) {
+pub(crate) fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
     for e in std::fs::read_dir(from).unwrap() {
         let e = e.unwrap();
@@ -38,7 +46,7 @@ fn s(p: PathBuf) -> String {
 }
 
 /// Repo character package, policy, calibration and segment tables; runs and data in `tmp`.
-fn test_config(tmp: &Path, characters: PathBuf) -> Config {
+pub(crate) fn test_config(tmp: &Path, characters: PathBuf) -> Config {
     copy_dir(&fixture_dir(), &tmp.join("runs").join("sim"));
     let mut fc = FileConfig {
         paths: PathsConfig {
@@ -57,14 +65,28 @@ fn test_config(tmp: &Path, characters: PathBuf) -> Config {
     Config::from_file_config(fc, tmp)
 }
 
-async fn start(cfg: Config) -> String {
-    let state: Arc<AppState> = AppState::new(cfg, EngineHandle::scripted());
+pub(crate) async fn start(cfg: Config) -> String {
+    start_state(AppState::new(cfg, EngineHandle::scripted())).await
+}
+
+/// Whether any value in the tree is JSON `null` (optional fields must be omitted instead).
+pub(crate) fn has_null(v: &Value) -> bool {
+    match v {
+        Value::Null => true,
+        Value::Array(a) => a.iter().any(has_null),
+        Value::Object(o) => o.values().any(has_null),
+        _ => false,
+    }
+}
+
+/// Serve `state` on a free port; returns `127.0.0.1:<port>`.
+pub(crate) async fn start_state(state: Arc<AppState>) -> String {
     let (addr, serve) = server::bind(state, 0).await.unwrap();
     tokio::spawn(serve);
     format!("127.0.0.1:{}", addr.port())
 }
 
-async fn rpc(addr: &str, method: &str, params: Value) -> Value {
+pub(crate) async fn rpc(addr: &str, method: &str, params: Value) -> Value {
     reqwest::Client::new()
         .post(format!("http://{addr}/rpc"))
         .json(&json!({ "method": method, "params": params }))
@@ -170,6 +192,9 @@ async fn rpc_reads_runs_and_rejects_bad_requests() {
         .await
         .unwrap();
     assert_eq!(r.status(), 403);
+    let refused: Value = r.json().await.unwrap();
+    assert_eq!(refused["error"]["code"], "invalid_params", "{refused}");
+    assert_eq!(refused["error"]["detail"]["reason"], "forbidden_origin");
     let r = client
         .post(format!("http://{addr}/rpc"))
         .header("content-type", "text/plain")
@@ -240,7 +265,7 @@ async fn reconcile_and_directives_are_wired() {
     assert!(proposals["result"].is_array(), "{proposals}");
 }
 
-fn spec(run_id: &str) -> Value {
+pub(crate) fn spec(run_id: &str) -> Value {
     json!({
         "run_id": run_id,
         "character": "malakor",
@@ -404,7 +429,7 @@ async fn pf05_reports_placeholder_only_then_the_installed_list() {
     let mut cfg = test_config(tmp.path(), chars);
     cfg.paths.policy = policy.clone();
 
-    let r = shadowrunr_daemon::preflight::pf05_policy(&cfg);
+    let r = crate::preflight::pf05_policy(&cfg);
     assert_eq!(
         r.state,
         shadowrunr_types::HealthState::Amber,
@@ -419,16 +444,12 @@ async fn pf05_reports_placeholder_only_then_the_installed_list() {
         "zorblax\tslur_racial\nquexfin\tslur_racial\nwibblet\tinsult\n",
     )
     .unwrap();
-    let meta = shadowrunr_daemon::policy_install::install(
-        &policy,
-        "fixture-list",
-        Some(src.to_str().unwrap()),
-        0,
-    )
-    .await
-    .unwrap();
+    let meta =
+        crate::policy_install::install(&policy, "fixture-list", Some(src.to_str().unwrap()), 0)
+            .await
+            .unwrap();
     assert_eq!(meta.terms, 3);
-    let r = shadowrunr_daemon::preflight::pf05_policy(&cfg);
+    let r = crate::preflight::pf05_policy(&cfg);
     assert_eq!(
         r.state,
         shadowrunr_types::HealthState::Green,
