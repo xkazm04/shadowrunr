@@ -35,3 +35,6 @@ builder:
 ## Skill improvement log
 
 - 2026-10-18: Bash heredocs in this harness collapsed `\\` in a Python regex. Write scripts that contain backslashes with the Write tool, not a heredoc.
+- 2026-10-18: Live LLM runtimes hide cost and behaviour defects that unit tests cannot see (warm-session context grew 7.8k to 500k tokens per call; a NOTE leaked into speech). Run a short live pilot right after integration and read its ledger's per-call token curve before any batch run.
+- 2026-10-18: Overnight batch runs can be reaped by the harness when other sessions exhaust machine memory. Check free memory and foreign heavy processes first, and keep every batch resumable.
+- 2026-10-18: Anchor generated-output ignores to the repo root (`/runs/`, `/data/`); an unanchored `runs/` silently dropped crate test fixtures.
