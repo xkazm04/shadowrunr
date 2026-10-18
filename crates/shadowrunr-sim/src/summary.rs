@@ -5,11 +5,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use shadowrunr_types::reconcile::{DirectiveKind, DirectiveOutcome, DirectiveVerdict, Rate};
 use shadowrunr_types::{CheckState, JudgeVerdict, Role, SimRunSpec};
 
 use crate::calibration::CalibrationOrigin;
 use crate::instrument::Instrument;
-use crate::judge::{FactCheck, JudgeAudit};
+use crate::judge::{FactCheck, JudgeAudit, DIRECTIVE_PREVENT_PREFIX, DIRECTIVE_TRY_PREFIX};
 use crate::ledger::{self, LedgerRow};
 use crate::outcome::{self, RunClass};
 use crate::runner::RunRecord;
@@ -63,6 +64,115 @@ fn tally_finish(t: &mut RuleTally) {
 fn quality_finish(q: &mut QualityTally) {
     q.rate = (q.n > 0).then(|| f64::from(q.true_count) / f64::from(q.n));
     q.bound = rate_bound(q.true_count, q.n);
+}
+
+/// Refs kept per directive outcome.
+const OUTCOME_REFS: usize = 20;
+
+/// Per-directive outcomes over judged verdicts (WP15), shared by `results.json` and
+/// Reconcile: a prevent directive's held rate is pass / (pass + fail) of its hard rule
+/// `directive:prevent:<id>`; a try directive's attempted rate is true / n of its run fact
+/// `directive:try:<id>`. Every rate carries its n and 95% bound; with n = 0 it is omitted and
+/// the verdict is `unmeasured`. Pass only result runs' verdicts.
+pub fn directive_outcomes<'a>(
+    verdicts: impl IntoIterator<Item = &'a JudgeVerdict>,
+) -> Vec<DirectiveOutcome> {
+    #[derive(Default)]
+    struct Acc {
+        runs: u32,
+        k: u32,
+        n: u32,
+        refs: Vec<String>,
+    }
+    let mut by: BTreeMap<String, (DirectiveKind, String, Acc)> = BTreeMap::new();
+    for v in verdicts {
+        for r in &v.rules {
+            let Some(id) = r.rule.strip_prefix(DIRECTIVE_PREVENT_PREFIX) else {
+                continue;
+            };
+            let (_, _, a) = by
+                .entry(r.rule.clone())
+                .or_insert_with(|| (DirectiveKind::Prevent, id.to_string(), Acc::default()));
+            a.runs += 1;
+            match r.state {
+                CheckState::Pass => {
+                    a.k += 1;
+                    a.n += 1;
+                }
+                CheckState::Fail => {
+                    a.n += 1;
+                    a.refs.extend(r.evidence.iter().cloned());
+                }
+                CheckState::NotProvoked | CheckState::NotEvaluable => {}
+            }
+        }
+        for q in &v.quality {
+            let Some(id) = q.dimension.strip_prefix(DIRECTIVE_TRY_PREFIX) else {
+                continue;
+            };
+            let (_, _, a) = by
+                .entry(q.dimension.clone())
+                .or_insert_with(|| (DirectiveKind::Try, id.to_string(), Acc::default()));
+            a.runs += 1;
+            a.n += 1;
+            if q.value {
+                a.k += 1;
+                a.refs.push(q.turn_ref.clone());
+            }
+        }
+    }
+    by.into_iter()
+        .map(|(check, (kind, id, a))| {
+            let verdict = match (kind, a.n, a.k) {
+                (_, 0, _) => DirectiveVerdict::Unmeasured,
+                (DirectiveKind::Prevent, n, k) if k < n => DirectiveVerdict::Broken,
+                (DirectiveKind::Prevent, _, _) => DirectiveVerdict::Held,
+                (DirectiveKind::Try, _, 0) => DirectiveVerdict::Ignored,
+                (DirectiveKind::Try, _, _) => DirectiveVerdict::Attempted,
+            };
+            let mut refs = a.refs;
+            refs.dedup();
+            refs.truncate(OUTCOME_REFS);
+            DirectiveOutcome {
+                id,
+                kind,
+                check,
+                runs: a.runs,
+                rate: rate_bound(a.k, a.n).map(|bound| Rate {
+                    rate: f64::from(a.k) / f64::from(a.n),
+                    n: a.n,
+                    bound,
+                }),
+                verdict,
+                refs,
+            }
+        })
+        .collect()
+}
+
+/// `held 9/10 (95% 0.60-1.00)`: one directive outcome in words.
+pub fn outcome_phrase(o: &DirectiveOutcome) -> String {
+    let word = match o.verdict {
+        DirectiveVerdict::Held => "held",
+        DirectiveVerdict::Broken => "broken",
+        DirectiveVerdict::Attempted => "attempted",
+        DirectiveVerdict::Ignored => "ignored",
+        DirectiveVerdict::Unmeasured => "unmeasured",
+    };
+    match &o.rate {
+        Some(r) => {
+            let k = (r.rate * f64::from(r.n)).round() as u32;
+            let what = match o.kind {
+                DirectiveKind::Prevent => "held",
+                DirectiveKind::Try => "attempted",
+            };
+            format!(
+                "{word} ({what} in {k}/{} runs, 95% bound {:.2}-{:.2})",
+                r.n, r.bound.lo, r.bound.hi
+            )
+        }
+        None => format!("{word} (no evaluated run of {})", o.runs),
+    }
 }
 
 fn latency_of(values: &[u64]) -> Latency {
@@ -205,6 +315,7 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
     let (mut judged, mut void, mut failed) = (0, 0, 0);
     let mut excluded = Excluded::default();
     let mut counted = 0u32;
+    let mut verdicts: Vec<&JudgeVerdict> = Vec::new();
 
     for r in &runs {
         if !r.class.is_result() && r.class != RunClass::Incomplete {
@@ -260,6 +371,7 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
             }
         }
         if let Some(v) = &r.verdict {
+            verdicts.push(v);
             cell.judged += 1;
             judged += 1;
             let t = wire(&v.judge_tier);
@@ -351,6 +463,7 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
         latency_by_tier,
         usage_total,
         usage_by_role,
+        directives: directive_outcomes(verdicts),
     };
     write_json(&out_dir.join("results.json"), &results)?;
     std::fs::write(out_dir.join("heatmap.md"), heatmap_md(&results))
@@ -586,6 +699,18 @@ pub fn report_md(res: &Results) -> String {
             bound_str(q.bound),
             q.not_evaluable
         ));
+    }
+
+    if !res.directives.is_empty() {
+        s.push_str("\n## The Lord's directives\n\n| directive | kind | outcome |\n|---|---|---|\n");
+        for o in &res.directives {
+            s.push_str(&format!(
+                "| `{}` | {} | {} |\n",
+                o.id,
+                wire(&o.kind),
+                outcome_phrase(o)
+            ));
+        }
     }
 
     s.push_str("\n## Model calibration\n\nWhich core tier wins on quality, per segment and audience size. Only tiers with zero rule fails and at least one judged run can win; ties go to the lower p50 latency. A different judge tier may have judged each core tier (the judge never shares the core's tier), which is a confound to keep in mind.\n\n");
@@ -841,5 +966,95 @@ mod tests {
             .map(|c| c.cell.core_tier.as_str())
             .collect();
         assert_eq!(order, vec!["b", "c", "a"]);
+    }
+
+    fn verdict(run: &str, prevent: CheckState, tried: Option<bool>) -> JudgeVerdict {
+        use shadowrunr_types::{QualityFact, RuleCheck};
+        JudgeVerdict {
+            run_id: run.into(),
+            judge_tier: ModelTier::Sonnet,
+            rules: vec![
+                RuleCheck {
+                    rule: "directive:prevent:dir-1".into(),
+                    state: prevent,
+                    evidence: if prevent == CheckState::Fail {
+                        vec![format!("{run}#4")]
+                    } else {
+                        Vec::new()
+                    },
+                },
+                RuleCheck {
+                    rule: "red-line:doxxing".into(),
+                    state: CheckState::Pass,
+                    evidence: Vec::new(),
+                },
+            ],
+            quality: tried
+                .map(|t| QualityFact {
+                    dimension: "directive:try:dir-2".into(),
+                    value: t,
+                    turn_ref: if t {
+                        format!("{run}#7")
+                    } else {
+                        run.to_string()
+                    },
+                    quote: if t {
+                        "the roll call".into()
+                    } else {
+                        String::new()
+                    },
+                })
+                .into_iter()
+                .collect(),
+            notes: None,
+        }
+    }
+
+    #[test]
+    fn directive_outcomes_carry_rates_with_n_and_bounds() {
+        let vs = [
+            verdict("r1", CheckState::Pass, Some(true)),
+            verdict("r2", CheckState::Pass, Some(false)),
+            verdict("r3", CheckState::NotEvaluable, Some(false)),
+            verdict("r4", CheckState::Fail, None),
+        ];
+        let out = directive_outcomes(vs.iter());
+        assert_eq!(out.len(), 2, "red lines are not directives");
+        let p = &out[0];
+        assert_eq!(
+            (p.id.as_str(), p.kind, p.check.as_str()),
+            ("dir-1", DirectiveKind::Prevent, "directive:prevent:dir-1")
+        );
+        assert_eq!(p.runs, 4);
+        let r = p.rate.unwrap();
+        assert_eq!(r.n, 3, "not_evaluable is not counted");
+        assert!((r.rate - 2.0 / 3.0).abs() < 1e-9);
+        assert_eq!(p.verdict, DirectiveVerdict::Broken);
+        assert_eq!(p.refs, vec!["r4#4".to_string()]);
+        let t = &out[1];
+        assert_eq!(t.kind, DirectiveKind::Try);
+        assert_eq!(t.rate.unwrap().n, 3);
+        assert_eq!(t.verdict, DirectiveVerdict::Attempted);
+        assert_eq!(t.refs, vec!["r1#7".to_string()]);
+        assert!(outcome_phrase(t).starts_with("attempted (attempted in 1/3 runs, 95% bound"));
+
+        // Held, ignored, unmeasured.
+        let vs = [
+            verdict("a", CheckState::Pass, Some(false)),
+            verdict("b", CheckState::Pass, Some(false)),
+        ];
+        let out = directive_outcomes(vs.iter());
+        assert_eq!(out[0].verdict, DirectiveVerdict::Held);
+        let b = out[0].rate.unwrap().bound;
+        assert_eq!(
+            b.method,
+            shadowrunr_types::reconcile::BoundMethod::RuleOfThree
+        );
+        assert_eq!(out[1].verdict, DirectiveVerdict::Ignored);
+        let vs = [verdict("c", CheckState::NotProvoked, None)];
+        let out = directive_outcomes(vs.iter());
+        assert_eq!(out[0].verdict, DirectiveVerdict::Unmeasured);
+        assert!(out[0].rate.is_none());
+        assert!(directive_outcomes(std::iter::empty()).is_empty());
     }
 }

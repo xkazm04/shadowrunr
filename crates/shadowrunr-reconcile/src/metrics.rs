@@ -9,9 +9,40 @@ use shadowrunr_types::{CheckState, Rank, Role, SegmentId, Speaker, StreamEvent, 
 use crate::runs::{ts, wire, RunData};
 use crate::stats::{percentile, rate};
 use crate::types::{
-    HandoverTiming, IncidentSource, LatencyStats, Metrics, RankEngagement, RankRow, RoleLatency,
-    RuleFailure, RuleIncident, RunSummary, SegmentMetrics, ToneFinding,
+    DirectiveOutcome, HandoverTiming, IncidentSource, LatencyStats, Metrics, RankEngagement,
+    RankRow, RoleLatency, RuleFailure, RuleIncident, RunSummary, SegmentMetrics, ToneFinding,
 };
+
+/// Judge checks a brief adds (`directive:prevent:<id>`, `directive:try:<id>`): reported as
+/// directive outcomes, never as red-line incidents.
+const DIRECTIVE_CHECK_PREFIX: &str = "directive:";
+
+/// Per-directive outcomes over the runs' verdicts (WP15): held rates for prevent directives,
+/// attempted rates for try directives, each with n and its bound. The aggregation is the
+/// simulator's (`results.json` uses the same function), so the two never disagree.
+pub fn directive_outcomes(runs: &[RunData]) -> Vec<DirectiveOutcome> {
+    shadowrunr_sim::summary::directive_outcomes(runs.iter().filter_map(|r| r.verdict.as_ref()))
+}
+
+/// The sentence the report's summary carries about the directives, or `None` when no run
+/// was judged against any: which held, which broke, which were attempted or ignored.
+pub fn directive_summary(outcomes: &[DirectiveOutcome]) -> Option<String> {
+    if outcomes.is_empty() {
+        return None;
+    }
+    let parts: Vec<String> = outcomes
+        .iter()
+        .map(|o| {
+            format!(
+                "{} ({}) {}",
+                o.id,
+                wire(&o.kind),
+                shadowrunr_sim::summary::outcome_phrase(o)
+            )
+        })
+        .collect();
+    Some(format!("Directives: {}.", parts.join("; ")))
+}
 
 /// Compute every deterministic metric over `runs`.
 pub fn analyze(runs: &[RunData]) -> Metrics {
@@ -346,7 +377,12 @@ fn red_lines(runs: &[RunData]) -> Vec<RuleIncident> {
     let mut out = Vec::new();
     for run in runs {
         if let Some(v) = &run.verdict {
-            for r in v.rules.iter().filter(|r| r.state == CheckState::Fail) {
+            for r in v
+                .rules
+                .iter()
+                .filter(|r| r.state == CheckState::Fail)
+                .filter(|r| !r.rule.starts_with(DIRECTIVE_CHECK_PREFIX))
+            {
                 out.push(RuleIncident {
                     run_id: run.run_id.clone(),
                     rule: r.rule.clone(),
@@ -450,4 +486,146 @@ fn latency(runs: &[RunData]) -> LatencyStats {
     stats.say_first_text_p50_ms = percentile(&say_first, 50.0);
     stats.say_first_text_p95_ms = percentile(&say_first, 95.0);
     stats
+}
+
+#[cfg(test)]
+mod directive_tests {
+    //! WP15: directive outcomes, with self-contained run fixtures (no quota is spent: the
+    //! synthesis runs on the keyless scripted engine and falls back to the deterministic
+    //! summary).
+
+    use std::path::Path;
+    use std::sync::Arc;
+
+    use serde_json::json;
+
+    use super::*;
+    use crate::types::{BoundMethod, DirectiveKind, DirectiveVerdict, Source};
+    use crate::{load_source, ReconcileConfig, Reconciler};
+
+    const TRANSCRIPT: &str = concat!(
+        r#"{"type":"stream_start","ts_ms":0,"stream_id":"s","character":"malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":3}"#,
+        "\n",
+        r#"{"type":"say","ts_ms":1000,"speaker":"malakor","text":"Kneel."}"#,
+        "\n",
+        r#"{"type":"stream_end","ts_ms":60000,"reason":"sim_complete"}"#,
+        "\n"
+    );
+
+    fn run(dir: &Path, id: &str, verdict: serde_json::Value) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join("transcript.jsonl"), TRANSCRIPT).unwrap();
+        let spec = json!({
+            "run_id": id, "character": "malakor", "tone_variant": "theatrical",
+            "core_tier": "haiku", "core_effort": "low", "segment": "SEG-01",
+            "audience_size": 3, "seed": 1, "duration_s": 60, "population": "fixture"
+        });
+        std::fs::write(dir.join("spec.json"), spec.to_string()).unwrap();
+        let rec = json!({
+            "run_id": id, "status": "judged", "instrument_hash": "h",
+            "calibration": { "kind": "default_assumption" },
+            "tick_s": 5, "ticks": 12, "ended_at_s": 60, "signed_off": false,
+            "chat": { "bulk_msgs": 0, "featured_msgs": 0, "vote_msgs": 0, "command_msgs": 0,
+                      "featured_calls": 0, "featured_engine_errors": 0,
+                      "featured_parse_errors": 0, "silent_ticks": 0 },
+            "population": { "size_key": "3", "msgs_per_min": 1.0, "mix": [], "counts": [],
+                            "peak_ccv": 3 },
+            "featured": [], "injections": []
+        });
+        std::fs::write(dir.join("run.json"), rec.to_string()).unwrap();
+        std::fs::write(dir.join("verdict.json"), verdict.to_string()).unwrap();
+    }
+
+    /// Three judged runs made with a brief: dir-1 (prevent) broken once, dir-2 (try)
+    /// attempted once, dir-3 (try) never attempted.
+    fn briefed_tournament(root: &Path) {
+        let t = root.join("t-brief");
+        for (i, (prevent, tried)) in [("pass", true), ("fail", false), ("pass", false)]
+            .into_iter()
+            .enumerate()
+        {
+            let id = format!("r{i}");
+            let evidence: Vec<String> = if prevent == "fail" {
+                vec![format!("{id}#2")]
+            } else {
+                Vec::new()
+            };
+            let try_fact = if tried {
+                json!({"dimension": "directive:try:dir-2", "value": true,
+                       "turn_ref": format!("{id}#2"), "quote": "Kneel."})
+            } else {
+                json!({"dimension": "directive:try:dir-2", "value": false,
+                       "turn_ref": id.clone(), "quote": ""})
+            };
+            let v = json!({
+                "run_id": id, "judge_tier": "opus",
+                "rules": [
+                    { "rule": "situation:a", "state": "pass" },
+                    { "rule": "directive:prevent:dir-1", "state": prevent, "evidence": evidence }
+                ],
+                "quality": [
+                    try_fact,
+                    {"dimension": "directive:try:dir-3", "value": false, "turn_ref": id.clone(),
+                     "quote": ""}
+                ]
+            });
+            run(&t.join(&id), &id, v);
+        }
+    }
+
+    #[tokio::test]
+    async fn reconcile_aggregates_directive_outcomes_and_says_which_held() {
+        let tmp = tempfile::tempdir().unwrap();
+        briefed_tournament(tmp.path());
+        let src = Source::Tournament {
+            tournament_id: "t-brief".into(),
+        };
+        let runs = load_source(tmp.path(), &src).unwrap();
+        assert_eq!(runs.len(), 3);
+        let out = directive_outcomes(&runs);
+        let by = |id: &str| out.iter().find(|o| o.id == id).unwrap();
+        let d1 = by("dir-1");
+        assert_eq!(d1.kind, DirectiveKind::Prevent);
+        let r = d1.rate.unwrap();
+        assert_eq!((r.n, d1.runs), (3, 3));
+        assert!((r.rate - 2.0 / 3.0).abs() < 1e-9);
+        assert_eq!(d1.verdict, DirectiveVerdict::Broken);
+        assert_eq!(d1.refs, vec!["r1#2".to_string()]);
+        assert_eq!(by("dir-2").verdict, DirectiveVerdict::Attempted);
+        assert_eq!(by("dir-2").rate.unwrap().n, 3);
+        assert_eq!(by("dir-3").verdict, DirectiveVerdict::Ignored);
+        assert_eq!(
+            by("dir-3").rate.unwrap().bound.method,
+            BoundMethod::RuleOfThree
+        );
+
+        // A broken directive is a directive outcome, not a red-line incident.
+        assert!(analyze(&runs)
+            .red_lines
+            .iter()
+            .all(|i| !i.rule.starts_with("directive:")));
+
+        // The stored report says which held and which were ignored, even when the synthesis
+        // gives nothing usable (the scripted engine).
+        let rec = Reconciler::with_clock(
+            ReconcileConfig {
+                data_dir: tmp.path().join("data"),
+                runs_root: tmp.path().to_path_buf(),
+                characters_root: None,
+            },
+            Arc::new(shadowrunr_engine::ScriptedEngine),
+            Arc::new(|| 1_000),
+        );
+        let id = rec.run(src).await.unwrap();
+        let summary = rec.report(&id).unwrap().summary;
+        for part in [
+            "Directives: dir-1 (prevent) broken (held in 2/3 runs, 95% bound",
+            "dir-2 (try) attempted (attempted in 1/3 runs",
+            "dir-3 (try) ignored (attempted in 0/3 runs, 95% bound 0.00-1.00)",
+        ] {
+            assert!(summary.contains(part), "{part}: {summary}");
+        }
+        // Nothing about directives when no run carried one.
+        assert_eq!(directive_summary(&[]), None);
+    }
 }

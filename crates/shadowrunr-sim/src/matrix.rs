@@ -1,5 +1,10 @@
 //! Tournament matrices (`sim/matrices/*.toml`): tones x core tiers x segments x audience
 //! sizes x seeds, with a run duration.
+//!
+//! WP15: `brief = "current"` runs every spec with the brief the next live stream would
+//! receive (`<data>`), `brief = "<path>"` with a `StreamBrief` JSON file (relative to the
+//! working directory, like every sim path). Absent: no brief, and the instrument hash is
+//! what it always was.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -7,7 +12,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use shadowrunr_types::{Effort, ModelTier, SegmentId, SimRunSpec};
 
-use crate::{wire, SimError};
+use crate::{wire, BriefSource, SimError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Axes {
@@ -56,6 +61,9 @@ pub struct Matrix {
     /// Per-size population override: `"300" = "raid-moment"`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub populations: BTreeMap<String, String>,
+    /// The Lord's brief for every run: `"current"` or a path (WP15).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brief: Option<String>,
     pub axes: Axes,
 }
 
@@ -96,6 +104,14 @@ impl Matrix {
             )));
         }
         Ok(m)
+    }
+
+    /// The brief source the matrix declares (`BriefSource::None` when it declares none).
+    pub fn brief_source(&self) -> BriefSource {
+        self.brief
+            .as_deref()
+            .map(BriefSource::parse)
+            .unwrap_or_default()
     }
 
     pub fn population_for(&self, size: u32) -> String {
@@ -232,6 +248,23 @@ seeds = [1]
         let specs = m.specs();
         assert_eq!(specs[0].population, "small-new");
         assert_eq!(specs[1].population, "growing");
+        assert_eq!(m.brief_source(), BriefSource::None);
         assert!(Matrix::parse("id = \"x\"\ncharacter = \"m\"\nduration_s = 1\n[axes]\ntones = []\ncore_tiers = []\nsegments = []\naudience_sizes = []\nseeds = []\n").is_err());
+    }
+
+    #[test]
+    fn a_matrix_may_name_a_brief() {
+        let base = "id = \"t\"\ncharacter = \"malakor\"\nduration_s = 60\n";
+        let axes = "[axes]\ntones = [\"theatrical\"]\ncore_tiers = [\"haiku\"]\nsegments = [\"SEG-01\"]\naudience_sizes = [3]\nseeds = [1]\n";
+        let current = Matrix::parse(&format!("{base}brief = \"current\"\n{axes}")).unwrap();
+        assert_eq!(current.brief_source(), BriefSource::Current);
+        let file = Matrix::parse(&format!("{base}brief = \"sim/briefs/a.json\"\n{axes}")).unwrap();
+        assert_eq!(
+            file.brief_source(),
+            BriefSource::File(std::path::PathBuf::from("sim/briefs/a.json"))
+        );
+        // The shipped matrices declare none: their tournaments keep their hashes.
+        assert_eq!(shipped("pilot.toml").brief_source(), BriefSource::None);
+        assert_eq!(shipped("heavy.toml").brief_source(), BriefSource::None);
     }
 }

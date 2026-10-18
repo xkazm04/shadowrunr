@@ -8,7 +8,8 @@
 //!    injection tagging, flood/copypasta clusters);
 //! 4. pick messages (safety-critical first; deterministic, or `Role::ChatPicker` above a
 //!    volume threshold);
-//! 5. recall and compose (stable prefix + per-turn block);
+//! 5. recall and compose (stable prefix, with the Lord's brief when the stream has one, +
+//!    per-turn block);
 //! 6. call the core thread (warm session when available, else `complete`);
 //! 7. parse spoken lines, `OP:` and `NOTE:`; gate output; dispatch research jobs.
 
@@ -50,7 +51,10 @@ pub use picker::PickerConfig;
 pub use pool::{Job, JobCtx, JobRunner, JobStatus, JobUpdate, ResearchRunner, WorkerPool};
 pub use rules::{CharacterRule, RuleState, RulesOverride};
 
-use compose::{compose_turn, stable_prefix, TurnInputs, ViewerBrief};
+pub use compose::{brief_summary, build_stream_brief, load_stream_brief, normalize_stream_brief};
+pub use shadowrunr_types::reconcile::StreamBrief;
+
+use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line};
 use moderation::{gate_text, output_events, InputFilter, Policy, TermAction};
@@ -69,6 +73,9 @@ pub enum BrainError {
     Rejected(String),
     #[error("policy: {0}")]
     Policy(String),
+    /// `<data>/next_plan.json` or `<data>/directives.json` could not be read.
+    #[error("stream brief: {0}")]
+    Brief(String),
     #[error(transparent)]
     Engine(#[from] shadowrunr_types::EngineError),
 }
@@ -150,6 +157,8 @@ pub struct Brain {
     engine: Arc<dyn Engine>,
     tuning: BrainTuning,
     prefix: String,
+    /// The Lord's brief for this stream, rendered into `prefix` (see [`Brain::with_brief`]).
+    brief: Option<StreamBrief>,
     store: MemoryStore,
     pool: Arc<WorkerPool>,
     policy: Policy,
@@ -189,7 +198,7 @@ impl Brain {
     ) -> Result<Self, BrainError> {
         let store = MemoryStore::open(&cfg.memory_dir)?;
         let policy = Policy::load(&tuning.policy, &cfg.character.dir, &tuning.platforms)?;
-        let prefix = stable_prefix(&cfg.character);
+        let prefix = stable_prefix_with_brief(&cfg.character, None);
         let mut names: Vec<String> = ["malakor", "lich", "overlord", "my lord"]
             .iter()
             .map(|s| s.to_string())
@@ -231,9 +240,26 @@ impl Brain {
             engine,
             tuning,
             prefix,
+            brief: None,
             store,
             policy,
         })
+    }
+
+    /// Give the brain this stream's brief from the Lord (the chosen plan plus the active
+    /// directives, see [`build_stream_brief`]). It is rendered once, into the stable prefix,
+    /// after the character package; call it before the first tick (the core thread's warm
+    /// session is opened with the prefix). `None` keeps the prefix byte-identical to a brain
+    /// that never heard of briefs.
+    pub fn with_brief(mut self, brief: Option<StreamBrief>) -> Self {
+        self.prefix = stable_prefix_with_brief(&self.cfg.character, brief.as_ref());
+        self.brief = brief;
+        self
+    }
+
+    /// The brief this stream received, if any.
+    pub fn brief(&self) -> Option<&StreamBrief> {
+        self.brief.as_ref()
     }
 
     /// Share a worker pool between brains (a stream and a side thread, say). Results still
@@ -608,6 +634,7 @@ impl Brain {
             active_foil: active_foil.as_deref(),
             nonce,
             fresh_bit: std::mem::take(&mut self.fresh_bit),
+            brief: self.brief.as_ref(),
         });
         self.last_prompt = Some(prompt.clone());
 

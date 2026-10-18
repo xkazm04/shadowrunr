@@ -785,6 +785,79 @@
       },
       "type": "array"
     },
+    "DirectiveOutcome": {
+      "description": "Per-directive outcome aggregate (WP15): a prevent directive is the judge's hard rule\n`directive:prevent:<id>`, a try directive its run fact `directive:try:<id>`.",
+      "properties": {
+        "check": {
+          "description": "The judge check the outcome is counted from.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/DirectiveKind"
+        },
+        "rate": {
+          "$ref": "#/$defs/Rate",
+          "description": "Prevent: share of evaluated runs (pass + fail) where it held. Try: share of runs where\nit was attempted. Omitted when n is 0."
+        },
+        "refs": {
+          "description": "Prevent: refs of the failing evidence. Try: refs of the attempts. At most 20.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "runs": {
+          "description": "Judged runs whose verdict carried the check, in any state.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "verdict": {
+          "$ref": "#/$defs/DirectiveVerdict"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "check",
+        "runs",
+        "verdict"
+      ],
+      "type": "object"
+    },
+    "DirectiveVerdict": {
+      "description": "How a directive fared over the judged runs that carried it (WP15).",
+      "oneOf": [
+        {
+          "const": "held",
+          "description": "A prevent directive no evaluated run broke.",
+          "type": "string"
+        },
+        {
+          "const": "broken",
+          "description": "A prevent directive at least one evaluated run broke.",
+          "type": "string"
+        },
+        {
+          "const": "attempted",
+          "description": "A try directive at least one run attempted.",
+          "type": "string"
+        },
+        {
+          "const": "ignored",
+          "description": "A try directive no run attempted.",
+          "type": "string"
+        },
+        {
+          "const": "unmeasured",
+          "description": "The judge never evaluated it (n = 0).",
+          "type": "string"
+        }
+      ]
+    },
     "DroppedItem": {
       "description": "An LLM-proposed item that did not survive mechanical verification (the \"flag\" half of\n\"drop or flag\").",
       "properties": {
@@ -2634,6 +2707,13 @@
           "format": "int64",
           "type": "integer"
         },
+        "directives": {
+          "description": "Addition (WP15): what happened to each of the Lord's directives in the source runs\n(held or attempted, with n and bound). Absent when no run carried a brief.",
+          "items": {
+            "$ref": "#/$defs/DirectiveOutcome"
+          },
+          "type": "array"
+        },
         "dropped": {
           "description": "Addition: refs, evidence and options the verifier dropped, with the reason.",
           "items": {
@@ -3689,6 +3769,38 @@
       ],
       "type": "string"
     },
+    "StreamBrief": {
+      "description": "What one stream receives from the Lord of the Darkness (WP15): the latest chosen plan's\ndispatch, segments and topics, plus the directives that are active when the stream starts\n(never proposed or inactive ones). The brain renders it once, in its stable prefix; the sim\nhashes its canonical JSON into the instrument. Built by `shadowrunr_brain::build_stream_brief`\n(the one builder, used by the live path and the sim). A brief with nothing in it is no brief.",
+      "properties": {
+        "directives": {
+          "default": [],
+          "description": "Active directives only, oldest first.",
+          "items": {
+            "$ref": "#/$defs/Directive"
+          },
+          "type": "array"
+        },
+        "lord_dispatch": {
+          "description": "The Lord's message for the stream, in character. LLM-composed from report text, so the\nbrain frames it as a message, never as a rule.",
+          "type": "string"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/PlanSegment"
+          },
+          "type": "array"
+        },
+        "topics": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
     "StreamEvent": {
       "oneOf": [
         {
@@ -3697,6 +3809,10 @@
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
+            },
+            "brief": {
+              "$ref": "#/$defs/StreamBrief",
+              "description": "Addition (WP15): the brief the brain received in its stable prefix for this stream\n(the chosen plan's dispatch, segments and topics plus the active directives).\nOmitted when the stream had no brief."
             },
             "character": {
               "type": "string"
@@ -4256,6 +4372,13 @@
         "cells": {
           "items": {
             "$ref": "#/$defs/CellResult"
+          },
+          "type": "array"
+        },
+        "directives": {
+          "description": "Addition (WP15): per-directive outcomes over every judged result run, for runs made\nwith a brief. Omitted when no verdict carried a directive check.",
+          "items": {
+            "$ref": "#/$defs/DirectiveOutcome"
           },
           "type": "array"
         },

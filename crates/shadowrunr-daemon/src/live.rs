@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::{ErrorCode, SimRunSpec, StreamEvent};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinError;
@@ -251,8 +252,26 @@ fn validate(spec: &mut SimRunSpec) -> Result<(), RpcError> {
     runs::check_id("run_id", &spec.run_id)
 }
 
+/// The brief a stream starting now receives (WP15): `<data>/next_plan.json` plus the active
+/// directives of `<data>/directives.json`, through the one builder
+/// (`shadowrunr_brain::build_stream_brief`). Proposed and inactive directives never reach it.
+/// A corrupt file refuses the start (`io`): a stream never starts on a half-read brief.
+pub fn stream_brief(data_dir: &std::path::Path) -> Result<Option<StreamBrief>, RpcError> {
+    shadowrunr_brain::load_stream_brief(data_dir).map_err(|e| RpcError::io(e.to_string()))
+}
+
+/// The one-line log of what a stream received.
+pub fn brief_line(run_id: &str, brief: Option<&StreamBrief>) -> String {
+    format!(
+        "sim.start {run_id}: brief: {}",
+        shadowrunr_brain::brief_summary(brief)
+    )
+}
+
 /// `sim.start`: refuse while a pre-flight check is red, then run in the background and
-/// stream on `/events`. The run lands in `<runs>/sim/<adhoc_dir>/<run_id>/`.
+/// stream on `/events`. The run lands in `<runs>/sim/<adhoc_dir>/<run_id>/`. The brain gets
+/// the brief from `<data>`; the run's `stream_start` event carries it, so On Air shows what
+/// Malakor actually received.
 pub async fn start_sim(
     state: Arc<AppState>,
     mut spec: SimRunSpec,
@@ -272,6 +291,8 @@ pub async fn start_sim(
         ));
     }
     let run_id = spec.run_id.clone();
+    let brief = stream_brief(&state.cfg.paths.data)?;
+    eprintln!("{}", brief_line(&run_id, brief.as_ref()));
     let run = state
         .live
         .register(&run_id, state.cfg.daemon.max_live_runs)?;
@@ -284,7 +305,12 @@ pub async fn start_sim(
     }
 
     let engine = state.engine.engine.clone();
-    let opts = state.cfg.sim_options(judge);
+    let mut opts = state.cfg.sim_options(judge);
+    opts.data_dir = state.cfg.paths.data.clone();
+    opts.brief = match brief {
+        Some(b) => shadowrunr_sim::BriefSource::Inline(Box::new(b)),
+        None => shadowrunr_sim::BriefSource::None,
+    };
     let handle = tokio::runtime::Handle::current();
     let sim = tokio::task::spawn_blocking(move || {
         handle.block_on(shadowrunr_sim::run_one_with(spec, out_dir, engine, &opts))
@@ -381,5 +407,81 @@ mod tests {
         run.finish(None);
         assert!(matches!(rx.try_recv().unwrap(), LiveItem::End(None)));
         assert!(run.attach(0).rx.is_none());
+    }
+
+    #[test]
+    fn the_live_brief_reads_plan_and_directives_and_excludes_proposals() {
+        use shadowrunr_reconcile::DirectiveStore;
+        use shadowrunr_types::reconcile::{DirectiveKind, NextStreamPlan, PlanSegment};
+        use shadowrunr_types::SegmentId;
+
+        let d = tempfile::tempdir().unwrap();
+        assert_eq!(
+            stream_brief(d.path()).unwrap(),
+            None,
+            "no plan, no directives"
+        );
+        assert_eq!(brief_line("r1", None), "sim.start r1: brief: no brief");
+
+        // The stores as the owner and the Reconciler write them.
+        let store = DirectiveStore::new(d.path());
+        let kept = store
+            .add(DirectiveKind::Prevent, "No coin-flip bits.", None, 10)
+            .unwrap();
+        let scoped = store
+            .add(
+                DirectiveKind::Try,
+                "Roll call the top minions.",
+                Some(SegmentId::Seg01ImprovisedRoom),
+                11,
+            )
+            .unwrap();
+        store
+            .propose(DirectiveKind::Try, "A proposal nobody kept.", None, 12)
+            .unwrap();
+        let retired = store
+            .add(DirectiveKind::Prevent, "Retired rule.", None, 13)
+            .unwrap();
+        store.deactivate(&retired.id).unwrap();
+        let plan = NextStreamPlan {
+            plan_id: "plan-1".into(),
+            created_ms: 20,
+            lord_dispatch: "Read the ledger of doom aloud.".into(),
+            segments: vec![PlanSegment {
+                segment: SegmentId::Seg01ImprovisedRoom,
+                minutes: 30,
+                notes: "roll call first".into(),
+            }],
+            topics: vec!["socks".into()],
+            directives: Vec::new(),
+            report_id: None,
+            option_ids: Vec::new(),
+        };
+        std::fs::write(
+            d.path().join("next_plan.json"),
+            serde_json::to_string(&plan).unwrap(),
+        )
+        .unwrap();
+
+        let b = stream_brief(d.path()).unwrap().unwrap();
+        assert_eq!(
+            b.lord_dispatch.as_deref(),
+            Some("Read the ledger of doom aloud.")
+        );
+        assert_eq!(b.segments, plan.segments);
+        assert_eq!(b.topics, plan.topics);
+        assert_eq!(
+            b.directives,
+            vec![kept, scoped],
+            "active only: no proposal, no retired"
+        );
+        assert_eq!(
+            brief_line("r1", Some(&b)),
+            "sim.start r1: brief: dispatch yes, 1 prevent, 1 try, 1 segments, 1 topics"
+        );
+
+        // A corrupt store refuses the start.
+        std::fs::write(d.path().join("directives.json"), "{").unwrap();
+        assert_eq!(stream_brief(d.path()).unwrap_err().code, ErrorCode::Io);
     }
 }

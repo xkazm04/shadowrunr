@@ -73,6 +73,8 @@ const CHECK_TONE = { verified: "ok", nearby: "caution", not_found: "fail" } as c
 
 function QuoteState({ fact, transcript }: { fact: QualityFact; transcript: Query<StreamEvent[]> }) {
   const ref = parseRef(fact.turn_ref);
+  // A run-level fact (WP15: a try directive or the dispatch not attempted) cites the run, not a line.
+  if (!ref && fact.quote === "") return <Chip tone="muted" title="Judged over the whole run: there is no line to quote.">whole run</Chip>;
   if (!ref) return <Chip tone="unevaluable">bad ref</Chip>;
   if (transcript.data === undefined) {
     return transcript.errorView ? <Chip tone="muted">transcript unavailable</Chip> : <Chip tone="muted">checking</Chip>;

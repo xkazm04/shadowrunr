@@ -224,7 +224,7 @@ Directive       { id, kind: "prevent"|"try", text, scope?, created_ms, active, p
 
 The `lord_dispatch` of the chosen plan is the text Malakor is to receive as "the Lord's dispatch"
 at the next stream start. Directives are stored in `<data>/directives.json` and fed to every
-stream until they are deactivated.
+stream until they are deactivated. How they reach the brain: the WP15 appendix (`StreamBrief`).
 
 **Proposed directives (WP14).** Directives a `lord.chat` reply returns are proposals, not live
 directives: the Reconciler's prompt carries report text derived from viewer transcripts, so a
@@ -538,3 +538,65 @@ content reason; `1` error; `4` stopped at the quota pause cap; `5` finished with
 `--plan-only` prints each run's `action` (`skip` | `rejudge` | `run`) and `reason` (`new`,
 `complete`, `void_kept`, `stale`, `partial`, `engine_failed`, `judge_pending`) with the counts,
 and executes, spends and writes nothing.
+
+## Appendix (WP15): the stream brief, closing the loop
+
+The chosen plan and the active directives now reach Malakor. Three optional wire additions;
+nothing above changes, and a stream or a run without a brief is byte-for-byte what it was.
+
+```
+StreamBrief       { lord_dispatch?, segments?: [{segment, minutes, notes}], topics: [string],
+                    directives: [Directive] }          // active directives only
+stream_start      + brief?: StreamBrief                // what the brain received
+TournamentResults + directives?: [DirectiveOutcome]    // omitted when no verdict has one
+DirectiveOutcome  { id, kind: "prevent"|"try", check, runs, rate?: {rate, n, bound},
+                    verdict: "held"|"broken"|"attempted"|"ignored"|"unmeasured", refs? }
+```
+
+- **One builder.** `shadowrunr_brain::build_stream_brief(plan, directives)` builds the brief
+  from the latest chosen plan (`<data>/next_plan.json`: dispatch, segments, topics) plus the
+  directives with `active: true` and no `proposed` (`<data>/directives.json`), oldest first.
+  The plan's own `directives` snapshot is not read: a directive deactivated after the plan was
+  chosen does not come back. A brief with nothing in it is no brief. `load_stream_brief(<data>)`
+  reads both files; a corrupt file is an error, never a half brief. The live path (`sim.start`)
+  and the sim use this one builder.
+- **The brain.** `Brain::with_brief(Option<StreamBrief>)`, once per stream. The brief is a
+  section of the stable prefix after the character package (constitution, enabled rules, tone,
+  bible): a heading, a constant precedence paragraph, the data inside a fixed
+  `<lord_brief>` fence, and a constant restatement after it. Prevent directives render under
+  "Never do", try directives under "Work in when it fits", a scoped directive as
+  `- [<id>] (SEG-01 only) <text>`, and the per-turn segment block names the directives in
+  force in that segment. The constitution and platform rules outrank the brief; a directive
+  that conflicts with them is void. The dispatch is framed as the Lord's message, which
+  Malakor may quote, never as a rule. Brief text cannot close the fence or forge a heading:
+  every `<` becomes `‹` and every item is one line. The output gate is unchanged. With no brief
+  the prefix is byte-identical to before (golden test).
+- **The live path.** `sim.start` builds the brief from `<data>` at stream start, logs
+  `sim.start <run_id>: brief: dispatch yes, 2 prevent, 1 try, ...`, and the run's
+  `stream_start` carries the brief (the smaller wire change than a new event: one optional
+  field, no new variant).
+- **The sim.** `SimOptions.brief`: `None` (default) | `Current` (from `<data>`) |
+  `File(path)` | `Inline(brief)`. Matrix toml: `brief = "current"` or `brief = "<path>"`;
+  `shadowrunr sim run|tournament --brief current|<path>` overrides it. The brief is read once
+  per tournament. A run with a brief writes `<run_dir>/brief.json`, and a re-judge uses that
+  file, not today's `<data>`. The brief's canonical JSON digest joins the base hash as
+  `brief.json` only when a brief is present, so tournaments with and without a brief (or with
+  different briefs) never mix, and every existing hash is unchanged. `--plan-only` prints
+  `brief_digest` and `brief` (the summary line) when there is one; the tournament summary
+  prints `brief_digest`.
+- **The judge.** With a brief, the judge also gets: a hard rule `directive:prevent:<id>` per
+  prevent directive in force (always provoked: fails when the run did the prevented thing,
+  with verified evidence); a run fact `directive:try:<id>` per try directive in force; and a
+  run fact `follows_dispatch` when there is a dispatch. A scoped directive is in force only
+  when its segment ran. Run facts are one per run: `true` needs a verified line and quote;
+  `false` may carry no line (an absence has none), and is then recorded with
+  `turn_ref: "<run_id>"` and an empty quote (`judge.json` check `not_attempted`). The texts go
+  inside the run's untrusted-data fence, one block per directive (`directive-<id>`) and one for
+  the dispatch (`lord-dispatch`), the id on the fence line outside the content. The judge never
+  sees the constitution, and `JUDGE_SYSTEM` is unchanged.
+- **Outcomes.** `results.json` and Reconcile aggregate per directive over judged result runs:
+  prevent = pass / (pass + fail) of its rule (`held` when none failed, else `broken`), try =
+  true / n of its fact (`attempted` when any run tried it, else `ignored`), each rate with its
+  n and 95% bound (omitted, `unmeasured`, at n = 0). `report.md` lists them; the Reconcile
+  report's `summary` ends with `Directives: <id> (<kind>) <verdict> (...)`. Directive checks
+  are not red-line incidents.

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::reconcile::Bound;
+use crate::reconcile::{Bound, DirectiveOutcome};
 
 /// The axes of one heatmap cell.
 #[derive(
@@ -134,6 +134,10 @@ pub struct TournamentResults {
     pub latency_by_tier: BTreeMap<String, BTreeMap<String, Latency>>,
     pub usage_total: UsageTotals,
     pub usage_by_role: BTreeMap<String, UsageTotals>,
+    /// Addition (WP15): per-directive outcomes over every judged result run, for runs made
+    /// with a brief. Omitted when no verdict carried a directive check.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub directives: Vec<DirectiveOutcome>,
 }
 
 fn is_zero(n: &u32) -> bool {

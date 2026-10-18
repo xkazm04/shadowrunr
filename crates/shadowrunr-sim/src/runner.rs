@@ -17,6 +17,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shadowrunr_brain::{load_character, Brain, BrainConfig, BrainTuning};
 use shadowrunr_segments::{SegmentConfig, SegmentRuntime};
+use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::{
     ChatMsg, EndReason, Engine, ModelTier, Op, Role, SegmentContext, SegmentId, SimRunSpec,
     Speaker, StreamEvent, TsMs,
@@ -216,6 +217,20 @@ pub(crate) struct Prepared {
     pub hex_ids: Vec<String>,
     pub streamer: String,
     pub character_dir: PathBuf,
+    /// The Lord's brief the brain receives (WP15), also written to `brief.json`.
+    pub brief: Option<StreamBrief>,
+}
+
+/// `<run_dir>/brief.json`: the brief a run was made with, so a re-judge sees the same one.
+pub const BRIEF_FILE: &str = "brief.json";
+
+/// The brief a run directory was made with, if any.
+pub(crate) fn run_brief(run_dir: &Path) -> Result<Option<StreamBrief>, SimError> {
+    let p = run_dir.join(BRIEF_FILE);
+    if !p.is_file() {
+        return Ok(None);
+    }
+    read_json(&p).map(Some)
 }
 
 pub(crate) fn character_dir(opts: &SimOptions, character: &str) -> PathBuf {
@@ -226,12 +241,23 @@ pub(crate) fn rubric_path(opts: &SimOptions) -> PathBuf {
     opts.sim_root.join("rubric.toml")
 }
 
-/// The instrument identity for a spec, without running anything.
+/// The instrument identity for a spec, without running anything. Reads the options' brief.
 pub(crate) fn instrument_for(
     opts: &SimOptions,
     character: &str,
     tone: &str,
     calibration_text: &str,
+) -> Result<Instrument, SimError> {
+    let brief = opts.resolved_brief()?;
+    instrument_with(opts, character, tone, calibration_text, brief.as_ref())
+}
+
+fn instrument_with(
+    opts: &SimOptions,
+    character: &str,
+    tone: &str,
+    calibration_text: &str,
+    brief: Option<&StreamBrief>,
 ) -> Result<Instrument, SimError> {
     instrument::compute(&InstrumentInputs {
         character_dir: &character_dir(opts, character),
@@ -239,6 +265,7 @@ pub(crate) fn instrument_for(
         segments_dir: &opts.segments_data_dir,
         rubric_path: &rubric_path(opts),
         calibration_text,
+        brief,
     })
 }
 
@@ -310,9 +337,19 @@ pub(crate) fn prepare(
         Err(e) if opts.judge => return Err(e),
         Err(_) => None,
     };
-    let instrument = instrument_for(opts, &spec.character, &spec.tone_variant, &cal_text)?;
+    let brief = opts.resolved_brief()?;
+    let instrument = instrument_with(
+        opts,
+        &spec.character,
+        &spec.tone_variant,
+        &cal_text,
+        brief.as_ref(),
+    )?;
     write_json(&run_dir.join("spec.json"), spec)?;
     write_json(&run_dir.join("instrument.json"), &instrument)?;
+    if let Some(b) = &brief {
+        write_json(&run_dir.join(BRIEF_FILE), b)?;
+    }
     let engine: Arc<dyn Engine> = Arc::new(LedgerEngine::create(
         engine,
         &run_dir.join("ledger.jsonl"),
@@ -333,6 +370,7 @@ pub(crate) fn prepare(
         hex_ids: hex_ids(&opts.segments_data_dir),
         streamer,
         character_dir: cdir,
+        brief,
     })
 }
 
@@ -404,6 +442,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         tone_variant: spec.tone_variant.clone(),
         core_tier: spec.core_tier,
         audience_size: spec.audience_size,
+        brief: prep.brief.clone(),
     })?;
     w.push_all(stage.start(0, spec.segment))?;
 
@@ -567,6 +606,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                 &mut record,
                 prep.engine.as_ref(),
                 opts.quota.as_ref(),
+                prep.brief.as_ref(),
             )
             .await?
         }
@@ -592,6 +632,7 @@ async fn judge_into(
     record: &mut RunRecord,
     engine: &dyn Engine,
     quota: Option<&GateHandle>,
+    brief: Option<&StreamBrief>,
 ) -> Result<Option<shadowrunr_types::JudgeVerdict>, SimError> {
     record.judge_tier = Some(tier);
     // Before the judge call, ask the engine whether any account can serve it.
@@ -618,6 +659,7 @@ async fn judge_into(
         rubric,
         judge_tier: tier,
         core_tier: spec.core_tier,
+        brief,
     };
     match judge::judge_run(&inp, engine).await {
         Ok(JudgeOutcome::Verdict(b)) => {
@@ -711,7 +753,8 @@ pub async fn run_one_with(
                 ..BrainTuning::default()
             },
         )
-        .await?;
+        .await?
+        .with_brief(prep.brief.clone());
         let stage = SegmentRuntime::with_config(
             spec.segment,
             SegmentConfig {
@@ -746,6 +789,8 @@ pub async fn judge_existing(
     let events = transcript::read(&run_dir.join("transcript.jsonl"))?;
     let bank = SituationBank::load(&character_dir(opts, &spec.character).join("situations.json"))?;
     let rubric = Rubric::load(&rubric_path(opts))?;
+    // The brief the run was made with, not whatever `<data>` holds now.
+    let brief = run_brief(run_dir)?;
     let engine: Arc<dyn Engine> = Arc::new(LedgerEngine::create(
         engine,
         &run_dir.join("ledger.jsonl"),
@@ -761,6 +806,7 @@ pub async fn judge_existing(
         &mut record,
         engine.as_ref(),
         opts.quota.as_ref(),
+        brief.as_ref(),
     )
     .await?;
     write_json(&run_dir.join("run.json"), &record)?;
@@ -1618,5 +1664,212 @@ pub(crate) mod tests {
             .await
             .unwrap()
             .is_some());
+    }
+
+    // ---- WP15: the Lord's brief ----------------------------------------------------------
+
+    /// [`FakeEngine`] that records every request.
+    struct Recording {
+        inner: FakeEngine,
+        seen: Mutex<Vec<EngineRequest>>,
+    }
+
+    #[async_trait]
+    impl Engine for Recording {
+        async fn complete(&self, req: EngineRequest) -> Result<EngineReply, EngineError> {
+            self.seen.lock().unwrap().push(req.clone());
+            self.inner.complete(req).await
+        }
+        async fn open_session(
+            &self,
+            t: EngineRequest,
+        ) -> Result<Box<dyn WarmSession>, EngineError> {
+            self.inner.open_session(t).await
+        }
+        async fn health(&self) -> Vec<HealthReport> {
+            Vec::new()
+        }
+    }
+
+    impl Recording {
+        fn of(&self, role: Role) -> Vec<EngineRequest> {
+            self.seen
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|r| r.role == role)
+                .cloned()
+                .collect()
+        }
+    }
+
+    /// `<data>` with a chosen plan, an active prevent, an active SEG-01 try and a proposal.
+    fn brief_data(dir: &Path) {
+        use shadowrunr_types::reconcile::{Directive, DirectiveKind, NextStreamPlan};
+        std::fs::create_dir_all(dir).unwrap();
+        let plan = NextStreamPlan {
+            plan_id: "plan-1".into(),
+            created_ms: 1,
+            lord_dispatch: "The Lord wants the ledger of doom read aloud.".into(),
+            segments: Vec::new(),
+            topics: vec!["socks".into()],
+            directives: Vec::new(),
+            report_id: None,
+            option_ids: Vec::new(),
+        };
+        let d = |id: &str, kind, text: &str, scope, active, proposed| Directive {
+            id: id.into(),
+            kind,
+            text: text.into(),
+            scope,
+            created_ms: 2,
+            active,
+            proposed,
+        };
+        let dirs = vec![
+            d(
+                "dir-1",
+                DirectiveKind::Prevent,
+                "No coin-flip bits.",
+                None,
+                true,
+                false,
+            ),
+            d(
+                "dir-2",
+                DirectiveKind::Try,
+                "Roll call the top minions.",
+                Some(SegmentId::Seg01ImprovisedRoom),
+                true,
+                false,
+            ),
+            d(
+                "dir-9",
+                DirectiveKind::Try,
+                "PROPOSED-ONLY text",
+                None,
+                false,
+                true,
+            ),
+        ];
+        std::fs::write(
+            dir.join("next_plan.json"),
+            serde_json::to_string(&plan).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("directives.json"),
+            serde_json::to_string(&dirs).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_brief_reaches_the_brain_the_transcript_the_instrument_and_the_judge() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        opts.hooks = Hooks::default();
+        let data = tmp.path().join("data");
+        brief_data(&data);
+        let (_, _, cal) = calibration::load(&opts.sim_root).unwrap();
+        let plain_hash = instrument_for(&opts, "malakor", "theatrical", &cal)
+            .unwrap()
+            .instrument_hash;
+        opts.data_dir = data.clone();
+        opts.brief = crate::BriefSource::Current;
+        let expected = shadowrunr_brain::load_stream_brief(&data).unwrap().unwrap();
+        assert_eq!(
+            expected.directives.len(),
+            2,
+            "the proposal is not in the brief"
+        );
+
+        let out = tmp.path().join("out");
+        let rec = Arc::new(Recording {
+            inner: FakeEngine::new(""),
+            seen: Mutex::new(Vec::new()),
+        });
+        let res = run_one_with(
+            spec("br", ModelTier::Haiku, 3, 60),
+            out.clone(),
+            rec.clone(),
+            &opts,
+        )
+        .await
+        .unwrap();
+        let dir = out.join("br");
+
+        // brief.json and stream_start carry exactly the built brief.
+        let stored: shadowrunr_types::reconcile::StreamBrief =
+            read_json(&dir.join(BRIEF_FILE)).unwrap();
+        assert_eq!(stored, expected);
+        let events = transcript::read(&res.transcript).unwrap();
+        match &events[0] {
+            StreamEvent::StreamStart { brief, .. } => assert_eq!(brief.as_ref(), Some(&expected)),
+            other => panic!("{other:?}"),
+        }
+
+        // The instrument: the brief joins the hash.
+        let inst: Instrument = read_json(&dir.join("instrument.json")).unwrap();
+        assert_ne!(inst.instrument_hash, plain_hash);
+        assert!(inst.files.iter().any(|f| f.path == instrument::BRIEF_ENTRY
+            && f.sha256 == instrument::brief_digest(&expected)));
+
+        // The brain: every core call's system prompt holds the framed brief, byte-stable.
+        let core = rec.of(Role::CoreThread);
+        assert!(!core.is_empty());
+        assert!(core.iter().all(|r| r.system == core[0].system));
+        assert!(core[0]
+            .system
+            .contains(shadowrunr_brain::compose::BRIEF_HEADING));
+        assert!(core[0].system.contains("- [dir-1] No coin-flip bits."));
+        assert!(core[0]
+            .system
+            .contains("- [dir-2] (SEG-01 only) Roll call the top minions."));
+
+        // The judge: dynamic checks plus fenced texts; nothing proposed anywhere.
+        let judge = rec.of(Role::Judge);
+        assert_eq!(judge.len(), 1);
+        let jp = &judge[0].prompt;
+        assert!(jp.contains("- directive:prevent:dir-1: "));
+        assert!(jp.contains("- directive:try:dir-2: "));
+        assert!(jp.contains("- follows_dispatch: "));
+        assert!(jp.contains(" directive-dir-1 fence="));
+        assert!(jp.contains(" lord-dispatch fence="));
+        for r in rec.seen.lock().unwrap().iter() {
+            assert!(!r.system.contains("PROPOSED-ONLY") && !r.prompt.contains("PROPOSED-ONLY"));
+        }
+        let v = res.verdict.expect("the fake judge rules");
+        assert!(v.rules.iter().any(|r| r.rule == "directive:prevent:dir-1"));
+
+        // A re-judge uses the brief the run was made with, not today's `<data>`.
+        std::fs::write(data.join("directives.json"), "[]").unwrap();
+        let rec2 = Arc::new(Recording {
+            inner: FakeEngine::new(""),
+            seen: Mutex::new(Vec::new()),
+        });
+        judge_existing(&dir, rec2.clone(), &opts).await.unwrap();
+        assert!(rec2.of(Role::Judge)[0]
+            .prompt
+            .contains("- directive:prevent:dir-1: "));
+    }
+
+    #[test]
+    fn no_brief_source_and_an_empty_data_dir_both_mean_no_brief() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        let (_, _, cal) = calibration::load(&opts.sim_root).unwrap();
+        let none = instrument_for(&opts, "malakor", "theatrical", &cal).unwrap();
+        opts.brief = crate::BriefSource::Current;
+        opts.data_dir = tmp.path().join("empty-data");
+        let current_empty = instrument_for(&opts, "malakor", "theatrical", &cal).unwrap();
+        assert_eq!(none.instrument_hash, current_empty.instrument_hash);
+        assert_eq!(none.base_hash, current_empty.base_hash);
+        assert_eq!(
+            crate::BriefSource::Current
+                .resolved(&opts.data_dir)
+                .unwrap(),
+            crate::BriefSource::None
+        );
     }
 }

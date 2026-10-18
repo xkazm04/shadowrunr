@@ -2,11 +2,16 @@
 //! same character package (including its optional rules and the effective enabled set after
 //! the operator's override), tone file, segment tables, judge rubric, calibration, installed
 //! moderation lists and sim logic. Results from different hashes are never merged.
+//!
+//! WP15: when a run carries the Lord's brief, the brief's canonical JSON digest joins the
+//! base hash as `brief.json`, so tournaments with and without a brief (or with different
+//! briefs) never mix. With no brief nothing is added, so every existing hash is unchanged.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use shadowrunr_types::reconcile::StreamBrief;
 
 use crate::SimError;
 
@@ -87,6 +92,15 @@ fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf)>) -> Result<(), S
     Ok(())
 }
 
+/// sha256 of the brief's canonical JSON (serde's field order, compact; the builder fixes the
+/// directive order), the digest the instrument and `--plan-only` show.
+pub fn brief_digest(b: &StreamBrief) -> String {
+    sha_hex(&serde_json::to_vec(b).unwrap_or_default())
+}
+
+/// Logical path of the brief entry in the instrument's file list.
+pub const BRIEF_ENTRY: &str = "brief.json";
+
 fn combine(files: &[InstrumentFile], logic: &str) -> String {
     let mut h = Sha256::new();
     h.update(logic.as_bytes());
@@ -108,6 +122,8 @@ pub struct InstrumentInputs<'a> {
     pub rubric_path: &'a Path,
     /// Calibration text actually in use (the file or the compiled-in default).
     pub calibration_text: &'a str,
+    /// The run's brief, when it has one (WP15).
+    pub brief: Option<&'a StreamBrief>,
 }
 
 pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
@@ -162,6 +178,12 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
         path: "calibration.json".into(),
         sha256: sha_hex(&norm(inp.calibration_text.as_bytes())),
     });
+    if let Some(b) = inp.brief {
+        files.push(InstrumentFile {
+            path: BRIEF_ENTRY.into(),
+            sha256: brief_digest(b),
+        });
+    }
     let base_hash = combine(&files, SIM_LOGIC_VERSION);
 
     let tone = file_entry(
@@ -204,6 +226,7 @@ mod tests {
             segments_dir: &root.join("seg"),
             rubric_path: &root.join("rubric.toml"),
             calibration_text: "{}",
+            brief: None,
         })
         .unwrap()
     }
@@ -263,6 +286,7 @@ mod tests {
                 segments_dir: &d.path().join("seg"),
                 rubric_path: &d.path().join("rubric.toml"),
                 calibration_text: "{}",
+                brief: None,
             })
             .unwrap()
             .instrument_hash
@@ -300,6 +324,7 @@ mod tests {
             segments_dir: &d.path().join("seg"),
             rubric_path: &d.path().join("rubric.toml"),
             calibration_text: "{}",
+            brief: None,
         })
         .unwrap();
         assert!(i.files.iter().any(|f| f.path == "policy/local/fixture.txt"));
@@ -308,5 +333,73 @@ mod tests {
             .iter()
             .any(|f| f.path == "policy/local/fixture.json"));
         assert!(i.files.iter().any(|f| f.path == "character/rules/alpha.md"));
+    }
+
+    fn brief(text: &str) -> StreamBrief {
+        StreamBrief {
+            lord_dispatch: Some("Audit the sock bureau.".into()),
+            segments: Vec::new(),
+            topics: Vec::new(),
+            directives: vec![shadowrunr_types::reconcile::Directive {
+                id: "dir-1".into(),
+                kind: shadowrunr_types::reconcile::DirectiveKind::Prevent,
+                text: text.into(),
+                scope: None,
+                created_ms: 1,
+                active: true,
+                proposed: false,
+            }],
+        }
+    }
+
+    fn inst_with(root: &Path, b: Option<&StreamBrief>) -> Instrument {
+        compute(&InstrumentInputs {
+            character_dir: &root.join("char"),
+            tone: "a",
+            segments_dir: &root.join("seg"),
+            rubric_path: &root.join("rubric.toml"),
+            calibration_text: "{}",
+            brief: b,
+        })
+        .unwrap()
+    }
+
+    /// `fixture` hashed by the pre-WP15 code (the brief entry is the only change to
+    /// `compute`, and it is skipped without a brief): no brief must keep exactly this value.
+    const PRE_BRIEF_HASH: &str = "16bfb51c09466debd4947b6f5e0120d079ed4a930d3d665dc033cc0c746fbcac";
+
+    #[test]
+    fn a_brief_joins_the_hash_only_when_present() {
+        // Nested two levels, so the override and installed-list lookups (`<char>/../..`)
+        // stay inside the temp dir and the golden does not depend on the machine.
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().join("repo").join("characters");
+        fixture(&root);
+        let none = inst_with(&root, None);
+        assert_eq!(
+            none.instrument_hash, PRE_BRIEF_HASH,
+            "no brief: hash unchanged"
+        );
+        assert!(!none.files.iter().any(|f| f.path == BRIEF_ENTRY));
+
+        let b = brief("No coin bits.");
+        let with = inst_with(&root, Some(&b));
+        assert_ne!(
+            with.base_hash, none.base_hash,
+            "a brief starts a new tournament"
+        );
+        assert_ne!(with.instrument_hash, none.instrument_hash);
+        let entry = with.files.iter().find(|f| f.path == BRIEF_ENTRY).unwrap();
+        assert_eq!(entry.sha256, brief_digest(&b));
+        assert_eq!(
+            inst_with(&root, Some(&b)).instrument_hash,
+            with.instrument_hash,
+            "stable"
+        );
+        let other = inst_with(&root, Some(&brief("No coin bits, ever.")));
+        assert_ne!(
+            other.instrument_hash, with.instrument_hash,
+            "briefs never mix"
+        );
     }
 }

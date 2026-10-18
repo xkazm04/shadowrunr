@@ -64,6 +64,12 @@ describe("simulator layer 2", () => {
     expect(screen.getByText("Held the room.")).toBeTruthy();
   });
 
+  it("shows a run-level fact (no line to quote) as whole run, not as a bad ref", async () => {
+    mount(world(1, 4), ["verdicts", VERDICT_RUN]);
+    await settle(() => expect(screen.getByText("whole run")).toBeTruthy());
+    expect(screen.queryByText("bad ref")).toBeNull();
+  });
+
   it("shows a run with no verdict as empty, not as an error", async () => {
     mount(world(1, 4), ["verdicts", "t001-r0009"]);
     await settle(() => expect(screen.getByText("This run has no verdict yet")).toBeTruthy());

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::chat::{ChatMsg, EvidenceGrade, Rank};
 use crate::engine::ModelTier;
+use crate::reconcile::StreamBrief;
 use crate::segment::{Case, SegmentId};
 use crate::TsMs;
 
@@ -97,6 +98,11 @@ pub enum StreamEvent {
         tone_variant: String,
         core_tier: ModelTier,
         audience_size: u32,
+        /// Addition (WP15): the brief the brain received in its stable prefix for this stream
+        /// (the chosen plan's dispatch, segments and topics plus the active directives).
+        /// Omitted when the stream had no brief.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        brief: Option<StreamBrief>,
     },
     SegmentStart {
         ts_ms: TsMs,

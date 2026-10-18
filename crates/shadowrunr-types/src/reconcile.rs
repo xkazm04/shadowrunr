@@ -264,6 +264,10 @@ pub struct ReconcileReport {
     /// budget. Absent for reports stored before WP12.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub synthesis_input: Option<SynthesisInput>,
+    /// Addition (WP15): what happened to each of the Lord's directives in the source runs
+    /// (held or attempted, with n and bound). Absent when no run carried a brief.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub directives: Vec<DirectiveOutcome>,
 }
 
 /// Incidents of one rule from one source, counted over the whole report.
@@ -373,6 +377,62 @@ pub struct Directive {
     /// loses `proposed`); `directive.deactivate` drops it. Omitted when false.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub proposed: bool,
+}
+
+/// What one stream receives from the Lord of the Darkness (WP15): the latest chosen plan's
+/// dispatch, segments and topics, plus the directives that are active when the stream starts
+/// (never proposed or inactive ones). The brain renders it once, in its stable prefix; the sim
+/// hashes its canonical JSON into the instrument. Built by `shadowrunr_brain::build_stream_brief`
+/// (the one builder, used by the live path and the sim). A brief with nothing in it is no brief.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StreamBrief {
+    /// The Lord's message for the stream, in character. LLM-composed from report text, so the
+    /// brain frames it as a message, never as a rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lord_dispatch: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<PlanSegment>,
+    #[serde(default)]
+    pub topics: Vec<String>,
+    /// Active directives only, oldest first.
+    #[serde(default)]
+    pub directives: Vec<Directive>,
+}
+
+/// How a directive fared over the judged runs that carried it (WP15).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DirectiveVerdict {
+    /// A prevent directive no evaluated run broke.
+    Held,
+    /// A prevent directive at least one evaluated run broke.
+    Broken,
+    /// A try directive at least one run attempted.
+    Attempted,
+    /// A try directive no run attempted.
+    Ignored,
+    /// The judge never evaluated it (n = 0).
+    Unmeasured,
+}
+
+/// Per-directive outcome aggregate (WP15): a prevent directive is the judge's hard rule
+/// `directive:prevent:<id>`, a try directive its run fact `directive:try:<id>`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DirectiveOutcome {
+    pub id: String,
+    pub kind: DirectiveKind,
+    /// The judge check the outcome is counted from.
+    pub check: String,
+    /// Judged runs whose verdict carried the check, in any state.
+    pub runs: u32,
+    /// Prevent: share of evaluated runs (pass + fail) where it held. Try: share of runs where
+    /// it was attempted. Omitted when n is 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate: Option<Rate>,
+    pub verdict: DirectiveVerdict,
+    /// Prevent: refs of the failing evidence. Try: refs of the attempts. At most 20.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refs: Vec<String>,
 }
 
 /// `lord.chat` result. `directives_added` are the directives the reply proposed: each is

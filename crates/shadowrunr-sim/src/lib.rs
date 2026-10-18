@@ -34,6 +34,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Serialize;
+use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::{Command, Engine, JudgeVerdict, ModelTier, Rank, SimRunSpec};
 
 pub use outcome::{classify, RunClass};
@@ -80,6 +81,55 @@ impl Default for Hooks {
     }
 }
 
+/// Where a run's brief from the Lord comes from (WP15). The default is no brief, which keeps
+/// the stable prefix and the instrument hash exactly as they were before briefs existed.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum BriefSource {
+    #[default]
+    None,
+    /// What the next live stream would receive: `<data>/next_plan.json` plus the active
+    /// directives in `<data>/directives.json` ([`SimOptions::data_dir`]).
+    Current,
+    /// A `StreamBrief` JSON file.
+    File(PathBuf),
+    /// An already-resolved brief (callers resolve once, then run many specs with it).
+    Inline(Box<StreamBrief>),
+}
+
+impl BriefSource {
+    /// `"current"` or a path, as a matrix or the CLI spells it. Empty or `"none"` is no brief.
+    pub fn parse(s: &str) -> Self {
+        match s.trim() {
+            "" | "none" => Self::None,
+            "current" => Self::Current,
+            p => Self::File(PathBuf::from(p)),
+        }
+    }
+
+    /// The brief this source names, through the one builder's rules
+    /// (`shadowrunr_brain::build_stream_brief` / `normalize_stream_brief`). `None` when the
+    /// source is empty: an empty brief is no brief.
+    pub fn resolve(&self, data_dir: &std::path::Path) -> Result<Option<StreamBrief>, SimError> {
+        match self {
+            Self::None => Ok(None),
+            Self::Current => Ok(shadowrunr_brain::load_stream_brief(data_dir)?),
+            Self::File(p) => {
+                let b: StreamBrief = read_json(p)?;
+                Ok(shadowrunr_brain::normalize_stream_brief(b))
+            }
+            Self::Inline(b) => Ok(shadowrunr_brain::normalize_stream_brief((**b).clone())),
+        }
+    }
+
+    /// This source with the brief read now, so a tournament reads `<data>` once.
+    pub fn resolved(&self, data_dir: &std::path::Path) -> Result<Self, SimError> {
+        Ok(match self.resolve(data_dir)? {
+            Some(b) => Self::Inline(Box::new(b)),
+            None => Self::None,
+        })
+    }
+}
+
 /// Knobs for one run. Paths are relative to the working directory (the repo root) unless
 /// absolute.
 #[derive(Debug, Clone)]
@@ -112,6 +162,18 @@ pub struct SimOptions {
     /// Asked before every judge call: when no account can serve, the judge is deferred and
     /// the run is `judge_pending` instead of burning the call (WP13).
     pub quota: Option<pacing::GateHandle>,
+    /// The Lord's brief the run's brain receives (WP15). Its canonical digest joins the
+    /// instrument hash only when a brief is present.
+    pub brief: BriefSource,
+    /// `<data>`, read by [`BriefSource::Current`].
+    pub data_dir: PathBuf,
+}
+
+impl SimOptions {
+    /// The run's brief, read from its source.
+    pub fn resolved_brief(&self) -> Result<Option<StreamBrief>, SimError> {
+        self.brief.resolve(&self.data_dir)
+    }
 }
 
 impl Default for SimOptions {
@@ -131,6 +193,8 @@ impl Default for SimOptions {
             platforms: vec!["twitch".into()],
             hooks: Hooks::default(),
             quota: None,
+            brief: BriefSource::None,
+            data_dir: PathBuf::from("data"),
         }
     }
 }

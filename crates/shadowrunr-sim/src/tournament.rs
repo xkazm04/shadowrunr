@@ -59,6 +59,9 @@ pub struct TournamentOptions {
 pub fn effective_options(matrix: &Matrix, base: &SimOptions) -> SimOptions {
     let mut o = base.clone();
     o.tick_s = matrix.tick_s;
+    if o.brief == crate::BriefSource::None {
+        o.brief = matrix.brief_source();
+    }
     if !matrix.judge_tiers.is_empty() {
         o.judge_tiers = matrix.judge_tiers.clone();
     }

@@ -117,12 +117,20 @@ export type ReconcileListResult = ReportSummary[];
  */
 export type BoundMethod = "wilson" | "rule_of_three";
 /**
+ * How a directive fared over the judged runs that carried it (WP15).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "DirectiveVerdict".
+ */
+export type DirectiveVerdict = "held" | "broken" | "attempted" | "ignored" | "unmeasured";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "StreamEvent".
  */
 export type StreamEvent =
   | {
       audience_size: number;
+      brief?: StreamBrief;
       character: string;
       core_tier: ModelTier;
       stream_id: string;
@@ -1144,6 +1152,11 @@ export interface ReportSummary {
 export interface ReconcileReport {
   created_ms: number;
   /**
+   * Addition (WP15): what happened to each of the Lord's directives in the source runs
+   * (held or attempted, with n and bound). Absent when no run carried a brief.
+   */
+  directives?: DirectiveOutcome[];
+  /**
    * Addition: refs, evidence and options the verifier dropped, with the reason.
    */
   dropped?: DroppedItem[];
@@ -1166,6 +1179,53 @@ export interface ReconcileReport {
   summary: string;
   synthesis_input?: SynthesisInput;
   tone: ToneFinding[];
+}
+/**
+ * Per-directive outcome aggregate (WP15): a prevent directive is the judge's hard rule
+ * `directive:prevent:<id>`, a try directive its run fact `directive:try:<id>`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "DirectiveOutcome".
+ */
+export interface DirectiveOutcome {
+  /**
+   * The judge check the outcome is counted from.
+   */
+  check: string;
+  id: string;
+  kind: DirectiveKind;
+  rate?: Rate;
+  /**
+   * Prevent: refs of the failing evidence. Try: refs of the attempts. At most 20.
+   */
+  refs?: string[];
+  /**
+   * Judged runs whose verdict carried the check, in any state.
+   */
+  runs: number;
+  verdict: DirectiveVerdict;
+}
+/**
+ * A rate is never reported without its n and its bound. Rates with n = 0 are omitted.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Rate".
+ */
+export interface Rate {
+  bound: Bound;
+  n: number;
+  rate: number;
+}
+/**
+ * A 95% interval on a rate.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Bound".
+ */
+export interface Bound {
+  hi: number;
+  lo: number;
+  method: BoundMethod;
 }
 /**
  * An LLM-proposed item that did not survive mechanical verification (the "flag" half of
@@ -1255,28 +1315,6 @@ export interface RankRow {
    * Distinct viewers (per run) of this rank who chatted.
    */
   viewers: number;
-}
-/**
- * A rate is never reported without its n and its bound. Rates with n = 0 are omitted.
- *
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "Rate".
- */
-export interface Rate {
-  bound: Bound;
-  n: number;
-  rate: number;
-}
-/**
- * A 95% interval on a rate.
- *
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "Bound".
- */
-export interface Bound {
-  hi: number;
-  lo: number;
-  method: BoundMethod;
 }
 /**
  * Incidents of one rule from one source, counted over the whole report.
@@ -1448,6 +1486,29 @@ export interface ReconcileRunResult {
 export interface RunParams {
   run_id: string;
   tournament_id?: string;
+}
+/**
+ * What one stream receives from the Lord of the Darkness (WP15): the latest chosen plan's
+ * dispatch, segments and topics, plus the directives that are active when the stream starts
+ * (never proposed or inactive ones). The brain renders it once, in its stable prefix; the sim
+ * hashes its canonical JSON into the instrument. Built by `shadowrunr_brain::build_stream_brief`
+ * (the one builder, used by the live path and the sim). A brief with nothing in it is no brief.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "StreamBrief".
+ */
+export interface StreamBrief {
+  /**
+   * Active directives only, oldest first.
+   */
+  directives?: Directive[];
+  /**
+   * The Lord's message for the stream, in character. LLM-composed from report text, so the
+   * brain frames it as a message, never as a rule.
+   */
+  lord_dispatch?: string;
+  segments?: PlanSegment[];
+  topics?: string[];
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -1827,6 +1888,11 @@ export interface TournamentResults {
   assumptions?: string[];
   calibration: CalibrationOrigin[];
   cells: CellResult[];
+  /**
+   * Addition (WP15): per-directive outcomes over every judged result run, for runs made
+   * with a brief. Omitted when no verdict carried a directive check.
+   */
+  directives?: DirectiveOutcome[];
   /**
    * Runs the engine cut (WP13): not results, so left out of every count and cell; a
    * resume re-runs them. Omitted when 0.

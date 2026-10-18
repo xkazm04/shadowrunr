@@ -310,6 +310,13 @@ impl Reconciler {
             Some(note) => format!("{summary} {note}"),
             None => summary,
         };
+        // Which of the Lord's directives held and which were ignored (WP15), computed, never
+        // left to the synthesis.
+        let directives = metrics::directive_outcomes(&runs);
+        let summary = match metrics::directive_summary(&directives) {
+            Some(d) => format!("{summary} {d}"),
+            None => summary,
+        };
 
         let report = ReconcileReport {
             report_id: report_id.clone(),
@@ -326,6 +333,7 @@ impl Reconciler {
             red_line_counts: Vec::new(),
             red_lines_total: None,
             synthesis_input: None,
+            directives,
         };
         self.save(&StoredReport {
             report,

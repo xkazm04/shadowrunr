@@ -143,6 +143,7 @@ mod tests {
                 red_line_counts: vec![],
                 red_lines_total: None,
                 synthesis_input: None,
+                directives: vec![],
             },
             proposals: vec![],
             runs: vec![],

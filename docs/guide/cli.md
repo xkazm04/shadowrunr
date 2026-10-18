@@ -140,6 +140,13 @@ shadowrunr sim tournament sim/matrices/pilot.toml --plan-only
   `run`) with its reason (`new`, `complete`, `void_kept`, `stale`, `partial`,
   `engine_failed`, `judge_pending`) and the counts. It builds no engine, runs nothing, spends
   no quota and writes nothing.
+- `--brief current|<path>` (also on `sim run`, or `brief = "current"` in a matrix) hands
+  every run the Lord's brief: the latest chosen plan's dispatch, segments and topics, plus the
+  active directives (never proposed ones). `current` reads them from `<data>`; a path reads a
+  `StreamBrief` JSON file. The brief's digest joins the instrument hash, so a tournament with a
+  brief never mixes with one without, and `--plan-only` prints it as `brief_digest`. The
+  judge then checks each prevent directive (`directive:prevent:<id>`), each try directive
+  (`directive:try:<id>`) and, when a dispatch is present, `follows_dispatch`.
 
 | Exit code | Meaning |
 |---|---|

@@ -8,8 +8,8 @@ use serde::Serialize;
 use shadowrunr_reconcile::{ReconcileConfig, Reconciler, Source};
 use shadowrunr_sim::pacing::GateHandle;
 use shadowrunr_sim::{
-    plan_matrix, run_one_with, run_tournament, summarize, wire, FleetQuota, PlanReason, RunAction,
-    TournamentOptions,
+    plan_matrix, run_one_with, run_tournament, summarize, wire, BriefSource, FleetQuota,
+    PlanReason, RunAction, TournamentOptions,
 };
 use shadowrunr_types::{HealthState, ModelTier, SegmentId, SimRunSpec};
 
@@ -218,6 +218,10 @@ pub struct SimRunArgs {
     /// Directory the run lands in, as <out>/<run_id>/ (default: <runs>/sim/adhoc).
     #[arg(long)]
     pub out: Option<PathBuf>,
+    /// The Lord's brief the brain receives: `current` (the chosen plan plus the active
+    /// directives in <data>) or a StreamBrief JSON file. Default: none.
+    #[arg(long, value_name = "current|PATH")]
+    pub brief: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -252,6 +256,36 @@ pub struct TournamentArgs {
     /// Past it the tournament stops with its summary and exit code 4.
     #[arg(long, value_name = "SECONDS")]
     pub max_pause: Option<u64>,
+    /// The Lord's brief for every run: `current` or a StreamBrief JSON file. Overrides the
+    /// matrix's `brief`. Default: the matrix's, else none.
+    #[arg(long, value_name = "current|PATH")]
+    pub brief: Option<String>,
+}
+
+/// A brief source with its file path taken from the working directory.
+fn brief_source(s: &str) -> BriefSource {
+    match BriefSource::parse(s) {
+        BriefSource::File(p) => BriefSource::File(from_cwd(&p)),
+        other => other,
+    }
+}
+
+/// Read the brief once (so every run of a tournament gets the same one) and say what it is.
+/// Returns the resolved source and the brief's digest when there is a brief.
+fn resolve_brief(cfg: &Config, src: BriefSource) -> Result<(BriefSource, Option<String>), String> {
+    let resolved = src.resolved(&cfg.paths.data).map_err(|e| e.to_string())?;
+    let digest = match &resolved {
+        BriefSource::Inline(b) => {
+            eprintln!(
+                "brief: {} (digest {})",
+                shadowrunr_brain::brief_summary(Some(b)),
+                &shadowrunr_sim::instrument::brief_digest(b)[..12]
+            );
+            Some(shadowrunr_sim::instrument::brief_digest(b))
+        }
+        _ => None,
+    };
+    Ok((resolved, digest))
 }
 
 fn cwd() -> PathBuf {
@@ -508,8 +542,12 @@ async fn sim_run(cfg: &Config, a: SimRunArgs) -> Result<ExitCode, String> {
     {
         eprintln!("previous run moved to {}", old.display());
     }
+    let mut opts = cfg.sim_options(a.judge);
+    opts.data_dir = cfg.paths.data.clone();
+    if let Some(b) = a.brief.as_deref() {
+        opts.brief = resolve_brief(cfg, brief_source(b))?.0;
+    }
     let engine = EngineHandle::build(cfg, a.scripted);
-    let opts = cfg.sim_options(a.judge);
     eprintln!(
         "sim run {} ({} engine) -> {}",
         spec.run_id,
@@ -575,6 +613,9 @@ struct TournamentReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     stopped: Option<shadowrunr_sim::StopReason>,
     exit_code: u8,
+    /// sha256 of the brief's canonical JSON, when the runs had one (it is in the hash).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    brief_digest: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -594,6 +635,12 @@ struct PlanReport {
     run: usize,
     by_reason: std::collections::BTreeMap<String, usize>,
     runs: Vec<PlannedRow>,
+    /// sha256 of the brief's canonical JSON, when the runs would have one (WP15).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    brief_digest: Option<String>,
+    /// `dispatch yes, 2 prevent, 1 try, ...`, when there is a brief.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    brief: Option<String>,
 }
 
 async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, String> {
@@ -616,10 +663,29 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
         .max_pause
         .unwrap_or(cfg.sim.max_quota_pause_s)
         .saturating_mul(1000);
+    // The brief: the flag, else the matrix's, read once for every run.
+    let declared = match a.brief.as_deref() {
+        Some(b) => brief_source(b),
+        None => match shadowrunr_sim::matrix::Matrix::load(&matrix)
+            .map_err(|e| e.to_string())?
+            .brief_source()
+        {
+            BriefSource::File(p) => BriefSource::File(from_cwd(&p)),
+            other => other,
+        },
+    };
+    let (brief, brief_digest) = resolve_brief(cfg, declared)?;
+    let mut sim = cfg.sim_options(!a.no_judge);
+    sim.data_dir = cfg.paths.data.clone();
+    sim.brief = brief;
     if a.plan_only {
         // Reads only: no engine is built, nothing runs, nothing is written.
+        let brief_line = match &sim.brief {
+            BriefSource::Inline(b) => Some(shadowrunr_brain::brief_summary(Some(b))),
+            _ => None,
+        };
         let opts = TournamentOptions {
-            sim: cfg.sim_options(!a.no_judge),
+            sim,
             ..TournamentOptions::default()
         };
         let plan = plan_matrix(&matrix, &out, &opts).map_err(|e| e.to_string())?;
@@ -644,6 +710,8 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
                     reason: r.reason,
                 })
                 .collect(),
+            brief_digest,
+            brief: brief_line,
         });
         return Ok(ExitCode::SUCCESS);
     }
@@ -653,7 +721,7 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
         .as_ref()
         .map(|f| GateHandle(std::sync::Arc::new(FleetQuota::new(f.clone()))));
     let opts = TournamentOptions {
-        sim: cfg.sim_options(!a.no_judge),
+        sim,
         concurrency: a.concurrency,
         max_runs: a.max_runs,
         quota,
@@ -685,6 +753,7 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
         pauses: s.pauses,
         stopped: s.stop,
         exit_code,
+        brief_digest,
     };
     crate::integrations::activity::notify_once(
         cfg,
