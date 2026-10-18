@@ -1,0 +1,63 @@
+/* The simulator screen: A/1's scene (app.js:420-475). The canvas draws the backdrop and the
+   grid (fidelity role, colours in model/palette.ts); the DOM here lays the heading, the HUD
+   and the marquee over it at A/1's scene positions (pos(x, y, w, h) in % of the scene).
+   Alpha inks: color-mix(X n%, transparent) is exactly rgba(X, n%). */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--sr-color-text-on-dark);
+  background: var(--sr-color-surface-void);
+}
+
+.canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.screen[data-hot="true"] .canvas { cursor: pointer; }
+
+/* A/1 #marquee, centred over the grid at 40% of the scene. */
+.marquee {
+  position: absolute;
+  left: 2%;
+  width: 74%;
+  top: 40%;
+  z-index: var(--sr-z-screen-caption);
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(.5rem);
+  transition: opacity .3s, transform .4s;
+}
+
+.marquee[data-on="true"] { opacity: 1; transform: none; }
+
+.marquee b {
+  display: block;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-semibold);
+  font-size: 3.2rem;
+  letter-spacing: .06em;
+  line-height: .95;
+  text-transform: uppercase;
+  color: var(--sr-color-text-on-dark);
+  text-shadow: 0 0 1.6rem color-mix(in srgb, var(--sr-color-mask-ink) 90%, transparent), 0 0 .4rem color-mix(in srgb, var(--sr-color-mask-ink) 90%, transparent);
+  overflow-wrap: anywhere;
+}
+
+.marquee span {
+  display: inline-block;
+  margin-top: var(--sr-space-compact);
+  padding: var(--sr-space-tick) var(--sr-space-compact);
+  font-family: var(--sr-font-display);
+  font-size: var(--sr-size-label);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--sr-color-link-on-press);
+  background: color-mix(in srgb, var(--sr-color-mask-ink) 66%, transparent);
+}
+
+.screen[data-stack="true"] .marquee { left: 3%; width: 94%; top: 30%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee { transition: none; }
+}

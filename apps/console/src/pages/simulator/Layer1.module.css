@@ -1,0 +1,117 @@
+/* Layer 1, Simulator: the winner's poster frame (l1.css .b-*) over tokens, with A/1's
+   simulator screen as the hero. Palette: --sr-page-* under [data-page="simulator"]
+   (face #8e2a1a, type #efe6d2, overprint #d6a85a, overprint-2 #e8542a).
+   The HUD sits at A/1's scene positions: heading pos(2, 2.5, 74, 9), HUD pos(78, 4, 20.5, 92).
+   Alpha inks: color-mix(X n%, transparent) is exactly rgba(X, n%). */
+
+.root { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--sr-page-type); }
+
+.sr {
+  position: absolute;
+  width: .0625rem;
+  height: .0625rem;
+  margin: -.0625rem;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.top { flex: none; height: 3.2rem; display: flex; align-items: center; padding-right: 23rem; }
+
+.brand { display: flex; align-items: center; gap: var(--sr-space-cozy); font-family: var(--sr-font-display); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.brand svg { width: 1.7rem; height: 1.7rem; flex: none; }
+.brand b { font-size: var(--sr-size-subhead); font-weight: var(--sr-weight-bold); }
+.brand span { font-size: var(--sr-size-body); font-weight: var(--sr-weight-semibold); letter-spacing: .16em; border-left: var(--sr-stroke-rule) solid currentcolor; padding-left: var(--sr-space-cozy); opacity: .85; }
+
+.hero { position: relative; flex: 1; min-height: 0; margin-bottom: var(--sr-space-compact); box-shadow: .3rem .3rem 0 var(--sr-page-key); }
+
+.foot {
+  position: relative;
+  flex: none;
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sr-space-base);
+  border-top: var(--sr-stroke-rule) solid currentcolor;
+  margin-bottom: .15rem;
+}
+
+.credit { margin: 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-small); letter-spacing: .1em; text-transform: uppercase; line-height: 1.25; }
+.credit span { display: block; white-space: nowrap; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); font-size: var(--sr-size-caption); letter-spacing: .01em; text-transform: none; opacity: .9; max-width: 48rem; overflow: hidden; text-overflow: ellipsis; }
+
+.cta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sr-space-close);
+  background: var(--sr-page-type);
+  color: var(--sr-page-face);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  font-size: var(--sr-size-kicker);
+  padding: .45rem var(--sr-space-base);
+  text-decoration: none;
+  box-shadow: .25rem .25rem 0 var(--sr-page-overprint);
+  transition: transform .2s, box-shadow .2s;
+}
+.cta:hover,
+.cta:focus-visible { transform: translate(-.12rem, -.12rem); box-shadow: .4rem .4rem 0 var(--sr-page-overprint); }
+.cta i { width: 0; height: 0; border: .5rem solid transparent; border-left: .75rem solid currentcolor; border-right: 0; }
+
+/* The DOM over the canvas: transparent to the pointer except where it holds controls. */
+.overlay { position: absolute; inset: 0; z-index: var(--sr-z-screen-panel); pointer-events: none; color: var(--sr-color-text-on-dark); }
+
+.overlay > [data-state] { position: absolute; left: 2%; top: 13%; width: 74%; pointer-events: auto; }
+
+.heading { position: absolute; left: 2%; top: 2.5%; width: 74%; height: 9%; overflow: hidden; }
+
+.hud { position: absolute; left: 78%; top: 4%; width: 20.5%; height: 92%; display: flex; flex-direction: column; gap: var(--sr-space-loose); overflow: hidden auto; pointer-events: auto; }
+
+.hudk,
+.kicker { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-label); letter-spacing: .18em; text-transform: uppercase; color: var(--sr-color-text-mute-on-dark); }
+
+.kicker { color: var(--sr-color-link-on-press); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.hudtxt { margin-top: var(--sr-space-tick); font-family: var(--sr-font-sans); font-size: var(--sr-size-caption); line-height: 1.35; color: var(--sr-color-text-mute-on-dark); }
+
+.big { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: 3.4rem; line-height: .95; letter-spacing: .02em; color: var(--sr-color-text-on-dark); }
+.big small { margin-left: var(--sr-space-tight); font-size: var(--sr-size-label); letter-spacing: .14em; text-transform: uppercase; color: var(--sr-color-text-mute-on-dark); }
+
+.doors { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sr-space-compact); }
+
+.door {
+  display: flex;
+  align-items: center;
+  gap: var(--sr-space-compact);
+  padding: var(--sr-space-tight) var(--sr-space-near);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-semibold);
+  font-size: var(--sr-size-control);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--sr-color-text-on-dark);
+  background: color-mix(in srgb, var(--sr-color-surface-void) 72%, transparent);
+  border: var(--sr-stroke-hair) solid color-mix(in srgb, var(--sr-color-ok-bright) 22%, transparent);
+  border-radius: 999rem;
+}
+.door i { font-style: normal; color: var(--sr-color-link-on-press); }
+.door:hover,
+.door:focus-visible { color: var(--sr-color-link-on-press); border-color: var(--sr-color-link-on-press); }
+
+.legend { margin-top: auto; }
+.ramp { height: .8rem; margin-top: var(--sr-space-tight); border-radius: var(--sr-radius-nick); }
+.tag { display: flex; justify-content: space-between; margin-top: var(--sr-space-tick); font-family: var(--sr-font-display); font-size: var(--sr-size-micro); letter-spacing: .18em; text-transform: uppercase; color: var(--sr-color-text-mute-on-dark); }
+
+/* Narrow screens stack: heading, grid (16%-66%), HUD below (SimScreen sets data-stack). */
+[data-stack="true"] .heading { left: 3%; width: 94%; top: 2%; height: 13%; }
+[data-stack="true"] .overlay > [data-state] { left: 3%; width: 94%; top: 16%; }
+[data-stack="true"] .hud { left: 3%; width: 94%; top: 68%; height: 30%; gap: var(--sr-space-compact); }
+[data-stack="true"] .doors { flex-flow: row wrap; }
+[data-stack="true"] .big { font-size: var(--sr-size-heading); }
+
+.heading .hudtxt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

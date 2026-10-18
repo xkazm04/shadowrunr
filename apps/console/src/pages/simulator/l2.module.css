@@ -1,0 +1,53 @@
+/* The simulator's nested pages on the bone-paper spread: tokens only.
+   Alpha inks: color-mix(X n%, transparent) is exactly rgba(X, n%). */
+
+.l2 { display: flex; flex-direction: column; min-height: 100%; }
+
+.sr {
+  position: absolute;
+  width: .0625rem;
+  height: .0625rem;
+  margin: -.0625rem;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ref { font-family: var(--sr-font-mono); font-size: var(--sr-size-caption); color: var(--sr-page-accent-text, var(--sr-color-signal-deep)); text-decoration: underline; text-underline-offset: .15em; overflow-wrap: anywhere; }
+.ref:hover,
+.ref:focus-visible { color: var(--sr-color-signal); }
+
+.refs { display: inline-flex; flex-wrap: wrap; gap: var(--sr-space-tight); }
+
+.code { font-family: var(--sr-font-mono); font-size: var(--sr-size-caption); overflow-wrap: anywhere; }
+
+.dim { color: var(--sr-color-text-mute); font-size: var(--sr-size-caption); }
+
+.health { display: inline-flex; align-items: center; gap: var(--sr-space-tight); font-variant-numeric: tabular-nums; }
+.swatch { display: inline-block; width: .8rem; height: .8rem; border: var(--sr-stroke-hair) solid var(--sr-color-line); }
+
+.note { max-width: 52rem; margin: var(--sr-space-base) 0; padding: var(--sr-space-compact) var(--sr-space-near); border-left: var(--sr-stroke-heavy) solid var(--sr-color-caution-edge); background: var(--sr-color-surface-caution); color: var(--sr-color-text-on-caution); font-size: var(--sr-size-small); }
+
+.list { margin: 0; padding-left: var(--sr-space-loose); }
+.list li { margin: var(--sr-space-tick) 0; }
+
+.picker { display: flex; align-items: center; gap: var(--sr-space-compact); margin: var(--sr-space-base) 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-control); letter-spacing: .08em; text-transform: uppercase; }
+
+.select { padding: var(--sr-space-snug) var(--sr-space-compact); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-surface-field); color: var(--sr-color-text-ink); font-family: var(--sr-font-mono); font-size: var(--sr-size-small); }
+
+/* A plain (bounded) table: rules and quality facts of one verdict. */
+.table { width: 100%; border-collapse: collapse; font-size: var(--sr-size-small); }
+.table th { padding: var(--sr-space-snug) var(--sr-space-compact); border-bottom: var(--sr-stroke-rule) solid var(--sr-color-text-ink); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .08em; text-transform: uppercase; text-align: left; }
+.table td { padding: var(--sr-space-snug) var(--sr-space-compact); border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); vertical-align: top; }
+
+.rule { font-family: var(--sr-font-mono); font-size: var(--sr-size-caption); overflow-wrap: anywhere; }
+
+.quote { font-family: var(--sr-font-serif); font-style: italic; }
+
+.notes { max-width: 52rem; margin: 0; padding: var(--sr-space-near) var(--sr-space-base); border-left: var(--sr-stroke-heavy) solid var(--sr-page-accent, var(--sr-color-signal)); background: var(--sr-color-surface-card); font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-lede); line-height: 1.45; }
+
+.split { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sr-space-section); }
+
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: var(--sr-space-tick) var(--sr-space-base); margin: 0; }
+.kv dt { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .08em; text-transform: uppercase; }
+.kv dd { margin: 0; }
