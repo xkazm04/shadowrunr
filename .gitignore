@@ -29,3 +29,6 @@ dist/
 /.ai/skill-runs.local.jsonl
 # END ai-registry linked skills
 /.ai/registry-releases/
+
+# bp product blueprint: machine-local scan store (adopt-bp)
+.ai/lens-scan/

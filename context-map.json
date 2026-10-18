@@ -1460,10 +1460,6 @@
         "dom budget"
       ],
       "business_feature": "Keeps the ported console faithful to the chosen design and within its performance budgets",
-      "api_surface": [],
-      "db_tables": [],
-      "cross_refs": [],
-      "tech_stack": [],
       "pinned": false,
       "last_written_at": "2026-10-18T18:12:43.547Z"
     },
@@ -1503,10 +1499,6 @@
         "character rules"
       ],
       "business_feature": "Defines who Malakor is and what he must never do",
-      "api_surface": [],
-      "db_tables": [],
-      "cross_refs": [],
-      "tech_stack": [],
       "pinned": false,
       "last_written_at": "2026-10-18T18:12:43.547Z"
     },
@@ -1537,10 +1529,6 @@
         "platform rules"
       ],
       "business_feature": "Sets how streams are tested before going live",
-      "api_surface": [],
-      "db_tables": [],
-      "cross_refs": [],
-      "tech_stack": [],
       "pinned": false,
       "last_written_at": "2026-10-18T18:12:43.547Z"
     }
