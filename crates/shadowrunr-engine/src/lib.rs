@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use shadowrunr_types::Engine;
 
-pub use config::{route, AccountConfig, EngineConfig, FallbackDriver, RouteOverride};
+pub use config::{route, AccountConfig, EngineConfig, FallbackDriver, RouteOverride, ROLES};
 pub use fleet::{AccountStatus, Fleet, FleetMode, FleetState};
 pub use scripted::ScriptedEngine;
 

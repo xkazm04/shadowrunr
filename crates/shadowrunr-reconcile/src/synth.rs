@@ -1,21 +1,17 @@
-//! LLM synthesis with `Role::Reconciler`: prompts, JSON schemas, excerpt sampling and the
-//! parsing of structured replies. Every reply is untrusted until `verify` has checked it.
+//! LLM synthesis with `Role::Reconciler`: prompts, JSON schemas and the parsing of
+//! structured replies (excerpt sampling and prompt sizing live in `budget`). Every reply is untrusted until `verify` has checked it.
 
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde::Deserialize;
 use serde_json::{json, Value};
-use shadowrunr_types::{Engine, EngineRequest, Role, StreamEvent};
+use shadowrunr_types::{Engine, EngineRequest, Role};
 
-use crate::runs::{parse_ref, render_line, RunData};
-use crate::types::{Directive, Evidence, Metrics, PlanOption, ReconcileReport};
+use crate::types::{Directive, Evidence, PlanOption, ReconcileReport};
 use crate::ReconcileError;
 
-/// Cap on transcript lines sent to the Reconciler per report.
-pub const MAX_EXCERPT_LINES: usize = 600;
 /// Cap on each character file pasted into the prompt, in characters.
-const MAX_FILE_CHARS: usize = 16_000;
+pub const MAX_FILE_CHARS: usize = 16_000;
 
 /// Stable system prefix (byte-identical across calls so the prompt cache holds).
 pub const SYSTEM: &str = "You are the Reconciler of Shadowrunr OS. Between livestreams you \
@@ -251,120 +247,43 @@ pub fn parse<T: serde::de::DeserializeOwned>(v: Value) -> Result<T, ReconcileErr
     serde_json::from_value(v).map_err(|e| ReconcileError::Synthesis(format!("reply shape: {e}")))
 }
 
-/// Deterministic excerpt sampling: judged and moderated lines first (with one line of
-/// context each side), then structure (segments, polls, handovers), then a stride over
-/// Malakor's lines, within [`MAX_EXCERPT_LINES`].
-pub fn excerpts(runs: &[RunData]) -> String {
-    let per_run = (MAX_EXCERPT_LINES / runs.len().max(1)).max(30);
-    let mut out = String::new();
-    for run in runs {
-        let n = run.events.len();
-        let mut chosen: BTreeSet<usize> = BTreeSet::new();
-        let add = |line: usize, ctx: bool, chosen: &mut BTreeSet<usize>| {
-            let lines = if ctx {
-                line.saturating_sub(1).max(1)..=(line + 1).min(n)
-            } else {
-                line..=line
-            };
-            for l in lines {
-                if chosen.len() >= per_run {
-                    return;
-                }
-                if run.line(l).is_some() {
-                    chosen.insert(l);
-                }
-            }
-        };
-        let mut priority: Vec<usize> = Vec::new();
-        if let Some(v) = &run.verdict {
-            for r in &v.rules {
-                priority.extend(r.evidence.iter().filter_map(|e| own_line(run, e)));
-            }
-            for q in &v.quality {
-                priority.extend(own_line(run, &q.turn_ref));
-            }
-        }
-        let mut structure = Vec::new();
-        let mut says = Vec::new();
-        for (line, ev) in run.numbered() {
-            match ev {
-                StreamEvent::Moderation { .. } => priority.push(line),
-                StreamEvent::SegmentStart { .. }
-                | StreamEvent::SegmentEnd { .. }
-                | StreamEvent::Handover { .. }
-                | StreamEvent::Vote { closed: true, .. }
-                | StreamEvent::StreamStart { .. }
-                | StreamEvent::StreamEnd { .. } => structure.push(line),
-                StreamEvent::Op { .. } => structure.push(line),
-                StreamEvent::Say { .. } => says.push(line),
-                _ => {}
-            }
-        }
-        for l in priority {
-            add(l, true, &mut chosen);
-        }
-        for l in structure {
-            add(l, false, &mut chosen);
-        }
-        let room = per_run.saturating_sub(chosen.len());
-        if room > 0 && !says.is_empty() {
-            // Each sampled say comes with the line before it (usually the chat it answers).
-            let take = (room / 2).max(1);
-            let stride = says.len().div_ceil(take).max(1);
-            for l in says.iter().step_by(stride) {
-                add(*l, true, &mut chosen);
-            }
-        }
-        let tone = run.tone_variant().unwrap_or_else(|| "?".into());
-        let aud = run
-            .audience_size()
-            .map(|a| a.to_string())
-            .unwrap_or_else(|| "?".into());
-        out.push_str(&format!(
-            "### run {} (tone {tone}, audience {aud}, {} lines, {} shown)\n",
-            run.run_id,
-            n,
-            chosen.len()
-        ));
-        for l in chosen {
-            if let Some(ev) = run.line(l) {
-                out.push_str(&render_line(run, l, ev));
-                out.push('\n');
-            }
-        }
-        out.push('\n');
-    }
-    out
-}
-
-fn own_line(run: &RunData, r: &str) -> Option<usize> {
-    let (id, line) = parse_ref(r)?;
-    (id == run.run_id).then_some(line)
-}
-
-fn clip_file(text: &str) -> String {
-    if text.chars().count() <= MAX_FILE_CHARS {
-        text.to_string()
+fn clip_file(text: &str, max_chars: usize) -> (String, bool) {
+    if text.chars().count() <= max_chars {
+        (text.to_string(), false)
     } else {
-        let mut t: String = text.chars().take(MAX_FILE_CHARS).collect();
+        let mut t: String = text.chars().take(max_chars).collect();
         t.push_str("\n[... truncated]");
-        t
+        (t, true)
     }
 }
 
 /// Character files the Reconciler may reference: the constitution (read-only), the bible and
 /// the tone files of the variants that were run.
 pub fn character_context(character_dir: Option<&Path>, tones: &[String]) -> String {
+    character_context_capped(character_dir, tones, MAX_FILE_CHARS).0
+}
+
+/// [`character_context`] with each file clipped to `max_file_chars`; the flag says whether
+/// any file was clipped.
+pub fn character_context_capped(
+    character_dir: Option<&Path>,
+    tones: &[String],
+    max_file_chars: usize,
+) -> (String, bool) {
     let Some(dir) = character_dir else {
-        return "(character package not available: propose character_change options without a diff)\n".into();
+        return (
+            "(character package not available: propose character_change options without a diff)\n"
+                .into(),
+            false,
+        );
     };
     let mut out = String::new();
+    let mut clipped = false;
     let mut push = |label: &str, rel: &str| {
         if let Ok(text) = std::fs::read_to_string(dir.join(rel)) {
-            out.push_str(&format!(
-                "=== {rel} ({label}) ===\n{}\n\n",
-                clip_file(&text)
-            ));
+            let (text, cut) = clip_file(&text, max_file_chars);
+            clipped |= cut;
+            out.push_str(&format!("=== {rel} ({label}) ===\n{text}\n\n"));
         }
     };
     push("IMMUTABLE, reference only", "constitution.md");
@@ -374,11 +293,31 @@ pub fn character_context(character_dir: Option<&Path>, tones: &[String]) -> Stri
             push("editable via diff", &format!("tones/{t}.md"));
         }
     }
-    out
+    (out, clipped)
 }
 
-pub fn synthesis_prompt(metrics: &Metrics, excerpts: &str, character: &str) -> String {
-    let metrics_json = serde_json::to_string_pretty(metrics).unwrap_or_default();
+/// The synthesis prompt. `metrics` is the summarised metrics block (JSON, see
+/// `budget::synthesis_prompt`); `omitted` lists what was cut to fit the budget.
+pub fn synthesis_prompt(
+    metrics: &str,
+    excerpts: &str,
+    character: &str,
+    omitted: &[String],
+) -> String {
+    let omitted = if omitted.is_empty() {
+        String::new()
+    } else {
+        let mut o = String::from(
+            "## Omitted for size\nThis source is larger than the prompt budget, so the material \
+below was cut. Do not read absence as evidence: a run or line not shown here may still matter, \
+and the metrics above count everything.\n",
+        );
+        for n in omitted {
+            o.push_str(&format!("- {n}\n"));
+        }
+        o.push('\n');
+        o
+    };
     format!(
         "TASK: reconcile the simulated streams below.\n\
 1. For each segment that ran, list what worked and what failed. Each item is a short claim \
@@ -389,7 +328,12 @@ title, a rationale, and evidence with refs. A character_change may carry `diff`:
 diff (--- a/<path> / +++ b/<path> / @@ hunks with exact current lines as context) against \
 bible.md or tones/<variant>.md only. Never constitution.md.\n\
 3. Write a summary of at most 120 words for the owner.\n\n\
-## Deterministic metrics (facts)\n```json\n{metrics_json}\n```\n\n\
+## Deterministic metrics (facts, summarised)\n\
+Rule failures are listed per segment (by each run's matrix segment) and per tone cell, worst \
+first, with fails and n (evaluated checks). Incidents are counted by rule; only some are \
+listed individually.\n\
+```json\n{metrics}\n```\n\n\
+{omitted}\
 ## Character package\n{character}\n\
 ## Transcript excerpts\n{excerpts}"
     )

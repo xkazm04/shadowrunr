@@ -33,14 +33,14 @@ export type DirectiveKind = "prevent" | "try";
 export type DirectiveListResult = Directive[];
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "EngineFleetMode".
+ */
+export type EngineFleetMode = "primary" | "degraded" | "down" | "scripted";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "Effort".
  */
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
-/**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "EngineKind".
- */
-export type EngineKind = ("claude_cli" | "anthropic_api" | "codex_cli" | "agy_cli" | "local_gemma") | "scripted";
 /**
  * Who is asking. Routing (tier, effort, tools, timeout) is a table keyed by role.
  *
@@ -54,6 +54,11 @@ export type Role =
  * via the `definition` "ModelTier".
  */
 export type ModelTier = "haiku" | "sonnet" | "opus";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "EngineKind".
+ */
+export type EngineKind = ("claude_cli" | "anthropic_api" | "codex_cli" | "agy_cli" | "local_gemma") | "scripted";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "OptionKind".
@@ -447,6 +452,10 @@ export interface RpcMethods {
     params: EmptyParams;
     result: DirectiveListResult;
   };
+  "engine.status": {
+    params: EmptyParams;
+    result: EngineStatus;
+  };
   "ledger.page": {
     params: LedgerPageParams;
     result: LedgerPage;
@@ -732,6 +741,72 @@ export interface Directive {
  */
 export interface DirectiveIdParams {
   id: string;
+}
+/**
+ * `engine.status` result: the configured routes, account cooldowns and fleet state.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "EngineStatus".
+ */
+export interface EngineStatus {
+  /**
+   * In rotation order; empty for the scripted engine.
+   */
+  accounts: EngineAccount[];
+  /**
+   * An Anthropic API key env var is configured as the first fallback.
+   */
+  api_fallback: boolean;
+  /**
+   * Recognised `cli_fallbacks` drivers in configured order (`codex`, `agy`, `local_gemma`).
+   */
+  fallbacks: string[];
+  fleet: EngineFleet;
+  /**
+   * Every role, in contract order.
+   */
+  routes: EngineRoute[];
+}
+/**
+ * `engine.status`: one Claude Code account, by label only (never a config dir or a
+ * credential).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "EngineAccount".
+ */
+export interface EngineAccount {
+  /**
+   * Epoch ms until which the account is skipped after a rate limit; absent = healthy.
+   */
+  cooling_until_ms?: number;
+  label: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "EngineFleet".
+ */
+export interface EngineFleet {
+  mode: EngineFleetMode;
+  /**
+   * When the fleet entered `mode` (epoch ms); 0 for `scripted`.
+   */
+  since_ms: number;
+}
+/**
+ * `engine.status`: one row of the role routing table as the engine applies it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "EngineRoute".
+ */
+export interface EngineRoute {
+  effort: Effort;
+  /**
+   * The config's `[engine.routes]` table has an entry for this role.
+   */
+  overridden: boolean;
+  role: Role;
+  tier: ModelTier;
+  timeout_ms: number;
 }
 /**
  * `ledger.page` source: one run's `ledger.jsonl` (`run_id`, optionally qualified by

@@ -604,6 +604,23 @@
       ],
       "type": "string"
     },
+    "EngineAccount": {
+      "description": "`engine.status`: one Claude Code account, by label only (never a config dir or a\ncredential).",
+      "properties": {
+        "cooling_until_ms": {
+          "description": "Epoch ms until which the account is skipped after a rate limit; absent = healthy.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object"
+    },
     "EngineError": {
       "oneOf": [
         {
@@ -711,6 +728,47 @@
             "detail"
           ],
           "type": "object"
+        }
+      ]
+    },
+    "EngineFleet": {
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/EngineFleetMode"
+        },
+        "since_ms": {
+          "description": "When the fleet entered `mode` (epoch ms); 0 for `scripted`.",
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "mode",
+        "since_ms"
+      ],
+      "type": "object"
+    },
+    "EngineFleetMode": {
+      "oneOf": [
+        {
+          "const": "primary",
+          "description": "The last call was served by a Claude Code CLI account.",
+          "type": "string"
+        },
+        {
+          "const": "degraded",
+          "description": "The last call was served by a fallback (API key or an alternative CLI).",
+          "type": "string"
+        },
+        {
+          "const": "down",
+          "description": "The last call found nothing able to serve it.",
+          "type": "string"
+        },
+        {
+          "const": "scripted",
+          "description": "The daemon runs the deterministic scripted engine; no fleet exists.",
+          "type": "string"
         }
       ]
     },
@@ -833,6 +891,78 @@
         "system",
         "prompt",
         "timeout_ms"
+      ],
+      "type": "object"
+    },
+    "EngineRoute": {
+      "description": "`engine.status`: one row of the role routing table as the engine applies it.",
+      "properties": {
+        "effort": {
+          "$ref": "#/$defs/Effort"
+        },
+        "overridden": {
+          "description": "The config's `[engine.routes]` table has an entry for this role.",
+          "type": "boolean"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "tier": {
+          "$ref": "#/$defs/ModelTier"
+        },
+        "timeout_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "role",
+        "tier",
+        "effort",
+        "timeout_ms",
+        "overridden"
+      ],
+      "type": "object"
+    },
+    "EngineStatus": {
+      "description": "`engine.status` result: the configured routes, account cooldowns and fleet state.",
+      "properties": {
+        "accounts": {
+          "description": "In rotation order; empty for the scripted engine.",
+          "items": {
+            "$ref": "#/$defs/EngineAccount"
+          },
+          "type": "array"
+        },
+        "api_fallback": {
+          "description": "An Anthropic API key env var is configured as the first fallback.",
+          "type": "boolean"
+        },
+        "fallbacks": {
+          "description": "Recognised `cli_fallbacks` drivers in configured order (`codex`, `agy`, `local_gemma`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "fleet": {
+          "$ref": "#/$defs/EngineFleet"
+        },
+        "routes": {
+          "description": "Every role, in contract order.",
+          "items": {
+            "$ref": "#/$defs/EngineRoute"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "routes",
+        "accounts",
+        "fleet",
+        "fallbacks",
+        "api_fallback"
       ],
       "type": "object"
     },
@@ -3899,6 +4029,22 @@
       ],
       "type": "object"
     },
+    "engine.status": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/EngineStatus"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
     "ledger.page": {
       "additionalProperties": false,
       "properties": {
@@ -4212,6 +4358,7 @@
     "directive.add",
     "directive.deactivate",
     "directive.list",
+    "engine.status",
     "ledger.page",
     "lord.chat",
     "plan.choose",

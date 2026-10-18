@@ -401,3 +401,37 @@ carry the `"run_id"` that seq belongs to; `since` without it is `invalid_params`
   further behind loses the overflow and receives
   `{"error": {"code": "busy", "detail": {"skipped": n, "resume_since": seq}}}`.
   Resubscribing with `since = resume_since` backfills from the run's history.
+
+## Appendix (WP12): engine status, Reconcile at tournament scale
+
+These notes extend the sections above; nothing above changes.
+
+| method | params | result |
+|---|---|---|
+| `engine.status` | `{}` | `EngineStatus` |
+
+```
+EngineStatus { routes: [EngineRoute], accounts: [EngineAccount], fleet: EngineFleet,
+               fallbacks: [string], api_fallback: bool }
+EngineRoute  { role, tier, effort, timeout_ms, overridden }   // every role, contract order
+EngineAccount{ label, cooling_until_ms? }                     // labels only, never a config dir
+EngineFleet  { mode: "primary"|"degraded"|"down"|"scripted", since_ms }
+```
+
+- `routes` is the routing table the engine applies: the defaults above with the config's
+  `[engine.routes]` overrides; `overridden` says the role has an override entry.
+- `fallbacks` lists the recognised `cli_fallbacks` drivers in order (`codex`, `agy`,
+  `local_gemma`); `api_fallback` says an API key env var is configured. Neither the env var's
+  name nor its value is exposed.
+- With the scripted engine, `routes` is the default table (nothing overridden), `accounts` and
+  `fallbacks` are empty, and `fleet` is `{ "mode": "scripted", "since_ms": 0 }`.
+
+**Reconcile synthesis budget.** The Reconciler's synthesis prompt is sized against a token
+budget (default 120k tokens, estimated as characters ÷ 3.5, 15% kept free). The metrics are
+summarised (top-N rule failures per segment and tone cell with fails and n, incidents counted
+by rule and listed up to a cap, the rank table, latency percentiles), and transcript excerpts
+are sampled into the remaining budget: rule-failure citations first, then failed quality
+turns of the worst cells, then a stratified sample across tone × tier × segment × audience.
+When anything is cut the prompt says so, and the stored report file
+(`<data>/reconcile/<report_id>.json`) records `synthesis_input` with included and omitted
+counts. `synthesis_input` is not part of `ReconcileReport` on the wire.

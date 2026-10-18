@@ -26,7 +26,7 @@ fn tournament() -> Source {
 
 /// Replies with queued texts in order and records every request.
 #[derive(Default)]
-struct QueueEngine {
+pub(crate) struct QueueEngine {
     replies: Mutex<VecDeque<Result<String, EngineError>>>,
     requests: Mutex<Vec<EngineRequest>>,
 }
@@ -38,7 +38,7 @@ impl QueueEngine {
             requests: Mutex::new(Vec::new()),
         })
     }
-    fn requests(&self) -> Vec<EngineRequest> {
+    pub(crate) fn requests(&self) -> Vec<EngineRequest> {
         self.requests.lock().unwrap().clone()
     }
 }
@@ -81,6 +81,28 @@ impl Engine for QueueEngine {
     async fn health(&self) -> Vec<HealthReport> {
         Vec::new()
     }
+}
+
+pub(crate) fn queue_engine(replies: Vec<Result<String, EngineError>>) -> Arc<QueueEngine> {
+    QueueEngine::with(replies)
+}
+
+/// A reconciler over `runs_root` (no character package) with a ticking test clock.
+pub(crate) fn reconciler_at(
+    data: &std::path::Path,
+    runs_root: &std::path::Path,
+    engine: Arc<dyn Engine>,
+) -> Reconciler {
+    let ms = Arc::new(std::sync::atomic::AtomicI64::new(1_000));
+    Reconciler::with_clock(
+        ReconcileConfig {
+            data_dir: data.to_path_buf(),
+            runs_root: runs_root.to_path_buf(),
+            characters_root: None,
+        },
+        engine,
+        Arc::new(move || ms.fetch_add(1, std::sync::atomic::Ordering::SeqCst)),
+    )
 }
 
 fn reconciler(data: &std::path::Path, engine: Arc<dyn Engine>) -> Reconciler {

@@ -17,6 +17,7 @@ export declare const validateCharacterRulesResult: ValidateFn<T.CharacterRulesRe
 export declare const validateCharacterRulesSetResult: ValidateFn<T.CharacterRulesSetResult>;
 export declare const validateDirective: ValidateFn<T.Directive>;
 export declare const validateDirectiveListResult: ValidateFn<T.DirectiveListResult>;
+export declare const validateEngineStatus: ValidateFn<T.EngineStatus>;
 export declare const validateLedgerPage: ValidateFn<T.LedgerPage>;
 export declare const validateLordChatReply: ValidateFn<T.LordChatReply>;
 export declare const validateNextStreamPlan: ValidateFn<T.NextStreamPlan>;

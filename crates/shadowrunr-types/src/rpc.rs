@@ -309,6 +309,61 @@ pub struct EventFrame {
     pub event: StreamEvent,
 }
 
+/// `engine.status`: one row of the role routing table as the engine applies it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EngineRoute {
+    pub role: Role,
+    pub tier: ModelTier,
+    pub effort: Effort,
+    pub timeout_ms: u64,
+    /// The config's `[engine.routes]` table has an entry for this role.
+    pub overridden: bool,
+}
+
+/// `engine.status`: one Claude Code account, by label only (never a config dir or a
+/// credential).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EngineAccount {
+    pub label: String,
+    /// Epoch ms until which the account is skipped after a rate limit; absent = healthy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cooling_until_ms: Option<TsMs>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum EngineFleetMode {
+    /// The last call was served by a Claude Code CLI account.
+    Primary,
+    /// The last call was served by a fallback (API key or an alternative CLI).
+    Degraded,
+    /// The last call found nothing able to serve it.
+    Down,
+    /// The daemon runs the deterministic scripted engine; no fleet exists.
+    Scripted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct EngineFleet {
+    pub mode: EngineFleetMode,
+    /// When the fleet entered `mode` (epoch ms); 0 for `scripted`.
+    pub since_ms: TsMs,
+}
+
+/// `engine.status` result: the configured routes, account cooldowns and fleet state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EngineStatus {
+    /// Every role, in contract order.
+    pub routes: Vec<EngineRoute>,
+    /// In rotation order; empty for the scripted engine.
+    pub accounts: Vec<EngineAccount>,
+    pub fleet: EngineFleet,
+    /// Recognised `cli_fallbacks` drivers in configured order (`codex`, `agy`, `local_gemma`).
+    pub fallbacks: Vec<String>,
+    /// An Anthropic API key env var is configured as the first fallback.
+    pub api_fallback: bool,
+}
+
 /// What a method visitor is handed for each method.
 pub trait MethodVisitor {
     fn method<P: JsonSchema, R: JsonSchema>(&mut self, name: &'static str);
@@ -342,6 +397,7 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<LedgerPageParams, LedgerPage>("ledger.page");
     v.method::<RunsPageParams, RunsPage>("runs.page");
     v.method::<TournamentsPageParams, TournamentsPage>("tournaments.page");
+    v.method::<EmptyParams, EngineStatus>("engine.status");
 }
 
 /// Every method name, in table order.

@@ -424,6 +424,11 @@ impl Fleet {
         self.inner.account_status()
     }
 
+    /// The engine configuration the fleet was built from (read-only).
+    pub fn config(&self) -> &EngineConfig {
+        &self.inner.cfg
+    }
+
     pub fn inner(&self) -> &Arc<FleetInner> {
         &self.inner
     }

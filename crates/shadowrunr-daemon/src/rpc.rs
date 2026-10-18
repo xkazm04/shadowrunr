@@ -14,6 +14,7 @@ use shadowrunr_types::rpc::*;
 use shadowrunr_types::{ErrorBody, ErrorCode, ErrorEnvelope, JudgeVerdict, StreamEvent};
 
 pub use crate::catalog::{character_rules, character_rules_set};
+use crate::engine::EngineHandle;
 use crate::server::AppState;
 use crate::{catalog, paging, preflight, runs};
 
@@ -133,6 +134,66 @@ fn tournament_results(state: &AppState, tournament_id: &str) -> Result<Value, Rp
     serde_json::from_str(&text).map_err(|e| RpcError::io(format!("{}: {e}", path.display())))
 }
 
+/// `engine.status`: the routes the engine applies, account cooldowns (labels only) and the
+/// fleet state. The scripted engine reports the default route table, no accounts and mode
+/// `scripted`.
+pub fn engine_status(engine: &EngineHandle) -> EngineStatus {
+    use shadowrunr_engine::{EngineConfig, FleetMode, ROLES};
+    let default_cfg = EngineConfig::default();
+    let cfg = engine.fleet.as_ref().map_or(&default_cfg, |f| f.config());
+    let routes = ROLES
+        .iter()
+        .map(|&role| {
+            let (tier, effort, timeout_ms) = cfg.route(role);
+            EngineRoute {
+                role,
+                tier,
+                effort,
+                timeout_ms,
+                overridden: engine.fleet.is_some() && cfg.route_overridden(role),
+            }
+        })
+        .collect();
+    let Some(fleet) = &engine.fleet else {
+        return EngineStatus {
+            routes,
+            accounts: Vec::new(),
+            fleet: EngineFleet {
+                mode: EngineFleetMode::Scripted,
+                since_ms: 0,
+            },
+            fallbacks: Vec::new(),
+            api_fallback: false,
+        };
+    };
+    let state = fleet.fleet_state();
+    EngineStatus {
+        routes,
+        accounts: fleet
+            .accounts()
+            .into_iter()
+            .map(|a| EngineAccount {
+                label: a.label,
+                cooling_until_ms: a.cooling_until_ms,
+            })
+            .collect(),
+        fleet: EngineFleet {
+            mode: match state.mode {
+                FleetMode::Primary => EngineFleetMode::Primary,
+                FleetMode::Degraded => EngineFleetMode::Degraded,
+                FleetMode::Down => EngineFleetMode::Down,
+            },
+            since_ms: state.since_ms,
+        },
+        fallbacks: cfg
+            .fallback_drivers()
+            .into_iter()
+            .map(|d| d.name().to_string())
+            .collect(),
+        api_fallback: cfg.api_key_env.is_some(),
+    }
+}
+
 /// Dispatch one call. Every method of `shadowrunr_types::rpc::visit_methods` is handled here.
 pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, RpcError> {
     let sim_root = state.cfg.paths.sim_runs();
@@ -232,9 +293,107 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         "ledger.page" => ok(paging::ledger_page(cfg, params(req.params)?)?),
         "runs.page" => ok(paging::runs_page(&sim_root, params(req.params)?)?),
         "tournaments.page" => ok(paging::tournaments_page(&sim_root, params(req.params)?)?),
+        "engine.status" => {
+            let _: EmptyParams = params(req.params)?;
+            ok(engine_status(&state.engine))
+        }
         other => Err(RpcError::new(
             ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use shadowrunr_engine::{route, AccountConfig, EngineConfig, Fleet, RouteOverride};
+    use shadowrunr_types::{Effort, ModelTier, Role};
+
+    use super::*;
+
+    #[test]
+    fn engine_status_for_the_scripted_engine() {
+        let st = engine_status(&EngineHandle::scripted());
+        assert_eq!(st.routes.len(), 8);
+        assert_eq!(st.routes[0].role, Role::CoreThread);
+        for r in &st.routes {
+            assert_eq!((r.tier, r.effort, r.timeout_ms), route(r.role));
+            assert!(!r.overridden);
+        }
+        assert!(st.accounts.is_empty());
+        assert_eq!(st.fleet.mode, EngineFleetMode::Scripted);
+        assert!(st.fallbacks.is_empty());
+        assert!(!st.api_fallback);
+        let v = serde_json::to_value(&st).unwrap();
+        assert_eq!(v["fleet"], json!({ "mode": "scripted", "since_ms": 0 }));
+    }
+
+    #[test]
+    fn engine_status_reports_overrides_cooldowns_and_labels_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let secret_dir = tmp.path().join("secret-claude-config");
+        let mut routes = HashMap::new();
+        routes.insert(
+            Role::CoreThread,
+            RouteOverride {
+                tier: Some(ModelTier::Sonnet),
+                ..RouteOverride::default()
+            },
+        );
+        let cfg = EngineConfig {
+            accounts: vec![
+                AccountConfig {
+                    label: "main".into(),
+                    config_dir: Some(secret_dir.to_string_lossy().into_owned()),
+                },
+                AccountConfig {
+                    label: "spare".into(),
+                    config_dir: None,
+                },
+            ],
+            api_key_env: Some("SHADOWRUNR_TEST_API_KEY".into()),
+            cli_fallbacks: vec!["agy".into(), "nonsense".into(), "codex_cli".into()],
+            ledger_path: Some(
+                tmp.path()
+                    .join("ledger.jsonl")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            routes,
+            ..EngineConfig::default()
+        };
+        let fleet = Arc::new(Fleet::new(&cfg));
+        let until = fleet.inner().now() + 600_000;
+        fleet.inner().cool(1, Some(until));
+        let handle = EngineHandle {
+            engine: fleet.clone(),
+            fleet: Some(fleet),
+        };
+        let st = engine_status(&handle);
+
+        let core = &st.routes[0];
+        assert_eq!(core.role, Role::CoreThread);
+        assert_eq!(
+            (core.tier, core.effort, core.timeout_ms, core.overridden),
+            (ModelTier::Sonnet, Effort::Low, 30_000, true)
+        );
+        assert!(st.routes[1..].iter().all(|r| !r.overridden));
+        let labels: Vec<(&str, Option<i64>)> = st
+            .accounts
+            .iter()
+            .map(|a| (a.label.as_str(), a.cooling_until_ms))
+            .collect();
+        assert_eq!(labels, vec![("main", None), ("spare", Some(until))]);
+        assert_eq!(st.fleet.mode, EngineFleetMode::Primary);
+        assert_eq!(st.fallbacks, vec!["agy", "codex"]);
+        assert!(st.api_fallback);
+
+        let text = serde_json::to_string(&st).unwrap();
+        assert!(!text.contains("secret-claude-config"), "{text}");
+        assert!(!text.contains("SHADOWRUNR_TEST_API_KEY"), "{text}");
+        assert!(!text.contains("null"), "{text}");
     }
 }

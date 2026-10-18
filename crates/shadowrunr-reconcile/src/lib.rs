@@ -14,6 +14,7 @@
 //!
 //! Types and RPC names: docs/spec/contract.md § Daemon protocol.
 
+pub mod budget;
 pub mod directives;
 pub mod metrics;
 pub mod runs;
@@ -28,6 +29,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use shadowrunr_types::{Engine, EngineError, SegmentId, TsMs};
 
+pub use budget::{PromptBudget, DEFAULT_PROMPT_BUDGET_TOKENS};
 pub use directives::DirectiveStore;
 pub use metrics::analyze;
 pub use runs::{load_source, RunData};
@@ -119,6 +121,10 @@ pub struct StoredReport {
     pub runs: Vec<RunSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plans: Vec<NextStreamPlan>,
+    /// What the synthesis prompt carried and what was cut to fit its budget (WP12). Absent
+    /// in reports stored before WP12.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synthesis_input: Option<SynthesisInput>,
 }
 
 /// One `lord.chat` turn, appended to `<data>/lord_chat.jsonl`.
@@ -144,6 +150,7 @@ pub struct Reconciler {
     engine: Arc<dyn Engine>,
     clock: Clock,
     directives: DirectiveStore,
+    budget: PromptBudget,
 }
 
 impl Reconciler {
@@ -158,7 +165,20 @@ impl Reconciler {
             engine,
             clock,
             directives,
+            budget: PromptBudget::default(),
         }
+    }
+
+    /// Size the synthesis prompt against `tokens` estimated tokens instead of
+    /// [`DEFAULT_PROMPT_BUDGET_TOKENS`].
+    pub fn with_prompt_budget(mut self, tokens: u32) -> Self {
+        self.budget = PromptBudget::new(tokens);
+        self
+    }
+
+    /// The synthesis prompt's budget.
+    pub fn prompt_budget(&self) -> PromptBudget {
+        self.budget
     }
 
     fn report_path(&self, report_id: &str) -> Result<PathBuf, ReconcileError> {
@@ -212,14 +232,11 @@ impl Reconciler {
         let mut tones: Vec<String> = runs.iter().filter_map(RunData::tone_variant).collect();
         tones.sort();
         tones.dedup();
-        let prompt = synth::synthesis_prompt(
-            &metrics,
-            &synth::excerpts(&runs),
-            &synth::character_context(char_dir.as_deref(), &tones),
-        );
+        let built =
+            budget::synthesis_prompt(&runs, &metrics, char_dir.as_deref(), &tones, self.budget);
         let synthesis = match synth::call(
             self.engine.as_ref(),
-            prompt,
+            built.prompt,
             synth::synthesis_schema(),
             &report_id,
         )
@@ -298,6 +315,7 @@ impl Reconciler {
             proposals,
             runs: metrics.runs,
             plans: Vec::new(),
+            synthesis_input: Some(built.input),
         })?;
         Ok(report_id)
     }
@@ -684,3 +702,5 @@ pub fn deterministic_summary(m: &Metrics) -> String {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_scale;

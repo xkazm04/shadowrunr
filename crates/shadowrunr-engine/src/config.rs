@@ -21,6 +21,18 @@ pub fn route(role: Role) -> (ModelTier, Effort, u64) {
     }
 }
 
+/// Every role, in contract order (for tables such as the daemon's `engine.status`).
+pub const ROLES: [Role; 8] = [
+    Role::CoreThread,
+    Role::ChatPicker,
+    Role::Planner,
+    Role::Researcher,
+    Role::Consolidator,
+    Role::Chatter,
+    Role::Judge,
+    Role::Reconciler,
+];
+
 /// One row of the route override table. Absent fields keep the default.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct RouteOverride {
@@ -50,6 +62,15 @@ impl FallbackDriver {
             "agy" | "agy_cli" => Some(Self::Agy),
             "local_gemma" | "gemma" => Some(Self::LocalGemma),
             _ => None,
+        }
+    }
+
+    /// The canonical `cli_fallbacks` name.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Codex => "codex",
+            Self::Agy => "agy",
+            Self::LocalGemma => "local_gemma",
         }
     }
 }
@@ -142,6 +163,12 @@ impl EngineConfig {
         }
     }
 
+    /// Whether the route override table has an entry for `role` (the engine then applies
+    /// [`EngineConfig::route`] to every request of that role).
+    pub fn route_overridden(&self, role: Role) -> bool {
+        self.routes.contains_key(&role)
+    }
+
     pub fn claude_bin(&self) -> String {
         self.claude_bin.clone().unwrap_or_else(|| "claude".into())
     }
@@ -206,6 +233,16 @@ mod tests {
         );
         assert_eq!(cfg.route(Role::Judge), (ModelTier::Sonnet, Effort::High, 5));
         assert_eq!(cfg.route(Role::Planner), route(Role::Planner));
+        assert!(cfg.route_overridden(Role::Judge));
+        assert!(!cfg.route_overridden(Role::Planner));
+        for d in [
+            FallbackDriver::Codex,
+            FallbackDriver::Agy,
+            FallbackDriver::LocalGemma,
+        ] {
+            assert_eq!(FallbackDriver::parse(d.name()), Some(d));
+        }
+        assert_eq!(ROLES.len(), 8);
     }
 
     #[test]
