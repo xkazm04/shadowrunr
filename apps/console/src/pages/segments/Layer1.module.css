@@ -1,0 +1,221 @@
+/* Layer 1, Segments & ranks: port of the winner's poster frame (l1.css .b-*) and the programme
+   (l1.css .sg-*, .lc, .tick), over tokens; plus A/1's lifecycle track in the poster's inks.
+   Palette: --sr-page-* under [data-page="segments"] (face #d6a85a, type #0b0f0e,
+   overprint #a8321c, overprint-2 #efe6d2, key #0b0f0e). Winner names: --t type, --f face,
+   --o overprint, --o2 overprint-2, --k key. */
+
+.root { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--sr-page-type); }
+
+.top,
+.hero,
+.foot { width: min(100%, var(--sr-layout-body-measure)); margin-left: auto; margin-right: auto; }
+
+.top { flex: none; height: 3.2rem; display: flex; align-items: center; padding-right: 23rem; }
+
+.brand { display: flex; align-items: center; gap: var(--sr-space-cozy); font-family: var(--sr-font-display); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.brand svg { width: 1.7rem; height: 1.7rem; flex: none; }
+.brand b { font-size: var(--sr-size-subhead); font-weight: var(--sr-weight-bold); }
+.brand span { font-size: var(--sr-size-body); font-weight: var(--sr-weight-semibold); letter-spacing: .16em; border-left: var(--sr-stroke-rule) solid currentcolor; padding-left: var(--sr-space-cozy); opacity: .85; }
+
+/* .b-hero:has(.sg-life) */
+.hero { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1.05fr; grid-template-rows: 1.1fr 1fr; gap: var(--sr-space-base) var(--sr-space-roomy); }
+
+.foot {
+  position: relative;
+  z-index: 4;
+  flex: none;
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sr-space-base);
+  border-top: var(--sr-stroke-rule) solid currentcolor;
+  margin-bottom: .15rem;
+}
+
+.credit { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-small); letter-spacing: .1em; text-transform: uppercase; line-height: 1.25; }
+.credit span { display: block; white-space: nowrap; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); font-size: var(--sr-size-caption); letter-spacing: .01em; text-transform: none; opacity: .9; max-width: 48rem; }
+
+.cta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sr-space-close);
+  background: var(--sr-page-type);
+  color: var(--sr-page-face);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  font-size: var(--sr-size-kicker);
+  padding: .45rem var(--sr-space-base);
+  text-decoration: none;
+  box-shadow: .25rem .25rem 0 var(--sr-page-overprint);
+  transition: transform .2s, box-shadow .2s;
+}
+.cta:hover,
+.cta:focus-visible { transform: translate(-.12rem, -.12rem); box-shadow: .4rem .4rem 0 var(--sr-page-overprint); }
+.cta i { width: 0; height: 0; border: .5rem solid transparent; border-left: .75rem solid currentcolor; border-right: 0; }
+
+/* The winner's hotspots ([data-hot]): the hovered block lit, the others knocked back. */
+.hot { color: inherit; text-decoration: none; cursor: pointer; transition: opacity .25s, filter .25s, transform .25s; }
+.hero:has(.hot:hover) .hot:not(:hover),
+.hero:has(.hot:focus-visible) .hot:not(:focus-visible) { opacity: .28; filter: saturate(.3); }
+.hot:hover,
+.hot:focus-visible { outline: .2rem solid var(--sr-page-type); outline-offset: .25rem; border-radius: var(--sr-radius-none); }
+
+/* .sg-life: the five lifecycle columns; row 3 is A/1's track. */
+.life { grid-column: 1 / 3; grid-row: 1; display: grid; grid-template-columns: 5fr 5fr 7fr 8fr 7fr; grid-template-rows: auto 1fr auto; column-gap: var(--sr-space-cozy); position: relative; }
+
+.h {
+  grid-column: 1 / -1;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-small);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  border-bottom: var(--sr-stroke-rule) solid var(--sr-page-type);
+  padding-bottom: .15rem;
+  margin-bottom: var(--sr-space-tight);
+}
+.pyr .h em { font-style: normal; color: var(--sr-page-overprint); letter-spacing: .06em; }
+
+.lc h3 { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: 3.8rem; line-height: .82; text-transform: uppercase; letter-spacing: -.01em; color: var(--sr-page-type); margin-bottom: var(--sr-space-compact); }
+.lc:has(.none) h3 { color: transparent; -webkit-text-stroke: var(--sr-stroke-rule) var(--sr-page-type); }
+.cRetired h3 { text-decoration: line-through; text-decoration-thickness: .4rem; }
+
+.tk { display: flex; flex-direction: column; gap: var(--sr-space-snug); }
+
+.tick {
+  display: block;
+  background: var(--sr-page-type);
+  color: var(--sr-page-face);
+  padding: .45rem var(--sr-space-close);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-semibold);
+  font-size: var(--sr-size-label);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  line-height: 1.1;
+  border-left: .35rem solid var(--sr-page-overprint);
+  box-shadow: .18rem .18rem 0 var(--sr-page-overprint);
+}
+.tick b { display: block; font-size: var(--sr-size-micro); letter-spacing: .14em; color: var(--sr-page-overprint-2); font-weight: var(--sr-weight-bold); }
+.x { opacity: .65; text-decoration: line-through; }
+.more { border-left-style: dashed; }
+
+.none { font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-small); opacity: .85; border: var(--sr-stroke-rule) dashed var(--sr-page-type); padding: var(--sr-space-snug) var(--sr-space-cozy); }
+
+/* .sg-cmd */
+.cmd { grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; align-content: flex-start; gap: var(--sr-space-compact); position: relative; }
+.cmd code { font-family: var(--sr-font-mono); font-weight: var(--sr-weight-bold); font-size: 2.1rem; background: var(--sr-page-type); color: var(--sr-page-face); padding: var(--sr-space-hair) var(--sr-space-close); box-shadow: .25rem .25rem 0 var(--sr-page-overprint); transform: rotate(-1deg); }
+.cmd code:nth-of-type(2n) { transform: rotate(1deg); }
+.cmd code:nth-of-type(3n) { transform: rotate(-.4deg); }
+
+/* .sg-pyr: the rank pyramid; the ledge under the lowest proposing rank is A/1's ziggurat note. */
+.pyr { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; justify-content: flex-start; min-height: 0; }
+.st {
+  position: relative;
+  width: var(--w);
+  margin: 0 auto .26rem;
+  background: var(--c);
+  color: var(--sr-page-key);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: var(--sr-space-tick) .9rem;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: 1.55rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  line-height: 1.15;
+  box-shadow: .18rem .18rem 0 var(--sr-page-type);
+}
+.st .w { font-size: 1.8rem; }
+.ledge::after { content: ""; position: absolute; left: -1.2rem; right: -1.2rem; bottom: -.2rem; border-bottom: var(--sr-stroke-rule) dashed var(--sr-page-type); pointer-events: none; }
+/* The ledge's label hangs in the free margin left of the step, out of the flow. */
+.ledgeTag { position: absolute; right: calc(100% + var(--sr-space-roomy)); top: 50%; transform: translateY(-50%); font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-micro); letter-spacing: .08em; line-height: 1.1; width: 7rem; text-align: right; color: var(--sr-page-type); pointer-events: none; }
+
+.rkThrall { --c: var(--sr-rank-thrall); }
+.rkAcolyte { --c: var(--sr-rank-acolyte); }
+.rkCultist { --c: var(--sr-rank-cultist); }
+.rkWarlock { --c: var(--sr-rank-warlock); }
+.rkLich { --c: var(--sr-rank-lich); }
+.rkDreadCouncil { --c: var(--sr-rank-dread-council); }
+
+/* A/1's track: a rail through five stations, lit where segments stand. */
+.track { grid-column: 1 / -1; grid-row: 3; display: grid; grid-template-columns: subgrid; row-gap: var(--sr-space-tick); position: relative; margin-top: var(--sr-space-cozy); }
+.track::before,
+.track::after { content: ""; position: absolute; left: 0; right: 0; pointer-events: none; background: var(--sr-page-type); }
+.track::before { top: var(--sr-space-tick); height: var(--sr-stroke-heavy); opacity: .35; }
+.track::after { top: var(--sr-space-close); height: var(--sr-stroke-hair); opacity: .15; }
+
+.station { grid-row: 1; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: var(--sr-space-tick); min-width: 0; }
+.lamp { display: block; width: 46%; height: var(--sr-space-compact); border: var(--sr-stroke-rule) solid var(--sr-page-type); border-radius: var(--sr-radius-nick); background: var(--sr-page-face); }
+.station[data-lit="true"] .lamp { background: var(--sr-page-overprint); border-color: var(--sr-page-overprint); }
+.stationTag { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-micro); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; opacity: .55; }
+.station[data-lit="true"] .stationTag { opacity: 1; color: var(--sr-page-overprint); }
+
+.siding { grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center; gap: var(--sr-space-tight); padding-left: 7.8%; min-width: 0; }
+.spur { flex: none; align-self: flex-start; width: 5rem; height: 1.3rem; fill: none; stroke: var(--sr-page-type); stroke-width: var(--sr-stroke-heavy); stroke-dasharray: 6 8; opacity: .5; }
+.spur path { vector-effect: non-scaling-stroke; }
+.hex { flex: none; width: 2rem; height: 2rem; opacity: .65; overflow: visible; }
+.hex polygon { fill: var(--sr-page-face); stroke: var(--sr-page-type); stroke-width: var(--sr-stroke-rule); stroke-dasharray: 4 4; }
+.hex text { fill: var(--sr-page-type); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); }
+.sidingMore,
+.sidingTag { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-micro); letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
+.sidingTag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Loading, offline and degraded: the reconcile poster's state slip, in this poster's inks. */
+.slip {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 2;
+  max-width: 32rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sr-space-compact) var(--sr-space-near);
+  font-family: var(--sr-font-serif);
+  font-style: italic;
+  font-size: var(--sr-size-body);
+  line-height: 1.3;
+  background: var(--sr-page-type);
+  color: var(--sr-page-face);
+  padding: .35rem var(--sr-space-near);
+  transform: rotate(-.6deg);
+}
+.slipAction {
+  font-family: var(--sr-font-display);
+  font-style: normal;
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-small);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--sr-page-face);
+  background: none;
+  border: var(--sr-stroke-rule) solid currentcolor;
+  padding: 0 var(--sr-space-compact);
+  cursor: pointer;
+}
+.slipAction:hover { background: var(--sr-page-overprint); }
+
+/* Narrow (the shell's poster carries data-narrow): the winner's portrait composition. */
+[data-narrow="true"] .top { height: auto; flex-wrap: wrap; gap: var(--sr-space-snug); padding: var(--sr-space-tick) 0; }
+[data-narrow="true"] .brand span { display: none; }
+[data-narrow="true"] .hero { display: flex; flex-direction: column; gap: var(--sr-space-base); flex: none; min-height: 34rem; }
+[data-narrow="true"] .life { grid-template-columns: 1fr 1fr; row-gap: var(--sr-space-near); }
+[data-narrow="true"] .lc h3 { font-size: 3.4rem; }
+[data-narrow="true"] .track { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+[data-narrow="true"] .stationTag { white-space: normal; text-align: center; }
+[data-narrow="true"] .foot { height: auto; flex-direction: column; align-items: stretch; padding: var(--sr-space-compact) 0 var(--sr-space-close); }
+[data-narrow="true"] .cta { justify-content: center; }
+[data-narrow="true"] .credit span { white-space: normal; }
+[data-narrow="true"] .slip { position: relative; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hot,
+  .cta { transition: none; }
+}

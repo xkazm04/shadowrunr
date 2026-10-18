@@ -1,0 +1,18 @@
+/* The segments poster motif (art.js M.segments; poster.css .pf-motif): fills from the page
+   palette, the ticket breathing. */
+.motif { position: absolute; inset: 0; width: 100%; height: 100%; }
+.k { fill: var(--sr-page-key); }
+.o { fill: var(--sr-page-overprint); }
+.t { fill: var(--sr-page-type); }
+.f { fill: var(--sr-page-face); }
+.lines { stroke: var(--sr-page-face); fill: none; }
+
+.breathe { animation: breathe 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+@keyframes breathe {
+  50% { transform: scale(1.06) translateY(-1%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .breathe { animation: none; }
+}
