@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { HealthState } from "../contract";
-import { DAEMON_START_COMMAND, RpcError, isOffline } from "../api/rpc";
+import type { HealthState } from "../../contract";
+import { DAEMON_START_COMMAND, RpcError, isOffline } from "../../api/rpc";
 
 export function cx(...xs: (string | false | null | undefined)[]): string {
   return xs.filter(Boolean).join(" ");
@@ -36,8 +36,8 @@ export function Dot({ state }: { state: HealthState | "none" }) {
 export function Chip(props: {
   children: ReactNode;
   tone?: "neutral" | "ok" | "warn" | "bad" | "accent" | "prevent" | "try";
-  onClick?: () => void;
-  title?: string;
+  onClick?: (() => void) | undefined;
+  title?: string | undefined;
 }) {
   const cls = cx("chip", `chip-${props.tone ?? "neutral"}`, props.onClick && "chip-click");
   return props.onClick ? (
@@ -103,7 +103,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 /** The daemon-offline empty state: what to run, retry, or review with fixtures. */
-export function OfflineState({ onRetry }: { onRetry?: () => void }) {
+export function OfflineState({ onRetry }: { onRetry?: (() => void) | undefined }) {
   const mockHref = `${window.location.pathname}?mock=1${window.location.hash}`;
   return (
     <div className="empty offline">

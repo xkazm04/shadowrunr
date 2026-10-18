@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { HealthReport } from "../contract";
 import { useApi } from "../api/context";
-import { Button, Dot, Empty, ErrorState, Inspector, KV, Loading, Toolbar, cx, useListNav } from "../ui/primitives";
+import { Button, Dot, Empty, ErrorState, Inspector, KV, Loading, Toolbar, cx, useListNav } from "../legacy/ui/primitives";
 
 /** Media-less mapping of the design's pre-flight board (.spark briefs WP5 §3). */
 export const PF_LABELS: Record<string, string> = {

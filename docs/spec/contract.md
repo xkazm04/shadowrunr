@@ -373,7 +373,8 @@ LedgerEntry      { ts_ms, role, tier?, effort?, engine?, account?, model?, first
 
 **Event resume.** A subscribe message may carry `"since": <seq>`. With `"live"` it must also
 carry the `"run_id"` that seq belongs to; `since` without it is `invalid_params`. Sending
-`since` switches the session to enveloped frames:
+`since` switches the session to enveloped frames. A client that has not seen a run yet sends
+`"since": 0, "run_id": ""` to get enveloped frames from the start of the run in flight:
 
 ```
 { "seq": 7, "run_id": "<run_id>", "event": StreamEvent }

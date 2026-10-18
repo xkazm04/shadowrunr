@@ -1,0 +1,70 @@
+{
+  "$comment": "Raw minified bytes per route, gated by scripts/check-bundle.mjs after vite build (gzip is reported, not gated). Entry = first load. A page builder who needs more raises its own line in the same change and says why. legacy* go away at cutover C2. door = @shadowrunr/contract's compiled ajv validators, loaded in parallel with the first paint (F2 could split them per method).",
+  "routes": {
+    "entry": {
+      "js": 280000,
+      "css": 40000
+    },
+    "onair.l1": {
+      "js": 60000,
+      "css": 16000
+    },
+    "onair.l2": {
+      "js": 60000,
+      "css": 16000
+    },
+    "characters.l1": {
+      "js": 60000,
+      "css": 16000
+    },
+    "characters.l2": {
+      "js": 60000,
+      "css": 16000
+    },
+    "brain.l1": {
+      "js": 60000,
+      "css": 16000
+    },
+    "brain.l2": {
+      "js": 60000,
+      "css": 16000
+    },
+    "segments.l1": {
+      "js": 60000,
+      "css": 16000
+    },
+    "segments.l2": {
+      "js": 60000,
+      "css": 16000
+    },
+    "simulator.l1": {
+      "js": 60000,
+      "css": 16000
+    },
+    "simulator.l2": {
+      "js": 60000,
+      "css": 16000
+    },
+    "reconcile.l1": {
+      "js": 60000,
+      "css": 16000
+    },
+    "reconcile.l2": {
+      "js": 60000,
+      "css": 16000
+    },
+    "legacy": {
+      "js": 64000,
+      "css": 24000
+    },
+    "legacy.mock": {
+      "js": 200000
+    },
+    "tauri.opener": {
+      "js": 1024
+    },
+    "door": {
+      "js": 280000
+    }
+  }
+}

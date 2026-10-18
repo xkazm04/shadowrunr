@@ -1,0 +1,8 @@
+{
+  "$comment": "Max DOM nodes in document.body, measured in jsdom by src/app/shell.dom.test.tsx (counts are gated, timings are not). wall = the shell alone; wall+l1 / wall+l2 = the shell plus one page at that layer. Page builders keep their page under these with virtualised lists; raising a line needs a reason in the same change.",
+  "routes": {
+    "wall": 160,
+    "wall+l1": 1200,
+    "wall+l2": 2000
+  }
+}

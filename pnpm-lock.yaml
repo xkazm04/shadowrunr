@@ -38,6 +38,12 @@ importers:
 
   apps/console:
     dependencies:
+      '@shadowrunr/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
+      '@shadowrunr/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
       '@tanstack/react-virtual':
         specifier: 3.14.21
         version: 3.14.21(react-dom@19.3.1(react@19.3.1))(react@19.3.1)

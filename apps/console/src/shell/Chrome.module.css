@@ -1,0 +1,71 @@
+.chrome {
+  position: fixed;
+  top: .75rem;
+  right: .9rem;
+  z-index: var(--sr-z-chrome);
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+}
+
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sr-space-compact);
+  padding: .32rem var(--sr-space-near);
+  border: var(--sr-stroke-rule) solid var(--sr-color-chrome-ink);
+  background: var(--sr-color-surface-paper);
+  box-shadow: .2rem .2rem 0 var(--sr-color-chrome-ink);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-body);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--sr-color-chrome-ink);
+}
+
+.dot { width: .6rem; height: .6rem; border-radius: var(--sr-radius-round); background: var(--sr-color-text-mute); }
+.conn[data-summary="online"] .dot { background: var(--sr-color-ok); }
+.conn[data-summary="degraded"] .dot { background: var(--sr-color-foil); }
+.conn[data-summary="offline"] .dot { background: var(--sr-color-fail); }
+.conn[data-summary="offline"] { background: var(--sr-color-signal); }
+
+.wallBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--sr-space-compact);
+  padding: .32rem var(--sr-space-near);
+  border: var(--sr-stroke-rule) solid var(--sr-color-chrome-ink);
+  background: var(--sr-color-chrome-ink);
+  box-shadow: .2rem .2rem 0 var(--sr-color-signal);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-body);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--sr-color-surface-paper);
+  cursor: pointer;
+}
+
+.wallBtn:hover { background: var(--sr-color-signal); color: var(--sr-color-chrome-ink); }
+
+.wallIcon {
+  width: 1rem;
+  height: 1rem;
+  background: linear-gradient(90deg, currentcolor 0 28%, transparent 28% 36%, currentcolor 36% 64%, transparent 64% 72%, currentcolor 72%);
+}
+
+.chrome[data-narrow="true"] {
+  left: 0;
+  right: 0;
+  top: 0;
+  justify-content: space-between;
+  height: 3rem;
+  padding: 0 var(--sr-space-cozy);
+  background: var(--sr-color-chrome-ink);
+  box-shadow: 0 var(--sr-stroke-rule) 0 var(--sr-color-signal);
+}
+
+.chrome[data-narrow="true"] .conn,
+.chrome[data-narrow="true"] .wallBtn { box-shadow: none; font-size: var(--sr-size-caption); padding: .25rem .55rem; }

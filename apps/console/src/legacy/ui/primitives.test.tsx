@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { DAEMON_START_COMMAND, RpcError } from "../api/rpc";
+import { DAEMON_START_COMMAND, RpcError } from "../../api/rpc";
 import { ErrorState } from "./primitives";
 
 afterEach(cleanup);

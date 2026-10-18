@@ -1,0 +1,3 @@
+.app { position: fixed; inset: 0; overflow: hidden; background: var(--sr-color-surface-void); color: var(--sr-color-text-on-dark); }
+
+.legacy { position: absolute; inset: 0; overflow: auto; background: var(--sr-color-surface-paper); color: var(--sr-color-text-ink); }

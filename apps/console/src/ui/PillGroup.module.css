@@ -1,0 +1,19 @@
+.pills { display: flex; flex-wrap: wrap; gap: var(--sr-space-snug); }
+
+.pill {
+  padding: var(--sr-space-tick) var(--sr-space-close);
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  background: none;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-small);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--sr-color-text-ink);
+  cursor: pointer;
+}
+
+.pill[aria-pressed="true"] { background: var(--sr-color-text-ink); color: var(--sr-color-surface-paper); }
+.pill:not([aria-pressed="true"]):hover { background: var(--sr-color-surface-hover-paper); }
+
+.count { margin-left: var(--sr-space-tick); opacity: .7; }

@@ -29,7 +29,7 @@ export class RpcError extends Error {
     kind: RpcErrorKind,
     method: string,
     message: string,
-    opts: { code?: string; status?: number } = {},
+    opts: { code?: string | undefined; status?: number | undefined } = {},
   ) {
     super(message);
     this.name = "RpcError";

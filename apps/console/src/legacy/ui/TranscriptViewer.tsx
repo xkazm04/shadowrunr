@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { StreamEvent } from "../contract";
-import { useApi, useRpc } from "../api/context";
-import type { EventStreamStatus } from "../api/events";
-import { clock, eventActor, eventText } from "../lib/format";
-import { EVENT_FILTERS, annotationsByLine, eventGroup, summarizeRules, type Annotation, type EventFilter } from "../lib/transcript";
-import { openExternal, stageReplayUrl } from "../lib/open";
+import type { StreamEvent } from "../../contract";
+import { useApi, useRpc } from "../../api/context";
+import type { EventStreamStatus } from "../../api/events";
+import { clock, eventActor, eventText } from "../../lib/format";
+import { EVENT_FILTERS, annotationsByLine, eventGroup, summarizeRules, type Annotation, type EventFilter } from "../../lib/transcript";
+import { openExternal, stageReplayUrl } from "../../lib/open";
 import { Button, Chip, ErrorState, Inspector, Loading, Segmented, cx, useListNav } from "./primitives";
 
 function AnnotationChip({ a }: { a: Annotation }) {
@@ -63,7 +63,7 @@ export function TranscriptInspector(props: { runId: string; highlightLine?: numb
       runId,
       1,
       (ev) => setLive((l) => (l ? { ...l, events: [...l.events, ev] } : l)),
-      (status, detail) => setLive((l) => (l ? { ...l, status, detail } : l)),
+      (status, detail) => setLive((l) => (l ? { ...l, status, ...(detail === undefined ? {} : { detail }) } : l)),
     );
   }, [watching, runId, eventSource]);
 

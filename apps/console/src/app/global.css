@@ -1,0 +1,23 @@
+/* App-wide base styles over @shadowrunr/tokens. Component styles live in co-located CSS Modules. */
+*,
+*::before,
+*::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: var(--sr-root-size); text-size-adjust: 100%; }
+
+html,
+body,
+#root { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--sr-color-surface-void);
+  color: var(--sr-color-text-on-dark);
+  font-family: var(--sr-font-sans);
+  font-size: var(--sr-size-body);
+}
+
+button { font: inherit; color: inherit; }
+a { color: inherit; }
+
+:focus-visible { outline: var(--sr-stroke-heavy) solid var(--sr-color-signal); outline-offset: var(--sr-stroke-heavy); border-radius: var(--sr-radius-nick); }
+[data-page] :focus-visible { outline-color: currentcolor; }

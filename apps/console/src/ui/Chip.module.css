@@ -1,0 +1,26 @@
+.chip {
+  display: inline-block;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: var(--sr-size-micro);
+  line-height: 1.35;
+  padding: .02rem var(--sr-space-compact);
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  background: var(--sr-color-surface-chip);
+  color: var(--sr-color-text-ink);
+  white-space: nowrap;
+}
+
+button.chip { cursor: pointer; }
+button.chip:hover { background: var(--sr-page-accent, var(--sr-color-signal)); }
+
+.ok { background: var(--sr-color-verdict-held-ground); border-color: var(--sr-color-verdict-held-edge); color: var(--sr-color-verdict-held-ink); }
+.fail { background: var(--sr-color-verdict-failed-ground); border-color: var(--sr-color-verdict-failed-edge); color: var(--sr-color-verdict-failed-ink); }
+.caution { background: var(--sr-color-verdict-wobbled-ground); border-color: var(--sr-color-verdict-wobbled-edge); }
+.unevaluable { background: var(--sr-color-verdict-unevaluable-ground); border-color: var(--sr-color-verdict-unevaluable-edge); color: var(--sr-color-verdict-unevaluable-ink); }
+.muted { background: transparent; border-style: dashed; color: var(--sr-color-text-mute); }
+.signal { background: var(--sr-color-signal); color: var(--sr-color-chrome-ink); }
+
+.chips { display: flex; flex-wrap: wrap; gap: var(--sr-space-snug); }

@@ -1,0 +1,18 @@
+.wrap { display: inline-flex; align-items: center; gap: var(--sr-space-compact); white-space: nowrap; }
+
+.bar {
+  position: relative;
+  display: inline-block;
+  width: 5.5rem;
+  height: .7rem;
+  background: var(--sr-color-track);
+  vertical-align: middle;
+}
+
+.bound { position: absolute; top: 0; bottom: 0; background: var(--sr-page-accent, var(--sr-color-signal)); opacity: .55; }
+
+.point { position: absolute; top: -.2rem; bottom: -.2rem; width: .2rem; margin-left: -.1rem; background: var(--sr-color-text-ink); }
+
+.text { font-variant-numeric: tabular-nums; }
+
+.n { margin-left: var(--sr-space-snug); font-size: var(--sr-size-caption); color: var(--sr-color-text-mute); }

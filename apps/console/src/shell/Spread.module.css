@@ -1,0 +1,67 @@
+/* Layer 2: the bone-paper spread beside the spine. It reveals with the winner's clip-path wipe,
+   or, after a click on a lit element, pushes in from that element (A/1). */
+
+.spread {
+  position: absolute;
+  left: var(--sr-layout-spine);
+  top: 0;
+  right: 0;
+  bottom: var(--bus-offset, 0);
+  z-index: var(--sr-z-spread);
+  overflow: hidden auto;
+  background: var(--sr-color-surface-paper);
+  color: var(--sr-color-text-ink);
+  clip-path: inset(0 0 0 100%);
+  visibility: hidden;
+  outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sr-color-chrome-ink) var(--sr-color-surface-chip);
+  transition: clip-path .85s var(--sr-ease-move), visibility 0s .85s;
+  font-size: var(--sr-size-body);
+  line-height: 1.55;
+}
+
+.spread::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 0 var(--sr-layout-spine);
+  z-index: var(--sr-z-under);
+  background-image: var(--sr-grain-image);
+  mix-blend-mode: var(--sr-grain-blend);
+  opacity: var(--sr-grain-opacity-spread);
+  pointer-events: none;
+}
+
+.spread[data-open="true"] { clip-path: inset(0); visibility: visible; transition: clip-path .85s var(--sr-ease-move), visibility 0s; }
+
+.spread[data-push="true"] { clip-path: inset(0); animation: pushin .62s var(--sr-ease-move) both; transform-origin: 50% 50%; }
+
+@keyframes pushin {
+  from { opacity: 0; transform: var(--push-from, scale(.6)); }
+  to { opacity: 1; transform: none; }
+}
+
+.inner {
+  position: relative;
+  z-index: var(--sr-z-above);
+  max-width: var(--sr-layout-spread-measure);
+  margin: 0 auto;
+  padding: var(--sr-space-loose) var(--sr-space-gutter) 5rem;
+}
+
+.spread[data-open="true"] .inner > * { animation: rise .7s var(--sr-ease-settle) both; }
+.spread[data-open="true"] .inner > :nth-child(2) { animation-delay: .08s; }
+.spread[data-open="true"] .inner > :nth-child(n + 3) { animation-delay: .16s; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(var(--sr-space-roomy)); }
+}
+
+.spread[data-narrow="true"] { left: 0; top: 6.4rem; }
+.spread[data-narrow="true"]::before { left: 0; top: 6.4rem; }
+.spread[data-narrow="true"] .inner { padding: var(--sr-space-base) var(--sr-space-base) 4rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .spread,
+  .spread * { animation-duration: .01s !important; transition-duration: .2s !important; transition-delay: 0s !important; }
+}

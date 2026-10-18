@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "
 import type { CellResult, TournamentResults } from "../contract";
 import { boundStr, pct, shortHash } from "../lib/format";
 import { cellId, heatOf, isThin, notEvaluable, notProvoked, qualityColumns, ruleFails, ruleN, rulePass, worstFirst } from "../lib/heatmap";
-import { cx } from "../ui/primitives";
+import { cx } from "../legacy/ui/primitives";
 
 export interface HeatSelection {
   cellId: string;

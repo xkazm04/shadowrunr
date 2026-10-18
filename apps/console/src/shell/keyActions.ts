@@ -1,0 +1,60 @@
+// What each keymap action does to the shell, as a pure function of the current state.
+import type { KeyAction, Mode } from "../keys";
+import { PAGE_IDS, WALL, layerOf, pageRoute, up, type PageId, type Route } from "../router";
+
+export interface KeyContext {
+  readonly route: Route;
+  readonly intro: boolean;
+  /** The page the wall returns to (M, Season). */
+  readonly lastPage: PageId;
+  readonly hover: number | null;
+  readonly legacyViews: readonly string[];
+}
+
+export type Effect =
+  | { readonly kind: "navigate"; readonly route: Route }
+  | { readonly kind: "hover"; readonly index: number }
+  | { readonly kind: "skip-intro" }
+  | { readonly kind: "blur" }
+  | { readonly kind: "none" };
+
+const NONE: Effect = { kind: "none" };
+const wrap = (i: number, n: number) => ((i % n) + n) % n;
+
+export function modeOf(ctx: Pick<KeyContext, "route" | "intro">): Mode {
+  return ctx.intro ? "intro" : layerOf(ctx.route);
+}
+
+export function effectOf(action: KeyAction, ctx: KeyContext): Effect {
+  const n = PAGE_IDS.length;
+  switch (action.type) {
+    case "page": {
+      const id = PAGE_IDS[action.index];
+      return id ? { kind: "navigate", route: pageRoute(id) } : NONE;
+    }
+    case "up": {
+      const parent = up(ctx.route);
+      return parent ? { kind: "navigate", route: parent } : NONE;
+    }
+    case "toggle-wall":
+      return { kind: "navigate", route: ctx.route.view === "wall" ? pageRoute(ctx.lastPage) : WALL };
+    case "wall-focus": {
+      const from = ctx.hover ?? PAGE_IDS.indexOf(ctx.lastPage);
+      return { kind: "hover", index: wrap(from + action.delta, n) };
+    }
+    case "page-step": {
+      if (ctx.route.view !== "page") return NONE;
+      const id = PAGE_IDS[wrap(PAGE_IDS.indexOf(ctx.route.page) + action.delta, n)];
+      return id ? { kind: "navigate", route: pageRoute(id) } : NONE;
+    }
+    case "skip-intro":
+      return { kind: "skip-intro" };
+    case "blur":
+      return { kind: "blur" };
+    case "legacy-view": {
+      const v = ctx.legacyViews[action.index];
+      return v ? { kind: "navigate", route: { view: "legacy", sub: [v] } } : NONE;
+    }
+  }
+}
+

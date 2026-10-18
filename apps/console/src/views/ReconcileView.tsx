@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { Evidence, NextStreamPlan, PlanOption, ReconcileReport, RuleIncident } from "../contract";
 import { useApi, useRpc } from "../api/context";
 import { boundStr, dateTime, msStr, parseRef, pct } from "../lib/format";
-import { useDesk } from "../state";
-import { DisclosureRow } from "../ui/Disclosure";
-import { DiffView, PlanLetter, diffFiles } from "../ui/DiffView";
-import { Button, Chip, Empty, ErrorLine, ErrorState, Loading, Popover, SectionHeader, Sheet, Toolbar, cx } from "../ui/primitives";
-import { TranscriptInspector } from "../ui/TranscriptViewer";
+import { useDesk } from "../legacy/state";
+import { DisclosureRow } from "../legacy/ui/Disclosure";
+import { DiffView, PlanLetter, diffFiles } from "../legacy/ui/DiffView";
+import { Button, Chip, Empty, ErrorLine, ErrorState, Loading, Popover, SectionHeader, Sheet, Toolbar, cx } from "../legacy/ui/primitives";
+import { TranscriptInspector } from "../legacy/ui/TranscriptViewer";
 
 type OpenRef = (ref: string) => void;
 

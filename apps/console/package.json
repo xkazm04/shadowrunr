@@ -5,12 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/check-bundle.mjs",
     "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
+    "lint": "eslint src --max-warnings 0 && stylelint \"src/**/*.css\" && node scripts/check-size.mjs && node scripts/check-token-refs.mjs",
+    "budget:bundle": "node scripts/check-bundle.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
+    "@shadowrunr/contract": "workspace:*",
+    "@shadowrunr/tokens": "workspace:*",
+    "@tanstack/react-virtual": "3.14.21",
     "@tauri-apps/plugin-opener": "^2.7.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

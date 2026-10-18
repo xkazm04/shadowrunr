@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { Directive } from "../contract";
 import { useApi, useRpc } from "../api/context";
 import { dateTime } from "../lib/format";
-import { useDesk } from "../state";
-import { Button, Chip, ErrorLine, ErrorState, Inspector, Popover, Toolbar, cx } from "../ui/primitives";
+import { useDesk } from "../legacy/state";
+import { Button, Chip, ErrorLine, ErrorState, Inspector, Popover, Toolbar, cx } from "../legacy/ui/primitives";
 
 interface Turn {
   id: number;

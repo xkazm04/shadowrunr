@@ -83,7 +83,7 @@ export function useRpc<M extends RpcMethod>(method: M, params: RpcParams<M> | nu
   const { client } = useApi();
   const skip = params === null;
   const fullKey = `${method}|${skip ? "-" : key}`;
-  const [state, setState] = useState<{ key: string; data?: RpcResult<M>; error?: unknown; loading: boolean }>({
+  const [state, setState] = useState<{ key: string; data?: RpcResult<M> | undefined; error?: unknown; loading: boolean }>({
     key: fullKey,
     loading: !skip,
   });

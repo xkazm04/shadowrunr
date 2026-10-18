@@ -1,0 +1,88 @@
+.section { margin: var(--sr-space-gutter) 0 0; }
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sr-space-close);
+  flex-wrap: wrap;
+  margin: 0 0 var(--sr-space-base);
+  padding-bottom: .35rem;
+  border-bottom: var(--sr-stroke-heavy) solid var(--sr-color-text-ink);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-heading);
+  line-height: .95;
+  text-transform: uppercase;
+  color: var(--sr-color-text-ink);
+}
+
+.sectionRight { margin-left: auto; font-size: var(--sr-size-caption); }
+
+.head { padding: var(--sr-space-wide) 0 var(--sr-space-base); }
+
+.kicker {
+  margin-bottom: var(--sr-space-compact);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-body);
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--sr-page-accent-text, var(--sr-color-signal-deep));
+}
+
+.title {
+  margin: 0;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: 6.4rem;
+  line-height: .95;
+  letter-spacing: -.01em;
+  text-transform: uppercase;
+  color: var(--sr-color-text-ink);
+  text-shadow: .04em .035em 0 var(--sr-page-accent, var(--sr-color-signal));
+  overflow-wrap: anywhere;
+}
+
+.lede {
+  max-width: 46rem;
+  margin: var(--sr-space-base) 0 0;
+  font-family: var(--sr-font-serif);
+  font-style: italic;
+  font-size: var(--sr-size-lede);
+  line-height: 1.4;
+  color: var(--sr-color-text-note);
+}
+
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: var(--sr-z-spread-tabs);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sr-space-tight);
+  padding: var(--sr-space-near) 0 var(--sr-space-cozy);
+  background: var(--sr-color-surface-paper);
+  border-bottom: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+}
+
+.tab {
+  padding: .25rem var(--sr-space-close);
+  border: var(--sr-stroke-rule) solid transparent;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-control);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--sr-color-text-ink);
+  background: none;
+  cursor: pointer;
+}
+
+.tab:hover { border-color: var(--sr-color-text-ink); }
+
+.tab[aria-selected="true"] {
+  background: var(--sr-color-text-ink);
+  color: var(--sr-color-surface-paper);
+  box-shadow: .2rem .2rem 0 var(--sr-page-accent, var(--sr-color-signal));
+}

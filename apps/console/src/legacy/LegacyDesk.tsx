@@ -1,12 +1,18 @@
-import { useEffect } from "react";
-import { useApi } from "./api/context";
-import { VIEWS, useDesk, type ViewId } from "./state";
+// LEGACY (deleted at cutover C2): the pre-port operator desk, reachable at `#/legacy/<view>`.
+// The shell's router owns the view and the keymap owns the keys (Ctrl+1..5 in legacy mode), so
+// this file no longer reads the hash or listens to the keyboard itself.
+import { ApiProvider, readConfig, useApi } from "../api/context";
+import { DirectivesView } from "../views/DirectivesView";
+import { LordChatView } from "../views/LordChatView";
+import { PreflightView } from "../views/PreflightView";
+import { ReconcileView } from "../views/ReconcileView";
+import { SimulationsView } from "../views/SimulationsView";
+import { DeskProvider, VIEWS, type ViewId } from "./state";
 import { cx } from "./ui/primitives";
-import { DirectivesView } from "./views/DirectivesView";
-import { LordChatView } from "./views/LordChatView";
-import { PreflightView } from "./views/PreflightView";
-import { ReconcileView } from "./views/ReconcileView";
-import { SimulationsView } from "./views/SimulationsView";
+import "./styles/tokens.css";
+import "./styles/app.css";
+
+export const LEGACY_VIEWS: readonly ViewId[] = VIEWS.map((v) => v.id);
 
 const ICONS: Record<ViewId, string> = {
   preflight: "◉",
@@ -35,42 +41,14 @@ function ConnectionPill() {
   );
 }
 
-export function App() {
-  const { view, go } = useDesk();
+function Desk({ view, go }: { view: ViewId; go: (v: ViewId) => void }) {
   const { config } = useApi();
-
-  // Keep the view in the hash so a reload (or a shared link) lands on the same view.
-  useEffect(() => {
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${view}`);
-  }, [view]);
-  useEffect(() => {
-    const onHash = () => {
-      const v = VIEWS.find((x) => x.id === window.location.hash.slice(1));
-      if (v) go(v.id);
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, [go]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-      const v = VIEWS.find((x) => x.key === e.key);
-      if (v) {
-        e.preventDefault();
-        go(v.id);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [go]);
-
   return (
     <div className="window">
       <nav className="sidebar" aria-label="Views">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
-          <span>Shadowrunr</span>
+          <span>Shadowrunr · legacy desk</span>
           {config.mock && <span className="mock-badge">MOCK</span>}
         </div>
         <div className="side-group">Desk</div>
@@ -99,5 +77,16 @@ export function App() {
       {view === "lord" && <LordChatView />}
       {view === "directives" && <DirectivesView />}
     </div>
+  );
+}
+
+export default function LegacyDesk(props: { view: string | undefined; onNavigate: (view: string) => void }) {
+  const view: ViewId = LEGACY_VIEWS.find((v) => v === props.view) ?? "preflight";
+  return (
+    <ApiProvider config={readConfig()}>
+      <DeskProvider view={view} go={props.onNavigate}>
+        <Desk view={view} go={props.onNavigate} />
+      </DeskProvider>
+    </ApiProvider>
   );
 }

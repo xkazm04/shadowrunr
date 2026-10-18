@@ -3,9 +3,9 @@ import type { CellResult, RunRow } from "../contract";
 import { useRpc } from "../api/context";
 import { boundStr, pct, shortHash } from "../lib/format";
 import { cellId, cellLabel } from "../lib/heatmap";
-import { useDesk } from "../state";
-import { Button, Chip, Empty, ErrorState, Loading, Popover, SectionHeader, Toolbar, cx, useListNav } from "../ui/primitives";
-import { TranscriptInspector } from "../ui/TranscriptViewer";
+import { useDesk } from "../legacy/state";
+import { Button, Chip, Empty, ErrorState, Loading, Popover, SectionHeader, Toolbar, cx, useListNav } from "../legacy/ui/primitives";
+import { TranscriptInspector } from "../legacy/ui/TranscriptViewer";
 import { Heatmap, type HeatSelection } from "./Heatmap";
 
 function runsOfCell(runs: RunRow[], cell: CellResult): RunRow[] {

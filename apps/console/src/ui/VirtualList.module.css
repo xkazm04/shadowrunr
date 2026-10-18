@@ -1,0 +1,14 @@
+.viewport {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  contain: strict;
+  outline: none;
+}
+
+.viewport:focus-visible { outline: var(--sr-stroke-heavy) solid var(--sr-page-accent, var(--sr-color-signal)); }
+
+.sizer { position: relative; width: 100%; }
+
+.row { position: absolute; top: 0; left: 0; width: 100%; }

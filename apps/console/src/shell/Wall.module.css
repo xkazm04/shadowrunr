@@ -1,0 +1,1 @@
+.wall { position: absolute; inset: 0; z-index: var(--sr-z-wall); }

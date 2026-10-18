@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   server: { port: 1420, strictPort: true },
-  build: { target: "es2022", sourcemap: false },
+  build: { target: "es2022", sourcemap: false, manifest: true },
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],

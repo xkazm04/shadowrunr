@@ -1,0 +1,85 @@
+.root { display: flex; flex-direction: column; gap: var(--sr-space-cozy); min-height: 0; }
+
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sr-space-near); }
+
+.search {
+  flex: 1;
+  min-width: 14rem;
+  padding: var(--sr-space-tight) var(--sr-space-cozy);
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  border-radius: var(--sr-radius-none);
+  background: var(--sr-color-surface-field);
+  font: inherit;
+  color: var(--sr-color-text-ink);
+}
+
+.search:focus-visible {
+  outline: var(--sr-stroke-heavy) solid var(--sr-page-accent, var(--sr-color-signal));
+  outline-offset: var(--sr-stroke-hair);
+}
+
+.count {
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-body);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--sr-color-text-mute);
+}
+
+.scroll {
+  height: 62vh;
+  overflow: auto;
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  background: var(--sr-color-surface-card);
+  contain: strict;
+}
+
+.table { width: 100%; border-collapse: collapse; font-size: var(--sr-size-small); }
+
+.th {
+  position: sticky;
+  top: 0;
+  z-index: var(--sr-z-sticky-head);
+  padding: var(--sr-space-compact) var(--sr-space-close);
+  border-bottom: var(--sr-stroke-heavy) solid var(--sr-color-text-ink);
+  background: var(--sr-color-surface-paper);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-caption);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--sr-color-text-ink);
+}
+
+.sortBtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.td {
+  padding: .55rem var(--sr-space-close);
+  border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line);
+  vertical-align: top;
+}
+
+.end { text-align: right; font-variant-numeric: tabular-nums; }
+.center { text-align: center; }
+
+.tr:hover { background: var(--sr-color-row-hover); }
+.clickable { cursor: pointer; }
+
+.selected {
+  background: var(--sr-color-row-selected);
+  outline: var(--sr-stroke-rule) solid var(--sr-page-accent, var(--sr-color-signal));
+}
+
+.spacer td { padding: 0; border: 0; }

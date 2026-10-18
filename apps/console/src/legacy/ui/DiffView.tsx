@@ -1,4 +1,4 @@
-import type { NextStreamPlan } from "../contract";
+import type { NextStreamPlan } from "../../contract";
 import { cx } from "./primitives";
 import { Chip } from "./primitives";
 

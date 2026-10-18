@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ACTIVE_SEGMENTS, type Directive, type DirectiveKind, type SegmentId } from "../contract";
 import { useApi, useRpc } from "../api/context";
 import { dateTime } from "../lib/format";
-import { Button, Chip, Empty, ErrorLine, ErrorState, Inspector, KV, Loading, Segmented, Sheet, Toolbar, cx, useListNav } from "../ui/primitives";
+import { Button, Chip, Empty, ErrorLine, ErrorState, Inspector, KV, Loading, Segmented, Sheet, Toolbar, cx, useListNav } from "../legacy/ui/primitives";
 
 type KindFilter = "all" | DirectiveKind;
 type StatusFilter = "active" | "inactive" | "all";

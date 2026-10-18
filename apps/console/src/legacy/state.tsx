@@ -23,12 +23,12 @@ interface DeskState {
 
 const Ctx = createContext<DeskState | null>(null);
 
-export function DeskProvider({ children, initial = "preflight" }: { children: ReactNode; initial?: ViewId }) {
-  const [view, setView] = useState<ViewId>(initial);
+/** Controlled: the shell's router owns the view (`#/legacy/<view>`). */
+export function DeskProvider({ children, view, go }: { children: ReactNode; view: ViewId; go: (v: ViewId) => void }) {
   const [reconcileTournament, setReconcileTournament] = useState<string | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
   return (
-    <Ctx.Provider value={{ view, go: setView, reconcileTournament, setReconcileTournament, reportId, setReportId }}>
+    <Ctx.Provider value={{ view, go, reconcileTournament, setReconcileTournament, reportId, setReportId }}>
       {children}
     </Ctx.Provider>
   );
