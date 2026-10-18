@@ -23,6 +23,7 @@ export declare const validateNextStreamPlan: ValidateFn<T.NextStreamPlan>;
 export declare const validatePlanProposalsResult: ValidateFn<T.PlanProposalsResult>;
 export declare const validatePreflightRunResult: ValidateFn<T.PreflightRunResult>;
 export declare const validateRankTableInfo: ValidateFn<T.RankTableInfo>;
+export declare const validateReconcileListResult: ValidateFn<T.ReconcileListResult>;
 export declare const validateReconcileReport: ValidateFn<T.ReconcileReport>;
 export declare const validateReconcileRunResult: ValidateFn<T.ReconcileRunResult>;
 export declare const validateRunTranscriptResult: ValidateFn<T.RunTranscriptResult>;

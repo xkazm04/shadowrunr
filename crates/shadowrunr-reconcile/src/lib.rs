@@ -377,6 +377,37 @@ impl Reconciler {
         Ok(self.load(report_id)?.report)
     }
 
+    /// `reconcile.list`: every stored report, newest first. Unreadable files are skipped.
+    pub fn list(&self) -> Result<Vec<shadowrunr_types::rpc::ReportSummary>, ReconcileError> {
+        let dir = self.cfg.data_dir.join("reconcile");
+        let mut out = Vec::new();
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(out),
+            Err(e) => return Err(ReconcileError::Io(format!("{}: {e}", dir.display()))),
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(id) = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .filter(|_| path.extension().is_some_and(|x| x == "json"))
+            else {
+                continue;
+            };
+            if let Ok(stored) = self.load(id) {
+                out.push(shadowrunr_types::rpc::ReportSummary {
+                    report_id: stored.report.report_id.clone(),
+                    created_ms: stored.report.created_ms,
+                    source: stored.report.source.clone(),
+                    proposals: u32::try_from(stored.proposals.len()).unwrap_or(u32::MAX),
+                });
+            }
+        }
+        out.sort_by(|a, b| b.created_ms.cmp(&a.created_ms));
+        Ok(out)
+    }
+
     /// `plan.proposals`.
     pub fn proposals(&self, report_id: &str) -> Result<Vec<PlanOption>, ReconcileError> {
         Ok(self.load(report_id)?.proposals)

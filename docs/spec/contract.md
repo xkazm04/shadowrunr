@@ -197,6 +197,8 @@ runs on the same tier as the core thread it judges.**
 | `sim.start` | `{ "spec": SimRunSpec, "judge": bool }` | `{ run_id }`; events stream on `/events` |
 | `reconcile.run` | `{ "source": { "tournament_id" } \| { "run_ids": [] } }` | `{ report_id }` |
 | `reconcile.report` | `{ "report_id" }` | `ReconcileReport` (below) |
+| `reconcile.list` | `{}` | `[{ report_id, created_ms, source, proposals }]`, newest first |
+| `plan.current` | `{}` | the latest chosen `NextStreamPlan`, or `not_found` |
 | `plan.proposals` | `{ "report_id" }` | `PlanOption[]` |
 | `plan.choose` | `{ "report_id", "option_ids": [] }` | `NextStreamPlan` |
 | `directive.add` | `{ "kind": "prevent" \| "try", "text", "scope"?: SegmentId }` | `Directive` |

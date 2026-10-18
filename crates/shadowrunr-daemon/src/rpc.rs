@@ -180,6 +180,11 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
             let p: ReportParams = params(req.params)?;
             ok(state.reconciler.report(&p.report_id)?)
         }
+        "reconcile.list" => ok(state.reconciler.list()?),
+        "plan.current" => match state.reconciler.next_plan()? {
+            Some(plan) => ok(plan),
+            None => Err(RpcError::new(ErrorCode::NotFound, "no plan chosen yet")),
+        },
         "plan.proposals" => {
             let p: ReportParams = params(req.params)?;
             ok(state.reconciler.proposals(&p.report_id)?)

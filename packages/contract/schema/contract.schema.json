@@ -2126,6 +2126,12 @@
       ],
       "type": "object"
     },
+    "ReconcileListResult": {
+      "items": {
+        "$ref": "#/$defs/ReportSummary"
+      },
+      "type": "array"
+    },
     "ReconcileReport": {
       "properties": {
         "created_ms": {
@@ -2216,6 +2222,33 @@
       },
       "required": [
         "report_id"
+      ],
+      "type": "object"
+    },
+    "ReportSummary": {
+      "description": "One stored Reconcile report, newest first, for `reconcile.list`.",
+      "properties": {
+        "created_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "proposals": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "report_id": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        }
+      },
+      "required": [
+        "report_id",
+        "created_ms",
+        "source",
+        "proposals"
       ],
       "type": "object"
     },
@@ -3914,6 +3947,22 @@
       ],
       "type": "object"
     },
+    "plan.current": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/NextStreamPlan"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
     "plan.proposals": {
       "additionalProperties": false,
       "properties": {
@@ -3954,6 +4003,22 @@
         },
         "result": {
           "$ref": "#/$defs/RankTableInfo"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "reconcile.list": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ReconcileListResult"
         }
       },
       "required": [
@@ -4150,9 +4215,11 @@
     "ledger.page",
     "lord.chat",
     "plan.choose",
+    "plan.current",
     "plan.proposals",
     "preflight.run",
     "ranks.table",
+    "reconcile.list",
     "reconcile.report",
     "reconcile.run",
     "run.transcript",

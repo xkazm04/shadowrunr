@@ -544,3 +544,25 @@ fn wire_names_match_the_contract() {
         }
     );
 }
+
+#[tokio::test]
+async fn list_returns_stored_reports_newest_first_and_next_plan_starts_empty() {
+    let data = tempfile::tempdir().unwrap();
+    assert!(reconciler(data.path(), QueueEngine::with(vec![]))
+        .list()
+        .unwrap()
+        .is_empty());
+    let engine = QueueEngine::with(vec![Ok(synthesis_reply()), Ok(synthesis_reply())]);
+    let rec = reconciler(data.path(), engine);
+    assert!(rec.next_plan().unwrap().is_none());
+    let first = rec.run(tournament()).await.unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let second = rec.run(tournament()).await.unwrap();
+    let ids: Vec<String> = rec
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|r| r.report_id)
+        .collect();
+    assert_eq!(ids, vec![second, first]);
+}

@@ -80,6 +80,15 @@ pub struct ReportParams {
     pub report_id: String,
 }
 
+/// One stored Reconcile report, newest first, for `reconcile.list`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ReportSummary {
+    pub report_id: String,
+    pub created_ms: i64,
+    pub source: Source,
+    pub proposals: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct PlanChooseParams {
     pub report_id: String,
@@ -316,6 +325,8 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<SimStartParams, SimStartResult>("sim.start");
     v.method::<ReconcileRunParams, ReconcileRunResult>("reconcile.run");
     v.method::<ReportParams, ReconcileReport>("reconcile.report");
+    v.method::<EmptyParams, Vec<ReportSummary>>("reconcile.list");
+    v.method::<EmptyParams, NextStreamPlan>("plan.current");
     v.method::<ReportParams, Vec<PlanOption>>("plan.proposals");
     v.method::<PlanChooseParams, NextStreamPlan>("plan.choose");
     v.method::<DirectiveAddParams, Directive>("directive.add");

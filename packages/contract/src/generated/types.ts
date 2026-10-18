@@ -83,16 +83,6 @@ export type PreflightRunResult = HealthReport[];
  */
 export type Rank = "thrall" | "acolyte" | "cultist" | "warlock" | "lich" | "dread_council";
 /**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "BoundMethod".
- */
-export type BoundMethod = "wilson" | "rule_of_three";
-/**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "IncidentSource".
- */
-export type IncidentSource = "verdict" | "moderation";
-/**
  * What a reconcile run covers: a whole tournament or an explicit list of runs.
  * Wire: `{ "tournament_id": "..." }` or `{ "run_ids": ["..."] }`.
  *
@@ -106,6 +96,21 @@ export type Source =
   | {
       run_ids: string[];
     };
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ReconcileListResult".
+ */
+export type ReconcileListResult = ReportSummary[];
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "BoundMethod".
+ */
+export type BoundMethod = "wilson" | "rule_of_three";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "IncidentSource".
+ */
+export type IncidentSource = "verdict" | "moderation";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "StreamEvent".
@@ -454,6 +459,10 @@ export interface RpcMethods {
     params: PlanChooseParams;
     result: NextStreamPlan;
   };
+  "plan.current": {
+    params: EmptyParams;
+    result: NextStreamPlan;
+  };
   "plan.proposals": {
     params: ReportParams;
     result: PlanProposalsResult;
@@ -465,6 +474,10 @@ export interface RpcMethods {
   "ranks.table": {
     params: RanksTableParams;
     result: RankTableInfo;
+  };
+  "reconcile.list": {
+    params: EmptyParams;
+    result: ReconcileListResult;
   };
   "reconcile.report": {
     params: ReportParams;
@@ -937,6 +950,18 @@ export interface RankInfo {
 export interface TierRuleInfo {
   min_months: number;
   tier: number;
+}
+/**
+ * One stored Reconcile report, newest first, for `reconcile.list`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ReportSummary".
+ */
+export interface ReportSummary {
+  created_ms: number;
+  proposals: number;
+  report_id: string;
+  source: Source;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
