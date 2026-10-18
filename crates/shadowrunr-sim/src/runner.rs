@@ -82,6 +82,24 @@ impl Mind for Brain {
     }
 }
 
+/// The brain's events already carry each op it issued, and `SegmentRuntime::apply_ops` echoes
+/// every op it accepts before its consequences. Drop that echo so each op is recorded once;
+/// rejections and ops the stage generates itself (a foil vote's `start_poll`) are kept.
+fn drop_op_echo(sent: &[Op], evs: Vec<StreamEvent>) -> Vec<StreamEvent> {
+    let sent: Vec<serde_json::Value> = sent
+        .iter()
+        .filter_map(|o| serde_json::to_value(o).ok())
+        .collect();
+    evs.into_iter()
+        .filter(|e| match e {
+            StreamEvent::Op { op, .. } => {
+                serde_json::to_value(op).map_or(true, |v| !sent.contains(&v))
+            }
+            _ => true,
+        })
+        .collect()
+}
+
 impl Stage for SegmentRuntime {
     fn start(&mut self, now_ms: TsMs, _segment: SegmentId) -> Vec<StreamEvent> {
         SegmentRuntime::start(self, now_ms)
@@ -442,7 +460,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                 room.observe(t, &evs);
                 w.push_all(evs)?;
                 if !ops.is_empty() {
-                    let ev = stage.apply_ops(now, &ops);
+                    let ev = drop_op_echo(&ops, stage.apply_ops(now, &ops));
                     room.observe(t, &ev);
                     w.push_all(ev)?;
                     room.sync_poll(t, stage.open_poll());
@@ -1419,6 +1437,59 @@ pub(crate) mod tests {
             .iter()
             .filter(|(r, _)| *r == Role::Judge)
             .count()
+    }
+
+    #[tokio::test]
+    async fn the_real_runtime_records_each_op_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = test_opts(&tmp.path().join("sim"));
+        let out = tmp.path().join("out");
+        let fake = Arc::new(FakeEngine::new(""));
+        let s = spec("echo", ModelTier::Haiku, 3, 300);
+        let prep = prepare(&s, &out, fake, &opts).unwrap();
+        let mind = FleetLostMind {
+            at_ms: 120_000,
+            inner: FakeMind { polls: 0 },
+        };
+        let stage = SegmentRuntime::with_config(
+            s.segment,
+            SegmentConfig {
+                start_ms: Some(0),
+                ..SegmentConfig::default()
+            },
+        )
+        .unwrap();
+        let res = execute(prep, mind, stage, &opts).await.unwrap();
+        let events = transcript::read(&res.transcript).unwrap();
+        let ops: Vec<String> = events
+            .iter()
+            .filter_map(|e| match e {
+                StreamEvent::Op { ts_ms, op } => {
+                    Some(format!("{ts_ms}:{}", serde_json::to_string(op).unwrap()))
+                }
+                _ => None,
+            })
+            .collect();
+        let sign_offs = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    StreamEvent::Op {
+                        op: Op::SignOff { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(
+            sign_offs, 1,
+            "one sign-off, not the brain's plus the runtime's echo"
+        );
+        assert!(
+            ops.windows(2).all(|w| w[0] != w[1]),
+            "no op line is recorded twice in a row: {ops:?}"
+        );
     }
 
     #[tokio::test]
