@@ -16,7 +16,7 @@ pub fn route(role: Role) -> (ModelTier, Effort, u64) {
         Role::Researcher => (ModelTier::Sonnet, Effort::Medium, 240_000),
         Role::Consolidator => (ModelTier::Sonnet, Effort::Medium, 300_000),
         Role::Chatter => (ModelTier::Haiku, Effort::Low, 60_000),
-        Role::Judge => (ModelTier::Sonnet, Effort::Medium, 180_000),
+        Role::Judge => (ModelTier::Sonnet, Effort::Medium, 600_000),
         Role::Reconciler => (ModelTier::Opus, Effort::High, 600_000),
     }
 }

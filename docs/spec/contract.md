@@ -165,7 +165,7 @@ merged.
 | researcher | sonnet | medium | 240 s |
 | consolidator | sonnet | medium | 300 s |
 | chatter | haiku | low | 60 s |
-| judge | sonnet | medium | 180 s |
+| judge | sonnet | medium | 600 s (whole-transcript judging) |
 | reconciler | opus | high | 600 s |
 
 The core-thread entry is a starting point; the tournament recalibrates it. **The judge never
