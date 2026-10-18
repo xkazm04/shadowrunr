@@ -1,0 +1,31 @@
+# .ai/manifest.yaml - the agent-facing contract for this repo (ai-manifest spec). Written by
+# ai-registry/scripts/register-project.mjs as the minimum the fleet reads; add capability blocks
+# freely - unknown fields are ignored by readers.
+schema: ai-manifest
+schemaVersion: 0.1.0
+generatedAt: "2026-10-18"
+
+repo:
+  name: overlord
+
+# The organization's AI registry - knowledge bundles this repo consumes and the skill
+# marketplace it installs from.
+registry:
+  remote: github:xkazm04/ai-registry
+  local: ../ai-registry
+knowledge:
+  domains: [software-engineering, media-generation]
+
+# Shared skills this project uses, from the registry's skills/ lane. Empty until one is linked.
+skills:
+  - adopt-bp
+  - lens-scan
+  - spark
+  - contest
+
+# Commands that exist in this repo (verified 2026-10-18).
+capabilities:
+  build: "cargo build --workspace && pnpm -r run build"
+  test: "cargo test --workspace && pnpm -r run test"
+  lint: "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && pnpm -r run lint"
+  typecheck: "pnpm -r run typecheck"

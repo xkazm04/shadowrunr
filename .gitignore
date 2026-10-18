@@ -16,3 +16,16 @@ dist/
 /ledger.jsonl
 /.ai/*.local.*
 /node_modules/
+
+# BEGIN ai-registry linked skills (managed by ai-registry/scripts/link-registry.mjs)
+# Links are machine state; the declarations live in .ai/manifest.yaml (`skills:` and `knowledge.domains`).
+/.claude/skills/adopt-bp
+/.claude/skills/lens-scan
+/.claude/skills/spark
+/.claude/skills/contest
+/.claude/rules/ai-registry-access.md
+/.claude/rules/ai-registry-software-engineering.md
+/.claude/rules/ai-registry-media-generation.md
+/.ai/skill-runs.local.jsonl
+# END ai-registry linked skills
+/.ai/registry-releases/
