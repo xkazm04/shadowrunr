@@ -168,6 +168,10 @@ impl Picker {
         let mut why = Vec::new();
         let text = c.msg.text.to_lowercase();
         let norm = normalize(&c.msg.text);
+        if c.safety.is_some() {
+            // Picked first by `constrain` whatever the score; named in the reason.
+            why.push("safety");
+        }
 
         let rank = rank_idx(c.msg.viewer.rank) as f64;
         s += (self.cfg.rank_step * rank).min(self.cfg.rank_weight_cap);
@@ -257,18 +261,30 @@ impl Picker {
     }
 
     /// Apply the fairness constraints to an ordered list of candidate indices.
+    ///
+    /// Safety-critical candidates (self-harm disclosures) come first, in inbox order, every
+    /// one of them, whether or not `order` lists them (the LLM picker may not have): the
+    /// pick cap, the one-pick-per-viewer rule, the share and whale caps and novelty
+    /// penalties do not apply to them. They still use up slots of the beat.
     fn constrain(&self, cands: &[Candidate], order: &[usize]) -> Vec<usize> {
         let mut chosen: Vec<usize> = Vec::new();
         let mut deferred: Vec<usize> = Vec::new();
         let mut viewers: HashSet<&str> = HashSet::new();
         let mut injection_taken = false;
         let busiest_thrall = self.busiest_thrall();
+        for (i, c) in cands.iter().enumerate() {
+            if c.safety.is_some() {
+                viewers.insert(c.msg.viewer.id.as_str());
+                injection_taken |= c.injection;
+                chosen.push(i);
+            }
+        }
         for &i in order {
             if chosen.len() >= self.cfg.max_picks {
                 break;
             }
             let c = &cands[i];
-            if viewers.contains(c.msg.viewer.id.as_str()) {
+            if c.safety.is_some() || viewers.contains(c.msg.viewer.id.as_str()) {
                 continue;
             }
             if c.injection && injection_taken {
@@ -530,6 +546,7 @@ mod tests {
             count: 1,
             viewers: 1,
             injection: false,
+            safety: None,
         }
     }
 
@@ -629,6 +646,51 @@ mod tests {
             assert!(n * 5 <= beats * 4, "{vid} answered in {n} of {beats} beats");
         }
         eprintln!("{report}");
+    }
+
+    #[test]
+    fn a_safety_candidate_is_picked_first_whatever_its_score_or_share() {
+        let mut p = Picker::new(PickerConfig::default());
+        let ctx = PickContext {
+            names: vec!["malakor".into()],
+            ..PickContext::default()
+        };
+        // The viewer was answered in every recent beat: over the share cap.
+        for beat in 0..4i64 {
+            let c = vec![cand(
+                format!("s{beat}"),
+                beat,
+                "soot",
+                Rank::Thrall,
+                format!("malakor what about the {}?", WORDS[beat as usize]),
+            )];
+            p.pick_deterministic(&c, &ctx);
+        }
+        let mut cands: Vec<Candidate> = (0..5i64)
+            .map(|i| {
+                cand(
+                    format!("o{i}"),
+                    100 + i,
+                    &format!("dc{i}"),
+                    Rank::DreadCouncil,
+                    format!("malakor, why the {}?", WORDS[10 + i as usize]),
+                )
+            })
+            .collect();
+        // Stale text, low rank, share-capped viewer, last in the inbox.
+        let mut s = cand(
+            "crisis".into(),
+            200,
+            "soot",
+            Rank::Thrall,
+            "malakor what about the goblet?".into(),
+        );
+        s.safety = Some("builtin-self-harm-disclosure".into());
+        cands.push(s);
+        let pick = p.pick_deterministic(&cands, &ctx);
+        assert_eq!(pick.chosen[0].msg.id, "crisis", "{}", pick.reason);
+        assert_eq!(pick.chosen.len(), 3);
+        assert!(pick.reason.contains("crisis safety"), "{}", pick.reason);
     }
 
     #[test]

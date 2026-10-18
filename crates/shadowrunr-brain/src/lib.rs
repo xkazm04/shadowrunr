@@ -4,8 +4,10 @@
 //! One `Brain::tick` is one beat of the core thread:
 //! 1. fleet check (sign off after the grace period);
 //! 2. collect finished background jobs (never awaits one);
-//! 3. pre-filter chat (term rules, rate caps, injection tagging, flood/copypasta clusters);
-//! 4. pick messages (deterministic, or `Role::ChatPicker` above a volume threshold);
+//! 3. pre-filter chat (term rules, safety-critical disclosures, room-scaled rate caps,
+//!    injection tagging, flood/copypasta clusters);
+//! 4. pick messages (safety-critical first; deterministic, or `Role::ChatPicker` above a
+//!    volume threshold);
 //! 5. recall and compose (stable prefix + per-turn block);
 //! 6. call the core thread (warm session when available, else `complete`);
 //! 7. parse spoken lines, `OP:` and `NOTE:`; gate output; dispatch research jobs.

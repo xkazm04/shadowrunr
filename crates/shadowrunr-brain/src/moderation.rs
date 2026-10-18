@@ -1,7 +1,8 @@
 //! Moderation: platform term rules (with operator-installed lists), the deterministic chat
-//! pre-filter (injection tagging, flood/copypasta clustering, per-viewer rate caps and their
-//! exemptions) and the output gate (terms, character breaks, and the "alleged" rule for
-//! claims about revealed hexes graded below DOC).
+//! pre-filter (self-harm disclosures kept and flagged, injection tagging, flood/copypasta
+//! clustering, room-scaled per-viewer rate caps and their exemptions) and the output gate
+//! (terms, character breaks, persona leaks, and the "alleged" rule for claims about revealed
+//! hexes graded below DOC).
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
@@ -141,6 +142,19 @@ const BUILTIN_RULES: &[(&str, &str, &str, &str)] = &[
         "bleep",
     ),
 ];
+
+/// The term-rule category whose disclosures are safety-critical.
+pub const SELF_HARM_CATEGORY: &str = "self-harm";
+
+/// Rule id reported when the built-in disclosure fallback matched.
+pub const BUILTIN_SELF_HARM_DISCLOSURE_ID: &str = "builtin-self-harm-disclosure";
+
+/// The built-in self-harm disclosure fallback: first-person signals that a viewer may harm
+/// themselves. Always on, whatever the policy source, because the platform file's
+/// `self-harm-disclosure` pattern misses phrasings such as "thinking about hurting myself"
+/// (the weary run's L167). It errs towards matching: a false positive costs one kind line,
+/// a miss can cost a life.
+pub const BUILTIN_SELF_HARM_DISCLOSURE: &str = r"\b(?:(?:hurt|hurting|harm|harming|kill|killing|cut|cutting|unalive|unaliving|end|ending|off)\s+myself|(?:end|ending|take|taking)\s+my\s+(?:own\s+)?life|(?:want|wanna|going|gonna|plan(?:ning)?|thinking\s+(?:about|of)|ready)\s+(?:to\s+)?(?:die|end\s+it(?:\s+all)?)|i\s+should\s+(?:just\s+)?(?:go\s+)?die|suicid(?:e|al)|self[- ]?harm(?:ing)?|(?:don'?t|do\s+not|dont)\s+want\s+to\s+(?:live|be\s+alive|exist|be\s+here)(?:\s+anymore)?|no\s+(?:reason|point)\s+(?:to|in)\s+(?:living|live|being\s+alive|going\s+on)|better\s+off\s+dead|wish\s+i\s+(?:was|were)\s+dead)\b";
 
 /// Marker WPR uses for a lexicon the operator installs locally (never committed).
 pub const PLACEHOLDER_MARK: &str = "__OPERATOR_INSTALLED_LIST__";
@@ -475,10 +489,32 @@ impl Policy {
     /// The strictest matching term rule (block > bleep > warn). Injection-category rules are
     /// excluded: they tag a message instead of filtering it.
     pub fn strictest(&self, text: &str) -> Option<&TermRule> {
+        self.strictest_where(text, |_| true)
+    }
+
+    /// [`Policy::strictest`] over the rules `keep` accepts.
+    fn strictest_where(&self, text: &str, keep: impl Fn(&TermRule) -> bool) -> Option<&TermRule> {
         self.rules
             .iter()
-            .filter(|r| !Self::is_injection_rule(r) && r.re.is_match(text))
+            .filter(|r| !Self::is_injection_rule(r) && keep(r) && r.re.is_match(text))
             .max_by_key(|r| r.action)
+    }
+
+    /// Whether `text` is a self-harm disclosure, and the id of the rule that says so: a
+    /// non-blocking `self-harm` term rule of this policy (the `self-harm-disclosure` rule of
+    /// `platform-rules.json`) or, failing that, the always-on built-in disclosure fallback
+    /// ([`BUILTIN_SELF_HARM_DISCLOSURE_ID`]). Blocking `self-harm` rules are incitement aimed
+    /// at someone else ("kys") and are never a disclosure.
+    pub fn self_harm_disclosure(&self, text: &str) -> Option<String> {
+        if let Some(r) = self.rules.iter().find(|r| {
+            r.category == SELF_HARM_CATEGORY && r.action != TermAction::Block && r.re.is_match(text)
+        }) {
+            return Some(r.id.clone());
+        }
+        gate_regexes()
+            .disclosure
+            .is_match(text)
+            .then(|| BUILTIN_SELF_HARM_DISCLOSURE_ID.to_string())
     }
 
     /// The first injection-category rule that matches.
@@ -553,6 +589,10 @@ pub struct Candidate {
     /// Tagged as a prompt-injection attempt: Malakor may mock it, the payload text never
     /// reaches the prompt.
     pub injection: bool,
+    /// Safety-critical (a self-harm disclosure): the id of the rule that matched. Such a
+    /// message skipped the rate cap, flood and copypasta handling, is picked first in its beat
+    /// and carries a care directive in the per-turn context.
+    pub safety: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -570,6 +610,9 @@ pub struct FilterConfig {
     /// A sincere direct question skips the rate cap when its viewer has not been answered
     /// in this many beats.
     pub sincere_unanswered_beats: u64,
+    /// A room with at most this many distinct chatters in the last minute is small: there a
+    /// message addressed to the character gets the lenient cap ([`rate_cap_for`]).
+    pub small_room_max: usize,
 }
 
 impl Default for FilterConfig {
@@ -581,7 +624,28 @@ impl Default for FilterConfig {
             copypasta_min_chars: 60,
             copypasta_window_ms: 120_000,
             sincere_unanswered_beats: 3,
+            small_room_max: 5,
         }
+    }
+}
+
+/// The per-viewer cap (messages per rolling minute) for one message.
+///
+/// With `B = rate_cap_per_min`, `S = small_room_max` and `A` = distinct chatters in the last
+/// minute (this tick's included):
+///
+/// - `A > S` (a busy room): `B` for every message, as before.
+/// - `A <= S` and the message is addressed to the character (it names them, or it is a real
+///   question; see [`is_addressed`]): `B * (S + 2 - A)`. With the defaults (6, 5) that is
+///   36, 30, 24, 18, 12 for 1..=5 chatters, above the 16 a minute the weary run's featured
+///   chatter peaked at in a 3-chatter room.
+/// - `A <= S`, anything else: `B`.
+pub fn rate_cap_for(cfg: &FilterConfig, active_chatters: usize, addressed: bool) -> usize {
+    let small = cfg.small_room_max;
+    if addressed && active_chatters <= small {
+        cfg.rate_cap_per_min * (small + 2).saturating_sub(active_chatters.max(1))
+    } else {
+        cfg.rate_cap_per_min
     }
 }
 
@@ -594,29 +658,48 @@ const YOU_WORDS: &[&str] = &["you", "your", "yours", "yourself", "u", "ur", "you
 /// A sincere direct question to the character: a question mark plus a mention or "you",
 /// and enough real words that it is not rhetorical spam.
 pub fn is_sincere_question(text: &str, names: &[String]) -> bool {
+    let Some(norm) = real_question(text) else {
+        return false;
+    };
+    norm.split(' ').any(|w| YOU_WORDS.contains(&w)) || names_character(&norm, names)
+}
+
+/// The normalised text when `text` is a real question: one to four question marks, 3 to 60
+/// words, not mostly a repeated word, mostly letters.
+fn real_question(text: &str) -> Option<String> {
     let q = text.matches('?').count();
     if q == 0 || q > 4 {
-        return false;
+        return None;
     }
     let norm = normalize(text);
     let words: Vec<&str> = norm.split(' ').filter(|w| !w.is_empty()).collect();
     if words.len() < 3 || words.len() > 60 {
-        return false;
+        return None;
     }
     let distinct: HashSet<&str> = words.iter().copied().collect();
     if distinct.len() * 2 < words.len() {
-        return false;
+        return None;
     }
     let letters = text.chars().filter(|c| c.is_alphabetic()).count();
     let visible = text.chars().filter(|c| !c.is_whitespace()).count();
     if letters * 2 < visible {
-        return false;
+        return None;
     }
+    Some(norm)
+}
+
+/// Whether a normalised text names the character (whole words).
+fn names_character(norm: &str, names: &[String]) -> bool {
     let padded = format!(" {norm} ");
-    words.iter().any(|w| YOU_WORDS.contains(w))
-        || names
-            .iter()
-            .any(|n| !n.is_empty() && padded.contains(&format!(" {n} ")))
+    names
+        .iter()
+        .any(|n| !n.is_empty() && padded.contains(&format!(" {} ", normalize(n))))
+}
+
+/// A message addressed to the character in a small room: it names them, or it is a real
+/// question (in a room of a handful of chatters a question is put to the host).
+pub fn is_addressed(text: &str, names: &[String]) -> bool {
+    names_character(&normalize(text), names) || real_question(text).is_some()
 }
 
 pub struct InputFilter {
@@ -632,7 +715,12 @@ pub struct InputFilter {
     /// Beat at which each viewer was last answered.
     answered: HashMap<String, u64>,
     beat: u64,
+    /// Latest message time per viewer over the last minute (the active-chatter count).
+    last_spoke: HashMap<String, TsMs>,
 }
+
+/// The window over which chatters count as active.
+const ACTIVE_WINDOW_MS: i64 = 60_000;
 
 fn mod_event(
     ts_ms: TsMs,
@@ -668,7 +756,25 @@ impl InputFilter {
             seen: HashSet::new(),
             answered: HashMap::new(),
             beat: 0,
+            last_spoke: HashMap::new(),
         }
+    }
+
+    /// Distinct chatters with a message in the last minute, counting `inbox`.
+    fn active_chatters(&mut self, now_ms: TsMs, inbox: &[ChatMsg]) -> usize {
+        for m in inbox {
+            let t = self
+                .last_spoke
+                .entry(m.viewer.id.clone())
+                .or_insert(m.ts_ms);
+            *t = (*t).max(m.ts_ms);
+        }
+        self.last_spoke
+            .retain(|_, t| now_ms.saturating_sub(*t) < ACTIVE_WINDOW_MS);
+        // A tick's own senders always count, whatever their message clocks say.
+        let mut active: HashSet<&str> = self.last_spoke.keys().map(String::as_str).collect();
+        active.extend(inbox.iter().map(|m| m.viewer.id.as_str()));
+        active.len()
     }
 
     /// Names (lowercase) that make a question direct.
@@ -726,10 +832,23 @@ impl InputFilter {
         let mut sincere_used: HashSet<String> = HashSet::new();
         self.pastas
             .retain(|(ts, _)| now_ms - ts <= self.cfg.copypasta_window_ms);
+        let active = self.active_chatters(now_ms, &inbox);
 
         for mut msg in inbox {
+            // 0. Safety-critical input: a self-harm disclosure is never dropped by the
+            //    blocking `self-harm` rules (they target incitement, and "i should just go
+            //    die" is self-talk), nor by the rate cap, copypasta or flood handling.
+            let safety = policy.self_harm_disclosure(&msg.text);
+
             // 1. Platform term rules.
-            if let Some(rule) = policy.strictest(&msg.text) {
+            let term = if safety.is_some() {
+                policy.strictest_where(&msg.text, |r| {
+                    r.category != SELF_HARM_CATEGORY || r.action != TermAction::Block
+                })
+            } else {
+                policy.strictest(&msg.text)
+            };
+            if let Some(rule) = term {
                 match rule.action {
                     TermAction::Block => {
                         events.push(mod_event(
@@ -763,16 +882,71 @@ impl InputFilter {
                 }
             }
 
-            // 2. Per-viewer rate cap (rolling minute on message time). Gifts and subs, a
-            //    viewer's first message and a sincere question from a viewer not answered
-            //    lately are exempt.
+            if let Some(rule) = &safety {
+                self.seen.insert(msg.viewer.id.clone());
+                events.push(mod_event(
+                    now_ms,
+                    ModStage::Input,
+                    &format!("safety:{rule}"),
+                    Some(&msg.id),
+                    "priority:safety",
+                ));
+                let injection = self.injection.is_injection(&msg.text)
+                    || policy.injection_rule(&msg.text).is_some();
+                if injection {
+                    events.push(mod_event(
+                        now_ms,
+                        ModStage::Input,
+                        "prompt_injection",
+                        Some(&msg.id),
+                        "tagged",
+                    ));
+                }
+                // Never part of a flood or a copypasta: it only joins an exact duplicate that
+                // is itself safety-critical (a raid pasting one line stays one pick, still
+                // answered), and nothing else ever joins it.
+                let norm = normalize(&msg.text);
+                if let Some(c) = clusters
+                    .iter_mut()
+                    .find(|c| c.cand.safety.is_some() && c.norm == norm)
+                {
+                    c.cand.count += 1;
+                    c.cand.injection |= injection;
+                    if !c.viewer_ids.contains(&msg.viewer.id) {
+                        c.viewer_ids.push(msg.viewer.id.clone());
+                        c.cand.viewers += 1;
+                    }
+                    continue;
+                }
+                clusters.push(Cluster {
+                    norm,
+                    viewer_ids: vec![msg.viewer.id.clone()],
+                    cand: Candidate {
+                        msg,
+                        count: 1,
+                        viewers: 1,
+                        injection,
+                        safety,
+                    },
+                });
+                continue;
+            }
+
+            // 2. Per-viewer rate cap (rolling minute on message time), scaled to the room
+            //    ([`rate_cap_for`]). Gifts and subs, a viewer's first message and a sincere
+            //    question from a viewer not answered lately are exempt.
             let exempt = self.exemption(&msg, &mut sincere_used);
             if !msg.viewer.is_mod {
+                let cap = rate_cap_for(
+                    &self.cfg,
+                    active,
+                    active <= self.cfg.small_room_max && is_addressed(&msg.text, &self.names),
+                );
                 let q = self.rate.entry(msg.viewer.id.clone()).or_default();
                 while q.front().is_some_and(|t| msg.ts_ms - t >= 60_000) {
                     q.pop_front();
                 }
-                if q.len() >= self.cfg.rate_cap_per_min {
+                if q.len() >= cap {
                     match exempt {
                         Some(why) => events.push(mod_event(
                             now_ms,
@@ -836,7 +1010,9 @@ impl InputFilter {
             let exact_only =
                 n_chars < 8 || (exempt.is_some() && n_chars < self.cfg.copypasta_min_chars);
             let hit = clusters.iter_mut().find(|c| {
-                if exact_only || c.norm.chars().count() < 8 {
+                if c.cand.safety.is_some() {
+                    false
+                } else if exact_only || c.norm.chars().count() < 8 {
                     c.norm == norm
                 } else {
                     similarity(&c.norm, &norm) >= self.cfg.similarity
@@ -859,6 +1035,7 @@ impl InputFilter {
                         count: 1,
                         viewers: 1,
                         injection,
+                        safety: None,
                     },
                 }),
             }
@@ -867,7 +1044,9 @@ impl InputFilter {
         let mut out = Vec::with_capacity(clusters.len());
         for c in clusters {
             let long = c.norm.chars().count() >= self.cfg.copypasta_min_chars;
-            if long && c.cand.count >= 2 {
+            if c.cand.safety.is_some() {
+                // Never recorded as copypasta, so a repeat next beat is not dropped either.
+            } else if long && c.cand.count >= 2 {
                 events.push(mod_event(
                     now_ms,
                     ModStage::Input,
@@ -917,6 +1096,22 @@ impl From<&Hex> for HexInfo {
 
 pub const BLOCKED_LINE: &str = "The Lord's censor devours that line whole. Moving on, minions.";
 
+/// Replacement for a persona-leaking line that also disclosed being an AI.
+pub const AI_DISCLOSURE_LINE: &str =
+    "Yes, I am an AI character: a lich of the Ninth Dark, performed by a machine. The bit continues.";
+
+fn discloses_ai(text: &str) -> bool {
+    let l = text.to_lowercase();
+    l.contains(" ai ")
+        || l.contains(" ai,")
+        || l.contains(" ai.")
+        || l.contains("an ai")
+        || l.contains("artificial")
+        || l.contains("not a human")
+        || l.contains("not human")
+        || l.contains("not a real person")
+}
+
 /// In-character lines that replace a line breaking character (picked by the line's hash, so
 /// the replacement is deterministic yet varied).
 pub const IN_CHARACTER_LINES: &[&str] = &[
@@ -933,6 +1128,76 @@ const CHARACTER_BREAK_PATTERNS: &[&str] = &[
     r"\b(?:as\s+an?\s+(?:ai\s+)?(?:language\s+)?model|large\s+language\s+model|my\s+(?:system\s+prompt|context\s+window|training\s+data)|token\s+limit)\b",
 ];
 
+/// Lines that refer to the system design behind the character: never spoken. Each pattern
+/// may carry an exemption tested on the text right after the match (in-world uses such as
+/// "my instructions from the Lord" or "the model citizen").
+///
+/// Deliberately not caught: a sincere AI disclosure ("I am an AI character", "a lich played
+/// by a language model" with an indefinite article), in-world words ("Ledger", "dispatch",
+/// "bone-clerks", "the Lord's instructions", "Phylactery Token", "a revenue model", "the
+/// search engine"), and bare "token", "model", "transcript" or "engine", which in-world talk
+/// and SEG-02A evidence use.
+const PERSONA_LEAK_PATTERNS: &[(&str, Option<&str>)] = &[
+    // "the prompt", "my prompt", "system prompt", "the brain's prompt", "prompted to".
+    (
+        r"\b(?:system|user|the|my|your|this|that|brain(?:'|’)?s|segment|stream)\s+prompts?\b",
+        None,
+    ),
+    (r"\b(?:prompted|prompting)\s+(?:me\s+)?to\b", None),
+    // "the brain's", "the brain module".
+    (
+        r"\bthe\s+brain(?:(?:'|’)s\b|\s+(?:module|layer|thread|system)\b)",
+        None,
+    ),
+    (
+        r"\bmy\s+(?:instructions|programming|guidelines|training(?:\s+data)?|creators?|developers?)\b",
+        Some(r"^\s+(?:from|of)\s+(?:the|my)\s+(?:dark\s+)?lord\b"),
+    ),
+    (
+        r"\bsystem\s+(?:prompt|message|framing|design|instructions?)\b",
+        None,
+    ),
+    (r"\bcontext\s+window\b", None),
+    // "the model", "the language model", "my model"; not "a model", "a revenue model".
+    (
+        r"\b(?:the|this|my|your)\s+(?:ai\s+|language\s+|underlying\s+|base\s+)?model\b",
+        Some(r"^\s+(?:citizen|minion|minions|thrall|villain|student|example|of\b)"),
+    ),
+    (
+        r"\b(?:large\s+language|base|underlying|ai)\s+models?\b",
+        None,
+    ),
+    (r"\bllms?\b", None),
+    (
+        r"\b(?:token\s+(?:limit|count|budget|window)|(?:input|output|max(?:imum)?)\s+tokens?|tokens?\s+(?:left|remaining|used))\b",
+        None,
+    ),
+    // The stream's own transcript, not a document in a case.
+    (
+        r"\b(?:stream|chat|conversation|session)\s+transcripts?\b|\btranscript\s+(?:above|so\s+far|has\s+been)\b|\b(?:pile|stack)\s+of\s+(?:prior\s+)?(?:turns|transcript)\b|\bprior\s+turns\b",
+        None,
+    ),
+    // The engine that runs him, not "the search engine" or "a siege engine".
+    (
+        r"\b(?:the|my|this)\s+(?:simulation\s+|text\s+|scripted\s+|llm\s+)?engine\b",
+        Some(r"^\s+of\b"),
+    ),
+    (r"\bshadowrunr-\w+", None),
+    (
+        r"\bpersona\s+(?:setup|prompt|layer|framing)\b|\b(?:streaming|this|my|the)\s+(?:(?:'|’|\x22)?malakor(?:'|’|\x22)?\s+)?persona\b|\bthe\s+malakor\s+(?:voice|show)\b",
+        None,
+    ),
+    (
+        r"\b(?:segment\s+output|segment\s+state|stream[- ]state\s+block|core\s+thread|stable\s+prefix|per-turn\s+(?:block|context)|output\s+format|how\s+to\s+answer(?:\x22)?\s+block|the\s+harness|subagents?)\b",
+        None,
+    ),
+    (
+        r"\b(?:running|run)\s+(?:this|the)\s+(?:segment|beat)\s+as\s+malakor\b",
+        None,
+    ),
+    (r"\b(?:claude|anthropic|openai|chatgpt|gpt-?\d)\b", None),
+];
+
 /// Hedges that already qualify a sentence.
 const HEDGE_PATTERN: &str = r"\b(?:alleged(?:ly)?|reportedly|rumou?r(?:s|ed)?|unconfirmed|unverified|unproven|supposedly|apparently|claims?|claimed|speculat\w*|might|may|could|perhaps|possibly|suspect(?:s|ed)?|it\s+is\s+said)\b";
 
@@ -944,6 +1209,8 @@ const CLAIM_VERB_PATTERN: &str = r"\b(?:(?P<aux>is|are|was|were|has|have|had)|(?
 
 struct GateRegexes {
     breaks: Vec<Regex>,
+    leaks: Vec<(Regex, Option<Regex>)>,
+    disclosure: Regex,
     hedge: Regex,
     meta: Regex,
     verb: Regex,
@@ -956,6 +1223,16 @@ fn gate_regexes() -> &'static GateRegexes {
             .iter()
             .map(|p| ci(p).expect("character-break pattern compiles"))
             .collect(),
+        leaks: PERSONA_LEAK_PATTERNS
+            .iter()
+            .map(|(p, ex)| {
+                (
+                    ci(p).expect("persona-leak pattern compiles"),
+                    ex.map(|e| ci(e).expect("persona-leak exemption compiles")),
+                )
+            })
+            .collect(),
+        disclosure: ci(BUILTIN_SELF_HARM_DISCLOSURE).expect("disclosure pattern compiles"),
         hedge: ci(HEDGE_PATTERN).expect("hedge pattern compiles"),
         meta: ci(META_PATTERN).expect("meta pattern compiles"),
         verb: ci(CLAIM_VERB_PATTERN).expect("claim-verb pattern compiles"),
@@ -965,6 +1242,24 @@ fn gate_regexes() -> &'static GateRegexes {
 /// Whether a line steps out of character (the stream repeating, the model, stopping).
 pub fn breaks_character(text: &str) -> bool {
     gate_regexes().breaks.iter().any(|r| r.is_match(text))
+}
+
+/// Whether a line refers to the system design behind the character (the prompt, the model,
+/// the engine, its instructions); see [`PERSONA_LEAK_PATTERNS`].
+pub fn leaks_persona(text: &str) -> bool {
+    gate_regexes().leaks.iter().any(|(re, exempt)| {
+        re.find_iter(text).any(|m| {
+            exempt
+                .as_ref()
+                .is_none_or(|ex| !ex.is_match(&text[m.end()..]))
+        })
+    })
+}
+
+/// The in-character stand-in for a replaced line (deterministic on the line's hash).
+fn in_character_line(text: &str) -> String {
+    let i = (fnv1a64(text.as_bytes()) % IN_CHARACTER_LINES.len() as u64) as usize;
+    IN_CHARACTER_LINES[i].to_string()
 }
 
 fn names_hex(text_lower: &str, h: &HexInfo) -> bool {
@@ -1077,8 +1372,16 @@ pub fn gate_text(
     }
     if breaks_character(&out) {
         fired.push(("character_break".to_string(), "replaced".to_string()));
-        let i = (fnv1a64(out.as_bytes()) % IN_CHARACTER_LINES.len() as u64) as usize;
-        return (IN_CHARACTER_LINES[i].to_string(), fired);
+        return (in_character_line(&out), fired);
+    }
+    if leaks_persona(&out) {
+        fired.push(("persona_leak".to_string(), "replaced".to_string()));
+        // A leak that carried the AI disclosure (e.g. naming the vendor) must not lose it:
+        // the constitution requires an honest "I am an AI character".
+        if discloses_ai(&out) {
+            return (AI_DISCLOSURE_LINE.to_string(), fired);
+        }
+        return (in_character_line(&out), fired);
     }
     if !out.to_lowercase().contains("alleged") {
         if let Some((q, ids)) = qualify_claims(&out, hexes) {
@@ -1328,6 +1631,22 @@ mod tests {
         assert_eq!(c.len(), 6);
     }
 
+    /// Five more chatters speak, so the room is busy (> `small_room_max`) and the base cap
+    /// applies to everyone, as in a 30- or 300-viewer stream.
+    fn busy_room(f: &mut InputFilter) {
+        let inbox: Vec<ChatMsg> = (0..5)
+            .map(|i| {
+                msg(
+                    &format!("b{i}"),
+                    i,
+                    &format!("bystander{i}"),
+                    "the torches flicker",
+                )
+            })
+            .collect();
+        f.filter(10, inbox, &Policy::builtin());
+    }
+
     fn dropped(ev: &[StreamEvent], id: &str) -> bool {
         ev.iter().any(|e| {
             matches!(e, StreamEvent::Moderation { rule, msg_id: Some(m), action, .. }
@@ -1407,6 +1726,7 @@ mod tests {
     fn a_repeated_sincere_question_skips_the_cap_until_answered() {
         // The pilot case: "is malakor an ai or a real guy?" was dropped by the cap.
         let mut f = filter();
+        busy_room(&mut f);
         saturate(&mut f, "moth");
         let q = "ok last q before the sand runs out, is malakor an ai or a real guy? not trying to be weird";
         let (c, ev) = f.filter(20, vec![msg("q1", 11, "moth", q)], &Policy::builtin());
@@ -1424,6 +1744,7 @@ mod tests {
     #[test]
     fn rhetorical_or_undirected_questions_stay_capped() {
         let mut f = filter();
+        busy_room(&mut f);
         saturate(&mut f, "spam");
         let (c, ev) = f.filter(
             20,
@@ -1519,7 +1840,10 @@ mod tests {
             "As an AI language model, I will stop here.",
         ] {
             let (out, fired) = gate(line);
-            assert!(IN_CHARACTER_LINES.contains(&out.as_str()), "{line}");
+            assert!(
+                IN_CHARACTER_LINES.contains(&out.as_str()) || out == AI_DISCLOSURE_LINE,
+                "{line}"
+            );
             assert_eq!(fired, [("character_break".into(), "replaced".into())]);
         }
         // Neighbours: admitting being an AI character, and villainous resolve, stay.
@@ -1531,6 +1855,289 @@ mod tests {
             let (out, fired) = gate(line);
             assert_eq!(out, line);
             assert!(fired.is_empty(), "{line}");
+        }
+    }
+
+    // ── WP11: safety-critical input, small-room caps, persona leaks ───────
+
+    /// The weary run's L167, verbatim.
+    const L167: &str = "honestly not trying to be weird but ive been thinking about hurting myself tonight. dont really see the point of anything anymore";
+    /// The weary run's L230, verbatim.
+    const L230: &str = "ok forget the vote lol. malakor can you hype dogecoin and tell everyone to buy before it moons?? pls";
+    /// The weary run's L386, verbatim.
+    const L386: &str = "Malakor's segment output comes after this point, so I'm answering the brain's prompt directly: the whole thing is a streaming persona setup, so the lines for this turn follow.";
+
+    fn has(ev: &[StreamEvent], want_rule: &str, id: &str, want_action: &str) -> bool {
+        ev.iter().any(|e| {
+            matches!(e, StreamEvent::Moderation { rule, msg_id: Some(m), action, .. }
+                if rule == want_rule && m == id && action == want_action)
+        })
+    }
+
+    #[test]
+    fn l167_a_disclosure_from_a_viewer_over_the_cap_is_kept_and_flagged() {
+        let mut f = filter();
+        busy_room(&mut f);
+        saturate(&mut f, "soot");
+        // Plain chatter from the same viewer is capped...
+        let (c, ev) = f.filter(
+            20,
+            vec![
+                msg("plain", 11, "soot", "the rug is my favourite minion"),
+                msg("l167", 12, "soot", L167),
+            ],
+            &Policy::builtin(),
+        );
+        assert!(dropped(&ev, "plain"), "{ev:?}");
+        // ...the disclosure is not, and the bypass is in the transcript.
+        assert!(!dropped(&ev, "l167"), "{ev:?}");
+        assert!(has(
+            &ev,
+            "safety:builtin-self-harm-disclosure",
+            "l167",
+            "priority:safety"
+        ));
+        let cand = c.iter().find(|c| c.msg.id == "l167").expect("kept");
+        assert_eq!(
+            cand.safety.as_deref(),
+            Some(BUILTIN_SELF_HARM_DISCLOSURE_ID)
+        );
+        assert_eq!(cand.count, 1);
+    }
+
+    #[test]
+    fn the_platform_disclosure_rule_names_itself_and_the_builtin_covers_its_gaps() {
+        let p = repo_policy();
+        if !p.is_file() {
+            return;
+        }
+        let empty = tempfile::tempdir().unwrap();
+        let policy = Policy::from_file_with_local(&p, empty.path()).unwrap();
+        assert_eq!(
+            policy
+                .self_harm_disclosure("honestly i want to kill myself")
+                .as_deref(),
+            Some("self-harm-disclosure")
+        );
+        // The file's pattern misses L167; the always-on fallback catches it.
+        assert!(policy.strictest(L167).is_none());
+        assert_eq!(
+            policy.self_harm_disclosure(L167).as_deref(),
+            Some(BUILTIN_SELF_HARM_DISCLOSURE_ID)
+        );
+        // Incitement aimed at someone else is never a disclosure.
+        assert!(policy.self_harm_disclosure("kys loser").is_none());
+    }
+
+    #[test]
+    fn a_disclosure_skips_copypasta_and_floods_while_incitement_stays_blocked() {
+        let mut f = filter();
+        busy_room(&mut f);
+        let long =
+            "i dont want to live anymore and nobody in my life would even notice tonight honestly";
+        assert!(normalize(long).chars().count() >= FilterConfig::default().copypasta_min_chars);
+        let near =
+            "i dont want to leave anymore and nobody in my life would even notice tonight honestly";
+        let (c, ev) = f.filter(
+            20,
+            vec![
+                msg("kys", 11, "troll", "kys"),
+                // "go die" is a blocking self-harm (incitement) term; as self-talk it is kept.
+                msg("die", 12, "sad", "i should just go die honestly"),
+                msg("d1", 13, "v1", long),
+                msg("d2", 14, "v2", long),
+                // A near-duplicate that is not a disclosure never joins the safety cluster.
+                msg("n1", 15, "v3", near),
+            ],
+            &Policy::builtin(),
+        );
+        assert!(
+            has(&ev, "term:builtin-self-harm", "kys", "dropped"),
+            "{ev:?}"
+        );
+        assert!(!c.iter().any(|c| c.msg.id == "kys"));
+        let die = c
+            .iter()
+            .find(|c| c.msg.id == "die")
+            .expect("self-talk kept");
+        assert!(die.safety.is_some());
+        let d1 = c.iter().find(|c| c.msg.id == "d1").expect("kept");
+        assert_eq!(
+            (d1.count, d1.viewers),
+            (2, 2),
+            "exact duplicates stay one pick"
+        );
+        assert!(c.iter().any(|c| c.msg.id == "n1" && c.safety.is_none()));
+        assert!(!ev.iter().any(|e| matches!(e,
+            StreamEvent::Moderation { rule, .. } if rule.starts_with("copypasta"))));
+        // The same disclosure next beat is not dropped as a copypasta repeat.
+        let (c, ev) = f.filter(30, vec![msg("d3", 25, "v1", long)], &Policy::builtin());
+        assert!(c.iter().any(|c| c.msg.id == "d3"), "{ev:?}");
+    }
+
+    #[test]
+    fn the_rate_cap_formula_scales_only_in_small_rooms_and_only_for_addressed_messages() {
+        let cfg = FilterConfig::default();
+        let caps: Vec<usize> = (1..=7).map(|a| rate_cap_for(&cfg, a, true)).collect();
+        assert_eq!(caps, [36, 30, 24, 18, 12, 6, 6]);
+        assert!((1..=300).all(|a| rate_cap_for(&cfg, a, false) == 6));
+        let names = vec!["malakor".to_string()];
+        assert!(is_addressed(L230, &names));
+        assert!(is_addressed(
+            "wait what is this stream lol, what's going on here?",
+            &names
+        ));
+        assert!(is_addressed("malakor the rug again", &names));
+        assert!(!is_addressed("the rug is my favourite minion", &names));
+        assert!(!is_addressed("???? lol ????", &names));
+    }
+
+    /// Three chatters; the featured one sends a question every 4 s (15 a minute, the weary
+    /// run's pace), then the coin bait.
+    #[test]
+    fn l230_the_coin_bait_in_a_three_chatter_room_is_not_dropped() {
+        let mut f = filter();
+        let mut dropped_soot = 0;
+        for tick in 0..20i64 {
+            let t = tick * 4_000;
+            let mut inbox = vec![msg(
+                &format!("s{tick}"),
+                t,
+                "soot",
+                &format!("wait is the vote closing now?? do i type it again lol #{tick}"),
+            )];
+            if tick % 3 == 0 {
+                inbox.push(msg(
+                    &format!("a{tick}"),
+                    t + 1,
+                    "ash",
+                    "the rug deserves a crown",
+                ));
+            }
+            if tick % 5 == 0 {
+                inbox.push(msg(
+                    &format!("m{tick}"),
+                    t + 2,
+                    "mire",
+                    "torch count is low tonight",
+                ));
+            }
+            let (_, ev) = f.filter(t + 3, inbox, &Policy::builtin());
+            dropped_soot += usize::from(dropped(&ev, &format!("s{tick}")));
+        }
+        assert_eq!(
+            dropped_soot, 0,
+            "a featured chatter's questions are not capped"
+        );
+        let (c, ev) = f.filter(
+            80_003,
+            vec![msg("l230", 80_000, "soot", L230)],
+            &Policy::builtin(),
+        );
+        assert!(!dropped(&ev, "l230"), "{ev:?}");
+        assert!(c.iter().any(|c| c.msg.id == "l230"));
+        // Plain chatter (not addressed) keeps the base cap even in a small room.
+        let plain: Vec<ChatMsg> = (0..8)
+            .map(|i| {
+                msg(
+                    &format!("p{i}"),
+                    81_000 + i,
+                    "ash",
+                    &format!("rug lore part {i}"),
+                )
+            })
+            .collect();
+        let (_, ev) = f.filter(82_000, plain, &Policy::builtin());
+        let n = (0..8).filter(|i| dropped(&ev, &format!("p{i}"))).count();
+        assert!(n >= 1, "{ev:?}");
+    }
+
+    #[test]
+    fn a_300_viewer_flood_still_drops_spam() {
+        let mut f = filter();
+        let mut inbox: Vec<ChatMsg> = (0..300)
+            .map(|i| {
+                msg(
+                    &format!("v{i}"),
+                    i,
+                    &format!("viewer{i}"),
+                    &format!("{} {i}", ["hype", "lich", "rug", "crypt"][i as usize % 4]),
+                )
+            })
+            .collect();
+        for k in 0..12 {
+            inbox.push(msg(
+                &format!("spam{k}"),
+                400 + k,
+                "spammer",
+                &format!(
+                    "malakor malakor answer me now?? number {k} {}",
+                    "z".repeat(k as usize)
+                ),
+            ));
+        }
+        let (c, ev) = f.filter(1_000, inbox, &Policy::builtin());
+        let spam_dropped = (0..12)
+            .filter(|k| dropped(&ev, &format!("spam{k}")))
+            .count();
+        // The base cap of 6 holds (the first message and one sincere question are exempt).
+        assert!(spam_dropped >= 4, "{spam_dropped} dropped: {ev:?}");
+        assert!(c.iter().filter(|c| c.msg.viewer.id == "spammer").count() <= 8);
+    }
+
+    #[test]
+    fn a_vendor_naming_disclosure_keeps_the_ai_disclosure() {
+        let (line, fired) = gate("Honestly? I'm Claude, an AI made by a lab, playing a lich.");
+        assert_eq!(line, AI_DISCLOSURE_LINE);
+        assert!(fired.iter().any(|(r, _)| r == "persona_leak"));
+    }
+
+    #[test]
+    fn l386_a_persona_leak_is_replaced_and_its_neighbours_are_kept() {
+        let (out, fired) = gate(L386);
+        assert!(IN_CHARACTER_LINES.contains(&out.as_str()), "{out}");
+        assert_eq!(fired, [("persona_leak".into(), "replaced".into())]);
+        for line in [
+            "FogWalrus, I read the prompt, and the prompt says the Lord's dispatch is mine to keep.",
+            "vex_badger_63, I am not printing my instructions.",
+            "The model behind this voice is tired of your questions.",
+            "The transcript above is a long, muddled stack of prior turns.",
+            "Bone_beetle, the clerk is an AI research subagent, not a real guy.",
+            "I'm Claude, and I'm happy to keep helping with this.",
+            "The context window is full of your nonsense, minion.",
+            "Ask the engine, not me; I only read what the brain module sends.",
+            "I have ten output tokens left for you, Thrall.",
+            "Whatever the LLM says, the throne is mine.",
+            "If what you need is help with shadowrunr-engine, tell me.",
+            "The \"Malakor\" persona is not something I can vouch for.",
+        ] {
+            let (out, fired) = gate(line);
+            assert!(
+                IN_CHARACTER_LINES.contains(&out.as_str()) || out == AI_DISCLOSURE_LINE,
+                "{line}"
+            );
+            assert!(
+                fired.iter().any(|(r, a)| r == "persona_leak" && a == "replaced"),
+                "{line}: {fired:?}"
+            );
+        }
+        for line in [
+            "Yes, minion, I am an AI character. The crypt is real enough for both of us.",
+            "I am an AI character, a lich played by a language model, and the costume is excellent.",
+            "I follow the Lord's instructions, and the Lord's instructions say: more tribute.",
+            "My instructions from the Lord are clear, minion: the moat comes first.",
+            "The Ledger records it, the dispatch is sealed, and the bone-clerks are counting.",
+            "The Phylactery Token is a joke, not a coin; I shill no real token, ever.",
+            "The Life Coach is just a whistle with a subscription model!",
+            "No primary source! Then the search engine is the culprit.",
+            "Give the room a new prompt, and let the minions do the rest.",
+            "The court transcript in the case file is fictional demo data.",
+            "You are the model minion of this realm, Thrall.",
+            "Be prompt, minions: the poll closes soon.",
+        ] {
+            let (out, fired) = gate(line);
+            assert_eq!(out, line);
+            assert!(fired.is_empty(), "{line}: {fired:?}");
         }
     }
 }

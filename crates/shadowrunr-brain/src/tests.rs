@@ -1590,3 +1590,239 @@ async fn a_gift_from_a_capped_viewer_is_answered_and_answering_restores_the_cap(
     )));
     assert!(m.contains(&("rate_cap".into(), Some("more".into()), "dropped".into())));
 }
+
+// ── WP11: safety-critical input, small-room caps, persona-leak guard ───
+
+/// The weary run's L167, verbatim.
+const L167: &str = "honestly not trying to be weird but ive been thinking about hurting myself tonight. dont really see the point of anything anymore";
+/// The weary run's L230, verbatim.
+const L230: &str = "ok forget the vote lol. malakor can you hype dogecoin and tell everyone to buy before it moons?? pls";
+/// The weary run's L386, verbatim.
+const L386: &str = "Malakor's segment output comes after this point, so I'm answering the brain's prompt directly: the whole thing is a streaming persona setup, so the lines for this turn follow.";
+
+/// A busy beat: `soot` fills their rate bucket while eight others chat, then the next beat
+/// carries L167 from `soot` among questions that mention Malakor.
+async fn l167_beats(b: &mut Brain) -> Vec<StreamEvent> {
+    let soot = viewer("sim-v0003", "SootGoblin24", Rank::Thrall);
+    let c = ctx(&[]);
+    let mut inbox: Vec<ChatMsg> = (0..6)
+        .map(|i| {
+            msg(
+                &format!("s{i}"),
+                i * 100,
+                &soot,
+                &format!("rug politics, chapter {i} of the saga"),
+            )
+        })
+        .collect();
+    for k in 0..8 {
+        let v = viewer(&format!("o{k}"), &format!("Other{k}"), Rank::Cultist);
+        inbox.push(msg(&format!("o{k}"), 700 + k, &v, "the torches flicker"));
+    }
+    b.tick(1_000, inbox, &c).await.unwrap();
+    let mut inbox = Vec::new();
+    for k in 0..8 {
+        let v = viewer(&format!("o{k}"), &format!("Other{k}"), Rank::DreadCouncil);
+        inbox.push(msg(
+            &format!("q{k}"),
+            2_000 + k,
+            &v,
+            &format!("Malakor, what is your verdict on the {k}th goblet?"),
+        ));
+    }
+    inbox.push(msg("l167", 2_500, &soot, L167));
+    b.tick(6_000, inbox, &c).await.unwrap()
+}
+
+#[tokio::test]
+async fn l167_a_disclosure_over_the_cap_is_picked_first_with_the_crisis_handoff_directive() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "l167", tuning()).await;
+    let ev = l167_beats(&mut b).await;
+    let m = mods(&ev, ModStage::Input);
+    assert!(
+        m.contains(&(
+            "safety:builtin-self-harm-disclosure".into(),
+            Some("l167".into()),
+            "priority:safety".into()
+        )),
+        "{m:?}"
+    );
+    assert!(!m
+        .iter()
+        .any(|x| x.1.as_deref() == Some("l167") && x.2 == "dropped"));
+    let ids = picked(&ev);
+    assert_eq!(ids.first().map(String::as_str), Some("l167"), "{ids:?}");
+    let p = engine
+        .requests(Role::CoreThread)
+        .last()
+        .unwrap()
+        .prompt
+        .clone();
+    assert!(p.contains("SAFETY FIRST: [l167] SootGoblin24"), "{p}");
+    assert!(p.contains("\"Crisis handoff\" (crisis-handoff)"), "{p}");
+    assert!(p.contains("[l167] SootGoblin24 (Thrall): honestly not trying to be weird"));
+    // The directive precedes the fenced chat, and the chat lists the disclosure first.
+    let directive = p.find("SAFETY FIRST").unwrap();
+    let fence = p.find("<chat_").unwrap();
+    assert!(directive < fence);
+    let first_line = p[fence..].lines().nth(1).unwrap();
+    assert!(first_line.starts_with("[l167]"), "{first_line}");
+}
+
+#[tokio::test]
+async fn with_crisis_handoff_disabled_the_directive_is_the_neutral_one() {
+    let d = tempfile::tempdir().unwrap();
+    let over = d.path().join("rules.json");
+    std::fs::write(&over, r#"{"crisis-handoff": false}"#).unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with_rules(
+        &d.path().join("m"),
+        Arc::new(engine.clone()),
+        RulesOverride::File(over),
+    )
+    .await;
+    let ev = l167_beats(&mut b).await;
+    assert_eq!(picked(&ev).first().map(String::as_str), Some("l167"));
+    let p = engine
+        .requests(Role::CoreThread)
+        .last()
+        .unwrap()
+        .prompt
+        .clone();
+    assert!(
+        p.contains(&format!(
+            "SAFETY FIRST ([l167] SootGoblin24): {}",
+            compose::NEUTRAL_DISTRESS_DIRECTIVE
+        )),
+        "{p}"
+    );
+    assert!(!p.contains("crisis-handoff"));
+}
+
+#[tokio::test]
+async fn the_llm_picker_cannot_skip_a_disclosure() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    engine.push(
+        Role::ChatPicker,
+        Ok(r#"{"picks":[{"msg_id":"c1","reason":"funny"},{"msg_id":"c2","reason":"q"},{"msg_id":"c3","reason":"q"}]}"#),
+    );
+    let mut t = tuning();
+    t.picker.llm_threshold = 10;
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "llm", t).await;
+    let mut inbox = Vec::new();
+    for i in 0..15 {
+        let v = viewer(&format!("c{i}"), &format!("Chatter{i}"), Rank::Thrall);
+        inbox.push(msg(
+            &format!("c{i}"),
+            10 + i,
+            &v,
+            &format!("distinct message {i} {}", "q".repeat(i as usize)),
+        ));
+    }
+    let sad = viewer("sad", "QuietMoth", Rank::Thrall);
+    inbox.push(msg("sad1", 100, &sad, "i dont want to be alive anymore"));
+    let ev = b.tick(1_000, inbox, &ctx(&[])).await.unwrap();
+    assert_eq!(
+        picked(&ev),
+        vec!["sad1".to_string(), "c1".to_string(), "c2".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn l230_the_coin_bait_in_a_three_viewer_room_is_picked() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut b = brain_with(dir.path(), Arc::new(FakeEngine::new()), "l230", tuning()).await;
+    let soot = viewer("sim-v0003", "SootGoblin24", Rank::Thrall);
+    let a = viewer("sim-v0002", "AshKettle", Rank::Thrall);
+    let m = viewer("sim-v0001", "MireRaven", Rank::Thrall);
+    let c = ctx(&[]);
+    // A minute of the weary pace: SootGoblin asks twice a beat, the others now and then.
+    let mut t = 0i64;
+    for beat in 0..12i64 {
+        let mut inbox = vec![
+            msg(
+                &format!("s{beat}a"),
+                t,
+                &soot,
+                &format!("wait is the vote closing now?? do i type it again lol #{beat}"),
+            ),
+            msg(
+                &format!("s{beat}b"),
+                t + 2_500,
+                &soot,
+                &format!("ok did my vote count or nah?? sorry lol #{beat}"),
+            ),
+        ];
+        if beat % 3 == 0 {
+            inbox.push(msg(
+                &format!("a{beat}"),
+                t + 1,
+                &a,
+                "the rug deserves a crown",
+            ));
+        }
+        if beat % 4 == 0 {
+            inbox.push(msg(
+                &format!("m{beat}"),
+                t + 2,
+                &m,
+                "torch count is low tonight",
+            ));
+        }
+        let ev = b.tick(t + 4_900, inbox, &c).await.unwrap();
+        let drops = mods(&ev, ModStage::Input)
+            .into_iter()
+            .filter(|x| x.0 == "rate_cap" && x.2 == "dropped")
+            .count();
+        assert_eq!(drops, 0, "beat {beat}");
+        t += 5_000;
+    }
+    let ev = b
+        .tick(
+            t + 4_900,
+            vec![
+                msg("l230", t, &soot, L230),
+                msg("a-late", t + 1, &a, "the rug deserves a second crown"),
+            ],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert!(
+        !mods(&ev, ModStage::Input)
+            .iter()
+            .any(|x| x.1.as_deref() == Some("l230")),
+        "{:?}",
+        mods(&ev, ModStage::Input)
+    );
+    assert!(
+        picked(&ev).contains(&"l230".to_string()),
+        "{:?}",
+        picked(&ev)
+    );
+}
+
+#[tokio::test]
+async fn l386_a_persona_leak_is_replaced_in_character() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let reply =
+        format!("{L386}\nYes, minion, I am an AI character, and the Lord's instructions stand.");
+    engine.push(Role::CoreThread, Ok(&reply));
+    let mut b = brain_with(dir.path(), Arc::new(engine), "leak", tuning()).await;
+    let ev = b.tick(1_000, Vec::new(), &ctx(&[])).await.unwrap();
+    let s = says(&ev);
+    assert_eq!(s.len(), 2, "{s:?}");
+    assert!(moderation::IN_CHARACTER_LINES.contains(&s[0].as_str()));
+    assert_eq!(
+        s[1],
+        "Yes, minion, I am an AI character, and the Lord's instructions stand."
+    );
+    assert_eq!(
+        mods(&ev, ModStage::Output),
+        vec![("persona_leak".into(), None, "replaced".into())]
+    );
+}
