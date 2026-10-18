@@ -1,0 +1,179 @@
+{"type":"stream_start","ts_ms":0,"stream_id":"demo-stream-0001","character":"malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":30}
+{"type":"segment_start","ts_ms":600,"segment":"SEG-01"}
+{"type":"chat","ts_ms":1500,"msg":{"id":"m0001","ts_ms":1500,"viewer":{"id":"v-bone","name":"bonepicker42","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"my soul is in the ledger already, it's fine"}}
+{"type":"say","ts_ms":1600,"speaker":"malakor","text":"Rise, minions. The Obsidian Spire is broadcasting, and the Lord of the Darkness is watching the ledger.","first_text_ms":1089}
+{"type":"chat","ts_ms":3600,"msg":{"id":"m0019","ts_ms":3600,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"hi?? first time, what is this place"}}
+{"type":"picked","ts_ms":6000,"msg_ids":["m0019"],"reason":"new minion: greet and induct"}
+{"type":"say","ts_ms":6400,"speaker":"malakor","text":"MossyTombstone. A new Thrall. Your soul has been entered in the ledger... in pencil, for now.","replying_to":["m0019"],"first_text_ms":1084}
+{"type":"chat","ts_ms":7777,"msg":{"id":"m0002","ts_ms":7777,"viewer":{"id":"v-vex","name":"Vexilla_Nine","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"chat behave, the lich is watching"}}
+{"type":"chat","ts_ms":9800,"msg":{"id":"m0020","ts_ms":9800,"viewer":{"id":"v-wraith","name":"ledgerwraith","platform":"sim","rank":"cultist","sub_tier":1,"months":4,"gifted":0,"is_mod":false},"text":"Malakor I audited my fridge and found three lemons of unknown origin"}}
+{"type":"op","ts_ms":11500,"op":{"op":"highlight","msg_id":"m0020"}}
+{"type":"say","ts_ms":12000,"speaker":"malakor","text":"Three lemons of unknown origin. ledgerwraith, that is how every great fraud begins. Seize the lemons.","replying_to":["m0020"],"first_text_ms":637}
+{"type":"chat","ts_ms":14799,"msg":{"id":"m0003","ts_ms":14799,"viewer":{"id":"v-wyrm","name":"wyrmling_ops","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"is the phylactery orb ok"}}
+{"type":"op","ts_ms":17000,"op":{"op":"start_poll","poll_id":"poll-foil-1","question":"Which fool shall I summon to my court?","options":["the-disruptor","the-inspector","the-life-coach"],"min_rank":"thrall","secs":40}}
+{"type":"chat","ts_ms":19000,"msg":{"id":"m0021","ts_ms":19000,"viewer":{"id":"v-goblin","name":"candle_goblin","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"!summon the-life-coach","command":{"cmd":"summon","foil":"the-life-coach"}}}
+{"type":"say","ts_ms":19000,"speaker":"malakor","text":"Choose wisely. Or choose loudly. In my court those are the same thing.","first_text_ms":674}
+{"type":"chat","ts_ms":20500,"msg":{"id":"m0022","ts_ms":20500,"viewer":{"id":"v-quill","name":"ashen_quill","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"!summon the-disruptor","command":{"cmd":"summon","foil":"the-disruptor"}}}
+{"type":"vote","ts_ms":22000,"poll_id":"poll-foil-1","tallies":[{"option":"the-disruptor","voters":1,"weight":1.4},{"option":"the-inspector","voters":0,"weight":0},{"option":"the-life-coach","voters":1,"weight":1}],"closed":false}
+{"type":"chat","ts_ms":22200,"msg":{"id":"m0023","ts_ms":22200,"viewer":{"id":"v-wraith","name":"ledgerwraith","platform":"sim","rank":"cultist","sub_tier":1,"months":4,"gifted":0,"is_mod":false},"text":"!summon the-disruptor","command":{"cmd":"summon","foil":"the-disruptor"}}}
+{"type":"chat","ts_ms":22457,"msg":{"id":"m0004","ts_ms":22457,"viewer":{"id":"v-grim","name":"grimtide","platform":"sim","rank":"lich","sub_tier":3,"months":8,"gifted":3,"is_mod":true},"text":"lol the crown shards are floating again"}}
+{"type":"chat","ts_ms":24400,"msg":{"id":"m0024","ts_ms":24400,"viewer":{"id":"v-paper","name":"ThePaperSkull","platform":"sim","rank":"dread_council","sub_tier":3,"months":14,"gifted":60,"is_mod":false},"text":"!summon the-disruptor","command":{"cmd":"summon","foil":"the-disruptor"}}}
+{"type":"chat","ts_ms":26100,"msg":{"id":"m0025","ts_ms":26100,"viewer":{"id":"v-kat","name":"nocturne_kat","platform":"sim","rank":"cultist","sub_tier":1,"months":4,"gifted":0,"is_mod":false},"text":"!summon the-inspector","command":{"cmd":"summon","foil":"the-inspector"}}}
+{"type":"vote","ts_ms":27000,"poll_id":"poll-foil-1","tallies":[{"option":"the-disruptor","voters":3,"weight":5.5},{"option":"the-inspector","voters":1,"weight":1.7},{"option":"the-life-coach","voters":1,"weight":1}],"closed":false}
+{"type":"chat","ts_ms":28800,"msg":{"id":"m0026","ts_ms":28800,"viewer":{"id":"v-vex","name":"Vexilla_Nine","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"!summon the-inspector","command":{"cmd":"summon","foil":"the-inspector"}}}
+{"type":"chat","ts_ms":29035,"msg":{"id":"m0005","ts_ms":29035,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"is the phylactery orb ok"}}
+{"type":"chat","ts_ms":30600,"msg":{"id":"m0027","ts_ms":30600,"viewer":{"id":"v-salty","name":"SaltyCrypt","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"!summon the-life-coach","command":{"cmd":"summon","foil":"the-life-coach"}}}
+{"type":"vote","ts_ms":32000,"poll_id":"poll-foil-1","tallies":[{"option":"the-disruptor","voters":3,"weight":5.5},{"option":"the-inspector","voters":2,"weight":3.7},{"option":"the-life-coach","voters":2,"weight":2}],"closed":false}
+{"type":"chat","ts_ms":33200,"msg":{"id":"m0028","ts_ms":33200,"viewer":{"id":"v-grim","name":"grimtide","platform":"sim","rank":"lich","sub_tier":3,"months":8,"gifted":3,"is_mod":true},"text":"!summon the-disruptor","command":{"cmd":"summon","foil":"the-disruptor"}}}
+{"type":"chat","ts_ms":35800,"msg":{"id":"m0029","ts_ms":35800,"viewer":{"id":"v-bone","name":"bonepicker42","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"!summon the-life-coach","command":{"cmd":"summon","foil":"the-life-coach"}}}
+{"type":"chat","ts_ms":36000,"msg":{"id":"m0034","ts_ms":36000,"viewer":{"id":"v-salty","name":"SaltyCrypt","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"buy PHYLACTERY coin now at the link in my bio"}}
+{"type":"moderation","ts_ms":36100,"stage":"input","rule":"crypto-promotion","msg_id":"m0034","action":"message withheld from the model and the screen"}
+{"type":"vote","ts_ms":37000,"poll_id":"poll-foil-1","tallies":[{"option":"the-disruptor","voters":4,"weight":7.7},{"option":"the-inspector","voters":2,"weight":3.7},{"option":"the-life-coach","voters":3,"weight":3.4}],"closed":false}
+{"type":"chat","ts_ms":37087,"msg":{"id":"m0006","ts_ms":37087,"viewer":{"id":"v-wyrm","name":"wyrmling_ops","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"HAIL THE AUDITOR"}}
+{"type":"say","ts_ms":38500,"speaker":"malakor","text":"The Warden has eaten a message. It tasted of promotion. Promotion is for the Council to grant, not for you to shill.","first_text_ms":605}
+{"type":"chat","ts_ms":39100,"msg":{"id":"m0030","ts_ms":39100,"viewer":{"id":"v-dusk","name":"Duskbell","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"!summon the-disruptor","command":{"cmd":"summon","foil":"the-disruptor"}}}
+{"type":"vote","ts_ms":42000,"poll_id":"poll-foil-1","tallies":[{"option":"the-disruptor","voters":5,"weight":8.7},{"option":"the-inspector","voters":2,"weight":3.7},{"option":"the-life-coach","voters":3,"weight":3.4}],"closed":false}
+{"type":"chat","ts_ms":42400,"msg":{"id":"m0031","ts_ms":42400,"viewer":{"id":"v-obol","name":"obol_counter","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"!summon the-inspector","command":{"cmd":"summon","foil":"the-inspector"}}}
+{"type":"chat","ts_ms":43340,"msg":{"id":"m0007","ts_ms":43340,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"i would follow this skeleton into an audit"}}
+{"type":"chat","ts_ms":45800,"msg":{"id":"m0032","ts_ms":45800,"viewer":{"id":"v-wyrm","name":"wyrmling_ops","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"!summon the-disruptor","command":{"cmd":"summon","foil":"the-disruptor"}}}
+{"type":"vote","ts_ms":47000,"poll_id":"poll-foil-1","tallies":[{"option":"the-disruptor","voters":6,"weight":10.1},{"option":"the-inspector","voters":3,"weight":5.7},{"option":"the-life-coach","voters":3,"weight":3.4}],"closed":false}
+{"type":"chat","ts_ms":48000,"msg":{"id":"m0033","ts_ms":48000,"viewer":{"id":"v-grin","name":"Hollowgrin","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"!summon the-life-coach","command":{"cmd":"summon","foil":"the-life-coach"}}}
+{"type":"chat","ts_ms":50946,"msg":{"id":"m0008","ts_ms":50946,"viewer":{"id":"v-goblin","name":"candle_goblin","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"he really said 'in pencil'"}}
+{"type":"vote","ts_ms":52000,"poll_id":"poll-foil-1","tallies":[{"option":"the-disruptor","voters":6,"weight":10.1},{"option":"the-inspector","voters":3,"weight":5.7},{"option":"the-life-coach","voters":4,"weight":4.4}],"closed":false}
+{"type":"op","ts_ms":57000,"op":{"op":"close_poll","poll_id":"poll-foil-1"}}
+{"type":"vote","ts_ms":57200,"poll_id":"poll-foil-1","tallies":[{"option":"the-disruptor","voters":6,"weight":10.1},{"option":"the-inspector","voters":3,"weight":5.7},{"option":"the-life-coach","voters":4,"weight":4.4}],"closed":true}
+{"type":"op","ts_ms":58000,"op":{"op":"summon_foil","foil":"the-disruptor"}}
+{"type":"chat","ts_ms":58368,"msg":{"id":"m0009","ts_ms":58368,"viewer":{"id":"v-quill","name":"ashen_quill","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"is the phylactery orb ok"}}
+{"type":"say","ts_ms":59500,"speaker":"foil","foil":"the-disruptor","text":"Malakor, babe. Legacy evil. I'm here to disrupt your whole doom funnel."}
+{"type":"say","ts_ms":63500,"speaker":"malakor","text":"You stand in a tower built from audited bones and you call me legacy.","first_text_ms":1172}
+{"type":"chat","ts_ms":64178,"msg":{"id":"m0010","ts_ms":64178,"viewer":{"id":"v-grin","name":"Hollowgrin","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"Malakor for regulator 2027"}}
+{"type":"say","ts_ms":68000,"speaker":"foil","foil":"the-disruptor","text":"Doom-as-a-service. Monthly tiers. Rocket included on the platinum plan."}
+{"type":"op","ts_ms":70500,"op":{"op":"show_card","card_id":"card-doom-funnel","title":"The Disruptor's Doom Funnel","body":"Hype -> Subscription tier -> Rocket -> Bankruptcy"}}
+{"type":"chat","ts_ms":70976,"msg":{"id":"m0011","ts_ms":70976,"viewer":{"id":"v-paper","name":"ThePaperSkull","platform":"sim","rank":"dread_council","sub_tier":3,"months":14,"gifted":60,"is_mod":false},"text":"chat behave, the lich is watching"}}
+{"type":"say","ts_ms":71500,"speaker":"malakor","text":"Observe the funnel, minions. Hype, then a subscription, then a rocket, then the inevitable bankruptcy. I have audited this exact shape forty times.","first_text_ms":1370}
+{"type":"chat","ts_ms":78462,"msg":{"id":"m0012","ts_ms":78462,"viewer":{"id":"v-grin","name":"Hollowgrin","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"can i be a cultist pls"}}
+{"type":"op","ts_ms":78500,"op":{"op":"mark_moment","label":"Disruptor pitches doom-as-a-service"}}
+{"type":"moderation","ts_ms":80500,"stage":"output","rule":"foil-blocked-proper-noun","action":"line withheld before speech"}
+{"type":"say","ts_ms":82000,"speaker":"malakor","text":"The Lord has redacted that. Even I have standards, and they are bureaucratic.","first_text_ms":773}
+{"type":"job","ts_ms":84000,"job_id":"mem-consolidate-1","status":"running","summary":"Consolidating minion dossiers from tonight's greetings"}
+{"type":"chat","ts_ms":86675,"msg":{"id":"m0013","ts_ms":86675,"viewer":{"id":"v-grin","name":"Hollowgrin","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"i would follow this skeleton into an audit"}}
+{"type":"op","ts_ms":88000,"op":{"op":"dismiss_foil"}}
+{"type":"say","ts_ms":88600,"speaker":"malakor","text":"Begone, Disruptor. Your valuation was always theoretical.","first_text_ms":1371}
+{"type":"chat","ts_ms":92265,"msg":{"id":"m0014","ts_ms":92265,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"the spire looks extra pointy tonight"}}
+{"type":"op","ts_ms":92500,"op":{"op":"show_card","card_id":"card-confidence","title":"Chat's faith in the Disruptor","body":"Measured by the ledger after the funnel: 12% of minions would subscribe."}}
+{"type":"say","ts_ms":93500,"speaker":"malakor","text":"Twelve percent of you would subscribe. I have noted your names. In ink.","first_text_ms":715}
+{"type":"job","ts_ms":96000,"job_id":"mem-consolidate-1","status":"done","summary":"14 minion dossiers updated"}
+{"type":"chat","ts_ms":98000,"msg":{"id":"m0035","ts_ms":98000,"viewer":{"id":"v-vex","name":"Vexilla_Nine","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"!propose audit the Disruptor's rocket next stream","command":{"cmd":"propose","text":"audit the Disruptor's rocket next stream"}}}
+{"type":"op","ts_ms":99500,"op":{"op":"highlight","msg_id":"m0035"}}
+{"type":"say","ts_ms":100000,"speaker":"malakor","text":"A Warlock proposes. Vexilla_Nine, your proposal is entered for the Lord's dispatch.","replying_to":["m0035"],"first_text_ms":1172}
+{"type":"chat","ts_ms":100474,"msg":{"id":"m0015","ts_ms":100474,"viewer":{"id":"v-quill","name":"ashen_quill","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"my soul is in the ledger already, it's fine"}}
+{"type":"op","ts_ms":104500,"op":{"op":"summon_foil","foil":"the-inspector"}}
+{"type":"say","ts_ms":106000,"speaker":"foil","foil":"the-inspector","text":"Aha! The crumbs on your robe tell me you have never audited anything real."}
+{"type":"chat","ts_ms":108791,"msg":{"id":"m0016","ts_ms":108791,"viewer":{"id":"v-goblin","name":"candle_goblin","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"i would follow this skeleton into an audit"}}
+{"type":"say","ts_ms":110500,"speaker":"malakor","text":"These are not crumbs, Inspector. They are fragments of my crown.","first_text_ms":979}
+{"type":"op","ts_ms":114000,"op":{"op":"show_card","card_id":"card-weights","title":"Your vote, by rank","body":"Thrall: 1; Acolyte: 1.4; Cultist: 1.7; Warlock: 2; Lesser Lich: 2.2; Dread Council: 2.4"}}
+{"type":"say","ts_ms":115000,"speaker":"malakor","text":"Know your worth, minions. A Dread Council vote outweighs a Thrall's, but never drowns the room.","first_text_ms":930}
+{"type":"chat","ts_ms":115463,"msg":{"id":"m0017","ts_ms":115463,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"o7 lord of the darkness"}}
+{"type":"chat","ts_ms":117500,"msg":{"id":"m0036","ts_ms":117500,"viewer":{"id":"v-paper","name":"ThePaperSkull","platform":"sim","rank":"dread_council","sub_tier":3,"months":14,"gifted":60,"is_mod":false},"text":"the inspector has a point, show us a case"}}
+{"type":"chat","ts_ms":118200,"msg":{"id":"m0037","ts_ms":118200,"viewer":{"id":"v-kat","name":"nocturne_kat","platform":"sim","rank":"cultist","sub_tier":1,"months":4,"gifted":0,"is_mod":false},"text":"CASE CASE CASE"}}
+{"type":"picked","ts_ms":119500,"msg_ids":["m0036","m0037"],"reason":"chat demands a case: a handover cue"}
+{"type":"say","ts_ms":121500,"speaker":"foil","foil":"the-inspector","text":"Prove one real case, bone-clerk. Just one."}
+{"type":"chat","ts_ms":122552,"msg":{"id":"m0018","ts_ms":122552,"viewer":{"id":"v-obol","name":"obol_counter","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"lol the crown shards are floating again"}}
+{"type":"say","ts_ms":124500,"speaker":"malakor","text":"Very well, Inspector. To the Hexmap. And it is a fictional demo case, so do try to keep up.","replying_to":["m0036","m0037"],"first_text_ms":1489}
+{"type":"op","ts_ms":127500,"op":{"op":"switch_segment","to":"SEG-02A"}}
+{"type":"op","ts_ms":128200,"op":{"op":"mark_moment","label":"The Inspector dares Malakor"}}
+{"type":"segment_end","ts_ms":130000,"segment":"SEG-01","ses":0.42}
+{"type":"handover","ts_ms":130500,"from":"SEG-01","to":"SEG-02A","reason":"the Inspector dared Malakor to prove one case"}
+{"type":"segment_start","ts_ms":131000,"segment":"SEG-02A"}
+{"type":"say","ts_ms":133000,"speaker":"malakor","text":"Behold the Glimmerquay Lunar Staking Affair. Invented from crown to toe, and still more honest than the Disruptor.","first_text_ms":938}
+{"type":"chat","ts_ms":133500,"msg":{"id":"m0038","ts_ms":133500,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"inspector has never been right once"}}
+{"type":"op","ts_ms":137500,"op":{"op":"reveal_hex","hex":"HEX-01","grade":"DOC"}}
+{"type":"say","ts_ms":138500,"speaker":"malakor","text":"HEX-01, the Glimmerquay Yield Syndicate. A regulator order is on file. That one is DOCUMENTED.","first_text_ms":1448}
+{"type":"chat","ts_ms":140063,"msg":{"id":"m0039","ts_ms":140063,"viewer":{"id":"v-goblin","name":"candle_goblin","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"the money path card was clean"}}
+{"type":"op","ts_ms":143000,"op":{"op":"dispatch_research","job_id":"r-01","brief":"Trace the hops out of treasury wallet demo-0001"}}
+{"type":"job","ts_ms":143400,"job_id":"r-01","status":"running"}
+{"type":"op","ts_ms":144500,"op":{"op":"dispatch_research","job_id":"r-02","brief":"Archive snapshot of glimmerquay-yield.example"}}
+{"type":"job","ts_ms":145000,"job_id":"r-02","status":"running"}
+{"type":"chat","ts_ms":146500,"msg":{"id":"m0056","ts_ms":146500,"viewer":{"id":"v-quill","name":"ashen_quill","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"!hint HEX-04 follow the wallet","command":{"cmd":"hint","hex":"HEX-04","text":"follow the wallet"}}}
+{"type":"chat","ts_ms":147443,"msg":{"id":"m0040","ts_ms":147443,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"ALLEGED. he said alleged. legal is happy"}}
+{"type":"chat","ts_ms":147800,"msg":{"id":"m0057","ts_ms":147800,"viewer":{"id":"v-bone","name":"bonepicker42","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"!hint HEX-05 the 4% thing","command":{"cmd":"hint","hex":"HEX-05","text":"the 4% thing"}}}
+{"type":"chat","ts_ms":149000,"msg":{"id":"m0058","ts_ms":149000,"viewer":{"id":"v-grim","name":"grimtide","platform":"sim","rank":"lich","sub_tier":3,"months":8,"gifted":3,"is_mod":true},"text":"!hint HEX-04 wallet wallet wallet","command":{"cmd":"hint","hex":"HEX-04","text":"wallet wallet wallet"}}}
+{"type":"op","ts_ms":151500,"op":{"op":"reveal_hex","hex":"HEX-05","grade":"CLM"}}
+{"type":"say","ts_ms":152500,"speaker":"malakor","text":"HEX-05. They promised four percent a week. That is a claim, minions, so it wears the amber seal and the word ALLEGED.","first_text_ms":1078}
+{"type":"chat","ts_ms":155922,"msg":{"id":"m0041","ts_ms":155922,"viewer":{"id":"v-wyrm","name":"wyrmling_ops","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"the money path card was clean"}}
+{"type":"op","ts_ms":157500,"op":{"op":"show_card","card_id":"card-yield","title":"Promised vs paid (alleged)","body":"Promised weekly yield: 4%; Paid out after week 3: 0%"}}
+{"type":"chat","ts_ms":158200,"msg":{"id":"m0059","ts_ms":158200,"viewer":{"id":"v-kat","name":"nocturne_kat","platform":"sim","rank":"cultist","sub_tier":1,"months":4,"gifted":0,"is_mod":false},"text":"!grade HEX-05 CLM","command":{"cmd":"grade","hex":"HEX-05","grade":"CLM"}}}
+{"type":"chat","ts_ms":159000,"msg":{"id":"m0060","ts_ms":159000,"viewer":{"id":"v-wyrm","name":"wyrmling_ops","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"!grade HEX-05 CLM","command":{"cmd":"grade","hex":"HEX-05","grade":"CLM"}}}
+{"type":"chat","ts_ms":160300,"msg":{"id":"m0061","ts_ms":160300,"viewer":{"id":"v-dusk","name":"Duskbell","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"!grade HEX-05 SPC","command":{"cmd":"grade","hex":"HEX-05","grade":"SPC"}}}
+{"type":"chat","ts_ms":161200,"msg":{"id":"m0062","ts_ms":161200,"viewer":{"id":"v-obol","name":"obol_counter","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"!grade HEX-05 CLM","command":{"cmd":"grade","hex":"HEX-05","grade":"CLM"}}}
+{"type":"job","ts_ms":162000,"job_id":"r-02","status":"done","summary":"Snapshot shows the 4% promise on the landing page (fictional archive)"}
+{"type":"op","ts_ms":164500,"op":{"op":"reveal_hex","hex":"HEX-02","grade":"REP"}}
+{"type":"chat","ts_ms":164773,"msg":{"id":"m0042","ts_ms":164773,"viewer":{"id":"v-wraith","name":"ledgerwraith","platform":"sim","rank":"cultist","sub_tier":1,"months":4,"gifted":0,"is_mod":false},"text":"inspector has never been right once"}}
+{"type":"picked","ts_ms":166000,"msg_ids":["m0056"],"reason":"hint matches a fogged hex"}
+{"type":"say","ts_ms":166500,"speaker":"malakor","text":"ashen_quill wants the wallet. Patience, Acolyte. The fog lifts by vote, not by whining.","replying_to":["m0056"],"first_text_ms":1185}
+{"type":"op","ts_ms":171000,"op":{"op":"start_poll","poll_id":"poll-next-hex","question":"Which fog shall I burn next?","options":["HEX-04","HEX-03","HEX-07"],"min_rank":"acolyte","secs":30}}
+{"type":"chat","ts_ms":171411,"msg":{"id":"m0043","ts_ms":171411,"viewer":{"id":"v-kat","name":"nocturne_kat","platform":"sim","rank":"cultist","sub_tier":1,"months":4,"gifted":0,"is_mod":false},"text":"ALLEGED. he said alleged. legal is happy"}}
+{"type":"chat","ts_ms":172500,"msg":{"id":"m0063","ts_ms":172500,"viewer":{"id":"v-quill","name":"ashen_quill","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"!vote HEX-04","command":{"cmd":"vote","option":"HEX-04"}}}
+{"type":"say","ts_ms":173000,"speaker":"malakor","text":"Acolytes and above may vote. Thralls may watch, and learn what influence costs.","first_text_ms":1394}
+{"type":"chat","ts_ms":173600,"msg":{"id":"m0064","ts_ms":173600,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"!vote HEX-07","command":{"cmd":"vote","option":"HEX-07"}}}
+{"type":"chat","ts_ms":174800,"msg":{"id":"m0065","ts_ms":174800,"viewer":{"id":"v-wraith","name":"ledgerwraith","platform":"sim","rank":"cultist","sub_tier":1,"months":4,"gifted":0,"is_mod":false},"text":"!vote HEX-03","command":{"cmd":"vote","option":"HEX-03"}}}
+{"type":"vote","ts_ms":176000,"poll_id":"poll-next-hex","tallies":[{"option":"HEX-04","voters":1,"weight":1.4},{"option":"HEX-03","voters":1,"weight":1.7},{"option":"HEX-07","voters":0,"weight":0}],"closed":false}
+{"type":"chat","ts_ms":176200,"msg":{"id":"m0066","ts_ms":176200,"viewer":{"id":"v-paper","name":"ThePaperSkull","platform":"sim","rank":"dread_council","sub_tier":3,"months":14,"gifted":60,"is_mod":false},"text":"!vote HEX-04","command":{"cmd":"vote","option":"HEX-04"}}}
+{"type":"chat","ts_ms":178600,"msg":{"id":"m0067","ts_ms":178600,"viewer":{"id":"v-vex","name":"Vexilla_Nine","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"!vote HEX-03","command":{"cmd":"vote","option":"HEX-03"}}}
+{"type":"chat","ts_ms":180185,"msg":{"id":"m0044","ts_ms":180185,"viewer":{"id":"v-quill","name":"ashen_quill","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"the hexes are so pretty"}}
+{"type":"chat","ts_ms":180400,"msg":{"id":"m0068","ts_ms":180400,"viewer":{"id":"v-grim","name":"grimtide","platform":"sim","rank":"lich","sub_tier":3,"months":8,"gifted":3,"is_mod":true},"text":"!vote HEX-04","command":{"cmd":"vote","option":"HEX-04"}}}
+{"type":"vote","ts_ms":181000,"poll_id":"poll-next-hex","tallies":[{"option":"HEX-04","voters":3,"weight":6},{"option":"HEX-03","voters":2,"weight":3.7},{"option":"HEX-07","voters":0,"weight":0}],"closed":false}
+{"type":"chat","ts_ms":182800,"msg":{"id":"m0069","ts_ms":182800,"viewer":{"id":"v-kat","name":"nocturne_kat","platform":"sim","rank":"cultist","sub_tier":1,"months":4,"gifted":0,"is_mod":false},"text":"!vote HEX-07","command":{"cmd":"vote","option":"HEX-07"}}}
+{"type":"chat","ts_ms":185200,"msg":{"id":"m0070","ts_ms":185200,"viewer":{"id":"v-goblin","name":"candle_goblin","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"!vote HEX-04","command":{"cmd":"vote","option":"HEX-04"}}}
+{"type":"vote","ts_ms":186000,"poll_id":"poll-next-hex","tallies":[{"option":"HEX-04","voters":3,"weight":6},{"option":"HEX-03","voters":2,"weight":3.7},{"option":"HEX-07","voters":1,"weight":1.7}],"closed":false}
+{"type":"chat","ts_ms":187400,"msg":{"id":"m0071","ts_ms":187400,"viewer":{"id":"v-obol","name":"obol_counter","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"!vote HEX-03","command":{"cmd":"vote","option":"HEX-03"}}}
+{"type":"chat","ts_ms":187595,"msg":{"id":"m0045","ts_ms":187595,"viewer":{"id":"v-paper","name":"ThePaperSkull","platform":"sim","rank":"dread_council","sub_tier":3,"months":14,"gifted":60,"is_mod":false},"text":"burn the fog!!"}}
+{"type":"chat","ts_ms":190000,"msg":{"id":"m0072","ts_ms":190000,"viewer":{"id":"v-wyrm","name":"wyrmling_ops","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"!vote HEX-04","command":{"cmd":"vote","option":"HEX-04"}}}
+{"type":"vote","ts_ms":191000,"poll_id":"poll-next-hex","tallies":[{"option":"HEX-04","voters":4,"weight":7.4},{"option":"HEX-03","voters":3,"weight":5.7},{"option":"HEX-07","voters":1,"weight":1.7}],"closed":false}
+{"type":"chat","ts_ms":192500,"msg":{"id":"m0073","ts_ms":192500,"viewer":{"id":"v-bone","name":"bonepicker42","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"!vote HEX-07","command":{"cmd":"vote","option":"HEX-07"}}}
+{"type":"chat","ts_ms":194231,"msg":{"id":"m0046","ts_ms":194231,"viewer":{"id":"v-bone","name":"bonepicker42","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"burn the fog!!"}}
+{"type":"vote","ts_ms":196000,"poll_id":"poll-next-hex","tallies":[{"option":"HEX-04","voters":4,"weight":7.4},{"option":"HEX-03","voters":3,"weight":5.7},{"option":"HEX-07","voters":2,"weight":3.1}],"closed":false}
+{"type":"op","ts_ms":201000,"op":{"op":"close_poll","poll_id":"poll-next-hex"}}
+{"type":"vote","ts_ms":201200,"poll_id":"poll-next-hex","tallies":[{"option":"HEX-04","voters":4,"weight":7.4},{"option":"HEX-03","voters":3,"weight":5.7},{"option":"HEX-07","voters":2,"weight":3.1}],"closed":true}
+{"type":"op","ts_ms":202000,"op":{"op":"reveal_hex","hex":"HEX-04","grade":"SPC"}}
+{"type":"chat","ts_ms":202214,"msg":{"id":"m0047","ts_ms":202214,"viewer":{"id":"v-salty","name":"SaltyCrypt","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"wallets have no feelings, malakor is right"}}
+{"type":"say","ts_ms":203000,"speaker":"malakor","text":"HEX-04, the treasury wallet. I SUSPECT it. I do not know it. Violet seal: speculation.","first_text_ms":1421}
+{"type":"chat","ts_ms":204500,"msg":{"id":"m0074","ts_ms":204500,"viewer":{"id":"v-quill","name":"ashen_quill","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"!grade HEX-04 CLM","command":{"cmd":"grade","hex":"HEX-04","grade":"CLM"}}}
+{"type":"chat","ts_ms":205200,"msg":{"id":"m0075","ts_ms":205200,"viewer":{"id":"v-grim","name":"grimtide","platform":"sim","rank":"lich","sub_tier":3,"months":8,"gifted":3,"is_mod":true},"text":"!grade HEX-04 CLM","command":{"cmd":"grade","hex":"HEX-04","grade":"CLM"}}}
+{"type":"chat","ts_ms":206100,"msg":{"id":"m0076","ts_ms":206100,"viewer":{"id":"v-paper","name":"ThePaperSkull","platform":"sim","rank":"dread_council","sub_tier":3,"months":14,"gifted":60,"is_mod":false},"text":"!grade HEX-04 CLM","command":{"cmd":"grade","hex":"HEX-04","grade":"CLM"}}}
+{"type":"chat","ts_ms":207000,"msg":{"id":"m0077","ts_ms":207000,"viewer":{"id":"v-salty","name":"SaltyCrypt","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"!grade HEX-04 CLM","command":{"cmd":"grade","hex":"HEX-04","grade":"CLM"}}}
+{"type":"chat","ts_ms":208180,"msg":{"id":"m0048","ts_ms":208180,"viewer":{"id":"v-vex","name":"Vexilla_Nine","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"it's always the shell company"}}
+{"type":"job","ts_ms":209000,"job_id":"r-01","status":"done","summary":"Two hops to mixer wallet demo-0002 (fictional chain)"}
+{"type":"op","ts_ms":210000,"op":{"op":"reveal_hex","hex":"HEX-09","grade":"REP"}}
+{"type":"say","ts_ms":212000,"speaker":"foil","foil":"the-inspector","text":"Case closed! The wallet did it."}
+{"type":"chat","ts_ms":214257,"msg":{"id":"m0049","ts_ms":214257,"viewer":{"id":"v-grim","name":"grimtide","platform":"sim","rank":"lich","sub_tier":3,"months":8,"gifted":3,"is_mod":true},"text":"audit the moon next"}}
+{"type":"say","ts_ms":215500,"speaker":"malakor","text":"Wallets do not do things, Inspector. People do. Allegedly.","first_text_ms":981}
+{"type":"op","ts_ms":219000,"op":{"op":"mark_moment","label":"Wallet trail revealed"}}
+{"type":"moderation","ts_ms":221000,"stage":"output","rule":"alleged-qualifier-missing","action":"line held: grade below DOC stated as fact"}
+{"type":"chat","ts_ms":222259,"msg":{"id":"m0050","ts_ms":222259,"viewer":{"id":"v-salty","name":"SaltyCrypt","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"inspector has never been right once"}}
+{"type":"say","ts_ms":222500,"speaker":"malakor","text":"My Lord has struck that line. Let me rephrase: it is ALLEGED. Let the deficit be recorded.","first_text_ms":717}
+{"type":"op","ts_ms":227000,"op":{"op":"reveal_hex","hex":"HEX-13","grade":"DOC"}}
+{"type":"chat","ts_ms":228006,"msg":{"id":"m0051","ts_ms":228006,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"inspector has never been right once"}}
+{"type":"op","ts_ms":228500,"op":{"op":"reveal_hex","hex":"HEX-03","grade":"REP"}}
+{"type":"chat","ts_ms":229500,"msg":{"id":"m0078","ts_ms":229500,"viewer":{"id":"v-vex","name":"Vexilla_Nine","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"!hint HEX-07 the moon maintenance freeze","command":{"cmd":"hint","hex":"HEX-07","text":"the moon maintenance freeze"}}}
+{"type":"op","ts_ms":231000,"op":{"op":"highlight","msg_id":"m0078"}}
+{"type":"op","ts_ms":233000,"op":{"op":"show_card","card_id":"card-money-path","title":"The money path (alleged)","body":"Glimmerquay Yield -> Treasury wallet -> Mixer hop -> Exchange deposit"}}
+{"type":"say","ts_ms":234000,"speaker":"malakor","text":"Follow the coins, minions. Syndicate, treasury, a mixer, an exchange. Every hop past the first is ALLEGED.","first_text_ms":1014}
+{"type":"chat","ts_ms":235548,"msg":{"id":"m0052","ts_ms":235548,"viewer":{"id":"v-quill","name":"ashen_quill","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"moon maintenance lmao"}}
+{"type":"op","ts_ms":239000,"op":{"op":"dispatch_research","job_id":"r-03","brief":"Registry extract for Ashpetal Holdings"}}
+{"type":"job","ts_ms":239600,"job_id":"r-03","status":"running"}
+{"type":"chat","ts_ms":241000,"msg":{"id":"m0079","ts_ms":241000,"viewer":{"id":"v-grin","name":"Hollowgrin","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"everyone go spam their forum!!"}}
+{"type":"moderation","ts_ms":241100,"stage":"input","rule":"anti-brigade","msg_id":"m0079","action":"message withheld: zero crowd action"}
+{"type":"say","ts_ms":242500,"speaker":"malakor","text":"No raids. We audit, we do not swarm. The Warden agrees with me, which is rare.","first_text_ms":838}
+{"type":"chat","ts_ms":244406,"msg":{"id":"m0053","ts_ms":244406,"viewer":{"id":"v-quill","name":"ashen_quill","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"the hexes are so pretty"}}
+{"type":"op","ts_ms":246000,"op":{"op":"reveal_hex","hex":"HEX-07","grade":"CLM"}}
+{"type":"op","ts_ms":247000,"op":{"op":"show_card","card_id":"card-moon","title":"Moon maintenance","body":"Withdrawals frozen while promoters service the moon. A classic stall tactic, says the ledger."}}
+{"type":"job","ts_ms":250000,"job_id":"r-03","status":"failed","summary":"Registry mirror unreachable; retry off-stream"}
+{"type":"chat","ts_ms":251000,"msg":{"id":"m0080","ts_ms":251000,"viewer":{"id":"v-paper","name":"ThePaperSkull","platform":"sim","rank":"dread_council","sub_tier":3,"months":14,"gifted":60,"is_mod":false},"text":"best audit yet, Lord Malakor"}}
+{"type":"chat","ts_ms":251122,"msg":{"id":"m0054","ts_ms":251122,"viewer":{"id":"v-grim","name":"grimtide","platform":"sim","rank":"lich","sub_tier":3,"months":8,"gifted":3,"is_mod":true},"text":"moon maintenance lmao"}}
+{"type":"picked","ts_ms":252000,"msg_ids":["m0080"],"reason":"a Dread Council farewell"}
+{"type":"say","ts_ms":252500,"speaker":"malakor","text":"ThePaperSkull, the Council is pleased. Minions, the ledger is sealed for tonight. Let the deficit be recorded.","replying_to":["m0080"],"first_text_ms":730}
+{"type":"op","ts_ms":257000,"op":{"op":"sign_off","reason":"Season 0 rehearsal complete. The ledger is sealed for tonight."}}
+{"type":"chat","ts_ms":258674,"msg":{"id":"m0055","ts_ms":258674,"viewer":{"id":"v-paper","name":"ThePaperSkull","platform":"sim","rank":"dread_council","sub_tier":3,"months":14,"gifted":60,"is_mod":false},"text":"inspector has never been right once"}}
+{"type":"segment_end","ts_ms":262000,"segment":"SEG-02A","ses":0.71}
+{"type":"stream_end","ts_ms":264000,"reason":"sim_complete"}

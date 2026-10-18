@@ -11,3 +11,4 @@ dist/
 *.db-*
 /data/
 /shadowrunr.toml
+/ledger.jsonl
