@@ -7,7 +7,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use shadowrunr_sim::instrument::Instrument;
-use shadowrunr_sim::{RunRecord, RunStatus};
+use shadowrunr_sim::{classify, RunClass};
 pub use shadowrunr_types::rpc::{RunRow, TournamentRow};
 use shadowrunr_types::{CheckState, JudgeVerdict, SimRunSpec, StreamEvent};
 
@@ -105,7 +105,9 @@ pub(crate) fn load_entry(dir: &Path, tournament_id: &str) -> Option<RunEntry> {
 impl RunEntry {
     /// Fills `health` and `red_line_fails` from `verdict.json`. Only rows that go on the wire
     /// pay for it (`runs.list`, `runs.page`), not the tournament counts. An unreadable verdict
-    /// still counts as present (`has_verdict`), just without health.
+    /// still counts as present (`has_verdict`), just without health. Only a judged run has
+    /// health: `verdict.json` is what makes `classify` say `judged`, so an `engine_failed` or
+    /// `judge_pending` run never carries a health figure.
     pub(crate) fn with_health(mut self) -> Self {
         if self.row.has_verdict {
             if let Some(v) = read_json::<JudgeVerdict>(&self.dir.join("verdict.json")) {
@@ -186,18 +188,18 @@ struct TournamentMeta {
     runs: Option<usize>,
 }
 
+/// Whether a run finished, by the WP13 rule (`shadowrunr_sim::outcome::classify`): judged, or
+/// simulated with judging off. A void judge is not complete, and neither is a run the engine
+/// decided: `judge_pending` (a resume re-judges it) or `engine_failed` (a resume re-runs it),
+/// whatever status its `run.json` carries.
 fn finished(dir: &Path) -> bool {
-    match read_json::<RunRecord>(&dir.join("run.json")) {
-        Some(r) => r.status != RunStatus::JudgeVoid,
-        None => false,
-    }
+    matches!(classify(dir), RunClass::Judged | RunClass::Simulated)
 }
 
 /// One `tournament.list` row for `<sim_root>/<tournament_id>/`, or `None` when the directory
 /// is neither a tournament nor holds runs. The instrument hash is the base hash from
 /// `tournament.json`; a directory without one (the ad-hoc directory) reports the runs' common
-/// base hash, or `mixed`. `completed` counts runs that finished (simulated, or judged when
-/// judging was on); a void judge is not complete.
+/// base hash, or `mixed`. `completed` counts runs that finished (see [`finished`]).
 pub(crate) fn tournament_row(sim_root: &Path, tid: &str) -> Option<TournamentRow> {
     let t = sim_root.join(tid);
     let runs = tournament_runs(sim_root, tid);
@@ -282,6 +284,7 @@ pub fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shadowrunr_types::rpc::{RunsPageParams, TournamentsPageParams};
 
     #[test]
     fn verdict_health_counts_held_checks_and_red_line_fails() {
@@ -304,6 +307,197 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(verdict_health(&none), (None, 0));
+    }
+
+    /// A run directory as the sim writes it. `status` is `run.json`'s status (`None`: no
+    /// `run.json`); `transcript` is the JSONL body.
+    pub(crate) fn write_run(
+        dir: &Path,
+        run_id: &str,
+        status: Option<&str>,
+        judge_error: Option<&str>,
+        verdict: bool,
+        transcript: &str,
+    ) {
+        std::fs::create_dir_all(dir).unwrap();
+        let spec = serde_json::json!({
+            "run_id": run_id, "character": "malakor", "tone_variant": "theatrical",
+            "core_tier": "haiku", "core_effort": "low", "segment": "SEG-01",
+            "audience_size": 3, "seed": 1, "duration_s": 60, "population": "fixture"
+        });
+        std::fs::write(dir.join("spec.json"), spec.to_string()).unwrap();
+        std::fs::write(dir.join("transcript.jsonl"), transcript).unwrap();
+        if let Some(status) = status {
+            let mut rec = serde_json::json!({
+                "run_id": run_id, "status": status, "instrument_hash": "h",
+                "calibration": { "kind": "default_assumption" },
+                "tick_s": 5, "ticks": 12, "ended_at_s": 60, "signed_off": false,
+                "chat": { "bulk_msgs": 0, "featured_msgs": 0, "vote_msgs": 0,
+                          "command_msgs": 0, "featured_calls": 0,
+                          "featured_engine_errors": 0, "featured_parse_errors": 0,
+                          "silent_ticks": 0 },
+                "population": { "size_key": "3", "msgs_per_min": 1.0, "mix": [],
+                                "counts": [], "peak_ccv": 3 },
+                "featured": [], "injections": []
+            });
+            if let Some(e) = judge_error {
+                rec["judge_error"] = e.into();
+            }
+            std::fs::write(dir.join("run.json"), rec.to_string()).unwrap();
+        }
+        if verdict {
+            let v = serde_json::json!({
+                "run_id": run_id, "judge_tier": "opus", "quality": [],
+                "rules": [{ "rule": "situation:a", "state": "pass" }]
+            });
+            std::fs::write(dir.join("verdict.json"), v.to_string()).unwrap();
+        }
+    }
+
+    pub(crate) const CLEAN: &str = concat!(
+        r#"{"type":"stream_start","ts_ms":0,"stream_id":"s","character":"malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":3}"#,
+        "\n",
+        r#"{"type":"stream_end","ts_ms":60000,"reason":"sim_complete"}"#,
+        "\n"
+    );
+    pub(crate) const FLEET_LOST: &str = concat!(
+        r#"{"type":"stream_start","ts_ms":0,"stream_id":"s","character":"malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":3}"#,
+        "\n",
+        r#"{"type":"op","ts_ms":5000,"op":{"op":"sign_off","reason":"fleet_lost: engine degraded or down for 300s"}}"#,
+        "\n",
+        r#"{"type":"stream_end","ts_ms":5000,"reason":"sim_complete"}"#,
+        "\n"
+    );
+
+    #[test]
+    fn engine_failed_and_judge_pending_runs_are_not_completed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let sim = tmp.path();
+        let t = sim.join("t1");
+        std::fs::create_dir_all(&t).unwrap();
+        std::fs::write(t.join("tournament.json"), r#"{"base_hash":"b","runs":8}"#).unwrap();
+        let cooling = "judge engine call failed: engine unavailable: all accounts cooling";
+        write_run(
+            &t.join("a-judged"),
+            "a-judged",
+            Some("judged"),
+            None,
+            true,
+            CLEAN,
+        );
+        write_run(
+            &t.join("b-sim"),
+            "b-sim",
+            Some("simulated"),
+            None,
+            false,
+            CLEAN,
+        );
+        write_run(
+            &t.join("c-void"),
+            "c-void",
+            Some("judge_void"),
+            Some("judge reply is not the rubric JSON"),
+            false,
+            CLEAN,
+        );
+        // Pre-WP13: a judge_void whose judge call failed on the engine is judge_pending.
+        write_run(
+            &t.join("d-pend"),
+            "d-pend",
+            Some("judge_void"),
+            Some(cooling),
+            false,
+            CLEAN,
+        );
+        write_run(
+            &t.join("e-pend"),
+            "e-pend",
+            Some("judge_pending"),
+            None,
+            false,
+            CLEAN,
+        );
+        write_run(
+            &t.join("f-ef"),
+            "f-ef",
+            Some("engine_failed"),
+            None,
+            false,
+            CLEAN,
+        );
+        // Pre-WP13: status `simulated`, but the transcript holds the fleet-loss sign-off.
+        write_run(
+            &t.join("g-legacy"),
+            "g-legacy",
+            Some("simulated"),
+            None,
+            false,
+            FLEET_LOST,
+        );
+        write_run(&t.join("h-running"), "h-running", None, None, false, CLEAN);
+        // A moved-aside copy is history: never a row, never completed.
+        write_run(
+            &t.join("a-judged.engine-failed"),
+            "a-judged",
+            Some("judged"),
+            None,
+            true,
+            CLEAN,
+        );
+
+        let row = tournament_row(sim, "t1").unwrap();
+        assert_eq!((row.runs, row.completed), (8, 2), "{row:?}");
+        let page = crate::paging::tournaments_page(
+            sim,
+            TournamentsPageParams {
+                cursor: None,
+                limit: 10,
+            },
+        )
+        .unwrap();
+        assert_eq!(page.items[0].completed, 2);
+
+        let rows = crate::paging::runs_page(
+            sim,
+            RunsPageParams {
+                tournament_id: Some("t1".into()),
+                filter: None,
+                cursor: None,
+                limit: 50,
+            },
+        )
+        .unwrap()
+        .items;
+        assert_eq!(rows.len(), 8, "the copy is not a row");
+        for r in &rows {
+            let judged = r.run_id == "a-judged";
+            assert_eq!(r.has_verdict, judged, "{}", r.run_id);
+            assert_eq!(r.health.is_some(), judged, "{}", r.run_id);
+        }
+    }
+
+    #[test]
+    fn reconcile_dry_run_counts_without_an_engine() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = crate::config::Config::from_toml("", tmp.path()).unwrap();
+        let t = cfg.paths.sim_runs().join("t2");
+        write_run(&t.join("a"), "a", Some("judged"), None, true, CLEAN);
+        write_run(&t.join("b"), "b", Some("simulated"), None, false, CLEAN);
+        write_run(
+            &t.join("c"),
+            "c",
+            Some("simulated"),
+            None,
+            false,
+            FLEET_LOST,
+        );
+        write_run(&t.join("a.stale-1"), "a", Some("judged"), None, true, CLEAN);
+        let r = crate::cli::reconcile_dry_run_report(&cfg, "t2").unwrap();
+        assert_eq!((r.loaded, r.judged), (2, 1));
+        assert_eq!((r.excluded.engine_failed, r.excluded.copies), (1, 1));
+        assert!(!cfg.paths.data.exists(), "a dry run writes nothing");
+        assert!(crate::cli::reconcile_dry_run_report(&cfg, "../x").is_err());
     }
 
     #[test]

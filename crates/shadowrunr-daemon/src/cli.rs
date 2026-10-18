@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
 use shadowrunr_reconcile::{ReconcileConfig, Reconciler, Source};
-use shadowrunr_sim::pacing::{GateHandle, DEFAULT_MAX_PAUSE_MS};
+use shadowrunr_sim::pacing::GateHandle;
 use shadowrunr_sim::{
     plan_matrix, run_one_with, run_tournament, summarize, wire, FleetQuota, PlanReason, RunAction,
     TournamentOptions,
@@ -60,6 +60,11 @@ pub enum Command {
         /// Print the full report as JSON.
         #[arg(long)]
         json: bool,
+        /// Load the tournament and print what Reconcile would analyse and what it leaves out
+        /// (engine_failed, judge_pending, moved-aside copies, incomplete) as JSON. Builds no
+        /// engine, calls nothing, writes nothing.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Character packages: optional constitution rules.
     #[command(subcommand)]
@@ -227,7 +232,7 @@ pub struct TournamentArgs {
     /// execute nothing, spend no quota, write nothing.
     #[arg(long)]
     pub plan_only: bool,
-    /// Total quota pause cap in seconds (default: [sim] max_quota_pause_s, else 28800 = 8 h).
+    /// Total quota pause cap in seconds (default: [sim] max_quota_pause_s, 28800 = 8 h).
     /// Past it the tournament stops with its summary and exit code 4.
     #[arg(long, value_name = "SECONDS")]
     pub max_pause: Option<u64>,
@@ -289,8 +294,14 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
         Command::Sim(SimCommand::Summarize { dir, json }) => sim_summarize(&from_cwd(&dir), json),
         Command::Reconcile {
             tournament,
+            dry_run: true,
+            ..
+        } => reconcile_dry_run(&cfg, &tournament),
+        Command::Reconcile {
+            tournament,
             scripted,
             json,
+            dry_run: false,
         } => reconcile_cmd(&cfg, tournament, scripted, json).await,
         Command::Character(CharacterCommand::Rules {
             id,
@@ -541,17 +552,6 @@ struct PlanReport {
     runs: Vec<PlannedRow>,
 }
 
-/// `[sim] max_quota_pause_s` from the loaded config file, read here so the daemon's config
-/// type need not change (unknown `[sim]` keys are ignored there).
-fn config_max_pause_s(cfg: &Config) -> Option<u64> {
-    let text = std::fs::read_to_string(cfg.source.as_ref()?).ok()?;
-    let v: toml::Value = toml::from_str(&text).ok()?;
-    v.get("sim")?
-        .get("max_quota_pause_s")?
-        .as_integer()
-        .and_then(|n| u64::try_from(n).ok())
-}
-
 async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, String> {
     let given = a.matrix.or(a.matrix_path).ok_or(
         "a matrix is required: shadowrunr sim tournament --matrix sim/matrices/pilot.toml",
@@ -570,9 +570,8 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
         .unwrap_or_else(|| cfg.paths.sim_runs());
     let max_pause_ms = a
         .max_pause
-        .or_else(|| config_max_pause_s(cfg))
-        .map(|s| s.saturating_mul(1000))
-        .unwrap_or(DEFAULT_MAX_PAUSE_MS);
+        .unwrap_or(cfg.sim.max_quota_pause_s)
+        .saturating_mul(1000);
     if a.plan_only {
         // Reads only: no engine is built, nothing runs, nothing is written.
         let opts = TournamentOptions {
@@ -674,6 +673,41 @@ fn sim_summarize(dir: &Path, json: bool) -> Result<ExitCode, String> {
             println!("wrote {}", dir.join(f).display());
         }
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `reconcile --dry-run`: what a Reconcile run would load from `<runs>/sim/<tournament>/`.
+#[derive(Debug, Serialize)]
+pub struct ReconcileDryRun {
+    pub tournament_id: String,
+    /// Runs Reconcile would analyse (results only).
+    pub loaded: usize,
+    /// Of those, runs with a verdict.
+    pub judged: usize,
+    /// What it would leave out.
+    pub excluded: shadowrunr_reconcile::Excluded,
+}
+
+/// Reads only: loads the tournament the way `Reconciler::run` does, without an engine.
+pub fn reconcile_dry_run_report(cfg: &Config, tournament: &str) -> Result<ReconcileDryRun, String> {
+    runs::check_id("tournament", tournament).map_err(|e| e.message)?;
+    let (loaded, excluded) = shadowrunr_reconcile::load_source_full(
+        &cfg.paths.sim_runs(),
+        &Source::Tournament {
+            tournament_id: tournament.to_string(),
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(ReconcileDryRun {
+        tournament_id: tournament.to_string(),
+        loaded: loaded.len(),
+        judged: loaded.iter().filter(|r| r.verdict.is_some()).count(),
+        excluded,
+    })
+}
+
+fn reconcile_dry_run(cfg: &Config, tournament: &str) -> Result<ExitCode, String> {
+    print_json(&reconcile_dry_run_report(cfg, tournament)?);
     Ok(ExitCode::SUCCESS)
 }
 

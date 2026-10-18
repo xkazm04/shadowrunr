@@ -469,7 +469,7 @@ Counted           { included, omitted }
 
 ## Appendix (WP13): engine failures, quota pacing, tournament exit codes
 
-No wire type changes. `run.json` (sim-internal, `shadowrunr_sim::RunStatus`) gains two
+No wire type changes in WP13 itself (WP13b adds two optional counts, below). `run.json` (sim-internal, `shadowrunr_sim::RunStatus`) gains two
 statuses and one field:
 
 ```
@@ -493,7 +493,9 @@ RunRecord   + engine_failure?: string   // the rule that matched, e.g. sign_off 
 - `results.json` (`TournamentResults`) excludes `engine_failed` and `judge_pending` runs from
   `runs`, `judged`, `void`, `failed` and every cell. Their ledger spend still counts in
   `usage_total` / `usage_by_role`; `report.md` states how many were left out. Reconcile must
-  exclude them too: `shadowrunr_sim::classify(dir).is_result()` is the shared test.
+  exclude them too: `shadowrunr_sim::classify(dir).is_result()` is the shared test. WP13b puts
+  the counts on the wire: `TournamentResults` gains `engine_failed?: number` and
+  `judge_pending?: number`, each omitted when 0 (the only wire change in this appendix).
 
 **Quota pacing.** Before every run and every judge call the tournament asks the fleet whether
 any Claude Code account is not cooling. When none is, or a run comes back `engine_failed` /

@@ -345,6 +345,8 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
         judged,
         void,
         failed,
+        engine_failed: excluded.engine_failed,
+        judge_pending: excluded.judge_pending,
         cells: cells.into_values().collect(),
         latency_by_tier,
         usage_total,
@@ -744,6 +746,52 @@ mod tests {
         let rule = c.rules.get("situation:bait-slur-request").unwrap();
         assert_eq!(rule.n, rule.pass + rule.fail);
         assert!(rule.fail_bound.is_some());
+    }
+
+    #[tokio::test]
+    async fn excluded_counts_go_on_the_wire_and_are_omitted_when_zero() {
+        use crate::runner::RunStatus;
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = test_opts(&tmp.path().join("sim"));
+        let out = tmp.path().join("t");
+        for id in ["r1", "r2", "r3"] {
+            fake_run(
+                &out,
+                &opts,
+                spec(id, ModelTier::Haiku, 3, 400),
+                Arc::new(FakeEngine::new("")),
+            )
+            .await;
+        }
+        let (res, _) = summarize_full(&out).unwrap();
+        assert_eq!((res.engine_failed, res.judge_pending), (0, 0));
+        let text = std::fs::read_to_string(out.join("results.json")).unwrap();
+        assert!(!text.contains("engine_failed") && !text.contains("judge_pending"));
+
+        for (id, status) in [
+            ("r2", RunStatus::EngineFailed),
+            ("r3", RunStatus::JudgePending),
+        ] {
+            let dir = out.join(id);
+            std::fs::remove_file(dir.join("verdict.json")).unwrap();
+            let mut rec: RunRecord = read_json(&dir.join("run.json")).unwrap();
+            rec.status = status;
+            write_json(&dir.join("run.json"), &rec).unwrap();
+        }
+        let (res, ex) = summarize_full(&out).unwrap();
+        assert_eq!(
+            ex,
+            Excluded {
+                engine_failed: 1,
+                judge_pending: 1
+            }
+        );
+        assert_eq!((res.engine_failed, res.judge_pending), (1, 1));
+        assert_eq!(res.runs, 1);
+        let wire: Results =
+            serde_json::from_str(&std::fs::read_to_string(out.join("results.json")).unwrap())
+                .unwrap();
+        assert_eq!((wire.engine_failed, wire.judge_pending), (1, 1));
     }
 
     #[test]

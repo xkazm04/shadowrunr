@@ -4,7 +4,9 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shadowrunr_sim::outcome::{classify, RunClass};
 use shadowrunr_types::{JudgeVerdict, Op, SimRunSpec, Speaker, StreamEvent, TsMs};
 
 use crate::types::Source;
@@ -146,19 +148,104 @@ pub fn load_run(dir: &Path, tournament_id: Option<String>) -> Result<RunData, Re
     })
 }
 
-fn run_dirs(dir: &Path) -> Result<Vec<PathBuf>, ReconcileError> {
-    let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
+/// What a tournament directory held that Reconcile did not load (WP13). Only results are
+/// analysed; the engine's failures and the moved-aside history are counted here instead.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Excluded {
+    /// The engine cut the stream: not a performance of the character (a resume re-runs it).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub engine_failed: u32,
+    /// Sound transcript, but the judge call failed on the engine (a resume re-judges it).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub judge_pending: u32,
+    /// Moved-aside copies (`<run_id>.stale-*`, `.attempt-*`, `.engine-failed*`): history.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub copies: u32,
+    /// Neither `run.json` nor `error.json` yet: still running, or interrupted.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub incomplete: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
+impl Excluded {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// `Not loaded (not results): 3 engine_failed, 2 moved-aside copies.`, or `None`.
+    pub fn describe(&self) -> Option<String> {
+        let parts: Vec<String> = [
+            (self.engine_failed, "engine_failed"),
+            (self.judge_pending, "judge_pending"),
+            (self.copies, "moved-aside copies"),
+            (self.incomplete, "incomplete"),
+        ]
+        .iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, what)| format!("{n} {what}"))
+        .collect();
+        (!parts.is_empty()).then(|| format!("Not loaded (not results): {}.", parts.join(", ")))
+    }
+}
+
+/// Suffixes a tournament gives the run directories it moves aside.
+const COPY_MARKERS: [&str; 3] = [".stale-", ".attempt-", ".engine-failed"];
+
+/// Whether a run directory is a moved-aside copy: its name is not the run id in its
+/// `spec.json`, or (without a readable spec) it carries a copy suffix.
+fn is_copy(dir: &Path) -> bool {
+    let name = dir
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    match read_json::<SimRunSpec>(&dir.join("spec.json")) {
+        Some(spec) => spec.run_id != name,
+        None => COPY_MARKERS.iter().any(|m| name.contains(m)),
+    }
+}
+
+/// A tournament's run directories that are results, plus what was left out.
+fn run_dirs(dir: &Path) -> Result<(Vec<PathBuf>, Excluded), ReconcileError> {
+    let mut all: Vec<PathBuf> = std::fs::read_dir(dir)
         .map_err(|e| io_err(dir, e))?
         .filter_map(Result::ok)
         .map(|e| e.path())
         .filter(|p| p.join("transcript.jsonl").is_file())
         .collect();
-    out.sort();
-    Ok(out)
+    all.sort();
+    let mut excluded = Excluded::default();
+    let mut out = Vec::with_capacity(all.len());
+    for d in all {
+        if is_copy(&d) {
+            excluded.copies += 1;
+            continue;
+        }
+        match classify(&d) {
+            c if c.is_result() => out.push(d),
+            RunClass::EngineFailed => excluded.engine_failed += 1,
+            RunClass::JudgePending => excluded.judge_pending += 1,
+            _ => excluded.incomplete += 1,
+        }
+    }
+    Ok((out, excluded))
 }
 
 /// Load every run a [`Source`] names. `runs_root` is `runs/sim`.
 pub fn load_source(runs_root: &Path, source: &Source) -> Result<Vec<RunData>, ReconcileError> {
+    load_source_full(runs_root, source).map(|(runs, _)| runs)
+}
+
+/// [`load_source`], plus what a tournament source left out. A tournament loads only its
+/// results (`shadowrunr_sim::outcome::classify(dir).is_result()`) from live run directories;
+/// runs named explicitly (`Source::Runs`) load as asked.
+pub fn load_source_full(
+    runs_root: &Path,
+    source: &Source,
+) -> Result<(Vec<RunData>, Excluded), ReconcileError> {
+    let mut excluded = Excluded::default();
     let runs = match source {
         Source::Tournament { tournament_id } => {
             check_id("tournament_id", tournament_id)?;
@@ -168,8 +255,9 @@ pub fn load_source(runs_root: &Path, source: &Source) -> Result<Vec<RunData>, Re
                     "tournament {tournament_id}"
                 )));
             }
-            run_dirs(&dir)?
-                .iter()
+            let (dirs, ex) = run_dirs(&dir)?;
+            excluded = ex;
+            dirs.iter()
                 .map(|d| load_run(d, Some(tournament_id.clone())))
                 .collect::<Result<Vec<_>, _>>()?
         }
@@ -183,7 +271,10 @@ pub fn load_source(runs_root: &Path, source: &Source) -> Result<Vec<RunData>, Re
         }
     };
     if runs.is_empty() {
-        return Err(ReconcileError::NotFound("no runs in source".into()));
+        return Err(ReconcileError::NotFound(match excluded.describe() {
+            Some(d) => format!("no results in source. {d}"),
+            None => "no runs in source".into(),
+        }));
     }
     let mut seen = std::collections::HashSet::new();
     for r in &runs {
@@ -194,7 +285,7 @@ pub fn load_source(runs_root: &Path, source: &Source) -> Result<Vec<RunData>, Re
             )));
         }
     }
-    Ok(runs)
+    Ok((runs, excluded))
 }
 
 /// Find `<runs_root>/<tournament>/<run_id>/` (or `<runs_root>/<run_id>/`).

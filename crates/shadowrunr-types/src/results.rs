@@ -121,9 +121,21 @@ pub struct TournamentResults {
     pub judged: u32,
     pub void: u32,
     pub failed: u32,
+    /// Runs the engine cut (WP13): not results, so left out of every count and cell; a
+    /// resume re-runs them. Omitted when 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub engine_failed: u32,
+    /// Runs whose judge call failed on the engine (WP13): not results, so left out of every
+    /// count and cell; a resume re-judges them. Omitted when 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub judge_pending: u32,
     pub cells: Vec<CellResult>,
     /// tier -> role -> first_text_ms latency, from every ledger row.
     pub latency_by_tier: BTreeMap<String, BTreeMap<String, Latency>>,
     pub usage_total: UsageTotals,
     pub usage_by_role: BTreeMap<String, UsageTotals>,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }

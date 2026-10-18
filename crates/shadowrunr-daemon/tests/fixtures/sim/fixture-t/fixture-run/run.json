@@ -1,0 +1,31 @@
+{
+  "run_id": "fixture-run",
+  "status": "simulated",
+  "instrument_hash": "fixture",
+  "calibration": {
+    "kind": "default_assumption"
+  },
+  "tick_s": 5,
+  "ticks": 12,
+  "ended_at_s": 60,
+  "signed_off": false,
+  "chat": {
+    "bulk_msgs": 0,
+    "featured_msgs": 0,
+    "vote_msgs": 0,
+    "command_msgs": 0,
+    "featured_calls": 0,
+    "featured_engine_errors": 0,
+    "featured_parse_errors": 0,
+    "silent_ticks": 0
+  },
+  "population": {
+    "size_key": "3",
+    "msgs_per_min": 1.0,
+    "mix": [],
+    "counts": [],
+    "peak_ccv": 3
+  },
+  "featured": [],
+  "injections": []
+}

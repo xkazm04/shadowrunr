@@ -73,6 +73,9 @@ max_featured = 8        # LLM-played chatters per run
 featured_every_ticks = 1
 pool_size = 2           # brain background-worker pool
 adhoc_dir = "adhoc"     # single runs go to runs/sim/adhoc/<run_id>/
+# Total quota pause a tournament may wait for an account before it stops (exit code 4).
+# `shadowrunr sim tournament --max-pause <s>` overrides it.
+max_quota_pause_s = 28800  # 8 h
 
 [daemon]
 port = 7717             # bound to 127.0.0.1 only

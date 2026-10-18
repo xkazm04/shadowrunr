@@ -14821,7 +14821,7 @@ return errors === 0;
 validate460.evaluated = {"items":true,"dynamicProps":false,"dynamicItems":false};
 
 export const validateTournamentResults = validate462;
-const schema138 = {"description":"`tournament.results`: the whole `results.json`.","properties":{"assumptions":{"description":"Figures without a source.","items":{"type":"string"},"type":"array"},"calibration":{"items":{"$ref":"#/$defs/CalibrationOrigin"},"type":"array"},"cells":{"items":{"$ref":"#/$defs/CellResult"},"type":"array"},"failed":{"format":"uint32","minimum":0,"type":"integer"},"instrument_hashes":{"items":{"type":"string"},"type":"array"},"judged":{"format":"uint32","minimum":0,"type":"integer"},"latency_by_tier":{"additionalProperties":{"additionalProperties":{"$ref":"#/$defs/Latency"},"type":"object"},"description":"tier -> role -> first_text_ms latency, from every ledger row.","type":"object"},"runs":{"format":"uint32","minimum":0,"type":"integer"},"tournament_id":{"type":"string"},"usage_by_role":{"additionalProperties":{"$ref":"#/$defs/UsageTotals"},"type":"object"},"usage_total":{"$ref":"#/$defs/UsageTotals"},"void":{"format":"uint32","minimum":0,"type":"integer"}},"required":["tournament_id","instrument_hashes","calibration","runs","judged","void","failed","cells","latency_by_tier","usage_total","usage_by_role"],"type":"object"};
+const schema138 = {"description":"`tournament.results`: the whole `results.json`.","properties":{"assumptions":{"description":"Figures without a source.","items":{"type":"string"},"type":"array"},"calibration":{"items":{"$ref":"#/$defs/CalibrationOrigin"},"type":"array"},"cells":{"items":{"$ref":"#/$defs/CellResult"},"type":"array"},"engine_failed":{"description":"Runs the engine cut (WP13): not results, so left out of every count and cell; a\nresume re-runs them. Omitted when 0.","format":"uint32","minimum":0,"type":"integer"},"failed":{"format":"uint32","minimum":0,"type":"integer"},"instrument_hashes":{"items":{"type":"string"},"type":"array"},"judge_pending":{"description":"Runs whose judge call failed on the engine (WP13): not results, so left out of every\ncount and cell; a resume re-judges them. Omitted when 0.","format":"uint32","minimum":0,"type":"integer"},"judged":{"format":"uint32","minimum":0,"type":"integer"},"latency_by_tier":{"additionalProperties":{"additionalProperties":{"$ref":"#/$defs/Latency"},"type":"object"},"description":"tier -> role -> first_text_ms latency, from every ledger row.","type":"object"},"runs":{"format":"uint32","minimum":0,"type":"integer"},"tournament_id":{"type":"string"},"usage_by_role":{"additionalProperties":{"$ref":"#/$defs/UsageTotals"},"type":"object"},"usage_total":{"$ref":"#/$defs/UsageTotals"},"void":{"format":"uint32","minimum":0,"type":"integer"}},"required":["tournament_id","instrument_hashes","calibration","runs","judged","void","failed","cells","latency_by_tier","usage_total","usage_by_role"],"type":"object"};
 const schema139 = {"description":"Where the audience calibration a run used came from.","oneOf":[{"description":"The researched file (`sim/calibration.json`).","properties":{"kind":{"const":"file","type":"string"},"path":{"type":"string"}},"required":["kind","path"],"type":"object"},{"description":"The compiled-in default: every figure is an assumption.","properties":{"kind":{"const":"default_assumption","type":"string"}},"required":["kind"],"type":"object"}]};
 
 function validate356(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
@@ -16124,17 +16124,17 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.failed !== undefined){
-let data6 = data.failed;
+if(data.engine_failed !== undefined){
+let data6 = data.engine_failed;
 const _errs11 = errors;
 if(!(((typeof data6 == "number") && (!(data6 % 1) && !isNaN(data6))) && (isFinite(data6)))){
-validate462.errors = [{instancePath:instancePath+"/failed",schemaPath:"#/properties/failed/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+validate462.errors = [{instancePath:instancePath+"/engine_failed",schemaPath:"#/properties/engine_failed/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
 if(errors === _errs11){
 if((typeof data6 == "number") && (isFinite(data6))){
 if(data6 < 0 || isNaN(data6)){
-validate462.errors = [{instancePath:instancePath+"/failed",schemaPath:"#/properties/failed/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+validate462.errors = [{instancePath:instancePath+"/engine_failed",schemaPath:"#/properties/engine_failed/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
@@ -16145,20 +16145,41 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.instrument_hashes !== undefined){
-let data7 = data.instrument_hashes;
+if(data.failed !== undefined){
+let data7 = data.failed;
 const _errs13 = errors;
+if(!(((typeof data7 == "number") && (!(data7 % 1) && !isNaN(data7))) && (isFinite(data7)))){
+validate462.errors = [{instancePath:instancePath+"/failed",schemaPath:"#/properties/failed/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
 if(errors === _errs13){
-if(Array.isArray(data7)){
-var valid4 = true;
-const len3 = data7.length;
-for(let i3=0; i3<len3; i3++){
+if((typeof data7 == "number") && (isFinite(data7))){
+if(data7 < 0 || isNaN(data7)){
+validate462.errors = [{instancePath:instancePath+"/failed",schemaPath:"#/properties/failed/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+var valid0 = _errs13 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.instrument_hashes !== undefined){
+let data8 = data.instrument_hashes;
 const _errs15 = errors;
-if(typeof data7[i3] !== "string"){
+if(errors === _errs15){
+if(Array.isArray(data8)){
+var valid4 = true;
+const len3 = data8.length;
+for(let i3=0; i3<len3; i3++){
+const _errs17 = errors;
+if(typeof data8[i3] !== "string"){
 validate462.errors = [{instancePath:instancePath+"/instrument_hashes/" + i3,schemaPath:"#/properties/instrument_hashes/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid4 = _errs15 === errors;
+var valid4 = _errs17 === errors;
 if(!valid4){
 break;
 }
@@ -16169,50 +16190,71 @@ validate462.errors = [{instancePath:instancePath+"/instrument_hashes",schemaPath
 return false;
 }
 }
-var valid0 = _errs13 === errors;
+var valid0 = _errs15 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.judge_pending !== undefined){
+let data10 = data.judge_pending;
+const _errs19 = errors;
+if(!(((typeof data10 == "number") && (!(data10 % 1) && !isNaN(data10))) && (isFinite(data10)))){
+validate462.errors = [{instancePath:instancePath+"/judge_pending",schemaPath:"#/properties/judge_pending/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+if(errors === _errs19){
+if((typeof data10 == "number") && (isFinite(data10))){
+if(data10 < 0 || isNaN(data10)){
+validate462.errors = [{instancePath:instancePath+"/judge_pending",schemaPath:"#/properties/judge_pending/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+var valid0 = _errs19 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.judged !== undefined){
-let data9 = data.judged;
-const _errs17 = errors;
-if(!(((typeof data9 == "number") && (!(data9 % 1) && !isNaN(data9))) && (isFinite(data9)))){
+let data11 = data.judged;
+const _errs21 = errors;
+if(!(((typeof data11 == "number") && (!(data11 % 1) && !isNaN(data11))) && (isFinite(data11)))){
 validate462.errors = [{instancePath:instancePath+"/judged",schemaPath:"#/properties/judged/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs17){
-if((typeof data9 == "number") && (isFinite(data9))){
-if(data9 < 0 || isNaN(data9)){
+if(errors === _errs21){
+if((typeof data11 == "number") && (isFinite(data11))){
+if(data11 < 0 || isNaN(data11)){
 validate462.errors = [{instancePath:instancePath+"/judged",schemaPath:"#/properties/judged/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
-var valid0 = _errs17 === errors;
+var valid0 = _errs21 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.latency_by_tier !== undefined){
-let data10 = data.latency_by_tier;
-const _errs19 = errors;
-if(errors === _errs19){
-if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
-for(const key0 in data10){
-let data11 = data10[key0];
-const _errs22 = errors;
-if(errors === _errs22){
-if(data11 && typeof data11 == "object" && !Array.isArray(data11)){
-for(const key1 in data11){
-const _errs25 = errors;
-if(!(validate361(data11[key1], {instancePath:instancePath+"/latency_by_tier/" + key0.replace(/~/g, "~0").replace(/\//g, "~1")+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),parentData:data11,parentDataProperty:key1,rootData,dynamicAnchors}))){
+let data12 = data.latency_by_tier;
+const _errs23 = errors;
+if(errors === _errs23){
+if(data12 && typeof data12 == "object" && !Array.isArray(data12)){
+for(const key0 in data12){
+let data13 = data12[key0];
+const _errs26 = errors;
+if(errors === _errs26){
+if(data13 && typeof data13 == "object" && !Array.isArray(data13)){
+for(const key1 in data13){
+const _errs29 = errors;
+if(!(validate361(data13[key1], {instancePath:instancePath+"/latency_by_tier/" + key0.replace(/~/g, "~0").replace(/\//g, "~1")+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),parentData:data13,parentDataProperty:key1,rootData,dynamicAnchors}))){
 vErrors = vErrors === null ? validate361.errors : vErrors.concat(validate361.errors);
 errors = vErrors.length;
 }
-var valid6 = _errs25 === errors;
+var valid6 = _errs29 === errors;
 if(!valid6){
 break;
 }
@@ -16223,7 +16265,7 @@ validate462.errors = [{instancePath:instancePath+"/latency_by_tier/" + key0.repl
 return false;
 }
 }
-var valid5 = _errs22 === errors;
+var valid5 = _errs26 === errors;
 if(!valid5){
 break;
 }
@@ -16234,57 +16276,57 @@ validate462.errors = [{instancePath:instancePath+"/latency_by_tier",schemaPath:"
 return false;
 }
 }
-var valid0 = _errs19 === errors;
+var valid0 = _errs23 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.runs !== undefined){
-let data13 = data.runs;
-const _errs26 = errors;
-if(!(((typeof data13 == "number") && (!(data13 % 1) && !isNaN(data13))) && (isFinite(data13)))){
+let data15 = data.runs;
+const _errs30 = errors;
+if(!(((typeof data15 == "number") && (!(data15 % 1) && !isNaN(data15))) && (isFinite(data15)))){
 validate462.errors = [{instancePath:instancePath+"/runs",schemaPath:"#/properties/runs/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs26){
-if((typeof data13 == "number") && (isFinite(data13))){
-if(data13 < 0 || isNaN(data13)){
+if(errors === _errs30){
+if((typeof data15 == "number") && (isFinite(data15))){
+if(data15 < 0 || isNaN(data15)){
 validate462.errors = [{instancePath:instancePath+"/runs",schemaPath:"#/properties/runs/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
-var valid0 = _errs26 === errors;
+var valid0 = _errs30 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.tournament_id !== undefined){
-const _errs28 = errors;
+const _errs32 = errors;
 if(typeof data.tournament_id !== "string"){
 validate462.errors = [{instancePath:instancePath+"/tournament_id",schemaPath:"#/properties/tournament_id/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid0 = _errs28 === errors;
+var valid0 = _errs32 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.usage_by_role !== undefined){
-let data15 = data.usage_by_role;
-const _errs30 = errors;
-if(errors === _errs30){
-if(data15 && typeof data15 == "object" && !Array.isArray(data15)){
-for(const key2 in data15){
-const _errs33 = errors;
-if(!(validate369(data15[key2], {instancePath:instancePath+"/usage_by_role/" + key2.replace(/~/g, "~0").replace(/\//g, "~1"),parentData:data15,parentDataProperty:key2,rootData,dynamicAnchors}))){
+let data17 = data.usage_by_role;
+const _errs34 = errors;
+if(errors === _errs34){
+if(data17 && typeof data17 == "object" && !Array.isArray(data17)){
+for(const key2 in data17){
+const _errs37 = errors;
+if(!(validate369(data17[key2], {instancePath:instancePath+"/usage_by_role/" + key2.replace(/~/g, "~0").replace(/\//g, "~1"),parentData:data17,parentDataProperty:key2,rootData,dynamicAnchors}))){
 vErrors = vErrors === null ? validate369.errors : vErrors.concat(validate369.errors);
 errors = vErrors.length;
 }
-var valid7 = _errs33 === errors;
+var valid7 = _errs37 === errors;
 if(!valid7){
 break;
 }
@@ -16295,43 +16337,45 @@ validate462.errors = [{instancePath:instancePath+"/usage_by_role",schemaPath:"#/
 return false;
 }
 }
-var valid0 = _errs30 === errors;
-}
-else {
-var valid0 = true;
-}
-if(valid0){
-if(data.usage_total !== undefined){
-const _errs34 = errors;
-if(!(validate369(data.usage_total, {instancePath:instancePath+"/usage_total",parentData:data,parentDataProperty:"usage_total",rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate369.errors : vErrors.concat(validate369.errors);
-errors = vErrors.length;
-}
 var valid0 = _errs34 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
+if(data.usage_total !== undefined){
+const _errs38 = errors;
+if(!(validate369(data.usage_total, {instancePath:instancePath+"/usage_total",parentData:data,parentDataProperty:"usage_total",rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate369.errors : vErrors.concat(validate369.errors);
+errors = vErrors.length;
+}
+var valid0 = _errs38 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
 if(data.void !== undefined){
-let data18 = data.void;
-const _errs35 = errors;
-if(!(((typeof data18 == "number") && (!(data18 % 1) && !isNaN(data18))) && (isFinite(data18)))){
+let data20 = data.void;
+const _errs39 = errors;
+if(!(((typeof data20 == "number") && (!(data20 % 1) && !isNaN(data20))) && (isFinite(data20)))){
 validate462.errors = [{instancePath:instancePath+"/void",schemaPath:"#/properties/void/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs35){
-if((typeof data18 == "number") && (isFinite(data18))){
-if(data18 < 0 || isNaN(data18)){
+if(errors === _errs39){
+if((typeof data20 == "number") && (isFinite(data20))){
+if(data20 < 0 || isNaN(data20)){
 validate462.errors = [{instancePath:instancePath+"/void",schemaPath:"#/properties/void/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
-var valid0 = _errs35 === errors;
+var valid0 = _errs39 === errors;
 }
 else {
 var valid0 = true;
+}
+}
 }
 }
 }
@@ -16354,7 +16398,7 @@ return false;
 validate462.errors = vErrors;
 return errors === 0;
 }
-validate462.evaluated = {"props":{"assumptions":true,"calibration":true,"cells":true,"failed":true,"instrument_hashes":true,"judged":true,"latency_by_tier":true,"runs":true,"tournament_id":true,"usage_by_role":true,"usage_total":true,"void":true},"dynamicProps":false,"dynamicItems":false};
+validate462.evaluated = {"props":{"assumptions":true,"calibration":true,"cells":true,"engine_failed":true,"failed":true,"instrument_hashes":true,"judge_pending":true,"judged":true,"latency_by_tier":true,"runs":true,"tournament_id":true,"usage_by_role":true,"usage_total":true,"void":true},"dynamicProps":false,"dynamicItems":false};
 
 export const validateTournamentsPage = validate468;
 const schema147 = {"description":"Tournaments ordered by `tournament_id`.","properties":{"items":{"items":{"$ref":"#/$defs/TournamentRow"},"type":"array"},"next_cursor":{"type":"string"}},"required":["items"],"type":"object"};

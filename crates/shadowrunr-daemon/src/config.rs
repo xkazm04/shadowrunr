@@ -81,6 +81,9 @@ pub struct SimDefaults {
     pub pool_size: usize,
     /// Directory under `<runs>/sim/` for single runs (CLI `sim run` and daemon `sim.start`).
     pub adhoc_dir: String,
+    /// Total quota pause a tournament may spend waiting for an account, in seconds; past it
+    /// the tournament stops with exit code 4 (`sim tournament --max-pause` overrides it).
+    pub max_quota_pause_s: u64,
 }
 
 impl Default for SimDefaults {
@@ -110,6 +113,7 @@ impl Default for SimDefaults {
             featured_every_ticks: 1,
             pool_size: 2,
             adhoc_dir: "adhoc".into(),
+            max_quota_pause_s: shadowrunr_sim::pacing::DEFAULT_MAX_PAUSE_MS / 1000,
         }
     }
 }
@@ -332,6 +336,7 @@ mod tests {
         assert!(!cfg.engine.scripted);
         assert_eq!(cfg.daemon.port, 7717);
         assert_eq!(cfg.sim.character, "malakor");
+        assert_eq!(cfg.sim.max_quota_pause_s, 28_800);
         assert_eq!(cfg.paths.characters, Path::new("/repo").join("characters"));
         assert_eq!(
             cfg.paths.sim_runs(),
@@ -378,6 +383,17 @@ core_thread = { tier = "sonnet" }
         let cfg = Config::load(None, &deep).unwrap();
         assert_eq!(cfg.daemon.port, 9000);
         assert_eq!(cfg.root, tmp.path());
+    }
+
+    #[test]
+    fn max_quota_pause_defaults_to_eight_hours_and_reads_the_file() {
+        assert_eq!(SimDefaults::default().max_quota_pause_s, 28_800);
+        let cfg = Config::from_toml("[sim]\nmax_quota_pause_s = 60\n", Path::new("/r")).unwrap();
+        assert_eq!(cfg.sim.max_quota_pause_s, 60);
+        assert_eq!(
+            cfg.sim.character, "malakor",
+            "other [sim] keys keep their defaults"
+        );
     }
 
     #[test]

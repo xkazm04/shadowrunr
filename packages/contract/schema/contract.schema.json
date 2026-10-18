@@ -4255,6 +4255,12 @@
           },
           "type": "array"
         },
+        "engine_failed": {
+          "description": "Runs the engine cut (WP13): not results, so left out of every count and cell; a\nresume re-runs them. Omitted when 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "failed": {
           "format": "uint32",
           "minimum": 0,
@@ -4265,6 +4271,12 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "judge_pending": {
+          "description": "Runs whose judge call failed on the engine (WP13): not results, so left out of every\ncount and cell; a resume re-judges them. Omitted when 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         },
         "judged": {
           "format": "uint32",

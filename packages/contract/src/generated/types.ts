@@ -1819,8 +1819,18 @@ export interface TournamentResults {
   assumptions?: string[];
   calibration: CalibrationOrigin[];
   cells: CellResult[];
+  /**
+   * Runs the engine cut (WP13): not results, so left out of every count and cell; a
+   * resume re-runs them. Omitted when 0.
+   */
+  engine_failed?: number;
   failed: number;
   instrument_hashes: string[];
+  /**
+   * Runs whose judge call failed on the engine (WP13): not results, so left out of every
+   * count and cell; a resume re-judges them. Omitted when 0.
+   */
+  judge_pending?: number;
   judged: number;
   /**
    * tier -> role -> first_text_ms latency, from every ledger row.

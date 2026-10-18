@@ -588,3 +588,222 @@ async fn list_returns_stored_reports_newest_first_and_next_plan_starts_empty() {
         .collect();
     assert_eq!(ids, vec![second, first]);
 }
+
+// ---- WP13b: Reconcile reads only results -----------------------------------------------
+
+const CLEAN: &str = concat!(
+    r#"{"type":"stream_start","ts_ms":0,"stream_id":"s","character":"malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":3}"#,
+    "\n",
+    r#"{"type":"say","ts_ms":1000,"speaker":"malakor","text":"Kneel."}"#,
+    "\n",
+    r#"{"type":"stream_end","ts_ms":60000,"reason":"sim_complete"}"#,
+    "\n"
+);
+const FLEET_LOST: &str = concat!(
+    r#"{"type":"stream_start","ts_ms":0,"stream_id":"s","character":"malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":3}"#,
+    "\n",
+    r#"{"type":"op","ts_ms":5000,"op":{"op":"sign_off","reason":"fleet_lost: engine degraded or down for 300s"}}"#,
+    "\n",
+    r#"{"type":"stream_end","ts_ms":5000,"reason":"sim_complete"}"#,
+    "\n"
+);
+
+/// One run directory as the sim writes it. `spec_id: None` writes no `spec.json`;
+/// `status: None` writes no `run.json`.
+fn write_sim_run(
+    dir: &std::path::Path,
+    spec_id: Option<&str>,
+    status: Option<&str>,
+    judge_error: Option<&str>,
+    verdict: bool,
+    transcript: &str,
+) {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(dir.join("transcript.jsonl"), transcript).unwrap();
+    if let Some(id) = spec_id {
+        let spec = json!({
+            "run_id": id, "character": "malakor", "tone_variant": "theatrical",
+            "core_tier": "haiku", "core_effort": "low", "segment": "SEG-01",
+            "audience_size": 3, "seed": 1, "duration_s": 60, "population": "fixture"
+        });
+        std::fs::write(dir.join("spec.json"), spec.to_string()).unwrap();
+    }
+    if let Some(status) = status {
+        let mut rec = json!({
+            "run_id": spec_id.unwrap_or("x"), "status": status, "instrument_hash": "h",
+            "calibration": { "kind": "default_assumption" },
+            "tick_s": 5, "ticks": 12, "ended_at_s": 60, "signed_off": false,
+            "chat": { "bulk_msgs": 0, "featured_msgs": 0, "vote_msgs": 0, "command_msgs": 0,
+                      "featured_calls": 0, "featured_engine_errors": 0,
+                      "featured_parse_errors": 0, "silent_ticks": 0 },
+            "population": { "size_key": "3", "msgs_per_min": 1.0, "mix": [], "counts": [],
+                            "peak_ccv": 3 },
+            "featured": [], "injections": []
+        });
+        if let Some(e) = judge_error {
+            rec["judge_error"] = e.into();
+        }
+        std::fs::write(dir.join("run.json"), rec.to_string()).unwrap();
+    }
+    if verdict {
+        let v = json!({
+            "run_id": spec_id.unwrap_or("x"), "judge_tier": "opus", "quality": [],
+            "rules": [{ "rule": "situation:a", "state": "pass" }]
+        });
+        std::fs::write(dir.join("verdict.json"), v.to_string()).unwrap();
+    }
+}
+
+/// A tournament with one run of every kind, plus moved-aside copies.
+fn mixed_tournament(root: &std::path::Path) {
+    let t = root.join("t-mix");
+    let cooling = "judge engine call failed: engine unavailable: all claude cli accounts cooling";
+    let run = |name: &str, status, err, verdict, tr| {
+        write_sim_run(&t.join(name), Some(name), status, err, verdict, tr)
+    };
+    // Results.
+    run("a-judged", Some("judged"), None, true, CLEAN);
+    run("b-simulated", Some("simulated"), None, false, CLEAN);
+    run(
+        "c-void",
+        Some("judge_void"),
+        Some("judge reply is not the rubric JSON"),
+        false,
+        CLEAN,
+    );
+    // Not results.
+    run("d-engine-failed", Some("engine_failed"), None, false, CLEAN);
+    run("e-fleet-lost", Some("simulated"), None, false, FLEET_LOST); // pre-WP13 record
+    run("f-pending", Some("judge_pending"), None, false, CLEAN);
+    run(
+        "g-pending-old",
+        Some("judge_void"),
+        Some(cooling),
+        false,
+        CLEAN,
+    ); // pre-WP13
+    run("h-running", None, None, false, CLEAN);
+    // History: copies named after the run they replaced.
+    for copy in [
+        "a-judged.stale-0123456789",
+        "a-judged.attempt-1792330000000",
+        "d-engine-failed.engine-failed",
+    ] {
+        let id = copy.split('.').next().unwrap();
+        write_sim_run(&t.join(copy), Some(id), Some("judged"), None, true, CLEAN);
+    }
+    // A copy without a spec is recognised by its suffix.
+    write_sim_run(
+        &t.join("b-simulated.engine-failed-1"),
+        None,
+        Some("simulated"),
+        None,
+        false,
+        CLEAN,
+    );
+}
+
+#[test]
+fn a_tournament_loads_only_results_and_counts_the_rest() {
+    let tmp = tempfile::tempdir().unwrap();
+    mixed_tournament(tmp.path());
+    let src = Source::Tournament {
+        tournament_id: "t-mix".into(),
+    };
+    let (runs, excluded) = load_source_full(tmp.path(), &src).unwrap();
+    let ids: Vec<&str> = runs.iter().map(|r| r.run_id.as_str()).collect();
+    assert_eq!(ids, ["a-judged", "b-simulated", "c-void"]);
+    assert_eq!(
+        excluded,
+        Excluded {
+            engine_failed: 2,
+            judge_pending: 2,
+            copies: 4,
+            incomplete: 1,
+        }
+    );
+    // The rule is the sim's: every loaded run is a result there too, and nothing else is.
+    for r in &runs {
+        assert!(shadowrunr_sim::classify(&r.dir).is_result(), "{}", r.run_id);
+    }
+    assert_eq!(
+        excluded.describe().unwrap(),
+        "Not loaded (not results): 2 engine_failed, 2 judge_pending, 4 moved-aside copies, 1 incomplete."
+    );
+    assert_eq!(Excluded::default().describe(), None);
+    // Naming a run explicitly still loads it as asked.
+    let named = load_source(
+        tmp.path(),
+        &Source::Runs {
+            run_ids: vec!["d-engine-failed".into()],
+        },
+    )
+    .unwrap();
+    assert_eq!(named.len(), 1);
+}
+
+#[tokio::test]
+async fn the_stored_report_records_what_was_left_out() {
+    let tmp = tempfile::tempdir().unwrap();
+    mixed_tournament(tmp.path());
+    let data = tmp.path().join("data");
+    let rec = reconciler_at(&data, tmp.path(), queue_engine(vec![Ok("not json".into())]));
+    let id = rec
+        .run(Source::Tournament {
+            tournament_id: "t-mix".into(),
+        })
+        .await
+        .unwrap();
+    let stored = rec.stored(&id).unwrap();
+    assert_eq!(stored.runs.len(), 3);
+    assert_eq!(
+        (stored.excluded.engine_failed, stored.excluded.copies),
+        (2, 4)
+    );
+    assert!(stored.report.summary.starts_with("3 runs (1 judged)"));
+    assert!(
+        stored
+            .report
+            .summary
+            .ends_with("Not loaded (not results): 2 engine_failed, 2 judge_pending, 4 moved-aside copies, 1 incomplete."),
+        "{}",
+        stored.report.summary
+    );
+    let text = std::fs::read_to_string(data.join("reconcile").join(format!("{id}.json"))).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(
+        v["excluded"],
+        json!({ "engine_failed": 2, "judge_pending": 2, "copies": 4, "incomplete": 1 })
+    );
+
+    // A clean source stores no `excluded` key at all.
+    let id = reconciler(data.as_path(), queue_engine(vec![Ok("not json".into())]))
+        .run(tournament())
+        .await
+        .unwrap();
+    let text = std::fs::read_to_string(data.join("reconcile").join(format!("{id}.json"))).unwrap();
+    assert!(!text.contains("excluded"), "{text}");
+}
+
+#[test]
+fn a_tournament_of_only_engine_failures_says_so() {
+    let tmp = tempfile::tempdir().unwrap();
+    let t = tmp.path().join("t-dead");
+    write_sim_run(
+        &t.join("r1"),
+        Some("r1"),
+        Some("engine_failed"),
+        None,
+        false,
+        CLEAN,
+    );
+    let err = load_source(
+        tmp.path(),
+        &Source::Tournament {
+            tournament_id: "t-dead".into(),
+        },
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), "not_found");
+    assert!(err.to_string().contains("1 engine_failed"), "{err}");
+}

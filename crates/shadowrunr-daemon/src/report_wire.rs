@@ -151,6 +151,7 @@ mod tests {
                 budget_tokens: 120_000,
                 ..SynthesisInput::default()
             }),
+            excluded: Default::default(),
         }
     }
 

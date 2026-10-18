@@ -32,7 +32,7 @@ use shadowrunr_types::{Engine, EngineError, SegmentId, TsMs};
 pub use budget::{PromptBudget, DEFAULT_PROMPT_BUDGET_TOKENS};
 pub use directives::DirectiveStore;
 pub use metrics::analyze;
-pub use runs::{load_source, RunData};
+pub use runs::{load_source, load_source_full, Excluded, RunData};
 pub use types::*;
 
 #[derive(Debug, thiserror::Error)]
@@ -125,6 +125,11 @@ pub struct StoredReport {
     /// in reports stored before WP12.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub synthesis_input: Option<SynthesisInput>,
+    /// What the tournament held that was not loaded: `engine_failed` and `judge_pending`
+    /// runs (not results, WP13), moved-aside copies, incomplete runs. Omitted when nothing
+    /// was left out, and in reports stored before WP13b.
+    #[serde(default, skip_serializing_if = "Excluded::is_empty")]
+    pub excluded: Excluded,
 }
 
 /// One `lord.chat` turn, appended to `<data>/lord_chat.jsonl`.
@@ -218,7 +223,7 @@ impl Reconciler {
     /// the LLM synthesis fails the deterministic report is still stored, with the failure in
     /// its summary and no proposals.
     pub async fn run(&self, source: Source) -> Result<String, ReconcileError> {
-        let runs = load_source(&self.cfg.runs_root, &source)?;
+        let (runs, excluded) = load_source_full(&self.cfg.runs_root, &source)?;
         let metrics = analyze(&runs);
         let created_ms = (self.clock)();
         let mut report_id = format!("rec-{created_ms}");
@@ -297,6 +302,10 @@ impl Reconciler {
                 Vec::new(),
             ),
         };
+        let summary = match excluded.describe() {
+            Some(note) => format!("{summary} {note}"),
+            None => summary,
+        };
 
         let report = ReconcileReport {
             report_id: report_id.clone(),
@@ -320,6 +329,7 @@ impl Reconciler {
             runs: metrics.runs,
             plans: Vec::new(),
             synthesis_input: Some(built.input),
+            excluded,
         })?;
         Ok(report_id)
     }

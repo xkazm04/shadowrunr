@@ -1500,6 +1500,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shadowrunr-engine",
+ "shadowrunr-sim",
  "shadowrunr-types",
  "tempfile",
  "thiserror",
