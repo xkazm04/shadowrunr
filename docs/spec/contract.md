@@ -201,10 +201,10 @@ runs on the same tier as the core thread it judges.**
 | `plan.current` | `{}` | the latest chosen `NextStreamPlan`, or `not_found` |
 | `plan.proposals` | `{ "report_id" }` | `PlanOption[]` |
 | `plan.choose` | `{ "report_id", "option_ids": [] }` | `NextStreamPlan` |
-| `directive.add` | `{ "kind": "prevent" \| "try", "text", "scope"?: SegmentId }` | `Directive` |
+| `directive.add` | `{ "kind": "prevent" \| "try", "text", "scope"?: SegmentId }` | `Directive` (active; keeps a matching proposal, see below) |
 | `directive.list` | `{}` | `Directive[]` |
-| `directive.deactivate` | `{ "id" }` | `Directive` (with `active: false`) |
-| `lord.chat` | `{ "report_id"?, "message" }` | `{ reply, directives_added: Directive[] }` |
+| `directive.deactivate` | `{ "id" }` | `Directive` (with `active: false`; drops a proposal) |
+| `lord.chat` | `{ "report_id"?, "message" }` | `{ reply, directives_added: Directive[] }` (each one proposed) |
 
 These Reconcile & Plan types live in the `shadowrunr-reconcile` crate and are serialised as
 listed:
@@ -219,12 +219,31 @@ PlanOption      { option_id, kind: "character_change"|"segment_change"|"topic"|"
                   title, rationale, evidence: [Evidence], diff? }   // diff never touches constitution.md
 NextStreamPlan  { plan_id, created_ms, lord_dispatch, segments: [{segment, minutes, notes}],
                   topics: [string], directives: [Directive] }
-Directive       { id, kind: "prevent"|"try", text, scope?, created_ms, active }
+Directive       { id, kind: "prevent"|"try", text, scope?, created_ms, active, proposed? }
 ```
 
 The `lord_dispatch` of the chosen plan is the text Malakor receives as "the Lord's dispatch"
 at the next stream start. Directives are stored in `<data>/directives.json` and fed to every
 stream until they are deactivated.
+
+**Proposed directives (WP14).** Directives a `lord.chat` reply returns are proposals, not live
+directives: the Reconciler's prompt carries report text derived from viewer transcripts, so a
+reply must never activate anything by itself. A directive is in one of three states:
+
+| State | Wire | Written by |
+|---|---|---|
+| proposed | `active: false, proposed: true` | `lord.chat` (the model) |
+| active | `active: true` (no `proposed`) | `directive.add` (the owner) |
+| inactive | `active: false` (no `proposed`) | `directive.deactivate` (the owner) |
+
+- **Keep** a proposal with `directive.add` carrying the proposal's kind, text and scope (text
+  compared ignoring ASCII case): the proposal becomes active under its own id; no duplicate is
+  stored. A directive the owner adds that matches no proposal is active immediately, as before.
+- **Drop** a proposal with `directive.deactivate`.
+- Streams (via `plan.choose` and the plan's `directives`) read only active directives;
+  `directive.list` returns all three states. `proposed` is omitted when false, so files and
+  clients from before WP14 are unaffected.
+- This is the smallest wire change: one optional field, no new RPC.
 
 ## Appendix (WP10): optional rules, installed lists, new moderation values
 

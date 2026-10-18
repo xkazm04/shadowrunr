@@ -1,8 +1,12 @@
 // `reconcile/chat`: the real Lord's chat over `lord.chat`. Each message goes to the daemon
-// (with the report on show as context); directives the reply created are shown as chips.
+// (with the report on show as context). Directives the reply proposes are inactive until the
+// owner decides (WP14): each shows as a chip with Keep (`directive.add` with the same kind,
+// text and scope) and Drop (`directive.deactivate`). A chip's state is read from
+// `directive.list`, so it stays right across tab switches and never offers Keep twice.
 // The conversation is held for the session only; the daemon keeps its own log.
+import type { Directive } from "@shadowrunr/contract";
 import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { LLM_TIMEOUT_MS, useMutation, viewOfError } from "../../data";
+import { LLM_TIMEOUT_MS, useMutation, useRpc, viewOfError } from "../../data";
 import { ConnectionState } from "../../kit";
 import { Chip } from "../../ui/Chip";
 import { Head } from "../../ui/Section";
@@ -42,7 +46,7 @@ export function ChatPage({ reportId }: { reportId: string | undefined }) {
       <Head
         kicker="Reconcile & plan · layer 2"
         title="The Lord’s chat"
-        lede="Talk to the Lord about the report. Instructions that sound like a rule become directives."
+        lede="Talk to the Lord about the report. Instructions that sound like a rule come back as proposed directives: keep or drop each one."
       />
       <p className={styles.meta}>{reportId === undefined ? "No report on show: the Lord answers without one." : <>About report <code>{reportId}</code></>}</p>
       <ConnectionState>
@@ -105,12 +109,55 @@ function Turn({ turn }: { turn: ChatTurn }) {
       {turn.directives.length > 0 && (
         <span className={styles.dirChips} data-role="reconcile-chat-directives">
           {turn.directives.map((d) => (
-            <Chip key={d.id} tone={d.kind === "prevent" ? "fail" : "ok"} title={d.scope ? `Directive, ${d.scope}` : "Directive, all segments"}>
-              {d.kind}: {d.text}
-            </Chip>
+            <Proposal key={d.id} d={d} />
           ))}
         </span>
       )}
     </div>
+  );
+}
+
+/** One directive the reply proposed: Keep or Drop while pending, then its decided state. */
+function Proposal({ d }: { d: Directive }) {
+  const list = useRpc("directive.list", {});
+  const keep = useMutation("directive.add");
+  const drop = useMutation("directive.deactivate");
+  const [error, setError] = useState<string | undefined>();
+  const live = list.data?.find((x) => x.id === d.id) ?? d;
+  const title = d.scope ? `Directive, ${d.scope}` : "Directive, all segments";
+  const tone = d.kind === "prevent" ? "fail" : "ok";
+  const label = `${d.kind}: ${d.text}`;
+  if (!live.proposed) {
+    const state = live.active ? "kept" : "dropped";
+    return (
+      <span className={styles.rowAction} data-role="reconcile-chat-directive" data-state={state}>
+        <Chip tone={live.active ? tone : "muted"} title={`${title}, ${state}`}>
+          {label}
+        </Chip>
+        {!live.active && <span className={styles.dim}>dropped</span>}
+      </span>
+    );
+  }
+  // Until the list has loaded, the turn's copy may be stale: wait rather than risk a second Keep.
+  const busy = keep.pending || drop.pending || (list.data === undefined && list.error === undefined);
+  return (
+    <span className={styles.rowAction} data-role="reconcile-chat-directive" data-state="proposed">
+      <Chip tone="caution" title={`${title}, proposed: inactive until kept`}>
+        {label}
+      </Chip>
+      <button
+        type="button"
+        className={styles.secondary}
+        disabled={busy}
+        aria-label={`Keep ${label}`}
+        onClick={() => void keep.run({ kind: d.kind, text: d.text, ...(d.scope === undefined ? {} : { scope: d.scope }) }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))}
+      >
+        Keep
+      </button>
+      <button type="button" className={styles.secondary} disabled={busy} aria-label={`Drop ${label}`} onClick={() => void drop.run({ id: d.id }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))}>
+        Drop
+      </button>
+      {error && <small role="alert">{error}</small>}
+    </span>
   );
 }

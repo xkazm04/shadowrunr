@@ -6989,7 +6989,7 @@ return errors === 0;
 validate407.evaluated = {"props":{"active_tone":true,"default_tone":true,"foils":true,"id":true,"name":true,"rules_enabled":true,"rules_total":true,"tagline":true,"tones":true},"dynamicProps":false,"dynamicItems":false};
 
 export const validateDirective = validate408;
-const schema39 = {"properties":{"active":{"type":"boolean"},"created_ms":{"format":"int64","type":"integer"},"id":{"type":"string"},"kind":{"$ref":"#/$defs/DirectiveKind"},"scope":{"$ref":"#/$defs/SegmentId"},"text":{"type":"string"}},"required":["id","kind","text","created_ms","active"],"type":"object"};
+const schema39 = {"properties":{"active":{"type":"boolean"},"created_ms":{"format":"int64","type":"integer"},"id":{"type":"string"},"kind":{"$ref":"#/$defs/DirectiveKind"},"proposed":{"description":"Addition (WP14): proposed by the Reconciler in a `lord.chat` reply and not yet decided\nby the owner. A proposed directive is inactive (`active: false`), so no stream reads\nit. `directive.add` with the same kind, text and scope keeps it (it becomes active and\nloses `proposed`); `directive.deactivate` drops it. Omitted when false.","type":"boolean"},"scope":{"$ref":"#/$defs/SegmentId"},"text":{"type":"string"}},"required":["id","kind","text","created_ms","active"],"type":"object"};
 const schema38 = {"enum":["prevent","try"],"type":"string"};
 
 function validate90(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
@@ -7083,11 +7083,11 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.scope !== undefined){
+if(data.proposed !== undefined){
 const _errs8 = errors;
-if(!(validate63(data.scope, {instancePath:instancePath+"/scope",parentData:data,parentDataProperty:"scope",rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate63.errors : vErrors.concat(validate63.errors);
-errors = vErrors.length;
+if(typeof data.proposed !== "boolean"){
+validate408.errors = [{instancePath:instancePath+"/proposed",schemaPath:"#/properties/proposed/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
+return false;
 }
 var valid0 = _errs8 === errors;
 }
@@ -7095,16 +7095,29 @@ else {
 var valid0 = true;
 }
 if(valid0){
+if(data.scope !== undefined){
+const _errs10 = errors;
+if(!(validate63(data.scope, {instancePath:instancePath+"/scope",parentData:data,parentDataProperty:"scope",rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate63.errors : vErrors.concat(validate63.errors);
+errors = vErrors.length;
+}
+var valid0 = _errs10 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
 if(data.text !== undefined){
-const _errs9 = errors;
+const _errs11 = errors;
 if(typeof data.text !== "string"){
 validate408.errors = [{instancePath:instancePath+"/text",schemaPath:"#/properties/text/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid0 = _errs9 === errors;
+var valid0 = _errs11 === errors;
 }
 else {
 var valid0 = true;
+}
 }
 }
 }
@@ -7121,7 +7134,7 @@ return false;
 validate408.errors = vErrors;
 return errors === 0;
 }
-validate408.evaluated = {"props":{"active":true,"created_ms":true,"id":true,"kind":true,"scope":true,"text":true},"dynamicProps":false,"dynamicItems":false};
+validate408.evaluated = {"props":{"active":true,"created_ms":true,"id":true,"kind":true,"proposed":true,"scope":true,"text":true},"dynamicProps":false,"dynamicItems":false};
 
 export const validateDirectiveListResult = validate411;
 const schema41 = {"items":{"$ref":"#/$defs/Directive"},"type":"array"};
@@ -7193,11 +7206,11 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.scope !== undefined){
+if(data.proposed !== undefined){
 const _errs8 = errors;
-if(!(validate63(data.scope, {instancePath:instancePath+"/scope",parentData:data,parentDataProperty:"scope",rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate63.errors : vErrors.concat(validate63.errors);
-errors = vErrors.length;
+if(typeof data.proposed !== "boolean"){
+validate94.errors = [{instancePath:instancePath+"/proposed",schemaPath:"#/properties/proposed/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
+return false;
 }
 var valid0 = _errs8 === errors;
 }
@@ -7205,16 +7218,29 @@ else {
 var valid0 = true;
 }
 if(valid0){
+if(data.scope !== undefined){
+const _errs10 = errors;
+if(!(validate63(data.scope, {instancePath:instancePath+"/scope",parentData:data,parentDataProperty:"scope",rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate63.errors : vErrors.concat(validate63.errors);
+errors = vErrors.length;
+}
+var valid0 = _errs10 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
 if(data.text !== undefined){
-const _errs9 = errors;
+const _errs11 = errors;
 if(typeof data.text !== "string"){
 validate94.errors = [{instancePath:instancePath+"/text",schemaPath:"#/properties/text/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid0 = _errs9 === errors;
+var valid0 = _errs11 === errors;
 }
 else {
 var valid0 = true;
+}
 }
 }
 }
@@ -7231,7 +7257,7 @@ return false;
 validate94.errors = vErrors;
 return errors === 0;
 }
-validate94.evaluated = {"props":{"active":true,"created_ms":true,"id":true,"kind":true,"scope":true,"text":true},"dynamicProps":false,"dynamicItems":false};
+validate94.evaluated = {"props":{"active":true,"created_ms":true,"id":true,"kind":true,"proposed":true,"scope":true,"text":true},"dynamicProps":false,"dynamicItems":false};
 
 
 function validate411(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
@@ -8689,7 +8715,7 @@ return errors === 0;
 validate417.evaluated = {"props":{"items":true,"next_cursor":true},"dynamicProps":false,"dynamicItems":false};
 
 export const validateLordChatReply = validate419;
-const schema56 = {"description":"`lord.chat` result.","properties":{"directives_added":{"items":{"$ref":"#/$defs/Directive"},"type":"array"},"reply":{"type":"string"}},"required":["reply","directives_added"],"type":"object"};
+const schema56 = {"description":"`lord.chat` result. `directives_added` are the directives the reply proposed: each is\n`proposed: true, active: false` until the owner keeps it.","properties":{"directives_added":{"items":{"$ref":"#/$defs/Directive"},"type":"array"},"reply":{"type":"string"}},"required":["reply","directives_added"],"type":"object"};
 
 function validate419(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;

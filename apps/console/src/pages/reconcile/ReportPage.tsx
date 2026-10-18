@@ -5,6 +5,7 @@ import type { Evidence, RankRow, ReconcileReport, SegmentFinding, ToneFinding } 
 import { useState } from "react";
 import { pageRoute, RouteLink } from "../../router";
 import { QueryView } from "../../kit";
+import { RankEngagement } from "../../kit/RankEngagement";
 import { RateBar } from "../../ui/RateBar";
 import { Head, Section } from "../../ui/Section";
 import { StatBand } from "../../ui/StatBand";
@@ -146,42 +147,10 @@ function SegmentSection({ s, filter }: { s: SegmentFinding; filter: ReportFilter
   );
 }
 
-const rankLabel = (r: string) => r.replace(/_/g, " ");
-
 function Ranks({ rows }: { rows: readonly RankRow[] }) {
   return (
     <Section title="Which ranks got answered">
-      {rows.length === 0 ? (
-        <p className={styles.dim}>No ranked chat in this report.</p>
-      ) : (
-        <div className={styles.tblwrap}>
-          <table className={styles.tbl}>
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th className={styles.num}>Viewers</th>
-                <th className={styles.num}>Messages</th>
-                <th>Picked</th>
-                <th>Answered</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((x) => (
-                <tr key={x.rank}>
-                  <td>
-                    <span className={styles.rkDot} data-rank={x.rank} />
-                    {rankLabel(x.rank)}
-                  </td>
-                  <td className={styles.num}>{x.viewers.toLocaleString("en-US")}</td>
-                  <td className={styles.num}>{x.messages.toLocaleString("en-US")}</td>
-                  <td>{x.pick_rate ? <RateBar label="Picked" rate={x.pick_rate.rate} n={x.pick_rate.n} bound={x.pick_rate.bound} /> : `${x.picked}`}</td>
-                  <td>{x.answer_rate ? <RateBar label="Answered" rate={x.answer_rate.rate} n={x.answer_rate.n} bound={x.answer_rate.bound} /> : `${x.answered}`}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {rows.length === 0 ? <p className={styles.dim}>No ranked chat in this report.</p> : <RankEngagement rows={rows} />}
     </Section>
   );
 }

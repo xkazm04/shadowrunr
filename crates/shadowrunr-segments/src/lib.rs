@@ -21,7 +21,10 @@ pub use evidence::{requires_alleged, SourceAllowlist};
 pub use portfolio::{next_status, PortfolioEntry};
 pub use ranks::RankTable;
 pub use runtime::{Lead, Proposal, SegmentConfig, SegmentRuntime};
-pub use table::{segment_name, segment_table, HandoverRule, SegmentTable};
+pub use table::{
+    active_segments, descoped_segments, segment_is_descoped, segment_name, segment_table,
+    HandoverRule, SegmentTable,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SegmentError {

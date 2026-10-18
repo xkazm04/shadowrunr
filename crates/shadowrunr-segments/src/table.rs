@@ -358,9 +358,59 @@ pub fn segment_table(id: SegmentId) -> Result<&'static SegmentTable, SegmentErro
         })
 }
 
+/// Whether `id` is descoped, read from its compiled-in table (`status = "descoped"`). This is
+/// the one place the descoped set lives: callers ask here instead of naming SEG-02B by hand. A
+/// segment without a table, or tables that fail to parse, counts as descoped (never startable).
+pub fn segment_is_descoped(id: SegmentId) -> bool {
+    segment_table(id).map_or(true, SegmentTable::is_descoped)
+}
+
+/// The segments that can start (not descoped), in table order. Empty when the tables fail to
+/// parse.
+pub fn active_segments() -> Vec<SegmentId> {
+    tables()
+        .map(|ts| {
+            ts.iter()
+                .filter(|t| !t.is_descoped())
+                .map(|t| t.id)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The descoped segments, in table order.
+pub fn descoped_segments() -> Vec<SegmentId> {
+    tables()
+        .map(|ts| {
+            ts.iter()
+                .filter(|t| t.is_descoped())
+                .map(|t| t.id)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_descoped_set_comes_from_the_tables() {
+        assert_eq!(
+            active_segments(),
+            vec![SegmentId::Seg01ImprovisedRoom, SegmentId::Seg02aHexmap]
+        );
+        assert_eq!(
+            descoped_segments(),
+            vec![SegmentId::Seg02bCartography, SegmentId::Seg02bDependency]
+        );
+        for id in descoped_segments() {
+            assert!(segment_is_descoped(id));
+        }
+        for id in active_segments() {
+            assert!(!segment_is_descoped(id));
+        }
+    }
 
     #[test]
     fn all_tables_parse_and_cover_every_segment() {

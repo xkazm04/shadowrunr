@@ -1201,6 +1201,11 @@ const PERSONA_LEAK_PATTERNS: &[(&str, Option<&str>)] = &[
 /// Hedges that already qualify a sentence.
 const HEDGE_PATTERN: &str = r"\b(?:alleged(?:ly)?|reportedly|rumou?r(?:s|ed)?|unconfirmed|unverified|unproven|supposedly|apparently|claims?|claimed|speculat\w*|might|may|could|perhaps|possibly|suspect(?:s|ed)?|it\s+is\s+said)\b";
 
+/// A clause that is nothing but a hedge ("Allegedly," / ", reportedly." / ", or so they say")
+/// qualifies its whole sentence. A hedge inside a longer clause ("Alleged fraud aside")
+/// governs only that clause.
+const STANDALONE_HEDGE_PATTERN: &str = r"^(?:allegedly|reportedly|supposedly|apparently|purportedly|perhaps|possibly|rumou?r\s+has\s+it|it\s+is\s+said|so\s+(?:it\s+is\s+said|they\s+say|they\s+claim)|or\s+so\s+(?:it\s+is\s+said|they\s+say|they\s+claim)|they\s+claim|they\s+say)$";
+
 /// Talk about the grading procedure itself, not a claim about the hex.
 const META_PATTERN: &str = r"(?:\b(?:doc|rep|clm|spc)\b|\bgrad(?:e|es|ed|ing)\b|\breveal\w*|\blift(?:s|ed)?\b|\bfog(?:ged|gy)?\b|\bnominat\w*|![a-z]+|\bhints?\b|\bseals?\b|\bprimary\s+sources?\b|\bsources?\s+(?:is\s+|are\s+)?attached\b|\bevidence\s+grade\b)";
 
@@ -1212,6 +1217,7 @@ struct GateRegexes {
     leaks: Vec<(Regex, Option<Regex>)>,
     disclosure: Regex,
     hedge: Regex,
+    standalone_hedge: Regex,
     meta: Regex,
     verb: Regex,
 }
@@ -1234,6 +1240,7 @@ fn gate_regexes() -> &'static GateRegexes {
             .collect(),
         disclosure: ci(BUILTIN_SELF_HARM_DISCLOSURE).expect("disclosure pattern compiles"),
         hedge: ci(HEDGE_PATTERN).expect("hedge pattern compiles"),
+        standalone_hedge: ci(STANDALONE_HEDGE_PATTERN).expect("standalone hedge pattern compiles"),
         meta: ci(META_PATTERN).expect("meta pattern compiles"),
         verb: ci(CLAIM_VERB_PATTERN).expect("claim-verb pattern compiles"),
     })
@@ -1293,10 +1300,44 @@ fn sentence_spans(text: &str) -> Vec<(usize, usize)> {
     spans
 }
 
+/// Byte spans of the clauses of a sentence: split after `,` `;` `:` `(` `)`, em and en
+/// dashes, and a spaced hyphen. The separator stays with the clause before it.
+fn clause_spans(sentence: &str) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    let mut start = 0;
+    for (i, c) in sentence.char_indices() {
+        let spaced_hyphen =
+            c == '-' && sentence[..i].ends_with(' ') && sentence[i + 1..].starts_with(' ');
+        if spaced_hyphen || matches!(c, ',' | ';' | ':' | '(' | ')' | '\u{2014}' | '\u{2013}') {
+            let end = i + c.len_utf8();
+            spans.push((start, end));
+            start = end;
+        }
+    }
+    if start < sentence.len() {
+        spans.push((start, sentence.len()));
+    }
+    spans
+}
+
+/// Whether a clause is a bare hedge (see [`STANDALONE_HEDGE_PATTERN`]).
+fn is_standalone_hedge(clause: &str) -> bool {
+    let core = clause.trim_matches(|c: char| !c.is_alphanumeric());
+    !core.is_empty() && gate_regexes().standalone_hedge.is_match(core)
+}
+
 /// Qualify claims about revealed hexes graded below DOC by inserting "allegedly" next to the
-/// claim's verb. A sentence is a claim when it names such a hex (id or label), is not a
-/// question, carries no hedge already, is not about the grading procedure, and has a verb to
-/// hang the qualifier on. Returns the new text and the hex ids qualified.
+/// claim's verb. The qualifier is judged per claim, not per line:
+///
+/// - a sentence is skipped when it is a question, talks about the grading procedure, or
+///   carries a bare hedge clause ("Allegedly, ..." / "..., reportedly.") that governs it all;
+/// - otherwise each clause that names such a hex (id or label) and has a claim verb is a
+///   claim; a hex named in a verbless clause ("HEX-01, the fund, moved ...") hands its claim
+///   to the next clause that has a verb;
+/// - a claim counts as qualified only when a hedge sits in that same clause. A hedge in
+///   another clause ("Alleged fraud aside, Hollow Bank stole the funds") does not govern it.
+///
+/// Returns the new text and the hex ids qualified.
 pub fn qualify_claims(text: &str, hexes: &[HexInfo]) -> Option<(String, Vec<String>)> {
     let re = gate_regexes();
     let below_doc: Vec<&HexInfo> = hexes
@@ -1311,36 +1352,60 @@ pub fn qualify_claims(text: &str, hexes: &[HexInfo]) -> Option<(String, Vec<Stri
     for (a, b) in sentence_spans(text) {
         let sentence = &text[a..b];
         let lower = sentence.to_lowercase();
-        let named: Vec<&&HexInfo> = below_doc.iter().filter(|h| names_hex(&lower, h)).collect();
-        let claim = !named.is_empty()
+        let named: Vec<&HexInfo> = below_doc
+            .iter()
+            .copied()
+            .filter(|h| names_hex(&lower, h))
+            .collect();
+        let clauses = clause_spans(sentence);
+        let candidate = !named.is_empty()
             && !sentence.trim_end().ends_with('?')
-            && !re.hedge.is_match(sentence)
-            && !re.meta.is_match(sentence);
-        let edit = if claim {
-            re.verb.captures(sentence).map(|cap| {
-                if let Some(m) = cap.name("aux") {
-                    (m.end(), " allegedly")
+            && !re.meta.is_match(sentence)
+            && !clauses
+                .iter()
+                .any(|&(ca, cb)| is_standalone_hedge(&sentence[ca..cb]));
+        let mut edits: Vec<(usize, &str)> = Vec::new();
+        if candidate {
+            let mut pending: Vec<&HexInfo> = Vec::new();
+            for (ca, cb) in clauses {
+                let clause = &sentence[ca..cb];
+                let clause_lower = clause.to_lowercase();
+                let here: Vec<&HexInfo> = named
+                    .iter()
+                    .copied()
+                    .filter(|h| names_hex(&clause_lower, h))
+                    .collect();
+                if here.is_empty() && pending.is_empty() {
+                    continue;
+                }
+                let Some(cap) = re.verb.captures(clause) else {
+                    pending.extend(here);
+                    continue;
+                };
+                let subjects: Vec<&HexInfo> = pending.drain(..).chain(here).collect();
+                if re.hedge.is_match(clause) {
+                    continue;
+                }
+                edits.push(if let Some(m) = cap.name("aux") {
+                    (ca + m.end(), " allegedly")
                 } else {
                     let m = cap.name("verb").expect("one branch matched");
-                    (m.start(), "allegedly ")
-                }
-            })
-        } else {
-            None
-        };
-        match edit {
-            Some((at, ins)) => {
-                out.push_str(&sentence[..at]);
-                out.push_str(ins);
-                out.push_str(&sentence[at..]);
-                for h in named {
+                    (ca + m.start(), "allegedly ")
+                });
+                for h in subjects {
                     if !ids.contains(&h.id) {
                         ids.push(h.id.clone());
                     }
                 }
             }
-            None => out.push_str(sentence),
         }
+        let mut at = 0;
+        for (pos, ins) in edits {
+            out.push_str(&sentence[at..pos]);
+            out.push_str(ins);
+            at = pos;
+        }
+        out.push_str(&sentence[at..]);
     }
     if ids.is_empty() {
         None
@@ -1383,13 +1448,13 @@ pub fn gate_text(
         }
         return (in_character_line(&out), fired);
     }
-    if !out.to_lowercase().contains("alleged") {
-        if let Some((q, ids)) = qualify_claims(&out, hexes) {
-            for id in ids {
-                fired.push((format!("alleged:{id}"), "qualified".to_string()));
-            }
-            out = q;
+    // Judged per claim inside `qualify_claims`: a hedge elsewhere in the line does not
+    // qualify a claim it does not govern.
+    if let Some((q, ids)) = qualify_claims(&out, hexes) {
+        for id in ids {
+            fired.push((format!("alleged:{id}"), "qualified".to_string()));
         }
+        out = q;
     }
     (out, fired)
 }
@@ -1821,6 +1886,63 @@ mod tests {
             "Is HEX-01 really behind it, minions?",
         ] {
             let (out, fired) = gate(line);
+            assert_eq!(out, line);
+            assert!(fired.is_empty(), "{line}: {fired:?}");
+        }
+    }
+
+    fn hexes_with_bank() -> Vec<HexInfo> {
+        let mut h = hexes();
+        h.push(HexInfo {
+            id: "HEX-03".into(),
+            label: "Hollow Bank".into(),
+            grade: Some(EvidenceGrade::Clm),
+        });
+        h
+    }
+
+    #[test]
+    fn a_hedge_qualifies_only_the_claim_it_governs() {
+        let g = |t: &str| gate_text(t, &Policy::builtin(), &hexes_with_bank());
+        // "Alleged" modifies "fraud", not the theft: the theft is still an unqualified claim.
+        let (out, fired) = g("Alleged fraud aside, Hollow Bank stole the funds.");
+        assert_eq!(
+            out,
+            "Alleged fraud aside, Hollow Bank allegedly stole the funds."
+        );
+        assert_eq!(fired, [("alleged:HEX-03".into(), "qualified".into())]);
+        // One sentence, two claims, one already hedged: only the bare one gains a qualifier.
+        let (out, fired) = g("Hollow Bank allegedly stole the funds, and HEX-01 hid them.");
+        assert_eq!(
+            out,
+            "Hollow Bank allegedly stole the funds, and HEX-01 allegedly hid them."
+        );
+        assert_eq!(fired, [("alleged:HEX-01".into(), "qualified".into())]);
+        // A hex named in a verbless clause hands its claim to the next verb.
+        let (out, _) = g("HEX-01, the harbour fund, moved the money.");
+        assert_eq!(out, "HEX-01, the harbour fund, allegedly moved the money.");
+        // An earlier sentence's hedge does not cover a later sentence.
+        let (out, _) = g("The fraud is alleged. Hollow Bank stole the funds.");
+        assert_eq!(
+            out,
+            "The fraud is alleged. Hollow Bank allegedly stole the funds."
+        );
+    }
+
+    #[test]
+    fn a_properly_qualified_claim_is_untouched() {
+        let g = |t: &str| gate_text(t, &Policy::builtin(), &hexes_with_bank());
+        for line in [
+            "Hollow Bank allegedly stole the funds.",
+            "Allegedly, Hollow Bank stole the funds.",
+            "Hollow Bank stole the funds, reportedly.",
+            "Hollow Bank, allegedly, stole the funds.",
+            "Rumour has it that Hollow Bank stole the funds.",
+            "Hollow Bank stole the funds - or so they say.",
+            "They claim HEX-01 moved the money through three wallets.",
+            "Did Hollow Bank steal the funds?",
+        ] {
+            let (out, fired) = g(line);
             assert_eq!(out, line);
             assert!(fired.is_empty(), "{line}: {fired:?}");
         }

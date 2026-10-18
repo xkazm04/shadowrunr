@@ -545,7 +545,8 @@ impl Reconciler {
         }
     }
 
-    /// `directive.add`.
+    /// `directive.add`: the owner's directive, active at once. Repeating a pending
+    /// proposal's kind, text and scope keeps that proposal (the chat's Keep chip).
     pub fn directive_add(
         &self,
         kind: DirectiveKind,
@@ -568,6 +569,7 @@ impl Reconciler {
         self.directives.list()
     }
 
+    /// `directive.deactivate`: retire an active directive, or drop a proposal.
     pub fn directive_deactivate(&self, id: &str) -> Result<Directive, ReconcileError> {
         self.directives.deactivate(id)
     }
@@ -592,8 +594,12 @@ impl Reconciler {
     }
 
     /// `lord.chat`: a conversation with the Reconciler, which may turn the owner's
-    /// instructions into directives (structured output). Invalid directive items are
-    /// skipped; duplicates of an active directive are not added twice.
+    /// instructions into directives (structured output). Those directives are only
+    /// **proposed** (inactive): the prompt carries report text derived from viewer
+    /// transcripts, so a reply never activates anything by itself. The owner keeps a proposal
+    /// with `directive.add` (same kind, text and scope) or drops it with
+    /// `directive.deactivate`. Invalid directive items are skipped; duplicates of an active
+    /// or pending directive are not proposed twice.
     pub async fn lord_chat(
         &self,
         report_id: Option<&str>,
@@ -605,14 +611,41 @@ impl Reconciler {
         }
         let report = report_id.map(|id| self.report(id)).transpose()?;
         let active = self.directives.active()?;
+        let pending = self.directives.proposed()?;
+        let history = self.chat_history();
         let now = (self.clock)();
+        // The report summary and earlier replies are model output over viewer transcripts:
+        // fenced as untrusted data (prompt-safety/untrusted-span-fencing).
+        let mut untrusted: Vec<&str> = vec![message];
+        if let Some(r) = &report {
+            untrusted.push(&r.summary);
+        }
+        for (owner, reply) in &history {
+            untrusted.push(owner);
+            untrusted.push(reply);
+        }
+        untrusted.extend(active.iter().chain(&pending).map(|d| d.text.as_str()));
+        let fence =
+            shadowrunr_sim::judge::UntrustedFence::mint(&untrusted).map_err(ReconcileError::Io)?;
         let v = synth::call(
             self.engine.as_ref(),
-            synth::lord_chat_prompt(report.as_ref(), &active, &self.chat_history(), message),
+            synth::lord_chat_prompt(
+                report.as_ref(),
+                &active,
+                &pending,
+                &history,
+                message,
+                &fence,
+            ),
             synth::lord_chat_schema(),
             &format!("lord-chat-{now}"),
         )
         .await?;
+        if fence.appears_in(&v.to_string()) {
+            return Err(ReconcileError::Synthesis(
+                "the reply echoed the untrusted-data fence token (boundary event)".into(),
+            ));
+        }
         let raw: synth::RawLordChat = synth::parse(v)?;
         let reply = raw.reply.trim().to_string();
         if reply.is_empty() {
@@ -635,12 +668,13 @@ impl Reconciler {
             let text = d.text.trim();
             let dup = active
                 .iter()
+                .chain(pending.iter())
                 .chain(added.iter())
-                .any(|a| a.kind == kind && a.scope == scope && a.text.eq_ignore_ascii_case(text));
+                .any(|a| directives::same_content(a, kind, text, scope));
             if dup {
                 continue;
             }
-            if let Ok(dir) = self.directives.add(kind, text, scope, (self.clock)()) {
+            if let Ok(dir) = self.directives.propose(kind, text, scope, (self.clock)()) {
                 added.push(dir);
             }
         }
@@ -674,8 +708,9 @@ fn append_jsonl<T: Serialize>(path: &Path, v: &T) -> Result<(), ReconcileError> 
     writeln!(f, "{line}").map_err(io)
 }
 
+/// Not descoped, per the segment tables (the one source of the descoped set).
 fn is_active_segment(s: SegmentId) -> bool {
-    matches!(s, SegmentId::Seg01ImprovisedRoom | SegmentId::Seg02aHexmap)
+    !shadowrunr_segments::segment_is_descoped(s)
 }
 
 /// `SEG-01` / `SEG-02A`; descoped and unknown segments are `None`.

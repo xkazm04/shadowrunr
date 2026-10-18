@@ -367,9 +367,16 @@ pub struct Directive {
     pub scope: Option<SegmentId>,
     pub created_ms: TsMs,
     pub active: bool,
+    /// Addition (WP14): proposed by the Reconciler in a `lord.chat` reply and not yet decided
+    /// by the owner. A proposed directive is inactive (`active: false`), so no stream reads
+    /// it. `directive.add` with the same kind, text and scope keeps it (it becomes active and
+    /// loses `proposed`); `directive.deactivate` drops it. Omitted when false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub proposed: bool,
 }
 
-/// `lord.chat` result.
+/// `lord.chat` result. `directives_added` are the directives the reply proposed: each is
+/// `proposed: true, active: false` until the owner keeps it.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct LordChatReply {
     pub reply: String,

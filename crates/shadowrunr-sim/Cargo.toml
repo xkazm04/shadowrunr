@@ -18,6 +18,8 @@ tokio.workspace = true
 toml = "0.8.23"
 sha2 = "0.10.9"
 futures = "0.3.31"
+# Per-assembly nonce for the untrusted-span fence around judge input (WP14).
+getrandom = "0.3.4"
 
 [dev-dependencies]
 tempfile = "3.26.0"

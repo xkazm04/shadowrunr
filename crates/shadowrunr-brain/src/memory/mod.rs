@@ -6,6 +6,6 @@ pub mod store;
 
 pub use consolidate::{consolidate, should_consolidate, ConsolidationReport};
 pub use store::{
-    rebuild_index, CycleRecord, DecayReport, FactStatus, MemoryStore, Procedural, RebuildReport,
-    StoredFact,
+    rebuild_index, verify_index, CycleRecord, DecayReport, FactStatus, IndexCheck, MemoryStore,
+    Procedural, RebuildReport, StoredFact,
 };

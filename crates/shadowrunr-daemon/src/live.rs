@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use shadowrunr_types::{ErrorCode, SegmentId, SimRunSpec, StreamEvent};
+use shadowrunr_types::{ErrorCode, SimRunSpec, StreamEvent};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinError;
 
@@ -224,10 +224,7 @@ impl Tail {
 fn validate(spec: &mut SimRunSpec) -> Result<(), RpcError> {
     runs::check_id("character", &spec.character)?;
     runs::check_id("tone_variant", &spec.tone_variant)?;
-    if matches!(
-        spec.segment,
-        SegmentId::Seg02bCartography | SegmentId::Seg02bDependency
-    ) {
+    if shadowrunr_segments::segment_is_descoped(spec.segment) {
         return Err(RpcError::invalid(format!(
             "segment {} is descoped",
             shadowrunr_sim::wire(&spec.segment)

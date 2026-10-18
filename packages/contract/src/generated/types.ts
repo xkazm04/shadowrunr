@@ -778,6 +778,13 @@ export interface Directive {
   created_ms: number;
   id: string;
   kind: DirectiveKind;
+  /**
+   * Addition (WP14): proposed by the Reconciler in a `lord.chat` reply and not yet decided
+   * by the owner. A proposed directive is inactive (`active: false`), so no stream reads
+   * it. `directive.add` with the same kind, text and scope keeps it (it becomes active and
+   * loses `proposed`); `directive.deactivate` drops it. Omitted when false.
+   */
+  proposed?: boolean;
   scope?: SegmentId;
   text: string;
 }
@@ -929,7 +936,8 @@ export interface LordChatParams {
   report_id?: string;
 }
 /**
- * `lord.chat` result.
+ * `lord.chat` result. `directives_added` are the directives the reply proposed: each is
+ * `proposed: true, active: false` until the owner keeps it.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "LordChatReply".

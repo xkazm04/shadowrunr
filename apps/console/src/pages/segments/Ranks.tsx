@@ -2,11 +2,11 @@
 // and engagement by rank from a reconcile report (l2b.js `ranks`; A/1 FLOORS.segments ranks).
 import type { RankInfo, RankTableInfo } from "@shadowrunr/contract";
 import { useState, type CSSProperties, type FormEvent } from "react";
-import { useRpc } from "../../data";
 import { QueryView } from "../../kit";
+import { RankEngagement } from "../../kit/RankEngagement";
+import { useNewestReport } from "../../kit/useNewestReport";
 import { pageRoute, RouteLink, useRouter } from "../../router";
 import { Chip } from "../../ui/Chip";
-import { RateBar } from "../../ui/RateBar";
 import { Head, Section } from "../../ui/Section";
 import { StatePanel } from "../../ui/States";
 import { useRanks, useReport } from "./hooks";
@@ -144,14 +144,14 @@ function Calculator({ ranks }: { ranks: readonly RankInfo[] }) {
 
 /** The report in the route, else the newest the daemon stores (`reconcile.list`). */
 function Engagement({ table, reportId }: { table: RankTableInfo; reportId: string | undefined }) {
-  const list = useRpc("reconcile.list", reportId === undefined ? {} : null);
-  const id = reportId ?? list.data?.[0]?.report_id;
-  const right = id === undefined ? "no report yet" : reportId === undefined ? `${id} · newest` : id;
+  const shown = useNewestReport(reportId);
+  const id = shown.reportId;
+  const right = id === undefined ? "no report yet" : shown.newest ? `${id} · newest` : id;
   return (
     <Section title="Engagement by rank" right={right}>
       {id !== undefined ? (
         <ReportEngagement table={table} reportId={id} />
-      ) : list.data === undefined && list.errorView === undefined ? (
+      ) : shown.pending ? (
         <StatePanel state="loading" title="Finding the newest report" />
       ) : (
         <ChooseReport />
@@ -198,33 +198,7 @@ function ReportEngagement({ table, reportId }: { table: RankTableInfo; reportId:
     <QueryView query={report} isEmpty={(r) => (r.ranks.by_rank ?? []).length === 0} emptyTitle="No ranked chat in this report" emptyHint="Ranks with no messages are left out of the report.">
       {(r) => (
         <>
-          <div className={styles.tblwrap}>
-            <table className={styles.tbl} data-role="segments-engagement">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th className={styles.num}>Viewers</th>
-                  <th className={styles.num}>Messages</th>
-                  <th>Picked</th>
-                  <th>Answered</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(r.ranks.by_rank ?? []).map((x) => (
-                  <tr key={x.rank} data-role="segments-engagement-row" data-rank={x.rank}>
-                    <td>
-                      <span className={`${styles.rkDot} ${rankClass(x.rank)}`} aria-hidden="true" />
-                      {title(x.rank)}
-                    </td>
-                    <td className={styles.num}>{x.viewers}</td>
-                    <td className={styles.num}>{x.messages}</td>
-                    <td>{x.pick_rate ? <RateBar label="Picked" rate={x.pick_rate.rate} n={x.pick_rate.n} bound={x.pick_rate.bound} /> : x.picked}</td>
-                    <td>{x.answer_rate ? <RateBar label="Answered" rate={x.answer_rate.rate} n={x.answer_rate.n} bound={x.answer_rate.bound} /> : x.answered}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <RankEngagement rows={r.ranks.by_rank ?? []} title={title} role="segments-engagement" />
           <p className={styles.note}>Viewers are simulated in the trials. Rates carry their n and bound; ranks with no messages are left out.</p>
         </>
       )}

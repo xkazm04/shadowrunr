@@ -723,6 +723,10 @@
         "kind": {
           "$ref": "#/$defs/DirectiveKind"
         },
+        "proposed": {
+          "description": "Addition (WP14): proposed by the Reconciler in a `lord.chat` reply and not yet decided\nby the owner. A proposed directive is inactive (`active: false`), so no stream reads\nit. `directive.add` with the same kind, text and scope keeps it (it becomes active and\nloses `proposed`); `directive.deactivate` drops it. Omitted when false.",
+          "type": "boolean"
+        },
         "scope": {
           "$ref": "#/$defs/SegmentId"
         },
@@ -1944,7 +1948,7 @@
       "type": "object"
     },
     "LordChatReply": {
-      "description": "`lord.chat` result.",
+      "description": "`lord.chat` result. `directives_added` are the directives the reply proposed: each is\n`proposed: true, active: false` until the owner keeps it.",
       "properties": {
         "directives_added": {
           "items": {

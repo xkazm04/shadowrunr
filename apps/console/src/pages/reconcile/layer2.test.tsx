@@ -208,14 +208,16 @@ describe("reconcile/directives", () => {
 });
 
 describe("reconcile/chat", () => {
-  it("sends to lord.chat and shows the directives the reply created as chips", async () => {
+  it("sends to lord.chat and shows the directives the reply proposed as chips", async () => {
     session.showReport("rec-1792284840627");
     const bodies: string[] = [];
+    const proposed = { id: "dir-9", kind: "prevent" as const, text: "repeat the poll line", created_ms: 1, active: false, proposed: true };
     mount(["chat"], (method, body) => {
       if (method === "lord.chat") {
         bodies.push(body);
-        return ok({ reply: "Forbidden, then. It is written.", directives_added: [{ id: "dir-9", kind: "prevent", text: "repeat the poll line", created_ms: 1, active: true }] });
+        return ok({ reply: "Forbidden, then. It is written.", directives_added: [proposed] });
       }
+      if (method === "directive.list") return ok([proposed]);
       return base()(method, body);
     });
     await settle();
@@ -225,7 +227,55 @@ describe("reconcile/chat", () => {
     expect(bodies[0]).toContain('"message":"Never repeat the poll line."');
     expect(bodies[0]).toContain('"report_id":"rec-1792284840627"');
     expect(screen.getByText("Forbidden, then. It is written.")).toBeTruthy();
-    expect(role("reconcile-chat-directives")?.textContent).toBe("prevent: repeat the poll line");
+    const chip = role("reconcile-chat-directive");
+    expect(chip?.getAttribute("data-state")).toBe("proposed");
+    expect(screen.getByText("prevent: repeat the poll line")).toBeTruthy();
+  });
+
+  it("keeps and drops proposed directives through the directive RPCs", async () => {
+    const a = { id: "dir-a", kind: "prevent" as const, text: "repeat the poll line", created_ms: 1, active: false, proposed: true, scope: "SEG-01" as const };
+    const b = { id: "dir-b", kind: "try" as const, text: "open with the ledger", created_ms: 2, active: false, proposed: true };
+    let list: Record<string, unknown>[] = [a, b];
+    const bodies: Record<string, string[]> = { "directive.add": [], "directive.deactivate": [] };
+    const m = mount(["chat"], (method, body) => {
+      if (method === "lord.chat") return ok({ reply: "Two proposals.", directives_added: [a, b] });
+      if (method === "directive.list") return ok(list);
+      if (method === "directive.add") {
+        bodies[method]?.push(body);
+        const kept = { ...a, active: true, proposed: undefined };
+        list = [kept, b];
+        return ok(kept);
+      }
+      if (method === "directive.deactivate") {
+        bodies[method]?.push(body);
+        const dropped = { ...b, active: false, proposed: undefined };
+        list = list.map((d) => (d.id === "dir-b" ? dropped : d));
+        return ok(dropped);
+      }
+      return base()(method, body);
+    });
+    await settle();
+    fireEvent.change(screen.getByLabelText("Message the Lord"), { target: { value: "Fix the openings." } });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+    await settle();
+    const state = (id: string) => [...all("reconcile-chat-directive")].map((n) => n.getAttribute("data-state"))[id === "a" ? 0 : 1];
+    expect(state("a")).toBe("proposed");
+    expect(state("b")).toBe("proposed");
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Keep prevent: repeat the poll line" })));
+    await settle();
+    expect(bodies["directive.add"]?.[0]).toContain('"kind":"prevent"');
+    expect(bodies["directive.add"]?.[0]).toContain('"text":"repeat the poll line"');
+    expect(bodies["directive.add"]?.[0]).toContain('"scope":"SEG-01"');
+    expect(state("a")).toBe("kept");
+    expect(screen.queryByRole("button", { name: "Keep prevent: repeat the poll line" })).toBeNull();
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Drop try: open with the ledger" })));
+    await settle();
+    expect(bodies["directive.deactivate"]?.[0]).toContain('"id":"dir-b"');
+    expect(state("b")).toBe("dropped");
+    expect(screen.queryByRole("button", { name: /^(Keep|Drop) / })).toBeNull();
+    expect(m.fetch.calls.filter((c) => c === "directive.list").length).toBeGreaterThanOrEqual(3);
   });
 
   it("shows an undelivered message when the daemon fails", async () => {

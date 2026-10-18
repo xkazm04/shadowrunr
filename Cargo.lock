@@ -1500,6 +1500,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shadowrunr-engine",
+ "shadowrunr-segments",
  "shadowrunr-sim",
  "shadowrunr-types",
  "tempfile",
@@ -1524,6 +1525,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures",
+ "getrandom 0.3.4",
  "serde",
  "serde_json",
  "sha2",

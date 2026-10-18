@@ -1303,3 +1303,278 @@ pub fn rebuild_index(memory_dir: &Path) -> Result<RebuildReport, BrainError> {
     tx.commit()?;
     Ok(report)
 }
+
+/// What a read-only comparison of the index against the markdown truth found.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct IndexCheck {
+    /// Markdown counts.
+    pub files: RebuildReport,
+    /// Whether `index.sqlite` exists.
+    pub index_present: bool,
+    /// How the index disagrees with the markdown; empty when they agree.
+    pub problems: Vec<String>,
+}
+
+impl IndexCheck {
+    /// The index exists and matches every markdown file.
+    pub fn in_step(&self) -> bool {
+        self.index_present && self.problems.is_empty()
+    }
+}
+
+/// Compare the SQLite index with the markdown truth under `memory_dir` without writing
+/// anything: the index is opened read-only, never created, migrated or rebuilt. Checks:
+/// SQLite `quick_check`, one index node per episode, fact, procedural and cycle file with the
+/// same path and content hash, and the tombstone set. A markdown file that does not parse is
+/// an error (a rebuild would fail on it too); every index-side disagreement is a problem.
+///
+/// [`rebuild_index`] is the repair, run by an explicit command, never by a check.
+pub fn verify_index(memory_dir: &Path) -> Result<IndexCheck, BrainError> {
+    use std::collections::BTreeMap;
+    let mut check = IndexCheck::default();
+    let rel = |p: &Path| -> String {
+        p.strip_prefix(memory_dir)
+            .unwrap_or(p)
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join("/")
+    };
+    // (kind, file_path) -> content_hash, from the markdown.
+    let mut want: BTreeMap<(String, String), String> = BTreeMap::new();
+    let mut want_tombs: BTreeSet<(String, String)> = BTreeSet::new();
+    for (kind, dir) in [
+        ("episode", "episodes"),
+        ("fact", "facts"),
+        ("procedural", "procedurals"),
+        ("cycle", "cycles"),
+    ] {
+        let tomb_root = memory_dir.join("facts").join("_tombstones");
+        for path in walk_md(&memory_dir.join(dir))? {
+            let (doc, hash) = read_doc(&path)?;
+            if kind == "fact" && path.starts_with(&tomb_root) {
+                want_tombs.insert((
+                    doc.req("scope", &path)?.to_string(),
+                    doc.req("key", &path)?.to_string(),
+                ));
+                check.files.tombstones += 1;
+                continue;
+            }
+            want.insert((kind.to_string(), rel(&path)), hash);
+            match kind {
+                "episode" => check.files.episodes += 1,
+                "fact" => check.files.facts += 1,
+                "procedural" => check.files.procedurals += 1,
+                _ => check.files.cycles += 1,
+            }
+        }
+    }
+
+    let index = memory_dir.join(INDEX_FILE);
+    if !index.is_file() {
+        check.problems.push(format!("{INDEX_FILE} is missing"));
+        return Ok(check);
+    }
+    check.index_present = true;
+    let conn = match Connection::open_with_flags(
+        &index,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            check.problems.push(format!("cannot open the index: {e}"));
+            return Ok(check);
+        }
+    };
+    let quick: Result<String, rusqlite::Error> =
+        conn.query_row("PRAGMA quick_check", [], |r| r.get(0));
+    match quick {
+        Ok(s) if s == "ok" => {}
+        Ok(s) => {
+            check.problems.push(format!("integrity check: {s}"));
+            return Ok(check);
+        }
+        Err(e) => {
+            check.problems.push(format!("integrity check failed: {e}"));
+            return Ok(check);
+        }
+    }
+
+    let mut have: BTreeMap<(String, String), String> = BTreeMap::new();
+    let nodes = conn
+        .prepare("SELECT kind, file_path, content_hash FROM mem_node")
+        .and_then(|mut st| {
+            st.query_map([], |r| Ok(((r.get(0)?, r.get(1)?), r.get(2)?)))?
+                .collect::<Result<Vec<((String, String), String)>, _>>()
+        });
+    match nodes {
+        Ok(rows) => have.extend(rows),
+        Err(e) => {
+            check.problems.push(format!("cannot read index nodes: {e}"));
+            return Ok(check);
+        }
+    }
+    let tombs = conn
+        .prepare("SELECT scope, key FROM mem_fact_tombstone")
+        .and_then(|mut st| {
+            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<BTreeSet<(String, String)>, _>>()
+        });
+    let have_tombs = match tombs {
+        Ok(t) => t,
+        Err(e) => {
+            check
+                .problems
+                .push(format!("cannot read index tombstones: {e}"));
+            return Ok(check);
+        }
+    };
+
+    let missing: Vec<&(String, String)> = want.keys().filter(|k| !have.contains_key(*k)).collect();
+    let extra: Vec<&(String, String)> = have.keys().filter(|k| !want.contains_key(*k)).collect();
+    let changed: Vec<&(String, String)> = want
+        .iter()
+        .filter(|(k, h)| have.get(*k).is_some_and(|x| x != *h))
+        .map(|(k, _)| k)
+        .collect();
+    for (what, keys) in [
+        ("not indexed", &missing),
+        ("indexed but absent from the markdown", &extra),
+        ("changed since indexed", &changed),
+    ] {
+        if let Some((_, first)) = keys.first() {
+            check
+                .problems
+                .push(format!("{} file(s) {what} (first: {first})", keys.len()));
+        }
+    }
+    if want_tombs != have_tombs {
+        check.problems.push(format!(
+            "tombstones: {} in markdown, {} in the index",
+            want_tombs.len(),
+            have_tombs.len()
+        ));
+    }
+    Ok(check)
+}
+
+#[cfg(test)]
+mod verify_tests {
+    use super::*;
+
+    fn stamp(p: &Path) -> (Vec<u8>, std::time::SystemTime) {
+        (
+            fs::read(p).unwrap(),
+            fs::metadata(p).unwrap().modified().unwrap(),
+        )
+    }
+
+    fn seeded() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let store = MemoryStore::open(dir.path()).unwrap();
+        store
+            .write_episode(&Episode {
+                id: "ep_1".into(),
+                ts_ms: 1_000,
+                stream_id: "s1".into(),
+                kind: EpisodeKind::Stream,
+                text: "Gorbo begged for a title.".into(),
+                importance: 3,
+            })
+            .unwrap();
+        store
+            .write_fact(
+                &Fact {
+                    id: String::new(),
+                    scope: FactScope::Viewer,
+                    key: "v42".into(),
+                    value: "Begs for titles".into(),
+                    confidence: 0.9,
+                    sources: vec!["ep_1".into()],
+                    supersedes: None,
+                },
+                3,
+                2_000,
+            )
+            .unwrap();
+        store
+            .write_fact(
+                &Fact {
+                    id: String::new(),
+                    scope: FactScope::Character,
+                    key: "secret".into(),
+                    value: "fears mirrors".into(),
+                    confidence: 0.9,
+                    sources: vec!["ep_1".into()],
+                    supersedes: None,
+                },
+                3,
+                2_500,
+            )
+            .unwrap();
+        store
+            .forget_fact(FactScope::Character, "secret", "operator request", 3_000)
+            .unwrap();
+        dir
+    }
+
+    #[test]
+    fn verify_reads_without_touching_the_index() {
+        let dir = seeded();
+        let index = dir.path().join(INDEX_FILE);
+        let before = stamp(&index);
+        for _ in 0..2 {
+            let c = verify_index(dir.path()).unwrap();
+            assert!(c.in_step(), "{c:?}");
+            assert_eq!(c.files.episodes, 1);
+            assert_eq!(c.files.facts, 2);
+            assert_eq!(c.files.tombstones, 1);
+        }
+        assert_eq!(stamp(&index), before, "bytes and mtime unchanged");
+        for suffix in ["-wal", "-shm", "-journal"] {
+            assert!(!dir.path().join(format!("{INDEX_FILE}{suffix}")).exists());
+        }
+    }
+
+    #[test]
+    fn verify_reports_drift_and_rebuild_repairs_it() {
+        let dir = seeded();
+        // A markdown file the index never saw (written by hand, or by a crashed write).
+        let ep = dir.path().join("episodes").join("1970").join("01");
+        let src = walk_md(&ep).unwrap().remove(0);
+        let text = fs::read_to_string(&src).unwrap().replace("ep_1", "ep_2");
+        fs::write(ep.join("ep_2.md"), text).unwrap();
+        let c = verify_index(dir.path()).unwrap();
+        assert!(!c.in_step());
+        assert!(c.problems[0].contains("1 file(s) not indexed"), "{c:?}");
+
+        // An edited file: same path, different content.
+        fs::write(&src, fs::read_to_string(&src).unwrap() + "\nedited\n").unwrap();
+        let c = verify_index(dir.path()).unwrap();
+        assert!(
+            c.problems
+                .iter()
+                .any(|p| p.contains("changed since indexed")),
+            "{c:?}"
+        );
+
+        rebuild_index(dir.path()).unwrap();
+        assert!(verify_index(dir.path()).unwrap().in_step());
+
+        // A missing or corrupt index is a problem, not an error, and is not created.
+        fs::remove_file(dir.path().join(INDEX_FILE)).unwrap();
+        let c = verify_index(dir.path()).unwrap();
+        assert!(!c.index_present && !c.in_step());
+        assert!(
+            !dir.path().join(INDEX_FILE).exists(),
+            "never created by a check"
+        );
+        fs::write(dir.path().join(INDEX_FILE), b"not a database").unwrap();
+        let c = verify_index(dir.path()).unwrap();
+        assert!(!c.in_step(), "{c:?}");
+        assert_eq!(
+            fs::read(dir.path().join(INDEX_FILE)).unwrap(),
+            b"not a database"
+        );
+    }
+}

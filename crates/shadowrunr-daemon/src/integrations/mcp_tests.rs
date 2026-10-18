@@ -263,3 +263,62 @@ async fn start_sim_runs_scripted_when_allowed() {
         "{t}"
     );
 }
+
+/// Every file under `root`: path, bytes and mtime.
+fn tree(root: &std::path::Path) -> Vec<(std::path::PathBuf, Vec<u8>, std::time::SystemTime)> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap() {
+            let p = e.unwrap().path();
+            let m = std::fs::metadata(&p).unwrap();
+            if m.is_dir() {
+                stack.push(p.clone());
+                out.push((p, Vec::new(), m.modified().unwrap()));
+            } else {
+                out.push((p.clone(), std::fs::read(&p).unwrap(), m.modified().unwrap()));
+            }
+        }
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}
+
+#[tokio::test]
+async fn the_read_only_preflight_tool_makes_no_writes() {
+    let (mut c, tmp, _s) = start(false, Framing::Lines);
+    c.request(
+        "initialize",
+        json!({ "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "t", "version": "0" } }),
+    )
+    .await;
+    // A memory store with an index, as a daemon leaves it.
+    {
+        let store =
+            shadowrunr_brain::MemoryStore::open(&tmp.path().join("data").join("memory")).unwrap();
+        store
+            .write_episode(&shadowrunr_types::Episode {
+                id: "ep_1".into(),
+                ts_ms: 1_000,
+                stream_id: "s1".into(),
+                kind: shadowrunr_types::EpisodeKind::Stream,
+                text: "Gorbo begged for a title.".into(),
+                importance: 3,
+            })
+            .unwrap();
+    }
+    assert!(!super::super::mcp_tools::find("preflight").unwrap().write);
+    let before = tree(tmp.path());
+    for _ in 0..2 {
+        let pf = c.tool("preflight", json!({})).await;
+        let pf03 = pf
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["check"] == "PF-03")
+            .unwrap()
+            .clone();
+        assert_eq!(pf03["state"], "green", "{pf03}");
+    }
+    assert_eq!(tree(tmp.path()), before, "the preflight tool wrote to disk");
+}

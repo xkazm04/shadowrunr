@@ -1,0 +1,15 @@
+/* The engagement-by-rank table (was copied into Reconcile's and Segments' layer-2 modules). */
+.wrap { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: var(--sr-size-small); }
+.tbl th { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .1em; text-transform: uppercase; font-size: var(--sr-size-caption); text-align: left; padding: var(--sr-space-compact) var(--sr-space-close); border-bottom: var(--sr-stroke-heavy) solid var(--sr-color-text-ink); white-space: nowrap; }
+.tbl td { padding: .55rem var(--sr-space-close); border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); vertical-align: top; }
+.tbl tbody tr:hover { background: var(--sr-color-row-hover); }
+.tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.dot { display: inline-block; width: var(--sr-space-near); height: var(--sr-space-near); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); margin-right: var(--sr-space-compact); vertical-align: calc(-1 * var(--sr-stroke-hair)); background: var(--sr-color-surface-chip); }
+.dot[data-rank="thrall"] { background: var(--sr-rank-thrall); }
+.dot[data-rank="acolyte"] { background: var(--sr-rank-acolyte); }
+.dot[data-rank="cultist"] { background: var(--sr-rank-cultist); }
+.dot[data-rank="warlock"] { background: var(--sr-rank-warlock); }
+.dot[data-rank="lich"] { background: var(--sr-rank-lich); }
+.dot[data-rank="dread_council"] { background: var(--sr-rank-dread-council); }

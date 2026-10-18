@@ -84,13 +84,6 @@ button.inc[aria-pressed="true"] span { text-decoration: underline; text-decorati
 .tbl tr[data-omitted] td { color: var(--sr-color-fail); }
 .plainList { margin: var(--sr-space-near) 0 0; padding-left: var(--sr-space-loose); font-size: var(--sr-size-small); }
 
-.rkDot { display: inline-block; width: var(--sr-space-near); height: var(--sr-space-near); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); margin-right: var(--sr-space-compact); vertical-align: -.06rem; background: var(--sr-color-surface-chip); }
-.rkDot[data-rank="thrall"] { background: var(--sr-rank-thrall); }
-.rkDot[data-rank="acolyte"] { background: var(--sr-rank-acolyte); }
-.rkDot[data-rank="cultist"] { background: var(--sr-rank-cultist); }
-.rkDot[data-rank="warlock"] { background: var(--sr-rank-warlock); }
-.rkDot[data-rank="lich"] { background: var(--sr-rank-lich); }
-.rkDot[data-rank="dread_council"] { background: var(--sr-rank-dread-council); }
 
 .qrows { max-width: 40rem; }
 .qrow { display: grid; grid-template-columns: 1fr auto; gap: var(--sr-space-compact); align-items: center; padding: .25rem 0; border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); font-size: var(--sr-size-caption); }

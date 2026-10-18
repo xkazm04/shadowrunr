@@ -72,6 +72,9 @@ pub enum Command {
     /// Moderation policy: operator-installed term lists.
     #[command(subcommand)]
     Policy(PolicyCommand),
+    /// The brain's long-term memory store (<data>/memory).
+    #[command(subcommand)]
+    Memory(MemoryCommand),
     /// Serve /events (WebSocket) and /rpc on 127.0.0.1.
     Daemon {
         /// Port (default: [daemon] port, 7717).
@@ -113,6 +116,18 @@ pub enum CharacterCommand {
         #[arg(long = "disable", value_name = "RULE")]
         disable: Vec<String>,
         /// Print the list as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MemoryCommand {
+    /// Delete and rebuild <data>/memory/index.sqlite from the markdown truth: the repair
+    /// PF-03 names when the index is stale. Pre-flight only verifies; it never rebuilds.
+    /// Stop the daemon first (it holds the index open).
+    Reindex {
+        /// Print the counts as JSON.
         #[arg(long)]
         json: bool,
     },
@@ -162,9 +177,10 @@ fn parse_tier(s: &str) -> Result<ModelTier, String> {
 fn parse_segment(s: &str) -> Result<SegmentId, String> {
     let seg: SegmentId = serde_json::from_value(serde_json::Value::String(s.to_ascii_uppercase()))
         .map_err(|_| format!("segment must be SEG-01 or SEG-02A, got {s:?}"))?;
-    match seg {
-        SegmentId::Seg01ImprovisedRoom | SegmentId::Seg02aHexmap => Ok(seg),
-        _ => Err(format!("segment {s} is descoped")),
+    if shadowrunr_segments::segment_is_descoped(seg) {
+        Err(format!("segment {s} is descoped"))
+    } else {
+        Ok(seg)
     }
 }
 
@@ -312,6 +328,7 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
         Command::Policy(PolicyCommand::InstallList { list_id, source }) => {
             policy_install_cmd(&cfg, &list_id, source.as_deref()).await
         }
+        Command::Memory(MemoryCommand::Reindex { json }) => memory_reindex_cmd(&cfg, json),
         Command::Daemon { port, scripted } => daemon_cmd(cfg, port, scripted).await,
         Command::Personas(PersonasCommand::Status { json }) => {
             personas_status_cmd(&cfg, json).await
@@ -331,6 +348,36 @@ async fn personas_status_cmd(cfg: &Config, json: bool) -> Result<ExitCode, Strin
         println!("{}", status::render(&r));
     }
     Ok(ExitCode::from(r.exit))
+}
+
+fn memory_reindex_cmd(cfg: &Config, json: bool) -> Result<ExitCode, String> {
+    let dir = cfg.paths.memory();
+    if !dir.is_dir() {
+        return Err(format!("{}: no memory store to reindex", dir.display()));
+    }
+    let r = shadowrunr_brain::rebuild_index(&dir)
+        .map_err(|e| format!("reindex {}: {e}", dir.display()))?;
+    if json {
+        print_json(&serde_json::json!({
+            "memory_dir": dir.display().to_string(),
+            "episodes": r.episodes,
+            "facts": r.facts,
+            "tombstones": r.tombstones,
+            "procedurals": r.procedurals,
+            "cycles": r.cycles,
+        }));
+    } else {
+        println!(
+            "{}: index rebuilt: {} episodes, {} facts, {} tombstones, {} procedurals, {} cycles",
+            dir.display(),
+            r.episodes,
+            r.facts,
+            r.tombstones,
+            r.procedurals,
+            r.cycles
+        );
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn character_rules_cmd(
@@ -435,10 +482,7 @@ async fn sim_run(cfg: &Config, a: SimRunArgs) -> Result<ExitCode, String> {
     for (k, v) in [("character", &character), ("tone", &tone)] {
         runs::check_id(k, v).map_err(|e| e.message)?;
     }
-    if matches!(
-        segment,
-        SegmentId::Seg02bCartography | SegmentId::Seg02bDependency
-    ) {
+    if shadowrunr_segments::segment_is_descoped(segment) {
         return Err(format!("segment {} is descoped", wire(&segment)));
     }
     let spec = SimRunSpec {

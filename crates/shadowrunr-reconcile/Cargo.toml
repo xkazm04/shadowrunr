@@ -11,6 +11,8 @@ shadowrunr-engine.workspace = true
 # The WP13 run classification (`outcome::classify`): one rule for results, Reconcile and
 # the daemon. sim does not depend on reconcile, so there is no cycle.
 shadowrunr-sim.workspace = true
+# The descoped segment set, read from the segment tables (WP14).
+shadowrunr-segments.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

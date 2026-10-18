@@ -57,6 +57,47 @@ describe("virtualised lists at 10x scale", () => {
   });
 });
 
+describe("FilterTable empty filter", () => {
+  it("shows a no-matches row when the filter empties the table, and clears it", () => {
+    const data = [
+      { id: "a", tone: "weary", on: true },
+      { id: "b", tone: "theatrical", on: false },
+    ];
+    render(
+      <FilterTable<(typeof data)[number], "on" | "all">
+        rows={data}
+        label="Runs"
+        getKey={(r) => r.id}
+        haystack={(r) => `${r.id} ${r.tone}`}
+        columns={[{ id: "id", header: "Run", cell: (r) => r.id }]}
+        facets={{
+          label: "Show",
+          initial: "all",
+          options: [
+            { id: "all", label: "All" },
+            { id: "on", label: "On" },
+          ],
+          predicate: (r, f) => f === "all" || r.on,
+        }}
+      />,
+    );
+    const empty = () => document.querySelector("[data-role='filter-table-empty']");
+    expect(empty()).toBeNull();
+    fireEvent.change(screen.getByLabelText("Filter Runs"), { target: { value: "nobody" } });
+    expect(empty()?.textContent).toContain("No matches");
+    expect(empty()?.textContent).toContain("“nobody”");
+    expect(screen.getByText("0 of 2")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+    expect(empty()).toBeNull();
+    expect(screen.getByText("2 of 2")).toBeTruthy();
+  });
+
+  it("shows nothing extra for a table with no rows at all", () => {
+    render(<FilterTable rows={[] as { id: string }[]} label="Runs" getKey={(r) => r.id} haystack={(r) => r.id} columns={[{ id: "id", header: "Run", cell: (r) => r.id }]} />);
+    expect(document.querySelector("[data-role='filter-table-empty']")).toBeNull();
+  });
+});
+
 describe("VirtualList scrollToIndex", () => {
   it("scrolls the viewport to the row it is given, and again when it changes", () => {
     const calls: number[] = [];

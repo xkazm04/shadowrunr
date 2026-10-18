@@ -97,36 +97,90 @@ pub fn pf02_character(cfg: &Config) -> HealthReport {
     }
 }
 
-/// PF-03: the memory store is writable and its index rebuilds from the markdown truth.
+/// The amber hint when the memory index disagrees with the markdown.
+pub const REINDEX_HINT: &str = "index stale: run `shadowrunr memory reindex`";
+
+/// The nearest existing directory at or above `dir`, and whether it is marked read-only.
+/// A check never creates the directory it checks.
+fn nearest_dir_readonly(dir: &Path) -> Option<(std::path::PathBuf, bool)> {
+    let mut d = Some(dir);
+    while let Some(p) = d {
+        if let Ok(m) = std::fs::metadata(p) {
+            if m.is_dir() {
+                return Some((p.to_path_buf(), m.permissions().readonly()));
+            }
+        }
+        d = p.parent();
+    }
+    None
+}
+
+/// PF-03: the memory store's directory is usable and its SQLite index agrees with the
+/// markdown truth. Read-only: nothing is created, probed by writing, or rebuilt (the MCP
+/// `preflight` tool is declared read-only). A stale index is amber with the repair command;
+/// the rebuild itself is `shadowrunr memory reindex`.
 pub fn pf03_memory(cfg: &Config) -> HealthReport {
     let dir = cfg.paths.memory();
-    let probe = dir.join(".preflight-probe");
-    let writable = std::fs::create_dir_all(&dir)
-        .and_then(|_| std::fs::write(&probe, b"ok"))
-        .and_then(|_| std::fs::remove_file(&probe));
-    if let Err(e) = writable {
+    if !dir.is_dir() {
+        return match nearest_dir_readonly(&dir) {
+            Some((at, false)) => rep(
+                "PF-03",
+                HealthState::Green,
+                format!(
+                    "{} not created yet (the store creates it on first open under {}); nothing to index",
+                    dir.display(),
+                    at.display()
+                ),
+            ),
+            Some((at, true)) => rep(
+                "PF-03",
+                HealthState::Red,
+                format!("{} cannot be created: {} is read-only", dir.display(), at.display()),
+            ),
+            None => rep(
+                "PF-03",
+                HealthState::Red,
+                format!("{}: no existing parent directory", dir.display()),
+            ),
+        };
+    }
+    if nearest_dir_readonly(&dir).is_some_and(|(_, ro)| ro) {
         return rep(
             "PF-03",
             HealthState::Red,
-            format!("{} not writable: {e}", dir.display()),
+            format!("{} is read-only", dir.display()),
         );
     }
-    match shadowrunr_brain::rebuild_index(&dir) {
-        Ok(r) => rep(
+    match shadowrunr_brain::memory::verify_index(&dir) {
+        Ok(c) if c.in_step() => rep(
             "PF-03",
             HealthState::Green,
             format!(
-                "{} writable; index rebuilt: {} episodes, {} facts, {} tombstones",
+                "{}: index in step with the markdown ({} episodes, {} facts, {} tombstones)",
                 dir.display(),
-                r.episodes,
-                r.facts,
-                r.tombstones
+                c.files.episodes,
+                c.files.facts,
+                c.files.tombstones
+            ),
+        ),
+        Ok(c) if !c.index_present && c.files == Default::default() => rep(
+            "PF-03",
+            HealthState::Green,
+            format!("{}: empty store, no index yet", dir.display()),
+        ),
+        Ok(c) => rep(
+            "PF-03",
+            HealthState::Amber,
+            format!(
+                "{REINDEX_HINT} ({}: {})",
+                dir.display(),
+                c.problems.join("; ")
             ),
         ),
         Err(e) => rep(
             "PF-03",
             HealthState::Red,
-            format!("index rebuild failed at {}: {e}", dir.display()),
+            format!("memory markdown unreadable at {}: {e}", dir.display()),
         ),
     }
 }
@@ -137,7 +191,11 @@ pub fn pf04_segments(cfg: &Config) -> HealthReport {
         Ok(t) => t.len(),
         Err(e) => return rep("PF-04", HealthState::Red, format!("segment tables: {e}")),
     };
-    for seg in [SegmentId::Seg01ImprovisedRoom, SegmentId::Seg02aHexmap] {
+    let (active, descoped) = (
+        shadowrunr_segments::active_segments(),
+        shadowrunr_segments::descoped_segments(),
+    );
+    for &seg in &active {
         if let Err(e) = SegmentRuntime::with_config(seg, SegmentConfig::default()) {
             return rep(
                 "PF-04",
@@ -146,7 +204,7 @@ pub fn pf04_segments(cfg: &Config) -> HealthReport {
             );
         }
     }
-    for seg in [SegmentId::Seg02bCartography, SegmentId::Seg02bDependency] {
+    for &seg in &descoped {
         match SegmentRuntime::with_config(seg, SegmentConfig::default()) {
             Err(SegmentError::Descoped { .. }) => {}
             Ok(_) => {
@@ -178,10 +236,20 @@ pub fn pf04_segments(cfg: &Config) -> HealthReport {
             ),
         );
     }
+    let names = |ids: &[SegmentId]| {
+        ids.iter()
+            .map(shadowrunr_sim::wire)
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
     rep(
         "PF-04",
         HealthState::Green,
-        format!("{tables} tables valid; SEG-01, SEG-02A start; SEG-02B-I, SEG-02B-II refused"),
+        format!(
+            "{tables} tables valid; {} start; {} refused",
+            names(&active),
+            names(&descoped)
+        ),
     )
 }
 
@@ -338,21 +406,33 @@ pub fn pf06_calibration(cfg: &Config) -> HealthReport {
     }
 }
 
-/// PF-07: the runs directory is writable and the disk has room.
+/// PF-07: the runs directory is usable and the disk has room. Read-only like PF-03: the
+/// directory is not created and no probe file is written (a missing directory is created by
+/// the first run).
 pub fn pf07_disk(cfg: &Config) -> HealthReport {
     let dir = cfg.paths.sim_runs();
-    let probe = dir.join(".preflight-probe");
-    let writable = std::fs::create_dir_all(&dir)
-        .and_then(|_| std::fs::write(&probe, b"ok"))
-        .and_then(|_| std::fs::remove_file(&probe));
-    if let Err(e) = writable {
+    let (at, readonly) = match nearest_dir_readonly(&dir) {
+        Some(x) => x,
+        None => {
+            return rep(
+                "PF-07",
+                HealthState::Red,
+                format!("{}: no existing parent directory", dir.display()),
+            )
+        }
+    };
+    if readonly {
         return rep(
             "PF-07",
             HealthState::Red,
-            format!("{} not writable: {e}", dir.display()),
+            format!(
+                "{} not writable: {} is read-only",
+                dir.display(),
+                at.display()
+            ),
         );
     }
-    match fs2::available_space(&dir) {
+    match fs2::available_space(&at) {
         Ok(free) => {
             let gib = free as f64 / f64::from(1u32 << 30);
             let state = if free < RED_FREE_BYTES {
@@ -430,6 +510,89 @@ mod tests {
         assert_eq!(s, HealthState::Amber);
         assert!(d.contains("placeholder only"));
         assert_eq!(installed_lists(&[]).0, HealthState::Green);
+    }
+
+    fn stamp(p: &Path) -> (Vec<u8>, std::time::SystemTime) {
+        (
+            std::fs::read(p).unwrap(),
+            std::fs::metadata(p).unwrap().modified().unwrap(),
+        )
+    }
+
+    fn seed_memory(dir: &Path) {
+        let store = shadowrunr_brain::MemoryStore::open(dir).unwrap();
+        store
+            .write_episode(&shadowrunr_types::Episode {
+                id: "ep_1".into(),
+                ts_ms: 1_000,
+                stream_id: "s1".into(),
+                kind: shadowrunr_types::EpisodeKind::Stream,
+                text: "Gorbo begged for a title.".into(),
+                importance: 3,
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn pf03_verifies_without_writing_and_names_the_repair() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = crate::e2e::test_config(tmp.path(), crate::e2e::repo().join("characters"));
+        let mem = cfg.paths.memory();
+
+        // No store yet: green, and the check does not create it.
+        let r = pf03_memory(&cfg);
+        assert_eq!(r.state, HealthState::Green, "{}", r.detail);
+        assert!(!mem.exists(), "a check never creates the directory");
+
+        seed_memory(&mem);
+        let index = mem.join(shadowrunr_brain::memory::store::INDEX_FILE);
+        let before = stamp(&index);
+        let listing = |d: &Path| {
+            let mut v: Vec<_> = std::fs::read_dir(d)
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect();
+            v.sort();
+            v
+        };
+        let files_before = listing(&mem);
+        for _ in 0..2 {
+            let r = pf03_memory(&cfg);
+            assert_eq!(r.state, HealthState::Green, "{}", r.detail);
+            assert!(r.detail.contains("index in step"), "{}", r.detail);
+        }
+        assert_eq!(stamp(&index), before, "index bytes and mtime unchanged");
+        assert_eq!(listing(&mem), files_before, "no probe, journal or new file");
+
+        // The index misses a markdown file: amber with the repair command, still no write.
+        let ep_dir = mem.join("episodes").join("1970").join("01");
+        let text = std::fs::read_to_string(ep_dir.join("ep_1.md")).unwrap();
+        std::fs::write(ep_dir.join("ep_2.md"), text.replace("ep_1", "ep_2")).unwrap();
+        let r = pf03_memory(&cfg);
+        assert_eq!(r.state, HealthState::Amber, "{}", r.detail);
+        assert!(r.detail.starts_with(REINDEX_HINT), "{}", r.detail);
+        assert_eq!(stamp(&index), before);
+
+        // The explicit repair brings it back to green.
+        shadowrunr_brain::rebuild_index(&mem).unwrap();
+        assert_eq!(pf03_memory(&cfg).state, HealthState::Green);
+    }
+
+    #[test]
+    fn pf07_writes_no_probe() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = crate::e2e::test_config(tmp.path(), crate::e2e::repo().join("characters"));
+        let dir = cfg.paths.sim_runs();
+        let mtime = std::fs::metadata(&dir).unwrap().modified().unwrap();
+        let r = pf07_disk(&cfg);
+        assert_ne!(r.state, HealthState::Red, "{}", r.detail);
+        assert!(!dir.join(".preflight-probe").exists());
+        assert_eq!(std::fs::metadata(&dir).unwrap().modified().unwrap(), mtime);
+        // A runs directory that does not exist yet is not created by the check.
+        let mut cfg2 = cfg.clone();
+        cfg2.paths.runs = tmp.path().join("fresh-runs");
+        assert_ne!(pf07_disk(&cfg2).state, HealthState::Red);
+        assert!(!tmp.path().join("fresh-runs").exists());
     }
 
     #[test]

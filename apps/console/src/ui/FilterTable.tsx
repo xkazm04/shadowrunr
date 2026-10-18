@@ -7,6 +7,7 @@ import { filterRows, nextSort, type SortState } from "./filterRows";
 import styles from "./FilterTable.module.css";
 import { PillGroup, type PillOption } from "./PillGroup";
 import { remPx } from "./remPx";
+import { StatePanel } from "./States";
 import { DEFAULT_INITIAL_RECT, measuredHeight } from "./VirtualList";
 
 export interface Column<R> {
@@ -78,6 +79,11 @@ export function FilterTable<R, F extends string = string>(props: FilterTableProp
       }),
   });
   const items = v.getVirtualItems();
+  const filtered = deferred.trim() !== "" || (facets !== undefined && facet !== facets.initial);
+  const clear = () => {
+    setQuery("");
+    setFacet(facets?.initial);
+  };
   const top = items[0]?.start ?? 0;
   const bottom = v.getTotalSize() - (items[items.length - 1]?.end ?? 0);
 
@@ -159,6 +165,22 @@ export function FilterTable<R, F extends string = string>(props: FilterTableProp
             {bottom > 0 && (
               <tr className={styles.spacer} aria-hidden="true">
                 <td colSpan={columns.length} style={{ height: bottom }} />
+              </tr>
+            )}
+            {shown.length === 0 && rows.length > 0 && (
+              <tr data-role="filter-table-empty">
+                <td colSpan={columns.length} className={styles.emptyCell}>
+                  <StatePanel
+                    state="empty"
+                    title="No matches"
+                    hint={
+                      deferred.trim() === ""
+                        ? `None of the ${rows.length.toLocaleString("en-US")} rows is in this view.`
+                        : `None of the ${rows.length.toLocaleString("en-US")} rows matches “${deferred.trim()}”${facets && facet !== facets.initial ? " in this view" : ""}.`
+                    }
+                    {...(filtered ? { action: { label: "Clear filter", onClick: clear } } : {})}
+                  />
+                </td>
               </tr>
             )}
           </tbody>

@@ -83,3 +83,6 @@
 }
 
 .spacer td { padding: 0; border: 0; }
+
+/* The "no matches" row when a filter empties the table. */
+.emptyCell { padding: var(--sr-space-base); }
