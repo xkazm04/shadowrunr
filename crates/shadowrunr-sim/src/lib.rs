@@ -98,6 +98,8 @@ pub struct SimOptions {
     pub pool_size: usize,
     /// Keep the throwaway memory dir after the run (debugging only).
     pub keep_memory: bool,
+    /// Platforms whose term rules the simulated brain applies (empty = strictest union).
+    pub platforms: Vec<String>,
     pub hooks: Hooks,
 }
 
@@ -115,6 +117,7 @@ impl Default for SimOptions {
             featured_every_ticks: 1,
             pool_size: 2,
             keep_memory: false,
+            platforms: vec!["twitch".into()],
             hooks: Hooks::default(),
         }
     }

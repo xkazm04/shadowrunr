@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use shadowrunr_brain::{load_character, Brain, BrainConfig};
+use shadowrunr_brain::{load_character, Brain, BrainConfig, BrainTuning};
 use shadowrunr_segments::{SegmentConfig, SegmentRuntime};
 use shadowrunr_types::{
     ChatMsg, EndReason, Engine, ModelTier, Op, Role, SegmentContext, SimRunSpec, Speaker,
@@ -619,7 +619,7 @@ pub async fn run_one_with(
         std::fs::create_dir_all(&memory_dir)
             .map_err(|e| SimError::Io(format!("{}: {e}", memory_dir.display())))?;
         let character = load_character(&prep.character_dir, &spec.tone_variant)?;
-        let brain = Brain::new(
+        let brain = Brain::new_with(
             BrainConfig {
                 character,
                 memory_dir: memory_dir.clone(),
@@ -628,6 +628,10 @@ pub async fn run_one_with(
                 pool_size: opts.pool_size,
             },
             prep.engine.clone(),
+            BrainTuning {
+                platforms: opts.platforms.clone(),
+                ..BrainTuning::default()
+            },
         )
         .await?;
         let stage = SegmentRuntime::with_config(
