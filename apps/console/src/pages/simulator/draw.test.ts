@@ -1,7 +1,7 @@
 // The canvas scene at A/1's scale (40 x 120) and at 10x (40 x 1,200 = 48k runs), on a
 // recording context: counts are asserted (one rect per run, one dot per red line), not timings.
 import { describe, expect, it } from "vitest";
-import { drawBackdrop, drawGrid, tileLabel, type SceneContext } from "./draw";
+import { drawGrid, tileLabel, type SceneContext } from "./draw";
 import { gridLayout, type Tile } from "./grid";
 import { TOKENS_SIM } from "@shadowrunr/tokens";
 import { healthColor } from "./ramp";
@@ -62,20 +62,6 @@ function tiles(t: number, perT: number): Tile[] {
 }
 
 const area = { x: 32, y: 105, w: 1184, h: 680 };
-
-describe("drawBackdrop (A/1 smG)", () => {
-  it("paints the ground, then the glow stretched to the scene", () => {
-    const c = recorder();
-    drawBackdrop(c, 1600, 810);
-    expect(c.ops[1]).toMatchObject({ op: "fillRect", fill: SIM_INK.backdrop, args: [0, 0, 1600, 810] });
-    expect(c.ops.find((o) => o.op === "scale")?.args).toEqual([1600, 810]);
-    expect(c.ops.find((o) => o.op === "radial")?.args).toEqual([0, 0, 0, 0, 0, 0.6]);
-    expect(c.ops.filter((o) => o.op === "stop").map((o) => o.args)).toEqual([
-      [0, SIM_INK.glow],
-      [1, SIM_INK.glowEnd],
-    ]);
-  });
-});
 
 describe("drawGrid", () => {
   it("draws A/1's 40 x 120: one tile rect, one rect per run, one dot per red line, one label", () => {

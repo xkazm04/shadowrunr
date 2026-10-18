@@ -2,7 +2,7 @@
 // set of calls (`useRpcMany`). Every key goes through `QueryCache.watch`, so caching,
 // invalidation, retry and the backstop behave exactly as for `useRpc`, and the folded snapshot
 // keeps its identity until one of its keys changes (no per-render churn).
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import type { RpcMethod, RpcParams, RpcResult } from "@shadowrunr/contract";
 import { queryKey, type QueryCache, type QueryStatus } from "./cache";
 import { viewOfError, type DataError, type ErrorView } from "./errors";
@@ -110,15 +110,12 @@ abstract class KeySet<T> {
       error ??= s.error;
       refreshing ||= s.refreshing;
     }
-    const same =
-      out.datas.length === this.datas.length &&
-      out.datas.every((d, i) => d === this.datas[i]) &&
-      error === this.snap.error &&
-      refreshing === this.snap.refreshing &&
-      out.ready === this.snap.ready;
+    const sameData = out.datas.length === this.datas.length && out.datas.every((d, i) => d === this.datas[i]);
+    const same = sameData && error === this.snap.error && refreshing === this.snap.refreshing && out.ready === this.snap.ready;
     if (same) return;
     this.datas = out.datas;
-    this.snap = { data: out.data, ready: out.ready, error, refreshing };
+    // Unchanged replies keep the folded object, so a refresh flag flipping redraws nothing downstream.
+    this.snap = { data: sameData ? this.snap.data : out.data, ready: out.ready, error, refreshing };
     for (const l of this.listeners) l();
   }
 }
@@ -312,4 +309,15 @@ export function useRpcMany<M extends RpcMethod>(method: M, list: readonly RpcPar
     }),
     [snap, store],
   );
+}
+
+/**
+ * The same array back while its elements are identical, for memos that depend on a list of data
+ * (for example `runs.map((r) => r.query.data)`) rather than on objects that also carry flags.
+ */
+export function useSameList<T>(xs: readonly T[]): readonly T[] {
+  const [kept, setKept] = useState(xs);
+  const changed = kept.length !== xs.length || xs.some((x, i) => x !== kept[i]);
+  if (changed) setKept(xs);
+  return changed ? xs : kept;
 }

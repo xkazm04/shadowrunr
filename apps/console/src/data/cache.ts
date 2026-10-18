@@ -154,7 +154,9 @@ export class QueryCache {
     if (ctrl.signal.aborted || this.entries.get(key) !== e) return;
     e.inflight = null;
     if (r.ok) {
-      this.set(e, { status: "ready", data: r.value, error: undefined, updatedAt: this.now(), refreshing: false });
+      // An identical reply keeps the old object, so memos and canvases downstream do not redraw.
+      const data = e.snapshot.data !== undefined && sameValue(e.snapshot.data, r.value) ? e.snapshot.data : r.value;
+      this.set(e, { status: "ready", data, error: undefined, updatedAt: this.now(), refreshing: false });
     } else {
       e.stale = true;
       this.set(e, { ...e.snapshot, status: "error", error: r.error, refreshing: false });
@@ -174,4 +176,22 @@ export class QueryCache {
       if (item) this.entries.delete(item[0]);
     }
   }
+}
+
+/** Structural equality over JSON-shaped values (what the contract door hands back). */
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) if (!sameValue(a[i], b[i])) return false;
+    return true;
+  }
+  if (Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  const ra = a as Record<string, unknown>;
+  const rb = b as Record<string, unknown>;
+  for (const k of ka) if (!Object.hasOwn(rb, k) || !sameValue(ra[k], rb[k])) return false;
+  return true;
 }

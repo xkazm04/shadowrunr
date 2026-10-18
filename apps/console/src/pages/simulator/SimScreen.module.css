@@ -1,17 +1,35 @@
-/* The simulator screen: A/1's scene (app.js:420-475). The canvas draws the backdrop and the
-   grid (fidelity role, colours in model/palette.ts); the DOM here lays the heading, the HUD
-   and the marquee over it at A/1's scene positions (pos(x, y, w, h) in % of the scene).
+/* The simulator screen: A/1's scene (app.js:420-475). A/1's backdrop SVG, the canvas over the
+   grid's box (fidelity roles; colours in the --sr-sim-* tokens), and the DOM that lays the
+   heading, the HUD and the marquee over it at A/1's scene positions (pos(x, y, w, h) in % of
+   the scene).
    Alpha inks: color-mix(X n%, transparent) is exactly rgba(X, n%). */
 
-.screen {
+/* The hero's letterbox: A/1's feed holds the scene at its 1600:810 aspect (the backdrop's
+   viewBox), and the HUD's positions (percent of the scene) are A/1's only at that aspect. The
+   bands are the backdrop's ground. Stacked (a narrow hero, data-stack) the scene fills the hero. */
+.frame {
   position: absolute;
   inset: 0;
-  overflow: hidden;
-  color: var(--sr-color-text-on-dark);
-  background: var(--sr-color-surface-void);
+  display: grid;
+  place-items: center;
+  container-type: size;
+  background: var(--sr-sim-backdrop);
 }
 
-.canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.screen {
+  position: relative;
+  width: min(100cqw, 100cqh * 1600 / 810);
+  aspect-ratio: 1600 / 810;
+  overflow: hidden;
+  color: var(--sr-color-text-on-dark);
+}
+
+.frame[data-stack="true"] .screen { position: absolute; inset: 0; width: auto; aspect-ratio: auto; }
+
+.backdrop { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* Placed and sized inline at the grid's box (grid.ts gridRect), like A/1's canvas. */
+.canvas { position: absolute; display: block; }
 
 .screen[data-hot="true"] .canvas { cursor: pointer; }
 
@@ -56,7 +74,7 @@
   background: color-mix(in srgb, var(--sr-color-mask-ink) 66%, transparent);
 }
 
-.screen[data-stack="true"] .marquee { left: 3%; width: 94%; top: 30%; }
+[data-stack="true"] .marquee { left: 3%; width: 94%; top: 30%; }
 
 @media (prefers-reduced-motion: reduce) {
   .marquee { transition: none; }

@@ -20,7 +20,14 @@
   transform: rotate(-1deg);
 }
 
-.hero { position: relative; flex: 1; min-height: 0; overflow: hidden; container-type: size; }
+/* The hero letterboxes A/1's scene: A/1's programme feed holds the scene at its 1600:810 aspect
+   (the backdrop's viewBox), and every panel position (percent of the scene) and type size
+   (cqh of the scene) is A/1's only at that aspect. Stretched to a taller hero, the type grew
+   against the panel widths and overran them (fidelity check, brain-a1). The bands are the
+   backdrop's ground, so the letterbox reads as one screen. */
+.hero { position: relative; flex: 1; min-height: 0; overflow: hidden; container-type: size; display: grid; place-items: center; background: var(--sr-brain-backdrop); }
+
+.scene { position: relative; width: min(100cqw, 100cqh * 1600 / 810); aspect-ratio: 1600 / 810; container-type: size; }
 
 .backdrop { position: absolute; inset: 0; width: 100%; height: 100%; }
 
@@ -153,6 +160,8 @@
   to { transform: translateX(15%); }
 }
 [data-narrow="true"] .hero { flex: none; min-height: 34rem; }
+/* Narrow screens keep the whole hero: a 1600:810 band would be too small to read. */
+[data-narrow="true"] .scene { position: absolute; inset: 0; width: auto; aspect-ratio: auto; }
 
 @media (prefers-reduced-motion: reduce) {
   .sweep { display: none; }

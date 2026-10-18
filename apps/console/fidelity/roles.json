@@ -1,0 +1,91 @@
+{
+  "$comment": "The fidelity contract's roles (contest promotion step 2). The owner chose the winner for its 'layer-1 graphics plus print texture and palettes'; Brain and Simulator layer 1 are A/1's graphics (owner-accepted). `roles` is what style-contract.py reads: one selector on the source prototype (`winner`) and one on the harness (`port`). `pages` is what fidelity/run.mjs reads: which prototype each page is captured from, the route and drive that reach its state, and the viewport. Roles are grouped by their `<page>.` prefix; each page is captured and checked on its own. The print texture's pseudo-element grain and the halftone screens' opacity, size and inks are not computed styles the tool records, so `texture` lists them for fidelity/texture.py.",
+  "sources": {
+    "winner": "entries/claude-claude-sonnet-5-5_xhigh/variant-3/index.html",
+    "a1": "entries/claude-claude-opus-5-5_xhigh/variant-1/index.html"
+  },
+  "pages": {
+    "characters": { "source": "winner", "route": "#/characters", "viewport": "1440x1000" },
+    "onair": {
+      "source": "winner",
+      "route": "#/onair",
+      "viewport": "1440x1000",
+      "$comment": "The hexmap only exists in SEG-02A. The winner's stylised replay reaches it about 55 s in; the harness reaches it through the live feed (the operator's Live pick) with the contest's demo case.",
+      "winnerDrive": ["wait:58000"],
+      "portQuery": "scene=seg02a"
+    },
+    "segments": { "source": "winner", "route": "#/segments", "viewport": "1440x1000" },
+    "reconcile": { "source": "winner", "route": "#/reconcile", "viewport": "1440x1000" },
+    "brain": { "source": "winner", "route": "#/brain", "viewport": "1440x1000" },
+    "simulator": { "source": "winner", "route": "#/simulator", "viewport": "1440x1000" },
+    "brain-a1": {
+      "source": "a1",
+      "route": "#/brain",
+      "viewport": "1440x1000",
+      "portViewport": "1586x868",
+      "$comment": "A/1's scene is 1253 x 634 px at 1440x1000 on a 16 px root (its type is in container units of the scene). The harness holds the same scene, 1253 px wide on a 16 px root, at 1586x868."
+    },
+    "simulator-a1": {
+      "source": "a1",
+      "route": "#/simulator",
+      "viewport": "1440x1000",
+      "portViewport": "1586x868",
+      "$comment": "Compared like brain-a1 (equal scene, equal root). The port's layer 1 is A/1's scaled simulator (one tile per tournament, one cell per run), so A/1 is captured in its Scaled sample mode.",
+      "winnerDrive": ["click:.seg button.sc", "wait:1500"]
+    }
+  },
+  "texture": {
+    "pages": ["characters", "onair", "segments", "reconcile", "brain", "simulator"],
+    "halftoneA": { "winner": "#poster-{page} .pf-ht:not(.b)", "port": "#poster-{page} [data-role=poster-halftone-a]" },
+    "halftoneB": { "winner": "#poster-{page} .pf-ht.b", "port": "#poster-{page} [data-role=poster-halftone-b]" },
+    "grain": { "winner": "#poster-{page}", "port": "#poster-{page}", "pseudo": "::after" }
+  },
+  "roles": {
+    "characters.face": { "winner": "#poster-characters", "port": "#poster-characters" },
+    "characters.cta": { "winner": "#poster-characters .b-cta", "port": "#poster-characters [data-role=characters-cta]" },
+    "characters.nameplate": { "winner": "#poster-characters .cb-name", "port": "[data-role=characters-nameplate]", "position": true },
+    "characters.portrait": { "winner": "#poster-characters .cb-portrait", "port": "[data-role=characters-portrait]", "position": true },
+    "characters.arch": { "winner": "#poster-characters .cb-portrait .arch", "port": "[data-role=characters-portrait-arch]" },
+    "characters.roster": { "winner": "#poster-characters .cb-roster", "port": "[data-role=characters-roster]", "position": true },
+    "characters.rosteritem": { "winner": "#poster-characters .cb-roster .cr", "port": "[data-role=characters-roster-item]" },
+
+    "onair.face": { "winner": "#poster-onair", "port": "#poster-onair" },
+    "onair.cta": { "winner": "#poster-onair .b-cta", "port": "#poster-onair [data-role=push-in]" },
+    "onair.screen": { "winner": "#poster-onair .ob-screen .screen", "port": "[data-role=onair-screen]", "position": true },
+    "onair.set": { "winner": "#poster-onair .scr-bg", "port": "[data-role=onair-set]" },
+    "onair.hexmap": { "winner": "#poster-onair .scr-hex", "port": "[data-role=onair-hex]", "position": true },
+    "onair.hexsvg": { "winner": "#poster-onair .scr-hex svg", "port": "[data-role=onair-hexmap]" },
+
+    "segments.face": { "winner": "#poster-segments", "port": "#poster-segments" },
+    "segments.cta": { "winner": "#poster-segments .b-cta", "port": "#poster-segments [data-role=segments-cta]" },
+    "segments.lifecycle": { "winner": "#poster-segments .sg-life", "port": "[data-role=segments-lifecycle]", "position": true },
+    "segments.column": { "winner": "#poster-segments .sg-life .lc", "port": "[data-role=segments-lc]" },
+    "segments.tick": { "winner": "#poster-segments .sg-life .tick", "port": "[data-role=segments-tick]" },
+    "segments.pyramid": { "winner": "#poster-segments .sg-pyr", "port": "[data-role=segments-pyramid]", "position": true },
+    "segments.step": { "winner": "#poster-segments .sg-pyr .st", "port": "[data-role=segments-step]", "position": true },
+
+    "reconcile.face": { "winner": "#poster-reconcile", "port": "#poster-reconcile" },
+    "reconcile.cta": { "winner": "#poster-reconcile .b-cta", "port": "#poster-reconcile [data-role=reconcile-cta]" },
+    "reconcile.triptych": { "winner": "#poster-reconcile .rc-tri", "port": "[data-role=reconcile-triptych]", "position": true },
+    "reconcile.held": { "winner": "#poster-reconcile .rc.held", "port": "[data-role=reconcile-held]", "position": true },
+    "reconcile.failed": { "winner": "#poster-reconcile .rc.failed", "port": "[data-role=reconcile-failed]", "position": true },
+    "reconcile.proposed": { "winner": "#poster-reconcile .rc.prop", "port": "[data-role=reconcile-proposed]", "position": true },
+    "reconcile.sun": { "winner": "#poster-reconcile .rc-sun", "port": "[data-role=reconcile-sun]" },
+
+    "brain.face": { "winner": "#poster-brain", "port": "#poster-brain" },
+    "brain.cta": { "winner": "#poster-brain .b-cta", "port": "#poster-brain [data-role=push-in]" },
+
+    "brain-a1.scene": { "winner": ".scene.sc-brain", "port": "[data-role=brain-scene]" },
+    "brain-a1.scope": { "winner": ".sc-brain > :nth-child(3)", "port": "[data-role=brain-scope]", "position": true },
+    "brain-a1.scopecanvas": { "winner": ".sc-brain > :nth-child(3) canvas", "port": "[data-role=brain-scope-canvas]" },
+    "brain-a1.gauge": { "winner": ".sc-brain > :nth-child(4)", "port": "[data-role=brain-latency]", "position": true },
+    "brain-a1.gaugesvg": { "winner": ".sc-brain > :nth-child(4) svg", "port": "[data-role=brain-gauge]" },
+
+    "simulator.face": { "winner": "#poster-simulator", "port": "#poster-simulator" },
+    "simulator.cta": { "winner": "#poster-simulator .b-cta", "port": "#poster-simulator [data-role=push-in]" },
+
+    "simulator-a1.scene": { "winner": ".scene.sc-simulator", "port": "[data-role=simulator-screen]" },
+    "simulator-a1.grid": { "winner": ".sc-simulator canvas", "port": "[data-role=simulator-grid]" },
+    "simulator-a1.gridbox": { "winner": ".sc-simulator > .pos.hot.art", "port": "[data-role=simulator-grid]", "position": true }
+  }
+}

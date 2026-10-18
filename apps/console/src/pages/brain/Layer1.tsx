@@ -159,8 +159,10 @@ function Wall() {
       cta={{ to: ENGINE, label: "Open the engine and transcripts", role: "push-in" }}
     >
       <div className={styles.hero} data-role="brain-hero" data-tournament={win.tournamentId}>
-        <Backdrop />
-        <Hero win={win} />
+        <div className={styles.scene} data-role="brain-scene">
+          <Backdrop />
+          <Hero win={win} />
+        </div>
       </div>
     </PosterFrame>
   );

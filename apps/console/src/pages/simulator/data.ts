@@ -2,7 +2,7 @@
 // of `data/paged`, folded into what the grid and the tournament pages read.
 import { useMemo } from "react";
 import type { TournamentRow } from "@shadowrunr/contract";
-import { usePaged, usePagedMany, useRpcMany, type Paged } from "../../data";
+import { usePaged, usePagedMany, useRpcMany, useSameList, type Paged } from "../../data";
 import { buildTile, tilesInView, type Tile } from "./grid";
 import type { SimResults } from "./results";
 
@@ -45,7 +45,9 @@ export function useSimGrid(): SimGrid {
   const inView = useMemo(() => tilesInView(all ?? []), [all]);
   const runBases = useMemo(() => inView.map((t) => ({ tournament_id: t.tournament_id, limit: PAGE_LIMIT })), [inView]);
   const runs = usePagedMany("runs.page", runBases);
-  const tiles = useMemo(() => inView.map((t, i) => buildTile(t.tournament_id, t.runs, runs[i]?.query.data ?? [])), [inView, runs]);
+  // Keyed on the replies, not the chains: a refresh flag flipping must not redraw the grid.
+  const runData = useSameList(runs.map((r) => r.query.data));
+  const tiles = useMemo(() => inView.map((t, i) => buildTile(t.tournament_id, t.runs, runData[i] ?? [])), [inView, runData]);
   const complete = tournaments.done && runs.every((r) => r.done);
   return { tournaments, tiles, complete };
 }

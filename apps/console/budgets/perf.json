@@ -1,0 +1,36 @@
+{
+  "$comment": "Performance at 10x (Q4), gated by src/perf/*.test.tsx under `pnpm -C apps/console test`; timings are reported by `pnpm -C apps/console perf`, never gated. Fixture (src/perf/fixture.ts): 2,000 streams (roster, findings, segments, directives), 48k runs (40 tournaments x 1,200), 100k transcript lines, the simulator grid at 40 x 120. Each line holds what was measured on 2026-10-18 plus a stated margin (DOM ~8%, rounded up; RPC and draw counts exact). Raising a line needs a reason in the same change.",
+  "idleTicks": 30,
+  "dom": {
+    "onair.l1": { "max": 260, "why": "measured 239: the screen folds a 100k-line transcript into a fixed scene (6 chat rows), the run picker holds the first 40 of 48k" },
+    "characters.l1": { "max": 535, "why": "measured 495: the roster shows a window of 19 of 2,000 plus a +N tile; the rest is the portrait and foil art" },
+    "brain.l1": { "max": 150, "why": "measured 135 (134 + the scene's letterbox wrapper, C1 fidelity): the oscilloscope and memory are canvases, so 1,200 runs and 156k ledger rows add no nodes" },
+    "segments.l1": { "max": 160, "why": "measured 143: ticks are capped per lifecycle column and the descoped siding is capped, at 2,000 segments" },
+    "simulator.l1": { "max": 60, "why": "measured 55: the 48k-run grid is one canvas; the DOM is the HUD, the doors, and (C1 fidelity) A/1's 6-node backdrop SVG plus the letterbox frame" },
+    "reconcile.l1": { "max": 235, "why": "measured 213: the triptych bars are capped (MAX_BARS) at 2,000 held and 2,000 failed" },
+    "onair.l2.rundown": { "max": 320, "why": "measured 292: a 500-run page of 48k, virtualised rows plus the pager" },
+    "characters.l2.all": { "max": 690, "why": "measured 639: 2,000 characters in a virtualised table" },
+    "brain.l2.runs": { "max": 345, "why": "measured 317: 2,000 of 48k runs loaded by cursor, virtualised" },
+    "brain.l2.transcript": { "max": 195, "why": "measured 177: a 100k-line transcript, virtualised lines plus the line detail" },
+    "segments.l2.tables": { "max": 320, "why": "measured 296: the compiled-in tables (SegmentId is a closed enum of four) with the portfolio virtualised" },
+    "simulator.l2.runs": { "max": 375, "why": "measured 343: 48k runs in a virtualised FilterTable" },
+    "reconcile.l2.report": { "max": 870, "why": "measured 806: 4,170 incidents virtualised, 2,000 + 2,000 findings paged" }
+  },
+  "rpc": {
+    "onair.l1": { "calls": { "runs.page": 1, "run.transcript": 1, "segments.tables": 1, "character.list": 1, "plan.current": 1 }, "why": "one page of runs for the picker (never the 48k), the newest run's transcript, the rundown pills, the tone and the plan slip" },
+    "characters.l1": { "calls": { "character.list": 1, "character.get": 1 }, "why": "the roster once and the selected character's detail; never one get per roster entry" },
+    "brain.l1": { "calls": { "tournaments.page": 1, "runs.page": 3, "ledger.page": 12, "run.transcript": 9, "reconcile.list": 1 }, "why": "the bounded read window: the newest tournament's 1,200 runs (3 pages), 12 ledger pages (WINDOW.ledgerPages), one sample transcript per lane (9)" },
+    "segments.l1": { "calls": { "segments.tables": 1, "ranks.table": 1 }, "why": "the tables and the rank ladder, once each" },
+    "simulator.l1": { "calls": { "tournaments.page": 1, "runs.page": 40, "tournament.results": 0 }, "why": "the grid reads runs.page per tournament (40 x 120 fits one page each) and no tournament.results: each run row carries its own health" },
+    "reconcile.l1": { "calls": { "reconcile.list": 1, "reconcile.report": 1, "plan.proposals": 1 }, "why": "the newest report found by list, the report and its proposals, once each" }
+  },
+  "draws": {
+    "brain.scope": { "perChange": 1, "idle": 0, "sameData": 0, "why": "one pass per input change, none while idle over 30 ticks (no frame loop), none for an identical refetch (the cache and the paged fold keep equal replies)" },
+    "brain.memory": { "perChange": 1, "idle": 0, "sameData": 0, "why": "as brain.scope" },
+    "simulator.hover": { "perChange": 1, "idle": 0, "why": "exactly one pass per hovered-tile change, none for a move inside the same tile, none while idle" },
+    "simulator.data": { "perChange": 3, "idle": 0, "sameData": 0, "why": "a stream_end changes three replies the grid reads (the tournaments page, then the new tournament's runs page, then the grown tile's runs page); one pass each. None for an identical refetch (the cache, the paged fold and useSameList keep equal replies). Target 1: coalesce draws into one animation frame" }
+  },
+  "commits": {
+    "onair.liveEvent": { "perChange": 1, "idle": 0, "why": "one live event is one React commit at On Air (the live feed is an external store read once), none while idle over 30 ticks" }
+  }
+}

@@ -32,8 +32,8 @@ function Face({ copy, num, module }: { copy: PosterCopy; num: string; module: Pa
   const { Motif, Glance } = module;
   return (
     <div className={styles.face} data-role="poster-face">
-      <div className={styles.halftoneA} />
-      <div className={styles.halftoneB} />
+      <div className={styles.halftoneA} data-role="poster-halftone-a" />
+      <div className={styles.halftoneB} data-role="poster-halftone-b" />
       {Motif && (
         <div className={styles.motif}>
           <Motif />

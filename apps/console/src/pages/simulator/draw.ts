@@ -28,22 +28,6 @@ export type SceneContext = Pick<
   | "createRadialGradient"
 >;
 
-/** A/1's backdrop: the dark ground and the verdigris glow, stretched to the scene (preserveAspectRatio none). */
-export function drawBackdrop(c: SceneContext, w: number, h: number): void {
-  c.clearRect(0, 0, w, h);
-  c.fillStyle = INK.backdrop;
-  c.fillRect(0, 0, w, h);
-  c.save();
-  c.translate(w / 2, h / 2);
-  c.scale(w, h);
-  const g = c.createRadialGradient(0, 0, 0, 0, 0, 0.6);
-  g.addColorStop(0, INK.glow);
-  g.addColorStop(1, INK.glowEnd);
-  c.fillStyle = g;
-  c.fillRect(-0.5, -0.5, 1, 1);
-  c.restore();
-}
-
 /** The tile label: A/1 prints the id upper-cased with its health. */
 export function tileLabel(t: Tile): string {
   return `${t.id.replace("scaled-", "").toUpperCase()} · ${pct(t.health)}`;

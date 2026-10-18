@@ -1,0 +1,158 @@
+{
+  "characters": {
+    "halftoneA": {
+      "opacity": "0.55",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(232, 84, 42) 0px, rgb(232, 84, 42) 26%, rgba(0, 0, 0, 0) 28%)",
+      "backgroundSize": "14.4px 14.4px",
+      "maskImage": "linear-gradient(160deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 62%)",
+      "inset": "-100px -111.594px"
+    },
+    "halftoneB": {
+      "opacity": "0.35",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(47, 125, 106) 0px, rgb(47, 125, 106) 22%, rgba(0, 0, 0, 0) 24%)",
+      "backgroundSize": "19.8px 19.8px",
+      "maskImage": "linear-gradient(20deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 55%)",
+      "inset": "-100px -111.594px"
+    },
+    "grain": {
+      "opacity": "0.4",
+      "mixBlendMode": "multiply",
+      "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.5 0 0 0 -.5'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+      "backgroundSize": "auto",
+      "maskImage": "none",
+      "inset": "0px"
+    }
+  },
+  "onair": {
+    "halftoneA": {
+      "opacity": "0.55",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(47, 125, 106) 0px, rgb(47, 125, 106) 26%, rgba(0, 0, 0, 0) 28%)",
+      "backgroundSize": "14.4px 14.4px",
+      "maskImage": "linear-gradient(160deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 62%)",
+      "inset": "-100px -111.594px"
+    },
+    "halftoneB": {
+      "opacity": "0.35",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(239, 230, 210) 0px, rgb(239, 230, 210) 22%, rgba(0, 0, 0, 0) 24%)",
+      "backgroundSize": "19.8px 19.8px",
+      "maskImage": "linear-gradient(20deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 55%)",
+      "inset": "-100px -111.594px"
+    },
+    "grain": {
+      "opacity": "0.4",
+      "mixBlendMode": "multiply",
+      "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.5 0 0 0 -.5'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+      "backgroundSize": "auto",
+      "maskImage": "none",
+      "inset": "0px"
+    }
+  },
+  "segments": {
+    "halftoneA": {
+      "opacity": "0.55",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(168, 50, 28) 0px, rgb(168, 50, 28) 26%, rgba(0, 0, 0, 0) 28%)",
+      "backgroundSize": "14.4px 14.4px",
+      "maskImage": "linear-gradient(160deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 62%)",
+      "inset": "-100px -111.594px"
+    },
+    "halftoneB": {
+      "opacity": "0.35",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(239, 230, 210) 0px, rgb(239, 230, 210) 22%, rgba(0, 0, 0, 0) 24%)",
+      "backgroundSize": "19.8px 19.8px",
+      "maskImage": "linear-gradient(20deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 55%)",
+      "inset": "-100px -111.594px"
+    },
+    "grain": {
+      "opacity": "0.4",
+      "mixBlendMode": "multiply",
+      "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.5 0 0 0 -.5'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+      "backgroundSize": "auto",
+      "maskImage": "none",
+      "inset": "0px"
+    }
+  },
+  "reconcile": {
+    "halftoneA": {
+      "opacity": "0.55",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(47, 125, 106) 0px, rgb(47, 125, 106) 26%, rgba(0, 0, 0, 0) 28%)",
+      "backgroundSize": "14.4px 14.4px",
+      "maskImage": "linear-gradient(160deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 62%)",
+      "inset": "-100px -111.594px"
+    },
+    "halftoneB": {
+      "opacity": "0.35",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(232, 84, 42) 0px, rgb(232, 84, 42) 22%, rgba(0, 0, 0, 0) 24%)",
+      "backgroundSize": "19.8px 19.8px",
+      "maskImage": "linear-gradient(20deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 55%)",
+      "inset": "-100px -111.594px"
+    },
+    "grain": {
+      "opacity": "0.4",
+      "mixBlendMode": "multiply",
+      "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.5 0 0 0 -.5'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+      "backgroundSize": "auto",
+      "maskImage": "none",
+      "inset": "0px"
+    }
+  },
+  "brain": {
+    "halftoneA": {
+      "opacity": "0.55",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(232, 84, 42) 0px, rgb(232, 84, 42) 26%, rgba(0, 0, 0, 0) 28%)",
+      "backgroundSize": "14.4px 14.4px",
+      "maskImage": "linear-gradient(160deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 62%)",
+      "inset": "-100px -111.594px"
+    },
+    "halftoneB": {
+      "opacity": "0.35",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(134, 211, 187) 0px, rgb(134, 211, 187) 22%, rgba(0, 0, 0, 0) 24%)",
+      "backgroundSize": "19.8px 19.8px",
+      "maskImage": "linear-gradient(20deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 55%)",
+      "inset": "-100px -111.594px"
+    },
+    "grain": {
+      "opacity": "0.4",
+      "mixBlendMode": "multiply",
+      "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.5 0 0 0 -.5'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+      "backgroundSize": "auto",
+      "maskImage": "none",
+      "inset": "0px"
+    }
+  },
+  "simulator": {
+    "halftoneA": {
+      "opacity": "0.55",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(214, 168, 90) 0px, rgb(214, 168, 90) 26%, rgba(0, 0, 0, 0) 28%)",
+      "backgroundSize": "14.4px 14.4px",
+      "maskImage": "linear-gradient(160deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 62%)",
+      "inset": "-100px -111.594px"
+    },
+    "halftoneB": {
+      "opacity": "0.35",
+      "mixBlendMode": "normal",
+      "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(232, 84, 42) 0px, rgb(232, 84, 42) 22%, rgba(0, 0, 0, 0) 24%)",
+      "backgroundSize": "19.8px 19.8px",
+      "maskImage": "linear-gradient(20deg, rgb(0, 0, 0) 0px, rgba(0, 0, 0, 0) 55%)",
+      "inset": "-100px -111.594px"
+    },
+    "grain": {
+      "opacity": "0.4",
+      "mixBlendMode": "multiply",
+      "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.5 0 0 0 -.5'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+      "backgroundSize": "auto",
+      "maskImage": "none",
+      "inset": "0px"
+    }
+  }
+}

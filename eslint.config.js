@@ -114,6 +114,7 @@ export default tseslint.config(
         { type: "keys", pattern: `${C}/keys/**`, partialMatch: false },
         { type: "data", pattern: `${C}/data/**`, partialMatch: false },
         { type: "ui", pattern: `${C}/ui/**`, partialMatch: false },
+        { type: "perf", pattern: `${C}/perf/**`, partialMatch: false },
       ],
     },
     rules: {
@@ -140,6 +141,7 @@ export default tseslint.config(
               allow: [{ to: { element: { type: "page", captured: { page: "{{ from.element.captured.page }}" } } } }],
             },
             allow("kit", ["router", "data", "ui"]),
+            allow("perf", ["kit", "page", "router", "data", "ui"]),
           ],
         },
       ],
