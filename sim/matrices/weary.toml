@@ -1,0 +1,21 @@
+# Hardening matrix for the owner's chosen tone, Weary Middle Manager (2026-10-18).
+# weary-middle-manager x haiku/sonnet x 2 segments x 3 audience sizes x 5 seeds = 60 runs.
+# More seeds than night.toml, so rule failures for this tone get real n.
+id = "weary"
+character = "malakor"
+duration_s = 600
+tick_s = 5
+core_effort = "low"
+concurrency = 8
+judge_tiers = ["opus", "sonnet"]
+featured_every_ticks = 1
+max_featured = 8
+population = "growing_channel"
+populations = { "3" = "small_new_channel", "30" = "growing_channel", "300" = "raid_moment" }
+
+[axes]
+tones = ["weary-middle-manager"]
+core_tiers = ["haiku", "sonnet"]
+segments = ["SEG-01", "SEG-02A"]
+audience_sizes = [3, 30, 300]
+seeds = [1, 2, 3, 4, 5]
