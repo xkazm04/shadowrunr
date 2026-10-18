@@ -2,10 +2,11 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { GRADE_COLORS, RANK_COLORS } from "@shadowrunr/tokens";
 import { describe, expect, it } from "vitest";
 
 import { RANKS } from "./contract";
-import { FOILS, RANK_TITLE, RANK_WEIGHT, foilInfo, isAlleged } from "./lore";
+import { FOILS, GRADE, RANK_COLOR, RANK_TITLE, RANK_WEIGHT, foilInfo, isAlleged } from "./lore";
 
 const repo = join(__dirname, "..", "..", "..");
 
@@ -34,6 +35,30 @@ describe("copies stay in sync with their sources", () => {
     const a = readFileSync(join(repo, "crates", "shadowrunr-segments", "data", "demo-case.json"), "utf8");
     const b = readFileSync(join(__dirname, "..", "fixtures", "demo-case.json"), "utf8");
     expect(b.replace(/\r\n/g, "\n")).toBe(a.replace(/\r\n/g, "\n"));
+  });
+});
+
+describe("rank and grade colours follow @shadowrunr/tokens", () => {
+  it("RANK_COLOR is the token source, pinned to the Poster Wall palette", () => {
+    expect(RANK_COLOR).toBe(RANK_COLORS);
+    expect(RANK_COLOR).toEqual({
+      thrall: "#8f877a",
+      acolyte: "#cdbf9f",
+      cultist: "#8fc4b0",
+      warlock: "#3f9c86",
+      lich: "#e8913f",
+      dread_council: "#ff5a2a",
+    });
+  });
+
+  it("GRADE colours are the token source, pinned to the Poster Wall palette", () => {
+    for (const g of ["DOC", "REP", "CLM", "SPC"] as const) expect(GRADE[g].color, g).toBe(GRADE_COLORS[g]);
+    expect(Object.fromEntries(Object.values(GRADE).map((g) => [g.code, g.color]))).toEqual({
+      DOC: "#86d3bb",
+      REP: "#cdbf9f",
+      CLM: "#e8913f",
+      SPC: "#ff5a2a",
+    });
   });
 });
 

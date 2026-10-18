@@ -1,6 +1,8 @@
 // Display data the stage needs from other packages. These are COPIES with their source named;
 // `lore.test.ts` checks them against the source files so drift fails the tests.
 
+import { GRADE_COLORS, RANK_COLORS } from "@shadowrunr/tokens";
+
 import type { EvidenceGrade, Rank, SegmentId } from "./contract";
 
 /** Vote weights from `crates/shadowrunr-segments/data/ranks.toml` (assumptions there, too). */
@@ -23,15 +25,8 @@ export const RANK_TITLE: Record<Rank, string> = {
   dread_council: "Dread Council",
 };
 
-/** Rank colour bands (stage-owned palette, see DESIGN.md). */
-export const RANK_COLOR: Record<Rank, string> = {
-  thrall: "#8f887b",
-  acolyte: "#c9b98a",
-  cultist: "#c8743f",
-  warlock: "#7180ec",
-  lich: "#4fcfb6",
-  dread_council: "#f0c75a",
-};
+/** Rank colours: the single source is `@shadowrunr/tokens` (the Poster Wall's fidelity palette). */
+export const RANK_COLOR: Record<Rank, string> = RANK_COLORS;
 
 export interface GradeInfo {
   code: EvidenceGrade;
@@ -39,12 +34,12 @@ export interface GradeInfo {
   color: string;
 }
 
-/** Evidence grades (digest § 4): DOC emerald, REP cyan, CLM amber, SPC violet. */
+/** Evidence grades; colours from `@shadowrunr/tokens`: DOC verdigris, REP stone, CLM amber, SPC flare. */
 export const GRADE: Record<EvidenceGrade, GradeInfo> = {
-  DOC: { code: "DOC", name: "Documented primary", color: "#34d17f" },
-  REP: { code: "REP", name: "Reported by press", color: "#3cc8e6" },
-  CLM: { code: "CLM", name: "Community claim", color: "#f2a93b" },
-  SPC: { code: "SPC", name: "Overlord speculation", color: "#a982f5" },
+  DOC: { code: "DOC", name: "Documented primary", color: GRADE_COLORS.DOC },
+  REP: { code: "REP", name: "Reported by press", color: GRADE_COLORS.REP },
+  CLM: { code: "CLM", name: "Community claim", color: GRADE_COLORS.CLM },
+  SPC: { code: "SPC", name: "Overlord speculation", color: GRADE_COLORS.SPC },
 };
 
 /** Anything below DOC is never stated as fact: the stage stamps it ALLEGED. */
