@@ -1,0 +1,1483 @@
+{
+  "contexts": [
+    {
+      "api_surface": "Rust library consumed by the daemon",
+      "business_feature": "Character Brain",
+      "category": "lib",
+      "cross_refs": [
+        "engine-llm-sessions",
+        "types-crate"
+      ],
+      "db_tables": [],
+      "description": "Composes in-character chat replies from a character's constitution, rules, tone and working/long-term memory. Includes grammar, picker, pool, moderation and markdown-backed memory consolidation. Depends on the shared types crate and the engine for LLM calls.",
+      "entry_points": [
+        "crates/shadowrunr-brain/src/lib.rs",
+        "crates/shadowrunr-brain/src/compose.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-brain/src/character.rs",
+        "crates/shadowrunr-brain/src/compose.rs",
+        "crates/shadowrunr-brain/src/fleet.rs",
+        "crates/shadowrunr-brain/src/grammar.rs",
+        "crates/shadowrunr-brain/src/lib.rs",
+        "crates/shadowrunr-brain/src/memory/consolidate.rs",
+        "crates/shadowrunr-brain/src/memory/markdown.rs",
+        "crates/shadowrunr-brain/src/memory/mod.rs",
+        "crates/shadowrunr-brain/src/memory/store.rs",
+        "crates/shadowrunr-brain/src/moderation.rs",
+        "crates/shadowrunr-brain/src/picker.rs",
+        "crates/shadowrunr-brain/src/pool.rs",
+        "crates/shadowrunr-brain/src/rules.rs",
+        "crates/shadowrunr-brain/src/tests.rs",
+        "crates/shadowrunr-brain/src/util.rs",
+        "crates/shadowrunr-brain/src/working.rs"
+      ],
+      "group": "Character Brain",
+      "group_id": "d44ba015-f3ec-4b46-b7d8-52874f886ba3",
+      "id": "438f47d8-694c-4986-92b2-bbba5af4a1c1",
+      "keywords": [
+        "character",
+        "compose",
+        "memory",
+        "moderation",
+        "grammar",
+        "rules",
+        "picker",
+        "persona"
+      ],
+      "last_written_at": "2026-10-18T12:48:03.413204300+00:00",
+      "name": "brain-composition-memory",
+      "pinned": false,
+      "tech_stack": [
+        "Rust",
+        "Tokio",
+        "Serde"
+      ]
+    },
+    {
+      "api_surface": "",
+      "business_feature": "Console App Bootstrap",
+      "category": "ui",
+      "cross_refs": [
+        "console-shell-router",
+        "console-data-layer"
+      ],
+      "db_tables": [],
+      "description": "Console app entry: main, App composition, page registry and global CSS. Supporting keyboard keymap/conflicts, the QueryView/Placeholder kit, and formatting, heatmap, transcript and open helpers.",
+      "entry_points": [
+        "apps/console/src/app/main.tsx",
+        "apps/console/src/app/App.tsx"
+      ],
+      "file_paths": [
+        "apps/console/src/app/App.tsx",
+        "apps/console/src/app/compose.ts",
+        "apps/console/src/app/global.css",
+        "apps/console/src/app/main.tsx",
+        "apps/console/src/app/pages.ts",
+        "apps/console/src/app/shell.dom.test.tsx",
+        "apps/console/src/keys/conflicts.ts",
+        "apps/console/src/keys/index.ts",
+        "apps/console/src/keys/keymap.test.ts",
+        "apps/console/src/keys/keymap.ts",
+        "apps/console/src/keys/listener.ts",
+        "apps/console/src/kit/Placeholder.module.css",
+        "apps/console/src/kit/Placeholder.tsx",
+        "apps/console/src/kit/QueryView.tsx",
+        "apps/console/src/kit/index.ts",
+        "apps/console/src/lib/format.ts",
+        "apps/console/src/lib/heatmap.test.ts",
+        "apps/console/src/lib/heatmap.ts",
+        "apps/console/src/lib/open.ts",
+        "apps/console/src/lib/transcript.ts"
+      ],
+      "group": "Console Platform",
+      "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
+      "id": "6be461ec-15e2-4963-b858-4712c7c675e8",
+      "keywords": [
+        "bootstrap",
+        "keymap",
+        "pages registry",
+        "queryview",
+        "format"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.650465100+00:00",
+      "name": "console-app-bootstrap",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0",
+        "Vite 8.3"
+      ]
+    },
+    {
+      "api_surface": "Consumes daemon RPC and events",
+      "business_feature": "Brain Page",
+      "category": "ui",
+      "cross_refs": [
+        "console-data-layer",
+        "brain-composition-memory",
+        "console-shell-router"
+      ],
+      "db_tables": [],
+      "description": "Console Brain page: visualizes the brain layers (layer 1 and 2), engine instruments, runs and a viewer. A canvas plot and palette back the drawing, with queries over the daemon.",
+      "entry_points": [
+        "apps/console/src/pages/brain/index.ts",
+        "apps/console/src/pages/brain/Layer1.tsx"
+      ],
+      "file_paths": [
+        "apps/console/src/pages/brain/Engine.tsx",
+        "apps/console/src/pages/brain/Instruments.module.css",
+        "apps/console/src/pages/brain/Instruments.tsx",
+        "apps/console/src/pages/brain/Layer1.module.css",
+        "apps/console/src/pages/brain/Layer1.tsx",
+        "apps/console/src/pages/brain/Layer2.module.css",
+        "apps/console/src/pages/brain/Layer2.tsx",
+        "apps/console/src/pages/brain/Mini.tsx",
+        "apps/console/src/pages/brain/Plot.tsx",
+        "apps/console/src/pages/brain/Runs.tsx",
+        "apps/console/src/pages/brain/Viewer.module.css",
+        "apps/console/src/pages/brain/Viewer.tsx",
+        "apps/console/src/pages/brain/brainModel.test.ts",
+        "apps/console/src/pages/brain/brainModel.ts",
+        "apps/console/src/pages/brain/draw.test.ts",
+        "apps/console/src/pages/brain/draw.ts",
+        "apps/console/src/pages/brain/engineModel.ts",
+        "apps/console/src/pages/brain/events.ts",
+        "apps/console/src/pages/brain/index.ts",
+        "apps/console/src/pages/brain/layer1.test.tsx",
+        "apps/console/src/pages/brain/layer2.test.tsx",
+        "apps/console/src/pages/brain/palette.ts",
+        "apps/console/src/pages/brain/queries.test.tsx",
+        "apps/console/src/pages/brain/queries.ts",
+        "apps/console/src/pages/brain/testgen.tsx",
+        "apps/console/src/pages/brain/useBrain.ts"
+      ],
+      "group": "Operator Console Pages",
+      "group_id": "80632075-1266-4432-b387-031833872c9b",
+      "id": "c2325be4-a41e-48f5-9050-bb31c09bb12a",
+      "keywords": [
+        "brain",
+        "engine",
+        "instruments",
+        "runs",
+        "plot",
+        "viewer"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.644291100+00:00",
+      "name": "console-brain-page",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0",
+        "Vite 8.3"
+      ]
+    },
+    {
+      "api_surface": "",
+      "business_feature": "Console Build And Desktop",
+      "category": "config",
+      "cross_refs": [
+        "console-app-bootstrap"
+      ],
+      "db_tables": [],
+      "description": "Console build tooling and Tauri desktop wrapper: Vite/TS config, bundle and DOM size budgets, check scripts for bundle, size and token refs, and fixture generation. The src-tauri crate hosts the desktop window and capabilities.",
+      "entry_points": [
+        "apps/console/package.json",
+        "apps/console/src-tauri/src/lib.rs"
+      ],
+      "file_paths": [
+        "apps/console/vite.config.ts",
+        "apps/console/scripts/check-bundle.mjs",
+        "apps/console/scripts/check-size.mjs",
+        "apps/console/scripts/check-token-refs.mjs",
+        "apps/console/scripts/gen-fixtures.mjs",
+        "apps/console/src-tauri/build.rs",
+        "apps/console/src-tauri/src/lib.rs",
+        "apps/console/src-tauri/src/main.rs"
+      ],
+      "group": "Console Platform",
+      "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
+      "id": "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa",
+      "keywords": [
+        "tauri",
+        "vite",
+        "budget",
+        "bundle",
+        "desktop",
+        "build"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.654806200+00:00",
+      "name": "console-build-and-desktop-shell",
+      "pinned": false,
+      "tech_stack": [
+        "Tauri",
+        "Vite 8.3",
+        "React 19.3",
+        "Rust"
+      ]
+    },
+    {
+      "api_surface": "Consumes the daemon catalog RPC",
+      "business_feature": "Characters Page",
+      "category": "ui",
+      "cross_refs": [
+        "console-data-layer"
+      ],
+      "db_tables": [],
+      "description": "Console Characters page: name plate, portrait, roster and a character package browser with docs, rules and situations tabs. Rules can be toggled live.",
+      "entry_points": [
+        "apps/console/src/pages/characters/index.ts",
+        "apps/console/src/pages/characters/PackagePage.tsx"
+      ],
+      "file_paths": [
+        "apps/console/src/pages/characters/AllPage.tsx",
+        "apps/console/src/pages/characters/Avatar.module.css",
+        "apps/console/src/pages/characters/Avatar.tsx",
+        "apps/console/src/pages/characters/CastTabs.tsx",
+        "apps/console/src/pages/characters/DocTabs.tsx",
+        "apps/console/src/pages/characters/Layer1.module.css",
+        "apps/console/src/pages/characters/Layer1.tsx",
+        "apps/console/src/pages/characters/Layer2.module.css",
+        "apps/console/src/pages/characters/Layer2.tsx",
+        "apps/console/src/pages/characters/Markdown.module.css",
+        "apps/console/src/pages/characters/Markdown.tsx",
+        "apps/console/src/pages/characters/PackagePage.tsx",
+        "apps/console/src/pages/characters/Poster.module.css",
+        "apps/console/src/pages/characters/Poster.tsx",
+        "apps/console/src/pages/characters/RulesTab.tsx",
+        "apps/console/src/pages/characters/SituationsTab.tsx",
+        "apps/console/src/pages/characters/doc.ts",
+        "apps/console/src/pages/characters/harness.tsx",
+        "apps/console/src/pages/characters/index.ts",
+        "apps/console/src/pages/characters/layer1.test.tsx",
+        "apps/console/src/pages/characters/layer2.test.tsx",
+        "apps/console/src/pages/characters/model.test.ts",
+        "apps/console/src/pages/characters/model.ts",
+        "apps/console/src/pages/characters/routes.ts",
+        "apps/console/src/pages/characters/testgen.ts"
+      ],
+      "group": "Operator Console Pages",
+      "group_id": "80632075-1266-4432-b387-031833872c9b",
+      "id": "20f1e644-e83b-481d-864f-cb15b9124d7e",
+      "keywords": [
+        "characters",
+        "roster",
+        "package",
+        "rules",
+        "situations",
+        "avatar",
+        "markdown"
+      ],
+      "last_written_at": "2026-10-18T12:48:03.413738500+00:00",
+      "name": "console-characters-page",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "Client of the daemon JSON-RPC and websocket events",
+      "business_feature": "Console Data Layer",
+      "category": "lib",
+      "cross_refs": [
+        "daemon-core-rpc",
+        "contract-package"
+      ],
+      "db_tables": [],
+      "description": "Console client data layer: a typed RPC and websocket connection to the daemon, cache with invalidation, result/error types and React bindings. A mock backend and the API context let the UI run offline.",
+      "entry_points": [
+        "apps/console/src/data/index.ts",
+        "apps/console/src/data/layer.ts"
+      ],
+      "file_paths": [
+        "apps/console/src/contract.ts",
+        "apps/console/src/api/context.tsx",
+        "apps/console/src/api/events.ts",
+        "apps/console/src/api/mock.test.ts",
+        "apps/console/src/api/mock.ts",
+        "apps/console/src/api/rpc.test.ts",
+        "apps/console/src/api/rpc.ts",
+        "apps/console/src/data/cache.test.ts",
+        "apps/console/src/data/cache.ts",
+        "apps/console/src/data/config.ts",
+        "apps/console/src/data/connection.ts",
+        "apps/console/src/data/contractDoor.ts",
+        "apps/console/src/data/door.ts",
+        "apps/console/src/data/errors.ts",
+        "apps/console/src/data/index.ts",
+        "apps/console/src/data/invalidation.ts",
+        "apps/console/src/data/layer.ts",
+        "apps/console/src/data/react.test.tsx",
+        "apps/console/src/data/react.tsx",
+        "apps/console/src/data/result.ts",
+        "apps/console/src/data/rpc.test.ts",
+        "apps/console/src/data/rpc.ts",
+        "apps/console/src/data/socket.test.ts",
+        "apps/console/src/data/socket.ts",
+        "apps/console/src/data/testing.ts"
+      ],
+      "group": "Console Platform",
+      "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
+      "id": "9b2fb27b-e4c5-4300-a214-7f5518a08b44",
+      "keywords": [
+        "rpc",
+        "websocket",
+        "cache",
+        "invalidation",
+        "mock",
+        "door",
+        "query"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.649058300+00:00",
+      "name": "console-data-layer",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "",
+      "business_feature": "Legacy Desk",
+      "category": "ui",
+      "cross_refs": [
+        "console-data-layer"
+      ],
+      "db_tables": [],
+      "description": "The earlier console desk kept for reference: LegacyDesk with its state, styles, primitives, diff and transcript viewers. Also the older Directives, Preflight, Reconcile, Simulations and LordChat views plus a heatmap.",
+      "entry_points": [
+        "apps/console/src/legacy/LegacyDesk.tsx"
+      ],
+      "file_paths": [
+        "apps/console/src/legacy/LegacyDesk.tsx",
+        "apps/console/src/legacy/state.tsx",
+        "apps/console/src/legacy/styles/app.css",
+        "apps/console/src/legacy/styles/tokens.css",
+        "apps/console/src/legacy/ui/DiffView.tsx",
+        "apps/console/src/legacy/ui/Disclosure.tsx",
+        "apps/console/src/legacy/ui/TranscriptViewer.tsx",
+        "apps/console/src/legacy/ui/primitives.test.tsx",
+        "apps/console/src/legacy/ui/primitives.tsx",
+        "apps/console/src/views/DirectivesView.tsx",
+        "apps/console/src/views/Heatmap.test.tsx",
+        "apps/console/src/views/Heatmap.tsx",
+        "apps/console/src/views/LordChatView.tsx",
+        "apps/console/src/views/PreflightView.tsx",
+        "apps/console/src/views/ReconcileView.tsx",
+        "apps/console/src/views/SimulationsView.tsx"
+      ],
+      "group": "Console Platform",
+      "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
+      "id": "ea1655b1-35e7-4e00-a3cd-02bcbe65075a",
+      "keywords": [
+        "legacy",
+        "desk",
+        "views",
+        "preflight",
+        "directives",
+        "transcripts"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.651989500+00:00",
+      "name": "console-legacy-desk",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "Consumes daemon run/event RPC",
+      "business_feature": "On Air Page",
+      "category": "ui",
+      "cross_refs": [
+        "stage-kit-scene-engine",
+        "console-data-layer",
+        "segments-runtime"
+      ],
+      "db_tables": [],
+      "description": "Console On Air page: live show rundown, segment cards, dispatch, run detail and a screen preview rendered with stage-kit. A player and beats/feed models drive playback.",
+      "entry_points": [
+        "apps/console/src/pages/onair/index.ts",
+        "apps/console/src/pages/onair/Layer1.tsx"
+      ],
+      "file_paths": [
+        "apps/console/src/pages/onair/Dispatch.tsx",
+        "apps/console/src/pages/onair/Layer1.module.css",
+        "apps/console/src/pages/onair/Layer1.tsx",
+        "apps/console/src/pages/onair/Layer2.module.css",
+        "apps/console/src/pages/onair/Layer2.tsx",
+        "apps/console/src/pages/onair/Motif.module.css",
+        "apps/console/src/pages/onair/Motif.tsx",
+        "apps/console/src/pages/onair/RunDetail.tsx",
+        "apps/console/src/pages/onair/Rundown.tsx",
+        "apps/console/src/pages/onair/Screen.module.css",
+        "apps/console/src/pages/onair/Screen.tsx",
+        "apps/console/src/pages/onair/ScreenHex.tsx",
+        "apps/console/src/pages/onair/ScreenParts.tsx",
+        "apps/console/src/pages/onair/SegmentCards.tsx",
+        "apps/console/src/pages/onair/beats.ts",
+        "apps/console/src/pages/onair/feed.ts",
+        "apps/console/src/pages/onair/index.ts",
+        "apps/console/src/pages/onair/onair.dom.test.tsx",
+        "apps/console/src/pages/onair/player.test.ts",
+        "apps/console/src/pages/onair/player.ts",
+        "apps/console/src/pages/onair/testdata.ts",
+        "apps/console/src/pages/onair/view.test.ts",
+        "apps/console/src/pages/onair/view.ts"
+      ],
+      "group": "Operator Console Pages",
+      "group_id": "80632075-1266-4432-b387-031833872c9b",
+      "id": "2c9b35e1-8018-4269-bd27-cb947122a89b",
+      "keywords": [
+        "on air",
+        "rundown",
+        "dispatch",
+        "player",
+        "beats",
+        "feed",
+        "screen"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.646715500+00:00",
+      "name": "console-onair-page",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "Consumes daemon reconcile RPC",
+      "business_feature": "Reconcile Page",
+      "category": "ui",
+      "cross_refs": [
+        "reconcile-engine",
+        "console-data-layer"
+      ],
+      "db_tables": [],
+      "description": "Console Reconcile page: reports, plans, directives and a chat page over reconciliation results. It includes diff views, animated count-ups and a session model.",
+      "entry_points": [
+        "apps/console/src/pages/reconcile/index.ts",
+        "apps/console/src/pages/reconcile/Layer1.tsx"
+      ],
+      "file_paths": [
+        "apps/console/src/pages/reconcile/ChatPage.tsx",
+        "apps/console/src/pages/reconcile/CountUp.tsx",
+        "apps/console/src/pages/reconcile/DiffView.tsx",
+        "apps/console/src/pages/reconcile/DirectivesPage.tsx",
+        "apps/console/src/pages/reconcile/Face.module.css",
+        "apps/console/src/pages/reconcile/Face.tsx",
+        "apps/console/src/pages/reconcile/Layer1.module.css",
+        "apps/console/src/pages/reconcile/Layer1.tsx",
+        "apps/console/src/pages/reconcile/Layer2.module.css",
+        "apps/console/src/pages/reconcile/Layer2.tsx",
+        "apps/console/src/pages/reconcile/NoReport.tsx",
+        "apps/console/src/pages/reconcile/PlanPage.tsx",
+        "apps/console/src/pages/reconcile/Refs.tsx",
+        "apps/console/src/pages/reconcile/ReportPage.tsx",
+        "apps/console/src/pages/reconcile/harness.tsx",
+        "apps/console/src/pages/reconcile/hooks.ts",
+        "apps/console/src/pages/reconcile/index.ts",
+        "apps/console/src/pages/reconcile/layer1.test.tsx",
+        "apps/console/src/pages/reconcile/layer2.test.tsx",
+        "apps/console/src/pages/reconcile/model.test.ts",
+        "apps/console/src/pages/reconcile/model.ts",
+        "apps/console/src/pages/reconcile/session.ts",
+        "apps/console/src/pages/reconcile/testgen.ts"
+      ],
+      "group": "Operator Console Pages",
+      "group_id": "80632075-1266-4432-b387-031833872c9b",
+      "id": "cc2fd542-4e2c-4527-bb2d-c132b966dc3e",
+      "keywords": [
+        "reconcile",
+        "report",
+        "plan",
+        "directives",
+        "diff",
+        "chat"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.647428500+00:00",
+      "name": "console-reconcile-page",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "Consumes daemon segments RPC",
+      "business_feature": "Segments Page",
+      "category": "ui",
+      "cross_refs": [
+        "segments-runtime",
+        "console-data-layer"
+      ],
+      "db_tables": [],
+      "description": "Console Segments and Ranks page: segment lifecycle, the A/1 track with its descoped siding, a rank pyramid, vote calculator, command and table views.",
+      "entry_points": [
+        "apps/console/src/pages/segments/index.ts",
+        "apps/console/src/pages/segments/Layer1.tsx"
+      ],
+      "file_paths": [
+        "apps/console/src/pages/segments/Commands.tsx",
+        "apps/console/src/pages/segments/Face.module.css",
+        "apps/console/src/pages/segments/Face.tsx",
+        "apps/console/src/pages/segments/Layer1.module.css",
+        "apps/console/src/pages/segments/Layer1.tsx",
+        "apps/console/src/pages/segments/Layer2.module.css",
+        "apps/console/src/pages/segments/Layer2.tsx",
+        "apps/console/src/pages/segments/Ranks.tsx",
+        "apps/console/src/pages/segments/SegmentCard.tsx",
+        "apps/console/src/pages/segments/Tables.tsx",
+        "apps/console/src/pages/segments/Track.tsx",
+        "apps/console/src/pages/segments/counts.ts",
+        "apps/console/src/pages/segments/grammar.ts",
+        "apps/console/src/pages/segments/harness.tsx",
+        "apps/console/src/pages/segments/hooks.ts",
+        "apps/console/src/pages/segments/index.ts",
+        "apps/console/src/pages/segments/layer1.test.tsx",
+        "apps/console/src/pages/segments/layer2.test.tsx",
+        "apps/console/src/pages/segments/model.test.ts",
+        "apps/console/src/pages/segments/model.ts",
+        "apps/console/src/pages/segments/testgen.ts"
+      ],
+      "group": "Operator Console Pages",
+      "group_id": "80632075-1266-4432-b387-031833872c9b",
+      "id": "6dce940f-74f8-426d-8a02-ed09e53724ef",
+      "keywords": [
+        "segments",
+        "ranks",
+        "track",
+        "pyramid",
+        "commands",
+        "vote"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.648033300+00:00",
+      "name": "console-segments-page",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "",
+      "business_feature": "Console Shell And Routing",
+      "category": "ui",
+      "cross_refs": [
+        "console-app-bootstrap",
+        "console-ui-primitives"
+      ],
+      "db_tables": [],
+      "description": "Console shell: chrome, intro, mixer bus, poster wall and spread layouts, with viewport and keyboard actions. Includes the client router (route parsing and store) that navigates between pages.",
+      "entry_points": [
+        "apps/console/src/shell/Shell.tsx",
+        "apps/console/src/router/index.ts"
+      ],
+      "file_paths": [
+        "apps/console/src/shell/Chrome.module.css",
+        "apps/console/src/shell/Chrome.tsx",
+        "apps/console/src/shell/Intro.module.css",
+        "apps/console/src/shell/Intro.tsx",
+        "apps/console/src/shell/MixerBus.module.css",
+        "apps/console/src/shell/MixerBus.tsx",
+        "apps/console/src/shell/Poster.module.css",
+        "apps/console/src/shell/Poster.tsx",
+        "apps/console/src/shell/Shell.module.css",
+        "apps/console/src/shell/Shell.tsx",
+        "apps/console/src/shell/Spread.module.css",
+        "apps/console/src/shell/Spread.tsx",
+        "apps/console/src/shell/Wall.module.css",
+        "apps/console/src/shell/Wall.tsx",
+        "apps/console/src/shell/index.ts",
+        "apps/console/src/shell/keyActions.test.ts",
+        "apps/console/src/shell/keyActions.ts",
+        "apps/console/src/shell/layout.test.ts",
+        "apps/console/src/shell/layout.ts",
+        "apps/console/src/shell/posters.ts",
+        "apps/console/src/shell/types.ts",
+        "apps/console/src/shell/useViewport.ts",
+        "apps/console/src/router/index.ts",
+        "apps/console/src/router/react.tsx",
+        "apps/console/src/router/route.test.ts",
+        "apps/console/src/router/route.ts",
+        "apps/console/src/router/store.test.ts",
+        "apps/console/src/router/store.ts"
+      ],
+      "group": "Console Platform",
+      "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
+      "id": "4acf582d-5403-4f36-b24c-fe00bacb3683",
+      "keywords": [
+        "shell",
+        "router",
+        "chrome",
+        "poster",
+        "wall",
+        "layout",
+        "mixer"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.649982200+00:00",
+      "name": "console-shell-router",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "Consumes daemon sim RPC",
+      "business_feature": "Simulator Page",
+      "category": "ui",
+      "cross_refs": [
+        "sim-runner-judging",
+        "console-data-layer"
+      ],
+      "db_tables": [],
+      "description": "Console Simulator page: an A/1 canvas tournament grid, runs, tournaments, and verdicts with quote checks, plus a heatmap. Drawing, cells and result models support it.",
+      "entry_points": [
+        "apps/console/src/pages/simulator/index.ts",
+        "apps/console/src/pages/simulator/Layer1.tsx"
+      ],
+      "file_paths": [
+        "apps/console/src/pages/simulator/Heatmap.tsx",
+        "apps/console/src/pages/simulator/Layer1.module.css",
+        "apps/console/src/pages/simulator/Layer1.tsx",
+        "apps/console/src/pages/simulator/Layer2.tsx",
+        "apps/console/src/pages/simulator/Runs.tsx",
+        "apps/console/src/pages/simulator/SimScreen.module.css",
+        "apps/console/src/pages/simulator/SimScreen.tsx",
+        "apps/console/src/pages/simulator/Tournaments.tsx",
+        "apps/console/src/pages/simulator/Verdicts.tsx",
+        "apps/console/src/pages/simulator/cells.ts",
+        "apps/console/src/pages/simulator/common.tsx",
+        "apps/console/src/pages/simulator/data.ts",
+        "apps/console/src/pages/simulator/draw.test.ts",
+        "apps/console/src/pages/simulator/draw.ts",
+        "apps/console/src/pages/simulator/grid.ts",
+        "apps/console/src/pages/simulator/index.ts",
+        "apps/console/src/pages/simulator/l2.module.css",
+        "apps/console/src/pages/simulator/layer1.test.tsx",
+        "apps/console/src/pages/simulator/layer2.test.tsx",
+        "apps/console/src/pages/simulator/model.test.ts",
+        "apps/console/src/pages/simulator/palette.ts",
+        "apps/console/src/pages/simulator/quote.ts",
+        "apps/console/src/pages/simulator/results.ts",
+        "apps/console/src/pages/simulator/routeKey.ts",
+        "apps/console/src/pages/simulator/testgen.ts"
+      ],
+      "group": "Operator Console Pages",
+      "group_id": "80632075-1266-4432-b387-031833872c9b",
+      "id": "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30",
+      "keywords": [
+        "simulator",
+        "tournament",
+        "heatmap",
+        "verdicts",
+        "grid",
+        "canvas"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.648461800+00:00",
+      "name": "console-simulator-page",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "",
+      "business_feature": "Console UI Primitives",
+      "category": "ui",
+      "cross_refs": [
+        "tokens-package"
+      ],
+      "db_tables": [],
+      "description": "Reusable console UI primitives: chips, filter tables, pill groups, rate bars, sections, stat bands, loading/empty states, switches and a virtual list. Each is CSS-module styled with helper utilities and tests.",
+      "entry_points": [
+        "apps/console/src/ui/index.ts"
+      ],
+      "file_paths": [
+        "apps/console/src/ui/Chip.module.css",
+        "apps/console/src/ui/Chip.tsx",
+        "apps/console/src/ui/FilterTable.module.css",
+        "apps/console/src/ui/FilterTable.tsx",
+        "apps/console/src/ui/PillGroup.module.css",
+        "apps/console/src/ui/PillGroup.tsx",
+        "apps/console/src/ui/RateBar.module.css",
+        "apps/console/src/ui/RateBar.tsx",
+        "apps/console/src/ui/Section.module.css",
+        "apps/console/src/ui/Section.tsx",
+        "apps/console/src/ui/StatBand.module.css",
+        "apps/console/src/ui/StatBand.tsx",
+        "apps/console/src/ui/States.module.css",
+        "apps/console/src/ui/States.tsx",
+        "apps/console/src/ui/Switch.module.css",
+        "apps/console/src/ui/Switch.tsx",
+        "apps/console/src/ui/VirtualList.module.css",
+        "apps/console/src/ui/VirtualList.tsx",
+        "apps/console/src/ui/cx.ts",
+        "apps/console/src/ui/filterRows.ts",
+        "apps/console/src/ui/index.ts",
+        "apps/console/src/ui/remPx.ts",
+        "apps/console/src/ui/ui.test.tsx"
+      ],
+      "group": "Console Platform",
+      "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
+      "id": "435472ca-7ef4-4956-80d8-3dc82f215665",
+      "keywords": [
+        "chip",
+        "table",
+        "switch",
+        "virtual list",
+        "stat band",
+        "primitives"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.650851600+00:00",
+      "name": "console-ui-primitives",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "CSS Modules"
+      ]
+    },
+    {
+      "api_surface": "Typed contract for daemon RPC and events",
+      "business_feature": "Wire Contract",
+      "category": "lib",
+      "cross_refs": [
+        "types-crate",
+        "console-data-layer",
+        "daemon-integrations"
+      ],
+      "db_tables": [],
+      "description": "TypeScript contract generated from the Rust-exported JSON Schema: generated types, validators and meta, with a door adapter and codegen/check scripts. Keeps the console and stage in sync with the daemon wire format.",
+      "entry_points": [
+        "packages/contract/src/index.ts",
+        "packages/contract/scripts/generate.mjs"
+      ],
+      "file_paths": [
+        "packages/contract/scripts/check.mjs",
+        "packages/contract/scripts/codegen.mjs",
+        "packages/contract/scripts/generate.mjs",
+        "packages/contract/src/door.test.ts",
+        "packages/contract/src/door.ts",
+        "packages/contract/src/generated/meta.ts",
+        "packages/contract/src/generated/types.ts",
+        "packages/contract/src/generated/validators.d.ts",
+        "packages/contract/src/generated/validators.js",
+        "packages/contract/src/index.ts"
+      ],
+      "group": "Shared Contract And Design Tokens",
+      "group_id": "9749f973-f568-488a-a441-c6571cb5930f",
+      "id": "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0",
+      "keywords": [
+        "contract",
+        "codegen",
+        "json schema",
+        "validators",
+        "door",
+        "generated"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.656023300+00:00",
+      "name": "contract-package",
+      "pinned": false,
+      "tech_stack": [
+        "TypeScript 6.0",
+        "JSON Schema"
+      ]
+    },
+    {
+      "api_surface": "JSON-RPC over websocket (engine.status, runs, catalog, paging, events) and CLI",
+      "business_feature": "Daemon And RPC Server",
+      "category": "api",
+      "cross_refs": [
+        "engine-llm-sessions",
+        "daemon-integrations",
+        "types-crate",
+        "console-data-layer"
+      ],
+      "db_tables": [],
+      "description": "The shadowrunr daemon: CLI, config, RPC server, live event streaming, paging, run management, preflight checks, catalog and policy installation. It wires the engine, brain, segments, sim and reconcile crates behind a websocket/RPC surface. E2E tests cover catalog, events, paging and resilience.",
+      "entry_points": [
+        "crates/shadowrunr-daemon/src/main.rs",
+        "crates/shadowrunr-daemon/src/server.rs",
+        "crates/shadowrunr-daemon/src/rpc.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-daemon/src/catalog.rs",
+        "crates/shadowrunr-daemon/src/cli.rs",
+        "crates/shadowrunr-daemon/src/config.rs",
+        "crates/shadowrunr-daemon/src/engine.rs",
+        "crates/shadowrunr-daemon/src/events.rs",
+        "crates/shadowrunr-daemon/src/lib.rs",
+        "crates/shadowrunr-daemon/src/live.rs",
+        "crates/shadowrunr-daemon/src/main.rs",
+        "crates/shadowrunr-daemon/src/paging.rs",
+        "crates/shadowrunr-daemon/src/policy_install.rs",
+        "crates/shadowrunr-daemon/src/preflight.rs",
+        "crates/shadowrunr-daemon/src/rpc.rs",
+        "crates/shadowrunr-daemon/src/runs.rs",
+        "crates/shadowrunr-daemon/src/server.rs",
+        "crates/shadowrunr-daemon/src/e2e/catalog.rs",
+        "crates/shadowrunr-daemon/src/e2e/events.rs",
+        "crates/shadowrunr-daemon/src/e2e/mod.rs",
+        "crates/shadowrunr-daemon/src/e2e/paging.rs",
+        "crates/shadowrunr-daemon/src/e2e/resilience.rs",
+        "crates/shadowrunr-daemon/tests/cli.rs"
+      ],
+      "group": "Engine And Daemon",
+      "group_id": "f6744bb5-6e0d-4edb-b2fb-ecb0f8a50aa8",
+      "id": "1f8d2348-1a2f-4c72-8dc0-e281a35b78d4",
+      "keywords": [
+        "daemon",
+        "rpc",
+        "websocket",
+        "preflight",
+        "runs",
+        "catalog",
+        "paging",
+        "events"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.639523800+00:00",
+      "name": "daemon-core-rpc",
+      "pinned": false,
+      "tech_stack": [
+        "Rust",
+        "Tokio",
+        "Serde"
+      ]
+    },
+    {
+      "api_surface": "MCP tools server, signed event forwarding",
+      "business_feature": "Daemon Integrations",
+      "category": "api",
+      "cross_refs": [
+        "daemon-core-rpc",
+        "contract-package"
+      ],
+      "db_tables": [],
+      "description": "External integrations hosted by the daemon: an MCP server with tools and schema, event forwarder, signed webhooks, activity feed, door settings and status. They let outside systems observe and drive the show.",
+      "entry_points": [
+        "crates/shadowrunr-daemon/src/integrations/mod.rs",
+        "crates/shadowrunr-daemon/src/integrations/mcp.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-daemon/src/integrations/activity.rs",
+        "crates/shadowrunr-daemon/src/integrations/activity_tests.rs",
+        "crates/shadowrunr-daemon/src/integrations/door.rs",
+        "crates/shadowrunr-daemon/src/integrations/forwarder.rs",
+        "crates/shadowrunr-daemon/src/integrations/mcp.rs",
+        "crates/shadowrunr-daemon/src/integrations/mcp_schema.rs",
+        "crates/shadowrunr-daemon/src/integrations/mcp_tests.rs",
+        "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs",
+        "crates/shadowrunr-daemon/src/integrations/mod.rs",
+        "crates/shadowrunr-daemon/src/integrations/settings.rs",
+        "crates/shadowrunr-daemon/src/integrations/signing.rs",
+        "crates/shadowrunr-daemon/src/integrations/status.rs"
+      ],
+      "group": "Engine And Daemon",
+      "group_id": "f6744bb5-6e0d-4edb-b2fb-ecb0f8a50aa8",
+      "id": "976802f1-d558-4f08-a516-915d94ce8b8f",
+      "keywords": [
+        "mcp",
+        "webhook",
+        "signing",
+        "forwarder",
+        "door",
+        "activity"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.640126300+00:00",
+      "name": "daemon-integrations",
+      "pinned": false,
+      "tech_stack": [
+        "Rust",
+        "Tokio",
+        "Serde"
+      ]
+    },
+    {
+      "api_surface": "Rust engine API consumed by the daemon, brain and sim",
+      "business_feature": "LLM Engine Sessions",
+      "category": "lib",
+      "cross_refs": [
+        "brain-composition-memory",
+        "daemon-core-rpc",
+        "sim-runner-judging"
+      ],
+      "db_tables": [],
+      "description": "Drives LLM CLIs (Claude and alternates) as streaming sessions. Handles rate limits, health, a usage ledger, model fleet config and a scripted/fake CLI for tests. Recorded Claude JSONL fixtures back the tests.",
+      "entry_points": [
+        "crates/shadowrunr-engine/src/lib.rs",
+        "crates/shadowrunr-engine/src/session.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-engine/src/alt_cli.rs",
+        "crates/shadowrunr-engine/src/api.rs",
+        "crates/shadowrunr-engine/src/bin/fake_claude.rs",
+        "crates/shadowrunr-engine/src/claude_cli.rs",
+        "crates/shadowrunr-engine/src/config.rs",
+        "crates/shadowrunr-engine/src/fleet.rs",
+        "crates/shadowrunr-engine/src/health.rs",
+        "crates/shadowrunr-engine/src/ledger.rs",
+        "crates/shadowrunr-engine/src/lib.rs",
+        "crates/shadowrunr-engine/src/limits.rs",
+        "crates/shadowrunr-engine/src/model.rs",
+        "crates/shadowrunr-engine/src/scripted.rs",
+        "crates/shadowrunr-engine/src/session.rs",
+        "crates/shadowrunr-engine/src/stream.rs",
+        "crates/shadowrunr-engine/tests/fake_cli.rs"
+      ],
+      "group": "Engine And Daemon",
+      "group_id": "f6744bb5-6e0d-4edb-b2fb-ecb0f8a50aa8",
+      "id": "4f625471-4451-4819-953d-10b381c13213",
+      "keywords": [
+        "claude cli",
+        "session",
+        "stream",
+        "rate limit",
+        "ledger",
+        "fleet",
+        "health",
+        "fake cli"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.636814800+00:00",
+      "name": "engine-llm-sessions",
+      "pinned": false,
+      "tech_stack": [
+        "Rust",
+        "Tokio",
+        "Serde"
+      ]
+    },
+    {
+      "api_surface": "Rust library exposed via daemon RPC reconcile methods",
+      "business_feature": "Character Reconciliation",
+      "category": "lib",
+      "cross_refs": [
+        "sim-runner-judging",
+        "daemon-core-rpc",
+        "console-reconcile-page"
+      ],
+      "db_tables": [],
+      "description": "Reconciles simulation runs against a character package. It verifies quotes, computes budgets, metrics and stats, and synthesizes directives for improving the character. It scales to any tournament size and uses simulation run fixtures and a malakor character fixture.",
+      "entry_points": [
+        "crates/shadowrunr-reconcile/src/lib.rs",
+        "crates/shadowrunr-reconcile/src/synth.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-reconcile/src/budget.rs",
+        "crates/shadowrunr-reconcile/src/directives.rs",
+        "crates/shadowrunr-reconcile/src/lib.rs",
+        "crates/shadowrunr-reconcile/src/metrics.rs",
+        "crates/shadowrunr-reconcile/src/runs.rs",
+        "crates/shadowrunr-reconcile/src/stats.rs",
+        "crates/shadowrunr-reconcile/src/synth.rs",
+        "crates/shadowrunr-reconcile/src/tests.rs",
+        "crates/shadowrunr-reconcile/src/tests_scale.rs",
+        "crates/shadowrunr-reconcile/src/types.rs",
+        "crates/shadowrunr-reconcile/src/verify.rs"
+      ],
+      "group": "Simulation And Reconciliation",
+      "group_id": "eac5aeb6-533f-4866-bbf9-9019bb9ddb16",
+      "id": "ce601bf6-a98a-465f-8f19-3143e6483f8d",
+      "keywords": [
+        "reconcile",
+        "directives",
+        "budget",
+        "verify",
+        "quotes",
+        "metrics",
+        "synthesis"
+      ],
+      "last_written_at": "2026-10-18T12:48:03.414053400+00:00",
+      "name": "reconcile-engine",
+      "pinned": false,
+      "tech_stack": [
+        "Rust",
+        "Serde"
+      ]
+    },
+    {
+      "api_surface": "Rust library consumed by the daemon",
+      "business_feature": "Show Segments",
+      "category": "lib",
+      "cross_refs": [
+        "daemon-core-rpc",
+        "console-segments-page",
+        "types-crate"
+      ],
+      "db_tables": [],
+      "description": "Defines the show's segment lifecycle, ranks, evidence rules, cases and command handling. Segment definitions and the primary-source allowlist live as TOML data. Runtime tests exercise the A/1 track and rank progression.",
+      "entry_points": [
+        "crates/shadowrunr-segments/src/lib.rs",
+        "crates/shadowrunr-segments/src/runtime.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-segments/src/case.rs",
+        "crates/shadowrunr-segments/src/command.rs",
+        "crates/shadowrunr-segments/src/evidence.rs",
+        "crates/shadowrunr-segments/src/lib.rs",
+        "crates/shadowrunr-segments/src/portfolio.rs",
+        "crates/shadowrunr-segments/src/ranks.rs",
+        "crates/shadowrunr-segments/src/runtime.rs",
+        "crates/shadowrunr-segments/src/table.rs",
+        "crates/shadowrunr-segments/tests/runtime.rs"
+      ],
+      "group": "Show Segments And Stage",
+      "group_id": "655343c0-db97-4d26-986a-fcd94d7f1e57",
+      "id": "5ca16ac4-6263-4c09-80d5-f32a969b16b6",
+      "keywords": [
+        "segment",
+        "rank",
+        "evidence",
+        "case",
+        "command",
+        "portfolio",
+        "allowlist"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.641512600+00:00",
+      "name": "segments-runtime",
+      "pinned": false,
+      "tech_stack": [
+        "Rust",
+        "Serde",
+        "TOML"
+      ]
+    },
+    {
+      "api_surface": "Rust library consumed by the daemon and the reconcile crate",
+      "business_feature": "Audience Simulation",
+      "category": "lib",
+      "cross_refs": [
+        "engine-llm-sessions",
+        "reconcile-engine",
+        "console-simulator-page"
+      ],
+      "db_tables": [],
+      "description": "Simulates chat audiences and tournaments against characters: populations, matrix runs, an LLM judge with a rubric, calibration, an instrument ledger, statistics and transcripts. Matrix TOMLs and the rubric/calibration under sim/ configure the runs.",
+      "entry_points": [
+        "crates/shadowrunr-sim/src/lib.rs",
+        "crates/shadowrunr-sim/src/runner.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-sim/examples/run_matrix.rs",
+        "crates/shadowrunr-sim/src/calibration.rs",
+        "crates/shadowrunr-sim/src/chat.rs",
+        "crates/shadowrunr-sim/src/instrument.rs",
+        "crates/shadowrunr-sim/src/judge.rs",
+        "crates/shadowrunr-sim/src/ledger.rs",
+        "crates/shadowrunr-sim/src/lib.rs",
+        "crates/shadowrunr-sim/src/matrix.rs",
+        "crates/shadowrunr-sim/src/population.rs",
+        "crates/shadowrunr-sim/src/rng.rs",
+        "crates/shadowrunr-sim/src/runner.rs",
+        "crates/shadowrunr-sim/src/situations.rs",
+        "crates/shadowrunr-sim/src/stats.rs",
+        "crates/shadowrunr-sim/src/summary.rs",
+        "crates/shadowrunr-sim/src/tournament.rs",
+        "crates/shadowrunr-sim/src/transcript.rs"
+      ],
+      "group": "Simulation And Reconciliation",
+      "group_id": "eac5aeb6-533f-4866-bbf9-9019bb9ddb16",
+      "id": "3048d794-6232-48f9-ab59-cfe44cb0d0d2",
+      "keywords": [
+        "simulation",
+        "tournament",
+        "judge",
+        "rubric",
+        "calibration",
+        "matrix",
+        "population",
+        "transcript"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.643285500+00:00",
+      "name": "sim-runner-judging",
+      "pinned": false,
+      "tech_stack": [
+        "Rust",
+        "Tokio",
+        "Serde",
+        "TOML"
+      ]
+    },
+    {
+      "api_surface": "Consumes the daemon live event stream",
+      "business_feature": "Live Stage App",
+      "category": "ui",
+      "cross_refs": [
+        "stage-kit-scene-engine",
+        "stage-kit-overlays",
+        "tokens-package"
+      ],
+      "db_tables": [],
+      "description": "Standalone Vite stage app that plays a show from a demo JSONL/case fixture or a live source. It renders the stage via stage-kit with operator controls and layouts. DESIGN.md records the visual design intent.",
+      "entry_points": [
+        "apps/stage/src/main.tsx",
+        "apps/stage/src/Stage.tsx"
+      ],
+      "file_paths": [
+        "apps/stage/scripts/make-demo.mjs",
+        "apps/stage/src/App.tsx",
+        "apps/stage/src/Controls.tsx",
+        "apps/stage/src/Stage.tsx",
+        "apps/stage/src/fixture.test.ts",
+        "apps/stage/src/layouts.ts",
+        "apps/stage/src/main.tsx",
+        "apps/stage/src/source.ts",
+        "apps/stage/src/stage.test.ts",
+        "apps/stage/src/styles.css",
+        "apps/stage/vite.config.ts"
+      ],
+      "group": "Show Segments And Stage",
+      "group_id": "655343c0-db97-4d26-986a-fcd94d7f1e57",
+      "id": "e0e277e4-0b4e-4d04-8c33-29f0d59d2a67",
+      "keywords": [
+        "stage",
+        "broadcast",
+        "demo",
+        "layout",
+        "controls",
+        "fixture"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.642704500+00:00",
+      "name": "stage-app",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "Vite 8.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "",
+      "business_feature": "Stage Overlays",
+      "category": "ui",
+      "cross_refs": [
+        "stage-kit-scene-engine",
+        "stage-app",
+        "tokens-package"
+      ],
+      "db_tables": [],
+      "description": "Broadcast overlay React components: captions, chat lane, decrees, explainer and foil cards, hexmap and panels, job ticker and vote panel. They render the scene model on the live stream.",
+      "entry_points": [
+        "packages/stage-kit/src/ui/index.ts",
+        "packages/stage-kit/src/ui/Overlays.tsx"
+      ],
+      "file_paths": [
+        "packages/stage-kit/src/ui/Caption.tsx",
+        "packages/stage-kit/src/ui/ChatLane.tsx",
+        "packages/stage-kit/src/ui/Decrees.tsx",
+        "packages/stage-kit/src/ui/ExplainerCard.tsx",
+        "packages/stage-kit/src/ui/FoilCard.tsx",
+        "packages/stage-kit/src/ui/HexPanels.tsx",
+        "packages/stage-kit/src/ui/Hexmap.tsx",
+        "packages/stage-kit/src/ui/JobTicker.tsx",
+        "packages/stage-kit/src/ui/Overlays.tsx",
+        "packages/stage-kit/src/ui/VotePanel.tsx",
+        "packages/stage-kit/src/ui/index.ts"
+      ],
+      "group": "Show Segments And Stage",
+      "group_id": "655343c0-db97-4d26-986a-fcd94d7f1e57",
+      "id": "e0fa3d2a-a070-4dbd-9551-517f0c58b0b8",
+      "keywords": [
+        "overlay",
+        "caption",
+        "chat lane",
+        "vote",
+        "hexmap",
+        "ticker",
+        "decrees"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.642437800+00:00",
+      "name": "stage-kit-overlays",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "",
+      "business_feature": "Stage Scene Engine",
+      "category": "lib",
+      "cross_refs": [
+        "stage-kit-overlays",
+        "stage-app",
+        "console-onair-page"
+      ],
+      "db_tables": [],
+      "description": "Shared stage toolkit: parses the event stream into scene models, drives playback and timing, and computes tallies, hex grid layout, lore and chat memory. It includes the SVG character and foil art components. Used by both the stage app and the console On Air page.",
+      "entry_points": [
+        "packages/stage-kit/src/index.ts",
+        "packages/stage-kit/src/scene.ts"
+      ],
+      "file_paths": [
+        "packages/stage-kit/src/index.ts",
+        "packages/stage-kit/src/chatMemory.ts",
+        "packages/stage-kit/src/diagram.ts",
+        "packages/stage-kit/src/hexgrid.ts",
+        "packages/stage-kit/src/lore.ts",
+        "packages/stage-kit/src/lore.test.ts",
+        "packages/stage-kit/src/parse.ts",
+        "packages/stage-kit/src/parse.test.ts",
+        "packages/stage-kit/src/playback.ts",
+        "packages/stage-kit/src/scene.ts",
+        "packages/stage-kit/src/scene.test.ts",
+        "packages/stage-kit/src/sceneModel.ts",
+        "packages/stage-kit/src/tallies.ts",
+        "packages/stage-kit/src/timing.ts",
+        "packages/stage-kit/src/visuals.test.ts",
+        "packages/stage-kit/src/vocab.ts",
+        "packages/stage-kit/src/art/FoilArt.tsx",
+        "packages/stage-kit/src/art/MalakorArt.tsx",
+        "packages/stage-kit/src/art/Sigil.tsx",
+        "packages/stage-kit/src/art/Silhouette.tsx"
+      ],
+      "group": "Show Segments And Stage",
+      "group_id": "655343c0-db97-4d26-986a-fcd94d7f1e57",
+      "id": "fc878bef-2e53-416c-83f0-0b62db46a8b4",
+      "keywords": [
+        "scene",
+        "playback",
+        "parse",
+        "tallies",
+        "hexgrid",
+        "lore",
+        "silhouette",
+        "timing"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.641874900+00:00",
+      "name": "stage-kit-scene-engine",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0",
+        "Vite 8.3"
+      ]
+    },
+    {
+      "api_surface": "",
+      "business_feature": "Design Tokens",
+      "category": "config",
+      "cross_refs": [
+        "console-ui-primitives",
+        "stage-kit-overlays",
+        "stage-app"
+      ],
+      "db_tables": [],
+      "description": "Design tokens generated from tokens.source.json into CSS and TypeScript, with the bundled Barlow Condensed fonts and their licence. REJECTED.md records discarded options. Consumed by the console and stage.",
+      "entry_points": [
+        "packages/tokens/tokens.source.json",
+        "packages/tokens/src/index.ts"
+      ],
+      "file_paths": [
+        "packages/tokens/scripts/generate.mjs",
+        "packages/tokens/src/index.ts",
+        "packages/tokens/src/tokens.css",
+        "packages/tokens/src/tokens.test.ts",
+        "packages/tokens/src/tokens.ts"
+      ],
+      "group": "Shared Contract And Design Tokens",
+      "group_id": "9749f973-f568-488a-a441-c6571cb5930f",
+      "id": "df38dcc3-a71c-4397-abb5-4fe4681cfccb",
+      "keywords": [
+        "design tokens",
+        "css variables",
+        "fonts",
+        "barlow",
+        "theme"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.656728600+00:00",
+      "name": "tokens-package",
+      "pinned": false,
+      "tech_stack": [
+        "TypeScript 6.0",
+        "CSS"
+      ]
+    },
+    {
+      "api_surface": "Defines the RPC and event shapes used on the wire",
+      "business_feature": "Shared Domain Types",
+      "category": "lib",
+      "cross_refs": [
+        "contract-package",
+        "daemon-core-rpc",
+        "brain-composition-memory"
+      ],
+      "db_tables": [],
+      "description": "Shared Rust domain types: engine, chat, catalog, events, memory, reconcile, RPC, segment and sim structures plus errors. A JSON Schema is exported and a drift test guards it against the contract package.",
+      "entry_points": [
+        "crates/shadowrunr-types/src/lib.rs",
+        "crates/shadowrunr-types/src/rpc.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-types/examples/export-schema.rs",
+        "crates/shadowrunr-types/src/catalog.rs",
+        "crates/shadowrunr-types/src/chat.rs",
+        "crates/shadowrunr-types/src/engine.rs",
+        "crates/shadowrunr-types/src/error.rs",
+        "crates/shadowrunr-types/src/event.rs",
+        "crates/shadowrunr-types/src/lib.rs",
+        "crates/shadowrunr-types/src/memory.rs",
+        "crates/shadowrunr-types/src/reconcile.rs",
+        "crates/shadowrunr-types/src/rpc.rs",
+        "crates/shadowrunr-types/src/schema.rs",
+        "crates/shadowrunr-types/src/segment.rs",
+        "crates/shadowrunr-types/src/sim.rs",
+        "crates/shadowrunr-types/tests/schema_drift.rs"
+      ],
+      "group": "Shared Contract And Design Tokens",
+      "group_id": "9749f973-f568-488a-a441-c6571cb5930f",
+      "id": "3b37a94d-3e69-4c44-8598-301f66448d9a",
+      "keywords": [
+        "types",
+        "schema",
+        "rpc",
+        "event",
+        "catalog",
+        "serde",
+        "schemars"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.655630100+00:00",
+      "name": "types-crate",
+      "pinned": false,
+      "tech_stack": [
+        "Rust",
+        "Serde",
+        "schemars"
+      ]
+    },
+    {
+      "api_surface": "",
+      "business_feature": "Workspace Tooling",
+      "category": "config",
+      "cross_refs": [
+        "daemon-core-rpc"
+      ],
+      "db_tables": [],
+      "description": "Monorepo configuration: pnpm workspace, Cargo workspace, TypeScript base, ESLint with boundaries, Stylelint, the example daemon TOML config and platform policy rules. Also covers project metadata files.",
+      "entry_points": [
+        "package.json",
+        "Cargo.toml"
+      ],
+      "file_paths": [
+        "eslint.config.js",
+        "stylelint.config.mjs"
+      ],
+      "group": "Docs And Repo Config",
+      "group_id": "fd5448c6-6dd1-4d64-a4b8-3e3af91da444",
+      "id": "70f40362-0fe0-4f05-90cf-b95538e20c74",
+      "keywords": [
+        "pnpm",
+        "cargo workspace",
+        "eslint",
+        "stylelint",
+        "policy",
+        "config"
+      ],
+      "last_written_at": "2026-10-18T12:47:49.657330900+00:00",
+      "name": "workspace-tooling-and-policy",
+      "pinned": false,
+      "tech_stack": [
+        "pnpm 11.3",
+        "ESLint 10.13",
+        "TypeScript 6.0",
+        "Cargo"
+      ]
+    }
+  ],
+  "generated_at": "2026-10-18T12:48:43.257734700+00:00",
+  "generator": "personas-context-scan",
+  "groups": [
+    {
+      "color": "violet",
+      "context_count": 1,
+      "domain": "feature",
+      "id": "d44ba015-f3ec-4b46-b7d8-52874f886ba3",
+      "name": "Character Brain"
+    },
+    {
+      "color": "blue",
+      "context_count": 3,
+      "domain": "infrastructure",
+      "id": "f6744bb5-6e0d-4edb-b2fb-ecb0f8a50aa8",
+      "name": "Engine And Daemon"
+    },
+    {
+      "color": "amber",
+      "context_count": 4,
+      "domain": "feature",
+      "id": "655343c0-db97-4d26-986a-fcd94d7f1e57",
+      "name": "Show Segments And Stage"
+    },
+    {
+      "color": "emerald",
+      "context_count": 2,
+      "domain": "feature",
+      "id": "eac5aeb6-533f-4866-bbf9-9019bb9ddb16",
+      "name": "Simulation And Reconciliation"
+    },
+    {
+      "color": "pink",
+      "context_count": 6,
+      "domain": "feature",
+      "id": "80632075-1266-4432-b387-031833872c9b",
+      "name": "Operator Console Pages"
+    },
+    {
+      "color": "indigo",
+      "context_count": 6,
+      "domain": "shared",
+      "id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
+      "name": "Console Platform"
+    },
+    {
+      "color": "orange",
+      "context_count": 3,
+      "domain": "shared",
+      "id": "9749f973-f568-488a-a441-c6571cb5930f",
+      "name": "Shared Contract And Design Tokens"
+    },
+    {
+      "color": "red",
+      "context_count": 1,
+      "domain": "infrastructure",
+      "id": "fd5448c6-6dd1-4d64-a4b8-3e3af91da444",
+      "name": "Docs And Repo Config"
+    }
+  ],
+  "project": {
+    "id": "06d2c489-42ea-41e1-a605-5f313639bca0",
+    "name": "overlord",
+    "root": "."
+  },
+  "provenance": {
+    "git_commit": "9fea8a7dd4ecb65f08477970c0f25318ccdea31a",
+    "git_commit_count": 45
+  },
+  "stats": {
+    "contexts": 26,
+    "files": 435,
+    "groups": 8,
+    "use_cases": 0
+  },
+  "taxonomy": {
+    "context_categories": [
+      "ui",
+      "api",
+      "lib",
+      "data",
+      "test",
+      "config"
+    ],
+    "group_domains": [
+      "feature",
+      "infrastructure",
+      "shared",
+      "integration",
+      "data"
+    ]
+  },
+  "use_cases": [],
+  "version": 2
+}
