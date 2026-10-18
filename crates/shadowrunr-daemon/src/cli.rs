@@ -72,6 +72,22 @@ pub enum Command {
         #[arg(long)]
         scripted: bool,
     },
+    /// Personas integration: registration and activity status.
+    #[command(subcommand)]
+    Personas(PersonasCommand),
+    /// Serve the MCP tools (runs, transcripts, reports, pre-flight) on stdin/stdout.
+    Mcp,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PersonasCommand {
+    /// Is Personas running and this repo its registered project? Exit 3 when Personas is
+    /// not running, 1 when the project is not verified. Never prints the door token.
+    Status {
+        /// Print the status as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -266,7 +282,24 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
             policy_install_cmd(&cfg, &list_id, source.as_deref()).await
         }
         Command::Daemon { port, scripted } => daemon_cmd(cfg, port, scripted).await,
+        Command::Personas(PersonasCommand::Status { json }) => {
+            personas_status_cmd(&cfg, json).await
+        }
+        Command::Mcp => crate::integrations::mcp::run_stdio(cfg)
+            .await
+            .map(|()| ExitCode::SUCCESS),
     }
+}
+
+async fn personas_status_cmd(cfg: &Config, json: bool) -> Result<ExitCode, String> {
+    use crate::integrations::status;
+    let r = status::status(cfg, std::time::Duration::from_secs(3)).await;
+    if json {
+        print_json(&r);
+    } else {
+        println!("{}", status::render(&r));
+    }
+    Ok(ExitCode::from(r.exit))
 }
 
 fn character_rules_cmd(

@@ -80,3 +80,26 @@ max_live_runs = 2       # concurrent sim.start runs
 # Browser origins allowed besides http://localhost:*, tauri://localhost and
 # http://tauri.localhost (the Tauri v2 window on Windows). Exact matches only.
 # extra_origins = ["http://localhost.example"]
+
+# Personas integration (docs/guide/personas.md). Everything here is optional and never
+# fatal: an absent or unreachable Personas only changes `shadowrunr personas status` and
+# the PF-09 pre-flight line.
+[personas]
+mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its start_sim tool
+# handshake = "~/.personas/local-http.json"   # default; $PERSONAS_DATA_DIR wins when set
+
+# Activity: forward matching events to a Personas webhook trigger as HMAC-signed calls.
+# Off unless this table is present. The secret lives in the environment variable named by
+# `secret_env`, never in this file.
+# [personas.activity]
+# webhook_url = "http://127.0.0.1:9420"   # Personas webhook server (PERSONAS_WEBHOOK_PORT)
+# trigger_id = "<webhook trigger id from Personas>"
+# secret_env = "SHADOWRUNR_PERSONAS_WEBHOOK_SECRET"
+# events = ["stream_end", "segment_end", "handover", "tournament_complete", "report_ready"]
+# # Moderation with priority:safety, character_break or persona_leak is always forwarded.
+# queue = 256              # events held while Personas is slow; more are dropped and counted
+# max_attempts = 4         # per event, first try included
+# backoff_ms = 250         # doubles per retry, capped at max_backoff_ms
+# max_backoff_ms = 5000
+# timeout_ms = 3000
+# down_cooldown_ms = 30000 # after an event exhausts its attempts, drop (and count) for this long
