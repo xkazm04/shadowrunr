@@ -92,6 +92,10 @@ pub struct BrainTuning {
     pub platforms: Vec<String>,
     /// Use a warm session for the core thread when the engine supports it.
     pub warm_session: bool,
+    /// Recycle the warm session after this many turns. The brain rebuilds the full context
+    /// every tick, so the CLI's own accumulated history is pure cost: a live pilot measured
+    /// ~220k cached tokens per core call without recycling. 0 = never recycle.
+    pub warm_recycle_turns: u32,
     pub working_set_ttl_ms: i64,
     /// Run the sleep cycle at `end_stream` when memory pressure warrants it.
     pub consolidate_at_end: bool,
@@ -107,6 +111,7 @@ impl Default for BrainTuning {
             policy: PolicySource::Auto,
             platforms: Vec::new(),
             warm_session: true,
+            warm_recycle_turns: 6,
             working_set_ttl_ms: working::WORKING_SET_TTL_MS,
             consolidate_at_end: true,
         }
@@ -149,6 +154,7 @@ pub struct Brain {
     fleet_override: Option<FleetMode>,
     engine_down: bool,
     session: Option<Box<dyn WarmSession>>,
+    session_turns: u32,
     session_unsupported: bool,
     hexes: Vec<HexInfo>,
     turns: Vec<String>,
@@ -196,6 +202,7 @@ impl Brain {
             fleet_override: None,
             engine_down: false,
             session: None,
+            session_turns: 0,
             session_unsupported: false,
             hexes: Vec::new(),
             turns: Vec::new(),
@@ -387,10 +394,21 @@ impl Brain {
             }
             if let Some(session) = self.session.as_mut() {
                 match session.send(prompt.clone()).await {
-                    Ok(r) => return Ok(r),
+                    Ok(r) => {
+                        self.session_turns += 1;
+                        let limit = self.tuning.warm_recycle_turns;
+                        if limit > 0 && self.session_turns >= limit {
+                            if let Some(s) = self.session.take() {
+                                let _ = s.close().await;
+                            }
+                            self.session_turns = 0;
+                        }
+                        return Ok(r);
+                    }
                     Err(_) => {
                         // The warm process died: fall back to a cold call, reopen next beat.
                         self.session = None;
+                        self.session_turns = 0;
                     }
                 }
             }

@@ -363,6 +363,27 @@ async fn warm_session_gets_the_prefix_once_and_turns_as_prompts() {
     assert!(engine.requests(Role::CoreThread).is_empty());
 }
 
+#[tokio::test]
+async fn warm_session_is_recycled_so_history_cannot_bloat() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::with_sessions();
+    let t = BrainTuning {
+        warm_session: true,
+        warm_recycle_turns: 2,
+        ..tuning()
+    };
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "s1", t).await;
+    let c = ctx(&[]);
+    for i in 0..5 {
+        b.tick(i * 1_000, Vec::new(), &c).await.unwrap();
+    }
+    // Turns 1-2, 3-4, 5: three sessions, every one with the same stable prefix.
+    let templates = engine.inner.templates.lock().unwrap().clone();
+    assert_eq!(templates.len(), 3);
+    assert!(templates.iter().all(|t| t.system == b.stable_prefix()));
+    assert_eq!(engine.inner.session_prompts.lock().unwrap().len(), 5);
+}
+
 // ── Memory ─────────────────────────────────────────────────────────────
 
 #[test]
