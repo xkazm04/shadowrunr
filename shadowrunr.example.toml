@@ -1,0 +1,82 @@
+# shadowrunr.toml: configuration for the `shadowrunr` binary (CLI and daemon).
+#
+# Copy this file to `shadowrunr.toml` at the repo root. The binary looks for it in the working
+# directory and then in each parent directory, or takes `--config <path>`. Relative paths
+# below resolve against the directory that holds this file.
+#
+# No credentials ever go in this file. Claude Code accounts are referenced by a label and,
+# optionally, the CLAUDE_CONFIG_DIR they are logged in under; an API key is referenced by the
+# NAME of the environment variable that holds it.
+
+[engine]
+# Claude Code accounts in rotation order. `config_dir` omitted = the default login of the
+# `claude` CLI on this machine. An empty list means no CLI at all (fallbacks only).
+accounts = [
+    { label = "main" },
+    # { label = "alt", config_dir = "C:/Users/me/.claude-alt" },
+]
+
+# First fallback: the Anthropic Messages API. Name the env var, never the key.
+# api_key_env = "ANTHROPIC_API_KEY"
+
+# Further experimental fallbacks, in order: "codex", "agy". ("local_gemma" is always
+# unavailable in v0.1.)
+cli_fallbacks = []
+
+# true = the deterministic, keyless ScriptedEngine (same as passing --scripted).
+scripted = false
+
+# Path or name of the `claude` executable (default: `claude` on PATH).
+# claude_bin = "claude"
+
+# Process-wide call ledger. Default: <data>/engine-ledger.jsonl. Simulation runs also write
+# their own per-run `ledger.jsonl`; do not point this at a run directory.
+# ledger_path = "data/engine-ledger.jsonl"
+
+# Global cap on live CLI processes (default 6) and warm-session idle timeout (default 20 min).
+# max_live_processes = 6
+# idle_timeout_ms = 1200000
+
+# Pass --safe-mode to spawned `claude` (no operator CLAUDE.md, skills, hooks, MCP). Default true.
+# safe_mode = true
+
+# Per-role routing overrides; absent fields keep the defaults in docs/spec/contract.md.
+# [engine.routes]
+# core_thread = { tier = "sonnet" }
+# judge = { effort = "high" }
+
+[paths]
+characters = "characters"   # character packages
+runs = "runs"               # simulations land in runs/sim/<tournament_id>/<run_id>/
+data = "data"               # memory store, directives, reconcile reports, engine ledger
+policy = "policy"           # platform-rules.json
+sim = "sim"                 # calibration.json, rubric.toml, matrices/
+segments = "crates/shadowrunr-segments/data"   # segment tables (hashed into the instrument)
+
+[sim]
+# Defaults for `shadowrunr sim run` and the daemon's `sim.start`.
+character = "malakor"
+tone = "theatrical"
+tier = "haiku"          # core-thread tier: haiku | sonnet | opus
+effort = "low"
+segment = "SEG-01"      # SEG-01 | SEG-02A (SEG-02B-I/II are descoped and refused)
+audience = 30
+seed = 1
+duration_s = 600
+tick_s = 5
+population = "growing_channel"
+populations = { "3" = "small_new_channel", "30" = "growing_channel", "300" = "raid_moment" }
+# The first tier here that differs from the run's core tier judges it.
+judge_tiers = ["opus", "sonnet"]
+concurrency = 2         # tournament runs in flight (a matrix may override it)
+max_featured = 8        # LLM-played chatters per run
+featured_every_ticks = 1
+pool_size = 2           # brain background-worker pool
+adhoc_dir = "adhoc"     # single runs go to runs/sim/adhoc/<run_id>/
+
+[daemon]
+port = 7717             # bound to 127.0.0.1 only
+max_live_runs = 2       # concurrent sim.start runs
+# Browser origins allowed besides http://localhost:*, tauri://localhost and
+# http://tauri.localhost (the Tauri v2 window on Windows). Exact matches only.
+# extra_origins = ["http://localhost.example"]

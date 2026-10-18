@@ -20,6 +20,13 @@ async fn main() {
             label: "main".into(),
             config_dir: None,
         }],
+        // Live CLI processes across all concurrent runs (SHADOWRUNR_MAX_LIVE, default 10).
+        max_live_processes: Some(
+            std::env::var("SHADOWRUNR_MAX_LIVE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10),
+        ),
         ..EngineConfig::default()
     };
     let engine = build_engine(&cfg);

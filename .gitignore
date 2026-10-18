@@ -9,3 +9,4 @@ dist/
 /runs/
 *.db
 *.db-*
+/data/

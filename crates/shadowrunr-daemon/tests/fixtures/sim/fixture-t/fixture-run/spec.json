@@ -1,0 +1,12 @@
+{
+  "run_id": "fixture-run",
+  "character": "malakor",
+  "tone_variant": "theatrical",
+  "core_tier": "haiku",
+  "core_effort": "low",
+  "segment": "SEG-01",
+  "audience_size": 3,
+  "seed": 1,
+  "duration_s": 10,
+  "population": "small_new_channel"
+}

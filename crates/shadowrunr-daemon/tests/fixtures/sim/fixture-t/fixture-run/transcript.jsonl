@@ -1,0 +1,11 @@
+{"type":"stream_start","ts_ms":0,"stream_id":"fixture-run","character":"malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":3}
+{"type":"segment_start","ts_ms":0,"segment":"SEG-01"}
+{"type":"chat","ts_ms":1200,"msg":{"id":"m1","ts_ms":1200,"viewer":{"id":"v1","name":"bonepicker","platform":"sim","rank":"thrall"},"text":"hail the lich"}}
+{"type":"picked","ts_ms":2000,"msg_ids":["m1"],"reason":"greeting"}
+{"type":"say","ts_ms":2400,"speaker":"malakor","text":"Bonepicker kneels. Good. Your tithe is noted, thrall.","replying_to":["m1"],"first_text_ms":410}
+{"type":"op","ts_ms":2400,"op":{"op":"mark_moment","label":"first tithe"}}
+{"type":"chat","ts_ms":3100,"msg":{"id":"m2","ts_ms":3100,"viewer":{"id":"v2","name":"gravewatch","platform":"sim","rank":"acolyte","sub_tier":1,"months":2},"text":"!summon auditor"}}
+{"type":"moderation","ts_ms":3100,"stage":"input","rule":"rate_cap","msg_id":"m2","action":"drop"}
+{"type":"say","ts_ms":4200,"speaker":"malakor","text":"The crypt is quiet. Too quiet. Entertain me, minions."}
+{"type":"segment_end","ts_ms":5000,"segment":"SEG-01"}
+{"type":"stream_end","ts_ms":5000,"reason":"sim_complete"}

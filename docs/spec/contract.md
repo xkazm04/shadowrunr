@@ -176,6 +176,10 @@ runs on the same tier as the core thread it judges.**
 - `GET /events`: WebSocket. The server pushes one `StreamEvent` JSON per message (a live sim
   or a replay). Clients send `{"subscribe": "<run_id>|live", "speed": 1.0}` to choose the
   source and the replay speed.
+  A run id may be qualified as `<tournament_id>/<run_id>`; a bare id found in several
+  tournaments is rejected as ambiguous. On failure the server sends one
+  `{"error": {"code","message"}}` frame, which is not a `StreamEvent`.
+- Browser origins allowed: `http://localhost:*`, `tauri://localhost`, `http://tauri.localhost`.
 - `POST /rpc`: JSON `{"method": "<name>", "params": {...}}` → `{"result": ...}` or
   `{"error": {"code": "...", "message": "..."}}`.
 
@@ -194,6 +198,7 @@ runs on the same tier as the core thread it judges.**
 | `plan.choose` | `{ "report_id", "option_ids": [] }` | `NextStreamPlan` |
 | `directive.add` | `{ "kind": "prevent" \| "try", "text", "scope"?: SegmentId }` | `Directive` |
 | `directive.list` | `{}` | `Directive[]` |
+| `directive.deactivate` | `{ "id" }` | `Directive` (with `active: false`) |
 | `lord.chat` | `{ "report_id"?, "message" }` | `{ reply, directives_added: Directive[] }` |
 
 These Reconcile & Plan types live in the `shadowrunr-reconcile` crate and are serialised as

@@ -1,9 +1,5 @@
-//! `shadowrunr` binary. WP5 builds the daemon and the full CLI; this stub only proves the
-//! workspace links.
+//! `shadowrunr`: the Shadowrunr OS command line and daemon. Commands: docs/guide/cli.md.
 
-fn main() {
-    println!(
-        "shadowrunr {} - daemon and CLI arrive in WP5",
-        env!("CARGO_PKG_VERSION")
-    );
+fn main() -> std::process::ExitCode {
+    shadowrunr_daemon::cli::main()
 }

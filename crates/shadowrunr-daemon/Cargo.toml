@@ -5,6 +5,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "shadowrunr_daemon"
+path = "src/lib.rs"
+
 [[bin]]
 name = "shadowrunr"
 path = "src/main.rs"
@@ -15,6 +19,18 @@ shadowrunr-engine.workspace = true
 shadowrunr-brain.workspace = true
 shadowrunr-segments.workspace = true
 shadowrunr-sim.workspace = true
+shadowrunr-reconcile.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+clap = { version = "4.6.7", features = ["derive"] }
+axum = { version = "0.8.9", features = ["ws"] }
+tower-http = { version = "0.6.11", features = ["cors"] }
+toml = "0.8.23"
+fs2 = "0.4.0"
+futures = "0.3.31"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+reqwest = { version = "0.12.28", default-features = false, features = ["json"] }
+tokio-tungstenite = "0.29.0"
