@@ -26,8 +26,24 @@ use crate::stream::{Feed, TurnOutcome, TurnParser};
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// Env vars stripped from every CLI child so the plan login (not an API key) is used.
-pub const STRIPPED_ENV: &[&str] = &["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
+/// Env vars stripped from every CLI child: API credentials (so the plan login is used) and the
+/// session variables a parent Claude Code session exports. `CLAUDE_CODE_PLUGIN_DIRS` in
+/// particular loads the operator's own dev-mod plugins into every child, even with an
+/// isolated `CLAUDE_CONFIG_DIR` (found live, 2026-10-18).
+pub const STRIPPED_ENV: &[&str] = &[
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_PLUGIN_DIRS",
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_SESSION_ATTENDED",
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDECODE",
+    "CLAUDE_PID",
+    "CLAUDE_EFFORT",
+    "AI_AGENT",
+];
 
 /// One fleet account, by label and config dir only.
 #[derive(Debug, Clone, PartialEq, Eq)]

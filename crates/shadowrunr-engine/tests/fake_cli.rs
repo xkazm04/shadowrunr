@@ -95,6 +95,8 @@ fn req(timeout_ms: u64) -> EngineRequest {
 async fn one_shot_spawns_cli_with_isolated_env_and_writes_ledger() {
     // The parent has an API key; the child must not see it.
     std::env::set_var("ANTHROPIC_API_KEY", "test-parent-key-not-real");
+    // A parent Claude Code session exports its dev-mod plugin dirs; the child must not load them.
+    std::env::set_var("CLAUDE_CODE_PLUGIN_DIRS", "C:/not-real/dev-mods");
     let mut w = World::new();
     let dir = w.account("main", json!({"fixture": fixture("claude_success.jsonl")}));
     let fleet = Fleet::new(&w.cfg);
@@ -114,6 +116,7 @@ async fn one_shot_spawns_cli_with_isolated_env_and_writes_ledger() {
     let c = calls(&dir);
     assert_eq!(c.len(), 1);
     assert_eq!(c[0]["api_key_present"], false);
+    assert_eq!(c[0]["plugin_dirs_present"], false);
     let a = argv(&c[0]);
     for flag in [
         "-p",

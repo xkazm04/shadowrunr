@@ -38,6 +38,7 @@ fn main() {
         let rec = json!({
             "argv": args,
             "api_key_present": std::env::var_os("ANTHROPIC_API_KEY").is_some(),
+            "plugin_dirs_present": std::env::var_os("CLAUDE_CODE_PLUGIN_DIRS").is_some(),
         });
         if let Ok(mut f) = std::fs::OpenOptions::new()
             .create(true)
