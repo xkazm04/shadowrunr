@@ -404,7 +404,7 @@ impl Reconciler {
                 });
             }
         }
-        out.sort_by(|a, b| b.created_ms.cmp(&a.created_ms));
+        out.sort_by_key(|r| std::cmp::Reverse(r.created_ms));
         Ok(out)
     }
 
