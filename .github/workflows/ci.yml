@@ -1,0 +1,123 @@
+# CI: the merge-pipeline rung of the gate ladder. Every gate here also runs locally (README,
+# "Development"); this run is the one nobody's local state can pollute.
+#
+# Trust: this workflow needs no secrets and reads none. It runs with a read-only token
+# (`contents: read`), checks out without persisting that token, and interpolates no event data
+# into a shell. Pull requests from forks therefore run the same jobs with nothing to steal.
+#
+# Never here: the live engine (tests use the scripted engine and a fake CLI binary), Claude Code,
+# Personas, the gitignored local stores (data/, policy/local/, runs/, .contest/), and the
+# fidelity gate, which needs the local contest arena and stays local-only.
+#
+# Every action is pinned to a full commit SHA; the tag is in the comment beside it.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # bash -eo pipefail on every runner, Windows included: one failing command fails its step.
+    shell: bash
+
+env:
+  # Pinned so a new stable release (and its new clippy lints) cannot turn an unchanged commit red.
+  RUST_TOOLCHAIN: "1.97.1"
+  NODE_VERSION: "24"
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  rust:
+    name: rust (fmt, clippy, test)
+    # Windows-first: the CLI spawns child processes with CREATE_NO_WINDOW and the console ships
+    # as a Windows Tauri app. apps/console/src-tauri is its own Cargo workspace and is not built.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt,clippy
+          rustup default "$RUST_TOOLCHAIN"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: cargo test
+        run: cargo test --workspace
+
+  web:
+    name: web (tokens, contract, packages, stage, console)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The contract drift gate re-exports the JSON Schema from crates/shadowrunr-types, so this
+      # job builds that one small crate rather than installing Node in the Windows rust job.
+      - name: Install the Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # No `version:` input: pnpm comes from the root package.json `packageManager` field.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: tokens drift
+        run: pnpm -C packages/tokens check
+      - name: contract drift
+        run: pnpm -C packages/contract check
+
+      - name: tokens typecheck
+        run: pnpm -C packages/tokens typecheck
+      - name: tokens test
+        run: pnpm -C packages/tokens test
+      - name: contract typecheck
+        run: pnpm -C packages/contract typecheck
+      - name: contract test
+        run: pnpm -C packages/contract test
+      - name: contract lint
+        run: pnpm -C packages/contract lint
+      - name: stage-kit typecheck
+        run: pnpm -C packages/stage-kit typecheck
+      - name: stage-kit test
+        run: pnpm -C packages/stage-kit test
+      - name: stage-kit lint
+        run: pnpm -C packages/stage-kit lint
+
+      - name: stage typecheck
+        run: pnpm -C apps/stage typecheck
+      - name: stage test
+        run: pnpm -C apps/stage test
+      - name: stage build
+        run: pnpm -C apps/stage build
+
+      - name: console typecheck
+        run: pnpm -C apps/console typecheck
+      - name: console test (includes the DOM-count budgets)
+        run: pnpm -C apps/console test
+      - name: console lint (eslint, stylelint, 400-line cap, token refs)
+        run: pnpm -C apps/console lint
+      - name: console build (includes the per-route bundle budget)
+        run: pnpm -C apps/console build

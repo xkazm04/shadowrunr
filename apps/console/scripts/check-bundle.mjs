@@ -5,7 +5,7 @@
 // From dist/.vite/manifest.json:
 //   entry          the index.html chunk plus everything it imports statically (first load)
 //   <page>.l1/.l2  each page layer's lazy chunk plus what it imports beyond the entry
-//   legacy         the legacy desk chunk (deleted at cutover C2)
+//   door           @shadowrunr/contract's validators; other lazy chunks are named in OTHER_ROUTES
 // Budgets live in budgets/bundle.json. A route without a budget, or a budget without a route,
 // fails too, so a new page has to declare its budget.
 import { existsSync, readFileSync } from "node:fs";
@@ -26,9 +26,6 @@ const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
 
 /** Lazy chunks that are not page layers. */
 const OTHER_ROUTES = [
-  [/^src\/legacy\/LegacyDesk\.tsx$/, "legacy"],
-  [/^src\/api\/mock\.ts$/, "legacy.mock"],
-  [/@tauri-apps\/plugin-opener\//, "tauri.opener"],
   [/^src\/data\/contractDoor\.ts$/, "door"],
 ];
 

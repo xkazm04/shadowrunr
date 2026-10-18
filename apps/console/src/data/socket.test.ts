@@ -135,7 +135,7 @@ describe("event stream: reconnect and resume", () => {
     expect(h.events).toEqual([]);
   });
 
-  it("accepts a legacy daemon's bare events (no seq)", () => {
+  it("accepts a pre-seq daemon's bare events (no seq)", () => {
     const h = harness();
     h.sockets.last().open();
     h.sockets.last().push({ type: "stream_end", ts_ms: 9, reason: "sim_complete" });

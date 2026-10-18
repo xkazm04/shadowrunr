@@ -8,7 +8,6 @@ export interface KeyContext {
   /** The page the wall returns to (M, Season). */
   readonly lastPage: PageId;
   readonly hover: number | null;
-  readonly legacyViews: readonly string[];
 }
 
 export type Effect =
@@ -51,10 +50,6 @@ export function effectOf(action: KeyAction, ctx: KeyContext): Effect {
       return { kind: "skip-intro" };
     case "blur":
       return { kind: "blur" };
-    case "legacy-view": {
-      const v = ctx.legacyViews[action.index];
-      return v ? { kind: "navigate", route: { view: "legacy", sub: [v] } } : NONE;
-    }
   }
 }
 

@@ -19,10 +19,6 @@ const C = "apps/console/src";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const CONSOLE_TSCONFIG = join(ROOT, "apps/console/tsconfig.json");
 
-/** The pre-port desk: reachable at #/legacy until cutover C2 deletes all of it. */
-const LEGACY_DIRS = [`${C}/legacy/**`, `${C}/views/**`, `${C}/api/**`, `${C}/lib/**`, `${C}/fixtures/**`];
-const LEGACY = [...LEGACY_DIRS, `${C}/contract.ts`];
-
 /** The one door: JSON.parse is allowed here and nowhere else. */
 const DOOR = ["packages/contract/src/**"];
 
@@ -71,7 +67,6 @@ export default tseslint.config(
       "runs/**",
       ".contest/**",
       "apps/stage/**",
-      ...LEGACY,
     ],
   },
   {
@@ -119,7 +114,6 @@ export default tseslint.config(
         { type: "keys", pattern: `${C}/keys/**`, partialMatch: false },
         { type: "data", pattern: `${C}/data/**`, partialMatch: false },
         { type: "ui", pattern: `${C}/ui/**`, partialMatch: false },
-        { type: "legacy", pattern: LEGACY_DIRS, partialMatch: false },
       ],
     },
     rules: {
@@ -132,11 +126,11 @@ export default tseslint.config(
         "error",
         {
           default: "disallow",
-          // An import of a file outside every element (src/contract.ts, say) is checked too.
+          // An import of a file outside every element (a stray file at src/, say) is checked too.
           checkUnknownLocals: true,
           message: "{{from.type}} may not import {{to.type}} (see eslint.config.js boundaries).",
           policies: [
-            allow("app", ["shell", "kit", "page", "router", "keys", "data", "ui", "legacy"]),
+            allow("app", ["shell", "kit", "page", "router", "keys", "data", "ui"]),
             allow("shell", ["kit", "router", "keys", "data", "ui"]),
             allow("page", ["kit", "router", "data", "ui"]),
             // Files of one page import each other across its subfolders (the captured page id
@@ -146,7 +140,6 @@ export default tseslint.config(
               allow: [{ to: { element: { type: "page", captured: { page: "{{ from.element.captured.page }}" } } } }],
             },
             allow("kit", ["router", "data", "ui"]),
-            allow("legacy", ["legacy"]),
           ],
         },
       ],

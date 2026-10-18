@@ -1,6 +1,6 @@
-// simulator/heatmap[/<key>]: one tournament's cells worst first (the summary.rs rule, moved
-// from the legacy lib/heatmap.ts into ../model/heatmap.ts). Each cell shows its fail rate with
-// n and its 95% bound; a cell opens its rules, quality rates and runs.
+// simulator/heatmap[/<key>]: one tournament's cells worst first (the summary.rs rule, in
+// ./cells.ts). Each cell shows its fail rate with n and its 95% bound; a cell opens its rules,
+// quality rates and runs.
 import { useMemo, useState } from "react";
 import { QueryView } from "../../kit";
 import { usePaged, useRpc } from "../../data";

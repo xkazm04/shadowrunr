@@ -34,7 +34,7 @@ describe("keymap conflict report", () => {
 
 describe("bindings", () => {
   it("jumps to a page with bare 1-6 at every level", () => {
-    for (const mode of ["wall", "l1", "l2", "legacy"] as const) {
+    for (const mode of ["wall", "l1", "l2"] as const) {
       for (let i = 1; i <= 6; i++) expect(resolve(KEYMAP, mode, String(i), false)?.action).toEqual({ type: "page", index: i - 1 });
     }
     expect(resolve(KEYMAP, "l1", "7", false)).toBeUndefined();
@@ -59,7 +59,6 @@ describe("bindings", () => {
     expect(chordOf(key("M"))).toBe("m");
     expect(chordOf(key("1", { metaKey: true }))).toBe("Ctrl+1");
     expect(chordOf(key("Escape"))).toBe("Escape");
-    expect(resolve(KEYMAP, "legacy", "Ctrl+2", false)?.action).toEqual({ type: "legacy-view", index: 1 });
     expect(resolve(KEYMAP, "l1", "Ctrl+2", false)).toBeUndefined();
   });
 });

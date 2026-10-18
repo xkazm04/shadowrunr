@@ -7,7 +7,6 @@ const ctx = (over: Partial<KeyContext> = {}): KeyContext => ({
   intro: false,
   lastPage: "brain",
   hover: null,
-  legacyViews: ["preflight", "simulations"],
   ...over,
 });
 
@@ -42,10 +41,5 @@ describe("key actions", () => {
       kind: "navigate",
       route: pageRoute("onair"),
     });
-  });
-
-  it("opens legacy views by index", () => {
-    expect(effectOf({ type: "legacy-view", index: 1 }, ctx())).toEqual({ kind: "navigate", route: { view: "legacy", sub: ["simulations"] } });
-    expect(effectOf({ type: "legacy-view", index: 4 }, ctx())).toEqual({ kind: "none" });
   });
 });

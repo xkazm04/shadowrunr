@@ -134,16 +134,14 @@ describe("the shell", () => {
   });
 });
 
-describe("the legacy desk (until cutover C2)", () => {
-  it("stays reachable at #/legacy/<view>, on fixtures, with Ctrl+1..5", async () => {
-    window.history.replaceState(null, "", "/?mock=1#/legacy/directives");
-    mount("#/legacy/directives");
-    expect(await screen.findByText("Shadowrunr · legacy desk")).toBeTruthy();
+describe("retired routes (cutover C2)", () => {
+  it("sends a hash naming no page to the wall, where Ctrl+digit is unbound and bare digits still work", async () => {
+    mount("#/desk/directives");
+    expect(router.getRoute()).toEqual({ view: "wall" });
     await key("2", { ctrlKey: true });
-    expect(router.getRoute()).toEqual({ view: "legacy", sub: ["simulations"] });
-    await key("1"); // bare 1 still jumps to On Air
+    expect(router.getRoute()).toEqual({ view: "wall" });
+    await key("1");
     expect(router.getRoute()).toEqual(pageRoute("onair"));
-    window.history.replaceState(null, "", "/");
   });
 });
 

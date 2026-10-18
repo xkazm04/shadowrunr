@@ -12,7 +12,6 @@ const APP = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = join(APP, "src");
 const require = createRequire(join(APP, "package.json"));
 const TOKENS_CSS = require.resolve("@shadowrunr/tokens/tokens.css");
-const LEGACY = ["legacy/"];
 
 const DEF = /(--sr-[a-z0-9-]+)\s*:/g;
 const REF = /var\(\s*(--sr-[a-z0-9-]+)/g;
@@ -36,7 +35,6 @@ const unknown = [];
 for (const file of walk(SRC)) {
   if (!/\.(css|tsx?)$/.test(file)) continue;
   const rel = relative(SRC, file).split(sep).join("/");
-  if (LEGACY.some((p) => rel.startsWith(p))) continue;
   const text = readFileSync(file, "utf8");
   files++;
   for (const m of text.matchAll(REF)) {

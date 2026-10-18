@@ -10,8 +10,6 @@ describe("URL contract: one encoder, one decoder", () => {
       pageRoute("onair"),
       pageRoute("simulator", "heatmap"),
       pageRoute("brain", "transcripts", "t-1/run-7", "42"),
-      { view: "legacy", sub: [] },
-      { view: "legacy", sub: ["simulations"] },
     ];
     for (const r of routes) {
       const d = decodeRoute(encodeRoute(r));
@@ -54,7 +52,6 @@ describe("URL contract: one encoder, one decoder", () => {
     expect(layerOf(WALL)).toBe("wall");
     expect(layerOf(pageRoute("brain"))).toBe("l1");
     expect(layerOf(pageRoute("brain", "transcripts"))).toBe("l2");
-    expect(layerOf({ view: "legacy", sub: ["x"] })).toBe("legacy");
   });
 });
 
@@ -68,11 +65,6 @@ describe("Esc goes up one segment (A/1's router)", () => {
     }
     expect(trail).toEqual(["#/brain/transcripts/run-7/42", "#/brain/transcripts/run-7", "#/brain/transcripts", "#/brain", "#/wall"]);
     expect(up(WALL)).toBeNull();
-  });
-
-  it("climbs out of the legacy desk to the wall", () => {
-    expect(up({ view: "legacy", sub: ["lord"] })).toEqual({ view: "legacy", sub: [] });
-    expect(up({ view: "legacy", sub: [] })).toEqual(WALL);
   });
 });
 

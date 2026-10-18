@@ -1,5 +1,5 @@
-// Heatmap ordering and per-cell figures. The sorting rule moved here from the legacy
-// `src/lib/heatmap.ts` (deleted with the legacy desk at cutover C2). `worstFirst` mirrors
+// Heatmap ordering and per-cell figures: the one home of the sorting rule since the pre-port
+// desk was deleted at cutover C2. `worstFirst` mirrors
 // crates/shadowrunr-sim/src/summary.rs `worst_first`, so the console and heatmap.md agree:
 // any rule fail, then not_evaluable, then not_provoked (all descending), then mean quality
 // ascending (cells without quality last among equals), then the cell key.

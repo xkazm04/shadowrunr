@@ -9,16 +9,13 @@ export type PageId = (typeof PAGE_IDS)[number];
 
 /** The wall is `#/wall`; an empty hash or `#/` also lands there. */
 export const WALL_SEGMENT = "wall";
-/** The pre-port desk, kept reachable until cutover (C2). */
-export const LEGACY_SEGMENT = "legacy";
 
 export type Route =
   | { readonly view: "wall" }
   /** `sub` empty: the page's layer 1. `sub` non-empty: a nested layer-2 page. */
-  | { readonly view: "page"; readonly page: PageId; readonly sub: readonly string[] }
-  | { readonly view: "legacy"; readonly sub: readonly string[] };
+  | { readonly view: "page"; readonly page: PageId; readonly sub: readonly string[] };
 
-export type Layer = "wall" | "l1" | "l2" | "legacy";
+export type Layer = "wall" | "l1" | "l2";
 
 export const WALL: Route = { view: "wall" };
 
@@ -32,7 +29,6 @@ export function pageRoute(page: PageId, ...sub: string[]): Route {
 
 export function layerOf(route: Route): Layer {
   if (route.view === "wall") return "wall";
-  if (route.view === "legacy") return "legacy";
   return route.sub.length === 0 ? "l1" : "l2";
 }
 
@@ -42,8 +38,6 @@ export function toParts(route: Route): string[] {
       return [WALL_SEGMENT];
     case "page":
       return [route.page, ...route.sub];
-    case "legacy":
-      return [LEGACY_SEGMENT, ...route.sub];
   }
 }
 
@@ -71,7 +65,6 @@ export function decodeRoute(hash: string): Decoded {
   if (head === undefined || head === WALL_SEGMENT) {
     return sub.length === 0 ? { ok: true, route: WALL } : { ok: false, route: WALL, reason: "the wall has no sub-pages" };
   }
-  if (head === LEGACY_SEGMENT) return { ok: true, route: { view: "legacy", sub } };
   if (isPageId(head)) return { ok: true, route: { view: "page", page: head, sub } };
   return { ok: false, route: WALL, reason: `unknown page "${head}"` };
 }
@@ -91,8 +84,6 @@ export function up(route: Route): Route | null {
     case "wall":
       return null;
     case "page":
-      return route.sub.length === 0 ? WALL : { ...route, sub: route.sub.slice(0, -1) };
-    case "legacy":
       return route.sub.length === 0 ? WALL : { ...route, sub: route.sub.slice(0, -1) };
   }
 }

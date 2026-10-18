@@ -75,7 +75,7 @@ describe("tiles", () => {
   });
 });
 
-describe("heatmap (moved from the legacy lib/heatmap.ts)", () => {
+describe("heatmap ordering and bounds (cells.ts)", () => {
   const cell = (tone: string, fail: number, np: number, q?: number): CellResult => ({
     cell: { instrument_hash: "h", tone, core_tier: "haiku", segment: "SEG-01", audience_size: 3 },
     runs: 1,

@@ -6,8 +6,7 @@
 // over a colour role, which is exactly `rgba(<role>, N/100)`. `rgb()` stays banned, so there are
 // no R G B channel tokens; a scrim is `var(--sr-color-scrim)` mixed the same way.
 export default {
-  // The legacy desk's global CSS is deleted with it at cutover C2.
-  ignoreFiles: ["**/node_modules/**", "**/dist/**", "packages/tokens/src/tokens.css", "apps/console/src/legacy/**"],
+  ignoreFiles: ["**/node_modules/**", "**/dist/**", "packages/tokens/src/tokens.css"],
   rules: {
     "block-no-empty": true,
     "declaration-block-no-duplicate-properties": true,

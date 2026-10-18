@@ -33,6 +33,26 @@ cargo build --workspace
 cargo test --workspace
 ```
 
+## Development
+
+Every gate exits non-zero on a violation. CI (`.github/workflows/ci.yml`) runs all of them
+on each push to `main` and on every pull request, with no secrets:
+
+- Rust: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+  `cargo test --workspace`. Tests use the scripted engine and a fake CLI binary, so they never
+  spend quota.
+- Drift: `pnpm -C packages/tokens check` (generated token CSS) and
+  `pnpm -C packages/contract check` (TypeScript types and validators against the Rust schema).
+- Per package (`packages/*`, `apps/stage`, `apps/console`): `pnpm -C <pkg> typecheck`,
+  `pnpm -C <pkg> test`, and `pnpm -C <pkg> lint` where the package has it.
+- Console: `lint` also runs stylelint (tokens only, no raw colour or px), the 400-line file
+  cap and the token-reference check. `test` holds the DOM-count budgets
+  (`apps/console/budgets/dom.json`), and `build` ends with the per-route bundle budget
+  (`apps/console/budgets/bundle.json`).
+
+The console's visual fidelity gate is local-only. It needs the contest arena, which is not in
+this repository, so CI never runs it.
+
 ## Licence
 
 Apache-2.0. "Shadowrunr", "Overlord" and "Malakor" are project names, not licensed marks.
