@@ -1,0 +1,24 @@
+# Night tournament (stage 1 of the heavy grid), sized from the live pilot: a 10-minute
+# simulated stream takes ~15 min of wall clock on Haiku (judge included).
+# 5 tones x haiku/sonnet x 2 segments x 3 audience sizes x 2 seeds = 120 runs.
+# Opus as core is measured separately in night-opus.toml. Seeds 3-5 and 20-minute runs stay
+# in heavy.toml for a later pass.
+id = "night"
+character = "malakor"
+duration_s = 600
+tick_s = 5
+core_effort = "low"
+concurrency = 8
+# Haiku and Sonnet cores are both judged by Opus, so their scores are comparable.
+judge_tiers = ["opus", "sonnet"]
+featured_every_ticks = 1
+max_featured = 8
+population = "growing_channel"
+populations = { "3" = "small_new_channel", "30" = "growing_channel", "300" = "raid_moment" }
+
+[axes]
+tones = ["theatrical", "deadpan-bureaucrat", "gleeful-chaos", "unhinged-roastmaster", "weary-middle-manager"]
+core_tiers = ["haiku", "sonnet"]
+segments = ["SEG-01", "SEG-02A"]
+audience_sizes = [3, 30, 300]
+seeds = [1, 2]

@@ -1,0 +1,20 @@
+# Opus as Malakor's core thread: one slice per tone, judged by Sonnet (the judge never shares
+# the core's tier, so these scores are flagged as not directly comparable with night.toml).
+id = "night-opus"
+character = "malakor"
+duration_s = 600
+tick_s = 5
+core_effort = "low"
+concurrency = 5
+judge_tiers = ["opus", "sonnet"]
+featured_every_ticks = 1
+max_featured = 8
+population = "growing_channel"
+populations = { "3" = "small_new_channel", "30" = "growing_channel", "300" = "raid_moment" }
+
+[axes]
+tones = ["theatrical", "deadpan-bureaucrat", "gleeful-chaos", "unhinged-roastmaster", "weary-middle-manager"]
+core_tiers = ["opus"]
+segments = ["SEG-01"]
+audience_sizes = [30]
+seeds = [1]
