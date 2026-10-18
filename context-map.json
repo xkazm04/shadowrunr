@@ -15,6 +15,7 @@
         "crates/shadowrunr-brain/src/compose.rs"
       ],
       "file_paths": [
+        "crates/shadowrunr-brain/Cargo.toml",
         "crates/shadowrunr-brain/src/character.rs",
         "crates/shadowrunr-brain/src/compose.rs",
         "crates/shadowrunr-brain/src/fleet.rs",
@@ -80,15 +81,21 @@
         "apps/console/src/keys/keymap.test.ts",
         "apps/console/src/keys/keymap.ts",
         "apps/console/src/keys/listener.ts",
+        "apps/console/src/kit/LetterboxBands.module.css",
+        "apps/console/src/kit/LetterboxBands.tsx",
+        "apps/console/src/kit/OpenInStage.module.css",
+        "apps/console/src/kit/OpenInStage.tsx",
         "apps/console/src/kit/Placeholder.module.css",
         "apps/console/src/kit/Placeholder.tsx",
+        "apps/console/src/kit/PosterFrame.module.css",
+        "apps/console/src/kit/PosterFrame.tsx",
         "apps/console/src/kit/QueryView.tsx",
+        "apps/console/src/kit/events.ts",
         "apps/console/src/kit/index.ts",
-        "apps/console/src/lib/format.ts",
-        "apps/console/src/lib/heatmap.test.ts",
-        "apps/console/src/lib/heatmap.ts",
-        "apps/console/src/lib/open.ts",
-        "apps/console/src/lib/transcript.ts"
+        "apps/console/src/kit/keyCommands.ts",
+        "apps/console/src/kit/openExternal.test.ts",
+        "apps/console/src/kit/openExternal.ts",
+        "apps/console/src/kit/testing.tsx"
       ],
       "group": "Console Platform",
       "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
@@ -125,7 +132,10 @@
         "apps/console/src/pages/brain/Layer1.tsx"
       ],
       "file_paths": [
+        "apps/console/src/pages/brain/BandArt.module.css",
+        "apps/console/src/pages/brain/BandArt.tsx",
         "apps/console/src/pages/brain/Engine.tsx",
+        "apps/console/src/pages/brain/EngineFloor.tsx",
         "apps/console/src/pages/brain/Instruments.module.css",
         "apps/console/src/pages/brain/Instruments.tsx",
         "apps/console/src/pages/brain/Layer1.module.css",
@@ -134,21 +144,23 @@
         "apps/console/src/pages/brain/Layer2.tsx",
         "apps/console/src/pages/brain/Mini.tsx",
         "apps/console/src/pages/brain/Plot.tsx",
+        "apps/console/src/pages/brain/Preflight.module.css",
+        "apps/console/src/pages/brain/Preflight.tsx",
+        "apps/console/src/pages/brain/PreflightLamp.tsx",
         "apps/console/src/pages/brain/Runs.tsx",
         "apps/console/src/pages/brain/Viewer.module.css",
         "apps/console/src/pages/brain/Viewer.tsx",
+        "apps/console/src/pages/brain/bands.test.tsx",
         "apps/console/src/pages/brain/brainModel.test.ts",
         "apps/console/src/pages/brain/brainModel.ts",
         "apps/console/src/pages/brain/draw.test.ts",
         "apps/console/src/pages/brain/draw.ts",
         "apps/console/src/pages/brain/engineModel.ts",
-        "apps/console/src/pages/brain/events.ts",
         "apps/console/src/pages/brain/index.ts",
         "apps/console/src/pages/brain/layer1.test.tsx",
         "apps/console/src/pages/brain/layer2.test.tsx",
-        "apps/console/src/pages/brain/palette.ts",
-        "apps/console/src/pages/brain/queries.test.tsx",
-        "apps/console/src/pages/brain/queries.ts",
+        "apps/console/src/pages/brain/preflight.test.tsx",
+        "apps/console/src/pages/brain/preflightModel.ts",
         "apps/console/src/pages/brain/testgen.tsx",
         "apps/console/src/pages/brain/useBrain.ts"
       ],
@@ -186,14 +198,17 @@
         "apps/console/src-tauri/src/lib.rs"
       ],
       "file_paths": [
-        "apps/console/vite.config.ts",
         "apps/console/scripts/check-bundle.mjs",
         "apps/console/scripts/check-size.mjs",
         "apps/console/scripts/check-token-refs.mjs",
-        "apps/console/scripts/gen-fixtures.mjs",
+        "apps/console/src-tauri/.cargo/config.toml",
+        "apps/console/src-tauri/Cargo.toml",
         "apps/console/src-tauri/build.rs",
+        "apps/console/src-tauri/capabilities/default.json",
         "apps/console/src-tauri/src/lib.rs",
-        "apps/console/src-tauri/src/main.rs"
+        "apps/console/src-tauri/src/main.rs",
+        "apps/console/src-tauri/tauri.conf.json",
+        "apps/console/vite.config.ts"
       ],
       "group": "Console Platform",
       "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
@@ -239,20 +254,17 @@
         "apps/console/src/pages/characters/Layer1.tsx",
         "apps/console/src/pages/characters/Layer2.module.css",
         "apps/console/src/pages/characters/Layer2.tsx",
-        "apps/console/src/pages/characters/Markdown.module.css",
-        "apps/console/src/pages/characters/Markdown.tsx",
         "apps/console/src/pages/characters/PackagePage.tsx",
         "apps/console/src/pages/characters/Poster.module.css",
         "apps/console/src/pages/characters/Poster.tsx",
         "apps/console/src/pages/characters/RulesTab.tsx",
         "apps/console/src/pages/characters/SituationsTab.tsx",
-        "apps/console/src/pages/characters/doc.ts",
-        "apps/console/src/pages/characters/harness.tsx",
         "apps/console/src/pages/characters/index.ts",
         "apps/console/src/pages/characters/layer1.test.tsx",
         "apps/console/src/pages/characters/layer2.test.tsx",
         "apps/console/src/pages/characters/model.test.ts",
         "apps/console/src/pages/characters/model.ts",
+        "apps/console/src/pages/characters/packageDocs.ts",
         "apps/console/src/pages/characters/routes.ts",
         "apps/console/src/pages/characters/testgen.ts"
       ],
@@ -291,13 +303,6 @@
         "apps/console/src/data/layer.ts"
       ],
       "file_paths": [
-        "apps/console/src/contract.ts",
-        "apps/console/src/api/context.tsx",
-        "apps/console/src/api/events.ts",
-        "apps/console/src/api/mock.test.ts",
-        "apps/console/src/api/mock.ts",
-        "apps/console/src/api/rpc.test.ts",
-        "apps/console/src/api/rpc.ts",
         "apps/console/src/data/cache.test.ts",
         "apps/console/src/data/cache.ts",
         "apps/console/src/data/config.ts",
@@ -308,6 +313,8 @@
         "apps/console/src/data/index.ts",
         "apps/console/src/data/invalidation.ts",
         "apps/console/src/data/layer.ts",
+        "apps/console/src/data/paged.test.tsx",
+        "apps/console/src/data/paged.ts",
         "apps/console/src/data/react.test.tsx",
         "apps/console/src/data/react.tsx",
         "apps/console/src/data/result.ts",
@@ -331,55 +338,6 @@
       ],
       "last_written_at": "2026-10-18T12:47:49.649058300+00:00",
       "name": "console-data-layer",
-      "pinned": false,
-      "tech_stack": [
-        "React 19.3",
-        "TypeScript 6.0"
-      ]
-    },
-    {
-      "api_surface": "",
-      "business_feature": "Legacy Desk",
-      "category": "ui",
-      "cross_refs": [
-        "console-data-layer"
-      ],
-      "db_tables": [],
-      "description": "The earlier console desk kept for reference: LegacyDesk with its state, styles, primitives, diff and transcript viewers. Also the older Directives, Preflight, Reconcile, Simulations and LordChat views plus a heatmap.",
-      "entry_points": [
-        "apps/console/src/legacy/LegacyDesk.tsx"
-      ],
-      "file_paths": [
-        "apps/console/src/legacy/LegacyDesk.tsx",
-        "apps/console/src/legacy/state.tsx",
-        "apps/console/src/legacy/styles/app.css",
-        "apps/console/src/legacy/styles/tokens.css",
-        "apps/console/src/legacy/ui/DiffView.tsx",
-        "apps/console/src/legacy/ui/Disclosure.tsx",
-        "apps/console/src/legacy/ui/TranscriptViewer.tsx",
-        "apps/console/src/legacy/ui/primitives.test.tsx",
-        "apps/console/src/legacy/ui/primitives.tsx",
-        "apps/console/src/views/DirectivesView.tsx",
-        "apps/console/src/views/Heatmap.test.tsx",
-        "apps/console/src/views/Heatmap.tsx",
-        "apps/console/src/views/LordChatView.tsx",
-        "apps/console/src/views/PreflightView.tsx",
-        "apps/console/src/views/ReconcileView.tsx",
-        "apps/console/src/views/SimulationsView.tsx"
-      ],
-      "group": "Console Platform",
-      "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
-      "id": "ea1655b1-35e7-4e00-a3cd-02bcbe65075a",
-      "keywords": [
-        "legacy",
-        "desk",
-        "views",
-        "preflight",
-        "directives",
-        "transcripts"
-      ],
-      "last_written_at": "2026-10-18T12:47:49.651989500+00:00",
-      "name": "console-legacy-desk",
       "pinned": false,
       "tech_stack": [
         "React 19.3",
@@ -422,6 +380,7 @@
         "apps/console/src/pages/onair/onair.dom.test.tsx",
         "apps/console/src/pages/onair/player.test.ts",
         "apps/console/src/pages/onair/player.ts",
+        "apps/console/src/pages/onair/preflight.dom.test.tsx",
         "apps/console/src/pages/onair/testdata.ts",
         "apps/console/src/pages/onair/view.test.ts",
         "apps/console/src/pages/onair/view.ts"
@@ -467,6 +426,7 @@
         "apps/console/src/pages/reconcile/DirectivesPage.tsx",
         "apps/console/src/pages/reconcile/Face.module.css",
         "apps/console/src/pages/reconcile/Face.tsx",
+        "apps/console/src/pages/reconcile/Incidents.tsx",
         "apps/console/src/pages/reconcile/Layer1.module.css",
         "apps/console/src/pages/reconcile/Layer1.tsx",
         "apps/console/src/pages/reconcile/Layer2.module.css",
@@ -475,7 +435,7 @@
         "apps/console/src/pages/reconcile/PlanPage.tsx",
         "apps/console/src/pages/reconcile/Refs.tsx",
         "apps/console/src/pages/reconcile/ReportPage.tsx",
-        "apps/console/src/pages/reconcile/harness.tsx",
+        "apps/console/src/pages/reconcile/Synthesis.tsx",
         "apps/console/src/pages/reconcile/hooks.ts",
         "apps/console/src/pages/reconcile/index.ts",
         "apps/console/src/pages/reconcile/layer1.test.tsx",
@@ -531,8 +491,6 @@
         "apps/console/src/pages/segments/Tables.tsx",
         "apps/console/src/pages/segments/Track.tsx",
         "apps/console/src/pages/segments/counts.ts",
-        "apps/console/src/pages/segments/grammar.ts",
-        "apps/console/src/pages/segments/harness.tsx",
         "apps/console/src/pages/segments/hooks.ts",
         "apps/console/src/pages/segments/index.ts",
         "apps/console/src/pages/segments/layer1.test.tsx",
@@ -575,6 +533,13 @@
         "apps/console/src/router/index.ts"
       ],
       "file_paths": [
+        "apps/console/package.json",
+        "apps/console/src/router/index.ts",
+        "apps/console/src/router/react.tsx",
+        "apps/console/src/router/route.test.ts",
+        "apps/console/src/router/route.ts",
+        "apps/console/src/router/store.test.ts",
+        "apps/console/src/router/store.ts",
         "apps/console/src/shell/Chrome.module.css",
         "apps/console/src/shell/Chrome.tsx",
         "apps/console/src/shell/Intro.module.css",
@@ -597,12 +562,7 @@
         "apps/console/src/shell/posters.ts",
         "apps/console/src/shell/types.ts",
         "apps/console/src/shell/useViewport.ts",
-        "apps/console/src/router/index.ts",
-        "apps/console/src/router/react.tsx",
-        "apps/console/src/router/route.test.ts",
-        "apps/console/src/router/route.ts",
-        "apps/console/src/router/store.test.ts",
-        "apps/console/src/router/store.ts"
+        "apps/console/tsconfig.json"
       ],
       "group": "Console Platform",
       "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
@@ -639,6 +599,8 @@
         "apps/console/src/pages/simulator/Layer1.tsx"
       ],
       "file_paths": [
+        "apps/console/src/pages/simulator/BandArt.module.css",
+        "apps/console/src/pages/simulator/BandArt.tsx",
         "apps/console/src/pages/simulator/Heatmap.tsx",
         "apps/console/src/pages/simulator/Layer1.module.css",
         "apps/console/src/pages/simulator/Layer1.tsx",
@@ -648,6 +610,7 @@
         "apps/console/src/pages/simulator/SimScreen.tsx",
         "apps/console/src/pages/simulator/Tournaments.tsx",
         "apps/console/src/pages/simulator/Verdicts.tsx",
+        "apps/console/src/pages/simulator/bands.test.tsx",
         "apps/console/src/pages/simulator/cells.ts",
         "apps/console/src/pages/simulator/common.tsx",
         "apps/console/src/pages/simulator/data.ts",
@@ -659,8 +622,8 @@
         "apps/console/src/pages/simulator/layer1.test.tsx",
         "apps/console/src/pages/simulator/layer2.test.tsx",
         "apps/console/src/pages/simulator/model.test.ts",
-        "apps/console/src/pages/simulator/palette.ts",
         "apps/console/src/pages/simulator/quote.ts",
+        "apps/console/src/pages/simulator/ramp.ts",
         "apps/console/src/pages/simulator/results.ts",
         "apps/console/src/pages/simulator/routeKey.ts",
         "apps/console/src/pages/simulator/testgen.ts"
@@ -701,6 +664,8 @@
         "apps/console/src/ui/Chip.tsx",
         "apps/console/src/ui/FilterTable.module.css",
         "apps/console/src/ui/FilterTable.tsx",
+        "apps/console/src/ui/Markdown.module.css",
+        "apps/console/src/ui/Markdown.tsx",
         "apps/console/src/ui/PillGroup.module.css",
         "apps/console/src/ui/PillGroup.tsx",
         "apps/console/src/ui/RateBar.module.css",
@@ -715,7 +680,10 @@
         "apps/console/src/ui/Switch.tsx",
         "apps/console/src/ui/VirtualList.module.css",
         "apps/console/src/ui/VirtualList.tsx",
+        "apps/console/src/ui/VisuallyHidden.module.css",
+        "apps/console/src/ui/VisuallyHidden.tsx",
         "apps/console/src/ui/cx.ts",
+        "apps/console/src/ui/doc.ts",
         "apps/console/src/ui/filterRows.ts",
         "apps/console/src/ui/index.ts",
         "apps/console/src/ui/remPx.ts",
@@ -756,6 +724,8 @@
         "packages/contract/scripts/generate.mjs"
       ],
       "file_paths": [
+        "packages/contract/package.json",
+        "packages/contract/schema/contract.schema.json",
         "packages/contract/scripts/check.mjs",
         "packages/contract/scripts/codegen.mjs",
         "packages/contract/scripts/generate.mjs",
@@ -765,7 +735,8 @@
         "packages/contract/src/generated/types.ts",
         "packages/contract/src/generated/validators.d.ts",
         "packages/contract/src/generated/validators.js",
-        "packages/contract/src/index.ts"
+        "packages/contract/src/index.ts",
+        "packages/contract/tsconfig.json"
       ],
       "group": "Shared Contract And Design Tokens",
       "group_id": "9749f973-f568-488a-a441-c6571cb5930f",
@@ -804,9 +775,15 @@
         "crates/shadowrunr-daemon/src/rpc.rs"
       ],
       "file_paths": [
+        "crates/shadowrunr-daemon/Cargo.toml",
         "crates/shadowrunr-daemon/src/catalog.rs",
         "crates/shadowrunr-daemon/src/cli.rs",
         "crates/shadowrunr-daemon/src/config.rs",
+        "crates/shadowrunr-daemon/src/e2e/catalog.rs",
+        "crates/shadowrunr-daemon/src/e2e/events.rs",
+        "crates/shadowrunr-daemon/src/e2e/mod.rs",
+        "crates/shadowrunr-daemon/src/e2e/paging.rs",
+        "crates/shadowrunr-daemon/src/e2e/resilience.rs",
         "crates/shadowrunr-daemon/src/engine.rs",
         "crates/shadowrunr-daemon/src/events.rs",
         "crates/shadowrunr-daemon/src/lib.rs",
@@ -815,15 +792,13 @@
         "crates/shadowrunr-daemon/src/paging.rs",
         "crates/shadowrunr-daemon/src/policy_install.rs",
         "crates/shadowrunr-daemon/src/preflight.rs",
+        "crates/shadowrunr-daemon/src/report_wire.rs",
         "crates/shadowrunr-daemon/src/rpc.rs",
         "crates/shadowrunr-daemon/src/runs.rs",
         "crates/shadowrunr-daemon/src/server.rs",
-        "crates/shadowrunr-daemon/src/e2e/catalog.rs",
-        "crates/shadowrunr-daemon/src/e2e/events.rs",
-        "crates/shadowrunr-daemon/src/e2e/mod.rs",
-        "crates/shadowrunr-daemon/src/e2e/paging.rs",
-        "crates/shadowrunr-daemon/src/e2e/resilience.rs",
-        "crates/shadowrunr-daemon/tests/cli.rs"
+        "crates/shadowrunr-daemon/tests/cli.rs",
+        "crates/shadowrunr-daemon/tests/fixtures/sim/fixture-t/fixture-run/run.json",
+        "crates/shadowrunr-daemon/tests/fixtures/sim/fixture-t/fixture-run/spec.json"
       ],
       "group": "Engine And Daemon",
       "group_id": "f6744bb5-6e0d-4edb-b2fb-ecb0f8a50aa8",
@@ -911,6 +886,7 @@
         "crates/shadowrunr-engine/src/session.rs"
       ],
       "file_paths": [
+        "crates/shadowrunr-engine/Cargo.toml",
         "crates/shadowrunr-engine/src/alt_cli.rs",
         "crates/shadowrunr-engine/src/api.rs",
         "crates/shadowrunr-engine/src/bin/fake_claude.rs",
@@ -965,6 +941,7 @@
         "crates/shadowrunr-reconcile/src/synth.rs"
       ],
       "file_paths": [
+        "crates/shadowrunr-reconcile/Cargo.toml",
         "crates/shadowrunr-reconcile/src/budget.rs",
         "crates/shadowrunr-reconcile/src/directives.rs",
         "crates/shadowrunr-reconcile/src/lib.rs",
@@ -975,7 +952,15 @@
         "crates/shadowrunr-reconcile/src/tests.rs",
         "crates/shadowrunr-reconcile/src/tests_scale.rs",
         "crates/shadowrunr-reconcile/src/types.rs",
-        "crates/shadowrunr-reconcile/src/verify.rs"
+        "crates/shadowrunr-reconcile/src/verify.rs",
+        "crates/shadowrunr-reconcile/tests/fixtures/characters/malakor/bible.md",
+        "crates/shadowrunr-reconcile/tests/fixtures/characters/malakor/constitution.md",
+        "crates/shadowrunr-reconcile/tests/fixtures/characters/malakor/tones/theatrical.md",
+        "crates/shadowrunr-reconcile/tests/fixtures/sim-runs/t-fix/run-a/instrument.json",
+        "crates/shadowrunr-reconcile/tests/fixtures/sim-runs/t-fix/run-a/spec.json",
+        "crates/shadowrunr-reconcile/tests/fixtures/sim-runs/t-fix/run-a/verdict.json",
+        "crates/shadowrunr-reconcile/tests/fixtures/sim-runs/t-fix/run-b/spec.json",
+        "crates/shadowrunr-reconcile/tests/fixtures/sim-runs/t-fix/run-b/verdict.json"
       ],
       "group": "Simulation And Reconciliation",
       "group_id": "eac5aeb6-533f-4866-bbf9-9019bb9ddb16",
@@ -1013,6 +998,14 @@
         "crates/shadowrunr-segments/src/runtime.rs"
       ],
       "file_paths": [
+        "crates/shadowrunr-segments/Cargo.toml",
+        "crates/shadowrunr-segments/data/demo-case.json",
+        "crates/shadowrunr-segments/data/primary-source-allowlist.toml",
+        "crates/shadowrunr-segments/data/ranks.toml",
+        "crates/shadowrunr-segments/data/segments/seg-01.toml",
+        "crates/shadowrunr-segments/data/segments/seg-02a.toml",
+        "crates/shadowrunr-segments/data/segments/seg-02b-i.toml",
+        "crates/shadowrunr-segments/data/segments/seg-02b-ii.toml",
         "crates/shadowrunr-segments/src/case.rs",
         "crates/shadowrunr-segments/src/command.rs",
         "crates/shadowrunr-segments/src/evidence.rs",
@@ -1060,6 +1053,8 @@
         "crates/shadowrunr-sim/src/runner.rs"
       ],
       "file_paths": [
+        "crates/shadowrunr-sim/Cargo.toml",
+        "crates/shadowrunr-sim/data/default-calibration.json",
         "crates/shadowrunr-sim/examples/run_matrix.rs",
         "crates/shadowrunr-sim/src/calibration.rs",
         "crates/shadowrunr-sim/src/chat.rs",
@@ -1068,6 +1063,8 @@
         "crates/shadowrunr-sim/src/ledger.rs",
         "crates/shadowrunr-sim/src/lib.rs",
         "crates/shadowrunr-sim/src/matrix.rs",
+        "crates/shadowrunr-sim/src/outcome.rs",
+        "crates/shadowrunr-sim/src/pacing.rs",
         "crates/shadowrunr-sim/src/population.rs",
         "crates/shadowrunr-sim/src/rng.rs",
         "crates/shadowrunr-sim/src/runner.rs",
@@ -1116,6 +1113,9 @@
         "apps/stage/src/Stage.tsx"
       ],
       "file_paths": [
+        "apps/stage/DESIGN.md",
+        "apps/stage/fixtures/demo-case.json",
+        "apps/stage/package.json",
         "apps/stage/scripts/make-demo.mjs",
         "apps/stage/src/App.tsx",
         "apps/stage/src/Controls.tsx",
@@ -1126,6 +1126,10 @@
         "apps/stage/src/source.ts",
         "apps/stage/src/stage.test.ts",
         "apps/stage/src/styles.css",
+        "apps/stage/tsconfig.app.json",
+        "apps/stage/tsconfig.json",
+        "apps/stage/tsconfig.node.json",
+        "apps/stage/tsconfig.test.json",
         "apps/stage/vite.config.ts"
       ],
       "group": "Show Segments And Stage",
@@ -1212,26 +1216,28 @@
         "packages/stage-kit/src/scene.ts"
       ],
       "file_paths": [
-        "packages/stage-kit/src/index.ts",
+        "packages/stage-kit/package.json",
+        "packages/stage-kit/src/art/FoilArt.tsx",
+        "packages/stage-kit/src/art/MalakorArt.tsx",
+        "packages/stage-kit/src/art/Sigil.tsx",
+        "packages/stage-kit/src/art/Silhouette.tsx",
         "packages/stage-kit/src/chatMemory.ts",
         "packages/stage-kit/src/diagram.ts",
         "packages/stage-kit/src/hexgrid.ts",
-        "packages/stage-kit/src/lore.ts",
+        "packages/stage-kit/src/index.ts",
         "packages/stage-kit/src/lore.test.ts",
-        "packages/stage-kit/src/parse.ts",
+        "packages/stage-kit/src/lore.ts",
         "packages/stage-kit/src/parse.test.ts",
+        "packages/stage-kit/src/parse.ts",
         "packages/stage-kit/src/playback.ts",
-        "packages/stage-kit/src/scene.ts",
         "packages/stage-kit/src/scene.test.ts",
+        "packages/stage-kit/src/scene.ts",
         "packages/stage-kit/src/sceneModel.ts",
         "packages/stage-kit/src/tallies.ts",
         "packages/stage-kit/src/timing.ts",
         "packages/stage-kit/src/visuals.test.ts",
         "packages/stage-kit/src/vocab.ts",
-        "packages/stage-kit/src/art/FoilArt.tsx",
-        "packages/stage-kit/src/art/MalakorArt.tsx",
-        "packages/stage-kit/src/art/Sigil.tsx",
-        "packages/stage-kit/src/art/Silhouette.tsx"
+        "packages/stage-kit/tsconfig.json"
       ],
       "group": "Show Segments And Stage",
       "group_id": "655343c0-db97-4d26-986a-fcd94d7f1e57",
@@ -1271,11 +1277,15 @@
         "packages/tokens/src/index.ts"
       ],
       "file_paths": [
+        "packages/tokens/REJECTED.md",
+        "packages/tokens/package.json",
         "packages/tokens/scripts/generate.mjs",
         "packages/tokens/src/index.ts",
         "packages/tokens/src/tokens.css",
         "packages/tokens/src/tokens.test.ts",
-        "packages/tokens/src/tokens.ts"
+        "packages/tokens/src/tokens.ts",
+        "packages/tokens/tokens.source.json",
+        "packages/tokens/tsconfig.json"
       ],
       "group": "Shared Contract And Design Tokens",
       "group_id": "9749f973-f568-488a-a441-c6571cb5930f",
@@ -1311,6 +1321,7 @@
         "crates/shadowrunr-types/src/rpc.rs"
       ],
       "file_paths": [
+        "crates/shadowrunr-types/Cargo.toml",
         "crates/shadowrunr-types/examples/export-schema.rs",
         "crates/shadowrunr-types/src/catalog.rs",
         "crates/shadowrunr-types/src/chat.rs",
@@ -1320,6 +1331,7 @@
         "crates/shadowrunr-types/src/lib.rs",
         "crates/shadowrunr-types/src/memory.rs",
         "crates/shadowrunr-types/src/reconcile.rs",
+        "crates/shadowrunr-types/src/results.rs",
         "crates/shadowrunr-types/src/rpc.rs",
         "crates/shadowrunr-types/src/schema.rs",
         "crates/shadowrunr-types/src/segment.rs",
@@ -1361,8 +1373,21 @@
         "Cargo.toml"
       ],
       "file_paths": [
+        ".github/workflows/ci.yml",
+        "CLAUDE.md",
+        "Cargo.toml",
+        "README.md",
+        "docs/design/obsidian-program-digest.md",
+        "docs/guide/cli.md",
+        "docs/guide/personas.md",
+        "docs/spec/contract.md",
         "eslint.config.js",
-        "stylelint.config.mjs"
+        "package.json",
+        "pnpm-workspace.yaml",
+        "rust-toolchain.toml",
+        "shadowrunr.example.toml",
+        "stylelint.config.mjs",
+        "tsconfig.base.json"
       ],
       "group": "Docs And Repo Config",
       "group_id": "fd5448c6-6dd1-4d64-a4b8-3e3af91da444",
@@ -1384,6 +1409,140 @@
         "TypeScript 6.0",
         "Cargo"
       ]
+    },
+    {
+      "id": "9ae45cd9-d46e-4bd1-a018-b134dcd33f03",
+      "name": "console-quality-gates",
+      "group": "Console Platform",
+      "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
+      "category": "test",
+      "description": "Port-quality instruments for the operator console: the style-contract fidelity harness against the winning prototype, 10x scale perf counts, and per-route bundle and DOM budgets.",
+      "file_paths": [
+        "apps/console/budgets/bundle.json",
+        "apps/console/budgets/dom.json",
+        "apps/console/budgets/perf.json",
+        "apps/console/fidelity/contest-data.d.ts",
+        "apps/console/fidelity/contest.ts",
+        "apps/console/fidelity/contract.brain-a1.json",
+        "apps/console/fidelity/contract.brain-art.json",
+        "apps/console/fidelity/contract.brain.json",
+        "apps/console/fidelity/contract.characters.json",
+        "apps/console/fidelity/contract.onair.json",
+        "apps/console/fidelity/contract.reconcile.json",
+        "apps/console/fidelity/contract.segments.json",
+        "apps/console/fidelity/contract.simulator-a1.json",
+        "apps/console/fidelity/contract.simulator-art.json",
+        "apps/console/fidelity/contract.simulator.json",
+        "apps/console/fidelity/contract.texture.json",
+        "apps/console/fidelity/harness.tsx",
+        "apps/console/fidelity/roles.json",
+        "apps/console/fidelity/run.mjs",
+        "apps/console/fidelity/serve.mjs",
+        "apps/console/fidelity/texture.py",
+        "apps/console/fidelity/toml.ts",
+        "apps/console/fidelity/tsconfig.json",
+        "apps/console/src/perf/commits.test.tsx",
+        "apps/console/src/perf/dom.test.tsx",
+        "apps/console/src/perf/draws.test.tsx",
+        "apps/console/src/perf/fixture.ts",
+        "apps/console/src/perf/harness.tsx",
+        "apps/console/src/perf/rpc.test.tsx",
+        "apps/console/src/perf/timings.test.tsx"
+      ],
+      "entry_points": [
+        "apps/console/fidelity/run.mjs"
+      ],
+      "keywords": [
+        "fidelity",
+        "style contract",
+        "perf budget",
+        "bundle budget",
+        "dom budget"
+      ],
+      "business_feature": "Keeps the ported console faithful to the chosen design and within its performance budgets",
+      "api_surface": [],
+      "db_tables": [],
+      "cross_refs": [],
+      "tech_stack": [],
+      "pinned": false,
+      "last_written_at": "2026-10-18T18:12:43.547Z"
+    },
+    {
+      "id": "382c68f3-bc20-4cc7-8220-18aa850f7087",
+      "name": "character-package",
+      "group": "Character Brain",
+      "group_id": "d44ba015-f3ec-4b46-b7d8-52874f886ba3",
+      "category": "data",
+      "description": "The Malakor character package: immutable constitution, bible, tone variants, foils, optional rules and situations the brain and judge read.",
+      "file_paths": [
+        "characters/malakor/bible.md",
+        "characters/malakor/character.toml",
+        "characters/malakor/constitution.md",
+        "characters/malakor/foils/the-coin-prophet.md",
+        "characters/malakor/foils/the-disruptor.md",
+        "characters/malakor/foils/the-has-been-hero.md",
+        "characters/malakor/foils/the-inspector.md",
+        "characters/malakor/foils/the-life-coach.md",
+        "characters/malakor/rules/crisis-handoff.md",
+        "characters/malakor/rules/no-financial-promotion.md",
+        "characters/malakor/situations.json",
+        "characters/malakor/tones/deadpan-bureaucrat.md",
+        "characters/malakor/tones/gleeful-chaos.md",
+        "characters/malakor/tones/theatrical.md",
+        "characters/malakor/tones/unhinged-roastmaster.md",
+        "characters/malakor/tones/weary-middle-manager.md"
+      ],
+      "entry_points": [
+        "characters/malakor/character.toml"
+      ],
+      "keywords": [
+        "constitution",
+        "tone",
+        "foil",
+        "situations",
+        "character rules"
+      ],
+      "business_feature": "Defines who Malakor is and what he must never do",
+      "api_surface": [],
+      "db_tables": [],
+      "cross_refs": [],
+      "tech_stack": [],
+      "pinned": false,
+      "last_written_at": "2026-10-18T18:12:43.547Z"
+    },
+    {
+      "id": "d6365504-acc7-4901-b7cf-569781f6644c",
+      "name": "sim-instruments",
+      "group": "Simulation And Reconciliation",
+      "group_id": "eac5aeb6-533f-4866-bbf9-9019bb9ddb16",
+      "category": "data",
+      "description": "Simulation instruments: audience calibration, the judge rubric, tournament matrices, and the platform word rules used by moderation and the clip factory.",
+      "file_paths": [
+        "policy/platform-rules.json",
+        "sim/calibration.json",
+        "sim/matrices/heavy.toml",
+        "sim/matrices/night-opus.toml",
+        "sim/matrices/night.toml",
+        "sim/matrices/pilot.toml",
+        "sim/matrices/weary.toml",
+        "sim/rubric.toml"
+      ],
+      "entry_points": [
+        "sim/rubric.toml"
+      ],
+      "keywords": [
+        "calibration",
+        "rubric",
+        "matrix",
+        "platform rules"
+      ],
+      "business_feature": "Sets how streams are tested before going live",
+      "api_surface": [],
+      "db_tables": [],
+      "cross_refs": [],
+      "tech_stack": [],
+      "pinned": false,
+      "last_written_at": "2026-10-18T18:12:43.547Z"
     }
   ],
   "generated_at": "2026-10-18T12:48:43.257734700+00:00",
@@ -1391,7 +1550,7 @@
   "groups": [
     {
       "color": "violet",
-      "context_count": 1,
+      "context_count": 2,
       "domain": "feature",
       "id": "d44ba015-f3ec-4b46-b7d8-52874f886ba3",
       "name": "Character Brain"
@@ -1412,7 +1571,7 @@
     },
     {
       "color": "emerald",
-      "context_count": 2,
+      "context_count": 3,
       "domain": "feature",
       "id": "eac5aeb6-533f-4866-bbf9-9019bb9ddb16",
       "name": "Simulation And Reconciliation"
