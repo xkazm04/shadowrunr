@@ -124,11 +124,17 @@ pub fn parse_reply(text: &str, allowed_ops: &[String], active_foil: Option<&str>
             out.push(parse_op(line, allowed_ops));
             continue;
         }
-        if let Some(rest) = line.strip_prefix("NOTE:") {
-            let n = rest.trim();
+        // A NOTE anywhere on the line (models sometimes prefix a header such as
+        // "Memory candidates (not spoken): NOTE: ...") is a memory candidate, never speech.
+        if let Some(idx) = line.find("NOTE:") {
+            let n = line[idx + "NOTE:".len()..].trim();
             if !n.is_empty() {
                 out.push(Line::Note(n.to_string()));
             }
+            continue;
+        }
+        // Meta lines about the output format are never spoken.
+        if line.contains("(not spoken)") || line.eq_ignore_ascii_case("memory candidates:") {
             continue;
         }
         if let Some(rest) = line.strip_prefix("FOIL ") {
@@ -241,5 +247,25 @@ mod tests {
             let op: Op = serde_json::from_str(ex).unwrap_or_else(|e| panic!("{tag}: {e}"));
             assert_eq!(op_tag(&op), tag);
         }
+    }
+
+    #[test]
+    fn note_with_a_header_is_never_spoken() {
+        let reply = "Welcome, minion.
+Memory candidates (not spoken): NOTE: v1 is new
+Memory candidates:
+Back to conquest.";
+        let lines = parse_reply(reply, &[], None);
+        let spoken: Vec<_> = lines
+            .iter()
+            .filter_map(|l| match l {
+                Line::Say(s) => Some(s.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(spoken, vec!["Welcome, minion.", "Back to conquest."]);
+        assert!(lines
+            .iter()
+            .any(|l| matches!(l, Line::Note(n) if n == "v1 is new")));
     }
 }
