@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main console window: core defaults plus opening http(s) URLs (the stage) in the system browser.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://localhost:*" }, { "url": "http://127.0.0.1:*" }]
+    }
+  ]
+}

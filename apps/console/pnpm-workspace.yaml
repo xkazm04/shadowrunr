@@ -1,0 +1,3 @@
+# Standalone pnpm root: keeps node_modules local to apps/console.
+packages:
+  - "."

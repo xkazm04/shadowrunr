@@ -1,0 +1,4 @@
+# Share the repository's single target/ directory (see .spark/briefs/_common.md) even though
+# this crate is its own Cargo workspace. Relative to apps/console/src-tauri.
+[build]
+target-dir = "../../../target"
