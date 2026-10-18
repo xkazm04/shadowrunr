@@ -1,0 +1,55 @@
+/* A/1's gauge, lamps and funnel. Colours come from the --br-* palette (palette.ts) and the
+   per-lamp --lamp / --d / --blink properties; sizes follow the hero (container-type: size). */
+
+.gauge { position: absolute; inset: 6% 6% auto; width: 88%; height: 70%; }
+
+.funnel { position: absolute; left: 4%; right: 4%; top: 16%; width: 92%; height: 80%; }
+
+.lamps {
+  position: absolute;
+  left: 2%;
+  right: 2%;
+  bottom: 6%;
+  top: 22%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+}
+
+.lampCell { text-align: center; }
+
+.lamp {
+  width: var(--d);
+  height: var(--d);
+  margin: 0 auto .8cqh;
+  border-radius: var(--sr-radius-round);
+  background: radial-gradient(circle at 40% 35%, var(--br-lamp-highlight), var(--lamp) 45%, transparent 72%);
+  box-shadow: 0 0 calc(var(--d) * .8) color-mix(in srgb, var(--lamp) 40%, transparent);
+  animation: blink var(--blink) infinite;
+}
+
+.lamp[data-error="true"] {
+  outline: var(--sr-stroke-rule) solid var(--br-lamp-error);
+  outline-offset: var(--sr-stroke-heavy);
+}
+
+.lampName,
+.lampCount {
+  font-family: var(--sr-font-display);
+  font-size: max(.75rem, 2.1cqh);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--br-bone2);
+}
+
+.lampCount { letter-spacing: .06em; color: var(--br-ash); }
+
+.lampErr { font-weight: var(--sr-weight-semibold); color: var(--br-error-text); }
+
+@keyframes blink {
+  50% { opacity: .25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lamp { animation: none; }
+}

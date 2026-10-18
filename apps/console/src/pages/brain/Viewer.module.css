@@ -1,0 +1,119 @@
+/* The transcript viewer on the bone-paper spread: tools, a virtualised line list and a sticky
+   detail pane. Layer 2 is "kept in spirit", so it rides the shared paper tokens. */
+
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sr-space-near); margin: var(--sr-space-base) 0 var(--sr-space-cozy); }
+
+.search {
+  flex: 1;
+  min-width: 12rem;
+  padding: var(--sr-space-tight) var(--sr-space-cozy);
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  border-radius: var(--sr-radius-none);
+  background: var(--sr-color-surface-field);
+  font: inherit;
+  color: var(--sr-color-text-ink);
+}
+
+.count {
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-body);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--sr-color-text-mute);
+}
+
+.viewer { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--sr-space-loose); align-items: start; }
+
+.list {
+  position: relative;
+  height: 62vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  contain: strict;
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  background: var(--sr-color-surface-card);
+  outline: none;
+}
+
+.list:focus-visible { outline: var(--sr-stroke-heavy) solid var(--sr-page-accent, var(--sr-color-signal)); }
+
+.sizer { position: relative; width: 100%; }
+.row { position: absolute; top: 0; left: 0; width: 100%; }
+
+.line {
+  display: grid;
+  grid-template-columns: 3.4rem 3.2rem 6.2rem minmax(0, 1fr);
+  gap: var(--sr-space-cozy);
+  align-items: start;
+  width: 100%;
+  padding: var(--sr-space-tight) var(--sr-space-cozy);
+  border: 0;
+  border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line);
+  background: none;
+  font: inherit;
+  font-size: var(--sr-size-small);
+  text-align: left;
+  color: var(--sr-color-text-ink);
+  cursor: pointer;
+}
+
+.line:hover { background: var(--sr-color-row-hover); }
+.line[aria-current="true"] { background: var(--sr-color-row-selected); }
+
+.n,
+.t { font-family: var(--sr-font-mono); font-size: var(--sr-size-micro); color: var(--sr-color-text-mute); font-variant-numeric: tabular-nums; }
+
+.ty {
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-caption);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--sr-color-text-note);
+}
+
+.ty[data-type="say"] { color: var(--sr-page-accent-text, var(--sr-color-ok)); }
+.ty[data-type="moderation"] { color: var(--sr-color-fail); }
+
+.tx { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-clamp: 2; color: var(--sr-color-text-note); }
+.tx b { margin-right: .4em; font-weight: var(--sr-weight-semibold); color: var(--sr-color-text-ink); }
+
+.detail { position: sticky; top: var(--sr-space-base); min-width: 0; }
+
+.kicker {
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-caption);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--sr-color-text-mute);
+  overflow-wrap: anywhere;
+}
+
+.who {
+  margin: var(--sr-space-tight) 0;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-subhead);
+  text-transform: uppercase;
+}
+
+.voice { font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-lede); line-height: 1.4; color: var(--sr-color-text-ink); }
+.body { color: var(--sr-color-text-note); }
+
+.hint { color: var(--sr-color-text-mute); }
+
+.raw {
+  max-height: 40vh;
+  overflow: auto;
+  padding: var(--sr-space-near);
+  border: var(--sr-stroke-hair) solid var(--sr-color-line);
+  background: var(--sr-color-surface-field);
+  font-family: var(--sr-font-mono);
+  font-size: var(--sr-size-micro);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+[data-narrow="true"] .viewer { grid-template-columns: minmax(0, 1fr); }

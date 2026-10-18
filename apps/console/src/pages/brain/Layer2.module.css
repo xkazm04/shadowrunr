@@ -1,0 +1,67 @@
+/* Brain layer 2 on the bone-paper spread: plain tables for the small route and account lists,
+   the shared FilterTable for anything that can outgrow a screen. */
+
+.page { padding-bottom: var(--sr-space-gutter); }
+
+.note { margin: 0 0 var(--sr-space-near); color: var(--sr-color-text-mute); }
+
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sr-space-cozy);
+  margin: var(--sr-space-base) 0 0;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-body);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.source select {
+  padding: var(--sr-space-tick) var(--sr-space-cozy);
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  border-radius: var(--sr-radius-none);
+  background: var(--sr-color-surface-field);
+  font: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--sr-color-text-ink);
+}
+
+.table { width: 100%; border-collapse: collapse; font-size: var(--sr-size-small); }
+
+.table th {
+  padding: var(--sr-space-compact) var(--sr-space-close);
+  border-bottom: var(--sr-stroke-heavy) solid var(--sr-color-text-ink);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-caption);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table td { padding: .55rem var(--sr-space-close); border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); vertical-align: top; }
+
+.table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.mono { font-family: var(--sr-font-mono); font-size: var(--sr-size-micro); overflow-wrap: anywhere; }
+
+.role { display: inline-flex; align-items: center; gap: var(--sr-space-tight); white-space: nowrap; }
+.role i { width: .7rem; height: .7rem; border-radius: var(--sr-radius-round); border: var(--sr-stroke-hair) solid var(--sr-color-line); }
+
+.link { color: var(--sr-page-accent-text, var(--sr-color-ok)); font-weight: var(--sr-weight-semibold); overflow-wrap: anywhere; }
+
+.more {
+  padding: var(--sr-space-tick) var(--sr-space-close);
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  background: var(--sr-color-text-ink);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-small);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--sr-color-surface-paper);
+  cursor: pointer;
+}
