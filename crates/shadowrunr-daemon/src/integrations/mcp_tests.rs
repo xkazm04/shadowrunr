@@ -124,6 +124,12 @@ async fn initialize_list_and_call_over_line_framing() {
     assert!(!runs_schema["required"]
         .as_array()
         .is_some_and(|r| r.contains(&json!("limit"))));
+    // WP14b: an agent reading directives learns that proposed entries are not live.
+    let directives_desc = tools[6]["description"].as_str().unwrap();
+    assert!(
+        directives_desc.contains("proposed: true"),
+        "{directives_desc}"
+    );
     let sim_schema = &tools[3]["inputSchema"];
     assert!(sim_schema["properties"]["spec"]["properties"]["segment"].is_object());
     assert!(sim_schema["properties"]["live"].is_object());

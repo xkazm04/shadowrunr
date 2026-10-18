@@ -11,8 +11,9 @@
 //!   the judge cited for rule failures (then ± [`FAILURE_WINDOW`] around them) and Malakor's
 //!   own blocked output, then failed quality turns of the worst-quality cells, then a
 //!   stratified sample across tone × tier × segment × audience size, then context around
-//!   whatever is left. Every excerpt line keeps its `<run_id>#<line>` label, so evidence
-//!   verification is unchanged.
+//!   whatever is left. The excerpts carry viewer chat, so they sit inside an untrusted-data
+//!   fence (`UntrustedFence`, WP14b); every excerpt line keeps its `<run_id>#<line>` label
+//!   inside it, so evidence verification is unchanged.
 //!
 //! The metrics block is cut only as far as needed: a small source keeps every row, and
 //! tighter caps are tried until enough of the budget is left for transcript evidence.
@@ -23,12 +24,14 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
 use serde_json::{json, Map, Value};
+use shadowrunr_sim::judge::UntrustedFence;
 use shadowrunr_types::{CheckState, ModStage, StreamEvent};
 
 use crate::runs::{parse_ref, render_line, wire, RunData};
 use crate::stats::{percentile, rate};
 use crate::synth;
 use crate::types::{Counted, IncidentSource, Metrics, RuleFailure, RuleIncident, SynthesisInput};
+use crate::ReconcileError;
 
 /// Default prompt budget, in estimated tokens.
 pub const DEFAULT_PROMPT_BUDGET_TOKENS: u32 = 120_000;
@@ -153,16 +156,22 @@ const LEVELS: [Caps; 4] = [
 pub struct BuiltPrompt {
     pub prompt: String,
     pub input: SynthesisInput,
+    /// The fence the transcript excerpts sit in; the reply is screened for its token.
+    pub fence: UntrustedFence,
 }
 
-/// Build the synthesis prompt for `runs` within `budget`.
+/// Build the synthesis prompt for `runs` within `budget`. Fails closed when no fence token
+/// can be minted (no OS randomness): no fence, no prompt.
 pub fn synthesis_prompt(
     runs: &[RunData],
     metrics: &Metrics,
     character_dir: Option<&Path>,
     tones: &[String],
     budget: PromptBudget,
-) -> BuiltPrompt {
+) -> Result<BuiltPrompt, ReconcileError> {
+    // Sizing only: every token is the same length, so the skeleton costs the same with the
+    // real fence minted below over the finished content.
+    let sizing = UntrustedFence::mint(&[]).map_err(ReconcileError::Io)?;
     let usable = budget.usable_chars();
     let overhead = clen(synth::SYSTEM) + clen(&synth::synthesis_schema().to_string());
     let mut chosen = None;
@@ -170,7 +179,7 @@ pub fn synthesis_prompt(
         let summary = summarize_metrics(runs, metrics, caps);
         let (character, clipped) =
             synth::character_context_capped(character_dir, tones, caps.file_chars);
-        let skeleton = synth::synthesis_prompt(&summary.block, "", &character, &[]);
+        let skeleton = synth::synthesis_prompt(&summary.block, "", &character, &[], &sizing);
         let fixed = overhead + clen(&skeleton) + NOTES_RESERVE;
         let room = usable.saturating_sub(fixed);
         if room >= usable * caps.min_room_pct / 100 || i + 1 == LEVELS.len() {
@@ -202,10 +211,14 @@ quality turns, {} of {} runs have any excerpt. Cite only lines shown in this pro
             ex.runs.included + ex.runs.omitted,
         ));
     }
-    let prompt = synth::synthesis_prompt(&summary.block, &ex.text, &character, &omitted);
+    let notes = omitted.join(" ");
+    let fence = UntrustedFence::mint(&[&summary.block, &character, &ex.text, &notes])
+        .map_err(ReconcileError::Io)?;
+    let prompt = synth::synthesis_prompt(&summary.block, &ex.text, &character, &omitted, &fence);
     let total = overhead + clen(&prompt);
-    BuiltPrompt {
+    Ok(BuiltPrompt {
         prompt,
+        fence,
         input: SynthesisInput {
             budget_tokens: budget.tokens,
             estimated_tokens: estimate_tokens(total),
@@ -218,7 +231,7 @@ quality turns, {} of {} runs have any excerpt. Cite only lines shown in this pro
             rule_failures: summary.rule_rows,
             omitted,
         },
-    }
+    })
 }
 
 // ---------------------------------------------------------------------------------------------

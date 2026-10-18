@@ -237,13 +237,17 @@ impl Reconciler {
         let mut tones: Vec<String> = runs.iter().filter_map(RunData::tone_variant).collect();
         tones.sort();
         tones.dedup();
+        // Fail closed: no fence, no synthesis call (the run errors, nothing is stored).
         let built =
-            budget::synthesis_prompt(&runs, &metrics, char_dir.as_deref(), &tones, self.budget);
+            budget::synthesis_prompt(&runs, &metrics, char_dir.as_deref(), &tones, self.budget)?;
+        // The excerpts are viewer chat, fenced as untrusted data; a reply that echoes the
+        // fence token is refused and the report falls back to the deterministic metrics.
         let synthesis = match synth::call(
             self.engine.as_ref(),
             built.prompt,
             synth::synthesis_schema(),
             &report_id,
+            Some(&built.fence),
         )
         .await
         {
@@ -478,11 +482,20 @@ impl Reconciler {
         let directives = self.directives.active()?;
         let created_ms = (self.clock)();
         let plan_id = format!("plan-{created_ms}");
+        // The summary and the options' text are model output over viewer transcripts, and the
+        // dispatch is written in the Lord's voice: fenced as untrusted data. A reply that
+        // echoes the fence token is refused, and no plan is stored.
+        let opts = serde_json::to_string(&chosen).unwrap_or_default();
+        let dirs = serde_json::to_string(&directives).unwrap_or_default();
+        let fence =
+            shadowrunr_sim::judge::UntrustedFence::mint(&[&stored.report.summary, &opts, &dirs])
+                .map_err(ReconcileError::Io)?;
         let v = synth::call(
             self.engine.as_ref(),
-            synth::dispatch_prompt(&stored.report, &chosen, &directives),
+            synth::dispatch_prompt(&stored.report, &chosen, &directives, &fence),
             synth::dispatch_schema(),
             &plan_id,
+            Some(&fence),
         )
         .await?;
         let raw: synth::RawDispatch = synth::parse(v)?;
@@ -639,13 +652,9 @@ impl Reconciler {
             ),
             synth::lord_chat_schema(),
             &format!("lord-chat-{now}"),
+            Some(&fence),
         )
         .await?;
-        if fence.appears_in(&v.to_string()) {
-            return Err(ReconcileError::Synthesis(
-                "the reply echoed the untrusted-data fence token (boundary event)".into(),
-            ));
-        }
         let raw: synth::RawLordChat = synth::parse(v)?;
         let reply = raw.reply.trim().to_string();
         if reply.is_empty() {

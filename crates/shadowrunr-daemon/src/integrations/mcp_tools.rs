@@ -76,7 +76,7 @@ pub const TOOLS: [ToolDef; 8] = [
     ToolDef {
         name: "list_directives",
         method: "directive.list",
-        description: "The operator's standing directives (prevent / try), active and inactive.",
+        description: "The operator's directives (prevent / try) in three states: active (active: true, fed to streams), proposed (active: false, proposed: true; suggested by the Reconciler in lord.chat and not yet kept or dropped by the operator, so no stream reads it) and inactive (active: false, retired or dropped).",
         write: false,
     },
     ToolDef {

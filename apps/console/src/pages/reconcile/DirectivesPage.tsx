@@ -1,5 +1,8 @@
 // `reconcile/directives`: standing orders fed to every stream until deactivated, over
 // `directive.list`, `directive.add` and `directive.deactivate` (stored by the daemon).
+// Directives the Reconciler proposed in the Lord's chat (`active: false, proposed: true`,
+// WP14) show as Proposed with Keep and Drop, over the same RPCs as the chat's chips: Keep is
+// `directive.add` with the proposal's kind, text and scope; Drop is `directive.deactivate`.
 import type { Directive, DirectiveKind, SegmentId } from "@shadowrunr/contract";
 import { useState, type FormEvent } from "react";
 import { useMutation, useRpc, viewOfError } from "../../data";
@@ -13,7 +16,11 @@ import { dateTime } from "./model";
 /** Segments a directive may be scoped to (SEG-02B is descoped). */
 const SCOPES: readonly SegmentId[] = ["SEG-01", "SEG-02A"];
 
-type Facet = "active" | "all" | "inactive";
+type Facet = "active" | "proposed" | "all" | "inactive";
+
+const isProposed = (d: Directive) => d.proposed === true;
+/** Retired or dropped: neither live nor awaiting the owner. */
+const isOff = (d: Directive) => !d.active && !isProposed(d);
 
 export function DirectivesPage() {
   const list = useRpc("directive.list", {});
@@ -22,10 +29,10 @@ export function DirectivesPage() {
       <Head
         kicker="Reconcile & plan · layer 2"
         title="Directives"
-        lede="Standing orders fed to every stream until deactivated. Prevent forbids a behaviour; try asks for an experiment."
+        lede="Standing orders fed to every stream until deactivated. Prevent forbids a behaviour; try asks for an experiment. Proposals from the Lord’s chat stay inactive until you keep them."
       />
       <AddForm />
-      <QueryView query={list} isEmpty={(d) => d.length === 0} emptyTitle="No directives yet" emptyHint="Add one above, or ask the Lord in the chat: an order there becomes a directive.">
+      <QueryView query={list} isEmpty={(d) => d.length === 0} emptyTitle="No directives yet" emptyHint="Add one above, or ask the Lord in the chat: an order there comes back as a proposal to keep or drop.">
         {(rows) => <DirectiveTable rows={rows} />}
       </QueryView>
     </>
@@ -93,6 +100,35 @@ function AddForm() {
   );
 }
 
+/** A proposal awaiting the owner: Keep makes it active under its own id, Drop retires it. */
+function Proposal({ d }: { d: Directive }) {
+  const keep = useMutation("directive.add");
+  const drop = useMutation("directive.deactivate");
+  const [error, setError] = useState<string | undefined>();
+  const label = `${d.kind}: ${d.text}`;
+  const busy = keep.pending || drop.pending;
+  return (
+    <span className={styles.rowAction} data-role="reconcile-directive-proposal">
+      <Chip tone="caution" title="Proposed by the Reconciler in the Lord’s chat: inactive until kept">
+        Proposed
+      </Chip>
+      <button
+        type="button"
+        className={styles.secondary}
+        disabled={busy}
+        aria-label={`Keep ${label}`}
+        onClick={() => void keep.run({ kind: d.kind, text: d.text, ...(d.scope === undefined ? {} : { scope: d.scope }) }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))}
+      >
+        Keep
+      </button>
+      <button type="button" className={styles.secondary} disabled={busy} aria-label={`Drop ${label}`} onClick={() => void drop.run({ id: d.id }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))}>
+        Drop
+      </button>
+      {error && <small role="alert">{error}</small>}
+    </span>
+  );
+}
+
 function Deactivate({ d }: { d: Directive }) {
   const off = useMutation("directive.deactivate");
   const [error, setError] = useState<string | undefined>();
@@ -116,14 +152,18 @@ function Deactivate({ d }: { d: Directive }) {
 
 const COLUMNS: readonly Column<Directive>[] = [
   { id: "kind", header: "Kind", cell: (d) => <Chip tone={d.kind === "prevent" ? "fail" : "ok"}>{d.kind}</Chip>, sortValue: (d) => d.kind },
-  { id: "text", header: "Directive", cell: (d) => <span className={d.active ? undefined : styles.struck}>{d.text}</span>, sortValue: (d) => d.text },
+  { id: "text", header: "Directive", cell: (d) => <span className={isOff(d) ? styles.struck : undefined}>{d.text}</span>, sortValue: (d) => d.text },
   { id: "scope", header: "Scope", cell: (d) => d.scope ?? "all segments", sortValue: (d) => d.scope ?? "" },
   { id: "created", header: "Added", cell: (d) => dateTime(d.created_ms), sortValue: (d) => d.created_ms },
-  { id: "state", header: "State", cell: (d) => <Deactivate d={d} />, sortValue: (d) => (d.active ? 0 : 1), align: "end" },
+  { id: "state", header: "State", cell: (d) => (isProposed(d) ? <Proposal d={d} /> : <Deactivate d={d} />), sortValue: (d) => (isProposed(d) ? 0 : d.active ? 1 : 2), align: "end" },
 ];
 
 function DirectiveTable({ rows }: { rows: readonly Directive[] }) {
   const active = rows.filter((d) => d.active).length;
+  const proposed = rows.filter(isProposed).length;
+  // Open on the proposals while any await the owner; fixed at mount so keeping the last one
+  // does not move the view.
+  const [initial] = useState<Facet>(() => (proposed > 0 ? "proposed" : "active"));
   return (
     <div className={styles.tableBox} data-role="reconcile-directives">
       <FilterTable<Directive, Facet>
@@ -136,13 +176,14 @@ function DirectiveTable({ rows }: { rows: readonly Directive[] }) {
         initialSort={{ column: "created", dir: "desc" }}
         facets={{
           label: "Show",
-          initial: "active",
+          initial,
           options: [
             { id: "active", label: "Active", count: active },
+            { id: "proposed", label: "Proposed", count: proposed },
             { id: "all", label: "All", count: rows.length },
-            { id: "inactive", label: "Off", count: rows.length - active },
+            { id: "inactive", label: "Off", count: rows.length - active - proposed },
           ],
-          predicate: (d, f) => f === "all" || (f === "active") === d.active,
+          predicate: (d, f) => (f === "all" ? true : f === "active" ? d.active : f === "proposed" ? isProposed(d) : isOff(d)),
         }}
       />
     </div>

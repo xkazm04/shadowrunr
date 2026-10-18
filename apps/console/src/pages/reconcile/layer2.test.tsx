@@ -199,6 +199,59 @@ describe("reconcile/directives", () => {
     expect(m.fetch.calls.filter((c) => c === "directive.list").length).toBeGreaterThanOrEqual(3);
   });
 
+  it("shows proposals as Proposed with Keep and Drop over the chat's RPCs, and leaves kept and dropped rows as they were", async () => {
+    const kept = { id: "dir-k", kind: "try" as const, text: "kept earlier", created_ms: 1, active: true };
+    const off = { id: "dir-o", kind: "prevent" as const, text: "dropped earlier", created_ms: 2, active: false };
+    const a = { id: "dir-a", kind: "prevent" as const, text: "repeat the poll line", created_ms: 3, active: false, proposed: true, scope: "SEG-01" as const };
+    const b = { id: "dir-b", kind: "try" as const, text: "open with the ledger", created_ms: 4, active: false, proposed: true };
+    let list: Record<string, unknown>[] = [kept, off, a, b];
+    const bodies: Record<string, string[]> = { "directive.add": [], "directive.deactivate": [] };
+    mount(["directives"], (method, body) => {
+      if (method === "directive.list") return ok(list);
+      if (method === "directive.add") {
+        bodies[method]?.push(body);
+        const k = { ...a, active: true, proposed: undefined };
+        list = list.map((d) => (d.id === "dir-a" ? k : d));
+        return ok(k);
+      }
+      if (method === "directive.deactivate") {
+        bodies[method]?.push(body);
+        const dropped = { ...b, active: false, proposed: undefined };
+        list = list.map((d) => (d.id === "dir-b" ? dropped : d));
+        return ok(dropped);
+      }
+      return base()(method, body);
+    });
+    await settle();
+    // Proposals await the owner, so the page opens on them.
+    expect(screen.getByText("2 of 4")).toBeTruthy();
+    expect(all("reconcile-directive-proposal").length).toBe(2);
+    expect(screen.getAllByText("Proposed").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByRole("button", { name: "Deactivate" })).toBeNull();
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Keep prevent: repeat the poll line" })));
+    await settle();
+    expect(bodies["directive.add"]?.[0]).toContain('"kind":"prevent"');
+    expect(bodies["directive.add"]?.[0]).toContain('"text":"repeat the poll line"');
+    expect(bodies["directive.add"]?.[0]).toContain('"scope":"SEG-01"');
+    expect(screen.queryByRole("button", { name: "Keep prevent: repeat the poll line" })).toBeNull();
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Drop try: open with the ledger" })));
+    await settle();
+    expect(bodies["directive.deactivate"]?.[0]).toContain('"id":"dir-b"');
+    expect(all("reconcile-directive-proposal").length).toBe(0);
+    expect(screen.queryByRole("button", { name: /^(Keep|Drop) / })).toBeNull();
+
+    // Every row now shows as a kept or dropped directive always has: Deactivate, or Off.
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /^All/ })));
+    await settle();
+    const stateOf = (text: string) => screen.getByText(text).closest("tr")?.querySelector("td:last-child")?.textContent;
+    expect(stateOf("repeat the poll line")).toBe("Deactivate");
+    expect(stateOf("kept earlier")).toBe("Deactivate");
+    expect(stateOf("open with the ledger")).toBe("Off");
+    expect(stateOf("dropped earlier")).toBe("Off");
+  });
+
   it("virtualises 2,000 directives", async () => {
     mount(["directives"], base({ "directive.list": genDirectives(2_000) }));
     await settle();

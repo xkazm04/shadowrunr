@@ -222,7 +222,7 @@ NextStreamPlan  { plan_id, created_ms, lord_dispatch, segments: [{segment, minut
 Directive       { id, kind: "prevent"|"try", text, scope?, created_ms, active, proposed? }
 ```
 
-The `lord_dispatch` of the chosen plan is the text Malakor receives as "the Lord's dispatch"
+The `lord_dispatch` of the chosen plan is the text Malakor is to receive as "the Lord's dispatch"
 at the next stream start. Directives are stored in `<data>/directives.json` and fed to every
 stream until they are deactivated.
 

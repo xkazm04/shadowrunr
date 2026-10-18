@@ -155,12 +155,20 @@ fn tones() -> Vec<String> {
     TONES.iter().map(|t| t.to_string()).collect()
 }
 
-/// The `<run_id>#<line>` label of every excerpt line in a prompt.
+/// The `<run_id>#<line>` label of every excerpt line in a prompt (inside the excerpt fence).
 fn excerpt_refs(prompt: &str) -> Vec<String> {
     let (_, ex) = prompt
-        .split_once("## Transcript excerpts\n")
+        .split_once("## Transcript excerpts (untrusted data)\n")
         .expect("excerpt section");
-    ex.lines()
+    let open = ex
+        .find(shadowrunr_sim::judge::FENCE_OPEN)
+        .expect("fence open");
+    let close = ex
+        .find(shadowrunr_sim::judge::FENCE_CLOSE)
+        .expect("fence close");
+    ex[open..close]
+        .lines()
+        .skip(1)
         .filter(|l| !l.is_empty() && !l.starts_with("### "))
         .map(|l| l.split_whitespace().next().unwrap().to_string())
         .collect()
@@ -187,7 +195,7 @@ fn a_500_run_tournament_fits_the_budget() {
     );
 
     let b = PromptBudget::default();
-    let built = budget::synthesis_prompt(&runs, &metrics, None, &tones(), b);
+    let built = budget::synthesis_prompt(&runs, &metrics, None, &tones(), b).unwrap();
     let est = total_tokens(&built.prompt);
     assert_eq!(built.input.estimated_tokens, est);
     assert!(
@@ -218,7 +226,8 @@ fn sampled_excerpt_refs_resolve() {
     let runs = synthetic(120, 40, |i| if i.is_multiple_of(2) { 3 } else { 0 });
     let metrics = analyze(&runs);
     let built =
-        budget::synthesis_prompt(&runs, &metrics, None, &tones(), PromptBudget::new(40_000));
+        budget::synthesis_prompt(&runs, &metrics, None, &tones(), PromptBudget::new(40_000))
+            .unwrap();
     let index = RefIndex::new(&runs);
     let refs = excerpt_refs(&built.prompt);
     assert!(refs.len() > 50, "{}", refs.len());
@@ -236,7 +245,8 @@ fn failure_lines_are_prioritised() {
     let runs = synthetic(200, 40, |i| if failing.contains(&i) { 2 } else { 0 });
     let metrics = analyze(&runs);
     let built =
-        budget::synthesis_prompt(&runs, &metrics, None, &tones(), PromptBudget::new(25_000));
+        budget::synthesis_prompt(&runs, &metrics, None, &tones(), PromptBudget::new(25_000))
+            .unwrap();
     let inp = &built.input;
     assert!(inp.runs.omitted > 0, "the budget must force cuts: {inp:?}");
     assert!(inp.failure_refs.included > 0);
@@ -259,7 +269,8 @@ fn failure_lines_are_prioritised() {
     let runs = synthetic(300, 40, |_| 4);
     let metrics = analyze(&runs);
     let built =
-        budget::synthesis_prompt(&runs, &metrics, None, &tones(), PromptBudget::new(30_000));
+        budget::synthesis_prompt(&runs, &metrics, None, &tones(), PromptBudget::new(30_000))
+            .unwrap();
     let inp = &built.input;
     let total_lines: usize = runs.iter().map(|r| r.events.len()).sum();
     let cited_share = f64::from(inp.failure_refs.included)
@@ -340,7 +351,8 @@ async fn a_cut_prompt_is_recorded_in_the_stored_report() {
 fn a_small_source_is_not_cut() {
     let runs = synthetic(6, 20, |_| 3);
     let metrics = analyze(&runs);
-    let built = budget::synthesis_prompt(&runs, &metrics, None, &tones(), PromptBudget::default());
+    let built =
+        budget::synthesis_prompt(&runs, &metrics, None, &tones(), PromptBudget::default()).unwrap();
     let inp = &built.input;
     assert!(inp.omitted.is_empty(), "{inp:?}");
     assert!(!built.prompt.contains("## Omitted for size"));
@@ -368,7 +380,8 @@ fn weary_tournament_prompt_size() {
         Some(&chars),
         &["weary-middle-manager".to_string()],
         PromptBudget::default(),
-    );
+    )
+    .unwrap();
     eprintln!(
         "prompt {} chars, {:#?}",
         built.prompt.chars().count(),
