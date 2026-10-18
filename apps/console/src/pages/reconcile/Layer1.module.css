@@ -1,0 +1,170 @@
+/* Layer 1, Reconcile & Plan: port of the winner's poster frame (l1.css .b-*) and the
+   triptych (l1.css .rc-*), over tokens. Palette: --sr-page-* under [data-page="reconcile"]
+   (face #0b0f0e, type #efe6d2, overprint #2f7d6a, overprint-2 #e8542a).
+   Alpha inks: color-mix(X n%, transparent) is exactly rgba(X, n%). */
+
+.root { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--sr-page-type); }
+
+.top,
+.hero,
+.foot { width: min(100%, var(--sr-layout-body-measure)); margin-left: auto; margin-right: auto; }
+
+.top { flex: none; height: 3.2rem; display: flex; align-items: center; padding-right: 23rem; }
+
+.brand { display: flex; align-items: center; gap: var(--sr-space-cozy); font-family: var(--sr-font-display); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.brand svg { width: 1.7rem; height: 1.7rem; flex: none; }
+.brand b { font-size: var(--sr-size-subhead); font-weight: var(--sr-weight-bold); }
+.brand span { font-size: var(--sr-size-body); font-weight: var(--sr-weight-semibold); letter-spacing: .16em; border-left: var(--sr-stroke-rule) solid currentcolor; padding-left: var(--sr-space-cozy); opacity: .85; }
+
+.hero { position: relative; flex: 1; min-height: 0; }
+
+.foot {
+  position: relative;
+  z-index: 4;
+  flex: none;
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sr-space-base);
+  border-top: var(--sr-stroke-rule) solid currentcolor;
+  margin-bottom: .15rem;
+}
+
+.credit { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-small); letter-spacing: .1em; text-transform: uppercase; line-height: 1.25; }
+.credit span { display: block; white-space: nowrap; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); font-size: var(--sr-size-caption); letter-spacing: .01em; text-transform: none; opacity: .9; max-width: 48rem; }
+
+.cta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sr-space-close);
+  background: var(--sr-page-type);
+  color: var(--sr-page-face);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  font-size: var(--sr-size-kicker);
+  padding: .45rem var(--sr-space-base);
+  text-decoration: none;
+  box-shadow: .25rem .25rem 0 var(--sr-page-overprint);
+  transition: transform .2s, box-shadow .2s;
+}
+.cta:hover,
+.cta:focus-visible { transform: translate(-.12rem, -.12rem); box-shadow: .4rem .4rem 0 var(--sr-page-overprint); }
+.cta i { width: 0; height: 0; border: .5rem solid transparent; border-left: .75rem solid currentcolor; border-right: 0; }
+
+/* The rising halftone sun (fidelity role: texture). */
+.sun {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  bottom: -27rem;
+  width: 56rem;
+  height: 56rem;
+  margin-left: -28rem;
+  border-radius: var(--sr-radius-round);
+  background: radial-gradient(circle, var(--sr-page-overprint) 0 var(--sr-halftone-sun-dot), transparent var(--sr-halftone-sun-edge)) 0 0 / var(--sr-halftone-sun-cell) var(--sr-halftone-sun-cell);
+  mask-image: radial-gradient(circle, var(--sr-color-mask-ink) 62%, transparent 63%);
+  opacity: var(--sr-halftone-sun-opacity);
+  animation: rise-sun 2.4s var(--sr-ease-settle) both;
+}
+
+@keyframes rise-sun {
+  from { transform: translateY(8rem); opacity: 0; }
+}
+
+.tri { position: absolute; inset: 0 0 3rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--sr-space-base); align-items: center; }
+
+.rc {
+  position: relative;
+  padding: 0 var(--sr-space-tight);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity .25s, filter .25s, transform .25s;
+}
+
+/* The winner's hotspot light: the hovered column lit, the others knocked back. */
+.tri:has(.rc:hover) .rc:not(:hover),
+.tri:has(.rc:focus-visible) .rc:not(:focus-visible) { opacity: .28; filter: saturate(.3); }
+.rc:hover,
+.rc:focus-visible { outline: .2rem solid var(--sr-page-type); outline-offset: .25rem; }
+
+.n { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: 20rem; line-height: .74; letter-spacing: -.02em; mix-blend-mode: screen; }
+
+.held .n { color: var(--sr-color-ok-bright); text-shadow: .03em .025em 0 color-mix(in srgb, var(--sr-page-overprint) 90%, transparent); }
+.failed .n { color: var(--sr-page-overprint-2); text-shadow: .03em .025em 0 color-mix(in srgb, var(--sr-color-fail) 90%, transparent); }
+.prop .n { color: var(--sr-page-type); text-shadow: .03em .025em 0 color-mix(in srgb, var(--sr-color-foil) 70%, transparent); }
+
+.w { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-heading-lg); letter-spacing: .2em; text-transform: uppercase; margin-top: var(--sr-space-close); }
+.held .w { color: var(--sr-color-ok-bright); }
+.failed .w { color: var(--sr-page-overprint-2); }
+
+.bars { display: flex; flex-wrap: wrap; gap: .18rem; margin-top: var(--sr-space-close); max-width: 18rem; }
+.bars i { display: block; width: .7rem; height: 2.4rem; transform-origin: bottom; animation: grow .55s var(--sr-ease-settle) both; }
+.barsG i { background: var(--sr-color-ok-bright); }
+.barsE i { background: var(--sr-page-overprint-2); }
+.barsB i { background: var(--sr-page-type); }
+
+@keyframes grow {
+  from { transform: scaleY(0); }
+}
+
+.caution,
+.stateSlip {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 2;
+  max-width: 32rem;
+  font-family: var(--sr-font-serif);
+  font-style: italic;
+  font-size: var(--sr-size-body);
+  line-height: 1.3;
+  background: var(--sr-page-type);
+  color: var(--sr-page-face);
+  padding: .35rem var(--sr-space-near);
+  transform: rotate(-.6deg);
+}
+
+.stateSlip { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sr-space-compact) var(--sr-space-near); }
+
+.slipAction {
+  font-family: var(--sr-font-display);
+  font-style: normal;
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-small);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--sr-page-face);
+  background: none;
+  border: var(--sr-stroke-rule) solid currentcolor;
+  padding: 0 var(--sr-space-compact);
+  text-decoration: none;
+  cursor: pointer;
+}
+.slipAction:hover { background: var(--sr-page-overprint-2); }
+
+/* Narrow (the shell's poster carries data-narrow): one column, the numerals inline. */
+[data-narrow="true"] .top { height: auto; flex-wrap: wrap; gap: var(--sr-space-snug); padding: var(--sr-space-tick) 0; }
+[data-narrow="true"] .credit span { white-space: normal; }
+[data-narrow="true"] .hero { min-height: 0; }
+[data-narrow="true"] .sun { bottom: -30rem; }
+[data-narrow="true"] .tri { position: relative; inset: auto; grid-template-columns: 1fr; gap: var(--sr-space-tight); }
+[data-narrow="true"] .rc { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 0 var(--sr-space-base); }
+[data-narrow="true"] .n { font-size: 9rem; display: inline-block; }
+[data-narrow="true"] .w { margin-top: 0; font-size: var(--sr-size-figure); }
+[data-narrow="true"] .bars { display: none; }
+[data-narrow="true"] .caution,
+[data-narrow="true"] .stateSlip { position: relative; margin-top: var(--sr-space-cozy); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sun,
+  .bars i { animation: none; }
+}
