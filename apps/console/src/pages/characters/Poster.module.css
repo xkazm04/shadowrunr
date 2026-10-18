@@ -1,0 +1,17 @@
+/* The characters poster motif (art.js M.characters; poster.css .pf-motif, .m-*): fills from
+   the page palette, the crown breathing (.mo-a). */
+.motif { position: absolute; inset: 0; width: 100%; height: 100%; }
+.o { fill: var(--sr-page-overprint); }
+.f { fill: var(--sr-page-face); }
+.k { fill: var(--sr-page-key); }
+.o2 { fill: var(--sr-page-overprint-2); }
+
+.breathe { animation: breathe 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+@keyframes breathe {
+  50% { transform: scale(1.06) translateY(-1%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .breathe { animation: none; }
+}

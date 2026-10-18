@@ -1,0 +1,11 @@
+/* The 120x140 face tile. The Malakor crop reproduces the winner's nested transform
+   (translate(-6 -2) scale(.33) of the 400x520 figure inside a 120x140 viewBox). `.box` is the
+   SVG's own box (sized by the caller, like the winner's `svg.av`); `.tile` is the 120/140
+   viewport centred in it (an SVG's default `xMidYMid meet`); the figure sits at left -5%
+   (-6/120), top -1.4286% (-2/140), width 110% (132/120), clipped to the tile. */
+.box { display: flex; align-items: center; justify-content: center; }
+.tile { position: relative; display: block; overflow: hidden; aspect-ratio: 120 / 140; height: 100%; max-width: 100%; }
+.crop { position: absolute; left: -5%; top: -1.4286%; width: 110%; }
+.crop :global(svg.mk) { display: block; width: 100%; height: auto; }
+
+.svg { display: block; }

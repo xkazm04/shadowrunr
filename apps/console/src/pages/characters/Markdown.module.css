@@ -1,0 +1,13 @@
+/* Package prose (the winner's l2.css .prose) over tokens. */
+.prose { max-width: var(--sr-layout-body-measure); font-family: var(--sr-font-serif); font-size: var(--sr-size-control); line-height: 1.5; color: var(--sr-color-text-ink); }
+.prose p { margin: 0 0 var(--sr-space-near); }
+.prose code { font-family: var(--sr-font-mono); font-size: var(--sr-size-caption); background: var(--sr-color-wash); padding: 0 var(--sr-space-tick); }
+.prose strong { font-weight: var(--sr-weight-bold); }
+
+.h { margin: var(--sr-space-loose) 0 var(--sr-space-snug); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-subhead); letter-spacing: .04em; text-transform: uppercase; }
+
+.ul,
+.ol { margin: 0 0 var(--sr-space-near); padding-left: var(--sr-space-loose); }
+.ul li,
+.ol li { margin: var(--sr-space-tick) 0; }
+.ul .ul { margin: var(--sr-space-tick) 0 0; }

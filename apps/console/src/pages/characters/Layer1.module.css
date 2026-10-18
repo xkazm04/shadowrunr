@@ -1,0 +1,206 @@
+/* Layer 1, Characters: port of the winner's poster frame (l1.css .b-*) and the cast poster
+   (l1.css .cb-*, .cr), over tokens. Palette: --sr-page-* under [data-page="characters"]
+   (face #efe6d2, type #0b0f0e, overprint #e8542a, overprint-2 #2f7d6a, key #0b0f0e).
+   Winner variables: --t type, --f face, --o overprint, --k key. The name size is the
+   winner's --fs fallback, 8.6rem. */
+
+.root { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--sr-page-type); }
+
+.top,
+.hero,
+.foot { width: min(100%, var(--sr-layout-body-measure)); margin-left: auto; margin-right: auto; }
+
+.top { flex: none; height: 3.2rem; display: flex; align-items: center; padding-right: 23rem; }
+
+.brand { display: flex; align-items: center; gap: var(--sr-space-cozy); font-family: var(--sr-font-display); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.brand svg { width: 1.7rem; height: 1.7rem; flex: none; }
+.brand b { font-size: var(--sr-size-subhead); font-weight: var(--sr-weight-bold); }
+.brand span { font-size: var(--sr-size-body); font-weight: var(--sr-weight-semibold); letter-spacing: .16em; border-left: var(--sr-stroke-rule) solid currentcolor; padding-left: var(--sr-space-cozy); opacity: .85; }
+
+/* .b-hero:has(.cb-name) */
+.hero {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 23rem;
+  grid-template-rows: 1fr auto auto auto;
+  column-gap: var(--sr-space-roomy);
+  row-gap: var(--sr-space-close);
+}
+
+/* The winner's hotspot light: the hovered element lit, the others knocked back. */
+.hot { color: inherit; text-decoration: none; cursor: pointer; transition: opacity .25s, filter .25s, transform .25s; }
+.hero:has(.hot:hover) .hot:not(:hover),
+.hero:has(.hot:focus-visible) .hot:not(:focus-visible) { opacity: .28; filter: saturate(.3); }
+.hot:hover,
+.hot:focus-visible { outline: .2rem solid var(--sr-page-type); outline-offset: .25rem; }
+
+/* .cb-name */
+.name { grid-column: 1; grid-row: 1; position: relative; z-index: 2; display: flex; flex-direction: column; justify-content: flex-start; min-width: 0; }
+.k { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-body); letter-spacing: .2em; text-transform: uppercase; margin-bottom: var(--sr-space-tight); }
+.n { display: block; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); text-transform: uppercase; font-size: 8.6rem; line-height: .8; text-shadow: .04em .035em 0 var(--sr-page-overprint); }
+.n i { display: block; font-style: normal; }
+.r { font-family: var(--sr-font-serif); font-style: italic; font-size: 1.35rem; margin-top: var(--sr-space-near); max-width: 28rem; }
+
+/* .cb-portrait */
+.portrait { grid-column: 2; grid-row: 1 / 3; position: relative; display: block; }
+.arch { position: absolute; inset: var(--sr-space-base) var(--sr-space-base) 0 var(--sr-space-base); background: var(--sr-page-type); border-radius: 50% 50% 0 0 / 24% 24% 0 0; box-shadow: .7rem .6rem 0 var(--sr-page-overprint); }
+.fig { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; }
+.fig :global(svg.mk) { width: 112%; height: auto; margin-bottom: -2%; }
+.avbig { width: 80%; padding-bottom: var(--sr-space-base); }
+.avbig svg { width: 100%; height: auto; filter: drop-shadow(.35rem .3rem 0 var(--sr-page-overprint)); }
+
+/* The winner's global Malakor motion (l1.css .mk-eye, .mk-steam) on every drawing of him here. */
+.root :global(.mk-eye) { animation: eyeflick 4s infinite; }
+.root :global(.mk-steam) { animation: steam 4s ease-in-out infinite; }
+@keyframes eyeflick { 0%, 100% { opacity: 1; } 47% { opacity: .8; } 50% { opacity: 1; } 93% { opacity: 1; } 95% { opacity: .2; } 97% { opacity: 1; } }
+@keyframes steam { 50% { transform: translateY(calc(-6 * var(--sr-stroke-hair))); opacity: .3; } }
+
+/* .cb-tone */
+.tone { grid-column: 1; grid-row: 2; position: relative; z-index: 2; display: flex; align-items: center; gap: var(--sr-space-near); flex-wrap: wrap; align-self: end; }
+.tone b { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .16em; text-transform: uppercase; font-size: var(--sr-size-small); background: var(--sr-page-type); color: var(--sr-page-face); padding: var(--sr-space-hair) var(--sr-space-cozy); }
+.tone span { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-figure); text-transform: uppercase; letter-spacing: .03em; color: var(--sr-page-overprint); text-shadow: .04em .04em 0 var(--sr-page-key); }
+.tone em { font-style: normal; font-family: var(--sr-font-sans); font-size: var(--sr-size-caption); flex-basis: 100%; opacity: .9; }
+
+/* .cb-roster, .cr */
+.roster { grid-column: 1 / 3; grid-row: 3; display: flex; gap: .55rem; align-items: flex-end; }
+.cr {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 5.6rem;
+  padding: var(--sr-space-snug) var(--sr-space-tick) var(--sr-space-tick);
+  border: var(--sr-stroke-rule) solid var(--sr-page-type);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform .2s, background .2s;
+}
+.av { width: 100%; height: 4.4rem; filter: drop-shadow(.18rem .15rem 0 var(--sr-page-overprint)); }
+.cr em { font-style: normal; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .06em; text-transform: uppercase; margin-top: .15rem; white-space: nowrap; }
+.cr:hover { transform: translateY(-.25rem); }
+.cr[aria-selected="true"] { background: var(--sr-page-type); color: var(--sr-page-face); }
+.cr:focus-visible { outline: .2rem solid var(--sr-page-type); outline-offset: .2rem; }
+.slot,
+.more { border-style: dashed; justify-content: center; min-height: 6.6rem; opacity: .85; cursor: default; }
+.more { cursor: pointer; }
+.slot span,
+.more span { font-family: var(--sr-font-display); font-size: var(--sr-size-figure); font-weight: var(--sr-weight-bold); line-height: 1; }
+.slot em,
+.more em { white-space: normal; font-size: var(--sr-size-micro); line-height: 1.1; }
+.slot:hover { transform: none; }
+
+.many { flex-wrap: wrap; gap: .35rem var(--sr-space-tight); align-items: flex-start; }
+.many .cr { width: calc((100% - 9 * var(--sr-space-tight)) / 10); padding: .15rem var(--sr-space-hair); }
+.many .av { height: 2.6rem; }
+.many .cr em { font-size: var(--sr-size-micro); }
+.many .more { min-height: 0; align-self: stretch; }
+
+/* .cb-foils */
+.foils { grid-column: 1 / 3; grid-row: 4; display: flex; align-items: center; gap: var(--sr-space-base); border-top: var(--sr-stroke-rule) solid var(--sr-page-type); padding-top: var(--sr-space-compact); }
+.foils b { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .16em; text-transform: uppercase; font-size: var(--sr-size-small); writing-mode: horizontal-tb; margin-right: var(--sr-space-tight); }
+.fo { display: flex; align-items: center; gap: var(--sr-space-tight); }
+.fo svg { height: 3.2rem; width: auto; filter: drop-shadow(.14rem .12rem 0 var(--sr-page-overprint)); }
+.fo em { font-style: normal; font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-small); letter-spacing: .06em; text-transform: uppercase; }
+
+/* Loading, offline, empty and degraded: the winner's caution slip, set on the poster. */
+.slip {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sr-space-compact) var(--sr-space-near);
+  max-width: 32rem;
+  font-family: var(--sr-font-serif);
+  font-style: italic;
+  font-size: var(--sr-size-body);
+  line-height: 1.3;
+  background: var(--sr-page-type);
+  color: var(--sr-page-face);
+  padding: .35rem var(--sr-space-near);
+  transform: rotate(-.6deg);
+}
+.slipAction {
+  font-family: var(--sr-font-display);
+  font-style: normal;
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-small);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--sr-page-face);
+  background: none;
+  border: var(--sr-stroke-rule) solid currentcolor;
+  padding: 0 var(--sr-space-compact);
+  cursor: pointer;
+}
+.slipAction:hover { background: var(--sr-page-overprint); }
+
+.foot {
+  position: relative;
+  z-index: 4;
+  flex: none;
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sr-space-base);
+  border-top: var(--sr-stroke-rule) solid currentcolor;
+  margin-bottom: .15rem;
+}
+.credit { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-small); letter-spacing: .1em; text-transform: uppercase; line-height: 1.25; }
+.credit span { display: block; white-space: nowrap; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); font-size: var(--sr-size-caption); letter-spacing: .01em; text-transform: none; opacity: .9; max-width: 48rem; }
+.cta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sr-space-close);
+  background: var(--sr-page-type);
+  color: var(--sr-page-face);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  font-size: var(--sr-size-kicker);
+  padding: .45rem var(--sr-space-base);
+  text-decoration: none;
+  box-shadow: .25rem .25rem 0 var(--sr-page-overprint);
+  transition: transform .2s, box-shadow .2s;
+}
+.cta:hover,
+.cta:focus-visible { transform: translate(-.12rem, -.12rem); box-shadow: .4rem .4rem 0 var(--sr-page-overprint); }
+.cta i { width: 0; height: 0; border: .5rem solid transparent; border-left: .75rem solid currentcolor; border-right: 0; }
+
+/* Narrow (the shell's poster carries data-narrow): the winner's max-width 760px rules. */
+[data-narrow="true"] .top { height: auto; flex-wrap: wrap; gap: var(--sr-space-snug); padding: var(--sr-space-tick) 0; }
+[data-narrow="true"] .credit span { white-space: normal; }
+[data-narrow="true"] .hero { display: flex; flex-direction: column; flex: none; min-height: 0; gap: var(--sr-space-near); }
+[data-narrow="true"] .n { font-size: min(8.6rem, 5.4rem); }
+[data-narrow="true"] .portrait { height: 17rem; flex: none; overflow: hidden; margin-top: var(--sr-space-tick); }
+[data-narrow="true"] .arch { inset: var(--sr-space-compact) 25% 0 25%; }
+[data-narrow="true"] .fig { height: 100%; align-items: flex-end; }
+[data-narrow="true"] .fig :global(svg.mk) { height: 104%; width: auto; margin: 0; }
+[data-narrow="true"] .avbig { height: 100%; width: auto; }
+[data-narrow="true"] .avbig svg { height: 92%; width: auto; }
+[data-narrow="true"] .roster { flex-wrap: wrap; }
+[data-narrow="true"] .cr { width: calc((100% - 1.1rem) / 3); }
+[data-narrow="true"] .many .cr { width: calc((100% - 4 * var(--sr-space-tight)) / 5); }
+[data-narrow="true"] .foils { flex-wrap: wrap; }
+[data-narrow="true"] .fo em { display: none; }
+[data-narrow="true"] .slip { position: relative; }
+[data-narrow="true"] .foot { height: auto; flex-direction: column; align-items: stretch; padding: var(--sr-space-compact) 0 var(--sr-space-close); }
+[data-narrow="true"] .cta { justify-content: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .root :global(.mk-eye),
+  .root :global(.mk-steam) { animation: none; }
+  .cr,
+  .hot { transition: none; }
+}
