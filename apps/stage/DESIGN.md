@@ -31,6 +31,27 @@ A `.jsonl` dropped anywhere on the page replaces the transcript; a dropped `.jso
 a `Case` replaces the case. Bad lines are skipped and listed (line number and field path) in the
 controls, never half-rendered.
 
+## Code layout: the stage on `@shadowrunr/stage-kit`
+
+The scene model and its components are shared with the console's On Air page, so they live in
+`packages/stage-kit`, not here:
+
+- `@shadowrunr/stage-kit`: the reducer (`scene.ts`, `sceneModel.ts`), poll and grade tallies,
+  `Timeline` playback, hex geometry, caption timing, the display lore (rank titles and weights,
+  grades, foils) and the wire vocabulary lists. Wire types come from `@shadowrunr/contract`,
+  generated from `crates/shadowrunr-types`; there is no hand-copied contract here any more.
+- `@shadowrunr/stage-kit/ui`: the stage components (caption, chat lane, decrees, vote panel,
+  foil card, hexmap and its panels, job ticker, explainer card, overlays) and the art (rank
+  sigils, the silhouette).
+- `@shadowrunr/stage-kit/parse`: the transcript parser. Every line goes through the contract's
+  one door (`parseEvent`), so the stage validates exactly what the console validates.
+
+This app keeps only what is the OBS stage's own: the 1920x1080 composition (`Stage.tsx`), the
+region layouts (`layouts.ts`), the sources (`source.ts`: URL parameters, fetches, drops, the
+daemon WebSocket), the controls, and `styles.css`, the broadcast skin the kit's class names are
+styled by. Colours on that skin that carry meaning (rank, grade) are the token variables from
+`@shadowrunr/tokens` (`--sr-rank-*`, `--sr-grade-*`), never local literals.
+
 ## Animation: plain CSS, no library
 
 Every animation is a CSS transition or keyframe; there is no animation library.
@@ -45,7 +66,7 @@ Every animation is a CSS transition or keyframe; there is no animation library.
 - **OBS's browser source is Chromium (CEF).** CSS animations run on the compositor and stay
   smooth while React renders at about 30 fps; a JS animation loop would compete with the
   playback clock.
-- **Bundle:** React only, about 98 kB gzip in total. Fonts (Cinzel, IBM Plex Sans Condensed,
+- **Bundle:** React plus the contract's compiled validators (the parser's door), about 118 kB gzip in total. Fonts (Cinzel, IBM Plex Sans Condensed,
   IBM Plex Mono) are bundled through Fontsource, so the broadcast never depends on a font CDN.
 
 Framer Motion would earn its weight only for gesture or spring physics, and the stage has
@@ -109,7 +130,8 @@ including the intro and the outro, and is never hidden.
 
 ## SEG-02A specifics
 
-- **Grades:** DOC emerald, REP cyan, CLM amber, SPC violet (digest § 4). Every hex graded below
+- **Grades:** DOC verdigris `#86d3bb`, REP stone `#cdbf9f`, CLM amber `#e8913f`, SPC flare `#ff5a2a`
+  (`--sr-grade-*` from `@shadowrunr/tokens`, the Poster Wall's fidelity palette). Every hex graded below
   DOC carries an ALLEGED stamp, in the map and in the inspector.
 - **Case title** in the top bar with a striped **FICTIONAL** tag, and a FICTIONAL CASE corner
   ribbon on the map, whenever `case.fictional` is true.
@@ -128,25 +150,26 @@ including the intro and the outro, and is never hidden.
 
 ## Rank sigils
 
-Six original SVG sigils (`src/art/Sigil.tsx`) on one faceted seal, so a rank reads by shape first
-and colour second:
+Six original SVG sigils (`packages/stage-kit/src/art/Sigil.tsx`) on one faceted seal, so a rank reads by shape first
+and colour second. The colours are the Poster Wall's rank palette from `@shadowrunr/tokens` (its
+`RANK_COLORS`, which the kit's `lore.ts` re-exports and its `lore.test.ts` pins):
 
-| Rank | Glyph | Colour |
+| Rank | Glyph | Colour (`--sr-rank-*`) |
 |---|---|---|
-| Thrall | a broken shackle ring | bone grey |
-| Acolyte | a candle flame in a dashed circle | parchment |
-| Cultist | a triangle with a watching eye | rust |
-| Warlock | a crescent cradling a four-point star | indigo |
-| Lesser Lich | a phylactery gem under three crown points | verdigris |
-| Dread Council | three obsidian spires over a ring of six seats | gold, double seal |
+| Thrall | a broken shackle ring | ash grey `#8f877a` |
+| Acolyte | a candle flame in a dashed circle | stone `#cdbf9f` |
+| Cultist | a triangle with a watching eye | pale verdigris `#8fc4b0` |
+| Warlock | a crescent cradling a four-point star | verdigris `#3f9c86` |
+| Lesser Lich | a phylactery gem under three crown points | amber `#e8913f` |
+| Dread Council | three obsidian spires over a ring of six seats | flare `#ff5a2a`, double seal |
 
 Rank titles come from `characters/malakor/character.toml` and vote weights from
-`crates/shadowrunr-segments/data/ranks.toml`. Both are copied into `src/lore.ts`, and
+`crates/shadowrunr-segments/data/ranks.toml`. Both are copied into the kit's `lore.ts`, and
 `lore.test.ts` fails if either copy drifts.
 
 ## The silhouette
 
-`src/art/Silhouette.tsx` is a placeholder for the future avatar, drawn from the bible: a
+`packages/stage-kit/src/art/Silhouette.tsx` is a placeholder for the future avatar, drawn from the bible: a
 bone-white skull, verdigris-bronze high collar and ribcage, charcoal chancellor robes, a cracked
 obsidian crown of floating astrolabe shards, and the green-glass Phylactery Orb. It has no hood,
 no ram-skull staff and no purple.
@@ -162,7 +185,7 @@ by construction:
 - the chat lane clips its oldest rows (column-reverse);
 - caption size steps down with line length.
 
-`visuals.test.ts` checks that every visible region in every layout and flag combination lies
+`stage.test.ts` checks that every visible region in every layout and flag combination lies
 inside the canvas. The `?debug=1` audit flags any element whose content exceeds its box, except
 intentional clamps. It was run over 30+ moments of the demo, at 1920x1080 and at a letterboxed
 1280x1000, with no findings.

@@ -2,12 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import demoCaseJson from "../fixtures/demo-case.json";
 import demoTranscript from "../fixtures/demo.jsonl?raw";
-import type { Case, StreamEvent } from "./contract";
+import type { Case, StreamEvent } from "@shadowrunr/contract";
 import { Controls } from "./Controls";
-import { buildMap } from "./hexgrid";
-import { parseCase, parseTranscript, type ParseIssue } from "./parse";
-import { CANVAS_H, CANVAS_W, Timeline, fitCanvas } from "./playback";
-import { initialScene, reduce, type SceneState } from "./scene";
+import { CANVAS_H, CANVAS_W, Timeline, buildMap, fitCanvas, initialScene, reduce, type SceneState } from "@shadowrunr/stage-kit";
+import { checkCase, parseCase, parseTranscript, type ParseIssue } from "@shadowrunr/stage-kit/parse";
 import {
   SPEEDS,
   connectDaemon,
@@ -232,14 +230,13 @@ export function App() {
   const onFile = useCallback(async (f: File) => {
     const text = await f.text();
     if (/\.json$/i.test(f.name)) {
-      try {
-        const c = parseCase(JSON.parse(text));
-        setExplicitCase({ case: c, source: "dropped" });
-        setStatus(`case loaded: ${c.title}`);
+      const c = checkCase(text);
+      if (c.ok) {
+        setExplicitCase({ case: c.value, source: "dropped" });
+        setStatus(`case loaded: ${c.value.title}`);
         return;
-      } catch {
-        // Not a case: fall through and try it as a transcript.
       }
+      // Not a case: fall through and try it as a transcript.
     }
     setLoaded(loadText(text, f.name));
     setStatus(null);

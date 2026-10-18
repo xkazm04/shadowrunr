@@ -1,0 +1,54 @@
+/* On Air's nested pages: the rundown (runs, one run's anatomy, segment cards) and the Lord's
+   dispatch. Layer 2 is kept in spirit: the winner's l2.css editorial look over tokens. */
+
+.l2 { color: var(--sr-color-text-ink); }
+
+.note { margin-top: var(--sr-space-compact); color: var(--sr-color-text-mute); font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-small); }
+.lede { max-width: var(--sr-layout-body-measure); font-family: var(--sr-font-serif); font-size: var(--sr-size-lede); line-height: 1.35; color: var(--sr-color-text-note); }
+.dim { color: var(--sr-color-text-mute); font-size: var(--sr-size-small); line-height: 1.35; }
+.sub { margin: var(--sr-space-loose) 0 var(--sr-space-compact); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-subhead); letter-spacing: .04em; text-transform: uppercase; }
+
+.pager { display: inline-flex; align-items: center; gap: var(--sr-space-compact); font-family: var(--sr-font-display); letter-spacing: .06em; text-transform: uppercase; }
+.pager button,
+.primary { padding: var(--sr-space-tick) var(--sr-space-close); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: none; color: inherit; font: inherit; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.pager button:disabled { cursor: default; opacity: .4; }
+.primary { background: var(--sr-color-text-ink); color: var(--sr-color-surface-paper); box-shadow: .2rem .2rem 0 var(--sr-page-accent, var(--sr-color-signal)); }
+.primary:hover { transform: translate(-.08rem, -.08rem); }
+
+.runs { height: 28rem; }
+.beats { height: 22rem; border-top: var(--sr-stroke-rule) solid var(--sr-color-text-ink); }
+.beat { display: grid; grid-template-columns: 4.5rem 9rem 1fr 4rem; gap: var(--sr-space-near); align-items: baseline; padding: var(--sr-space-snug) 0; border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); font-size: var(--sr-size-small); }
+.beat b { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .04em; text-transform: uppercase; }
+.beat[data-op] b { color: var(--sr-page-accent-text, var(--sr-color-signal-deep)); }
+.num { font-family: var(--sr-font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ref { font-family: var(--sr-font-mono); text-align: right; }
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sr-space-base); margin: var(--sr-space-base) 0; }
+.more { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .08em; text-transform: uppercase; }
+.more::after { content: " ›"; }
+
+/* The run's segment spans: the winner's timeline bar, SEG-01 in teal, SEG-02A in ember. */
+.tlBar { display: flex; gap: var(--sr-stroke-rule); height: 2.2rem; margin-top: var(--sr-space-base); }
+.tlBar i { display: flex; flex-basis: 0; align-items: center; min-width: var(--sr-space-section); padding: 0 var(--sr-space-compact); background: var(--sr-color-text-mute); color: var(--sr-color-surface-paper); font-style: normal; }
+.tlBar i[data-seg="SEG-01"] { background: var(--sr-page-overprint, var(--sr-color-ok)); }
+.tlBar i[data-seg="SEG-02A"] { background: var(--sr-color-signal); color: var(--sr-color-surface-void); }
+.tlBar b { font-family: var(--sr-font-display); font-size: var(--sr-size-body); letter-spacing: .06em; }
+
+/* Segment and option cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: var(--sr-space-base); }
+.card { display: flex; flex-direction: column; gap: var(--sr-space-compact); padding: var(--sr-space-base); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-surface-card); }
+.card[data-off] { border-style: dashed; opacity: .75; }
+.card header { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sr-space-compact); }
+.card h3 { flex: 1; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-subhead-lg); line-height: 1; text-transform: uppercase; }
+.sid { font-family: var(--sr-font-mono); font-size: var(--sr-size-caption); color: var(--sr-color-text-mute); }
+.chain { display: flex; flex-wrap: wrap; gap: var(--sr-space-tick); font-family: var(--sr-font-display); font-size: var(--sr-size-caption); letter-spacing: .04em; text-transform: uppercase; }
+.chain span { display: inline-flex; align-items: center; gap: var(--sr-space-tick); }
+.chain span[data-init] { font-weight: var(--sr-weight-bold); color: var(--sr-page-accent-text, var(--sr-color-signal-deep)); }
+.chain em { display: inline-block; width: var(--sr-space-compact); border-top: var(--sr-stroke-rule) solid currentcolor; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: var(--sr-space-tick) var(--sr-space-near); font-size: var(--sr-size-small); }
+.kv dt { color: var(--sr-color-text-mute); }
+.asm { padding: 0 var(--sr-space-snug); background: var(--sr-color-surface-caution); color: var(--sr-color-text-on-caution); font-style: normal; font-size: var(--sr-size-micro); text-transform: uppercase; }
+
+.plain { display: grid; gap: var(--sr-space-compact); list-style: none; }
+.plain small { color: var(--sr-color-text-mute); font-family: var(--sr-font-mono); }

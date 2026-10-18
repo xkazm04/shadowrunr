@@ -613,7 +613,7 @@ body {
   vertical-align: 1px;
 }
 .cmd-chip.cmd-grade {
-  color: #f2a93b;
+  color: var(--sr-grade-clm);
   border-color: #6b4f22;
 }
 .cmd-chip.cmd-hint {
@@ -1337,7 +1337,7 @@ body {
   font-size: 12px;
   letter-spacing: 0.14em;
   color: #1a1000;
-  background: #f2a93b;
+  background: var(--sr-grade-clm);
   padding: 1px 6px;
   border-radius: 3px;
   animation: pulse-opacity 1.2s ease-in-out infinite;
@@ -1364,7 +1364,7 @@ body {
 }
 
 .tally-row.disputed .tally-bar {
-  box-shadow: 0 0 0 2px #f2a93b;
+  box-shadow: 0 0 0 2px var(--sr-grade-clm);
 }
 
 /* ─── Explainer card ───────────────────────────────────────────────────────── */
@@ -1665,7 +1665,7 @@ body {
   opacity: 0.75;
 }
 .job-done .job-icon {
-  color: #34d17f;
+  color: var(--sr-grade-doc);
 }
 .job-failed {
   border-color: #5e2a25;

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 
-import type { StreamEvent } from "./contract";
-import type { ParseIssue } from "./parse";
-import { clipMarkers, segmentSpans } from "./playback";
+import type { StreamEvent } from "@shadowrunr/contract";
+import type { ParseIssue } from "@shadowrunr/stage-kit/parse";
+import { clipMarkers, segmentSpans } from "@shadowrunr/stage-kit";
 import { SPEEDS, type CaseSource } from "./source";
 
 function fmt(ms: number): string {

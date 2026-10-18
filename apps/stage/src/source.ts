@@ -1,8 +1,8 @@
 // Where a transcript and its case come from: URL parameters, fetches, drag and drop, and the
 // daemon WebSocket (contract § daemon protocol).
 
-import type { Case, StreamEvent } from "./contract";
-import { parseCase, parseEvent } from "./parse";
+import type { Case, StreamEvent } from "@shadowrunr/contract";
+import { checkCase, parseStreamEvent } from "@shadowrunr/stage-kit/parse";
 
 export const DEFAULT_WS = "ws://127.0.0.1:7717/events";
 export const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 4, 8] as const;
@@ -70,13 +70,17 @@ export async function fetchText(url: string): Promise<string> {
 
 /** Fetch a case; `null` when it does not exist or does not parse (a sidecar is optional). */
 export async function fetchCase(url: string): Promise<Case | null> {
+  let text: string;
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
-    return parseCase(await res.json());
+    text = await res.text();
   } catch {
+    // Unreachable sidecar: the same as an absent one.
     return null;
   }
+  const c = checkCase(text);
+  return c.ok ? c.value : null;
 }
 
 export type CaseSource = "transcript" | "param" | "sidecar" | "dropped" | "builtin" | "none";
@@ -150,11 +154,10 @@ export function connectDaemon(
     };
     ws.onmessage = (m) => {
       if (typeof m.data !== "string") return;
-      try {
-        onEvent(parseEvent(JSON.parse(m.data)));
-      } catch (e) {
-        onBadMessage((e as Error).message);
-      }
+      // The contract door decodes and validates the frame (bare event or enveloped).
+      const r = parseStreamEvent(m.data);
+      if (r.ok) onEvent(r.value);
+      else onBadMessage(r.message);
     };
     ws.onerror = () => onStatus("error", url);
     ws.onclose = () => {

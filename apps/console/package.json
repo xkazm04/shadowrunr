@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@shadowrunr/contract": "workspace:*",
+    "@shadowrunr/stage-kit": "workspace:*",
     "@shadowrunr/tokens": "workspace:*",
     "@tanstack/react-virtual": "3.14.21",
     "@tauri-apps/plugin-opener": "^2.7.2",

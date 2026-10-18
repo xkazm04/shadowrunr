@@ -5,10 +5,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { EVENT_TYPES, type SegmentId, type StreamEvent } from "./contract";
-import { parseCase, parseTranscript } from "./parse";
-import { foldEvents } from "./scene";
-import { buildMap } from "./hexgrid";
+import type { SegmentId, StreamEvent } from "@shadowrunr/contract";
+import { EVENT_TYPES, buildMap, foldEvents } from "@shadowrunr/stage-kit";
+import { parseCase, parseTranscript } from "@shadowrunr/stage-kit/parse";
 import { resolveCase, revealedHexIds, transcriptCase } from "./source";
 
 const root = join(__dirname, "..");
@@ -88,7 +87,7 @@ describe("fixtures/demo.jsonl", () => {
   });
 
   it("opens the fictional demo case once, right after the SEG-02A segment_start", () => {
-    const demo = parseCase(JSON.parse(readFileSync(join(root, "fixtures", "demo-case.json"), "utf8")));
+    const demo = parseCase(readFileSync(join(root, "fixtures", "demo-case.json"), "utf8"));
     const i = parsed.events.findIndex((e) => e.type === "case_open");
     expect(parsed.events[i - 1]).toMatchObject({ type: "segment_start", segment: "SEG-02A" });
     expect(parsed.events.filter((e) => e.type === "case_open")).toHaveLength(1);
@@ -97,7 +96,7 @@ describe("fixtures/demo.jsonl", () => {
   });
 
   it("references only hexes of the fictional demo case, which resolves from the transcript", () => {
-    const demo = parseCase(JSON.parse(readFileSync(join(root, "fixtures", "demo-case.json"), "utf8")));
+    const demo = parseCase(readFileSync(join(root, "fixtures", "demo-case.json"), "utf8"));
     expect(demo.fictional).toBe(true);
     const r = resolveCase(null, parsed.events, demo);
     expect(r.source).toBe("transcript");
@@ -112,5 +111,13 @@ describe("fixtures/demo.jsonl", () => {
     const lines = text.trim().split("\n");
     expect(JSON.parse(lines[0]!).type).toBe("stream_start");
     expect(JSON.parse(lines[lines.length - 1]!).type).toBe("stream_end");
+  });
+});
+
+describe("fixtures/demo-case.json", () => {
+  it("is a byte copy of the segments demo case", () => {
+    const a = readFileSync(join(repo, "crates", "shadowrunr-segments", "data", "demo-case.json"), "utf8");
+    const b = readFileSync(join(root, "fixtures", "demo-case.json"), "utf8");
+    expect(b.replace(/\r\n/g, "\n")).toBe(a.replace(/\r\n/g, "\n"));
   });
 });

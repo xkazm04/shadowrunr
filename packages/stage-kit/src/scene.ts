@@ -1,0 +1,327 @@
+// The event → scene reducer. Pure: `reduce(state, event)` returns a new state and never reads a
+// clock. Everything time-based in the view is derived from event timestamps (`at`) and the
+// playback clock, so seeking is just "fold the events up to t".
+
+import type { ChatMsg, StreamEvent } from "@shadowrunr/contract";
+import type { ChatMemory } from "./chatMemory";
+import { RANK_WEIGHT } from "./lore";
+import {
+  CHAT_MEMORY_MAX,
+  DECREE_MAX,
+  JOB_MAX,
+  LANE_MAX,
+  MOMENT_MAX,
+  REDACTION_MAX,
+  initialScene,
+  layoutFor,
+  type Decree,
+  type Hint,
+  type Job,
+  type LayoutId,
+  type Poll,
+  type Redaction,
+  type SceneState,
+  type Seal,
+  type Transition,
+} from "./sceneModel";
+import { RANKS, type TsMs } from "./vocab";
+
+function switchLayout(
+  s: SceneState,
+  to: LayoutId,
+  at: TsMs,
+  cause: Transition["cause"],
+  reason?: string,
+): SceneState {
+  if (s.layout === to) return s;
+  const seq = s.seq + 1;
+  const transition: Transition = { id: seq, from: s.layout, to, at, cause };
+  if (reason !== undefined) transition.reason = reason;
+  return { ...s, seq, layout: to, transition };
+}
+
+/** Match a chat vote to a poll option: exact (case-insensitive) text, or a 1-based index. */
+export function matchOption(options: string[], raw: string): string | null {
+  const want = raw.trim().toLowerCase();
+  if (want === "") return null;
+  const exact = options.find((o) => o.toLowerCase() === want);
+  if (exact !== undefined) return exact;
+  if (/^\d+$/.test(want)) {
+    const idx = Number(want) - 1;
+    return options[idx] ?? null;
+  }
+  const prefix = options.filter((o) => o.toLowerCase().startsWith(want));
+  return prefix.length === 1 ? prefix[0]! : null;
+}
+
+function castBallot(poll: Poll, msg: ChatMsg, raw: string): Poll {
+  if (poll.closedAt !== undefined) return poll;
+  if (RANKS.indexOf(msg.viewer.rank) < RANKS.indexOf(poll.minRank)) return poll;
+  const option = matchOption(poll.options, raw);
+  if (option === null) return poll;
+  const observed: Poll["observed"] = {};
+  for (const [k, v] of Object.entries(poll.observed)) observed[k] = { ...v };
+  const prev = poll.ballots[msg.viewer.id];
+  if (prev) {
+    const bucket = observed[prev.option] ?? {};
+    bucket[prev.rank] = Math.max(0, (bucket[prev.rank] ?? 0) - RANK_WEIGHT[prev.rank]);
+    observed[prev.option] = bucket;
+  }
+  const bucket = observed[option] ?? {};
+  bucket[msg.viewer.rank] = (bucket[msg.viewer.rank] ?? 0) + RANK_WEIGHT[msg.viewer.rank];
+  observed[option] = bucket;
+  return {
+    ...poll,
+    observed,
+    ballots: { ...poll.ballots, [msg.viewer.id]: { option, rank: msg.viewer.rank } },
+  };
+}
+
+function addDecree(s: SceneState, d: Decree): Decree[] {
+  const rest = s.decrees.filter((x) => x.msgId !== d.msgId);
+  return [...rest, d].slice(-DECREE_MAX);
+}
+
+function upsertJob(jobs: Job[], id: string, at: TsMs, patch: Partial<Job>): Job[] {
+  const i = jobs.findIndex((j) => j.id === id);
+  if (i === -1) {
+    const job: Job = { id, status: "dispatched", at, updatedAt: at, ...patch };
+    return [...jobs, job].slice(-JOB_MAX);
+  }
+  const next = jobs.slice();
+  next[i] = { ...jobs[i]!, ...patch, updatedAt: at };
+  return next;
+}
+
+/** Keep only the entries whose message is still remembered. */
+function pruneRecord<V>(rec: Record<string, V>, chats: ChatMemory): Record<string, V> {
+  const out: Record<string, V> = {};
+  for (const [id, v] of Object.entries(rec)) if (chats.has(id)) out[id] = v;
+  return out;
+}
+
+function applyChat(s: SceneState, msg: ChatMsg, at: TsMs): SceneState {
+  let lane = [...s.lane.filter((id) => id !== msg.id), msg.id].slice(-LANE_MAX);
+  const grew = s.chats.has(msg.id) ? 0 : 1;
+  const chats = s.chats.with(msg, CHAT_MEMORY_MAX, () => new Set([...lane, ...s.decrees.map((d) => d.msgId)]));
+  let heard = s.heard;
+  let purged = s.purged;
+  if (chats.size < s.chats.size + grew) {
+    // The memory forgot its oldest lines: drop what pointed at them.
+    lane = lane.filter((id) => chats.has(id));
+    const h = new Map<string, TsMs>();
+    for (const [id, t] of heard) if (chats.has(id)) h.set(id, t);
+    heard = h;
+    purged = pruneRecord(purged, chats);
+  }
+  let next: SceneState = { ...s, chats, lane, heard, purged };
+  const cmd = msg.command;
+  if (!cmd) return next;
+  switch (cmd.cmd) {
+    case "vote":
+    case "summon": {
+      const pollId = s.activePoll;
+      const poll = pollId ? s.polls[pollId] : undefined;
+      if (poll && pollId) {
+        const raw = cmd.cmd === "vote" ? cmd.option : cmd.foil;
+        next = { ...next, polls: { ...s.polls, [pollId]: castBallot(poll, msg, raw) } };
+      }
+      return next;
+    }
+    case "hint": {
+      const prev = s.hints[cmd.hex];
+      const hint: Hint = {
+        count: (prev?.count ?? 0) + 1,
+        lastAt: at,
+        lastText: cmd.text,
+        lastBy: msg.viewer.name,
+      };
+      return { ...next, hints: { ...s.hints, [cmd.hex]: hint } };
+    }
+    case "grade": {
+      const prev = s.gradeVotes[cmd.hex] ?? {};
+      const votes = { ...prev, [cmd.grade]: (prev[cmd.grade] ?? 0) + 1 };
+      return { ...next, gradeVotes: { ...s.gradeVotes, [cmd.hex]: votes } };
+    }
+    case "propose":
+      return next;
+  }
+}
+
+/** Apply one event. Pure. */
+export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
+  const at = ev.ts_ms;
+  let s: SceneState = {
+    ...prev,
+    t0: prev.t0 ?? at,
+    lastTs: prev.lastTs === null ? at : Math.max(prev.lastTs, at),
+    applied: prev.applied + 1,
+  };
+  switch (ev.type) {
+    case "stream_start":
+      return {
+        ...s,
+        meta: {
+          streamId: ev.stream_id,
+          character: ev.character,
+          toneVariant: ev.tone_variant,
+          coreTier: ev.core_tier,
+          audienceSize: ev.audience_size,
+          at,
+        },
+      };
+    case "segment_start":
+      s = { ...s, segment: ev.segment, pendingSwitch: null };
+      return switchLayout(s, layoutFor(ev.segment), at, "segment_start");
+    case "segment_end": {
+      const seal: Seal = { segment: ev.segment, at };
+      if (ev.ses !== undefined) seal.ses = ev.ses;
+      return { ...s, seals: [...s.seals, seal] };
+    }
+    case "case_open":
+      return { ...s, caseFile: ev.case };
+    case "handover":
+      s = { ...s, segment: ev.to, pendingSwitch: null };
+      return switchLayout(s, layoutFor(ev.to), at, "handover", ev.reason);
+    case "chat":
+      return applyChat(s, ev.msg, at);
+    case "picked": {
+      const heard = new Map(s.heard);
+      let decrees = s.decrees;
+      for (const id of ev.msg_ids) {
+        heard.set(id, at);
+        if (s.chats.has(id) && !s.purged[id]) {
+          decrees = addDecree(
+            { ...s, decrees },
+            { key: `p${s.seq + 1}-${id}`, msgId: id, kind: "picked", at, reason: ev.reason },
+          );
+        }
+      }
+      return { ...s, heard, decrees, seq: s.seq + 1 };
+    }
+    case "say": {
+      const seq = s.seq + 1;
+      if (ev.speaker === "foil") {
+        const foil = ev.foil ?? s.foil?.id ?? "foil";
+        return { ...s, seq, foilLine: { id: seq, foil, text: ev.text, at } };
+      }
+      const replyingTo = (ev.replying_to ?? [])
+        .map((id) => s.chats.get(id)?.viewer.name)
+        .filter((n): n is string => n !== undefined);
+      return { ...s, seq, caption: { id: seq, text: ev.text, at, replyingTo } };
+    }
+    case "op":
+      return applyOp(s, ev.op, at);
+    case "vote": {
+      const poll = s.polls[ev.poll_id];
+      if (!poll) {
+        // A tally for a poll we never saw open (a mid-stream join): show it with what we know.
+        const fresh: Poll = {
+          id: ev.poll_id,
+          question: "The minions are voting",
+          options: ev.tallies.map((t) => t.option),
+          minRank: "thrall",
+          secs: 0,
+          openedAt: at,
+          tallies: ev.tallies,
+          observed: {},
+          ballots: {},
+        };
+        if (ev.closed) fresh.closedAt = at;
+        return { ...s, polls: { ...s.polls, [ev.poll_id]: fresh }, activePoll: ev.poll_id };
+      }
+      const next: Poll = { ...poll, tallies: ev.tallies };
+      if (ev.closed && next.closedAt === undefined) next.closedAt = at;
+      return { ...s, polls: { ...s.polls, [ev.poll_id]: next } };
+    }
+    case "moderation": {
+      if (ev.stage === "output") {
+        const seq = s.seq + 1;
+        const red: Redaction = { key: `r${seq}`, at, rule: ev.rule, action: ev.action };
+        return { ...s, seq, redactions: [...s.redactions, red].slice(-REDACTION_MAX) };
+      }
+      if (ev.msg_id !== undefined) {
+        const id = ev.msg_id;
+        return {
+          ...s,
+          purged: { ...s.purged, [id]: ev.rule },
+          decrees: s.decrees.filter((d) => d.msgId !== id),
+        };
+      }
+      return s;
+    }
+    case "job": {
+      const patch: Partial<Job> = { status: ev.status };
+      if (ev.summary !== undefined) patch.summary = ev.summary;
+      return { ...s, jobs: upsertJob(s.jobs, ev.job_id, at, patch) };
+    }
+    case "stream_end":
+      return { ...s, ended: { reason: ev.reason, at } };
+  }
+}
+
+function applyOp(s: SceneState, op: Extract<StreamEvent, { type: "op" }>["op"], at: TsMs): SceneState {
+  switch (op.op) {
+    case "highlight": {
+      if (!s.chats.has(op.msg_id) || s.purged[op.msg_id]) return s;
+      const seq = s.seq + 1;
+      return {
+        ...s,
+        seq,
+        decrees: addDecree(s, { key: `h${seq}`, msgId: op.msg_id, kind: "highlight", at }),
+      };
+    }
+    case "start_poll": {
+      const poll: Poll = {
+        id: op.poll_id,
+        question: op.question,
+        options: op.options,
+        minRank: op.min_rank,
+        secs: op.secs,
+        openedAt: at,
+        tallies: op.options.map((option) => ({ option, voters: 0, weight: 0 })),
+        observed: {},
+        ballots: {},
+      };
+      return { ...s, polls: { ...s.polls, [op.poll_id]: poll }, activePoll: op.poll_id };
+    }
+    case "close_poll": {
+      const poll = s.polls[op.poll_id];
+      if (!poll) return s;
+      if (poll.closedAt !== undefined) return s;
+      return { ...s, polls: { ...s.polls, [op.poll_id]: { ...poll, closedAt: at } } };
+    }
+    case "summon_foil":
+      return { ...s, foil: { id: op.foil, since: at }, foilLine: null };
+    case "dismiss_foil":
+      return { ...s, foil: null, foilLine: null };
+    case "reveal_hex": {
+      const hexes = { ...s.hexes, [op.hex]: { grade: op.grade, revealedAt: at } };
+      const revealOrder = [...s.revealOrder.filter((h) => h !== op.hex), op.hex];
+      return { ...s, hexes, revealOrder };
+    }
+    case "dispatch_research":
+      return {
+        ...s,
+        jobs: upsertJob(s.jobs, op.job_id, at, { brief: op.brief, status: "dispatched" }),
+      };
+    case "show_card":
+      return { ...s, card: { id: op.card_id, title: op.title, body: op.body, at } };
+    case "mark_moment":
+      return { ...s, moments: [...s.moments, { label: op.label, at }].slice(-MOMENT_MAX) };
+    case "switch_segment":
+      return { ...s, pendingSwitch: { to: op.to, at } };
+    case "sign_off":
+      return { ...s, outro: { reason: op.reason, at } };
+  }
+}
+
+/** Fold a list of events. */
+export function foldEvents(events: readonly StreamEvent[], upTo = Number.POSITIVE_INFINITY): SceneState {
+  let s = initialScene();
+  for (const ev of events) {
+    if (ev.ts_ms > upTo) break;
+    s = reduce(s, ev);
+  }
+  return s;
+}

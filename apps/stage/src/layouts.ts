@@ -2,7 +2,7 @@
 // region in 1920x1080 canvas pixels. Switching layouts moves the same React elements to new
 // rects with a CSS transition, so a handover visibly re-arranges the stage instead of cutting.
 
-import type { LayoutId } from "./scene";
+import type { LayoutId } from "@shadowrunr/stage-kit";
 
 export interface Rect {
   x: number;

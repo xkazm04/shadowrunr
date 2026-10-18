@@ -1,0 +1,106 @@
+/* On Air's poster body: brand bar, hero (title, screen, progress, transport) and the credit
+   foot. The winner's l1.css frame and `.ob-*` rules over tokens; the page palette comes from
+   [data-page="onair"] (--sr-page-*). */
+
+.l1 {
+  /* The screen's width: as wide as the poster allows while the 16:9 frame fits the height. */
+  --sw: min(94%, calc((100vh - 20.5rem) * 1.7778));
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  color: var(--sr-page-type);
+}
+
+.top,
+.hero,
+.foot { width: min(100%, var(--sr-layout-body-measure)); margin-right: auto; margin-left: auto; }
+
+.top { display: flex; flex: none; align-items: center; height: 3.2rem; padding-right: 23rem; }
+.brand { display: flex; align-items: center; gap: var(--sr-space-cozy); font-family: var(--sr-font-display); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.brand svg { flex: none; width: var(--sr-size-title); height: var(--sr-size-title); }
+.brand b { font-size: var(--sr-size-subhead); font-weight: var(--sr-weight-bold); }
+.brand span { padding-left: var(--sr-space-cozy); border-left: var(--sr-stroke-rule) solid currentcolor; font-size: var(--sr-size-body); font-weight: var(--sr-weight-semibold); letter-spacing: .16em; opacity: .85; }
+
+.hero { position: relative; flex: 1; min-height: 0; }
+
+/* The huge title, overprinted twice (fidelity role: the layer-1 graphic). */
+.title {
+  position: absolute;
+  left: -.3rem;
+  top: -.4rem;
+  display: flex;
+  gap: .22em;
+  color: var(--sr-page-type);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: 15.5rem;
+  line-height: .74;
+  letter-spacing: -.005em;
+  text-transform: uppercase;
+  text-shadow: .04em .03em 0 var(--sr-page-overprint-2), .075em .06em 0 var(--sr-page-overprint);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.screenSlot,
+.prog,
+.ctl { position: absolute; right: 0; width: var(--sw); }
+.screenSlot { bottom: 3.1rem; }
+
+.prog { bottom: 2.55rem; height: .28rem; background: color-mix(in srgb, var(--sr-color-surface-void) 25%, transparent); }
+.prog i { display: block; height: 100%; background: var(--sr-page-type); transform: scaleX(var(--from, 0)); transform-origin: left; }
+.prog i[data-run] { animation: progress var(--rest, 0ms) linear forwards; }
+@keyframes progress { from { transform: scaleX(var(--from, 0)); } to { transform: scaleX(1); } }
+
+.ctl { bottom: 0; display: flex; align-items: center; gap: var(--sr-space-compact); height: 2.3rem; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-body); letter-spacing: .08em; text-transform: uppercase; }
+.ctl button,
+.pick { padding: var(--sr-space-tick) var(--sr-space-close); border: var(--sr-stroke-rule) solid var(--sr-page-type); background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.ctl button:hover:not(:disabled),
+.pick:hover { background: var(--sr-page-type); color: var(--sr-page-face); }
+.ctl button:disabled { cursor: default; opacity: .45; }
+.pick { max-width: 24rem; background: var(--sr-page-type); color: var(--sr-page-face); }
+.sp { flex: 1; }
+.lab { letter-spacing: .16em; opacity: .8; }
+
+.foot { position: relative; z-index: var(--sr-z-poster-spine); display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--sr-space-base); height: 3.5rem; margin-bottom: .15rem; border-top: var(--sr-stroke-rule) solid currentcolor; }
+.credit { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-small); line-height: 1.25; letter-spacing: .1em; text-transform: uppercase; }
+.credit span { display: block; max-width: 48rem; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); font-size: var(--sr-size-caption); letter-spacing: .01em; text-transform: none; white-space: nowrap; opacity: .9; }
+.cta {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sr-space-close);
+  padding: .45rem var(--sr-space-base);
+  background: var(--sr-page-type);
+  color: var(--sr-page-face);
+  box-shadow: .25rem .25rem 0 var(--sr-page-overprint);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-kicker);
+  letter-spacing: .1em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: transform .2s, box-shadow .2s;
+}
+.cta:hover,
+.cta:focus-visible { transform: translate(-.12rem, -.12rem); box-shadow: .4rem .4rem 0 var(--sr-page-overprint); }
+.cta i { width: 0; height: 0; border: var(--sr-space-compact) solid transparent; border-right: 0; border-left: .75rem solid currentcolor; }
+
+/* Narrow screens (760px at the browser's base size): a portrait composition. */
+@media (max-width: 47.5rem) {
+  .l1 { --sw: 100%; overflow: hidden auto; }
+  .top { height: 2.4rem; padding-right: 0; }
+  .brand span { display: none; }
+  .hero { display: flex; flex: none; flex-direction: column; min-height: 0; }
+  .title { position: relative; left: 0; top: 0; margin-bottom: var(--sr-space-tight); font-size: 8rem; line-height: .76; }
+  .screenSlot,
+  .prog,
+  .ctl { position: relative; right: auto; bottom: auto; width: 100%; }
+  .prog { margin-top: var(--sr-space-cozy); }
+  .ctl { flex-wrap: wrap; height: auto; padding: var(--sr-space-tight) 0; }
+  .sp { display: none; }
+  .foot { flex-direction: column; align-items: stretch; height: auto; padding: var(--sr-space-compact) 0 var(--sr-space-close); }
+  .credit span { white-space: normal; }
+  .cta { justify-content: center; }
+}

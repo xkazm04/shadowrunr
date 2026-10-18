@@ -3,22 +3,31 @@
 
 import type { CSSProperties, ReactNode } from "react";
 
-import type { Case } from "./contract";
-import { Silhouette } from "./art/Silhouette";
-import type { MapModel } from "./hexgrid";
+import type { Case } from "@shadowrunr/contract";
+import { captionOpacity, wordTimings, type MapModel, type SceneState } from "@shadowrunr/stage-kit";
+import {
+  CaptionPanel,
+  ChatLane,
+  Decrees,
+  DisclosureBadge,
+  ExplainerCard,
+  FoilCard,
+  GradeTallyPanel,
+  HexInspector,
+  Hexmap,
+  Intro,
+  JobTicker,
+  MomentMarks,
+  ObserverBadge,
+  Outro,
+  SealToast,
+  Silhouette,
+  TopBar,
+  TransitionWipe,
+  VotePanel,
+  visiblePoll,
+} from "@shadowrunr/stage-kit/ui";
 import { layoutRects, type Rect, type Region } from "./layouts";
-import type { SceneState } from "./scene";
-import { CaptionPanel } from "./ui/Caption";
-import { ChatLane } from "./ui/ChatLane";
-import { Decrees } from "./ui/Decrees";
-import { ExplainerCard } from "./ui/ExplainerCard";
-import { FoilCard, ObserverBadge } from "./ui/FoilCard";
-import { Hexmap } from "./ui/Hexmap";
-import { GradeTallyPanel, HexInspector } from "./ui/HexPanels";
-import { JobTicker } from "./ui/JobTicker";
-import { DisclosureBadge, Intro, MomentMarks, Outro, SealToast, TopBar, TransitionWipe } from "./ui/Overlays";
-import { VotePanel, visiblePoll } from "./ui/VotePanel";
-import { captionOpacity, wordTimings } from "./timing";
 
 function RegionBox({ name, rect, children }: { name: Region; rect: Rect; children: ReactNode }) {
   const style: CSSProperties = { left: rect.x, top: rect.y, width: rect.w, height: rect.h };
