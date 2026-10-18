@@ -1,18 +1,24 @@
 // Brain layer 1: the winner's poster frame around A/1's oscilloscope wall (app.js:333-391).
 // Lanes per run cell, the memory curve, the first-word gauge, role lamps and the picker funnel,
 // each a lit panel that pushes in to its nested page. Canvases draw on input change only. The
-// gauge reads the newest Reconcile report's first-word latency when one exists.
-import { useCallback } from "react";
+// gauge reads the newest Reconcile report's first-word latency when one exists. The brand row
+// carries the pre-flight lamp (PreflightLamp); the letterbox bands around the scene carry the
+// winner's Brain face motif (BandArt).
+import { useCallback, useRef } from "react";
 import type { TournamentsPage } from "@shadowrunr/contract";
 import { TOKENS_BRAIN } from "@shadowrunr/tokens";
 import { QueryView } from "../../kit";
+import { LetterboxBands, bandOf, useBoxSize } from "../../kit/LetterboxBands";
 import { PosterFrame } from "../../kit/PosterFrame";
 import { useRpc } from "../../data";
 import { RouteLink, pageRoute } from "../../router";
 import { DegradedState, EmptyState } from "../../ui/States";
 import { useBrainWindow, type BrainWindow } from "./useBrain";
 import { FunnelChart, Gauge, Lamps } from "./Instruments";
+import { BrainBandBottom, BrainBandTop } from "./BandArt";
+import bandStyles from "./BandArt.module.css";
 import { Plot } from "./Plot";
+import { PreflightLamp } from "./PreflightLamp";
 import type { BrainModel, Latency } from "./brainModel";
 import { drawMemory, drawScope, roleColor, type Ctx, type Size } from "./draw";
 import { int } from "../../kit/events";
@@ -149,17 +155,26 @@ export function Layer1({ active }: { readonly active: boolean }) {
 
 function Wall() {
   const win = useBrainWindow();
+  const hero = useRef<HTMLDivElement>(null);
+  const scene = useRef<HTMLDivElement>(null);
+  const band = bandOf(useBoxSize(hero), useBoxSize(scene));
   return (
     <PosterFrame
       className={styles.root}
       role="brain-layer1"
       heading="Layer 1 · The Brain"
-      topExtra={win.truncated && <span className={styles.flag}>Newest tournament · first pages only</span>}
+      topExtra={
+        <>
+          {win.truncated && <span className={styles.flag}>Newest tournament · first pages only</span>}
+          <PreflightLamp />
+        </>
+      }
       credit={`Directed by the core thread · ${win.tournamentId ?? "no tournament yet"}`}
       cta={{ to: ENGINE, label: "Open the engine and transcripts", role: "push-in" }}
     >
-      <div className={styles.hero} data-role="brain-hero" data-tournament={win.tournamentId}>
-        <div className={styles.scene} data-role="brain-scene">
+      <div ref={hero} className={styles.hero} data-role="brain-hero" data-tournament={win.tournamentId}>
+        <LetterboxBands band={band} top={<BrainBandTop />} bottom={<BrainBandBottom />} role="brain-band" className={bandStyles.band} />
+        <div ref={scene} className={styles.scene} data-role="brain-scene">
           <Backdrop />
           <Hero win={win} />
         </div>

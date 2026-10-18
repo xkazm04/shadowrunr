@@ -1,6 +1,7 @@
 // The shell: the wall, the poster in front (layer 1), the spine and spread (layer 2), the mixer
 // bus, the chrome and the intro. It owns no page content: pages plug in through `PageRegistry`.
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { emitKeyCommand } from "../kit/keyCommands";
 import { KEYMAP, installKeymap } from "../keys";
 import { StatePanel } from "../ui/States";
 import { PAGE_IDS, WALL, crumbs, encodeRoute, layerOf, pageRoute, up, useRoute, useRouter, type LabelOf, type PageId } from "../router";
@@ -87,6 +88,7 @@ export function Shell(props: ShellProps) {
             hitRefs.current[fx.index]?.focus({ preventScroll: true });
           } else if (fx.kind === "skip-intro") finishIntro();
           else if (fx.kind === "blur" && document.activeElement instanceof HTMLElement) document.activeElement.blur();
+          else if (fx.kind === "command") emitKeyCommand(fx.command);
         },
       }),
     [router, finishIntro],

@@ -1,12 +1,13 @@
 // On Air, layer 1: the poster body (brand bar, the huge "On Air" title, the stream screen, the
 // replay transport and the credit with its call to action), as the winner's l1.js `onair`.
 // The screen replays a real run (runs.page + run.transcript) or follows the live feed; A/1's
-// selector picks which.
-import type { SegmentTables } from "@shadowrunr/contract";
+// selector picks which. When the latest pre-flight has a red check, the transport says so and
+// links to Brain's board (the same `preflight.run` query entry the board reads).
+import type { PreflightRunResult, SegmentTables } from "@shadowrunr/contract";
 import type { CSSProperties } from "react";
 import { useConnection, useRpc } from "../../data";
 import { PosterFrame } from "../../kit/PosterFrame";
-import { pageRoute } from "../../router";
+import { RouteLink, pageRoute } from "../../router";
 import { LIVE, runSource, sourceKey, useOnAirFeed, type OnAirFeed } from "./feed";
 import styles from "./Layer1.module.css";
 import type { FeedSnapshot } from "./player";
@@ -52,7 +53,16 @@ function Progress({ snap }: { snap: FeedSnapshot }) {
   );
 }
 
-function Transport({ feed }: { feed: OnAirFeed }) {
+/** The one preflight query's params (Brain's board reads the same cache entry). */
+const PREFLIGHT_PARAMS = {} as const;
+const PREFLIGHT_BOARD = pageRoute("brain", "preflight");
+
+/** The red checks of the latest pre-flight, by id; empty when none is red or none has run. */
+export function redChecks(reports: PreflightRunResult | undefined): string[] {
+  return (reports ?? []).filter((r) => r.state === "red").map((r) => r.check);
+}
+
+function Transport({ feed, red }: { feed: OnAirFeed; red: readonly string[] }) {
   const { snapshot, source, runs } = feed;
   const items = runs.data?.items ?? [];
   const value = source ? sourceKey(source) : "";
@@ -65,6 +75,11 @@ function Transport({ feed }: { feed: OnAirFeed }) {
       <button type="button" disabled={snapshot.live || !feed.feed} onClick={() => feed.feed?.restart()}>
         Restart
       </button>
+      {red.length > 0 && (
+        <RouteLink to={PREFLIGHT_BOARD} className={styles.pfRed} data-role="onair-preflight-red" title={`Red: ${red.join(", ")}. Open the pre-flight board`}>
+          Pre-flight red
+        </RouteLink>
+      )}
       <span className={styles.sp} />
       <span className={styles.lab}>{source?.kind === "live" ? "Live" : "Replay"}</span>
       <select
@@ -104,6 +119,8 @@ export function Layer1({ active }: { readonly active: boolean }) {
   // The Lord's dispatch on the slip: the plan the operator chose (absent until one is chosen).
   const plan = useRpc("plan.current", active ? {} : null);
   const tone = useActiveTone(active);
+  const preflight = useRpc("preflight.run", active ? PREFLIGHT_PARAMS : null);
+  const red = redChecks(preflight.data);
   const { pills, descoped } = pillsOf(tables.data);
   const state = screenState(feed, conn.summary === "offline");
   const run = feed.source?.kind === "run" ? feed.source : null;
@@ -127,7 +144,7 @@ export function Layer1({ active }: { readonly active: boolean }) {
           <Screen snapshot={feed.snapshot} pills={pills} descoped={descoped} chatRoute={chatRoute} status={state.status} offAir={state.offAir} dispatch={plan.data?.lord_dispatch} />
         </div>
         <Progress snap={feed.snapshot} />
-        <Transport feed={feed} />
+        <Transport feed={feed} red={red} />
       </div>
     </PosterFrame>
   );

@@ -1,10 +1,12 @@
 // One run in the rundown: its segment spans as the winner's timeline bar, its counts, its beats
-// (virtualised: a 100k-line transcript can hold thousands) and a button to replay it on screen.
+// (virtualised: a 100k-line transcript can hold thousands), a button to replay it on screen and
+// one to open it on the broadcast stage.
 import type { StreamEvent } from "@shadowrunr/contract";
 import { segmentSpans } from "@shadowrunr/stage-kit";
 import { useMemo } from "react";
 import { useRpc } from "../../data";
 import { QueryView } from "../../kit";
+import { OpenInStage } from "../../kit/OpenInStage";
 import { RouteLink, pageRoute, useRouter } from "../../router";
 import { Section } from "../../ui/Section";
 import { StatBand } from "../../ui/StatBand";
@@ -49,6 +51,7 @@ function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent
         >
           Replay on screen
         </button>
+        <OpenInStage runId={`${tournamentId}/${runId}`} className={styles.primary} role="onair-open-stage" />
         <RouteLink to={pageRoute("brain", "transcripts", runId)} className={styles.more}>
           Read the transcript
         </RouteLink>

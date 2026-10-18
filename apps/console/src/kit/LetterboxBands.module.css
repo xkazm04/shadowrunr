@@ -1,0 +1,5 @@
+/* The letterbox bands: full width, outside the scene's box, transparent to the pointer. The page
+   sizes its art; the band crops it. */
+.band { position: absolute; left: 0; right: 0; overflow: hidden; pointer-events: none; }
+.top { top: 0; }
+.bottom { bottom: 0; }

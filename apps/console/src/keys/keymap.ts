@@ -15,7 +15,11 @@ export type KeyAction =
   | { readonly type: "wall-focus"; readonly delta: 1 | -1 }
   | { readonly type: "page-step"; readonly delta: 1 | -1 }
   | { readonly type: "skip-intro" }
-  | { readonly type: "blur" };
+  | { readonly type: "blur" }
+  | { readonly type: "command"; readonly command: KeyCommand };
+
+/** A page command (kit/keyCommands.ts): the page on screen that owns it runs it. */
+export type KeyCommand = "rerun";
 
 /**
  * When a binding fires relative to text entry: `never` (the default) does not fire while an
@@ -53,6 +57,7 @@ export const KEYMAP: readonly Binding[] = [
   { chord: "ArrowDown", modes: ["wall"], action: { type: "wall-focus", delta: 1 }, label: "Next poster" },
   { chord: "ArrowLeft", modes: ["l1"], action: { type: "page-step", delta: -1 }, label: "Previous page" },
   { chord: "ArrowRight", modes: ["l1"], action: { type: "page-step", delta: 1 }, label: "Next page" },
+  { chord: "r", modes: ["l2"], action: { type: "command", command: "rerun" }, label: "Re-run the page's check" },
 ];
 
 /** The fields of a KeyboardEvent the keymap reads. */

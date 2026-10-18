@@ -1,0 +1,2 @@
+/* The opener's failure line, beside the button that tried. */
+.error { color: var(--sr-color-fail); font-size: var(--sr-size-small); }

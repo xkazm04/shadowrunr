@@ -1,0 +1,24 @@
+/* Simulator's band art over the page palette (the winner's poster.css .pf-motif: the face colour
+   under the motif at the active poster's .22). */
+.band { background: var(--sr-page-face); }
+/* The winner's motif spans the whole poster face; the hero sits inside the body's side padding
+   (shell Poster.module.css .body: --sr-space-roomy each side). The art keeps the face's width and
+   centre, so its scale is the winner's, and the band crops the overhang. It crops (slice) and
+   never stretches when a band grows taller. */
+.art {
+  display: block;
+  width: calc(100% + 2 * var(--sr-space-roomy));
+  height: 100%;
+  margin-left: calc(-1 * var(--sr-space-roomy));
+  opacity: .22;
+  color: var(--sr-page-type);
+}
+.t { fill: var(--sr-page-type); }
+.o { fill: var(--sr-page-overprint); }
+.k { fill: var(--sr-page-key); }
+.a { animation: breathe 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes breathe { 50% { transform: scale(1.06) translateY(-1%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .a { animation: none; }
+}

@@ -2,41 +2,20 @@
 // A/1's backdrop and the grid on a canvas that covers the grid area only, as A/1's does. One tile
 // per tournament, one cell per run, hover hit-testing and a marquee; a click opens the tournament
 // (push-in from the grid). The canvas redraws only when its tiles, its size or the hovered tile
-// change: no animation loop.
+// change: no animation loop. The letterbox bands carry the winner's Simulator face motif (BandArt).
 import { TOKENS_SIM } from "@shadowrunr/tokens";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { LetterboxBands, bandOf, useBoxSize } from "../../kit/LetterboxBands";
 import { pageRoute, useRouter } from "../../router";
 import { remPx } from "../../ui/remPx";
+import { SimBandBottom, SimBandTop } from "./BandArt";
+import bandStyles from "./BandArt.module.css";
 import { drawGrid, tileLabel } from "./draw";
 import { gridLayout, gridRect, hitTest, type Tile } from "./grid";
 import styles from "./SimScreen.module.css";
 
 /** Under this many rem of hero width the screen stacks (grid on top, HUD below) and fills the hero. */
 export const NARROW_REM = 40;
-
-interface Size {
-  readonly w: number;
-  readonly h: number;
-}
-
-/** The element's size, re-read on resize only (ResizeObserver; jsdom has none and keeps 0). */
-function useSize(ref: RefObject<HTMLElement | null>): Size {
-  const [size, setSize] = useState<Size>({ w: 0, h: 0 });
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const read = () => {
-      const r = el.getBoundingClientRect();
-      setSize((s) => (s.w === r.width && s.h === r.height ? s : { w: r.width, h: r.height }));
-    };
-    read();
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(read);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [ref]);
-  return size;
-}
 
 const heldText = (h: number | undefined) => (h === undefined ? "not judged yet" : `${Math.round(h * 100)}% held`);
 
@@ -62,14 +41,16 @@ export function SimScreen(props: { tiles: readonly Tile[]; children?: ReactNode 
   const frame = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
-  const hero = useSize(frame);
-  const size = useSize(wrap);
+  const hero = useBoxSize(frame);
+  const size = useBoxSize(wrap);
   const [hover, setHover] = useState(-1);
   const narrow = hero.w > 0 && hero.w < NARROW_REM * remPx();
   // The grid's box in the scene (A/1's pos 2, 13, 74, 84); the canvas is exactly this box.
   const area = gridRect(size.w, size.h, narrow);
   const layout = gridLayout(area.w, area.h);
   const hovered = hover >= 0 ? tiles[hover] : undefined;
+  // Stacked, the screen fills the hero: no band.
+  const band = narrow ? 0 : bandOf(hero, size);
 
   // One draw per change of tiles, size or hover (A/1 drew every frame; this draws on input).
   useEffect(() => {
@@ -100,6 +81,7 @@ export function SimScreen(props: { tiles: readonly Tile[]; children?: ReactNode 
 
   return (
     <div ref={frame} className={styles.frame} data-stack={narrow}>
+      <LetterboxBands band={band} top={<SimBandTop />} bottom={<SimBandBottom />} role="simulator-band" className={bandStyles.band} />
       <div ref={wrap} className={styles.screen} data-role="simulator-screen" data-hot={hover >= 0}>
         <Backdrop />
         <canvas

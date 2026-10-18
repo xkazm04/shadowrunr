@@ -25,6 +25,8 @@
       "portViewport": "1586x868",
       "$comment": "A/1's scene is 1253 x 634 px at 1440x1000 on a 16 px root (its type is in container units of the scene). The harness holds the same scene, 1253 px wide on a 16 px root, at 1586x868."
     },
+    "brain-art": { "source": "winner", "route": "#/brain", "viewport": "1440x1000" },
+    "simulator-art": { "source": "winner", "route": "#/simulator", "viewport": "1440x1000" },
     "simulator-a1": {
       "source": "a1",
       "route": "#/simulator",
@@ -81,8 +83,16 @@
     "brain-a1.gauge": { "winner": ".sc-brain > :nth-child(4)", "port": "[data-role=brain-latency]", "position": true },
     "brain-a1.gaugesvg": { "winner": ".sc-brain > :nth-child(4) svg", "port": "[data-role=brain-gauge]" },
 
+    "brain-art.motif": { "winner": "#poster-brain .pf-motif", "port": "[data-role=brain-band-art]" },
+    "brain-art.rings": { "winner": "#poster-brain .pf-motif g", "port": "[data-role=brain-band-rings]" },
+    "brain-art.pulse": { "winner": "#poster-brain .pf-motif path", "port": "[data-role=brain-band-pulse]" },
+
     "simulator.face": { "winner": "#poster-simulator", "port": "#poster-simulator" },
     "simulator.cta": { "winner": "#poster-simulator .b-cta", "port": "#poster-simulator [data-role=push-in]" },
+
+    "simulator-art.motif": { "winner": "#poster-simulator .pf-motif", "port": "[data-role=simulator-band-art]" },
+    "simulator-art.dots": { "winner": "#poster-simulator .pf-motif g.m-t", "port": "[data-role=simulator-band-dots]" },
+    "simulator-art.core": { "winner": "#poster-simulator .pf-motif circle.m-k", "port": "[data-role=simulator-band-core]" },
 
     "simulator-a1.scene": { "winner": ".scene.sc-simulator", "port": "[data-role=simulator-screen]" },
     "simulator-a1.grid": { "winner": ".sc-simulator canvas", "port": "[data-role=simulator-grid]" },

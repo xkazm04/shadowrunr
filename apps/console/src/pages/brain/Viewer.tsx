@@ -1,9 +1,11 @@
 // brain/transcripts/<run>[/<line>]: the virtualised transcript viewer. Type pills and a search
 // filter the lines; a line is a deep link (`.../<line>`), scrolled into view and opened in the
 // detail pane with its raw event. Only a screenful of rows is ever in the DOM (100k lines).
+// "Open in stage" plays the run on the broadcast stage, outside the console.
 import { useDeferredValue, useMemo, useState } from "react";
 import type { RunTranscriptResult, StreamEvent } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
+import { OpenInStage } from "../../kit/OpenInStage";
 import { useRpc } from "../../data";
 import { pageRoute, useRouter } from "../../router";
 import { PillGroup, type PillOption } from "../../ui/PillGroup";
@@ -97,6 +99,7 @@ function Transcript({ run, line, events }: { run: string; line: number | undefin
         <span className={styles.count} aria-live="polite">
           {int(shown.length)} of {int(events.length)} lines
         </span>
+        <OpenInStage runId={run} className={styles.stage} role="brain-open-stage" />
       </div>
       {line !== undefined && selected === undefined && <p className={styles.hint}>This transcript has no line {line}; it ends at line {events.length}.</p>}
       <div className={styles.viewer}>

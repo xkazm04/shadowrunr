@@ -7,7 +7,7 @@ import { BrainMini } from "./Mini";
 const Layer1 = lazy(() => import("./Layer1").then((m) => ({ default: m.Layer1 })));
 const Layer2 = lazy(() => import("./Layer2").then((m) => ({ default: m.Layer2 })));
 
-const LABELS: Readonly<Record<string, string>> = { engine: "The engine", transcripts: "Transcripts" };
+const LABELS: Readonly<Record<string, string>> = { engine: "The engine", transcripts: "Transcripts", preflight: "Pre-flight" };
 
 /** Breadcrumbs: the two nested pages by name, a run id verbatim, a line as `Line n`. */
 export function brainLabel(segment: string, depth: number, parts: readonly string[]): string | undefined {

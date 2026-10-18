@@ -53,6 +53,10 @@
 .ctl button:disabled { cursor: default; opacity: .45; }
 .pick { max-width: 24rem; background: var(--sr-page-type); color: var(--sr-page-face); }
 .sp { flex: 1; }
+/* The pre-flight warning: red ink on the face, a door into Brain's board. */
+.pfRed { padding: var(--sr-space-tick) var(--sr-space-close); border: var(--sr-stroke-rule) solid var(--sr-color-fail); background: var(--sr-color-fail); color: var(--sr-color-text-on-dark); text-decoration: none; letter-spacing: .1em; white-space: nowrap; }
+.pfRed:hover,
+.pfRed:focus-visible { background: var(--sr-page-type); border-color: var(--sr-page-type); color: var(--sr-page-face); }
 .lab { letter-spacing: .16em; opacity: .8; }
 
 /* Narrow screens (760px at the browser's base size): a portrait composition. */

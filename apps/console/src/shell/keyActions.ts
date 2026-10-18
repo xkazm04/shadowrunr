@@ -1,5 +1,5 @@
 // What each keymap action does to the shell, as a pure function of the current state.
-import type { KeyAction, Mode } from "../keys";
+import type { KeyAction, KeyCommand, Mode } from "../keys";
 import { PAGE_IDS, WALL, layerOf, pageRoute, up, type PageId, type Route } from "../router";
 
 export interface KeyContext {
@@ -15,6 +15,7 @@ export type Effect =
   | { readonly kind: "hover"; readonly index: number }
   | { readonly kind: "skip-intro" }
   | { readonly kind: "blur" }
+  | { readonly kind: "command"; readonly command: KeyCommand }
   | { readonly kind: "none" };
 
 const NONE: Effect = { kind: "none" };
@@ -50,6 +51,8 @@ export function effectOf(action: KeyAction, ctx: KeyContext): Effect {
       return { kind: "skip-intro" };
     case "blur":
       return { kind: "blur" };
+    case "command":
+      return { kind: "command", command: action.command };
   }
 }
 

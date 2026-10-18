@@ -20,6 +20,33 @@
   transform: rotate(-1deg);
 }
 
+/* The pre-flight lamp on the brand row (a door into brain/preflight). It sits inside the row's
+   fixed height, so nothing below it moves. Lamp colours read on the brain face. */
+.pf {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sr-space-snug);
+  margin-left: var(--sr-space-base);
+  padding: var(--sr-space-hair) var(--sr-space-close);
+  border: var(--sr-stroke-rule) solid currentcolor;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-small);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  color: inherit;
+}
+.pf:hover,
+.pf:focus-visible { background: var(--sr-page-type); color: var(--sr-page-face); }
+.pf:focus-visible { outline: var(--sr-stroke-rule) solid var(--sr-page-type); outline-offset: .15rem; }
+
+.pfLamp { width: .75rem; height: .75rem; border: var(--sr-stroke-hair) solid var(--sr-color-chrome-ink); border-radius: var(--sr-radius-round); background: var(--sr-brain-text-ash); }
+.pfLamp[data-state="green"] { background: var(--sr-color-ok-bright); }
+.pfLamp[data-state="amber"] { background: var(--sr-brain-text-apricot); }
+.pfLamp[data-state="red"] { background: var(--sr-brain-lamp-error); }
+
 /* The hero letterboxes A/1's scene: A/1's programme feed holds the scene at its 1600:810 aspect
    (the backdrop's viewBox), and every panel position (percent of the scene) and type size
    (cqh of the scene) is A/1's only at that aspect. Stretched to a taller hero, the type grew
