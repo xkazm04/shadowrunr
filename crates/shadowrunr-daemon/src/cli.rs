@@ -535,6 +535,15 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
         void: s.results.void,
         failed_runs: s.results.failed,
     };
+    crate::integrations::activity::notify_once(
+        cfg,
+        crate::integrations::activity::ActivityEvent::tournament_complete(
+            &report.tournament_id,
+            serde_json::json!({"runs": report.runs, "judged": report.judged, "void": report.void,
+                               "failed_runs": report.failed_runs, "dir": report.dir}),
+        ),
+    )
+    .await;
     print_json(&report);
     Ok(ExitCode::SUCCESS)
 }
@@ -583,6 +592,14 @@ async fn reconcile_cmd(
         .await
         .map_err(|e| e.to_string())?;
     let report = rec.report(&report_id).map_err(|e| e.to_string())?;
+    crate::integrations::activity::notify_once(
+        cfg,
+        crate::integrations::activity::ActivityEvent::report_ready(
+            &report_id,
+            serde_json::json!({"summary": report.summary}),
+        ),
+    )
+    .await;
     if json {
         print_json(&report);
     } else {
@@ -607,6 +624,7 @@ async fn daemon_cmd(cfg: Config, port: Option<u16>, scripted: bool) -> Result<Ex
     let engine = EngineHandle::build(&cfg, scripted);
     let scripted = engine.is_scripted();
     let state = server::AppState::new(cfg, engine);
+    crate::integrations::activity::start_for_daemon(&state);
     let (addr, serve) = server::bind(state.clone(), port)
         .await
         .map_err(|e| format!("bind 127.0.0.1:{port}: {e}"))?;

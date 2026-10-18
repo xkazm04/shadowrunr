@@ -171,6 +171,9 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         "reconcile.run" => {
             let p: ReconcileRunParams = params(req.params)?;
             let report_id = state.reconciler.run(source(p.source)).await?;
+            crate::integrations::activity::emit(
+                crate::integrations::activity::ActivityEvent::report_ready(&report_id, json!({})),
+            );
             ok(ReconcileRunResult { report_id })
         }
         "reconcile.report" => {

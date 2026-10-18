@@ -230,3 +230,10 @@ shadowrunr character rules malakor                          # list optional rule
 shadowrunr character rules malakor --disable crisis-handoff  # operator override in <data>/characters/malakor/rules.json
 shadowrunr policy install-list awdev1-better-profane-words   # downloads into policy/local/ (git-ignored, GPL-3.0, never committed)
 ```
+
+## Personas
+
+```
+shadowrunr personas status [--json]   # verifies the Personas registration (exit 3 = Personas not running)
+shadowrunr mcp                        # stdio MCP server for Athena (see docs/guide/personas.md)
+```

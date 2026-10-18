@@ -39,7 +39,7 @@ pub fn any_red(reports: &[HealthReport]) -> bool {
 
 /// Run all eight checks, in order.
 pub async fn run_all(cfg: &Config, engine: &EngineHandle) -> Vec<HealthReport> {
-    vec![
+    let mut reports = vec![
         pf01_engine(engine).await,
         pf02_character(cfg),
         pf03_memory(cfg),
@@ -48,7 +48,10 @@ pub async fn run_all(cfg: &Config, engine: &EngineHandle) -> Vec<HealthReport> {
         pf06_calibration(cfg),
         pf07_disk(cfg),
         pf08_media(),
-    ]
+    ];
+    // PF-09 (integrations) appears only when Personas activity is configured.
+    reports.extend(crate::integrations::activity::preflight_line(cfg).await);
+    reports
 }
 
 /// PF-01: the engine's own health (WP1), folded into one report.
