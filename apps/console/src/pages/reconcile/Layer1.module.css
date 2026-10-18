@@ -5,55 +5,9 @@
 
 .root { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--sr-page-type); }
 
-.top,
-.hero,
-.foot { width: min(100%, var(--sr-layout-body-measure)); margin-left: auto; margin-right: auto; }
-
-.top { flex: none; height: 3.2rem; display: flex; align-items: center; padding-right: 23rem; }
-
-.brand { display: flex; align-items: center; gap: var(--sr-space-cozy); font-family: var(--sr-font-display); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
-.brand svg { width: 1.7rem; height: 1.7rem; flex: none; }
-.brand b { font-size: var(--sr-size-subhead); font-weight: var(--sr-weight-bold); }
-.brand span { font-size: var(--sr-size-body); font-weight: var(--sr-weight-semibold); letter-spacing: .16em; border-left: var(--sr-stroke-rule) solid currentcolor; padding-left: var(--sr-space-cozy); opacity: .85; }
+.hero { width: min(100%, var(--sr-layout-body-measure)); margin-left: auto; margin-right: auto; }
 
 .hero { position: relative; flex: 1; min-height: 0; }
-
-.foot {
-  position: relative;
-  z-index: 4;
-  flex: none;
-  height: 3.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sr-space-base);
-  border-top: var(--sr-stroke-rule) solid currentcolor;
-  margin-bottom: .15rem;
-}
-
-.credit { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-small); letter-spacing: .1em; text-transform: uppercase; line-height: 1.25; }
-.credit span { display: block; white-space: nowrap; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); font-size: var(--sr-size-caption); letter-spacing: .01em; text-transform: none; opacity: .9; max-width: 48rem; }
-
-.cta {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--sr-space-close);
-  background: var(--sr-page-type);
-  color: var(--sr-page-face);
-  font-family: var(--sr-font-display);
-  font-weight: var(--sr-weight-bold);
-  text-transform: uppercase;
-  letter-spacing: .1em;
-  font-size: var(--sr-size-kicker);
-  padding: .45rem var(--sr-space-base);
-  text-decoration: none;
-  box-shadow: .25rem .25rem 0 var(--sr-page-overprint);
-  transition: transform .2s, box-shadow .2s;
-}
-.cta:hover,
-.cta:focus-visible { transform: translate(-.12rem, -.12rem); box-shadow: .4rem .4rem 0 var(--sr-page-overprint); }
-.cta i { width: 0; height: 0; border: .5rem solid transparent; border-left: .75rem solid currentcolor; border-right: 0; }
 
 /* The rising halftone sun (fidelity role: texture). */
 .sun {
@@ -152,8 +106,6 @@
 .slipAction:hover { background: var(--sr-page-overprint-2); }
 
 /* Narrow (the shell's poster carries data-narrow): one column, the numerals inline. */
-[data-narrow="true"] .top { height: auto; flex-wrap: wrap; gap: var(--sr-space-snug); padding: var(--sr-space-tick) 0; }
-[data-narrow="true"] .credit span { white-space: normal; }
 [data-narrow="true"] .hero { min-height: 0; }
 [data-narrow="true"] .sun { bottom: -30rem; }
 [data-narrow="true"] .tri { position: relative; inset: auto; grid-template-columns: 1fr; gap: var(--sr-space-tight); }

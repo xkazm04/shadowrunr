@@ -4,9 +4,8 @@
 // canvas cost does not grow with the season (48k runs) either.
 import { useMemo } from "react";
 import type { RunParams, RunRow, TournamentsPage } from "@shadowrunr/contract";
-import { useRpc, type Query } from "../../data";
+import { usePaged, useRpc, useRpcMany, type Many, type Query } from "../../data";
 import { buildBrainModel, buildLanes, type BrainModel } from "./brainModel";
-import { usePagedRpc, useRpcEach, type MultiQuery } from "./queries";
 
 export const WINDOW = { tournaments: 500, runPages: 4, ledgerPages: 12, pageSize: 500 } as const;
 
@@ -17,7 +16,7 @@ export interface BrainWindow {
   /** The ledger or the run list had more pages than the window reads. */
   readonly truncated: boolean;
   /** A follow-up read failed while the first one answered. */
-  readonly degraded: MultiQuery<unknown> | undefined;
+  readonly degraded: { readonly errorView: Many<unknown>["errorView"]; readonly reload: () => void } | undefined;
 }
 
 /** The tournament the brain shows by default: the last one the daemon lists. */
@@ -41,20 +40,22 @@ export function useBrainWindow(): BrainWindow {
   const tournaments = useRpc("tournaments.page", { limit: WINDOW.tournaments });
   const tid = tournaments.data ? latestTournament(tournaments.data.items) : undefined;
   const base = tid === undefined ? null : { tournament_id: tid, limit: WINDOW.pageSize };
-  const runs = usePagedRpc("runs.page", base, WINDOW.runPages);
-  const ledger = usePagedRpc("ledger.page", base, WINDOW.ledgerPages);
-  const samples = useMemo(() => laneSamples(runs.data.items), [runs.data.items]);
-  const transcripts = useRpcEach("run.transcript", samples);
+  const runs = usePaged("runs.page", base, WINDOW.runPages);
+  const ledger = usePaged("ledger.page", base, WINDOW.ledgerPages);
+  const runItems = runs.query.data;
+  const ledgerItems = ledger.query.data;
+  const samples = useMemo(() => laneSamples(runItems ?? []), [runItems]);
+  const transcripts = useRpcMany("run.transcript", samples);
   const model = useMemo(
-    () => (runs.data.pages > 0 ? buildBrainModel(runs.data.items, ledger.data.items, transcripts.data) : undefined),
-    [runs.data, ledger.data, transcripts.data],
+    () => (runItems !== undefined ? buildBrainModel(runItems, ledgerItems ?? [], transcripts.data) : undefined),
+    [runItems, ledgerItems, transcripts.data],
   );
-  const degraded = [runs, ledger, transcripts].find((q) => q.error !== undefined);
+  const degraded = [runs.query, ledger.query, transcripts].find((q) => q.error !== undefined);
   return {
     tournaments,
     tournamentId: tid,
     model,
-    truncated: runs.data.more || ledger.data.more,
+    truncated: runs.more || ledger.more,
     degraded,
   };
 }

@@ -4,12 +4,17 @@
 import { useMemo } from "react";
 import type { JudgeVerdict, QualityFact, RuleCheck, RunRow, StreamEvent } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
-import { useRpc, type Query } from "../../data";
+import { usePaged, useRpc, type Query } from "../../data";
 import { pageRoute, useRouter } from "../../router";
-import { Chip, FilterTable, Head, Section, State, StatBand, type Column } from "../../ui";
-import { PAGE_LIMIT, usePaged } from "./data";
-import { parseRef, verifyQuote, type QuoteCheck } from "./quote";
-import { int, Note, RefLink, RefList, Found } from "./common";
+import { Chip, State } from "../../ui/Chip";
+import { FilterTable, type Column } from "../../ui/FilterTable";
+import { Head, Section } from "../../ui/Section";
+import { StatBand } from "../../ui/StatBand";
+import { PAGE_LIMIT } from "./data";
+import { parseRef } from "../../kit/events";
+import { verifyQuote, type QuoteCheck } from "./quote";
+import { int } from "../../kit/events";
+import { Note, RefLink, RefList, Found } from "./common";
 import styles from "./l2.module.css";
 
 const pickColumns: readonly Column<RunRow>[] = [

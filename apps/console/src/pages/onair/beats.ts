@@ -97,15 +97,6 @@ export function countsOf(events: readonly StreamEvent[]): RunCounts {
   return { events: events.length, spoken, chat, picked, start, end };
 }
 
-/** `m:ss` (or `h:mm:ss`) for a span in ms. */
-export function clock(ms: number): string {
-  const s = Math.max(0, Math.round(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = String(s % 60).padStart(2, "0");
-  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
-}
-
 export function runLabel(r: RunRow): string {
   return `${r.spec.tone_variant.replace(/-/g, " ")} · ${r.spec.core_tier} core · ${r.spec.audience_size} viewers`;
 }

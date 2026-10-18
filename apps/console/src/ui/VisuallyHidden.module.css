@@ -1,0 +1,2 @@
+/* Text for assistive technology only: kept in the accessibility tree, not painted. */
+.hidden { position: absolute; width: var(--sr-stroke-hair); height: var(--sr-stroke-hair); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

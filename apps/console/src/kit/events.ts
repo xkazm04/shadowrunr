@@ -1,8 +1,6 @@
-// Transcript event text for the brain's viewer and memory curve. Ported from the pre-port
-// console (`lib/format.ts` eventText/eventActor), which C2 deletes.
-//
-// Proposal for the Director: On Air (P1) and the simulator's quote verification (P5) need the
-// same `eventText`; promote this file to `kit/` so there is one copy.
+// Shared reading of transcript events and evidence refs, and the number formats every page
+// prints. One copy: the Brain's viewer, the simulator's quote checks, On Air's rundown,
+// Characters' situations and Reconcile's evidence all read events and refs through here.
 import type { StreamEvent } from "@shadowrunr/contract";
 
 /** A/1 `isMemo`: a say line that lists memory candidates (not spoken on air). */
@@ -43,17 +41,20 @@ function opText(ev: Extract<StreamEvent, { type: "op" }>): string {
   }
 }
 
-/** One-line body of a transcript event. */
+/**
+ * One-line body of a transcript event: the words it carries (what a judge quotes, so quote
+ * verification searches it) plus the facts that identify it.
+ */
 export function eventText(ev: StreamEvent): string {
   switch (ev.type) {
     case "stream_start":
-      return `${ev.character} · ${ev.tone_variant} · ${ev.core_tier} · ${ev.audience_size} viewers`;
+      return `${ev.stream_id} · ${ev.character} · ${ev.tone_variant} · ${ev.core_tier} · ${ev.audience_size} viewers`;
     case "segment_start":
       return ev.segment;
     case "segment_end":
       return `${ev.segment}${typeof ev.ses === "number" ? ` · SES ${ev.ses.toFixed(2)}` : ""}`;
     case "case_open":
-      return `${ev.case.title}${ev.case.fictional ? " · FICTIONAL" : ""} · ${ev.case.hexes.length} hexes`;
+      return `${ev.case.title || ev.case.id}${ev.case.fictional ? " · FICTIONAL" : ""} · ${ev.case.hexes.length} hexes`;
     case "chat":
       return ev.msg.text;
     case "picked":
@@ -91,19 +92,65 @@ export function eventWho(ev: StreamEvent): string {
   }
 }
 
-/** Stream clock mm:ss from ms since the stream started. */
+/** An evidence ref `<run_id>#<line>`: run ids may be tournament-qualified with `/`. */
+export interface TurnRef {
+  readonly runId: string;
+  /** 1-based transcript line. */
+  readonly line: number;
+}
+
+/** `<run_id>#<line>` → its parts; undefined when it is not a transcript ref (no line, line 0). */
+export function parseRef(ref: string): TurnRef | undefined {
+  const at = ref.lastIndexOf("#");
+  if (at <= 0) return undefined;
+  const tail = ref.slice(at + 1);
+  if (!/^\d+$/.test(tail)) return undefined;
+  const line = Number(tail);
+  return line >= 1 ? { runId: ref.slice(0, at), line } : undefined;
+}
+
+/** The run a ref names: its run id, or the whole ref when it carries no line. */
+export const refRun = (ref: string): string => parseRef(ref)?.runId ?? ref;
+
+/** The short chip text for a ref: line first, then the run's tail. */
+export function refLabel(ref: string): string {
+  const p = parseRef(ref);
+  if (!p) return ref;
+  const run = p.runId.length > 28 ? `…${p.runId.slice(-26)}` : p.runId;
+  return `L${p.line} · ${run}`;
+}
+
+/** Stream clock `mm:ss` from ms since the stream started. */
 export function clock(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** A span `m:ss`, or `h:mm:ss` past the hour. */
+export function span(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
+
+/** A duration: ms below ten seconds, seconds with one decimal above. */
 export function msText(ms: number | undefined): string {
   if (ms === undefined) return "–";
   return ms >= 10_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
+/** Dollars: four decimals under a dollar, two above. */
 export function usd(x: number): string {
   return x >= 1 ? `$${x.toFixed(2)}` : `$${x.toFixed(4)}`;
 }
 
+/** A count with thousands separators. */
 export const int = (n: number): string => n.toLocaleString("en-US");
+
+/** A share 0..1 as a percentage (clamped); `–` when there is none. */
+export function pct(x: number | undefined, digits = 0): string {
+  if (x === undefined) return "–";
+  return `${(Math.min(1, Math.max(0, x)) * 100).toFixed(digits)}%`;
+}

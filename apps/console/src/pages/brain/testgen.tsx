@@ -1,12 +1,7 @@
 // Test-only (imported by *.test.ts[x] only): contract-valid generated data at any scale and a
 // scripted daemon that pages it by cursor. Every value is generated, never presented as real.
-import { act, render } from "@testing-library/react";
-import type { ReactNode } from "react";
 import type { LedgerEntry, ModelTier, Role, RunRow, StreamEvent, TournamentRow } from "@shadowrunr/contract";
-import { createDataLayer, DataProvider, type DataLayer } from "../../data";
-import { contractDoor } from "../../data/contractDoor";
-import { fakeSockets, manualTimers, scriptedFetch, type FetchReply } from "../../data/testing";
-import { createHashRouter, RouterProvider, type RouterStore } from "../../router";
+import { ok, page, param, type Script } from "../../kit/testing";
 import type { Ctx } from "./draw";
 
 const TIERS: readonly ModelTier[] = ["haiku", "sonnet", "opus"];
@@ -98,23 +93,9 @@ export function season(opts: { tournaments: number; runs: number; rowsPerRun: nu
   return { tournaments, runs, ledger, transcriptLines: opts.transcriptLines };
 }
 
-const ok = (result: unknown): FetchReply => ({ body: { result } });
-const param = (sent: string, name: string) => new RegExp(`"${name}":"([^"]*)"`).exec(sent)?.[1];
-const limitOf = (sent: string) => Number(/"limit":(\d+)/.exec(sent)?.[1] ?? "500");
-
-function page<T>(items: readonly T[], sent: string): FetchReply {
-  const start = Number(param(sent, "cursor") ?? "0");
-  const end = start + Math.min(500, limitOf(sent));
-  return ok({ items: items.slice(start, end), ...(end < items.length ? { next_cursor: String(end) } : {}) });
-}
-
-/** `scriptedFetch` hands the script the raw request body. */
-export type Script = (method: string, body: unknown) => FetchReply;
-
 /** A daemon over a generated season; `null` season = the daemon is unreachable. */
 export function daemon(s: Season | null, transcripts = new Map<string, StreamEvent[]>()): Script {
-  return (method, body) => {
-    const sent = typeof body === "string" ? body : "";
+  return (method, sent) => {
     if (s === null) return { network: true };
     switch (method) {
       case "tournaments.page":
@@ -136,27 +117,6 @@ export function daemon(s: Season | null, transcripts = new Map<string, StreamEve
         return { status: 404, body: { error: { code: "method_not_found", message: method } } };
     }
   };
-}
-
-export function mount(ui: ReactNode, script: Script, hash: string): { router: RouterStore; layer: DataLayer; calls: string[] } {
-  window.location.hash = hash;
-  const router = createHashRouter(window);
-  const fetch = scriptedFetch(script);
-  const layer = createDataLayer({ baseUrl: "http://127.0.0.1:7717", door: contractDoor, fetch, socket: fakeSockets().factory, timers: manualTimers() });
-  render(
-    <DataProvider layer={layer}>
-      <RouterProvider router={router}>{ui}</RouterProvider>
-    </DataProvider>,
-  );
-  return { router, layer, calls: fetch.calls };
-}
-
-export async function settle(rounds = 8): Promise<void> {
-  for (let i = 0; i < rounds; i++) {
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
-  }
 }
 
 /** A canvas context that records calls and style writes; the brain's draws are gated on it. */
@@ -247,4 +207,3 @@ export class Recorder implements Ctx {
   }
 }
 
-export const nodes = (root: ParentNode = document.body): number => root.querySelectorAll("*").length;

@@ -2,7 +2,7 @@
 // bus, the chrome and the intro. It owns no page content: pages plug in through `PageRegistry`.
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { KEYMAP, installKeymap } from "../keys";
-import { StatePanel } from "../ui";
+import { StatePanel } from "../ui/States";
 import { PAGE_IDS, WALL, crumbs, encodeRoute, layerOf, pageRoute, up, useRoute, useRouter, type LabelOf, type PageId } from "../router";
 import { Chrome } from "./Chrome";
 import { INTRO, Intro } from "./Intro";

@@ -1,7 +1,7 @@
 // The season wall: six posters laid out by `layoutPosters`. Hover widens a poster on the wall
 // and opens a rail strip on layer 1 (armed 1.1 s after arriving, so the strip the pointer
 // happens to rest on does not pop open).
-import { TOKENS } from "@shadowrunr/tokens";
+import { TOKENS_LAYOUT } from "@shadowrunr/tokens";
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { PAGE_IDS, type Crumb, type PageId } from "../router";
 import { layoutPosters, type LayoutMetrics, type View } from "./layout";
@@ -14,9 +14,9 @@ import styles from "./Wall.module.css";
 const rem = (v: string): number => Number.parseFloat(v);
 
 export const METRICS: LayoutMetrics = {
-  stripRem: rem(TOKENS.layout.strip),
-  spineRem: rem(TOKENS.layout.spine),
-  railPeekRem: rem(TOKENS.layout.railPeek),
+  stripRem: rem(TOKENS_LAYOUT.strip),
+  spineRem: rem(TOKENS_LAYOUT.spine),
+  railPeekRem: rem(TOKENS_LAYOUT.railPeek),
   topBarRem: 3,
   tabRem: 3.2,
   barRem: 3.4,

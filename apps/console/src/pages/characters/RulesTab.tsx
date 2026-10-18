@@ -6,10 +6,13 @@ import { useState } from "react";
 import type { CharacterDetail, RuleState } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { useMutation, useRpc, viewOfError, type DataError } from "../../data";
-import { Chip, Head, StatePanel, Switch } from "../../ui";
-import { ruleBody } from "./doc";
+import { Chip } from "../../ui/Chip";
+import { Head } from "../../ui/Section";
+import { StatePanel } from "../../ui/States";
+import { Switch } from "../../ui/Switch";
+import { ruleBody } from "./packageDocs";
 import styles from "./Layer2.module.css";
-import { Markdown } from "./Markdown";
+import { Markdown } from "../../ui/Markdown";
 
 /** The latest reply of a successful switch, valid only until the rules query answers anew. */
 interface Shadow {
@@ -19,7 +22,8 @@ interface Shadow {
 
 export function RulesTab({ d }: { d: CharacterDetail }) {
   const rules = useRpc("character.rules", { character: d.id });
-  const list = useRpc("character.list", {});
+  // On success the data layer refetches character.rules, character.get and character.list
+  // (data/invalidation.ts), so the page holds no refetch of its own.
   const set = useMutation("character.rules.set");
   const [shadow, setShadow] = useState<Shadow | undefined>(undefined);
   const [busyId, setBusyId] = useState<string | undefined>(undefined);
@@ -38,9 +42,6 @@ export function RulesTab({ d }: { d: CharacterDetail }) {
       return;
     }
     setShadow({ basis: rules.data, value: r.value });
-    // character.rules.set has no invalidation entry yet (reported): refetch what it changes.
-    rules.reload();
-    list.reload();
   };
 
   return (
@@ -71,8 +72,8 @@ export function RulesTab({ d }: { d: CharacterDetail }) {
                           <StatePanel state={viewOfError(failure.error).state} title={`The switch did not take · ${viewOfError(failure.error).title}`} detail={`${failure.error.code}: ${failure.error.message}`} />
                         )}
                       </div>
-                      <div role="group" aria-label={r.title} className={styles.sw}>
-                        <Switch checked={r.enabled} label="Enabled" disabled={busyId !== undefined} onChange={(next) => void toggle(r.id, next)} />
+                      <div className={styles.sw}>
+                        <Switch checked={r.enabled} label={`${r.title}: enabled`} hideLabel disabled={busyId !== undefined} onChange={(next) => void toggle(r.id, next)} />
                       </div>
                     </li>
                   ))}

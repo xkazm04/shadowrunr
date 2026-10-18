@@ -1,16 +1,20 @@
-// brain/engine: the routing the ledger shows, fleet accounts, fallbacks, and the virtualised
-// call ledger with a role filter. Source: one tournament's ledgers (default: the newest), or the
+// brain/engine: the engine floor (live routes and accounts, see EngineFloor), fallbacks, and
+// the virtualised call ledger with a role filter. Source: one tournament's ledgers (default: the newest), or the
 // daemon's own engine ledger.
 import { useMemo, useState } from "react";
 import type { LedgerEntry, TournamentsPage } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
-import { useRpc } from "../../data";
-import { Chip, FilterTable, Section, StatBand, StatePanel, type Column, type Facets } from "../../ui";
+import { usePaged, useRpc } from "../../data";
+import { Chip } from "../../ui/Chip";
+import { FilterTable, type Column, type Facets } from "../../ui/FilterTable";
+import { Section } from "../../ui/Section";
+import { StatBand } from "../../ui/StatBand";
+import { StatePanel } from "../../ui/States";
 import { latestTournament } from "./useBrain";
-import { usePagedRpc } from "./queries";
 import { summariseLedger, type EngineSummary } from "./engineModel";
-import { clock, int, msText, usd } from "./events";
-import { roleColor } from "./palette";
+import { clock, int, msText, usd } from "../../kit/events";
+import { roleColor } from "./draw";
+import { EngineFloor } from "./EngineFloor";
 import styles from "./Layer2.module.css";
 
 const DAEMON = "__daemon__";
@@ -83,73 +87,7 @@ function Tables({ rows, more, onMore }: { rows: readonly LedgerEntry[]; more: bo
           { label: "Cost", value: usd(s.cost) },
         ]}
       />
-      <Section title="Routing" right="as the ledger shows it">
-        <p className={styles.note}>The configured route table and live account cooldowns need the daemon&apos;s proposed `engine.status` call; until then this is what the engine did.</p>
-        <table className={styles.table} data-role="brain-routes">
-          <thead>
-            <tr>
-              <th>Role</th>
-              <th>Tier</th>
-              <th>Effort</th>
-              <th>Engine</th>
-              <th>Models</th>
-              <th className={styles.num}>Calls</th>
-              <th className={styles.num}>Errors</th>
-              <th className={styles.num}>p50</th>
-              <th className={styles.num}>p95</th>
-              <th className={styles.num}>First text p50</th>
-            </tr>
-          </thead>
-          <tbody>
-            {s.routes.map((r) => (
-              <tr key={r.role}>
-                <td>
-                  <span className={styles.role}>
-                    <i style={{ background: roleColor(r.role) }} />
-                    {r.role}
-                  </span>
-                </td>
-                <td>{r.tiers.join(", ") || "–"}</td>
-                <td>{r.efforts.join(", ") || "–"}</td>
-                <td>{r.engines.join(", ") || "–"}</td>
-                <td className={styles.mono}>{r.models.join(", ") || "–"}</td>
-                <td className={styles.num}>{int(r.calls)}</td>
-                <td className={styles.num}>{r.errors}</td>
-                <td className={styles.num}>{msText(r.durationP50)}</td>
-                <td className={styles.num}>{msText(r.durationP95)}</td>
-                <td className={styles.num}>{msText(r.firstTextP50)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Section>
-      <Section title="Fleet accounts" right={`${s.accounts.length} seen`}>
-        <table className={styles.table} data-role="brain-accounts">
-          <thead>
-            <tr>
-              <th>Engine</th>
-              <th>Account</th>
-              <th className={styles.num}>Calls</th>
-              <th className={styles.num}>Errors</th>
-              <th>Last call</th>
-              <th>Models</th>
-            </tr>
-          </thead>
-          <tbody>
-            {s.accounts.map((a) => (
-              <tr key={a.key}>
-                <td className={styles.mono}>{a.engine}</td>
-                <td>{a.account}</td>
-                <td className={styles.num}>{int(a.calls)}</td>
-                <td className={styles.num}>{a.errors}</td>
-                <td>{a.lastError === undefined ? <Chip tone="ok">ok</Chip> : <Chip tone="fail">{a.lastError}</Chip>}</td>
-                <td className={styles.mono}>{a.models.map((m) => `${m.model} ${m.calls}`).join(" · ")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {s.unrouted > 0 && <p className={styles.note}>{int(s.unrouted)} ledger rows carry no engine or account: they errored before routing.</p>}
-      </Section>
+      <EngineFloor s={s} />
       <Section title="Fallbacks" right={int(fallbacks.length)}>
         {fallbacks.length === 0 ? (
           <p className={styles.note}>No call in these rows fell back to another engine.</p>
@@ -171,7 +109,7 @@ export function Engine() {
   const latest = tournaments.data ? latestTournament(tournaments.data.items) : undefined;
   const source = picked ?? latest ?? (tournaments.data ? DAEMON : null);
   const params = source === null ? null : source === DAEMON ? { limit: PAGE } : { tournament_id: source, limit: PAGE };
-  const ledger = usePagedRpc("ledger.page", params, pages);
+  const ledger = usePaged("ledger.page", params, pages);
   return (
     <QueryView<TournamentsPage> query={tournaments}>
       {(t) => (
@@ -193,16 +131,16 @@ export function Engine() {
               <option value={DAEMON}>The daemon&apos;s engine ledger</option>
             </select>
           </label>
-          {ledger.data.pages === 0 ? (
-            ledger.errorView ? (
-              <StatePanel state={ledger.errorView.state} title={ledger.errorView.title} hint={ledger.errorView.hint} action={{ label: "Retry", onClick: ledger.reload }} />
+          {ledger.query.data === undefined ? (
+            ledger.query.errorView ? (
+              <StatePanel state={ledger.query.errorView.state} title={ledger.query.errorView.title} hint={ledger.query.errorView.hint} action={{ label: "Retry", onClick: ledger.query.reload }} />
             ) : (
               <StatePanel state="loading" title="Reading the ledger" />
             )
-          ) : ledger.data.items.length === 0 ? (
+          ) : ledger.query.data.length === 0 ? (
             <StatePanel state="empty" title="This ledger has no calls yet" />
           ) : (
-            <Tables rows={ledger.data.items} more={ledger.data.more} onMore={() => setPages((p) => p + STEP)} />
+            <Tables rows={ledger.query.data} more={ledger.more} onMore={() => setPages((p) => p + STEP)} />
           )}
         </>
       )}

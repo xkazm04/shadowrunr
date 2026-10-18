@@ -116,3 +116,18 @@ function narrow(i: LayoutInput, m: LayoutMetrics, W: number, H: number, r: numbe
   }
   return { rects, bodyWidth: W, stageHeight: H };
 }
+
+/** The winner's poster height in rem (its root was 2vh). */
+export const POSTER_REM = 50;
+/** The root size bounds in px (app/global.css). */
+export const ROOT_PX = { min: 14, max: 30.4, narrow: 16 } as const;
+
+/**
+ * The root size app/global.css computes: `min(1.25vw, 100vh / (50 + bus))`, clamped, so the
+ * height above the full mixer bus is exactly the winner's 50rem.
+ */
+export function rootPx(width: number, height: number, narrow: boolean, busRem: number): number {
+  if (narrow) return ROOT_PX.narrow;
+  const fluid = Math.min(width * 0.0125, height / (POSTER_REM + busRem));
+  return Math.min(ROOT_PX.max, Math.max(ROOT_PX.min, fluid));
+}

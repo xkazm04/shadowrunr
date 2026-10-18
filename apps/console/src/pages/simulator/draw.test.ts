@@ -3,7 +3,10 @@
 import { describe, expect, it } from "vitest";
 import { drawBackdrop, drawGrid, tileLabel, type SceneContext } from "./draw";
 import { gridLayout, type Tile } from "./grid";
-import { SIM_INK, healthColor } from "./palette";
+import { TOKENS_SIM } from "@shadowrunr/tokens";
+import { healthColor } from "./ramp";
+
+const SIM_INK = TOKENS_SIM;
 
 interface Op {
   readonly op: string;

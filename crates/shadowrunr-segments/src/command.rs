@@ -6,6 +6,51 @@ use shadowrunr_types::{Command, EvidenceGrade};
 /// characters. An assumption: long enough for a premise, short enough to keep prompts small.
 pub const MAX_TEXT_CHARS: usize = 280;
 
+/// One chat command as [`parse_command`] reads it: the name, the argument shape and what it
+/// does. The operator console shows this table (`segments.tables` `commands`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommandSpec {
+    pub name: &'static str,
+    pub args: &'static str,
+    pub what: &'static str,
+    /// Gated by the rank table's `propose_min_rank`.
+    pub rank_gated: bool,
+}
+
+/// Every command [`parse_command`] accepts, in `table::COMMAND_NAMES` order.
+pub const COMMAND_SPECS: [CommandSpec; 5] = [
+    CommandSpec {
+        name: "summon",
+        args: "<foil>",
+        what: "Call a guest foil into the room. The weighted vote decides.",
+        rank_gated: false,
+    },
+    CommandSpec {
+        name: "hint",
+        args: "<hex> <text>",
+        what: "Nominate a lead on the hexmap.",
+        rank_gated: false,
+    },
+    CommandSpec {
+        name: "grade",
+        args: "<hex> <DOC|REP|CLM|SPC>",
+        what: "Grade a hex. Jury advice, never proof.",
+        rank_gated: false,
+    },
+    CommandSpec {
+        name: "propose",
+        args: "<text>",
+        what: "Propose a scheme. Rank-gated.",
+        rank_gated: true,
+    },
+    CommandSpec {
+        name: "vote",
+        args: "<option>",
+        what: "Vote in the open poll. Weight rises with rank.",
+        rank_gated: false,
+    },
+];
+
 /// Parse a chat line into a command. Command names are case-insensitive, whitespace is
 /// tolerated, and arguments are validated: anything malformed yields `None`.
 pub fn parse_command(text: &str) -> Option<Command> {
@@ -90,6 +135,23 @@ fn join_capped(words: &[&str]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_specs_cover_the_command_names_and_parse() {
+        let names: Vec<&str> = COMMAND_SPECS.iter().map(|c| c.name).collect();
+        assert_eq!(names, crate::table::COMMAND_NAMES);
+        let samples = [
+            "!summon the-disruptor",
+            "!hint HEX-06 the ledger",
+            "!grade HEX-06 DOC",
+            "!propose a scheme",
+            "!vote two",
+        ];
+        for (spec, line) in COMMAND_SPECS.iter().zip(samples) {
+            assert!(line.starts_with(&format!("!{}", spec.name)));
+            assert!(parse_command(line).is_some(), "{line}");
+        }
+    }
 
     fn summon(s: &str) -> Option<String> {
         match parse_command(s)? {

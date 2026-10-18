@@ -4,9 +4,12 @@ import { useMemo } from "react";
 import type { RunRow } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { pageRoute, useRouter } from "../../router";
-import { Chip, FilterTable, Head, type Column, type Facets } from "../../ui";
-import { PAGE_LIMIT, usePaged } from "./data";
-import { int } from "./common";
+import { Chip } from "../../ui/Chip";
+import { FilterTable, type Column, type Facets } from "../../ui/FilterTable";
+import { Head } from "../../ui/Section";
+import { usePaged } from "../../data";
+import { PAGE_LIMIT } from "./data";
+import { int } from "../../kit/events";
 import styles from "./l2.module.css";
 
 type VerdictFacet = "all" | "judged" | "unjudged";

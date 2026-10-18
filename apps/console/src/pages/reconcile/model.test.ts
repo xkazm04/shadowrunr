@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { barCount, caution, incidentGroups, MAX_BARS, parseDiff, parseRef, refLabel, sourceLabel, triptych } from "./model";
+import { parseRef, refLabel } from "../../kit/events";
+import { barCount, caution, incidentGroups, MAX_BARS, parseDiff, sourceLabel, triptych } from "./model";
 import { BIBLE_DIFF, CONSTITUTION_DIFF, genProposals, genReport } from "./testgen";
 
 describe("the triptych", () => {
@@ -16,7 +17,7 @@ describe("the triptych", () => {
 
 describe("incident groups", () => {
   it("folds alleged:<hex> into one rule and sorts most frequent first", () => {
-    const groups = incidentGroups(genReport({ incidents: 9 }).red_lines);
+    const groups = incidentGroups(genReport({ incidents: 9 }));
     expect(groups).toEqual([
       { rule: "alleged", n: 3 },
       { rule: "rate_cap", n: 3 },

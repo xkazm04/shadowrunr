@@ -16,7 +16,7 @@ use shadowrunr_types::{ErrorBody, ErrorCode, ErrorEnvelope, JudgeVerdict, Stream
 pub use crate::catalog::{character_rules, character_rules_set};
 use crate::engine::EngineHandle;
 use crate::server::AppState;
-use crate::{catalog, paging, preflight, runs};
+use crate::{catalog, paging, preflight, report_wire, runs};
 
 /// A failed call: one of the ten codes, a message for people, optional structured detail.
 #[derive(Debug, Clone, PartialEq)]
@@ -119,7 +119,12 @@ fn read_verdict(state: &AppState, p: RunParams) -> Result<JudgeVerdict, RpcError
     serde_json::from_str(&text).map_err(|e| RpcError::io(format!("{}: {e}", path.display())))
 }
 
-fn tournament_results(state: &AppState, tournament_id: &str) -> Result<Value, RpcError> {
+/// `tournament.results`: `results.json`, read through the contract's typed `TournamentResults`
+/// so a file the console's door would reject fails here, as `io`, with the file named.
+fn tournament_results(
+    state: &AppState,
+    tournament_id: &str,
+) -> Result<shadowrunr_types::results::TournamentResults, RpcError> {
     runs::check_id("tournament_id", tournament_id)?;
     let dir = state.cfg.paths.sim_runs().join(tournament_id);
     if !dir.is_dir() {
@@ -222,7 +227,7 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         "tournament.list" => ok(runs::list_tournaments(&sim_root)),
         "tournament.results" => {
             let p: TournamentParams = params(req.params)?;
-            tournament_results(state, &p.tournament_id)
+            ok(tournament_results(state, &p.tournament_id)?)
         }
         "sim.start" => {
             let p: SimStartParams = params(req.params)?;
@@ -239,9 +244,16 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         }
         "reconcile.report" => {
             let p: ReportParams = params(req.params)?;
-            ok(state.reconciler.report(&p.report_id)?)
+            ok(report_wire::report_reply(
+                state.reconciler.stored(&p.report_id)?,
+            ))
         }
         "reconcile.list" => ok(state.reconciler.list()?),
+        "reconcile.incidents" => {
+            let p: ReconcileIncidentsParams = params(req.params)?;
+            let report = state.reconciler.report(&p.report_id)?;
+            ok(report_wire::incidents_page(&report, &p)?)
+        }
         "plan.current" => match state.reconciler.next_plan()? {
             Some(plan) => ok(plan),
             None => Err(RpcError::new(ErrorCode::NotFound, "no plan chosen yet")),
@@ -285,7 +297,11 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
             let p: CharacterGetParams = params(req.params)?;
             ok(catalog::character_get(cfg, &p.id)?)
         }
-        "segments.tables" => ok(catalog::segment_tables()?),
+        "character.tone.set" => {
+            let p: CharacterToneSetParams = params(req.params)?;
+            ok(catalog::character_tone_set(cfg, &p.id, &p.tone)?)
+        }
+        "segments.tables" => ok(catalog::segment_tables(cfg)?),
         "ranks.table" => {
             let p: RanksTableParams = params(req.params)?;
             ok(catalog::rank_table(cfg, p.character.as_deref())?)

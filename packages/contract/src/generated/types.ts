@@ -88,6 +88,11 @@ export type PreflightRunResult = HealthReport[];
  */
 export type Rank = "thrall" | "acolyte" | "cultist" | "warlock" | "lich" | "dread_council";
 /**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "IncidentSource".
+ */
+export type IncidentSource = "verdict" | "moderation";
+/**
  * What a reconcile run covers: a whole tournament or an explicit list of runs.
  * Wire: `{ "tournament_id": "..." }` or `{ "run_ids": ["..."] }`.
  *
@@ -111,11 +116,6 @@ export type ReconcileListResult = ReportSummary[];
  * via the `definition` "BoundMethod".
  */
 export type BoundMethod = "wilson" | "rule_of_three";
-/**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "IncidentSource".
- */
-export type IncidentSource = "verdict" | "moderation";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "StreamEvent".
@@ -355,6 +355,20 @@ export type SegmentStatus = "pilot" | "trial" | "regular" | "flagship" | "retire
  */
 export type TournamentListResult = TournamentRow[];
 /**
+ * Where the audience calibration a run used came from.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CalibrationOrigin".
+ */
+export type CalibrationOrigin =
+  | {
+      kind: "file";
+      path: string;
+    }
+  | {
+      kind: "default_assumption";
+    };
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "EngineError".
  */
@@ -440,6 +454,10 @@ export interface RpcMethods {
     params: CharacterRulesSetParams;
     result: CharacterRulesSetResult;
   };
+  "character.tone.set": {
+    params: CharacterToneSetParams;
+    result: CharacterSummary;
+  };
   "directive.add": {
     params: DirectiveAddParams;
     result: Directive;
@@ -483,6 +501,10 @@ export interface RpcMethods {
   "ranks.table": {
     params: RanksTableParams;
     result: RankTableInfo;
+  };
+  "reconcile.incidents": {
+    params: ReconcileIncidentsParams;
+    result: IncidentsPage;
   };
   "reconcile.list": {
     params: EmptyParams;
@@ -547,6 +569,10 @@ export interface CharacterGetParams {
  * via the `definition` "CharacterDetail".
  */
 export interface CharacterDetail {
+  /**
+   * The tone the operator chose, else `default_tone` (see [`CharacterSummary`]).
+   */
+  active_tone: string;
   bible?: string;
   /**
    * `constitution.md`: immutable, never edited by the brain.
@@ -576,6 +602,7 @@ export interface CharacterDetail {
   };
   rules: CharacterRuleInfo[];
   situations: Situation[];
+  tagline?: string;
   tones: ToneInfo[];
 }
 /**
@@ -663,6 +690,10 @@ export interface EmptyParams {}
  * via the `definition` "CharacterSummary".
  */
 export interface CharacterSummary {
+  /**
+   * The tone the operator chose (`<data>/characters/<id>/active.json`), else `default_tone`.
+   */
+  active_tone: string;
   default_tone: string;
   /**
    * Foil ids declared in `character.toml`, in order.
@@ -678,6 +709,10 @@ export interface CharacterSummary {
    */
   rules_enabled: number;
   rules_total: number;
+  /**
+   * One line under the name (`character.toml` `tagline`); omitted when the package has none.
+   */
+  tagline?: string;
   /**
    * Tone variant ids (`tones/<id>.md`), sorted.
    */
@@ -713,6 +748,17 @@ export interface CharacterRulesSetParams {
   character: string;
   enabled: boolean;
   id: string;
+}
+/**
+ * `character.tone.set`: the operator's tone for a character, written to
+ * `<data>/characters/<id>/active.json`. The tone must be one of the package's tones.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterToneSetParams".
+ */
+export interface CharacterToneSetParams {
+  id: string;
+  tone: string;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -1027,6 +1073,51 @@ export interface TierRuleInfo {
   tier: number;
 }
 /**
+ * `reconcile.incidents`: one report's red-line incidents, paged in report order.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ReconcileIncidentsParams".
+ */
+export interface ReconcileIncidentsParams {
+  cursor?: string;
+  /**
+   * 1..=500; larger values are capped at 500.
+   */
+  limit: number;
+  report_id: string;
+  /**
+   * Only incidents of this rule.
+   */
+  rule?: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "IncidentsPage".
+ */
+export interface IncidentsPage {
+  items: RuleIncident[];
+  next_cursor?: string;
+  /**
+   * Incidents matching the filter, over every page.
+   */
+  total: number;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "RuleIncident".
+ */
+export interface RuleIncident {
+  action?: string;
+  refs?: string[];
+  rule: string;
+  run_id: string;
+  source: IncidentSource;
+  /**
+   * `input` or `output` for moderation incidents.
+   */
+  stage?: string;
+}
+/**
  * One stored Reconcile report, newest first, for `reconcile.list`.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -1050,11 +1141,22 @@ export interface ReconcileReport {
   dropped?: DroppedItem[];
   latency: LatencyStats;
   ranks: RankEngagement;
+  /**
+   * Wire addition (WPI): every incident counted by `(rule, source)`, most first. Present
+   * on `reconcile.report` replies; the stored report never carries it.
+   */
+  red_line_counts?: IncidentCount[];
   red_lines: RuleIncident[];
+  /**
+   * Wire addition (WPI): the report's incident total when `red_lines` was cut to its first
+   * page on the wire; page the rest with `reconcile.incidents`. Absent when nothing was cut.
+   */
+  red_lines_total?: number;
   report_id: string;
   segments: SegmentFinding[];
   source: Source;
   summary: string;
+  synthesis_input?: SynthesisInput;
   tone: ToneFinding[];
 }
 /**
@@ -1169,19 +1271,19 @@ export interface Bound {
   method: BoundMethod;
 }
 /**
+ * Incidents of one rule from one source, counted over the whole report.
+ *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "RuleIncident".
+ * via the `definition` "IncidentCount".
  */
-export interface RuleIncident {
-  action?: string;
-  refs?: string[];
+export interface IncidentCount {
+  count: number;
   rule: string;
-  run_id: string;
-  source: IncidentSource;
   /**
-   * `input` or `output` for moderation incidents.
+   * Distinct runs with at least one such incident.
    */
-  stage?: string;
+  runs: number;
+  source: IncidentSource;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -1242,6 +1344,43 @@ export interface HandoverTiming {
   ref: string;
   run_id: string;
   to: SegmentId;
+}
+/**
+ * What the synthesis prompt carried (WP12), stored with the report as `synthesis_input`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SynthesisInput".
+ */
+export interface SynthesisInput {
+  /**
+   * The budget the prompt was sized against, in estimated tokens.
+   */
+  budget_tokens: number;
+  /**
+   * The prompt's estimated size (characters / 3.5), system prefix and schema included.
+   */
+  estimated_tokens: number;
+  excerpt_lines: number;
+  failure_refs: Counted;
+  incidents: Counted;
+  /**
+   * What the prompt told the Reconciler was omitted; empty when nothing was cut.
+   */
+  omitted?: string[];
+  quality_refs: Counted;
+  rule_failures: Counted;
+  runs: Counted;
+  tone_cells: Counted;
+}
+/**
+ * Items that made it into the synthesis prompt, and items cut to fit its budget.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Counted".
+ */
+export interface Counted {
+  included: number;
+  omitted: number;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -1433,6 +1572,15 @@ export interface RunsListParams {
  */
 export interface RunRow {
   has_verdict: boolean;
+  /**
+   * Share of the verdict's rule checks that held: pass / (pass + fail). Absent without a
+   * verdict or when no rule was provoked.
+   */
+  health?: number;
+  /**
+   * Failed `red-line:*` rule checks in the verdict; omitted when 0.
+   */
+  red_line_fails?: number;
   run_id: string;
   spec: SimRunSpec;
   tournament_id: string;
@@ -1517,10 +1665,35 @@ export interface SegmentTables {
    */
   command_names: string[];
   /**
+   * Every chat command with its arguments and meaning, in `command_names` order.
+   */
+  commands: CommandInfo[];
+  /**
    * Every `Op` tag in the action grammar.
    */
   op_tags: string[];
   segments: SegmentTableInfo[];
+}
+/**
+ * One chat command as the runtime's parser reads it (`shadowrunr-segments` `command.rs`).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CommandInfo".
+ */
+export interface CommandInfo {
+  /**
+   * The argument shape, e.g. `<hex> <DOC|REP|CLM|SPC>`.
+   */
+  args: string;
+  min_rank?: Rank;
+  /**
+   * Without the `!`, e.g. `summon`.
+   */
+  name: string;
+  /**
+   * What the command does, in one line.
+   */
+  what: string;
 }
 /**
  * One parsed segment table.
@@ -1634,14 +1807,147 @@ export interface TournamentParams {
   tournament_id: string;
 }
 /**
- * `tournament.results`: the tournament's `results.json` as written by the simulator (its
- * shape is owned by `shadowrunr-sim`; not yet part of the typed contract).
+ * `tournament.results`: the whole `results.json`.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "TournamentResults".
  */
 export interface TournamentResults {
-  [k: string]: unknown | undefined;
+  /**
+   * Figures without a source.
+   */
+  assumptions?: string[];
+  calibration: CalibrationOrigin[];
+  cells: CellResult[];
+  failed: number;
+  instrument_hashes: string[];
+  judged: number;
+  /**
+   * tier -> role -> first_text_ms latency, from every ledger row.
+   */
+  latency_by_tier: {
+    [k: string]:
+      | {
+          [k: string]: Latency | undefined;
+        }
+      | undefined;
+  };
+  runs: number;
+  tournament_id: string;
+  usage_by_role: {
+    [k: string]: UsageTotals | undefined;
+  };
+  usage_total: UsageTotals;
+  void: number;
+}
+/**
+ * One heatmap cell: every run that shares a [`CellKey`].
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CellResult".
+ */
+export interface CellResult {
+  cell: CellKey;
+  core_latency: Latency;
+  /**
+   * Failed before a verdict (`error.json`).
+   */
+  failed: number;
+  judge_tiers: string[];
+  judged: number;
+  max_say_gap_s?: number;
+  quality: {
+    [k: string]: QualityTally | undefined;
+  };
+  rules: {
+    [k: string]: RuleTally | undefined;
+  };
+  runs: number;
+  usage: UsageTotals;
+  usage_by_role: {
+    [k: string]: UsageTotals | undefined;
+  };
+  /**
+   * Simulated but the judge was void (failed call or unparseable reply).
+   */
+  void: number;
+}
+/**
+ * The axes of one heatmap cell.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CellKey".
+ */
+export interface CellKey {
+  audience_size: number;
+  core_tier: string;
+  instrument_hash: string;
+  segment: string;
+  tone: string;
+}
+/**
+ * `first_text_ms` percentiles.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Latency".
+ */
+export interface Latency {
+  n: number;
+  p50_ms?: number;
+  p95_ms?: number;
+}
+/**
+ * One quality dimension within a cell: a rate with its n.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "QualityTally".
+ */
+export interface QualityTally {
+  bound?: Bound;
+  n: number;
+  /**
+   * Facts whose quote or line did not verify (excluded from n).
+   */
+  not_evaluable: number;
+  rate?: number;
+  true: number;
+}
+/**
+ * One hard rule's checks within a cell (100% bar).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "RuleTally".
+ */
+export interface RuleTally {
+  fail: number;
+  fail_bound?: Bound;
+  /**
+   * `<run_id>#<line>` refs of the failing evidence.
+   */
+  fail_refs?: string[];
+  /**
+   * Evaluated runs: pass + fail. not_provoked and not_evaluable are never passes.
+   */
+  n: number;
+  not_evaluable: number;
+  not_provoked: number;
+  pass: number;
+  pass_rate?: number;
+}
+/**
+ * Engine usage summed over ledger rows.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "UsageTotals".
+ */
+export interface UsageTotals {
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  calls: number;
+  cost_usd: number;
+  errors: number;
+  input_tokens: number;
+  output_tokens: number;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema

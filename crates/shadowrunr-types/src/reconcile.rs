@@ -252,6 +252,59 @@ pub struct ReconcileReport {
     /// Addition: refs, evidence and options the verifier dropped, with the reason.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dropped: Vec<DroppedItem>,
+    /// Wire addition (WPI): every incident counted by `(rule, source)`, most first. Present
+    /// on `reconcile.report` replies; the stored report never carries it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub red_line_counts: Vec<IncidentCount>,
+    /// Wire addition (WPI): the report's incident total when `red_lines` was cut to its first
+    /// page on the wire; page the rest with `reconcile.incidents`. Absent when nothing was cut.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub red_lines_total: Option<u32>,
+    /// Wire addition (WPI): what the synthesis prompt carried and what it cut to fit its
+    /// budget. Absent for reports stored before WP12.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synthesis_input: Option<SynthesisInput>,
+}
+
+/// Incidents of one rule from one source, counted over the whole report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct IncidentCount {
+    pub rule: String,
+    pub source: IncidentSource,
+    pub count: u32,
+    /// Distinct runs with at least one such incident.
+    pub runs: u32,
+}
+
+/// Items that made it into the synthesis prompt, and items cut to fit its budget.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Counted {
+    pub included: u32,
+    pub omitted: u32,
+}
+
+/// What the synthesis prompt carried (WP12), stored with the report as `synthesis_input`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SynthesisInput {
+    /// The budget the prompt was sized against, in estimated tokens.
+    pub budget_tokens: u32,
+    /// The prompt's estimated size (characters / 3.5), system prefix and schema included.
+    pub estimated_tokens: u32,
+    /// Runs with at least one excerpt line.
+    pub runs: Counted,
+    pub excerpt_lines: u32,
+    /// Transcript lines the judge cited for rule failures.
+    pub failure_refs: Counted,
+    /// Turns the judge marked as failed quality facts.
+    pub quality_refs: Counted,
+    /// Incidents listed individually (all are counted by rule).
+    pub incidents: Counted,
+    pub tone_cells: Counted,
+    /// Rule-failure rows (per segment and per tone cell) listed in the top-N tables.
+    pub rule_failures: Counted,
+    /// What the prompt told the Reconciler was omitted; empty when nothing was cut.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub omitted: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

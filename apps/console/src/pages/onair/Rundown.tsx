@@ -5,10 +5,13 @@ import { useState } from "react";
 import { useRpc } from "../../data";
 import { QueryView } from "../../kit";
 import { pageRoute, useRouter } from "../../router";
-import { Chip, FilterTable, Section, type Column } from "../../ui";
+import { Chip } from "../../ui/Chip";
+import { FilterTable, type Column } from "../../ui/FilterTable";
+import { Section } from "../../ui/Section";
 import styles from "./Layer2.module.css";
 import { RunDetail } from "./RunDetail";
-import { clock, runLabel } from "./beats";
+import { span as clock } from "../../kit/events";
+import { runLabel } from "./beats";
 import { SegmentCards } from "./SegmentCards";
 
 /** Runs per page: the daemon caps `runs.page` at 500. */

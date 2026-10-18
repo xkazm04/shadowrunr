@@ -1,13 +1,17 @@
-// The package's voices: tones (the tournament axis, the default one as the hero) and foils (the
-// SEG-01 guests, drawn by stage-kit's one FoilArt).
+// The package's voices: tones (the tournament axis, the active one as the hero; any other can be
+// made active, an operator choice kept in <data> by character.tone.set) and foils (the SEG-01
+// guests, drawn by stage-kit's one FoilArt).
 import { FoilArt, hasFoilArt } from "@shadowrunr/stage-kit/ui";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { CharacterDetail } from "@shadowrunr/contract";
+import { useMutation, viewOfError } from "../../data";
 import { pageRoute, RouteLink } from "../../router";
-import { Chip, EmptyState, Head, Section } from "../../ui";
-import { readFoil, readTone, type ToneDoc } from "./doc";
+import { Chip } from "../../ui/Chip";
+import { Head, Section } from "../../ui/Section";
+import { EmptyState } from "../../ui/States";
+import { readFoil, readTone, type ToneDoc } from "./packageDocs";
 import styles from "./Layer2.module.css";
-import { Inline } from "./Markdown";
+import { Inline } from "../../ui/Markdown";
 import { foilName, toneLabel } from "./model";
 
 const KICKER = "Characters · the package";
@@ -29,15 +33,37 @@ function Kv({ rows }: { rows: readonly (readonly [string, string | undefined])[]
   );
 }
 
+/** Makes a tone the character's active one; the data layer refetches the package after. */
+function MakeActive({ character, tone }: { character: string; tone: string }) {
+  const set = useMutation("character.tone.set");
+  const [error, setError] = useState<string | undefined>(undefined);
+  return (
+    <>
+      <button
+        type="button"
+        className={styles.toneSet}
+        disabled={set.pending}
+        data-role="characters-tone-set"
+        onClick={() =>
+          void set.run({ id: character, tone }).then((r) => setError(r.ok ? undefined : `${viewOfError(r.error).title}: ${r.error.message}`))
+        }
+      >
+        Make active
+      </button>
+      {error !== undefined && <small className={styles.toneSetError}>{error}</small>}
+    </>
+  );
+}
+
 export function TonesTab({ d }: { d: CharacterDetail }) {
   const tones = useMemo(() => d.tones.map((t) => readTone(t.id, t.text)), [d.tones]);
-  const hero = tones.find((t) => t.id === d.default_tone);
+  const hero = tones.find((t) => t.id === d.active_tone) ?? tones.find((t) => t.id === d.default_tone);
   const others = tones.filter((t) => t !== hero);
   return (
     <>
       <Head kicker={KICKER} title="Tones" lede="One file per tone variant. The tone is the tournament axis: the same character, performed several ways, judged blind." />
       {tones.length === 0 && <EmptyState title="No tones yet" hint="Add tones/<id>.md to the package." />}
-      {hero && <ToneHero t={hero} />}
+      {hero && <ToneHero t={hero} isDefault={hero.id === d.default_tone} defaultTone={d.default_tone} />}
       {others.length > 0 && (
         <Section title={hero ? `The other ${others.length}` : "Tones"}>
           <div className={styles.toneGrid}>
@@ -46,6 +72,7 @@ export function TonesTab({ d }: { d: CharacterDetail }) {
                 <header>
                   <h3>{toneLabel(t.title)}</h3>
                   {t.baseline && <Chip tone="ok">baseline</Chip>}
+                  <MakeActive character={d.id} tone={t.id} />
                 </header>
                 {t.desc !== undefined && (
                   <p>
@@ -67,7 +94,7 @@ export function TonesTab({ d }: { d: CharacterDetail }) {
   );
 }
 
-function ToneHero({ t }: { t: ToneDoc }) {
+function ToneHero({ t, isDefault, defaultTone }: { t: ToneDoc; isDefault: boolean; defaultTone: string }) {
   return (
     <section className={styles.toneHero} data-role="characters-tone-hero">
       <div>
@@ -80,7 +107,8 @@ function ToneHero({ t }: { t: ToneDoc }) {
         )}
         <Kv rows={[["Ratio", t.ratio], ["Edge", t.edge]]} />
         <p className={styles.heroNote}>
-          The package default{t.baseline ? " and the measured baseline" : ""}. Its cells and every other tone&apos;s are in <RouteLink to={pageRoute("simulator", "heatmap")}>the trials</RouteLink>.
+          {isDefault ? "The package default" : `The operator's choice (the package default is ${toneLabel(defaultTone)})`}
+          {t.baseline ? " and the measured baseline" : ""}. Its cells and every other tone&apos;s are in <RouteLink to={pageRoute("simulator", "heatmap")}>the trials</RouteLink>.
         </p>
       </div>
       <div>

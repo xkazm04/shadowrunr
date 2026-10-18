@@ -11,8 +11,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::catalog::{CharacterDetail, CharacterSummary, RankTableInfo, RuleState, SegmentTables};
 use crate::reconcile::{
-    Directive, DirectiveKind, LordChatReply, NextStreamPlan, PlanOption, ReconcileReport, Source,
+    Directive, DirectiveKind, LordChatReply, NextStreamPlan, PlanOption, ReconcileReport,
+    RuleIncident, Source,
 };
+use crate::results::TournamentResults;
 use crate::{
     Effort, EngineKind, HealthReport, JudgeVerdict, ModelTier, Role, SegmentId, SimRunSpec,
     StreamEvent, TsMs, Usage,
@@ -132,18 +134,42 @@ pub struct CharacterGetParams {
     pub id: String,
 }
 
+/// `character.tone.set`: the operator's tone for a character, written to
+/// `<data>/characters/<id>/active.json`. The tone must be one of the package's tones.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CharacterToneSetParams {
+    pub id: String,
+    pub tone: String,
+}
+
+/// `reconcile.incidents`: one report's red-line incidents, paged in report order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ReconcileIncidentsParams {
+    pub report_id: String,
+    /// Only incidents of this rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    /// 1..=500; larger values are capped at 500.
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct IncidentsPage {
+    pub items: Vec<RuleIncident>,
+    /// Incidents matching the filter, over every page.
+    pub total: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RanksTableParams {
     /// Whose rank titles to show; the configured default character when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub character: Option<String>,
 }
-
-/// `tournament.results`: the tournament's `results.json` as written by the simulator (its
-/// shape is owned by `shadowrunr-sim`; not yet part of the typed contract).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(transparent)]
-pub struct TournamentResults(pub serde_json::Map<String, serde_json::Value>);
 
 /// One row of `runs.list` and `runs.page`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -152,6 +178,17 @@ pub struct RunRow {
     pub tournament_id: String,
     pub spec: SimRunSpec,
     pub has_verdict: bool,
+    /// Share of the verdict's rule checks that held: pass / (pass + fail). Absent without a
+    /// verdict or when no rule was provoked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health: Option<f64>,
+    /// Failed `red-line:*` rule checks in the verdict; omitted when 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub red_line_fails: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// One row of `tournament.list` and `tournaments.page`.
@@ -381,6 +418,7 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<ReconcileRunParams, ReconcileRunResult>("reconcile.run");
     v.method::<ReportParams, ReconcileReport>("reconcile.report");
     v.method::<EmptyParams, Vec<ReportSummary>>("reconcile.list");
+    v.method::<ReconcileIncidentsParams, IncidentsPage>("reconcile.incidents");
     v.method::<EmptyParams, NextStreamPlan>("plan.current");
     v.method::<ReportParams, Vec<PlanOption>>("plan.proposals");
     v.method::<PlanChooseParams, NextStreamPlan>("plan.choose");
@@ -392,6 +430,7 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<CharacterRulesSetParams, Vec<RuleState>>("character.rules.set");
     v.method::<EmptyParams, Vec<CharacterSummary>>("character.list");
     v.method::<CharacterGetParams, CharacterDetail>("character.get");
+    v.method::<CharacterToneSetParams, CharacterSummary>("character.tone.set");
     v.method::<EmptyParams, SegmentTables>("segments.tables");
     v.method::<RanksTableParams, RankTableInfo>("ranks.table");
     v.method::<LedgerPageParams, LedgerPage>("ledger.page");

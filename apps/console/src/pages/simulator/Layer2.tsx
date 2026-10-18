@@ -1,7 +1,8 @@
 // Layer 2, Simulator: the winner's nested pages (l2b.js `P3.L2.simulator`), tabbed:
 // tournaments[/<id>], runs, verdicts[/<run>], heatmap[/<key>].
 import { pageRoute, useRouter } from "../../router";
-import { EmptyState, Tabs, type TabItem } from "../../ui";
+import { Tabs, type TabItem } from "../../ui/Section";
+import { EmptyState } from "../../ui/States";
 import { HeatmapPage } from "./Heatmap";
 import styles from "./l2.module.css";
 import { RunsPage } from "./Runs";

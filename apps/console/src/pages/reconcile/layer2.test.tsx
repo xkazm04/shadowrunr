@@ -1,9 +1,9 @@
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mountPage, nodes, ok, settle, type Script } from "./harness";
+import { mountPage, nodes, ok, param, settle, type Script } from "../../kit/testing";
 import { Layer2 } from "./Layer2";
 import { session } from "./session";
-import { genDirectives, genPlan, genProposals, genReport } from "./testgen";
+import { genDirectives, genPlan, genProposals, genReport, wireReport } from "./testgen";
 
 let dispose: (() => void) | undefined;
 beforeEach(() => session.reset());
@@ -65,6 +65,34 @@ describe("reconcile/report", () => {
     expect(screen.queryByText(/What held/)).toBeNull();
     expect(screen.getAllByText(/What failed/).length).toBe(2);
     expect(screen.getByRole("link", { name: "Failed 13" }).getAttribute("aria-current")).toBe("true");
+  });
+
+  it("reads a cut report: counts for every incident, the rest paged in by rule, and what the prompt left out", async () => {
+    session.showReport("rec-cut");
+    const full = genReport({ id: "rec-cut", incidents: 1_200 });
+    const wire = wireReport(full);
+    const m = mount(["report"], (method, sent) => {
+      if (method === "reconcile.report") return ok(wire);
+      if (method === "reconcile.incidents") {
+        const rule = param(sent, "rule");
+        const items = full.red_lines.filter((i) => rule === undefined || i.rule === rule);
+        const start = Number(param(sent, "cursor") ?? "0");
+        const end = start + 500;
+        return ok({ items: items.slice(start, end), total: items.length, ...(end < items.length ? { next_cursor: String(end) } : {}) });
+      }
+      return base()(method, sent);
+    });
+    await settle(8);
+    expect(screen.getByText("1,200 logged")).toBeTruthy();
+    expect(role("reconcile-incidents")?.textContent).toContain("400");
+    expect(role("reconcile-incidents-paged")?.textContent).toContain("Showing 500 of 1,200");
+    expect(m.fetch.calls.filter((c) => c === "reconcile.incidents")).toHaveLength(1);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /^rate cap/i })));
+    await settle(8);
+    expect(role("reconcile-incidents-paged")?.textContent).toContain("Showing 400 of 400 for rate cap");
+    expect(m.fetch.calls.filter((c) => c === "reconcile.incidents").length).toBe(2);
+    expect(role("reconcile-synthesis-state")?.textContent).toContain("The prompt was cut to fit its budget");
+    expect(role("reconcile-synthesis")?.querySelectorAll("tr[data-omitted]").length).toBe(4);
   });
 
   it("shows ranks and tone quality with n and bound", async () => {

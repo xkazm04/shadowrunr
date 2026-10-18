@@ -147,3 +147,19 @@
   .lock { grid-template-columns: 1.6rem 1.8rem 1fr; }
   .rule { flex-direction: column; align-items: flex-start; }
 }
+
+.toneSet {
+  margin-left: auto;
+  padding: var(--sr-space-hair) var(--sr-space-cozy);
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  background: var(--sr-color-surface-card);
+  color: var(--sr-color-text-ink);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-caption);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.toneSet:disabled { opacity: .55; cursor: default; }
+.toneSetError { flex-basis: 100%; color: var(--sr-color-fail); }

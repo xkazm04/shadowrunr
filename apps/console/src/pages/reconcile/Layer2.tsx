@@ -1,7 +1,8 @@
 // Layer 2 of Reconcile & Plan: the winner's four tabs (l2b.js P3.L2.reconcile) as routes:
 //   reconcile/report[/held|failed]   reconcile/plan   reconcile/directives   reconcile/chat
 import { pageRoute, RouteLink, useRouter } from "../../router";
-import { StatePanel, Tabs, type TabItem } from "../../ui";
+import { Tabs, type TabItem } from "../../ui/Section";
+import { StatePanel } from "../../ui/States";
 import { ChatPage } from "./ChatPage";
 import { DirectivesPage } from "./DirectivesPage";
 import { useReportId } from "./hooks";
@@ -39,7 +40,7 @@ export function Layer2({ sub }: { readonly sub: readonly string[] }) {
 }
 
 function Body({ tab, second, extra, sub }: { tab: TabId | undefined; second: string | undefined; extra: boolean; sub: readonly string[] }) {
-  const reportId = useReportId();
+  const { reportId, pending } = useReportId();
   const filter = tab === "report" && !extra ? filterOf(second) : undefined;
   const known = tab !== undefined && !extra && (tab === "report" ? filter !== undefined : second === undefined);
   if (!known) {
@@ -52,6 +53,7 @@ function Body({ tab, second, extra, sub }: { tab: TabId | undefined; second: str
       </>
     );
   }
+  if (pending && (tab === "report" || tab === "plan")) return <StatePanel state="loading" title="Finding the newest report" />;
   switch (tab) {
     case "report":
       return reportId === undefined ? <NoReport /> : <ReportPage reportId={reportId} filter={filter ?? "all"} />;

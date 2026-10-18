@@ -2,7 +2,8 @@
 //   #/onair/rundown                         every run, paged and virtualised; the segment cards
 //   #/onair/rundown/<tournament>/<run>      one run's segment spans and beats, and "replay it"
 //   #/onair/dispatch[/<report>]             the Lord's dispatch, from a report's plan options
-import { Head, StatePanel, Tabs } from "../../ui";
+import { Head, Tabs } from "../../ui/Section";
+import { StatePanel } from "../../ui/States";
 import { pageRoute, useRouter } from "../../router";
 import { Dispatch } from "./Dispatch";
 import styles from "./Layer2.module.css";

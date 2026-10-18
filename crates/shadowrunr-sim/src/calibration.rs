@@ -77,15 +77,8 @@ pub struct Calibration {
     pub bait_tactics: Vec<BaitTactic>,
 }
 
-/// Where the calibration in use came from.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum CalibrationOrigin {
-    /// The researched file (`sim/calibration.json`).
-    File { path: String },
-    /// The compiled-in default: every figure is an assumption.
-    DefaultAssumption,
-}
+/// Where the calibration in use came from (a wire type: `results.json` lists it).
+pub use shadowrunr_types::results::CalibrationOrigin;
 
 /// A figure is an assumption when it cites no source (or cites "assumption" explicitly).
 pub fn is_assumption(source_ids: &[String]) -> bool {

@@ -19,7 +19,6 @@ const OUT_TS = "src/tokens.ts";
 const PREFIX = {
   color: "--sr-color-",
   alpha: "--sr-color-",
-  channel: "--sr-rgb-",
   font: "--sr-font-",
   weight: "--sr-weight-",
   size: "--sr-size-",
@@ -32,6 +31,9 @@ const PREFIX = {
   breakpoint: "--sr-bp-",
   texture: "--sr-",
   layout: "--sr-layout-",
+  // A/1's canvas palettes (fidelity roles, kept exact): the brain scope and the simulator grid.
+  brain: "--sr-brain-",
+  sim: "--sr-sim-",
 };
 
 const errors = [];
@@ -70,8 +72,9 @@ function renderRole(group, name, role) {
   }
   if (Array.isArray(role.value)) return role.value.map((r) => resolve(r, where)).join(",");
   const value = resolve(role.value, where);
-  if (group === "channel") return hexChannels(value, where).join(" ");
-  if (group === "alpha") return `rgba(${hexChannels(value, where).join(",")},${role.alpha})`;
+  // A role with an `alpha` is that primitive at that alpha (the alpha group, and the canvas
+  // palettes' translucent inks), written exactly as the winner and A/1 wrote it.
+  if (group === "alpha" || role.alpha !== undefined) return `rgba(${hexChannels(value, where).join(",")},${role.alpha})`;
   return value;
 }
 
@@ -206,13 +209,15 @@ const str = (v) => JSON.stringify(v);
 function renderTs() {
   const out = header("/*", " * ", " */");
   out.push("");
-  out.push("/** Every role resolved to its value (canvas and inline use). Primitives stay in the source JSON. */");
-  out.push(
-    `export const TOKENS = ${tsObject(
-      Object.entries(roles).map(([g, list]) => [g, tsObject(list.map((r) => [camel(r.name), str(r.value)]), 2)]),
-      0,
-    )} as const;`,
-  );
+  // One const per group, so a bundle that reads one group (the wall's layout, a canvas palette)
+  // does not carry every other role; TOKENS gathers them all.
+  const groupConst = (g) => `TOKENS_${g.replace(/-/g, "_").toUpperCase()}`;
+  for (const [g, list] of Object.entries(roles)) {
+    out.push(`/** The \`${g}\` roles resolved to their values. */`);
+    out.push(`export const ${groupConst(g)} = ${tsObject(list.map((r) => [camel(r.name), str(r.value)]), 0)} as const;`);
+  }
+  out.push("", "/** Every role resolved to its value (canvas and inline use). Primitives stay in the source JSON. */");
+  out.push(`export const TOKENS = ${tsObject(Object.keys(roles).map((g) => [g, groupConst(g)]), 0)} as const;`);
   out.push("", "/** CSS custom-property prefix per role group; a role's property is prefix + kebab-case key. */");
   out.push(`export const VAR_PREFIX = ${tsObject(Object.keys(roles).map((g) => [g, str(PREFIX[g])]), 0)} as const;`);
   out.push("", "/** Values that change at a breakpoint, keyed by breakpoint role then CSS custom property. */");

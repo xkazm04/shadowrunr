@@ -4,7 +4,9 @@ import type { Directive, DirectiveKind, SegmentId } from "@shadowrunr/contract";
 import { useState, type FormEvent } from "react";
 import { useMutation, useRpc, viewOfError } from "../../data";
 import { QueryView } from "../../kit";
-import { Chip, FilterTable, Head, type Column } from "../../ui";
+import { Chip } from "../../ui/Chip";
+import { FilterTable, type Column } from "../../ui/FilterTable";
+import { Head } from "../../ui/Section";
 import styles from "./Layer2.module.css";
 import { dateTime } from "./model";
 

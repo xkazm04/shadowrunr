@@ -1,13 +1,14 @@
-//! Read-only catalogue RPCs: `character.list`, `character.get`, `character.rules[.set]`,
-//! `segments.tables` and `ranks.table`. Everything is read from the same sources the brain,
+//! Catalogue RPCs: `character.list`, `character.get`, `character.rules[.set]`,
+//! `character.tone.set`, `segments.tables` and `ranks.table`. Everything is read from the same sources the brain,
 //! the segment runtime and the sim instrument use, so the operator sees what will run.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use shadowrunr_brain::rules::{self, RulesOverride};
 use shadowrunr_brain::{load_character_with, BrainError, CharacterPackage};
+use shadowrunr_segments::command::COMMAND_SPECS;
 use shadowrunr_segments::ranks::LADDER;
 use shadowrunr_segments::table::{self, Guard, Trigger, COMMAND_NAMES, OP_TAGS};
 use shadowrunr_segments::RankTable;
@@ -69,6 +70,86 @@ fn load(cfg: &Config, id: &str) -> Result<CharacterPackage, RpcError> {
     let dir = character_dir(cfg, id)?;
     let over = RulesOverride::File(rules::override_path(&cfg.paths.data, id));
     load_character_with(&dir, "", &over).map_err(|e| RpcError::io(format!("character {id}: {e}")))
+}
+
+/// `character.toml` fields the brain's loader does not keep.
+#[derive(Deserialize, Default)]
+struct Display {
+    #[serde(default)]
+    tagline: Option<String>,
+}
+
+fn tagline(dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join("character.toml")).ok()?;
+    let d: Display = toml::from_str(&text).ok()?;
+    d.tagline
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+}
+
+/// `<data>/characters/<id>/active.json`: the operator's choices for a character.
+#[derive(Serialize, Deserialize, Default)]
+struct Active {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tone: Option<String>,
+}
+
+fn active_path(cfg: &Config, id: &str) -> PathBuf {
+    cfg.paths
+        .data
+        .join("characters")
+        .join(id)
+        .join("active.json")
+}
+
+/// The operator's tone when it names one of `tones`, else `default_tone`. A stale override
+/// (its tone file was removed) falls back rather than failing the catalogue.
+fn active_tone(cfg: &Config, id: &str, default_tone: &str, tones: &[String]) -> String {
+    std::fs::read_to_string(active_path(cfg, id))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Active>(&t).ok())
+        .and_then(|a| a.tone)
+        .filter(|t| tones.iter().any(|x| x == t))
+        .unwrap_or_else(|| default_tone.to_string())
+}
+
+fn tone_ids(dir: &Path) -> Vec<String> {
+    markdown_files(&dir.join("tones"))
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect()
+}
+
+/// `character.tone.set`: write the operator's tone into `<data>/characters/<id>/active.json`
+/// and return the updated summary. The tone must be one of the package's `tones/*.md`.
+pub fn character_tone_set(
+    cfg: &Config,
+    id: &str,
+    tone: &str,
+) -> Result<CharacterSummary, RpcError> {
+    let dir = character_dir(cfg, id)?;
+    if !tone_ids(&dir).iter().any(|t| t == tone) {
+        return Err(RpcError::not_found(format!(
+            "character {id} has no tone {tone:?}"
+        )));
+    }
+    let path = active_path(cfg, id);
+    let mut active: Active = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    active.tone = Some(tone.to_string());
+    let text = serde_json::to_string_pretty(&active)
+        .map_err(|e| RpcError::internal(format!("active.json: {e}")))?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| RpcError::io(format!("{}: {e}", parent.display())))?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, text + "\n")
+        .and_then(|()| std::fs::rename(&tmp, &path))
+        .map_err(|e| RpcError::io(format!("{}: {e}", path.display())))?;
+    summary(cfg, id)
 }
 
 fn read_text(path: &Path) -> Result<String, RpcError> {
@@ -138,13 +219,12 @@ fn situations(dir: &Path) -> Result<Vec<Situation>, RpcError> {
 
 fn summary(cfg: &Config, id: &str) -> Result<CharacterSummary, RpcError> {
     let pkg = load(cfg, id)?;
-    let tones = markdown_files(&pkg.dir.join("tones"))
-        .into_iter()
-        .map(|(id, _)| id)
-        .collect();
+    let tones = tone_ids(&pkg.dir);
     Ok(CharacterSummary {
         rules_enabled: pkg.rules.iter().filter(|r| r.enabled).count() as u32,
         rules_total: pkg.rules.len() as u32,
+        tagline: tagline(&pkg.dir),
+        active_tone: active_tone(cfg, &pkg.id, &pkg.default_tone, &tones),
         id: pkg.id,
         name: pkg.name,
         default_tone: pkg.default_tone,
@@ -212,9 +292,12 @@ pub fn character_get(cfg: &Config, id: &str) -> Result<CharacterDetail, RpcError
         .iter()
         .map(|r| (*r, pkg.rank_titles.title(*r)))
         .collect();
+    let tone_list: Vec<String> = tones.iter().map(|t| t.id.clone()).collect();
     Ok(CharacterDetail {
         files: package_files(&pkg.dir),
         situations: situations(&pkg.dir)?,
+        tagline: tagline(&pkg.dir),
+        active_tone: active_tone(cfg, &pkg.id, &pkg.default_tone, &tone_list),
         id: pkg.id,
         name: pkg.name,
         default_tone: pkg.default_tone,
@@ -249,8 +332,12 @@ fn guard_name(g: Guard) -> &'static str {
     }
 }
 
-/// `segments.tables`: the compiled-in tables the segment runtime interprets.
-pub fn segment_tables() -> Result<SegmentTables, RpcError> {
+/// `segments.tables`: the compiled-in tables the segment runtime interprets, and the chat
+/// commands with the rank gate of `<segments>/ranks.toml`.
+pub fn segment_tables(cfg: &Config) -> Result<SegmentTables, RpcError> {
+    let path = cfg.paths.segments.join("ranks.toml");
+    let ranks = RankTable::load_or_builtin(&path)
+        .map_err(|e| RpcError::io(format!("{}: {e}", path.display())))?;
     let tables = table::tables().map_err(|e| RpcError::internal(e.to_string()))?;
     let segments = tables
         .iter()
@@ -294,6 +381,15 @@ pub fn segment_tables() -> Result<SegmentTables, RpcError> {
         segments,
         op_tags: OP_TAGS.iter().map(|s| s.to_string()).collect(),
         command_names: COMMAND_NAMES.iter().map(|s| s.to_string()).collect(),
+        commands: COMMAND_SPECS
+            .iter()
+            .map(|c| CommandInfo {
+                name: c.name.to_string(),
+                args: c.args.to_string(),
+                what: c.what.to_string(),
+                min_rank: c.rank_gated.then_some(ranks.propose_min_rank),
+            })
+            .collect(),
     })
 }
 

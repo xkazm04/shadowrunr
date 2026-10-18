@@ -6,8 +6,9 @@ import { FoilArt, MalakorArt } from "@shadowrunr/stage-kit/ui";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { CharacterSummary } from "@shadowrunr/contract";
 import { useConnection, useRpc } from "../../data";
+import { PosterFrame } from "../../kit/PosterFrame";
 import { pageRoute, RouteLink } from "../../router";
-import { cx } from "../../ui";
+import { cx } from "../../ui/cx";
 import { ART_CHARACTER, CharacterFace, GenericAvatar } from "./Avatar";
 import styles from "./Layer1.module.css";
 import { factsLine, foilName, foilShort, ROSTER_MANY, rosterKicker, rosterWindow, selectedIndex, shortName, stepIndex, toneLabel } from "./model";
@@ -40,19 +41,13 @@ function CastPoster() {
   const foilNames = new Map((detail.data?.foils ?? []).map((f) => [f.id, foilName(f)]));
 
   return (
-    <div className={styles.root} data-role="characters-layer1">
-      <div className={styles.top}>
-        <div className={styles.brand}>
-          <svg viewBox="0 0 40 40" aria-hidden="true">
-            <path d="M6 16L9 5l7 7 4-9 4 9 7-7 3 11z" fill="currentColor" />
-            <ellipse cx="20" cy="26" rx="11" ry="10" fill="none" stroke="currentColor" strokeWidth="3" />
-            <circle cx="16" cy="25" r="2.4" fill="currentColor" />
-            <circle cx="24" cy="25" r="2.4" fill="currentColor" />
-          </svg>
-          <b>Shadowrunr OS</b>
-          <span>Season 0 · v0.1</span>
-        </div>
-      </div>
+    <PosterFrame
+      className={styles.root}
+      role="characters-layer1"
+      measure
+      credit={cur ? `Starring ${cur.name} · ` : "The cast · "}
+      cta={{ to: cur ? pkg("package", "constitution") : pageRoute("characters", "all"), label: cur ? "Open the character package" : "Open all characters", role: "characters-cta" }}
+    >
       <div className={styles.hero}>
         <RouteLink to={pkg()} className={cx(styles.hot, styles.name)} title="The character package: constitution, optional rules, bible, tones, foils, situations" data-role="characters-nameplate">
           {cur ? (
@@ -63,6 +58,11 @@ function CastPoster() {
                   <i key={i}>{w}</i>
                 ))}
               </span>
+              {cur.tagline !== undefined && (
+                <span className={styles.tg} data-role="characters-tagline">
+                  {cur.tagline}
+                </span>
+              )}
               <span className={styles.r}>{factsLine(cur)}</span>
             </>
           ) : (
@@ -90,9 +90,10 @@ function CastPoster() {
         {cur && (
           <RouteLink to={pkg("package", "tones")} className={cx(styles.hot, styles.tone)} title="Tones, and what is still unmeasured" data-role="characters-tone">
             <b>Active tone</b>
-            <span>{toneLabel(cur.default_tone)}</span>
+            <span data-role="characters-active-tone">{toneLabel(cur.active_tone)}</span>
             <em>
-              The package default. {cur.tones.length} tone {cur.tones.length === 1 ? "variant is" : "variants are"} the tournament axis.
+              {cur.active_tone === cur.default_tone ? "The package default." : `The operator's choice; the package default is ${toneLabel(cur.default_tone)}.`} {cur.tones.length} tone{" "}
+              {cur.tones.length === 1 ? "variant is" : "variants are"} the tournament axis.
             </em>
           </RouteLink>
         )}
@@ -119,17 +120,7 @@ function CastPoster() {
           </p>
         )}
       </div>
-      <div className={styles.foot}>
-        <p className={styles.credit}>
-          {cur ? `Starring ${cur.name} · ` : "The cast · "}
-          <span>v0.1 · media-less phase: voice, avatar and broadcast come next · stylised illustration</span>
-        </p>
-        <RouteLink to={cur ? pkg("package", "constitution") : pageRoute("characters", "all")} className={styles.cta} data-role="characters-cta">
-          <span>{cur ? "Open the character package" : "Open all characters"}</span>
-          <i />
-        </RouteLink>
-      </div>
-    </div>
+    </PosterFrame>
   );
 }
 

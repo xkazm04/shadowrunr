@@ -3,7 +3,7 @@
 import { useRpc } from "../../data";
 import { QueryView } from "../../kit";
 import { RouteLink, pageRoute } from "../../router";
-import { Chip } from "../../ui";
+import { Chip } from "../../ui/Chip";
 import styles from "./Layer2.module.css";
 import { handoverText } from "./beats";
 

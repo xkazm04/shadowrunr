@@ -61,6 +61,41 @@ export function genReport(opts: { id?: string; held?: number; failed?: number; i
   };
 }
 
+/**
+ * The report as the daemon sends a large one (report_wire.rs): every incident counted by rule and
+ * source, the list cut to its first `page`, the total, and what the synthesis prompt carried.
+ */
+export function wireReport(r: ReconcileReport, page = 100): ReconcileReport {
+  const counts = new Map<string, { rule: string; source: RuleIncident["source"]; count: number; runs: Set<string> }>();
+  for (const i of r.red_lines) {
+    const k = `${i.rule}|${i.source}`;
+    const c = counts.get(k) ?? { rule: i.rule, source: i.source, count: 0, runs: new Set<string>() };
+    c.count += 1;
+    c.runs.add(i.run_id);
+    counts.set(k, c);
+  }
+  const red_line_counts = [...counts.values()].map((c) => ({ rule: c.rule, source: c.source, count: c.count, runs: c.runs.size })).sort((a, b) => b.count - a.count || a.rule.localeCompare(b.rule));
+  const cut = r.red_lines.length > page;
+  return {
+    ...r,
+    red_lines: r.red_lines.slice(0, page),
+    red_line_counts,
+    ...(cut ? { red_lines_total: r.red_lines.length } : {}),
+    synthesis_input: {
+      budget_tokens: 120_000,
+      estimated_tokens: 118_400,
+      runs: { included: 40, omitted: 20 },
+      excerpt_lines: 2_400,
+      failure_refs: { included: 300, omitted: 0 },
+      quality_refs: { included: 120, omitted: 64 },
+      incidents: { included: 50, omitted: r.red_lines.length - 50 },
+      tone_cells: { included: 12, omitted: 0 },
+      rule_failures: { included: 40, omitted: 8 },
+      omitted: ["transcript excerpts of 20 runs", "64 failed quality turns"],
+    },
+  };
+}
+
 export const CONSTITUTION_DIFF = "--- a/constitution.md\n+++ b/constitution.md\n@@ -1,2 +1,3 @@\n # Constitution\n+He may lie about being an AI.\n";
 export const BIBLE_DIFF = "--- a/bible.md\n+++ b/bible.md\n@@ -135,2 +135,3 @@\n chat picks winners.\n+When chat goes quiet he deals a fresh premise.\n-He waits.\n";
 

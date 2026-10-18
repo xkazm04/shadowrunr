@@ -1,0 +1,58 @@
+/* The layer-1 frame (the winner's l1.css brand row, footer, credit and call to action), shared
+   by every page. Colours come from the page palette (`--sr-page-*`) the poster scopes. */
+
+.measure { width: min(100%, var(--sr-layout-body-measure)); margin-right: auto; margin-left: auto; }
+
+.top { display: flex; flex: none; align-items: center; height: 3.2rem; padding-right: 23rem; }
+
+.brand { display: flex; align-items: center; gap: var(--sr-space-cozy); font-family: var(--sr-font-display); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.brand svg { flex: none; width: 1.7rem; height: 1.7rem; }
+.brand b { font-size: var(--sr-size-subhead); font-weight: var(--sr-weight-bold); }
+.brand span { padding-left: var(--sr-space-cozy); border-left: var(--sr-stroke-rule) solid currentcolor; font-size: var(--sr-size-body); font-weight: var(--sr-weight-semibold); letter-spacing: .16em; opacity: .85; }
+
+.foot {
+  position: relative;
+  z-index: var(--sr-z-poster-spine);
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sr-space-base);
+  height: 3.5rem;
+  margin-bottom: .15rem;
+  border-top: var(--sr-stroke-rule) solid currentcolor;
+}
+
+.credit { min-width: 0; margin: 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-small); line-height: 1.25; letter-spacing: .1em; text-transform: uppercase; }
+.credit span { display: block; max-width: 48rem; overflow: hidden; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); font-size: var(--sr-size-caption); letter-spacing: .01em; text-overflow: ellipsis; text-transform: none; white-space: nowrap; opacity: .9; }
+
+.cta {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sr-space-close);
+  padding: .45rem var(--sr-space-base);
+  background: var(--sr-page-type);
+  color: var(--sr-page-face);
+  box-shadow: .25rem .25rem 0 var(--sr-page-overprint);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-kicker);
+  letter-spacing: .1em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: transform .2s, box-shadow .2s;
+}
+.cta:hover,
+.cta:focus-visible { transform: translate(-.12rem, -.12rem); box-shadow: .4rem .4rem 0 var(--sr-page-overprint); }
+.cta i { width: 0; height: 0; border: .5rem solid transparent; border-right: 0; border-left: .75rem solid currentcolor; }
+
+[data-narrow="true"] .top { height: auto; flex-wrap: wrap; gap: var(--sr-space-snug); padding: var(--sr-space-tick) 0; }
+[data-narrow="true"] .brand span { display: none; }
+[data-narrow="true"] .foot { height: auto; flex-direction: column; align-items: stretch; padding: var(--sr-space-compact) 0 var(--sr-space-close); }
+[data-narrow="true"] .credit span { white-space: normal; }
+[data-narrow="true"] .cta { justify-content: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cta { transition: none; }
+}

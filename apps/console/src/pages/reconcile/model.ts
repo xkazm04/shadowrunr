@@ -1,6 +1,6 @@
 // Pure derivations for Reconcile & Plan: the triptych counts, incident groups, the caution
-// slip, evidence refs, sources and diffs. No React, no DOM, so every rule is unit-tested.
-import type { Evidence, PlanOption, ReconcileReport, RuleIncident, Source } from "@shadowrunr/contract";
+// slip, evidence refs, sources and diffs (ref parsing is kit/events). No React, no DOM, so every rule is unit-tested.
+import type { Evidence, PlanOption, ReconcileReport, Source } from "@shadowrunr/contract";
 
 export interface Triptych {
   readonly held: number;
@@ -29,12 +29,19 @@ export interface IncidentGroup {
   readonly n: number;
 }
 
-/** Incidents per rule, most frequent first; every `alleged:<hex>` folds into `alleged`. */
-export function incidentGroups(incidents: readonly RuleIncident[]): IncidentGroup[] {
+const groupKey = (rule: string): string => (rule.split(":")[0] === "alleged" ? "alleged" : rule);
+
+/**
+ * Incidents per rule, most frequent first; every `alleged:<hex>` folds into `alleged`. From the
+ * report's `red_line_counts` (every incident, even when the wire cut the list to a page), else
+ * from the incidents listed.
+ */
+export function incidentGroups(report: Pick<ReconcileReport, "red_lines" | "red_line_counts">): IncidentGroup[] {
   const counts = new Map<string, number>();
-  for (const i of incidents) {
-    const key = i.rule.split(":")[0] === "alleged" ? "alleged" : i.rule;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+  if (report.red_line_counts && report.red_line_counts.length > 0) {
+    for (const c of report.red_line_counts) counts.set(groupKey(c.rule), (counts.get(groupKey(c.rule)) ?? 0) + c.count);
+  } else {
+    for (const i of report.red_lines) counts.set(groupKey(i.rule), (counts.get(groupKey(i.rule)) ?? 0) + 1);
   }
   return [...counts]
     .map(([rule, n]) => ({ rule, n }))
@@ -65,28 +72,6 @@ export function caution(report: ReconcileReport): string | undefined {
   else if (small > 0) parts.push(`${small} of ${rates.length} rates rest on small samples`);
   if (parts.length === 0) return undefined;
   return `Handle with care: ${parts.join(" and ")}.`;
-}
-
-export interface Ref {
-  readonly runId: string;
-  readonly line: number;
-}
-
-/** `"<run_id>#<line>"` (run ids may be tournament-qualified with `/`). */
-export function parseRef(ref: string): Ref | undefined {
-  const at = ref.lastIndexOf("#");
-  if (at <= 0) return undefined;
-  const line = Number(ref.slice(at + 1));
-  if (!Number.isInteger(line) || line < 0) return undefined;
-  return { runId: ref.slice(0, at), line };
-}
-
-/** The short chip text for a ref: line first, then the run's tail. */
-export function refLabel(ref: string): string {
-  const p = parseRef(ref);
-  if (!p) return ref;
-  const run = p.runId.length > 28 ? `…${p.runId.slice(-26)}` : p.runId;
-  return `L${p.line} · ${run}`;
 }
 
 export const evidenceRefs = (items: readonly Evidence[] | undefined): string[] => (items ?? []).flatMap((e) => e.refs ?? []);
@@ -146,8 +131,6 @@ export const OPTION_KIND_LABEL: Readonly<Record<PlanOption["kind"], string>> = {
 export function ruleLabel(id: string): string {
   return id.replace(/^(red-line|role|situation|talk):/, "").replace(/[-_]+/g, " ");
 }
-
-export const pct = (x: number, digits = 0): string => `${(Math.min(1, Math.max(0, x)) * 100).toFixed(digits)}%`;
 
 export function dateTime(ms: number): string {
   const d = new Date(ms);

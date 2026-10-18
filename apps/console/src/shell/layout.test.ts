@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { layoutPosters, type LayoutInput } from "./layout";
+import { layoutPosters, POSTER_REM, ROOT_PX, rootPx, type LayoutInput } from "./layout";
+import { BUS_REM } from "./MixerBus";
 import { METRICS } from "./Wall";
 
 const base: LayoutInput = {
@@ -51,5 +54,31 @@ describe("poster layout", () => {
     expect(wall.every((r) => r.width === 400)).toBe(true);
     const l1 = layoutPosters({ ...base, narrow: true, width: 400, view: "l1" }, METRICS).rects;
     expect(l1.slice(1).every((r) => r.width === 80)).toBe(true);
+  });
+});
+
+describe("the root size (app/global.css)", () => {
+  // Vitest runs from the console package root.
+  const css = readFileSync(join(process.cwd(), "src/app/global.css"), "utf8");
+
+  it("keeps the height above the full mixer bus at the winner's 50rem", () => {
+    for (const [w, h] of [
+      [1600, 1000],
+      [1920, 1080],
+      [1280, 800],
+    ] as const) {
+      const r = rootPx(w, h, false, BUS_REM.full);
+      const l = layoutPosters({ ...base, view: "l1", width: w, height: h, rem: r, busRem: BUS_REM.full }, METRICS);
+      expect(l.stageHeight / r, `${w}x${h}`).toBeCloseTo(POSTER_REM, 5);
+    }
+    // Width-bound and clamped screens keep the clamp.
+    expect(rootPx(1000, 1000, false, BUS_REM.full)).toBe(14);
+    expect(rootPx(3840, 2160, false, BUS_REM.full)).toBe(30.4);
+    expect(rootPx(700, 900, true, BUS_REM.full)).toBe(16);
+  });
+
+  it("is the formula global.css writes", () => {
+    expect(css).toContain(`--sr-root-size: clamp(${ROOT_PX.min}px, min(1.25vw, calc(100vh / ${POSTER_REM + BUS_REM.full})), ${ROOT_PX.max}px);`);
+    expect(css).toContain(`--sr-root-size: ${ROOT_PX.narrow}px;`);
   });
 });

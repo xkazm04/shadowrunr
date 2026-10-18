@@ -2,7 +2,8 @@ import { foldEvents } from "@shadowrunr/stage-kit";
 import type { StreamEvent } from "@shadowrunr/contract";
 import { describe, expect, it } from "vitest";
 import { CHAT_ROWS, LIFE_MS, captionView, captionWords, cardView, chatRows, decreeView, lifeOf, slateView, voteView } from "./view";
-import { beatsOf, clock, countsOf } from "./beats";
+import { span as clock } from "../../kit/events";
+import { beatsOf, countsOf } from "./beats";
 import { transcript } from "./testdata";
 
 const viewer = (name: string) => ({ id: name, name, platform: "sim" as const, rank: "warlock" as const });

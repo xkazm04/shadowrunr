@@ -50,6 +50,7 @@ export function transcript(n: number): StreamEvent[] {
 
 export const TABLES: SegmentTables = {
   command_names: ["vote", "summon", "hint", "grade", "propose"],
+  commands: [{ name: "vote", args: "<option>", what: "Vote in the open poll." }],
   op_tags: ["start_poll", "close_poll", "reveal_hex"],
   segments: [
     {

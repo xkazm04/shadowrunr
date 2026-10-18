@@ -1,11 +1,11 @@
 /* The On Air stream screen: the winner's l1.css `.screen` block over tokens (fidelity role:
    the layer-1 graphic). Geometry, colours and timings are kept exactly. Alpha steps on the
    graphic are color-mix over an admitted colour role (the stylelint gate bans rgb()); the
-   scrim #070a09 has no colour role, so --scrim mixes it exactly from void and mask ink.
+   scrim #070a09 is the colour role --sr-color-scrim.
    Motion inside SVG art uses SVG user units: calc(n * var(--sr-stroke-hair)) is n units. */
 
 .screen {
-  --scrim: color-mix(in srgb, var(--sr-color-surface-void) 64%, var(--sr-color-mask-ink));
+  --scrim: var(--sr-color-scrim);
   --paper: var(--sr-color-surface-paper);
   --ink: var(--sr-page-key);
   position: relative;

@@ -3,10 +3,13 @@
 // repeats across tournaments is never ambiguous.
 import { useMemo, useState } from "react";
 import type { RunRow } from "@shadowrunr/contract";
+import { usePaged } from "../../data";
 import { pageRoute, RouteLink, useRouter } from "../../router";
-import { FilterTable, OfflineState, Section, StatePanel, State, type Column, type Facets } from "../../ui";
-import { usePagedRpc } from "./queries";
-import { int } from "./events";
+import { State } from "../../ui/Chip";
+import { FilterTable, type Column, type Facets } from "../../ui/FilterTable";
+import { Section } from "../../ui/Section";
+import { OfflineState, StatePanel } from "../../ui/States";
+import { int } from "../../kit/events";
 import styles from "./Layer2.module.css";
 
 const PAGE = 500;
@@ -38,29 +41,30 @@ const haystack = (r: RunRow) => `${r.run_id} ${r.tournament_id} ${r.spec.tone_va
 export function Runs() {
   const router = useRouter();
   const [pages, setPages] = useState(STEP);
-  const runs = usePagedRpc("runs.page", { limit: PAGE }, pages);
+  const runs = usePaged("runs.page", { limit: PAGE }, pages);
+  const items = runs.query.data;
   const facets = useMemo<Facets<RunRow, string>>(() => {
     const tiers = new Map<string, number>();
-    for (const r of runs.data.items) tiers.set(r.spec.core_tier, (tiers.get(r.spec.core_tier) ?? 0) + 1);
+    for (const r of items ?? []) tiers.set(r.spec.core_tier, (tiers.get(r.spec.core_tier) ?? 0) + 1);
     return {
       label: "Filter by core tier",
       initial: "all",
-      options: [{ id: "all", label: "all", count: runs.data.items.length }, ...[...tiers].map(([id, count]) => ({ id, label: id, count }))],
+      options: [{ id: "all", label: "all", count: items?.length ?? 0 }, ...[...tiers].map(([id, count]) => ({ id, label: id, count }))],
       predicate: (r, f) => f === "all" || r.spec.core_tier === f,
     };
-  }, [runs.data.items]);
+  }, [items]);
 
-  if (runs.data.pages === 0) {
-    const v = runs.errorView;
+  if (items === undefined) {
+    const v = runs.query.errorView;
     if (!v) return <StatePanel state="loading" title="Loading the runs" />;
-    return v.state === "offline" ? <OfflineState onRetry={runs.reload} detail={v.message} /> : <StatePanel state={v.state} title={v.title} hint={v.hint} action={{ label: "Retry", onClick: runs.reload }} />;
+    return v.state === "offline" ? <OfflineState onRetry={runs.query.reload} detail={v.message} /> : <StatePanel state={v.state} title={v.title} hint={v.hint} action={{ label: "Retry", onClick: runs.query.reload }} />;
   }
-  if (runs.data.items.length === 0) return <StatePanel state="empty" title="No runs yet" hint="Simulated streams appear here once a tournament has run." />;
+  if (items.length === 0) return <StatePanel state="empty" title="No runs yet" hint="Simulated streams appear here once a tournament has run." />;
   return (
     <Section
-      title={`Runs · ${int(runs.data.items.length)}${runs.data.more ? "+" : ""}`}
+      title={`Runs · ${int(items.length)}${runs.more ? "+" : ""}`}
       right={
-        runs.data.more ? (
+        runs.more ? (
           <button type="button" className={styles.more} onClick={() => setPages((p) => p + STEP)}>
             Load {int(STEP * PAGE)} more
           </button>
@@ -69,7 +73,7 @@ export function Runs() {
     >
       <div data-role="brain-runs">
         <FilterTable
-          rows={runs.data.items}
+          rows={items}
           columns={COLUMNS}
           getKey={qualifiedRun}
           haystack={haystack}

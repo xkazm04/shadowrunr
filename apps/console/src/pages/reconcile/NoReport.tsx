@@ -1,15 +1,14 @@
 // The designed empty state when there is no report on show: run the reconciler over a
 // tournament (`reconcile.run`), or open a report the daemon already holds by its id.
 import { useState, type FormEvent } from "react";
-import { useRpc, viewOfError } from "../../data";
+import { LLM_TIMEOUT_MS, useMutation, useRpc, viewOfError } from "../../data";
 import { ConnectionState } from "../../kit";
-import { useLongMutation } from "./hooks";
 import styles from "./Layer2.module.css";
 import { session } from "./session";
 
 export function NoReport() {
   const tournaments = useRpc("tournament.list", {});
-  const run = useLongMutation("reconcile.run");
+  const run = useMutation("reconcile.run", { timeoutMs: LLM_TIMEOUT_MS });
   const [picked, setPicked] = useState<string>("");
   const [openId, setOpenId] = useState("");
   const [error, setError] = useState<string | undefined>();

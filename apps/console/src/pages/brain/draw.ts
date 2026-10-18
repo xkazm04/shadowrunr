@@ -1,7 +1,7 @@
 // A/1's oscilloscope and memory canvases (app.js:370-390), drawn once per input change. A/1
 // redrew every frame for its sweep; here the sweep is a CSS overlay and the pulse dots are drawn
 // at A/1's reduced-motion state (`sweep = 1`), so nothing runs per tick.
-import { BRAIN, roleColor } from "./palette";
+import { TOKENS_BRAIN } from "@shadowrunr/tokens";
 import type { Lane, MemoryCurve } from "./brainModel";
 
 /** The slice of CanvasRenderingContext2D the brain draws with (tests pass a recorder). */
@@ -24,6 +24,23 @@ export type Ctx = Pick<
   | "globalAlpha"
 >;
 
+/** A/1 `ROLEC`: one colour per engine role; roles A/1 never saw draw in `roleUnknown`. */
+const ROLE_COLOR: Readonly<Record<string, string | undefined>> = {
+  core_thread: TOKENS_BRAIN.roleCoreThread,
+  chatter: TOKENS_BRAIN.roleChatter,
+  researcher: TOKENS_BRAIN.roleResearcher,
+  consolidator: TOKENS_BRAIN.roleConsolidator,
+  judge: TOKENS_BRAIN.roleJudge,
+  chat_picker: TOKENS_BRAIN.roleChatPicker,
+};
+
+export function roleColor(role: string): string {
+  return ROLE_COLOR[role] ?? TOKENS_BRAIN.roleUnknown;
+}
+
+/** Memory curves, one per lane (A/1 indexed four runs; more lanes cycle). */
+export const MEMORY = [TOKENS_BRAIN.memoryA, TOKENS_BRAIN.memoryB, TOKENS_BRAIN.memoryC, TOKENS_BRAIN.memoryD] as const;
+
 export interface Size {
   readonly w: number;
   readonly h: number;
@@ -41,8 +58,8 @@ export function drawScope(c: Ctx, { w, h }: Size, lanes: readonly Lane[]): void 
   c.clearRect(0, 0, w, h);
   const top = h * 0.3;
   const laneH = (h - top - h * 0.05) / Math.max(1, lanes.length);
-  const s = BRAIN.scope;
-  c.strokeStyle = s.grid;
+  const b = TOKENS_BRAIN;
+  c.strokeStyle = b.scopeGrid;
   c.lineWidth = 1;
   for (let gx = 0; gx <= 20; gx++) {
     c.beginPath();
@@ -52,7 +69,7 @@ export function drawScope(c: Ctx, { w, h }: Size, lanes: readonly Lane[]): void 
   }
   lanes.forEach((lane, li) => {
     const y0 = top + li * laneH + laneH * 0.62;
-    c.fillStyle = s.laneLabel;
+    c.fillStyle = b.scopeLaneLabel;
     c.font = `600 ${Math.max(11, laneH * 0.2)}px ${LANE_FONT}`;
     c.fillText(lane.label.toUpperCase(), 8, y0 - laneH * 0.42);
     c.beginPath();
@@ -66,9 +83,9 @@ export function drawScope(c: Ctx, { w, h }: Size, lanes: readonly Lane[]): void 
       c.lineTo(x + 6, y0);
     }
     c.lineTo(w, y0);
-    c.strokeStyle = s.trace;
+    c.strokeStyle = b.scopeTrace;
     c.lineWidth = 1.6;
-    c.shadowColor = s.traceGlow;
+    c.shadowColor = b.scopeTraceGlow;
     c.shadowBlur = 8;
     c.stroke();
     c.shadowBlur = 0;
@@ -83,7 +100,7 @@ export function drawScope(c: Ctx, { w, h }: Size, lanes: readonly Lane[]): void 
       c.fill();
       c.globalAlpha = 1;
       if (p.err) {
-        c.strokeStyle = s.error;
+        c.strokeStyle = b.scopeError;
         c.beginPath();
         c.arc(x, y0 + laneH * 0.3, 7, 0, 7);
         c.stroke();
@@ -99,7 +116,7 @@ export function drawMemory(c: Ctx, { w, h }: Size, curves: readonly (MemoryCurve
     c.beginPath();
     c.moveTo(0, h);
     for (const p of curve.points) c.lineTo((p.t / curve.span) * w, h - (p.n / memMax) * h * 0.62);
-    c.strokeStyle = BRAIN.memory[li % BRAIN.memory.length] ?? BRAIN.unknownRole;
+    c.strokeStyle = MEMORY[li % MEMORY.length] ?? TOKENS_BRAIN.roleUnknown;
     c.lineWidth = 2;
     c.stroke();
   });

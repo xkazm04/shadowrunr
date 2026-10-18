@@ -1,10 +1,10 @@
-import type { TournamentResults } from "@shadowrunr/contract";
 import { describe, expect, it } from "vitest";
 import { buildTile, gridLayout, hitTest, runGrid, summarise, tilesInView, tileOrigin } from "./grid";
 import { cellFailRate, cellRouteKey, parseCellRouteKey, rateBound, worstFirst } from "./cells";
-import { healthColor } from "./palette";
-import { eventText, parseRef, verifyQuote } from "./quote";
-import { readResults, type CellResult } from "./results";
+import { healthColor } from "./ramp";
+import { eventText, parseRef } from "../../kit/events";
+import { verifyQuote } from "./quote";
+import type { CellResult } from "./results";
 import { TRANSCRIPT, world } from "./testgen";
 
 /** A/1 app.js:25, verbatim, as the reference for the port. */
@@ -56,33 +56,20 @@ describe("A/1 fidelity: grid geometry and hit-testing", () => {
   });
 });
 
-describe("results narrowing", () => {
-  it("reads a results.json and names the first misfit", () => {
-    const w = world(1, 24);
-    const raw = w.results.get("t001") as TournamentResults;
-    const r = readResults(raw);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value.cells.length).toBeGreaterThan(0);
-    const bad = readResults({ ...raw, cells: [{ cell: { tone: "x" } }] });
-    expect(bad).toEqual({ ok: false, path: "cells.0.cell.core_tier" });
-    expect(readResults({ cells: [] })).toEqual({ ok: false, path: "tournament_id" });
-  });
-});
-
 describe("tiles", () => {
-  it("colours runs by their cell, marks red-line fails by ref, leaves unjudged runs unlit", () => {
+  it("colours runs by their own health, marks their red-line fails, leaves unjudged runs unlit", () => {
     const w = world(1, 24);
-    const res = readResults(w.results.get("t001") as TournamentResults);
-    if (!res.ok) throw new Error("fixture misfit");
     const runs = w.runs.get("t001") ?? [];
-    const tile = buildTile("t001", 24, runs, res.value);
+    const tile = buildTile("t001", 24, runs);
     expect(tile.runs).toHaveLength(24);
     expect(tile.runs[9]?.health).toBeUndefined(); // has_verdict false
-    expect(tile.runs[0]?.red).toBe(true); // named by the fail ref
-    expect(tile.runs.filter((r) => r.red)).toHaveLength(res.value.cells.filter((_, j) => j % 4 === 0).length);
+    expect(tile.runs[0]?.red).toBe(true); // its verdict failed a red line
+    expect(tile.runs.filter((r) => r.red)).toHaveLength(runs.filter((r) => (r.red_line_fails ?? 0) > 0).length);
+    expect(tile.red).toBe(runs.reduce((n, r) => n + (r.red_line_fails ?? 0), 0));
     expect(tile.red).toBeGreaterThan(0);
-    expect(tile.health).toBeCloseTo(42 / 56);
-    const s = summarise([tile, buildTile("t002", 0, [], undefined)]);
+    const judged = runs.filter((r) => r.health !== undefined);
+    expect(tile.health).toBeCloseTo(judged.reduce((a, r) => a + (r.health ?? 0), 0) / judged.length);
+    const s = summarise([tile, buildTile("t002", 0, [])]);
     expect(s).toMatchObject({ runs: 24, red: tile.red });
     expect(s.best?.id).toBe("t001");
   });
@@ -98,6 +85,9 @@ describe("heatmap (moved from the legacy lib/heatmap.ts)", () => {
     judge_tiers: [],
     rules: { "a:b": { pass: 1, fail, not_provoked: np, not_evaluable: 0, n: 1 + fail, fail_refs: [] } },
     quality: q === undefined ? {} : { humor: { true: 1, n: 1, rate: q, not_evaluable: 0 } },
+    core_latency: { n: 0 },
+    usage: { calls: 0, errors: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, cost_usd: 0 },
+    usage_by_role: {},
   });
 
   it("sorts worst first: fails, then not provoked, then low quality, then the key", () => {
@@ -140,6 +130,6 @@ describe("quote verification (A/1 core.js:241-249)", () => {
   });
 
   it("reads the words of every event kind", () => {
-    expect(TRANSCRIPT.map(eventText)).toEqual(["s1", "Kneel, minions. The Lord of the Darkness is watching.", "hail the lich", "Your “hail” is noted, thrall.", "sim_complete"]);
+    expect(TRANSCRIPT.map(eventText)).toEqual(["s1 · malakor · theatrical · haiku · 3 viewers", "Kneel, minions. The Lord of the Darkness is watching.", "hail the lich", "Your “hail” is noted, thrall.", "sim_complete"]);
   });
 });

@@ -10,3 +10,4 @@ export * from "./invalidation";
 export * from "./layer";
 export * from "./config";
 export * from "./react";
+export * from "./paged";

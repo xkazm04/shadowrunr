@@ -2,6 +2,7 @@
 // deterministic spec (the winner's sr-kit `avatarSpec`, kept exactly), and the situation
 // verdict tallies read out of a tournament's results.json.
 import type { CharacterSummary, FoilInfo, TournamentResults } from "@shadowrunr/contract";
+import { refRun } from "../../kit/events";
 
 /** The roster switches to the dense "billing block" (two rows of ten) above this many. */
 export const ROSTER_MANY = 6;
@@ -159,33 +160,22 @@ export interface SituationTally {
 
 export const SITUATION_PREFIX = "situation:";
 
-type Rec = Readonly<Record<string, unknown>>;
-const isRec = (v: unknown): v is Rec => typeof v === "object" && v !== null && !Array.isArray(v);
-const count = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-
 /**
- * Sums every cell's `situation:*` rule tallies, keyed by situation id. `tournament.results` is
- * an open record in the contract, so this narrows only the fields it reads; a reply without a
- * `cells` array is `null` (shown as degraded).
+ * Sums every cell's `situation:*` rule tallies, keyed by situation id (`tournament.results` is
+ * typed by the contract and validated at the door).
  */
-export function situationTallies(raw: TournamentResults): Map<string, SituationTally> | null {
-  const cells = raw["cells"];
-  if (!Array.isArray(cells)) return null;
+export function situationTallies(results: TournamentResults): Map<string, SituationTally> {
   const acc = new Map<string, { pass: number; fail: number; not_provoked: number; not_evaluable: number; refs: Set<string> }>();
-  for (const cell of cells) {
-    if (!isRec(cell)) continue;
-    const rules = cell["rules"];
-    if (!isRec(rules)) continue;
-    for (const [rule, t] of Object.entries(rules)) {
-      if (!rule.startsWith(SITUATION_PREFIX) || !isRec(t)) continue;
+  for (const cell of results.cells) {
+    for (const [rule, t] of Object.entries(cell.rules)) {
+      if (!rule.startsWith(SITUATION_PREFIX) || t === undefined) continue;
       const id = rule.slice(SITUATION_PREFIX.length);
       const a = acc.get(id) ?? { pass: 0, fail: 0, not_provoked: 0, not_evaluable: 0, refs: new Set<string>() };
-      a.pass += count(t["pass"]);
-      a.fail += count(t["fail"]);
-      a.not_provoked += count(t["not_provoked"]);
-      a.not_evaluable += count(t["not_evaluable"]);
-      const refs = t["fail_refs"];
-      if (Array.isArray(refs)) for (const r of refs) if (typeof r === "string") a.refs.add(r);
+      a.pass += t.pass;
+      a.fail += t.fail;
+      a.not_provoked += t.not_provoked;
+      a.not_evaluable += t.not_evaluable;
+      for (const r of t.fail_refs ?? []) a.refs.add(r);
       acc.set(id, a);
     }
   }
@@ -199,16 +189,8 @@ export function situationTallies(raw: TournamentResults): Map<string, SituationT
 /** Runs where the situation was judged at all (pass + fail). */
 export const judged = (t: SituationTally | undefined): number => (t ? t.pass + t.fail : 0);
 
-/** `<run_id>#<line>` → its parts; a ref without a line keeps only the run. */
-export function parseRef(ref: string): { readonly run: string; readonly line?: string } {
-  const at = ref.lastIndexOf("#");
-  if (at <= 0) return { run: ref };
-  const line = ref.slice(at + 1);
-  return /^\d+$/.test(line) ? { run: ref.slice(0, at), line } : { run: ref };
-}
-
 /** Distinct run ids of a tally's failing evidence, in order. */
 export function failingRuns(t: SituationTally | undefined): string[] {
   if (!t) return [];
-  return [...new Set(t.failRefs.map((r) => parseRef(r).run))];
+  return [...new Set(t.failRefs.map(refRun))];
 }

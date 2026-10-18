@@ -2,10 +2,10 @@
 // (with the report on show as context); directives the reply created are shown as chips.
 // The conversation is held for the session only; the daemon keeps its own log.
 import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { viewOfError } from "../../data";
+import { LLM_TIMEOUT_MS, useMutation, viewOfError } from "../../data";
 import { ConnectionState } from "../../kit";
-import { Chip, Head } from "../../ui";
-import { useLongMutation } from "./hooks";
+import { Chip } from "../../ui/Chip";
+import { Head } from "../../ui/Section";
 import styles from "./Layer2.module.css";
 import { session, useSession, type ChatTurn } from "./session";
 
@@ -14,7 +14,7 @@ export const CHAT_WINDOW = 50;
 
 export function ChatPage({ reportId }: { reportId: string | undefined }) {
   const { chat } = useSession();
-  const send = useLongMutation("lord.chat");
+  const send = useMutation("lord.chat", { timeoutMs: LLM_TIMEOUT_MS });
   const [text, setText] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
 

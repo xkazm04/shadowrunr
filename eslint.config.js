@@ -75,7 +75,7 @@ export default tseslint.config(
     ],
   },
   {
-    files: ["apps/console/**/*.{ts,tsx}", "packages/*/src/**/*.ts"],
+    files: ["apps/console/**/*.{ts,tsx}", "packages/*/src/**/*.{ts,tsx}"],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: { parser: tseslint.parser, ecmaVersion: 2022, sourceType: "module" },
     rules: {
@@ -85,6 +85,12 @@ export default tseslint.config(
       "no-restricted-syntax": restricted(false, false),
       "no-restricted-properties": ["error", { object: "JSON", property: "parse", message: "JSON.parse lives only in the contract door." }],
     },
+  },
+  {
+    // Shared packages' React components (stage-kit's art and ui) get the hooks rules too.
+    files: ["packages/*/src/**/*.tsx"],
+    plugins: { "react-hooks": reactHooks },
+    rules: reactHooks.configs.flat.recommended.rules,
   },
   {
     files: DOOR,
@@ -133,6 +139,12 @@ export default tseslint.config(
             allow("app", ["shell", "kit", "page", "router", "keys", "data", "ui", "legacy"]),
             allow("shell", ["kit", "router", "keys", "data", "ui"]),
             allow("page", ["kit", "router", "data", "ui"]),
+            // Files of one page import each other across its subfolders (the captured page id
+            // must match); one page never imports another.
+            {
+              from: { element: { type: "page" } },
+              allow: [{ to: { element: { type: "page", captured: { page: "{{ from.element.captured.page }}" } } } }],
+            },
             allow("kit", ["router", "data", "ui"]),
             allow("legacy", ["legacy"]),
           ],

@@ -314,8 +314,7 @@ the event envelope and the error envelope now live in `crates/shadowrunr-types` 
   `rpc` (with the daemon's code).
 - Drift gates: `pnpm -C packages/contract check` (re-export, regenerate, diff) and the
   `shadowrunr-types` test `committed_schema_matches_the_rust_types`.
-- `tournament.results` stays an untyped object until the sim's `Results` types join the
-  contract.
+- `tournament.results` returns `TournamentResults` (see the WPI appendix).
 
 **Error taxonomy.** One envelope, `{"error": {"code", "message", "detail"?}}`, and ten codes:
 
@@ -434,4 +433,36 @@ are sampled into the remaining budget: rule-failure citations first, then failed
 turns of the worst cells, then a stratified sample across tone × tier × segment × audience.
 When anything is cut the prompt says so, and the stored report file
 (`<data>/reconcile/<report_id>.json`) records `synthesis_input` with included and omitted
-counts. `synthesis_input` is not part of `ReconcileReport` on the wire.
+counts. Since WPI, `synthesis_input` is also on the wire (see the WPI appendix).
+
+## Appendix (WPI): typed results, run health, incident paging, character tone
+
+These notes extend the sections above.
+
+| method | params | result |
+|---|---|---|
+| `tournament.results` | `{ "tournament_id" }` | `TournamentResults` (was untyped) |
+| `reconcile.incidents` | `{ "report_id", "rule"?, "cursor"?, "limit" }` | `{ items: RuleIncident[], total, next_cursor? }` |
+| `character.tone.set` | `{ "id", "tone" }` | `CharacterSummary`; writes `<data>/characters/<id>/active.json` |
+
+```
+TournamentResults { tournament_id, instrument_hashes, calibration: [CalibrationOrigin], assumptions,
+                    runs, judged, void, failed, cells: [CellResult],
+                    latency_by_tier: {tier: {role: Latency}}, usage_total, usage_by_role }
+RunRow            + health?: number          // pass / (pass + fail) over verdict.json rule checks
+                  + red_line_fails?: u32     // failed red-line:* checks; omitted when 0
+CharacterSummary  + tagline?, active_tone    // active_tone: the operator override, else default_tone
+CharacterDetail   + tagline?, active_tone
+SegmentTables     + commands: [{ name, args, what, min_rank? }]   // from shadowrunr-segments COMMAND_SPECS
+ReconcileReport   + red_line_counts?: [{ rule, source, count, runs }]
+                  + red_lines_total?: u32
+                  + synthesis_input?: { budget_tokens, estimated_tokens, runs: Counted, excerpt_lines,
+                                        failure_refs: Counted, quality_refs: Counted, ... }
+Counted           { included, omitted }
+```
+
+- **Report payload.** On the wire `red_lines` holds at most 100 incidents. When the report has
+  more, `red_lines_total` and `red_line_counts` carry the aggregates, and the full list pages
+  through `reconcile.incidents`, which can filter by `rule`. A small report keeps every
+  incident and omits both fields. The stored file is unchanged.
+- **Health** is computed only for the rows of the returned page.

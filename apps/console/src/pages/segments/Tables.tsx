@@ -3,7 +3,10 @@
 import type { SegmentStatus, SegmentTableInfo, SegmentTables } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { pageRoute, RouteLink, useRouter } from "../../router";
-import { Chip, FilterTable, Head, Section, StatePanel, type Column } from "../../ui";
+import { Chip } from "../../ui/Chip";
+import { FilterTable, type Column } from "../../ui/FilterTable";
+import { Head, Section } from "../../ui/Section";
+import { StatePanel } from "../../ui/States";
 import { useTables } from "./hooks";
 import styles from "./Layer2.module.css";
 import { LIFECYCLE, STATUS_TONE, statusCounts } from "./model";

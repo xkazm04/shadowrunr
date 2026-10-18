@@ -3,6 +3,17 @@
 *::before,
 *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* The root size (WPI): the winner sized its posters 50rem tall (2vh); the mixer bus takes
+   BUS_REM.full = 4.2rem below them, so the root follows the height available above the bus,
+   100vh / (50 + 4.2), and every layer-1 graphic keeps its exact rem geometry. The same root on
+   every view, so nothing rescales between the wall and the layers. shell/layout.ts rootPx()
+   mirrors this and its test holds the two together. */
+:root { --sr-root-size: clamp(14px, min(1.25vw, calc(100vh / 54.2)), 30.4px); }
+
+@media (max-width: 760px) {
+  :root { --sr-root-size: 16px; }
+}
+
 html { font-size: var(--sr-root-size); text-size-adjust: 100%; }
 
 html,

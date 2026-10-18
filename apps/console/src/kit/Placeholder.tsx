@@ -1,7 +1,8 @@
 // Placeholders the page builders replace (P1–P6): a layer-1 status view with one lit link into
 // a nested layer-2 page, and that layer-2 page with its connection state.
 import { RouteLink, pageRoute, type PageId } from "../router";
-import { EmptyState, Head } from "../ui";
+import { Head } from "../ui/Section";
+import { EmptyState } from "../ui/States";
 import styles from "./Placeholder.module.css";
 import { ConnectionState } from "./QueryView";
 

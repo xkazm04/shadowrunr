@@ -3,11 +3,12 @@
 // composed (the Lord's dispatch, the running order, topics, the directives riding along).
 import type { NextStreamPlan, PlanOption } from "@shadowrunr/contract";
 import { useState } from "react";
-import { useRpc, viewOfError } from "../../data";
+import { LLM_TIMEOUT_MS, useMutation, useRpc, viewOfError } from "../../data";
 import { QueryView } from "../../kit";
-import { Chip, Head } from "../../ui";
+import { Chip } from "../../ui/Chip";
+import { Head } from "../../ui/Section";
 import { DiffView } from "./DiffView";
-import { useLongMutation, useReport } from "./hooks";
+import { useReport } from "./hooks";
 import styles from "./Layer2.module.css";
 import { evidenceRefs, OPTION_KIND_LABEL, parseDiff } from "./model";
 import { RefLinks } from "./Refs";
@@ -80,7 +81,7 @@ function OptionCard({ option: o, on, onToggle }: { option: PlanOption; on: boole
 
 function Composer({ reportId, chosen, sealed }: { reportId: string; chosen: readonly PlanOption[]; sealed: NextStreamPlan | undefined }) {
   const directives = useRpc("directive.list", {});
-  const choose = useLongMutation("plan.choose");
+  const choose = useMutation("plan.choose", { timeoutMs: LLM_TIMEOUT_MS });
   const [error, setError] = useState<string | undefined>();
   const active = (directives.data ?? []).filter((d) => d.active).length;
 

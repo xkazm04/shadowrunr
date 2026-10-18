@@ -42,13 +42,14 @@ describe("the rank pyramid", () => {
 
 describe("commands and ops", () => {
   it("lists where each command is accepted and gates !propose", () => {
-    const rows = commandRows(genTables(), "warlock");
+    const rows = commandRows(genTables());
     const by = Object.fromEntries(rows.map((r) => [r.name, r]));
     expect(by.summon?.segments).toEqual(["SEG-01"]);
     expect(by.vote?.segments).toEqual(["SEG-01", "SEG-02A"]);
     expect(by.propose?.minRank).toBe("warlock");
     expect(by.hint?.minRank).toBeUndefined();
-    expect(by.grade?.grammar?.args).toBe("<hex> <DOC|REP|CLM|SPC>");
+    expect(by.grade?.args).toBe("<hex> <DOC|REP|CLM|SPC>");
+    expect(by.summon?.what).toContain("guest foil");
   });
 
   it("grids every op against the runnable segments only", () => {

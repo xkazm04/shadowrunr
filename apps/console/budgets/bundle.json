@@ -1,5 +1,5 @@
 {
-  "$comment": "Raw minified bytes per route, gated by scripts/check-bundle.mjs after vite build (gzip is reported, not gated). Entry = first load. A page builder who needs more raises its own line in the same change and says why. legacy* go away at cutover C2. door = @shadowrunr/contract's compiled ajv validators, loaded in parallel with the first paint (F2 could split them per method).",
+  "$comment": "Raw minified bytes per route, gated by scripts/check-bundle.mjs after vite build (gzip is reported, not gated). Entry = first load. A page builder who needs more raises its own line in the same change and says why. legacy* go away at cutover C2. door = @shadowrunr/contract's compiled ajv validators, loaded in parallel with the first paint. WPI re-budget, measured: (1) the entry no longer imports the ui barrel, so the shared ui kit (FilterTable, VirtualList with TanStack Virtual, Section and the rest: one 39,055 B js / 4,451 B css chunk) left the first paint (entry 317,322 -> 277,523 B js, 44,318 -> 36,688 B css) and now loads with the first layer 2; every layer-2 js line is 60,000 for the page plus 40,000 for that shared chunk, counted once per route by check-bundle's closure. (2) layer-2 css lines rise by the ui css each page now carries (it was in the entry): characters.l2 24,000 (17.5 KB page incl. the promoted Markdown prose + 4.5 KB kit), segments.l2 22,000, reconcile.l2 26,000 (FilterTable, RateBar, StatBand, kit css: 8.3 KB). (3) door 280,000 -> 320,000: typed tournament.results (TournamentResults with its cells, tallies, bounds, latency and usage), reconcile.incidents, the report's red_line_counts and synthesis_input, CommandInfo and the character fields added 52,443 B of standalone validators (257,445 -> 309,888 B); splitting the validators per method is codegen work in packages/contract.",
   "routes": {
     "entry": {
       "js": 280000,
@@ -10,7 +10,7 @@
       "css": 24000
     },
     "onair.l2": {
-      "js": 60000,
+      "js": 100000,
       "css": 16000
     },
     "characters.l1": {
@@ -18,15 +18,15 @@
       "css": 16000
     },
     "characters.l2": {
-      "js": 60000,
-      "css": 16000
+      "js": 100000,
+      "css": 24000
     },
     "brain.l1": {
       "js": 60000,
       "css": 16000
     },
     "brain.l2": {
-      "js": 60000,
+      "js": 100000,
       "css": 16000
     },
     "segments.l1": {
@@ -34,15 +34,15 @@
       "css": 16000
     },
     "segments.l2": {
-      "js": 60000,
-      "css": 16000
+      "js": 100000,
+      "css": 22000
     },
     "simulator.l1": {
       "js": 60000,
       "css": 16000
     },
     "simulator.l2": {
-      "js": 60000,
+      "js": 100000,
       "css": 16000
     },
     "reconcile.l1": {
@@ -50,8 +50,8 @@
       "css": 16000
     },
     "reconcile.l2": {
-      "js": 60000,
-      "css": 16000
+      "js": 100000,
+      "css": 26000
     },
     "legacy": {
       "js": 64000,
@@ -64,7 +64,7 @@
       "js": 1024
     },
     "door": {
-      "js": 280000
+      "js": 320000
     }
   }
 }

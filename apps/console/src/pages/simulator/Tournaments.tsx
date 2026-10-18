@@ -5,11 +5,16 @@ import type { RunRow, TournamentRow } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { useRpc } from "../../data";
 import { pageRoute, useRouter } from "../../router";
-import { Chip, FilterTable, Head, Section, StatBand, StatePanel, type Column } from "../../ui";
-import { isResults, PAGE_LIMIT, usePaged, useResults } from "./data";
+import { Chip } from "../../ui/Chip";
+import { FilterTable, type Column } from "../../ui/FilterTable";
+import { Head, Section } from "../../ui/Section";
+import { StatBand } from "../../ui/StatBand";
+import { usePaged } from "../../data";
+import { PAGE_LIMIT, useResults } from "./data";
 import { buildTile, resultsHealth, tilesInView, type RunCell } from "./grid";
-import { readResults, type SimResults } from "./results";
-import { Health, int, Note, shortHash, usd, Found } from "./common";
+import type { SimResults } from "./results";
+import { int, usd } from "../../kit/events";
+import { Health, Note, shortHash, Found } from "./common";
 import styles from "./l2.module.css";
 
 export function TournamentList() {
@@ -28,7 +33,7 @@ export function TournamentList() {
         header: "Held",
         cell: (t) => {
           const r = results.get(t.tournament_id);
-          return r === undefined ? <span className={styles.dim}>open to read</span> : <Health value={isResults(r) ? resultsHealth(r) : undefined} />;
+          return r === undefined ? <span className={styles.dim}>open to read</span> : <Health value={resultsHealth(r)} />;
         },
       },
     ],
@@ -74,25 +79,17 @@ export function TournamentDetail({ id }: { id: string }) {
   const router = useRouter();
   const res = useRpc("tournament.results", { tournament_id: id });
   const runs = usePaged("runs.page", { tournament_id: id, limit: PAGE_LIMIT });
-  const read = useMemo(() => (res.data ? readResults(res.data) : undefined), [res.data]);
-  const results = read?.ok ? read.value : undefined;
   const lines = useMemo(() => {
     const rows = runs.query.data ?? [];
-    const tile = buildTile(id, rows.length, rows, results);
+    const tile = buildTile(id, rows.length, rows);
     const lines: RunLine[] = rows.map((row, i) => ({ row, cell: tile.runs[i] }));
     return lines.sort((a, b) => (a.cell?.health ?? 2) - (b.cell?.health ?? 2));
-  }, [id, runs.query.data, results]);
+  }, [id, runs.query.data]);
   return (
     <>
       <Head kicker="Simulator · tournament" title={id} />
       <Found query={res} emptyTitle="No results for this tournament yet" emptyHint="results.json is written when the tournament is summarised.">
-        {() =>
-          read && !read.ok ? (
-            <StatePanel state="degraded" title="The results file does not match the expected shape" detail={`first misfit: ${read.path}`} />
-          ) : results ? (
-            <ResultsSummary r={results} />
-          ) : null
-        }
+        {(r) => <ResultsSummary r={r} />}
       </Found>
       <Section title="Runs · worst first" right={`${int(lines.length)} runs${runs.done ? "" : " · loading"}`}>
         <QueryView query={runs.query} isEmpty={(r) => r.length === 0} emptyTitle="No runs recorded for this tournament">
@@ -140,7 +137,7 @@ function ResultsSummary({ r }: { r: SimResults }) {
         </dd>
       </dl>
       {r.instrument_hashes.length > 1 && <Note>This tournament mixes instrument hashes; compare cells within one hash only.</Note>}
-      {r.assumptions.length > 0 && (
+      {r.assumptions !== undefined && r.assumptions.length > 0 && (
         <Section title="Assumptions the calibration carries">
           <ul className={styles.list}>
             {r.assumptions.map((a) => (

@@ -2,9 +2,13 @@
 // and engagement by rank from a reconcile report (l2b.js `ranks`; A/1 FLOORS.segments ranks).
 import type { RankInfo, RankTableInfo } from "@shadowrunr/contract";
 import { useState, type CSSProperties, type FormEvent } from "react";
+import { useRpc } from "../../data";
 import { QueryView } from "../../kit";
 import { pageRoute, RouteLink, useRouter } from "../../router";
-import { Chip, Head, RateBar, Section } from "../../ui";
+import { Chip } from "../../ui/Chip";
+import { RateBar } from "../../ui/RateBar";
+import { Head, Section } from "../../ui/Section";
+import { StatePanel } from "../../ui/States";
 import { useRanks, useReport } from "./hooks";
 import styles from "./Layer2.module.css";
 import { fmtWeight, parseVotes, qualifies, RANK_KEY, rankIndex, START_VOTES, tally, type Votes } from "./model";
@@ -138,15 +142,25 @@ function Calculator({ ranks }: { ranks: readonly RankInfo[] }) {
   );
 }
 
+/** The report in the route, else the newest the daemon stores (`reconcile.list`). */
 function Engagement({ table, reportId }: { table: RankTableInfo; reportId: string | undefined }) {
+  const list = useRpc("reconcile.list", reportId === undefined ? {} : null);
+  const id = reportId ?? list.data?.[0]?.report_id;
+  const right = id === undefined ? "no report yet" : reportId === undefined ? `${id} · newest` : id;
   return (
-    <Section title="Engagement by rank" right={reportId ?? "no report chosen"}>
-      {reportId === undefined ? <ChooseReport /> : <ReportEngagement table={table} reportId={reportId} />}
+    <Section title="Engagement by rank" right={right}>
+      {id !== undefined ? (
+        <ReportEngagement table={table} reportId={id} />
+      ) : list.data === undefined && list.errorView === undefined ? (
+        <StatePanel state="loading" title="Finding the newest report" />
+      ) : (
+        <ChooseReport />
+      )}
     </Section>
   );
 }
 
-/** The contract cannot list reports yet (proposed: `reconcile.list`), so the operator names one. */
+/** No report stored yet (or the list failed): run one in Reconcile, or name an id. */
 function ChooseReport() {
   const router = useRouter();
   const [id, setId] = useState("");

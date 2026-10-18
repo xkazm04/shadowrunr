@@ -1,7 +1,11 @@
 import styles from "./Switch.module.css";
+import { visuallyHidden } from "./VisuallyHidden";
 
-/** An on/off toggle (rules, options). The label names what is switched. */
-export function Switch(props: { checked: boolean; onChange: (next: boolean) => void; label: string; disabled?: boolean }) {
+/**
+ * An on/off toggle (rules, options). The label names what is switched; `hideLabel` keeps it
+ * for assistive technology only, where the row around the switch already names it.
+ */
+export function Switch(props: { checked: boolean; onChange: (next: boolean) => void; label: string; hideLabel?: boolean; disabled?: boolean }) {
   return (
     <button
       type="button"
@@ -14,7 +18,7 @@ export function Switch(props: { checked: boolean; onChange: (next: boolean) => v
       <span className={styles.track} aria-hidden="true">
         <span className={styles.knob} />
       </span>
-      <span>{props.label}</span>
+      <span className={props.hideLabel ? visuallyHidden : undefined}>{props.label}</span>
       <span className={styles.state}>{props.checked ? "On" : "Off"}</span>
     </button>
   );

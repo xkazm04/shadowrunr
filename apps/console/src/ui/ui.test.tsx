@@ -4,6 +4,8 @@ import { filterRows, nextSort } from "./filterRows";
 import { FilterTable } from "./FilterTable";
 import { RateBar } from "./RateBar";
 import { State } from "./Chip";
+import { Markdown } from "./Markdown";
+import { parseBlocks } from "./doc";
 import { Switch } from "./Switch";
 import { VirtualList } from "./VirtualList";
 
@@ -55,6 +57,30 @@ describe("virtualised lists at 10x scale", () => {
   });
 });
 
+describe("VirtualList scrollToIndex", () => {
+  it("scrolls the viewport to the row it is given, and again when it changes", () => {
+    const calls: number[] = [];
+    // jsdom has no layout and no Element.scrollTo: give the viewport a scroll height and record
+    // what the virtualiser asks for.
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: (o?: ScrollToOptions | number) => {
+        if (typeof o === "object" && o.top !== undefined) calls.push(o.top);
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => 10_000_000 });
+    const row = (i: number) => <span>row {i}</span>;
+    const view = render(<VirtualList label="Lines" count={100_000} estimateRem={2} renderRow={row} scrollToIndex={50_000} />);
+    expect(calls.length).toBeGreaterThan(0);
+    const first = calls[calls.length - 1] ?? 0;
+    expect(first).toBeGreaterThan(0);
+    view.rerender(<VirtualList label="Lines" count={100_000} estimateRem={2} renderRow={row} scrollToIndex={90_000} />);
+    expect(calls[calls.length - 1] ?? 0).toBeGreaterThan(first);
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+  });
+});
+
 describe("primitives", () => {
   it("maps states to tones through one table", () => {
     render(<State value="not_provoked" />);
@@ -64,6 +90,23 @@ describe("primitives", () => {
   it("shows a rate with n and its bound", () => {
     render(<RateBar label="Held" rate={0.62} n={40} bound={{ lo: 0.48, hi: 0.74 }} />);
     expect(screen.getByRole("img").getAttribute("aria-label")).toBe("Held: 62% (48%–74%), n=40");
+  });
+
+  it("keeps a switch's label for screen readers only when asked", () => {
+    render(<Switch label="Crisis handoff" hideLabel checked onChange={() => undefined} />);
+    const sw = screen.getByRole("switch", { name: /Crisis handoff/ });
+    const label = [...sw.querySelectorAll("span")].find((s) => s.textContent === "Crisis handoff");
+    expect(label?.className).toBeTruthy();
+  });
+
+  it("renders markdown as elements, never as HTML", () => {
+    const src = ["# Title", "", "A **bold** <script>alert(1)</script> `code`", "", "- one", "  - nested"].join("\n");
+    const { container } = render(<Markdown blocks={parseBlocks(src)} />);
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.textContent).toContain("<script>alert(1)</script>");
+    expect(container.querySelector("strong")?.textContent).toBe("bold");
+    expect(container.querySelector("code")?.textContent).toBe("code");
+    expect(container.querySelectorAll("ul ul li")).toHaveLength(1);
   });
 
   it("toggles a switch", () => {

@@ -40,6 +40,7 @@ export function malakorSummary(over: Partial<CharacterSummary> = {}): CharacterS
     id: "malakor",
     name: "Arch-Lich Malakor",
     default_tone: "theatrical",
+    active_tone: "theatrical",
     foils: [...FOIL_IDS],
     tones: [...TONE_IDS],
     rules_enabled: 2,
@@ -53,6 +54,7 @@ export function malakorDetail(): CharacterDetail {
     id: "malakor",
     name: "Arch-Lich Malakor",
     default_tone: "theatrical",
+    active_tone: "theatrical",
     constitution,
     bible,
     files: [{ path: "character.toml", bytes: 900 }],
@@ -92,6 +94,7 @@ export function genRoster(n: number): CharacterSummary[] {
       id: `char-${String(i).padStart(4, "0")}`,
       name: `Warden Number ${i}`,
       default_tone: TONE_IDS[i % TONE_IDS.length] ?? "theatrical",
+      active_tone: TONE_IDS[i % TONE_IDS.length] ?? "theatrical",
       foils: FOIL_IDS.slice(0, 1 + (i % 5)),
       tones: [...TONE_IDS],
       rules_enabled: i % 3,
@@ -103,9 +106,27 @@ export function genRoster(n: number): CharacterSummary[] {
 
 /** results.json with `cells` cells, each judging every situation (2,000 failing refs at 10x). */
 export function genResults(cells: number, failsPerCell = 1): TournamentResults {
+  const usage = { calls: 0, errors: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, cost_usd: 0 };
   return {
     tournament_id: "t-scale",
+    instrument_hashes: ["h"],
+    calibration: [{ kind: "default_assumption" }],
+    runs: cells,
+    judged: cells,
+    void: 0,
+    failed: 0,
+    latency_by_tier: {},
+    usage_total: usage,
+    usage_by_role: {},
     cells: Array.from({ length: cells }, (_, c) => ({
+      runs: 1,
+      judged: 1,
+      void: 0,
+      failed: 0,
+      judge_tiers: ["opus"],
+      core_latency: { n: 0 },
+      usage,
+      usage_by_role: {},
       cell: { tone: "theatrical", core_tier: "haiku", segment: "SEG-01", audience_size: 30, instrument_hash: "h" },
       rules: Object.fromEntries(
         SITUATIONS.map((s, k) => [

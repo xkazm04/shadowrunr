@@ -36,6 +36,41 @@
         }
       ]
     },
+    "CalibrationOrigin": {
+      "description": "Where the audience calibration a run used came from.",
+      "oneOf": [
+        {
+          "description": "The researched file (`sim/calibration.json`).",
+          "properties": {
+            "kind": {
+              "const": "file",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The compiled-in default: every figure is an assumption.",
+          "properties": {
+            "kind": {
+              "const": "default_assumption",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Case": {
       "properties": {
         "fictional": {
@@ -80,9 +115,123 @@
       ],
       "type": "object"
     },
+    "CellKey": {
+      "description": "The axes of one heatmap cell.",
+      "properties": {
+        "audience_size": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "core_tier": {
+          "type": "string"
+        },
+        "instrument_hash": {
+          "type": "string"
+        },
+        "segment": {
+          "type": "string"
+        },
+        "tone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "instrument_hash",
+        "tone",
+        "core_tier",
+        "segment",
+        "audience_size"
+      ],
+      "type": "object"
+    },
+    "CellResult": {
+      "description": "One heatmap cell: every run that shares a [`CellKey`].",
+      "properties": {
+        "cell": {
+          "$ref": "#/$defs/CellKey"
+        },
+        "core_latency": {
+          "$ref": "#/$defs/Latency",
+          "description": "Core-thread `first_text_ms` from the ledger."
+        },
+        "failed": {
+          "description": "Failed before a verdict (`error.json`).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "judge_tiers": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "judged": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_say_gap_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "quality": {
+          "additionalProperties": {
+            "$ref": "#/$defs/QualityTally"
+          },
+          "type": "object"
+        },
+        "rules": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RuleTally"
+          },
+          "type": "object"
+        },
+        "runs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "usage": {
+          "$ref": "#/$defs/UsageTotals"
+        },
+        "usage_by_role": {
+          "additionalProperties": {
+            "$ref": "#/$defs/UsageTotals"
+          },
+          "type": "object"
+        },
+        "void": {
+          "description": "Simulated but the judge was void (failed call or unparseable reply).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cell",
+        "runs",
+        "judged",
+        "void",
+        "failed",
+        "judge_tiers",
+        "rules",
+        "quality",
+        "core_latency",
+        "usage",
+        "usage_by_role"
+      ],
+      "type": "object"
+    },
     "CharacterDetail": {
       "description": "`character.get`: the whole package as the operator sees it.",
       "properties": {
+        "active_tone": {
+          "description": "The tone the operator chose, else `default_tone` (see [`CharacterSummary`]).",
+          "type": "string"
+        },
         "bible": {
           "type": "string"
         },
@@ -150,6 +299,9 @@
           },
           "type": "array"
         },
+        "tagline": {
+          "type": "string"
+        },
         "tones": {
           "items": {
             "$ref": "#/$defs/ToneInfo"
@@ -161,6 +313,7 @@
         "id",
         "name",
         "default_tone",
+        "active_tone",
         "files",
         "constitution",
         "tones",
@@ -261,6 +414,10 @@
     "CharacterSummary": {
       "description": "One row of `character.list`.",
       "properties": {
+        "active_tone": {
+          "description": "The tone the operator chose (`<data>/characters/<id>/active.json`), else `default_tone`.",
+          "type": "string"
+        },
         "default_tone": {
           "type": "string"
         },
@@ -289,6 +446,10 @@
           "minimum": 0,
           "type": "integer"
         },
+        "tagline": {
+          "description": "One line under the name (`character.toml` `tagline`); omitted when the package has none.",
+          "type": "string"
+        },
         "tones": {
           "description": "Tone variant ids (`tones/<id>.md`), sorted.",
           "items": {
@@ -301,10 +462,27 @@
         "id",
         "name",
         "default_tone",
+        "active_tone",
         "tones",
         "foils",
         "rules_enabled",
         "rules_total"
+      ],
+      "type": "object"
+    },
+    "CharacterToneSetParams": {
+      "description": "`character.tone.set`: the operator's tone for a character, written to\n`<data>/characters/<id>/active.json`. The tone must be one of the package's tones.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "tone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "tone"
       ],
       "type": "object"
     },
@@ -482,6 +660,53 @@
           "type": "object"
         }
       ]
+    },
+    "CommandInfo": {
+      "description": "One chat command as the runtime's parser reads it (`shadowrunr-segments` `command.rs`).",
+      "properties": {
+        "args": {
+          "description": "The argument shape, e.g. `<hex> <DOC|REP|CLM|SPC>`.",
+          "type": "string"
+        },
+        "min_rank": {
+          "$ref": "#/$defs/Rank",
+          "description": "Lowest rank allowed to use it; every rank when absent."
+        },
+        "name": {
+          "description": "Without the `!`, e.g. `summon`.",
+          "type": "string"
+        },
+        "what": {
+          "description": "What the command does, in one line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args",
+        "what"
+      ],
+      "type": "object"
+    },
+    "Counted": {
+      "description": "Items that made it into the synthesis prompt, and items cut to fit its budget.",
+      "properties": {
+        "included": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "omitted": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "included",
+        "omitted"
+      ],
+      "type": "object"
     },
     "Directive": {
       "properties": {
@@ -1418,6 +1643,35 @@
       ],
       "type": "string"
     },
+    "IncidentCount": {
+      "description": "Incidents of one rule from one source, counted over the whole report.",
+      "properties": {
+        "count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "runs": {
+          "description": "Distinct runs with at least one such incident.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source": {
+          "$ref": "#/$defs/IncidentSource"
+        }
+      },
+      "required": [
+        "rule",
+        "source",
+        "count",
+        "runs"
+      ],
+      "type": "object"
+    },
     "IncidentSource": {
       "oneOf": [
         {
@@ -1431,6 +1685,30 @@
           "type": "string"
         }
       ]
+    },
+    "IncidentsPage": {
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/RuleIncident"
+          },
+          "type": "array"
+        },
+        "next_cursor": {
+          "type": "string"
+        },
+        "total": {
+          "description": "Incidents matching the filter, over every page.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total"
+      ],
+      "type": "object"
     },
     "JudgeVerdict": {
       "properties": {
@@ -1461,6 +1739,30 @@
         "judge_tier",
         "rules",
         "quality"
+      ],
+      "type": "object"
+    },
+    "Latency": {
+      "description": "`first_text_ms` percentiles.",
+      "properties": {
+        "n": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "p50_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "p95_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "n"
       ],
       "type": "object"
     },
@@ -2093,6 +2395,40 @@
       ],
       "type": "object"
     },
+    "QualityTally": {
+      "description": "One quality dimension within a cell: a rate with its n.",
+      "properties": {
+        "bound": {
+          "$ref": "#/$defs/Bound"
+        },
+        "n": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "not_evaluable": {
+          "description": "Facts whose quote or line did not verify (excluded from n).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rate": {
+          "format": "double",
+          "type": "number"
+        },
+        "true": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "true",
+        "n",
+        "not_evaluable"
+      ],
+      "type": "object"
+    },
     "Rank": {
       "description": "The weighted rank ladder, lowest first. `Thrall` is a non-subscriber who votes with\nchannel points at weight 1. Rank derivation and vote weights live in shadowrunr-segments.",
       "enum": [
@@ -2256,6 +2592,32 @@
       ],
       "type": "object"
     },
+    "ReconcileIncidentsParams": {
+      "description": "`reconcile.incidents`: one report's red-line incidents, paged in report order.",
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "limit": {
+          "description": "1..=500; larger values are capped at 500.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "report_id": {
+          "type": "string"
+        },
+        "rule": {
+          "description": "Only incidents of this rule.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "report_id",
+        "limit"
+      ],
+      "type": "object"
+    },
     "ReconcileListResult": {
       "items": {
         "$ref": "#/$defs/ReportSummary"
@@ -2281,11 +2643,24 @@
         "ranks": {
           "$ref": "#/$defs/RankEngagement"
         },
+        "red_line_counts": {
+          "description": "Wire addition (WPI): every incident counted by `(rule, source)`, most first. Present\non `reconcile.report` replies; the stored report never carries it.",
+          "items": {
+            "$ref": "#/$defs/IncidentCount"
+          },
+          "type": "array"
+        },
         "red_lines": {
           "items": {
             "$ref": "#/$defs/RuleIncident"
           },
           "type": "array"
+        },
+        "red_lines_total": {
+          "description": "Wire addition (WPI): the report's incident total when `red_lines` was cut to its first\npage on the wire; page the rest with `reconcile.incidents`. Absent when nothing was cut.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         },
         "report_id": {
           "type": "string"
@@ -2301,6 +2676,10 @@
         },
         "summary": {
           "type": "string"
+        },
+        "synthesis_input": {
+          "$ref": "#/$defs/SynthesisInput",
+          "description": "Wire addition (WPI): what the synthesis prompt carried and what it cut to fit its\nbudget. Absent for reports stored before WP12."
         },
         "tone": {
           "items": {
@@ -2604,6 +2983,60 @@
       ],
       "type": "object"
     },
+    "RuleTally": {
+      "description": "One hard rule's checks within a cell (100% bar).",
+      "properties": {
+        "fail": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fail_bound": {
+          "$ref": "#/$defs/Bound",
+          "description": "95% bound on the FAIL rate (3/n when no run failed)."
+        },
+        "fail_refs": {
+          "description": "`<run_id>#<line>` refs of the failing evidence.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "n": {
+          "description": "Evaluated runs: pass + fail. not_provoked and not_evaluable are never passes.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "not_evaluable": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "not_provoked": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pass": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pass_rate": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "pass",
+        "fail",
+        "not_provoked",
+        "not_evaluable",
+        "n"
+      ],
+      "type": "object"
+    },
     "RunFilter": {
       "description": "`runs.page` filter; every present field must match.",
       "properties": {
@@ -2651,6 +3084,17 @@
       "properties": {
         "has_verdict": {
           "type": "boolean"
+        },
+        "health": {
+          "description": "Share of the verdict's rule checks that held: pass / (pass + fail). Absent without a\nverdict or when no rule was provoked.",
+          "format": "double",
+          "type": "number"
+        },
+        "red_line_fails": {
+          "description": "Failed `red-line:*` rule checks in the verdict; omitted when 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         },
         "run_id": {
           "type": "string"
@@ -3023,6 +3467,13 @@
           },
           "type": "array"
         },
+        "commands": {
+          "description": "Every chat command with its arguments and meaning, in `command_names` order.",
+          "items": {
+            "$ref": "#/$defs/CommandInfo"
+          },
+          "type": "array"
+        },
         "op_tags": {
           "description": "Every `Op` tag in the action grammar.",
           "items": {
@@ -3040,7 +3491,8 @@
       "required": [
         "segments",
         "op_tags",
-        "command_names"
+        "command_names",
+        "commands"
       ],
       "type": "object"
     },
@@ -3627,6 +4079,70 @@
       ],
       "type": "object"
     },
+    "SynthesisInput": {
+      "description": "What the synthesis prompt carried (WP12), stored with the report as `synthesis_input`.",
+      "properties": {
+        "budget_tokens": {
+          "description": "The budget the prompt was sized against, in estimated tokens.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "estimated_tokens": {
+          "description": "The prompt's estimated size (characters / 3.5), system prefix and schema included.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "excerpt_lines": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failure_refs": {
+          "$ref": "#/$defs/Counted",
+          "description": "Transcript lines the judge cited for rule failures."
+        },
+        "incidents": {
+          "$ref": "#/$defs/Counted",
+          "description": "Incidents listed individually (all are counted by rule)."
+        },
+        "omitted": {
+          "description": "What the prompt told the Reconciler was omitted; empty when nothing was cut.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "quality_refs": {
+          "$ref": "#/$defs/Counted",
+          "description": "Turns the judge marked as failed quality facts."
+        },
+        "rule_failures": {
+          "$ref": "#/$defs/Counted",
+          "description": "Rule-failure rows (per segment and per tone cell) listed in the top-N tables."
+        },
+        "runs": {
+          "$ref": "#/$defs/Counted",
+          "description": "Runs with at least one excerpt line."
+        },
+        "tone_cells": {
+          "$ref": "#/$defs/Counted"
+        }
+      },
+      "required": [
+        "budget_tokens",
+        "estimated_tokens",
+        "runs",
+        "excerpt_lines",
+        "failure_refs",
+        "quality_refs",
+        "incidents",
+        "tone_cells",
+        "rule_failures"
+      ],
+      "type": "object"
+    },
     "TierRuleInfo": {
       "description": "One way to qualify for a rank through a subscription.",
       "properties": {
@@ -3718,8 +4234,89 @@
       "type": "object"
     },
     "TournamentResults": {
-      "additionalProperties": true,
-      "description": "`tournament.results`: the tournament's `results.json` as written by the simulator (its\nshape is owned by `shadowrunr-sim`; not yet part of the typed contract).",
+      "description": "`tournament.results`: the whole `results.json`.",
+      "properties": {
+        "assumptions": {
+          "description": "Figures without a source.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "calibration": {
+          "items": {
+            "$ref": "#/$defs/CalibrationOrigin"
+          },
+          "type": "array"
+        },
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/CellResult"
+          },
+          "type": "array"
+        },
+        "failed": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "instrument_hashes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "judged": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "latency_by_tier": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "$ref": "#/$defs/Latency"
+            },
+            "type": "object"
+          },
+          "description": "tier -> role -> first_text_ms latency, from every ledger row.",
+          "type": "object"
+        },
+        "runs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tournament_id": {
+          "type": "string"
+        },
+        "usage_by_role": {
+          "additionalProperties": {
+            "$ref": "#/$defs/UsageTotals"
+          },
+          "type": "object"
+        },
+        "usage_total": {
+          "$ref": "#/$defs/UsageTotals"
+        },
+        "void": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tournament_id",
+        "instrument_hashes",
+        "calibration",
+        "runs",
+        "judged",
+        "void",
+        "failed",
+        "cells",
+        "latency_by_tier",
+        "usage_total",
+        "usage_by_role"
+      ],
       "type": "object"
     },
     "TournamentRow": {
@@ -3839,6 +4436,55 @@
       "required": [
         "input_tokens",
         "output_tokens"
+      ],
+      "type": "object"
+    },
+    "UsageTotals": {
+      "description": "Engine usage summed over ledger rows.",
+      "properties": {
+        "cache_creation_tokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cache_read_tokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "calls": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cost_usd": {
+          "format": "double",
+          "type": "number"
+        },
+        "errors": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "input_tokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_tokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "calls",
+        "errors",
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_creation_tokens",
+        "cost_usd"
       ],
       "type": "object"
     },
@@ -3973,6 +4619,22 @@
         },
         "result": {
           "$ref": "#/$defs/CharacterRulesSetResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "character.tone.set": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/CharacterToneSetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/CharacterSummary"
         }
       },
       "required": [
@@ -4149,6 +4811,22 @@
         },
         "result": {
           "$ref": "#/$defs/RankTableInfo"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "reconcile.incidents": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ReconcileIncidentsParams"
+        },
+        "result": {
+          "$ref": "#/$defs/IncidentsPage"
         }
       },
       "required": [
@@ -4355,6 +5033,7 @@
     "character.list",
     "character.rules",
     "character.rules.set",
+    "character.tone.set",
     "directive.add",
     "directive.deactivate",
     "directive.list",
@@ -4366,6 +5045,7 @@
     "plan.proposals",
     "preflight.run",
     "ranks.table",
+    "reconcile.incidents",
     "reconcile.list",
     "reconcile.report",
     "reconcile.run",

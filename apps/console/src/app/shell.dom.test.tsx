@@ -1,6 +1,6 @@
-// The shell in jsdom: wall, six posters, layer-1 and nested layer-2 placeholders, the mixer bus,
-// keys, and the DOM-count budget (budgets/dom.json). Counts are gated; timings are not.
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+// The shell in jsdom: wall, six posters, every page's layer 1 and a nested layer 2, the mixer
+// bus, keys, and the DOM-count budget (budgets/dom.json). Counts are gated; timings are not.
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDataLayer, type DataLayer } from "../data";
 import { contractDoor } from "../data/contractDoor";
@@ -9,7 +9,27 @@ import { createHashRouter, encodeRoute, pageRoute, type RouterStore } from "../r
 import DOM_BUDGETS from "../../budgets/dom.json";
 import { App } from "./App";
 
-const BUDGETS: { readonly routes: Readonly<Record<string, number | undefined>> } = DOM_BUDGETS;
+const BUDGETS: { readonly allowances: { readonly shell: number; readonly motif: number }; readonly routes: Readonly<Record<string, number | undefined>> } = DOM_BUDGETS;
+
+/** The active poster's layer-1 root once its page has rendered into it. */
+const layer1Of = (id: string) => document.querySelector(`[data-role='poster'][data-page='${id}'] [data-role='layer1']`);
+const waitLayer1 = (id: string) =>
+  waitFor(
+    () => {
+      const root = layer1Of(id);
+      expect(root?.childElementCount ?? 0, `${id} layer 1 rendered`).toBeGreaterThan(0);
+    },
+    { timeout: 4000 },
+  );
+/** The open spread once a page's layer 2 has rendered into it. */
+const waitLayer2 = () =>
+  waitFor(
+    () => {
+      const spread = document.querySelector("[data-role='spread'][data-open='true']");
+      expect(spread?.querySelector("[data-role$='layer2'], [data-role$='-l2']"), "layer 2 rendered").not.toBeNull();
+    },
+    { timeout: 4000 },
+  );
 
 let router: RouterStore;
 let data: DataLayer;
@@ -59,11 +79,11 @@ describe("the shell", () => {
     expect(screen.getByRole("status").textContent).toContain("Connecting");
   });
 
-  it("renders every page's layer-1 placeholder and the mixer bus with the tally on it", async () => {
+  it("renders every page's layer 1 and the mixer bus with the tally on it", async () => {
     mount("#/wall");
     for (const id of ["onair", "characters", "brain", "segments", "simulator", "reconcile"] as const) {
       await go(encodeRoute(pageRoute(id)));
-      await screen.findByText(/Layer 1 ·/);
+      await waitLayer1(id);
       const active = document.querySelector(`[data-role='poster'][data-page='${id}']`);
       expect(active?.getAttribute("data-active")).toBe("true");
       const channels = document.querySelectorAll("[data-role='bus-channel']");
@@ -72,12 +92,12 @@ describe("the shell", () => {
     }
   });
 
-  it("renders a nested layer-2 placeholder per page, with breadcrumbs from ids", async () => {
+  it("renders a nested layer 2 per page, with breadcrumbs from ids", async () => {
     mount("#/wall");
     const nested = { onair: "rundown", characters: "malakor", brain: "transcripts", segments: "tables", simulator: "tournaments", reconcile: "plan" };
     for (const [id, seg] of Object.entries(nested)) {
       await go(`#/${id}/${seg}`);
-      await screen.findByText(/Layer 2 ·/);
+      await waitLayer2();
       expect(document.querySelector("[data-role='spread']")?.getAttribute("data-open")).toBe("true");
       expect(screen.getByLabelText("Breadcrumb").textContent).toContain("Season");
     }
@@ -106,7 +126,7 @@ describe("the shell", () => {
 
   it("shows the offline state once the daemon fails to answer", async () => {
     mount("#/brain/transcripts");
-    await screen.findByText(/Layer 2 ·/);
+    await waitLayer2();
     await act(async () => {
       await data.client.call("tournament.list", {});
     });
@@ -132,11 +152,17 @@ describe("DOM-count budget", () => {
     const counts: Record<string, number> = {};
     mount("#/wall");
     counts["wall"] = nodes();
+    // The wall's line is the shell plus one motif allowance per poster; every motif keeps to it.
+    expect(BUDGETS.routes["wall"]).toBe(BUDGETS.allowances.shell + 6 * BUDGETS.allowances.motif);
+    for (const m of document.querySelectorAll("[data-role$='-motif']")) {
+      const n = m.querySelectorAll("*").length + 2; // the art, its root and the face's motif box
+      expect(n, `${m.getAttribute("data-role")}: ${n} nodes`).toBeLessThanOrEqual(BUDGETS.allowances.motif);
+    }
     await go("#/simulator");
-    await screen.findByText(/Layer 1 ·/);
+    await waitLayer1("simulator");
     counts["wall+l1"] = nodes();
     await go("#/simulator/tournaments");
-    await screen.findByText(/Layer 2 ·/);
+    await waitLayer2();
     counts["wall+l2"] = nodes();
     for (const [route, n] of Object.entries(counts)) {
       const budget = BUDGETS.routes[route];

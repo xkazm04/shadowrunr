@@ -1,38 +1,30 @@
 // Layer 1 in jsdom over a scripted daemon: the grid's data at 1x and 10x, its HUD, and its
 // offline and empty states. The canvas holds the runs, so the DOM count does not grow with
 // scale (counts are gated, timings are not).
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
-import { DataProvider, type DataLayer } from "../../data";
-import { createHashRouter, RouterProvider, type RouterStore } from "../../router";
+import { mountPage, nodes } from "../../kit/testing";
 import { Layer1 } from "./Layer1";
-import { scriptedLayer, world, type World } from "./testgen";
+import { daemon, world, type World } from "./testgen";
 
-let router: RouterStore | undefined;
+let dispose: (() => void) | undefined;
 
-function mount(w: World | "offline", node: ReactNode = <Layer1 active />): { layer: DataLayer; calls: string[] } {
-  window.location.hash = "#/simulator";
-  router = createHashRouter(window);
-  const s = scriptedLayer(w);
-  render(
-    <RouterProvider router={router}>
-      <DataProvider layer={s.layer}>{node}</DataProvider>
-    </RouterProvider>,
-  );
-  return s;
+function mount(w: World | "offline", node: ReactNode = <Layer1 active />) {
+  const m = mountPage(node, daemon(w), "#/simulator");
+  dispose = m.dispose;
+  return m;
 }
 
-const nodes = () => document.body.querySelectorAll("*").length;
 const settle = async (until: () => void, timeout = 4000) => waitFor(until, { timeout, interval: 5 });
 
 afterEach(() => {
   cleanup();
-  router?.dispose();
+  dispose?.();
 });
 
 describe("simulator layer 1", () => {
-  it("aggregates the tournaments, their runs and results into the HUD", async () => {
+  it("aggregates the tournaments and their runs into the HUD", async () => {
     const s = mount(world(4, 24));
     await settle(() => expect(screen.getByLabelText("Simulator summary").textContent).toContain("96runs"));
     const hud = screen.getByLabelText("Simulator summary").textContent ?? "";
@@ -43,10 +35,11 @@ describe("simulator layer 1", () => {
     for (const role of ["simulator-l1", "simulator-screen", "simulator-grid", "simulator-marquee", "simulator-hud", "simulator-legend", "simulator-heading"]) {
       expect(document.querySelector(`[data-role='${role}']`), role).not.toBeNull();
     }
-    // tournaments.page once, then runs.page and tournament.results per tournament.
+    // tournaments.page once, then runs.page per tournament: each run row carries its own
+    // health, so the grid reads no tournament.results.
     expect(s.calls.filter((m) => m === "tournaments.page")).toHaveLength(1);
     expect(s.calls.filter((m) => m === "runs.page")).toHaveLength(4);
-    expect(s.calls.filter((m) => m === "tournament.results")).toHaveLength(4);
+    expect(s.calls.filter((m) => m === "tournament.results")).toHaveLength(0);
     expect(screen.getByText("Open the trials").closest("a")?.getAttribute("href")).toBe("#/simulator/tournaments");
   });
 
@@ -55,7 +48,7 @@ describe("simulator layer 1", () => {
     await settle(() => expect(screen.getByLabelText("Simulator summary").textContent).toContain("480runs"));
     const small = nodes();
     cleanup();
-    router?.dispose();
+    dispose?.();
     const s = mount(world(40, 1200));
     await settle(() => expect(screen.getByLabelText("Simulator summary").textContent).toContain("48,000runs"), 15_000);
     expect(screen.getByLabelText("Simulator summary").textContent).toContain("40 tournaments");
@@ -77,7 +70,7 @@ describe("simulator layer 1", () => {
     mount(world(0, 0));
     await settle(() => expect(screen.getByText("No tournaments yet")).toBeTruthy());
     cleanup();
-    router?.dispose();
+    dispose?.();
     const s = mount("offline");
     await act(async () => {
       await s.layer.client.call("tournaments.page", { limit: 1 });

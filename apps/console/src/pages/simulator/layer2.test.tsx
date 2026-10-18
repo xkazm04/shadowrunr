@@ -1,30 +1,21 @@
 // Layer 2 in jsdom over a scripted daemon: tabs, the virtualised lists at 10x, the verdict's
 // quote verification, and the heatmap worst first with rate, n and bound.
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { DataProvider } from "../../data";
-import { createHashRouter, pageRoute, RouterProvider, type RouterStore } from "../../router";
+import { mountPage, nodes } from "../../kit/testing";
+import { pageRoute, type RouterStore } from "../../router";
 import { page } from "./index";
 import { Layer2 } from "./Layer2";
-import { scriptedLayer, VERDICT_RUN, world, type World } from "./testgen";
+import { daemon, VERDICT_RUN, world, type World } from "./testgen";
 
 let router: RouterStore | undefined;
 
 function mount(w: World | "offline", sub: readonly string[]) {
-  window.location.hash = `#/simulator/${sub.join("/")}`;
-  router = createHashRouter(window);
-  const s = scriptedLayer(w);
-  render(
-    <RouterProvider router={router}>
-      <DataProvider layer={s.layer}>
-        <Layer2 sub={sub} />
-      </DataProvider>
-    </RouterProvider>,
-  );
-  return s;
+  const m = mountPage(<Layer2 sub={sub} />, daemon(w), `#/simulator/${sub.join("/")}`);
+  router = m.router;
+  return m;
 }
 
-const nodes = () => document.body.querySelectorAll("*").length;
 const settle = async (until: () => void) => waitFor(until, { timeout: 4000, interval: 5 });
 
 afterEach(() => {

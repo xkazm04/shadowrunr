@@ -115,7 +115,7 @@ pub fn runs_page(sim_root: &Path, p: RunsPageParams) -> Result<RunsPage, RpcErro
                 continue;
             };
             if matches(&filter, &entry) {
-                items.push(entry.row);
+                items.push(entry.with_health().row);
                 if items.len() > limit {
                     break 'outer;
                 }

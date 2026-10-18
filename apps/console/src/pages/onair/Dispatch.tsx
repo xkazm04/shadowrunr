@@ -1,12 +1,14 @@
 // The Lord's dispatch: what the next stream receives. A plan is composed in Reconcile › Plan from
-// a report's options plus every active directive (verbatim). This page shows the report it
-// answers (the one in the route, else the newest from reconcile.list), its summary and options;
-// the standing directives always show.
-import type { Directive } from "@shadowrunr/contract";
+// a report's options plus every active directive (verbatim). This page shows the plan in force
+// (`plan.current`: what Malakor receives), the report it answers (the one in the route, else the
+// newest from reconcile.list) with its options, and the standing directives.
+import type { Directive, NextStreamPlan } from "@shadowrunr/contract";
 import { useRpc } from "../../data";
 import { QueryView } from "../../kit";
 import { RouteLink, pageRoute } from "../../router";
-import { Chip, EmptyState, Section } from "../../ui";
+import { Chip } from "../../ui/Chip";
+import { Section } from "../../ui/Section";
+import { EmptyState } from "../../ui/States";
 import styles from "./Layer2.module.css";
 
 function Directives() {
@@ -29,6 +31,39 @@ function Directives() {
       </QueryView>
     </Section>
   );
+}
+
+function Receives({ plan }: { plan: NextStreamPlan }) {
+  return (
+    <Section title="What Malakor receives" right={plan.report_id === undefined ? plan.plan_id : `from ${plan.report_id}`}>
+      <p className={styles.lede} data-role="onair-dispatch-text">
+        {plan.lord_dispatch}
+      </p>
+      {plan.segments.length > 0 && (
+        <ol className={styles.plain} data-role="onair-dispatch-segments">
+          {plan.segments.map((s, i) => (
+            <li key={`${s.segment}-${i}`}>
+              <b>{s.segment}</b> · {s.minutes} min{s.notes ? ` · ${s.notes}` : ""}
+            </li>
+          ))}
+        </ol>
+      )}
+      {plan.topics.length > 0 && <p className={styles.dim}>Topics: {plan.topics.join(" · ")}</p>}
+    </Section>
+  );
+}
+
+/** The plan in force; nothing until the operator chooses one in Reconcile › Plan. */
+function PlanInForce() {
+  const plan = useRpc("plan.current", {});
+  if (plan.error?.code === "not_found") {
+    return (
+      <Section title="What Malakor receives">
+        <EmptyState title="No plan chosen yet" hint={<>Choose a report&apos;s options in <RouteLink to={pageRoute("reconcile", "plan")}>Reconcile › Plan</RouteLink>; the plan it seals is what the next stream receives.</>} />
+      </Section>
+    );
+  }
+  return <QueryView query={plan}>{(p) => <Receives plan={p} />}</QueryView>;
 }
 
 function FromReport({ reportId }: { reportId: string }) {
@@ -76,6 +111,7 @@ export function Dispatch({ reportId }: { reportId: string | null }) {
   }
   return (
     <>
+      <PlanInForce />
       {id === null ? (
         <Section title="Tonight’s dispatch">
           <EmptyState

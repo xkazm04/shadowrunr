@@ -135,6 +135,7 @@
   --sr-color-screen-set-near: #1c2e29;
   --sr-color-screen-hex: #1a2421;
   --sr-color-screen-chat: #e5dcc7;
+  --sr-color-scrim: #070a09;
   /* alpha */
   --sr-color-line: rgba(20,17,13,.2);
   --sr-color-wash: rgba(20,17,13,.06);
@@ -142,16 +143,6 @@
   --sr-color-row-hover: rgba(232,84,42,.12);
   --sr-color-row-selected: rgba(232,84,42,.2);
   --sr-color-shadow-seam: rgba(0,0,0,.35);
-  /* channel */
-  --sr-rgb-paper: 239 230 210;
-  --sr-rgb-ember: 232 84 42;
-  --sr-rgb-ink: 11 15 14;
-  --sr-rgb-press: 20 17 13;
-  --sr-rgb-scrim: 7 10 9;
-  --sr-rgb-black: 0 0 0;
-  --sr-rgb-teal: 47 125 106;
-  --sr-rgb-ochre: 214 168 90;
-  --sr-rgb-blood: 142 42 26;
   /* font */
   --sr-font-display: "Barlow Condensed","Bahnschrift SemiCondensed","Arial Narrow","Roboto Condensed",sans-serif;
   --sr-font-serif: "Palatino Linotype",Palatino,"Iowan Old Style","Book Antiqua",Georgia,serif;
@@ -267,6 +258,62 @@
   --sr-layout-rail-peek: 11rem;
   --sr-layout-spread-measure: 84rem;
   --sr-layout-body-measure: 64rem;
+  /* brain */
+  --sr-brain-role-core-thread: #ff6a2b;
+  --sr-brain-role-chatter: #86d3bb;
+  --sr-brain-role-researcher: #ffb15a;
+  --sr-brain-role-consolidator: #cdbf9f;
+  --sr-brain-role-judge: #c9a6ff;
+  --sr-brain-role-chat-picker: #9fd3ff;
+  --sr-brain-role-unknown: #ccc;
+  --sr-brain-backdrop: #070b0a;
+  --sr-brain-glow-core: rgba(255,106,43,.08);
+  --sr-brain-glow-edge: rgba(0,0,0,0);
+  --sr-brain-panel-edge: rgba(134,211,187,.18);
+  --sr-brain-panel-fill: rgba(3,7,6,.6);
+  --sr-brain-scope-grid: rgba(134,211,187,.07);
+  --sr-brain-scope-lane-label: rgba(154,146,132,.9);
+  --sr-brain-scope-trace: rgba(255,106,43,.75);
+  --sr-brain-scope-trace-glow: #ff6a2b;
+  --sr-brain-scope-error: #ff3b2f;
+  --sr-brain-scope-sweep-from: rgba(255,177,90,0);
+  --sr-brain-scope-sweep-to: rgba(255,177,90,.18);
+  --sr-brain-memory-a: #86d3bb;
+  --sr-brain-memory-b: #4fa38d;
+  --sr-brain-memory-c: #ffb15a;
+  --sr-brain-memory-d: #ff6a2b;
+  --sr-brain-gauge-track: rgba(134,211,187,.12);
+  --sr-brain-gauge-p95: rgba(255,177,90,.35);
+  --sr-brain-gauge-p50: #4fa38d;
+  --sr-brain-gauge-tick: rgba(207,195,168,.5);
+  --sr-brain-gauge-tick-text: #9a9284;
+  --sr-brain-gauge-needle: #ff6a2b;
+  --sr-brain-funnel-a: #86d3bb;
+  --sr-brain-funnel-b: #4fa38d;
+  --sr-brain-funnel-c: #ffb15a;
+  --sr-brain-funnel-d: #ff6a2b;
+  --sr-brain-funnel-text: #efe6d2;
+  --sr-brain-lamp-highlight: #fff8;
+  --sr-brain-lamp-error: #ff3b2f;
+  --sr-brain-text-bone: #efe6d2;
+  --sr-brain-text-bone-dim: #cfc3a8;
+  --sr-brain-text-ash: #9a9284;
+  --sr-brain-text-verdigris: #86d3bb;
+  --sr-brain-text-apricot: #ffb15a;
+  --sr-brain-text-error: #ff8a65;
+  --sr-brain-door-fill: rgba(6,12,11,.72);
+  --sr-brain-door-edge: rgba(127,190,170,.22);
+  /* sim */
+  --sr-sim-backdrop: #070b0a;
+  --sr-sim-glow: rgba(79,163,141,.12);
+  --sr-sim-glow-end: rgba(0,0,0,0);
+  --sr-sim-tile: rgba(255,255,255,.025);
+  --sr-sim-tile-hover: rgba(255,177,90,.14);
+  --sr-sim-red-line: #ff3b2f;
+  --sr-sim-label: rgba(207,195,168,.8);
+  --sr-sim-label-hover: #ffb15a;
+  --sr-sim-unjudged: rgba(255,255,255,.06);
+  --sr-sim-font: "Barlow Condensed","Arial Narrow",sans-serif;
   /* rank */
   --sr-rank-thrall: #8f877a;
   --sr-rank-acolyte: #cdbf9f;

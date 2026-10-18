@@ -5,7 +5,8 @@
 import type { SegmentTables } from "@shadowrunr/contract";
 import type { CSSProperties } from "react";
 import { useConnection, useRpc } from "../../data";
-import { RouteLink, pageRoute } from "../../router";
+import { PosterFrame } from "../../kit/PosterFrame";
+import { pageRoute } from "../../router";
 import { LIVE, runSource, sourceKey, useOnAirFeed, type OnAirFeed } from "./feed";
 import styles from "./Layer1.module.css";
 import type { FeedSnapshot } from "./player";
@@ -89,49 +90,45 @@ function Transport({ feed }: { feed: OnAirFeed }) {
   );
 }
 
+/** The configured character's active tone (the operator's choice, else its default), in words. */
+function useActiveTone(active: boolean): string | undefined {
+  const list = useRpc("character.list", active ? {} : null);
+  const c = list.data?.find((x) => x.id === "malakor") ?? list.data?.[0];
+  return c === undefined ? undefined : c.active_tone.replace(/-/g, " ");
+}
+
 export function Layer1({ active }: { readonly active: boolean }) {
   const feed = useOnAirFeed(active);
   const conn = useConnection();
   const tables = useRpc("segments.tables", {});
+  // The Lord's dispatch on the slip: the plan the operator chose (absent until one is chosen).
+  const plan = useRpc("plan.current", active ? {} : null);
+  const tone = useActiveTone(active);
   const { pills, descoped } = pillsOf(tables.data);
   const state = screenState(feed, conn.summary === "offline");
   const run = feed.source?.kind === "run" ? feed.source : null;
   const chatRoute = run ? pageRoute("brain", "transcripts", run.runId) : pageRoute("brain", "transcripts");
   if (!active) return null;
   return (
-    <div className={styles.l1} data-role="onair-layer1">
-      <div className={styles.top}>
-        <div className={styles.brand}>
-          <svg viewBox="0 0 40 40" aria-hidden="true">
-            <path d="M6 16L9 5l7 7 4-9 4 9 7-7 3 11z" fill="currentColor" />
-            <ellipse cx="20" cy="26" rx="11" ry="10" fill="none" stroke="currentColor" strokeWidth="3" />
-            <circle cx="16" cy="25" r="2.4" fill="currentColor" />
-            <circle cx="24" cy="25" r="2.4" fill="currentColor" />
-          </svg>
-          <b>Shadowrunr OS</b>
-          <span>Season 0 · v0.1</span>
-        </div>
-      </div>
+    <PosterFrame
+      className={styles.l1}
+      role="onair-layer1"
+      measure
+      credit={tone === undefined ? "A broadcast of the Overlord pilot · " : `A broadcast of the Overlord pilot · next stream's tone: ${tone} · `}
+      note="v0.1 · media-less phase: voice, avatar and broadcast come next · stylised illustration"
+      cta={{ to: pageRoute("onair", "rundown"), label: "Open the rundown", role: "push-in" }}
+    >
       <div className={styles.hero}>
         <div className={styles.title} aria-hidden="true" data-role="onair-title">
           <span>On</span>
           <span>Air</span>
         </div>
         <div className={styles.screenSlot}>
-          <Screen snapshot={feed.snapshot} pills={pills} descoped={descoped} chatRoute={chatRoute} status={state.status} offAir={state.offAir} />
+          <Screen snapshot={feed.snapshot} pills={pills} descoped={descoped} chatRoute={chatRoute} status={state.status} offAir={state.offAir} dispatch={plan.data?.lord_dispatch} />
         </div>
         <Progress snap={feed.snapshot} />
         <Transport feed={feed} />
       </div>
-      <div className={styles.foot}>
-        <p className={styles.credit}>
-          A broadcast of the Overlord pilot ·<span>v0.1 · media-less phase: voice, avatar and broadcast come next · stylised illustration</span>
-        </p>
-        <RouteLink to={pageRoute("onair", "rundown")} className={styles.cta} data-role="push-in">
-          <span>Open the rundown</span>
-          <i />
-        </RouteLink>
-      </div>
-    </div>
+    </PosterFrame>
   );
 }

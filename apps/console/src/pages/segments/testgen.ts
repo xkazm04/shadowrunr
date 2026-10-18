@@ -2,7 +2,7 @@
 // never by the page, so nothing here reaches a bundle). The base shape mirrors the compiled-in
 // tables (crates/shadowrunr-segments/data); `scale` repeats it to stress the caps. SegmentId is
 // a closed enum in the contract, so scaled segments reuse the four real ids.
-import type { RankTableInfo, RankRow, ReconcileReport, SegmentId, SegmentStatus, SegmentTableInfo, SegmentTables } from "@shadowrunr/contract";
+import type { CommandInfo, RankRow, RankTableInfo, ReconcileReport, SegmentId, SegmentStatus, SegmentTableInfo, SegmentTables } from "@shadowrunr/contract";
 
 const OP_TAGS = ["highlight", "start_poll", "close_poll", "summon_foil", "dismiss_foil", "reveal_hex", "dispatch_research", "show_card", "mark_moment", "switch_segment", "sign_off"];
 const COMMANDS = ["summon", "hint", "grade", "propose", "vote"];
@@ -55,6 +55,15 @@ const descopedSeg = (id: SegmentId, title: string): SegmentTableInfo => ({
   transitions: [],
 });
 
+/** The daemon's command table (crates/shadowrunr-segments/src/command.rs COMMAND_SPECS). */
+export const COMMAND_INFO: CommandInfo[] = [
+  { name: "summon", args: "<foil>", what: "Call a guest foil into the room. The weighted vote decides." },
+  { name: "hint", args: "<hex> <text>", what: "Nominate a lead on the hexmap." },
+  { name: "grade", args: "<hex> <DOC|REP|CLM|SPC>", what: "Grade a hex. Jury advice, never proof." },
+  { name: "propose", args: "<text>", what: "Propose a scheme. Rank-gated.", min_rank: "warlock" },
+  { name: "vote", args: "<option>", what: "Vote in the open poll. Weight rises with rank." },
+];
+
 export const BASE_SEGMENTS: readonly SegmentTableInfo[] = [seg01, seg02a, descopedSeg("SEG-02B-I", "Cartography Legion"), descopedSeg("SEG-02B-II", "Dependency Doctrine")];
 
 const STATUSES: readonly SegmentStatus[] = ["pilot", "trial", "regular", "flagship", "retired", "descoped"];
@@ -65,7 +74,7 @@ export function genTables(scale = 0): SegmentTables {
     const base = BASE_SEGMENTS[i % 2] ?? seg01;
     return { ...base, title: `${base.title} ${i}`, status: STATUSES[i % STATUSES.length] ?? "pilot" };
   });
-  return { segments: [...BASE_SEGMENTS, ...extra], op_tags: OP_TAGS, command_names: COMMANDS };
+  return { segments: [...BASE_SEGMENTS, ...extra], op_tags: OP_TAGS, command_names: COMMANDS, commands: COMMAND_INFO };
 }
 
 /** `ranks.table` for Malakor (crates/shadowrunr-segments/data/ranks.toml + character titles). */

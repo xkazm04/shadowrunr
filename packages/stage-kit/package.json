@@ -9,7 +9,11 @@
     "./ui": "./src/ui/index.ts",
     "./parse": "./src/parse.ts"
   },
-  "scripts": { "typecheck": "tsc --noEmit -p .", "test": "vitest run" },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "lint": "eslint src --max-warnings 0"
+  },
   "dependencies": {
     "@shadowrunr/contract": "workspace:*",
     "@shadowrunr/tokens": "workspace:*"

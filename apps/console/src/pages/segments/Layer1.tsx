@@ -5,6 +5,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { RankTableInfo, SegmentTables } from "@shadowrunr/contract";
 import { useConnection, type Query } from "../../data";
+import { PosterFrame } from "../../kit/PosterFrame";
 import { pageRoute, RouteLink } from "../../router";
 import { useRanks, useTables } from "./hooks";
 import styles from "./Layer1.module.css";
@@ -31,19 +32,13 @@ function ProgrammePoster() {
   const segs = tables.data?.segments;
 
   return (
-    <div className={styles.root} data-role="segments-layer1">
-      <div className={styles.top}>
-        <div className={styles.brand}>
-          <svg viewBox="0 0 40 40" aria-hidden="true">
-            <path d="M6 16L9 5l7 7 4-9 4 9 7-7 3 11z" fill="currentColor" />
-            <ellipse cx="20" cy="26" rx="11" ry="10" fill="none" stroke="currentColor" strokeWidth="3" />
-            <circle cx="16" cy="25" r="2.4" fill="currentColor" />
-            <circle cx="24" cy="25" r="2.4" fill="currentColor" />
-          </svg>
-          <b>Shadowrunr OS</b>
-          <span>Season 0 · v0.1</span>
-        </div>
-      </div>
+    <PosterFrame
+      className={styles.root}
+      role="segments-layer1"
+      measure
+      credit="The programme of the night · "
+      cta={{ to: pageRoute("segments", "tables"), label: "Open the segment tables", role: "segments-cta" }}
+    >
       <div className={styles.hero} data-role="segments-hero">
         <RouteLink
           to={pageRoute("segments", "tables")}
@@ -91,16 +86,7 @@ function ProgrammePoster() {
           </p>
         )}
       </div>
-      <div className={styles.foot}>
-        <p className={styles.credit}>
-          The programme of the night · <span>v0.1 · media-less phase: voice, avatar and broadcast come next · stylised illustration</span>
-        </p>
-        <RouteLink to={pageRoute("segments", "tables")} className={styles.cta} data-role="segments-cta">
-          <span>Open the segment tables</span>
-          <i />
-        </RouteLink>
-      </div>
-    </div>
+    </PosterFrame>
   );
 }
 

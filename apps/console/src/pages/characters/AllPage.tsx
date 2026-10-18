@@ -1,17 +1,19 @@
 // characters/all: every character in one virtualised table (the winner's charsAll), then what a
 // character is and its special guests.
+import { int } from "../../kit/events";
 import { FoilArt, MalakorArt } from "@shadowrunr/stage-kit/ui";
 import type { CharacterSummary } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { useRpc } from "../../data";
 import { RouteLink, useRouter } from "../../router";
-import { Chip, FilterTable, Head, Section, type Column } from "../../ui";
+import { Chip } from "../../ui/Chip";
+import { FilterTable, type Column } from "../../ui/FilterTable";
+import { Head, Section } from "../../ui/Section";
 import { ART_CHARACTER, GenericAvatar } from "./Avatar";
 import styles from "./Layer2.module.css";
 import { foilName, toneLabel } from "./model";
 import { pkgRoute } from "./routes";
 
-const int = (n: number) => n.toLocaleString("en-US");
 
 const COLUMNS: readonly Column<CharacterSummary>[] = [
   {

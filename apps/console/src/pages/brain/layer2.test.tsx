@@ -6,7 +6,8 @@ import DOM_BUDGETS from "../../../budgets/dom.json";
 import { pageRoute } from "../../router";
 import { brainLabel } from "./index";
 import { Layer2, lineOf } from "./Layer2";
-import { daemon, mount, nodes, season, settle, transcript } from "./testgen";
+import { daemon, season, transcript } from "./testgen";
+import { mountPage as mount, nodes, ok, settle } from "../../kit/testing";
 
 const L2_BUDGET: number = DOM_BUDGETS.routes["wall+l2"];
 
@@ -17,7 +18,7 @@ describe("brain/transcripts/<run>/<line>", () => {
     const s = season({ tournaments: 1, runs: 1, rowsPerRun: 1, transcriptLines: 10 });
     const big = new Map([["gen-t0000/r1", transcript(100_000, "r1")]]);
     mount(<Layer2 sub={["transcripts", "gen-t0000/r1", "50000"]} />, daemon(s, big), "#/brain/transcripts/gen-t0000%2Fr1/50000");
-    await settle();
+    await settle(8);
     expect(screen.getByText(/100,000 of 100,000 lines/)).toBeTruthy();
     const rows = document.querySelectorAll("[data-role='brain-lines'] [role='listitem']").length;
     expect(rows).toBeGreaterThan(0);
@@ -31,9 +32,9 @@ describe("brain/transcripts/<run>/<line>", () => {
   it("filters by type and deep-links a picked line by route", async () => {
     const s = season({ tournaments: 1, runs: 1, rowsPerRun: 1, transcriptLines: 10 });
     const { router } = mount(<Layer2 sub={["transcripts", "r2"]} />, daemon(s, new Map([["r2", transcript(600, "r2")]])), "#/brain/transcripts/r2");
-    await settle();
+    await settle(8);
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "say" })));
-    await settle();
+    await settle(8);
     expect(screen.getByText(/199 of 600 lines/)).toBeTruthy();
     const first = document.querySelector<HTMLButtonElement>("[data-role='brain-lines'] button[data-line]");
     expect(first).not.toBeNull();
@@ -69,7 +70,7 @@ describe("brain/transcripts", () => {
 
   it("shows one offline state when the daemon is down", async () => {
     mount(<Layer2 sub={["transcripts"]} />, daemon(null), "#/brain/transcripts");
-    await settle();
+    await settle(8);
     expect(screen.getAllByText("The daemon is not reachable")).toHaveLength(1);
     expect(screen.getByText(/Layer 2 ·/)).toBeTruthy();
   });
@@ -88,9 +89,35 @@ describe("brain/engine", () => {
     expect(nodes()).toBeLessThan(L2_BUDGET);
   });
 
+  it("shows the engine's live routes and accounts from engine.status, with the ledger's calls", async () => {
+    const s = season({ tournaments: 1, runs: 6, rowsPerRun: 60, transcriptLines: 10 });
+    const base = daemon(s);
+    const status = {
+      routes: [
+        { role: "core_thread", tier: "sonnet", effort: "low", timeout_ms: 30_000, overridden: true },
+        { role: "chatter", tier: "haiku", effort: "low", timeout_ms: 20_000, overridden: false },
+        { role: "judge", tier: "opus", effort: "high", timeout_ms: 600_000, overridden: false },
+      ],
+      accounts: [{ label: "main" }, { label: "spare", cooling_until_ms: 1_800_000_600_000 }],
+      fleet: { mode: "primary", since_ms: 1_800_000_000_000 },
+      fallbacks: ["codex"],
+      api_fallback: true,
+    };
+    mount(<Layer2 sub={["engine"]} />, (method, sent) => (method === "engine.status" ? ok(status) : base(method, sent)), "#/brain/engine");
+    await settle(20);
+    const routes = document.querySelector("[data-role='brain-routes']");
+    expect(routes?.getAttribute("data-source")).toBe("engine.status");
+    expect(routes?.querySelectorAll("tbody tr")).toHaveLength(3);
+    expect(routes?.textContent).toContain("overridden");
+    const accounts = document.querySelector("[data-role='brain-accounts']");
+    expect(accounts?.querySelector("[data-account='main']")?.textContent).toContain("in rotation");
+    expect(accounts?.querySelector("[data-account='spare']")?.textContent).toContain("cooling until");
+    expect(document.querySelector("[data-role='brain-fleet']")?.textContent).toContain("API key, codex");
+  });
+
   it("names an unknown floor instead of rendering blank", async () => {
     mount(<Layer2 sub={["nope"]} />, daemon(null), "#/brain/nope");
-    await settle();
+    await settle(8);
     expect(screen.getByText(/No brain page called/)).toBeTruthy();
   });
 });

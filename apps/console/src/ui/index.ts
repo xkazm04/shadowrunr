@@ -9,3 +9,6 @@ export * from "./RateBar";
 export * from "./PillGroup";
 export * from "./Switch";
 export * from "./States";
+export * from "./VisuallyHidden";
+export * from "./doc";
+export * from "./Markdown";

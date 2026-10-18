@@ -4,7 +4,8 @@ import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Layer1 } from "./Layer1";
 import { WINDOW } from "./useBrain";
-import { daemon, mount, nodes, Recorder, season, settle } from "./testgen";
+import { daemon, Recorder, season } from "./testgen";
+import { mountPage as mount, nodes, ok, settle } from "../../kit/testing";
 
 const ROLES = [
   "brain-layer1",
@@ -46,11 +47,41 @@ const draws = (role: string) => Number(document.querySelector(`[data-role='${rol
 describe("brain layer 1", () => {
   it("renders every fidelity role on a pilot-sized season", async () => {
     mount(<Layer1 active />, daemon(season({ tournaments: 1, runs: 4, rowsPerRun: 130, transcriptLines: 800 })), "#/brain");
-    await settle();
+    await settle(8);
     for (const role of ROLES) expect(document.querySelector(`[data-role='${role}']`), role).not.toBeNull();
     expect(document.querySelectorAll("[data-role='brain-lamp']").length).toBe(4);
     expect(screen.getByText(/Picker funnel · 4 runs/)).toBeTruthy();
     expect(screen.getByText("Layer 1 · The Brain")).toBeTruthy();
+  });
+
+  it("reads the first-word gauge from the newest Reconcile report when there is one", async () => {
+    const base = daemon(season({ tournaments: 1, runs: 4, rowsPerRun: 20, transcriptLines: 50 }));
+    const report = {
+      report_id: "rec-2",
+      created_ms: 2,
+      source: { tournament_id: "gen-t0000" },
+      segments: [],
+      tone: [],
+      ranks: {},
+      red_lines: [],
+      latency: { ledger_rows: 10, errors: 0, fallbacks: 0, say_n: 12, say_first_text_p50_ms: 1500, say_first_text_p95_ms: 4000 },
+      summary: "",
+    };
+    const { calls } = mount(
+      <Layer1 active />,
+      (method, sent) =>
+        method === "reconcile.list"
+          ? ok([{ report_id: "rec-2", created_ms: 2, source: { tournament_id: "gen-t0000" }, proposals: 0 }])
+          : method === "reconcile.report"
+            ? ok(report)
+            : base(method, sent),
+      "#/brain",
+    );
+    await settle(12);
+    const gauge = document.querySelector("[data-role='brain-latency']")?.textContent ?? "";
+    expect(gauge).toContain("1.5s p50");
+    expect(gauge).toContain("p95 4.0 s · n=12 · newest report");
+    expect(calls).toContain("reconcile.report");
   });
 
   it("holds at 10x: a bounded read window, a constant DOM, and a flag that says so", async () => {
@@ -71,11 +102,11 @@ describe("brain layer 1", () => {
   it("draws each canvas on input change only, never per tick", async () => {
     const raf = vi.spyOn(window, "requestAnimationFrame");
     mount(<Layer1 active />, daemon(season({ tournaments: 1, runs: 4, rowsPerRun: 20, transcriptLines: 60 })), "#/brain");
-    await settle();
+    await settle(8);
     const before = [draws("brain-scope-canvas"), draws("brain-memory-canvas")];
     expect(before[0]).toBeGreaterThan(0);
     await new Promise((r) => setTimeout(r, 60));
-    await settle();
+    await settle(8);
     expect([draws("brain-scope-canvas"), draws("brain-memory-canvas")]).toEqual(before);
     expect(raf).not.toHaveBeenCalled();
     // one lane per run here: 4 trace labels on the scope canvas
@@ -84,20 +115,20 @@ describe("brain layer 1", () => {
 
   it("renders nothing and reads nothing while hidden under a nested page", async () => {
     const { calls } = mount(<Layer1 active={false} />, daemon(season({ tournaments: 1, runs: 4, rowsPerRun: 5, transcriptLines: 10 })), "#/brain/engine");
-    await settle();
+    await settle(8);
     expect(document.querySelector("[data-role='brain-layer1']")).toBeNull();
     expect(calls).toEqual([]);
   });
 
   it("shows the offline state when the daemon is down", async () => {
     mount(<Layer1 active />, daemon(null), "#/brain");
-    await settle();
+    await settle(8);
     expect(screen.getByText("The daemon is not reachable")).toBeTruthy();
   });
 
   it("shows the designed empty state before any tournament", async () => {
     mount(<Layer1 active />, daemon(season({ tournaments: 0, runs: 0, rowsPerRun: 0, transcriptLines: 0 })), "#/brain");
-    await settle();
+    await settle(8);
     expect(screen.getByText("No simulation runs yet")).toBeTruthy();
   });
 });

@@ -3,7 +3,7 @@
 // crates/shadowrunr-sim/src/summary.rs `worst_first`, so the console and heatmap.md agree:
 // any rule fail, then not_evaluable, then not_provoked (all descending), then mean quality
 // ascending (cells without quality last among equals), then the cell key.
-import type { Bound, CellKey, CellResult } from "./results";
+import type { Bound, CellKey, CellResult, QualityTally, RuleTally } from "./results";
 
 export { cellLabel, cellRouteKey, parseCellRouteKey, type ParsedCellKey } from "./routeKey";
 
@@ -11,7 +11,11 @@ export { cellLabel, cellRouteKey, parseCellRouteKey, type ParsedCellKey } from "
 export const THIN_N = 5;
 
 const sum = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0);
-const tallies = (c: CellResult) => Object.values(c.rules);
+/** The cell's rule tallies by rule id (the contract types map values as possibly absent). */
+export const ruleEntries = (c: CellResult): [string, RuleTally][] => Object.entries(c.rules).filter((e): e is [string, RuleTally] => e[1] !== undefined);
+/** The cell's quality tallies by dimension. */
+export const qualityEntries = (c: CellResult): [string, QualityTally][] => Object.entries(c.quality).filter((e): e is [string, QualityTally] => e[1] !== undefined);
+const tallies = (c: CellResult) => ruleEntries(c).map(([, t]) => t);
 
 export const ruleFails = (c: CellResult) => sum(tallies(c).map((r) => r.fail));
 export const notEvaluable = (c: CellResult) => sum(tallies(c).map((r) => r.not_evaluable));
@@ -20,8 +24,8 @@ export const rulePass = (c: CellResult) => sum(tallies(c).map((r) => r.pass));
 
 /** Mean of the dimension rates that have n > 0; undefined when there are none. */
 export function meanQuality(c: CellResult): number | undefined {
-  const rates = Object.values(c.quality)
-    .map((q) => q.rate)
+  const rates = qualityEntries(c)
+    .map(([, q]) => q.rate)
     .filter((r): r is number => typeof r === "number");
   return rates.length ? sum(rates) / rates.length : undefined;
 }
@@ -101,7 +105,7 @@ export function cellHealth(c: CellResult): number | undefined {
 export const isRedLine = (rule: string) => rule.startsWith("red-line");
 
 export function redLineFails(c: CellResult): number {
-  return sum(Object.entries(c.rules).map(([k, r]) => (isRedLine(k) ? r.fail : 0)));
+  return sum(ruleEntries(c).map(([k, r]) => (isRedLine(k) ? r.fail : 0)));
 }
 
 export const sameCell = (a: CellKey, b: CellKey) => compareCellKey(a, b) === 0;

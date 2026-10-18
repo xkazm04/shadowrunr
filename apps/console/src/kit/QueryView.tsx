@@ -2,7 +2,7 @@
 // Pages use it so every surface has its offline, empty and degraded states by construction.
 import type { ReactNode } from "react";
 import { useConnection, type Query } from "../data";
-import { OfflineState, StatePanel } from "../ui";
+import { OfflineState, StatePanel } from "../ui/States";
 
 export function QueryView<T>(props: {
   query: Query<T>;

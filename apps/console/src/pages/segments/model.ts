@@ -2,9 +2,8 @@
 // and op grids and the vote calculator. Everything here is derived from `segments.tables`,
 // `ranks.table` and `reconcile.report`; nothing is invented.
 import type { Rank, RankInfo, RankRow, RankTableInfo, SegmentStatus, SegmentTableInfo, SegmentTables } from "@shadowrunr/contract";
-import type { Tone } from "../../ui";
+import type { Tone } from "../../ui/Chip";
 import { LIFECYCLE, type Lifecycle } from "./counts";
-import { grammarOf, type Grammar } from "./grammar";
 
 export { glance, LIFECYCLE, statusCounts, type Lifecycle } from "./counts";
 
@@ -95,21 +94,33 @@ export function qualifies(r: RankInfo): { tiers: string; gifted: string } {
 
 export interface CommandRow {
   readonly name: string;
-  readonly grammar: Grammar | undefined;
+  /** The argument shape, from the daemon's command table; undefined when it sends none. */
+  readonly args: string | undefined;
+  /** What the command does, in one line. */
+  readonly what: string | undefined;
   /** Segments whose table accepts the command. */
   readonly segments: readonly string[];
   /** The lowest rank allowed, or undefined for "any rank". */
   readonly minRank: Rank | undefined;
 }
 
-/** One row per command the runtime knows, with where it is accepted and who may use it. */
-export function commandRows(tables: SegmentTables, proposeMinRank: Rank | undefined): CommandRow[] {
-  return tables.command_names.map((name) => ({
-    name,
-    grammar: grammarOf(name),
-    segments: tables.segments.filter((s) => s.commands.includes(name)).map((s) => s.id),
-    minRank: name === "propose" ? proposeMinRank : undefined,
-  }));
+/**
+ * One row per command the runtime knows, with where it is accepted and who may use it. The
+ * arguments, meaning and rank gate come from `segments.tables` `commands` (the parser's own
+ * table in shadowrunr-segments `command.rs`).
+ */
+export function commandRows(tables: SegmentTables): CommandRow[] {
+  const info = new Map(tables.commands.map((c) => [c.name, c]));
+  return tables.command_names.map((name) => {
+    const c = info.get(name);
+    return {
+      name,
+      args: c?.args,
+      what: c?.what,
+      segments: tables.segments.filter((s) => s.commands.includes(name)).map((s) => s.id),
+      minRank: c?.min_rank,
+    };
+  });
 }
 
 /** The op grid's columns: segments that can run (descoped tables allow nothing). */

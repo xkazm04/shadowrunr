@@ -1,7 +1,8 @@
 // Layer 2 of Segments & ranks: the winner's three tabs (l2b.js P3.L2.segments) as routes:
 //   segments/tables[/<SEG>]   segments/commands   segments/ranks[/<report id>]
 import { pageRoute, RouteLink, useRouter } from "../../router";
-import { StatePanel, Tabs, type TabItem } from "../../ui";
+import { Tabs, type TabItem } from "../../ui/Section";
+import { StatePanel } from "../../ui/States";
 import { CommandsPage } from "./Commands";
 import styles from "./Layer2.module.css";
 import { RanksPage } from "./Ranks";

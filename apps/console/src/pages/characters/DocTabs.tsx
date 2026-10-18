@@ -3,10 +3,12 @@
 import { useId, useMemo } from "react";
 import type { CharacterDetail } from "@shadowrunr/contract";
 import { pageRoute, RouteLink } from "../../router";
-import { EmptyState, Head, Section } from "../../ui";
-import { parseDoc, readConstitution, type Block } from "./doc";
+import { Head, Section } from "../../ui/Section";
+import { EmptyState } from "../../ui/States";
+import { parseDoc, type Block } from "../../ui/doc";
+import { readConstitution } from "./packageDocs";
 import styles from "./Layer2.module.css";
-import { Inline, Markdown } from "./Markdown";
+import { Inline, Markdown } from "../../ui/Markdown";
 
 const KICKER = "Characters · the package";
 

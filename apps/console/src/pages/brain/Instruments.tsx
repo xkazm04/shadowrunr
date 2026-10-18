@@ -1,9 +1,10 @@
 // A/1's three SVG and lamp instruments (app.js:345-366): the first-word gauge, the worker-pool
 // lamps and the picker funnel. Geometry and colours are A/1's, rebuilt as components.
 import type { CSSProperties } from "react";
-import { BRAIN, roleColor } from "./palette";
+import { TOKENS_BRAIN } from "@shadowrunr/tokens";
+import { roleColor } from "./draw";
 import type { Funnel, Latency, RoleStat } from "./brainModel";
-import { int } from "./events";
+import { int } from "../../kit/events";
 import styles from "./Instruments.module.css";
 
 const SVG_FONT = "Barlow Condensed,Arial Narrow,sans-serif";
@@ -19,19 +20,19 @@ const pt = (ms: number, r: number) => at(ms, r).join(" ");
 const arc = (to: number) => `M${pt(0, 140)} A140 140 0 0 1 ${pt(to, 140)}`;
 
 export function Gauge({ latency }: { latency: Latency }) {
-  const g = BRAIN.gauge;
+  const b = TOKENS_BRAIN;
   const ticks = Array.from({ length: 9 }, (_, s) => s);
   return (
     <svg viewBox="0 0 320 200" className={styles.gauge} aria-hidden="true" data-role="brain-gauge">
-      <path d={arc(GAUGE_MAX_MS)} fill="none" stroke={g.track} strokeWidth="16" />
-      {latency.p95 !== undefined && <path d={arc(latency.p95)} fill="none" stroke={g.p95} strokeWidth="16" />}
-      {latency.p50 !== undefined && <path d={arc(latency.p50)} fill="none" stroke={g.p50} strokeWidth="16" />}
+      <path d={arc(GAUGE_MAX_MS)} fill="none" stroke={b.gaugeTrack} strokeWidth="16" />
+      {latency.p95 !== undefined && <path d={arc(latency.p95)} fill="none" stroke={b.gaugeP95} strokeWidth="16" />}
+      {latency.p50 !== undefined && <path d={arc(latency.p50)} fill="none" stroke={b.gaugeP50} strokeWidth="16" />}
       {ticks.map((s) => {
         const [tx, ty] = at(s * 1000, 116);
         return (
           <g key={s}>
-            <path d={`M${pt(s * 1000, 132)} L${pt(s * 1000, 146)}`} stroke={g.tick} strokeWidth="2" />
-            <text x={tx} y={ty} fill={g.tickText} fontSize="15" textAnchor="middle" fontFamily={SVG_FONT}>
+            <path d={`M${pt(s * 1000, 132)} L${pt(s * 1000, 146)}`} stroke={b.gaugeTick} strokeWidth="2" />
+            <text x={tx} y={ty} fill={b.gaugeTickText} fontSize="15" textAnchor="middle" fontFamily={SVG_FONT}>
               {s}s
             </text>
           </g>
@@ -39,10 +40,10 @@ export function Gauge({ latency }: { latency: Latency }) {
       })}
       {latency.p50 !== undefined && (
         <g data-role="brain-gauge-needle">
-          <path d={`M160 170 L${pt(latency.p50, 128)}`} stroke={g.needle} strokeWidth="4" strokeLinecap="round" />
+          <path d={`M160 170 L${pt(latency.p50, 128)}`} stroke={b.gaugeNeedle} strokeWidth="4" strokeLinecap="round" />
         </g>
       )}
-      <circle cx="160" cy="170" r="8" fill={g.needle} />
+      <circle cx="160" cy="170" r="8" fill={b.gaugeNeedle} />
     </svg>
   );
 }
@@ -82,7 +83,8 @@ export interface FunnelStage {
 
 /** Chat in → past moderation → picked → answered (A/1 app.js:362). */
 export function funnelStages(f: Funnel): FunnelStage[] {
-  const [c0, c1, c2, c3] = BRAIN.funnel;
+  const b = TOKENS_BRAIN;
+  const [c0, c1, c2, c3] = [b.funnelA, b.funnelB, b.funnelC, b.funnelD];
   return [
     { n: f.chat, label: "chat in", color: c0 },
     { n: f.chat - f.dropped - f.collapsed, label: "past moderation", color: c1 },
@@ -108,7 +110,7 @@ export function FunnelChart({ funnel }: { funnel: Funnel }) {
             <path d={`M${160 - w0 / 2} ${y} L${160 + w0 / 2} ${y} L${160 + w1 / 2} ${y + 44} L${160 - w1 / 2} ${y + 44}Z`} fill={s.color} opacity={a}>
               <animate attributeName="opacity" values={`${a};${a + 0.17};${a}`} dur={`${2 + i * 0.4}s`} repeatCount="indefinite" />
             </path>
-            <text x="160" y={y + 29} textAnchor="middle" fill={BRAIN.funnelText} fontSize="19" fontFamily={SVG_FONT} letterSpacing="1">
+            <text x="160" y={y + 29} textAnchor="middle" fill={TOKENS_BRAIN.funnelText} fontSize="19" fontFamily={SVG_FONT} letterSpacing="1">
               {int(s.n)} {s.label.toUpperCase()}
             </text>
           </g>

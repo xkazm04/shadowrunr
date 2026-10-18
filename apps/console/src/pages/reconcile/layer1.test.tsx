@@ -1,6 +1,6 @@
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mountPage, nodes, ok, settle, type Script } from "./harness";
+import { mountPage, nodes, ok, settle, type Script } from "../../kit/testing";
 import { Glance, Motif } from "./Face";
 import { Layer1 } from "./Layer1";
 import { session } from "./session";
@@ -36,6 +36,20 @@ describe("layer 1: the triptych", () => {
     expect(screen.getByText("No report yet.")).toBeTruthy();
     expect(role("reconcile-run")?.getAttribute("href")).toBe("#/reconcile/report");
     expect(m.fetch.calls).not.toContain("reconcile.report");
+  });
+
+  it("shows the newest stored report without being told its id (reconcile.list)", async () => {
+    const list = [
+      { report_id: "rec-1792284840627", created_ms: 1792284840627, source: { tournament_id: "pilot-d1ef98d3a6" }, proposals: 6 },
+      { report_id: "rec-1", created_ms: 1, source: { tournament_id: "old" }, proposals: 0 },
+    ];
+    const base = daemon();
+    const m = mountPage(<Layer1 active />, (method, sent) => (method === "reconcile.list" ? ok(list) : base(method, sent)));
+    dispose = () => m.router.dispose();
+    await settle();
+    expect(role("reconcile-held")?.querySelector("[data-n]")?.getAttribute("data-n")).toBe("14");
+    expect(m.fetch.calls).toContain("reconcile.list");
+    expect(m.fetch.calls).toContain("reconcile.report");
   });
 
   it("counts held, failed and proposed from the report and links each into layer 2", async () => {

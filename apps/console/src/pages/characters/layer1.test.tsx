@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import DOM_BUDGETS from "../../../budgets/dom.json";
-import { fail, mountPage, nodes, ok, role, roles, settle, type Script } from "./harness";
+import { fail, mountPage, nodes, ok, role, roles, settle, type Script } from "../../kit/testing";
 import { Layer1 } from "./Layer1";
 import { Glance, Motif } from "./Poster";
 import { genRoster, malakorDetail, malakorSummary } from "./testgen";
@@ -49,6 +49,15 @@ describe("layer 1: the cast poster", () => {
     expect(foils?.getAttribute("href")).toBe("#/characters/malakor/package/foils");
     expect(role("characters-cta")?.getAttribute("href")).toBe("#/characters/malakor/package/constitution");
     expect(role("characters-state")).toBeNull();
+  });
+
+  it("prints the tagline and the operator's active tone on the name plate", async () => {
+    const m = mountPage(<Layer1 active />, daemon([malakorSummary({ tagline: "High Auditor of the Obsidian Spire", active_tone: "weary-middle-manager" })]));
+    dispose = m.dispose;
+    await settle();
+    expect(role("characters-tagline")?.textContent).toBe("High Auditor of the Obsidian Spire");
+    expect(role("characters-active-tone")?.textContent).toBe("Weary middle manager");
+    expect(role("characters-tone")?.textContent).toContain("The operator's choice; the package default is Theatrical.");
   });
 
   it("shows the offline slip when the daemon is unreachable, and the empty cast when there is none", async () => {

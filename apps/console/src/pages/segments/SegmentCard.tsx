@@ -4,7 +4,7 @@
 import type { ClockInfo, HandoverInfo, SegmentTableInfo } from "@shadowrunr/contract";
 import type { CSSProperties } from "react";
 import { pageRoute, RouteLink } from "../../router";
-import { Chip } from "../../ui";
+import { Chip } from "../../ui/Chip";
 import styles from "./Layer2.module.css";
 import { fmtSecs, handoverMarks, humanState, STATUS_TONE } from "./model";
 
@@ -136,7 +136,8 @@ function Clock({ clock }: { clock: ClockInfo }) {
 /** The handover clock as a ruler: sustain, then the max-elapsed cut-off, then the grace. */
 function Handover({ h }: { h: HandoverInfo }) {
   const m = handoverMarks(h);
-  const pct = (n: number) => `${n.toFixed(2)}%`;
+  /** A CSS length along the ruler: `n` is already a percentage. */
+  const at = (n: number) => `${n.toFixed(2)}%`;
   return (
     <div className={styles.handover} data-role="segments-handover">
       <p className={styles.hoLede}>
@@ -147,9 +148,9 @@ function Handover({ h }: { h: HandoverInfo }) {
         when at least {h.ccv_min} viewers hold for {fmtSecs(h.sustain_s)}, or at {fmtSecs(h.max_elapsed_s)}, whichever comes first.
       </p>
       <div className={styles.ruler} role="img" aria-label={`Handover ruler: sustain ${fmtSecs(h.sustain_s)}, cut-off ${fmtSecs(h.max_elapsed_s)}, grace ${fmtSecs(h.grace_s)}`}>
-        <i className={styles.rSustain} style={{ width: pct(m.sustainPct) } as CSSProperties} />
-        <i className={styles.rGrace} style={{ left: pct(m.maxPct), width: pct(100 - m.maxPct) } as CSSProperties} />
-        <b className={styles.rMark} style={{ left: pct(m.maxPct) } as CSSProperties} />
+        <i className={styles.rSustain} style={{ width: at(m.sustainPct) } as CSSProperties} />
+        <i className={styles.rGrace} style={{ left: at(m.maxPct), width: at(100 - m.maxPct) } as CSSProperties} />
+        <b className={styles.rMark} style={{ left: at(m.maxPct) } as CSSProperties} />
       </div>
       <div className={styles.rLegend}>
         <span>0:00</span>

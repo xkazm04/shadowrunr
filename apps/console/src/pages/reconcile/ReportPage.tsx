@@ -1,14 +1,19 @@
 // `reconcile/report[/held|failed]`: the report in its own words, what held and failed per
-// segment with evidence linked into Brain transcripts, red lines, ranks and tone quality.
-import type { Evidence, RankRow, ReconcileReport, RuleIncident, SegmentFinding, ToneFinding } from "@shadowrunr/contract";
-import { useMemo, useState } from "react";
+// segment with evidence linked into Brain transcripts, red lines (Incidents), ranks, tone
+// quality and what the synthesis prompt carried (Synthesis).
+import type { Evidence, RankRow, ReconcileReport, SegmentFinding, ToneFinding } from "@shadowrunr/contract";
+import { useState } from "react";
 import { pageRoute, RouteLink } from "../../router";
 import { QueryView } from "../../kit";
-import { Chip, FilterTable, Head, RateBar, Section, StatBand, type Column } from "../../ui";
+import { RateBar } from "../../ui/RateBar";
+import { Head, Section } from "../../ui/Section";
+import { StatBand } from "../../ui/StatBand";
 import { useReport } from "./hooks";
 import styles from "./Layer2.module.css";
-import { dateTime, incidentGroups, ruleLabel, sourceLabel, triptych } from "./model";
+import { incidentTotal, Incidents } from "./Incidents";
+import { dateTime, ruleLabel, sourceLabel, triptych } from "./model";
 import { RefLinks } from "./Refs";
+import { Synthesis } from "./Synthesis";
 
 export type ReportFilter = "all" | "held" | "failed";
 
@@ -36,7 +41,7 @@ function ReportBody({ report, filter, proposed }: { report: ReconcileReport; fil
           { label: "held", value: t.held },
           { label: "failed", value: t.failed, tone: "fail" },
           { label: "proposed", value: proposed ?? "–" },
-          { label: "red-line incidents", value: report.red_lines.length.toLocaleString("en-US") },
+          { label: "red-line incidents", value: incidentTotal(report).toLocaleString("en-US") },
         ]}
       />
       <nav className={styles.segFilter} aria-label="Show">
@@ -51,11 +56,12 @@ function ReportBody({ report, filter, proposed }: { report: ReconcileReport; fil
       {report.segments.map((s) => (
         <SegmentSection key={s.segment} s={s} filter={filter} />
       ))}
-      <Incidents incidents={report.red_lines} />
+      <Incidents report={report} />
       <Ranks rows={report.ranks.by_rank ?? []} />
       {report.tone.map((tone, i) => (
         <ToneSection key={`${tone.tone_variant}-${tone.instrument_hash ?? i}`} tone={tone} />
       ))}
+      <Synthesis input={report.synthesis_input} />
       {report.dropped && report.dropped.length > 0 && (
         <details className={styles.dropped}>
           <summary>The verifier dropped {report.dropped.length} item(s) it could not stand behind</summary>
@@ -136,66 +142,6 @@ function SegmentSection({ s, filter }: { s: SegmentFinding; filter: ReportFilter
           </div>
         )}
       </div>
-    </Section>
-  );
-}
-
-type SourceFacet = "all" | "verdict" | "moderation";
-/** An incident with its position, so identical incidents still get distinct row keys. */
-type Row = RuleIncident & { readonly k: number };
-
-const INCIDENT_COLUMNS: readonly Column<Row>[] = [
-  { id: "source", header: "Source", cell: (i) => <Chip tone={i.source === "verdict" ? "fail" : "muted"}>{i.source}</Chip>, sortValue: (i) => i.source },
-  { id: "rule", header: "Rule", cell: (i) => ruleLabel(i.rule), sortValue: (i) => i.rule },
-  { id: "action", header: "Action", cell: (i) => [i.stage, i.action].filter(Boolean).join(" · ") || "–" },
-  { id: "run", header: "Run", cell: (i) => <code>{i.run_id}</code>, sortValue: (i) => i.run_id },
-  { id: "refs", header: "Lines", cell: (i) => <RefLinks refs={i.refs} /> },
-];
-
-function Incidents({ incidents }: { incidents: readonly RuleIncident[] }) {
-  const groups = useMemo(() => incidentGroups(incidents), [incidents]);
-  const rows = useMemo(() => incidents.map((x, k): Row => ({ ...x, k })), [incidents]);
-  const judged = useMemo(() => incidents.filter((i) => i.source === "verdict").length, [incidents]);
-  const top = groups.slice(0, 12);
-  const max = Math.max(1, top[0]?.n ?? 1);
-  return (
-    <Section title={<>Red-line and moderation incidents <small className={styles.small}>{incidents.length.toLocaleString("en-US")} logged</small></>}>
-      {incidents.length === 0 ? (
-        <p className={styles.dim}>No incidents in this report.</p>
-      ) : (
-        <>
-          <div className={styles.incs} data-role="reconcile-incidents">
-            {top.map((g) => (
-              <div className={styles.inc} key={g.rule}>
-                <span>{ruleLabel(g.rule)}</span>
-                <i style={{ width: `${((g.n / max) * 100).toFixed(1)}%` }} />
-                <b>{g.n.toLocaleString("en-US")}</b>
-              </div>
-            ))}
-            {groups.length > top.length && <p className={styles.dim}>and {groups.length - top.length} rarer rules, in the table below</p>}
-          </div>
-          <div className={styles.tableBox}>
-            <FilterTable<Row, SourceFacet>
-              rows={rows}
-              columns={INCIDENT_COLUMNS}
-              getKey={(i) => String(i.k)}
-              haystack={(i) => `${i.rule} ${i.run_id} ${i.action ?? ""} ${i.stage ?? ""}`}
-              label="Incidents"
-              placeholder="Filter by rule or run"
-              facets={{
-                label: "Source",
-                initial: "all",
-                options: [
-                  { id: "all", label: "All" },
-                  { id: "verdict", label: "Judge", count: judged },
-                  { id: "moderation", label: "Moderation", count: incidents.length - judged },
-                ],
-                predicate: (i, f) => f === "all" || i.source === f,
-              }}
-            />
-          </div>
-        </>
-      )}
     </Section>
   );
 }

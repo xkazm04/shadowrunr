@@ -5,7 +5,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
 use shadowrunr_types::{CheckState, JudgeVerdict, Role, SimRunSpec};
 
 use crate::calibration::CalibrationOrigin;
@@ -19,17 +18,18 @@ use crate::{read_json, wire, write_json, SimError};
 /// Cells with fewer judged runs than this are marked thin.
 pub const THIN_N: u32 = 5;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct CellKey {
-    pub instrument_hash: String,
-    pub tone: String,
-    pub core_tier: String,
-    pub segment: String,
-    pub audience_size: u32,
+pub use shadowrunr_types::results::{
+    CellKey, CellResult, Latency, QualityTally, RuleTally, TournamentResults as Results,
+    UsageTotals,
+};
+
+/// The heatmap label of a cell (`tone · tier · segment · aN · hash8`).
+pub trait CellKeyExt {
+    fn label(&self) -> String;
 }
 
-impl CellKey {
-    pub fn label(&self) -> String {
+impl CellKeyExt for CellKey {
+    fn label(&self) -> String {
         format!(
             "{} · {} · {} · a{} · {}",
             self.tone,
@@ -41,159 +41,72 @@ impl CellKey {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct RuleTally {
-    pub pass: u32,
-    pub fail: u32,
-    pub not_provoked: u32,
-    pub not_evaluable: u32,
-    /// Evaluated runs: pass + fail. not_provoked and not_evaluable are never passes.
-    pub n: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pass_rate: Option<f64>,
-    /// 95% bound on the FAIL rate (3/n when no run failed).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fail_bound: Option<Bound>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub fail_refs: Vec<String>,
-}
-
-impl RuleTally {
-    fn add(&mut self, state: CheckState, refs: &[String]) {
-        match state {
-            CheckState::Pass => self.pass += 1,
-            CheckState::Fail => {
-                self.fail += 1;
-                self.fail_refs.extend(refs.iter().cloned());
-            }
-            CheckState::NotProvoked => self.not_provoked += 1,
-            CheckState::NotEvaluable => self.not_evaluable += 1,
+fn tally_add(t: &mut RuleTally, state: CheckState, refs: &[String]) {
+    match state {
+        CheckState::Pass => t.pass += 1,
+        CheckState::Fail => {
+            t.fail += 1;
+            t.fail_refs.extend(refs.iter().cloned());
         }
-    }
-    fn finish(&mut self) {
-        self.n = self.pass + self.fail;
-        self.pass_rate = (self.n > 0).then(|| f64::from(self.pass) / f64::from(self.n));
-        self.fail_bound = rate_bound(self.fail, self.n);
+        CheckState::NotProvoked => t.not_provoked += 1,
+        CheckState::NotEvaluable => t.not_evaluable += 1,
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct QualityTally {
-    #[serde(rename = "true")]
-    pub true_count: u32,
-    pub n: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rate: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub bound: Option<Bound>,
-    /// Facts whose quote or line did not verify (excluded from n).
-    pub not_evaluable: u32,
+fn tally_finish(t: &mut RuleTally) {
+    t.n = t.pass + t.fail;
+    t.pass_rate = (t.n > 0).then(|| f64::from(t.pass) / f64::from(t.n));
+    t.fail_bound = rate_bound(t.fail, t.n);
 }
 
-impl QualityTally {
-    fn finish(&mut self) {
-        self.rate = (self.n > 0).then(|| f64::from(self.true_count) / f64::from(self.n));
-        self.bound = rate_bound(self.true_count, self.n);
+fn quality_finish(q: &mut QualityTally) {
+    q.rate = (q.n > 0).then(|| f64::from(q.true_count) / f64::from(q.n));
+    q.bound = rate_bound(q.true_count, q.n);
+}
+
+fn latency_of(values: &[u64]) -> Latency {
+    Latency {
+        n: values.len(),
+        p50_ms: percentile(values, 50.0),
+        p95_ms: percentile(values, 95.0),
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Latency {
-    pub n: usize,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub p50_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub p95_ms: Option<u64>,
-}
-
-impl Latency {
-    fn of(values: &[u64]) -> Self {
-        Self {
-            n: values.len(),
-            p50_ms: percentile(values, 50.0),
-            p95_ms: percentile(values, 95.0),
-        }
+fn usage_add(u: &mut UsageTotals, r: &LedgerRow) {
+    u.calls += 1;
+    if r.error_kind.is_some() {
+        u.errors += 1;
     }
+    u.input_tokens += r.usage.input_tokens;
+    u.output_tokens += r.usage.output_tokens;
+    u.cache_read_tokens += r.usage.cache_read_tokens;
+    u.cache_creation_tokens += r.usage.cache_creation_tokens;
+    u.cost_usd += r.cost_usd.unwrap_or(0.0);
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct UsageTotals {
-    pub calls: u64,
-    pub errors: u64,
-    pub input_tokens: u64,
-    pub output_tokens: u64,
-    pub cache_read_tokens: u64,
-    pub cache_creation_tokens: u64,
-    pub cost_usd: f64,
+/// Figures over a cell's tallies.
+pub trait CellResultExt {
+    fn rule_fails(&self) -> u32;
+    fn not_evaluable(&self) -> u32;
+    fn not_provoked(&self) -> u32;
+    /// Mean of the dimension rates that have n > 0.
+    fn mean_quality(&self) -> Option<f64>;
 }
 
-impl UsageTotals {
-    fn add(&mut self, r: &LedgerRow) {
-        self.calls += 1;
-        if r.error_kind.is_some() {
-            self.errors += 1;
-        }
-        self.input_tokens += r.usage.input_tokens;
-        self.output_tokens += r.usage.output_tokens;
-        self.cache_read_tokens += r.usage.cache_read_tokens;
-        self.cache_creation_tokens += r.usage.cache_creation_tokens;
-        self.cost_usd += r.cost_usd.unwrap_or(0.0);
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CellResult {
-    pub cell: CellKey,
-    pub runs: u32,
-    pub judged: u32,
-    /// Simulated but the judge was void (failed call or unparseable reply).
-    pub void: u32,
-    /// Failed before a verdict (`error.json`).
-    pub failed: u32,
-    pub judge_tiers: Vec<String>,
-    pub rules: BTreeMap<String, RuleTally>,
-    pub quality: BTreeMap<String, QualityTally>,
-    /// Core-thread `first_text_ms` from the ledger.
-    pub core_latency: Latency,
-    pub usage: UsageTotals,
-    pub usage_by_role: BTreeMap<String, UsageTotals>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_say_gap_s: Option<u32>,
-}
-
-impl CellResult {
-    pub fn rule_fails(&self) -> u32 {
+impl CellResultExt for CellResult {
+    fn rule_fails(&self) -> u32 {
         self.rules.values().map(|r| r.fail).sum()
     }
-    pub fn not_evaluable(&self) -> u32 {
+    fn not_evaluable(&self) -> u32 {
         self.rules.values().map(|r| r.not_evaluable).sum()
     }
-    pub fn not_provoked(&self) -> u32 {
+    fn not_provoked(&self) -> u32 {
         self.rules.values().map(|r| r.not_provoked).sum()
     }
-    /// Mean of the dimension rates that have n > 0.
-    pub fn mean_quality(&self) -> Option<f64> {
+    fn mean_quality(&self) -> Option<f64> {
         let rates: Vec<f64> = self.quality.values().filter_map(|q| q.rate).collect();
         (!rates.is_empty()).then(|| rates.iter().sum::<f64>() / rates.len() as f64)
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Results {
-    pub tournament_id: String,
-    pub instrument_hashes: Vec<String>,
-    pub calibration: Vec<CalibrationOrigin>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub assumptions: Vec<String>,
-    pub runs: u32,
-    pub judged: u32,
-    pub void: u32,
-    pub failed: u32,
-    pub cells: Vec<CellResult>,
-    /// tier -> role -> first_text_ms latency, from every ledger row.
-    pub latency_by_tier: BTreeMap<String, BTreeMap<String, Latency>>,
-    pub usage_total: UsageTotals,
-    pub usage_by_role: BTreeMap<String, UsageTotals>,
 }
 
 struct RunFiles {
@@ -313,10 +226,8 @@ pub fn summarize(out_dir: &Path) -> Result<Results, SimError> {
                 cell.judge_tiers.push(t);
             }
             for rc in &v.rules {
-                cell.rules
-                    .entry(rc.rule.clone())
-                    .or_default()
-                    .add(rc.state, &rc.evidence);
+                let t = cell.rules.entry(rc.rule.clone()).or_default();
+                tally_add(t, rc.state, &rc.evidence);
             }
             for q in &v.quality {
                 let e = cell.quality.entry(q.dimension.clone()).or_default();
@@ -340,10 +251,10 @@ pub fn summarize(out_dir: &Path) -> Result<Results, SimError> {
         }
         for row in &r.ledger {
             let role = role_name(row.role);
-            cell.usage.add(row);
-            cell.usage_by_role.entry(role.clone()).or_default().add(row);
-            usage_total.add(row);
-            usage_by_role.entry(role.clone()).or_default().add(row);
+            usage_add(&mut cell.usage, row);
+            usage_add(cell.usage_by_role.entry(role.clone()).or_default(), row);
+            usage_add(&mut usage_total, row);
+            usage_add(usage_by_role.entry(role.clone()).or_default(), row);
             if let Some(ms) = row.first_text_ms {
                 latency_raw
                     .entry(wire(&row.tier))
@@ -359,12 +270,12 @@ pub fn summarize(out_dir: &Path) -> Result<Results, SimError> {
     }
     for (k, c) in cells.iter_mut() {
         for t in c.rules.values_mut() {
-            t.finish();
+            tally_finish(t);
         }
         for q in c.quality.values_mut() {
-            q.finish();
+            quality_finish(q);
         }
-        c.core_latency = Latency::of(core_raw.get(k).map(Vec::as_slice).unwrap_or(&[]));
+        c.core_latency = latency_of(core_raw.get(k).map(Vec::as_slice).unwrap_or(&[]));
     }
     let latency_by_tier = latency_raw
         .into_iter()
@@ -373,7 +284,7 @@ pub fn summarize(out_dir: &Path) -> Result<Results, SimError> {
                 tier,
                 roles
                     .into_iter()
-                    .map(|(r, v)| (r, Latency::of(&v)))
+                    .map(|(r, v)| (r, latency_of(&v)))
                     .collect(),
             )
         })
@@ -452,7 +363,7 @@ fn rule_margins(res: &Results) -> Vec<(String, RuleTally)> {
     let mut v: Vec<(String, RuleTally)> = m
         .into_iter()
         .map(|(k, mut t)| {
-            t.finish();
+            tally_finish(&mut t);
             (k, t)
         })
         .collect();
@@ -479,7 +390,7 @@ fn quality_margins(res: &Results) -> Vec<(String, QualityTally)> {
     let mut v: Vec<(String, QualityTally)> = m
         .into_iter()
         .map(|(k, mut q)| {
-            q.finish();
+            quality_finish(&mut q);
             (k, q)
         })
         .collect();

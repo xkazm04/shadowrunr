@@ -12,11 +12,13 @@ export const EVENT_INVALIDATES: Readonly<Record<string, readonly string[]>> = {
 /** Mutating RPC method → methods to refetch once it succeeds. */
 export const MUTATION_INVALIDATES: Readonly<Record<string, readonly string[]>> = {
   "sim.start": ["runs.list", "runs.page", "tournament.list", "tournaments.page"],
-  "reconcile.run": ["reconcile.report"],
-  "plan.choose": ["plan.proposals", "directive.list"],
+  "reconcile.run": ["reconcile.report", "reconcile.list"],
+  "plan.choose": ["plan.proposals", "plan.current", "directive.list"],
   "directive.add": ["directive.list"],
   "directive.deactivate": ["directive.list"],
   "lord.chat": ["directive.list"],
+  "character.rules.set": ["character.rules", "character.get", "character.list"],
+  "character.tone.set": ["character.list", "character.get"],
 };
 
 export function invalidatedByEvent(type: string): readonly string[] {

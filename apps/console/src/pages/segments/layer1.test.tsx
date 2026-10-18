@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { Glance, Mini, Motif } from "./Face";
-import { mountPage, nodes, ok, settle, type Script } from "./harness";
+import { mountPage, nodes, ok, settle, type Script } from "../../kit/testing";
 import { Layer1 } from "./Layer1";
 import { DESCOPED_SHOWN, TICKS_PER_COLUMN } from "./model";
 import { genRanks, genTables } from "./testgen";

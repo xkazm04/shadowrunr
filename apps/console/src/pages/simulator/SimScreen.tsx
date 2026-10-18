@@ -35,7 +35,7 @@ function useSize(ref: RefObject<HTMLElement | null>): Size {
   return size;
 }
 
-const pct = (h: number | undefined) => (h === undefined ? "not judged yet" : `${Math.round(h * 100)}% held`);
+const heldText = (h: number | undefined) => (h === undefined ? "not judged yet" : `${Math.round(h * 100)}% held`);
 
 export function SimScreen(props: { tiles: readonly Tile[]; children?: ReactNode }) {
   const { tiles } = props;
@@ -104,7 +104,7 @@ export function SimScreen(props: { tiles: readonly Tile[]; children?: ReactNode 
           <>
             <b>{tileLabel(hovered)}</b>
             <span>
-              {pct(hovered.health)} · {hovered.red} red-line fails · {hovered.runs.length.toLocaleString("en-US")} runs
+              {heldText(hovered.health)} · {hovered.red} red-line fails · {hovered.runs.length.toLocaleString("en-US")} runs
             </span>
           </>
         )}

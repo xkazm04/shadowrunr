@@ -1,7 +1,8 @@
 // Brain layer 2: `engine` (routing, fleet accounts, fallbacks, the call ledger) and
 // `transcripts[/<run>[/<line>]]` (the run list, then the transcript viewer with line deep links).
 import { pageRoute, useRouter } from "../../router";
-import { EmptyState, Head, Tabs } from "../../ui";
+import { Head, Tabs } from "../../ui/Section";
+import { EmptyState } from "../../ui/States";
 import { Engine } from "./Engine";
 import { Runs } from "./Runs";
 import { Viewer } from "./Viewer";

@@ -12,15 +12,7 @@
   color: var(--sr-page-type);
 }
 
-.top,
-.hero,
-.foot { width: min(100%, var(--sr-layout-body-measure)); margin-right: auto; margin-left: auto; }
-
-.top { display: flex; flex: none; align-items: center; height: 3.2rem; padding-right: 23rem; }
-.brand { display: flex; align-items: center; gap: var(--sr-space-cozy); font-family: var(--sr-font-display); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
-.brand svg { flex: none; width: var(--sr-size-title); height: var(--sr-size-title); }
-.brand b { font-size: var(--sr-size-subhead); font-weight: var(--sr-weight-bold); }
-.brand span { padding-left: var(--sr-space-cozy); border-left: var(--sr-stroke-rule) solid currentcolor; font-size: var(--sr-size-body); font-weight: var(--sr-weight-semibold); letter-spacing: .16em; opacity: .85; }
+.hero { width: min(100%, var(--sr-layout-body-measure)); margin-right: auto; margin-left: auto; }
 
 .hero { position: relative; flex: 1; min-height: 0; }
 
@@ -63,35 +55,9 @@
 .sp { flex: 1; }
 .lab { letter-spacing: .16em; opacity: .8; }
 
-.foot { position: relative; z-index: var(--sr-z-poster-spine); display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--sr-space-base); height: 3.5rem; margin-bottom: .15rem; border-top: var(--sr-stroke-rule) solid currentcolor; }
-.credit { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-small); line-height: 1.25; letter-spacing: .1em; text-transform: uppercase; }
-.credit span { display: block; max-width: 48rem; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); font-size: var(--sr-size-caption); letter-spacing: .01em; text-transform: none; white-space: nowrap; opacity: .9; }
-.cta {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--sr-space-close);
-  padding: .45rem var(--sr-space-base);
-  background: var(--sr-page-type);
-  color: var(--sr-page-face);
-  box-shadow: .25rem .25rem 0 var(--sr-page-overprint);
-  font-family: var(--sr-font-display);
-  font-weight: var(--sr-weight-bold);
-  font-size: var(--sr-size-kicker);
-  letter-spacing: .1em;
-  text-decoration: none;
-  text-transform: uppercase;
-  transition: transform .2s, box-shadow .2s;
-}
-.cta:hover,
-.cta:focus-visible { transform: translate(-.12rem, -.12rem); box-shadow: .4rem .4rem 0 var(--sr-page-overprint); }
-.cta i { width: 0; height: 0; border: var(--sr-space-compact) solid transparent; border-right: 0; border-left: .75rem solid currentcolor; }
-
 /* Narrow screens (760px at the browser's base size): a portrait composition. */
 @media (max-width: 47.5rem) {
   .l1 { --sw: 100%; overflow: hidden auto; }
-  .top { height: 2.4rem; padding-right: 0; }
-  .brand span { display: none; }
   .hero { display: flex; flex: none; flex-direction: column; min-height: 0; }
   .title { position: relative; left: 0; top: 0; margin-bottom: var(--sr-space-tight); font-size: 8rem; line-height: .76; }
   .screenSlot,
@@ -100,7 +66,4 @@
   .prog { margin-top: var(--sr-space-cozy); }
   .ctl { flex-wrap: wrap; height: auto; padding: var(--sr-space-tight) 0; }
   .sp { display: none; }
-  .foot { flex-direction: column; align-items: stretch; height: auto; padding: var(--sr-space-compact) 0 var(--sr-space-close); }
-  .credit span { white-space: normal; }
-  .cta { justify-content: center; }
 }

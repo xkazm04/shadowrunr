@@ -1,7 +1,11 @@
 {
-  "$comment": "Max DOM nodes in document.body, measured in jsdom by src/app/shell.dom.test.tsx (counts are gated, timings are not). wall = the shell alone; wall+l1 / wall+l2 = the shell plus one page at that layer. Page builders keep their page under these with virtualised lists; raising a line needs a reason in the same change.",
+  "$comment": "Max DOM nodes in document.body, measured in jsdom by src/app/shell.dom.test.tsx (counts are gated, timings are not). wall = the shell alone; wall+l1 / wall+l2 = the shell plus one page at that layer. Page builders keep their page under these with virtualised lists; raising a line needs a reason in the same change. WPI re-budgeted the wall for six poster motifs: wall = allowances.shell (the wall without motif art, glance chips included: 130 measured) + 6 x allowances.motif (each poster's motif art with its box; measured 8 to 15: Reconcile 8, On Air 10, Characters 10, Segments 15; Brain and Simulator have none yet). The test checks the sum and every motif against its allowance.",
+  "allowances": {
+    "shell": 136,
+    "motif": 18
+  },
   "routes": {
-    "wall": 160,
+    "wall": 244,
     "wall+l1": 1200,
     "wall+l2": 2000
   }

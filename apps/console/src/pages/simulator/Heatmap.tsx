@@ -3,10 +3,15 @@
 // n and its 95% bound; a cell opens its rules, quality rates and runs.
 import { useMemo, useState } from "react";
 import { QueryView } from "../../kit";
-import { useRpc } from "../../data";
+import { usePaged, useRpc } from "../../data";
 import { pageRoute, RouteLink, useRouter } from "../../router";
-import { Chip, EmptyState, FilterTable, Head, RateBar, Section, StatBand, StatePanel, type Column } from "../../ui";
-import { PAGE_LIMIT, usePaged } from "./data";
+import { Chip } from "../../ui/Chip";
+import { FilterTable, type Column } from "../../ui/FilterTable";
+import { RateBar } from "../../ui/RateBar";
+import { Head, Section } from "../../ui/Section";
+import { StatBand } from "../../ui/StatBand";
+import { EmptyState } from "../../ui/States";
+import { PAGE_LIMIT } from "./data";
 import {
   cellFailRate,
   cellLabel,
@@ -16,13 +21,16 @@ import {
   meanQuality,
   notProvoked,
   parseCellRouteKey,
+  qualityEntries,
   rateBound,
+  ruleEntries,
   sameCell,
   THIN_N,
   worstFirst,
 } from "./cells";
-import { readResults, type CellKey, type CellResult, type SimResults } from "./results";
-import { int, pct, RefList, RunLink, Found } from "./common";
+import type { CellKey, CellResult, SimResults } from "./results";
+import { int, pct } from "../../kit/events";
+import { RefList, RunLink, Found } from "./common";
 import styles from "./l2.module.css";
 
 /** A cell lists this many runs inline; the rest are one click away in Runs. */
@@ -65,7 +73,6 @@ export function HeatmapPage({ cellKey }: { cellKey: string | undefined }) {
   const [picked, setPicked] = useState<string | undefined>(undefined);
   const tid = parsed?.tournamentId ?? picked ?? list[list.length - 1]?.tournament_id;
   const res = useRpc("tournament.results", tid === undefined ? null : { tournament_id: tid });
-  const read = useMemo(() => (res.data ? readResults(res.data) : undefined), [res.data]);
 
   if (cellKey !== undefined && parsed === undefined) {
     return <EmptyState title="That heatmap cell does not exist" hint="Open the heatmap and pick a cell from the table." />;
@@ -100,13 +107,7 @@ export function HeatmapPage({ cellKey }: { cellKey: string | undefined }) {
       </QueryView>
       {tid !== undefined && (
         <Found query={res} emptyTitle="No results for this tournament yet" emptyHint="results.json is written when the tournament is summarised.">
-          {() =>
-            read && !read.ok ? (
-              <StatePanel state="degraded" title="The results file does not match the expected shape" detail={`first misfit: ${read.path}`} />
-            ) : read?.ok ? (
-              <Cells r={read.value} cols={COLUMNS} selected={parsed?.cell} onOpen={(c) => router.navigate(pageRoute("simulator", "heatmap", cellRouteKey(read.value.tournament_id, c.cell)))} />
-            ) : null
-          }
+          {(r) => <Cells r={r} cols={COLUMNS} selected={parsed?.cell} onOpen={(c) => router.navigate(pageRoute("simulator", "heatmap", cellRouteKey(r.tournament_id, c.cell)))} />}
         </Found>
       )}
     </>
@@ -143,7 +144,7 @@ function CellDetail({ tournamentId, c }: { tournamentId: string; c: CellResult }
   });
   const mine = (runs.query.data ?? []).filter((x) => x.spec.core_tier === c.cell.core_tier && x.spec.segment === c.cell.segment);
   const shown = mine.slice(0, RUNS_SHOWN);
-  const failing = Object.entries(c.rules)
+  const failing = ruleEntries(c)
     .filter(([, t]) => t.fail > 0)
     .sort((a, b) => Number(isRedLine(b[0])) - Number(isRedLine(a[0])) || b[1].fail - a[1].fail);
   const rate = cellFailRate(c);
@@ -175,7 +176,7 @@ function CellDetail({ tournamentId, c }: { tournamentId: string; c: CellResult }
                   <RateBar rate={t.n > 0 ? t.fail / t.n : undefined} n={t.n} label={`${rule} fail rate`} {...bounded(t.fail_bound ?? rateBound(t.fail, t.n))} />
                 </td>
                 <td>
-                  <RefList refs={t.fail_refs} />
+                  <RefList refs={t.fail_refs ?? []} />
                 </td>
               </tr>
             ))}
@@ -185,7 +186,7 @@ function CellDetail({ tournamentId, c }: { tournamentId: string; c: CellResult }
       <h3>Quality rates · n and bounds</h3>
       <table className={styles.table}>
         <tbody>
-          {Object.entries(c.quality).map(([dim, q]) => (
+          {qualityEntries(c).map(([dim, q]) => (
             <tr key={dim}>
               <td>{dim.replace(/_/g, " ")}</td>
               <td>{q.n > 0 ? <RateBar rate={q.rate} n={q.n} label={dim} {...bounded(q.bound)} /> : <span className={styles.dim}>n=0</span>}</td>

@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import { DataProvider, type DataLayer } from "../data";
 import { RouterProvider, type RouterStore } from "../router";
 import { Shell } from "../shell";
-import { StatePanel } from "../ui";
+import { StatePanel } from "../ui/States";
 import { PAGES } from "./pages";
 
 // LEGACY (C2 deletes this and src/legacy, src/views, src/api, src/lib, src/fixtures, src/contract.ts).

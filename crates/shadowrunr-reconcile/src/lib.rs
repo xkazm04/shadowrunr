@@ -309,6 +309,10 @@ impl Reconciler {
             latency: metrics.latency,
             summary,
             dropped,
+            // Wire-only fields: the daemon fills them when it serves the report.
+            red_line_counts: Vec::new(),
+            red_lines_total: None,
+            synthesis_input: None,
         };
         self.save(&StoredReport {
             report,
@@ -393,6 +397,12 @@ impl Reconciler {
     /// `reconcile.report`.
     pub fn report(&self, report_id: &str) -> Result<ReconcileReport, ReconcileError> {
         Ok(self.load(report_id)?.report)
+    }
+
+    /// The whole stored report file: the report plus its proposals, runs, plans and
+    /// `synthesis_input`. The daemon shapes `reconcile.report` and `reconcile.incidents` from it.
+    pub fn stored(&self, report_id: &str) -> Result<StoredReport, ReconcileError> {
+        self.load(report_id)
     }
 
     /// `reconcile.list`: every stored report, newest first. Unreadable files are skipped.

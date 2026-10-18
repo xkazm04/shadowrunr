@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { mountPage, nodes, ok, settle, type Script } from "./harness";
+import { mountPage, nodes, ok, settle, type Script } from "../../kit/testing";
 import { Layer2 } from "./Layer2";
 import { genRanks, genReport, genTables } from "./testgen";
 
@@ -25,6 +25,8 @@ const base =
         return ok(genRanks());
       case "reconcile.report":
         return ok(genReport());
+      case "reconcile.list":
+        return ok([]);
       default:
         return ok({});
     }
@@ -126,7 +128,16 @@ describe("segments/ranks", () => {
     expect(role("segments-calc-verdict")?.textContent).toBe("Head-count: A wins. Weight: A wins.");
   });
 
-  it("asks for a report, then shows engagement by rank with rates, n and bounds", async () => {
+  it("shows engagement from the newest stored report without an id in the route", async () => {
+    const list = [{ report_id: "rec-1792284840627", created_ms: 1792284840627, source: { tournament_id: "t" }, proposals: 0 }];
+    const m = mount(["ranks"], base({ "reconcile.list": list }));
+    await settle();
+    expect(all("segments-engagement-row").map((r) => r.getAttribute("data-rank"))).toEqual(["thrall", "warlock", "dread_council"]);
+    expect(screen.getByText("rec-1792284840627 · newest")).toBeTruthy();
+    expect(m.fetch.calls).toContain("reconcile.list");
+  });
+
+  it("asks for a report when none is stored, then shows engagement by rank with rates, n and bounds", async () => {
     const m = mount(["ranks"]);
     await settle();
     expect(role("segments-engagement-empty")).toBeTruthy();

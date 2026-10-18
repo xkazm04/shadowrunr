@@ -1,6 +1,10 @@
 // Root stylelint config (F3). Component CSS (`*.module.css`) carries no raw colour and no px:
 // every colour and pixel value comes from @shadowrunr/tokens custom properties. Generated token
 // CSS and global base styles are outside this gate (tokens.css is checked by F1's drift gate).
+//
+// Translucent colour (settled in WPI): `color-mix(in srgb, var(--sr-color-<role>) N%, transparent)`
+// over a colour role, which is exactly `rgba(<role>, N/100)`. `rgb()` stays banned, so there are
+// no R G B channel tokens; a scrim is `var(--sr-color-scrim)` mixed the same way.
 export default {
   // The legacy desk's global CSS is deleted with it at cutover C2.
   ignoreFiles: ["**/node_modules/**", "**/dist/**", "packages/tokens/src/tokens.css", "apps/console/src/legacy/**"],

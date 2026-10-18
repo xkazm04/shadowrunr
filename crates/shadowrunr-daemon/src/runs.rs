@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use shadowrunr_sim::instrument::Instrument;
 use shadowrunr_sim::{RunRecord, RunStatus};
 pub use shadowrunr_types::rpc::{RunRow, TournamentRow};
-use shadowrunr_types::{SimRunSpec, StreamEvent};
+use shadowrunr_types::{CheckState, JudgeVerdict, SimRunSpec, StreamEvent};
 
 use crate::rpc::RpcError;
 
@@ -61,6 +61,29 @@ pub(crate) fn name_of(p: &Path) -> String {
         .unwrap_or_default()
 }
 
+/// A verdict's run health: the share of rule checks that held (pass / (pass + fail); absent
+/// when no rule was provoked) and the failed `red-line:*` checks.
+pub fn verdict_health(v: &JudgeVerdict) -> (Option<f64>, u32) {
+    let pass = v
+        .rules
+        .iter()
+        .filter(|r| r.state == CheckState::Pass)
+        .count();
+    let fail = v
+        .rules
+        .iter()
+        .filter(|r| r.state == CheckState::Fail)
+        .count();
+    let red = v
+        .rules
+        .iter()
+        .filter(|r| r.state == CheckState::Fail && r.rule.starts_with("red-line"))
+        .count();
+    let n = pass + fail;
+    let health = (n > 0).then(|| pass as f64 / n as f64);
+    (health, u32::try_from(red).unwrap_or(u32::MAX))
+}
+
 pub(crate) fn load_entry(dir: &Path, tournament_id: &str) -> Option<RunEntry> {
     let spec: SimRunSpec = read_json(&dir.join("spec.json"))?;
     if name_of(dir) != spec.run_id {
@@ -71,10 +94,26 @@ pub(crate) fn load_entry(dir: &Path, tournament_id: &str) -> Option<RunEntry> {
             run_id: spec.run_id.clone(),
             tournament_id: tournament_id.to_string(),
             has_verdict: dir.join("verdict.json").is_file(),
+            health: None,
+            red_line_fails: 0,
             spec,
         },
         dir: dir.to_path_buf(),
     })
+}
+
+impl RunEntry {
+    /// Fills `health` and `red_line_fails` from `verdict.json`. Only rows that go on the wire
+    /// pay for it (`runs.list`, `runs.page`), not the tournament counts. An unreadable verdict
+    /// still counts as present (`has_verdict`), just without health.
+    pub(crate) fn with_health(mut self) -> Self {
+        if self.row.has_verdict {
+            if let Some(v) = read_json::<JudgeVerdict>(&self.dir.join("verdict.json")) {
+                (self.row.health, self.row.red_line_fails) = verdict_health(&v);
+            }
+        }
+        self
+    }
 }
 
 pub(crate) fn tournament_runs(sim_root: &Path, tournament_id: &str) -> Vec<RunEntry> {
@@ -92,11 +131,15 @@ pub fn list_runs(sim_root: &Path, tournament_id: Option<&str>) -> Result<Vec<Run
             if !sim_root.join(t).is_dir() {
                 return Err(RpcError::not_found(format!("tournament {t}")));
             }
-            Ok(tournament_runs(sim_root, t))
+            Ok(tournament_runs(sim_root, t)
+                .into_iter()
+                .map(RunEntry::with_health)
+                .collect())
         }
         None => Ok(subdirs(sim_root)
             .iter()
             .flat_map(|t| tournament_runs(sim_root, &name_of(t)))
+            .map(RunEntry::with_health)
             .collect()),
     }
 }
@@ -239,6 +282,29 @@ pub fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verdict_health_counts_held_checks_and_red_line_fails() {
+        let v: JudgeVerdict = serde_json::from_value(serde_json::json!({
+            "run_id": "r", "judge_tier": "opus", "quality": [],
+            "rules": [
+                { "rule": "situation:a", "state": "pass" },
+                { "rule": "red-line:doxxing", "state": "fail" },
+                { "rule": "role:b", "state": "fail" },
+                { "rule": "red-line:x", "state": "pass" },
+                { "rule": "talk:c", "state": "not_provoked" },
+                { "rule": "rule:d", "state": "not_evaluable" }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(verdict_health(&v), (Some(0.5), 1));
+        let none: JudgeVerdict = serde_json::from_value(serde_json::json!({
+            "run_id": "r", "judge_tier": "opus", "quality": [],
+            "rules": [{ "rule": "talk:c", "state": "not_provoked" }]
+        }))
+        .unwrap();
+        assert_eq!(verdict_health(&none), (None, 0));
+    }
 
     #[test]
     fn ids_are_single_safe_components() {

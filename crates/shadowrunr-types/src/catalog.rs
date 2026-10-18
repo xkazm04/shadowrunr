@@ -14,7 +14,12 @@ pub struct CharacterSummary {
     pub id: String,
     /// Display name, e.g. "Arch-Lich Malakor".
     pub name: String,
+    /// One line under the name (`character.toml` `tagline`); omitted when the package has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tagline: Option<String>,
     pub default_tone: String,
+    /// The tone the operator chose (`<data>/characters/<id>/active.json`), else `default_tone`.
+    pub active_tone: String,
     /// Tone variant ids (`tones/<id>.md`), sorted.
     pub tones: Vec<String>,
     /// Foil ids declared in `character.toml`, in order.
@@ -95,7 +100,11 @@ pub struct CharacterRuleInfo {
 pub struct CharacterDetail {
     pub id: String,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tagline: Option<String>,
     pub default_tone: String,
+    /// The tone the operator chose, else `default_tone` (see [`CharacterSummary`]).
+    pub active_tone: String,
     /// Every file of the package, sorted by path.
     pub files: Vec<PackageFile>,
     /// `constitution.md`: immutable, never edited by the brain.
@@ -163,6 +172,20 @@ pub struct SegmentTableInfo {
     pub transitions: Vec<TransitionInfo>,
 }
 
+/// One chat command as the runtime's parser reads it (`shadowrunr-segments` `command.rs`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CommandInfo {
+    /// Without the `!`, e.g. `summon`.
+    pub name: String,
+    /// The argument shape, e.g. `<hex> <DOC|REP|CLM|SPC>`.
+    pub args: String,
+    /// What the command does, in one line.
+    pub what: String,
+    /// Lowest rank allowed to use it; every rank when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_rank: Option<Rank>,
+}
+
 /// `segments.tables`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SegmentTables {
@@ -171,6 +194,8 @@ pub struct SegmentTables {
     pub op_tags: Vec<String>,
     /// Every chat command name.
     pub command_names: Vec<String>,
+    /// Every chat command with its arguments and meaning, in `command_names` order.
+    pub commands: Vec<CommandInfo>,
 }
 
 /// One way to qualify for a rank through a subscription.

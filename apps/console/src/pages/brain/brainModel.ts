@@ -3,7 +3,7 @@
 // one lane per (core tier, audience) cell (A/1's lane label), and a lane holds at most
 // `maxPulses` pulses: beyond that, pulses are binned by x and each bin keeps its longest call.
 import type { LedgerEntry, ModelTier, RunRow, StreamEvent } from "@shadowrunr/contract";
-import { isMemoryMoment } from "./events";
+import { isMemoryMoment } from "../../kit/events";
 
 export interface Pulse {
   /** ms since the run's first ledger row. */

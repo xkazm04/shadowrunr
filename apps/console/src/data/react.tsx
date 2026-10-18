@@ -8,6 +8,7 @@ import { viewOfError, type DataError, type ErrorView } from "./errors";
 import type { RpcMethod, RpcParams, RpcResult } from "@shadowrunr/contract";
 import type { DataLayer } from "./layer";
 import type { Result } from "./result";
+import type { CallOptions } from "./rpc";
 
 const DataContext = createContext<DataLayer | null>(null);
 
@@ -68,27 +69,41 @@ export function useRpc<M extends RpcMethod>(method: M, params: RpcParams<M> | nu
   );
 }
 
-/** A mutating RPC; on success the cache refetches what it invalidates (invalidation.ts). */
-export function useMutation<M extends RpcMethod>(method: M): {
+/**
+ * A mutating RPC; on success the cache refetches what it invalidates (invalidation.ts).
+ * `opts.timeoutMs` overrides the 15 s default per call: the LLM-backed calls (`reconcile.run`,
+ * `plan.choose`, `lord.chat`) run for minutes.
+ */
+export function useMutation<M extends RpcMethod>(
+  method: M,
+  opts?: CallOptions,
+): {
   run: (params: RpcParams<M>) => Promise<Result<RpcResult<M>, DataError>>;
   pending: boolean;
 } {
   const layer = useDataLayer();
   const [pending, setPending] = useState(false);
+  const timeoutMs = opts?.timeoutMs;
+  const signal = opts?.signal;
   const run = useCallback(
     async (params: RpcParams<M>): Promise<Result<RpcResult<M>, DataError>> => {
       setPending(true);
       try {
-        const r = await layer.mutate(method, params);
+        const callOpts: CallOptions = { ...(timeoutMs === undefined ? {} : { timeoutMs }), ...(signal === undefined ? {} : { signal }) };
+        const r = await layer.mutate(method, params, callOpts);
+        // The door validated the reply against this method's schema.
         return r.ok ? { ok: true, value: r.value as RpcResult<M> } : r;
       } finally {
         setPending(false);
       }
     },
-    [layer, method],
+    [layer, method, timeoutMs, signal],
   );
   return { run, pending };
 }
+
+/** Per-call timeout for the reconciler's LLM calls (opus, 600 s in the routing table). */
+export const LLM_TIMEOUT_MS = 11 * 60_000;
 
 export function useConnection(): ConnectionSnapshot & { summary: ConnectionSummary } {
   const { connection } = useDataLayer();

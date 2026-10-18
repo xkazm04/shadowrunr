@@ -1,7 +1,7 @@
 // Layer 2 of Characters (the winner's l2.js P3.L2.characters) as routes: all characters, then one
 // character's package with its six tabs.
 import { RouteLink } from "../../router";
-import { StatePanel } from "../../ui";
+import { StatePanel } from "../../ui/States";
 import { AllPage } from "./AllPage";
 import styles from "./Layer2.module.css";
 import { PackagePage } from "./PackagePage";

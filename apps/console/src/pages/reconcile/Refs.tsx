@@ -2,7 +2,7 @@
 // `#/brain/transcripts/<run>/<line>`. A ref that does not parse is shown as plain text.
 import { pageRoute, RouteLink } from "../../router";
 import styles from "./Layer2.module.css";
-import { parseRef, refLabel } from "./model";
+import { parseRef, refLabel } from "../../kit/events";
 
 /** Refs shown per item before the rest fold into a count. */
 export const MAX_REFS = 8;

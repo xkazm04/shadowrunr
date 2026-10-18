@@ -1,23 +1,7 @@
 //! Rates with honest bounds. A rate is never reported without its n.
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BoundMethod {
-    /// Wilson score interval, 95%.
-    Wilson,
-    /// Rule of three: with zero events in n trials, the 95% upper bound on the event rate is
-    /// about 3/n.
-    RuleOfThree,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Bound {
-    pub lo: f64,
-    pub hi: f64,
-    pub method: BoundMethod,
-}
+/// The wire's bound types (`shadowrunr_types::reconcile`): `results.json` carries them.
+pub use shadowrunr_types::reconcile::{Bound, BoundMethod};
 
 /// 95% two-sided normal quantile.
 const Z95: f64 = 1.959_963_984_540_054;

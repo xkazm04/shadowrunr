@@ -1,18 +1,14 @@
-// Shared bits of the simulator's nested pages: links (verdicts, cells, Brain transcripts),
-// number formats and the health swatch. Formats are local until a shared kit/format exists
-// (the legacy lib/format.ts is deleted at cutover C2).
+// Shared bits of the simulator's nested pages: links (verdicts, cells, Brain transcripts)
+// and the health swatch. Number formats and refs come from kit/events.
 import type { CSSProperties, ReactNode } from "react";
 import type { Query } from "../../data";
 import { QueryView } from "../../kit";
 import { pageRoute, RouteLink } from "../../router";
-import { EmptyState } from "../../ui";
-import { healthColor } from "./palette";
-import { parseRef } from "./quote";
+import { EmptyState } from "../../ui/States";
+import { parseRef, pct } from "../../kit/events";
+import { healthColor } from "./ramp";
 import styles from "./l2.module.css";
 
-export const int = (n: number) => n.toLocaleString("en-US");
-export const pct = (x: number | undefined, digits = 0) => (x === undefined ? "–" : `${(x * 100).toFixed(digits)}%`);
-export const usd = (x: number) => `$${x.toFixed(x < 1 ? 4 : 2)}`;
 export const shortHash = (h: string) => (h.length > 12 ? `${h.slice(0, 12)}…` : h);
 
 export function RunLink({ runId, children }: { runId: string; children?: ReactNode }) {

@@ -6,10 +6,13 @@ import { useMemo } from "react";
 import { useRpc } from "../../data";
 import { QueryView } from "../../kit";
 import { RouteLink, pageRoute, useRouter } from "../../router";
-import { Section, StatBand, VirtualList } from "../../ui";
+import { Section } from "../../ui/Section";
+import { StatBand } from "../../ui/StatBand";
+import { VirtualList } from "../../ui/VirtualList";
 import { runSource, selectSource } from "./feed";
 import styles from "./Layer2.module.css";
-import { beatsOf, clock, countsOf } from "./beats";
+import { int, span as clock } from "../../kit/events";
+import { beatsOf, countsOf } from "./beats";
 
 function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent[]; tournamentId: string; runId: string }) {
   const router = useRouter();
@@ -22,10 +25,10 @@ function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent
       <StatBand
         stats={[
           { label: "Length", value: clock(n.end - n.start) },
-          { label: "Events", value: n.events.toLocaleString("en-US") },
-          { label: "Lines spoken", value: n.spoken.toLocaleString("en-US") },
-          { label: "Chat lines", value: n.chat.toLocaleString("en-US") },
-          { label: "Picked", value: n.picked.toLocaleString("en-US") },
+          { label: "Events", value: int(n.events) },
+          { label: "Lines spoken", value: int(n.spoken) },
+          { label: "Chat lines", value: int(n.chat) },
+          { label: "Picked", value: int(n.picked) },
         ]}
       />
       <div className={styles.tlBar} role="img" aria-label={`Segments: ${spans.map((s) => `${s.segment} ${clock(s.from - n.start)} to ${clock(s.to - n.start)}`).join(", ")}`} data-role="onair-run-spans">
@@ -50,7 +53,7 @@ function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent
           Read the transcript
         </RouteLink>
       </div>
-      <h3 className={styles.sub}>Beats · {beats.length.toLocaleString("en-US")}</h3>
+      <h3 className={styles.sub}>Beats · {int(beats.length)}</h3>
       {beats.length === 0 ? (
         <p className={styles.note}>No beats: the core thread called no ops in this run.</p>
       ) : (

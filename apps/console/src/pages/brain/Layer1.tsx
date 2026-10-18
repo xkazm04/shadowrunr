@@ -1,37 +1,25 @@
 // Brain layer 1: the winner's poster frame around A/1's oscilloscope wall (app.js:333-391).
 // Lanes per run cell, the memory curve, the first-word gauge, role lamps and the picker funnel,
-// each a lit panel that pushes in to its nested page. Canvases draw on input change only.
+// each a lit panel that pushes in to its nested page. Canvases draw on input change only. The
+// gauge reads the newest Reconcile report's first-word latency when one exists.
 import { useCallback } from "react";
 import type { TournamentsPage } from "@shadowrunr/contract";
+import { TOKENS_BRAIN } from "@shadowrunr/tokens";
 import { QueryView } from "../../kit";
+import { PosterFrame } from "../../kit/PosterFrame";
+import { useRpc } from "../../data";
 import { RouteLink, pageRoute } from "../../router";
-import { DegradedState, EmptyState } from "../../ui";
+import { DegradedState, EmptyState } from "../../ui/States";
 import { useBrainWindow, type BrainWindow } from "./useBrain";
 import { FunnelChart, Gauge, Lamps } from "./Instruments";
 import { Plot } from "./Plot";
-import type { BrainModel } from "./brainModel";
-import { drawMemory, drawScope, type Ctx, type Size } from "./draw";
-import { int } from "./events";
-import { BRAIN, paletteVars, roleColor } from "./palette";
+import type { BrainModel, Latency } from "./brainModel";
+import { drawMemory, drawScope, roleColor, type Ctx, type Size } from "./draw";
+import { int } from "../../kit/events";
 import styles from "./Layer1.module.css";
 
 const ENGINE = pageRoute("brain", "engine");
 const TRANSCRIPTS = pageRoute("brain", "transcripts");
-
-function Brand() {
-  return (
-    <div className={styles.brand}>
-      <svg viewBox="0 0 40 40" aria-hidden="true">
-        <path d="M6 16L9 5l7 7 4-9 4 9 7-7 3 11z" fill="currentColor" />
-        <ellipse cx="20" cy="26" rx="11" ry="10" fill="none" stroke="currentColor" strokeWidth="3" />
-        <circle cx="16" cy="25" r="2.4" fill="currentColor" />
-        <circle cx="24" cy="25" r="2.4" fill="currentColor" />
-      </svg>
-      <b>Shadowrunr OS</b>
-      <span>Season 0 · v0.1</span>
-    </div>
-  );
-}
 
 /** A/1's scene backdrop: near-black with an ember glow up and left. */
 function Backdrop() {
@@ -39,20 +27,34 @@ function Backdrop() {
     <svg className={styles.backdrop} viewBox="0 0 1600 810" preserveAspectRatio="none" aria-hidden="true" data-role="brain-backdrop">
       <defs>
         <radialGradient id="brG" cx="35%" cy="35%" r="70%">
-          <stop offset="0" stopColor={BRAIN.glowCore} />
-          <stop offset="1" stopColor={BRAIN.glowEdge} />
+          <stop offset="0" stopColor={TOKENS_BRAIN.glowCore} />
+          <stop offset="1" stopColor={TOKENS_BRAIN.glowEdge} />
         </radialGradient>
       </defs>
-      <rect width="1600" height="810" fill={BRAIN.backdrop} />
+      <rect width="1600" height="810" fill={TOKENS_BRAIN.backdrop} />
       <rect width="1600" height="810" fill="url(#brG)" />
     </svg>
   );
 }
 
+/**
+ * First words on air: the newest Reconcile report's `say` latency (the reconciler already
+ * computed it over every run it read), else the sample transcripts the brain loaded.
+ */
+export function useFirstWords(sampled: Latency): Latency & { readonly source: "report" | "sample" } {
+  const list = useRpc("reconcile.list", {});
+  const newest = list.data?.[0]?.report_id;
+  const report = useRpc("reconcile.report", newest === undefined ? null : { report_id: newest });
+  const l = report.data?.latency;
+  if (l && l.say_n > 0) return { p50: l.say_first_text_p50_ms, p95: l.say_first_text_p95_ms, n: l.say_n, source: "report" };
+  return { ...sampled, source: "sample" };
+}
+
 function Scene({ model }: { model: BrainModel }) {
   const scope = useCallback((c: Ctx, s: Size) => drawScope(c, s, model.lanes), [model.lanes]);
   const memory = useCallback((c: Ctx, s: Size) => drawMemory(c, s, model.memory, model.memMax), [model.memory, model.memMax]);
-  const { latency, funnel } = model;
+  const { funnel } = model;
+  const latency = useFirstWords(model.latency);
   const sec = (ms: number | undefined) => (ms === undefined ? "–" : (ms / 1000).toFixed(1));
   return (
     <>
@@ -86,6 +88,7 @@ function Scene({ model }: { model: BrainModel }) {
           </span>
           <span className={styles.hudtxt}>
             first words · p95 {sec(latency.p95)} s · n={latency.n}
+            {latency.source === "report" ? " · newest report" : ""}
           </span>
         </span>
       </RouteLink>
@@ -147,26 +150,18 @@ export function Layer1({ active }: { readonly active: boolean }) {
 function Wall() {
   const win = useBrainWindow();
   return (
-    <div className={styles.root} style={paletteVars()} data-role="brain-layer1">
-      <h2 className={styles.srOnly}>Layer 1 · The Brain</h2>
-      <div className={styles.top}>
-        <Brand />
-        {win.truncated && <span className={styles.flag}>Newest tournament · first pages only</span>}
-      </div>
+    <PosterFrame
+      className={styles.root}
+      role="brain-layer1"
+      heading="Layer 1 · The Brain"
+      topExtra={win.truncated && <span className={styles.flag}>Newest tournament · first pages only</span>}
+      credit={`Directed by the core thread · ${win.tournamentId ?? "no tournament yet"}`}
+      cta={{ to: ENGINE, label: "Open the engine and transcripts", role: "push-in" }}
+    >
       <div className={styles.hero} data-role="brain-hero" data-tournament={win.tournamentId}>
         <Backdrop />
         <Hero win={win} />
       </div>
-      <div className={styles.foot}>
-        <p className={styles.credit}>
-          Directed by the core thread · {win.tournamentId ?? "no tournament yet"}
-          <span>v0.1 · media-less phase: voice, avatar and broadcast come next · stylised illustration</span>
-        </p>
-        <RouteLink to={ENGINE} className={styles.cta} data-role="push-in">
-          <span>Open the engine and transcripts</span>
-          <i />
-        </RouteLink>
-      </div>
-    </div>
+    </PosterFrame>
   );
 }

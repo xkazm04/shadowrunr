@@ -223,12 +223,38 @@ describe("fidelity: byte-equal to the winner", () => {
     expect([TOKENS.texture.halftoneBCell, TOKENS.texture.halftoneBDot, TOKENS.texture.halftoneBEdge]).toEqual(["1.1rem", "22%", "24%"]);
     expect([TOKENS.layout.spine, TOKENS.layout.strip]).toEqual(["18.75rem", "3.6rem"]);
     expect(TOKENS.alpha.line).toBe("rgba(20,17,13,.2)");
-    expect(TOKENS.channel.paper).toBe("239 230 210");
+    expect(TOKENS.color.scrim).toBe("#070a09");
     expect(BREAKPOINTS_PX.narrow).toBe(760);
   });
 
   it("reproduces the winner's viewport type scaling in CSS (16px at 1280x800, max 1.9x, 16px when narrow)", () => {
     expect(TOKENS.root.size).toBe("clamp(16px,min(1.25vw,2vh),30.4px)");
     expect(css).toMatch(/@media \(max-width: 760px\) \{\n {2}:root \{\n {4}--sr-root-size: 16px;/);
+  });
+
+  it("keeps A/1's brain scope palette byte-equal (app.js:20 ROLEC and 333-391)", () => {
+    const b = TOKENS.brain;
+    expect([b.roleCoreThread, b.roleChatter, b.roleResearcher, b.roleConsolidator, b.roleJudge, b.roleChatPicker, b.roleUnknown]).toEqual([
+      "#ff6a2b", "#86d3bb", "#ffb15a", "#cdbf9f", "#c9a6ff", "#9fd3ff", "#ccc",
+    ]);
+    expect([b.backdrop, b.glowCore, b.glowEdge, b.panelEdge, b.panelFill]).toEqual(["#070b0a", "rgba(255,106,43,.08)", "rgba(0,0,0,0)", "rgba(134,211,187,.18)", "rgba(3,7,6,.6)"]);
+    expect([b.scopeGrid, b.scopeLaneLabel, b.scopeTrace, b.scopeTraceGlow, b.scopeError, b.scopeSweepFrom, b.scopeSweepTo]).toEqual([
+      "rgba(134,211,187,.07)", "rgba(154,146,132,.9)", "rgba(255,106,43,.75)", "#ff6a2b", "#ff3b2f", "rgba(255,177,90,0)", "rgba(255,177,90,.18)",
+    ]);
+    expect([b.memoryA, b.memoryB, b.memoryC, b.memoryD]).toEqual(["#86d3bb", "#4fa38d", "#ffb15a", "#ff6a2b"]);
+    expect([b.funnelA, b.funnelB, b.funnelC, b.funnelD, b.funnelText]).toEqual(["#86d3bb", "#4fa38d", "#ffb15a", "#ff6a2b", "#efe6d2"]);
+    expect([b.gaugeTrack, b.gaugeP95, b.gaugeP50, b.gaugeTick, b.gaugeTickText, b.gaugeNeedle]).toEqual([
+      "rgba(134,211,187,.12)", "rgba(255,177,90,.35)", "#4fa38d", "rgba(207,195,168,.5)", "#9a9284", "#ff6a2b",
+    ]);
+    expect([b.lampHighlight, b.lampError, b.doorFill, b.doorEdge]).toEqual(["#fff8", "#ff3b2f", "rgba(6,12,11,.72)", "rgba(127,190,170,.22)"]);
+    expect([b.textBone, b.textBoneDim, b.textAsh, b.textVerdigris, b.textApricot, b.textError]).toEqual(["#efe6d2", "#cfc3a8", "#9a9284", "#86d3bb", "#ffb15a", "#ff8a65"]);
+  });
+
+  it("keeps A/1's simulator grid palette byte-equal (app.js:420 and 446-475)", () => {
+    const s = TOKENS.sim;
+    expect([s.backdrop, s.glow, s.glowEnd, s.tile, s.tileHover, s.redLine, s.label, s.labelHover, s.unjudged]).toEqual([
+      "#070b0a", "rgba(79,163,141,.12)", "rgba(0,0,0,0)", "rgba(255,255,255,.025)", "rgba(255,177,90,.14)", "#ff3b2f", "rgba(207,195,168,.8)", "#ffb15a", "rgba(255,255,255,.06)",
+    ]);
+    expect(s.font).toBe('"Barlow Condensed","Arial Narrow",sans-serif');
   });
 });

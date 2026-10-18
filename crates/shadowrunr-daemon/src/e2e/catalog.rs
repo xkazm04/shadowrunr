@@ -69,6 +69,39 @@ async fn character_list_and_get_expose_the_package() {
 }
 
 #[tokio::test]
+async fn character_tone_set_overrides_the_active_tone_in_data_only() {
+    let tmp = tempfile::tempdir().unwrap();
+    let addr = start(test_config(tmp.path(), repo().join("characters"))).await;
+    let list: Vec<CharacterSummary> = typed(&rpc(&addr, "character.list", json!({})).await);
+    let m = list.iter().find(|c| c.id == "malakor").unwrap();
+    assert_eq!(m.active_tone, m.default_tone, "no override: the default");
+
+    let v = rpc(
+        &addr,
+        "character.tone.set",
+        json!({ "id": "malakor", "tone": "weary-middle-manager" }),
+    )
+    .await;
+    let s: CharacterSummary = typed(&v);
+    assert_eq!(s.active_tone, "weary-middle-manager");
+    assert_eq!(s.default_tone, "theatrical", "the package is untouched");
+    let d: CharacterDetail = typed(&rpc(&addr, "character.get", json!({ "id": "malakor" })).await);
+    assert_eq!(d.active_tone, "weary-middle-manager");
+    assert!(tmp
+        .path()
+        .join("data/characters/malakor/active.json")
+        .is_file());
+
+    let v = rpc(
+        &addr,
+        "character.tone.set",
+        json!({ "id": "malakor", "tone": "no-such-tone" }),
+    )
+    .await;
+    assert_eq!(v["error"]["code"], "not_found", "{v}");
+}
+
+#[tokio::test]
 async fn segments_tables_and_ranks_table_are_the_running_data() {
     let tmp = tempfile::tempdir().unwrap();
     let addr = start(test_config(tmp.path(), repo().join("characters"))).await;
@@ -77,6 +110,19 @@ async fn segments_tables_and_ranks_table_are_the_running_data() {
     assert_eq!(t.segments.len(), 4);
     assert_eq!(t.op_tags.len(), 11);
     assert_eq!(t.command_names.len(), 5);
+    let names: Vec<&str> = t.commands.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, t.command_names);
+    assert!(t
+        .commands
+        .iter()
+        .all(|c| !c.args.is_empty() && !c.what.is_empty()));
+    let gated: Vec<&str> = t
+        .commands
+        .iter()
+        .filter(|c| c.min_rank.is_some())
+        .map(|c| c.name.as_str())
+        .collect();
+    assert_eq!(gated, vec!["propose"]);
     let seg01 = &t.segments[0];
     assert_eq!(seg01.title, "Improvised Room");
     assert_eq!(seg01.initial, "opening");

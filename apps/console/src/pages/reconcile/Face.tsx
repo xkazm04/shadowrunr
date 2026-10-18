@@ -19,7 +19,7 @@ export function Motif() {
 }
 
 export function Glance() {
-  const reportId = useReportId();
+  const { reportId } = useReportId();
   const { report, proposals } = useReport(reportId);
   if (!report.data) return <b>{reportId === undefined ? "No report yet" : "Report"}</b>;
   const t = triptych(report.data, proposals.data ?? []);

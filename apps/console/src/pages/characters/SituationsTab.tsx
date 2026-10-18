@@ -5,14 +5,17 @@ import { useMemo, useState } from "react";
 import type { CharacterDetail, Situation, TournamentRow } from "@shadowrunr/contract";
 import { useRpc } from "../../data";
 import { pageRoute, RouteLink, useRouter } from "../../router";
-import { Chip, ChipRow, FilterTable, Head, Section, State, StatePanel, type Column, type Facets } from "../../ui";
+import { Chip, ChipRow, State } from "../../ui/Chip";
+import { FilterTable, type Column, type Facets } from "../../ui/FilterTable";
+import { Head, Section } from "../../ui/Section";
+import { StatePanel } from "../../ui/States";
 import styles from "./Layer2.module.css";
-import { Inline } from "./Markdown";
-import { failingRuns, judged, parseRef, SITUATION_PREFIX, situationTallies, type SituationTally } from "./model";
+import { Inline } from "../../ui/Markdown";
+import { int, parseRef } from "../../kit/events";
+import { failingRuns, judged, SITUATION_PREFIX, situationTallies, type SituationTally } from "./model";
 import { pkgRoute } from "./routes";
 
 const ALL = "all";
-const int = (n: number) => n.toLocaleString("en-US");
 const STATES = ["pass", "fail", "not_provoked", "not_evaluable"] as const;
 /** Failing evidence lines listed per situation; the rest are counted, not drawn. */
 const EVIDENCE_SHOWN = 40;
@@ -98,7 +101,7 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
             ))}
           </select>
         </label>
-        <ResultsState tournaments={tournaments.data?.length} listError={tournaments.errorView?.title} resultsError={results.errorView?.title} misfit={results.data !== undefined && tallies === null} />
+        <ResultsState tournaments={tournaments.data?.length} listError={tournaments.errorView?.title} resultsError={results.errorView?.title} />
         <RouteLink to={pageRoute("simulator", "heatmap")} className={styles.lead}>
           The trials heatmap
         </RouteLink>
@@ -127,12 +130,11 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
   );
 }
 
-function ResultsState(p: { tournaments: number | undefined; listError: string | undefined; resultsError: string | undefined; misfit: boolean }) {
+function ResultsState(p: { tournaments: number | undefined; listError: string | undefined; resultsError: string | undefined }) {
   let text: string | undefined;
   if (p.listError !== undefined) text = `Tournaments unavailable · ${p.listError}`;
   else if (p.tournaments === 0) text = "No tournament has run yet: verdicts appear once one does.";
   else if (p.resultsError !== undefined) text = `Results unavailable · ${p.resultsError}`;
-  else if (p.misfit) text = "This tournament's results.json has no cells; verdicts are not shown.";
   return text === undefined ? null : (
     <span className={styles.warnInl} role="status">
       {text}
@@ -202,14 +204,15 @@ function Detail({ s, t, tid }: { s: Situation; t: SituationTally | undefined; ti
               <h4>Failing evidence</h4>
               <ul className={styles.refs} data-role="characters-situation-evidence">
                 {t?.failRefs.slice(0, EVIDENCE_SHOWN).map((ref) => {
-                  const { run, line } = parseRef(ref);
+                  const p = parseRef(ref);
+                  const run = p?.runId ?? ref;
                   return (
                     <li key={ref}>
                       <RouteLink to={pageRoute("simulator", "verdicts", run)}>{run}</RouteLink>
-                      {line !== undefined && (
+                      {p !== undefined && (
                         <>
                           {" · "}
-                          <RouteLink to={pageRoute("brain", "transcripts", run, line)}>line {line}</RouteLink>
+                          <RouteLink to={pageRoute("brain", "transcripts", run, String(p.line))}>line {p.line}</RouteLink>
                         </>
                       )}
                     </li>

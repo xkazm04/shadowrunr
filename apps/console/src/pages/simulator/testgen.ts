@@ -1,10 +1,8 @@
 // Test-only: generated simulator data at any scale (fictional, never shown as real) and a
 // scripted daemon that answers the simulator's RPCs from it, paged like the real one. Imported
 // by the page's tests only; nothing here reaches the production bundle.
-import type { RunRow, StreamEvent, TournamentRow } from "@shadowrunr/contract";
-import { createDataLayer, type DataLayer } from "../../data";
-import { contractDoor } from "../../data/contractDoor";
-import { fakeSockets, manualTimers, scriptedFetch, type FetchReply } from "../../data/testing";
+import type { RunRow, StreamEvent, TournamentResults, TournamentRow } from "@shadowrunr/contract";
+import { ok, page, param, type Script } from "../../kit/testing";
 
 export const TONES = ["theatrical", "weary-middle-manager"] as const;
 export const TIERS = ["haiku", "sonnet", "opus"] as const;
@@ -15,14 +13,14 @@ export interface World {
   readonly fictional: true;
   readonly tournaments: TournamentRow[];
   readonly runs: Map<string, RunRow[]>;
-  readonly results: Map<string, Record<string, unknown>>;
+  readonly results: Map<string, TournamentResults>;
 }
 
 /** `t` tournaments of `perT` runs each; every cell cycles tone x tier x segment x audience. */
 export function world(t: number, perT: number): World {
   const tournaments: TournamentRow[] = [];
   const runs = new Map<string, RunRow[]>();
-  const results = new Map<string, Record<string, unknown>>();
+  const results = new Map<string, TournamentResults>();
   for (let i = 0; i < t; i++) {
     const tid = `t${String(i + 1).padStart(3, "0")}`;
     tournaments.push({ tournament_id: tid, instrument_hash: "a3f9c2e17b44d0e5", runs: perT, completed: perT });
@@ -34,16 +32,22 @@ export function world(t: number, perT: number): World {
       const seg = SEGS[Math.floor(k / 6) % SEGS.length] ?? "SEG-01";
       const aud = AUDS[Math.floor(k / 12) % AUDS.length] ?? 3;
       const run_id = `${tid}-r${String(k).padStart(4, "0")}`;
-      list.push({
-        run_id,
-        tournament_id: tid,
-        has_verdict: k % 10 !== 9,
-        spec: { run_id, character: "malakor", tone_variant: tone, core_tier: tier, core_effort: "low", segment: seg, audience_size: aud, seed: k, duration_s: 300, population: "growing" },
-      });
       const key = `${tone}|${tier}|${seg}|${aud}`;
       const c = cells.get(key) ?? { tone, tier, seg, aud, ids: [] };
       c.ids.push(run_id);
       cells.set(key, c);
+      // The first run of every fourth cell (shifted per tournament) fails a red line.
+      const j = [...cells.keys()].indexOf(key);
+      const red = c.ids.length === 1 && (i + j) % 4 === 0;
+      const judged = k % 10 !== 9;
+      list.push({
+        run_id,
+        tournament_id: tid,
+        has_verdict: judged,
+        ...(judged ? { health: red ? 0.5 : 1 } : {}),
+        ...(judged && red ? { red_line_fails: 1 } : {}),
+        spec: { run_id, character: "malakor", tone_variant: tone, core_tier: tier, core_effort: "low", segment: seg, audience_size: aud, seed: k, duration_s: 300, population: "growing" },
+      });
     }
     runs.set(tid, list);
     results.set(tid, {
@@ -82,19 +86,6 @@ export function world(t: number, perT: number): World {
   return { fictional: true, tournaments, runs, results };
 }
 
-const field = (sent: string, name: string) => new RegExp(`"${name}":"([^"]*)"`).exec(sent)?.[1];
-const numField = (sent: string, name: string) => {
-  const m = new RegExp(`"${name}":(\\d+)`).exec(sent)?.[1];
-  return m === undefined ? undefined : Number(m);
-};
-
-function page<T>(items: readonly T[], sent: string): { items: T[]; next_cursor?: string } {
-  const limit = Math.min(500, numField(sent, "limit") ?? 500);
-  const from = Number(field(sent, "cursor") ?? "0");
-  const slice = items.slice(from, from + limit);
-  return from + limit < items.length ? { items: slice, next_cursor: String(from + limit) } : { items: slice };
-}
-
 /** One judge verdict and transcript, for the quote checks. */
 export const VERDICT_RUN = "t001-r0000";
 export const TRANSCRIPT: StreamEvent[] = [
@@ -120,34 +111,31 @@ export const VERDICT = {
   ],
 };
 
-/** A data layer whose daemon answers from `w`; `offline` makes every call fail. */
-export function scriptedLayer(w: World | "offline"): { layer: DataLayer; calls: string[] } {
-  const reply = (method: string, sent: string): FetchReply => {
+/** A daemon that answers the simulator's RPCs from `w`, paged; `offline` fails every call. */
+export function daemon(w: World | "offline"): Script {
+  return (method, sent) => {
     if (w === "offline") return { network: true };
-    const tid = field(sent, "tournament_id");
+    const tid = param(sent, "tournament_id");
     switch (method) {
       case "tournaments.page":
-        return { body: { result: page(w.tournaments, sent) } };
+        return page(w.tournaments, sent);
       case "runs.page": {
         let rows = tid === undefined ? [...w.runs.values()].flat() : (w.runs.get(tid) ?? []);
         if (sent.includes('"has_verdict":true')) rows = rows.filter((r) => r.has_verdict);
-        const tone = field(sent, "tone_variant");
+        const tone = param(sent, "tone_variant");
         if (tone !== undefined) rows = rows.filter((r) => r.spec.tone_variant === tone);
-        return { body: { result: page(rows, sent) } };
+        return page(rows, sent);
       }
       case "tournament.results": {
         const r = tid === undefined ? undefined : w.results.get(tid);
-        return r ? { body: { result: r } } : { body: { error: { code: "not_found", message: "no results" } } };
+        return r ? ok(r) : { body: { error: { code: "not_found", message: "no results" } } };
       }
       case "run.verdict":
-        return field(sent, "run_id") === VERDICT_RUN ? { body: { result: VERDICT } } : { body: { error: { code: "not_found", message: "no verdict" } } };
+        return param(sent, "run_id") === VERDICT_RUN ? ok(VERDICT) : { body: { error: { code: "not_found", message: "no verdict" } } };
       case "run.transcript":
-        return { body: { result: TRANSCRIPT } };
+        return ok(TRANSCRIPT);
       default:
         return { body: { error: { code: "method_not_found", message: method } } };
     }
   };
-  const fetch = scriptedFetch((m, sent) => reply(m, typeof sent === "string" ? sent : ""));
-  const layer = createDataLayer({ baseUrl: "http://127.0.0.1:7717", door: contractDoor, fetch, socket: fakeSockets().factory, timers: manualTimers() });
-  return { layer, calls: fetch.calls };
 }

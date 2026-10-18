@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readConstitution, readFoil, readTone, parseBlocks, parseDoc, ruleBody, splitRule } from "./doc";
+import { parseBlocks, parseDoc } from "../../ui/doc";
+import { readConstitution, readFoil, readTone, ruleBody, splitRule } from "./packageDocs";
 import {
   avatarSpec,
   factsLine,
@@ -7,7 +8,6 @@ import {
   foilName,
   foilShort,
   hash32,
-  parseRef,
   rosterKicker,
   rosterWindow,
   selectedIndex,
@@ -18,6 +18,7 @@ import {
 } from "./model";
 import { crumbLabel, readSub } from "./routes";
 import { genResults, genRoster, malakorDetail, malakorSummary } from "./testgen";
+import { parseRef, refRun } from "../../kit/events";
 
 describe("the roster", () => {
   it("draws everyone up to twenty, then a window of nineteen around the selection plus +N", () => {
@@ -81,17 +82,20 @@ describe("situation verdicts from results.json", () => {
     expect(t?.size).toBe(malakorDetail().situations.length);
   });
 
-  it("ignores non-situation rules and malformed tallies, and rejects a reply without cells", () => {
-    const t = situationTallies({ cells: [{ rules: { "red-line:doxxing": { pass: 4, fail: 0 }, "situation:x": { pass: "no", fail: 1 }, "situation:y": 7 } }] });
-    expect([...(t?.keys() ?? [])]).toEqual(["x"]);
-    expect(t?.get("x")).toMatchObject({ pass: 0, fail: 1 });
-    expect(situationTallies({ tournament_id: "t" })).toBeNull();
+  it("ignores rules that are not situations", () => {
+    const r = genResults(1);
+    const cell = r.cells[0];
+    if (!cell) throw new Error("no cell");
+    const t = situationTallies({ ...r, cells: [{ ...cell, rules: { "red-line:doxxing": { pass: 4, fail: 0, not_provoked: 0, not_evaluable: 0, n: 4 }, "situation:x": { pass: 0, fail: 1, not_provoked: 0, not_evaluable: 0, n: 1 } } }] });
+    expect([...t.keys()]).toEqual(["x"]);
+    expect(t.get("x")).toMatchObject({ pass: 0, fail: 1 });
   });
 
-  it("splits a transcript ref", () => {
-    expect(parseRef("theatrical.30.r1#42")).toEqual({ run: "theatrical.30.r1", line: "42" });
-    expect(parseRef("run-a")).toEqual({ run: "run-a" });
-    expect(parseRef("run#x")).toEqual({ run: "run#x" });
+  it("reads a transcript ref's run, with or without a line", () => {
+    expect(parseRef("theatrical.30.r1#42")).toEqual({ runId: "theatrical.30.r1", line: 42 });
+    expect(refRun("theatrical.30.r1#42")).toBe("theatrical.30.r1");
+    expect(refRun("run-a")).toBe("run-a");
+    expect(refRun("run#x")).toBe("run#x");
   });
 });
 

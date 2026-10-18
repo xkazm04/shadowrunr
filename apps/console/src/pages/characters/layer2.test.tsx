@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import DOM_BUDGETS from "../../../budgets/dom.json";
-import { fail, mountPage, nodes, ok, role, roles, settle, type Script } from "./harness";
+import { fail, mountPage, nodes, ok, role, roles, settle, type Script } from "../../kit/testing";
 import { Layer2 } from "./Layer2";
 import { genResults, genRoster, malakorDetail, malakorRules, malakorSummary } from "./testgen";
 
@@ -20,6 +20,8 @@ interface Daemon {
   onSet?: (sent: string) => ReturnType<Script>;
   /** The daemon's rules.json override, changed by character.rules.set. */
   state?: Record<string, boolean>;
+  /** The daemon's active.json tone, changed by character.tone.set. */
+  tone?: { value: string };
 }
 
 const daemon =
@@ -29,7 +31,12 @@ const daemon =
       case "character.list":
         return ok(o.roster ?? [malakorSummary()]);
       case "character.get":
-        return /"id":"malakor"/.test(sent) ? ok(malakorDetail()) : fail("not_found", "no such character");
+        return /"id":"malakor"/.test(sent) ? ok({ ...malakorDetail(), ...(o.tone ? { active_tone: o.tone.value } : {}) }) : fail("not_found", "no such character");
+      case "character.tone.set": {
+        const tone = /"tone":"([^"]+)"/.exec(sent)?.[1] ?? "";
+        if (o.tone) o.tone.value = tone;
+        return ok(malakorSummary({ active_tone: tone }));
+      }
       case "character.rules":
         return ok(malakorRules(o.state));
       case "character.rules.set":
@@ -120,6 +127,23 @@ describe("characters/<id>/package", () => {
   });
 });
 
+describe("tones", () => {
+  it("makes another tone active through character.tone.set and shows it as the hero", async () => {
+    const tone = { value: "theatrical" };
+    const m = mount(["malakor", "package", "tones"], { tone });
+    await settle();
+    expect(role("characters-tone-hero")?.textContent).toContain("Theatrical");
+    const card = roles("characters-tone-card").find((c) => c.textContent?.includes("Weary middle manager"));
+    await act(async () => {
+      card?.querySelector<HTMLButtonElement>("[data-role='characters-tone-set']")?.click();
+    });
+    await settle();
+    expect(m.fetch.calls).toContain("character.tone.set");
+    expect(role("characters-tone-hero")?.textContent).toContain("Weary middle manager");
+    expect(role("characters-tone-hero")?.textContent).toContain("The operator's choice (the package default is Theatrical)");
+  });
+});
+
 describe("optional rules are real switches", () => {
   it("sends character.rules.set and shows the daemon's reply, with the instrument card", async () => {
     const sent: string[] = [];
@@ -147,9 +171,10 @@ describe("optional rules are real switches", () => {
     expect(rule()?.getAttribute("data-enabled")).toBe("false");
     expect(rule()?.textContent).toContain("changed by the operator");
     expect(role("characters-instrument")?.textContent).toContain("1 of 2 rules differ from the package defaults.");
-    // The page refetched what the switch changed (no invalidation entry exists yet).
+    // The data layer refetched what the switch changed (MUTATION_INVALIDATES), the page did not.
     expect(m.fetch.calls.filter((c) => c === "character.rules").length).toBeGreaterThanOrEqual(2);
-    expect(m.fetch.calls.filter((c) => c === "character.list").length).toBeGreaterThanOrEqual(2);
+    expect(m.fetch.calls.filter((c) => c === "character.get").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("switch", { name: /Crisis handoff: enabled/ })).toBeTruthy();
   });
 
   it("keeps the switch and says why when the daemon refuses", async () => {

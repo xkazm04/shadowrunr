@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildLanes, memoryCurve } from "./brainModel";
 import { drawMemory, drawScope, laneX } from "./draw";
-import { BRAIN } from "./palette";
+import { TOKENS_BRAIN } from "@shadowrunr/tokens";
+import { MEMORY } from "./draw";
 import { ledgerRows, Recorder, runRow, season, transcript } from "./testgen";
 
 describe("the oscilloscope (A/1 app.js:370-386)", () => {
@@ -13,7 +14,7 @@ describe("the oscilloscope (A/1 app.js:370-386)", () => {
     expect(rec.texts).toEqual(["HAIKU · A3"]);
     expect(rec.calls["lineTo"]).toBe(21 + 5 * 4 + 1);
     expect(rec.calls["arc"]).toBe(5 + 1); // one error ring (row 2 of 41)
-    expect(rec.writes["strokeStyle"]).toContain(BRAIN.scope.trace);
+    expect(rec.writes["strokeStyle"]).toContain(TOKENS_BRAIN.scopeTrace);
     expect(rec.writes["shadowBlur"]).toEqual([8, 0]);
   });
 
@@ -33,6 +34,6 @@ describe("the oscilloscope (A/1 app.js:370-386)", () => {
     const rec = new Recorder();
     drawMemory(rec, { w: 400, h: 200 }, [memoryCurve(transcript(60)), undefined, memoryCurve(transcript(30))], 10);
     expect(rec.calls["stroke"]).toBe(2);
-    expect(rec.writes["strokeStyle"]).toEqual([BRAIN.memory[0], BRAIN.memory[2]]);
+    expect(rec.writes["strokeStyle"]).toEqual([MEMORY[0], MEMORY[2]]);
   });
 });

@@ -1,4 +1,4 @@
-/* A/1's gauge, lamps and funnel. Colours come from the --br-* palette (palette.ts) and the
+/* A/1's gauge, lamps and funnel. Colours come from the --sr-brain-* tokens and the
    per-lamp --lamp / --d / --blink properties; sizes follow the hero (container-type: size). */
 
 .gauge { position: absolute; inset: 6% 6% auto; width: 88%; height: 70%; }
@@ -23,13 +23,13 @@
   height: var(--d);
   margin: 0 auto .8cqh;
   border-radius: var(--sr-radius-round);
-  background: radial-gradient(circle at 40% 35%, var(--br-lamp-highlight), var(--lamp) 45%, transparent 72%);
+  background: radial-gradient(circle at 40% 35%, var(--sr-brain-lamp-highlight), var(--lamp) 45%, transparent 72%);
   box-shadow: 0 0 calc(var(--d) * .8) color-mix(in srgb, var(--lamp) 40%, transparent);
   animation: blink var(--blink) infinite;
 }
 
 .lamp[data-error="true"] {
-  outline: var(--sr-stroke-rule) solid var(--br-lamp-error);
+  outline: var(--sr-stroke-rule) solid var(--sr-brain-lamp-error);
   outline-offset: var(--sr-stroke-heavy);
 }
 
@@ -39,12 +39,12 @@
   font-size: max(.75rem, 2.1cqh);
   letter-spacing: .18em;
   text-transform: uppercase;
-  color: var(--br-bone2);
+  color: var(--sr-brain-text-bone-dim);
 }
 
-.lampCount { letter-spacing: .06em; color: var(--br-ash); }
+.lampCount { letter-spacing: .06em; color: var(--sr-brain-text-ash); }
 
-.lampErr { font-weight: var(--sr-weight-semibold); color: var(--br-error-text); }
+.lampErr { font-weight: var(--sr-weight-semibold); color: var(--sr-brain-text-error); }
 
 @keyframes blink {
   50% { opacity: .25; }

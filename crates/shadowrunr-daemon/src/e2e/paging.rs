@@ -228,3 +228,60 @@ async fn ledger_page_reads_runs_tournaments_and_the_engine_ledger() {
 fn paging_cursor(offset: u64) -> String {
     crate::paging::encode_cursor(&[&offset.to_string()])
 }
+
+#[tokio::test]
+async fn run_rows_carry_health_and_red_line_fails_from_the_verdict() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = test_config(tmp.path(), repo().join("characters"));
+    let sim_root = tmp.path().join("runs").join("sim");
+    write_run(&sim_root, "health", "judged", "theatrical", 3);
+    write_run(&sim_root, "health", "unjudged", "theatrical", 3);
+    let verdict = json!({
+        "run_id": "judged", "judge_tier": "opus", "quality": [],
+        "rules": [
+            { "rule": "situation:a", "state": "pass" },
+            { "rule": "situation:b", "state": "pass" },
+            { "rule": "situation:c", "state": "pass" },
+            { "rule": "red-line:doxxing", "state": "fail" },
+            { "rule": "talk:d", "state": "not_provoked" }
+        ]
+    });
+    std::fs::write(
+        sim_root.join("health/judged/verdict.json"),
+        verdict.to_string(),
+    )
+    .unwrap();
+    let addr = start(cfg).await;
+    for method in ["runs.page", "runs.list"] {
+        let params = if method == "runs.page" {
+            json!({ "tournament_id": "health", "limit": 10 })
+        } else {
+            json!({ "tournament_id": "health" })
+        };
+        let v = rpc(&addr, method, params).await;
+        assert!(!has_null(&v), "{v}");
+        let rows = if method == "runs.page" {
+            v["result"]["items"].clone()
+        } else {
+            v["result"].clone()
+        };
+        let judged = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["run_id"] == "judged")
+            .unwrap();
+        assert_eq!(judged["health"], json!(0.75), "{method}: {judged}");
+        assert_eq!(judged["red_line_fails"], json!(1), "{method}: {judged}");
+        let unjudged = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["run_id"] == "unjudged")
+            .unwrap();
+        assert!(
+            unjudged.get("health").is_none() && unjudged.get("red_line_fails").is_none(),
+            "{unjudged}"
+        );
+    }
+}

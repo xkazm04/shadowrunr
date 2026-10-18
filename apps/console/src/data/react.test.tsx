@@ -62,6 +62,27 @@ describe("typed hooks", () => {
     expect(h.fetch.calls).toEqual(["directive.list", "directive.add", "directive.list"]);
   });
 
+  it("gives a mutation its own timeout (the LLM-backed calls run for minutes)", async () => {
+    const h = layerWith(() => ({ hang: true }));
+    let reason: unknown;
+    function Run() {
+      const m = useMutation("reconcile.run", { timeoutMs: 5 });
+      return (
+        <button type="button" onClick={() => void m.run({ source: { tournament_id: "t" } }).then((r) => (reason = r.ok ? "ok" : r.error.detail?.reason))}>
+          run
+        </button>
+      );
+    }
+    render(
+      <DataProvider layer={h.layer}>
+        <Run />
+      </DataProvider>,
+    );
+    await act(async () => screen.getByText("run").click());
+    await act(async () => void (await new Promise((r) => setTimeout(r, 30))));
+    expect(reason).toBe("timeout");
+  });
+
   it("shows the offline state from the error taxonomy", async () => {
     const h = layerWith(() => ({ network: true }));
     render(

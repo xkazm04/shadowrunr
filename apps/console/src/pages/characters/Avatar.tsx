@@ -3,7 +3,7 @@
 // id. The colours are the illustration's own palette, kept exactly.
 import { MalakorArt } from "@shadowrunr/stage-kit/ui";
 import type { ReactElement } from "react";
-import { cx } from "../../ui";
+import { cx } from "../../ui/cx";
 import styles from "./Avatar.module.css";
 import { avatarOf, type AvatarSpec } from "./model";
 

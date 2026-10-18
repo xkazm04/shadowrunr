@@ -3,14 +3,13 @@
 // transcript). Counts are gated; timings are not.
 import type { RunRow, StreamEvent } from "@shadowrunr/contract";
 import { foldEvents } from "@shadowrunr/stage-kit";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import DOM_BUDGETS from "../../../budgets/dom.json";
-import { DataProvider, createDataLayer } from "../../data";
-import { contractDoor } from "../../data/contractDoor";
-import { fakeSockets, manualTimers, scriptedFetch, type FetchReply } from "../../data/testing";
-import { RouterProvider, createHashRouter, pageRoute, type RouterStore } from "../../router";
+import type { FetchReply } from "../../data/testing";
+import { mountPage, nodes } from "../../kit/testing";
+import { pageRoute } from "../../router";
 import { Layer1 } from "./Layer1";
 import { Layer2 } from "./Layer2";
 import type { FeedSnapshot } from "./player";
@@ -44,23 +43,12 @@ const FIDELITY_ROLES = [
   "onair-transport",
 ];
 
-let router: RouterStore | null = null;
+let dispose: (() => void) | null = null;
 
 function mount(ui: ReactNode, reply: (method: string, body: string) => FetchReply) {
-  window.location.hash = "#/onair";
-  router = createHashRouter(window);
-  const data = createDataLayer({
-    baseUrl: "http://127.0.0.1:7717",
-    door: contractDoor,
-    fetch: scriptedFetch((m, p) => reply(m, typeof p === "string" ? p : "")),
-    socket: fakeSockets().factory,
-    timers: manualTimers(),
-  });
-  return render(
-    <RouterProvider router={router}>
-      <DataProvider layer={data}>{ui}</DataProvider>
-    </RouterProvider>,
-  );
+  const m = mountPage(ui, reply, "#/onair");
+  dispose = m.dispose;
+  return m;
 }
 
 function daemon(runs: RunRow[], events: StreamEvent[], next?: string) {
@@ -81,12 +69,10 @@ function daemon(runs: RunRow[], events: StreamEvent[], next?: string) {
   };
 }
 
-const nodes = () => document.body.querySelectorAll("*").length;
-
 afterEach(() => {
   cleanup();
-  router?.dispose();
-  router = null;
+  dispose?.();
+  dispose = null;
 });
 
 describe("On Air layer 1", () => {
@@ -158,6 +144,35 @@ describe("On Air layer 2", () => {
     mount(<Layer2 sub={["dispatch"]} />, daemon([], []));
     await screen.findByText("No reconcile report yet");
     await screen.findByText("None active");
+  });
+
+  it("shows what Malakor receives: the plan in force, on the slip and the dispatch page", async () => {
+    const plan = {
+      plan_id: "plan-1",
+      created_ms: 1,
+      lord_dispatch: "Audit the ledgers before the moon sets.",
+      segments: [{ segment: "SEG-01", minutes: 20, notes: "open warm" }],
+      topics: ["the missing 4%"],
+      directives: [],
+      report_id: "rec-1",
+    };
+    const base = daemon([runRow(0)], transcript(40));
+    const withPlan = (method: string): FetchReply =>
+      method === "plan.current"
+        ? { body: { result: plan } }
+        : method === "character.list"
+          ? { body: { result: [{ id: "malakor", name: "Arch-Lich Malakor", default_tone: "theatrical", active_tone: "weary-middle-manager", tones: ["theatrical", "weary-middle-manager"], foils: [], rules_enabled: 0, rules_total: 0 }] } }
+          : base(method);
+    mount(<Layer1 active />, withPlan);
+    await screen.findByText("Audit the ledgers before the moon sets.");
+    expect(document.querySelector("[data-role='onair-screen']")?.getAttribute("data-slip")).toBe("true");
+    await screen.findByText(/next stream's tone: weary middle manager/);
+    cleanup();
+    dispose?.();
+    mount(<Layer2 sub={["dispatch"]} />, withPlan);
+    await screen.findByText("What Malakor receives");
+    expect(document.querySelector("[data-role='onair-dispatch-text']")?.textContent).toBe("Audit the ledgers before the moon sets.");
+    expect(document.querySelector("[data-role='onair-dispatch-segments']")?.textContent).toContain("SEG-01 · 20 min · open warm");
   });
 
   it("names an unknown nested page instead of going blank", async () => {

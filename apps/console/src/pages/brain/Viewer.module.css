@@ -25,21 +25,9 @@
 
 .viewer { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--sr-space-loose); align-items: start; }
 
-.list {
-  position: relative;
-  height: 62vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  contain: strict;
-  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
-  background: var(--sr-color-surface-card);
-  outline: none;
-}
+/* The shared VirtualList viewport, sized and inked for the spread. */
+.list { height: 62vh; border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-surface-card); }
 
-.list:focus-visible { outline: var(--sr-stroke-heavy) solid var(--sr-page-accent, var(--sr-color-signal)); }
-
-.sizer { position: relative; width: 100%; }
-.row { position: absolute; top: 0; left: 0; width: 100%; }
 
 .line {
   display: grid;

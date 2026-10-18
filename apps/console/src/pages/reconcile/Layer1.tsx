@@ -1,8 +1,10 @@
 // Layer 1: the winner's held / failed / proposed triptych over the rising halftone sun
-// (l1.js P3.L1.reconcile, l1.css .rc-*). Each column is a lit link into its layer-2 page.
+// (l1.js P3.L1.reconcile, l1.css .rc-*), on the newest report. Each column is a lit link into
+// its layer-2 page.
 import type { ReactNode } from "react";
 import { pageRoute, RouteLink, type Route } from "../../router";
 import { useConnection } from "../../data";
+import { PosterFrame } from "../../kit/PosterFrame";
 import { CountUp } from "./CountUp";
 import { useReport, useReportId } from "./hooks";
 import styles from "./Layer1.module.css";
@@ -16,7 +18,7 @@ export function Layer1({ active }: { readonly active: boolean }) {
 type Slip = { readonly kind: "caution" | "state"; readonly text: string; readonly action?: ReactNode } | undefined;
 
 function ReconcilePoster() {
-  const reportId = useReportId();
+  const { reportId, pending } = useReportId();
   const { report, proposals } = useReport(reportId);
   const conn = useConnection();
 
@@ -25,7 +27,9 @@ function ReconcilePoster() {
   const counts = t && { held: t.held, failed: t.failed, proposed: proposals.data ? t.proposed : undefined };
 
   let slip: Slip;
-  if (reportId === undefined) {
+  if (reportId === undefined && pending) {
+    slip = { kind: "state", text: conn.summary === "offline" ? "The daemon is not reachable. The report shows here once it answers." : "Finding the newest report…" };
+  } else if (reportId === undefined) {
     slip =
       conn.summary === "offline"
         ? { kind: "state", text: "The daemon is not reachable. The report shows here once it answers." }
@@ -60,19 +64,13 @@ function ReconcilePoster() {
   }
 
   return (
-    <div className={styles.root} data-role="reconcile-layer1">
-      <div className={styles.top}>
-        <div className={styles.brand}>
-          <svg viewBox="0 0 40 40" aria-hidden="true">
-            <path d="M6 16L9 5l7 7 4-9 4 9 7-7 3 11z" fill="currentColor" />
-            <ellipse cx="20" cy="26" rx="11" ry="10" fill="none" stroke="currentColor" strokeWidth="3" />
-            <circle cx="16" cy="25" r="2.4" fill="currentColor" />
-            <circle cx="24" cy="25" r="2.4" fill="currentColor" />
-          </svg>
-          <b>Shadowrunr OS</b>
-          <span>Season 0 · v0.1</span>
-        </div>
-      </div>
+    <PosterFrame
+      className={styles.root}
+      role="reconcile-layer1"
+      measure
+      credit="Between streams · "
+      cta={{ to: pageRoute("reconcile", "plan"), label: "Choose the next plan", role: "reconcile-cta" }}
+    >
       <div className={styles.hero}>
         <div className={styles.sun} aria-hidden="true" data-role="reconcile-sun" />
         <div className={styles.tri} data-role="reconcile-triptych">
@@ -87,16 +85,7 @@ function ReconcilePoster() {
           </p>
         )}
       </div>
-      <div className={styles.foot}>
-        <p className={styles.credit}>
-          Between streams · <span>v0.1 · media-less phase: voice, avatar and broadcast come next · stylised illustration</span>
-        </p>
-        <RouteLink to={pageRoute("reconcile", "plan")} className={styles.cta} data-role="reconcile-cta">
-          <span>Choose the next plan</span>
-          <i />
-        </RouteLink>
-      </div>
-    </div>
+    </PosterFrame>
   );
 }
 

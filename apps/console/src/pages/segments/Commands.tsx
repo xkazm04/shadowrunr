@@ -3,7 +3,8 @@
 import type { RankTableInfo, SegmentTables } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { pageRoute, RouteLink } from "../../router";
-import { Chip, Head, Section } from "../../ui";
+import { Chip } from "../../ui/Chip";
+import { Head, Section } from "../../ui/Section";
 import { useRanks, useTables } from "./hooks";
 import styles from "./Layer2.module.css";
 import { commandRows, opGrid } from "./model";
@@ -35,7 +36,7 @@ function rankTitle(ranks: RankTableInfo | undefined, rank: string): string {
 }
 
 function Commands({ tables, ranks }: { tables: SegmentTables; ranks: RankTableInfo | undefined }) {
-  const rows = commandRows(tables, ranks?.propose_min_rank);
+  const rows = commandRows(tables);
   return (
     <Section title="Commands" right={`${rows.length} commands`}>
       <div className={styles.tblwrap}>
@@ -52,9 +53,9 @@ function Commands({ tables, ranks }: { tables: SegmentTables; ranks: RankTableIn
             {rows.map((c) => (
               <tr key={c.name} data-role="segments-command-row">
                 <td className={styles.nowrap}>
-                  <code>!{c.name}</code> {c.grammar && <code className={styles.dim}>{c.grammar.args}</code>}
+                  <code>!{c.name}</code> {c.args !== undefined && <code className={styles.dim}>{c.args}</code>}
                 </td>
-                <td>{c.grammar?.what ?? <span className={styles.dim}>No description in this console yet.</span>}</td>
+                <td>{c.what ?? <span className={styles.dim}>The daemon sends no description for this command.</span>}</td>
                 <td>
                   {c.segments.length === 0 ? (
                     <span className={styles.dim}>no segment accepts it</span>
