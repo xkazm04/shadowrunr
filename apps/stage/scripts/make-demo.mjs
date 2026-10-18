@@ -7,12 +7,14 @@
 // Times are ms since stream start (contract: TsMs inside a simulation). Every name is invented;
 // the case is the fictional demo case (crates/shadowrunr-segments/data/demo-case.json).
 
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "..", "fixtures", "demo.jsonl");
+// Byte copy of crates/shadowrunr-segments/data/demo-case.json (fictional: true).
+const demoCase = JSON.parse(readFileSync(join(here, "..", "fixtures", "demo-case.json"), "utf8"));
 
 // Vote weights: crates/shadowrunr-segments/data/ranks.toml.
 const WEIGHT = { thrall: 1.0, acolyte: 1.4, cultist: 1.7, warlock: 2.0, lich: 2.2, dread_council: 2.4 };
@@ -251,6 +253,7 @@ push({ type: "handover", ts_ms: 130500, from: "SEG-01", to: "SEG-02A", reason: "
 
 // ─────────────────────────── SEG-02A: Hexmap Investigation ───────────────────────────
 push({ type: "segment_start", ts_ms: 131000, segment: "SEG-02A" });
+push({ type: "case_open", ts_ms: 131000, case: demoCase });
 filler(133500, 262000, FILLER_02, 5600);
 
 say(133000, "Behold the Glimmerquay Lunar Staking Affair. Invented from crown to toe, and still more honest than the Disruptor.");

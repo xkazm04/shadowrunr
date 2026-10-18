@@ -274,7 +274,10 @@ export function App() {
   // ── Scene ────────────────────────────────────────────────────────────────────
   const events = useMemo(() => loaded?.events ?? [], [loaded]);
   const scene = live ? liveScene.current : timeline ? timeline.advanceTo(now) : initialScene();
-  const resolved = useMemo(() => resolveCase(explicitCase, events, BUILTIN_CASE), [explicitCase, events]);
+  const resolved = useMemo(
+    () => resolveCase(explicitCase, events, BUILTIN_CASE, scene.caseFile),
+    [explicitCase, events, scene.caseFile],
+  );
   const revealKey = scene.revealOrder.join(",");
   const map = useMemo(() => buildMap(resolved.case, revealKey ? revealKey.split(",") : []), [resolved.case, revealKey]);
   useOverflowAudit(params.debug, rootRef);

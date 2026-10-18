@@ -3,6 +3,7 @@
 // playback clock, so seeking is just "fold the events up to t".
 
 import type {
+  Case,
   ChatMsg,
   EndReason,
   EvidenceGrade,
@@ -140,6 +141,8 @@ export interface SceneState {
   applied: number;
   meta: StreamMeta | null;
   segment: SegmentId | null;
+  /** The SEG-02A case from the latest `case_open` (null for transcripts without one). */
+  caseFile: Case | null;
   layout: LayoutId;
   transition: Transition | null;
   pendingSwitch: { to: SegmentId; at: TsMs } | null;
@@ -183,6 +186,7 @@ export function initialScene(): SceneState {
     applied: 0,
     meta: null,
     segment: null,
+    caseFile: null,
     layout: "boot",
     transition: null,
     pendingSwitch: null,
@@ -355,6 +359,8 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
       if (ev.ses !== undefined) seal.ses = ev.ses;
       return { ...s, seals: [...s.seals, seal] };
     }
+    case "case_open":
+      return { ...s, caseFile: ev.case };
     case "handover":
       s = { ...s, segment: ev.to, pendingSwitch: null };
       return switchLayout(s, layoutFor(ev.to), at, "handover", ev.reason);

@@ -79,7 +79,13 @@ export async function fetchCase(url: string): Promise<Case | null> {
   }
 }
 
-export type CaseSource = "param" | "sidecar" | "dropped" | "builtin" | "none";
+export type CaseSource = "transcript" | "param" | "sidecar" | "dropped" | "builtin" | "none";
+
+/** The case of the first `case_open` in the transcript, if it has one. */
+export function transcriptCase(events: readonly StreamEvent[]): Case | null {
+  for (const e of events) if (e.type === "case_open") return e.case;
+  return null;
+}
 
 /** Hex ids revealed anywhere in the transcript. */
 export function revealedHexIds(events: readonly StreamEvent[]): string[] {
@@ -91,15 +97,21 @@ export function revealedHexIds(events: readonly StreamEvent[]): string[] {
 }
 
 /**
- * Which case to draw. An explicit case wins; the built-in fictional demo case is used only when
- * every hex the transcript reveals exists in it (simulations run on that case), so an unrelated
- * transcript never borrows its title. Otherwise the map is drawn procedurally from hex ids.
+ * Which case to draw. The transcript's own `case_open` wins: `current` (the scene's case at the
+ * playback position, which also covers a live stream) and otherwise the first `case_open` in
+ * `events`. Older transcripts without one fall back to an explicit case (`?case=`, sidecar,
+ * dropped), then to the built-in fictional demo case, used only when every hex the transcript
+ * reveals exists in it (simulations run on that case), so an unrelated transcript never borrows
+ * its title. Otherwise the map is drawn procedurally from hex ids.
  */
 export function resolveCase(
-  explicit: { case: Case; source: Exclude<CaseSource, "builtin" | "none"> } | null,
+  explicit: { case: Case; source: Exclude<CaseSource, "transcript" | "builtin" | "none"> } | null,
   events: readonly StreamEvent[],
   builtin: Case,
+  current: Case | null = null,
 ): { case: Case | null; source: CaseSource } {
+  const fromTranscript = current ?? transcriptCase(events);
+  if (fromTranscript) return { case: fromTranscript, source: "transcript" };
   if (explicit) return explicit;
   const revealed = revealedHexIds(events);
   const known = new Set(builtin.hexes.map((h) => h.id));

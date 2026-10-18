@@ -227,7 +227,8 @@ fn clock_completes_the_switch_after_grace() {
             StreamEvent::SegmentStart {
                 segment: SegmentId::Seg02aHexmap,
                 ..
-            }
+            },
+            StreamEvent::CaseOpen { .. }
         ]
     ));
     assert_eq!(rt.segment(), SegmentId::Seg02aHexmap);
@@ -592,6 +593,73 @@ fn highlight_needs_a_seen_message_and_sign_off_ends_everything() {
 }
 
 // ----- SEG-02A ----------------------------------------------------------------------------
+
+#[test]
+fn start_in_seg02a_opens_the_fictional_demo_case() {
+    let mut rt = SegmentRuntime::with_config(SegmentId::Seg02aHexmap, cfg()).unwrap();
+    let evs = rt.start(1_000);
+    let [StreamEvent::SegmentStart {
+        ts_ms: 1_000,
+        segment: SegmentId::Seg02aHexmap,
+    }, StreamEvent::CaseOpen { ts_ms: 1_000, case }] = evs.as_slice()
+    else {
+        panic!("expected segment_start then case_open, got {evs:?}");
+    };
+    let demo = demo_case();
+    assert_eq!(case.id, demo.id);
+    assert_eq!(case.title, demo.title);
+    assert!(case.fictional);
+    assert_eq!(case.hexes.len(), demo.hexes.len());
+    let line = serde_json::to_string(&evs[1]).unwrap();
+    assert!(line.starts_with("{\"type\":\"case_open\""), "{line}");
+    assert!(line.contains("\"fictional\":true"), "{line}");
+}
+
+#[test]
+fn start_outside_seg02a_has_no_case_open() {
+    let mut rt = SegmentRuntime::with_config(SegmentId::Seg01ImprovisedRoom, cfg()).unwrap();
+    let evs = rt.start(0);
+    assert!(matches!(
+        evs.as_slice(),
+        [StreamEvent::SegmentStart {
+            segment: SegmentId::Seg01ImprovisedRoom,
+            ..
+        }]
+    ));
+}
+
+#[test]
+fn switch_into_seg02a_opens_the_case_right_after_segment_start() {
+    let mut rt = seg01();
+    let evs = rt.apply_ops(
+        5_000,
+        &[Op::SwitchSegment {
+            to: SegmentId::Seg02aHexmap,
+        }],
+    );
+    let start = evs
+        .iter()
+        .position(|e| {
+            matches!(
+                e,
+                StreamEvent::SegmentStart {
+                    segment: SegmentId::Seg02aHexmap,
+                    ..
+                }
+            )
+        })
+        .expect("segment_start SEG-02A");
+    let Some(StreamEvent::CaseOpen { ts_ms, case }) = evs.get(start + 1) else {
+        panic!("case_open must follow segment_start, got {evs:?}");
+    };
+    assert_eq!(*ts_ms, 5_000);
+    assert!(case.fictional);
+    let opens = evs
+        .iter()
+        .filter(|e| matches!(e, StreamEvent::CaseOpen { .. }))
+        .count();
+    assert_eq!(opens, 1);
+}
 
 #[test]
 fn demo_case_loads_fictional() {

@@ -50,6 +50,8 @@ export function eventText(ev: StreamEvent): string {
       return ev.segment;
     case "segment_end":
       return `${ev.segment}${typeof ev.ses === "number" ? ` · SES ${ev.ses.toFixed(2)}` : ""}`;
+    case "case_open":
+      return `${ev.case.title}${ev.case.fictional ? " · FICTIONAL" : ""} · ${ev.case.hexes.length} hexes`;
     case "chat":
       return ev.msg.text;
     case "picked":

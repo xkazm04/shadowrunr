@@ -236,6 +236,8 @@ export function parseEvent(v: unknown, warn: (m: string) => void = () => {}): St
       if (present(o, "ses", p, warn)) ev.ses = num(o, "ses", p);
       return ev;
     }
+    case "case_open":
+      return { type, ts_ms: int(o, "ts_ms", p), case: parseCase(o.case, warn, `${p}.case`) };
     case "chat":
       return { type, ts_ms: int(o, "ts_ms", p), msg: parseChatMsg(o.msg, `${p}.msg`, warn) };
     case "picked":
@@ -354,18 +356,21 @@ function parseHex(v: unknown, path: string, warn: (m: string) => void): Hex {
   return hex;
 }
 
-/** Parse a SEG-02A `Case` (the transcript does not carry one; see DESIGN.md § case source). */
-export function parseCase(v: unknown, warn: (m: string) => void = () => {}): Case {
-  const o = obj(v, "case");
+/**
+ * Parse a SEG-02A `Case`: the payload of a `case_open` event, or a standalone case file
+ * (`?case=`, sidecar, dropped) for transcripts older than `case_open`. See DESIGN.md § case source.
+ */
+export function parseCase(v: unknown, warn: (m: string) => void = () => {}, path = "case"): Case {
+  const o = obj(v, path);
   const hexes = o.hexes;
-  if (!Array.isArray(hexes)) fail("case.hexes", "array", hexes);
+  if (!Array.isArray(hexes)) fail(`${path}.hexes`, "array", hexes);
   const c: Case = {
-    id: str(o, "id", "case"),
-    title: str(o, "title", "case"),
-    fictional: bool(o, "fictional", "case"),
-    hexes: hexes.map((h, i) => parseHex(h, `case.hexes[${i}]`, warn)),
+    id: str(o, "id", path),
+    title: str(o, "title", path),
+    fictional: bool(o, "fictional", path),
+    hexes: hexes.map((h, i) => parseHex(h, `${path}.hexes[${i}]`, warn)),
   };
-  if (present(o, "links", "case", warn)) {
+  if (present(o, "links", path, warn)) {
     const links = o.links;
     if (
       !Array.isArray(links) ||
@@ -374,7 +379,7 @@ export function parseCase(v: unknown, warn: (m: string) => void = () => {}): Cas
           !Array.isArray(l) || l.length !== 2 || typeof l[0] !== "string" || typeof l[1] !== "string",
       )
     ) {
-      fail("case.links", "array of [string, string]", links);
+      fail(`${path}.links`, "array of [string, string]", links);
     }
     c.links = links as [string, string][];
   }

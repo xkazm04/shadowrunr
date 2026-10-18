@@ -116,9 +116,11 @@ including the intro and the outro, and is never hidden.
 - **Minion jury:** the community `!grade` counts per hex against Malakor's grade. A hex is
   DISPUTED when at least 3 minions graded it and their majority differs from his grade (a
   simplified form of the digest's "confidence vs jury" divergence).
-- **Case source.** The transcript does not carry the `Case`: `reveal_hex` has only the hex id and
-  grade. The stage resolves a case in this order: `?case=`, then the sidecar
-  `<transcript>.case.json`, then a dropped case file, then the built-in fictional demo case (a
+- **Case source.** The transcript carries the `Case` in a `case_open` event right after the
+  SEG-02A `segment_start`, and that case always wins (the latest one at the playback position,
+  else the first in the file). Older transcripts without `case_open` fall back, in this order, to
+  `?case=`, then the sidecar `<transcript>.case.json`, then a dropped case file, then the built-in
+  fictional demo case (a
   byte copy of `crates/shadowrunr-segments/data/demo-case.json`, which simulations run on). The
   built-in case is used only when it contains every hex the transcript reveals. Otherwise hexes
   are placed on a spiral and labelled with their ids, so any transcript stays drawable. The

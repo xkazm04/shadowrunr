@@ -20,6 +20,7 @@ One `StreamEvent` per line, tagged `"type"`:
 
 - `stream_start`
 - `segment_start` / `segment_end`
+- `case_open` (SEG-02A, the Case being audited, emitted once right after its `segment_start`)
 - `chat`
 - `picked`
 - `say` (with `speaker: malakor|foil`)

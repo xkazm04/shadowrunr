@@ -278,15 +278,26 @@ impl SegmentRuntime {
         Ok(table)
     }
 
-    /// Mark the segment as started at `now_ms` and return its `segment_start` event.
+    /// Mark the segment as started at `now_ms` and return its `segment_start` event, followed
+    /// in SEG-02A by `case_open` carrying the case being audited.
     /// Optional: without it the start time is the first `now_ms` seen.
     pub fn start(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
         self.started_ms = Some(now_ms);
         self.last_now_ms = now_ms;
-        vec![StreamEvent::SegmentStart {
+        let mut events = vec![StreamEvent::SegmentStart {
             ts_ms: now_ms,
             segment: self.table.id,
-        }]
+        }];
+        events.extend(self.case_open(now_ms, self.table.id));
+        events
+    }
+
+    /// The `case_open` event that follows a `segment_start` into SEG-02A; nothing otherwise.
+    fn case_open(&self, now_ms: TsMs, segment: SegmentId) -> Option<StreamEvent> {
+        (segment == SegmentId::Seg02aHexmap).then(|| StreamEvent::CaseOpen {
+            ts_ms: now_ms,
+            case: self.case.clone(),
+        })
     }
 
     // ----- accessors -------------------------------------------------------------------
@@ -465,6 +476,7 @@ impl SegmentRuntime {
             ts_ms: now_ms,
             segment: to,
         });
+        events.extend(self.case_open(now_ms, to));
         self.table = table;
         self.state = table.initial.clone();
         self.started_ms = Some(now_ms);

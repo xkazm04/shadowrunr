@@ -56,6 +56,25 @@ export interface Viewer {
 
 export type EvidenceGrade = "DOC" | "REP" | "CLM" | "SPC";
 
+/** SEG-02A case (`shadowrunr_types::Case`), carried by the `case_open` event. */
+export interface CaseHex {
+  id: string;
+  q: number;
+  r: number;
+  kind: "entity" | "wallet" | "domain" | "shell_company" | "claim";
+  label: string;
+  grade?: EvidenceGrade;
+  fog: boolean;
+  sources?: string[];
+}
+export interface CaseFile {
+  id: string;
+  title: string;
+  fictional: boolean;
+  hexes: CaseHex[];
+  links?: [string, string][];
+}
+
 export type Command =
   | { cmd: "summon"; foil: string }
   | { cmd: "hint"; hex: string; text: string }
@@ -120,6 +139,7 @@ export type StreamEvent =
     }
   | { type: "segment_start"; ts_ms: TsMs; segment: SegmentId }
   | { type: "segment_end"; ts_ms: TsMs; segment: SegmentId; ses?: number }
+  | { type: "case_open"; ts_ms: TsMs; case: CaseFile }
   | { type: "chat"; ts_ms: TsMs; msg: ChatMsg }
   | { type: "picked"; ts_ms: TsMs; msg_ids: string[]; reason: string }
   | {

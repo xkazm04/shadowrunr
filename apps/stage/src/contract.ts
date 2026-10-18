@@ -110,6 +110,8 @@ export type StreamEvent =
     }
   | { type: "segment_start"; ts_ms: TsMs; segment: SegmentId }
   | { type: "segment_end"; ts_ms: TsMs; segment: SegmentId; ses?: number }
+  /** SEG-02A: the Case being audited, emitted once right after its `segment_start`. */
+  | { type: "case_open"; ts_ms: TsMs; case: Case }
   | { type: "chat"; ts_ms: TsMs; msg: ChatMsg }
   | { type: "picked"; ts_ms: TsMs; msg_ids: string[]; reason: string }
   | {
@@ -141,6 +143,7 @@ export const EVENT_TYPES: readonly EventType[] = [
   "stream_start",
   "segment_start",
   "segment_end",
+  "case_open",
   "chat",
   "picked",
   "say",

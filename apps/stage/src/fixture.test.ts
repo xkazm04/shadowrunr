@@ -9,7 +9,7 @@ import { EVENT_TYPES, type SegmentId, type StreamEvent } from "./contract";
 import { parseCase, parseTranscript } from "./parse";
 import { foldEvents } from "./scene";
 import { buildMap } from "./hexgrid";
-import { resolveCase, revealedHexIds } from "./source";
+import { resolveCase, revealedHexIds, transcriptCase } from "./source";
 
 const root = join(__dirname, "..");
 const repo = join(root, "..", "..");
@@ -87,12 +87,24 @@ describe("fixtures/demo.jsonl", () => {
     expect(Object.values(s.hexes).map((h) => h.grade)).toEqual(expect.arrayContaining(["DOC", "REP", "CLM", "SPC"]));
   });
 
-  it("references only hexes of the fictional demo case, which resolves as the built-in case", () => {
+  it("opens the fictional demo case once, right after the SEG-02A segment_start", () => {
+    const demo = parseCase(JSON.parse(readFileSync(join(root, "fixtures", "demo-case.json"), "utf8")));
+    const i = parsed.events.findIndex((e) => e.type === "case_open");
+    expect(parsed.events[i - 1]).toMatchObject({ type: "segment_start", segment: "SEG-02A" });
+    expect(parsed.events.filter((e) => e.type === "case_open")).toHaveLength(1);
+    expect(transcriptCase(parsed.events)).toEqual(demo);
+    expect(transcriptCase(parsed.events)?.fictional).toBe(true);
+  });
+
+  it("references only hexes of the fictional demo case, which resolves from the transcript", () => {
     const demo = parseCase(JSON.parse(readFileSync(join(root, "fixtures", "demo-case.json"), "utf8")));
     expect(demo.fictional).toBe(true);
     const r = resolveCase(null, parsed.events, demo);
-    expect(r.source).toBe("builtin");
+    expect(r.source).toBe("transcript");
     expect(buildMap(r.case, revealedHexIds(parsed.events)).unplaced).toEqual([]);
+    // Without case_open (an older transcript) the built-in demo case still resolves.
+    const old = parsed.events.filter((e) => e.type !== "case_open");
+    expect(resolveCase(null, old, demo).source).toBe("builtin");
   });
 
   it("is reproducible from scripts/make-demo.mjs (same ops, same order)", () => {

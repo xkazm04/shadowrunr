@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::chat::{ChatMsg, EvidenceGrade, Rank};
 use crate::engine::ModelTier;
-use crate::segment::SegmentId;
+use crate::segment::{Case, SegmentId};
 use crate::TsMs;
 
 /// Malakor's action grammar. The model emits `OP: {json}` lines; only these ops are allowed.
@@ -106,6 +106,11 @@ pub enum StreamEvent {
         segment: SegmentId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ses: Option<f64>,
+    },
+    /// SEG-02A: the Case being audited, emitted once right after its `segment_start`.
+    CaseOpen {
+        ts_ms: TsMs,
+        case: Case,
     },
     Chat {
         ts_ms: TsMs,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ChatMsg, Command, Rank, StreamEvent } from "./contract";
+import type { Case, ChatMsg, Command, Rank, StreamEvent } from "./contract";
 import {
   foldEvents,
   gradeTallies,
@@ -12,6 +12,7 @@ import {
   LANE_MAX,
   DECREE_MAX,
 } from "./scene";
+import { resolveCase } from "./source";
 
 function msg(id: string, rank: Rank = "thrall", command?: Command, viewerId = `v-${id}`): ChatMsg {
   const m: ChatMsg = {
@@ -207,6 +208,51 @@ describe("hexmap state", () => {
     expect(h4).toMatchObject({ total: 4, majority: "CLM", official: "SPC", disputed: true });
     const h1 = t.find((x) => x.hex === "HEX-01")!;
     expect(h1).toMatchObject({ majority: "DOC", official: "DOC", disputed: false });
+  });
+});
+
+describe("case_open", () => {
+  const hex = (id: string, q: number, r: number) => ({ id, q, r, kind: "entity" as const, label: `label-${id}`, fog: true });
+  const real: Case = { id: "C-REAL", title: "The Transcript's Case", fictional: true, hexes: [hex("HEX-01", 2, -1), hex("HEX-07", 0, 0)] };
+  const other: Case = { id: "C-OTHER", title: "Another Case", fictional: true, hexes: [hex("HEX-07", 0, 0)] };
+  const events: StreamEvent[] = [
+    { type: "segment_start", ts_ms: 0, segment: "SEG-01" },
+    { type: "handover", ts_ms: 10, from: "SEG-01", to: "SEG-02A", reason: "dare" },
+    { type: "segment_start", ts_ms: 11, segment: "SEG-02A" },
+    { type: "case_open", ts_ms: 11, case: real },
+    op(20, { op: "reveal_hex", hex: "HEX-07", grade: "DOC" }),
+  ];
+
+  it("stores the transcript's case in the scene from its case_open onward", () => {
+    expect(initialScene().caseFile).toBeNull();
+    expect(foldEvents(events, 10).caseFile).toBeNull();
+    const s = foldEvents(events);
+    expect(s.caseFile).toBe(real);
+    expect(s.layout).toBe("hexmap");
+    expect(s.revealOrder).toEqual(["HEX-07"]);
+  });
+
+  it("a later case_open replaces the case", () => {
+    const s = foldEvents([...events, { type: "case_open", ts_ms: 30, case: other }]);
+    expect(s.caseFile?.id).toBe("C-OTHER");
+  });
+
+  it("prefers the transcript's case over ?case=, sidecar, dropped and the built-in demo", () => {
+    for (const source of ["param", "sidecar", "dropped"] as const) {
+      expect(resolveCase({ case: other, source }, events, other)).toEqual({ case: real, source: "transcript" });
+    }
+    expect(resolveCase(null, events, other)).toEqual({ case: real, source: "transcript" });
+    // The scene's case at the playback position (or on a live stream) wins over the file scan.
+    expect(resolveCase(null, events, other, other)).toEqual({ case: other, source: "transcript" });
+    expect(resolveCase(null, [], other, foldEvents(events).caseFile)).toEqual({ case: real, source: "transcript" });
+  });
+
+  it("keeps the old fallbacks for transcripts without case_open", () => {
+    const old = events.filter((e) => e.type !== "case_open");
+    expect(foldEvents(old).caseFile).toBeNull();
+    expect(resolveCase({ case: other, source: "sidecar" }, old, other)).toEqual({ case: other, source: "sidecar" });
+    expect(resolveCase(null, old, other)).toEqual({ case: other, source: "builtin" });
+    expect(resolveCase(null, old, { ...other, hexes: [] })).toEqual({ case: null, source: "none" });
   });
 });
 

@@ -27,6 +27,20 @@ const SAMPLES: Record<StreamEvent["type"], unknown> = {
   },
   segment_start: { type: "segment_start", ts_ms: 1, segment: "SEG-01" },
   segment_end: { type: "segment_end", ts_ms: 2, segment: "SEG-02A", ses: 0.4 },
+  case_open: {
+    type: "case_open",
+    ts_ms: 2,
+    case: {
+      id: "DEMO-C01",
+      title: "A Fictional Affair",
+      fictional: true,
+      hexes: [
+        { id: "HEX-01", q: 0, r: 0, kind: "entity", label: "Glimmerquay", fog: true },
+        { id: "HEX-02", q: 1, r: -1, kind: "wallet", label: "0xmoon", grade: "REP", fog: false, sources: ["https://example.test/a"] },
+      ],
+      links: [["HEX-01", "HEX-02"]],
+    },
+  },
   chat: {
     type: "chat",
     ts_ms: 3,
@@ -170,6 +184,40 @@ describe("parseTranscript", () => {
     );
     expect(r.events).toHaveLength(2);
     expect(r.warnings[0]!.message).toMatch(/backwards/);
+  });
+});
+
+describe("case_open", () => {
+  it("carries the case's coordinates, labels, title and fictional flag", () => {
+    const ev = parseEvent(SAMPLES.case_open);
+    if (ev.type !== "case_open") throw new Error(ev.type);
+    expect(ev.case.title).toBe("A Fictional Affair");
+    expect(ev.case.fictional).toBe(true);
+    expect(ev.case.hexes.map((h) => [h.id, h.q, h.r, h.label])).toEqual([
+      ["HEX-01", 0, 0, "Glimmerquay"],
+      ["HEX-02", 1, -1, "0xmoon"],
+    ]);
+  });
+
+  it("reports a malformed case with the case_open field path", () => {
+    expect(() => parseEvent({ type: "case_open", ts_ms: 1 })).toThrow(/case_open\.case: expected object/);
+    expect(() =>
+      parseEvent({ type: "case_open", ts_ms: 1, case: { id: "C", title: "T", hexes: [] } }),
+    ).toThrow(/case_open\.case\.fictional/);
+    expect(() =>
+      parseEvent({
+        type: "case_open",
+        ts_ms: 1,
+        case: { id: "C", title: "T", fictional: true, hexes: [{ id: "HEX-01", q: 0.5, r: 0, kind: "entity", label: "x", fog: true }] },
+      }),
+    ).toThrow(/case_open\.case\.hexes\[0\]\.q/);
+  });
+
+  it("parses inside a transcript right after segment_start", () => {
+    const text = [SAMPLES.segment_start, SAMPLES.case_open].map((e) => JSON.stringify(e)).join("\n");
+    const r = parseTranscript(text);
+    expect(r.errors).toEqual([]);
+    expect(r.events.map((e) => e.type)).toEqual(["segment_start", "case_open"]);
   });
 });
 

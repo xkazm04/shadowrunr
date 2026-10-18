@@ -74,6 +74,7 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         StreamEvent::StreamStart { ts_ms, .. }
         | StreamEvent::SegmentStart { ts_ms, .. }
         | StreamEvent::SegmentEnd { ts_ms, .. }
+        | StreamEvent::CaseOpen { ts_ms, .. }
         | StreamEvent::Chat { ts_ms, .. }
         | StreamEvent::Picked { ts_ms, .. }
         | StreamEvent::Say { ts_ms, .. }
@@ -106,6 +107,13 @@ pub fn body(ev: &StreamEvent) -> String {
         ),
         StreamEvent::SegmentStart { segment, .. } => format!("segment_start {}", wire(segment)),
         StreamEvent::SegmentEnd { segment, .. } => format!("segment_end {}", wire(segment)),
+        StreamEvent::CaseOpen { case, .. } => format!(
+            "case_open {} \"{}\" hexes={} fictional={}",
+            case.id,
+            case.title,
+            case.hexes.len(),
+            case.fictional
+        ),
         StreamEvent::Chat { msg, .. } => format!(
             "chat {} ({}{}) [{}]: {}",
             msg.viewer.name,
@@ -316,5 +324,38 @@ mod tests {
         let back = read(&p).unwrap();
         assert_eq!(back.len(), 2);
         assert!(render_line(2, &back[1]).starts_with("L2 [00:05] say malakor: hello minion"));
+    }
+
+    #[test]
+    fn case_open_passes_through_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("t.jsonl");
+        let case = shadowrunr_segments::demo_case();
+        let mut w = TranscriptWriter::create(&p).unwrap();
+        w.push(StreamEvent::CaseOpen {
+            ts_ms: 0,
+            case: case.clone(),
+        })
+        .unwrap();
+        w.flush().unwrap();
+        let back = read(&p).unwrap();
+        let [StreamEvent::CaseOpen {
+            ts_ms: 0,
+            case: got,
+        }] = back.as_slice()
+        else {
+            panic!("expected one case_open, got {back:?}");
+        };
+        assert_eq!(
+            serde_json::to_value(got).unwrap(),
+            serde_json::to_value(&case).unwrap()
+        );
+        assert!(got.fictional);
+        let line = render_line(1, &back[0]);
+        assert!(
+            line.starts_with(&format!("L1 [00:00] case_open {}", case.id)),
+            "{line}"
+        );
+        assert!(line.contains("fictional=true"), "{line}");
     }
 }

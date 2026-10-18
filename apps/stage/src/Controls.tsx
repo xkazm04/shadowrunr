@@ -11,6 +11,7 @@ function fmt(ms: number): string {
 }
 
 const CASE_LABEL: Record<CaseSource, string> = {
+  transcript: "case from the transcript (case_open)",
   param: "case from ?case=",
   sidecar: "case from sidecar .case.json",
   dropped: "case from dropped file",

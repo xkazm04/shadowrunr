@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 use shadowrunr_brain::{load_character, Brain, BrainConfig, BrainTuning};
 use shadowrunr_segments::{SegmentConfig, SegmentRuntime};
 use shadowrunr_types::{
-    ChatMsg, EndReason, Engine, ModelTier, Op, Role, SegmentContext, SimRunSpec, Speaker,
-    StreamEvent, TsMs,
+    ChatMsg, EndReason, Engine, ModelTier, Op, Role, SegmentContext, SegmentId, SimRunSpec,
+    Speaker, StreamEvent, TsMs,
 };
 
 use crate::calibration::{self, Calibration, CalibrationOrigin};
@@ -46,6 +46,14 @@ pub trait Mind: Send {
 
 /// The segment runtime, as the loop sees it.
 pub trait Stage: Send {
+    /// The opening events of `segment`: its `segment_start`, plus whatever the stage emits
+    /// with it (the real runtime follows a SEG-02A start with `case_open`).
+    fn start(&mut self, now_ms: TsMs, segment: SegmentId) -> Vec<StreamEvent> {
+        vec![StreamEvent::SegmentStart {
+            ts_ms: now_ms,
+            segment,
+        }]
+    }
     fn context(&self, ccv: u32, elapsed_s: u32) -> SegmentContext;
     fn ingest_chat(&mut self, now_ms: TsMs, msgs: &[ChatMsg]) -> Vec<StreamEvent>;
     fn apply_ops(&mut self, now_ms: TsMs, ops: &[Op]) -> Vec<StreamEvent>;
@@ -73,6 +81,9 @@ impl Mind for Brain {
 }
 
 impl Stage for SegmentRuntime {
+    fn start(&mut self, now_ms: TsMs, _segment: SegmentId) -> Vec<StreamEvent> {
+        SegmentRuntime::start(self, now_ms)
+    }
     fn context(&self, ccv: u32, elapsed_s: u32) -> SegmentContext {
         SegmentRuntime::context(self, ccv, elapsed_s)
     }
@@ -364,10 +375,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         core_tier: spec.core_tier,
         audience_size: spec.audience_size,
     })?;
-    w.push(StreamEvent::SegmentStart {
-        ts_ms: 0,
-        segment: spec.segment,
-    })?;
+    w.push_all(stage.start(0, spec.segment))?;
 
     let chatter_route = shadowrunr_engine::route(Role::Chatter);
     let total_ticks = spec.duration_s / tick_s;
@@ -1034,6 +1042,37 @@ pub(crate) mod tests {
         execute(prep, FakeMind { polls: 0 }, stage, opts)
             .await
             .unwrap()
+    }
+
+    #[test]
+    fn runtime_stage_opens_the_seg02a_case_after_segment_start() {
+        let mut rt = SegmentRuntime::with_config(
+            SegmentId::Seg02aHexmap,
+            SegmentConfig {
+                start_ms: Some(0),
+                ..SegmentConfig::default()
+            },
+        )
+        .unwrap();
+        let evs = Stage::start(&mut rt, 0, SegmentId::Seg02aHexmap);
+        assert!(matches!(
+            evs.as_slice(),
+            [
+                StreamEvent::SegmentStart {
+                    segment: SegmentId::Seg02aHexmap,
+                    ..
+                },
+                StreamEvent::CaseOpen { case, .. }
+            ] if case.fictional
+        ));
+        let mut fake = FakeStage {
+            segment: SegmentId::Seg01ImprovisedRoom,
+            poll: None,
+        };
+        assert!(matches!(
+            Stage::start(&mut fake, 0, SegmentId::Seg01ImprovisedRoom).as_slice(),
+            [StreamEvent::SegmentStart { .. }]
+        ));
     }
 
     #[tokio::test]
