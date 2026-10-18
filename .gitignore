@@ -15,3 +15,4 @@ dist/
 /shadowrunr.toml
 /ledger.jsonl
 /.ai/*.local.*
+/node_modules/
