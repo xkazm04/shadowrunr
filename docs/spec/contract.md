@@ -466,3 +466,54 @@ Counted           { included, omitted }
   through `reconcile.incidents`, which can filter by `rule`. A small report keeps every
   incident and omits both fields. The stored file is unchanged.
 - **Health** is computed only for the rows of the returned page.
+
+## Appendix (WP13): engine failures, quota pacing, tournament exit codes
+
+No wire type changes. `run.json` (sim-internal, `shadowrunr_sim::RunStatus`) gains two
+statuses and one field:
+
+```
+RunStatus   judged | simulated | judge_void | judge_pending | engine_failed
+RunRecord   + engine_failure?: string   // the rule that matched, e.g. sign_off "fleet_lost: ..."
+```
+
+- **`engine_failed`**: the engine cut the stream. First match wins: the transcript ends
+  `stream_end { reason: "fleet_lost" }` (written by the runner from WP13 on); or it holds an
+  `op: sign_off` whose reason starts `fleet_lost`; or the run's `ledger.jsonl` shows the core
+  thread's last 3 calls, or more than 25% of them, failing with an engine error
+  (`rate_limited`, `unavailable`, `timeout`, `io`); or the run failed before `run.json` with
+  such a ledger. Never judged. Resume re-runs it and moves the old directory to
+  `<run_id>.engine-failed`.
+- **`judge_pending`**: the transcript is sound, and the judge call failed with an engine error
+  or was deferred because no account could serve it (`judge_error` starts
+  `judge engine call failed: ` or `judge deferred: `). Resume re-judges it only.
+- **`judge_void`** is content only: the judge replied but abstained, its reply did not parse,
+  or it refused. Resume keeps it.
+- Runs written before WP13 as `judge_void` are reclassified by the same rule on resume.
+- `results.json` (`TournamentResults`) excludes `engine_failed` and `judge_pending` runs from
+  `runs`, `judged`, `void`, `failed` and every cell. Their ledger spend still counts in
+  `usage_total` / `usage_by_role`; `report.md` states how many were left out. Reconcile must
+  exclude them too: `shadowrunr_sim::classify(dir).is_result()` is the shared test.
+
+**Quota pacing.** Before every run and every judge call the tournament asks the fleet whether
+any Claude Code account is not cooling. When none is, or a run comes back `engine_failed` /
+`judge_pending`, it admits no new run, lets in-flight runs finish, then pauses until the
+earliest `cooling_until_ms` plus 60 s plus up to 30 s of jitter, logging one line:
+
+```
+paused: quota (<account labels>) until <YYYY-MM-DD HH:MM:SS UTC> - <n> runs left
+```
+
+With no reset time known it waits the fleet's default cooldown. After every pause it probes
+with the cheapest role (`chat_picker`, Haiku, low effort), never with a run. A failed run is
+retried at most twice in-session, then left for the next resume. The total pause is capped by
+`--max-pause <seconds>` or `[sim] max_quota_pause_s` (default 28800 = 8 h); when the next
+pause would pass it, the tournament stops with its summary.
+
+**`shadowrunr sim tournament`** exit codes: `0` every planned run is judged or void for a
+content reason; `1` error; `4` stopped at the quota pause cap; `5` finished with
+`engine_failed` or `judge_pending` runs left. The summary JSON gains `engine_failed`,
+`judge_pending`, `paused_ms`, `pauses`, `stopped?` (`"pause_cap"`) and `exit_code`.
+`--plan-only` prints each run's `action` (`skip` | `rejudge` | `run`) and `reason` (`new`,
+`complete`, `void_kept`, `stale`, `partial`, `engine_failed`, `judge_pending`) with the counts,
+and executes, spends and writes nothing.

@@ -11,7 +11,8 @@ use crate::calibration::CalibrationOrigin;
 use crate::instrument::Instrument;
 use crate::judge::{FactCheck, JudgeAudit};
 use crate::ledger::{self, LedgerRow};
-use crate::runner::{RunRecord, RunStatus};
+use crate::outcome::{self, RunClass};
+use crate::runner::RunRecord;
 use crate::stats::{percentile, rate_bound, Bound};
 use crate::{read_json, wire, write_json, SimError};
 
@@ -110,6 +111,7 @@ impl CellResultExt for CellResult {
 }
 
 struct RunFiles {
+    class: RunClass,
     spec: SimRunSpec,
     hash: String,
     record: Option<RunRecord>,
@@ -138,7 +140,15 @@ fn load_run(dir: &Path) -> Result<Option<RunFiles>, SimError> {
     let verdict = read_json(&dir.join("verdict.json")).ok();
     let audit = read_json(&dir.join("judge.json")).ok();
     let failed = dir.join("error.json").is_file() && record.is_none();
+    let class = if verdict.is_some() {
+        RunClass::Judged
+    } else if let Some(rec) = &record {
+        outcome::classify_record(dir, rec)
+    } else {
+        outcome::classify(dir)
+    };
     Ok(Some(RunFiles {
+        class,
         spec,
         hash,
         record,
@@ -153,8 +163,24 @@ fn role_name(r: Role) -> String {
     wire(&r)
 }
 
+/// Runs left out of the results because the engine, not the character, decided them (WP13).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Excluded {
+    /// The engine cut the stream: to be re-run.
+    pub engine_failed: u32,
+    /// Sound transcript, judge call failed on the engine: to be re-judged.
+    pub judge_pending: u32,
+}
+
 /// Aggregate a tournament directory and write `results.json`, `heatmap.md` and `report.md`.
+/// `engine_failed` and `judge_pending` runs are not results: they are left out of every
+/// count and cell (their engine spend still counts in `usage_total` / `usage_by_role`).
 pub fn summarize(out_dir: &Path) -> Result<Results, SimError> {
+    summarize_full(out_dir).map(|(r, _)| r)
+}
+
+/// [`summarize`], plus the runs it left out.
+pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
     let mut dirs: Vec<_> = std::fs::read_dir(out_dir)
         .map_err(|e| SimError::Io(format!("{}: {e}", out_dir.display())))?
         .filter_map(Result::ok)
@@ -177,8 +203,23 @@ pub fn summarize(out_dir: &Path) -> Result<Results, SimError> {
     let mut calibration: Vec<CalibrationOrigin> = Vec::new();
     let mut assumptions: BTreeSet<String> = BTreeSet::new();
     let (mut judged, mut void, mut failed) = (0, 0, 0);
+    let mut excluded = Excluded::default();
+    let mut counted = 0u32;
 
     for r in &runs {
+        if !r.class.is_result() && r.class != RunClass::Incomplete {
+            match r.class {
+                RunClass::EngineFailed => excluded.engine_failed += 1,
+                _ => excluded.judge_pending += 1,
+            }
+            // The spend was real: it counts in the tournament totals, never in a cell.
+            for row in &r.ledger {
+                usage_add(&mut usage_total, row);
+                usage_add(usage_by_role.entry(role_name(row.role)).or_default(), row);
+            }
+            continue;
+        }
+        counted += 1;
         let key = CellKey {
             instrument_hash: r.hash.clone(),
             tone: r.spec.tone_variant.clone(),
@@ -210,7 +251,7 @@ pub fn summarize(out_dir: &Path) -> Result<Results, SimError> {
                 calibration.push(rec.calibration.clone());
             }
             assumptions.extend(rec.assumptions.iter().cloned());
-            if rec.status == RunStatus::JudgeVoid {
+            if r.class == RunClass::JudgeVoid {
                 cell.void += 1;
                 void += 1;
             }
@@ -300,7 +341,7 @@ pub fn summarize(out_dir: &Path) -> Result<Results, SimError> {
         instrument_hashes: hashes,
         calibration,
         assumptions: assumptions.into_iter().collect(),
-        runs: runs.len() as u32,
+        runs: counted,
         judged,
         void,
         failed,
@@ -312,9 +353,24 @@ pub fn summarize(out_dir: &Path) -> Result<Results, SimError> {
     write_json(&out_dir.join("results.json"), &results)?;
     std::fs::write(out_dir.join("heatmap.md"), heatmap_md(&results))
         .map_err(|e| SimError::Io(e.to_string()))?;
-    std::fs::write(out_dir.join("report.md"), report_md(&results))
-        .map_err(|e| SimError::Io(e.to_string()))?;
-    Ok(results)
+    let mut report = report_md(&results);
+    if excluded != Excluded::default() {
+        let note = format!(
+            "Not results (left out of every figure): {} engine_failed (re-run on resume) · {} judge_pending (re-judge on resume).\n\n",
+            excluded.engine_failed, excluded.judge_pending
+        );
+        // After the title and the "Runs:" line.
+        let after_runs = report.find("\n\n").and_then(|a| {
+            let at = a + 2;
+            report[at..].find("\n\n").map(|i| at + i + 2)
+        });
+        match after_runs {
+            Some(i) => report.insert_str(i, &note),
+            None => report.push_str(&note),
+        }
+    }
+    std::fs::write(out_dir.join("report.md"), report).map_err(|e| SimError::Io(e.to_string()))?;
+    Ok((results, excluded))
 }
 
 fn pct(x: Option<f64>) -> String {

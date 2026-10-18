@@ -6,7 +6,11 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
 use shadowrunr_reconcile::{ReconcileConfig, Reconciler, Source};
-use shadowrunr_sim::{run_one_with, run_tournament, summarize, wire, TournamentOptions};
+use shadowrunr_sim::pacing::{GateHandle, DEFAULT_MAX_PAUSE_MS};
+use shadowrunr_sim::{
+    plan_matrix, run_one_with, run_tournament, summarize, wire, FleetQuota, PlanReason, RunAction,
+    TournamentOptions,
+};
 use shadowrunr_types::{HealthState, ModelTier, SegmentId, SimRunSpec};
 
 use crate::config::Config;
@@ -126,7 +130,8 @@ pub enum PolicyCommand {
 pub enum SimCommand {
     /// One simulated stream.
     Run(SimRunArgs),
-    /// Run (or resume) a tournament matrix.
+    /// Run (or resume) a tournament matrix. Pauses on quota instead of burning runs.
+    #[command(after_help = TOURNAMENT_EXIT_CODES)]
     Tournament(TournamentArgs),
     /// Write results.json, heatmap.md and report.md for a tournament directory.
     Summarize {
@@ -136,6 +141,13 @@ pub enum SimCommand {
         json: bool,
     },
 }
+
+/// `shadowrunr sim tournament` exit codes (also in docs/spec/contract.md, WP13 appendix).
+pub const TOURNAMENT_EXIT_CODES: &str = "Exit codes:
+  0  every planned run is judged, or void for a content reason
+  1  error (bad matrix, I/O)
+  4  stopped: the total quota pause cap (--max-pause / [sim] max_quota_pause_s) was exceeded
+  5  finished with engine_failed or judge_pending runs left (a resume re-runs / re-judges them)";
 
 fn parse_tier(s: &str) -> Result<ModelTier, String> {
     serde_json::from_value(serde_json::Value::String(s.to_ascii_lowercase()))
@@ -211,6 +223,14 @@ pub struct TournamentArgs {
     /// Use the deterministic, keyless scripted engine.
     #[arg(long)]
     pub scripted: bool,
+    /// Print the action for every run (skip, rejudge, run) with its reason, and the counts;
+    /// execute nothing, spend no quota, write nothing.
+    #[arg(long)]
+    pub plan_only: bool,
+    /// Total quota pause cap in seconds (default: [sim] max_quota_pause_s, else 28800 = 8 h).
+    /// Past it the tournament stops with its summary and exit code 4.
+    #[arg(long, value_name = "SECONDS")]
+    pub max_pause: Option<u64>,
 }
 
 fn cwd() -> PathBuf {
@@ -492,6 +512,44 @@ struct TournamentReport {
     judged: u32,
     void: u32,
     failed_runs: u32,
+    /// Runs left engine_failed / judge_pending: not results, never counted as void.
+    engine_failed: usize,
+    judge_pending: usize,
+    paused_ms: u64,
+    pauses: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stopped: Option<shadowrunr_sim::StopReason>,
+    exit_code: u8,
+}
+
+#[derive(Serialize)]
+struct PlannedRow {
+    run_id: String,
+    action: RunAction,
+    reason: PlanReason,
+}
+
+#[derive(Serialize)]
+struct PlanReport {
+    tournament_id: String,
+    dir: String,
+    planned: usize,
+    skip: usize,
+    rejudge: usize,
+    run: usize,
+    by_reason: std::collections::BTreeMap<String, usize>,
+    runs: Vec<PlannedRow>,
+}
+
+/// `[sim] max_quota_pause_s` from the loaded config file, read here so the daemon's config
+/// type need not change (unknown `[sim]` keys are ignored there).
+fn config_max_pause_s(cfg: &Config) -> Option<u64> {
+    let text = std::fs::read_to_string(cfg.source.as_ref()?).ok()?;
+    let v: toml::Value = toml::from_str(&text).ok()?;
+    v.get("sim")?
+        .get("max_quota_pause_s")?
+        .as_integer()
+        .and_then(|n| u64::try_from(n).ok())
 }
 
 async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, String> {
@@ -510,15 +568,59 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
         .as_deref()
         .map(from_cwd)
         .unwrap_or_else(|| cfg.paths.sim_runs());
+    let max_pause_ms = a
+        .max_pause
+        .or_else(|| config_max_pause_s(cfg))
+        .map(|s| s.saturating_mul(1000))
+        .unwrap_or(DEFAULT_MAX_PAUSE_MS);
+    if a.plan_only {
+        // Reads only: no engine is built, nothing runs, nothing is written.
+        let opts = TournamentOptions {
+            sim: cfg.sim_options(!a.no_judge),
+            ..TournamentOptions::default()
+        };
+        let plan = plan_matrix(&matrix, &out, &opts).map_err(|e| e.to_string())?;
+        let mut by_reason = std::collections::BTreeMap::new();
+        for r in &plan.runs {
+            *by_reason.entry(wire(&r.reason)).or_insert(0) += 1;
+        }
+        print_json(&PlanReport {
+            tournament_id: plan.tournament_id.clone(),
+            dir: plan.dir.display().to_string(),
+            planned: plan.runs.len(),
+            skip: plan.count(RunAction::Skip),
+            rejudge: plan.count(RunAction::Rejudge),
+            run: plan.count(RunAction::Run),
+            by_reason,
+            runs: plan
+                .runs
+                .iter()
+                .map(|r| PlannedRow {
+                    run_id: r.spec.run_id.clone(),
+                    action: r.action,
+                    reason: r.reason,
+                })
+                .collect(),
+        });
+        return Ok(ExitCode::SUCCESS);
+    }
     let engine = EngineHandle::build(cfg, a.scripted);
+    let quota = engine
+        .fleet
+        .as_ref()
+        .map(|f| GateHandle(std::sync::Arc::new(FleetQuota::new(f.clone()))));
     let opts = TournamentOptions {
         sim: cfg.sim_options(!a.no_judge),
         concurrency: a.concurrency,
         max_runs: a.max_runs,
+        quota,
+        clock: None,
+        max_pause_ms: Some(max_pause_ms),
     };
     let s = run_tournament(&matrix, &out, engine.engine, &opts)
         .await
         .map_err(|e| e.to_string())?;
+    let exit_code = s.exit_code();
     let report = TournamentReport {
         tournament_id: s.tournament_id,
         dir: s.dir.display().to_string(),
@@ -534,6 +636,12 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
         judged: s.results.judged,
         void: s.results.void,
         failed_runs: s.results.failed,
+        engine_failed: s.engine_failed,
+        judge_pending: s.judge_pending,
+        paused_ms: s.paused_ms,
+        pauses: s.pauses,
+        stopped: s.stop,
+        exit_code,
     };
     crate::integrations::activity::notify_once(
         cfg,
@@ -545,7 +653,7 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
     )
     .await;
     print_json(&report);
-    Ok(ExitCode::SUCCESS)
+    Ok(ExitCode::from(exit_code))
 }
 
 fn sim_summarize(dir: &Path, json: bool) -> Result<ExitCode, String> {

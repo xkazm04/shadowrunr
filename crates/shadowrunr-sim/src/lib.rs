@@ -3,7 +3,8 @@
 //! - [`run_one`] / [`run_one_with`]: one simulated stream on a compressed clock, against a
 //!   calibrated chat room, written to `<out>/<run_id>/` and optionally judged.
 //! - [`run_tournament`]: a matrix of runs (`sim/matrices/*.toml`), resumable, with a
-//!   concurrency limit and per-run instrument hashes.
+//!   concurrency limit and per-run instrument hashes. It pauses on quota instead of burning
+//!   runs ([`pacing`]), and an engine failure is never a result ([`outcome`]).
 //! - [`summarize`]: `results.json`, `heatmap.md` and `report.md` from a tournament directory.
 //!
 //! Method (from the owner's `/uat` Phase LC): a situation bank with required responses and
@@ -18,6 +19,8 @@ pub mod instrument;
 pub mod judge;
 pub mod ledger;
 pub mod matrix;
+pub mod outcome;
+pub mod pacing;
 pub mod population;
 pub mod rng;
 pub mod runner;
@@ -33,9 +36,14 @@ use std::sync::Arc;
 use serde::Serialize;
 use shadowrunr_types::{Command, Engine, JudgeVerdict, ModelTier, Rank, SimRunSpec};
 
+pub use outcome::{classify, RunClass};
+pub use pacing::{FleetQuota, PaceClock, QuotaBlock, QuotaGate};
 pub use runner::{judge_existing, run_one_with, Mind, RunRecord, RunStatus, Stage};
 pub use summary::{summarize, Results};
-pub use tournament::{plan, run_tournament, TournamentOptions, TournamentPlan, TournamentSummary};
+pub use tournament::{
+    exit_code, plan, plan_matrix, run_tournament, PlanReason, RunAction, StopReason,
+    TournamentOptions, TournamentPlan, TournamentSummary,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SimError {
@@ -101,6 +109,9 @@ pub struct SimOptions {
     /// Platforms whose term rules the simulated brain applies (empty = strictest union).
     pub platforms: Vec<String>,
     pub hooks: Hooks,
+    /// Asked before every judge call: when no account can serve, the judge is deferred and
+    /// the run is `judge_pending` instead of burning the call (WP13).
+    pub quota: Option<pacing::GateHandle>,
 }
 
 impl Default for SimOptions {
@@ -119,6 +130,7 @@ impl Default for SimOptions {
             keep_memory: false,
             platforms: vec!["twitch".into()],
             hooks: Hooks::default(),
+            quota: None,
         }
     }
 }

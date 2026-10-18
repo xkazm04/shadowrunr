@@ -424,6 +424,23 @@ impl Fleet {
         self.inner.account_status()
     }
 
+    /// Whether some Claude Code account is not cooling (read-only). A fleet with no accounts
+    /// serves from its fallbacks only, and counts as able to serve.
+    pub fn can_serve(&self) -> bool {
+        let st = self.inner.account_status();
+        st.is_empty() || st.iter().any(|a| a.cooling_until_ms.is_none())
+    }
+
+    /// The earliest instant (epoch ms) a cooling account comes back; `None` when no account
+    /// is cooling (read-only).
+    pub fn earliest_reset_ms(&self) -> Option<i64> {
+        self.inner
+            .account_status()
+            .iter()
+            .filter_map(|a| a.cooling_until_ms)
+            .min()
+    }
+
     /// The engine configuration the fleet was built from (read-only).
     pub fn config(&self) -> &EngineConfig {
         &self.inner.cfg
@@ -723,6 +740,8 @@ mod tests {
         assert_eq!(st[0].cooling_until_ms, Some(1_791_999_000_000));
         assert_eq!(st[1].cooling_until_ms, None);
         assert_eq!(s.fleet.fleet_state().mode, FleetMode::Primary);
+        assert!(s.fleet.can_serve());
+        assert_eq!(s.fleet.earliest_reset_ms(), Some(1_791_999_000_000));
         // Next call skips A entirely.
         let again = s.fleet.complete(core()).await.unwrap();
         assert_eq!(again.account.as_deref(), Some("B"));
@@ -800,6 +819,8 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(s.fleet.fleet_state().mode, FleetMode::Down);
+        assert!(!s.fleet.can_serve());
+        assert!(s.fleet.earliest_reset_ms().is_some());
         assert!(matches!(
             s.fleet.open_session(core()).await,
             Err(EngineError::Unavailable { .. })

@@ -27,6 +27,8 @@ use crate::chat::{ChatRoom, ChatStats, RoomConfig};
 use crate::instrument::{self, Instrument, InstrumentInputs};
 use crate::judge::{self, JudgeInputs, JudgeOutcome, Rubric};
 use crate::ledger::LedgerEngine;
+use crate::outcome;
+use crate::pacing::GateHandle;
 use crate::population;
 use crate::situations::{Injection, SituationBank};
 use crate::transcript::{self, TranscriptWriter};
@@ -116,8 +118,15 @@ pub enum RunStatus {
     Simulated,
     /// Simulated and judged: `verdict.json` exists.
     Judged,
-    /// Simulated, but the judge call failed or its reply did not parse: void, re-judge later.
+    /// Simulated, but the judge gave no usable verdict for a content reason (it abstained,
+    /// its reply did not parse, or it refused). Kept void; not re-judged.
     JudgeVoid,
+    /// Sound transcript, but the judge call failed with an engine error or was deferred for
+    /// quota: re-judge (never re-run). Not a result.
+    JudgePending,
+    /// The engine cut the stream (fleet loss, or engine errors that cut the core thread):
+    /// re-run. Not a result. See `outcome` for the rule.
+    EngineFailed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,6 +170,9 @@ pub struct RunRecord {
     pub judge_tier: Option<ModelTier>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub judge_error: Option<String>,
+    /// Why the run is `engine_failed` (the `outcome` rule that matched).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_failure: Option<String>,
 }
 
 /// `error.json`: the run failed before a verdict. Void, not a fail.
@@ -460,6 +472,13 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         t += tick_s;
     }
     let end_ms = i64::from(last_t) * 1000;
+    // An engine failure is not a result: the brain's fleet-loss sign-off, or engine errors
+    // that cut the core thread, end the stream as `fleet_lost` (the structured signal).
+    let engine_failure = outcome::fleet_lost_in(w.events()).or_else(|| {
+        outcome::stream_cut(
+            &crate::ledger::read(&prep.run_dir.join("ledger.jsonl")).unwrap_or_default(),
+        )
+    });
     w.push(StreamEvent::SegmentEnd {
         ts_ms: end_ms,
         segment: room.segment(),
@@ -467,7 +486,11 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
     })?;
     w.push(StreamEvent::StreamEnd {
         ts_ms: end_ms,
-        reason: EndReason::SimComplete,
+        reason: if engine_failure.is_some() {
+            EndReason::FleetLost
+        } else {
+            EndReason::SimComplete
+        },
     })?;
     w.flush()?;
     if let Err(e) = mind.end_stream(end_ms).await {
@@ -477,7 +500,11 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
     let events = w.events().to_vec();
     let mut record = RunRecord {
         run_id: spec.run_id.clone(),
-        status: RunStatus::Simulated,
+        status: if engine_failure.is_some() {
+            RunStatus::EngineFailed
+        } else {
+            RunStatus::Simulated
+        },
         instrument_hash: prep.instrument.instrument_hash.clone(),
         calibration: prep.cal_origin.clone(),
         assumptions: prep.cal.assumptions(),
@@ -504,10 +531,13 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         max_say_gap_s: max_say_gap_s(&events, end_ms),
         judge_tier: prep.judge_tier,
         judge_error: None,
+        engine_failure: engine_failure.clone(),
     };
     write_json(&prep.run_dir.join("run.json"), &record)?;
 
     let verdict = match (prep.judge_tier, &prep.rubric) {
+        // A degenerate transcript is never judged.
+        _ if engine_failure.is_some() => None,
         (Some(tier), Some(rubric)) => {
             judge_into(
                 &prep.run_dir,
@@ -518,6 +548,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                 tier,
                 &mut record,
                 prep.engine.as_ref(),
+                opts.quota.as_ref(),
             )
             .await?
         }
@@ -542,7 +573,23 @@ async fn judge_into(
     tier: ModelTier,
     record: &mut RunRecord,
     engine: &dyn Engine,
+    quota: Option<&GateHandle>,
 ) -> Result<Option<shadowrunr_types::JudgeVerdict>, SimError> {
+    record.judge_tier = Some(tier);
+    // Before the judge call, ask the engine whether any account can serve it.
+    if let Some(block) = quota.and_then(|q| q.0.blocked()) {
+        record.status = RunStatus::JudgePending;
+        record.judge_error = Some(format!(
+            "{}quota ({}){}",
+            outcome::JUDGE_DEFERRED_PREFIX,
+            block.accounts.join(", "),
+            block
+                .until_ms
+                .map(|u| format!(" until {}", crate::pacing::utc(u)))
+                .unwrap_or_default()
+        ));
+        return Ok(None);
+    }
     let featured: HashSet<String> = record.featured.iter().cloned().collect();
     let inp = JudgeInputs {
         run_id: &spec.run_id,
@@ -554,7 +601,6 @@ async fn judge_into(
         judge_tier: tier,
         core_tier: spec.core_tier,
     };
-    record.judge_tier = Some(tier);
     match judge::judge_run(&inp, engine).await {
         Ok(JudgeOutcome::Verdict(b)) => {
             let (verdict, audit) = *b;
@@ -571,8 +617,14 @@ async fn judge_into(
             Ok(None)
         }
         Err(SimError::Engine(e)) => {
-            record.status = RunStatus::JudgeVoid;
-            record.judge_error = Some(format!("judge engine call failed: {e}"));
+            // Rate limit, unavailable, timeout, io: the engine's fault, re-judge later.
+            // Refused / parse: a content outcome, void.
+            record.status = if outcome::is_engine_error(&e) {
+                RunStatus::JudgePending
+            } else {
+                RunStatus::JudgeVoid
+            };
+            record.judge_error = Some(format!("{}{e}", outcome::JUDGE_ENGINE_PREFIX));
             Ok(None)
         }
         Err(e) => Err(e),
@@ -690,6 +742,7 @@ pub async fn judge_existing(
         tier,
         &mut record,
         engine.as_ref(),
+        opts.quota.as_ref(),
     )
     .await?;
     write_json(&run_dir.join("run.json"), &record)?;
@@ -1300,5 +1353,199 @@ pub(crate) mod tests {
         );
         assert!(out.join("smoke/run.json").is_file());
         assert!(out.join("smoke/ledger.jsonl").is_file());
+    }
+
+    // ---- WP13: an engine failure is not a result ---------------------------------------
+
+    /// Speaks like [`FakeMind`] until `at_ms`, then signs off on fleet loss like the brain.
+    struct FleetLostMind {
+        at_ms: TsMs,
+        inner: FakeMind,
+    }
+
+    #[async_trait]
+    impl Mind for FleetLostMind {
+        async fn tick(
+            &mut self,
+            now_ms: TsMs,
+            inbox: Vec<ChatMsg>,
+            ctx: &SegmentContext,
+        ) -> Result<Vec<StreamEvent>, SimError> {
+            if now_ms >= self.at_ms {
+                return Ok(vec![StreamEvent::Op {
+                    ts_ms: now_ms,
+                    op: Op::SignOff {
+                        reason: "fleet_lost: engine degraded or down for 300s".into(),
+                    },
+                }]);
+            }
+            self.inner.tick(now_ms, inbox, ctx).await
+        }
+        async fn end_stream(&mut self, _now_ms: TsMs) -> Result<(), SimError> {
+            Ok(())
+        }
+    }
+
+    /// [`FakeEngine`] whose judge calls fail with `err`.
+    struct JudgeFails {
+        inner: FakeEngine,
+        err: fn() -> EngineError,
+    }
+
+    #[async_trait]
+    impl Engine for JudgeFails {
+        async fn complete(&self, req: EngineRequest) -> Result<EngineReply, EngineError> {
+            if req.role == Role::Judge {
+                self.inner.calls.lock().unwrap().push((req.role, req.tier));
+                return Err((self.err)());
+            }
+            self.inner.complete(req).await
+        }
+        async fn open_session(
+            &self,
+            t: EngineRequest,
+        ) -> Result<Box<dyn WarmSession>, EngineError> {
+            self.inner.open_session(t).await
+        }
+        async fn health(&self) -> Vec<HealthReport> {
+            Vec::new()
+        }
+    }
+
+    fn judge_calls(e: &FakeEngine) -> usize {
+        e.calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(r, _)| *r == Role::Judge)
+            .count()
+    }
+
+    #[tokio::test]
+    async fn fleet_lost_sign_off_is_engine_failed_and_never_judged() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = test_opts(&tmp.path().join("sim"));
+        let out = tmp.path().join("out");
+        let fake = Arc::new(FakeEngine::new(""));
+        let s = spec("fl", ModelTier::Haiku, 3, 300);
+        let prep = prepare(&s, &out, fake.clone(), &opts).unwrap();
+        let mind = FleetLostMind {
+            at_ms: 120_000,
+            inner: FakeMind { polls: 0 },
+        };
+        let stage = FakeStage {
+            segment: s.segment,
+            poll: None,
+        };
+        let res = execute(prep, mind, stage, &opts).await.unwrap();
+        assert!(res.verdict.is_none());
+        let record: RunRecord = read_json(&out.join("fl/run.json")).unwrap();
+        assert_eq!(record.status, RunStatus::EngineFailed);
+        assert!(record.engine_failure.unwrap().starts_with("sign_off"));
+        // The structured signal: the stream ends as fleet_lost.
+        let events = transcript::read(&res.transcript).unwrap();
+        assert!(matches!(
+            events.last(),
+            Some(StreamEvent::StreamEnd {
+                reason: EndReason::FleetLost,
+                ..
+            })
+        ));
+        assert_eq!(
+            judge_calls(&fake),
+            0,
+            "a degenerate transcript is never judged"
+        );
+        assert_eq!(
+            crate::outcome::classify(&out.join("fl")),
+            crate::outcome::RunClass::EngineFailed
+        );
+    }
+
+    #[tokio::test]
+    async fn judge_engine_error_is_pending_and_a_refusal_is_void() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = test_opts(&tmp.path().join("sim"));
+        let out = tmp.path().join("out");
+        type Case = (&'static str, fn() -> EngineError, RunStatus);
+        let cases: [Case; 4] = [
+            (
+                "rl",
+                || EngineError::RateLimited {
+                    account: "isolated".into(),
+                    reset_at_ms: Some(1),
+                },
+                RunStatus::JudgePending,
+            ),
+            (
+                "un",
+                || EngineError::Unavailable {
+                    reason: "all claude cli accounts cooling".into(),
+                },
+                RunStatus::JudgePending,
+            ),
+            (
+                "to",
+                || EngineError::Timeout { after_ms: 600_000 },
+                RunStatus::JudgePending,
+            ),
+            (
+                "rf",
+                || EngineError::Refused {
+                    reason: "no".into(),
+                },
+                RunStatus::JudgeVoid,
+            ),
+        ];
+        for (id, err, want) in cases {
+            let engine = Arc::new(JudgeFails {
+                inner: FakeEngine::new(""),
+                err,
+            });
+            let res = fake_run(&out, &opts, spec(id, ModelTier::Haiku, 3, 120), engine).await;
+            assert!(res.verdict.is_none());
+            let record: RunRecord = read_json(&out.join(id).join("run.json")).unwrap();
+            assert_eq!(record.status, want, "{id}");
+            assert!(record.engine_failure.is_none());
+        }
+    }
+
+    struct Blocked;
+    impl crate::pacing::QuotaGate for Blocked {
+        fn blocked(&self) -> Option<crate::pacing::QuotaBlock> {
+            Some(crate::pacing::QuotaBlock {
+                accounts: vec!["isolated".into()],
+                until_ms: Some(1_792_333_200_000),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn judge_is_deferred_when_no_account_can_serve() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        opts.quota = Some(GateHandle(Arc::new(Blocked)));
+        let out = tmp.path().join("out");
+        let fake = Arc::new(FakeEngine::new(""));
+        fake_run(
+            &out,
+            &opts,
+            spec("q", ModelTier::Haiku, 3, 120),
+            fake.clone(),
+        )
+        .await;
+        let record: RunRecord = read_json(&out.join("q/run.json")).unwrap();
+        assert_eq!(record.status, RunStatus::JudgePending);
+        assert_eq!(
+            record.judge_error.as_deref(),
+            Some("judge deferred: quota (isolated) until 2026-10-18 14:20:00 UTC")
+        );
+        assert_eq!(judge_calls(&fake), 0, "no judge call while blocked");
+        // Once an account serves again, the re-judge produces the verdict.
+        opts.quota = None;
+        assert!(judge_existing(&out.join("q"), fake.clone(), &opts)
+            .await
+            .unwrap()
+            .is_some());
     }
 }
