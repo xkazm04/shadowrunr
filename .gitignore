@@ -10,3 +10,4 @@ dist/
 *.db
 *.db-*
 /data/
+/shadowrunr.toml
