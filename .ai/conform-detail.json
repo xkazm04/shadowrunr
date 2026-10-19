@@ -80,6 +80,52 @@
           "evidence": "apps/console/src/kit/PosterFrame.tsx:18 Voice is explicitly future work; the inspected bootstrap supplies no voice onboarding."
         }
       ]
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/quality-gates": {
+      "context": "console-quality-gates",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T08:43:35.215Z",
+      "worker": "c3a106b2-3689-4794-948e-82a876d2f391",
+      "techniques": [
+        {
+          "technique": "gate-laddering",
+          "verdict": "deviation",
+          "evidence": "apps/console/fidelity/run.mjs:10 The fidelity gate is explicitly documented and implemented as local-only and not wired into CI, violating gate-laddering's rule that lower-rung checks must exist on the merge rung."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "deviation",
+          "evidence": "apps/console/fidelity/run.mjs:37 Missing tools (Python playwright, style-contract.py) or missing contest data exit with code 0 instead of a distinct error code, producing a false green."
+        },
+        {
+          "technique": "unmeasurable-criteria",
+          "verdict": "deviation",
+          "evidence": "apps/console/fidelity/run.mjs:42 When style-contract.py is absent, the gate skips with code 0 rather than failing closed on an unmeasurable condition."
+        },
+        {
+          "technique": "blocking-by-input-determinism",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/perf/dom.test.tsx:2 Perf budget gates measure deterministic DOM node counts rather than fluctuating wall-clock timings."
+        },
+        {
+          "technique": "severity-by-construction",
+          "verdict": "conformant",
+          "evidence": "apps/console/fidelity/run.mjs:111 Exits with status 1 if any page fidelity comparison fails against the contract."
+        },
+        {
+          "technique": "waiver-names-its-finding",
+          "verdict": "conformant",
+          "evidence": "apps/console/budgets/perf.json:2 Budget thresholds specify that raising any limit requires a documented reason in the same change."
+        },
+        {
+          "technique": "refusal-names-a-reachable-remedy",
+          "verdict": "conformant",
+          "evidence": "apps/console/fidelity/run.mjs:44 Failure message provides the exact pip and playwright commands needed to resolve the missing dependency."
+        }
+      ]
     }
   }
 }

@@ -1,0 +1,98 @@
+{
+ "schema": "conform-run/1",
+ "worker": "c3a106b2-3689-4794-948e-82a876d2f391",
+ "subject": "quality-gates",
+ "evaluatedAt": "2026-10-19T08:43:35.215774+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [
+  {
+   "context": "console-quality-gates",
+   "subject": "quality-gates",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/fidelity/run.mjs:37 When testing prerequisites or external tools are missing, the fidelity runner skips with exit code 0 by default rather than failing closed, producing false green runs.",
+   "techniques": [
+    {
+     "technique": "gate-laddering",
+     "verdict": "deviation",
+     "evidence": "apps/console/fidelity/run.mjs:10 The fidelity gate is explicitly documented and implemented as local-only and not wired into CI, violating gate-laddering's rule that lower-rung checks must exist on the merge rung."
+    },
+    {
+     "technique": "gate-liveness",
+     "verdict": "deviation",
+     "evidence": "apps/console/fidelity/run.mjs:37 Missing tools (Python playwright, style-contract.py) or missing contest data exit with code 0 instead of a distinct error code, producing a false green."
+    },
+    {
+     "technique": "unmeasurable-criteria",
+     "verdict": "deviation",
+     "evidence": "apps/console/fidelity/run.mjs:42 When style-contract.py is absent, the gate skips with code 0 rather than failing closed on an unmeasurable condition."
+    },
+    {
+     "technique": "blocking-by-input-determinism",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/perf/dom.test.tsx:2 Perf budget gates measure deterministic DOM node counts rather than fluctuating wall-clock timings."
+    },
+    {
+     "technique": "severity-by-construction",
+     "verdict": "conformant",
+     "evidence": "apps/console/fidelity/run.mjs:111 Exits with status 1 if any page fidelity comparison fails against the contract."
+    },
+    {
+     "technique": "waiver-names-its-finding",
+     "verdict": "conformant",
+     "evidence": "apps/console/budgets/perf.json:2 Budget thresholds specify that raising any limit requires a documented reason in the same change."
+    },
+    {
+     "technique": "refusal-names-a-reachable-remedy",
+     "verdict": "conformant",
+     "evidence": "apps/console/fidelity/run.mjs:44 Failure message provides the exact pip and playwright commands needed to resolve the missing dependency."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "quality-gates",
+   "context": "console-build-and-desktop-shell",
+   "reason": "evidence leans on dist/.vite/manifest.json, which is not a tracked file"
+  },
+  {
+   "subject": "quality-gates",
+   "context": "reconcile-engine",
+   "reason": "The quality-gates standard governs software engineering pipeline and commit refusal machinery, whereas shadowrunr-reconcile is a domain engine for livestream simulation reconciliation and character directive synthesis."
+  },
+  {
+   "subject": "quality-gates",
+   "context": "segments-runtime",
+   "reason": "The quality-gates standard governs software engineering pipeline gates, whereas shadowrunr-segments is a domain game runtime defining show segment lifecycles, Twitch-style viewer ranks, and evidence grading."
+  },
+  {
+   "subject": "quality-gates",
+   "context": "console-ui-primitives",
+   "reason": "The quality-gates standard governs software engineering pipeline and build refusal gates, whereas console-ui-primitives provides UI presentation components without gate mechanisms."
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-19T08:43:35.215774+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "quality-gates"
+   ],
+   "techniques": [
+    "blocking-by-input-determinism",
+    "gate-laddering",
+    "gate-liveness",
+    "refusal-names-a-reachable-remedy",
+    "severity-by-construction",
+    "unmeasurable-criteria",
+    "waiver-names-its-finding"
+   ],
+   "deviations": 1,
+   "context": "console-quality-gates",
+   "via": "curator-multi:agy",
+   "model": "gemini-3.8-flash-high"
+  }
+ ]
+}

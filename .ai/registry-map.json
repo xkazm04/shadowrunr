@@ -4343,7 +4343,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/fidelity/run.mjs:37 When testing prerequisites or external tools are missing, the fidelity runner skips with exit code 0 by default rather than failing closed, producing false green runs.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "perf-instrumentation",
