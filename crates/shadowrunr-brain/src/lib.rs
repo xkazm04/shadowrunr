@@ -443,6 +443,22 @@ impl Brain {
         self.store.write_episode(&ep)
     }
 
+    /// One beat's lines as one turn of the pending stream episode; a beat with no lines adds
+    /// nothing. Recall and the sleep cycle read the first EPISODE_ITEM_CHARS of an episode,
+    /// so a turn that would carry the pending episode past that starts the next one.
+    fn record_turn(&mut self, lines: &[String], now_ms: TsMs) -> Result<(), BrainError> {
+        if lines.is_empty() {
+            return Ok(());
+        }
+        let turn = lines.join("\n");
+        let pending: usize = self.turns.iter().map(|t| t.chars().count() + 1).sum();
+        if !self.turns.is_empty() && pending + turn.chars().count() > EPISODE_ITEM_CHARS {
+            self.flush_turns(now_ms)?;
+        }
+        self.turns.push(turn);
+        Ok(())
+    }
+
     fn core_template(&self) -> EngineRequest {
         let (_, effort, timeout_ms) = shadowrunr_engine::route(Role::CoreThread);
         EngineRequest {
@@ -733,7 +749,7 @@ impl Brain {
             }
             Err(e) if fleet_class(&e) => {
                 self.engine_down = true;
-                self.turns.extend(turn);
+                self.record_turn(&turn, now_ms)?;
                 // The grace clock starts at the failure, not at the next beat.
                 if self.fleet.observe(now_ms, FleetMode::Down) == FleetVerdict::SignOff {
                     ev.extend(self.sign_off_events(now_ms));
@@ -919,14 +935,7 @@ impl Brain {
         // Newly dispatched jobs report "queued" in the same beat.
         self.collect_jobs(now_ms, &mut ev)?;
 
-        // Recall and the sleep cycle read the first EPISODE_ITEM_CHARS of an episode, so a
-        // turn that would carry the pending episode past that is written to the next one.
-        let turn = turn.join("\n");
-        let pending: usize = self.turns.iter().map(|t| t.chars().count() + 1).sum();
-        if !self.turns.is_empty() && pending + turn.chars().count() > EPISODE_ITEM_CHARS {
-            self.flush_turns(now_ms)?;
-        }
-        self.turns.push(turn);
+        self.record_turn(&turn, now_ms)?;
         if self
             .ticks
             .is_multiple_of(u64::from(self.tuning.episode_every_ticks.max(1)))

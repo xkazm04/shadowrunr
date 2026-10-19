@@ -1364,6 +1364,39 @@ async fn engine_outage_counts_as_fleet_down() {
 }
 
 #[tokio::test]
+async fn a_beat_is_one_turn_record_whether_the_engine_answered_or_not() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    engine.push(
+        Role::CoreThread,
+        Err(EngineError::Timeout { after_ms: 30_000 }),
+    );
+    engine.push(Role::CoreThread, Ok("Bow before me."));
+    engine.push(Role::CoreThread, Ok("Silence suits the crypt."));
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "s1", tuning()).await;
+    let c = ctx(&[]);
+    let a = viewer("a", "Alba", Rank::Cultist);
+    let z = viewer("z", "Zed", Rank::Cultist);
+    // Beat 1: two picks, and the engine times out.
+    b.tick(
+        1_000,
+        vec![
+            msg("m1", 900, &a, "lich, what is the rug made of?"),
+            msg("m2", 950, &z, "my lord, which crypt is warmest?"),
+        ],
+        &c,
+    )
+    .await
+    .unwrap();
+    // Beat 2 answers; beat 3 sees beat 1 as ONE turn and beat 2 as one more.
+    b.tick(6_000, Vec::new(), &c).await.unwrap();
+    b.tick(11_000, Vec::new(), &c).await.unwrap();
+    let p = last_core_prompt(&engine);
+    assert_eq!(p.matches("[this-stream-").count(), 2, "{p}");
+    assert!(p.contains("[this-stream-1] Alba"), "{p}");
+}
+
+#[tokio::test]
 async fn votes_are_not_answered_over_questions() {
     let dir = tempfile::tempdir().unwrap();
     let mut t = tuning();
