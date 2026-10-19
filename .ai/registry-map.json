@@ -489,7 +489,11 @@
           "revision": 7,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/store.rs:325 Fact-source validation checks the derived index alone, so an indexed episode whose authoritative markdown disappeared can still satisfy the citation gate.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:ff529a6dc44bf233",
+          "evaluatedRevision": 7
         },
         {
           "subject": "on-stream-persona-continuity",

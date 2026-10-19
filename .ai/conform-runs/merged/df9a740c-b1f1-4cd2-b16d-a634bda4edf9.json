@@ -1,0 +1,105 @@
+{
+  "schema": "conform-run/1",
+  "worker": "df9a740c-b1f1-4cd2-b16d-a634bda4edf9",
+  "subject": "companion-identity",
+  "evaluatedAt": "2026-10-19T22:27:02.397034+00:00",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "pairs": [
+    {
+      "context": "brain-composition-memory",
+      "subject": "companion-identity",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "crates/shadowrunr-brain/src/memory/store.rs:325 Fact-source validation checks the derived index alone, so an indexed episode whose authoritative markdown disappeared can still satisfy the citation gate.",
+      "techniques": [
+        {
+          "technique": "brain-adoption-consent",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:92 This context receives an application-selected memory root; no second-product discovery or adoption flow was found."
+        },
+        {
+          "technique": "constitution-self-model-split",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:468 The prefix is constructed at initialization and reused; operator amendments to the constitution on disk are not loaded into subsequent contexts."
+        },
+        {
+          "technique": "disk-truth-db-index",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/store.rs:483 The citation gate delegates to an index-only existence query rather than checking the authoritative episode document."
+        },
+        {
+          "technique": "operator-profile-synthesis",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:626 This is audience memory keyed by viewer, rather than synthesis of a single operator's behavioral profile."
+        }
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "companion-identity",
+      "context": "console-brain-page",
+      "reason": "withdrawn after review: reviewer (sonnet): The not-applicable anchor Layer2.tsx:13 is only the FLOORS type declaration, which does not show that identity or adoption constructs are absent. The 'constitution, adoption' grep was also narrow for this subject."
+    },
+    {
+      "subject": "companion-identity",
+      "context": "character-package",
+      "reason": "withdrawn after review: reviewer (sonnet): I could not confirm that bible.md is 'agent-proposable' or sits behind a mutable proposal path. The constitution says changes come only from the operator via a reviewed commit, and I found no code that lets an agent write the bible. The restated doxxing rule at bible.md:177 is real, but the 'second "
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-19T22:27:02.397034+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "companion-identity"
+      ],
+      "techniques": [
+        "brain-adoption-consent",
+        "constitution-self-model-split",
+        "disk-truth-db-index",
+        "operator-profile-synthesis"
+      ],
+      "deviations": 1,
+      "context": "brain-composition-memory",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "ts": "2026-10-19T22:27:02.397034+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "companion-identity"
+      ],
+      "techniques": [
+        "anchored-identity-diffs",
+        "brain-adoption-consent",
+        "capability-exercise-ledger",
+        "constitution-self-model-split",
+        "disk-truth-db-index",
+        "one-mind-many-mouths",
+        "operator-profile-synthesis"
+      ],
+      "deviations": 0,
+      "context": "console-brain-page",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "ts": "2026-10-19T22:27:02.397034+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "companion-identity"
+      ],
+      "techniques": [
+        "constitution-self-model-split",
+        "operator-profile-synthesis"
+      ],
+      "deviations": 1,
+      "context": "character-package",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}

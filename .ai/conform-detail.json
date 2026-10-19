@@ -967,6 +967,114 @@
         }
       ],
       "registryProposal": "On Windows, CLI tools such as agy block on open stdin pipes unless pipe shutdown is handled specifically, prompting adapters to fall back to argument flags; the standard could document Windows pipe termination semantics for stdin prompt feeding."
+    },
+    "438f47d8-694c-4986-92b2-bbba5af4a1c1/companion-identity": {
+      "context": "brain-composition-memory",
+      "subject": "companion-identity",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T22:27:02.397Z",
+      "worker": "df9a740c-b1f1-4cd2-b16d-a634bda4edf9",
+      "techniques": [
+        {
+          "technique": "brain-adoption-consent",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:92 This context receives an application-selected memory root; no second-product discovery or adoption flow was found."
+        },
+        {
+          "technique": "constitution-self-model-split",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:468 The prefix is constructed at initialization and reused; operator amendments to the constitution on disk are not loaded into subsequent contexts."
+        },
+        {
+          "technique": "disk-truth-db-index",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/store.rs:483 The citation gate delegates to an index-only existence query rather than checking the authoritative episode document."
+        },
+        {
+          "technique": "operator-profile-synthesis",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:626 This is audience memory keyed by viewer, rather than synthesis of a single operator's behavioral profile."
+        }
+      ]
+    },
+    "c2325be4-a41e-48f5-9050-bb31c09bb12a/companion-identity": {
+      "context": "console-brain-page",
+      "subject": "companion-identity",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T22:27:02.397Z",
+      "techniques": [
+        {
+          "technique": "anchored-identity-diffs",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Layer2.tsx:50 The viewer renders transcript lines, not proposed identity edits."
+        },
+        {
+          "technique": "brain-adoption-consent",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/useBrain.ts:40 The page loads daemon tournament data rather than discovering a companion brain."
+        },
+        {
+          "technique": "capability-exercise-ledger",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Engine.tsx:112 This ledger records engine calls, not capabilities asserted in a companion's self-description."
+        },
+        {
+          "technique": "constitution-self-model-split",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Layer1.tsx:134 The page visualizes simulation activity rather than authoring identity documents."
+        },
+        {
+          "technique": "disk-truth-db-index",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:237 The local model derives display metrics; it does not persist a durable self."
+        },
+        {
+          "technique": "one-mind-many-mouths",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Viewer.tsx:116 Selecting a run for inspection does not create another conversational channel or partition companion memory."
+        },
+        {
+          "technique": "operator-profile-synthesis",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:183 These are operational funnel counts, not inferred operator traits."
+        }
+      ],
+      "withdrawn": {
+        "worker": "df9a740c-b1f1-4cd2-b16d-a634bda4edf9",
+        "state": "not-applicable",
+        "at": "2026-10-19T22:27:38.454348+00:00",
+        "reason": "reviewer (sonnet): The not-applicable anchor Layer2.tsx:13 is only the FLOORS type declaration, which does not show that identity or adoption constructs are absent. The 'constitution, adoption' grep was also narrow for this subject."
+      }
+    },
+    "382c68f3-bc20-4cc7-8220-18aa850f7087/companion-identity": {
+      "context": "character-package",
+      "subject": "companion-identity",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T22:27:02.397Z",
+      "techniques": [
+        {
+          "technique": "constitution-self-model-split",
+          "verdict": "deviation",
+          "evidence": "characters/malakor/bible.md:174 The mutable bible restates constitutional safety rules instead of only referencing their immutable authority."
+        },
+        {
+          "technique": "operator-profile-synthesis",
+          "verdict": "not-applicable",
+          "evidence": "characters/malakor/constitution.md:22 The package defines an audience-facing fictional character, not a behavioral profile of its operator."
+        }
+      ],
+      "withdrawn": {
+        "worker": "df9a740c-b1f1-4cd2-b16d-a634bda4edf9",
+        "state": "deviation",
+        "at": "2026-10-19T22:27:38.472832+00:00",
+        "reason": "reviewer (sonnet): I could not confirm that bible.md is 'agent-proposable' or sits behind a mutable proposal path. The constitution says changes come only from the operator via a reviewed commit, and I found no code that lets an agent write the bible. The restated doxxing rule at bible.md:177 is real, but the 'second "
+      }
     }
   }
 }
