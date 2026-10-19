@@ -1,0 +1,22 @@
+{
+ "schema": "conform-run/1",
+ "worker": "af113c57-bcb8-45a6-826f-e9fd08cf71bb",
+ "subject": "data-access",
+ "evaluatedAt": "2026-10-19T23:52:05.136947+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "data-access",
+   "context": "console-data-layer",
+   "reason": "The data-access standard governs the seam between application logic and persistent database engines (SQL query builders, table/row mappers, database transactions, CQRS read models, and multi-driver database stores), whereas console-data-layer is a frontend client network layer providing JSON-RPC execution (RpcClient), WebSocket event subscription (openEventStream), and client-side response caching/invalidation (QueryCache, useRpc, usePaged) against the local daemon."
+  },
+  {
+   "subject": "data-access",
+   "context": "console-ui-primitives",
+   "reason": "The data-access standard governs database repository layering, query construction, row decoding, and transactional units of work for persistent database stores, whereas console-ui-primitives provides reusable frontend UI presentation components (chips, filter tables, pill groups, rate bars, switches, sections, and virtual lists) with styling and DOM virtualization, containing no database or data-access persistence mechanisms."
+  }
+ ],
+ "consults": []
+}
