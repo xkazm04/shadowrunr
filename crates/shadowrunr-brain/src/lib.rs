@@ -151,6 +151,8 @@ const ALWAYS_PER_SCOPE: usize = 3;
 const VIEWER_FACTS: usize = 5;
 const RECALL_EPISODES: usize = 8;
 const EPISODE_ITEM_CHARS: usize = 2_000;
+/// Beats between warm-session open attempts after one failed.
+const SESSION_RETRY_BEATS: u64 = 10;
 
 /// The care-state record in the transcript (`care_state` / `started|restarted|expired`), on
 /// the disclosure's message id.
@@ -189,7 +191,9 @@ pub struct Brain {
     engine_down: bool,
     session: Option<Box<dyn WarmSession>>,
     session_turns: u32,
-    session_unsupported: bool,
+    /// No warm open before this beat: the last one failed. Engines report "no sessions" and
+    /// "all accounts cooling" alike (`Unavailable`), so a failure backs off, never disables.
+    session_retry_tick: u64,
     hexes: Vec<HexInfo>,
     turns: Vec<String>,
     ticks: u64,
@@ -244,7 +248,7 @@ impl Brain {
             engine_down: false,
             session: None,
             session_turns: 0,
-            session_unsupported: false,
+            session_retry_tick: 0,
             hexes: Vec::new(),
             turns: Vec::new(),
             ticks: 0,
@@ -455,11 +459,11 @@ impl Brain {
     }
 
     async fn call_core(&mut self, prompt: String) -> Result<EngineReply, EngineError> {
-        if self.tuning.warm_session && !self.session_unsupported {
-            if self.session.is_none() {
+        if self.tuning.warm_session {
+            if self.session.is_none() && self.ticks >= self.session_retry_tick {
                 match self.engine.open_session(self.core_template()).await {
                     Ok(s) => self.session = Some(s),
-                    Err(_) => self.session_unsupported = true,
+                    Err(_) => self.session_retry_tick = self.ticks + SESSION_RETRY_BEATS,
                 }
             }
             if let Some(session) = self.session.as_mut() {

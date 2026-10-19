@@ -67,6 +67,8 @@ fn reply(text: String) -> EngineReply {
 struct FakeEngine {
     inner: Arc<Inner>,
     sessions: bool,
+    /// Opens that fail before sessions work (all accounts cooling, say).
+    failing_opens: Arc<AtomicUsize>,
 }
 
 impl FakeEngine {
@@ -139,6 +141,15 @@ impl Engine for FakeEngine {
         if !self.sessions {
             return Err(EngineError::Unavailable {
                 reason: "no warm sessions in this fake".into(),
+            });
+        }
+        if self
+            .failing_opens
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+            .is_ok()
+        {
+            return Err(EngineError::Unavailable {
+                reason: "all claude cli accounts cooling".into(),
             });
         }
         self.inner.templates.lock().unwrap().push(template);
@@ -391,6 +402,29 @@ async fn warm_session_is_recycled_so_history_cannot_bloat() {
     assert_eq!(templates.len(), 3);
     assert!(templates.iter().all(|t| t.system == b.stable_prefix()));
     assert_eq!(engine.inner.session_prompts.lock().unwrap().len(), 5);
+}
+
+#[tokio::test]
+async fn a_failed_warm_open_is_retried_instead_of_disabling_sessions_for_the_stream() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::with_sessions();
+    engine.failing_opens.store(1, Ordering::SeqCst);
+    let t = BrainTuning {
+        warm_session: true,
+        warm_recycle_turns: 0,
+        ..tuning()
+    };
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "s1", t).await;
+    let c = ctx(&[]);
+    for i in 0..15 {
+        b.tick(i * 5_000, Vec::new(), &c).await.unwrap();
+    }
+    // The first open failed (accounts cooling): that beat went cold, later beats warm again.
+    assert_eq!(engine.inner.templates.lock().unwrap().len(), 1);
+    let warm = engine.inner.session_prompts.lock().unwrap().len();
+    let cold = engine.requests(Role::CoreThread).len();
+    assert_eq!(warm + cold, 15);
+    assert!(warm >= 5, "warm {warm}, cold {cold}");
 }
 
 // ── Memory ─────────────────────────────────────────────────────────────
