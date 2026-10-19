@@ -1,0 +1,89 @@
+{
+ "schema": "conform-run/1",
+ "worker": "a40e9df4-56a2-4d44-93b0-ce5055244536",
+ "subject": "conformance-checking",
+ "evaluatedAt": "2026-10-19T23:44:19.894946+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "daemon-core-rpc",
+   "subject": "conformance-checking",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-daemon/src/preflight.rs:61 Preflight classifies missing health evidence as an ordinary amber warning instead of preserving the standard's distinct unable-to-check outcome.",
+   "techniques": [
+    {
+     "technique": "checker-false-positive-discipline",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/preflight.rs:464 PF-08 unconditionally emits amber for an explicitly out-of-scope surface, creating the permanent optional-surface warning the technique rejects."
+    },
+    {
+     "technique": "claim-write-back",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/preflight.rs:120 Preflight reports readiness without executing repository-declared proof commands or maintaining their verification stamps."
+    },
+    {
+     "technique": "derived-expectation-needs-an-evidence-floor",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/preflight.rs:199 The segment check constructs the reachable runtime directly rather than deriving expectations from source-text patterns."
+    },
+    {
+     "technique": "edition-stratified-conformance",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/preflight.rs:40 This is an internally implemented preflight suite, not an upstream conformance corpus stratified by specification edition."
+    },
+    {
+     "technique": "finding-severity-ladder",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/preflight.rs:61 Absent evidence becomes amber, sharing the warning state instead of producing a first-class unable-to-check result."
+    },
+    {
+     "technique": "fixture-repo-testing",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/tests/cli.rs:116 The broken-project CLI test checks PF-02 and report count, but never asserts the exact set of failing check identifiers, so additional spurious failures can pass."
+    },
+    {
+     "technique": "inline-predicate-rung-inference",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/preflight.rs:43 The runner invokes implemented check functions rather than executing verification commands embedded in specification claims."
+    },
+    {
+     "technique": "pass-ratio-comparability",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/cli.rs:510 Preflight publishes individual check states and details rather than a conformance percentage."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "conformance-checking",
+   "context": "reconcile-engine",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-19T23:44:19.894946+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "conformance-checking"
+   ],
+   "techniques": [
+    "checker-false-positive-discipline",
+    "claim-write-back",
+    "derived-expectation-needs-an-evidence-floor",
+    "edition-stratified-conformance",
+    "finding-severity-ladder",
+    "fixture-repo-testing",
+    "inline-predicate-rung-inference",
+    "pass-ratio-comparability"
+   ],
+   "deviations": 1,
+   "context": "daemon-core-rpc",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}
