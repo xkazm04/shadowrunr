@@ -1,0 +1,134 @@
+{
+ "schema": "conform-run/1",
+ "worker": "3b8f43a7-133d-44d6-9caf-7a37de4a75bf",
+ "subject": "agent-runtime-assembly",
+ "evaluatedAt": "2026-10-19T21:29:18.451931+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [
+  {
+   "context": "daemon-core-rpc",
+   "subject": "agent-runtime-assembly",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-daemon/src/preflight.rs:271 An absent moderation policy file yields an advisory Amber health report instead of failing loudly, permitting execution to proceed with degraded built-in rules.",
+   "techniques": [
+    {
+     "technique": "guard-input-custody",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/preflight.rs:271 Absent policy yields Amber health advisory rather than failing loudly, allowing execution with built-in rules."
+    },
+    {
+     "technique": "indeterminate-closure-on-interruption",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/runs.rs:196 Run completion is classified post hoc by filesystem state rather than emitting explicit indeterminate closure events."
+    },
+    {
+     "technique": "host-routes-win",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/server.rs:130 Routes are mounted on a fixed host Axum router with no extension points capable of shadowing host routes."
+    },
+    {
+     "technique": "session-scoped-capability",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/server.rs:95 Access permissions check per-connection Origin headers against the local allowlist rather than process environment variables."
+    },
+    {
+     "technique": "operator-tier-code-loading",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/policy_install.rs:276 Policy list installer validates identifier characters and installs static data lists without dynamic code execution."
+    }
+   ]
+  },
+  {
+   "context": "brain-composition-memory",
+   "subject": "agent-runtime-assembly",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-brain/src/pool.rs:216 Research jobs exceeding a single turn are spawned into volatile in-memory Tokio tasks without durable row persistence, causing in-flight operations to be lost across restarts.",
+   "techniques": [
+    {
+     "technique": "bounded-projection-of-external-work",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/pool.rs:216 Long-running research jobs are spawned in-memory without persistent task state or lease coordination."
+    },
+    {
+     "technique": "guard-input-custody",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/moderation.rs:473 Missing platform-rules.json falls back silently to built-in rules rather than failing loudly."
+    },
+    {
+     "technique": "indeterminate-closure-on-interruption",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/lib.rs:982 Stream end writes an episode without closing active background pool tasks with an indeterminate terminal status."
+    },
+    {
+     "technique": "nested-run-is-not-its-parent",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-brain/src/pool.rs:116 Research worker subagents run with fresh correlation IDs and isolated contexts rather than inheriting parent stream state."
+    },
+    {
+     "technique": "additive-input-at-the-call-boundary",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-brain/src/lib.rs:576 External chat messages are ingested additively at tick boundaries without aborting or restarting the active unit."
+    },
+    {
+     "technique": "rewrite-before-the-gate",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-brain/src/lib.rs:836 Generated text is passed through moderation filter gates before event emission and state mutation."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "agent-runtime-assembly",
+   "context": "segments-runtime",
+   "reason": "The segments-runtime crate governs live show segment lifecycles, ranking progression, evidence rules, and chat command parsing over static TOML definitions rather than agent runtime assembly, hook composition, checkpointer custody, or execution pipeline architecture."
+  },
+  {
+   "subject": "agent-runtime-assembly",
+   "context": "types-crate",
+   "reason": "The types-crate defines shared domain data structures, event definitions, and serialization models rather than agent runtime assembly, hook pipelines, or checkpointer custody."
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-19T21:29:18.451931+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-runtime-assembly"
+   ],
+   "techniques": [
+    "guard-input-custody",
+    "host-routes-win",
+    "indeterminate-closure-on-interruption",
+    "operator-tier-code-loading",
+    "session-scoped-capability"
+   ],
+   "deviations": 1,
+   "context": "daemon-core-rpc",
+   "via": "curator-multi:agy",
+   "model": "gemini-3.8-flash-high"
+  },
+  {
+   "ts": "2026-10-19T21:29:18.451931+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-runtime-assembly"
+   ],
+   "techniques": [
+    "additive-input-at-the-call-boundary",
+    "bounded-projection-of-external-work",
+    "guard-input-custody",
+    "indeterminate-closure-on-interruption",
+    "nested-run-is-not-its-parent",
+    "rewrite-before-the-gate"
+   ],
+   "deviations": 1,
+   "context": "brain-composition-memory",
+   "via": "curator-multi:agy",
+   "model": "gemini-3.8-flash-high"
+  }
+ ]
+}

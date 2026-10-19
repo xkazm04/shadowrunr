@@ -569,7 +569,11 @@
           "revision": 28,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/pool.rs:216 Research jobs exceeding a single turn are spawned into volatile in-memory Tokio tasks without durable row persistence, causing in-flight operations to be lost across restarts.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:45b3f952560a4cbc",
+          "evaluatedRevision": 28
         }
       ],
       "governance": "governed"
@@ -2720,7 +2724,11 @@
           "revision": 28,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/preflight.rs:271 An absent moderation policy file yields an advisory Amber health report instead of failing loudly, permitting execution to proceed with degraded built-in rules.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:45b3f952560a4cbc",
+          "evaluatedRevision": 28
         },
         {
           "subject": "fleet-orchestration",
