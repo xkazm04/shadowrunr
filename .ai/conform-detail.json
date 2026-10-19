@@ -415,6 +415,68 @@
       "evaluatedTs": "2026-10-19T09:54:49.951Z",
       "worker": "acf56b6c-b0ba-4531-ae50-f84b08f86a53",
       "techniques": []
+    },
+    "4f625471-4451-4819-953d-10b381c13213/fleet-orchestration": {
+      "context": "engine-llm-sessions",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T10:17:22.440Z",
+      "worker": "30e13b5e-c797-48c2-aade-1962b6991fd4",
+      "techniques": [
+        {
+          "technique": "durable-fleet-state",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/fleet.rs:400 Fleet construction opens a call ledger but does not recover session entries; LedgerRow stores neither session identity nor a resume contract, while warm-session identity remains in memory."
+        },
+        {
+          "technique": "hibernation-and-resume",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:302 After spawning with the remembered resume identity, send accepts and overwrites it with the returned identity without checking that restoration continued the expected session."
+        }
+      ]
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/fleet-orchestration": {
+      "context": "console-reconcile-page",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T10:17:22.440Z",
+      "worker": "30e13b5e-c797-48c2-aade-1962b6991fd4",
+      "techniques": []
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/fleet-orchestration": {
+      "context": "console-quality-gates",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T10:17:22.440Z",
+      "worker": "30e13b5e-c797-48c2-aade-1962b6991fd4",
+      "techniques": []
+    },
+    "1f8d2348-1a2f-4c72-8dc0-e281a35b78d4/fleet-orchestration": {
+      "context": "daemon-core-rpc",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T10:17:22.440Z",
+      "techniques": [
+        {
+          "technique": "durable-fleet-state",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/server.rs:58 Default constructs an empty in-memory run map; startup does not load durable admission records, reconcile interrupted runs, or restore live ownership before serving."
+        }
+      ],
+      "withdrawn": {
+        "worker": "30e13b5e-c797-48c2-aade-1962b6991fd4",
+        "state": "deviation",
+        "at": "2026-10-19T10:18:08.097354+00:00",
+        "reason": "reviewer (sonnet): `LiveRegistry` (live.rs) is an in-process fan-out of event streams for running sims, not a durable admission or ownership registry, so an empty map at `server.rs:58` is not shown to be a missing recovery step, and I found no durable admission records that startup should reload."
+      }
     }
   }
 }

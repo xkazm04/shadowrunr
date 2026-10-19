@@ -1693,7 +1693,11 @@
           "revision": 28,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/ChatPage.tsx:39 Context searches for fleet, worker and harvest returned no hits, while repository searches located orchestration elsewhere, and this page submits chat through RPC rather than managing an agent fleet.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:93bd71853ab468b1",
+          "evaluatedRevision": 28
         },
         {
           "subject": "quality-gates",
@@ -2860,7 +2864,11 @@
           "revision": 28,
           "changedAt": "2026-10-15",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:302 A resumed process can replace the remembered session identity without an equality or restoration check, allowing a different session to be accepted as continuation.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:93bd71853ab468b1",
+          "evaluatedRevision": 28
         },
         {
           "subject": "agent-cli-transport",
@@ -4407,7 +4415,11 @@
           "revision": 28,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/fidelity/run.mjs:91 Context searches for fleet, worker and harvest returned no hits, while repository searches located orchestration elsewhere, and this runner invokes page-style checks rather than agent sessions.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:93bd71853ab468b1",
+          "evaluatedRevision": 28
         },
         {
           "subject": "production-pipeline-phasing",

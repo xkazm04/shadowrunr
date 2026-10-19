@@ -1,0 +1,122 @@
+{
+  "schema": "conform-run/1",
+  "worker": "30e13b5e-c797-48c2-aade-1962b6991fd4",
+  "subject": "fleet-orchestration",
+  "evaluatedAt": "2026-10-19T10:17:22.440104+00:00",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "pairs": [
+    {
+      "context": "engine-llm-sessions",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "crates/shadowrunr-engine/src/session.rs:302 A resumed process can replace the remembered session identity without an equality or restoration check, allowing a different session to be accepted as continuation.",
+      "techniques": [
+        {
+          "technique": "durable-fleet-state",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/fleet.rs:400 Fleet construction opens a call ledger but does not recover session entries; LedgerRow stores neither session identity nor a resume contract, while warm-session identity remains in memory."
+        },
+        {
+          "technique": "hibernation-and-resume",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:302 After spawning with the remembered resume identity, send accepts and overwrites it with the returned identity without checking that restoration continued the expected session."
+        }
+      ]
+    },
+    {
+      "context": "console-reconcile-page",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evidence": "apps/console/src/pages/reconcile/ChatPage.tsx:39 Context searches for fleet, worker and harvest returned no hits, while repository searches located orchestration elsewhere, and this page submits chat through RPC rather than managing an agent fleet.",
+      "techniques": [],
+      "absenceTerms": [
+        "fleet",
+        "worker",
+        "harvest"
+      ]
+    },
+    {
+      "context": "console-quality-gates",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evidence": "apps/console/fidelity/run.mjs:91 Context searches for fleet, worker and harvest returned no hits, while repository searches located orchestration elsewhere, and this runner invokes page-style checks rather than agent sessions.",
+      "techniques": [],
+      "absenceTerms": [
+        "fleet",
+        "worker",
+        "harvest"
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "fleet-orchestration",
+      "context": "reconcile-engine",
+      "reason": "the seat returned unknown"
+    },
+    {
+      "subject": "fleet-orchestration",
+      "context": "daemon-core-rpc",
+      "reason": "withdrawn after review: reviewer (sonnet): `LiveRegistry` (live.rs) is an in-process fan-out of event streams for running sims, not a durable admission or ownership registry, so an empty map at `server.rs:58` is not shown to be a missing recovery step, and I found no durable admission records that startup should reload."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-19T10:17:22.440104+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "fleet-orchestration"
+      ],
+      "techniques": [
+        "durable-fleet-state",
+        "hibernation-and-resume"
+      ],
+      "deviations": 1,
+      "context": "engine-llm-sessions",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "ts": "2026-10-19T10:17:22.440104+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "fleet-orchestration"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "console-reconcile-page",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "ts": "2026-10-19T10:17:22.440104+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "fleet-orchestration"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "console-quality-gates",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "ts": "2026-10-19T10:17:22.440104+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "fleet-orchestration"
+      ],
+      "techniques": [
+        "durable-fleet-state"
+      ],
+      "deviations": 1,
+      "context": "daemon-core-rpc",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}
