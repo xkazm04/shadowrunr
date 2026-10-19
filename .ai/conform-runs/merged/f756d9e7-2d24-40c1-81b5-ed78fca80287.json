@@ -1,0 +1,37 @@
+{
+ "schema": "conform-run/1",
+ "worker": "f756d9e7-2d24-40c1-81b5-ed78fca80287",
+ "subject": "sql-console",
+ "evaluatedAt": "2026-10-19T10:55:21.798721+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "sql-console",
+   "context": "console-quality-gates",
+   "reason": "The sql-console standard governs interactive SQL execution, schema browsing, safe mode mutation gating, and result grid fidelity for foreign database connections, whereas console-quality-gates provides style-contract visual fidelity test harnesses against winning prototypes, performance benchmark counters, and bundle/DOM node budgets for console page routes."
+  },
+  {
+   "subject": "sql-console",
+   "context": "console-data-layer",
+   "reason": "The sql-console standard governs interactive client surfaces and execution gates for running arbitrary SQL queries against external databases, whereas console-data-layer provides the frontend TypeScript JSON-RPC and WebSocket connection layer (QueryCache, RpcClient, Door validation) to the local shadowrunr daemon for application events rather than SQL database sessions."
+  },
+  {
+   "subject": "sql-console",
+   "context": "console-ui-primitives",
+   "reason": "The sql-console standard governs embedded database query consoles and schema trees, with grid mechanics explicitly delegated to the table standard, whereas console-ui-primitives provides general-purpose UI presentation components (chips, filter tables, pill groups, rate bars, switches, and virtual lists) for application views and contains no database query or introspection facilities."
+  },
+  {
+   "subject": "sql-console",
+   "context": "console-simulator-page",
+   "reason": "The sql-console standard governs database schema browsing and safe-mode SQL query execution, whereas console-simulator-page provides an A/1 canvas tournament grid, simulation run inspectors, tournament heatmaps, and quote-checking benchmark verdict viewers for evaluating autonomous agent performance."
+  },
+  {
+   "subject": "sql-console",
+   "context": "console-brain-page",
+   "reason": "The sql-console standard governs interactive query consoles and schema browsers for user-managed external databases, whereas console-brain-page visualizes LLM agent execution telemetry (brain layers 1 and 2, worker pools, call ledger pulses, memory curves, pre-flight checks, and transcript viewers) over the daemon."
+  }
+ ],
+ "consults": []
+}
