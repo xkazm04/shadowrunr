@@ -791,6 +791,78 @@
           "evidence": "crates/shadowrunr-brain/src/lib.rs:836 Generated text is passed through moderation filter gates before event emission and state mutation."
         }
       ]
+    },
+    "3048d794-6232-48f9-ab59-cfe44cb0d0d2/eval-harness": {
+      "context": "sim-runner-judging",
+      "subject": "eval-harness",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T21:44:02.041Z",
+      "techniques": [
+        {
+          "technique": "assertion-vs-judgment",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-sim/src/judge.rs:1191 Judged pass/fail claims requiring evidence cannot survive the mechanical verification layer without it."
+        },
+        {
+          "technique": "comparison-modes",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/tournament.rs:180 Resume checks instrument hashes but not the stored specification; duration, population or core-effort edits can reuse completed cells because those inputs enter neither the run ID nor instrument hash."
+        },
+        {
+          "technique": "judge-stability",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/judge.rs:393 The guard selects a different tier, rather than a disinterested model family or cross-family panel; the opened engine model mapping assigns all three tiers to Claude models."
+        },
+        {
+          "technique": "resolution-precondition",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/summary.rs:760 Winner selection compares means directly, then latency; it does not require between-condition spread to clear within-condition or judge variability."
+        },
+        {
+          "technique": "scenario-design",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/matrix.rs:195 Scenario-affecting duration, population and core effort are omitted from run identity, and the inspected instrument computation does not supply their missing content version."
+        }
+      ],
+      "withdrawn": {
+        "worker": "4d25b139-8816-4605-a03d-02ecd0d6dbd0",
+        "state": "deviation",
+        "at": "2026-10-19T21:44:59.788753+00:00",
+        "reason": "reviewer (sonnet): The cited technique claim that population edits enter neither the run ID nor the instrument hash is contradicted by `run_id()` in matrix.rs:184, which embeds `a{size}` and the seed. The winner-without-noise-check finding at summary.rs:756 is real, but this verdict leans on a false anchor claim."
+      }
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/eval-harness": {
+      "context": "console-simulator-page",
+      "subject": "eval-harness",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T21:44:02.041Z",
+      "techniques": [
+        {
+          "technique": "assertion-vs-judgment",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/simulator/quote.ts:32 Quote occurrence is checked mechanically against transcript text, with separate cited-line, nearby and missing outcomes."
+        },
+        {
+          "technique": "comparison-modes",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/simulator/grid.ts:42 resultsHealth pools checks across every cell without separating instrument hashes; the mixed-hash warning in TournamentDetail does not prevent the pooled Held figure."
+        },
+        {
+          "technique": "resolution-precondition",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/simulator/Heatmap.tsx:119 Every returned cell is ordered; confidence bounds and thin-sample labels do not gate the ranking on between-condition spread versus noise."
+        }
+      ],
+      "withdrawn": {
+        "worker": "4d25b139-8816-4605-a03d-02ecd0d6dbd0",
+        "state": "deviation",
+        "at": "2026-10-19T21:44:59.811481+00:00",
+        "reason": "reviewer (sonnet): cells.ts:52 `worstFirst` and Heatmap.tsx:119 are a labelled 'worst first' triage sort, keyed on rule fails, not-evaluable and not-provoked before mean quality, so the code does not show a published quality ranking that needs a noise check. The pooled-Held claim at grid.ts:42 is real, but it is a dif"
+      }
     }
   }
 }

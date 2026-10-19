@@ -1,0 +1,67 @@
+{
+  "schema": "conform-run/1",
+  "worker": "4d25b139-8816-4605-a03d-02ecd0d6dbd0",
+  "subject": "eval-harness",
+  "evaluatedAt": "2026-10-19T21:44:02.041370+00:00",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "pairs": [],
+  "declined": [
+    {
+      "subject": "eval-harness",
+      "context": "console-quality-gates",
+      "reason": "the seat returned unknown"
+    },
+    {
+      "subject": "eval-harness",
+      "context": "reconcile-engine",
+      "reason": "the seat returned unknown"
+    },
+    {
+      "subject": "eval-harness",
+      "context": "sim-runner-judging",
+      "reason": "withdrawn after review: reviewer (sonnet): The cited technique claim that population edits enter neither the run ID nor the instrument hash is contradicted by `run_id()` in matrix.rs:184, which embeds `a{size}` and the seed. The winner-without-noise-check finding at summary.rs:756 is real, but this verdict leans on a false anchor claim."
+    },
+    {
+      "subject": "eval-harness",
+      "context": "console-simulator-page",
+      "reason": "withdrawn after review: reviewer (sonnet): cells.ts:52 `worstFirst` and Heatmap.tsx:119 are a labelled 'worst first' triage sort, keyed on rule fails, not-evaluable and not-provoked before mean quality, so the code does not show a published quality ranking that needs a noise check. The pooled-Held claim at grid.ts:42 is real, but it is a dif"
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-19T21:44:02.041370+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "eval-harness"
+      ],
+      "techniques": [
+        "assertion-vs-judgment",
+        "comparison-modes",
+        "judge-stability",
+        "resolution-precondition",
+        "scenario-design"
+      ],
+      "deviations": 1,
+      "context": "sim-runner-judging",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "ts": "2026-10-19T21:44:02.041370+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "eval-harness"
+      ],
+      "techniques": [
+        "assertion-vs-judgment",
+        "comparison-modes",
+        "resolution-precondition"
+      ],
+      "deviations": 1,
+      "context": "console-simulator-page",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}
