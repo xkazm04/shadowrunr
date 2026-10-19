@@ -84,6 +84,13 @@ pub enum Command {
         #[arg(long)]
         scripted: bool,
     },
+    /// Clip factory: candidates from transcripts, vertical drafts, the owner's publish gate,
+    /// dry-run uploads.
+    #[command(subcommand)]
+    Clips(crate::clips_cli::ClipsCommand),
+    /// Real SEG-02A cases: off-stream research, the owner's stream approval, corrections.
+    #[command(subcommand)]
+    Case(crate::case_cli::CaseCommand),
     /// Personas integration: registration and activity status.
     #[command(subcommand)]
     Personas(PersonasCommand),
@@ -222,6 +229,10 @@ pub struct SimRunArgs {
     /// directives in <data>) or a StreamBrief JSON file. Default: none.
     #[arg(long, value_name = "current|PATH")]
     pub brief: Option<String>,
+    /// A staged real case (<data>/cases/<id>/) for a SEG-02A run, instead of the fictional
+    /// demo case. A sim is private: an unapproved case runs and the run is marked.
+    #[arg(long, value_name = "CASE_ID")]
+    pub case: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -364,6 +375,8 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
         }
         Command::Memory(MemoryCommand::Reindex { json }) => memory_reindex_cmd(&cfg, json),
         Command::Daemon { port, scripted } => daemon_cmd(cfg, port, scripted).await,
+        Command::Clips(c) => crate::clips_cli::run(&cfg, c).await,
+        Command::Case(c) => crate::case_cli::run(&cfg, c).await,
         Command::Personas(PersonasCommand::Status { json }) => {
             personas_status_cmd(&cfg, json).await
         }
@@ -547,6 +560,8 @@ async fn sim_run(cfg: &Config, a: SimRunArgs) -> Result<ExitCode, String> {
     if let Some(b) = a.brief.as_deref() {
         opts.brief = resolve_brief(cfg, brief_source(b))?.0;
     }
+    opts.case = a.case.clone();
+    warn_unapproved_case(&opts)?;
     let engine = EngineHandle::build(cfg, a.scripted);
     eprintln!(
         "sim run {} ({} engine) -> {}",
@@ -644,6 +659,36 @@ struct PlanReport {
     /// Experiments the matrix turns on (`rate_cap_exemptions`); they are in the hash.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     experiments: Vec<&'static str>,
+    /// The staged real case the runs audit (its content hash is in the instrument).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    case: Option<PlanCase>,
+}
+
+#[derive(Serialize)]
+struct PlanCase {
+    case_id: String,
+    content_sha256: String,
+    /// The owner has not approved it for a live stream: the runs are private and marked.
+    unapproved_real_case: bool,
+}
+
+/// Name an unapproved real case on stderr before a run uses it; fail early on a bad case.
+fn warn_unapproved_case(opts: &shadowrunr_sim::SimOptions) -> Result<Option<PlanCase>, String> {
+    let Some(staged) = opts.staged_case().map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    let unapproved = !staged.approved_for_stream();
+    if unapproved {
+        eprintln!(
+            "case {}: a REAL case NOT approved for stream. This private simulation may run it; every run is marked unapproved_real_case and nothing from it may be published.",
+            staged.case.id
+        );
+    }
+    Ok(Some(PlanCase {
+        case_id: staged.case.id.clone(),
+        content_sha256: staged.content_sha256.clone(),
+        unapproved_real_case: unapproved,
+    }))
 }
 
 async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, String> {
@@ -692,9 +737,11 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
             ..TournamentOptions::default()
         };
         let plan = plan_matrix(&matrix, &out, &opts).map_err(|e| e.to_string())?;
-        let experiments = shadowrunr_sim::matrix::Matrix::load(&matrix)
-            .map(|m| shadowrunr_sim::tournament::effective_options(&m, &opts.sim).experiments())
+        let effective = shadowrunr_sim::matrix::Matrix::load(&matrix)
+            .map(|m| shadowrunr_sim::tournament::effective_options(&m, &opts.sim))
             .map_err(|e| e.to_string())?;
+        let experiments = effective.experiments();
+        let case = warn_unapproved_case(&effective)?;
         let mut by_reason = std::collections::BTreeMap::new();
         for r in &plan.runs {
             *by_reason.entry(wire(&r.reason)).or_insert(0) += 1;
@@ -719,8 +766,12 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
             brief_digest,
             brief: brief_line,
             experiments,
+            case,
         });
         return Ok(ExitCode::SUCCESS);
+    }
+    if let Ok(m) = shadowrunr_sim::matrix::Matrix::load(&matrix) {
+        warn_unapproved_case(&shadowrunr_sim::tournament::effective_options(&m, &sim))?;
     }
     let engine = EngineHandle::build(cfg, a.scripted);
     let quota = engine

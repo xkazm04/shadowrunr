@@ -172,6 +172,11 @@ pub struct SimOptions {
     /// proposals, and a looser cap below 10 chatters (`FilterConfig::rate_cap_exemptions`).
     /// Off by default; on, it joins the instrument hash as `experiment/rate_cap_exemptions`.
     pub rate_cap_exemptions: bool,
+    /// A staged real SEG-02A case to audit, by id, from `<data>/cases/` (matrix `case = "<id>"`).
+    /// `None` runs the fictional demo case. A sim is private, so the case need not be approved
+    /// for stream; the run then records `unapproved_real_case`. Its content hash joins the
+    /// instrument hash as `case/<id>`.
+    pub case: Option<String>,
 }
 
 /// The instrument entry name of the opt-5 rate-cap experiment.
@@ -181,6 +186,18 @@ impl SimOptions {
     /// The run's brief, read from its source.
     pub fn resolved_brief(&self) -> Result<Option<StreamBrief>, SimError> {
         self.brief.resolve(&self.data_dir)
+    }
+
+    /// The staged real case these options name, loaded for a private simulation; `None` when
+    /// they name none.
+    pub fn staged_case(&self) -> Result<Option<shadowrunr_segments::StagedCase>, SimError> {
+        let Some(id) = &self.case else {
+            return Ok(None);
+        };
+        shadowrunr_segments::CaseStore::new(&self.data_dir)
+            .open_for_stream(id, shadowrunr_segments::StreamKind::PrivateSim)
+            .map(Some)
+            .map_err(|e| SimError::Spec(format!("case {id}: {e}")))
     }
 
     /// The experiments these options turn on, by name (empty for every shipped default).
@@ -213,6 +230,7 @@ impl Default for SimOptions {
             brief: BriefSource::None,
             data_dir: PathBuf::from("data"),
             rate_cap_exemptions: false,
+            case: None,
         }
     }
 }

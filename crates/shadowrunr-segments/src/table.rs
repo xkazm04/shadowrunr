@@ -236,6 +236,23 @@ impl Default for ClockRules {
     }
 }
 
+/// SEG-02A's arc for a long stream: the case unfolds in acts (digest section 4: anomaly and
+/// filing map, shell and archive trail, dossier sealed) instead of being revealed in the first
+/// half hour. Every act gets an equal share of the planned segment time; a hex staged for a
+/// later act stays locked (no reveal, no research) until its act opens, and `sign_off` waits
+/// for the seal window at the end of the last act. Values are assumptions.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArcRules {
+    /// The arc runs only when the segment is planned for at least this many seconds.
+    pub min_planned_s: u32,
+    /// Act titles, in order.
+    pub acts: Vec<String>,
+    /// The seal window: the last this-many seconds of the planned time, when the dossier is
+    /// recapped and sealed and `sign_off` is allowed.
+    pub seal_s: u32,
+}
+
 /// One segment, as data.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -256,6 +273,9 @@ pub struct SegmentTable {
     pub clock: ClockRules,
     #[serde(default)]
     pub transitions: Vec<Transition>,
+    /// The multi-act arc of a long stream (SEG-02A).
+    #[serde(default)]
+    pub arc: Option<ArcRules>,
 }
 
 impl SegmentTable {
@@ -316,6 +336,19 @@ impl SegmentTable {
                 "clock: the search cap must be positive and the plebiscite within poll bounds"
                     .into(),
             ));
+        }
+        if let Some(arc) = &self.arc {
+            let acts = u32::try_from(arc.acts.len()).unwrap_or(u32::MAX);
+            if acts < 2
+                || arc.acts.iter().any(|a| a.trim().is_empty())
+                || arc.min_planned_s == 0
+                || arc.seal_s == 0
+                || arc.seal_s >= arc.min_planned_s / acts
+            {
+                return Err(bad(
+                    "arc: two or more named acts, and a seal window shorter than one act".into(),
+                ));
+            }
         }
         if self.status == SegmentStatus::Descoped
             && (!self.allowed_ops.is_empty() || self.design_notes.is_none())

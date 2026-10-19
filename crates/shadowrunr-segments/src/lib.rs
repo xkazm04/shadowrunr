@@ -4,9 +4,11 @@
 //! segment portfolio lifecycle.
 //!
 //! Data files live under `data/` and are compiled in; ranks, the allowlist, cases and case
-//! files can also be loaded from disk at runtime.
+//! files can also be loaded from disk at runtime. Real cases staged by the off-stream research
+//! pipeline live in the [`cases`] store under `<data>/cases/`.
 
 pub mod case;
+pub mod cases;
 pub mod command;
 pub mod evidence;
 pub mod portfolio;
@@ -18,8 +20,9 @@ pub mod table;
 use shadowrunr_types::{Rank, SegmentId};
 
 pub use case::{demo_case, load_case, parse_case};
+pub use cases::{CaseMeta, CaseStatus, CaseStore, StagedCase, StreamKind, SubjectCategory};
 pub use command::{normalize_hex, parse_command, parse_grade};
-pub use evidence::{requires_alleged, SourceAllowlist};
+pub use evidence::{requires_alleged, ResearchAllowlist, SourceAllowlist};
 pub use portfolio::{next_status, PortfolioEntry};
 pub use ranks::RankTable;
 pub use research::{target_hex, CaseFile, CaseRecord};
@@ -39,6 +42,12 @@ pub enum SegmentError {
     Config { detail: String },
     #[error("io {path}: {detail}")]
     Io { path: String, detail: String },
+    /// A live stream asked for a real case the owner has not approved for stream (or whose
+    /// content changed since the approval).
+    #[error(
+        "case {case_id} is a real case not approved for stream: the owner approves it with `shadowrunr case approve {case_id}`"
+    )]
+    NotApproved { case_id: String },
 }
 
 /// Rank from subscription facts, using the built-in ladder (`data/ranks.toml`).

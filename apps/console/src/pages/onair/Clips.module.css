@@ -1,0 +1,61 @@
+/* On Air · Clips: the gate funnel, the candidate rows and one clip's nested page, in the
+   layer-2 editorial look over tokens. */
+
+.note { margin: var(--sr-space-compact) 0 var(--sr-space-base); color: var(--sr-color-text-mute); font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-small); }
+.dim { color: var(--sr-color-text-mute); font-size: var(--sr-size-small); line-height: 1.35; }
+.warn { margin: var(--sr-space-compact) 0; padding: var(--sr-space-snug) var(--sr-space-near); border-left: .4rem solid var(--sr-color-signal); background: var(--sr-color-surface-caution); color: var(--sr-color-text-on-caution); font-size: var(--sr-size-small); }
+
+/* Candidate rows */
+.list { list-style: none; border-top: var(--sr-stroke-rule) solid var(--sr-color-text-ink); }
+.row { display: grid; grid-template-columns: 2.5rem 4.5rem 1fr auto; grid-template-areas: "rank score title chips" "rank score meta chips"; gap: 0 var(--sr-space-near); align-items: baseline; padding: var(--sr-space-snug) 0; border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); color: inherit; text-decoration: none; }
+.row:hover { background: var(--sr-color-surface-card); }
+.rank { grid-area: rank; font-family: var(--sr-font-mono); color: var(--sr-color-text-mute); text-align: right; }
+.score { grid-area: score; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-subhead); font-variant-numeric: tabular-nums; }
+.title { grid-area: title; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--sr-weight-bold); }
+.meta { grid-area: meta; font-family: var(--sr-font-mono); font-size: var(--sr-size-caption); color: var(--sr-color-text-mute); }
+.chips { grid-area: chips; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sr-space-snug); }
+.pager { display: flex; align-items: center; gap: var(--sr-space-near); margin: var(--sr-space-base) 0; }
+
+/* The cut against its band: pre-roll, payoff, and the band's minimum as a tick. */
+.bar { position: relative; display: flex; height: 2.2rem; border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-surface-field); }
+.bar[data-over] { border-color: var(--sr-color-signal); }
+.pre { flex: 0 0 calc(var(--pre) * 100%); background: var(--sr-color-text-mute); }
+.pay { flex: 0 0 calc(var(--pay) * 100%); background: var(--sr-color-signal); }
+.min { position: absolute; top: -.4rem; bottom: -.4rem; left: calc(var(--min) * 100%); border-left: var(--sr-stroke-rule) dashed var(--sr-color-text-ink); }
+
+.signals { width: 100%; border-collapse: collapse; font-size: var(--sr-size-small); }
+.signals th { text-align: left; font-family: var(--sr-font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--sr-color-text-mute); border-bottom: var(--sr-stroke-rule) solid var(--sr-color-text-ink); }
+.signals td { padding: var(--sr-space-tick) 0; border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); font-variant-numeric: tabular-nums; }
+
+.plain { display: grid; gap: var(--sr-space-compact); list-style: none; font-size: var(--sr-size-small); }
+.plain small { color: var(--sr-color-text-mute); font-family: var(--sr-font-mono); }
+
+.checks { display: grid; gap: var(--sr-space-compact); list-style: none; }
+.checks li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sr-space-compact); padding-bottom: var(--sr-space-tick); border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); font-size: var(--sr-size-small); }
+.checks b { font-family: var(--sr-font-display); letter-spacing: .04em; text-transform: uppercase; }
+.checks span { flex-basis: 100%; color: var(--sr-color-text-mute); }
+
+.captions { display: grid; gap: var(--sr-space-tick); list-style: none; font-size: var(--sr-size-small); }
+.captions li { display: grid; grid-template-columns: 4rem 8rem 1fr; gap: var(--sr-space-near); }
+.captions small { font-family: var(--sr-font-mono); color: var(--sr-color-text-mute); text-align: right; }
+.captions b { font-family: var(--sr-font-display); text-transform: uppercase; letter-spacing: .04em; }
+
+/* Owner acts */
+.form { display: flex; flex-wrap: wrap; gap: var(--sr-space-near); align-items: flex-end; margin: var(--sr-space-base) 0; }
+.form > p { flex-basis: 100%; }
+.field { display: flex; flex-direction: column; gap: .25rem; font-size: var(--sr-size-caption); }
+.field > span { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .12em; text-transform: uppercase; color: var(--sr-color-text-mute); }
+.field input { font: inherit; font-size: var(--sr-size-small); padding: var(--sr-space-snug) var(--sr-space-compact); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-surface-field); color: var(--sr-color-text-ink); }
+.grow { flex: 1; min-width: 14rem; }
+.actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--sr-space-base); margin: var(--sr-space-base) 0; }
+.rowAction { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sr-space-compact); }
+.rowAction small[role="alert"] { color: var(--sr-color-fail); }
+.formError { margin: var(--sr-space-compact) 0; padding: var(--sr-space-snug) var(--sr-space-near); border-left: .4rem solid var(--sr-color-fail); background: var(--sr-color-verdict-failed-ground); color: var(--sr-color-verdict-failed-ink); font-size: var(--sr-size-small); }
+.dry { flex-basis: 100%; margin-top: var(--sr-space-compact); padding: var(--sr-space-near); border: var(--sr-stroke-rule) dashed var(--sr-color-text-ink); }
+.dry > b { font-family: var(--sr-font-display); letter-spacing: .08em; text-transform: uppercase; }
+
+.secondary,
+.primary { display: inline-block; padding: var(--sr-space-tight) var(--sr-space-base); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-surface-paper); color: var(--sr-color-text-ink); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-control); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; box-shadow: .2rem .2rem 0 var(--sr-color-text-ink); }
+.primary { background: var(--sr-page-accent, var(--sr-color-signal)); color: var(--sr-color-chrome-ink); }
+.primary:disabled,
+.secondary:disabled { opacity: .55; cursor: default; box-shadow: none; }

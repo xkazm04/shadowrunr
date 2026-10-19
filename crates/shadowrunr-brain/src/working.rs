@@ -12,6 +12,10 @@ use crate::util::one_line;
 /// Entries untouched for this long leave the working set.
 pub const WORKING_SET_TTL_MS: i64 = 3_600_000;
 const RECENT_LINES: usize = 12;
+/// Finished research results the prompt lists under "Earlier results", newest kept. A long
+/// investigation dispatches dozens of jobs inside the TTL; the segment's state summary keeps
+/// the case file's findings, so older summaries only cost prompt.
+pub const EARLIER_RESULTS: usize = 8;
 
 #[derive(Debug, Clone)]
 pub struct JobEntry {
@@ -162,13 +166,25 @@ impl WorkingSet {
                 ));
             }
         }
-        let older: Vec<&JobEntry> = self
+        let mut older: Vec<&JobEntry> = self
             .jobs
             .values()
             .filter(|j| !j.fresh && matches!(j.status.as_str(), "done" | "failed"))
             .collect();
         if !older.is_empty() {
+            // Newest first by update time (ties by id), then the cap.
+            older.sort_by(|a, b| {
+                b.updated_ms
+                    .cmp(&a.updated_ms)
+                    .then_with(|| a.job_id.cmp(&b.job_id))
+            });
+            let omitted = older.len().saturating_sub(EARLIER_RESULTS);
+            older.truncate(EARLIER_RESULTS);
+            older.reverse();
             s.push_str("Earlier results:\n");
+            if omitted > 0 {
+                s.push_str(&format!("({omitted} older results omitted)\n"));
+            }
             for j in older {
                 s.push_str(&format!(
                     "- {}: {}\n",
@@ -321,6 +337,28 @@ mod tests {
         // A single oversize item is still admitted.
         let big = vec![item(1, 30_000)];
         assert!(fitted_window(&big, 1_000).contains("[e1]"));
+    }
+
+    #[test]
+    fn earlier_results_keep_only_the_newest() {
+        let mut ws = WorkingSet::new(10_000_000);
+        for k in 0..20u32 {
+            let u = JobUpdate {
+                job_id: format!("job-{k:02}"),
+                origin: "s".into(),
+                brief: "b".into(),
+                status: JobStatus::Done(format!("result {k}")),
+            };
+            ws.apply_job(&u, i64::from(k) * 1_000);
+        }
+        let first = ws.render(None);
+        assert!(first.contains("Results just in"), "{first}");
+        let s = ws.render(None);
+        assert!(s.contains("(12 older results omitted)"), "{s}");
+        assert!(s.contains("job-19") && s.contains("job-12"), "{s}");
+        assert!(!s.contains("job-11:"), "{s}");
+        let at = |id: &str| s.find(id).unwrap();
+        assert!(at("job-12") < at("job-19"), "oldest kept first");
     }
 
     #[test]

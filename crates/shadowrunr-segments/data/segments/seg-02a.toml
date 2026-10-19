@@ -49,6 +49,14 @@ max_poll_options = 6
 max_searches_per_hex = 2
 plebiscite_secs = 60
 
+# A long investigation (a stream planned for an hour or more) runs as a three-act arc over the
+# planned time, one equal share per act: the case's hexes are staged per act and a later act's
+# hexes stay locked until it opens. `sign_off` waits for the seal window at the very end.
+[arc]
+min_planned_s = 3600
+acts = ["Anomaly and filing map", "Shell and archive trail", "Dossier sealed"]
+seal_s = 600
+
 [[transitions]]
 from = "briefing"
 on = "hex_revealed"

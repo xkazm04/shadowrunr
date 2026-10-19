@@ -23,6 +23,11 @@ pub struct FileConfig {
     pub sim: SimDefaults,
     #[serde(default)]
     pub daemon: DaemonConfig,
+    #[serde(default)]
+    pub clips: ClipsConfig,
+    /// `[research]`: the off-stream SEG-02A research pipeline (`shadowrunr case research`).
+    #[serde(default)]
+    pub research: crate::casework::ResearchConfig,
 }
 
 /// `[paths]`, as written in the file (relative to the file's directory unless absolute).
@@ -162,6 +167,35 @@ impl Default for DaemonConfig {
     }
 }
 
+/// `[clips]`: where the clip factory finds its recording tools. Every key is optional; a
+/// missing tool makes a render fall back to a poster frame plus caption tracks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClipsConfig {
+    /// The stage app: its `dist/` build and `scripts/record-clip.mjs`.
+    pub stage: String,
+    /// Commands (or paths) for node, ffmpeg and ffprobe.
+    pub node: String,
+    pub ffmpeg: String,
+    pub ffprobe: String,
+    /// A headless-capable Chromium; the usual Chrome, Edge and Playwright install locations
+    /// are searched when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chrome: Option<String>,
+}
+
+impl Default for ClipsConfig {
+    fn default() -> Self {
+        Self {
+            stage: "apps/stage".into(),
+            node: "node".into(),
+            ffmpeg: "ffmpeg".into(),
+            ffprobe: "ffprobe".into(),
+            chrome: None,
+        }
+    }
+}
+
 /// Absolute paths, resolved from [`PathsConfig`].
 #[derive(Debug, Clone)]
 pub struct Paths {
@@ -197,6 +231,10 @@ pub struct Config {
     pub paths: Paths,
     pub sim: SimDefaults,
     pub daemon: DaemonConfig,
+    /// `[clips]`, with `stage` and `chrome` resolved against the root.
+    pub clips: ClipsConfig,
+    /// `[research]`.
+    pub research: crate::casework::ResearchConfig,
 }
 
 #[derive(Debug)]
@@ -301,7 +339,35 @@ impl Config {
             paths,
             sim: fc.sim,
             daemon: fc.daemon,
+            clips: ClipsConfig {
+                stage: resolve(root, &fc.clips.stage)
+                    .to_string_lossy()
+                    .into_owned(),
+                chrome: fc
+                    .clips
+                    .chrome
+                    .as_deref()
+                    .map(|c| resolve(root, c).to_string_lossy().into_owned()),
+                ..fc.clips
+            },
+            research: fc.research,
         }
+    }
+
+    /// The clip factory's recording tools.
+    pub fn render_tools(&self) -> shadowrunr_clips::RenderTools {
+        shadowrunr_clips::RenderTools {
+            stage_dir: PathBuf::from(&self.clips.stage),
+            node: self.clips.node.clone(),
+            ffmpeg: self.clips.ffmpeg.clone(),
+            ffprobe: self.clips.ffprobe.clone(),
+            chrome: self.clips.chrome.as_ref().map(PathBuf::from),
+        }
+    }
+
+    /// The clip store under `<data>/clips`.
+    pub fn clip_store(&self) -> shadowrunr_clips::ClipStore {
+        shadowrunr_clips::ClipStore::new(&self.paths.data)
     }
 
     /// Simulation options built from `[paths]` and `[sim]`.

@@ -74,6 +74,9 @@ pub fn effective_options(matrix: &Matrix, base: &SimOptions) -> SimOptions {
     if matrix.rate_cap_exemptions {
         o.rate_cap_exemptions = true;
     }
+    if o.case.is_none() {
+        o.case = matrix.case.clone();
+    }
     o
 }
 

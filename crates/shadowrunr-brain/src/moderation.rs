@@ -102,6 +102,11 @@ fn ci(pattern: &str) -> Result<Regex, regex::Error> {
         .build()
 }
 
+/// The built-in doxxing pattern: a street address, a 3-3-4 phone number, or "home address".
+/// Shared with the SEG-02A research pipeline's PII scrubber, so what the brain blocks on air
+/// never reaches a staged case either.
+pub const BUILTIN_DOXX_PATTERN: &str = r"(\b\d{1,5}\s+\w+(?:\s+\w+)?\s+(?:street|st|avenue|ave|road|rd|boulevard|blvd|lane|ln|drive|dr)\b|\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b|\bhome\s+address\b)";
+
 /// Built-in fallback: a small set of categories used until WPR's platform-rules.json exists.
 const BUILTIN_RULES: &[(&str, &str, &str, &str)] = &[
     // id, category, pattern, action
@@ -123,12 +128,7 @@ const BUILTIN_RULES: &[(&str, &str, &str, &str)] = &[
         r"\b(loli|shota|underage\s+(?:sex|nudes?|porn)|cp\s+links?)\b",
         "block",
     ),
-    (
-        "builtin-doxx",
-        "doxxing",
-        r"(\b\d{1,5}\s+\w+(?:\s+\w+)?\s+(?:street|st|avenue|ave|road|rd|boulevard|blvd|lane|ln|drive|dr)\b|\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b|\bhome\s+address\b)",
-        "block",
-    ),
+    ("builtin-doxx", "doxxing", BUILTIN_DOXX_PATTERN, "block"),
     (
         "builtin-real-harm",
         "violence",

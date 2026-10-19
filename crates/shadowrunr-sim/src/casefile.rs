@@ -178,6 +178,46 @@ mod tests {
         assert!(!r.text.contains("CLM-03"), "{}", r.text);
     }
 
+    #[tokio::test]
+    async fn research_on_a_real_case_reads_its_public_records() {
+        let tmp = tempfile::tempdir().unwrap();
+        let id = crate::runner::tests::stage_real_case(tmp.path());
+        let staged = shadowrunr_segments::CaseStore::new(tmp.path())
+            .open_for_stream(&id, shadowrunr_segments::StreamKind::PrivateSim)
+            .unwrap();
+        let stage = SegmentRuntime::with_config(
+            SegmentId::Seg02aHexmap,
+            SegmentConfig::default()
+                .with_staged_case(&staged, shadowrunr_segments::StreamKind::PrivateSim),
+        )
+        .unwrap();
+        let engine = CaseFileResearch::wrap(Arc::new(ScriptedEngine), &stage);
+        let r = engine
+            .complete(request(Role::Researcher, "HEX-01: who is behind it"))
+            .await
+            .unwrap();
+        assert_eq!(r.model, MODEL);
+        assert!(r.text.contains("1 public record(s) on file"), "{}", r.text);
+        assert!(r.text.contains("DOC-01 [DOC]"), "{}", r.text);
+        assert!(!r.text.contains("FICTIONAL"), "{}", r.text);
+        // The cap and the Plebiscite hold for a real case too.
+        engine
+            .complete(request(Role::Researcher, "HEX-01 again"))
+            .await
+            .unwrap();
+        let r = engine
+            .complete(request(Role::Researcher, "hex 1 a third time"))
+            .await
+            .unwrap();
+        assert!(r.text.contains("Plebiscite"), "{}", r.text);
+        // A hex with nothing staged stays unproven.
+        let r = engine
+            .complete(request(Role::Researcher, "HEX-04: the archive"))
+            .await
+            .unwrap();
+        assert!(r.text.contains("stays unproven"), "{}", r.text);
+    }
+
     #[test]
     fn a_case_without_planted_records_is_not_wrapped() {
         let mut case = shadowrunr_segments::demo_case();

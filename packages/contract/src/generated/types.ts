@@ -23,6 +23,63 @@ export type CharacterRulesResult = RuleState[];
 export type CharacterRulesSetResult = RuleState[];
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipPlatform".
+ */
+export type ClipPlatform = "youtube" | "tiktok" | "twitch";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "EvidenceGrade".
+ */
+export type EvidenceGrade = "DOC" | "REP" | "CLM" | "SPC";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "GateState".
+ */
+export type GateState = ("pass" | "fail" | "not_applicable") | "unmeasured";
+/**
+ * The publish states. `rendered_draft -> pending_owner_gate -> approved_for_upload ->
+ * published`, or `rejected` from any state before `published`. Only the owner moves a
+ * candidate to `approved_for_upload` or `rejected`; only a real upload moves it to
+ * `published` (dry runs never do).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipStatus".
+ */
+export type ClipStatus = "rendered_draft" | "pending_owner_gate" | "approved_for_upload" | "published" | "rejected";
+/**
+ * `clip`: two or more independent signals agree. `review`: one signal carries it, or the
+ * window could not hold its setup; it goes to the owner as a review case, never straight
+ * to the queue.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipLane".
+ */
+export type ClipLane = "clip" | "review";
+/**
+ * What made a moment a marker. `mark_moment` is the host's own action; the others are
+ * structural beats of the show read from the transcript.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "MarkerKind".
+ */
+export type MarkerKind = "mark_moment" | "foil_roast" | "hex_reveal" | "verdict_sealed";
+/**
+ * What `clips.scan` reads: one run (`run_id`, optionally qualified) or every result run of
+ * a tournament.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipScanSource".
+ */
+export type ClipScanSource =
+  | {
+      run_id: string;
+      tournament_id?: string;
+    }
+  | {
+      tournament_id: string;
+    };
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "DirectiveKind".
  */
 export type DirectiveKind = "prevent" | "try";
@@ -48,7 +105,15 @@ export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
  * via the `definition` "Role".
  */
 export type Role =
-  "core_thread" | "chat_picker" | "planner" | "researcher" | "consolidator" | "chatter" | "judge" | "reconciler";
+  | "core_thread"
+  | "chat_picker"
+  | "planner"
+  | "researcher"
+  | "consolidator"
+  | "chatter"
+  | "judge"
+  | "reconciler"
+  | "clipper";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ModelTier".
@@ -219,11 +284,6 @@ export type StreamEvent =
       ts_ms: number;
       type: "stream_end";
     };
-/**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "EvidenceGrade".
- */
-export type EvidenceGrade = "DOC" | "REP" | "CLM" | "SPC";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "HexKind".
@@ -465,6 +525,34 @@ export interface RpcMethods {
   "character.tone.set": {
     params: CharacterToneSetParams;
     result: CharacterSummary;
+  };
+  "clips.approve": {
+    params: ClipsApproveParams;
+    result: ClipCandidate;
+  };
+  "clips.get": {
+    params: ClipIdParams;
+    result: ClipCandidate;
+  };
+  "clips.list": {
+    params: ClipsListParams;
+    result: ClipsPage;
+  };
+  "clips.publish": {
+    params: ClipsPublishParams;
+    result: ClipPublishReport;
+  };
+  "clips.reject": {
+    params: ClipsRejectParams;
+    result: ClipCandidate;
+  };
+  "clips.render": {
+    params: ClipIdParams;
+    result: ClipCandidate;
+  };
+  "clips.scan": {
+    params: ClipsScanParams;
+    result: ClipScanReport;
   };
   "directive.add": {
     params: DirectiveAddParams;
@@ -767,6 +855,599 @@ export interface CharacterRulesSetParams {
 export interface CharacterToneSetParams {
   id: string;
   tone: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipsApproveParams".
+ */
+export interface ClipsApproveParams {
+  id: string;
+  note?: string;
+  /**
+   * Required when a gate check is unmeasured.
+   */
+  override_reason?: string;
+  /**
+   * Who approves. Recorded; the owner's act, never the scorer's.
+   */
+  signature: string;
+}
+/**
+ * A stored clip candidate.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipCandidate".
+ */
+export interface ClipCandidate {
+  approval?: ClipApproval;
+  captions: ClipCaption[];
+  created_ms: number;
+  dry_runs?: ClipDryRun[];
+  evidence?: ClipEvidence;
+  gate: ClipGate;
+  history: ClipTransition[];
+  /**
+   * `clip-<16 hex>`: stable for the same source and cut.
+   */
+  id: string;
+  lane: ClipLane;
+  linked_case_id?: string;
+  markers: ClipMarker[];
+  /**
+   * 1 = the stream's best.
+   */
+  rank: number;
+  rejection?: ClipRejection;
+  render?: ClipRender;
+  score: number;
+  scoring: ClipScoring;
+  segment: SegmentId;
+  signals: ClipSignals;
+  source: ClipSource;
+  status: ClipStatus;
+  /**
+   * The marker label, or the first line of the payoff.
+   */
+  title: string;
+  window: ClipWindow;
+}
+/**
+ * The owner's signature on `approved_for_upload`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipApproval".
+ */
+export interface ClipApproval {
+  at_ms: number;
+  note?: string;
+  overridden?: string[];
+  /**
+   * Required when a check was unmeasured; the hold reasons it overrode are kept beside it.
+   */
+  override_reason?: string;
+  signature: string;
+}
+/**
+ * One caption cue: the exact transcript line (viewer handles redacted), timed on the
+ * draft's spoken clock from the clip's start.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipCaption".
+ */
+export interface ClipCaption {
+  end_ms: number;
+  /**
+   * `malakor`, or the foil id.
+   */
+  speaker: string;
+  start_ms: number;
+  text: string;
+}
+/**
+ * One upload request the dry run wrote instead of sending.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipDryRun".
+ */
+export interface ClipDryRun {
+  /**
+   * The platform call can serve this candidate at all (Twitch Create Clip needs a live
+   * broadcast).
+   */
+  applicable: boolean;
+  at_ms: number;
+  /**
+   * Uploads left today under the platform's daily budget, when it has one.
+   */
+  budget_left?: number;
+  /**
+   * The request file, relative to the candidate's directory.
+   */
+  file: string;
+  note: string;
+  platform: ClipPlatform;
+}
+/**
+ * The claim context a SEG-02A (or case-linked) cut carries.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipEvidence".
+ */
+export interface ClipEvidence {
+  case_id: string;
+  case_title: string;
+  /**
+   * Source URLs shown in the picture, at most three.
+   */
+  citation: string[];
+  /**
+   * A fabricated demo or simulation case: the header says so.
+   */
+  fictional: boolean;
+  hexes: ClipHex[];
+  worst_grade?: EvidenceGrade;
+}
+/**
+ * One hex a SEG-02A cut reveals or names.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipHex".
+ */
+export interface ClipHex {
+  grade?: EvidenceGrade;
+  id: string;
+  label: string;
+  sources?: string[];
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipGate".
+ */
+export interface ClipGate {
+  checks: GateCheck[];
+  evaluated_ms: number;
+  /**
+   * Any check failed or could not run.
+   */
+  held: boolean;
+  /**
+   * `<check>: <detail>` for every check that holds the clip.
+   */
+  hold_reasons?: string[];
+  /**
+   * `linked_case_id IS NOT NULL OR segment = SEG-02A`.
+   */
+  requires_mandatory_gate: boolean;
+}
+/**
+ * One gate check. Exclusions run on every clip; the mandatory checklist runs when the clip
+ * is from SEG-02A or links a case.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "GateCheck".
+ */
+export interface GateCheck {
+  detail: string;
+  /**
+   * `care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,
+   * `ai_disclosure`, `evidence_badge_burnt`, `source_citation`, `no_open_correction`.
+   */
+  id: string;
+  /**
+   * Part of the SEG-02A / linked-case checklist.
+   */
+  mandatory?: boolean;
+  state: GateState;
+}
+/**
+ * One state change, oldest first.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipTransition".
+ */
+export interface ClipTransition {
+  at_ms: number;
+  /**
+   * `scanner`, `gate`, `render` or the owner's signature.
+   */
+  by: string;
+  note?: string;
+  status: ClipStatus;
+}
+/**
+ * One marker the scorer read, admitted or capped.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipMarker".
+ */
+export interface ClipMarker {
+  /**
+   * Counted by the scorer. A capped marker is kept with its reason.
+   */
+  admitted: boolean;
+  /**
+   * `label_empty`, `label_too_long`, `cooldown` or `segment_ceiling`.
+   */
+  capped?: string;
+  /**
+   * A chat message asked for a clip just before the mark ("clip that"): the gate shows it.
+   */
+  chat_requested?: boolean;
+  kind: MarkerKind;
+  label: string;
+  /**
+   * Emission time on the stream clock.
+   */
+  ts_ms: number;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipRejection".
+ */
+export interface ClipRejection {
+  at_ms: number;
+  by: string;
+  reason: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipRender".
+ */
+export interface ClipRender {
+  duration_s: number;
+  /**
+   * Why there is no video (a missing tool, a failed recording), when `kind` is `poster`.
+   */
+  fallback_reason?: string;
+  files: ClipFile[];
+  height: number;
+  /**
+   * `video` (an MP4 was recorded from the stage) or `poster` (a still poster frame plus
+   * caption tracks, when recording tooling is missing).
+   */
+  kind: string;
+  overlay: ClipOverlay;
+  rendered_ms: number;
+  width: number;
+}
+/**
+ * One file of a render, relative to the candidate's directory.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipFile".
+ */
+export interface ClipFile {
+  bytes: number;
+  /**
+   * `video`, `poster`, `captions_srt`, `captions_ass`, `stage_input`, `manifest`.
+   */
+  kind: string;
+  path: string;
+}
+/**
+ * What the render burnt into the picture.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipOverlay".
+ */
+export interface ClipOverlay {
+  /**
+   * "AI character · synthetic media", always drawn.
+   */
+  ai_disclosure: boolean;
+  /**
+   * The ALLEGED header (SEG-02A and case-linked clips).
+   */
+  alleged_header: boolean;
+  /**
+   * Where the captions come from: always the transcript text, with the timing model named.
+   */
+  captions: string;
+  citation?: string[];
+  /**
+   * The grade badge text (`DOC`, `REP`, `CLM`, `SPC` or `UNGRADED`).
+   */
+  grade_badge?: string;
+}
+/**
+ * How the score was fused: the nominal weights, the weights actually applied after the
+ * unmeasured signals' share was redistributed, and where the weights come from.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipScoring".
+ */
+export interface ClipScoring {
+  /**
+   * Signals that agreed (each at or above its firing level).
+   */
+  agreeing: string[];
+  effective: ClipWeights;
+  nominal: ClipWeights;
+  /**
+   * Always "unmeasured" until a human editor's independent picks have scored the weights.
+   */
+  provenance: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipWeights".
+ */
+export interface ClipWeights {
+  audio: number;
+  chat: number;
+  hook: number;
+  marker: number;
+}
+/**
+ * The fused signals of one candidate, each 0..=1. An absent value is unmeasured for this
+ * window (never scored as zero).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipSignals".
+ */
+export interface ClipSignals {
+  /**
+   * Programme audio energy: always unmeasured in the media-less phase.
+   */
+  audio?: number;
+  /**
+   * Crowd reaction: the distinct-chatter z-score against the stream's own baseline, clipped
+   * to 0..=3 and divided by 3.
+   */
+  chat?: number;
+  /**
+   * The raw z-score behind `chat`.
+   */
+  chat_z?: number;
+  /**
+   * The model's hook read of the window's lines.
+   */
+  hook?: number;
+  /**
+   * The model's one-line reason for `hook`.
+   */
+  hook_why?: string;
+  /**
+   * The strongest admitted marker in the anchor beat (kind weight).
+   */
+  marker: number;
+  /**
+   * Why a signal is unmeasured here: `{"audio": "no audio in the media-less phase"}`.
+   */
+  unmeasured?: {
+    [k: string]: string | undefined;
+  };
+}
+/**
+ * Where the candidate came from. `transcript` is relative to the configured runs root
+ * (or the file name when the transcript lies outside it).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipSource".
+ */
+export interface ClipSource {
+  /**
+   * 1-based transcript lines of the first and last event inside the cut.
+   */
+  line_from: number;
+  line_to: number;
+  run_id: string;
+  stream_id: string;
+  tournament_id?: string;
+  transcript: string;
+}
+/**
+ * The cut, on two clocks: the stream clock (`*_ms`, the transcript's `ts_ms`) and the
+ * spoken clock the draft plays on (`spoken_*_ms`, the caption timing model), because a
+ * simulated beat holds more speech than its tick.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipWindow".
+ */
+export interface ClipWindow {
+  /**
+   * The beat the score peaked on, corrected for its signal's lag.
+   */
+  anchor_ms: number;
+  /**
+   * The style's duration band in seconds, `[min, max]`.
+   *
+   * @minItems 2
+   * @maxItems 2
+   */
+  band_s: [number, number];
+  /**
+   * `marker`, `crowd` or `hook`: which signal placed the anchor.
+   */
+  driver: string;
+  /**
+   * `spoken_end_ms - spoken_start_ms` in seconds.
+   */
+  duration_s: number;
+  end_ms: number;
+  /**
+   * The lag applied before the pre-roll (the crowd's reaction delay; 0 for a marker).
+   */
+  lag_ms: number;
+  /**
+   * The setup and payoff could not fit the band: re-author, do not cut.
+   */
+  needs_reauthoring?: boolean;
+  note?: string;
+  /**
+   * The pre-roll reached back before the anchor beat (spoken clock).
+   */
+  preroll_ms: number;
+  spoken_end_ms: number;
+  spoken_start_ms: number;
+  /**
+   * First and last stream-clock beats inside the cut.
+   */
+  start_ms: number;
+  /**
+   * `seg01-split-stage` (25-35 s), `seg02a-alleged` (45-60 s) or `default` (15-60 s).
+   */
+  style: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipIdParams".
+ */
+export interface ClipIdParams {
+  id: string;
+}
+/**
+ * `clips.list`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipsListParams".
+ */
+export interface ClipsListParams {
+  cursor?: string;
+  /**
+   * 1..=500; larger values are capped at 500.
+   */
+  limit: number;
+  run_id?: string;
+  status?: ClipStatus;
+  tournament_id?: string;
+}
+/**
+ * Candidates by score, best first; `counts` covers every stored candidate by status.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipsPage".
+ */
+export interface ClipsPage {
+  counts: {
+    [k: string]: number | undefined;
+  };
+  /**
+   * Candidates waiting at the owner gate that the gate holds (a check failed or could not
+   * run), over the whole store.
+   */
+  held: number;
+  items: ClipSummary[];
+  next_cursor?: string;
+  /**
+   * Stored candidates matching the filter, over every page.
+   */
+  total: number;
+}
+/**
+ * A candidate as `clips.list` shows it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipSummary".
+ */
+export interface ClipSummary {
+  created_ms: number;
+  duration_s: number;
+  held: boolean;
+  id: string;
+  lane: ClipLane;
+  rank: number;
+  /**
+   * `video`, `poster`, or absent before a render.
+   */
+  render?: string;
+  requires_mandatory_gate: boolean;
+  run_id: string;
+  score: number;
+  segment: SegmentId;
+  status: ClipStatus;
+  title: string;
+  tournament_id?: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipsPublishParams".
+ */
+export interface ClipsPublishParams {
+  id: string;
+  /**
+   * Every platform when absent.
+   */
+  platforms?: ClipPlatform[];
+}
+/**
+ * `clips.publish`: always a dry run in this build. No credentials exist and no adapter
+ * makes a network call; each adapter writes the exact request it would send.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipPublishReport".
+ */
+export interface ClipPublishReport {
+  dry_run: boolean;
+  id: string;
+  requests: ClipDryRun[];
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipsRejectParams".
+ */
+export interface ClipsRejectParams {
+  /**
+   * Who rejects; `owner` when absent.
+   */
+  by?: string;
+  id: string;
+  reason: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipsScanParams".
+ */
+export interface ClipsScanParams {
+  /**
+   * Ask the model for the hook read (one call per run). Default true; false leaves the
+   * hook unmeasured and redistributes its weight.
+   */
+  hook?: boolean;
+  source: ClipScanSource;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipScanReport".
+ */
+export interface ClipScanReport {
+  /**
+   * Candidates the owner already acted on, kept as they were.
+   */
+  kept: number;
+  /**
+   * Untouched earlier candidates of the same runs, replaced by this scan.
+   */
+  replaced: number;
+  runs: ClipScanRun[];
+  /**
+   * The best candidates of this scan, best first (at most 10).
+   */
+  top: ClipSummary[];
+  /**
+   * "weights unmeasured: ...": the label every ranking carries.
+   */
+  weights_note: string;
+  /**
+   * New candidates written.
+   */
+  written: number;
+}
+/**
+ * One run of a scan.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipScanRun".
+ */
+export interface ClipScanRun {
+  candidates: number;
+  /**
+   * `measured`, `off`, or `unmeasured: <why>` (the engine call failed or did not parse).
+   */
+  hook: string;
+  markers_admitted: number;
+  markers_capped: number;
+  run_id: string;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema

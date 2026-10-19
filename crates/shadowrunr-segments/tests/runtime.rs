@@ -2,6 +2,7 @@
 
 use shadowrunr_segments::{
     demo_case, requires_alleged, HandoverRule, SegmentConfig, SegmentError, SegmentRuntime,
+    StreamKind,
 };
 use shadowrunr_types::{
     ChatMsg, Command, EvidenceGrade, Hex, HexKind, ModStage, Op, Platform, Rank, SegmentId,
@@ -734,6 +735,7 @@ fn fictional_primary_domains_only_count_for_fictional_cases() {
     real.fictional = false;
     let mut c = cfg();
     c.case = Some(real);
+    c.case_approved = true;
     let mut rt = SegmentRuntime::with_config(SegmentId::Seg02aHexmap, c).unwrap();
     assert_eq!(
         rejections(&rt.apply_ops(0, &[reveal("HEX-01", EvidenceGrade::Doc)]))[0].1,
@@ -757,6 +759,7 @@ fn doc_reveal_with_regulator_source_passes() {
     });
     let mut c = cfg();
     c.case = Some(case);
+    c.case_approved = true;
     let mut rt = SegmentRuntime::with_config(SegmentId::Seg02aHexmap, c).unwrap();
     assert_eq!(
         accepted_ops(&rt.apply_ops(0, &[reveal("HEX-17", EvidenceGrade::Doc)])),
@@ -1198,4 +1201,220 @@ fn runtime_is_deterministic() {
     let a = scripted_run();
     assert_eq!(a, scripted_run());
     assert!(a.contains("\"type\":\"handover\""));
+}
+
+// ----- real cases and the multi-act arc ---------------------------------------------------
+
+fn real_demo_case() -> shadowrunr_types::Case {
+    let mut real = demo_case();
+    real.id = "REAL-TEST-01".into();
+    real.fictional = false;
+    real
+}
+
+#[test]
+fn a_live_stream_refuses_an_unapproved_real_case_and_a_sim_may_run_it() {
+    let mut c = cfg();
+    c.case = Some(real_demo_case());
+    assert!(matches!(
+        SegmentRuntime::with_config(SegmentId::Seg02aHexmap, c.clone()),
+        Err(SegmentError::NotApproved { case_id }) if case_id == "REAL-TEST-01"
+    ));
+    c.stream = StreamKind::PrivateSim;
+    assert!(SegmentRuntime::with_config(SegmentId::Seg02aHexmap, c.clone()).is_ok());
+    c.stream = StreamKind::Live;
+    c.case_approved = true;
+    let rt = SegmentRuntime::with_config(SegmentId::Seg02aHexmap, c).unwrap();
+    let rules = rt.context(30, 0).rules_prompt;
+    assert!(
+        rules.contains("REAL CASE FROM THE PUBLIC RECORD"),
+        "{rules}"
+    );
+    assert!(rules.contains("by role only"), "{rules}");
+    assert!(!rules.contains("FICTIONAL DEMO DATA"), "{rules}");
+    // The fictional demo case is never gated.
+    assert!(SegmentRuntime::with_config(SegmentId::Seg02aHexmap, cfg()).is_ok());
+}
+
+fn arc_runtime(planned_s: u32) -> SegmentRuntime {
+    let mut c = cfg();
+    c.planned_s = Some(planned_s);
+    let mut rt = SegmentRuntime::with_config(SegmentId::Seg02aHexmap, c).unwrap();
+    rt.start(0);
+    rt
+}
+
+fn cards(evs: &[StreamEvent]) -> Vec<String> {
+    evs.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Op {
+                op: Op::ShowCard { card_id, .. },
+                ..
+            } => Some(card_id.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_short_stream_runs_no_arc() {
+    let mut rt = arc_runtime(1_200);
+    assert_eq!(rt.arc_act(), None);
+    let ctx = rt.context(30, 0);
+    assert!(ctx.allowed_ops.iter().any(|o| o == "sign_off"));
+    assert!(!ctx.state_summary.contains("ARC"));
+    // Every hex is open at once.
+    assert_eq!(
+        accepted_ops(&rt.apply_ops(1_000, &[reveal("HEX-16", EvidenceGrade::Clm)])),
+        1
+    );
+}
+
+#[test]
+fn a_three_hour_stream_runs_three_acts_with_locked_hexes_and_a_seal_window() {
+    let mut rt = SegmentRuntime::with_config(
+        SegmentId::Seg02aHexmap,
+        SegmentConfig {
+            planned_s: Some(10_800),
+            ..cfg()
+        },
+    )
+    .unwrap();
+    let start = rt.start(0);
+    assert_eq!(cards(&start), ["arc-act-1"]);
+    assert_eq!(rt.arc_act(), Some((0, 3)));
+    // Every hex is staged for exactly one act, and every act has hexes.
+    let acts: Vec<usize> = rt
+        .case()
+        .hexes
+        .iter()
+        .map(|h| rt.hex_act(&h.id).unwrap())
+        .collect();
+    for k in 0..3 {
+        assert!(acts.contains(&k), "act {k} is empty: {acts:?}");
+    }
+    let in_act = |k: usize| {
+        rt.case()
+            .hexes
+            .iter()
+            .find(|h| rt.hex_act(&h.id) == Some(k))
+            .unwrap()
+            .id
+            .clone()
+    };
+    let (first, later) = (in_act(0), in_act(2));
+
+    // Act I: a later act's hex is locked for reveal and research; sign_off is withheld.
+    let ctx = rt.context(30, 60);
+    assert!(!ctx.allowed_ops.iter().any(|o| o == "sign_off"));
+    // The arc is the whole segment: no handover to SEG-01 midway.
+    assert!(!ctx.allowed_ops.iter().any(|o| o == "switch_segment"));
+    let switch = Op::SwitchSegment {
+        to: SegmentId::Seg01ImprovisedRoom,
+    };
+    assert_eq!(
+        rejections(&rt.apply_ops(60_000, &[switch]))[0].1,
+        "arc_in_progress"
+    );
+    assert_eq!(rt.segment(), SegmentId::Seg02aHexmap);
+    assert!(
+        ctx.state_summary.contains("ARC act 1/3"),
+        "{}",
+        ctx.state_summary
+    );
+    assert!(
+        ctx.state_summary.contains("LOCKED until act 2"),
+        "{}",
+        ctx.state_summary
+    );
+    assert!(
+        ctx.rules_prompt.contains("in 3 acts"),
+        "{}",
+        ctx.rules_prompt
+    );
+    assert_eq!(
+        rejections(&rt.apply_ops(60_000, &[reveal(&later, EvidenceGrade::Clm)]))[0].1,
+        "act_locked"
+    );
+    let research = Op::DispatchResearch {
+        job_id: "j1".into(),
+        brief: format!("{later}: who is behind it"),
+    };
+    assert_eq!(
+        rejections(&rt.apply_ops(60_000, &[research]))[0].1,
+        "act_locked"
+    );
+    assert_eq!(rt.searches(&later), 0, "a locked brief is not counted");
+    assert_eq!(
+        accepted_ops(&rt.apply_ops(60_000, &[reveal(&first, EvidenceGrade::Clm)])),
+        1
+    );
+    let early = Op::SignOff {
+        reason: "bored".into(),
+    };
+    assert_eq!(
+        rejections(&rt.apply_ops(61_000, std::slice::from_ref(&early)))[0].1,
+        "dossier_not_sealed"
+    );
+    assert!(!rt.is_signed_off());
+
+    // Act II opens at minute 60 with its card; act III at minute 120.
+    assert!(cards(&rt.tick(3_599_000, 30)).is_empty());
+    assert_eq!(cards(&rt.tick(3_600_000, 30)), ["arc-act-2"]);
+    assert_eq!(rt.arc_act(), Some((1, 3)));
+    assert_eq!(cards(&rt.tick(7_200_000, 30)), ["arc-act-3"]);
+    assert_eq!(
+        accepted_ops(&rt.apply_ops(7_200_000, &[reveal(&later, EvidenceGrade::Clm)])),
+        1
+    );
+    let ctx = rt.context(30, 7_300);
+    assert!(
+        ctx.state_summary.contains("Final act"),
+        "{}",
+        ctx.state_summary
+    );
+
+    // The seal window: the last 10 minutes. sign_off is offered and accepted.
+    assert_eq!(cards(&rt.tick(10_200_000, 30)), ["arc-seal"]);
+    let ctx = rt.context(30, 10_200);
+    assert!(ctx.allowed_ops.iter().any(|o| o == "sign_off"));
+    assert!(
+        ctx.state_summary.contains("SEAL WINDOW"),
+        "{}",
+        ctx.state_summary
+    );
+    assert_eq!(accepted_ops(&rt.apply_ops(10_200_000, &[early])), 1);
+    assert!(rt.is_signed_off());
+}
+
+#[test]
+fn a_fleet_loss_sign_off_is_never_held_for_the_seal() {
+    let mut rt = arc_runtime(10_800);
+    let lost = Op::SignOff {
+        reason: "fleet_lost: engine degraded or down for 300s".into(),
+    };
+    assert_eq!(accepted_ops(&rt.apply_ops(5_000, &[lost])), 1);
+    assert!(rt.is_signed_off());
+}
+
+#[test]
+fn a_staged_arc_from_the_case_file_wins_over_kind_order() {
+    let mut file = shadowrunr_segments::CaseFile::demo();
+    // Act III holds only HEX-01; the rest are dealt by kind.
+    file.arc = vec![Vec::new(), Vec::new(), vec!["HEX-01".into()]];
+    let rt = SegmentRuntime::with_config(
+        SegmentId::Seg02aHexmap,
+        SegmentConfig {
+            case: Some(demo_case()),
+            case_file: Some(file),
+            planned_s: Some(10_800),
+            ..cfg()
+        },
+    )
+    .unwrap();
+    assert_eq!(rt.hex_act("HEX-01"), Some(2));
+    assert!(demo_case()
+        .hexes
+        .iter()
+        .all(|h| rt.hex_act(&h.id).is_some()));
 }

@@ -189,3 +189,22 @@ by construction:
 inside the canvas. The `?debug=1` audit flags any element whose content exceeds its box, except
 intentional clamps. It was run over 30+ moments of the demo, at 1920x1080 and at a letterboxed
 1280x1000, with no findings.
+
+## Clip mode (vertical drafts)
+
+`?clip=<url>` loads one clip candidate's `clip.json` (written by `crates/shadowrunr-clips`) and
+draws it on a 1080x1920 canvas instead of the broadcast (`src/ClipStage.tsx`, `src/clip.ts`,
+`src/clip.css`). Top to bottom: the header (ALLEGED, the grade badge, the case title and a
+FICTIONAL DEMO CASE chip for SEG-02A or case-linked clips; otherwise the segment title and
+foil), the hexmap or the avatar with the foil card, the exact transcript captions word-timed
+by stage-kit's caption model, the citation strip, and the AI disclosure with the clip's
+provenance. Chat never appears: handles stay in the room.
+
+`&record=1` stops the wall clock. `window.__clip.seek(ms)` commits a frame, paints twice and
+settles every CSS animation at a time derived from the clip clock, so frames are
+deterministic. `scripts/record-clip.mjs` (no dependencies) serves `dist/` and the clip,
+drives a headless Chromium over the DevTools protocol frame by frame and pipes the frames
+into ffmpeg (libx264, yuv420p), plus a poster PNG:
+
+    node scripts/record-clip.mjs --dist dist --clip <clip.json> --out <draft.mp4>       --poster <poster.png> --chrome <chrome or msedge> --ffmpeg <ffmpeg> [--fps 30]
+

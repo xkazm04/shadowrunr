@@ -8,6 +8,10 @@
 //!
 //! Reconcile opt-5: `rate_cap_exemptions = true` runs every spec with the rate-cap exemption
 //! experiment on (see `shadowrunr_brain::FilterConfig`). Absent: off, same hash as before.
+//!
+//! `case = "<id>"` audits a staged real case from `<data>/cases/<id>/` in every SEG-02A run
+//! instead of the fictional demo case (its content hash joins the instrument). Absent: the demo
+//! case, same hash as before.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -71,6 +75,9 @@ pub struct Matrix {
     /// or false: off, and the instrument hash is what it always was.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub rate_cap_exemptions: bool,
+    /// A staged real case for every SEG-02A run (`SimOptions::case`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub case: Option<String>,
     pub axes: Axes,
 }
 
@@ -99,6 +106,16 @@ impl Matrix {
             return Err(SimError::Spec(
                 "duration_s and tick_s must be positive".into(),
             ));
+        }
+        if let Some(case) = &m.case {
+            shadowrunr_segments::cases::check_case_id(case)
+                .map_err(|e| SimError::Spec(format!("matrix {}: {e}", m.id)))?;
+            if a.segments.iter().any(|s| *s != SegmentId::Seg02aHexmap) {
+                return Err(SimError::Spec(format!(
+                    "matrix {}: a case is audited in SEG-02A runs only",
+                    m.id
+                )));
+            }
         }
         if !m
             .id
@@ -273,6 +290,35 @@ seeds = [1]
         // The shipped matrices declare none: their tournaments keep their hashes.
         assert_eq!(shipped("pilot.toml").brief_source(), BriefSource::None);
         assert_eq!(shipped("heavy.toml").brief_source(), BriefSource::None);
+    }
+
+    #[test]
+    fn the_three_hour_case_matrix_is_one_long_real_case_run() {
+        let m = shipped("case-3h.toml");
+        let specs = m.specs();
+        assert_eq!(specs.len(), 1, "one run");
+        let s = &specs[0];
+        assert_eq!(s.duration_s, 10_800);
+        assert_eq!(s.tone_variant, "unhinged-roastmaster");
+        assert_eq!(s.core_tier, ModelTier::Sonnet);
+        assert_eq!(s.segment, SegmentId::Seg02aHexmap);
+        assert_eq!(s.audience_size, 30);
+        assert_eq!(s.seed, 1);
+        assert_eq!(m.tick_s, 5, "2,160 ticks");
+        assert_eq!(m.judge_tiers, vec![ModelTier::Opus]);
+        let case = m.case.as_deref().expect("a real case");
+        shadowrunr_segments::cases::check_case_id(case).unwrap();
+        // No other shipped matrix names a case: their hashes are unchanged.
+        for name in ["pilot.toml", "heavy.toml", "night.toml"] {
+            assert!(shipped(name).case.is_none(), "{name}");
+        }
+        // A case is for SEG-02A runs only.
+        let bad = "id = \"x\"\ncharacter = \"malakor\"\nduration_s = 60\ncase = \"ABC-1\"\n[axes]\ntones = [\"theatrical\"]\ncore_tiers = [\"haiku\"]\nsegments = [\"SEG-01\"]\naudience_sizes = [3]\nseeds = [1]\n";
+        assert!(Matrix::parse(bad).is_err());
+        assert!(Matrix::parse(&bad.replace("SEG-01", "SEG-02A")).is_ok());
+        assert!(
+            Matrix::parse(&bad.replace("SEG-01", "SEG-02A").replace("ABC-1", "bad id")).is_err()
+        );
     }
 
     #[test]

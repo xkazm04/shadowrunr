@@ -1,11 +1,17 @@
-//! SEG-02A research: the planted case file of a fictional case, which hex a research brief is
-//! about, and the bone-clerks' report.
+//! SEG-02A research: the case file (planted records of a fictional case, or the staged public
+//! records of a real one), which hex a research brief is about, and the bone-clerks' report.
 //!
 //! A fictional case has nothing to find on the real web, so the bone-clerks used to come back
 //! empty and Malakor looped on the fog. The demo case therefore ships a pack of planted
 //! FICTIONAL records (`data/demo-case-records.json`) graded with the usual vocabulary (DOC,
 //! REP, CLM; never SPC, which is Malakor's own speculation). A research brief that names a hex
 //! returns that hex's records; some hexes carry none, so "nothing on file" still happens.
+//!
+//! A real case (`fictional: false`) carries the public records the off-stream research
+//! pipeline staged (`shadowrunr case research`, see [`crate::cases`]): every record names the
+//! URL it was published at, the day it was retrieved, the sha256 of the bytes retrieved and,
+//! when the publisher's own site refused the fetch, the Wayback Machine capture it came
+//! through. The bone-clerks then read those records, never the live web.
 //!
 //! The re-search cap itself (`max_searches_per_hex`, in the segment table's `[clock]`) is
 //! enforced by [`crate::SegmentRuntime`]; [`report`] only words the outcome.
@@ -17,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use shadowrunr_types::{Case, EvidenceGrade};
 
 use crate::command::normalize_hex;
-use crate::evidence::{url_host, SourceAllowlist};
+use crate::evidence::{url_host, wayback_original, ResearchAllowlist, SourceAllowlist};
 use crate::SegmentError;
 
 /// The compiled-in planted records of the fictional demo case: the exact bytes of
@@ -42,7 +48,8 @@ const STOP_WORDS: [&str; 10] = [
     "they",
 ];
 
-/// One planted record. Fictional by construction: only a fictional case accepts a case file.
+/// One record of a case file: planted (a fictional case) or staged from the public record (a
+/// real case).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CaseRecord {
@@ -52,22 +59,46 @@ pub struct CaseRecord {
     pub hex: String,
     pub grade: EvidenceGrade,
     pub title: String,
-    /// A reserved `*.example` URL. A DOC record's source is a primary source for the case.
+    /// Where the record was published: a reserved `*.example` URL in a fictional case, the
+    /// publisher's own URL in a real one. A DOC record's source is a primary source.
     pub source: String,
     pub summary: String,
+    /// Real cases: the UTC day the record was retrieved, `YYYY-MM-DD`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retrieved: Option<String>,
+    /// Real cases: sha256 (lowercase hex) of the bytes retrieved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_hash: Option<String>,
+    /// Real cases: the Wayback Machine capture the record was retrieved through, when the
+    /// publisher's site refused the fetch. Its original URL is `source`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
 }
 
-/// The planted records of one fictional case.
+impl CaseRecord {
+    /// The URL the record's bytes were actually fetched from.
+    pub fn fetched_from(&self) -> &str {
+        self.via.as_deref().unwrap_or(&self.source)
+    }
+}
+
+/// The records of one case: planted for a fictional case, staged from the public record for a
+/// real one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CaseFile {
     /// The case these records belong to.
     pub case_id: String,
-    /// Must be true: planted records exist only for fictional cases.
+    /// Must match the case: planted records for a fictional case, public records for a real one.
     pub fictional: bool,
-    /// Human-readable warning that everything in the file is invented.
+    /// Human-readable notice: that everything is invented (fictional), or where the records
+    /// come from and how they may be spoken (real).
     pub notice: String,
     pub records: Vec<CaseRecord>,
+    /// The case's arc: hex ids per act, in act order (SEG-02A's `[arc]`). Empty: the runtime
+    /// assigns acts by hex kind.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arc: Vec<Vec<String>>,
 }
 
 impl CaseFile {
@@ -94,21 +125,36 @@ impl CaseFile {
             .expect("built-in demo case records are valid (tested)")
     }
 
-    /// The file fits `case`: same id, both fictional, unique ids whose prefix is the grade, no
-    /// SPC, every record on a hex of the case, every source on a reserved `*.example` domain,
-    /// and every DOC record backed by a primary source (so finding it makes a DOC reveal
-    /// possible under the existing rule).
+    /// The file fits `case`: same id and the same `fictional` flag, unique ids whose prefix is
+    /// the grade, no SPC, every record on a hex of the case, non-empty text, and every DOC
+    /// record backed by a primary source (so finding it makes a DOC reveal possible under the
+    /// existing rule). A fictional file's sources sit on reserved `*.example` domains. A real
+    /// file's records each carry their retrieval day and content hash, were fetched from the
+    /// research allowlist (`via` must be a Wayback capture of `source`), and carry no email
+    /// address or phone number. The arc, when present, names each hex at most once.
     pub fn validate(&self, case: &Case, allowlist: &SourceAllowlist) -> Result<(), SegmentError> {
+        self.validate_with(case, allowlist, ResearchAllowlist::builtin())
+    }
+
+    /// [`CaseFile::validate`] with the research allowlist the case was staged under.
+    pub fn validate_with(
+        &self,
+        case: &Case,
+        allowlist: &SourceAllowlist,
+        research: &ResearchAllowlist,
+    ) -> Result<(), SegmentError> {
         let bad = |detail: String| SegmentError::Config {
             detail: format!("case file {}: {detail}", self.case_id),
         };
         if self.case_id != case.id {
             return Err(bad(format!("belongs to another case than {}", case.id)));
         }
-        if !self.fictional || !case.fictional {
-            return Err(bad(
+        if self.fictional != case.fictional {
+            return Err(bad(if self.fictional {
                 "planted records are only allowed in a fictional case".into()
-            ));
+            } else {
+                "public records belong to a real case, not a fictional one".into()
+            }));
         }
         let hexes: BTreeSet<&str> = case.hexes.iter().map(|h| h.id.as_str()).collect();
         let mut ids = BTreeSet::new();
@@ -128,17 +174,30 @@ impl CaseFile {
             if r.title.trim().is_empty() || r.summary.trim().is_empty() {
                 return Err(bad(format!("{}: empty title or summary", r.id)));
             }
-            if !url_host(&r.source).is_some_and(|h| h.ends_with(".example")) {
-                return Err(bad(format!(
-                    "{}: source must be on a reserved *.example domain",
-                    r.id
-                )));
+            if self.fictional {
+                if !url_host(&r.source).is_some_and(|h| h.ends_with(".example")) {
+                    return Err(bad(format!(
+                        "{}: source must be on a reserved *.example domain",
+                        r.id
+                    )));
+                }
+            } else {
+                real_record_ok(r, research).map_err(|why| bad(format!("{}: {why}", r.id)))?;
             }
-            if r.grade == EvidenceGrade::Doc && !allowlist.is_primary(&r.source, true) {
+            if r.grade == EvidenceGrade::Doc && !allowlist.is_primary(&r.source, self.fictional) {
                 return Err(bad(format!(
                     "{}: a DOC record needs a primary source",
                     r.id
                 )));
+            }
+        }
+        let mut staged = BTreeSet::new();
+        for id in self.arc.iter().flatten() {
+            if !hexes.contains(id.as_str()) {
+                return Err(bad(format!("arc names unknown hex {id}")));
+            }
+            if !staged.insert(id.as_str()) {
+                return Err(bad(format!("arc names {id} twice")));
             }
         }
         Ok(())
@@ -148,6 +207,100 @@ impl CaseFile {
     pub fn records_for<'a>(&'a self, hex: &'a str) -> impl Iterator<Item = &'a CaseRecord> + 'a {
         self.records.iter().filter(move |r| r.hex == hex)
     }
+}
+
+/// The provenance checks of one real record (see [`CaseFile::validate`]).
+fn real_record_ok(r: &CaseRecord, research: &ResearchAllowlist) -> Result<(), String> {
+    let source = r.source.trim().to_ascii_lowercase();
+    if !(source.starts_with("https://") || source.starts_with("http://"))
+        || url_host(&r.source).is_none()
+    {
+        return Err("source must be an absolute http(s) URL".into());
+    }
+    if let Some(via) = &r.via {
+        if wayback_original(via).as_deref() != Some(r.source.as_str()) {
+            return Err("via must be a Wayback capture of the source".into());
+        }
+    }
+    if !research.allows(r.fetched_from()) {
+        return Err(format!(
+            "{} is not on the research allowlist",
+            r.fetched_from()
+        ));
+    }
+    let day_ok = r.retrieved.as_deref().is_some_and(|d| {
+        let b = d.as_bytes();
+        b.len() == 10
+            && b.iter().enumerate().all(|(i, c)| {
+                if i == 4 || i == 7 {
+                    *c == b'-'
+                } else {
+                    c.is_ascii_digit()
+                }
+            })
+    });
+    if !day_ok {
+        return Err("a real record needs its retrieval day (YYYY-MM-DD)".into());
+    }
+    if !r
+        .content_hash
+        .as_deref()
+        .is_some_and(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()))
+    {
+        return Err("a real record needs the sha256 of the bytes retrieved".into());
+    }
+    for text in [&r.title, &r.summary] {
+        if let Some(what) = contact_detail(text) {
+            return Err(format!("{what} in the text (scrub it before staging)"));
+        }
+    }
+    Ok(())
+}
+
+/// The first contact detail in `text`: an email address, or a phone number (digits in 3-3-4
+/// groups, or a `+` followed by 10 or more digits). A last mechanical check on staged text;
+/// the research pipeline's scrubber is the real one.
+pub fn contact_detail(text: &str) -> Option<&'static str> {
+    for w in text.split_whitespace() {
+        let w = w.trim_matches(|c: char| !c.is_alphanumeric());
+        if let Some((user, domain)) = w.split_once('@') {
+            if !user.is_empty() && domain.contains('.') && !domain.starts_with('.') {
+                return Some("an email address");
+            }
+        }
+    }
+    let b = text.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if !(b[i].is_ascii_digit() || b[i] == b'+' || b[i] == b'(') {
+            i += 1;
+            continue;
+        }
+        // One run of digits and phone punctuation.
+        let plus = b[i] == b'+';
+        let mut digits = 0usize;
+        let mut groups: Vec<usize> = Vec::new();
+        let mut cur = 0usize;
+        while i < b.len()
+            && (b[i].is_ascii_digit() || matches!(b[i], b'+' | b'(' | b')' | b'-' | b'.' | b' '))
+        {
+            if b[i].is_ascii_digit() {
+                digits += 1;
+                cur += 1;
+            } else if cur > 0 {
+                groups.push(cur);
+                cur = 0;
+            }
+            i += 1;
+        }
+        if cur > 0 {
+            groups.push(cur);
+        }
+        if groups.windows(3).any(|g| g == [3, 3, 4]) || (plus && digits >= 10) {
+            return Some("a phone number");
+        }
+    }
+    None
 }
 
 /// `DOC`, `REP`, `CLM`, `SPC`.
@@ -257,14 +410,27 @@ pub fn report(case: &Case, file: &CaseFile, brief: &str, prior_searches: u32, ca
         })
         .collect();
     if found.is_empty() {
-        return format!(
-            "{} ({}): the bone-clerks searched the case file and found nothing on record. \
-             PLANTED FICTIONAL DEMO CASE.",
-            hex.id, hex.label
-        );
+        return if file.fictional {
+            format!(
+                "{} ({}): the bone-clerks searched the case file and found nothing on record. \
+                 PLANTED FICTIONAL DEMO CASE.",
+                hex.id, hex.label
+            )
+        } else {
+            format!(
+                "{} ({}): the bone-clerks searched the staged public record and found nothing \
+                 filed under this hex. Do not fill the gap: it stays unproven.",
+                hex.id, hex.label
+            )
+        };
     }
+    let kind = if file.fictional {
+        "planted FICTIONAL demo record(s)"
+    } else {
+        "public record(s)"
+    };
     format!(
-        "{} ({}): {} planted FICTIONAL demo record(s) on file. {}",
+        "{} ({}): {} {kind} on file. {}",
         hex.id,
         hex.label,
         found.len(),
@@ -424,6 +590,42 @@ mod tests {
                 assert!(r.contains(&rec.source), "{}", rec.id);
             }
         }
+    }
+
+    #[test]
+    fn a_real_case_reports_its_public_records() {
+        let (case, file) = crate::cases::tests::real_case();
+        file.validate(&case, SourceAllowlist::builtin()).unwrap();
+        let r = report(&case, &file, "HEX-01: who runs it", 0, 2);
+        assert!(
+            r.starts_with("HEX-01 (Test Holdings LLC): 1 public record(s) on file."),
+            "{r}"
+        );
+        assert!(r.contains("DOC-01 [DOC]"), "{r}");
+        assert!(!r.contains("FICTIONAL"), "{r}");
+        let r = report(&case, &file, "HEX-03: the fund", 0, 2);
+        assert!(r.contains("found nothing filed under this hex"), "{r}");
+        assert!(!r.contains("FICTIONAL"), "{r}");
+        // A DOC through a Wayback capture keeps the publisher's URL as its source.
+        let doc = file.records.iter().find(|r| r.id == "DOC-02").unwrap();
+        assert!(doc
+            .fetched_from()
+            .starts_with("https://web.archive.org/web/"));
+        assert!(SourceAllowlist::builtin().is_primary(&doc.source, false));
+    }
+
+    #[test]
+    fn a_real_file_never_fits_a_fictional_case_and_back() {
+        let (case, file) = crate::cases::tests::real_case();
+        let mut fictional = case.clone();
+        fictional.fictional = true;
+        assert!(file
+            .validate(&fictional, SourceAllowlist::builtin())
+            .is_err());
+        // Real records need their provenance.
+        let mut bare = file.clone();
+        bare.records[0].content_hash = None;
+        assert!(bare.validate(&case, SourceAllowlist::builtin()).is_err());
     }
 
     #[test]

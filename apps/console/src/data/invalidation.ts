@@ -19,6 +19,11 @@ export const MUTATION_INVALIDATES: Readonly<Record<string, readonly string[]>> =
   "lord.chat": ["directive.list"],
   "character.rules.set": ["character.rules", "character.get", "character.list"],
   "character.tone.set": ["character.list", "character.get"],
+  "clips.scan": ["clips.list", "clips.get"],
+  "clips.render": ["clips.list", "clips.get"],
+  "clips.approve": ["clips.list", "clips.get"],
+  "clips.reject": ["clips.list", "clips.get"],
+  "clips.publish": ["clips.get"],
 };
 
 export function invalidatedByEvent(type: string): readonly string[] {

@@ -1,0 +1,27 @@
+# One three-hour SEG-02A stream on a real, staged public-record case (the owner's request:
+# "simulate stream with this segment to dive deep into a subject/case for 3 hours").
+#
+# 1 tone x 1 core tier x 1 segment x 1 audience x 1 seed = 1 run of 10,800 s (2,160 ticks).
+# The case is read from <data>/cases/<case>/ (git-ignored; staged by `shadowrunr case
+# research`), its content hash joins the instrument, and the run plays it as the three-act
+# arc of seg-02a.toml. The case is not approved for stream: a sim is private, so it runs and
+# run.json records "unapproved_real_case": true. The transcript is judged in 20-minute windows
+# (rubric window_* defaults), one Opus call per window. Do not start without the Director.
+id = "case-3h"
+character = "malakor"
+duration_s = 10800
+tick_s = 5
+core_effort = "low"
+concurrency = 1
+judge_tiers = ["opus"]
+featured_every_ticks = 1
+max_featured = 8
+population = "growing_channel"
+case = "HARD-MONEY-20261019"
+
+[axes]
+tones = ["unhinged-roastmaster"]
+core_tiers = ["sonnet"]
+segments = ["SEG-02A"]
+audience_sizes = [30]
+seeds = [1]

@@ -6,7 +6,7 @@ import { Glance, Motif } from "./Motif";
 const Layer1 = lazy(() => import("./Layer1").then((m) => ({ default: m.Layer1 })));
 const Layer2 = lazy(() => import("./Layer2").then((m) => ({ default: m.Layer2 })));
 
-const LABELS: Readonly<Record<string, string>> = { rundown: "The rundown", dispatch: "The Lord’s dispatch" };
+const LABELS: Readonly<Record<string, string>> = { rundown: "The rundown", dispatch: "The Lord’s dispatch", clips: "Clips" };
 
 export const page = {
   Layer1,

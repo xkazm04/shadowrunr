@@ -55,7 +55,7 @@ Wire names that other components read verbatim:
 | `Rank`, lowest first | `thrall`, `acolyte`, `cultist`, `warlock`, `lich`, `dread_council` |
 | `EvidenceGrade` | `DOC`, `REP`, `CLM`, `SPC` |
 | `ModelTier` | `haiku`, `sonnet`, `opus` |
-| `Role` | `core_thread`, `chat_picker`, `planner`, `researcher`, `consolidator`, `chatter`, `judge`, `reconciler` |
+| `Role` | `core_thread`, `chat_picker`, `planner`, `researcher`, `consolidator`, `chatter`, `judge`, `reconciler`, `clipper` |
 | `CheckState` | `pass`, `fail`, `not_provoked`, `not_evaluable` |
 
 Chat commands:
@@ -168,6 +168,7 @@ merged.
 | chatter | haiku | low | 60 s |
 | judge | sonnet | medium | 900 s (whole-transcript judging) |
 | reconciler | opus | high | 600 s |
+| clipper | haiku | low | 60 s (one hook read per run; the cheapest tier) |
 
 The core-thread entry is what the tournament recalibrates: the 2026-10-18 night tournament
 (n=60 per tier) moved it from haiku to sonnet on red-line fails (0.4% vs 1.9%). The judge
@@ -638,3 +639,157 @@ existing `moderation` event.
   nobody is removed; the care state still applies.
 - **Malakor** ships `crisis-chat-ban`, `crisis-handoff` and `no-financial-promotion`, all on
   by default.
+
+## Appendix (Clips): the clip factory and its publish gate
+
+Media-less edition of the digest's § 7 (`docs/design/obsidian-program-digest.md`). The crate is
+`shadowrunr-clips`; the wire types are `shadowrunr_types::clips`. Nothing above changes except
+one new `Role` (`clipper`, routed above).
+
+**Candidates.** A transcript is read as beats of spoken lines on two clocks: the stream clock
+(`ts_ms`) and a *spoken* clock (each line starts at its beat or when the previous line ends, and
+lasts as long as the stage's caption model says; there is no TTS alignment yet). Signals per
+beat, each normalised to its own stream:
+- `marker`: the strongest admitted marker of the beat, by kind (`mark_moment` 1.0,
+  `hex_reveal` 0.8, `verdict_sealed` 0.7, `foil_roast` 0.6). `verdict_sealed` (a closed vote or
+  a case's last hex annexed) stands in for RELEASE_ANNEXED, whose releases belong to the
+  descoped SEG-02B-II. Caps: a `mark_moment` label of at most 80 chars, one marker per kind per
+  30 s per segment, at most 6 per kind per segment; a capped marker is kept with its reason
+  (`label_empty`, `label_too_long`, `cooldown`, `segment_ceiling`). A mark preceded within 15 s
+  by a chat "clip that" is flagged `chat_requested`.
+- `chat`: distinct chatters (commands and messages dropped for any reason but the rate cap
+  excluded) in the 10 s after the beat, as a z-score against the trailing 120 s (the whole
+  stream until 6 beats exist), clipped to 0..3 and divided by 3. A flood or copypasta cluster in
+  that window makes it unmeasured (a wave).
+- `audio`: always unmeasured (no audio yet).
+- `hook`: one `clipper` call per run rates its (at most 8) pre-selected windows; the windows sit
+  in an untrusted-data fence and carry no viewer handle. A failed or unparseable reply leaves
+  the hook unmeasured for the run.
+
+`score = 0.35·marker + 0.25·chat + 0.15·audio + 0.25·hook` over the measured signals, the
+unmeasured weights redistributed (`scoring.effective`). The weights are a design hypothesis:
+`scoring.provenance` and every ranking say "unmeasured". `lane` is `clip` when two signals
+agree (marker ≥ 0.5, chat ≥ 0.5, hook ≥ 0.6), else `review`. Pre-candidates are at least 30 s
+apart; overlapping cuts merge when the union fits the band; the top 5 per stream are kept.
+
+**Window.** The payoff is the line that carries the moment (the line sharing most words with the
+marker label, Malakor's answer to a foil, or the beat's last line for a crowd peak). The cut
+opens 12 s (spoken) before it, snapped earlier to a line start, keeps at least the line the
+payoff answers, closes 1.5 s after the payoff and is held in its band: SEG-01
+`seg01-split-stage` 25-35 s, SEG-02A `seg02a-alleged` 45-60 s, otherwise 15-60 s. A short cut
+takes the following lines, then earlier ones; a long one sheds pre-roll but never the setup,
+and when setup plus payoff cannot fit it is `needs_reauthoring` (never approved).
+
+**Gate** (`ClipGate.checks`, each `pass | fail | unmeasured | not_applicable`):
+- on every clip: `care_state` (no line addresses or answers a viewer in care, read from the
+  stream's `care_state` events, and no disclosure or crisis ban inside the cut),
+  `personal_data` (the brain's `solicits_personal_data`, plus any `personal_data_ask` the output
+  gate fired inside the cut), `brigade_call` (`brigade` term rules), `blocked_term` (other
+  blocking term rules), `injection_reply` (a line answering an injection-tagged message is
+  unmeasured: a person confirms nothing was performed), `ai_disclosure` (burnt in);
+- the mandatory checklist when `requires_mandatory_gate` (SEG-02A or a linked case):
+  `evidence_badge_burnt` (ALLEGED header + grade badge, `UNGRADED` when the cut claims no hex),
+  `source_citation` (every claimed hex has a source and the citation is drawn),
+  `no_open_correction` (from the case store's `cases/<id>/corrections.jsonl`, appended by
+  `shadowrunr case correct`: every entry with `blocks_clip_publishing` on a hex in the cut, or
+  on the whole case, fails it; a fictional demo case is not applicable; a real case missing
+  from the store is unmeasured).
+
+**States.** `rendered_draft -> pending_owner_gate -> approved_for_upload -> published`, or
+`rejected`. A scan drafts and gates every candidate to `pending_owner_gate` (`history` keeps
+both steps). `clips.approve` is the owner's act, recorded with the signature: refused unless
+pending, rendered and not `needs_reauthoring`; refused on any `fail`; an `unmeasured` check
+needs `override_reason`, stored with the reasons it overrides. Approving attests context
+fidelity and caption support. Nothing in this build reaches `published`: uploads are dry runs.
+
+**Render.** `<data>/clips/<id>/`: `candidate.json`, `clip.json` (the stage's input),
+`captions.srt`, `captions.ass`, `poster.svg`, `manifest.json`, and with the recording tools
+`draft.mp4` (1080x1920 H.264, recorded frame by frame from `apps/stage?clip=...&record=1`
+through the DevTools protocol, verified with ffprobe) plus `poster.png`. Captions are the exact
+transcript lines with viewer handles replaced by `[viewer]` and bleep rules applied. Without the
+tools the render is `kind: "poster"` with `fallback_reason`. Every write is temp + `sync_all` +
+rename under a lock on `<data>/clips/.lock`.
+
+**Upload router** (`clips.publish`, dry run only; the crate has no HTTP client): YouTube
+`videos.insert` (resumable, `status.containsSyntheticMedia: true`, private, 100/day budget),
+TikTok inbox draft (`/v2/post/publish/inbox/video/init/`), Twitch Helix Create Clip (recorded
+as not applicable: it clips a live broadcast and takes no file). Each request is written to
+`requests/<platform>.json` with credentials shown as absent.
+
+| method | params | result |
+|---|---|---|
+| `clips.list` | `{ "status"?, "tournament_id"?, "run_id"?, "cursor"?, "limit" }` | `ClipsPage { items: ClipSummary[], counts, held, total, next_cursor? }` |
+| `clips.get` | `{ "id" }` | `ClipCandidate` |
+| `clips.scan` | `{ "source": { "run_id", "tournament_id"? } \| { "tournament_id" }, "hook"? }` | `ClipScanReport` |
+| `clips.render` | `{ "id" }` | `ClipCandidate` (minutes for a video) |
+| `clips.approve` | `{ "id", "signature", "override_reason"?, "note"? }` | `ClipCandidate` |
+| `clips.reject` | `{ "id", "reason", "by"? }` | `ClipCandidate` |
+| `clips.publish` | `{ "id", "platforms"? }` | `ClipPublishReport { id, dry_run: true, requests }` |
+
+Refusals are `conflict` (a held or unapproved clip), `not_found`, `invalid_params` or `io`.
+
+## Appendix (SEG-02A real cases): the case store, the owner gate, the arc, windowed judging
+
+No wire type changes: `Case` and `case_open` are unchanged, and a real case is a `Case` with
+`fictional: false`.
+
+**Case store** (`shadowrunr_segments::cases`, written by `shadowrunr case research`):
+
+```
+<data>/cases/<case_id>/
+  case.json          Case                        (fictional: false)
+  records.json       CaseFile { case_id, fictional: false, notice, records: [CaseRecord], arc? }
+  meta.json          CaseMeta
+  corrections.jsonl  CorrectionEntry, append-only
+CaseRecord   { id /* DOC-01 */, hex, grade: DOC|REP|CLM, title, source, summary,
+               retrieved? /* YYYY-MM-DD */, content_hash? /* sha256 of the bytes */,
+               via? /* the Wayback capture of `source` it was read through */ }
+CaseFile.arc [[hex_id]]                        // hexes per act, in act order
+CaseMeta     { case_id, title, subject, subject_category: PUBLIC_ENFORCEMENT_ENTITY |
+               REGULATOR_WARNED_SCHEME, primary_public_record_url,
+               status: CALM_STAGED | LIVE_ACTIVE | DOSSIER_SEALED | RETRACTED,
+               owner_approved_for_stream, approved_at_utc?, approved_content_sha256?,
+               created_at_utc, content_sha256, research: { subject_hint, researched_at_utc,
+               sources: [{url, via?, retrieved, content_hash, bytes, content_type, extracted,
+               used, note?}], failed: [{url, why}], pii_scrub: [{kind, count}],
+               refused: [{what, why}], tension?, unknowns, calls } }
+CorrectionEntry { entry_id, case_id, hex_id?, entry_type: FACTUAL_CORRECTION |
+                  RIGHT_OF_REPLY_STATEMENT | GRADE_DOWNGRADE, public_note,
+                  blocks_clip_publishing, logged_at_utc }
+```
+
+- A real record names its retrieval day and content hash, was fetched from the research
+  allowlist (`ftc.gov`, `sec.gov`, `fca.org.uk`, `dfpi.ca.gov`, `justice.gov`,
+  `opencorporates.com`, `web.archive.org`), and holds no email address or phone number. A DOC
+  record still needs a primary source: a Wayback capture keeps its original's provenance
+  (`source` is the original URL, `via` the capture), so an archived sec.gov page can be DOC
+  while an archived press page stays REP.
+- `content_sha256` is sha256 over the canonical JSON of `case.json` and `records.json`; a
+  case whose files no longer match it does not load.
+- **Owner gate.** `SegmentRuntime::with_config` refuses a real case on a live stream
+  (`SegmentConfig.stream = Live`, the default) unless `case_approved`, which
+  `SegmentConfig::with_staged_case` sets only when the owner approved exactly this content
+  (`SegmentError::NotApproved`). A simulation (`StreamKind::PrivateSim`) may run an unapproved
+  case; `run.json` then carries `case: { case_id, content_sha256, unapproved_real_case }`. A
+  retracted case runs nowhere.
+- **Sim.** Matrix `case = "<id>"` / `sim run --case <id>` (SEG-02A only). The instrument hash
+  gains `case/<id>` = the content hash; the owner's approval is not content and changes no hash.
+
+**The arc.** `seg-02a.toml` `[arc] { min_planned_s = 3600, acts = [3 titles], seal_s = 600 }`.
+A SEG-02A segment planned at least `min_planned_s` long (`SegmentConfig.planned_s`; the sim
+passes the run's duration) splits its time into equal acts. Hexes are staged per act
+(`CaseFile.arc`, else dealt by kind). A later act's hex is refused for `reveal_hex` and
+`dispatch_research` (`act_locked`); each act opens with a runtime `show_card`
+(`card_id: "arc-act-<n>"`) and the seal window with `arc-seal`. Before the seal window
+`sign_off` is withheld from `allowed_ops` and refused (`dossier_not_sealed`), except a
+fleet-loss sign-off, and `switch_segment` is withheld and refused (`arc_in_progress`) for the
+whole arc. The sim ends a run on a sign-off only when the stage accepted it.
+
+**Windowed judging.** Rubric `window_threshold_s` (1800), `window_s` (1200),
+`window_overlap_s` (120), all defaulted. A longer transcript is judged window by window with
+the same prompt, fence and verification (correlation id `<run_id>:judge:w<k>`), and the
+verdict aggregates: fail in any window > not_evaluable in any window (a void window counts) >
+pass > not_provoked; quality facts pooled, run facts one per run. `judge.json` gains
+`windows: [{window, from_s, to_s, lines?, outcome: judged|cached|void, void_reason?, failed,
+not_evaluable, passed, facts, sampled_turns, raw_reply?}]`; `<run_dir>/judge-windows/w<k>.json`
+caches parsed windows. Every window void is a void run.

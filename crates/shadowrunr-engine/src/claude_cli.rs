@@ -73,7 +73,24 @@ pub struct ArgvSpec<'a> {
     pub safe_mode: bool,
 }
 
+/// The built-in tool names of an allowlist whose entries may carry a permission specifier
+/// (`WebFetch(domain:sec.gov)` names the tool `WebFetch`), deduplicated in order.
+pub fn tool_names(allowed: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for t in allowed {
+        let name = t.split('(').next().unwrap_or(t).trim().to_string();
+        if !name.is_empty() && !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    out
+}
+
 /// Build the argv (without the executable) for one `claude` process.
+///
+/// `allowed_tools` entries may carry a permission specifier: `WebFetch(domain:sec.gov)`
+/// enables the `WebFetch` tool (`--tools`) and pre-approves it for that domain only
+/// (`--allowedTools`); with `--permission-prompts none` a fetch of any other domain is denied.
 pub fn claude_argv(spec: &ArgvSpec<'_>) -> Vec<String> {
     let mut a: Vec<String> = vec!["-p".into()];
     if matches!(spec.mode, CallMode::Warm { .. }) {
@@ -90,9 +107,9 @@ pub fn claude_argv(spec: &ArgvSpec<'_>) -> Vec<String> {
         effort_str(spec.effort).into(),
         "--system-prompt-file".into(),
         spec.system_prompt_file.to_string_lossy().into_owned(),
-        // The built-in tool set: exactly the allowlist ("" disables every tool) ...
+        // The built-in tool set: exactly the allowlist's tools ("" disables every tool) ...
         "--tools".into(),
-        spec.allowed_tools.join(","),
+        tool_names(spec.allowed_tools).join(","),
     ]);
     // ... and the same list pre-approved, so nothing waits on a permission prompt.
     if !spec.allowed_tools.is_empty() {
@@ -450,6 +467,28 @@ pub(crate) mod tests {
         assert!(joined.contains("--resume abc"));
         assert!(joined.contains(r#"--json-schema {"type":"object"}"#));
         assert!(!joined.contains("--no-session-persistence"));
+    }
+
+    #[test]
+    fn scoped_tool_rules_enable_the_tool_and_approve_only_their_scope() {
+        let p = PathBuf::from("sp.txt");
+        let tools = vec![
+            "WebFetch(domain:sec.gov)".to_string(),
+            "WebFetch(domain:www.sec.gov)".to_string(),
+        ];
+        let argv = claude_argv(&spec(&tools, CallMode::OneShot, &p));
+        assert_flags_in_help(&argv);
+        let joined = argv.join(" ");
+        assert!(
+            joined.contains(
+                "--tools WebFetch --allowedTools WebFetch(domain:sec.gov),WebFetch(domain:www.sec.gov)"
+            ),
+            "{joined}"
+        );
+        assert_eq!(
+            tool_names(&["Read".into(), "Read".into(), "Grep(x)".into()]),
+            ["Read", "Grep"]
+        );
     }
 
     #[test]

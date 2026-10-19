@@ -6,17 +6,18 @@ use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 
 use serde::Serialize;
 use shadowrunr_types::{
-    Case, ChatMsg, Command, EvidenceGrade, ModStage, Op, Rank, SegmentContext, SegmentId,
+    Case, ChatMsg, Command, EvidenceGrade, HexKind, ModStage, Op, Rank, SegmentContext, SegmentId,
     StreamEvent, TsMs, VoteTally,
 };
 
 use crate::case::{demo_case, validate_case};
+use crate::cases::{StagedCase, StreamKind};
 use crate::command::{normalize_hex, parse_command};
-use crate::evidence::SourceAllowlist;
+use crate::evidence::{ResearchAllowlist, SourceAllowlist};
 use crate::ranks::RankTable;
 use crate::research::{target_hex, CaseFile};
 use crate::table::{
-    op_tag, segment_name, segment_table, GuardFacts, HandoverRule, SegmentTable, Trigger,
+    op_tag, segment_name, segment_table, ArcRules, GuardFacts, HandoverRule, SegmentTable, Trigger,
 };
 use crate::SegmentError;
 
@@ -30,15 +31,129 @@ pub struct SegmentConfig {
     pub foils: Vec<String>,
     /// The SEG-02A case. `None` loads the fictional demo case (`fictional: true`).
     pub case: Option<Case>,
-    /// Planted records for a fictional case (see [`crate::research`]). `None` gives the demo
-    /// case its built-in pack when `case` is `None` too, and a custom case no records.
+    /// The case's records (see [`crate::research`]): planted for a fictional case, staged from
+    /// the public record for a real one. `None` gives the demo case its built-in pack when
+    /// `case` is `None` too, and a custom case no records.
     pub case_file: Option<CaseFile>,
+    /// Who the stream is for. A real case (`fictional: false`) on a live stream needs
+    /// `case_approved`; a private simulation may run it unapproved.
+    pub stream: StreamKind,
+    /// The owner approved the real case in `case` for a live stream (from the case store,
+    /// [`SegmentConfig::with_staged_case`]).
+    pub case_approved: bool,
     pub ranks: RankTable,
     pub allowlist: SourceAllowlist,
+    /// The research allowlist a real case's records were fetched under.
+    pub research_allowlist: ResearchAllowlist,
+    /// Planned length of the segment in seconds. With the table's `[arc]` and a plan at least
+    /// its `min_planned_s` long, the case runs as a multi-act arc.
+    pub planned_s: Option<u32>,
     /// Overrides the table's handover thresholds (assumptions) for segments that have one.
     pub handover: Option<HandoverRule>,
     /// Segment start time. `None`: the first `now_ms` the runtime sees.
     pub start_ms: Option<TsMs>,
+}
+
+impl SegmentConfig {
+    /// This config running a staged real case for a stream of `kind`: the map, its public
+    /// records and the owner's approval (of exactly this content) from the case store.
+    pub fn with_staged_case(mut self, staged: &StagedCase, kind: StreamKind) -> Self {
+        self.case = Some(staged.case.clone());
+        self.case_file = Some(staged.file.clone());
+        self.stream = kind;
+        self.case_approved = staged.approved_for_stream();
+        self
+    }
+}
+
+/// The multi-act arc a long SEG-02A stream runs (the table's `[arc]`).
+#[derive(Debug, Clone)]
+struct ArcPlan {
+    acts: Vec<String>,
+    /// Act index of every hex, in `case.hexes` order.
+    act_of: Vec<usize>,
+    planned_ms: TsMs,
+    seal_ms: TsMs,
+    /// Acts whose opening card has been shown (act 0 opens with the segment).
+    announced: usize,
+    sealed_announced: bool,
+}
+
+impl ArcPlan {
+    /// The arc for `case`, when the table has one and the plan is long enough. Acts come from
+    /// the case file's `arc` (research staged them); a hex it does not name, or every hex of a
+    /// case without one, is dealt into the acts in kind order (entities and claims first,
+    /// then domains, shells and wallets), an even share each.
+    fn new(rules: &ArcRules, planned_s: u32, case: &Case, file: Option<&CaseFile>) -> Option<Self> {
+        if planned_s < rules.min_planned_s || rules.acts.len() < 2 {
+            return None;
+        }
+        let n = rules.acts.len();
+        let mut act_of: Vec<Option<usize>> = vec![None; case.hexes.len()];
+        if let Some(f) = file {
+            for (k, ids) in f.arc.iter().enumerate() {
+                for id in ids {
+                    if let Some(i) = case.hexes.iter().position(|h| &h.id == id) {
+                        act_of[i] = Some(k.min(n - 1));
+                    }
+                }
+            }
+        }
+        let kind_rank = |k: HexKind| match k {
+            HexKind::Entity => 0,
+            HexKind::Claim => 1,
+            HexKind::Domain => 2,
+            HexKind::ShellCompany => 3,
+            HexKind::Wallet => 4,
+        };
+        let mut loose: Vec<usize> = (0..case.hexes.len())
+            .filter(|&i| act_of[i].is_none())
+            .collect();
+        loose.sort_by_key(|&i| (kind_rank(case.hexes[i].kind), i));
+        let total = loose.len();
+        for (rank, i) in loose.into_iter().enumerate() {
+            act_of[i] = Some((rank * n / total.max(1)).min(n - 1));
+        }
+        Some(Self {
+            acts: rules.acts.clone(),
+            act_of: act_of.into_iter().map(|a| a.unwrap_or(0)).collect(),
+            planned_ms: i64::from(planned_s) * 1000,
+            seal_ms: i64::from(planned_s.saturating_sub(rules.seal_s)) * 1000,
+            announced: 0,
+            sealed_announced: false,
+        })
+    }
+
+    /// The act running `elapsed_ms` into the segment.
+    fn act_at(&self, elapsed_ms: TsMs) -> usize {
+        let n = self.acts.len() as i64;
+        let k = elapsed_ms.max(0).saturating_mul(n) / self.planned_ms.max(1);
+        usize::try_from(k.clamp(0, n - 1)).unwrap_or(0)
+    }
+
+    /// When act `k` opens, ms into the segment.
+    fn opens_ms(&self, k: usize) -> TsMs {
+        self.planned_ms * k as i64 / self.acts.len() as i64
+    }
+
+    fn sealing(&self, elapsed_ms: TsMs) -> bool {
+        elapsed_ms >= self.seal_ms
+    }
+}
+
+fn roman(n: usize) -> String {
+    match n {
+        1 => "I".into(),
+        2 => "II".into(),
+        3 => "III".into(),
+        4 => "IV".into(),
+        5 => "V".into(),
+        _ => n.to_string(),
+    }
+}
+
+fn minutes(ms: TsMs) -> i64 {
+    ms / 60_000
 }
 
 /// A queued `!hint` lead. The text is untrusted chat; it is never put into the prompt
@@ -226,6 +341,8 @@ pub struct SegmentRuntime {
     seen: HashSet<String>,
     seen_order: VecDeque<String>,
     signed_off: bool,
+    /// The multi-act arc, when the stream is planned long enough (SEG-02A).
+    arc: Option<ArcPlan>,
 }
 
 impl SegmentRuntime {
@@ -264,14 +381,26 @@ impl SegmentRuntime {
         }
         let case = config.case.clone().unwrap_or_else(demo_case);
         validate_case(&case)?;
+        // The owner gate: a real case goes out live only once the owner approved it.
+        if !case.fictional && config.stream == StreamKind::Live && !config.case_approved {
+            return Err(SegmentError::NotApproved {
+                case_id: case.id.clone(),
+            });
+        }
         let case_file = match (&config.case, &config.case_file) {
             (_, Some(file)) => Some(file.clone()),
             (None, None) => Some(CaseFile::demo()),
             (Some(_), None) => None,
         };
         if let Some(file) = &case_file {
-            file.validate(&case, &config.allowlist)?;
+            file.validate_with(&case, &config.allowlist, &config.research_allowlist)?;
         }
+        let arc = match (&table.arc, config.planned_s) {
+            (Some(rules), Some(planned)) if table.allows_op("reveal_hex") => {
+                ArcPlan::new(rules, planned, &case, case_file.as_ref())
+            }
+            _ => None,
+        };
         Ok(Self {
             started_ms: config.start_ms,
             config,
@@ -299,6 +428,7 @@ impl SegmentRuntime {
             seen: HashSet::new(),
             seen_order: VecDeque::new(),
             signed_off: false,
+            arc,
         })
     }
 
@@ -324,6 +454,9 @@ impl SegmentRuntime {
             segment: self.table.id,
         }];
         events.extend(self.case_open(now_ms, self.table.id));
+        if let Some(card) = self.arc_card(now_ms, 0) {
+            events.push(card);
+        }
         events
     }
 
@@ -429,11 +562,97 @@ impl SegmentRuntime {
         self.signed_off
     }
 
+    /// The running act (0-based) and the number of acts, when the stream runs an arc.
+    pub fn arc_act(&self) -> Option<(usize, usize)> {
+        self.arc
+            .as_ref()
+            .map(|a| (a.act_at(self.elapsed_ms()), a.acts.len()))
+    }
+
+    /// The act (0-based) a hex is staged for, when the stream runs an arc.
+    pub fn hex_act(&self, hex: &str) -> Option<usize> {
+        let arc = self.arc.as_ref()?;
+        let i = self.case.hexes.iter().position(|h| h.id == hex)?;
+        arc.act_of.get(i).copied()
+    }
+
     pub fn is_handover_pending(&self) -> bool {
         self.handover_pending_since.is_some()
     }
 
     // ----- internals -------------------------------------------------------------------
+
+    /// Milliseconds since the segment started, at the latest time seen.
+    fn elapsed_ms(&self) -> TsMs {
+        self.last_now_ms - self.started_ms.unwrap_or(self.last_now_ms)
+    }
+
+    /// The hex at `i` is staged for an act that has not opened yet.
+    fn hex_locked(&self, i: usize) -> bool {
+        self.arc
+            .as_ref()
+            .is_some_and(|a| a.act_of.get(i).copied().unwrap_or(0) > a.act_at(self.elapsed_ms()))
+    }
+
+    /// `sign_off` waits for the arc's seal window (a fleet-loss sign-off never waits).
+    fn sign_off_withheld(&self) -> bool {
+        self.arc
+            .as_ref()
+            .is_some_and(|a| !a.sealing(self.elapsed_ms()))
+    }
+
+    /// The opening card of act `k`: a `show_card` op the runtime emits itself.
+    fn arc_card(&mut self, now_ms: TsMs, k: usize) -> Option<StreamEvent> {
+        let arc = self.arc.as_mut()?;
+        if k < arc.announced || k >= arc.acts.len() {
+            return None;
+        }
+        arc.announced = k + 1;
+        let hexes: Vec<&str> = self
+            .case
+            .hexes
+            .iter()
+            .zip(&arc.act_of)
+            .filter(|(_, a)| **a == k)
+            .map(|(h, _)| h.id.as_str())
+            .collect();
+        Some(StreamEvent::Op {
+            ts_ms: now_ms,
+            op: Op::ShowCard {
+                card_id: format!("arc-act-{}", k + 1),
+                title: format!("ACT {}: {}", roman(k + 1), arc.acts[k]),
+                body: format!("Now open on the map: {}", hexes.join(", ")),
+            },
+        })
+    }
+
+    /// The clock side of the arc: the card of every act that opened, then the seal card.
+    fn arc_tick(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
+        let mut events = Vec::new();
+        let Some(arc) = &self.arc else {
+            return events;
+        };
+        let elapsed = self.elapsed_ms();
+        let act = arc.act_at(elapsed);
+        let from = arc.announced;
+        for k in from..=act {
+            events.extend(self.arc_card(now_ms, k));
+        }
+        if let Some(arc) = self.arc.as_mut() {
+            if arc.sealing(elapsed) && !arc.sealed_announced {
+                arc.sealed_announced = true;
+                events.push(StreamEvent::Op {
+                    ts_ms: now_ms,
+                    op: Op::ShowCard {
+                        card_id: "arc-seal".into(),
+                        title: "THE DOSSIER IS SEALED".into(),
+                        body: "Recap of the revealed hexes and their grades.".into(),
+                    },
+                });
+            }
+        }
+        events
+    }
 
     fn observe(&mut self, now_ms: TsMs) {
         self.started_ms.get_or_insert(now_ms);
@@ -822,7 +1041,12 @@ impl SegmentRuntime {
     /// soon as a poll can open.
     pub fn apply_ops(&mut self, now_ms: TsMs, ops: &[Op]) -> Vec<StreamEvent> {
         self.observe(now_ms);
-        let mut events = Vec::new();
+        // An act that opened since the last clock tick is announced before the ops it unlocks.
+        let mut events = if self.signed_off {
+            Vec::new()
+        } else {
+            self.arc_tick(now_ms)
+        };
         for op in ops {
             match self.apply_op(now_ms, op) {
                 Ok(consequences) => {
@@ -937,6 +1161,9 @@ impl SegmentRuntime {
                 let Some(i) = self.find_hex(hex) else {
                     return Err("unknown_hex");
                 };
+                if self.hex_locked(i) {
+                    return Err("act_locked");
+                }
                 self.require_state(Trigger::HexRevealed)?;
                 let h = &self.case.hexes[i];
                 if !h.fog && h.grade == Some(*grade) {
@@ -967,6 +1194,9 @@ impl SegmentRuntime {
                 }
                 // A brief that names no single hex is not counted against any hex.
                 let target = target_hex(&self.case, brief);
+                if target.is_some_and(|i| self.hex_locked(i)) {
+                    return Err("act_locked");
+                }
                 if let Some(i) = target {
                     let hex = self.case.hexes[i].id.clone();
                     if self.searches(&hex) >= self.table.clock.max_searches_per_hex {
@@ -995,6 +1225,10 @@ impl SegmentRuntime {
                 if *to == self.table.id {
                     return Err("already_in_segment");
                 }
+                // An arc is the whole planned segment: it is not handed over midway.
+                if self.arc.is_some() {
+                    return Err("arc_in_progress");
+                }
                 if !self.table.switch_to.contains(to) {
                     return Err("switch_not_allowed");
                 }
@@ -1016,7 +1250,10 @@ impl SegmentRuntime {
                 );
                 return Ok(events);
             }
-            Op::SignOff { .. } => {
+            Op::SignOff { reason } => {
+                if self.sign_off_withheld() && !reason.starts_with("fleet_lost") {
+                    return Err("dossier_not_sealed");
+                }
                 let events = self.close_poll(now_ms, false);
                 self.signed_off = true;
                 return Ok(events);
@@ -1041,6 +1278,7 @@ impl SegmentRuntime {
             events.extend(self.close_poll(now_ms, true));
         }
         events.extend(self.open_due_plebiscite(now_ms));
+        events.extend(self.arc_tick(now_ms));
         let Some(rule) = self.handover_rule() else {
             return events;
         };
@@ -1100,10 +1338,13 @@ impl SegmentRuntime {
                 Vec::new()
             } else {
                 let withheld = self.research_withheld();
+                let unsealed = self.sign_off_withheld();
                 self.table
                     .allowed_ops
                     .iter()
                     .filter(|o| !(withheld && o.as_str() == "dispatch_research"))
+                    .filter(|o| !(unsealed && o.as_str() == "sign_off"))
+                    .filter(|o| !(self.arc.is_some() && o.as_str() == "switch_segment"))
                     .cloned()
                     .collect()
             },
@@ -1142,6 +1383,44 @@ impl SegmentRuntime {
                     " THIS CASE IS FICTIONAL DEMO DATA: say so when asked and never present \
                      it as a real investigation.",
                 );
+            } else {
+                p.push_str(
+                    " THIS IS A REAL CASE FROM THE PUBLIC RECORD. Name only the companies, \
+                     schemes and regulators on the map. People named in the records are \
+                     spoken of by role only (\"the founder\", \"an officer\", \"a sales \
+                     agent\"), never by name, and never mocked for anything outside the record. \
+                     A DOC record documents what a regulator or a court filed, alleged, found or \
+                     ordered: a complaint's charges are the regulator's allegations (\"the SEC \
+                     alleged\") until an order, judgment or plea settles them. Victims of the \
+                     scheme are never the joke.",
+                );
+            }
+            if let Some(arc) = &self.arc {
+                let acts: Vec<String> = arc
+                    .acts
+                    .iter()
+                    .enumerate()
+                    .map(|(k, title)| {
+                        format!(
+                            "Act {} {title} (from minute {})",
+                            roman(k + 1),
+                            minutes(arc.opens_ms(k))
+                        )
+                    })
+                    .collect();
+                p.push_str(&format!(
+                    "\nArc: this investigation runs {} minutes in {} acts: {}. Hexes staged for \
+                     a later act stay locked (no reveal, no research) until their act opens. \
+                     When an act's map is done early, deepen it: jury polls, the minions' \
+                     leads, the records on file, a recap for newcomers. The last {} minutes are \
+                     the seal window: recap the dossier (every revealed hex with its grade, \
+                     alleged below DOC), then sign_off. sign_off is refused before it, and the \
+                     investigation is the whole segment: no switch_segment.",
+                    minutes(arc.planned_ms),
+                    arc.acts.len(),
+                    acts.join("; "),
+                    minutes(arc.planned_ms - arc.seal_ms)
+                ));
             }
         }
         if t.allows_op("dispatch_research") {
@@ -1153,11 +1432,17 @@ impl SegmentRuntime {
                  or let the vote decide.",
                 t.clock.max_searches_per_hex
             ));
-            if self.case_file.is_some() {
-                p.push_str(
+            match &self.case_file {
+                Some(f) if f.fictional => p.push_str(
                     " The case file holds planted FICTIONAL demo records: quote them as the \
                      demo's records, never as real findings.",
-                );
+                ),
+                Some(_) => p.push_str(
+                    " The bone-clerks read the case's public records, staged off-stream from \
+                     regulator and court sites: quote a record at its grade and never as more \
+                     than it says. A hex with nothing on file stays unproven.",
+                ),
+                None => {}
             }
         }
         p
@@ -1190,7 +1475,12 @@ impl SegmentRuntime {
                 .collect();
             if !found.is_empty() {
                 lines.push(format!(
-                    "case file (planted FICTIONAL demo records): {}",
+                    "case file ({}): {}",
+                    if file.fictional {
+                        "planted FICTIONAL demo records"
+                    } else {
+                        "public records"
+                    },
                     found.join("; ")
                 ));
             }
@@ -1233,6 +1523,77 @@ impl SegmentRuntime {
                      again."
                 ),
             });
+        }
+        lines
+    }
+
+    /// The arc block of the state summary: the act, its hexes, what is locked, and what to do.
+    fn arc_lines(&self) -> Vec<String> {
+        let Some(arc) = &self.arc else {
+            return Vec::new();
+        };
+        let elapsed = self.elapsed_ms();
+        let act = arc.act_at(elapsed);
+        let n = arc.acts.len();
+        let mut lines = vec![format!(
+            "ARC act {}/{n} \"{}\" (minutes {}-{}), minute {} now",
+            act + 1,
+            arc.acts[act],
+            minutes(arc.opens_ms(act)),
+            minutes(if act + 1 < n {
+                arc.opens_ms(act + 1)
+            } else {
+                arc.planned_ms
+            }),
+            minutes(elapsed)
+        )];
+        let ids = |pred: &dyn Fn(usize, &shadowrunr_types::Hex) -> bool| -> Vec<&str> {
+            self.case
+                .hexes
+                .iter()
+                .enumerate()
+                .filter(|(i, h)| pred(*i, h))
+                .map(|(_, h)| h.id.as_str())
+                .collect()
+        };
+        let open_fog = ids(&|i, h| h.fog && arc.act_of[i] <= act);
+        let act_fog = ids(&|i, h| h.fog && arc.act_of[i] == act);
+        lines.push(format!(
+            "fogged and open: {}",
+            if open_fog.is_empty() {
+                "none".to_string()
+            } else {
+                open_fog.join(", ")
+            }
+        ));
+        if act + 1 < n {
+            let locked = ids(&|i, _| arc.act_of[i] > act);
+            lines.push(format!(
+                "LOCKED until act {} opens at minute {}: {}",
+                act + 2,
+                minutes(arc.opens_ms(act + 1)),
+                locked.join(", ")
+            ));
+            if act_fog.is_empty() {
+                lines.push(format!(
+                    "Act {} map is complete: until act {} opens, deepen it (a jury poll on a \
+                     disputed hex, the minions' leads, the records on file, a recap for \
+                     newcomers). Do not stall and do not sign off.",
+                    act + 1,
+                    act + 2
+                ));
+            }
+        } else if arc.sealing(elapsed) {
+            lines.push(
+                "SEAL WINDOW: recap the dossier now (every revealed hex with its grade, alleged \
+                 below DOC), thank the minions, then sign_off."
+                    .into(),
+            );
+        } else {
+            lines.push(format!(
+                "Final act: the seal window opens at minute {}; sign_off is refused before it.",
+                minutes(arc.seal_ms)
+            ));
         }
         lines
     }
@@ -1302,7 +1663,10 @@ impl SegmentRuntime {
                     revealed.join("; ")
                 }
             ));
-            lines.push(format!("fogged: {}", fogged.join(", ")));
+            match &self.arc {
+                None => lines.push(format!("fogged: {}", fogged.join(", "))),
+                Some(_) => lines.extend(self.arc_lines()),
+            }
             let mut leads: Vec<(usize, &String)> =
                 self.leads.iter().map(|(h, m)| (m.len(), h)).collect();
             leads.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(b.1)));

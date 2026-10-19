@@ -313,6 +313,47 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
             let _: EmptyParams = params(req.params)?;
             ok(engine_status(&state.engine))
         }
+        "clips.list" => {
+            let p: shadowrunr_types::clips::ClipsListParams = params(req.params)?;
+            ok(cfg.clip_store().page(&p)?)
+        }
+        "clips.get" => {
+            let p: shadowrunr_types::clips::ClipIdParams = params(req.params)?;
+            ok(cfg.clip_store().load(&p.id)?)
+        }
+        "clips.scan" => {
+            let p: shadowrunr_types::clips::ClipsScanParams = params(req.params)?;
+            ok(crate::clips::scan(cfg, state.engine.engine.clone(), &p).await?)
+        }
+        "clips.render" => {
+            let p: shadowrunr_types::clips::ClipIdParams = params(req.params)?;
+            let cfg = cfg.clone();
+            let c = tokio::task::spawn_blocking(move || crate::clips::render(&cfg, &p.id))
+                .await
+                .map_err(|e| RpcError::internal(format!("render task: {e}")))??;
+            ok(c)
+        }
+        "clips.approve" => {
+            let p: shadowrunr_types::clips::ClipsApproveParams = params(req.params)?;
+            ok(cfg.clip_store().approve(
+                &p.id,
+                &p.signature,
+                p.override_reason.as_deref(),
+                p.note.as_deref(),
+            )?)
+        }
+        "clips.reject" => {
+            let p: shadowrunr_types::clips::ClipsRejectParams = params(req.params)?;
+            ok(cfg.clip_store().reject(&p.id, &p.reason, p.by.as_deref())?)
+        }
+        "clips.publish" => {
+            let p: shadowrunr_types::clips::ClipsPublishParams = params(req.params)?;
+            ok(shadowrunr_clips::upload::publish_dry_run(
+                &cfg.clip_store(),
+                &p.id,
+                p.platforms.as_deref(),
+            )?)
+        }
         other => Err(RpcError::new(
             ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),
@@ -333,7 +374,7 @@ mod tests {
     #[test]
     fn engine_status_for_the_scripted_engine() {
         let st = engine_status(&EngineHandle::scripted());
-        assert_eq!(st.routes.len(), 8);
+        assert_eq!(st.routes.len(), 9);
         assert_eq!(st.routes[0].role, Role::CoreThread);
         for r in &st.routes {
             assert_eq!((r.tier, r.effort, r.timeout_ms), route(r.role));

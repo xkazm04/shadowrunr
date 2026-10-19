@@ -77,6 +77,15 @@ adhoc_dir = "adhoc"     # single runs go to runs/sim/adhoc/<run_id>/
 # `shadowrunr sim tournament --max-pause <s>` overrides it.
 max_quota_pause_s = 28800  # 8 h
 
+[clips]
+# The clip factory's recording tools (`shadowrunr clips render`). Every key is optional; with a
+# tool missing a render falls back to a poster frame plus caption tracks.
+stage = "apps/stage"      # its dist/ build and scripts/record-clip.mjs
+node = "node"
+ffmpeg = "ffmpeg"
+ffprobe = "ffprobe"
+# chrome = "C:/Program Files/Google/Chrome/Application/chrome.exe"   # default: searched
+
 [daemon]
 port = 7717             # bound to 127.0.0.1 only
 max_live_runs = 2       # concurrent sim.start runs
@@ -106,3 +115,14 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # max_backoff_ms = 5000
 # timeout_ms = 3000
 # down_cooldown_ms = 30000 # after an event exhausts its attempts, drop (and count) for this long
+
+# Off-stream SEG-02A research (`shadowrunr case research`; docs/guide/cli.md). All optional.
+# [research]
+# domains = ["ftc.gov", "sec.gov", "fca.org.uk", "dfpi.ca.gov", "justice.gov",
+#            "opencorporates.com", "web.archive.org"]   # replaces the allowlist (owner-gated)
+# user_agent = "Org name contact@example.org"   # sec.gov serves automated clients only with a contact
+# max_sources = 14
+# max_page_chars = 20000
+# fetch_timeout_s = 30
+# discovery_timeout_s = 900
+# extraction_timeout_s = 900

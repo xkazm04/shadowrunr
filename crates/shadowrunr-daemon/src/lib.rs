@@ -1,8 +1,12 @@
 //! The `shadowrunr` binary as a library: CLI, config, pre-flight, and the daemon
 //! (`/events` WebSocket + `/rpc`). See docs/guide/cli.md and docs/spec/contract.md.
 
+pub mod case_cli;
+pub mod casework;
 pub mod catalog;
 pub mod cli;
+pub mod clips;
+pub mod clips_cli;
 pub mod config;
 pub mod engine;
 pub mod events;

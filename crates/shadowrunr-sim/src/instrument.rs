@@ -9,6 +9,10 @@
 //!
 //! Reconcile opt-5: an experiment a run turns on joins the base hash as `experiment/<name>`,
 //! so a treatment never mixes with its control. With none on nothing is added.
+//!
+//! A staged real case joins the base hash as `case/<id>` with its content hash, so runs on
+//! different cases (or on a case whose records changed) never mix. The fictional demo case
+//! is already hashed with the segment data, so a run without a case adds nothing.
 
 use std::path::{Path, PathBuf};
 
@@ -133,7 +137,12 @@ pub struct InstrumentInputs<'a> {
     /// Named experiments the run turns on (`SimOptions::experiments`): each joins the base
     /// hash as `experiment/<name>`. None (the default) adds nothing.
     pub experiments: &'a [&'a str],
+    /// The staged real case the run audits: `(case_id, content_sha256)`.
+    pub case: Option<(&'a str, &'a str)>,
 }
+
+/// Logical path prefix of a staged real case's entry (`case/<id>`).
+pub const CASE_PREFIX: &str = "case/";
 
 pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
     let mut files = Vec::new();
@@ -199,6 +208,12 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
             sha256: sha_hex(b"on"),
         });
     }
+    if let Some((id, sha)) = inp.case {
+        files.push(InstrumentFile {
+            path: format!("{CASE_PREFIX}{id}"),
+            sha256: sha.to_string(),
+        });
+    }
     let base_hash = combine(&files, SIM_LOGIC_VERSION);
 
     let tone = file_entry(
@@ -243,6 +258,7 @@ mod tests {
             calibration_text: "{}",
             brief: None,
             experiments: &[],
+            case: None,
         })
         .unwrap()
     }
@@ -304,6 +320,7 @@ mod tests {
                 calibration_text: "{}",
                 brief: None,
                 experiments: &[],
+                case: None,
             })
             .unwrap()
             .instrument_hash
@@ -343,6 +360,7 @@ mod tests {
             calibration_text: "{}",
             brief: None,
             experiments: &[],
+            case: None,
         })
         .unwrap();
         assert!(i.files.iter().any(|f| f.path == "policy/local/fixture.txt"));
@@ -379,6 +397,7 @@ mod tests {
             calibration_text: "{}",
             brief: b,
             experiments: &[],
+            case: None,
         })
         .unwrap()
     }
@@ -437,6 +456,7 @@ mod tests {
             calibration_text: "{}",
             brief: None,
             experiments: &["rate_cap_exemptions"],
+            case: None,
         })
         .unwrap();
         assert_ne!(

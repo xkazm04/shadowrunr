@@ -11,9 +11,13 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
+import { ClipApp } from "./ClipStage";
+
+// `?clip=<url>`: one clip candidate on the vertical canvas (clip mode) instead of the broadcast.
+const clipMode = new URLSearchParams(window.location.search).has("clip");
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    {clipMode ? <ClipApp /> : <App />}
   </StrictMode>,
 );

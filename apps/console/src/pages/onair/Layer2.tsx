@@ -2,23 +2,27 @@
 //   #/onair/rundown                         every run, paged and virtualised; the segment cards
 //   #/onair/rundown/<tournament>/<run>      one run's segment spans and beats, and "replay it"
 //   #/onair/dispatch[/<report>]             the Lord's dispatch, from a report's plan options
+//   #/onair/clips[/<clip id>]               the clip factory's gate, and one candidate
 import { Head, Tabs } from "../../ui/Section";
 import { StatePanel } from "../../ui/States";
 import { pageRoute, useRouter } from "../../router";
+import { ClipDetail } from "./ClipDetail";
+import { Clips } from "./Clips";
 import { Dispatch } from "./Dispatch";
 import styles from "./Layer2.module.css";
 import { Rundown } from "./Rundown";
 
-type Tab = "rundown" | "dispatch";
+type Tab = "rundown" | "dispatch" | "clips";
 const TABS = [
   { id: "rundown", label: "Rundown" },
   { id: "dispatch", label: "The Lord’s dispatch" },
+  { id: "clips", label: "Clips" },
 ] as const satisfies readonly { id: Tab; label: string }[];
 
 export function Layer2({ sub }: { readonly sub: readonly string[] }) {
   const router = useRouter();
   const [tab, a, b] = sub;
-  const known = tab === "rundown" || tab === "dispatch";
+  const known = tab === "rundown" || tab === "dispatch" || tab === "clips";
   return (
     <div className={styles.l2} data-page="onair" data-role="onair-layer2">
       <Tabs items={TABS} value={known ? tab : "rundown"} onSelect={(id) => router.navigate(pageRoute("onair", id))} label="On Air sections" />
@@ -42,10 +46,23 @@ export function Layer2({ sub }: { readonly sub: readonly string[] }) {
           <Dispatch reportId={a ?? null} />
         </>
       )}
+      {tab === "clips" &&
+        (a === undefined ? (
+          <>
+            <Head
+              kicker="Layer 2 · On Air"
+              title="Clips"
+              lede="Moments cut from the streams, scored, drafted as vertical 1080x1920 renders and held at the gate until the owner signs. Uploads are dry runs: no credentials exist."
+            />
+            <Clips />
+          </>
+        ) : (
+          <ClipDetail id={a} />
+        ))}
       {!known && (
         <>
           <Head kicker="Layer 2 · On Air" title="Not a page" />
-          <StatePanel state="invalid" title={`On Air has no page “${tab ?? ""}”`} hint="Pick the rundown or the Lord’s dispatch above." />
+          <StatePanel state="invalid" title={`On Air has no page “${tab ?? ""}”`} hint="Pick the rundown, the Lord’s dispatch or the clips above." />
         </>
       )}
     </div>

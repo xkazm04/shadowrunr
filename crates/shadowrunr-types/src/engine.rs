@@ -43,6 +43,8 @@ pub enum Role {
     Judge,
     /// Between-streams Reconcile & Plan analysis.
     Reconciler,
+    /// The clip factory's hook read of candidate windows (cheapest tier).
+    Clipper,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]

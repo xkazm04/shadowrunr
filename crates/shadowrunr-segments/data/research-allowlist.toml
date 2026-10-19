@@ -1,0 +1,20 @@
+# Research allowlist for the off-stream SEG-02A research pipeline (`shadowrunr case research`).
+#
+# The CALM research step fetches pages ONLY from these domains (or a subdomain of one): the
+# Researcher's web fetch is restricted to them, and the pipeline's own fetcher refuses every
+# other host, redirects included. This list governs network egress, not grades: a DOC grade
+# still needs a source on `primary-source-allowlist.toml` (OpenCorporates and the Wayback
+# Machine are research sources, never primary ones).
+#
+# Adding a domain is strictly owner-gated (digest section 2, "Approvals"). An operator may
+# narrow or replace the list in shadowrunr.toml (`[research] domains = [...]`).
+
+domains = [
+    "ftc.gov",
+    "sec.gov",
+    "fca.org.uk",
+    "dfpi.ca.gov",
+    "justice.gov",
+    "opencorporates.com",
+    "web.archive.org",
+]

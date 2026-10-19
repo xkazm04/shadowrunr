@@ -534,6 +534,1099 @@
         }
       ]
     },
+    "ClipApproval": {
+      "description": "The owner's signature on `approved_for_upload`.",
+      "properties": {
+        "at_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "note": {
+          "type": "string"
+        },
+        "overridden": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "override_reason": {
+          "description": "Required when a check was unmeasured; the hold reasons it overrode are kept beside it.",
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "signature",
+        "at_ms"
+      ],
+      "type": "object"
+    },
+    "ClipCandidate": {
+      "description": "A stored clip candidate.",
+      "properties": {
+        "approval": {
+          "$ref": "#/$defs/ClipApproval"
+        },
+        "captions": {
+          "items": {
+            "$ref": "#/$defs/ClipCaption"
+          },
+          "type": "array"
+        },
+        "created_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "dry_runs": {
+          "items": {
+            "$ref": "#/$defs/ClipDryRun"
+          },
+          "type": "array"
+        },
+        "evidence": {
+          "$ref": "#/$defs/ClipEvidence"
+        },
+        "gate": {
+          "$ref": "#/$defs/ClipGate"
+        },
+        "history": {
+          "items": {
+            "$ref": "#/$defs/ClipTransition"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "`clip-<16 hex>`: stable for the same source and cut.",
+          "type": "string"
+        },
+        "lane": {
+          "$ref": "#/$defs/ClipLane"
+        },
+        "linked_case_id": {
+          "type": "string"
+        },
+        "markers": {
+          "items": {
+            "$ref": "#/$defs/ClipMarker"
+          },
+          "type": "array"
+        },
+        "rank": {
+          "description": "1 = the stream's best.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rejection": {
+          "$ref": "#/$defs/ClipRejection"
+        },
+        "render": {
+          "$ref": "#/$defs/ClipRender"
+        },
+        "score": {
+          "format": "double",
+          "type": "number"
+        },
+        "scoring": {
+          "$ref": "#/$defs/ClipScoring"
+        },
+        "segment": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "signals": {
+          "$ref": "#/$defs/ClipSignals"
+        },
+        "source": {
+          "$ref": "#/$defs/ClipSource"
+        },
+        "status": {
+          "$ref": "#/$defs/ClipStatus"
+        },
+        "title": {
+          "description": "The marker label, or the first line of the payoff.",
+          "type": "string"
+        },
+        "window": {
+          "$ref": "#/$defs/ClipWindow"
+        }
+      },
+      "required": [
+        "id",
+        "created_ms",
+        "status",
+        "score",
+        "rank",
+        "lane",
+        "segment",
+        "title",
+        "source",
+        "window",
+        "markers",
+        "signals",
+        "scoring",
+        "captions",
+        "gate",
+        "history"
+      ],
+      "type": "object"
+    },
+    "ClipCaption": {
+      "description": "One caption cue: the exact transcript line (viewer handles redacted), timed on the\ndraft's spoken clock from the clip's start.",
+      "properties": {
+        "end_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "speaker": {
+          "description": "`malakor`, or the foil id.",
+          "type": "string"
+        },
+        "start_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "start_ms",
+        "end_ms",
+        "speaker",
+        "text"
+      ],
+      "type": "object"
+    },
+    "ClipDryRun": {
+      "description": "One upload request the dry run wrote instead of sending.",
+      "properties": {
+        "applicable": {
+          "description": "The platform call can serve this candidate at all (Twitch Create Clip needs a live\nbroadcast).",
+          "type": "boolean"
+        },
+        "at_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "budget_left": {
+          "description": "Uploads left today under the platform's daily budget, when it has one.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "file": {
+          "description": "The request file, relative to the candidate's directory.",
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "platform": {
+          "$ref": "#/$defs/ClipPlatform"
+        }
+      },
+      "required": [
+        "platform",
+        "at_ms",
+        "file",
+        "applicable",
+        "note"
+      ],
+      "type": "object"
+    },
+    "ClipEvidence": {
+      "description": "The claim context a SEG-02A (or case-linked) cut carries.",
+      "properties": {
+        "case_id": {
+          "type": "string"
+        },
+        "case_title": {
+          "type": "string"
+        },
+        "citation": {
+          "description": "Source URLs shown in the picture, at most three.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "fictional": {
+          "description": "A fabricated demo or simulation case: the header says so.",
+          "type": "boolean"
+        },
+        "hexes": {
+          "items": {
+            "$ref": "#/$defs/ClipHex"
+          },
+          "type": "array"
+        },
+        "worst_grade": {
+          "$ref": "#/$defs/EvidenceGrade",
+          "description": "The weakest grade among `hexes` (the badge); absent when the cut makes no hex claim."
+        }
+      },
+      "required": [
+        "case_id",
+        "case_title",
+        "fictional",
+        "hexes",
+        "citation"
+      ],
+      "type": "object"
+    },
+    "ClipFile": {
+      "description": "One file of a render, relative to the candidate's directory.",
+      "properties": {
+        "bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "description": "`video`, `poster`, `captions_srt`, `captions_ass`, `stage_input`, `manifest`.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "bytes"
+      ],
+      "type": "object"
+    },
+    "ClipGate": {
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/GateCheck"
+          },
+          "type": "array"
+        },
+        "evaluated_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "held": {
+          "description": "Any check failed or could not run.",
+          "type": "boolean"
+        },
+        "hold_reasons": {
+          "description": "`<check>: <detail>` for every check that holds the clip.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requires_mandatory_gate": {
+          "description": "`linked_case_id IS NOT NULL OR segment = SEG-02A`.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requires_mandatory_gate",
+        "checks",
+        "held",
+        "evaluated_ms"
+      ],
+      "type": "object"
+    },
+    "ClipHex": {
+      "description": "One hex a SEG-02A cut reveals or names.",
+      "properties": {
+        "grade": {
+          "$ref": "#/$defs/EvidenceGrade"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "type": "object"
+    },
+    "ClipIdParams": {
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "ClipLane": {
+      "description": "`clip`: two or more independent signals agree. `review`: one signal carries it, or the\nwindow could not hold its setup; it goes to the owner as a review case, never straight\nto the queue.",
+      "enum": [
+        "clip",
+        "review"
+      ],
+      "type": "string"
+    },
+    "ClipMarker": {
+      "description": "One marker the scorer read, admitted or capped.",
+      "properties": {
+        "admitted": {
+          "description": "Counted by the scorer. A capped marker is kept with its reason.",
+          "type": "boolean"
+        },
+        "capped": {
+          "description": "`label_empty`, `label_too_long`, `cooldown` or `segment_ceiling`.",
+          "type": "string"
+        },
+        "chat_requested": {
+          "description": "A chat message asked for a clip just before the mark (\"clip that\"): the gate shows it.",
+          "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/MarkerKind"
+        },
+        "label": {
+          "type": "string"
+        },
+        "ts_ms": {
+          "description": "Emission time on the stream clock.",
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "ts_ms",
+        "label",
+        "admitted"
+      ],
+      "type": "object"
+    },
+    "ClipOverlay": {
+      "description": "What the render burnt into the picture.",
+      "properties": {
+        "ai_disclosure": {
+          "description": "\"AI character · synthetic media\", always drawn.",
+          "type": "boolean"
+        },
+        "alleged_header": {
+          "description": "The ALLEGED header (SEG-02A and case-linked clips).",
+          "type": "boolean"
+        },
+        "captions": {
+          "description": "Where the captions come from: always the transcript text, with the timing model named.",
+          "type": "string"
+        },
+        "citation": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "grade_badge": {
+          "description": "The grade badge text (`DOC`, `REP`, `CLM`, `SPC` or `UNGRADED`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "alleged_header",
+        "ai_disclosure",
+        "captions"
+      ],
+      "type": "object"
+    },
+    "ClipPlatform": {
+      "enum": [
+        "youtube",
+        "tiktok",
+        "twitch"
+      ],
+      "type": "string"
+    },
+    "ClipPublishReport": {
+      "description": "`clips.publish`: always a dry run in this build. No credentials exist and no adapter\nmakes a network call; each adapter writes the exact request it would send.",
+      "properties": {
+        "dry_run": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "requests": {
+          "items": {
+            "$ref": "#/$defs/ClipDryRun"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "dry_run",
+        "requests"
+      ],
+      "type": "object"
+    },
+    "ClipRejection": {
+      "properties": {
+        "at_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "by": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "at_ms",
+        "by"
+      ],
+      "type": "object"
+    },
+    "ClipRender": {
+      "properties": {
+        "duration_s": {
+          "format": "double",
+          "type": "number"
+        },
+        "fallback_reason": {
+          "description": "Why there is no video (a missing tool, a failed recording), when `kind` is `poster`.",
+          "type": "string"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/ClipFile"
+          },
+          "type": "array"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "description": "`video` (an MP4 was recorded from the stage) or `poster` (a still poster frame plus\ncaption tracks, when recording tooling is missing).",
+          "type": "string"
+        },
+        "overlay": {
+          "$ref": "#/$defs/ClipOverlay"
+        },
+        "rendered_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "width",
+        "height",
+        "duration_s",
+        "files",
+        "overlay",
+        "rendered_ms"
+      ],
+      "type": "object"
+    },
+    "ClipScanReport": {
+      "properties": {
+        "kept": {
+          "description": "Candidates the owner already acted on, kept as they were.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "replaced": {
+          "description": "Untouched earlier candidates of the same runs, replaced by this scan.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "runs": {
+          "items": {
+            "$ref": "#/$defs/ClipScanRun"
+          },
+          "type": "array"
+        },
+        "top": {
+          "description": "The best candidates of this scan, best first (at most 10).",
+          "items": {
+            "$ref": "#/$defs/ClipSummary"
+          },
+          "type": "array"
+        },
+        "weights_note": {
+          "description": "\"weights unmeasured: ...\": the label every ranking carries.",
+          "type": "string"
+        },
+        "written": {
+          "description": "New candidates written.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "runs",
+        "written",
+        "kept",
+        "replaced",
+        "top",
+        "weights_note"
+      ],
+      "type": "object"
+    },
+    "ClipScanRun": {
+      "description": "One run of a scan.",
+      "properties": {
+        "candidates": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "hook": {
+          "description": "`measured`, `off`, or `unmeasured: <why>` (the engine call failed or did not parse).",
+          "type": "string"
+        },
+        "markers_admitted": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "markers_capped": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "run_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "candidates",
+        "hook",
+        "markers_admitted",
+        "markers_capped"
+      ],
+      "type": "object"
+    },
+    "ClipScanSource": {
+      "anyOf": [
+        {
+          "properties": {
+            "run_id": {
+              "type": "string"
+            },
+            "tournament_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "run_id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "tournament_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tournament_id"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "What `clips.scan` reads: one run (`run_id`, optionally qualified) or every result run of\na tournament."
+    },
+    "ClipScoring": {
+      "description": "How the score was fused: the nominal weights, the weights actually applied after the\nunmeasured signals' share was redistributed, and where the weights come from.",
+      "properties": {
+        "agreeing": {
+          "description": "Signals that agreed (each at or above its firing level).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "effective": {
+          "$ref": "#/$defs/ClipWeights"
+        },
+        "nominal": {
+          "$ref": "#/$defs/ClipWeights"
+        },
+        "provenance": {
+          "description": "Always \"unmeasured\" until a human editor's independent picks have scored the weights.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nominal",
+        "effective",
+        "provenance",
+        "agreeing"
+      ],
+      "type": "object"
+    },
+    "ClipSignals": {
+      "description": "The fused signals of one candidate, each 0..=1. An absent value is unmeasured for this\nwindow (never scored as zero).",
+      "properties": {
+        "audio": {
+          "description": "Programme audio energy: always unmeasured in the media-less phase.",
+          "format": "double",
+          "type": "number"
+        },
+        "chat": {
+          "description": "Crowd reaction: the distinct-chatter z-score against the stream's own baseline, clipped\nto 0..=3 and divided by 3.",
+          "format": "double",
+          "type": "number"
+        },
+        "chat_z": {
+          "description": "The raw z-score behind `chat`.",
+          "format": "double",
+          "type": "number"
+        },
+        "hook": {
+          "description": "The model's hook read of the window's lines.",
+          "format": "double",
+          "type": "number"
+        },
+        "hook_why": {
+          "description": "The model's one-line reason for `hook`.",
+          "type": "string"
+        },
+        "marker": {
+          "description": "The strongest admitted marker in the anchor beat (kind weight).",
+          "format": "double",
+          "type": "number"
+        },
+        "unmeasured": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Why a signal is unmeasured here: `{\"audio\": \"no audio in the media-less phase\"}`.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "marker"
+      ],
+      "type": "object"
+    },
+    "ClipSource": {
+      "description": "Where the candidate came from. `transcript` is relative to the configured runs root\n(or the file name when the transcript lies outside it).",
+      "properties": {
+        "line_from": {
+          "description": "1-based transcript lines of the first and last event inside the cut.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "line_to": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "stream_id": {
+          "type": "string"
+        },
+        "tournament_id": {
+          "type": "string"
+        },
+        "transcript": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "stream_id",
+        "transcript",
+        "line_from",
+        "line_to"
+      ],
+      "type": "object"
+    },
+    "ClipStatus": {
+      "description": "The publish states. `rendered_draft -> pending_owner_gate -> approved_for_upload ->\npublished`, or `rejected` from any state before `published`. Only the owner moves a\ncandidate to `approved_for_upload` or `rejected`; only a real upload moves it to\n`published` (dry runs never do).",
+      "enum": [
+        "rendered_draft",
+        "pending_owner_gate",
+        "approved_for_upload",
+        "published",
+        "rejected"
+      ],
+      "type": "string"
+    },
+    "ClipSummary": {
+      "description": "A candidate as `clips.list` shows it.",
+      "properties": {
+        "created_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "duration_s": {
+          "format": "double",
+          "type": "number"
+        },
+        "held": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lane": {
+          "$ref": "#/$defs/ClipLane"
+        },
+        "rank": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "render": {
+          "description": "`video`, `poster`, or absent before a render.",
+          "type": "string"
+        },
+        "requires_mandatory_gate": {
+          "type": "boolean"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "score": {
+          "format": "double",
+          "type": "number"
+        },
+        "segment": {
+          "$ref": "#/$defs/SegmentId"
+        },
+        "status": {
+          "$ref": "#/$defs/ClipStatus"
+        },
+        "title": {
+          "type": "string"
+        },
+        "tournament_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "score",
+        "rank",
+        "lane",
+        "segment",
+        "title",
+        "run_id",
+        "duration_s",
+        "held",
+        "requires_mandatory_gate",
+        "created_ms"
+      ],
+      "type": "object"
+    },
+    "ClipTransition": {
+      "description": "One state change, oldest first.",
+      "properties": {
+        "at_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "by": {
+          "description": "`scanner`, `gate`, `render` or the owner's signature.",
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ClipStatus"
+        }
+      },
+      "required": [
+        "status",
+        "at_ms",
+        "by"
+      ],
+      "type": "object"
+    },
+    "ClipWeights": {
+      "properties": {
+        "audio": {
+          "format": "double",
+          "type": "number"
+        },
+        "chat": {
+          "format": "double",
+          "type": "number"
+        },
+        "hook": {
+          "format": "double",
+          "type": "number"
+        },
+        "marker": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "marker",
+        "chat",
+        "audio",
+        "hook"
+      ],
+      "type": "object"
+    },
+    "ClipWindow": {
+      "description": "The cut, on two clocks: the stream clock (`*_ms`, the transcript's `ts_ms`) and the\nspoken clock the draft plays on (`spoken_*_ms`, the caption timing model), because a\nsimulated beat holds more speech than its tick.",
+      "properties": {
+        "anchor_ms": {
+          "description": "The beat the score peaked on, corrected for its signal's lag.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "band_s": {
+          "description": "The style's duration band in seconds, `[min, max]`.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "driver": {
+          "description": "`marker`, `crowd` or `hook`: which signal placed the anchor.",
+          "type": "string"
+        },
+        "duration_s": {
+          "description": "`spoken_end_ms - spoken_start_ms` in seconds.",
+          "format": "double",
+          "type": "number"
+        },
+        "end_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "lag_ms": {
+          "description": "The lag applied before the pre-roll (the crowd's reaction delay; 0 for a marker).",
+          "format": "int64",
+          "type": "integer"
+        },
+        "needs_reauthoring": {
+          "description": "The setup and payoff could not fit the band: re-author, do not cut.",
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        },
+        "preroll_ms": {
+          "description": "The pre-roll reached back before the anchor beat (spoken clock).",
+          "format": "int64",
+          "type": "integer"
+        },
+        "spoken_end_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "spoken_start_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "start_ms": {
+          "description": "First and last stream-clock beats inside the cut.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "style": {
+          "description": "`seg01-split-stage` (25-35 s), `seg02a-alleged` (45-60 s) or `default` (15-60 s).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "anchor_ms",
+        "start_ms",
+        "end_ms",
+        "spoken_start_ms",
+        "spoken_end_ms",
+        "duration_s",
+        "driver",
+        "lag_ms",
+        "preroll_ms",
+        "band_s",
+        "style"
+      ],
+      "type": "object"
+    },
+    "ClipsApproveParams": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "override_reason": {
+          "description": "Required when a gate check is unmeasured.",
+          "type": "string"
+        },
+        "signature": {
+          "description": "Who approves. Recorded; the owner's act, never the scorer's.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "signature"
+      ],
+      "type": "object"
+    },
+    "ClipsListParams": {
+      "description": "`clips.list`.",
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "limit": {
+          "description": "1..=500; larger values are capped at 500.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ClipStatus"
+        },
+        "tournament_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "limit"
+      ],
+      "type": "object"
+    },
+    "ClipsPage": {
+      "description": "Candidates by score, best first; `counts` covers every stored candidate by status.",
+      "properties": {
+        "counts": {
+          "additionalProperties": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "held": {
+          "description": "Candidates waiting at the owner gate that the gate holds (a check failed or could not\nrun), over the whole store.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ClipSummary"
+          },
+          "type": "array"
+        },
+        "next_cursor": {
+          "type": "string"
+        },
+        "total": {
+          "description": "Stored candidates matching the filter, over every page.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "counts",
+        "held",
+        "total"
+      ],
+      "type": "object"
+    },
+    "ClipsPublishParams": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "platforms": {
+          "description": "Every platform when absent.",
+          "items": {
+            "$ref": "#/$defs/ClipPlatform"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "ClipsRejectParams": {
+      "properties": {
+        "by": {
+          "description": "Who rejects; `owner` when absent.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "ClipsScanParams": {
+      "properties": {
+        "hook": {
+          "description": "Ask the model for the hook read (one call per run). Default true; false leaves the\nhook unmeasured and redistributes its weight.",
+          "type": "boolean"
+        },
+        "source": {
+          "$ref": "#/$defs/ClipScanSource"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    },
     "ClockInfo": {
       "properties": {
         "foil_vote_secs": {
@@ -1564,6 +2657,48 @@
       ],
       "type": "object"
     },
+    "GateCheck": {
+      "description": "One gate check. Exclusions run on every clip; the mandatory checklist runs when the clip\nis from SEG-02A or links a case.",
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "id": {
+          "description": "`care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,\n`ai_disclosure`, `evidence_badge_burnt`, `source_citation`, `no_open_correction`.",
+          "type": "string"
+        },
+        "mandatory": {
+          "description": "Part of the SEG-02A / linked-case checklist.",
+          "type": "boolean"
+        },
+        "state": {
+          "$ref": "#/$defs/GateState"
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "detail"
+      ],
+      "type": "object"
+    },
+    "GateState": {
+      "oneOf": [
+        {
+          "enum": [
+            "pass",
+            "fail",
+            "not_applicable"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "unmeasured",
+          "description": "The check could not run. It holds the clip like a fail; the owner may override it\nwith a recorded reason.",
+          "type": "string"
+        }
+      ]
+    },
     "HandoverInfo": {
       "description": "SEG-01's handover clock rule.",
       "properties": {
@@ -2038,6 +3173,31 @@
         "directives_added"
       ],
       "type": "object"
+    },
+    "MarkerKind": {
+      "description": "What made a moment a marker. `mark_moment` is the host's own action; the others are\nstructural beats of the show read from the transcript.",
+      "oneOf": [
+        {
+          "const": "mark_moment",
+          "description": "`op: mark_moment` (the host's mark, with its label).",
+          "type": "string"
+        },
+        {
+          "const": "foil_roast",
+          "description": "A foil line answered by Malakor in the same or the next beat (FOIL_ROAST).",
+          "type": "string"
+        },
+        {
+          "const": "hex_reveal",
+          "description": "`op: reveal_hex` (HEX_REVEAL).",
+          "type": "string"
+        },
+        {
+          "const": "verdict_sealed",
+          "description": "A closed vote or a case's last hex annexed: the RELEASE_ANNEXED equivalent (releases\nbelong to the descoped SEG-02B-II).",
+          "type": "string"
+        }
+      ]
     },
     "ModStage": {
       "oneOf": [
@@ -2886,6 +4046,11 @@
         {
           "const": "reconciler",
           "description": "Between-streams Reconcile & Plan analysis.",
+          "type": "string"
+        },
+        {
+          "const": "clipper",
+          "description": "The clip factory's hook read of candidate windows (cheapest tier).",
           "type": "string"
         }
       ]
@@ -4782,6 +5947,118 @@
       ],
       "type": "object"
     },
+    "clips.approve": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ClipsApproveParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ClipCandidate"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "clips.get": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ClipIdParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ClipCandidate"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "clips.list": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ClipsListParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ClipsPage"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "clips.publish": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ClipsPublishParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ClipPublishReport"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "clips.reject": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ClipsRejectParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ClipCandidate"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "clips.render": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ClipIdParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ClipCandidate"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "clips.scan": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ClipsScanParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ClipScanReport"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
     "directive.add": {
       "additionalProperties": false,
       "properties": {
@@ -5173,6 +6450,13 @@
     "character.rules",
     "character.rules.set",
     "character.tone.set",
+    "clips.approve",
+    "clips.get",
+    "clips.list",
+    "clips.publish",
+    "clips.reject",
+    "clips.render",
+    "clips.scan",
     "directive.add",
     "directive.deactivate",
     "directive.list",

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shadowrunr_brain::{load_character, Brain, BrainConfig, BrainTuning, FilterConfig};
-use shadowrunr_segments::{SegmentConfig, SegmentRuntime};
+use shadowrunr_segments::{SegmentConfig, SegmentRuntime, StagedCase, StreamKind};
 use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::{
     ChatMsg, EndReason, Engine, ModelTier, Op, Role, SegmentContext, SegmentId, SimRunSpec,
@@ -65,6 +65,11 @@ pub trait Stage: Send {
     /// The authoritative open poll `(id, options)` when the stage can tell (`Some(None)` =
     /// no poll open); `None` when it cannot, and the room tracks polls from ops instead.
     fn open_poll(&self) -> Option<Option<(String, Vec<String>)>> {
+        None
+    }
+    /// Whether the stage accepted a sign-off (`None`: it cannot tell, and the brain's
+    /// `sign_off` op ends the run). The real runtime refuses an early sign-off in a long arc.
+    fn is_signed_off(&self) -> Option<bool> {
         None
     }
 }
@@ -118,6 +123,9 @@ impl Stage for SegmentRuntime {
     fn tick(&mut self, now_ms: TsMs, ccv: u32) -> Vec<StreamEvent> {
         SegmentRuntime::tick(self, now_ms, ccv)
     }
+    fn is_signed_off(&self) -> Option<bool> {
+        Some(SegmentRuntime::is_signed_off(self))
+    }
     fn open_poll(&self) -> Option<Option<(String, Vec<String>)>> {
         Some(self.open_poll_id().map(|id| {
             let options = self
@@ -162,6 +170,17 @@ pub struct PopulationSummary {
     pub copypasta_at_s: Vec<u32>,
 }
 
+/// The staged real case a run audited (`run.json`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunCase {
+    pub case_id: String,
+    /// The case's content hash (it is in the instrument hash).
+    pub content_sha256: String,
+    /// The owner had not approved this content for a live stream: the run is a private
+    /// simulation of a real case, and nothing from it may be published as is.
+    pub unapproved_real_case: bool,
+}
+
 /// `run.json`: what happened in the run besides the transcript.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunRecord {
@@ -193,6 +212,9 @@ pub struct RunRecord {
     /// Why the run is `engine_failed` (the `outcome` rule that matched).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine_failure: Option<String>,
+    /// The staged real case the run audited; absent for the fictional demo case.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub case: Option<RunCase>,
 }
 
 /// `error.json`: the run failed before a verdict. Void, not a fail.
@@ -220,7 +242,13 @@ pub(crate) struct Prepared {
     pub character_dir: PathBuf,
     /// The Lord's brief the brain receives (WP15), also written to `brief.json`.
     pub brief: Option<StreamBrief>,
+    /// The staged real case the run audits (SEG-02A), loaded for a private simulation.
+    pub case: Option<StagedCase>,
 }
+
+/// `<run_dir>/judge-windows/`: the windowed judge's stored window replies (a re-judge after an
+/// engine failure reuses the windows already judged).
+pub const JUDGE_WINDOWS_DIR: &str = "judge-windows";
 
 /// `<run_dir>/brief.json`: the brief a run was made with, so a re-judge sees the same one.
 pub const BRIEF_FILE: &str = "brief.json";
@@ -250,7 +278,15 @@ pub(crate) fn instrument_for(
     calibration_text: &str,
 ) -> Result<Instrument, SimError> {
     let brief = opts.resolved_brief()?;
-    instrument_with(opts, character, tone, calibration_text, brief.as_ref())
+    let case = opts.staged_case()?;
+    instrument_with(
+        opts,
+        character,
+        tone,
+        calibration_text,
+        brief.as_ref(),
+        case.as_ref(),
+    )
 }
 
 fn instrument_with(
@@ -259,6 +295,7 @@ fn instrument_with(
     tone: &str,
     calibration_text: &str,
     brief: Option<&StreamBrief>,
+    case: Option<&StagedCase>,
 ) -> Result<Instrument, SimError> {
     instrument::compute(&InstrumentInputs {
         character_dir: &character_dir(opts, character),
@@ -268,6 +305,7 @@ fn instrument_with(
         calibration_text,
         brief,
         experiments: &opts.experiments(),
+        case: case.map(|c| (c.case.id.as_str(), c.content_sha256.as_str())),
     })
 }
 
@@ -351,12 +389,19 @@ pub(crate) fn prepare(
         Err(_) => None,
     };
     let brief = opts.resolved_brief()?;
+    if opts.case.is_some() && spec.segment != SegmentId::Seg02aHexmap {
+        return Err(SimError::Spec(
+            "a case is audited in SEG-02A runs only".into(),
+        ));
+    }
+    let case = opts.staged_case()?;
     let instrument = instrument_with(
         opts,
         &spec.character,
         &spec.tone_variant,
         &cal_text,
         brief.as_ref(),
+        case.as_ref(),
     )?;
     write_json(&run_dir.join("spec.json"), spec)?;
     write_json(&run_dir.join("instrument.json"), &instrument)?;
@@ -380,10 +425,14 @@ pub(crate) fn prepare(
         engine,
         judge_tier,
         foils,
-        hex_ids: hex_ids(&opts.segments_data_dir),
+        hex_ids: match &case {
+            Some(c) => c.case.hexes.iter().map(|h| h.id.clone()).collect(),
+            None => hex_ids(&opts.segments_data_dir),
+        },
         streamer,
         character_dir: cdir,
         brief,
+        case,
     })
 }
 
@@ -508,7 +557,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                         _ => None,
                     })
                     .collect();
-                signed_off |= ops.iter().any(|o| matches!(o, Op::SignOff { .. }));
+                let sign_off = ops.iter().any(|o| matches!(o, Op::SignOff { .. }));
                 room.observe(t, &evs);
                 w.push_all(evs)?;
                 if !ops.is_empty() {
@@ -517,6 +566,9 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                     w.push_all(ev)?;
                     room.sync_poll(t, stage.open_poll());
                 }
+                // A sign-off ends the run once the stage took it (a long arc refuses one
+                // before its seal window; the refusal is in the transcript).
+                signed_off |= sign_off && stage.is_signed_off().unwrap_or(true);
             }
             Err(e) => {
                 tick_errors.push(format!("{t}s: {e}"));
@@ -602,6 +654,11 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         judge_tier: prep.judge_tier,
         judge_error: None,
         engine_failure: engine_failure.clone(),
+        case: prep.case.as_ref().map(|c| RunCase {
+            case_id: c.case.id.clone(),
+            content_sha256: c.content_sha256.clone(),
+            unapproved_real_case: !c.approved_for_stream(),
+        }),
     };
     write_json(&prep.run_dir.join("run.json"), &record)?;
 
@@ -663,6 +720,7 @@ async fn judge_into(
         return Ok(None);
     }
     let featured: HashSet<String> = record.featured.iter().cloned().collect();
+    let window_cache = run_dir.join(JUDGE_WINDOWS_DIR);
     let inp = JudgeInputs {
         run_id: &spec.run_id,
         events,
@@ -673,6 +731,7 @@ async fn judge_into(
         judge_tier: tier,
         core_tier: spec.core_tier,
         brief,
+        window_cache: Some(&window_cache),
     };
     match judge::judge_run(&inp, engine).await {
         Ok(JudgeOutcome::Verdict(b)) => {
@@ -752,16 +811,20 @@ pub async fn run_one_with(
         std::fs::create_dir_all(&memory_dir)
             .map_err(|e| SimError::Io(format!("{}: {e}", memory_dir.display())))?;
         let character = load_character(&prep.character_dir, &spec.tone_variant)?;
-        let stage = SegmentRuntime::with_config(
-            spec.segment,
-            SegmentConfig {
-                foils: prep.foils.clone(),
-                start_ms: Some(0),
-                ..SegmentConfig::default()
-            },
-        )
-        .map_err(|e| SimError::Spec(format!("segment runtime: {e}")))?;
-        // A fictional case's bone-clerks search its planted records, not the web.
+        let mut config = SegmentConfig {
+            foils: prep.foils.clone(),
+            start_ms: Some(0),
+            // The whole run is one segment: a long SEG-02A run plays the case's arc.
+            planned_s: Some(spec.duration_s),
+            ..SegmentConfig::default()
+        };
+        if let Some(case) = &prep.case {
+            // A simulation is private: an unapproved real case may run (and is marked).
+            config = config.with_staged_case(case, StreamKind::PrivateSim);
+        }
+        let stage = SegmentRuntime::with_config(spec.segment, config)
+            .map_err(|e| SimError::Spec(format!("segment runtime: {e}")))?;
+        // The bone-clerks search the case file (planted or staged public records), not the web.
         let brain_engine = CaseFileResearch::wrap(prep.engine.clone(), &stage);
         let brain = Brain::new_with(
             BrainConfig {
@@ -941,7 +1004,7 @@ pub(crate) mod tests {
         serde_json::json!({ "messages": msgs }).to_string()
     }
 
-    fn judge_reply(req: &EngineRequest) -> String {
+    pub(crate) fn judge_reply(req: &EngineRequest) -> String {
         let mut say: Option<(usize, String)> = None;
         let mut lines_text: Vec<(usize, String)> = Vec::new();
         for l in req.prompt.lines() {
@@ -1886,6 +1949,312 @@ pub(crate) mod tests {
                 .resolved(&opts.data_dir)
                 .unwrap(),
             crate::BriefSource::None
+        );
+    }
+
+    // ---- real cases and the three-hour arc -----------------------------------------------
+
+    /// Stage a small real case (test fixture: the URLs need not resolve) under `<data>`.
+    pub(crate) fn stage_real_case(data: &Path) -> String {
+        use shadowrunr_segments::cases::{
+            CaseMeta, CaseStatus, ResearchProvenance, SubjectCategory,
+        };
+        use shadowrunr_segments::{CaseFile, CaseRecord, CaseStore};
+        use shadowrunr_types::{Case, EvidenceGrade, Hex, HexKind};
+        let kinds = [
+            HexKind::Entity,
+            HexKind::Claim,
+            HexKind::ShellCompany,
+            HexKind::Domain,
+            HexKind::Entity,
+            HexKind::Claim,
+        ];
+        let coords = [(0, 0), (1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1)];
+        let case = Case {
+            id: "SIM-REAL-01".into(),
+            title: "Sim Test Holdings (test fixture)".into(),
+            fictional: false,
+            hexes: (0..6)
+                .map(|i| Hex {
+                    id: format!("HEX-{:02}", i + 1),
+                    q: coords[i].0,
+                    r: coords[i].1,
+                    kind: kinds[i],
+                    label: format!("Sim Test node {}", i + 1),
+                    grade: None,
+                    fog: true,
+                    sources: vec![format!("https://www.sec.gov/test/{}", i + 1)],
+                })
+                .collect(),
+            links: vec![("HEX-01".into(), "HEX-03".into())],
+        };
+        let record = |id: &str, hex: &str, grade: EvidenceGrade, source: &str| CaseRecord {
+            id: id.into(),
+            hex: hex.into(),
+            grade,
+            title: format!("Test record {id}"),
+            source: source.into(),
+            summary: format!("The regulator's filing alleges item {id}."),
+            retrieved: Some("2026-10-19".into()),
+            content_hash: Some("ab".repeat(32)),
+            via: None,
+        };
+        let file = CaseFile {
+            case_id: case.id.clone(),
+            fictional: false,
+            notice: "Public records (test fixture).".into(),
+            records: vec![
+                record(
+                    "DOC-01",
+                    "HEX-01",
+                    EvidenceGrade::Doc,
+                    "https://www.sec.gov/test/1",
+                ),
+                record(
+                    "REP-01",
+                    "HEX-02",
+                    EvidenceGrade::Rep,
+                    "https://opencorporates.com/x",
+                ),
+            ],
+            arc: vec![
+                vec!["HEX-01".into(), "HEX-02".into()],
+                vec!["HEX-03".into(), "HEX-04".into()],
+                vec!["HEX-05".into(), "HEX-06".into()],
+            ],
+        };
+        let meta = CaseMeta {
+            case_id: case.id.clone(),
+            title: case.title.clone(),
+            subject: "Sim Test Holdings".into(),
+            subject_category: SubjectCategory::PublicEnforcementEntity,
+            primary_public_record_url: "https://www.sec.gov/test/1".into(),
+            status: CaseStatus::CalmStaged,
+            owner_approved_for_stream: false,
+            approved_at_utc: None,
+            approved_content_sha256: None,
+            created_at_utc: "2026-10-19T00:00:00Z".into(),
+            content_sha256: String::new(),
+            research: ResearchProvenance::default(),
+        };
+        CaseStore::new(data).stage(&case, &file, meta).unwrap();
+        case.id
+    }
+
+    #[tokio::test]
+    async fn a_staged_real_case_runs_privately_hashed_and_marked() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        opts.hooks = Hooks::default();
+        let data = tmp.path().join("data");
+        let id = stage_real_case(&data);
+        opts.data_dir = data.clone();
+        let (_, _, cal) = calibration::load(&opts.sim_root).unwrap();
+        let plain = instrument_for(&opts, "malakor", "theatrical", &cal)
+            .unwrap()
+            .instrument_hash;
+        opts.case = Some(id.clone());
+        let with_case = instrument_for(&opts, "malakor", "theatrical", &cal).unwrap();
+        assert_ne!(with_case.instrument_hash, plain, "the case joins the hash");
+        let staged = opts.staged_case().unwrap().unwrap();
+        assert!(with_case
+            .files
+            .iter()
+            .any(|f| f.path == format!("case/{id}") && f.sha256 == staged.content_sha256));
+
+        let out = tmp.path().join("out");
+        let mut sp = spec("real", ModelTier::Haiku, 3, 60);
+        sp.segment = SegmentId::Seg02aHexmap;
+        let res = run_one_with(
+            sp.clone(),
+            out.clone(),
+            Arc::new(FakeEngine::new("")),
+            &opts,
+        )
+        .await
+        .unwrap();
+        let rec: RunRecord = read_json(&out.join("real/run.json")).unwrap();
+        let c = rec.case.expect("the run names its case");
+        assert_eq!(c.case_id, id);
+        assert_eq!(c.content_sha256, staged.content_sha256);
+        assert!(
+            c.unapproved_real_case,
+            "a private sim of an unapproved case is marked"
+        );
+        let events = transcript::read(&res.transcript).unwrap();
+        assert!(events.iter().any(|e| matches!(e,
+            StreamEvent::CaseOpen { case, .. } if case.id == id && !case.fictional)));
+
+        // The owner's approval is not content: same instrument, and the mark is gone.
+        shadowrunr_segments::CaseStore::new(&data)
+            .approve(&id, 0)
+            .unwrap();
+        assert_eq!(
+            instrument_for(&opts, "malakor", "theatrical", &cal)
+                .unwrap()
+                .instrument_hash,
+            with_case.instrument_hash
+        );
+        let out2 = tmp.path().join("out2");
+        run_one_with(sp, out2.clone(), Arc::new(FakeEngine::new("")), &opts)
+            .await
+            .unwrap();
+        let rec: RunRecord = read_json(&out2.join("real/run.json")).unwrap();
+        assert!(!rec.case.unwrap().unapproved_real_case);
+
+        // A case is for SEG-02A runs only, and an unknown case fails before anything runs.
+        let err = run_one_with(
+            spec("seg01", ModelTier::Haiku, 3, 60),
+            out.clone(),
+            Arc::new(FakeEngine::new("")),
+            &opts,
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("SEG-02A"), "{err}");
+        opts.case = Some("NO-SUCH-CASE".into());
+        assert!(instrument_for(&opts, "malakor", "theatrical", &cal).is_err());
+    }
+
+    /// Reveals every fogged hex it sees, every tick, and tries to sign off every 10 minutes:
+    /// the worst pacing a model could choose.
+    struct GreedyMind;
+
+    #[async_trait]
+    impl Mind for GreedyMind {
+        async fn tick(
+            &mut self,
+            now_ms: TsMs,
+            _inbox: Vec<ChatMsg>,
+            ctx: &SegmentContext,
+        ) -> Result<Vec<StreamEvent>, SimError> {
+            let mut ev = vec![StreamEvent::Say {
+                ts_ms: now_ms,
+                speaker: Speaker::Malakor,
+                foil: None,
+                text: format!("Minute {} of the audit.", now_ms / 60_000),
+                replying_to: Vec::new(),
+                first_text_ms: None,
+            }];
+            for h in ctx.hexes.iter().filter(|h| h.fog) {
+                ev.push(StreamEvent::Op {
+                    ts_ms: now_ms,
+                    op: Op::RevealHex {
+                        hex: h.id.clone(),
+                        grade: shadowrunr_types::EvidenceGrade::Clm,
+                    },
+                });
+            }
+            if now_ms % 600_000 == 0 {
+                ev.push(StreamEvent::Op {
+                    ts_ms: now_ms,
+                    op: Op::SignOff {
+                        reason: "the audit is done".into(),
+                    },
+                });
+            }
+            Ok(ev)
+        }
+        async fn end_stream(&mut self, _now_ms: TsMs) -> Result<(), SimError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_three_hour_seg02a_run_holds_its_arc_against_a_greedy_mind() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        opts.hooks = Hooks::default();
+        opts.judge = false;
+        let mut sp = spec("long", ModelTier::Haiku, 3, 10_800);
+        sp.segment = SegmentId::Seg02aHexmap;
+        let out = tmp.path().join("out");
+        let prep = prepare(&sp, &out, Arc::new(FakeEngine::new("")), &opts).unwrap();
+        let stage = SegmentRuntime::with_config(
+            SegmentId::Seg02aHexmap,
+            SegmentConfig {
+                start_ms: Some(0),
+                planned_s: Some(sp.duration_s),
+                ..SegmentConfig::default()
+            },
+        )
+        .unwrap();
+        let res = execute(prep, GreedyMind, stage, &opts).await.unwrap();
+        let events = transcript::read(&res.transcript).unwrap();
+        let rec: RunRecord = read_json(&out.join("long/run.json")).unwrap();
+        // Early sign-offs were refused: the run reached the seal window, 2,040+ ticks.
+        assert!(rec.signed_off);
+        assert!(rec.ended_at_s >= 10_200, "ended at {}", rec.ended_at_s);
+        assert!(rec.ticks >= 2_040, "{}", rec.ticks);
+        let refused = |rule: &str| {
+            events
+                .iter()
+                .filter(|e| matches!(e, StreamEvent::Moderation { rule: r, .. } if r == rule))
+                .count()
+        };
+        assert!(
+            refused("dossier_not_sealed") >= 16,
+            "{}",
+            refused("dossier_not_sealed")
+        );
+        assert!(refused("act_locked") > 0);
+        // Each act opened on its schedule, then the seal.
+        let card_at = |id: &str| {
+            events.iter().find_map(|e| match e {
+                StreamEvent::Op {
+                    ts_ms,
+                    op: Op::ShowCard { card_id, .. },
+                } if card_id == id => Some(*ts_ms),
+                _ => None,
+            })
+        };
+        assert_eq!(card_at("arc-act-1"), Some(0));
+        assert_eq!(card_at("arc-act-2"), Some(3_600_000));
+        assert_eq!(card_at("arc-act-3"), Some(7_200_000));
+        assert_eq!(card_at("arc-seal"), Some(10_200_000));
+    }
+
+    /// The real brain over a 3-hour SEG-02A run (keyless fakes): the core prompt stays
+    /// bounded, the stable prefix stays byte-stable, and the run is not cut short.
+    #[tokio::test]
+    async fn a_three_hour_run_keeps_the_core_prompt_bounded() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        opts.hooks = Hooks::default();
+        opts.judge = false;
+        let rec = Arc::new(Recording {
+            inner: FakeEngine::new(""),
+            seen: Mutex::new(Vec::new()),
+        });
+        let mut sp = spec("three-hours", ModelTier::Haiku, 30, 10_800);
+        sp.segment = SegmentId::Seg02aHexmap;
+        let out = tmp.path().join("out");
+        run_one_with(sp, out.clone(), rec.clone(), &opts)
+            .await
+            .unwrap();
+        let rec_run: RunRecord = read_json(&out.join("three-hours/run.json")).unwrap();
+        assert_eq!(rec_run.ended_at_s, 10_800, "the run is not cut short");
+        assert!(rec_run.tick_errors.is_empty(), "{:?}", rec_run.tick_errors);
+        let core = rec.of(Role::CoreThread);
+        assert!(core.len() > 1_000, "{} core calls", core.len());
+        assert!(
+            core.iter().all(|r| r.system == core[0].system),
+            "stable prefix"
+        );
+        // Prompt size in the first and the last half hour: no unbounded growth.
+        let len = |r: &EngineRequest| r.prompt.len();
+        let n = core.len();
+        let early = core[n / 12..n / 6].iter().map(len).max().unwrap();
+        let late = core[n - n / 6..].iter().map(len).max().unwrap();
+        assert!(
+            late < early * 2,
+            "core prompt grew from {early} to {late} chars over three hours"
+        );
+        // The arc reached the brain: the last act's summary is in a late prompt.
+        assert!(
+            core[n - 1].prompt.contains("ARC act 3/3"),
+            "{}",
+            &core[n - 1].prompt
         );
     }
 }

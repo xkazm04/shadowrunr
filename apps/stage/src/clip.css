@@ -1,0 +1,299 @@
+/* Clip mode: the vertical 1080x1920 canvas (ClipStage.tsx). Bands top to bottom: header,
+   middle (hexmap or avatar), captions, citation, footer. Grade colours come from the tokens;
+   the stage palette and fonts from styles.css. */
+
+.clip-frame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+.clip-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  color: var(--dim);
+}
+
+.clip-canvas {
+  position: relative;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.clip-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(47, 143, 120, 0.22), transparent 62%),
+    linear-gradient(180deg, #0d1312 0%, #070a09 100%);
+}
+
+.clip-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 8px;
+  background: var(--sr-grade-spc, #ff5a2a);
+  z-index: 3;
+}
+
+/* ─── Header ─── */
+
+.clip-head {
+  position: absolute;
+  left: 72px;
+  right: 72px;
+  top: 48px;
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.clip-alleged-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.clip-alleged {
+  font-family: var(--display);
+  font-size: 104px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: var(--sr-grade-spc, #ff5a2a);
+}
+
+.clip-grade {
+  min-width: 248px;
+  padding: 14px 24px;
+  border-radius: 10px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 60px;
+  font-weight: 500;
+  color: #0b0f0e;
+}
+
+.clip-case-title {
+  font-family: var(--ui);
+  font-size: 42px;
+  line-height: 1.2;
+  color: var(--bone);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.clip-fiction {
+  align-self: flex-start;
+  padding: 8px 18px;
+  border: 3px solid var(--sr-grade-clm, #e8913f);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 30px;
+  letter-spacing: 0.08em;
+  color: var(--sr-grade-clm, #e8913f);
+}
+
+.clip-seg-title {
+  font-family: var(--display);
+  font-size: 76px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--verdigris);
+  letter-spacing: 0.03em;
+}
+
+.clip-seg-foil {
+  font-family: var(--mono);
+  font-size: 34px;
+  color: var(--bronze);
+}
+
+/* ─── Middle ─── */
+
+.clip-middle {
+  position: absolute;
+  left: 40px;
+  right: 40px;
+  top: 370px;
+  height: 820px;
+}
+
+.clip-middle .hexmap {
+  height: 100%;
+}
+
+.clip-middle .hex-svg {
+  width: 100%;
+  height: calc(100% - 96px);
+}
+
+.clip-middle .hex-legend {
+  height: auto;
+  flex-wrap: wrap;
+  row-gap: 6px;
+  font-size: 20px;
+}
+
+.clip-middle .legend-count {
+  flex-basis: 100%;
+  margin-left: 0;
+  text-align: right;
+}
+
+.clip-avatar {
+  position: relative;
+  height: 100%;
+}
+
+.clip-sil {
+  position: absolute;
+  left: 140px;
+  right: 140px;
+  top: 0;
+  bottom: 0;
+}
+
+.clip-avatar:has(.clip-foil) .clip-sil {
+  bottom: 196px;
+}
+
+.clip-foil {
+  position: absolute;
+  left: 40px;
+  right: 40px;
+  bottom: 0;
+  height: 172px;
+}
+
+.clip-foil .foil-card {
+  font-size: 26px;
+}
+
+/* ─── Captions ─── */
+
+.clip-captions {
+  position: absolute;
+  left: 72px;
+  right: 72px;
+  top: 1210px;
+  height: 440px;
+  overflow: hidden;
+}
+
+.clip-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.clip-caption-who {
+  font-family: var(--mono);
+  font-size: 32px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sr-grade-spc, #ff5a2a);
+}
+
+.clip-speaker-viewer .clip-caption-who {
+  color: var(--dim);
+}
+
+.clip-speaker-foil .clip-caption-who {
+  color: var(--bronze);
+}
+
+.clip-caption-text {
+  margin: 0;
+  font-family: var(--ui);
+  font-size: 60px;
+  font-weight: 600;
+  line-height: 1.22;
+  color: var(--bone);
+}
+
+.clip-speaker-viewer .clip-caption-text {
+  font-size: 48px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text);
+}
+
+.clip-caption-text .w {
+  opacity: 0.18;
+}
+
+.clip-caption-text .w.on {
+  opacity: 1;
+}
+
+/* ─── Citation and footer ─── */
+
+.clip-cite {
+  position: absolute;
+  left: 72px;
+  right: 72px;
+  top: 1664px;
+  height: 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 27px;
+  color: var(--sr-grade-rep, #cdbf9f);
+}
+
+.clip-cite-head {
+  font-size: 24px;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+}
+
+.clip-cite-src {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clip-foot {
+  position: absolute;
+  left: 72px;
+  right: 72px;
+  top: 1812px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  font-family: var(--mono);
+}
+
+.clip-disclosure {
+  flex-shrink: 0;
+  padding: 10px 26px;
+  border: 2px solid var(--sr-grade-doc, #86d3bb);
+  border-radius: 28px;
+  background: #161411;
+  font-size: 28px;
+  color: var(--sr-grade-doc, #86d3bb);
+}
+
+.clip-prov {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 22px;
+  color: var(--faint);
+}

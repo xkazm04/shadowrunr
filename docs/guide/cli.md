@@ -154,6 +154,20 @@ shadowrunr sim tournament sim/matrices/pilot.toml --plan-only
   joins the instrument hash as `experiment/rate_cap_exemptions`, and `--plan-only` lists it
   under `experiments`. `sim/matrices/rate-cap-exemptions.toml` (treatment) and
   `rate-cap-exemptions-control.toml` (control) are the paired design.
+- `case = "<id>"` in a matrix (or `sim run --case <id>`) audits a staged real case from
+  `<data>/cases/<id>/` in every SEG-02A run instead of the fictional demo case; the
+  bone-clerks answer from its public records (the 2-searches-per-hex cap and the Plebiscite
+  still apply). Its content hash joins the instrument hash as `case/<id>`, and `--plan-only`
+  prints `case` with `unapproved_real_case`. A case the owner has not approved still runs (a
+  sim is private), with a warning, and each run's `run.json` records it.
+- A SEG-02A run planned for an hour or more plays the case as a three-act arc over its
+  duration (the `[arc]` table of `seg-02a.toml`): a later act's hexes stay locked, each act
+  opens with a card, and `sign_off` waits for the 10-minute seal window at the end.
+- A transcript longer than the rubric's `window_threshold_s` (1800 s) is judged in windows of
+  `window_s` (1200 s, plus `window_overlap_s` = 120 s of context), one judge call per window
+  at the judge route's timeout, aggregated into one verdict (a rule failed in any window
+  fails; `judge.json` has one row per window). Parsed windows are cached in
+  `<run_dir>/judge-windows/`, so a re-judge resumes.
 
 | Exit code | Meaning |
 |---|---|
@@ -225,6 +239,90 @@ report_id: <report_id>
 stored: .../data/reconcile/<report_id>.json
 plan options: <n>
 <summary>
+```
+
+## `shadowrunr clips ...`
+
+The clip factory (contract appendix "Clips"). It reads transcripts, never writes under
+`<runs>`, and stores everything in `<data>/clips/<id>/`.
+
+- `clips scan --run <dir|run_id|tournament/run> | --tournament <id> [--no-hook] [--scripted] [--json]`
+  scores every beat (moment markers within caps, the crowd's distinct-chatter z-score against
+  the stream's own baseline, audio always unmeasured), asks the `clipper` route (Haiku, low
+  effort) for one hook read per run, cuts around the line that carries the moment (12 s
+  pre-roll, snapped earlier to a whole line; SEG-01 25-35 s, SEG-02A 45-60 s) and keeps the
+  top 5 per run as drafts waiting at the owner gate. `--no-hook` skips the model and
+  redistributes its weight; with `--scripted` the hook is unmeasured (the scripted engine's
+  echo is not a hook read). A rescan replaces a run's untouched drafts and keeps every one the
+  owner acted on. `engine_failed` runs are left out.
+- `clips list [--status <s>] [--tournament <id>] [--run <id>] [--limit n] [--json]`: best first,
+  with counts by status. Every ranking carries "weights unmeasured".
+- `clips show <id> [--json]`: window, signals, markers, evidence, the gate checklist,
+  captions and render.
+- `clips render <id> [--json]`: records `draft.mp4` (1080x1920) from the stage in a headless
+  Chromium and encodes it with ffmpeg, verified with ffprobe. Needs `apps/stage/dist` (build
+  it with `pnpm -C apps/stage build`), node, ffmpeg/ffprobe and Chrome, Edge or a Playwright
+  chromium build (`[clips]` in `shadowrunr.toml` names them). With a tool missing it writes the
+  poster frame and caption tracks and says which tool is missing; it never fakes a video.
+  About 3 s of wall time per second of clip.
+- `clips approve <id> --signature <name> [--override <reason>] [--note <text>]`: the owner's
+  act. Refused when a check failed (exclusions hold whatever the score); an unmeasured check
+  needs `--override`, recorded beside the hold reasons it overrides.
+- `clips reject <id> --reason <text>`.
+- `clips publish <id> [--platform youtube|tiktok|twitch]...`: **dry run**. Refused unless the
+  clip is `approved_for_upload`. Writes the exact request each adapter would send to
+  `<data>/clips/<id>/requests/<platform>.json`; nothing is sent and no credential is read.
+
+```
+$ shadowrunr clips scan --tournament <tournament_id>
+$ shadowrunr clips show <id>
+$ shadowrunr clips render <id>
+$ shadowrunr clips approve <id> --signature owner --override "corrections log not built yet; fictional demo case"
+$ shadowrunr clips publish <id>
+DRY RUN: nothing was sent; each request was written instead
+```
+
+## `shadowrunr case ...`
+
+Real SEG-02A cases (contract appendix "Real cases"). A case is researched off-stream, stored
+in `<data>/cases/<id>/` (git-ignored: real case data is never committed) and runs on a live
+stream only after the owner approves it.
+
+- `case research --subject "<company, scheme or case>" [--max-hexes 19] [--source <url>]...
+  [--id <ID>] [--tier haiku|sonnet|opus] [--no-discovery] [--json]`: the CALM pipeline. The
+  Researcher role finds the case's records with web fetch restricted to the research allowlist
+  (`crates/shadowrunr-segments/data/research-allowlist.toml`, or `[research] domains`); the
+  pipeline fetches each page itself (allowlisted `https` hosts only, redirects included),
+  reading a page that refuses automated clients through its Wayback Machine capture; one
+  tool-less structured-output call extracts hexes, records (DOC/REP/CLM, never SPC) and the
+  three acts from the fenced page text; the PII scrubber turns named people into roles and
+  removes emails, phone numbers and street addresses; the case is staged `CALM_STAGED`, not
+  approved for stream. The subject must be a company or a scheme named in an enforcement
+  record: a person is never a subject. Exit 3 when nothing was staged (the report says why).
+  It fetches real pages and spends engine calls.
+- `case list [--json]`, `case show <id> [--json]`: status, approval, map counts by grade,
+  every record's source with its retrieval day (and Wayback capture), every page fetched with
+  its sha256, scrub hits, refusals, and the corrections log.
+- `case approve <id>`: the owner's approval of the case as it is now. A live stream refuses
+  an unapproved case, or one whose content changed after the approval. A simulation is private
+  and may run it; its runs record `"unapproved_real_case": true` in `run.json`.
+- `case retract <id>`: the case runs nowhere, not even in a simulation.
+- `case correct <id> --type factual|reply|downgrade --note "<public note>" [--hex HEX-03]`:
+  appends to `corrections.jsonl` (each entry blocks clip publishing for the case until the
+  owner clears it).
+
+`[research]` in `shadowrunr.toml` (all optional): `domains` (replaces the allowlist; adding a
+domain is owner-gated), `user_agent` (sec.gov serves automated clients only when the
+User-Agent names a contact, e.g. `"Org name contact@example.org"`; without one its pages are
+read through the Wayback Machine), `max_sources` (14), `max_page_chars` (20000),
+`fetch_timeout_s` (30), `discovery_timeout_s` and `extraction_timeout_s` (900).
+
+```
+$ shadowrunr case research --subject "Woodbridge Group of Companies (SEC and DOJ enforcement)" --tier opus
+case: WOODBRIDGE-...
+stored: .../data/cases/WOODBRIDGE-.../
+$ shadowrunr case approve WOODBRIDGE-...
+$ shadowrunr sim run --segment SEG-02A --case WOODBRIDGE-... --duration 900 --judge
 ```
 
 ## `shadowrunr daemon [--port 7717] [--scripted]`

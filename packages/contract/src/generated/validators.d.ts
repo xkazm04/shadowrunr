@@ -16,6 +16,10 @@ export declare const validateCharacterListResult: ValidateFn<T.CharacterListResu
 export declare const validateCharacterRulesResult: ValidateFn<T.CharacterRulesResult>;
 export declare const validateCharacterRulesSetResult: ValidateFn<T.CharacterRulesSetResult>;
 export declare const validateCharacterSummary: ValidateFn<T.CharacterSummary>;
+export declare const validateClipCandidate: ValidateFn<T.ClipCandidate>;
+export declare const validateClipsPage: ValidateFn<T.ClipsPage>;
+export declare const validateClipPublishReport: ValidateFn<T.ClipPublishReport>;
+export declare const validateClipScanReport: ValidateFn<T.ClipScanReport>;
 export declare const validateDirective: ValidateFn<T.Directive>;
 export declare const validateDirectiveListResult: ValidateFn<T.DirectiveListResult>;
 export declare const validateEngineStatus: ValidateFn<T.EngineStatus>;

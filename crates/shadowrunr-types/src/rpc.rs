@@ -10,6 +10,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::{CharacterDetail, CharacterSummary, RankTableInfo, RuleState, SegmentTables};
+use crate::clips::{
+    ClipCandidate, ClipIdParams, ClipPublishReport, ClipScanReport, ClipsApproveParams,
+    ClipsListParams, ClipsPage, ClipsPublishParams, ClipsRejectParams, ClipsScanParams,
+};
 use crate::reconcile::{
     Directive, DirectiveKind, LordChatReply, NextStreamPlan, PlanOption, ReconcileReport,
     RuleIncident, Source,
@@ -437,6 +441,13 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<RunsPageParams, RunsPage>("runs.page");
     v.method::<TournamentsPageParams, TournamentsPage>("tournaments.page");
     v.method::<EmptyParams, EngineStatus>("engine.status");
+    v.method::<ClipsListParams, ClipsPage>("clips.list");
+    v.method::<ClipIdParams, ClipCandidate>("clips.get");
+    v.method::<ClipsScanParams, ClipScanReport>("clips.scan");
+    v.method::<ClipIdParams, ClipCandidate>("clips.render");
+    v.method::<ClipsApproveParams, ClipCandidate>("clips.approve");
+    v.method::<ClipsRejectParams, ClipCandidate>("clips.reject");
+    v.method::<ClipsPublishParams, ClipPublishReport>("clips.publish");
 }
 
 /// Every method name, in table order.

@@ -107,6 +107,103 @@ impl Default for SourceAllowlist {
     }
 }
 
+/// The compiled-in research allowlist: the exact bytes of `data/research-allowlist.toml`.
+pub const BUILTIN_RESEARCH_ALLOWLIST_TOML: &str = include_str!("../data/research-allowlist.toml");
+
+/// Domains the off-stream research pipeline may fetch from. It governs network egress only;
+/// grades stay with [`SourceAllowlist`] (a page fetched from `web.archive.org` is never a
+/// primary source by its own host).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResearchAllowlist {
+    pub domains: Vec<String>,
+}
+
+impl ResearchAllowlist {
+    pub fn from_toml_str(text: &str) -> Result<Self, SegmentError> {
+        let list: ResearchAllowlist = toml::from_str(text).map_err(|e| SegmentError::Data {
+            file: "research-allowlist.toml".into(),
+            detail: e.to_string(),
+        })?;
+        Self::from_domains(list.domains)
+    }
+
+    /// A list from bare domains (`sec.gov`), normalised like the primary allowlist. Empty, a
+    /// path or a dotless name is refused.
+    pub fn from_domains(domains: Vec<String>) -> Result<Self, SegmentError> {
+        let mut out = Vec::with_capacity(domains.len());
+        for d in domains {
+            let mut d = d.trim().to_ascii_lowercase();
+            if let Some(bare) = d.strip_prefix("www.") {
+                d = bare.to_string();
+            }
+            if d.is_empty() || d.contains('/') || d.contains(':') || !d.contains('.') {
+                return Err(SegmentError::Data {
+                    file: "research-allowlist.toml".into(),
+                    detail: format!("not a bare domain: {d:?}"),
+                });
+            }
+            if !out.contains(&d) {
+                out.push(d);
+            }
+        }
+        if out.is_empty() {
+            return Err(SegmentError::Data {
+                file: "research-allowlist.toml".into(),
+                detail: "the research allowlist is empty".into(),
+            });
+        }
+        Ok(Self { domains: out })
+    }
+
+    pub fn builtin() -> &'static ResearchAllowlist {
+        static LIST: OnceLock<ResearchAllowlist> = OnceLock::new();
+        LIST.get_or_init(|| {
+            ResearchAllowlist::from_toml_str(BUILTIN_RESEARCH_ALLOWLIST_TOML)
+                .expect("built-in research-allowlist.toml is valid (checked by tests)")
+        })
+    }
+
+    /// May the pipeline fetch this URL? Only `https://` URLs on a listed domain (or a
+    /// subdomain of one) pass.
+    pub fn allows(&self, url: &str) -> bool {
+        if !url.trim().to_ascii_lowercase().starts_with("https://") {
+            return false;
+        }
+        url_host(url).is_some_and(|host| {
+            self.domains
+                .iter()
+                .any(|d| host == *d || host.ends_with(&format!(".{d}")))
+        })
+    }
+}
+
+impl Default for ResearchAllowlist {
+    fn default() -> Self {
+        Self::builtin().clone()
+    }
+}
+
+/// The original URL of a Wayback Machine capture
+/// (`https://web.archive.org/web/<timestamp>[id_]/<original>`), or `None` for any other URL.
+/// A capture keeps its original's provenance: the record it copies was published at the
+/// original URL, so that URL is the source the DOC rule reads.
+pub fn wayback_original(url: &str) -> Option<String> {
+    if url_host(url).as_deref() != Some("web.archive.org") {
+        return None;
+    }
+    let lower = url.to_ascii_lowercase();
+    let at = lower.find("/web/")? + "/web/".len();
+    let rest = &url[at..];
+    let (stamp, original) = rest.split_once('/')?;
+    let digits = stamp.trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '_');
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let o = original.to_ascii_lowercase();
+    (o.starts_with("https://") || o.starts_with("http://")).then(|| original.to_string())
+}
+
 /// Lowercase host of an `http(s)://` URL, without userinfo, port or a leading `www.`.
 /// Anything that is not an absolute http(s) URL yields `None`.
 pub(crate) fn url_host(url: &str) -> Option<String> {
@@ -189,6 +286,69 @@ mod tests {
         let u = "https://records.example/morrowgate-fco/order-0001";
         assert!(!list.is_primary(u, false));
         assert!(list.is_primary(u, true));
+    }
+
+    #[test]
+    fn research_allowlist_is_the_owner_list() {
+        let list = ResearchAllowlist::builtin();
+        assert_eq!(
+            list.domains,
+            [
+                "ftc.gov",
+                "sec.gov",
+                "fca.org.uk",
+                "dfpi.ca.gov",
+                "justice.gov",
+                "opencorporates.com",
+                "web.archive.org"
+            ]
+        );
+        for u in [
+            "https://www.sec.gov/litigation/litreleases/2019/lr24001.htm",
+            "https://web.archive.org/web/2019id_/https://www.ftc.gov/x",
+            "https://opencorporates.com/companies/us_de/123",
+            "https://www.fca.org.uk/news",
+        ] {
+            assert!(list.allows(u), "{u}");
+        }
+        for u in [
+            "http://www.sec.gov/x",
+            "https://en.wikipedia.org/wiki/X",
+            "https://sec.gov.evil.example/x",
+            "https://archive.org/wayback/available?url=x",
+            "https://courtlistener.com/x",
+            "",
+        ] {
+            assert!(!list.allows(u), "{u}");
+        }
+        assert!(ResearchAllowlist::from_domains(vec![]).is_err());
+        assert!(ResearchAllowlist::from_domains(vec!["https://sec.gov".into()]).is_err());
+    }
+
+    #[test]
+    fn wayback_captures_keep_their_original() {
+        assert_eq!(
+            wayback_original("https://web.archive.org/web/20210104183940id_/https://www.sec.gov/news/press-release/2020-146")
+                .as_deref(),
+            Some("https://www.sec.gov/news/press-release/2020-146")
+        );
+        assert_eq!(
+            wayback_original("https://web.archive.org/web/2019/http://example.com/a?b=c")
+                .as_deref(),
+            Some("http://example.com/a?b=c")
+        );
+        assert_eq!(
+            wayback_original("https://www.sec.gov/web/2019/https://x.gov"),
+            None
+        );
+        assert_eq!(
+            wayback_original("https://web.archive.org/web/abc/https://x.gov"),
+            None
+        );
+        assert_eq!(
+            wayback_original("https://web.archive.org/web/2019/ftp://x"),
+            None
+        );
     }
 
     #[test]
