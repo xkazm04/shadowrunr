@@ -1,0 +1,137 @@
+{
+ "schema": "conform-run/1",
+ "worker": "acf56b6c-b0ba-4531-ae50-f84b08f86a53",
+ "subject": "prompt-assembly",
+ "evaluatedAt": "2026-10-19T09:54:49.951057+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "console-data-layer",
+   "subject": "prompt-assembly",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/data/rpc.ts:57 Searches for prompt and compaction returned no context hits, and the inspected request path serializes daemon RPC parameters without owning model-prompt assembly.",
+   "techniques": [],
+   "absenceTerms": [
+    "prompt",
+    "compaction"
+   ]
+  },
+  {
+   "context": "console-app-bootstrap",
+   "subject": "prompt-assembly",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/app/App.tsx:10 Searches for prompt and compaction returned no hits across app, keys and kit, whose inspected modules compose the React shell, navigation and display helpers without assembling model prompts.",
+   "techniques": [],
+   "absenceTerms": [
+    "prompt",
+    "compaction"
+   ]
+  },
+  {
+   "context": "engine-llm-sessions",
+   "subject": "prompt-assembly",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-engine/src/session.rs:481 The client-held API session resends its continually growing history without a token-budget gate or compaction recovery, allowing accumulated exchanges to exhaust the model window.",
+   "techniques": [
+    {
+     "technique": "context-budgeting",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-engine/src/api.rs:148 build_body renders every stored turn and appends the current request without enforcing a total input budget derived from the model window, response reservation and safety margin."
+    },
+    {
+     "technique": "continuation-prompts",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:354 Rate-limit rotation starts a fresh conversation and retries only the current prompt, without reconstructing prior constraints, decisions or completed work; fallback_reason reports the reset to the caller but supplies no continuation digest to the model."
+    },
+    {
+     "technique": "fingerprinting-and-cache-keys",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:284 Native-session respawn proceeds without comparing a stored standing-prompt fingerprint against a current fingerprint; the system-file content hash is not a session reuse gate."
+    },
+    {
+     "technique": "history-compaction",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:522 ApiSession appends successful exchanges indefinitely and directly returns API failures, providing neither proactive history compaction nor a guarded compaction-and-retry path for context overflow."
+    }
+   ]
+  },
+  {
+   "context": "console-reconcile-page",
+   "subject": "prompt-assembly",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/reconcile/ChatPage.tsx:39 Searches found prompt mentions in report-display metadata and tests but no system_prompt or compaction, while chat forwards message and report_id to the daemon without assembling the model prompt.",
+   "techniques": [],
+   "absenceTerms": [
+    "system_prompt",
+    "compaction"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "prompt-assembly",
+   "context": "console-build-and-desktop-shell",
+   "reason": "absence contradicted: apps/console/fidelity/contest.ts:155 contains 'prompt' (19 hit(s) in the context's directories)"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-19T09:54:49.951057+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "prompt-assembly"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-data-layer",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T09:54:49.951057+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "prompt-assembly"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-app-bootstrap",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T09:54:49.951057+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "prompt-assembly"
+   ],
+   "techniques": [
+    "context-budgeting",
+    "continuation-prompts",
+    "fingerprinting-and-cache-keys",
+    "history-compaction"
+   ],
+   "deviations": 1,
+   "context": "engine-llm-sessions",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T09:54:49.951057+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "prompt-assembly"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-reconcile-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

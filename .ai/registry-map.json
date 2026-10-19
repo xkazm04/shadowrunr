@@ -643,7 +643,11 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/app/App.tsx:10 Searches for prompt and compaction returned no hits across app, keys and kit, whose inspected modules compose the React shell, navigation and display helpers without assembling model prompts.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "app-shell",
@@ -1289,7 +1293,11 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/data/rpc.ts:57 Searches for prompt and compaction returned no context hits, and the inspected request path serializes daemon RPC parameters without owning model-prompt assembly.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "mcp-tools",
@@ -1717,7 +1725,11 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/ChatPage.tsx:39 Searches found prompt mentions in report-display metadata and tests but no system_prompt or compaction, while chat forwards message and report_id to the daemon without assembling the model prompt.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "measurement-honesty",
@@ -2896,7 +2908,11 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:481 The client-held API session resends its continually growing history without a token-budget gate or compaction recovery, allowing accumulated exchanges to exhaust the model window.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "concurrent-vcs",

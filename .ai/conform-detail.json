@@ -354,6 +354,67 @@
           "evidence": "crates/shadowrunr-daemon/src/integrations/mcp.rs:128 The server operates over local stdio as a single process with no multi-node cluster affinity or sticky routing requirements."
         }
       ]
+    },
+    "9b2fb27b-e4c5-4300-a214-7f5518a08b44/prompt-assembly": {
+      "context": "console-data-layer",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T09:54:49.951Z",
+      "worker": "acf56b6c-b0ba-4531-ae50-f84b08f86a53",
+      "techniques": []
+    },
+    "6be461ec-15e2-4963-b858-4712c7c675e8/prompt-assembly": {
+      "context": "console-app-bootstrap",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T09:54:49.951Z",
+      "worker": "acf56b6c-b0ba-4531-ae50-f84b08f86a53",
+      "techniques": []
+    },
+    "4f625471-4451-4819-953d-10b381c13213/prompt-assembly": {
+      "context": "engine-llm-sessions",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T09:54:49.951Z",
+      "worker": "acf56b6c-b0ba-4531-ae50-f84b08f86a53",
+      "techniques": [
+        {
+          "technique": "context-budgeting",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/api.rs:148 build_body renders every stored turn and appends the current request without enforcing a total input budget derived from the model window, response reservation and safety margin."
+        },
+        {
+          "technique": "continuation-prompts",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:354 Rate-limit rotation starts a fresh conversation and retries only the current prompt, without reconstructing prior constraints, decisions or completed work; fallback_reason reports the reset to the caller but supplies no continuation digest to the model."
+        },
+        {
+          "technique": "fingerprinting-and-cache-keys",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:284 Native-session respawn proceeds without comparing a stored standing-prompt fingerprint against a current fingerprint; the system-file content hash is not a session reuse gate."
+        },
+        {
+          "technique": "history-compaction",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:522 ApiSession appends successful exchanges indefinitely and directly returns API failures, providing neither proactive history compaction nor a guarded compaction-and-retry path for context overflow."
+        }
+      ]
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/prompt-assembly": {
+      "context": "console-reconcile-page",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T09:54:49.951Z",
+      "worker": "acf56b6c-b0ba-4531-ae50-f84b08f86a53",
+      "techniques": []
     }
   }
 }
