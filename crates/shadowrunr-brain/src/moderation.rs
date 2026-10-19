@@ -888,6 +888,20 @@ impl InputFilter {
         }
     }
 
+    /// Drop per-viewer state that can no longer change a decision, so a raid of one-message
+    /// viewers does not stay in memory for the whole stream. A rate deque whose newest stamp
+    /// is two windows old would be emptied by the next push anyway (the slack covers message
+    /// clocks a little behind the tick); an `answered` entry past the sincere window reads
+    /// the same as no entry ([`Self::unanswered_lately`]). `seen` and `asked` are per-stream
+    /// on purpose (first-message and first-question exemptions) and grow one entry per
+    /// distinct viewer, so they are not pruned.
+    fn prune_stale(&mut self, now_ms: TsMs) {
+        self.rate
+            .retain(|_, q| q.back().is_some_and(|t| now_ms - t < 2 * ACTIVE_WINDOW_MS));
+        let (beat, keep) = (self.beat, self.cfg.sincere_unanswered_beats);
+        self.answered.retain(|_, b| beat.saturating_sub(*b) <= keep);
+    }
+
     fn unanswered_lately(&self, viewer_id: &str) -> bool {
         self.answered
             .get(viewer_id)
@@ -942,6 +956,7 @@ impl InputFilter {
         policy: &Policy,
     ) -> (Vec<Candidate>, Vec<StreamEvent>) {
         self.beat += 1;
+        self.prune_stale(now_ms);
         let mut events = Vec::new();
         let mut clusters: Vec<Cluster> = Vec::new();
         let mut once: HashSet<String> = HashSet::new();
@@ -2109,6 +2124,34 @@ mod tests {
         let (c, _) = f.filter(25, inbox, &Policy::builtin());
         assert_eq!(c.len(), 1);
         assert_eq!(c[0].count, 4);
+    }
+
+    #[test]
+    fn per_viewer_rate_and_answered_state_stays_bounded_in_a_raid() {
+        let mut f = filter();
+        let policy = Policy::builtin();
+        // 5,000 one-message viewers over 10 simulated minutes (120 ticks of 5 s).
+        for tick in 0..120i64 {
+            let now = tick * 5_000;
+            let inbox: Vec<_> = (0..42)
+                .map(|i| {
+                    let v = format!("raider{}", tick * 42 + i);
+                    msg(&format!("m{v}"), now, &v, "hello there")
+                })
+                .collect();
+            let ids: Vec<String> = inbox.iter().map(|m| m.viewer.id.clone()).collect();
+            f.filter(now, inbox, &policy);
+            f.note_answered(ids.iter().map(String::as_str));
+        }
+        // Viewers active in the last two minutes: 24 ticks x 42.
+        assert!(f.rate.len() <= 25 * 42, "rate grew to {}", f.rate.len());
+        assert!(
+            f.answered.len() <= 5 * 42,
+            "answered grew to {}",
+            f.answered.len()
+        );
+        // The per-stream sets keep every distinct viewer.
+        assert_eq!(f.seen.len(), 120 * 42);
     }
 
     #[test]
