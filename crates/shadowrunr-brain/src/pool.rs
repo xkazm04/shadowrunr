@@ -6,7 +6,7 @@
 //!
 //! The core thread never awaits a job: `collect` is a non-blocking drain.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -139,6 +139,9 @@ pub struct WorkerPool {
     rx: Mutex<mpsc::UnboundedReceiver<JobUpdate>>,
     routed: Mutex<HashMap<String, Vec<JobUpdate>>>,
     tokens: Arc<Mutex<HashMap<String, CancellationToken>>>,
+    /// Every id this pool handed out: a finished job's id is never reused, because the
+    /// working set, episodes and transcript key jobs by id.
+    issued: Mutex<HashSet<String>>,
     counter: AtomicU64,
 }
 
@@ -153,6 +156,7 @@ impl WorkerPool {
             rx: Mutex::new(rx),
             routed: Mutex::new(HashMap::new()),
             tokens: Arc::new(Mutex::new(HashMap::new())),
+            issued: Mutex::new(HashSet::new()),
             counter: AtomicU64::new(0),
         }
     }
@@ -170,12 +174,14 @@ impl WorkerPool {
     pub fn dispatch(&self, origin: &str, job: Job) -> String {
         let n = self.counter.fetch_add(1, Ordering::Relaxed);
         let job_id = {
-            let tokens = self.tokens.lock().unwrap_or_else(|p| p.into_inner());
-            match job.job_id.filter(|s| !s.trim().is_empty()) {
-                Some(id) if !tokens.contains_key(&id) => id,
+            let mut issued = self.issued.lock().unwrap_or_else(|p| p.into_inner());
+            let id = match job.job_id.filter(|s| !s.trim().is_empty()) {
+                Some(id) if !issued.contains(&id) => id,
                 Some(id) => format!("{id}-{n}"),
                 None => format!("job-{n}"),
-            }
+            };
+            issued.insert(id.clone());
+            id
         };
         let token = CancellationToken::new();
         self.tokens
@@ -360,6 +366,29 @@ mod tests {
             }),
         };
         let x = pool.dispatch("s", mk());
+        let y = pool.dispatch("s", mk());
+        assert_eq!(x, "r1");
+        assert_ne!(x, y);
+    }
+
+    #[tokio::test]
+    async fn a_finished_job_id_is_never_handed_out_again() {
+        // The model reuses `r1` for its next research once the first one finished: the
+        // working set, episodes and transcript key jobs by id, so the second must differ.
+        let pool = WorkerPool::new(1);
+        let mk = || Job {
+            job_id: Some("r1".into()),
+            brief: "x".into(),
+            runner: Arc::new(SlowJob {
+                current: Arc::new(AtomicUsize::new(0)),
+                peak: Arc::new(AtomicUsize::new(0)),
+                ms: 1,
+            }),
+        };
+        let x = pool.dispatch("s", mk());
+        let mut acc = Vec::new();
+        wait_terminal(&pool, "s", 1, &mut acc).await;
+        assert_eq!(pool.active(), 0);
         let y = pool.dispatch("s", mk());
         assert_eq!(x, "r1");
         assert_ne!(x, y);
