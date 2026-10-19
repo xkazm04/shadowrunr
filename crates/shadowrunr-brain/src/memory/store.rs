@@ -140,6 +140,14 @@ pub struct CycleRecord {
     pub report: String,
 }
 
+/// A position in the episode stream: `(ts_ms, id)` order, so episodes sharing a
+/// timestamp (one `end_stream` batch) stay individually addressable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EpisodeMark {
+    pub ts_ms: TsMs,
+    pub id: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DecayReport {
     pub decayed: usize,
@@ -348,6 +356,64 @@ impl MemoryStore {
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
         Ok(v)
+    }
+
+    /// Non-system episodes strictly after `lo` and (if given) strictly before `hi` in
+    /// `(ts_ms, id)` order, at most `limit`; newest first or oldest first.
+    pub fn episodes_between(
+        &self,
+        lo: &EpisodeMark,
+        hi: Option<&EpisodeMark>,
+        limit: usize,
+        newest_first: bool,
+    ) -> Result<Vec<Episode>, BrainError> {
+        let conn = self.conn();
+        let dir = if newest_first { "DESC" } else { "ASC" };
+        let mut st = conn.prepare(&format!(
+            "SELECT id, ts_ms, stream_id, kind, importance, text FROM mem_episode
+             WHERE kind != 'system'
+               AND (ts_ms > ?1 OR (ts_ms = ?1 AND id > ?2))
+               AND (?3 IS NULL OR ts_ms < ?3 OR (ts_ms = ?3 AND id < ?4))
+             ORDER BY ts_ms {dir}, id {dir} LIMIT ?5"
+        ))?;
+        let v = st
+            .query_map(
+                params![
+                    lo.ts_ms,
+                    lo.id,
+                    hi.map(|h| h.ts_ms),
+                    hi.map(|h| h.id.as_str()).unwrap_or(""),
+                    limit as i64
+                ],
+                row_episode,
+            )?
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(v)
+    }
+
+    /// Characters of non-system episode text in the same range as `episodes_between`.
+    pub fn chars_between(
+        &self,
+        lo: &EpisodeMark,
+        hi: Option<&EpisodeMark>,
+    ) -> Result<usize, BrainError> {
+        let conn = self.conn();
+        let n: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(LENGTH(text)), 0) FROM mem_episode
+             WHERE kind != 'system'
+               AND (ts_ms > ?1 OR (ts_ms = ?1 AND id > ?2))
+               AND (?3 IS NULL OR ts_ms < ?3 OR (ts_ms = ?3 AND id < ?4))",
+            params![
+                lo.ts_ms,
+                lo.id,
+                hi.map(|h| h.ts_ms),
+                hi.map(|h| h.id.as_str()).unwrap_or("")
+            ],
+            |r| r.get(0),
+        )?;
+        Ok(n.max(0) as usize)
     }
 
     /// Characters of non-system episode text after `after_ms` (sleep-cycle pressure).

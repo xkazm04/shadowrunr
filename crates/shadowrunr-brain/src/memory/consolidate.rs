@@ -9,9 +9,11 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{json, Value};
-use shadowrunr_types::{Engine, EngineRequest, Fact, Role, TsMs};
+use shadowrunr_types::{Engine, EngineRequest, Episode, Fact, Role, TsMs};
 
-use super::store::{parse_scope, scope_str, CycleRecord, MemoryStore, DEFAULT_FACT_IMPORTANCE};
+use super::store::{
+    parse_scope, scope_str, CycleRecord, EpisodeMark, MemoryStore, DEFAULT_FACT_IMPORTANCE,
+};
 use crate::util::{fnv1a64, one_line};
 use crate::BrainError;
 
@@ -44,11 +46,88 @@ pub struct ConsolidationReport {
     pub dropped_over_cap: usize,
 }
 
+/// What the last completed cycle left unread: everything after `watermark` (the newest
+/// episode it consumed) plus an optional `gap` of older episodes its caps skipped.
+struct Cursor {
+    watermark: EpisodeMark,
+    gap: Option<(EpisodeMark, EpisodeMark)>,
+}
+
+fn mark_json(m: &EpisodeMark) -> Value {
+    json!({ "ts": m.ts_ms, "id": m.id })
+}
+
+fn mark_from(v: &Value) -> Option<EpisodeMark> {
+    Some(EpisodeMark {
+        ts_ms: v.get("ts")?.as_i64()?,
+        id: v.get("id")?.as_str()?.to_string(),
+    })
+}
+
+fn mark_of(ep: &Episode) -> EpisodeMark {
+    EpisodeMark {
+        ts_ms: ep.ts_ms,
+        id: ep.id.clone(),
+    }
+}
+
+impl Cursor {
+    fn from_cycle(last: Option<&CycleRecord>) -> Self {
+        let Some(c) = last else {
+            let watermark = EpisodeMark {
+                ts_ms: i64::MIN,
+                id: String::new(),
+            };
+            return Cursor {
+                watermark,
+                gap: None,
+            };
+        };
+        // Records from before the watermark existed: everything at or before finished_ms
+        // counts as consumed (the sentinel id sorts after any real one).
+        let watermark = c
+            .stats
+            .get("consumed_through")
+            .and_then(mark_from)
+            .unwrap_or(EpisodeMark {
+                ts_ms: c.finished_ms,
+                id: "\u{10ffff}".to_string(),
+            });
+        let gap = c
+            .stats
+            .get("gap")
+            .and_then(|g| Some((mark_from(g.get("lo")?)?, mark_from(g.get("hi")?)?)));
+        Cursor { watermark, gap }
+    }
+
+    fn pending_chars(&self, store: &MemoryStore) -> Result<usize, BrainError> {
+        let mut n = store.chars_between(&self.watermark, None)?;
+        if let Some((lo, hi)) = &self.gap {
+            n += store.chars_between(lo, Some(hi))?;
+        }
+        Ok(n)
+    }
+}
+
+/// Add one episode to the prompt window unless a cap says stop.
+fn admit(ep: Episode, window: &mut Vec<(Episode, String)>, chars: &mut usize) -> bool {
+    if window.len() >= MAX_EPISODES_IN {
+        return false;
+    }
+    let text: String = ep.text.chars().take(MAX_EPISODE_CHARS).collect();
+    let cost = text.chars().count();
+    if *chars + cost > MAX_CHARS_IN && !window.is_empty() {
+        return false;
+    }
+    *chars += cost;
+    window.push((ep, text));
+    true
+}
+
 /// Pressure check: volume since the last completed cycle, interval floor, staleness valve.
 pub fn should_consolidate(store: &MemoryStore, now_ms: TsMs) -> Result<bool, BrainError> {
     let last = store.last_completed_cycle()?;
-    let after = last.as_ref().map(|c| c.finished_ms).unwrap_or(i64::MIN);
-    let chars = store.chars_since(after)?;
+    let chars = Cursor::from_cycle(last.as_ref()).pending_chars(store)?;
     match last {
         None => Ok(chars >= PRESSURE_CHARS),
         Some(c) => {
@@ -140,27 +219,52 @@ pub async fn consolidate(
         cycle_id: store.new_id("cyc", now_ms),
         ..Default::default()
     };
-    let after = store
-        .last_completed_cycle()?
-        .map(|c| c.finished_ms)
-        .unwrap_or(i64::MIN);
+    let cursor = Cursor::from_cycle(store.last_completed_cycle()?.as_ref());
 
-    // Newest first, capped by count and characters, then oldest first for the prompt.
-    let mut window = Vec::new();
+    // A gap left by an earlier cycle is read first, oldest first. Otherwise the newest
+    // episodes fill the window and whatever older ones the caps skip become the new gap,
+    // so no episode is stranded behind the watermark.
+    let mut window: Vec<(Episode, String)> = Vec::new();
     let mut chars = 0usize;
-    for ep in store.episodes_since(after, MAX_EPISODES_IN * 4)? {
-        if window.len() >= MAX_EPISODES_IN {
-            break;
+    let mut watermark = cursor.watermark.clone();
+    let mut gap = None;
+    let mut gap_left = false;
+    if let Some((lo, hi)) = &cursor.gap {
+        let mut last_read = lo.clone();
+        for ep in store.episodes_between(lo, Some(hi), MAX_EPISODES_IN * 4, false)? {
+            let mark = mark_of(&ep);
+            if !admit(ep, &mut window, &mut chars) {
+                gap_left = true;
+                break;
+            }
+            last_read = mark;
         }
-        let text: String = ep.text.chars().take(MAX_EPISODE_CHARS).collect();
-        let cost = text.chars().count();
-        if chars + cost > MAX_CHARS_IN && !window.is_empty() {
-            break;
+        if gap_left {
+            gap = Some((last_read, hi.clone()));
         }
-        chars += cost;
-        window.push((ep, text));
     }
-    window.reverse();
+    if !gap_left {
+        let start = window.len();
+        let mut newest_read = None;
+        let mut oldest_read = None;
+        let mut skipped = false;
+        for ep in store.episodes_between(&cursor.watermark, None, MAX_EPISODES_IN * 4, true)? {
+            let mark = mark_of(&ep);
+            if !admit(ep, &mut window, &mut chars) {
+                skipped = true;
+                break;
+            }
+            newest_read.get_or_insert_with(|| mark.clone());
+            oldest_read = Some(mark);
+        }
+        window[start..].reverse();
+        if let Some(n) = newest_read {
+            watermark = n;
+        }
+        if skipped {
+            gap = oldest_read.map(|hi| (cursor.watermark.clone(), hi));
+        }
+    }
     report.episodes_in = window.len();
     report.chars_in = chars;
     let cited: HashSet<String> = window.iter().map(|(e, _)| e.id.clone()).collect();
@@ -242,6 +346,10 @@ Reply with JSON only, matching the schema.",
         "supersedes": report.supersedes,
         "rejected": report.rejected.len(),
         "dropped_over_cap": report.dropped_over_cap,
+        "consumed_through": mark_json(&watermark),
+        "gap": gap
+            .as_ref()
+            .map(|(lo, hi)| json!({ "lo": mark_json(lo), "hi": mark_json(hi) })),
     });
     let mut narrative = format!(
         "# Sleep cycle {}\n\nRead {} episodes ({} chars). Wrote {} facts and {} procedurals.\n",
@@ -376,4 +484,114 @@ fn apply(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+    use shadowrunr_types::{
+        EngineError, EngineKind, EngineReply, Episode, EpisodeKind, HealthReport, WarmSession,
+    };
+
+    use super::*;
+
+    /// Records every prompt; always replies with an empty, valid consolidation.
+    #[derive(Default)]
+    struct PromptLog(Mutex<Vec<String>>);
+
+    #[async_trait]
+    impl Engine for PromptLog {
+        async fn complete(&self, req: EngineRequest) -> Result<EngineReply, EngineError> {
+            self.0.lock().unwrap().push(req.prompt);
+            Ok(EngineReply {
+                text: r#"{"facts":[],"procedurals":[]}"#.into(),
+                engine: EngineKind::ClaudeCli,
+                account: None,
+                model: "fake".into(),
+                first_text_ms: None,
+                duration_ms: 1,
+                usage: Default::default(),
+                cost_usd: None,
+                fallback_reason: None,
+                session_id: None,
+            })
+        }
+        async fn open_session(
+            &self,
+            _: EngineRequest,
+        ) -> Result<Box<dyn WarmSession>, EngineError> {
+            Err(EngineError::Unavailable {
+                reason: "not needed".into(),
+            })
+        }
+        async fn health(&self) -> Vec<HealthReport> {
+            Vec::new()
+        }
+    }
+
+    /// 20 episodes x 2,000 chars (40k: pressure), two cycles 7 h apart; how many episode
+    /// ids never appear in any consolidator prompt?
+    async fn unseen_after_two_cycles(ts_of: impl Fn(i64) -> i64) -> usize {
+        let dir = tempfile::tempdir().unwrap();
+        let store = MemoryStore::open(dir.path()).unwrap();
+        for i in 0..20 {
+            store
+                .write_episode(&Episode {
+                    id: format!("ep_{i:02}"),
+                    ts_ms: ts_of(i),
+                    stream_id: "s0".into(),
+                    kind: EpisodeKind::Stream,
+                    text: "x".repeat(MAX_EPISODE_CHARS),
+                    importance: 3,
+                })
+                .unwrap();
+        }
+        let engine = PromptLog::default();
+        let t0 = 1_000_000;
+        assert!(should_consolidate(&store, t0).unwrap());
+        consolidate(&store, &engine, "Malakor", t0).await.unwrap();
+        let t1 = t0 + 7 * HOUR_MS;
+        consolidate(&store, &engine, "Malakor", t1).await.unwrap();
+        let prompts = engine.0.lock().unwrap().join("\n");
+        (0..20)
+            .filter(|i| !prompts.contains(&format!("[ep_{i:02}]")))
+            .count()
+    }
+
+    #[tokio::test]
+    async fn every_episode_reaches_a_cycle() {
+        assert_eq!(unseen_after_two_cycles(|i| 1_000 + i).await, 0);
+    }
+
+    #[tokio::test]
+    async fn same_timestamp_episodes_are_not_skipped() {
+        assert_eq!(unseen_after_two_cycles(|_| 1_000).await, 0);
+    }
+
+    #[tokio::test]
+    async fn pressure_counts_the_unread_gap() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = MemoryStore::open(dir.path()).unwrap();
+        for i in 0..40 {
+            store
+                .write_episode(&Episode {
+                    id: format!("ep_{i:02}"),
+                    ts_ms: 1_000 + i,
+                    stream_id: "s0".into(),
+                    kind: EpisodeKind::Stream,
+                    text: "x".repeat(MAX_EPISODE_CHARS),
+                    importance: 3,
+                })
+                .unwrap();
+        }
+        let engine = PromptLog::default();
+        consolidate(&store, &engine, "Malakor", 1_000_000)
+            .await
+            .unwrap();
+        // 80k in, 30k read: 50k unread is still pressure, once the 6 h floor passes.
+        assert!(!should_consolidate(&store, 1_000_000 + HOUR_MS).unwrap());
+        assert!(should_consolidate(&store, 1_000_000 + 7 * HOUR_MS).unwrap());
+    }
 }
