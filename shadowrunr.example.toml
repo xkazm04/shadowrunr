@@ -11,9 +11,12 @@
 [engine]
 # Claude Code accounts in rotation order. `config_dir` omitted = the default login of the
 # `claude` CLI on this machine. An empty list means no CLI at all (fallbacks only).
+# `fallback = true` keeps an account out of the rotation until every other account is
+# cooling (e.g. a personal login held in reserve behind a dedicated one).
 accounts = [
     { label = "main" },
     # { label = "alt", config_dir = "C:/Users/me/.claude-alt" },
+    # { label = "reserve", config_dir = "C:/Users/me/.claude-reserve", fallback = true },
 ]
 
 # First fallback: the Anthropic Messages API. Name the env var, never the key.

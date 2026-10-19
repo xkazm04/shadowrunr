@@ -47,6 +47,7 @@ impl World {
         self.cfg.accounts.push(AccountConfig {
             label: label.into(),
             config_dir: Some(dir.to_string_lossy().into()),
+            fallback: false,
         });
         dir
     }

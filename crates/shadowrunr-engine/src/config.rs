@@ -152,6 +152,10 @@ pub struct AccountConfig {
     /// Path for CLAUDE_CONFIG_DIR; omitted = the default login.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_dir: Option<String>,
+    /// Used only while every non-fallback account is cooling (a personal login kept as a
+    /// reserve, so a long run does not share its quota with the owner by round-robin).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fallback: bool,
 }
 
 impl EngineConfig {

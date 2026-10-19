@@ -83,7 +83,8 @@ impl FleetInner {
         (self.clock)()
     }
 
-    /// Next healthy account in round-robin order, skipping `tried`.
+    /// Next healthy account in round-robin order, skipping `tried`. Fallback accounts are
+    /// reached only when no other account is healthy.
     pub fn pick_account(&self, tried: &[usize]) -> Option<usize> {
         let n = self.accounts.len();
         if n == 0 {
@@ -92,17 +93,20 @@ impl FleetInner {
         let now = self.now();
         let start = self.rr.fetch_add(1, Ordering::Relaxed) % n;
         let mut cooling = self.cooling.lock().unwrap_or_else(|e| e.into_inner());
-        for k in 0..n {
-            let i = (start + k) % n;
-            if tried.contains(&i) {
-                continue;
+        let is_fallback = |i: usize| self.cfg.accounts.get(i).is_some_and(|a| a.fallback);
+        for reserve in [false, true] {
+            for k in 0..n {
+                let i = (start + k) % n;
+                if is_fallback(i) != reserve || tried.contains(&i) {
+                    continue;
+                }
+                match cooling[i] {
+                    Some(until) if until > now => continue,
+                    Some(_) => cooling[i] = None,
+                    None => {}
+                }
+                return Some(i);
             }
-            match cooling[i] {
-                Some(until) if until > now => continue,
-                Some(_) => cooling[i] = None,
-                None => {}
-            }
-            return Some(i);
         }
         None
     }
@@ -675,6 +679,15 @@ mod tests {
     }
 
     fn setup(labels: &[(&str, &'static str)], api_env: Option<&str>) -> Setup {
+        setup_with(labels, &[], api_env)
+    }
+
+    /// [`setup`] with the accounts named in `reserve` marked `fallback`.
+    fn setup_with(
+        labels: &[(&str, &'static str)],
+        reserve: &[&str],
+        api_env: Option<&str>,
+    ) -> Setup {
         let dir = tempfile::tempdir().unwrap();
         let cfg = EngineConfig {
             accounts: labels
@@ -682,6 +695,7 @@ mod tests {
                 .map(|(l, _)| AccountConfig {
                     label: (*l).into(),
                     config_dir: None,
+                    fallback: reserve.contains(l),
                 })
                 .collect(),
             api_key_env: api_env.map(str::to_string),
@@ -754,6 +768,35 @@ mod tests {
         assert_eq!(rows[0].account.as_deref(), Some("A"));
         assert_eq!(rows[1].error_kind, None);
         assert!(rows[1].fallback_reason.is_some());
+    }
+
+    #[tokio::test]
+    async fn a_fallback_account_is_reached_only_when_the_others_cool() {
+        let s = setup_with(
+            &[
+                ("main", SUCCESS),
+                ("isolated", RATE_LIMIT),
+                ("spare", SUCCESS),
+            ],
+            &["main"],
+            None,
+        );
+        // Round-robin never lands on the reserve while another account is healthy.
+        for _ in 0..4 {
+            let r = s.fleet.complete(core()).await.unwrap();
+            assert_ne!(r.account.as_deref(), Some("main"));
+        }
+        assert!(!s.runner.calls.lock().unwrap().contains(&"main".to_string()));
+        // Only the reserve is left once every other account cools.
+        let s = setup_with(
+            &[("isolated", RATE_LIMIT), ("main", SUCCESS)],
+            &["main"],
+            None,
+        );
+        let r = s.fleet.complete(core()).await.unwrap();
+        assert_eq!(r.account.as_deref(), Some("main"));
+        assert!(r.fallback_reason.unwrap().contains("account isolated"));
+        assert_eq!(*s.runner.calls.lock().unwrap(), ["isolated", "main"]);
     }
 
     #[tokio::test]

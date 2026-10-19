@@ -22,7 +22,7 @@ cp shadowrunr.example.toml shadowrunr.toml
 
 | Section | Holds |
 |---|---|
-| `[engine]` | `EngineConfig`: accounts by `label` and optional `config_dir` (CLAUDE_CONFIG_DIR), `api_key_env` (the env var *name*), `cli_fallbacks`, `scripted`, route overrides. No credentials. |
+| `[engine]` | `EngineConfig`: accounts by `label`, optional `config_dir` (CLAUDE_CONFIG_DIR) and `fallback` (reached only while every other account cools), `api_key_env` (the env var *name*), `cli_fallbacks`, `scripted`, route overrides. No credentials. |
 | `[paths]` | `characters`, `runs`, `data`, `policy`, plus `sim` (calibration, rubric, matrices) and `segments` (segment tables). |
 | `[sim]` | Defaults for `sim run` and `sim.start`: character, tone, tier, segment, audience, seed, duration, populations by audience size, judge tiers, concurrency. `max_quota_pause_s` (default 28800, 8 h) caps the total time a tournament waits on quota before it stops (`sim tournament --max-pause` overrides it). |
 | `[daemon]` | `port` (7717), `max_live_runs`, `extra_origins`. |

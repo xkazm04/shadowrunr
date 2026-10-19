@@ -19,6 +19,7 @@ async fn main() {
         accounts: vec![AccountConfig {
             label: "main".into(),
             config_dir: None,
+            fallback: false,
         }],
         // Live CLI processes across all concurrent runs (SHADOWRUNR_MAX_LIVE, default 10).
         max_live_processes: Some(

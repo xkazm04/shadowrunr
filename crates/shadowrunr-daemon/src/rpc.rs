@@ -405,10 +405,12 @@ mod tests {
                 AccountConfig {
                     label: "main".into(),
                     config_dir: Some(secret_dir.to_string_lossy().into_owned()),
+                    fallback: false,
                 },
                 AccountConfig {
                     label: "spare".into(),
                     config_dir: None,
+                    fallback: false,
                 },
             ],
             api_key_env: Some("SHADOWRUNR_TEST_API_KEY".into()),
