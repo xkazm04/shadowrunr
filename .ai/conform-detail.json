@@ -1075,6 +1075,62 @@
         "at": "2026-10-19T22:27:38.472832+00:00",
         "reason": "reviewer (sonnet): I could not confirm that bible.md is 'agent-proposable' or sits behind a mutable proposal path. The constitution says changes come only from the operator via a reviewed commit, and I found no code that lets an agent write the bible. The restated doxxing rule at bible.md:177 is real, but the 'second "
       }
+    },
+    "4acf582d-5403-4f36-b24c-fe00bacb3683/native-shell-integration": {
+      "context": "console-shell-router",
+      "subject": "native-shell-integration",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T22:34:14.818Z",
+      "worker": "7f623404-b181-4f8f-87fd-b592e1ccbf86",
+      "techniques": [
+        {
+          "technique": "capability-presence-contract",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/router/store.ts:80 The router changes document location hashes; it exposes no platform-dependent native capability."
+        },
+        {
+          "technique": "layout-resolved-input-synthesis",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/keyActions.ts:33 Keyboard actions produce internal navigation effects rather than synthesized input into another application."
+        },
+        {
+          "technique": "native-owned-stream",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/Chrome.tsx:12 Chrome consumes connection state; this context does not create or own the network stream."
+        },
+        {
+          "technique": "native-side-owns-the-target-set",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/router/react.tsx:51 Route links pass routes and DOM geometry, not filesystem targets or shell commands."
+        },
+        {
+          "technique": "non-stealing-overlay",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/Intro.tsx:9 The intro is an interactive DOM element inside the console, not a native surface over another application."
+        },
+        {
+          "technique": "observer-perturbation",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/Wall.tsx:87 Pointer inspection resolves the console's own poster elements, not foreign application structure."
+        },
+        {
+          "technique": "permission-gate-vector",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/keyActions.ts:25 Keyboard mode depends on intro and route state; no separately granted host capabilities gate these actions."
+        },
+        {
+          "technique": "query-transparent-overlay",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/Spread.tsx:34 The spread measures its own DOM bounds for animation and performs no query through a native overlay."
+        },
+        {
+          "technique": "unexported-capability-ladder",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/useViewport.ts:39 Viewport integration uses ordinary document APIs; no private native entry-point resolution was found."
+        }
+      ]
     }
   }
 }
