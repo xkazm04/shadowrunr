@@ -1,0 +1,27 @@
+{
+ "schema": "conform-run/1",
+ "worker": "9f415a00-c212-4439-81a5-f31f24d35bc2",
+ "subject": "supply-chain",
+ "evaluatedAt": "2026-10-19T22:55:14.171109+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "supply-chain",
+   "context": "segments-runtime",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "supply-chain",
+   "context": "console-build-and-desktop-shell",
+   "reason": "evidence leans on src/data/config.ts, which is not a tracked file"
+  },
+  {
+   "subject": "supply-chain",
+   "context": "character-package",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": []
+}
