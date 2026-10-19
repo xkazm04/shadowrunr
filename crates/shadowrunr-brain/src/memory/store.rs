@@ -215,6 +215,16 @@ impl std::fmt::Debug for MemoryStore {
     }
 }
 
+/// `path` under `root`, `/`-separated: the `file_path` the index records for a markdown file.
+fn rel_path(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 fn open_conn(root: &Path) -> Result<Connection, BrainError> {
     fs::create_dir_all(root).map_err(|e| BrainError::Store(format!("{}: {e}", root.display())))?;
     let conn = Connection::open(root.join(INDEX_FILE))?;
@@ -256,12 +266,7 @@ impl MemoryStore {
     }
 
     fn rel(&self, path: &Path) -> String {
-        path.strip_prefix(&self.root)
-            .unwrap_or(path)
-            .components()
-            .map(|c| c.as_os_str().to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join("/")
+        rel_path(&self.root, path)
     }
 
     /// A fresh id: `<prefix>_<ts>_<hash>`.
@@ -1223,14 +1228,7 @@ pub fn rebuild_index(memory_dir: &Path) -> Result<RebuildReport, BrainError> {
     let mut conn = open_conn(memory_dir)?;
     let tx = conn.transaction()?;
     let mut report = RebuildReport::default();
-    let rel = |p: &Path| -> String {
-        p.strip_prefix(memory_dir)
-            .unwrap_or(p)
-            .components()
-            .map(|c| c.as_os_str().to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join("/")
-    };
+    let rel = |p: &Path| rel_path(memory_dir, p);
 
     for path in walk_md(&memory_dir.join("episodes"))? {
         let (doc, hash) = read_doc(&path)?;
@@ -1349,14 +1347,7 @@ impl IndexCheck {
 pub fn verify_index(memory_dir: &Path) -> Result<IndexCheck, BrainError> {
     use std::collections::BTreeMap;
     let mut check = IndexCheck::default();
-    let rel = |p: &Path| -> String {
-        p.strip_prefix(memory_dir)
-            .unwrap_or(p)
-            .components()
-            .map(|c| c.as_os_str().to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join("/")
-    };
+    let rel = |p: &Path| rel_path(memory_dir, p);
     // (kind, file_path) -> content_hash, from the markdown.
     let mut want: BTreeMap<(String, String), String> = BTreeMap::new();
     let mut want_tombs: BTreeSet<(String, String)> = BTreeSet::new();
