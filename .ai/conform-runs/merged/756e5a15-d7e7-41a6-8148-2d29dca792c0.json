@@ -1,0 +1,76 @@
+{
+ "schema": "conform-run/1",
+ "worker": "756e5a15-d7e7-41a6-8148-2d29dca792c0",
+ "subject": "show-segment-format-design",
+ "evaluatedAt": "2026-10-19T22:40:53.616519+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [
+  {
+   "context": "segments-runtime",
+   "subject": "show-segment-format-design",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-segments/src/table.rs:276 The segment format data model specifies commands per segment rather than per state, omits mechanical guest allowances and premise decks, and permits segments without exit handover rules.",
+   "techniques": [
+    {
+     "technique": "guest-line-cap-host-last-word",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:28 Foil turn allowance and host last word are stated only as prompt direction in rules_prompt rather than declared as a table field or mechanically enforced."
+    },
+    {
+     "technique": "metric-gated-handover",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:43 The investigation segment defines clock bounds but omits a handover rule entirely, leaving the segment without an exit condition."
+    },
+    {
+     "technique": "quiet-room-premise-deck",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:26 No prepared premise deck is declared or validated; silence is handled only by a generic prompt instruction to fire fresh premises."
+    },
+    {
+     "technique": "segment-as-state-table",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/src/runtime.rs:875 Viewer commands disallowed by the segment table are silently discarded with a bare continue instead of receiving an in-world decline."
+    },
+    {
+     "technique": "segment-portfolio-lifecycle",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/src/portfolio.rs:70 Promotions and retirements are directly applied by next_status without presenting a proposal for owner confirmation."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "show-segment-format-design",
+   "context": "console-segments-page",
+   "reason": "This seat does not accept not-applicable verdicts; the context is an administrative web console page rendering segment tables, chat commands, and rank weights rather than designing or executing show segment formats, so the pair is declined."
+  },
+  {
+   "subject": "show-segment-format-design",
+   "context": "stage-kit-overlays",
+   "reason": "This seat does not accept not-applicable verdicts; the context provides broadcast stream overlay React components (captions, foil cards, ticker, vote panel) rendering the scene model rather than designing or executing show segment formats, so the pair is declined."
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-19T22:40:53.616519+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "show-segment-format-design"
+   ],
+   "techniques": [
+    "guest-line-cap-host-last-word",
+    "metric-gated-handover",
+    "quiet-room-premise-deck",
+    "segment-as-state-table",
+    "segment-portfolio-lifecycle"
+   ],
+   "deviations": 1,
+   "context": "segments-runtime",
+   "via": "curator-multi:agy",
+   "model": "gemini-3.8-flash-high"
+  }
+ ]
+}

@@ -1131,6 +1131,42 @@
           "evidence": "apps/console/src/shell/useViewport.ts:39 Viewport integration uses ordinary document APIs; no private native entry-point resolution was found."
         }
       ]
+    },
+    "5ca16ac4-6263-4c09-80d5-f32a969b16b6/show-segment-format-design": {
+      "context": "segments-runtime",
+      "subject": "show-segment-format-design",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T22:40:53.616Z",
+      "worker": "756e5a15-d7e7-41a6-8148-2d29dca792c0",
+      "techniques": [
+        {
+          "technique": "guest-line-cap-host-last-word",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:28 Foil turn allowance and host last word are stated only as prompt direction in rules_prompt rather than declared as a table field or mechanically enforced."
+        },
+        {
+          "technique": "metric-gated-handover",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:43 The investigation segment defines clock bounds but omits a handover rule entirely, leaving the segment without an exit condition."
+        },
+        {
+          "technique": "quiet-room-premise-deck",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:26 No prepared premise deck is declared or validated; silence is handled only by a generic prompt instruction to fire fresh premises."
+        },
+        {
+          "technique": "segment-as-state-table",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:875 Viewer commands disallowed by the segment table are silently discarded with a bare continue instead of receiving an in-world decline."
+        },
+        {
+          "technique": "segment-portfolio-lifecycle",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/portfolio.rs:70 Promotions and retirements are directly applied by next_status without presenting a proposal for owner confirmation."
+        }
+      ]
     }
   }
 }

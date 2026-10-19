@@ -3240,7 +3240,11 @@
           "revision": 1,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/table.rs:276 The segment format data model specifies commands per segment rather than per state, omits mechanical guest allowances and premise decks, and permits segments without exit handover rules.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:2adaa7129ea57239",
+          "evaluatedRevision": 1
         },
         {
           "subject": "data-video-art-direction",
