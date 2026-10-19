@@ -2920,7 +2920,11 @@
           "revision": 9,
           "changedAt": "2026-10-02",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:354 Dropping the session identifier upon hitting an account rate limit drops thread custody without a definitive verdict and re-dispatches subsequent prompts to a fresh CLI process without folding prior plan and turn context into the retry.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:5791230ffb7d9fad",
+          "evaluatedRevision": 9
         },
         {
           "subject": "agent-memory",

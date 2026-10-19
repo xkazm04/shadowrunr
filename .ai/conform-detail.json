@@ -910,6 +910,63 @@
           "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:86 Distinct runs with equal health compare equal because no immutable run identity is appended."
         }
       ]
+    },
+    "4f625471-4451-4819-953d-10b381c13213/agent-cli-transport": {
+      "context": "engine-llm-sessions",
+      "subject": "agent-cli-transport",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T22:10:36.615Z",
+      "worker": "dfaaacdc-ac81-4188-a8d9-ec62b1dc12cd",
+      "techniques": [
+        {
+          "technique": "availability-probe",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-engine/src/health.rs:128 Probes CLI version and auth status without spending tokens via the child environment and distinguishes unavailable status from cached credentials."
+        },
+        {
+          "technique": "child-observed-posture",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-engine/tests/fake_cli.rs:119 Asserts against the child-observed call log to verify that API keys and plugin directories were absent in the child."
+        },
+        {
+          "technique": "dated-capability-matrix",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/health.rs:19 Relies on a single constant version and help excerpts rather than a structured capability matrix tracking dates, methods, and feature requirements."
+        },
+        {
+          "technique": "fallback-ladder",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-engine/src/fleet.rs:474 Implements explicit multi-tier descent across accounts, API, and alternative CLIs with recorded reasons and a scripted deterministic floor."
+        },
+        {
+          "technique": "host-routed-approval-round-trip",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:120 Engine runs headless batch/unattended streaming sessions with prompts set to none; no interactive attended human queue is routed."
+        },
+        {
+          "technique": "output-normalization",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/alt_cli.rs:105 Passes prompt via argv for agy instead of standard input stream to avoid Windows pipe blocking."
+        },
+        {
+          "technique": "permission-stance-enforcement",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:112 Passes requested allowed tools without a write-tool denylist layer that rejects write tools on read-only requests."
+        },
+        {
+          "technique": "subscription-auth-selection",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:201 Strips API keys and parent session nesting variables at the single Command constructor door."
+        },
+        {
+          "technique": "thread-custody-across-resume",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:354 Unbinds session ID on account rate limits and retries the prompt on a new account without folding conversation history."
+        }
+      ],
+      "registryProposal": "On Windows, CLI tools such as agy block on open stdin pipes unless pipe shutdown is handled specifically, prompting adapters to fall back to argument flags; the standard could document Windows pipe termination semantics for stdin prompt feeding."
     }
   }
 }
