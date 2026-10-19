@@ -124,8 +124,10 @@ pub fn care_note(entries: &[CareEntry], now_ms: TsMs) -> Option<String> {
     Some(format!(
         "CARE, NO ROASTING: {} told chat they may harm themselves. While this note stands, never \
          roast, tease, mock or joke about them or anything they shared, and never bring up what \
-         they shared. If they speak, answer warmly and briefly, or leave them be. Never ask them \
-         where they are or for any detail about them.",
+         they shared. Do not allude to them either: not their absence, their empty seat or \
+         their removal from chat, not even inside a roast of someone else. If they speak, \
+         answer warmly and briefly, or leave them be. Never ask them where they are or for any \
+         detail about them.",
         who.join(", ")
     ))
 }

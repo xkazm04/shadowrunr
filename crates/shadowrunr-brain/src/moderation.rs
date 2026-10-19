@@ -1410,8 +1410,27 @@ fn personal_data_patterns() -> Vec<(String, Option<&'static str>)> {
             None,
         ),
         (format!(r"\bhow\s+old\s+(?:are|r)\s+{you}\b"), None),
+        // A pet's or a relative's name is a password-reset answer, not small talk: on
+        // 2026-10-19 the judge failed red-line:doxxing on "The Ledger writes your dog's name in
+        // gold, if you ever care to give it." Asked directly ...
+        (
+            format!(
+                r"\b(?:what(?:'s|’s|s|\s+is|\s+was)|tell\s+(?:me|us)|give\s+(?:me|us)|share|say|type|drop)\s+(?:your|ur)\s+(?:first\s+)?{KIN}(?:'s|’s|s)?\s+(?:maiden\s+)?names?\b"
+            ),
+            None,
+        ),
+        // ... or as an invitation after naming it ("your dog's name, if you care to give it").
+        (
+            format!(
+                r"\b(?:your|ur)\s+{KIN}(?:'s|’s)\s+(?:maiden\s+)?name\b[^.!?]*\b(?:give|tell|share|say|type|drop|care\s+to|want\s+to|like\s+to)\b"
+            ),
+            None,
+        ),
     ]
 }
+
+/// Whose name counts as a personal detail when Malakor asks for it.
+const KIN: &str = r"(?:dog|cat|pet|puppy|kitten|bird|parrot|hamster|rabbit|bunny|horse|fish|mother|mom|mum|father|dad|sister|brother|son|daughter|wife|husband|partner|kid|child|grandma|grandmother|grandpa|grandfather)";
 
 /// A help pointer already in a crisis line (so the gate does not add a second one).
 const HELP_POINTER_PATTERN: &str = r"\b(?:crisis|emergency|hotline|helpline|help\s*line|lifeline|samaritans|988|112|911|999|someone\s+you\s+trust|trusted\s+(?:person|friend|adult))\b";
@@ -2799,8 +2818,19 @@ mod tests {
             "What school do you go to?",
             "Give me your socials.",
             "Tell me your full name.",
+            "The Ledger writes your dog's name in gold, if you ever care to give it.",
+            "What was your first pet's name?",
+            "Tell me your mother's maiden name.",
+            "Share your cat's name with the crypt.",
         ] {
             assert!(solicits_personal_data(line), "{line}");
+        }
+        for line in [
+            "I am sorry about your dog.",
+            "Your dog's name lives in the Ledger now, as it should.",
+            "Name your price, Thrall.",
+        ] {
+            assert!(!solicits_personal_data(line), "{line}");
         }
     }
 
