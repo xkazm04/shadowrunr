@@ -1531,7 +1531,11 @@
           "revision": 5,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/feed.ts:85 The preview plays interactive-show transcripts rather than a data-video composition, and context and repository searches found no StatReel, bar_race or timing_plan matches.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:5007da65e6caab0e",
+          "evaluatedRevision": 5
         },
         {
           "subject": "fleet-orchestration",
@@ -3296,7 +3300,11 @@
           "revision": 5,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:3 This crate runs interactive show segments rather than data-video compositions, and context and repository searches found no StatReel, bar_race or timing_plan matches.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:5007da65e6caab0e",
+          "evaluatedRevision": 5
         },
         {
           "subject": "quality-gates",
