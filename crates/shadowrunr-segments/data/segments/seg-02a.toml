@@ -56,6 +56,16 @@ plebiscite_secs = 60
 min_planned_s = 3600
 acts = ["Anomaly and filing map", "Shell and archive trail", "Dossier sealed"]
 seal_s = 600
+# Pacing inside an act: the act's time (the last act's up to the seal window) is cut into one
+# reveal slot per hex staged for it, so 6 hexes in a 60-minute act unlock one reveal every 10
+# minutes. A reveal before its slot is refused (`reveal_not_due`), and two reveals stay at
+# least `reveal_gap_pct` percent of a slot apart. A hex is revealed only after a beat of work:
+# a bone-clerk search on it or a closed crowd vote that chose it (`reveal_needs_work`). The
+# recap cooldown is direction for the turn context, not a runtime check.
+reveal_pacing = true
+reveal_gap_pct = 50
+reveal_needs_work = true
+recap_cooldown_s = 900
 
 [[transitions]]
 from = "briefing"

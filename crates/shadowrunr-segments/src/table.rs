@@ -251,6 +251,23 @@ pub struct ArcRules {
     /// The seal window: the last this-many seconds of the planned time, when the dossier is
     /// recapped and sealed and `sign_off` is allowed.
     pub seal_s: u32,
+    /// Reveal pacing inside each act: the act's reveal span (the act, or the last act up to
+    /// the seal window) is cut into one slot per hex staged for it, and a new reveal waits for
+    /// the next slot (`reveal_not_due`). Off when absent: the acts gate which hexes only.
+    #[serde(default)]
+    pub reveal_pacing: bool,
+    /// The least time between two reveals, as a percentage of the running act's slot, so a
+    /// host who idled cannot spend the slots it saved in one burst. 0 disables it.
+    #[serde(default)]
+    pub reveal_gap_pct: u32,
+    /// A hex is revealed only after a beat of work on it: a bone-clerk search, or a closed
+    /// crowd vote (a poll, or an "Annex" Plebiscite) that chose it (`reveal_needs_work`).
+    #[serde(default)]
+    pub reveal_needs_work: bool,
+    /// Direction only (the runtime cannot hear a recap): at most one act recap per this many
+    /// seconds; the turn context says so. 0 leaves it out.
+    #[serde(default)]
+    pub recap_cooldown_s: u32,
 }
 
 /// One segment, as data.
@@ -348,6 +365,9 @@ impl SegmentTable {
                 return Err(bad(
                     "arc: two or more named acts, and a seal window shorter than one act".into(),
                 ));
+            }
+            if arc.reveal_gap_pct > 100 {
+                return Err(bad("arc: reveal_gap_pct is a percentage of one slot".into()));
             }
         }
         if self.status == SegmentStatus::Descoped

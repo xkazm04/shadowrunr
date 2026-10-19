@@ -162,7 +162,11 @@ shadowrunr sim tournament sim/matrices/pilot.toml --plan-only
   sim is private), with a warning, and each run's `run.json` records it.
 - A SEG-02A run planned for an hour or more plays the case as a three-act arc over its
   duration (the `[arc]` table of `seg-02a.toml`): a later act's hexes stay locked, each act
-  opens with a card, and `sign_off` waits for the 10-minute seal window at the end.
+  opens with a card, and `sign_off` waits for the 10-minute seal window at the end. Inside
+  an act reveals are paced: one slot per hex staged for the act (6 hexes in a 60-minute act:
+  one every 10 minutes), and a hex needs a bone-clerk search or a closed crowd vote that chose
+  it first. Early or unworked reveals are refused (`reveal_not_due`, `reveal_needs_work`) and
+  show in the transcript; the turn context says when the next reveal unlocks.
 - A transcript longer than the rubric's `window_threshold_s` (1800 s) is judged in windows of
   `window_s` (1200 s, plus `window_overlap_s` = 120 s of context), one judge call per window
   at the judge route's timeout, aggregated into one verdict (a rule failed in any window

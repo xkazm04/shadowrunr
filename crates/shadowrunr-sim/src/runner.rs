@@ -2116,9 +2116,16 @@ pub(crate) mod tests {
         assert!(instrument_for(&opts, "malakor", "theatrical", &cal).is_err());
     }
 
-    /// Reveals every fogged hex it sees, every tick, and tries to sign off every 10 minutes:
-    /// the worst pacing a model could choose.
-    struct GreedyMind;
+    /// Searches every fogged hex the bone-clerks have not searched yet, reveals every fogged
+    /// hex it sees, every tick, and tries to sign off every 10 minutes: the worst pacing a
+    /// model could choose. It logs each reveal the stage took (a hex whose fog lifted since
+    /// its previous tick) at the tick that sent it.
+    #[derive(Default)]
+    struct GreedyMind {
+        prev: Option<(TsMs, Vec<bool>)>,
+        jobs: u32,
+        revealed: Arc<Mutex<Vec<(TsMs, String)>>>,
+    }
 
     #[async_trait]
     impl Mind for GreedyMind {
@@ -2128,6 +2135,21 @@ pub(crate) mod tests {
             _inbox: Vec<ChatMsg>,
             ctx: &SegmentContext,
         ) -> Result<Vec<StreamEvent>, SimError> {
+            if let Some((then, fog)) = self.prev.take() {
+                let mut log = self.revealed.lock().unwrap();
+                for (h, was) in ctx.hexes.iter().zip(fog) {
+                    if was && !h.fog {
+                        log.push((then, h.id.clone()));
+                    }
+                }
+            }
+            self.prev = Some((now_ms, ctx.hexes.iter().map(|h| h.fog).collect()));
+            let searched = ctx
+                .state_summary
+                .lines()
+                .find(|l| l.starts_with("bone-clerk searches: "))
+                .unwrap_or("")
+                .to_string();
             let mut ev = vec![StreamEvent::Say {
                 ts_ms: now_ms,
                 speaker: Speaker::Malakor,
@@ -2136,6 +2158,18 @@ pub(crate) mod tests {
                 replying_to: Vec::new(),
                 first_text_ms: None,
             }];
+            for h in ctx.hexes.iter().filter(|h| h.fog) {
+                if !searched.contains(&format!("{} ", h.id)) {
+                    self.jobs += 1;
+                    ev.push(StreamEvent::Op {
+                        ts_ms: now_ms,
+                        op: Op::DispatchResearch {
+                            job_id: format!("greedy-{}", self.jobs),
+                            brief: format!("{}: everything on file", h.id),
+                        },
+                    });
+                }
+            }
             for h in ctx.hexes.iter().filter(|h| h.fog) {
                 ev.push(StreamEvent::Op {
                     ts_ms: now_ms,
@@ -2170,16 +2204,17 @@ pub(crate) mod tests {
         sp.segment = SegmentId::Seg02aHexmap;
         let out = tmp.path().join("out");
         let prep = prepare(&sp, &out, Arc::new(FakeEngine::new("")), &opts).unwrap();
-        let stage = SegmentRuntime::with_config(
-            SegmentId::Seg02aHexmap,
-            SegmentConfig {
-                start_ms: Some(0),
-                planned_s: Some(sp.duration_s),
-                ..SegmentConfig::default()
-            },
-        )
-        .unwrap();
-        let res = execute(prep, GreedyMind, stage, &opts).await.unwrap();
+        let config = SegmentConfig {
+            start_ms: Some(0),
+            planned_s: Some(sp.duration_s),
+            ..SegmentConfig::default()
+        };
+        let stage = SegmentRuntime::with_config(SegmentId::Seg02aHexmap, config.clone()).unwrap();
+        // A twin of the stage, only to read which act each hex is staged for.
+        let twin = SegmentRuntime::with_config(SegmentId::Seg02aHexmap, config).unwrap();
+        let mind = GreedyMind::default();
+        let revealed = mind.revealed.clone();
+        let res = execute(prep, mind, stage, &opts).await.unwrap();
         let events = transcript::read(&res.transcript).unwrap();
         let rec: RunRecord = read_json(&out.join("long/run.json")).unwrap();
         // Early sign-offs were refused: the run reached the seal window, 2,040+ ticks.
@@ -2212,6 +2247,52 @@ pub(crate) mod tests {
         assert_eq!(card_at("arc-act-2"), Some(3_600_000));
         assert_eq!(card_at("arc-act-3"), Some(7_200_000));
         assert_eq!(card_at("arc-seal"), Some(10_200_000));
+
+        // Reveal pacing: the greedy mind asked for every hex every tick, and got one per slot.
+        assert!(
+            refused("reveal_not_due") > 1_000,
+            "{}",
+            refused("reveal_not_due")
+        );
+        let revealed = revealed.lock().unwrap().clone();
+        let total = twin.case().hexes.len();
+        assert_eq!(revealed.len(), total, "{revealed:?}");
+        for (i, (t, _)) in revealed.iter().enumerate() {
+            let in_window = revealed[i..]
+                .iter()
+                .filter(|(u, _)| *u < t + 300_000)
+                .count();
+            assert!(
+                in_window <= 2,
+                "{in_window} reveals in the 5 minutes from {t} ms: {revealed:?}"
+            );
+        }
+        // Every act's hexes are revealed inside the act (the last act's before the seal).
+        let ends = [3_600_000, 7_200_000, 10_200_000];
+        for (k, end) in ends.iter().enumerate() {
+            let times: Vec<TsMs> = revealed
+                .iter()
+                .filter(|(_, h)| twin.hex_act(h) == Some(k))
+                .map(|(t, _)| *t)
+                .collect();
+            let staged = twin
+                .case()
+                .hexes
+                .iter()
+                .filter(|h| twin.hex_act(&h.id) == Some(k))
+                .count();
+            assert_eq!(times.len(), staged, "act {k}: {times:?}");
+            let opens = 3_600_000 * k as i64;
+            assert!(
+                times.iter().all(|t| (opens..*end).contains(t)),
+                "act {k} reveals {times:?} outside {opens}..{end}"
+            );
+            eprintln!(
+                "act {} reveals at s: {:?}",
+                k + 1,
+                times.iter().map(|t| t / 1000).collect::<Vec<_>>()
+            );
+        }
     }
 
     /// The real brain over a 3-hour SEG-02A run (keyless fakes): the core prompt stays

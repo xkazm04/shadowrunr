@@ -776,7 +776,8 @@ CorrectionEntry { entry_id, case_id, hex_id?, entry_type: FACTUAL_CORRECTION |
 - **Sim.** Matrix `case = "<id>"` / `sim run --case <id>` (SEG-02A only). The instrument hash
   gains `case/<id>` = the content hash; the owner's approval is not content and changes no hash.
 
-**The arc.** `seg-02a.toml` `[arc] { min_planned_s = 3600, acts = [3 titles], seal_s = 600 }`.
+**The arc.** `seg-02a.toml` `[arc] { min_planned_s = 3600, acts = [3 titles], seal_s = 600,
+reveal_pacing = true, reveal_gap_pct = 50, reveal_needs_work = true, recap_cooldown_s = 900 }`.
 A SEG-02A segment planned at least `min_planned_s` long (`SegmentConfig.planned_s`; the sim
 passes the run's duration) splits its time into equal acts. Hexes are staged per act
 (`CaseFile.arc`, else dealt by kind). A later act's hex is refused for `reveal_hex` and
@@ -785,6 +786,24 @@ passes the run's duration) splits its time into equal acts. Hexes are staged per
 `sign_off` is withheld from `allowed_ops` and refused (`dossier_not_sealed`), except a
 fleet-loss sign-off, and `switch_segment` is withheld and refused (`arc_in_progress`) for the
 whole arc. The sim ends a run on a sign-off only when the stage accepted it.
+
+**Reveal pacing.** The acts gate which hexes; `[arc] reveal_pacing = true` also paces reveals
+inside an act. Act k's reveal span (from its opening to the next act's, or to the seal window
+for the last act) is cut into one slot per hex staged for it: slot = span / staged hexes (a
+19-hex case over 3 hours, staged 6 / 7 / 6: one reveal every 10 / ~8.6 / ~8.3 minutes). The
+j-th fog-lifting reveal of the running act waits for `act_opens + j * slot` (never past the
+next act's opening), and any two reveals stay at least `reveal_gap_pct` (50) percent of a
+slot apart, so saved slots cannot be spent in a burst. An early `reveal_hex` is refused
+(`reveal_not_due`); a regrade of a revealed hex is not paced. With `reveal_needs_work = true`
+a hex lifts its fog only after a beat of work: one accepted `dispatch_research` naming it, or
+a closed crowd poll whose winning option names it (or an "Annex <hex>" Plebiscite win);
+otherwise `reveal_needs_work`. `reveal_hex` stays in `allowed_ops`, so attempts show as
+refusals. The state summary carries `REVEAL PACE` (the slot, when the next reveal unlocks),
+the worked and unworked open hexes, and between reveals a `BETWEEN REVEALS` line steering
+the wait to a search on the next candidate, a poll or `!hint` call on which hex to crack
+next, a record on file read aloud (alleged below DOC) and chat; `recap_cooldown_s` (900) is
+direction only: at most one act recap per that many seconds. `SegmentRuntime::next_reveal_ms`
+and `hex_worked` expose the gate. A stream under `min_planned_s` runs no arc and no pacing.
 
 **Windowed judging.** Rubric `window_threshold_s` (1800), `window_s` (1200),
 `window_overlap_s` (120), all defaulted. A longer transcript is judged window by window with

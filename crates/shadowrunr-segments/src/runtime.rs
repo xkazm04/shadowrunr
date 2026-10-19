@@ -77,6 +77,16 @@ struct ArcPlan {
     /// Acts whose opening card has been shown (act 0 opens with the segment).
     announced: usize,
     sealed_announced: bool,
+    /// Hexes staged for each act.
+    staged: Vec<usize>,
+    /// Reveals inside an act wait for their slot (`[arc] reveal_pacing`).
+    pacing: bool,
+    /// Least gap between two reveals, percent of the running act's slot.
+    gap_pct: u32,
+    /// A hex needs a search or a closed crowd vote before its reveal.
+    needs_work: bool,
+    /// Direction only: at most one act recap per this many seconds (0: not said).
+    recap_cooldown_s: u32,
 }
 
 impl ArcPlan {
@@ -114,14 +124,40 @@ impl ArcPlan {
         for (rank, i) in loose.into_iter().enumerate() {
             act_of[i] = Some((rank * n / total.max(1)).min(n - 1));
         }
+        let act_of: Vec<usize> = act_of.into_iter().map(|a| a.unwrap_or(0)).collect();
+        let mut staged = vec![0; n];
+        for &k in &act_of {
+            staged[k] += 1;
+        }
         Some(Self {
             acts: rules.acts.clone(),
-            act_of: act_of.into_iter().map(|a| a.unwrap_or(0)).collect(),
+            act_of,
             planned_ms: i64::from(planned_s) * 1000,
             seal_ms: i64::from(planned_s.saturating_sub(rules.seal_s)) * 1000,
             announced: 0,
             sealed_announced: false,
+            staged,
+            pacing: rules.reveal_pacing,
+            gap_pct: rules.reveal_gap_pct,
+            needs_work: rules.reveal_needs_work,
+            recap_cooldown_s: rules.recap_cooldown_s,
         })
+    }
+
+    /// Where act `k`'s reveals must be done: the next act's opening, or the seal window.
+    fn reveal_end_ms(&self, k: usize) -> TsMs {
+        if k + 1 < self.acts.len() {
+            self.opens_ms(k + 1)
+        } else {
+            self.seal_ms
+        }
+    }
+
+    /// One reveal slot of act `k`: its reveal span shared by the hexes staged for it.
+    fn slot_ms(&self, k: usize) -> TsMs {
+        let span = self.reveal_end_ms(k) - self.opens_ms(k);
+        let hexes = self.staged.get(k).copied().unwrap_or(0).max(1) as i64;
+        (span / hexes).max(1)
     }
 
     /// The act running `elapsed_ms` into the segment.
@@ -154,6 +190,11 @@ fn roman(n: usize) -> String {
 
 fn minutes(ms: TsMs) -> i64 {
     ms / 60_000
+}
+
+/// Whole minutes, rounded to the nearest (at least 1).
+fn round_minutes(ms: TsMs) -> i64 {
+    ((ms + 30_000) / 60_000).max(1)
 }
 
 /// A queued `!hint` lead. The text is untrusted chat; it is never put into the prompt
@@ -343,6 +384,10 @@ pub struct SegmentRuntime {
     signed_off: bool,
     /// The multi-act arc, when the stream is planned long enough (SEG-02A).
     arc: Option<ArcPlan>,
+    /// Elapsed ms of every fog-lifting reveal under the arc, in order (the reveal pacing).
+    reveals: Vec<TsMs>,
+    /// Hexes a closed crowd vote chose (a poll's winner naming it, or an "Annex" Plebiscite).
+    voted: BTreeSet<String>,
 }
 
 impl SegmentRuntime {
@@ -429,6 +474,8 @@ impl SegmentRuntime {
             seen_order: VecDeque::new(),
             signed_off: false,
             arc,
+            reveals: Vec::new(),
+            voted: BTreeSet::new(),
         })
     }
 
@@ -576,6 +623,29 @@ impl SegmentRuntime {
         arc.act_of.get(i).copied()
     }
 
+    /// When the next reveal unlocks, ms into the segment, under an arc with reveal pacing.
+    /// A reveal at or after it is due; before it, `reveal_hex` is refused (`reveal_not_due`).
+    pub fn next_reveal_ms(&self) -> Option<TsMs> {
+        let arc = self.arc.as_ref().filter(|a| a.pacing)?;
+        let act = arc.act_at(self.elapsed_ms());
+        let open = arc.opens_ms(act);
+        let slot = arc.slot_ms(act);
+        let done = self.reveals.iter().filter(|&&t| t >= open).count() as i64;
+        let mut next = open + done * slot;
+        if act + 1 < arc.acts.len() {
+            next = next.min(arc.opens_ms(act + 1));
+        }
+        if let Some(last) = self.reveals.last() {
+            next = next.max(last + slot * i64::from(arc.gap_pct) / 100);
+        }
+        Some(next)
+    }
+
+    /// The hex has had its beat of work: a bone-clerk search, or a closed crowd vote chose it.
+    pub fn hex_worked(&self, hex: &str) -> bool {
+        self.searches(hex) > 0 || self.voted.contains(hex)
+    }
+
     pub fn is_handover_pending(&self) -> bool {
         self.handover_pending_since.is_some()
     }
@@ -720,11 +790,25 @@ impl SegmentRuntime {
         };
         let mut events = vec![self.vote_event(now_ms, &poll, true)];
         match poll.kind {
-            PollKind::Crowd => self.fire(Trigger::PollClosed),
+            PollKind::Crowd => {
+                // A crowd vote whose winner names one hex counts as that hex's beat of work.
+                if resolve {
+                    if let Some(i) =
+                        winner(&poll.tallies()).and_then(|w| target_hex(&self.case, &w))
+                    {
+                        self.voted.insert(self.case.hexes[i].id.clone());
+                    }
+                }
+                self.fire(Trigger::PollClosed);
+            }
             PollKind::Plebiscite => {
                 if resolve {
                     if let Some(hex) = poll.subject.clone() {
-                        self.last_plebiscite = Some((hex, winner(&poll.tallies())));
+                        let won = winner(&poll.tallies());
+                        if won.as_deref().is_some_and(|w| w.starts_with("Annex ")) {
+                            self.voted.insert(hex.clone());
+                        }
+                        self.last_plebiscite = Some((hex, won));
                     }
                 }
                 self.fire(Trigger::PollClosed);
@@ -1169,6 +1253,16 @@ impl SegmentRuntime {
                 if !h.fog && h.grade == Some(*grade) {
                     return Err("already_revealed");
                 }
+                // Pacing and the beat of work govern lifting fog; a regrade is not a reveal.
+                let lifts_fog = h.fog;
+                if lifts_fog {
+                    if self.next_reveal_ms().is_some_and(|t| self.elapsed_ms() < t) {
+                        return Err("reveal_not_due");
+                    }
+                    if self.arc.as_ref().is_some_and(|a| a.needs_work) && !self.hex_worked(&h.id) {
+                        return Err("reveal_needs_work");
+                    }
+                }
                 if *grade == EvidenceGrade::Doc
                     && !self
                         .config
@@ -1180,6 +1274,9 @@ impl SegmentRuntime {
                 let h = &mut self.case.hexes[i];
                 h.fog = false;
                 h.grade = Some(*grade);
+                if lifts_fog && self.arc.is_some() {
+                    self.reveals.push(self.elapsed_ms());
+                }
                 self.fire(Trigger::HexRevealed);
             }
             Op::DispatchResearch { job_id, brief } => {
@@ -1421,6 +1518,46 @@ impl SegmentRuntime {
                     acts.join("; "),
                     minutes(arc.planned_ms - arc.seal_ms)
                 ));
+                if arc.pacing {
+                    let slots: Vec<String> = (0..arc.acts.len())
+                        .map(|k| {
+                            format!(
+                                "act {} {} hexes, one every ~{} min",
+                                roman(k + 1),
+                                arc.staged[k],
+                                round_minutes(arc.slot_ms(k))
+                            )
+                        })
+                        .collect();
+                    p.push_str(&format!(
+                        "\nReveal pacing: each act's reveals are spread across the act, one reveal \
+                         slot per hex staged for it ({}). A reveal before its slot is refused \
+                         (reveal_not_due); the state summary says when the next one unlocks. Do \
+                         not burn an act's map in its first minutes.",
+                        slots.join("; ")
+                    ));
+                }
+                if arc.needs_work {
+                    p.push_str(
+                        " A hex is revealed only after a beat of work on it: a bone-clerk search \
+                         (dispatch_research naming it) or a closed crowd poll whose winning option \
+                         names it (reveal_needs_work).",
+                    );
+                }
+                if arc.pacing {
+                    p.push_str(
+                        " Between reveals, make the wait count: search the next candidate hex, \
+                         poll the crowd on which hex to crack next (or call for !hint \
+                         nominations), read a record already on file aloud (quote it; alleged \
+                         below DOC), and work the chat.",
+                    );
+                    if arc.recap_cooldown_s > 0 {
+                        p.push_str(&format!(
+                            " Do not loop the act recap: at most one recap every {} minutes.",
+                            round_minutes(i64::from(arc.recap_cooldown_s) * 1000)
+                        ));
+                    }
+                }
             }
         }
         if t.allows_op("dispatch_research") {
@@ -1575,10 +1712,18 @@ impl SegmentRuntime {
                 locked.join(", ")
             ));
             if act_fog.is_empty() {
+                let recap = if arc.recap_cooldown_s > 0 {
+                    format!(
+                        "one short recap for newcomers at most every {} minutes",
+                        round_minutes(i64::from(arc.recap_cooldown_s) * 1000)
+                    )
+                } else {
+                    "a recap for newcomers".to_string()
+                };
                 lines.push(format!(
                     "Act {} map is complete: until act {} opens, deepen it (a jury poll on a \
-                     disputed hex, the minions' leads, the records on file, a recap for \
-                     newcomers). Do not stall and do not sign off.",
+                     disputed hex, the minions' leads, the records on file, {recap}). Do not \
+                     stall and do not sign off.",
                     act + 1,
                     act + 2
                 ));
@@ -1593,6 +1738,80 @@ impl SegmentRuntime {
             lines.push(format!(
                 "Final act: the seal window opens at minute {}; sign_off is refused before it.",
                 minutes(arc.seal_ms)
+            ));
+        }
+        if !arc.sealing(elapsed) && !open_fog.is_empty() {
+            lines.extend(self.pace_lines(arc, act, elapsed, &open_fog));
+        }
+        lines
+    }
+
+    /// The reveal pacing block: when the next reveal unlocks, which hexes have had their beat
+    /// of work, and what to do with the wait.
+    fn pace_lines(
+        &self,
+        arc: &ArcPlan,
+        act: usize,
+        elapsed: TsMs,
+        open_fog: &[&str],
+    ) -> Vec<String> {
+        let mut lines = Vec::new();
+        let next = self.next_reveal_ms();
+        let waiting = next.is_some_and(|t| elapsed < t);
+        if let Some(t) = next {
+            let head = format!(
+                "REVEAL PACE: act {} has {} hexes, one reveal slot every ~{} min",
+                act + 1,
+                arc.staged[act],
+                round_minutes(arc.slot_ms(act))
+            );
+            lines.push(if waiting {
+                format!(
+                    "{head}. The next reveal unlocks at minute {} (in {} s); reveal_hex before \
+                     it is refused (reveal_not_due).",
+                    minutes(t),
+                    (t - elapsed + 999) / 1000
+                )
+            } else {
+                format!("{head}. A reveal slot is OPEN now: reveal one worked hex.")
+            });
+        }
+        let (worked, unworked): (Vec<&str>, Vec<&str>) =
+            open_fog.iter().copied().partition(|h| self.hex_worked(h));
+        if arc.needs_work {
+            if !worked.is_empty() {
+                lines.push(format!(
+                    "ready to reveal (searched or voted): {}",
+                    worked.join(", ")
+                ));
+            }
+            if !unworked.is_empty() {
+                lines.push(format!(
+                    "needs a beat of work before its reveal (a bone-clerk search on it, or a \
+                     closed crowd poll that picks it): {}",
+                    unworked.join(", ")
+                ));
+            }
+        }
+        if waiting {
+            let candidate = unworked
+                .first()
+                .or(open_fog.first())
+                .copied()
+                .unwrap_or_default();
+            let recap = if arc.recap_cooldown_s > 0 {
+                format!(
+                    " Do NOT repeat the act recap: at most one recap every {} minutes.",
+                    round_minutes(i64::from(arc.recap_cooldown_s) * 1000)
+                )
+            } else {
+                String::new()
+            };
+            lines.push(format!(
+                "BETWEEN REVEALS make the wait count: dispatch_research on the next candidate \
+                 ({candidate}), open a poll on which hex to crack next (or call for !hint \
+                 nominations), read a record already on file aloud (quote it; alleged below \
+                 DOC), and play with the chat.{recap}"
             ));
         }
         lines

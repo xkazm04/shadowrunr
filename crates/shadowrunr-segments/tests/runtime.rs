@@ -1336,15 +1336,17 @@ fn a_three_hour_stream_runs_three_acts_with_locked_hexes_and_a_seal_window() {
         rejections(&rt.apply_ops(60_000, &[reveal(&later, EvidenceGrade::Clm)]))[0].1,
         "act_locked"
     );
-    let research = Op::DispatchResearch {
+    let locked_brief = Op::DispatchResearch {
         job_id: "j1".into(),
         brief: format!("{later}: who is behind it"),
     };
     assert_eq!(
-        rejections(&rt.apply_ops(60_000, &[research]))[0].1,
+        rejections(&rt.apply_ops(60_000, &[locked_brief]))[0].1,
         "act_locked"
     );
     assert_eq!(rt.searches(&later), 0, "a locked brief is not counted");
+    // A reveal needs a beat of work first: one bone-clerk search on the hex.
+    rt.apply_ops(60_000, &[research("j0", &format!("{first}: the filing"))]);
     assert_eq!(
         accepted_ops(&rt.apply_ops(60_000, &[reveal(&first, EvidenceGrade::Clm)])),
         1
@@ -1363,6 +1365,10 @@ fn a_three_hour_stream_runs_three_acts_with_locked_hexes_and_a_seal_window() {
     assert_eq!(cards(&rt.tick(3_600_000, 30)), ["arc-act-2"]);
     assert_eq!(rt.arc_act(), Some((1, 3)));
     assert_eq!(cards(&rt.tick(7_200_000, 30)), ["arc-act-3"]);
+    rt.apply_ops(
+        7_200_000,
+        &[research("j2", &format!("{later}: who is behind it"))],
+    );
     assert_eq!(
         accepted_ops(&rt.apply_ops(7_200_000, &[reveal(&later, EvidenceGrade::Clm)])),
         1
@@ -1417,4 +1423,161 @@ fn a_staged_arc_from_the_case_file_wins_over_kind_order() {
         .hexes
         .iter()
         .all(|h| rt.hex_act(&h.id).is_some()));
+}
+
+// ----- reveal pacing inside an act ---------------------------------------------------------
+
+/// The hexes staged for act `k`, in map order.
+fn act_hexes(rt: &SegmentRuntime, k: usize) -> Vec<String> {
+    rt.case()
+        .hexes
+        .iter()
+        .filter(|h| rt.hex_act(&h.id) == Some(k))
+        .map(|h| h.id.clone())
+        .collect()
+}
+
+#[test]
+fn arc_reveals_wait_for_their_slot_and_a_slot_opens_on_schedule() {
+    let mut rt = arc_runtime(10_800);
+    let act1 = act_hexes(&rt, 0);
+    assert!(act1.len() >= 3, "{act1:?}");
+    let slot = 3_600_000 / act1.len() as i64;
+    // Every act I hex gets its beat of work up front.
+    for (i, h) in act1.iter().enumerate() {
+        rt.apply_ops(
+            1_000,
+            &[research(&format!("w{i}"), &format!("{h}: the filing"))],
+        );
+        assert!(rt.hex_worked(h));
+    }
+    // The first slot is open from the act's start.
+    assert_eq!(rt.next_reveal_ms(), Some(0));
+    assert_eq!(
+        accepted_ops(&rt.apply_ops(2_000, &[reveal(&act1[0], EvidenceGrade::Clm)])),
+        1
+    );
+    // The next one waits for its slot.
+    assert_eq!(rt.next_reveal_ms(), Some(slot));
+    let evs = rt.apply_ops(3_000, &[reveal(&act1[1], EvidenceGrade::Clm)]);
+    assert_eq!(
+        rejections(&evs),
+        [(ModStage::Output, "reveal_not_due".to_string())]
+    );
+    assert!(rt.case().hexes.iter().any(|h| h.id == act1[1] && h.fog));
+    // The turn context says when it unlocks and what to do meanwhile.
+    let ctx = rt.context(30, 3);
+    let s = &ctx.state_summary;
+    assert!(
+        s.contains(&format!("next reveal unlocks at minute {}", slot / 60_000)),
+        "{s}"
+    );
+    assert!(s.contains("BETWEEN REVEALS"), "{s}");
+    assert!(s.contains("at most one recap every 15 minutes"), "{s}");
+    assert!(
+        ctx.rules_prompt.contains("Reveal pacing"),
+        "{}",
+        ctx.rules_prompt
+    );
+    assert!(
+        ctx.allowed_ops.iter().any(|o| o == "reveal_hex"),
+        "attempts stay visible as refusals"
+    );
+    // A regrade of a revealed hex is not a reveal: never paced.
+    assert_eq!(
+        accepted_ops(&rt.apply_ops(4_000, &[reveal(&act1[0], EvidenceGrade::Rep)])),
+        1
+    );
+    // One second short of the slot: refused. On the slot: accepted.
+    assert_eq!(
+        rejections(&rt.apply_ops(slot - 1_000, &[reveal(&act1[1], EvidenceGrade::Clm)]))[0].1,
+        "reveal_not_due"
+    );
+    assert_eq!(
+        accepted_ops(&rt.apply_ops(slot, &[reveal(&act1[1], EvidenceGrade::Clm)])),
+        1
+    );
+    assert!(rt
+        .context(30, 0)
+        .state_summary
+        .contains("ready to reveal (searched or voted)"));
+    // Idling saves slots, but the gap (half a slot) stops them being spent in one burst.
+    let late = 3 * slot + 1_000;
+    assert_eq!(
+        accepted_ops(&rt.apply_ops(late, &[reveal(&act1[2], EvidenceGrade::Clm)])),
+        1
+    );
+    if let Some(h) = act1.get(3) {
+        assert_eq!(
+            rejections(&rt.apply_ops(late + 1_000, &[reveal(h, EvidenceGrade::Clm)]))[0].1,
+            "reveal_not_due"
+        );
+        assert_eq!(rt.next_reveal_ms(), Some(late + slot / 2));
+        assert_eq!(
+            accepted_ops(&rt.apply_ops(late + slot / 2, &[reveal(h, EvidenceGrade::Clm)])),
+            1
+        );
+    }
+}
+
+#[test]
+fn a_hex_with_no_search_and_no_vote_cannot_be_revealed() {
+    let mut rt = arc_runtime(10_800);
+    let act1 = act_hexes(&rt, 0);
+    let (a, b) = (act1[0].clone(), act1[1].clone());
+    assert!(!rt.hex_worked(&a));
+    assert_eq!(
+        rejections(&rt.apply_ops(1_000, &[reveal(&a, EvidenceGrade::Clm)]))[0].1,
+        "reveal_needs_work"
+    );
+    let s = rt.context(30, 1).state_summary;
+    assert!(s.contains("needs a beat of work before its reveal"), "{s}");
+    // A crowd poll on which hex to crack next: its winner gets the beat of work.
+    let open = Op::StartPoll {
+        poll_id: "next-hex".into(),
+        question: "Which hex do we crack next?".into(),
+        options: vec![a.clone(), b.clone()],
+        min_rank: Rank::Thrall,
+        secs: 60,
+    };
+    assert_eq!(accepted_ops(&rt.apply_ops(2_000, &[open])), 1);
+    rt.ingest_chat(
+        3_000,
+        &[
+            msg("v1", 3_000, "ann", Rank::Thrall, "!vote 2"),
+            msg("v2", 3_000, "bob", Rank::Thrall, "!vote 2"),
+        ],
+    );
+    // An open poll is not a closed vote.
+    assert!(!rt.hex_worked(&b));
+    let close = Op::ClosePoll {
+        poll_id: "next-hex".into(),
+    };
+    assert_eq!(accepted_ops(&rt.apply_ops(4_000, &[close])), 1);
+    assert!(rt.hex_worked(&b), "the crowd chose {b}");
+    assert!(!rt.hex_worked(&a), "the loser is not worked");
+    assert_eq!(
+        accepted_ops(&rt.apply_ops(5_000, &[reveal(&b, EvidenceGrade::Clm)])),
+        1
+    );
+    assert_eq!(
+        rejections(&rt.apply_ops(5_000_000, &[reveal(&a, EvidenceGrade::Clm)]))[0].1,
+        "reveal_needs_work"
+    );
+}
+
+#[test]
+fn a_short_stream_has_no_reveal_pacing() {
+    let mut rt = arc_runtime(1_200);
+    assert_eq!(rt.next_reveal_ms(), None);
+    let evs = rt.apply_ops(
+        1_000,
+        &[
+            reveal("HEX-01", EvidenceGrade::Clm),
+            reveal("HEX-02", EvidenceGrade::Clm),
+            reveal("HEX-03", EvidenceGrade::Clm),
+        ],
+    );
+    assert_eq!(accepted_ops(&evs), 3, "{evs:?}");
+    assert!(!rt.context(30, 1).state_summary.contains("REVEAL PACE"));
 }
