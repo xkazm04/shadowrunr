@@ -160,16 +160,18 @@ merged.
 
 | Role | Tier | Effort | Timeout |
 |---|---|---|---|
-| core_thread | haiku | low | 30 s |
+| core_thread | sonnet | low | 30 s |
 | chat_picker | haiku | low | 20 s |
 | planner | sonnet | medium | 120 s |
 | researcher | sonnet | medium | 240 s |
 | consolidator | sonnet | medium | 300 s |
 | chatter | haiku | low | 60 s |
-| judge | sonnet | medium | 600 s (whole-transcript judging) |
+| judge | sonnet | medium | 900 s (whole-transcript judging) |
 | reconciler | opus | high | 600 s |
 
-The core-thread entry is a starting point; the tournament recalibrates it. **The judge never
+The core-thread entry is what the tournament recalibrates: the 2026-10-18 night tournament
+(n=60 per tier) moved it from haiku to sonnet on red-line fails (0.4% vs 1.9%). The judge
+timeout is sized from the measured whole-transcript p95 (502 s) with headroom. **The judge never
 runs on the same tier as the core thread it judges.**
 
 ## Daemon protocol (`shadowrunr daemon --port 7717`, bound to 127.0.0.1 only)

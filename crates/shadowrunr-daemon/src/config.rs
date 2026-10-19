@@ -91,7 +91,7 @@ impl Default for SimDefaults {
         Self {
             character: "malakor".into(),
             tone: "theatrical".into(),
-            tier: ModelTier::Haiku,
+            tier: ModelTier::Sonnet,
             effort: Effort::Low,
             segment: SegmentId::Seg01ImprovisedRoom,
             audience: 30,

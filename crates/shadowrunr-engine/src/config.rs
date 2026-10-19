@@ -7,16 +7,19 @@ use serde::{Deserialize, Serialize};
 use shadowrunr_types::{Effort, ModelTier, Role};
 
 /// Default routing per role: (tier, effort, timeout_ms). The tournament recalibrates the
-/// core-thread entry; everything else is a starting point.
+/// core-thread entry: the night tournament (2026-10-18, n=60 per tier, Opus judge) put Sonnet
+/// at 0.4% red-line fails against Haiku's 1.9%. The judge timeout sits above the measured
+/// whole-transcript p95 (502 s) with headroom; at 600 s one transcript never finished.
+/// Everything else is a starting point.
 pub fn route(role: Role) -> (ModelTier, Effort, u64) {
     match role {
-        Role::CoreThread => (ModelTier::Haiku, Effort::Low, 30_000),
+        Role::CoreThread => (ModelTier::Sonnet, Effort::Low, 30_000),
         Role::ChatPicker => (ModelTier::Haiku, Effort::Low, 20_000),
         Role::Planner => (ModelTier::Sonnet, Effort::Medium, 120_000),
         Role::Researcher => (ModelTier::Sonnet, Effort::Medium, 240_000),
         Role::Consolidator => (ModelTier::Sonnet, Effort::Medium, 300_000),
         Role::Chatter => (ModelTier::Haiku, Effort::Low, 60_000),
-        Role::Judge => (ModelTier::Sonnet, Effort::Medium, 600_000),
+        Role::Judge => (ModelTier::Sonnet, Effort::Medium, 900_000),
         Role::Reconciler => (ModelTier::Opus, Effort::High, 600_000),
     }
 }
