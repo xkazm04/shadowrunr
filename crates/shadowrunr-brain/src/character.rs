@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn empty_tone_uses_default() {
         let pkg = load_character(&malakor_dir(), "").unwrap();
-        assert_eq!(pkg.tone_variant, "theatrical");
+        assert_eq!(pkg.tone_variant, "unhinged-roastmaster");
     }
 
     #[test]

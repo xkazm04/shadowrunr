@@ -23,7 +23,7 @@ async fn character_list_and_get_expose_the_package() {
         .find(|c| c.id == "malakor")
         .expect("malakor listed");
     assert_eq!(m.name, "Arch-Lich Malakor");
-    assert_eq!(m.default_tone, "theatrical");
+    assert_eq!(m.default_tone, "unhinged-roastmaster");
     assert!(
         m.tones.contains(&"weary-middle-manager".to_string()),
         "{:?}",
@@ -84,7 +84,10 @@ async fn character_tone_set_overrides_the_active_tone_in_data_only() {
     .await;
     let s: CharacterSummary = typed(&v);
     assert_eq!(s.active_tone, "weary-middle-manager");
-    assert_eq!(s.default_tone, "theatrical", "the package is untouched");
+    assert_eq!(
+        s.default_tone, "unhinged-roastmaster",
+        "the package is untouched"
+    );
     let d: CharacterDetail = typed(&rpc(&addr, "character.get", json!({ "id": "malakor" })).await);
     assert_eq!(d.active_tone, "weary-middle-manager");
     assert!(tmp

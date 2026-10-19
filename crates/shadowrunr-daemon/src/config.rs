@@ -90,7 +90,7 @@ impl Default for SimDefaults {
     fn default() -> Self {
         Self {
             character: "malakor".into(),
-            tone: "theatrical".into(),
+            tone: "unhinged-roastmaster".into(),
             tier: ModelTier::Sonnet,
             effort: Effort::Low,
             segment: SegmentId::Seg01ImprovisedRoom,

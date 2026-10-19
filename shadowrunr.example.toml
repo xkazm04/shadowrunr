@@ -56,7 +56,7 @@ segments = "crates/shadowrunr-segments/data"   # segment tables (hashed into the
 [sim]
 # Defaults for `shadowrunr sim run` and the daemon's `sim.start`.
 character = "malakor"
-tone = "theatrical"
+tone = "unhinged-roastmaster"
 tier = "sonnet"         # core-thread tier: haiku | sonnet | opus
 effort = "low"
 segment = "SEG-01"      # SEG-01 | SEG-02A (SEG-02B-I/II are descoped and refused)
