@@ -468,9 +468,16 @@ impl Picker {
             json_schema: Some(Self::picker_schema()),
             correlation_id: Some(correlation_id.to_string()),
         };
-        let parsed = match engine.complete(req).await {
-            Ok(reply) => extract_json_object(&reply.text),
-            Err(_) => None,
+        // Why the LLM's answer could not be used, for the fallback's reason.
+        let (parsed, mut unusable) = match engine.complete(req).await {
+            Ok(reply) => match extract_json_object(&reply.text) {
+                Some(v) => (Some(v), None),
+                None => (None, Some("no JSON object".to_string())),
+            },
+            Err(e) => (
+                None,
+                Some(format!("engine: {}", one_line(&e.to_string(), 80))),
+            ),
         };
         let mut order = Vec::new();
         let mut reasons = Vec::new();
@@ -493,8 +500,11 @@ impl Picker {
         }
         let chosen_idx = self.constrain(cands, &order);
         if chosen_idx.is_empty() {
+            let why = unusable
+                .take()
+                .unwrap_or_else(|| "no pick from the pool".to_string());
             let mut pick = self.pick_deterministic(cands, ctx);
-            pick.reason = format!("llm picker unusable, fallback {}", pick.reason);
+            pick.reason = format!("llm picker unusable ({why}), fallback {}", pick.reason);
             return pick;
         }
         let chosen: Vec<Candidate> = chosen_idx.iter().map(|i| cands[*i].clone()).collect();

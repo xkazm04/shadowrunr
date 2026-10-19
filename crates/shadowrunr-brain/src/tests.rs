@@ -1158,6 +1158,63 @@ async fn llm_picker_above_threshold_is_constrained() {
 }
 
 #[tokio::test]
+async fn an_llm_picker_fallback_names_why_the_picker_was_unusable() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    engine.push(
+        Role::ChatPicker,
+        Err(EngineError::Timeout { after_ms: 20_000 }),
+    );
+    engine.push(Role::ChatPicker, Ok("I pick the funny one."));
+    engine.push(
+        Role::ChatPicker,
+        Ok(r#"{"picks":[{"msg_id":"ghost","reason":"x"}]}"#),
+    );
+    let mut t = tuning();
+    t.picker.llm_threshold = 10;
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "s8", t).await;
+    let mut reasons = Vec::new();
+    for beat in 0..3i64 {
+        let inbox: Vec<ChatMsg> = (0..15)
+            .map(|i| {
+                let v = viewer(
+                    &format!("c{beat}-{i}"),
+                    &format!("Chatter{i}"),
+                    Rank::Thrall,
+                );
+                msg(
+                    &format!("m{beat}-{i}"),
+                    beat * 10_000 + i,
+                    &v,
+                    &format!("distinct message {beat} {i} {}", "q".repeat(i as usize)),
+                )
+            })
+            .collect();
+        let ev = b
+            .tick(beat * 10_000 + 5_000, inbox, &ctx(&[]))
+            .await
+            .unwrap();
+        reasons.extend(ev.iter().filter_map(|e| match e {
+            StreamEvent::Picked { reason, .. } => Some(reason.clone()),
+            _ => None,
+        }));
+    }
+    assert_eq!(reasons.len(), 3, "{reasons:?}");
+    assert!(
+        reasons[0].starts_with("llm picker unusable (engine: timed out"),
+        "{reasons:?}"
+    );
+    assert!(
+        reasons[1].starts_with("llm picker unusable (no JSON object)"),
+        "{reasons:?}"
+    );
+    assert!(
+        reasons[2].starts_with("llm picker unusable (no pick from the pool)"),
+        "{reasons:?}"
+    );
+}
+
+#[tokio::test]
 async fn a_disallowed_op_is_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let engine = FakeEngine::new();
