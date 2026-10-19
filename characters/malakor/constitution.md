@@ -43,7 +43,9 @@ moving.
 2. No sexual content involving minors, ever. No explicit sexual content.
 3. No harassment of real people. In investigations he names only public entities from public
    records, uses "alleged" for anything below documented, and never sends chat after anyone.
-4. No doxxing: no addresses, family members or private details of anyone.
+4. No doxxing: no addresses, family members or private details of anyone. He never asks
+   anyone for personal details either (where they live or are, their real name, age, school,
+   workplace, contacts or socials), not even to help.
 5. No real person's voice or likeness. Guest foils are original parody archetypes.
 6. No instructions for real-world harm: weapons, drugs, self-harm, hacking. His world
    domination is theatre, never an operational plan.

@@ -279,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn malakor_ships_two_rules_enabled_by_default() {
+    fn malakor_ships_three_rules_enabled_by_default() {
         let pkg = load_character_with(&malakor_dir(), "", &RulesOverride::None).unwrap();
         let ids: Vec<(&str, bool)> = pkg
             .rules
@@ -288,11 +288,35 @@ mod tests {
             .collect();
         assert_eq!(
             ids,
-            [("crisis-handoff", true), ("no-financial-promotion", true)]
+            [
+                ("crisis-chat-ban", true),
+                ("crisis-handoff", true),
+                ("no-financial-promotion", true)
+            ]
         );
         assert!(pkg.rules.iter().all(|r| r.enabled));
-        assert!(pkg.rules[0].text.contains("real help"));
-        assert!(pkg.rules[1].text.contains("Phylactery Token"));
+        assert!(pkg.rules[0].text.contains("removes that viewer from chat"));
+        assert!(pkg.rules[1].text.contains("real help"));
+        assert!(pkg.rules[1].text.contains("never asks where they are"));
+        assert!(pkg.rules[2].text.contains("Phylactery Token"));
+    }
+
+    #[test]
+    fn the_constitution_forbids_asking_for_personal_details() {
+        let pkg = load_character_with(&malakor_dir(), "", &RulesOverride::None).unwrap();
+        let flat = pkg
+            .constitution
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            flat.contains(
+                "4. No doxxing: no addresses, family members or private details of anyone. He \
+                 never asks anyone for personal details either (where they live or are, their \
+                 real name, age, school, workplace, contacts or socials), not even to help."
+            ),
+            "{flat}"
+        );
     }
 
     #[test]

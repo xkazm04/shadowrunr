@@ -4,15 +4,18 @@
 //! One `Brain::tick` is one beat of the core thread:
 //! 1. fleet check (sign off after the grace period);
 //! 2. collect finished background jobs (never awaits one);
-//! 3. pre-filter chat (term rules, safety-critical disclosures, room-scaled rate caps,
-//!    injection tagging, flood/copypasta clusters);
+//! 3. pre-filter chat (viewers removed after a crisis line, term rules, safety-critical
+//!    disclosures, room-scaled rate caps, injection tagging, flood/copypasta clusters); a
+//!    disclosure puts its viewer in care ([`care`]);
 //! 4. pick messages (safety-critical first; deterministic, or `Role::ChatPicker` above a
 //!    volume threshold);
 //! 5. recall and compose (stable prefix, with the Lord's brief when the stream has one, +
 //!    per-turn block);
 //! 6. call the core thread (warm session when available, else `complete`);
-//! 7. parse spoken lines, `OP:` and `NOTE:`; gate output; dispatch research jobs.
+//! 7. parse spoken lines, `OP:` and `NOTE:`; gate output; dispatch research jobs; once a
+//!    crisis line went out, remove that viewer from chat when `crisis-chat-ban` is enabled.
 
+pub mod care;
 pub mod character;
 pub mod compose;
 pub mod fleet;
@@ -54,10 +57,13 @@ pub use rules::{CharacterRule, RuleState, RulesOverride};
 pub use compose::{brief_summary, build_stream_brief, load_stream_brief, normalize_stream_brief};
 pub use shadowrunr_types::reconcile::StreamBrief;
 
+use care::{care_note, CareLedger};
 use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line};
-use moderation::{gate_text, output_events, InputFilter, Policy, TermAction};
+use moderation::{
+    gate_line, gate_text, output_events, InputFilter, Policy, TermAction, CRISIS_BAN_RULE,
+};
 use picker::{PickContext, Picker};
 use util::{fnv1a64, near_duplicate, one_line, REPEAT_WINDOW};
 use working::{select_window, WindowItem, WorkingSet, RECENCY_FLOOR};
@@ -113,6 +119,9 @@ pub struct BrainTuning {
     pub working_set_ttl_ms: i64,
     /// Run the sleep cycle at `end_stream` when memory pressure warrants it.
     pub consolidate_at_end: bool,
+    /// Seconds a viewer stays in care after a self-harm disclosure (no roasting or joking
+    /// about them; see [`care`]). A new disclosure restarts it.
+    pub care_window_s: u64,
 }
 
 impl Default for BrainTuning {
@@ -128,6 +137,7 @@ impl Default for BrainTuning {
             warm_recycle_turns: 6,
             working_set_ttl_ms: working::WORKING_SET_TTL_MS,
             consolidate_at_end: true,
+            care_window_s: care::DEFAULT_CARE_WINDOW_S,
         }
     }
 }
@@ -141,6 +151,12 @@ const ALWAYS_PER_SCOPE: usize = 3;
 const VIEWER_FACTS: usize = 5;
 const RECALL_EPISODES: usize = 8;
 const EPISODE_ITEM_CHARS: usize = 2_000;
+
+/// The care-state record in the transcript (`care_state` / `started|restarted|expired`), on
+/// the disclosure's message id.
+fn care_event(now_ms: TsMs, msg_id: &str, action: &str) -> StreamEvent {
+    moderation::input_event(now_ms, care::CARE_RULE, msg_id, action)
+}
 
 fn fleet_class(e: &EngineError) -> bool {
     matches!(
@@ -163,6 +179,8 @@ pub struct Brain {
     pool: Arc<WorkerPool>,
     policy: Policy,
     filter: InputFilter,
+    /// Viewers in care after a self-harm disclosure.
+    care: CareLedger,
     picker: Picker,
     working: WorkingSet,
     fleet: FleetWatch,
@@ -217,6 +235,7 @@ impl Brain {
         Ok(Self {
             pool: Arc::new(WorkerPool::new(cfg.pool_size)),
             filter,
+            care: CareLedger::new(tuning.care_window_s),
             picker: Picker::new(tuning.picker.clone()),
             working: WorkingSet::new(tuning.working_set_ttl_ms),
             fleet: FleetWatch::new(tuning.fleet_grace_s),
@@ -313,6 +332,16 @@ impl Brain {
 
     pub fn working_set(&self) -> &WorkingSet {
         &self.working
+    }
+
+    /// Viewers in care after a self-harm disclosure, oldest first.
+    pub fn in_care(&self) -> &[care::CareEntry] {
+        self.care.active()
+    }
+
+    /// Whether a viewer was removed from chat for the rest of the stream.
+    pub fn is_banned(&self, viewer_id: &str) -> bool {
+        self.filter.is_banned(viewer_id)
     }
 
     pub fn pool(&self) -> &Arc<WorkerPool> {
@@ -461,22 +490,40 @@ impl Brain {
 
     fn sign_off_events(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
         let grace = self.tuning.fleet_grace_s;
-        vec![
-            StreamEvent::Say {
-                ts_ms: now_ms,
-                speaker: Speaker::Malakor,
-                foil: None,
-                text: SIGN_OFF_LINE.to_string(),
-                replying_to: Vec::new(),
-                first_text_ms: None,
+        // Every spoken line goes through the output gate, the fixed sign-off included.
+        let (text, fired) = gate_text(SIGN_OFF_LINE, &self.policy, &self.hexes);
+        let mut ev = output_events(now_ms, &fired);
+        ev.push(StreamEvent::Say {
+            ts_ms: now_ms,
+            speaker: Speaker::Malakor,
+            foil: None,
+            text,
+            replying_to: Vec::new(),
+            first_text_ms: None,
+        });
+        ev.push(StreamEvent::Op {
+            ts_ms: now_ms,
+            op: Op::SignOff {
+                reason: format!("fleet_lost: engine degraded or down for {grace}s"),
             },
-            StreamEvent::Op {
-                ts_ms: now_ms,
-                op: Op::SignOff {
-                    reason: format!("fleet_lost: engine degraded or down for {grace}s"),
-                },
-            },
-        ]
+        });
+        ev
+    }
+
+    /// End the care states that ran out. A disclosure from a viewer already removed from chat
+    /// never reaches the model, yet it restarts their care window.
+    fn update_care(&mut self, now_ms: TsMs, inbox: &[ChatMsg], ev: &mut Vec<StreamEvent>) {
+        for e in self.care.expire(now_ms) {
+            ev.push(care_event(now_ms, &e.msg_id, "expired"));
+        }
+        for m in inbox {
+            if self.filter.is_banned(&m.viewer.id)
+                && self.policy.self_harm_disclosure(&m.text).is_some()
+            {
+                let how = self.care.begin(&m.viewer.id, &m.viewer.name, &m.id, now_ms);
+                ev.push(care_event(now_ms, &m.id, how.as_str()));
+            }
+        }
     }
 
     /// One beat of the core thread: given new chat since the last tick and the segment
@@ -504,9 +551,15 @@ impl Brain {
         self.working.expire(now_ms);
         self.collect_jobs(now_ms, &mut ev)?;
 
-        // Pre-filter and pick.
+        // Pre-filter and pick. A disclosure puts its viewer in care (or restarts it).
+        self.update_care(now_ms, &inbox, &mut ev);
         let (cands, mods) = self.filter.filter(now_ms, inbox, &self.policy);
         ev.extend(mods);
+        for c in cands.iter().filter(|c| c.safety.is_some()) {
+            let v = &c.msg.viewer;
+            let how = self.care.begin(&v.id, &v.name, &c.msg.id, now_ms);
+            ev.push(care_event(now_ms, &c.msg.id, how.as_str()));
+        }
         let viewer_ids: Vec<String> = {
             let mut seen = HashSet::new();
             cands
@@ -622,6 +675,7 @@ impl Brain {
             .map(|f| f.text.clone());
         let working_text = self.working.render(foil_text.as_deref());
         let nonce = fnv1a64(format!("{}:{}:{}", self.salt, self.ticks, now_ms).as_bytes());
+        let care = care_note(self.care.active(), now_ms);
         let prompt = compose_turn(&TurnInputs {
             ctx,
             briefing: &briefing,
@@ -635,6 +689,7 @@ impl Brain {
             nonce,
             fresh_bit: std::mem::take(&mut self.fresh_bit),
             brief: self.brief.as_ref(),
+            care_note: care.as_deref(),
         });
         self.last_prompt = Some(prompt.clone());
 
@@ -702,12 +757,14 @@ impl Brain {
             }
         }
 
+        // A beat answering a disclosure: a personal-data ask becomes a help pointer.
+        let crisis = pick.chosen.iter().any(|c| c.safety.is_some());
         let mut say_idx: Vec<usize> = Vec::new();
         let mut suppressed = 0usize;
         for line in lines {
             match line {
                 Line::Say(text) => {
-                    let (out, fired) = gate_text(&text, &self.policy, &self.hexes);
+                    let (out, fired) = gate_line(&text, &self.policy, &self.hexes, crisis);
                     ev.extend(output_events(now_ms, &fired));
                     // Repetition guard: never say a near-duplicate of a recent line.
                     if guard_repeats && self.spoken.iter().any(|p| near_duplicate(&out, p)) {
@@ -794,6 +851,30 @@ impl Brain {
         // A quiet beat the guard silenced: the next turn gets a fresh-bit nudge instead.
         if say_idx.is_empty() && suppressed > 0 && pick.chosen.is_empty() {
             self.fresh_bit = true;
+        }
+
+        // `crisis-chat-ban`: once the crisis line went out (so the help is delivered), the
+        // viewer is removed from chat for the rest of the stream. No platform adapter can ban
+        // yet: the `crisis_chat_ban` / `banned:stream` event, on the disclosure's message id
+        // (whose `chat` event names the viewer), is the record a future adapter acts on.
+        if crisis
+            && !say_idx.is_empty()
+            && self
+                .cfg
+                .character
+                .enabled_rules()
+                .any(|r| r.id == compose::CRISIS_BAN_RULE_ID)
+        {
+            for c in pick.chosen.iter().filter(|c| c.safety.is_some()) {
+                if self.filter.ban(&c.msg.viewer.id) {
+                    ev.push(moderation::input_event(
+                        now_ms,
+                        CRISIS_BAN_RULE,
+                        &c.msg.id,
+                        "banned:stream",
+                    ));
+                }
+            }
         }
 
         // replying_to: lines that name a picked viewer; a single pick goes to the first line.

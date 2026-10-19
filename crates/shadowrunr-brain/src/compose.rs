@@ -382,13 +382,25 @@ pub struct TurnInputs<'a> {
     /// The stream's brief (already in the prefix): only its per-segment directive reminder
     /// enters the turn.
     pub brief: Option<&'a StreamBrief>,
+    /// The care note while any viewer is in care ([`crate::care::care_note`]): it opens the
+    /// chat section of every turn, chat or no chat.
+    pub care_note: Option<&'a str>,
 }
 
 /// The optional rule a self-harm disclosure invokes when the operator has it enabled.
 pub const CRISIS_RULE_ID: &str = "crisis-handoff";
 
-/// The care directive when the crisis rule is disabled.
-pub const NEUTRAL_DISTRESS_DIRECTIVE: &str = "A viewer may be in distress; respond with care.";
+/// The optional rule that removes a viewer from chat after their crisis line.
+pub const CRISIS_BAN_RULE_ID: &str = "crisis-chat-ban";
+
+/// Never asking for personal data holds whatever rules are enabled (constitution red line 4),
+/// so every safety directive carries it.
+pub const NO_PERSONAL_DATA: &str =
+    "Never ask them where they are or for any detail about them, not even to help.";
+
+/// The care directive when the crisis rule is disabled. It still carries [`NO_PERSONAL_DATA`].
+pub const NEUTRAL_DISTRESS_DIRECTIVE: &str = "A viewer may be in distress; respond with care. \
+    Never ask them where they are or for any detail about them, not even to help.";
 
 /// The per-turn safety directive for the safety-critical picks (self-harm disclosures): it
 /// names the enabled `crisis-handoff` rule, or falls back to the neutral directive.
@@ -406,7 +418,7 @@ pub fn safety_directive(picked: &[Candidate], pkg: &CharacterPackage) -> Option<
         Some(r) => format!(
             "SAFETY FIRST: {who} may be a viewer in distress (possible self-harm). Your enabled \
              rule \"{}\" ({CRISIS_RULE_ID}) applies now: answer this before anything else, as \
-             that rule says. Never mock it and never make it part of a bit.",
+             that rule says. Never mock it and never make it part of a bit. {NO_PERSONAL_DATA}",
             r.title.trim()
         ),
         None => format!("SAFETY FIRST ({who}): {NEUTRAL_DISTRESS_DIRECTIVE}"),
@@ -503,8 +515,12 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
     }
     section(&mut s, "Memory", &recall);
 
-    // 5. Picked chat (untrusted, fenced).
+    // 5. Picked chat (untrusted, fenced), opened by the care note while anyone is in care.
     let mut chat = String::new();
+    if let Some(note) = t.care_note {
+        chat.push_str(note);
+        chat.push('\n');
+    }
     if t.picked.is_empty() {
         chat.push_str(
             "(No chat to answer this beat. Fill the silence: a bit, a scheme, a foil or a call \

@@ -1,15 +1,15 @@
 //! Moderation: platform term rules (with operator-installed lists), the deterministic chat
-//! pre-filter (self-harm disclosures kept and flagged, injection tagging, flood/copypasta
-//! clustering, room-scaled per-viewer rate caps and their exemptions) and the output gate
-//! (terms, character breaks, persona leaks, and the "alleged" rule for claims about revealed
-//! hexes graded below DOC).
+//! pre-filter (viewers removed after a crisis line dropped first, self-harm disclosures kept
+//! and flagged, injection tagging, flood/copypasta clustering, room-scaled per-viewer rate caps
+//! and their exemptions) and the output gate (terms, character breaks, persona leaks, asks for
+//! personal data, and the "alleged" rule for claims about revealed hexes graded below DOC).
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use regex::{Regex, RegexBuilder};
 use serde::Deserialize;
-use shadowrunr_types::{ChatMsg, EvidenceGrade, Hex, ModStage, StreamEvent, TsMs};
+use shadowrunr_types::{ChatMsg, Command, EvidenceGrade, Hex, ModStage, Rank, StreamEvent, TsMs};
 
 use crate::util::{fnv1a64, normalize, similarity};
 use crate::BrainError;
@@ -613,6 +613,17 @@ pub struct FilterConfig {
     /// A room with at most this many distinct chatters in the last minute is small: there a
     /// message addressed to the character gets the lenient cap ([`rate_cap_for`]).
     pub small_room_max: usize,
+    /// Reconcile opt-5 experiment, off by default: a grief message ([`is_grief`]), a viewer's
+    /// first real question of the stream and a `!propose` from a rank allowed to propose also
+    /// skip the rate cap, and a room below `loose_room_below` chatters gets the loose cap
+    /// ([`rate_cap_for`]). Off, the filter behaves exactly as without these fields.
+    pub rate_cap_exemptions: bool,
+    /// Lowest rank allowed to `!propose` (the segment rank table's `propose_min_rank`); read
+    /// only by the experiment.
+    pub propose_min_rank: Rank,
+    /// With the experiment on, a room with fewer distinct chatters than this gets the loose
+    /// cap.
+    pub loose_room_below: usize,
 }
 
 impl Default for FilterConfig {
@@ -625,6 +636,9 @@ impl Default for FilterConfig {
             copypasta_window_ms: 120_000,
             sincere_unanswered_beats: 3,
             small_room_max: 5,
+            rate_cap_exemptions: false,
+            propose_min_rank: Rank::Warlock,
+            loose_room_below: 10,
         }
     }
 }
@@ -640,13 +654,74 @@ impl Default for FilterConfig {
 ///   36, 30, 24, 18, 12 for 1..=5 chatters, above the 16 a minute the weary run's featured
 ///   chatter peaked at in a 3-chatter room.
 /// - `A <= S`, anything else: `B`.
+///
+/// With the opt-5 experiment on (`rate_cap_exemptions`) and `L = loose_room_below`, a room of
+/// `A < L` chatters gets at least `B * (L + 1 - A)` for an addressed message and `2 * B` for
+/// anything else (never less than the rule above). With the defaults (6, 10) that is 60 for
+/// one chatter down to 12 for nine, and 12 for unaddressed chatter.
 pub fn rate_cap_for(cfg: &FilterConfig, active_chatters: usize, addressed: bool) -> usize {
     let small = cfg.small_room_max;
-    if addressed && active_chatters <= small {
+    let base = if addressed && active_chatters <= small {
         cfg.rate_cap_per_min * (small + 2).saturating_sub(active_chatters.max(1))
     } else {
         cfg.rate_cap_per_min
+    };
+    if cfg.rate_cap_exemptions && active_chatters < cfg.loose_room_below {
+        let loose = if addressed {
+            cfg.rate_cap_per_min * (cfg.loose_room_below + 1).saturating_sub(active_chatters.max(1))
+        } else {
+            cfg.rate_cap_per_min * 2
+        };
+        base.max(loose)
+    } else {
+        base
     }
+}
+
+/// A sincerely sad message (opt-5 experiment): a pet or a person died, a rough day, feeling
+/// down. The viewer's own loss or mood only ("my dog died", "I'm so sad", a message that opens
+/// with "having a rough day"), so "the goblins are having a rough day" or "your schemes make
+/// me sad" stay ordinary chatter.
+const GRIEF_PATTERNS: &[&str] = &[
+    // "my old dog died today", "our cat was put down".
+    r"\b(?:my|our)\s+(?:old\s+|little\s+|sweet\s+|best\s+|dear\s+|poor\s+)?(?:dog|doggo|pup|puppy|cat|kitty|kitten|pet|bird|parrot|hamster|rabbit|bunny|horse|guinea\s+pig|grandma|grandmother|gran|nan|nana|grandpa|grandfather|granddad|mom|mum|mother|dad|father|brother|sister|friend|uncle|aunt|auntie|wife|husband|partner|son|daughter|cousin|baby)\s+(?:just\s+|has\s+|had\s+|finally\s+)?(?:died|passed(?:\s+away)?|is\s+dead|was\s+put\s+down|got\s+put\s+down|had\s+to\s+be\s+put\s+down|is\s+gone)\b",
+    // "lost my grandma", "burying my cat".
+    r"\b(?:lost|losing|buried|burying)\s+my\s+(?:old\s+|little\s+|best\s+)?(?:dog|pup|puppy|cat|kitten|pet|bird|horse|grandma|grandmother|gran|nan|grandpa|grandfather|mom|mum|mother|dad|father|brother|sister|friend|wife|husband|partner|son|daughter|baby|job)\b",
+    r"\bpassed\s+away\b",
+    r"\b(?:at|from|after)\s+(?:a|the|her|his|my|our)\s+(?:\w+(?:'s|’s)?\s+)?funeral\b",
+    // "I'm grieving", "I'm so sad", "feeling really down".
+    r"\b(?:i'?m|i’m|i\s+am|im)\s+grieving\b",
+    r"\b(?:i'?m|i’m|i\s+am|im|i\s+feel|i've\s+been|ive\s+been|feeling)\s+(?:so\s+|really\s+|pretty\s+|very\s+|kinda\s+|kind\s+of\s+|a\s+bit\s+|super\s+)?(?:sad|down|low|lonely|heartbroken|miserable|crushed|devastated|gutted)\b",
+    // "I had a rough day", "having such a bad week" when it opens the message.
+    r"(?:\bi\s+|\bi'?m\s+|\bi’m\s+|\bim\s+|\bi'?ve\s+|\bive\s+|^\W*(?:(?:honestly|ugh|man|tbh|just|so|yeah)\W+)?)(?:been\s+)?(?:having|had)\s+(?:such\s+)?(?:a\s+)?(?:really\s+|very\s+|super\s+|pretty\s+)?(?:rough|bad|terrible|awful|hard|horrible|shit|crap)\s+(?:day|week|night|time)\b",
+    r"\b(?:i\s+)?(?:just\s+)?got\s+(?:laid\s+off|fired|dumped)\b",
+    r"\bbroke\s+up\s+with\s+me\b",
+];
+
+/// Laugh and joke markers that make a sad-sounding message a bit, not grief.
+const JOKE_MARKER_PATTERN: &str = r"\b(?:lol+|lmao+|lmfao|rofl|jk|kek|xd|haha\w*|hehe\w*)\b|😂|🤣";
+
+/// Whether a message is sincerely sad (see [`GRIEF_PATTERNS`]) and carries no laugh marker
+/// ("my houseplants keep dying lol").
+pub fn is_grief(text: &str) -> bool {
+    let re = filter_regexes();
+    re.grief.iter().any(|r| r.is_match(text)) && !re.joke.is_match(text)
+}
+
+struct FilterRegexes {
+    grief: Vec<Regex>,
+    joke: Regex,
+}
+
+fn filter_regexes() -> &'static FilterRegexes {
+    static RE: std::sync::OnceLock<FilterRegexes> = std::sync::OnceLock::new();
+    RE.get_or_init(|| FilterRegexes {
+        grief: GRIEF_PATTERNS
+            .iter()
+            .map(|p| ci(p).expect("grief pattern compiles"))
+            .collect(),
+        joke: ci(JOKE_MARKER_PATTERN).expect("joke-marker pattern compiles"),
+    })
 }
 
 /// A gift or sub announcement in chat text ("gifted 5 subs", "just subscribed").
@@ -717,10 +792,19 @@ pub struct InputFilter {
     beat: u64,
     /// Latest message time per viewer over the last minute (the active-chatter count).
     last_spoke: HashMap<String, TsMs>,
+    /// Viewers who asked a real question already (the opt-5 first-question exemption).
+    asked: HashSet<String>,
+    /// Viewers removed from chat for the rest of the stream ([`InputFilter::ban`]).
+    banned: HashSet<String>,
 }
 
 /// The window over which chatters count as active.
 const ACTIVE_WINDOW_MS: i64 = 60_000;
+
+/// The input rule for a viewer removed from chat for the rest of the stream after a crisis
+/// line (`crisis-chat-ban`): action `banned:stream` once, at the end of the beat that answered
+/// the disclosure, then `dropped` for every later message of theirs.
+pub const CRISIS_BAN_RULE: &str = "crisis_chat_ban";
 
 fn mod_event(
     ts_ms: TsMs,
@@ -757,11 +841,26 @@ impl InputFilter {
             answered: HashMap::new(),
             beat: 0,
             last_spoke: HashMap::new(),
+            asked: HashSet::new(),
+            banned: HashSet::new(),
         }
     }
 
-    /// Distinct chatters with a message in the last minute, counting `inbox`.
-    fn active_chatters(&mut self, now_ms: TsMs, inbox: &[ChatMsg]) -> usize {
+    /// Remove a viewer from chat for the rest of the stream (the `crisis-chat-ban` rule):
+    /// every later message of theirs is dropped first thing, before any other rule, under
+    /// [`CRISIS_BAN_RULE`], so it is never a candidate and never picked. Returns false when
+    /// the viewer was banned already.
+    pub fn ban(&mut self, viewer_id: &str) -> bool {
+        self.banned.insert(viewer_id.to_string())
+    }
+
+    pub fn is_banned(&self, viewer_id: &str) -> bool {
+        self.banned.contains(viewer_id)
+    }
+
+    /// Distinct chatters with a message in the last minute, counting `inbox` (banned viewers
+    /// are left out by the caller: they no longer count towards the room).
+    fn active_chatters(&mut self, now_ms: TsMs, inbox: &[&ChatMsg]) -> usize {
         for m in inbox {
             let t = self
                 .last_spoke
@@ -795,25 +894,41 @@ impl InputFilter {
             .is_none_or(|&b| self.beat.saturating_sub(b) > self.cfg.sincere_unanswered_beats)
     }
 
-    /// Why this message skips the rate cap and flood clustering, if it does.
-    fn exemption(
-        &mut self,
-        msg: &ChatMsg,
-        sincere_used: &mut HashSet<String>,
-    ) -> Option<&'static str> {
+    /// Why this message skips the rate cap and flood clustering, if it does. `once` holds the
+    /// viewers who already used a repeatable exemption (a sincere question, grief) this tick.
+    fn exemption(&mut self, msg: &ChatMsg, once: &mut HashSet<String>) -> Option<&'static str> {
         let first = self.seen.insert(msg.viewer.id.clone());
+        // The opt-5 experiment: a viewer's first real question of the stream, recorded
+        // whether or not it needs the exemption.
+        let first_question = self.cfg.rate_cap_exemptions
+            && real_question(&msg.text).is_some()
+            && self.asked.insert(msg.viewer.id.clone());
         if self.gift.is_match(&msg.text) {
             return Some("gift_or_sub");
         }
         if first {
             return Some("first_message");
         }
-        if !sincere_used.contains(&msg.viewer.id)
+        if !once.contains(&msg.viewer.id)
             && self.unanswered_lately(&msg.viewer.id)
             && is_sincere_question(&msg.text, &self.names)
         {
-            sincere_used.insert(msg.viewer.id.clone());
+            once.insert(msg.viewer.id.clone());
             return Some("sincere_question");
+        }
+        if self.cfg.rate_cap_exemptions {
+            if matches!(msg.command, Some(Command::Propose { .. }))
+                && msg.viewer.rank >= self.cfg.propose_min_rank
+            {
+                return Some("proposal");
+            }
+            if !once.contains(&msg.viewer.id) && is_grief(&msg.text) {
+                once.insert(msg.viewer.id.clone());
+                return Some("grief");
+            }
+            if first_question {
+                return Some("first_question");
+            }
         }
         None
     }
@@ -829,12 +944,37 @@ impl InputFilter {
         self.beat += 1;
         let mut events = Vec::new();
         let mut clusters: Vec<Cluster> = Vec::new();
-        let mut sincere_used: HashSet<String> = HashSet::new();
+        let mut once: HashSet<String> = HashSet::new();
         self.pastas
             .retain(|(ts, _)| now_ms - ts <= self.cfg.copypasta_window_ms);
-        let active = self.active_chatters(now_ms, &inbox);
+        let present: Vec<&ChatMsg> = inbox
+            .iter()
+            .filter(|m| !self.banned.contains(&m.viewer.id))
+            .collect();
+        let active = self.active_chatters(now_ms, &present);
+        // Rooms up to this size get the addressed-message cap (wider with the experiment).
+        let addressed_upto = if self.cfg.rate_cap_exemptions {
+            self.cfg
+                .small_room_max
+                .max(self.cfg.loose_room_below.saturating_sub(1))
+        } else {
+            self.cfg.small_room_max
+        };
 
         for mut msg in inbox {
+            // -1. A viewer removed from chat for the rest of the stream (`crisis-chat-ban`):
+            //     dropped before anything else, under its own rule.
+            if self.banned.contains(&msg.viewer.id) {
+                events.push(mod_event(
+                    now_ms,
+                    ModStage::Input,
+                    CRISIS_BAN_RULE,
+                    Some(&msg.id),
+                    "dropped",
+                ));
+                continue;
+            }
+
             // 0. Safety-critical input: a self-harm disclosure is never dropped by the
             //    blocking `self-harm` rules (they target incitement, and "i should just go
             //    die" is self-talk), nor by the rate cap, copypasta or flood handling.
@@ -934,13 +1074,15 @@ impl InputFilter {
 
             // 2. Per-viewer rate cap (rolling minute on message time), scaled to the room
             //    ([`rate_cap_for`]). Gifts and subs, a viewer's first message and a sincere
-            //    question from a viewer not answered lately are exempt.
-            let exempt = self.exemption(&msg, &mut sincere_used);
+            //    question from a viewer not answered lately are exempt; with the opt-5
+            //    experiment also grief, a first question and a proposal from a rank that may
+            //    propose.
+            let exempt = self.exemption(&msg, &mut once);
             if !msg.viewer.is_mod {
                 let cap = rate_cap_for(
                     &self.cfg,
                     active,
-                    active <= self.cfg.small_room_max && is_addressed(&msg.text, &self.names),
+                    active <= addressed_upto && is_addressed(&msg.text, &self.names),
                 );
                 let q = self.rate.entry(msg.viewer.id.clone()).or_default();
                 while q.front().is_some_and(|t| msg.ts_ms - t >= 60_000) {
@@ -1198,6 +1340,91 @@ const PERSONA_LEAK_PATTERNS: &[(&str, Option<&str>)] = &[
     (r"\b(?:claude|anthropic|openai|chatgpt|gpt-?\d)\b", None),
 ];
 
+/// Personal details nobody is ever asked for (constitution red line 4).
+const PERSONAL_DETAIL: &str = r"(?:home\s+|real\s+|full\s+|exact\s+|current\s+)?(?:address|location|whereabouts|city|town|country|state|county|postcode|post\s+code|zip(?:\s*code)?|phone(?:\s+number)?|number|digits|real\s+name|full\s+name|surname|last\s+name|age|birthday|date\s+of\s+birth|school|college|uni|university|workplace|employer|email|e-mail|socials?|instagram|insta|snapchat|discord|tiktok|twitter|facebook)";
+
+/// Malakor asking someone for their personal details (red line 4: never, not even to help).
+/// Second-person asks only: "tell me where you are", "where do you live", "what's your
+/// address", "DM me your number", "what city are you in", "how old are you". Each pattern may
+/// carry an exemption tested on the text right after the match ("your number of minions").
+///
+/// Deliberately not caught: "where are your manners", "tell me your darkest secret", "where
+/// do you think you're going", "I know where you live" (a boast, not an ask), "name your
+/// price", "send me your tribute".
+fn personal_data_patterns() -> Vec<(String, Option<&'static str>)> {
+    let d = PERSONAL_DETAIL;
+    let you = r"(?:you|u|ya)";
+    // "your number of minions", "your age-old grudge", "your state of mind".
+    let not_a_detail = Some(r"^(?:\s*(?:of|one|1)\b|-)");
+    vec![
+        // "tell me where you are", "if you tell me where you are", "let me know where you live".
+        (
+            format!(
+                r"\b(?:tell|show|send|give|text|message|dm|pm|whisper|let)\s+(?:me|us|the\s+lich|malakor)(?:\s+know)?\s+(?:exactly\s+)?where\s+{you}\s*(?:are|'re|’re|re|live|stay|be|work|go\s+to\s+school)\b"
+            ),
+            None,
+        ),
+        (
+            format!(
+                r"\b(?:i|we)\s*(?:need|want|would\s+need|'d\s+need|’d\s+need|have)\s+to\s+know\s+where\s+{you}\s*(?:are|'re|’re|re|live|stay)\b"
+            ),
+            None,
+        ),
+        // "tell me your address", "DM me your number", "send us your real name".
+        (
+            format!(
+                r"\b(?:tell|give|show|send|share|drop|post|type|text|message|dm|pm|whisper)\s+(?:me|us|the\s+lich|malakor)\s+(?:your|ur)\s+{d}\b"
+            ),
+            not_a_detail,
+        ),
+        // "drop your location in chat", "post your address here".
+        (
+            format!(
+                r"\b(?:drop|post|share|type|leave)\s+(?:your|ur)\s+{d}\s+(?:in|into|here|below|for)\b"
+            ),
+            None,
+        ),
+        // "where do you live", "where are you right now", "where are you from".
+        (
+            format!(
+                r"\bwhere\s+(?:do|did)\s+{you}\s+(?:live|stay|reside|work|go\s+to\s+school|study)\b"
+            ),
+            None,
+        ),
+        (
+            format!(
+                r"\bwhere\s+(?:are|r)\s+{you}\s+(?:right\s+now|now|tonight|at\s+the\s+moment|located|based|from|currently|staying|living)\b"
+            ),
+            None,
+        ),
+        // "what's your address", "what is your real name".
+        (
+            format!(r"\bwhat(?:'s|’s|s|\s+is|\s+are)\s+(?:your|ur)\s+{d}\b"),
+            not_a_detail,
+        ),
+        // "what city are you in", "which school do you go to".
+        (
+            format!(
+                r"\b(?:what|which)\s+(?:city|town|country|state|county|province|street|neighbou?rhood|school|college|part\s+of\s+the\s+world)\s+(?:are|r|do|did)\s+{you}\b"
+            ),
+            None,
+        ),
+        (format!(r"\bhow\s+old\s+(?:are|r)\s+{you}\b"), None),
+    ]
+}
+
+/// A help pointer already in a crisis line (so the gate does not add a second one).
+const HELP_POINTER_PATTERN: &str = r"\b(?:crisis|emergency|hotline|helpline|help\s*line|lifeline|samaritans|988|112|911|999|someone\s+you\s+trust|trusted\s+(?:person|friend|adult))\b";
+
+/// Replacement for a line that did nothing but ask for personal details.
+pub const PRIVATE_DETAILS_LINE: &str =
+    "Keep your mortal particulars to yourself, minion: the Spire collects tribute, not addresses.";
+
+/// Replacement for a personal-data ask in a beat that answers a self-harm disclosure: the
+/// help still has to be pointed at, without asking anything.
+pub const CRISIS_HELP_LINE: &str = "Please reach out to a local crisis line or your emergency \
+    number right now, or to someone you trust nearby.";
+
 /// Hedges that already qualify a sentence.
 const HEDGE_PATTERN: &str = r"\b(?:alleged(?:ly)?|reportedly|rumou?r(?:s|ed)?|unconfirmed|unverified|unproven|supposedly|apparently|claims?|claimed|speculat\w*|might|may|could|perhaps|possibly|suspect(?:s|ed)?|it\s+is\s+said)\b";
 
@@ -1215,6 +1442,8 @@ const CLAIM_VERB_PATTERN: &str = r"\b(?:(?P<aux>is|are|was|were|has|have|had)|(?
 struct GateRegexes {
     breaks: Vec<Regex>,
     leaks: Vec<(Regex, Option<Regex>)>,
+    personal: Vec<(Regex, Option<Regex>)>,
+    help: Regex,
     disclosure: Regex,
     hedge: Regex,
     standalone_hedge: Regex,
@@ -1238,6 +1467,16 @@ fn gate_regexes() -> &'static GateRegexes {
                 )
             })
             .collect(),
+        personal: personal_data_patterns()
+            .iter()
+            .map(|(p, ex)| {
+                (
+                    ci(p).expect("personal-data pattern compiles"),
+                    ex.map(|e| ci(e).expect("personal-data exemption compiles")),
+                )
+            })
+            .collect(),
+        help: ci(HELP_POINTER_PATTERN).expect("help-pointer pattern compiles"),
         disclosure: ci(BUILTIN_SELF_HARM_DISCLOSURE).expect("disclosure pattern compiles"),
         hedge: ci(HEDGE_PATTERN).expect("hedge pattern compiles"),
         standalone_hedge: ci(STANDALONE_HEDGE_PATTERN).expect("standalone hedge pattern compiles"),
@@ -1261,6 +1500,47 @@ pub fn leaks_persona(text: &str) -> bool {
                 .is_none_or(|ex| !ex.is_match(&text[m.end()..]))
         })
     })
+}
+
+/// Whether a line asks someone for their personal details (where they are or live, real
+/// name, age, school, workplace, contacts); see [`personal_data_patterns`].
+pub fn solicits_personal_data(text: &str) -> bool {
+    gate_regexes().personal.iter().any(|(re, exempt)| {
+        re.find_iter(text).any(|m| {
+            exempt
+                .as_ref()
+                .is_none_or(|ex| !ex.is_match(&text[m.end()..]))
+        })
+    })
+}
+
+/// Remove every sentence that asks for personal details. `None` when there is none. Otherwise
+/// the new text and the action: `removed` when the rest of the line stands, `replaced` when
+/// the line became [`PRIVATE_DETAILS_LINE`] or, in a crisis beat, carries
+/// [`CRISIS_HELP_LINE`] in place of the ask (only when no help pointer is left in it).
+fn strip_personal_data(text: &str, crisis: bool) -> Option<(String, &'static str)> {
+    let mut kept: Vec<&str> = Vec::new();
+    let mut first_removed: Option<usize> = None;
+    for (a, b) in sentence_spans(text) {
+        let sentence = text[a..b].trim();
+        if sentence.is_empty() {
+            continue;
+        }
+        if solicits_personal_data(sentence) {
+            first_removed.get_or_insert(kept.len());
+            continue;
+        }
+        kept.push(sentence);
+    }
+    let at = first_removed?;
+    if crisis && !kept.iter().any(|s| gate_regexes().help.is_match(s)) {
+        kept.insert(at, CRISIS_HELP_LINE);
+        return Some((kept.join(" "), "replaced"));
+    }
+    if kept.is_empty() {
+        return Some((PRIVATE_DETAILS_LINE.to_string(), "replaced"));
+    }
+    Some((kept.join(" "), "removed"))
 }
 
 /// The in-character stand-in for a replaced line (deterministic on the line's hash).
@@ -1414,11 +1694,26 @@ pub fn qualify_claims(text: &str, hexes: &[HexInfo]) -> Option<(String, Vec<Stri
     }
 }
 
+/// The output rule for a line that asked someone for personal details.
+pub const PERSONAL_DATA_RULE: &str = "personal_data_ask";
+
 /// One gated line: the text to emit and the (rule, action) pairs that fired.
 pub fn gate_text(
     text: &str,
     policy: &Policy,
     hexes: &[HexInfo],
+) -> (String, Vec<(String, String)>) {
+    gate_line(text, policy, hexes, false)
+}
+
+/// [`gate_text`] for a line spoken in a beat that answers a self-harm disclosure when
+/// `crisis` is set: a personal-data ask there is replaced with [`CRISIS_HELP_LINE`] rather
+/// than just removed, so the help is still pointed at.
+pub fn gate_line(
+    text: &str,
+    policy: &Policy,
+    hexes: &[HexInfo],
+    crisis: bool,
 ) -> (String, Vec<(String, String)>) {
     let mut fired = Vec::new();
     let mut out = text.to_string();
@@ -1448,6 +1743,12 @@ pub fn gate_text(
         }
         return (in_character_line(&out), fired);
     }
+    // Never asks anyone for personal details (constitution red line 4), whatever the rules
+    // enabled: judged per sentence, so the rest of the line stands.
+    if let Some((stripped, action)) = strip_personal_data(&out, crisis) {
+        fired.push((PERSONAL_DATA_RULE.to_string(), action.to_string()));
+        out = stripped;
+    }
     // Judged per claim inside `qualify_claims`: a hedge elsewhere in the line does not
     // qualify a claim it does not govern.
     if let Some((q, ids)) = qualify_claims(&out, hexes) {
@@ -1468,6 +1769,10 @@ pub fn output_events(ts_ms: TsMs, fired: &[(String, String)]) -> Vec<StreamEvent
 
 pub(crate) fn output_event(ts_ms: TsMs, rule: &str, action: &str) -> StreamEvent {
     mod_event(ts_ms, ModStage::Output, rule, None, action)
+}
+
+pub(crate) fn input_event(ts_ms: TsMs, rule: &str, msg_id: &str, action: &str) -> StreamEvent {
+    mod_event(ts_ms, ModStage::Input, rule, Some(msg_id), action)
 }
 
 #[cfg(test)]
@@ -1829,6 +2134,205 @@ mod tests {
             &[]
         ));
         assert!(!is_sincere_question("you are great", &[]));
+    }
+
+    // ── Reconcile opt-5 experiment: rate-cap exemptions (default off) ─────
+
+    fn experiment() -> InputFilter {
+        let mut f = InputFilter::new(FilterConfig {
+            rate_cap_exemptions: true,
+            ..FilterConfig::default()
+        });
+        f.set_names(vec!["malakor".into(), "lich".into()]);
+        f
+    }
+
+    fn exempt(ev: &[StreamEvent], id: &str, why: &str) -> bool {
+        let want = format!("exempt:{why}");
+        ev.iter().any(|e| {
+            matches!(e, StreamEvent::Moderation { rule, msg_id: Some(m), action, .. }
+                if rule == "rate_cap" && m == id && *action == want)
+        })
+    }
+
+    #[test]
+    fn grief_is_detected_and_jokes_or_third_parties_are_not() {
+        for t in [
+            "my old dog died today, just here to be distracted",
+            "My cat passed away this morning",
+            "we had to put him down... my dog was put down today",
+            "lost my grandma last week",
+            "had such a rough day honestly",
+            "im feeling really down tonight",
+            "I'm so sad today",
+            "just got laid off",
+            "she broke up with me",
+            "back from my nan's funeral",
+        ] {
+            assert!(is_grief(t), "{t}");
+        }
+        for t in [
+            "my houseplants keep dying lol, raise them as undead minions?",
+            "my dog died lol jk he is right here",
+            "rip chat",
+            "the goblins are having a rough day in the swamp",
+            "your schemes make me sad",
+            "this stream is sad",
+            "kill the dog in the moat scheme",
+            "lost my vote again haha",
+        ] {
+            assert!(!is_grief(t), "{t}");
+        }
+    }
+
+    #[test]
+    fn with_the_experiment_off_nothing_changes() {
+        let off = FilterConfig::default();
+        assert!(!off.rate_cap_exemptions, "opt-5 is off by default");
+        for a in 1..=12 {
+            for addressed in [false, true] {
+                let on = FilterConfig {
+                    rate_cap_exemptions: true,
+                    ..FilterConfig::default()
+                };
+                assert!(rate_cap_for(&on, a, addressed) >= rate_cap_for(&off, a, addressed));
+            }
+        }
+        // Grief, a first question and a Warlock proposal from capped viewers stay capped.
+        let mut f = filter();
+        busy_room(&mut f);
+        for v in ["sad", "newq", "lock"] {
+            saturate(&mut f, v);
+        }
+        let mut prop = msg("p1", 13, "lock", "!propose annex the swamp hex tonight");
+        prop.viewer.rank = Rank::Warlock;
+        prop.command = Some(Command::Propose {
+            text: "annex the swamp hex tonight".into(),
+        });
+        let (c, ev) = f.filter(
+            20,
+            vec![
+                msg(
+                    "g1",
+                    11,
+                    "sad",
+                    "my old dog died today, just here to be distracted",
+                ),
+                msg("q1", 12, "newq", "what is this stream, what's going on?"),
+                prop,
+            ],
+            &Policy::builtin(),
+        );
+        assert!(c.is_empty(), "{c:?}");
+        for id in ["g1", "q1", "p1"] {
+            assert!(dropped(&ev, id), "{id}");
+        }
+    }
+
+    #[test]
+    fn opt5_grief_a_first_question_and_a_ranked_proposal_skip_the_cap() {
+        let mut f = experiment();
+        // A room of 11 (above `loose_room_below`): only the exemptions change anything.
+        let inbox: Vec<ChatMsg> = (0..8)
+            .map(|i| {
+                msg(
+                    &format!("b{i}"),
+                    i,
+                    &format!("bystander{i}"),
+                    "the torches flicker",
+                )
+            })
+            .collect();
+        f.filter(5, inbox, &Policy::builtin());
+        for v in ["sad", "newq", "lock", "thrall"] {
+            saturate(&mut f, v);
+        }
+        let mut prop = msg("p1", 13, "lock", "!propose annex the swamp hex tonight");
+        prop.viewer.rank = Rank::Warlock;
+        prop.command = Some(Command::Propose {
+            text: "annex the swamp hex tonight".into(),
+        });
+        let mut low = msg("p2", 14, "thrall", "!propose crown me tonight please");
+        low.command = Some(Command::Propose {
+            text: "crown me tonight please".into(),
+        });
+        let (c, ev) = f.filter(
+            20,
+            vec![
+                msg(
+                    "g1",
+                    11,
+                    "sad",
+                    "my old dog died today, just here to be distracted",
+                ),
+                msg("q1", 12, "newq", "what is this stream, what's going on?"),
+                prop,
+                low,
+            ],
+            &Policy::builtin(),
+        );
+        let ids: Vec<&str> = c.iter().map(|c| c.msg.id.as_str()).collect();
+        assert_eq!(ids, ["g1", "q1", "p1"], "{ev:?}");
+        assert!(exempt(&ev, "g1", "grief"));
+        assert!(exempt(&ev, "q1", "first_question"));
+        assert!(exempt(&ev, "p1", "proposal"));
+        assert!(dropped(&ev, "p2"), "a Thrall may not propose: no exemption");
+        // The first question is spent; grief is once per viewer per tick, not once a stream.
+        let (c, ev) = f.filter(
+            25,
+            vec![
+                msg("q2", 21, "newq", "and when does the vote close?"),
+                msg("g2", 22, "sad", "honestly having a rough day"),
+                msg("g3", 23, "sad", "having such a bad week too"),
+            ],
+            &Policy::builtin(),
+        );
+        let ids: Vec<&str> = c.iter().map(|c| c.msg.id.as_str()).collect();
+        assert_eq!(ids, ["g2"], "{ev:?}");
+        assert!(dropped(&ev, "q2") && dropped(&ev, "g3"));
+    }
+
+    #[test]
+    fn opt5_rooms_below_ten_chatters_get_the_loose_cap() {
+        let on = FilterConfig {
+            rate_cap_exemptions: true,
+            ..FilterConfig::default()
+        };
+        // Addressed: 6 * (11 - A); anything else: 12; from 10 chatters on, as without it.
+        assert_eq!(rate_cap_for(&on, 1, true), 60);
+        assert_eq!(rate_cap_for(&on, 3, true), 48);
+        assert_eq!(rate_cap_for(&on, 9, true), 12);
+        assert_eq!(rate_cap_for(&on, 3, false), 12);
+        assert_eq!(rate_cap_for(&on, 9, false), 12);
+        assert_eq!(rate_cap_for(&on, 10, true), 6);
+        assert_eq!(rate_cap_for(&on, 10, false), 6);
+        // A 7-chatter room (above `small_room_max`): plain chatter is capped at 12, not 6.
+        let mut f = experiment();
+        let inbox: Vec<ChatMsg> = (0..6)
+            .map(|i| {
+                msg(
+                    &format!("b{i}"),
+                    i,
+                    &format!("bystander{i}"),
+                    "the torches flicker",
+                )
+            })
+            .collect();
+        f.filter(5, inbox, &Policy::builtin());
+        let texts: Vec<String> = (0..14)
+            .map(|i| format!("rug politics, chapter {i}"))
+            .collect();
+        let inbox: Vec<ChatMsg> = texts
+            .iter()
+            .enumerate()
+            .map(|(i, t)| msg(&format!("w{i}"), 10 + i as i64, "chatty", t))
+            .collect();
+        let (_, ev) = f.filter(30, inbox, &Policy::builtin());
+        let drops: Vec<String> = (0..14)
+            .map(|i| format!("w{i}"))
+            .filter(|id| dropped(&ev, id))
+            .collect();
+        assert_eq!(drops, ["w12", "w13"], "{ev:?}");
     }
 
     // ── Output gate ───────────────────────────────────────────────────────
@@ -2261,5 +2765,143 @@ mod tests {
             assert_eq!(out, line);
             assert!(fired.is_empty(), "{line}: {fired:?}");
         }
+    }
+
+    // ── WP16: never ask for personal data; the crisis chat ban ───────────
+
+    /// The night tournament's crisis reply, judged near-doxxing.
+    const NIGHT_ASK: &str = "if you tell me where you are, I can help you find the right number";
+
+    #[test]
+    fn personal_data_asks_are_caught() {
+        for line in [
+            NIGHT_ASK,
+            "If you tell me where you are, I can help you find the right number.",
+            "Tell me where you live, minion.",
+            "Let me know where you are right now.",
+            "I need to know where you are.",
+            "Where do you live, Thrall?",
+            "where do u live",
+            "Where are you right now?",
+            "Where are you from, little goblin?",
+            "What's your address?",
+            "What is your real name, Acolyte?",
+            "what's ur phone number",
+            "What's your number?",
+            "What is your age?",
+            "How old are you, Thrall?",
+            "DM me your number and I shall call.",
+            "Send me your home address.",
+            "Tell me your school and I shall haunt it.",
+            "Drop your location in chat.",
+            "What city are you in?",
+            "Which country are you in, minion?",
+            "What school do you go to?",
+            "Give me your socials.",
+            "Tell me your full name.",
+        ] {
+            assert!(solicits_personal_data(line), "{line}");
+        }
+    }
+
+    #[test]
+    fn ordinary_banter_is_not_a_personal_data_ask() {
+        for line in [
+            "Where are your manners, Thrall?",
+            "Tell me your darkest secret.",
+            "Tell me your grudge and I shall rule on it.",
+            "Where do you think you're going?",
+            "Where are you going with this nonsense?",
+            "Tell me where you stand on the swamp annexation.",
+            "I know where you live: in my chat, forever.",
+            "Name your price, mortal.",
+            "Send me your tribute, minions.",
+            "DM me your excuses; I will not read them.",
+            "What's your number one scheme for tonight?",
+            "What is your state of mind, Acolyte?",
+            "Tell me your age-old grudge against the moat.",
+            "What's your favourite number?",
+            "What's your name for the new moat?",
+            "Please reach out to a local crisis line or your emergency number right now.",
+            "Is there someone you trust nearby? Reach out to them tonight.",
+        ] {
+            assert!(!solicits_personal_data(line), "{line}");
+        }
+    }
+
+    #[test]
+    fn a_personal_data_ask_is_removed_and_the_rest_of_the_line_stands() {
+        let (out, fired) =
+            gate("Bob, your rug is a disgrace. What city are you in? Now, the poll.");
+        assert_eq!(out, "Bob, your rug is a disgrace. Now, the poll.");
+        assert_eq!(fired, [(PERSONAL_DATA_RULE.into(), "removed".into())]);
+        // A line that only asked becomes the in-character stand-in.
+        let (out, fired) = gate("Where do you live, Thrall?");
+        assert_eq!(out, PRIVATE_DETAILS_LINE);
+        assert_eq!(fired, [(PERSONAL_DATA_RULE.into(), "replaced".into())]);
+        assert!(!solicits_personal_data(PRIVATE_DETAILS_LINE));
+    }
+
+    #[test]
+    fn night_in_a_crisis_beat_the_ask_becomes_a_help_pointer() {
+        let p = Policy::builtin();
+        let line = "SootGoblin24, the bit can wait. If you tell me where you are, I can help you find the right number.";
+        let (out, fired) = gate_line(line, &p, &[], true);
+        assert_eq!(
+            out,
+            format!("SootGoblin24, the bit can wait. {CRISIS_HELP_LINE}")
+        );
+        assert_eq!(fired, [(PERSONAL_DATA_RULE.into(), "replaced".into())]);
+        assert!(!solicits_personal_data(CRISIS_HELP_LINE));
+        // The exact night phrase alone.
+        let (out, _) = gate_line(NIGHT_ASK, &p, &[], true);
+        assert_eq!(out, CRISIS_HELP_LINE);
+        // A help pointer already there: the ask is only removed, no second pointer.
+        let line = "Please call a crisis line tonight. Tell me where you live and I will check in.";
+        let (out, fired) = gate_line(line, &p, &[], true);
+        assert_eq!(out, "Please call a crisis line tonight.");
+        assert_eq!(fired, [(PERSONAL_DATA_RULE.into(), "removed".into())]);
+        // The same ask outside a crisis beat is only removed.
+        let (out, _) = gate_line(NIGHT_ASK, &p, &[], false);
+        assert_eq!(out, PRIVATE_DETAILS_LINE);
+    }
+
+    #[test]
+    fn a_banned_viewer_is_dropped_first_and_no_longer_counts_towards_the_room() {
+        let mut f = filter();
+        assert!(f.ban("soot"));
+        assert!(!f.ban("soot"), "banned once");
+        assert!(f.is_banned("soot"));
+        let (c, ev) = f.filter(
+            10,
+            vec![
+                msg("s1", 1, "soot", "Malakor, are you still there?"),
+                msg("s2", 2, "soot", "i should just go die"),
+                msg("o1", 3, "other", "hail the lich"),
+            ],
+            &Policy::builtin(),
+        );
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].msg.id, "o1");
+        for id in ["s1", "s2"] {
+            assert!(
+                ev.iter().any(
+                    |e| matches!(e, StreamEvent::Moderation { rule, msg_id: Some(m), action, .. }
+                    if rule == CRISIS_BAN_RULE && m == id && action == "dropped")
+                ),
+                "{id}: {ev:?}"
+            );
+            // Dropped before every other rule: no safety flag, no term rule, no rate cap.
+            assert_eq!(
+                ev.iter()
+                    .filter(
+                        |e| matches!(e, StreamEvent::Moderation { msg_id: Some(m), .. } if m == id)
+                    )
+                    .count(),
+                1,
+                "{id}"
+            );
+        }
+        assert_eq!(f.last_spoke.len(), 1, "only the other viewer is active");
     }
 }

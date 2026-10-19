@@ -30,7 +30,7 @@ async fn character_list_and_get_expose_the_package() {
         m.tones
     );
     assert_eq!(m.foils.len(), 5);
-    assert_eq!((m.rules_enabled, m.rules_total), (2, 2));
+    assert_eq!((m.rules_enabled, m.rules_total), (3, 3));
 
     let v = rpc(&addr, "character.get", json!({ "id": "malakor" })).await;
     let d: CharacterDetail = typed(&v);

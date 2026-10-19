@@ -163,8 +163,8 @@ fn character_rules_cli_toggles_the_override_and_lists() {
         String::from_utf8_lossy(&out.stderr)
     );
     let rules: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(rules[1]["id"], "no-financial-promotion");
-    assert_eq!(rules[1]["enabled"], false);
+    assert_eq!(rules[2]["id"], "no-financial-promotion");
+    assert_eq!(rules[2]["enabled"], false);
     assert!(tmp
         .path()
         .join("data/characters/malakor/rules.json")

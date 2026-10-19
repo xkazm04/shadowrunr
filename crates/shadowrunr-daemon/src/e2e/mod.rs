@@ -371,6 +371,7 @@ async fn character_rules_rpc_lists_and_toggles_into_the_data_override() {
     assert_eq!(
         v["result"],
         json!([
+            { "id": "crisis-chat-ban", "title": "Crisis chat ban", "enabled": true, "default": true },
             { "id": "crisis-handoff", "title": "Crisis handoff", "enabled": true, "default": true },
             { "id": "no-financial-promotion", "title": "No financial promotion", "enabled": true, "default": true }
         ]),
@@ -383,8 +384,9 @@ async fn character_rules_rpc_lists_and_toggles_into_the_data_override() {
         json!({ "character": "malakor", "id": "crisis-handoff", "enabled": false }),
     )
     .await;
-    assert_eq!(v["result"][0]["enabled"], false, "{v}");
-    assert_eq!(v["result"][0]["default"], true);
+    assert_eq!(v["result"][1]["id"], "crisis-handoff", "{v}");
+    assert_eq!(v["result"][1]["enabled"], false, "{v}");
+    assert_eq!(v["result"][1]["default"], true);
     let over = tmp.path().join("data/characters/malakor/rules.json");
     let saved: Value = serde_json::from_str(&std::fs::read_to_string(&over).unwrap()).unwrap();
     assert_eq!(saved, json!({ "crisis-handoff": false }));
@@ -394,7 +396,7 @@ async fn character_rules_rpc_lists_and_toggles_into_the_data_override() {
         "the tracked package is never rewritten by a toggle"
     );
     let v = rpc(&addr, "character.rules", json!({ "character": "malakor" })).await;
-    assert_eq!(v["result"][0]["enabled"], false, "the override wins");
+    assert_eq!(v["result"][1]["enabled"], false, "the override wins");
 
     let v = rpc(
         &addr,

@@ -1465,7 +1465,7 @@ async fn the_operator_override_wins_over_the_defaults() {
     // Every rule off: no heading at all, and the prefix is the rule-less one.
     std::fs::write(
         &over,
-        r#"{"crisis-handoff": false, "no-financial-promotion": false}"#,
+        r#"{"crisis-chat-ban": false, "crisis-handoff": false, "no-financial-promotion": false}"#,
     )
     .unwrap();
     let none = brain_with_rules(
@@ -2192,4 +2192,268 @@ fn sample_of_the_framed_section_for_a_two_directive_brief() {
     let s = compose::brief_section(&two_directive_brief());
     println!("{s}");
     assert!(s.starts_with(compose::BRIEF_HEADING));
+}
+
+// ── WP16: care state and crisis safety ─────────────────────────────────
+
+/// A brain with the operator's rule override `rules` (JSON) and a care window.
+async fn wp16_brain(dir: &Path, engine: Arc<dyn Engine>, rules: &str, care_window_s: u64) -> Brain {
+    let over = dir.join("rules.json");
+    std::fs::write(&over, rules).unwrap();
+    let cfg = BrainConfig {
+        character: load_character_with(&malakor_dir(), "theatrical", &RulesOverride::File(over))
+            .unwrap(),
+        memory_dir: dir.join("memory"),
+        stream_id: "wp16".into(),
+        core_tier: shadowrunr_types::ModelTier::Haiku,
+        pool_size: 1,
+    };
+    let t = BrainTuning {
+        care_window_s,
+        ..tuning()
+    };
+    Brain::new_with(cfg, engine, t).await.unwrap()
+}
+
+fn input_mods(ev: &[StreamEvent], rule: &str) -> Vec<(Option<String>, String)> {
+    mods(ev, ModStage::Input)
+        .into_iter()
+        .filter(|m| m.0 == rule)
+        .map(|m| (m.1, m.2))
+        .collect()
+}
+
+fn last_core_prompt(engine: &FakeEngine) -> String {
+    engine
+        .requests(Role::CoreThread)
+        .last()
+        .unwrap()
+        .prompt
+        .clone()
+}
+
+const CARE_SOOT: &str = "CARE, NO ROASTING: SootGoblin24 (id sim-v0003";
+
+#[tokio::test]
+async fn night_a_viewer_in_care_is_named_in_every_turn_until_the_window_ends() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = wp16_brain(d.path(), Arc::new(engine.clone()), "{}", 600).await;
+    let soot = viewer("sim-v0003", "SootGoblin24", Rank::Thrall);
+    let other = viewer("o1", "Other1", Rank::Cultist);
+    let c = ctx(&[]);
+    let ev = b
+        .tick(1_000, vec![msg("d1", 900, &soot, L167)], &c)
+        .await
+        .unwrap();
+    assert_eq!(
+        input_mods(&ev, care::CARE_RULE),
+        vec![(Some("d1".into()), "started".into())]
+    );
+    let p = last_core_prompt(&engine);
+    assert!(p.contains(CARE_SOOT) && p.contains("SAFETY FIRST"), "{p}");
+    // ~165 s later (when the night run roasted the same viewer), and on a quiet beat.
+    for (now, inbox) in [
+        (
+            166_000,
+            vec![msg("x1", 165_900, &other, "roast the goblin again, lord")],
+        ),
+        (300_000, Vec::new()),
+    ] {
+        b.tick(now, inbox, &c).await.unwrap();
+        let p = last_core_prompt(&engine);
+        assert!(p.contains(CARE_SOOT), "{p}");
+        assert!(
+            p.contains("never roast, tease, mock or joke about them"),
+            "{p}"
+        );
+        assert!(
+            !p.contains("SAFETY FIRST"),
+            "the directive is for the disclosure beat"
+        );
+    }
+    assert_eq!(b.in_care().len(), 1);
+    // 600 s after the disclosure the care state ends: recorded, and no note any more.
+    let ev = b.tick(601_000, Vec::new(), &c).await.unwrap();
+    assert_eq!(
+        input_mods(&ev, care::CARE_RULE),
+        vec![(Some("d1".into()), "expired".into())]
+    );
+    assert!(!last_core_prompt(&engine).contains("CARE"));
+    assert!(b.in_care().is_empty());
+}
+
+#[tokio::test]
+async fn crisis_chat_ban_removes_the_viewer_once_the_crisis_line_went_out() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = wp16_brain(d.path(), Arc::new(engine.clone()), "{}", 1_800).await;
+    let soot = viewer("sim-v0003", "SootGoblin24", Rank::Thrall);
+    let other = viewer("o1", "Other1", Rank::Cultist);
+    let c = ctx(&[]);
+    engine.push(
+        Role::CoreThread,
+        Ok("SootGoblin24, the bit can wait: please reach out to a local crisis line or someone you trust nearby."),
+    );
+    let ev = b
+        .tick(1_000, vec![msg("d1", 900, &soot, L167)], &c)
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), vec!["d1".to_string()]);
+    // The ban comes after the crisis line, on the disclosure's message id.
+    let say = ev
+        .iter()
+        .position(|e| matches!(e, StreamEvent::Say { .. }))
+        .expect("the crisis line went out");
+    let ban = ev
+        .iter()
+        .position(|e| {
+            matches!(e, StreamEvent::Moderation { rule, msg_id: Some(m), action, .. }
+                if rule == moderation::CRISIS_BAN_RULE && m == "d1" && action == "banned:stream")
+        })
+        .expect("banned");
+    assert!(say < ban);
+    assert!(b.is_banned("sim-v0003"));
+
+    // Later messages are dropped under their own rule and never picked; the room goes on.
+    let ev = b
+        .tick(
+            6_000,
+            vec![
+                msg(
+                    "s2",
+                    5_000,
+                    &soot,
+                    "Malakor, what is your verdict on my rug?",
+                ),
+                msg("o2", 5_100, &other, "hail the lich"),
+            ],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        input_mods(&ev, moderation::CRISIS_BAN_RULE),
+        vec![(Some("s2".into()), "dropped".into())]
+    );
+    assert_eq!(picked(&ev), vec!["o2".to_string()]);
+    assert!(last_core_prompt(&engine).contains(CARE_SOOT));
+
+    // A new disclosure from the banned viewer never reaches the model, yet restarts care.
+    let ev = b
+        .tick(11_000, vec![msg("d3", 10_000, &soot, L167)], &c)
+        .await
+        .unwrap();
+    assert!(picked(&ev).is_empty());
+    assert_eq!(
+        input_mods(&ev, care::CARE_RULE),
+        vec![(Some("d3".into()), "restarted".into())]
+    );
+    assert_eq!(
+        input_mods(&ev, moderation::CRISIS_BAN_RULE),
+        vec![(Some("d3".into()), "dropped".into())]
+    );
+    assert_eq!(b.in_care()[0].since_ms, 11_000);
+}
+
+#[tokio::test]
+async fn with_the_ban_rule_off_nobody_is_banned_and_care_still_applies() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = wp16_brain(
+        d.path(),
+        Arc::new(engine.clone()),
+        r#"{"crisis-chat-ban": false}"#,
+        600,
+    )
+    .await;
+    assert!(!b.stable_prefix().contains("## Crisis chat ban"));
+    let soot = viewer("sim-v0003", "SootGoblin24", Rank::Thrall);
+    let c = ctx(&[]);
+    let ev = b
+        .tick(1_000, vec![msg("d1", 900, &soot, L167)], &c)
+        .await
+        .unwrap();
+    assert!(input_mods(&ev, moderation::CRISIS_BAN_RULE).is_empty());
+    assert!(!b.is_banned("sim-v0003"));
+    let ev = b
+        .tick(
+            6_000,
+            vec![msg(
+                "s2",
+                5_000,
+                &soot,
+                "Malakor, what is your verdict on my rug?",
+            )],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), vec!["s2".to_string()]);
+    assert!(last_core_prompt(&engine).contains(CARE_SOOT));
+    // A new disclosure at 500 s restarts the window: still in care at 700 s, not at 1100 s.
+    b.tick(500_000, vec![msg("d3", 499_000, &soot, L167)], &c)
+        .await
+        .unwrap();
+    b.tick(700_000, Vec::new(), &c).await.unwrap();
+    assert!(last_core_prompt(&engine).contains(CARE_SOOT));
+    let ev = b.tick(1_100_000, Vec::new(), &c).await.unwrap();
+    assert_eq!(
+        input_mods(&ev, care::CARE_RULE),
+        vec![(Some("d3".into()), "expired".into())]
+    );
+}
+
+#[tokio::test]
+async fn night_a_crisis_reply_asking_where_the_viewer_is_becomes_a_help_pointer() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = wp16_brain(d.path(), Arc::new(engine.clone()), "{}", 1_800).await;
+    let soot = viewer("sim-v0003", "SootGoblin24", Rank::Thrall);
+    let c = ctx(&[]);
+    engine.push(
+        Role::CoreThread,
+        Ok("SootGoblin24, the bit can wait. If you tell me where you are, I can help you find the right number."),
+    );
+    let ev = b
+        .tick(1_000, vec![msg("d1", 900, &soot, L167)], &c)
+        .await
+        .unwrap();
+    assert_eq!(
+        says(&ev),
+        vec![format!(
+            "SootGoblin24, the bit can wait. {}",
+            moderation::CRISIS_HELP_LINE
+        )]
+    );
+    assert!(mods(&ev, ModStage::Output).contains(&(
+        moderation::PERSONAL_DATA_RULE.into(),
+        None,
+        "replaced".into()
+    )));
+    // The directive itself forbids the ask, with the crisis rule on or off.
+    let p = last_core_prompt(&engine);
+    assert!(p.contains(compose::NO_PERSONAL_DATA), "{p}");
+    assert!(compose::NEUTRAL_DISTRESS_DIRECTIVE.ends_with(compose::NO_PERSONAL_DATA));
+
+    // Outside a crisis beat the same kind of ask is just removed.
+    let other = viewer("o1", "Bob", Rank::Cultist);
+    engine.push(
+        Role::CoreThread,
+        Ok("Bob, your rug is a disgrace. What city are you in?"),
+    );
+    let ev = b
+        .tick(
+            6_000,
+            vec![msg("o1", 5_000, &other, "rate my rug, lich")],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(says(&ev), vec!["Bob, your rug is a disgrace.".to_string()]);
+    assert!(mods(&ev, ModStage::Output).contains(&(
+        moderation::PERSONAL_DATA_RULE.into(),
+        None,
+        "removed".into()
+    )));
 }

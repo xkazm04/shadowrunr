@@ -602,3 +602,39 @@ DirectiveOutcome  { id, kind: "prevent"|"try", check, runs, rate?: {rate, n, bou
   n and 95% bound (omitted, `unmeasured`, at n = 0). `report.md` lists them; the Reconcile
   report's `summary` ends with `Directives: <id> (<kind>) <verdict> (...)`. Directive checks
   are not red-line incidents.
+
+## Appendix (WP16): care state, never asking for personal data, the crisis chat ban
+
+These notes extend the sections above; no wire type changes. Every new value rides the
+existing `moderation` event.
+
+- **Care state.** A self-harm disclosure puts its viewer in care for
+  `BrainTuning.care_window_s` (default 1800 s); a new disclosure from the same viewer restarts
+  the window, and when it ends roasting that viewer is allowed again (never required). The
+  brain keeps the state in memory for the stream. While anyone is in care, every per-turn
+  chat section opens with a care note naming them (name, id, minutes since) and telling Malakor
+  not to roast, tease, mock or joke about them or what they shared, and not to ask them for
+  any detail. Transcript: `care_state` (stage `input`, on the disclosure's `msg_id`) with
+  action `started`, `restarted` or `expired`.
+- **Never ask for personal data (always on).** Constitution red line 4 now also forbids
+  asking anyone for personal details (where they live or are, real name, age, school,
+  workplace, contacts or socials), even to help. Both safety directives (the `crisis-handoff`
+  one and the neutral one used when that rule is off) carry the same instruction. The output
+  gate checks every spoken line (core lines, foil lines, show cards and the fixed sign-off)
+  per sentence for second-person asks ("tell me where you are", "where do you live", "what's
+  your address", "DM me your number", "what city are you in", "how old are you"): the
+  offending sentence is removed (`personal_data_ask` / `removed`, stage `output`); a line
+  that was only the ask becomes an in-character stand-in, and in a beat answering a
+  disclosure the ask is replaced with a help pointer unless one is already there (both
+  `personal_data_ask` / `replaced`).
+- **Crisis chat ban (optional rule `crisis-chat-ban`, on by default).** After the beat that
+  answered a disclosure produced at least one spoken line, the viewer is removed from chat for
+  the rest of the stream: `crisis_chat_ban` / `banned:stream` (stage `input`, on the
+  disclosure's `msg_id`, emitted after that beat's `say` events), then `crisis_chat_ban` /
+  `dropped` for each later message, before every other input rule, so it is never picked. A
+  later disclosure from a removed viewer is dropped too, but restarts their care window. No
+  platform adapter can ban or time out yet: `banned:stream`, whose `msg_id` names the
+  viewer through its `chat` event, is the record a future adapter acts on. With the rule off
+  nobody is removed; the care state still applies.
+- **Malakor** ships `crisis-chat-ban`, `crisis-handoff` and `no-financial-promotion`, all on
+  by default.
