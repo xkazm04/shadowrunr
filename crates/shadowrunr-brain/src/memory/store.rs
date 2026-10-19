@@ -299,8 +299,11 @@ impl MemoryStore {
         let path = self.episode_path(&ep);
         let hash = write_doc(&path, &doc)?;
         let rel = self.rel(&path);
-        let conn = self.conn();
-        index_episode(&conn, &ep, &rel, &hash)
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        index_episode(&tx, &ep, &rel, &hash)?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn episode_exists(&self, id: &str) -> Result<bool, BrainError> {
@@ -478,8 +481,11 @@ impl MemoryStore {
         let doc = fact_doc(sf);
         let hash = write_doc(path, &doc)?;
         let rel = self.rel(path);
-        let conn = self.conn();
-        index_fact(&conn, sf, &rel, &hash)
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        index_fact(&tx, sf, &rel, &hash)?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// Move a live fact out of the live set: new status, importance 0, file to `_history/`.
@@ -665,11 +671,17 @@ impl MemoryStore {
             return Ok(());
         }
         {
-            let conn = self.conn();
-            let mut st = conn.prepare("UPDATE mem_fact SET last_recalled_ms = ?1 WHERE id = ?2")?;
-            for id in ids {
-                st.execute(params![now_ms, id])?;
+            // One commit per beat, not one per fact: each autocommit is its own fsync.
+            let mut conn = self.conn();
+            let tx = conn.transaction()?;
+            {
+                let mut st =
+                    tx.prepare("UPDATE mem_fact SET last_recalled_ms = ?1 WHERE id = ?2")?;
+                for id in ids {
+                    st.execute(params![now_ms, id])?;
+                }
             }
+            tx.commit()?;
         }
         let mut dirty = self.dirty_recall.lock().unwrap_or_else(|p| p.into_inner());
         dirty.extend(ids.iter().cloned());
@@ -737,8 +749,10 @@ impl MemoryStore {
             .join(format!("{}.md", safe_segment(&p.id)));
         let hash = write_doc(&path, &doc)?;
         let rel = self.rel(&path);
-        let conn = self.conn();
-        index_procedural(&conn, &p, &rel, &hash)?;
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        index_procedural(&tx, &p, &rel, &hash)?;
+        tx.commit()?;
         Ok(p)
     }
 
@@ -871,8 +885,11 @@ impl MemoryStore {
             .join(format!("{}.md", safe_segment(&c.id)));
         let hash = write_doc(&path, &doc)?;
         let rel = self.rel(&path);
-        let conn = self.conn();
-        index_cycle(&conn, c, &rel, &hash)
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        index_cycle(&tx, c, &rel, &hash)?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// The most recent completed sleep cycle.
