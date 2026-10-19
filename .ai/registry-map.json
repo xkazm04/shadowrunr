@@ -909,7 +909,11 @@
           "revision": 3,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Layer2.tsx:48 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; Brain renders application diagnostics and transcripts rather than an agent browser-control surface.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:0d439bfcafe8cabd",
+          "evaluatedRevision": 3
         },
         {
           "subject": "module-design",
@@ -1191,7 +1195,11 @@
           "revision": 3,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/PackagePage.tsx:30 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; the package browser renders character data rather than controlling a browser for an agent.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:0d439bfcafe8cabd",
+          "evaluatedRevision": 3
         },
         {
           "subject": "voice-io",
@@ -1559,7 +1567,11 @@
           "revision": 3,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/RunDetail.tsx:94 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; the screen and replay consume recorded application events rather than drive a browser for an agent.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:0d439bfcafe8cabd",
+          "evaluatedRevision": 3
         },
         {
           "subject": "feed",
@@ -1813,7 +1825,11 @@
           "revision": 3,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/Layer2.tsx:36 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; reconciliation reports and chat are application views without an agent browser-control surface.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:0d439bfcafe8cabd",
+          "evaluatedRevision": 3
         }
       ],
       "governance": "governed"
@@ -1867,7 +1883,11 @@
           "revision": 3,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/Layer2.tsx:29 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; this module renders application tabs rather than an agent browser-control surface.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:0d439bfcafe8cabd",
+          "evaluatedRevision": 3
         },
         {
           "subject": "voice-io",

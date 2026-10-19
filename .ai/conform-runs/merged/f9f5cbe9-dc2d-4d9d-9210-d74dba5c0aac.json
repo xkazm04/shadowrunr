@@ -1,0 +1,292 @@
+{
+ "schema": "conform-run/1",
+ "worker": "f9f5cbe9-dc2d-4d9d-9210-d74dba5c0aac",
+ "subject": "agent-browser-control",
+ "evaluatedAt": "2026-10-19T10:27:01.848849+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "console-segments-page",
+   "subject": "agent-browser-control",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/segments/Layer2.tsx:29 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; this module renders application tabs rather than an agent browser-control surface.",
+   "techniques": [
+    {
+     "technique": "agent-actionable-errors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/Layer2.tsx:32 This is an application routing error displayed to the operator; no browser-driver error reaches an agent here."
+    },
+    {
+     "technique": "effect-classed-commands",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/Commands.tsx:56 The commands are displayed stream-chat commands, not commands dispatched against a browser."
+    },
+    {
+     "technique": "persistent-browser-daemon",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/hooks.ts:7 The page queries application segment tables; it does not start or manage browser processes."
+    },
+    {
+     "technique": "references-over-selectors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/SegmentCard.tsx:14 This context renders its own marked elements; it does not name arbitrary-page elements for agent actions."
+    },
+    {
+     "technique": "socket-scoped-surface",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/Layer2.tsx:26 This validates product subroutes; the context has no remotely forwarded browser-daemon command surface."
+    }
+   ],
+   "absenceTerms": [
+    "playwright",
+    "puppeteer",
+    "ariaSnapshot"
+   ]
+  },
+  {
+   "context": "console-characters-page",
+   "subject": "agent-browser-control",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/characters/PackagePage.tsx:30 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; the package browser renders character data rather than controlling a browser for an agent.",
+   "techniques": [
+    {
+     "technique": "agent-actionable-errors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/RulesTab.tsx:41 The failure belongs to an operator's character-rule mutation, not an agent's browser action."
+    },
+    {
+     "technique": "effect-classed-commands",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/RulesTab.tsx:27 This is an application RPC mutation, not a browser-command registry."
+    },
+    {
+     "technique": "persistent-browser-daemon",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/PackagePage.tsx:18 The page retrieves character records from the application daemon; browser lifecycle is outside this context."
+    },
+    {
+     "technique": "references-over-selectors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/RulesTab.tsx:76 The application owns and renders this switch; no runtime reference vocabulary for arbitrary pages is involved."
+    },
+    {
+     "technique": "socket-scoped-surface",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/Layer2.tsx:17 Routing selects a character package component; no remote browser listener or pairing surface is exposed here."
+    }
+   ],
+   "absenceTerms": [
+    "playwright",
+    "puppeteer",
+    "ariaSnapshot"
+   ]
+  },
+  {
+   "context": "console-reconcile-page",
+   "subject": "agent-browser-control",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/reconcile/Layer2.tsx:36 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; reconciliation reports and chat are application views without an agent browser-control surface.",
+   "techniques": [
+    {
+     "technique": "agent-actionable-errors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/reconcile/ChatPage.tsx:41 This displays a failed application chat request to the operator, not a browser-driver failure to an agent."
+    },
+    {
+     "technique": "effect-classed-commands",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/reconcile/ChatPage.tsx:21 The operation sends reconciliation chat through an application RPC; it is not a browser command."
+    },
+    {
+     "technique": "persistent-browser-daemon",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/reconcile/session.ts:43 The session is a frontend external store, not a persistent browser process or profile."
+    },
+    {
+     "technique": "references-over-selectors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/reconcile/ChatPage.tsx:53 This context renders its own chat interface; it does not snapshot arbitrary pages for agent targeting."
+    },
+    {
+     "technique": "socket-scoped-surface",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/reconcile/Layer2.tsx:65 The chat route renders a product component; it does not expose a remotely accessible browser daemon."
+    }
+   ],
+   "absenceTerms": [
+    "playwright",
+    "puppeteer",
+    "ariaSnapshot"
+   ]
+  },
+  {
+   "context": "console-onair-page",
+   "subject": "agent-browser-control",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/onair/RunDetail.tsx:94 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; the screen and replay consume recorded application events rather than drive a browser for an agent.",
+   "techniques": [
+    {
+     "technique": "effect-classed-commands",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/RunDetail.tsx:48 The action selects a replay source in application state; it does not dispatch browser commands."
+    },
+    {
+     "technique": "persistent-browser-daemon",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/feed.ts:58 The retained player replays events inside the application; it does not retain a browser process, tabs or login."
+    },
+    {
+     "technique": "references-over-selectors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/Screen.tsx:78 The application constructs its own navigation hotspot; it does not resolve snapshot references against arbitrary pages."
+    },
+    {
+     "technique": "socket-scoped-surface",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/feed.ts:87 This consumes application stream events; it does not expose browser-driving commands through a forwarded listener."
+    }
+   ],
+   "absenceTerms": [
+    "playwright",
+    "puppeteer",
+    "ariaSnapshot"
+   ]
+  },
+  {
+   "context": "console-brain-page",
+   "subject": "agent-browser-control",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/brain/Layer2.tsx:48 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; Brain renders application diagnostics and transcripts rather than an agent browser-control surface.",
+   "techniques": [
+    {
+     "technique": "agent-actionable-errors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Viewer.tsx:118 The viewer handles application transcript-query states, not browser-driver errors returned to an agent."
+    },
+    {
+     "technique": "effect-classed-commands",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Preflight.tsx:74 This registers an operator shortcut to reload preflight data; it is not a browser-command dispatcher."
+    },
+    {
+     "technique": "persistent-browser-daemon",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/useBrain.ts:44 The daemon supplies application ledger records; this context does not own a browser session or lifecycle."
+    },
+    {
+     "technique": "references-over-selectors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Plot.tsx:38 The React ref belongs to a canvas the application renders, not an agent's runtime element-reference table."
+    },
+    {
+     "technique": "socket-scoped-surface",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Layer2.tsx:47 These are frontend diagnostic routes; no tunneled browser-daemon surface exists in the context."
+    }
+   ],
+   "absenceTerms": [
+    "playwright",
+    "puppeteer",
+    "ariaSnapshot"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-19T10:27:01.848849+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-browser-control"
+   ],
+   "techniques": [
+    "agent-actionable-errors",
+    "effect-classed-commands",
+    "persistent-browser-daemon",
+    "references-over-selectors",
+    "socket-scoped-surface"
+   ],
+   "deviations": 0,
+   "context": "console-segments-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T10:27:01.848849+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-browser-control"
+   ],
+   "techniques": [
+    "agent-actionable-errors",
+    "effect-classed-commands",
+    "persistent-browser-daemon",
+    "references-over-selectors",
+    "socket-scoped-surface"
+   ],
+   "deviations": 0,
+   "context": "console-characters-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T10:27:01.848849+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-browser-control"
+   ],
+   "techniques": [
+    "agent-actionable-errors",
+    "effect-classed-commands",
+    "persistent-browser-daemon",
+    "references-over-selectors",
+    "socket-scoped-surface"
+   ],
+   "deviations": 0,
+   "context": "console-reconcile-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T10:27:01.848849+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-browser-control"
+   ],
+   "techniques": [
+    "effect-classed-commands",
+    "persistent-browser-daemon",
+    "references-over-selectors",
+    "socket-scoped-surface"
+   ],
+   "deviations": 0,
+   "context": "console-onair-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T10:27:01.848849+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-browser-control"
+   ],
+   "techniques": [
+    "agent-actionable-errors",
+    "effect-classed-commands",
+    "persistent-browser-daemon",
+    "references-over-selectors",
+    "socket-scoped-surface"
+   ],
+   "deviations": 0,
+   "context": "console-brain-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}
