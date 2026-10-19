@@ -74,7 +74,11 @@ pub(crate) fn write_json_atomic<T: Serialize>(path: &Path, v: &T) -> Result<(), 
     let text = serde_json::to_string_pretty(v)
         .map_err(|e| ReconcileError::Io(format!("serialise {}: {e}", path.display())))?;
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text + "\n").map_err(io)?;
+    // Flushed before the rename, so a power loss cannot leave a NUL-filled file behind.
+    let mut f = std::fs::File::create(&tmp).map_err(io)?;
+    std::io::Write::write_all(&mut f, (text + "\n").as_bytes()).map_err(io)?;
+    f.sync_all().map_err(io)?;
+    drop(f);
     std::fs::rename(&tmp, path).map_err(io)
 }
 

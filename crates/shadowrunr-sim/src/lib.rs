@@ -250,9 +250,22 @@ pub fn wire<T: Serialize>(v: &T) -> String {
     }
 }
 
+/// Write pretty JSON durably: a temp file, flushed to disk, then renamed over `path`. A crash
+/// or power loss leaves the old file or the new one, never a NUL-filled husk (a plain
+/// `fs::write` left exactly that in a judged run on 2026-10-19).
 pub(crate) fn write_json<T: Serialize>(path: &std::path::Path, v: &T) -> Result<(), SimError> {
+    use std::io::Write;
+    let io = |e: std::io::Error| SimError::Io(format!("{}: {e}", path.display()));
     let text = serde_json::to_string_pretty(v).map_err(|e| SimError::Io(e.to_string()))?;
-    std::fs::write(path, text + "\n").map_err(|e| SimError::Io(format!("{}: {e}", path.display())))
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = std::path::PathBuf::from(tmp);
+    let mut f = std::fs::File::create(&tmp).map_err(io)?;
+    f.write_all(text.as_bytes()).map_err(io)?;
+    f.write_all(b"\n").map_err(io)?;
+    f.sync_all().map_err(io)?;
+    drop(f);
+    std::fs::rename(&tmp, path).map_err(io)
 }
 
 pub(crate) fn read_json<T: serde::de::DeserializeOwned>(

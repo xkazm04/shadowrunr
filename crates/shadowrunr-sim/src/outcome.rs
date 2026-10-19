@@ -22,7 +22,7 @@
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use shadowrunr_types::{EndReason, EngineError, Op, Role, StreamEvent};
+use shadowrunr_types::{EndReason, EngineError, JudgeVerdict, Op, Role, StreamEvent};
 
 use crate::ledger::{self, LedgerRow};
 use crate::read_json;
@@ -176,8 +176,13 @@ pub fn engine_failure(dir: &Path) -> Option<String> {
 }
 
 /// Classify a run directory. Reads only.
+///
+/// A verdict counts only when it parses: a power loss mid-write has left `verdict.json` and
+/// `run.json` the right size but full of NUL bytes (rate-cap-control, 2026-10-19), and a file
+/// that merely exists then skipped the run as complete while the results silently dropped it.
+/// An unreadable verdict falls through to `run.json`; an unreadable `run.json` is incomplete.
 pub fn classify(dir: &Path) -> RunClass {
-    if dir.join("verdict.json").is_file() {
+    if read_json::<JudgeVerdict>(&dir.join("verdict.json")).is_ok() {
         return RunClass::Judged;
     }
     let record: Option<RunRecord> = read_json(&dir.join("run.json")).ok();
@@ -316,5 +321,14 @@ mod tests {
             },
         };
         assert!(fleet_lost_in(&[other]).is_none());
+    }
+
+    #[test]
+    fn a_nul_filled_verdict_after_a_power_loss_is_not_judged() {
+        let dir = tempfile::tempdir().unwrap();
+        // What the 2026-10-19 power loss left behind: right-sized files, every byte NUL.
+        std::fs::write(dir.path().join("verdict.json"), vec![0u8; 22_195]).unwrap();
+        std::fs::write(dir.path().join("run.json"), vec![0u8; 7_548]).unwrap();
+        assert_eq!(classify(dir.path()), RunClass::Incomplete);
     }
 }
