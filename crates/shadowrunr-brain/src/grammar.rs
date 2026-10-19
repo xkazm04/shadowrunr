@@ -188,6 +188,7 @@ pub fn op_example(tag: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shadowrunr_types::{EvidenceGrade, Rank, SegmentId};
 
     fn allowed(tags: &[&str]) -> Vec<String> {
         tags.iter().map(|s| s.to_string()).collect()
@@ -228,24 +229,68 @@ mod tests {
         assert!(matches!(&lines[1], Line::Rejected { rule, .. } if rule == "op_parse"));
     }
 
+    /// One value of every `Op` variant. `slot` is an exhaustive `match` with no wildcard, so
+    /// a new variant fails to compile here until it is given a sample and an example.
+    fn samples() -> Vec<Op> {
+        fn slot(op: &Op) -> usize {
+            match op {
+                Op::Highlight { .. } => 0,
+                Op::StartPoll { .. } => 1,
+                Op::ClosePoll { .. } => 2,
+                Op::SummonFoil { .. } => 3,
+                Op::DismissFoil => 4,
+                Op::RevealHex { .. } => 5,
+                Op::DispatchResearch { .. } => 6,
+                Op::ShowCard { .. } => 7,
+                Op::MarkMoment { .. } => 8,
+                Op::SwitchSegment { .. } => 9,
+                Op::SignOff { .. } => 10,
+            }
+        }
+        let s = |x: &str| x.to_string();
+        let ops = vec![
+            Op::Highlight { msg_id: s("m") },
+            Op::StartPoll {
+                poll_id: s("p"),
+                question: s("q"),
+                options: vec![s("a")],
+                min_rank: Rank::Thrall,
+                secs: 1,
+            },
+            Op::ClosePoll { poll_id: s("p") },
+            Op::SummonFoil { foil: s("f") },
+            Op::DismissFoil,
+            Op::RevealHex {
+                hex: s("HEX-01"),
+                grade: EvidenceGrade::Rep,
+            },
+            Op::DispatchResearch {
+                job_id: s("r"),
+                brief: s("b"),
+            },
+            Op::ShowCard {
+                card_id: s("c"),
+                title: s("t"),
+                body: s("b"),
+            },
+            Op::MarkMoment { label: s("l") },
+            Op::SwitchSegment {
+                to: SegmentId::Seg02aHexmap,
+            },
+            Op::SignOff { reason: s("r") },
+        ];
+        let slots: Vec<usize> = ops.iter().map(slot).collect();
+        assert_eq!(slots, (0..ops.len()).collect::<Vec<_>>());
+        ops
+    }
+
     #[test]
     fn every_op_example_parses() {
-        for tag in [
-            "highlight",
-            "start_poll",
-            "close_poll",
-            "summon_foil",
-            "dismiss_foil",
-            "reveal_hex",
-            "dispatch_research",
-            "show_card",
-            "mark_moment",
-            "switch_segment",
-            "sign_off",
-        ] {
-            let ex = op_example(tag).unwrap();
-            let op: Op = serde_json::from_str(ex).unwrap_or_else(|e| panic!("{tag}: {e}"));
-            assert_eq!(op_tag(&op), tag);
+        for op in samples() {
+            let tag = op_tag(&op);
+            let ex = op_example(&tag).unwrap_or_else(|| panic!("{tag}: no example"));
+            let back: Op = serde_json::from_str(ex).unwrap_or_else(|e| panic!("{tag}: {e}"));
+            assert_eq!(op_tag(&back), tag);
         }
     }
 
