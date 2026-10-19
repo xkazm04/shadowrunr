@@ -1,0 +1,129 @@
+{
+ "schema": "conform-run/1",
+ "worker": "5ea2b03c-9684-4a4e-ad20-fd57000af5a9",
+ "subject": "companion-runtime",
+ "evaluatedAt": "2026-10-19T23:31:06.668597+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "brain-composition-memory",
+   "subject": "companion-runtime",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-brain/src/lib.rs:557 The turn returns collected events after completion rather than streaming events as they are produced.",
+   "techniques": [
+    {
+     "technique": "action-catalog-single-source",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/grammar.rs:289 Prompt examples are maintained separately from Op, and their parity check iterates handwritten samples rather than deriving nonempty set equality from the declarations; the standard explicitly rejects list-based pins."
+    },
+    {
+     "technique": "autonomous-cycle-hosting",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/memory/consolidate.rs:324 The publicly exported consolidation function reads a shared store's cursor and awaits the model without acquiring a store-scoped cycle claim, allowing concurrent callers to consume the same window."
+    },
+    {
+     "technique": "headless-turn-stream",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/lib.rs:557 tick is headless, but returns a completed batch rather than the required live event stream."
+    },
+    {
+     "technique": "operative-working-set",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/working.rs:127 Queued, running, and progress entries bypass age-based expiry entirely, allowing an unrefreshed job observation to remain current indefinitely."
+    },
+    {
+     "technique": "signal-economy-contract",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/lib.rs:987 Automatic consolidation records diagnostics but discards its returned outcome without a typed report/absorb decision or repeated-failure escalation."
+    }
+   ]
+  },
+  {
+   "context": "console-brain-page",
+   "subject": "companion-runtime",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/brain/Engine.tsx:54 Missing model cost is displayed as zero dollars, concealing unknown spend rather than preserving it as unknown.",
+   "techniques": [
+    {
+     "technique": "action-catalog-single-source",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Viewer.tsx:55 The viewer displays recorded operation identifiers without defining a separate action-kind catalog or producing actionable model output."
+    },
+    {
+     "technique": "autonomous-cycle-hosting",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Preflight.tsx:69 This page requests daemon health checks; it does not host companion maintenance cycles."
+    },
+    {
+     "technique": "headless-turn-stream",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Viewer.tsx:116 This surface retrieves an existing transcript rather than providing another transport for live companion turns."
+    },
+    {
+     "technique": "host-seam-contracts",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Layer2.tsx:50 The page composes a transcript viewer rather than constructing or hosting the companion brain."
+    },
+    {
+     "technique": "metered-llm-seam",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/brain/Engine.tsx:54 Unknown cost renders as $0.0000; engineModel.ts:61 also adds missing costs to the total as zero."
+    },
+    {
+     "technique": "operative-working-set",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/useBrain.ts:48 The visualization derives historical telemetry from sampled transcripts, not present-tense state used by a companion to act."
+    },
+    {
+     "technique": "signal-economy-contract",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/brainModel.ts:197 These are dashboard statistics over requested ledger data, not autonomous outcomes entering an announcement or proposal queue."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-19T23:31:06.668597+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "companion-runtime"
+   ],
+   "techniques": [
+    "action-catalog-single-source",
+    "autonomous-cycle-hosting",
+    "headless-turn-stream",
+    "operative-working-set",
+    "signal-economy-contract"
+   ],
+   "deviations": 1,
+   "context": "brain-composition-memory",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T23:31:06.668597+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "companion-runtime"
+   ],
+   "techniques": [
+    "action-catalog-single-source",
+    "autonomous-cycle-hosting",
+    "headless-turn-stream",
+    "host-seam-contracts",
+    "metered-llm-seam",
+    "operative-working-set",
+    "signal-economy-contract"
+   ],
+   "deviations": 1,
+   "context": "console-brain-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}
