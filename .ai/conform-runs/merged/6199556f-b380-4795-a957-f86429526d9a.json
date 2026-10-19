@@ -1,0 +1,22 @@
+{
+ "schema": "conform-run/1",
+ "worker": "6199556f-b380-4795-a957-f86429526d9a",
+ "subject": "client-state",
+ "evaluatedAt": "2026-10-19T23:25:43.030461+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "client-state",
+   "context": "console-shell-router",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "client-state",
+   "context": "console-ui-primitives",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": []
+}
