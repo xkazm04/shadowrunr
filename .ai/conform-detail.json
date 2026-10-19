@@ -1224,6 +1224,63 @@
           "evidence": "sim/calibration.json:540 The growing_channel mix, like the other population tables at 528–569, assigns proportions without source_ids or explicit assumption labels."
         }
       ]
+    },
+    "4acf582d-5403-4f36-b24c-fe00bacb3683/app-shell": {
+      "context": "console-shell-router",
+      "subject": "app-shell",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T23:05:26.111Z",
+      "worker": "06517c5f-84b1-4f4f-b95e-f258b5709fe3",
+      "techniques": [
+        {
+          "technique": "lazy-section-loading",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/shell/Shell.tsx:142 The layer-2 Suspense fallback lacks a warm-path delay and the shell provides no ErrorBoundary or retry mechanism to catch chunk load failures."
+        },
+        {
+          "technique": "navigation-model",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/shell/MixerBus.tsx:35 Active state is derived directly from the current route without storing duplicate active flags on navigation entries."
+        },
+        {
+          "technique": "nav-hierarchy",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/shell/Shell.tsx:143 The shell constrains navigation depth to two levels by hosting nested layer-2 pages in a section-scoped spread and delegating deeper sub-paths to the page."
+        },
+        {
+          "technique": "shell-hosted-services",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/shell/Chrome.tsx:12 The shell chrome hosts persistent connection monitoring above the content viewport across all page navigations."
+        }
+      ]
+    },
+    "6be461ec-15e2-4963-b858-4712c7c675e8/app-shell": {
+      "context": "console-app-bootstrap",
+      "subject": "app-shell",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T23:05:26.111Z",
+      "worker": "06517c5f-84b1-4f4f-b95e-f258b5709fe3",
+      "techniques": [
+        {
+          "technique": "lazy-section-loading",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/app/pages.ts:10 The bootstrap registry defines pages using lazy-loaded chunks but provides no chunk retry wrapper or error recovery boundary at the app level."
+        },
+        {
+          "technique": "shell-hosted-services",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/app/App.tsx:8 Session-lifetime singleton services (router and data layer) are mounted at the root above the shell where they survive all navigations."
+        },
+        {
+          "technique": "nav-hierarchy",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/keys/keymap.ts:52 The global keyboard map enforces navigation hierarchy traversal by binding Escape to climb from layer 2 to layer 1 and stopping at the wall."
+        }
+      ]
     }
   }
 }

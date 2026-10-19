@@ -1,0 +1,99 @@
+{
+ "schema": "conform-run/1",
+ "worker": "06517c5f-84b1-4f4f-b95e-f258b5709fe3",
+ "subject": "app-shell",
+ "evaluatedAt": "2026-10-19T23:05:26.111271+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [
+  {
+   "context": "console-shell-router",
+   "subject": "app-shell",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/shell/Poster.tsx:131 The shell wraps lazy-loaded section components in a Suspense boundary with a null fallback and no error boundary or retry wrapper, causing chunk load failures to crash the entire application into a blank screen.",
+   "techniques": [
+    {
+     "technique": "lazy-section-loading",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/shell/Shell.tsx:142 The layer-2 Suspense fallback lacks a warm-path delay and the shell provides no ErrorBoundary or retry mechanism to catch chunk load failures."
+    },
+    {
+     "technique": "navigation-model",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/shell/MixerBus.tsx:35 Active state is derived directly from the current route without storing duplicate active flags on navigation entries."
+    },
+    {
+     "technique": "nav-hierarchy",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/shell/Shell.tsx:143 The shell constrains navigation depth to two levels by hosting nested layer-2 pages in a section-scoped spread and delegating deeper sub-paths to the page."
+    },
+    {
+     "technique": "shell-hosted-services",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/shell/Chrome.tsx:12 The shell chrome hosts persistent connection monitoring above the content viewport across all page navigations."
+    }
+   ]
+  },
+  {
+   "context": "console-app-bootstrap",
+   "subject": "app-shell",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/app/App.tsx:10 The root application composition mounts the shell and its code-split page registry without an error boundary or chunk retry handler, causing chunk loading failures to unmount the entire application.",
+   "techniques": [
+    {
+     "technique": "lazy-section-loading",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/app/pages.ts:10 The bootstrap registry defines pages using lazy-loaded chunks but provides no chunk retry wrapper or error recovery boundary at the app level."
+    },
+    {
+     "technique": "shell-hosted-services",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/app/App.tsx:8 Session-lifetime singleton services (router and data layer) are mounted at the root above the shell where they survive all navigations."
+    },
+    {
+     "technique": "nav-hierarchy",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/keys/keymap.ts:52 The global keyboard map enforces navigation hierarchy traversal by binding Escape to climb from layer 2 to layer 1 and stopping at the wall."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-19T23:05:26.111271+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "app-shell"
+   ],
+   "techniques": [
+    "lazy-section-loading",
+    "nav-hierarchy",
+    "navigation-model",
+    "shell-hosted-services"
+   ],
+   "deviations": 1,
+   "context": "console-shell-router",
+   "via": "curator-multi:agy",
+   "model": "gemini-3.8-flash-high"
+  },
+  {
+   "ts": "2026-10-19T23:05:26.111271+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "app-shell"
+   ],
+   "techniques": [
+    "lazy-section-loading",
+    "nav-hierarchy",
+    "shell-hosted-services"
+   ],
+   "deviations": 1,
+   "context": "console-app-bootstrap",
+   "via": "curator-multi:agy",
+   "model": "gemini-3.8-flash-high"
+  }
+ ]
+}

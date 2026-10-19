@@ -671,7 +671,11 @@
           "revision": 6,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/app/App.tsx:10 The root application composition mounts the shell and its code-split page registry without an error boundary or chunk retry handler, causing chunk loading failures to unmount the entire application.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:62a9a7fc993ea8b5",
+          "evaluatedRevision": 6
         },
         {
           "subject": "settings",
@@ -2032,7 +2036,11 @@
           "revision": 6,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/shell/Poster.tsx:131 The shell wraps lazy-loaded section components in a Suspense boundary with a null fallback and no error boundary or retry wrapper, causing chunk load failures to crash the entire application into a blank screen.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:62a9a7fc993ea8b5",
+          "evaluatedRevision": 6
         },
         {
           "subject": "mcp-tools",
