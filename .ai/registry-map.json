@@ -1369,7 +1369,11 @@
           "revision": 15,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/data/cache.ts:91 Remount revalidation checks only the stale flag, so an old idle reply can be served without checking its age.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:20824426732ffb6a",
+          "evaluatedRevision": 15
         },
         {
           "subject": "read-serving-replicas",
@@ -1619,7 +1623,11 @@
           "revision": 15,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/onair/feed.ts:56 A changed transcript for the same selected run does not rebuild the retained player, so replay can remain based on obsolete events.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:20824426732ffb6a",
+          "evaluatedRevision": 15
         },
         {
           "subject": "module-design",

@@ -1,0 +1,135 @@
+{
+ "schema": "conform-run/1",
+ "worker": "1248963a-1877-4374-8fec-585b7d7ed887",
+ "subject": "client-fetch-cache",
+ "evaluatedAt": "2026-10-19T23:16:45.392231+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "console-data-layer",
+   "subject": "client-fetch-cache",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/data/cache.ts:91 Remount revalidation checks only the stale flag, so an old idle reply can be served without checking its age.",
+   "techniques": [
+    {
+     "technique": "admission-hypothesis",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/data/cache.ts:88 Every newly watched question is admitted without a declared admission bet or an opt-out for unreusable reads."
+    },
+    {
+     "technique": "cache-key-discipline",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/data/cache.ts:43 One builder combines method and canonically serialized parameters; the cache's client fixes the endpoint for its lifetime."
+    },
+    {
+     "technique": "in-flight-dedup",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/data/cache.ts:105 Invalidating an entry after its last watcher detaches does not retire its pending flight; a subsequent watcher can join that superseded work and its reply can still populate the cache."
+    },
+    {
+     "technique": "parse-and-derive-caches",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/data/paged.ts:113 Folded results reuse the latest input references, retain only one result, and preserve the named walk/recompute path."
+    },
+    {
+     "technique": "plural-policy-claims",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/cache.ts:83 Watchers cannot supply individual freshness or eviction policies, so competing policy claims do not arise."
+    },
+    {
+     "technique": "similarity-keyed-admission",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/cache.ts:84 Lookup uses exact canonical request identity rather than a resemblance metric or threshold."
+    },
+    {
+     "technique": "swr-design",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/data/cache.ts:73 All request families inherit one backstop duration, with no separately declared fresh window and hard stale ceiling."
+    },
+    {
+     "technique": "warm-remount-caches",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/data/cache.ts:82 Successful idle entries retain stale=false regardless of elapsed time; remount does not compare updatedAt against a fresh window before skipping revalidation."
+    }
+   ]
+  },
+  {
+   "context": "console-onair-page",
+   "subject": "client-fetch-cache",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/onair/feed.ts:56 A changed transcript for the same selected run does not rebuild the retained player, so replay can remain based on obsolete events.",
+   "techniques": [
+    {
+     "technique": "parse-and-derive-caches",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/onair/feed.ts:56 ensureReplay ignores changed event content when the entity key matches, retaining a Timeline derived from the previous transcript."
+    },
+    {
+     "technique": "plural-policy-claims",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/Layer1.tsx:120 The inspected page consumers use the shared hook without individual freshness or eviction overrides."
+    },
+    {
+     "technique": "portable-read-definitions",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/onair/RunDetail.tsx:90 RunDetail and useOnAirFeed separately declare the same transcript question inside hooks instead of consuming one portable read definition."
+    },
+    {
+     "technique": "sibling-entry-warmth",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/onair/ClipDetail.tsx:19 Clip detail waits for clips.get without borrowing the cached listing's ClipSummary, although the clicked row already carries its title and score."
+    },
+    {
+     "technique": "similarity-keyed-admission",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/feed.ts:17 Replay selection uses entity identifiers, with no resemblance metric or similarity admission threshold."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-19T23:16:45.392231+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "client-fetch-cache"
+   ],
+   "techniques": [
+    "admission-hypothesis",
+    "cache-key-discipline",
+    "in-flight-dedup",
+    "parse-and-derive-caches",
+    "plural-policy-claims",
+    "similarity-keyed-admission",
+    "swr-design",
+    "warm-remount-caches"
+   ],
+   "deviations": 1,
+   "context": "console-data-layer",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T23:16:45.392231+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "client-fetch-cache"
+   ],
+   "techniques": [
+    "parse-and-derive-caches",
+    "plural-policy-claims",
+    "portable-read-definitions",
+    "sibling-entry-warmth",
+    "similarity-keyed-admission"
+   ],
+   "deviations": 1,
+   "context": "console-onair-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}
