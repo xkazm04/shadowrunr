@@ -1,0 +1,183 @@
+{
+ "schema": "conform-run/1",
+ "worker": "2d12c2b4-f158-4990-ac99-b950f7c8cd4a",
+ "subject": "voice-io",
+ "evaluatedAt": "2026-10-19T07:46:27.897884+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "stage-kit-scene-engine",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "packages/stage-kit/src/timing.ts:2 Context and repository searches found estimated caption timing and disclosure text but no speech pipeline, so these visual timings do not establish voice I/O applicability.",
+   "techniques": [
+    {
+     "technique": "speech-timing-timeline",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/timing.ts:75 Caption timing derives from text length and punctuation; no rendered audio exists for this timeline to describe."
+    }
+   ],
+   "absenceTerms": [
+    "speechSynthesis",
+    "SpeechRecognition",
+    "getUserMedia",
+    "dictation"
+   ]
+  },
+  {
+   "context": "engine-llm-sessions",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-engine/Cargo.toml:3 Context and repository searches found text-based LLM drivers and sessions without speech APIs or audio transport, so the engine abstraction here is outside voice I/O.",
+   "techniques": [
+    {
+     "technique": "duplex-agent-sessions",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:4 The session exchanges CLI JSON messages; it does not carry microphone or synthesized audio."
+    }
+   ],
+   "absenceTerms": [
+    "speechSynthesis",
+    "SpeechRecognition",
+    "getUserMedia",
+    "dictation"
+   ]
+  },
+  {
+   "context": "stage-app",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/stage/package.json:5 Context and repository searches found StreamEvent replay, simulated speaking animation and documentary speech references without audio implementation, so stage playback does not activate voice I/O requirements.",
+   "techniques": [
+    {
+     "technique": "speech-timing-timeline",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/Stage.tsx:44 The speaking animation uses estimated caption timings rather than following synthesized speech."
+    }
+   ],
+   "absenceTerms": [
+    "speechSynthesis",
+    "SpeechRecognition",
+    "getUserMedia",
+    "dictation"
+   ]
+  },
+  {
+   "context": "daemon-core-rpc",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-daemon/src/preflight.rs:464 Context and repository searches found an explicitly deferred TTS stack and unrelated LLM report synthesis without speech endpoints, so the daemon currently exposes no voice channel.",
+   "techniques": [
+    {
+     "technique": "tts-pipeline",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/preflight.rs:459 There is no synthesis or audio playback lifecycle in this phase."
+    }
+   ],
+   "absenceTerms": [
+    "speechSynthesis",
+    "SpeechRecognition",
+    "getUserMedia",
+    "dictation"
+   ]
+  },
+  {
+   "context": "console-app-bootstrap",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/kit/PosterFrame.tsx:18 Context and repository searches found voice described as future work alongside router, keyboard and transcript-display helpers without speech APIs, so this bootstrap currently has no voice I/O.",
+   "techniques": [
+    {
+     "technique": "voice-setup-experience",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/kit/PosterFrame.tsx:18 Voice is explicitly future work; the inspected bootstrap supplies no voice onboarding."
+    }
+   ],
+   "absenceTerms": [
+    "speechSynthesis",
+    "SpeechRecognition",
+    "getUserMedia",
+    "dictation"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-19T07:46:27.897884+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "speech-timing-timeline"
+   ],
+   "deviations": 0,
+   "context": "stage-kit-scene-engine",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T07:46:27.897884+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "duplex-agent-sessions"
+   ],
+   "deviations": 0,
+   "context": "engine-llm-sessions",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T07:46:27.897884+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "speech-timing-timeline"
+   ],
+   "deviations": 0,
+   "context": "stage-app",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T07:46:27.897884+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "tts-pipeline"
+   ],
+   "deviations": 0,
+   "context": "daemon-core-rpc",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T07:46:27.897884+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "voice-setup-experience"
+   ],
+   "deviations": 0,
+   "context": "console-app-bootstrap",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

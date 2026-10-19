@@ -619,7 +619,11 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/kit/PosterFrame.tsx:18 Context and repository searches found voice described as future work alongside router, keyboard and transcript-display helpers without speech APIs, so this bootstrap currently has no voice I/O.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "prompt-assembly",
@@ -2656,7 +2660,11 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/preflight.rs:464 Context and repository searches found an explicitly deferred TTS stack and unrelated LLM report synthesis without speech endpoints, so the daemon currently exposes no voice channel.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "agent-runtime-assembly",
@@ -2812,7 +2820,11 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/Cargo.toml:3 Context and repository searches found text-based LLM drivers and sessions without speech APIs or audio transport, so the engine abstraction here is outside voice I/O.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "fleet-orchestration",
@@ -3444,7 +3456,11 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/stage/package.json:5 Context and repository searches found StreamEvent replay, simulated speaking animation and documentary speech references without audio implementation, so stage playback does not activate voice I/O requirements.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "test-harness",
@@ -3710,7 +3726,11 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "packages/stage-kit/src/timing.ts:2 Context and repository searches found estimated caption timing and disclosure text but no speech pipeline, so these visual timings do not establish voice I/O applicability.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "self-describing-model-packages",

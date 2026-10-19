@@ -1,0 +1,85 @@
+{
+  "schema": "conform-detail/1",
+  "pairs": {
+    "fc878bef-2e53-416c-83f0-0b62db46a8b4/voice-io": {
+      "context": "stage-kit-scene-engine",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T07:46:27.897Z",
+      "worker": "2d12c2b4-f158-4990-ac99-b950f7c8cd4a",
+      "techniques": [
+        {
+          "technique": "speech-timing-timeline",
+          "verdict": "not-applicable",
+          "evidence": "packages/stage-kit/src/timing.ts:75 Caption timing derives from text length and punctuation; no rendered audio exists for this timeline to describe."
+        }
+      ]
+    },
+    "4f625471-4451-4819-953d-10b381c13213/voice-io": {
+      "context": "engine-llm-sessions",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T07:46:27.897Z",
+      "worker": "2d12c2b4-f158-4990-ac99-b950f7c8cd4a",
+      "techniques": [
+        {
+          "technique": "duplex-agent-sessions",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:4 The session exchanges CLI JSON messages; it does not carry microphone or synthesized audio."
+        }
+      ]
+    },
+    "e0e277e4-0b4e-4d04-8c33-29f0d59d2a67/voice-io": {
+      "context": "stage-app",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T07:46:27.897Z",
+      "worker": "2d12c2b4-f158-4990-ac99-b950f7c8cd4a",
+      "techniques": [
+        {
+          "technique": "speech-timing-timeline",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/Stage.tsx:44 The speaking animation uses estimated caption timings rather than following synthesized speech."
+        }
+      ]
+    },
+    "1f8d2348-1a2f-4c72-8dc0-e281a35b78d4/voice-io": {
+      "context": "daemon-core-rpc",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T07:46:27.897Z",
+      "worker": "2d12c2b4-f158-4990-ac99-b950f7c8cd4a",
+      "techniques": [
+        {
+          "technique": "tts-pipeline",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/preflight.rs:459 There is no synthesis or audio playback lifecycle in this phase."
+        }
+      ]
+    },
+    "6be461ec-15e2-4963-b858-4712c7c675e8/voice-io": {
+      "context": "console-app-bootstrap",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T07:46:27.897Z",
+      "worker": "2d12c2b4-f158-4990-ac99-b950f7c8cd4a",
+      "techniques": [
+        {
+          "technique": "voice-setup-experience",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/kit/PosterFrame.tsx:18 Voice is explicitly future work; the inspected bootstrap supplies no voice onboarding."
+        }
+      ]
+    }
+  }
+}
