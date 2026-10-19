@@ -683,6 +683,37 @@
           "evidence": "docs/spec/contract.md:3 The source-to-prose obligation is declared in prose; searches found no machine-readable coupling record and coverage checker, while context-map.json merely groups files."
         }
       ]
+    },
+    "70f40362-0fe0-4f05-90cf-b95538e20c74/agent-instruction-files": {
+      "context": "workspace-tooling-and-policy",
+      "subject": "agent-instruction-files",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T21:12:53.068Z",
+      "worker": "d097c107-0967-4378-a417-684d8aa9a775",
+      "techniques": [
+        {
+          "technique": "enforcement-demotion",
+          "verdict": "conformant",
+          "evidence": "stylelint.config.mjs:19 Component CSS hex-color restrictions are implemented in Stylelint, invoked by the console lint script."
+        },
+        {
+          "technique": "instruction-freshness",
+          "verdict": "deviation",
+          "evidence": "CLAUDE.md:17 context-map.json:1576 records six contexts for this group; enumerating its context entries also yields six."
+        },
+        {
+          "technique": "line-earning",
+          "verdict": "deviation",
+          "evidence": "CLAUDE.md:12 The always-loaded generated overview repeats group metadata already reachable in the context map that the file instructs agents to read."
+        },
+        {
+          "technique": "machine-owned-regions",
+          "verdict": "deviation",
+          "evidence": "CLAUDE.md:21 The block is fenced, names its generator and warns against hand edits, but provides no last-run date or generator version."
+        }
+      ]
     }
   }
 }

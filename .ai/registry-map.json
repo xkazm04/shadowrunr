@@ -4201,7 +4201,11 @@
           "revision": 31,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "CLAUDE.md:17 The instruction file reports seven Console Platform contexts while its referenced map contains six, presenting stale generated guidance as current.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:25b61236a62604b0",
+          "evaluatedRevision": 31
         },
         {
           "subject": "docs-sync",
