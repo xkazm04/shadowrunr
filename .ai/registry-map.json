@@ -2786,7 +2786,11 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_schema.rs:114 Tool definitions in tools/list and tool results publish mutable names without rename-stable identifiers, breaking telemetry, consent records, and cross-session correlation across renames.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:ed8e615f51454325",
+          "evaluatedRevision": 34
         }
       ],
       "governance": "governed"

@@ -233,6 +233,127 @@
         "at": "2026-10-19T09:15:03.036034+00:00",
         "reason": "reviewer (sonnet): The context holds an agent-memory-like component, `chatMemory.ts` (the scene's chat memory with bounded eviction, a keep-set and pruning of dependents in `scene.ts:103-116`), so the searches for recall, consolidat and episod used the wrong terms and the anchor `scene.ts:106` shows presence of a memo"
       }
+    },
+    "976802f1-d558-4f08-a516-915d94ce8b8f/mcp-tools": {
+      "context": "daemon-integrations",
+      "subject": "mcp-tools",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T09:38:33.382Z",
+      "worker": "ef6dc62d-9fff-4425-978b-2d1ba3d2598c",
+      "techniques": [
+        {
+          "technique": "transport-selection",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp.rs:244 Stdio transport is selected for local process execution, with protocol messages framed on stdout and all diagnostics written to stderr."
+        },
+        {
+          "technique": "server-composition",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp.rs:181 Tools are registered in a single static table, dispatched through one door, and handler failures are returned as in-band isError results rather than crashing the transport."
+        },
+        {
+          "technique": "tool-identity-vs-tool-name",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_schema.rs:114 Tool definitions and tool call results emit only mutable string names without carrying rename-stable tool identifiers on the wire."
+        },
+        {
+          "technique": "tool-schema-design",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:83 Tools omit server namespacing, preflight is an unnamespaced bare noun, and blast-radius annotations are not published on the wire."
+        },
+        {
+          "technique": "caller-differentiated-capability",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:166 While start_sim write capability is gated under mcp_allow_writes, unsupported CLI options passed by an agent are not rejected by name naming the surface."
+        },
+        {
+          "technique": "authentication-and-scoping",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:163 The server lacks per-consumer capability tokens and scopes, relying entirely on a global process-wide allow_writes boolean flag."
+        },
+        {
+          "technique": "first-party-agent-is-a-principal",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp.rs:234 The first-party agent (Athena) connects over stdio without an explicit principal grant or capability tokens, sharing a single unauthenticated dispatch door."
+        },
+        {
+          "technique": "catalog-projection-modes",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:39 With an 8-tool surface, the server exposes one tool per operation without unnecessary projection compression, matching the guideline for small catalogs."
+        },
+        {
+          "technique": "sealed-continuation-state",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:234 Paging cursors carry opaque, versioned hex tokens across request boundaries without requiring server-held session state."
+        },
+        {
+          "technique": "suspendable-request-classes",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp.rs:171 Protocol metadata operations (initialize, ping, tools/list) are immediately machine-evaluated and never suspend for human input."
+        },
+        {
+          "technique": "ambient-selection-is-not-an-argument",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:217 All tools take explicit caller-provided run_id and tournament_id handles rather than relying on ambient application state."
+        },
+        {
+          "technique": "budgeted-partial-response",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:43 Queries are strictly bounded by pagination caps and cheap lookups, satisfying the exception where deadlines and partial-response envelopes are not required."
+        },
+        {
+          "technique": "untrusted-result-handling",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp.rs:120 Tool output embeds raw serialized JSON into text blocks without attribution delimiters, provenance metadata, or separation of server voice from upstream text."
+        },
+        {
+          "technique": "write-freshness-gate",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:62 The only write tool (start_sim) initiates background simulation runs rather than modifying or appending to existing shared artifacts."
+        },
+        {
+          "technique": "enumeration-without-a-scope",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:42 The server operates as a single-seat local daemon without per-caller accounts, multi-tenancy, or external resource scoping."
+        },
+        {
+          "technique": "fluent-syntax-bounded-grammar",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_schema.rs:52 Tools accept structured JSON schema objects rather than accepting and parsing fluent command-string grammars."
+        },
+        {
+          "technique": "command-audit-by-position",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp.rs:1 Daemon integrations implements the spawned tool server process on stdio, not a host launcher that audits process spawn strings."
+        },
+        {
+          "technique": "client-integration",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp.rs:145 The daemon implements a server exposing tool capabilities without elicitation, leaving client custody and config writing to the external host."
+        },
+        {
+          "technique": "egress-argument-gating",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:36 Server tools only read local artifacts or spawn simulations, with no outbound third-party sharing or egress schemas to gate."
+        },
+        {
+          "technique": "one-server-many-registrations",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp.rs:146 The server publishes a single canonical name; deduplicating multi-registration aliases is a host-side responsibility."
+        },
+        {
+          "technique": "orchestration-to-tool-migration",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:60 The simulation pipeline remains deterministic and orchestrated within core daemon crates rather than being migrated to adaptive agent tools."
+        },
+        {
+          "technique": "sanctioned-session-state",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/integrations/mcp.rs:128 The server operates over local stdio as a single process with no multi-node cluster affinity or sticky routing requirements."
+        }
+      ]
     }
   }
 }
