@@ -763,7 +763,8 @@ CorrectionEntry { entry_id, case_id, hex_id?, entry_type: FACTUAL_CORRECTION |
   `opencorporates.com`, `web.archive.org`), and holds no email address or phone number. A DOC
   record still needs a primary source: a Wayback capture keeps its original's provenance
   (`source` is the original URL, `via` the capture), so an archived sec.gov page can be DOC
-  while an archived press page stays REP.
+  while an archived press page stays REP. The owner accepted Wayback captures of regulator
+  pages as primary (DOC) provenance on 2026-10-19.
 - `content_sha256` is sha256 over the canonical JSON of `case.json` and `records.json`; a
   case whose files no longer match it does not load.
 - **Owner gate.** `SegmentRuntime::with_config` refuses a real case on a live stream
