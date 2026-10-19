@@ -147,6 +147,13 @@ shadowrunr sim tournament sim/matrices/pilot.toml --plan-only
   brief never mixes with one without, and `--plan-only` prints it as `brief_digest`. The
   judge then checks each prevent directive (`directive:prevent:<id>`), each try directive
   (`directive:try:<id>`) and, when a dispatch is present, `follows_dispatch`.
+- `rate_cap_exemptions = true` in a matrix (Reconcile opt-5, off by default) runs every spec
+  with the rate-cap experiment on: a grief message, a viewer's first real question of the
+  stream and a `!propose` from a rank allowed to propose skip the rate cap (`rate_cap` /
+  `exempt:grief|first_question|proposal`), and a room below 10 chatters gets a looser cap. It
+  joins the instrument hash as `experiment/rate_cap_exemptions`, and `--plan-only` lists it
+  under `experiments`. `sim/matrices/rate-cap-exemptions.toml` (treatment) and
+  `rate-cap-exemptions-control.toml` (control) are the paired design.
 
 | Exit code | Meaning |
 |---|---|

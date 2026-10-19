@@ -641,6 +641,9 @@ struct PlanReport {
     /// `dispatch yes, 2 prevent, 1 try, ...`, when there is a brief.
     #[serde(skip_serializing_if = "Option::is_none")]
     brief: Option<String>,
+    /// Experiments the matrix turns on (`rate_cap_exemptions`); they are in the hash.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    experiments: Vec<&'static str>,
 }
 
 async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, String> {
@@ -689,6 +692,9 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
             ..TournamentOptions::default()
         };
         let plan = plan_matrix(&matrix, &out, &opts).map_err(|e| e.to_string())?;
+        let experiments = shadowrunr_sim::matrix::Matrix::load(&matrix)
+            .map(|m| shadowrunr_sim::tournament::effective_options(&m, &opts.sim).experiments())
+            .map_err(|e| e.to_string())?;
         let mut by_reason = std::collections::BTreeMap::new();
         for r in &plan.runs {
             *by_reason.entry(wire(&r.reason)).or_insert(0) += 1;
@@ -712,6 +718,7 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
                 .collect(),
             brief_digest,
             brief: brief_line,
+            experiments,
         });
         return Ok(ExitCode::SUCCESS);
     }

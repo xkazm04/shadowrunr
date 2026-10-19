@@ -5,6 +5,9 @@
 //! receive (`<data>`), `brief = "<path>"` with a `StreamBrief` JSON file (relative to the
 //! working directory, like every sim path). Absent: no brief, and the instrument hash is
 //! what it always was.
+//!
+//! Reconcile opt-5: `rate_cap_exemptions = true` runs every spec with the rate-cap exemption
+//! experiment on (see `shadowrunr_brain::FilterConfig`). Absent: off, same hash as before.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -64,6 +67,10 @@ pub struct Matrix {
     /// The Lord's brief for every run: `"current"` or a path (WP15).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub brief: Option<String>,
+    /// Reconcile opt-5 experiment for every run (`SimOptions::rate_cap_exemptions`). Absent
+    /// or false: off, and the instrument hash is what it always was.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rate_cap_exemptions: bool,
     pub axes: Axes,
 }
 
@@ -266,5 +273,36 @@ seeds = [1]
         // The shipped matrices declare none: their tournaments keep their hashes.
         assert_eq!(shipped("pilot.toml").brief_source(), BriefSource::None);
         assert_eq!(shipped("heavy.toml").brief_source(), BriefSource::None);
+    }
+
+    #[test]
+    fn opt5_the_rate_cap_experiment_is_a_matrix_switch_off_by_default() {
+        for name in [
+            "pilot.toml",
+            "heavy.toml",
+            "night.toml",
+            "rate-cap-exemptions-control.toml",
+        ] {
+            assert!(!shipped(name).rate_cap_exemptions, "{name}");
+        }
+        let control = shipped("rate-cap-exemptions-control.toml");
+        let treatment = shipped("rate-cap-exemptions.toml");
+        assert!(treatment.rate_cap_exemptions);
+        assert_ne!(control.id, treatment.id, "separate tournament directories");
+        // The same 12 runs in both arms, so they compare run for run.
+        let ids = |m: &Matrix| m.specs().into_iter().map(|s| s.run_id).collect::<Vec<_>>();
+        assert_eq!(ids(&control), ids(&treatment));
+        assert_eq!(ids(&treatment).len(), 2 * 3 * 2);
+        assert_eq!(treatment.axes.core_tiers, vec![ModelTier::Sonnet]);
+        assert_eq!(treatment.axes.tones, vec!["theatrical".to_string()]);
+        assert_eq!(treatment.axes.audience_sizes, vec![3, 30, 300]);
+        assert_eq!(treatment.judge_tiers, shipped("night.toml").judge_tiers);
+        // The switch reaches the run options; a matrix cannot turn it off for a caller.
+        let base = crate::SimOptions::default();
+        assert!(!crate::tournament::effective_options(&control, &base).rate_cap_exemptions);
+        let on = crate::tournament::effective_options(&treatment, &base);
+        assert!(on.rate_cap_exemptions);
+        assert_eq!(on.experiments(), vec![crate::RATE_CAP_EXEMPTIONS]);
+        assert!(base.experiments().is_empty());
     }
 }

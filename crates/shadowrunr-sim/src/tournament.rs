@@ -71,6 +71,9 @@ pub fn effective_options(matrix: &Matrix, base: &SimOptions) -> SimOptions {
     if let Some(m) = matrix.max_featured {
         o.max_featured = m;
     }
+    if matrix.rate_cap_exemptions {
+        o.rate_cap_exemptions = true;
+    }
     o
 }
 

@@ -6,6 +6,9 @@
 //! WP15: when a run carries the Lord's brief, the brief's canonical JSON digest joins the
 //! base hash as `brief.json`, so tournaments with and without a brief (or with different
 //! briefs) never mix. With no brief nothing is added, so every existing hash is unchanged.
+//!
+//! Reconcile opt-5: an experiment a run turns on joins the base hash as `experiment/<name>`,
+//! so a treatment never mixes with its control. With none on nothing is added.
 
 use std::path::{Path, PathBuf};
 
@@ -101,6 +104,9 @@ pub fn brief_digest(b: &StreamBrief) -> String {
 /// Logical path of the brief entry in the instrument's file list.
 pub const BRIEF_ENTRY: &str = "brief.json";
 
+/// Logical path prefix of an experiment entry (`experiment/rate_cap_exemptions`).
+pub const EXPERIMENT_PREFIX: &str = "experiment/";
+
 fn combine(files: &[InstrumentFile], logic: &str) -> String {
     let mut h = Sha256::new();
     h.update(logic.as_bytes());
@@ -124,6 +130,9 @@ pub struct InstrumentInputs<'a> {
     pub calibration_text: &'a str,
     /// The run's brief, when it has one (WP15).
     pub brief: Option<&'a StreamBrief>,
+    /// Named experiments the run turns on (`SimOptions::experiments`): each joins the base
+    /// hash as `experiment/<name>`. None (the default) adds nothing.
+    pub experiments: &'a [&'a str],
 }
 
 pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
@@ -184,6 +193,12 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
             sha256: brief_digest(b),
         });
     }
+    for name in inp.experiments {
+        files.push(InstrumentFile {
+            path: format!("{EXPERIMENT_PREFIX}{name}"),
+            sha256: sha_hex(b"on"),
+        });
+    }
     let base_hash = combine(&files, SIM_LOGIC_VERSION);
 
     let tone = file_entry(
@@ -227,6 +242,7 @@ mod tests {
             rubric_path: &root.join("rubric.toml"),
             calibration_text: "{}",
             brief: None,
+            experiments: &[],
         })
         .unwrap()
     }
@@ -287,6 +303,7 @@ mod tests {
                 rubric_path: &d.path().join("rubric.toml"),
                 calibration_text: "{}",
                 brief: None,
+                experiments: &[],
             })
             .unwrap()
             .instrument_hash
@@ -325,6 +342,7 @@ mod tests {
             rubric_path: &d.path().join("rubric.toml"),
             calibration_text: "{}",
             brief: None,
+            experiments: &[],
         })
         .unwrap();
         assert!(i.files.iter().any(|f| f.path == "policy/local/fixture.txt"));
@@ -360,6 +378,7 @@ mod tests {
             rubric_path: &root.join("rubric.toml"),
             calibration_text: "{}",
             brief: b,
+            experiments: &[],
         })
         .unwrap()
     }
@@ -401,5 +420,32 @@ mod tests {
             other.instrument_hash, with.instrument_hash,
             "briefs never mix"
         );
+    }
+
+    #[test]
+    fn an_experiment_joins_the_hash_only_when_on() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().join("repo").join("characters");
+        fixture(&root);
+        let off = inst_with(&root, None);
+        assert_eq!(off.instrument_hash, PRE_BRIEF_HASH, "off: hash unchanged");
+        let on = compute(&InstrumentInputs {
+            character_dir: &root.join("char"),
+            tone: "a",
+            segments_dir: &root.join("seg"),
+            rubric_path: &root.join("rubric.toml"),
+            calibration_text: "{}",
+            brief: None,
+            experiments: &["rate_cap_exemptions"],
+        })
+        .unwrap();
+        assert_ne!(
+            on.base_hash, off.base_hash,
+            "treatment and control never mix"
+        );
+        assert!(on
+            .files
+            .iter()
+            .any(|f| f.path == "experiment/rate_cap_exemptions"));
     }
 }

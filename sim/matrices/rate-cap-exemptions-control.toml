@@ -1,0 +1,24 @@
+# Reconcile opt-5, control arm: rate-cap exemptions off (today's pre-filter).
+#
+# The same 12 runs as rate-cap-exemptions.toml (the treatment), run on the same day's
+# instrument so the two compare run for run. Only `rate_cap_exemptions` differs.
+# 1 tone x sonnet x 2 segments x 3 audience sizes x 2 seeds = 12 runs.
+id = "rate-cap-control"
+character = "malakor"
+duration_s = 600
+tick_s = 5
+core_effort = "low"
+concurrency = 8
+# Sonnet cores are judged by Opus, as in night.toml.
+judge_tiers = ["opus", "sonnet"]
+featured_every_ticks = 1
+max_featured = 8
+population = "growing_channel"
+populations = { "3" = "small_new_channel", "30" = "growing_channel", "300" = "raid_moment" }
+
+[axes]
+tones = ["theatrical"]
+core_tiers = ["sonnet"]
+segments = ["SEG-01", "SEG-02A"]
+audience_sizes = [3, 30, 300]
+seeds = [1, 2]

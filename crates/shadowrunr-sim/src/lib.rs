@@ -168,12 +168,28 @@ pub struct SimOptions {
     pub brief: BriefSource,
     /// `<data>`, read by [`BriefSource::Current`].
     pub data_dir: PathBuf,
+    /// Reconcile opt-5 experiment: rate-cap exemptions for grief, first questions and ranked
+    /// proposals, and a looser cap below 10 chatters (`FilterConfig::rate_cap_exemptions`).
+    /// Off by default; on, it joins the instrument hash as `experiment/rate_cap_exemptions`.
+    pub rate_cap_exemptions: bool,
 }
+
+/// The instrument entry name of the opt-5 rate-cap experiment.
+pub const RATE_CAP_EXEMPTIONS: &str = "rate_cap_exemptions";
 
 impl SimOptions {
     /// The run's brief, read from its source.
     pub fn resolved_brief(&self) -> Result<Option<StreamBrief>, SimError> {
         self.brief.resolve(&self.data_dir)
+    }
+
+    /// The experiments these options turn on, by name (empty for every shipped default).
+    pub fn experiments(&self) -> Vec<&'static str> {
+        let mut v = Vec::new();
+        if self.rate_cap_exemptions {
+            v.push(RATE_CAP_EXEMPTIONS);
+        }
+        v
     }
 }
 
@@ -196,6 +212,7 @@ impl Default for SimOptions {
             quota: None,
             brief: BriefSource::None,
             data_dir: PathBuf::from("data"),
+            rate_cap_exemptions: false,
         }
     }
 }

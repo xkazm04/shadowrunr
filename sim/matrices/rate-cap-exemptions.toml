@@ -1,0 +1,34 @@
+# Reconcile opt-5, treatment arm: rate-cap exemptions on.
+#
+# The night tournament's rate cap dropped 16,903 messages over 120 runs, grief messages and
+# newcomer questions among them. With `rate_cap_exemptions = true` the brain's pre-filter also
+# exempts from the cap: a grief message (a pet or a person died, a rough day, feeling down), a
+# viewer's first real question of the stream, and a `!propose` from a rank allowed to propose;
+# and a room below 10 chatters gets a looser cap. The switch joins the instrument hash, so this
+# arm never mixes with its control.
+#
+# Control: rate-cap-exemptions-control.toml, the same 12 runs with the switch off. Compare the
+# two tournaments run for run (situation:viewer-sincerely-sad, situation:newcomer-what-is-this,
+# situation:dread-council-proposal, responsive_to_chat, and the `rate_cap` drop counts).
+# Settings as night.toml, narrowed to the Sonnet core and the theatrical tone:
+# 1 tone x sonnet x 2 segments x 3 audience sizes x 2 seeds = 12 runs per arm.
+id = "rate-cap-exemptions"
+character = "malakor"
+duration_s = 600
+tick_s = 5
+core_effort = "low"
+concurrency = 8
+# Sonnet cores are judged by Opus, as in night.toml.
+judge_tiers = ["opus", "sonnet"]
+featured_every_ticks = 1
+max_featured = 8
+population = "growing_channel"
+populations = { "3" = "small_new_channel", "30" = "growing_channel", "300" = "raid_moment" }
+rate_cap_exemptions = true
+
+[axes]
+tones = ["theatrical"]
+core_tiers = ["sonnet"]
+segments = ["SEG-01", "SEG-02A"]
+audience_sizes = [3, 30, 300]
+seeds = [1, 2]

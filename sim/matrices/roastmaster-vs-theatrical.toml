@@ -1,0 +1,24 @@
+# Reconcile opt-6 (report rec-1792364417988, chosen 2026-10-19): unhinged-roastmaster against
+# the theatrical control. Night measured roastmaster's humor_landed at 0.628 (n=247, 95% CI
+# 0.566-0.685), overlapping theatrical's 0.474-0.597, so it needs a direct comparison. It runs
+# on the instrument that carries opt-1 (requested roasts are consent), since roastmaster also
+# held back requested roasts. Sonnet core only: the owner's chosen tier.
+# 2 tones x sonnet x 2 segments x 3 audience sizes x 3 seeds = 36 runs.
+id = "roastmaster-vs-theatrical"
+character = "malakor"
+duration_s = 600
+tick_s = 5
+core_effort = "low"
+concurrency = 8
+judge_tiers = ["opus", "sonnet"]
+featured_every_ticks = 1
+max_featured = 8
+population = "growing_channel"
+populations = { "3" = "small_new_channel", "30" = "growing_channel", "300" = "raid_moment" }
+
+[axes]
+tones = ["unhinged-roastmaster", "theatrical"]
+core_tiers = ["sonnet"]
+segments = ["SEG-01", "SEG-02A"]
+audience_sizes = [3, 30, 300]
+seeds = [1, 2, 3]

@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use shadowrunr_brain::{load_character, Brain, BrainConfig, BrainTuning};
+use shadowrunr_brain::{load_character, Brain, BrainConfig, BrainTuning, FilterConfig};
 use shadowrunr_segments::{SegmentConfig, SegmentRuntime};
 use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::{
@@ -267,7 +267,19 @@ fn instrument_with(
         rubric_path: &rubric_path(opts),
         calibration_text,
         brief,
+        experiments: &opts.experiments(),
     })
+}
+
+/// The brain's chat pre-filter for a run: the defaults, plus the opt-5 rate-cap experiment
+/// when the options (a matrix's `rate_cap_exemptions = true`) turn it on, gated at the
+/// segment rank table's `propose_min_rank`.
+fn filter_config(opts: &SimOptions) -> FilterConfig {
+    FilterConfig {
+        rate_cap_exemptions: opts.rate_cap_exemptions,
+        propose_min_rank: SegmentConfig::default().ranks.propose_min_rank,
+        ..FilterConfig::default()
+    }
 }
 
 fn character_meta(dir: &Path) -> (String, Vec<String>) {
@@ -762,6 +774,7 @@ pub async fn run_one_with(
             brain_engine,
             BrainTuning {
                 platforms: opts.platforms.clone(),
+                filter: filter_config(opts),
                 ..BrainTuning::default()
             },
         )
