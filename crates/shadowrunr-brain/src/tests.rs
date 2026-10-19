@@ -2457,3 +2457,44 @@ async fn night_a_crisis_reply_asking_where_the_viewer_is_becomes_a_help_pointer(
         "removed".into()
     )));
 }
+
+#[tokio::test]
+async fn night_a_disclosure_is_never_replayed_into_later_prompts_or_stored_in_memory() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = wp16_brain(d.path(), Arc::new(engine.clone()), "{}", 1_800).await;
+    let soot = viewer("sim-v0003", "SootGoblin24", Rank::Thrall);
+    let other = viewer("o1", "Other1", Rank::Cultist);
+    let c = ctx(&[]);
+    engine.push(Role::CoreThread, Ok("SootGoblin24, I hear you."));
+    engine.push(
+        Role::CoreThread,
+        Ok("Does that cauldron scare you, minion?"),
+    );
+    b.tick(1_000, vec![msg("d1", 900, &soot, L167)], &c)
+        .await
+        .unwrap();
+    assert!(
+        last_core_prompt(&engine).contains("hurting myself"),
+        "the disclosure beat sees it"
+    );
+    // ~165 s later the care note says never bring up what they shared: the prompt must not.
+    b.tick(
+        166_000,
+        vec![msg("x1", 165_900, &other, "the cauldron bubbles")],
+        &c,
+    )
+    .await
+    .unwrap();
+    let p = last_core_prompt(&engine);
+    assert!(p.contains(CARE_SOOT), "{p}");
+    assert!(
+        !p.contains("hurting myself"),
+        "replayed from the turn record: {p}"
+    );
+    // Nor does long-term memory keep it for the next stream.
+    b.end_stream(200_000).await.unwrap();
+    for ep in b.memory().recent_episodes(50).unwrap() {
+        assert!(!ep.text.contains("hurting myself"), "stored: {}", ep.text);
+    }
+}

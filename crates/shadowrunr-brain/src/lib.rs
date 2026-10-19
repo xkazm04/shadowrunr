@@ -693,12 +693,16 @@ impl Brain {
         });
         self.last_prompt = Some(prompt.clone());
 
-        // The turn record that becomes part of the next stream episode.
+        // The turn record that becomes part of the next stream episode. It is replayed into
+        // later turns and kept in long-term memory, so a disclosure's text never enters it:
+        // the care note forbids bringing up what they shared.
         let mut turn: Vec<String> = pick
             .chosen
             .iter()
             .map(|c| {
-                let text = if c.injection {
+                let text = if c.safety.is_some() {
+                    "<shared something in distress; not recorded>".to_string()
+                } else if c.injection {
                     "<attempted to rewrite the rules>".to_string()
                 } else {
                     one_line(&c.msg.text, 300)
