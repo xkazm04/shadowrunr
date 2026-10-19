@@ -2498,3 +2498,81 @@ async fn night_a_disclosure_is_never_replayed_into_later_prompts_or_stored_in_me
         assert!(!ep.text.contains("hurting myself"), "stored: {}", ep.text);
     }
 }
+
+#[tokio::test]
+async fn a_busy_room_never_writes_an_episode_longer_than_recall_and_the_sleep_cycle_read() {
+    const W: &[&str] = &[
+        "goblet", "rug", "torch", "swamp", "moat", "ledger", "crypt", "throne", "bones", "candle",
+        "raven", "pickle", "lantern", "hoodie", "spire", "budget", "minion", "scheme", "prophecy",
+        "curse", "potion", "gargoyle", "banner", "dungeon", "skull", "cauldron", "toad", "wraith",
+        "relic", "scroll", "tribute", "decree", "harbour", "fog", "ember", "obelisk", "hex",
+        "rune", "mantle", "abyss",
+    ];
+    let w = |i: usize| W[i % W.len()];
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "p", tuning()).await;
+    let c = ctx(&[]);
+    let mut spoken = Vec::new();
+    for t in 0..5usize {
+        let r = |k: usize| {
+            format!(
+                "The {} of the {} answers to the {} and the {}, {} and {} by decree of the {}.",
+                w(t * 31 + k * 7),
+                w(t * 31 + k * 7 + 1),
+                w(t * 31 + k * 7 + 2),
+                w(t * 31 + k * 7 + 3),
+                w(t * 31 + k * 7 + 4),
+                w(t * 31 + k * 7 + 5),
+                w(t * 31 + k * 7 + 6)
+            )
+        };
+        engine.push(
+            Role::CoreThread,
+            Ok(&format!(
+                "{}
+{}
+{}",
+                r(0),
+                r(1),
+                r(2)
+            )),
+        );
+        let inbox: Vec<ChatMsg> = (0..10)
+            .map(|k| {
+                let v = viewer(&format!("v{k}"), &format!("Viewer{k}"), Rank::Cultist);
+                let q = t * 97 + k * 11;
+                msg(&format!("m{t}-{k}"), (t * 5000 + k) as i64, &v, &format!("malakor is the {} older than the {} or did the {} steal the {} from the {} while the {} slept?", w(q), w(q+3), w(q+5), w(q+8), w(q+13), w(q+17)))
+            })
+            .collect();
+        let ev = b.tick((t * 5000 + 4000) as i64, inbox, &c).await.unwrap();
+        spoken.extend(says(&ev));
+    }
+    b.end_stream(30_000).await.unwrap();
+    let eps = b.memory().recent_episodes(20).unwrap();
+    let all: String = eps
+        .iter()
+        .map(|e| e.text.as_str())
+        .collect::<Vec<_>>()
+        .join(
+            "
+",
+        );
+    for e in &eps {
+        // Recall and the sleep cycle read the first 2,000 chars of an episode; anything
+        // after that was written and never read.
+        assert!(
+            e.text.chars().count() <= 2_000,
+            "{} chars in {}",
+            e.text.chars().count(),
+            e.id
+        );
+    }
+    assert!(spoken.len() >= 10, "{spoken:?}");
+    for line in &spoken {
+        assert!(
+            all.contains(line.as_str()),
+            "spoken, never recorded: {line}"
+        );
+    }
+}

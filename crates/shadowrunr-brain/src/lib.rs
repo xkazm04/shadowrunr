@@ -915,7 +915,14 @@ impl Brain {
         // Newly dispatched jobs report "queued" in the same beat.
         self.collect_jobs(now_ms, &mut ev)?;
 
-        self.turns.push(turn.join("\n"));
+        // Recall and the sleep cycle read the first EPISODE_ITEM_CHARS of an episode, so a
+        // turn that would carry the pending episode past that is written to the next one.
+        let turn = turn.join("\n");
+        let pending: usize = self.turns.iter().map(|t| t.chars().count() + 1).sum();
+        if !self.turns.is_empty() && pending + turn.chars().count() > EPISODE_ITEM_CHARS {
+            self.flush_turns(now_ms)?;
+        }
+        self.turns.push(turn);
         if self
             .ticks
             .is_multiple_of(u64::from(self.tuning.episode_every_ticks.max(1)))
