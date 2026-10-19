@@ -4217,7 +4217,11 @@
           "revision": 14,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "docs/guide/personas.md:129 The guide retains an undated warning that activity hooks are unwired even though the CLI invokes them for tournament completion, reconciliation and daemon startup.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:fd96220db75846a1",
+          "evaluatedRevision": 14
         },
         {
           "subject": "quality-gates",

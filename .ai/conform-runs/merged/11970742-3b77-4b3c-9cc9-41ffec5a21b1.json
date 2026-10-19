@@ -1,0 +1,80 @@
+{
+ "schema": "conform-run/1",
+ "worker": "11970742-3b77-4b3c-9cc9-41ffec5a21b1",
+ "subject": "docs-sync",
+ "evaluatedAt": "2026-10-19T10:38:29.900553+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "workspace-tooling-and-policy",
+   "subject": "docs-sync",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "docs/guide/personas.md:129 The guide retains an undated warning that activity hooks are unwired even though the CLI invokes them for tournament completion, reconciliation and daemon startup.",
+   "techniques": [
+    {
+     "technique": "dated-corrections",
+     "verdict": "deviation",
+     "evidence": "docs/guide/personas.md:129 This standing warning outlived its condition: cli.rs:765 and :857 call notify_once, and :889 calls start_for_daemon; the paragraph supplies no dated resolution."
+    },
+    {
+     "technique": "named-duplication-points",
+     "verdict": "deviation",
+     "evidence": "docs/guide/cli.md:285 The handwritten error-code copy is stale: contract.md:355\u2013357 and error.rs:84\u201385 map parse_error to invalid_params, which server.rs:105\u2013109 emits; searches found no assertion reconciling this guide with that authority."
+    },
+    {
+     "technique": "same-change-enforcement",
+     "verdict": "deviation",
+     "evidence": ".github/workflows/ci.yml:90 This contract drift step compares schema and generated source files only; the workflow provides no diff-based enforcement of contract.md's same-change prose obligation."
+    },
+    {
+     "technique": "source-doc-mapping",
+     "verdict": "deviation",
+     "evidence": "docs/spec/contract.md:3 The source-to-prose obligation is declared in prose; searches found no machine-readable coupling record and coverage checker, while context-map.json merely groups files."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "docs-sync",
+   "context": "console-characters-page",
+   "reason": "Inspected the package prose renderer, routes, rule controls and tests, but could not establish a context-specific documentation synchronization obligation and its enforcement sufficiently to assign technique verdicts."
+  },
+  {
+   "subject": "docs-sync",
+   "context": "console-reconcile-page",
+   "reason": "The inspected reports, evidence verification and proposed document diffs concern character reconciliation; their relationship to repository documentation synchronization was not established."
+  },
+  {
+   "subject": "docs-sync",
+   "context": "console-app-bootstrap",
+   "reason": "Inspected composition, page and keyboard registries, helpers and tests, but found insufficient context-specific evidence to judge documentation synchronization without importing repository-wide findings."
+  },
+  {
+   "subject": "docs-sync",
+   "context": "console-onair-page",
+   "reason": "The inspected screen, playback and report surfaces operate on runtime data; documentation figures, coupled prose targets and their synchronization checks were not sufficiently established."
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-19T10:38:29.900553+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "docs-sync"
+   ],
+   "techniques": [
+    "dated-corrections",
+    "named-duplication-points",
+    "same-change-enforcement",
+    "source-doc-mapping"
+   ],
+   "deviations": 1,
+   "context": "workspace-tooling-and-policy",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

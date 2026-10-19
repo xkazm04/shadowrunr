@@ -652,6 +652,37 @@
           "evidence": "apps/console/src/pages/brain/Layer2.tsx:47 These are frontend diagnostic routes; no tunneled browser-daemon surface exists in the context."
         }
       ]
+    },
+    "70f40362-0fe0-4f05-90cf-b95538e20c74/docs-sync": {
+      "context": "workspace-tooling-and-policy",
+      "subject": "docs-sync",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T10:38:29.900Z",
+      "worker": "11970742-3b77-4b3c-9cc9-41ffec5a21b1",
+      "techniques": [
+        {
+          "technique": "dated-corrections",
+          "verdict": "deviation",
+          "evidence": "docs/guide/personas.md:129 This standing warning outlived its condition: cli.rs:765 and :857 call notify_once, and :889 calls start_for_daemon; the paragraph supplies no dated resolution."
+        },
+        {
+          "technique": "named-duplication-points",
+          "verdict": "deviation",
+          "evidence": "docs/guide/cli.md:285 The handwritten error-code copy is stale: contract.md:355–357 and error.rs:84–85 map parse_error to invalid_params, which server.rs:105–109 emits; searches found no assertion reconciling this guide with that authority."
+        },
+        {
+          "technique": "same-change-enforcement",
+          "verdict": "deviation",
+          "evidence": ".github/workflows/ci.yml:90 This contract drift step compares schema and generated source files only; the workflow provides no diff-based enforcement of contract.md's same-change prose obligation."
+        },
+        {
+          "technique": "source-doc-mapping",
+          "verdict": "deviation",
+          "evidence": "docs/spec/contract.md:3 The source-to-prose obligation is declared in prose; searches found no machine-readable coupling record and coverage checker, while context-map.json merely groups files."
+        }
+      ]
     }
   }
 }
