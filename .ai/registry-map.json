@@ -2158,7 +2158,11 @@
           "revision": 14,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:86 The tournament's worst-first run table compares health alone, leaving equal-health runs without the deterministic identity ordering required by the sorting technique.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:c587a204413d5373",
+          "evaluatedRevision": 14
         },
         {
           "subject": "bounded-enumeration",
@@ -2340,7 +2344,11 @@
           "revision": 14,
           "changedAt": "2026-10-14",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/ui/filterRows.ts:32 Sorting compares only the selected value, so distinct rows with equal values retain input-dependent ordering instead of using an immutable identity tiebreaker.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:c587a204413d5373",
+          "evaluatedRevision": 14
         },
         {
           "subject": "quality-gates",

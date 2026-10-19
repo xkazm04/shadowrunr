@@ -1,0 +1,93 @@
+{
+ "schema": "conform-run/1",
+ "worker": "3ec10dbb-f42b-40db-81ce-4784572bd907",
+ "subject": "table",
+ "evaluatedAt": "2026-10-19T21:57:55.835349+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "console-ui-primitives",
+   "subject": "table",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/ui/filterRows.ts:32 Sorting compares only the selected value, so distinct rows with equal values retain input-dependent ordering instead of using an immutable identity tiebreaker.",
+   "techniques": [
+    {
+     "technique": "filtering",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/ui/FilterTable.tsx:99 Changing the applied local filter updates query state without resetting the virtualized scroll window to its beginning; the component contains no filter-triggered scroll reset."
+    },
+    {
+     "technique": "sorting",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/ui/filterRows.ts:32 The comparator has no immutable unique identity tiebreaker, allowing equal-valued rows to change order when their input order changes."
+    }
+   ]
+  },
+  {
+   "context": "console-simulator-page",
+   "subject": "table",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:86 The tournament's worst-first run table compares health alone, leaving equal-health runs without the deterministic identity ordering required by the sorting technique.",
+   "techniques": [
+    {
+     "technique": "loading-and-empty-states",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/simulator/Runs.tsx:56 The entire FilterTable is inside QueryView's data-dependent child, so initial loading and settled emptiness remove the filters and column headers instead of preserving chrome and varying only the body."
+    },
+    {
+     "technique": "performance",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:30 The default usePaged chain automatically fetches every available page up to its loop guard, while FilterTable bounds only mounted rows, realizing the named failure of windowing rendering while fetching the whole set."
+    },
+    {
+     "technique": "sorting",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:86 Distinct runs with equal health compare equal because no immutable run identity is appended."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "table",
+   "context": "console-data-layer",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-19T21:57:55.835349+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "table"
+   ],
+   "techniques": [
+    "filtering",
+    "sorting"
+   ],
+   "deviations": 1,
+   "context": "console-ui-primitives",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T21:57:55.835349+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "table"
+   ],
+   "techniques": [
+    "loading-and-empty-states",
+    "performance",
+    "sorting"
+   ],
+   "deviations": 1,
+   "context": "console-simulator-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

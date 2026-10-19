@@ -863,6 +863,53 @@
         "at": "2026-10-19T21:44:59.811481+00:00",
         "reason": "reviewer (sonnet): cells.ts:52 `worstFirst` and Heatmap.tsx:119 are a labelled 'worst first' triage sort, keyed on rule fails, not-evaluable and not-provoked before mean quality, so the code does not show a published quality ranking that needs a noise check. The pooled-Held claim at grid.ts:42 is real, but it is a dif"
       }
+    },
+    "435472ca-7ef4-4956-80d8-3dc82f215665/table": {
+      "context": "console-ui-primitives",
+      "subject": "table",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T21:57:55.835Z",
+      "worker": "3ec10dbb-f42b-40db-81ce-4784572bd907",
+      "techniques": [
+        {
+          "technique": "filtering",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/ui/FilterTable.tsx:99 Changing the applied local filter updates query state without resetting the virtualized scroll window to its beginning; the component contains no filter-triggered scroll reset."
+        },
+        {
+          "technique": "sorting",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/ui/filterRows.ts:32 The comparator has no immutable unique identity tiebreaker, allowing equal-valued rows to change order when their input order changes."
+        }
+      ]
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/table": {
+      "context": "console-simulator-page",
+      "subject": "table",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T21:57:55.835Z",
+      "worker": "3ec10dbb-f42b-40db-81ce-4784572bd907",
+      "techniques": [
+        {
+          "technique": "loading-and-empty-states",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/simulator/Runs.tsx:56 The entire FilterTable is inside QueryView's data-dependent child, so initial loading and settled emptiness remove the filters and column headers instead of preserving chrome and varying only the body."
+        },
+        {
+          "technique": "performance",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:30 The default usePaged chain automatically fetches every available page up to its loop guard, while FilterTable bounds only mounted rows, realizing the named failure of windowing rendering while fetching the whole set."
+        },
+        {
+          "technique": "sorting",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:86 Distinct runs with equal health compare equal because no immutable run identity is appended."
+        }
+      ]
     }
   }
 }
