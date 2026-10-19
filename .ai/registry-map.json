@@ -469,7 +469,11 @@
           "revision": 51,
           "changedAt": "2026-10-15",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/consolidate.rs:148 Consolidation selects the newest capped window and advances its checkpoint to the cycle time, leaving older overflow episodes outside subsequent windows.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:4f054116d66a9495",
+          "evaluatedRevision": 51
         },
         {
           "subject": "companion-identity",
@@ -3070,7 +3074,11 @@
           "revision": 51,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/directives.rs:45 An existing empty directives file is treated as an empty store, allowing subsequent writes to replace unreadable durable state.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:4f054116d66a9495",
+          "evaluatedRevision": 51
         },
         {
           "subject": "measurement-honesty",

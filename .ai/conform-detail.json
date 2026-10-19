@@ -126,6 +126,113 @@
           "evidence": "apps/console/fidelity/run.mjs:44 Failure message provides the exact pip and playwright commands needed to resolve the missing dependency."
         }
       ]
+    },
+    "438f47d8-694c-4986-92b2-bbba5af4a1c1/agent-memory": {
+      "context": "brain-composition-memory",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T09:14:21.374Z",
+      "worker": "bf6cddb2-9505-4c38-89da-1c60e61d3152",
+      "techniques": [
+        {
+          "technique": "consolidation",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/consolidate.rs:176 Comparison context is a fixed prefix of live facts ordered by scope and key, rather than a relevance shortlist redrawn for incoming evidence."
+        },
+        {
+          "technique": "decay-and-forgetting",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/store.rs:850 Automatic retirement checks importance and idle age without the required low-confidence gate or exemptions for protected kinds."
+        },
+        {
+          "technique": "durable-store-failure-posture",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:606 Store query or decoding failures propagate out of the turn instead of producing degraded recall with an unavailable-memory message."
+        },
+        {
+          "technique": "episodic-capture",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:917 Stream episodes close every configured number of ticks and contain joined turn records, rather than closing on meaningful outcomes with distilled bodies and raw-source pointers."
+        },
+        {
+          "technique": "lane-reconciliation",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/store.rs:1405 verify_index compares markdown against metadata nodes and tombstones but never compares FTS membership, so a missing retrieval entry can escape the check."
+        },
+        {
+          "technique": "loss-site-inventory",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:647 Each recalled episode is silently clipped before window fitting; the later whole-episode omission notice does not disclose this loss."
+        },
+        {
+          "technique": "memory-value-model",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/store.rs:775 Search orders by BM25 while retirement uses separate importance and idle-age rules, without a shared trust, decay and usefulness value model."
+        },
+        {
+          "technique": "observation-clock",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:433 flush_turns timestamps accumulated earlier turns with the flush instant; their individual observation instants are absent from the consolidation evidence and its grounding contract."
+        },
+        {
+          "technique": "read-set-bounded-links",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/store.rs:428 A model-supplied supersedes reference resolves against the entire store without requiring membership in the facts the consolidation pass actually read."
+        },
+        {
+          "technique": "recall-injection",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/compose.rs:502 Recalled facts are shortened to 300 characters and rendered without their stored confidence or confirmation age, violating whole-item packing and standing labels."
+        },
+        {
+          "technique": "scope-before-similarity",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/store.rs:429 The supersede write checks only that its target is live, permitting a fact to retire an item from another scope or viewer."
+        }
+      ]
+    },
+    "ce601bf6-a98a-465f-8f19-3143e6483f8d/agent-memory": {
+      "context": "reconcile-engine",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T09:14:21.374Z",
+      "worker": "bf6cddb2-9505-4c38-89da-1c60e61d3152",
+      "techniques": [
+        {
+          "technique": "durable-store-failure-posture",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/directives.rs:45 An existing whitespace-only file is invalid JSON but becomes empty on both read and read-modify-write paths; other parse failures propagate into choose and lord_chat instead of degrading."
+        },
+        {
+          "technique": "loss-site-inventory",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/lib.rs:608 Conversation-history decoding silently skips malformed turns, and the subsequent eight-turn window supplies no omission or degradation notice to the model."
+        },
+        {
+          "technique": "pending-beliefs-live-apart",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/directives.rs:118 Pending rules share directives.json with active rules and depend on reader filters; rejected proposals can also be proposed again, as the existing test explicitly expects."
+        }
+      ]
+    },
+    "fc878bef-2e53-416c-83f0-0b62db46a8b4/agent-memory": {
+      "context": "stage-kit-scene-engine",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T09:14:21.374Z",
+      "techniques": [],
+      "withdrawn": {
+        "worker": "bf6cddb2-9505-4c38-89da-1c60e61d3152",
+        "state": "not-applicable",
+        "at": "2026-10-19T09:15:03.036034+00:00",
+        "reason": "reviewer (sonnet): The context holds an agent-memory-like component, `chatMemory.ts` (the scene's chat memory with bounded eviction, a keep-set and pruning of dependents in `scene.ts:103-116`), so the searches for recall, consolidat and episod used the wrong terms and the anchor `scene.ts:106` shows presence of a memo"
+      }
     }
   }
 }
