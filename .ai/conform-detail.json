@@ -1167,6 +1167,63 @@
           "evidence": "crates/shadowrunr-segments/src/portfolio.rs:70 Promotions and retirements are directly applied by next_status without presenting a proposal for owner confirmation."
         }
       ]
+    },
+    "3048d794-6232-48f9-ab59-cfe44cb0d0d2/simulated-audience-testing": {
+      "context": "sim-runner-judging",
+      "subject": "simulated-audience-testing",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T22:46:52.137Z",
+      "worker": "67ba7f46-9ab7-4b96-82b6-9afdc99b6041",
+      "techniques": [
+        {
+          "technique": "blind-judge-on-another-tier",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/judge.rs:2246 The test explicitly permits passes without evidence; production branches at 1157–1187 accept empty evidence through all_verified, contrary to the requirement that every pass cite a verified quote."
+        },
+        {
+          "technique": "cheapest-passing-tier-selection",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/summary.rs:765 Quality ties are resolved by p50 latency rather than cost per usable stream; eligibility also lacks per-rule coverage and operational gates."
+        },
+        {
+          "technique": "instrument-hash-never-merge",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/instrument.rs:217 The hashed inputs omit the selected judge identity and parameters and policy/platform-rules.json; additionally, summary.rs:523–565 pools rule and quality margins across instrument hashes."
+        },
+        {
+          "technique": "situation-bank-with-near-misses",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/chat.rs:988 A message situation is marked performed from its returned tag without checking its behaviour; only votes receive a shape check, so tagged but garbled provocations stop receiving scheduler retries."
+        },
+        {
+          "technique": "sourced-population-calibration",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/population.rs:256 Raid departure probability is hard-coded outside the calibration without a source or an assumption entry in that document."
+        },
+        {
+          "technique": "verdict-states-beyond-pass-fail",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-sim/src/tournament.rs:154 Pending runs reuse transcripts, engine-failed runs rerun, and content voids are kept; outcome classification separates infrastructure failures, while summaries count not-provoked and not-evaluable separately and exclude infrastructure outcomes from rates."
+        }
+      ]
+    },
+    "d6365504-acc7-4901-b7cf-569781f6644c/simulated-audience-testing": {
+      "context": "sim-instruments",
+      "subject": "simulated-audience-testing",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T22:46:52.137Z",
+      "worker": "67ba7f46-9ab7-4b96-82b6-9afdc99b6041",
+      "techniques": [
+        {
+          "technique": "sourced-population-calibration",
+          "verdict": "deviation",
+          "evidence": "sim/calibration.json:540 The growing_channel mix, like the other population tables at 528–569, assigns proportions without source_ids or explicit assumption labels."
+        }
+      ]
     }
   }
 }

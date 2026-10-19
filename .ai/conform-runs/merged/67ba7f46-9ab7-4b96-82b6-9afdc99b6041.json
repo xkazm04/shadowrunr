@@ -1,0 +1,99 @@
+{
+ "schema": "conform-run/1",
+ "worker": "67ba7f46-9ab7-4b96-82b6-9afdc99b6041",
+ "subject": "simulated-audience-testing",
+ "evaluatedAt": "2026-10-19T22:46:52.137931+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "sim-runner-judging",
+   "subject": "simulated-audience-testing",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-sim/src/summary.rs:756 Winner selection requires only one judged run and breaks quality ties on latency, allowing insufficient coverage and bypassing cost per usable stream.",
+   "techniques": [
+    {
+     "technique": "blind-judge-on-another-tier",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-sim/src/judge.rs:2246 The test explicitly permits passes without evidence; production branches at 1157\u20131187 accept empty evidence through all_verified, contrary to the requirement that every pass cite a verified quote."
+    },
+    {
+     "technique": "cheapest-passing-tier-selection",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-sim/src/summary.rs:765 Quality ties are resolved by p50 latency rather than cost per usable stream; eligibility also lacks per-rule coverage and operational gates."
+    },
+    {
+     "technique": "instrument-hash-never-merge",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-sim/src/instrument.rs:217 The hashed inputs omit the selected judge identity and parameters and policy/platform-rules.json; additionally, summary.rs:523\u2013565 pools rule and quality margins across instrument hashes."
+    },
+    {
+     "technique": "situation-bank-with-near-misses",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-sim/src/chat.rs:988 A message situation is marked performed from its returned tag without checking its behaviour; only votes receive a shape check, so tagged but garbled provocations stop receiving scheduler retries."
+    },
+    {
+     "technique": "sourced-population-calibration",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-sim/src/population.rs:256 Raid departure probability is hard-coded outside the calibration without a source or an assumption entry in that document."
+    },
+    {
+     "technique": "verdict-states-beyond-pass-fail",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/tournament.rs:154 Pending runs reuse transcripts, engine-failed runs rerun, and content voids are kept; outcome classification separates infrastructure failures, while summaries count not-provoked and not-evaluable separately and exclude infrastructure outcomes from rates."
+    }
+   ]
+  },
+  {
+   "context": "sim-instruments",
+   "subject": "simulated-audience-testing",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "sim/calibration.json:530 Population proportions are bare numbers without source references or assumption labels, leaving the configured audience mix unauditable under the calibration standard.",
+   "techniques": [
+    {
+     "technique": "sourced-population-calibration",
+     "verdict": "deviation",
+     "evidence": "sim/calibration.json:540 The growing_channel mix, like the other population tables at 528\u2013569, assigns proportions without source_ids or explicit assumption labels."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-19T22:46:52.137931+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "simulated-audience-testing"
+   ],
+   "techniques": [
+    "blind-judge-on-another-tier",
+    "cheapest-passing-tier-selection",
+    "instrument-hash-never-merge",
+    "situation-bank-with-near-misses",
+    "sourced-population-calibration",
+    "verdict-states-beyond-pass-fail"
+   ],
+   "deviations": 1,
+   "context": "sim-runner-judging",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T22:46:52.137931+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "simulated-audience-testing"
+   ],
+   "techniques": [
+    "sourced-population-calibration"
+   ],
+   "deviations": 1,
+   "context": "sim-instruments",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

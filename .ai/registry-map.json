@@ -3426,7 +3426,11 @@
           "revision": 1,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/summary.rs:756 Winner selection requires only one judged run and breaks quality ties on latency, allowing insufficient coverage and bypassing cost per usable stream.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:df005c95186d0c4f",
+          "evaluatedRevision": 1
         },
         {
           "subject": "eval-harness",
@@ -4711,7 +4715,11 @@
           "revision": 1,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "sim/calibration.json:530 Population proportions are bare numbers without source references or assumption labels, leaving the configured audience mix unauditable under the calibration standard.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:df005c95186d0c4f",
+          "evaluatedRevision": 1
         }
       ],
       "governance": "governed"
