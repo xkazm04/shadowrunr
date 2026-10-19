@@ -889,7 +889,11 @@
           "revision": 3,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/brain/Engine.tsx:112 The brain's ledger enumeration resumes by row offset and rereads ledger files, so later pages do not seek after a delivered key.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:4ec15f52e99e1903",
+          "evaluatedRevision": 3
         },
         {
           "subject": "narrative-scroll-surface",
@@ -2194,7 +2198,11 @@
           "revision": 3,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/simulator/Runs.tsx:37 The simulator requests run pages whose daemon fallback sorts directory names but linearly skips preceding keys instead of binary-searching the continuation boundary.",
+          "evaluatedAt": "2026-10-19",
+          "evaluatedAgainst": "sha256-b2:4ec15f52e99e1903",
+          "evaluatedRevision": 3
         },
         {
           "subject": "eval-harness",

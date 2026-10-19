@@ -1281,6 +1281,48 @@
           "evidence": "apps/console/src/keys/keymap.ts:52 The global keyboard map enforces navigation hierarchy traversal by binding Escape to climb from layer 2 to layer 1 and stopping at the wall."
         }
       ]
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/bounded-enumeration": {
+      "context": "console-simulator-page",
+      "subject": "bounded-enumeration",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T23:10:00.721Z",
+      "worker": "393d877d-2dc9-4d86-bffa-5b1b2aa01765",
+      "techniques": [
+        {
+          "technique": "after-plus-limit-not-cursor",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/paging.rs:106 This is the handler called by RunsPage: subdirs materializes and sorts the directory list, then the loop skips keys through the cursor; the prescribed binary-search fallback is missing. The run token itself correctly uses the last delivered tuple."
+        },
+        {
+          "technique": "filter-after-return-under-limit",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:30 The page selects judged runs by an attribute; its filtering does not hide keys according to caller access."
+        }
+      ]
+    },
+    "c2325be4-a41e-48f5-9050-bb31c09bb12a/bounded-enumeration": {
+      "context": "console-brain-page",
+      "subject": "bounded-enumeration",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-19",
+      "evaluatedTs": "2026-10-19T23:10:00.721Z",
+      "worker": "393d877d-2dc9-4d86-bffa-5b1b2aa01765",
+      "techniques": [
+        {
+          "technique": "after-plus-limit-not-cursor",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/paging.rs:286 Engine's ledger.page handler encodes an ordinal offset, reads complete ledger files, and skips preceding rows; encoding the offset does not realize key-based seek."
+        },
+        {
+          "technique": "filter-after-return-under-limit",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Engine.tsx:76 This caller-selected role facet filters already received rows; it is not an accessibility filter hiding resource existence."
+        }
+      ]
     }
   }
 }

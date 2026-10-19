@@ -1,0 +1,81 @@
+{
+ "schema": "conform-run/1",
+ "worker": "393d877d-2dc9-4d86-bffa-5b1b2aa01765",
+ "subject": "bounded-enumeration",
+ "evaluatedAt": "2026-10-19T23:10:00.721936+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "console-simulator-page",
+   "subject": "bounded-enumeration",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/simulator/Runs.tsx:37 The simulator requests run pages whose daemon fallback sorts directory names but linearly skips preceding keys instead of binary-searching the continuation boundary.",
+   "techniques": [
+    {
+     "technique": "after-plus-limit-not-cursor",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/paging.rs:106 This is the handler called by RunsPage: subdirs materializes and sorts the directory list, then the loop skips keys through the cursor; the prescribed binary-search fallback is missing. The run token itself correctly uses the last delivered tuple."
+    },
+    {
+     "technique": "filter-after-return-under-limit",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:30 The page selects judged runs by an attribute; its filtering does not hide keys according to caller access."
+    }
+   ]
+  },
+  {
+   "context": "console-brain-page",
+   "subject": "bounded-enumeration",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/brain/Engine.tsx:112 The brain's ledger enumeration resumes by row offset and rereads ledger files, so later pages do not seek after a delivered key.",
+   "techniques": [
+    {
+     "technique": "after-plus-limit-not-cursor",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/paging.rs:286 Engine's ledger.page handler encodes an ordinal offset, reads complete ledger files, and skips preceding rows; encoding the offset does not realize key-based seek."
+    },
+    {
+     "technique": "filter-after-return-under-limit",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Engine.tsx:76 This caller-selected role facet filters already received rows; it is not an accessibility filter hiding resource existence."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-19T23:10:00.721936+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "bounded-enumeration"
+   ],
+   "techniques": [
+    "after-plus-limit-not-cursor",
+    "filter-after-return-under-limit"
+   ],
+   "deviations": 1,
+   "context": "console-simulator-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-19T23:10:00.721936+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "bounded-enumeration"
+   ],
+   "techniques": [
+    "after-plus-limit-not-cursor",
+    "filter-after-return-under-limit"
+   ],
+   "deviations": 1,
+   "context": "console-brain-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}
