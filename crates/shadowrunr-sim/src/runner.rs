@@ -24,6 +24,7 @@ use shadowrunr_types::{
 };
 
 use crate::calibration::{self, Calibration, CalibrationOrigin};
+use crate::casefile::CaseFileResearch;
 use crate::chat::{ChatRoom, ChatStats, RoomConfig};
 use crate::instrument::{self, Instrument, InstrumentInputs};
 use crate::judge::{self, JudgeInputs, JudgeOutcome, Rubric};
@@ -739,22 +740,6 @@ pub async fn run_one_with(
         std::fs::create_dir_all(&memory_dir)
             .map_err(|e| SimError::Io(format!("{}: {e}", memory_dir.display())))?;
         let character = load_character(&prep.character_dir, &spec.tone_variant)?;
-        let brain = Brain::new_with(
-            BrainConfig {
-                character,
-                memory_dir: memory_dir.clone(),
-                stream_id: spec.run_id.clone(),
-                core_tier: spec.core_tier,
-                pool_size: opts.pool_size,
-            },
-            prep.engine.clone(),
-            BrainTuning {
-                platforms: opts.platforms.clone(),
-                ..BrainTuning::default()
-            },
-        )
-        .await?
-        .with_brief(prep.brief.clone());
         let stage = SegmentRuntime::with_config(
             spec.segment,
             SegmentConfig {
@@ -764,6 +749,24 @@ pub async fn run_one_with(
             },
         )
         .map_err(|e| SimError::Spec(format!("segment runtime: {e}")))?;
+        // A fictional case's bone-clerks search its planted records, not the web.
+        let brain_engine = CaseFileResearch::wrap(prep.engine.clone(), &stage);
+        let brain = Brain::new_with(
+            BrainConfig {
+                character,
+                memory_dir: memory_dir.clone(),
+                stream_id: spec.run_id.clone(),
+                core_tier: spec.core_tier,
+                pool_size: opts.pool_size,
+            },
+            brain_engine,
+            BrainTuning {
+                platforms: opts.platforms.clone(),
+                ..BrainTuning::default()
+            },
+        )
+        .await?
+        .with_brief(prep.brief.clone());
         execute(prep, brain, stage, opts).await
     }
     .await;

@@ -1,15 +1,17 @@
 //! Segments as data: the rank ladder and vote weights, the chat command parser, table-driven
 //! segments (SEG-01 Improvised Room, SEG-02A Hexmap Investigation, descoped SEG-02B-I/II),
-//! the deterministic [`SegmentRuntime`], and the segment portfolio lifecycle.
+//! the SEG-02A case file and re-search cap, the deterministic [`SegmentRuntime`], and the
+//! segment portfolio lifecycle.
 //!
-//! Data files live under `data/` and are compiled in; ranks, the allowlist and cases can also
-//! be loaded from disk at runtime.
+//! Data files live under `data/` and are compiled in; ranks, the allowlist, cases and case
+//! files can also be loaded from disk at runtime.
 
 pub mod case;
 pub mod command;
 pub mod evidence;
 pub mod portfolio;
 pub mod ranks;
+pub mod research;
 pub mod runtime;
 pub mod table;
 
@@ -20,10 +22,11 @@ pub use command::{normalize_hex, parse_command, parse_grade};
 pub use evidence::{requires_alleged, SourceAllowlist};
 pub use portfolio::{next_status, PortfolioEntry};
 pub use ranks::RankTable;
+pub use research::{target_hex, CaseFile, CaseRecord};
 pub use runtime::{Lead, Proposal, SegmentConfig, SegmentRuntime};
 pub use table::{
     active_segments, descoped_segments, segment_is_descoped, segment_name, segment_table,
-    HandoverRule, SegmentTable,
+    HandoverRule, SegmentTable, DEFAULT_MAX_SEARCHES_PER_HEX,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

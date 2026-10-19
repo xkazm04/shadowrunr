@@ -188,11 +188,28 @@ pub struct ClockRules {
     pub poll_max_secs: u32,
     #[serde(default = "default_max_poll_options")]
     pub max_poll_options: usize,
+    /// Research briefs the bone-clerks run against one hex per stream. The next attempt is
+    /// refused and the hex's next move goes to a Plebiscite instead (SEG-02A).
+    #[serde(default = "default_max_searches_per_hex")]
+    pub max_searches_per_hex: u32,
+    /// Length of the Plebiscite the runtime opens when a hex's searches run out.
+    #[serde(default = "default_plebiscite_secs")]
+    pub plebiscite_secs: u32,
     #[serde(default)]
     pub handover: Option<HandoverRule>,
 }
 
+/// Searches per hex per stream before the Plebiscite takes over: twice ends the "fog stays
+/// fogged" loop without starving a hex that needed a second look.
+pub const DEFAULT_MAX_SEARCHES_PER_HEX: u32 = 2;
+
 fn default_foil_vote_secs() -> u32 {
+    60
+}
+fn default_max_searches_per_hex() -> u32 {
+    DEFAULT_MAX_SEARCHES_PER_HEX
+}
+fn default_plebiscite_secs() -> u32 {
     60
 }
 fn default_poll_min_secs() -> u32 {
@@ -212,6 +229,8 @@ impl Default for ClockRules {
             poll_min_secs: default_poll_min_secs(),
             poll_max_secs: default_poll_max_secs(),
             max_poll_options: default_max_poll_options(),
+            max_searches_per_hex: default_max_searches_per_hex(),
+            plebiscite_secs: default_plebiscite_secs(),
             handover: None,
         }
     }
@@ -289,6 +308,14 @@ impl SegmentTable {
         let c = &self.clock;
         if c.poll_min_secs == 0 || c.poll_min_secs > c.poll_max_secs || c.max_poll_options < 2 {
             return Err(bad("clock: poll bounds are inconsistent".into()));
+        }
+        if c.max_searches_per_hex == 0
+            || !(c.poll_min_secs..=c.poll_max_secs).contains(&c.plebiscite_secs)
+        {
+            return Err(bad(
+                "clock: the search cap must be positive and the plebiscite within poll bounds"
+                    .into(),
+            ));
         }
         if self.status == SegmentStatus::Descoped
             && (!self.allowed_ops.is_empty() || self.design_notes.is_none())
@@ -468,6 +495,19 @@ mod tests {
         want.insert("dispatch_research");
         let got: BTreeSet<&str> = two.allowed_ops.iter().map(String::as_str).collect();
         assert_eq!(got, want);
+    }
+
+    #[test]
+    fn seg02a_caps_searches_per_hex() {
+        let c = &segment_table(SegmentId::Seg02aHexmap).unwrap().clock;
+        assert_eq!(c.max_searches_per_hex, DEFAULT_MAX_SEARCHES_PER_HEX);
+        assert_eq!(c.max_searches_per_hex, 2);
+        assert!((c.poll_min_secs..=c.poll_max_secs).contains(&c.plebiscite_secs));
+        let src = SEGMENT_TABLE_SOURCES[1].1;
+        let zero = src.replace("max_searches_per_hex = 2", "max_searches_per_hex = 0");
+        assert!(SegmentTable::from_toml_str("x", &zero).is_err());
+        let long = src.replace("plebiscite_secs = 60", "plebiscite_secs = 6000");
+        assert!(SegmentTable::from_toml_str("x", &long).is_err());
     }
 
     #[test]

@@ -44,6 +44,10 @@ right-of-reply entries are honoured on air.
 poll_min_secs = 10
 poll_max_secs = 600
 max_poll_options = 6
+# Bone-clerk searches per hex per stream. The next attempt is refused and the runtime puts
+# the hex's next move to a Plebiscite (a crowd poll of `plebiscite_secs`) instead.
+max_searches_per_hex = 2
+plebiscite_secs = 60
 
 [[transitions]]
 from = "briefing"

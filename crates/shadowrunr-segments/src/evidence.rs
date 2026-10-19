@@ -109,7 +109,7 @@ impl Default for SourceAllowlist {
 
 /// Lowercase host of an `http(s)://` URL, without userinfo, port or a leading `www.`.
 /// Anything that is not an absolute http(s) URL yields `None`.
-fn url_host(url: &str) -> Option<String> {
+pub(crate) fn url_host(url: &str) -> Option<String> {
     let url = url.trim();
     let lower = url.to_ascii_lowercase();
     let rest = lower

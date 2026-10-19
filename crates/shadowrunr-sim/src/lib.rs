@@ -14,6 +14,7 @@
 //! mechanically; the verdict assembled programmatically.
 
 pub mod calibration;
+pub mod casefile;
 pub mod chat;
 pub mod instrument;
 pub mod judge;

@@ -14,6 +14,7 @@ use crate::case::{demo_case, validate_case};
 use crate::command::{normalize_hex, parse_command};
 use crate::evidence::SourceAllowlist;
 use crate::ranks::RankTable;
+use crate::research::{target_hex, CaseFile};
 use crate::table::{
     op_tag, segment_name, segment_table, GuardFacts, HandoverRule, SegmentTable, Trigger,
 };
@@ -29,6 +30,9 @@ pub struct SegmentConfig {
     pub foils: Vec<String>,
     /// The SEG-02A case. `None` loads the fictional demo case (`fictional: true`).
     pub case: Option<Case>,
+    /// Planted records for a fictional case (see [`crate::research`]). `None` gives the demo
+    /// case its built-in pack when `case` is `None` too, and a custom case no records.
+    pub case_file: Option<CaseFile>,
     pub ranks: RankTable,
     pub allowlist: SourceAllowlist,
     /// Overrides the table's handover thresholds (assumptions) for segments that have one.
@@ -60,6 +64,8 @@ pub struct Proposal {
 enum PollKind {
     Crowd,
     Foil,
+    /// Opened by the runtime when a hex's searches run out: the audience picks its next move.
+    Plebiscite,
 }
 
 #[derive(Debug, Clone)]
@@ -70,6 +76,8 @@ struct Poll {
     min_rank: Rank,
     closes_ms: TsMs,
     kind: PollKind,
+    /// The hex a Plebiscite decides; `None` for other polls.
+    subject: Option<String>,
     /// viewer id -> (option index, weight). One vote per viewer; the last one counts.
     votes: BTreeMap<String, (usize, f64)>,
 }
@@ -115,6 +123,7 @@ impl Poll {
         let kind = match self.kind {
             PollKind::Crowd => "crowd poll",
             PollKind::Foil => "foil vote",
+            PollKind::Plebiscite => "Plebiscite",
         };
         format!(
             "open {kind} {}: \"{}\" | {tallies} | closes in {left} s | min rank {:?}",
@@ -202,6 +211,18 @@ pub struct SegmentRuntime {
     leads: BTreeMap<String, BTreeMap<String, Lead>>,
     proposals: Vec<Proposal>,
     jobs: BTreeSet<String>,
+    /// Planted records of a fictional case; `None` when the case has none.
+    case_file: Option<CaseFile>,
+    /// hex id -> research briefs accepted against it this stream (the re-search cap).
+    searches: BTreeMap<String, u32>,
+    /// Ids of planted records the bone-clerks have brought back, in the order found.
+    filed: Vec<String>,
+    /// A hex whose searches ran out, waiting for a poll slot to open its Plebiscite.
+    plebiscite_due: Option<String>,
+    /// Hexes that have had their Plebiscite (one per hex per stream).
+    plebiscited: BTreeSet<String>,
+    /// The last closed Plebiscite: (hex, winning option; `None` when nobody voted).
+    last_plebiscite: Option<(String, Option<String>)>,
     seen: HashSet<String>,
     seen_order: VecDeque<String>,
     signed_off: bool,
@@ -243,6 +264,14 @@ impl SegmentRuntime {
         }
         let case = config.case.clone().unwrap_or_else(demo_case);
         validate_case(&case)?;
+        let case_file = match (&config.case, &config.case_file) {
+            (_, Some(file)) => Some(file.clone()),
+            (None, None) => Some(CaseFile::demo()),
+            (Some(_), None) => None,
+        };
+        if let Some(file) = &case_file {
+            file.validate(&case, &config.allowlist)?;
+        }
         Ok(Self {
             started_ms: config.start_ms,
             config,
@@ -261,6 +290,12 @@ impl SegmentRuntime {
             leads: BTreeMap::new(),
             proposals: Vec::new(),
             jobs: BTreeSet::new(),
+            case_file,
+            searches: BTreeMap::new(),
+            filed: Vec::new(),
+            plebiscite_due: None,
+            plebiscited: BTreeSet::new(),
+            last_plebiscite: None,
             seen: HashSet::new(),
             seen_order: VecDeque::new(),
             signed_off: false,
@@ -331,6 +366,25 @@ impl SegmentRuntime {
     /// The case map with live fog and grades.
     pub fn case(&self) -> &Case {
         &self.case
+    }
+
+    /// The case's planted records, when it has any (fictional cases only).
+    pub fn case_file(&self) -> Option<&CaseFile> {
+        self.case_file.as_ref()
+    }
+
+    /// Research briefs accepted against `hex` this stream.
+    pub fn searches(&self, hex: &str) -> u32 {
+        self.searches.get(hex).copied().unwrap_or(0)
+    }
+
+    /// The hex whose Plebiscite is waiting to open or is open, if any.
+    pub fn plebiscite_hex(&self) -> Option<&str> {
+        self.poll
+            .as_ref()
+            .filter(|p| p.kind == PollKind::Plebiscite)
+            .and_then(|p| p.subject.as_deref())
+            .or(self.plebiscite_due.as_deref())
     }
 
     pub fn proposals(&self) -> &[Proposal] {
@@ -448,6 +502,14 @@ impl SegmentRuntime {
         let mut events = vec![self.vote_event(now_ms, &poll, true)];
         match poll.kind {
             PollKind::Crowd => self.fire(Trigger::PollClosed),
+            PollKind::Plebiscite => {
+                if resolve {
+                    if let Some(hex) = poll.subject.clone() {
+                        self.last_plebiscite = Some((hex, winner(&poll.tallies())));
+                    }
+                }
+                self.fire(Trigger::PollClosed);
+            }
             PollKind::Foil => {
                 if resolve {
                     if let Some(foil) = winner(&poll.tallies()) {
@@ -630,6 +692,7 @@ impl SegmentRuntime {
             min_rank: Rank::Thrall,
             closes_ms: now_ms + i64::from(secs) * 1000,
             kind: PollKind::Foil,
+            subject: None,
             votes: BTreeMap::new(),
         });
         self.fire(Trigger::FoilVoteOpened);
@@ -645,12 +708,118 @@ impl SegmentRuntime {
         }
     }
 
+    // ----- research --------------------------------------------------------------------
+
+    /// File the planted records of `hex` the bone-clerks have not brought back yet, and attach
+    /// their sources to the hex so the DOC rule sees them.
+    fn file_findings(&mut self, hex_idx: usize) {
+        let Some(file) = &self.case_file else {
+            return;
+        };
+        let hex = &mut self.case.hexes[hex_idx];
+        for r in file.records_for(&hex.id) {
+            if self.filed.contains(&r.id) {
+                continue;
+            }
+            self.filed.push(r.id.clone());
+            if !hex.sources.contains(&r.source) {
+                hex.sources.push(r.source.clone());
+            }
+        }
+    }
+
+    /// The options of `hex`'s Plebiscite: annex it, leave it fogged, or send the bone-clerks
+    /// to a linked hex that is still fogged and has searches left (up to two, in map order).
+    fn plebiscite_options(&self, hex: &str) -> Vec<String> {
+        let mut options = vec![format!("Annex {hex}"), format!("Leave {hex} fogged")];
+        let cap = self.table.clock.max_searches_per_hex;
+        let room = self
+            .table
+            .clock
+            .max_poll_options
+            .saturating_sub(options.len());
+        let linked: BTreeSet<&str> = self
+            .case
+            .links
+            .iter()
+            .filter_map(|(a, b)| match (a == hex, b == hex) {
+                (true, _) => Some(b.as_str()),
+                (_, true) => Some(a.as_str()),
+                _ => None,
+            })
+            .collect();
+        options.extend(
+            self.case
+                .hexes
+                .iter()
+                .filter(|h| h.fog && linked.contains(h.id.as_str()) && self.searches(&h.id) < cap)
+                .take(room.min(2))
+                .map(|h| format!("Search {}", h.id)),
+        );
+        options
+    }
+
+    /// Open the waiting Plebiscite when a poll can open: SEG-02A, no poll open, and a state
+    /// that takes `poll_opened`. Yields its `start_poll` op.
+    fn open_due_plebiscite(&mut self, now_ms: TsMs) -> Option<StreamEvent> {
+        if self.signed_off
+            || self.poll.is_some()
+            || !self.table.allows_op("dispatch_research")
+            || !self.table.accepts(&self.state, Trigger::PollOpened)
+        {
+            return None;
+        }
+        let hex = self.plebiscite_due.take()?;
+        let base = format!("plebiscite-{hex}");
+        let mut id = base.clone();
+        let mut n = 1;
+        while self.used_poll_ids.contains(&id) {
+            n += 1;
+            id = format!("{base}-{n}");
+        }
+        let clock = &self.table.clock;
+        let secs = clock.plebiscite_secs;
+        let question = format!(
+            "The bone-clerks have searched {hex} {} times. What is the Arch-Lich's next move?",
+            clock.max_searches_per_hex
+        );
+        let options = self.plebiscite_options(&hex);
+        self.open_poll(Poll {
+            id: id.clone(),
+            question: question.clone(),
+            options: options.clone(),
+            min_rank: Rank::Thrall,
+            closes_ms: now_ms + i64::from(secs) * 1000,
+            kind: PollKind::Plebiscite,
+            subject: Some(hex),
+            votes: BTreeMap::new(),
+        });
+        self.fire(Trigger::PollOpened);
+        Some(StreamEvent::Op {
+            ts_ms: now_ms,
+            op: Op::StartPoll {
+                poll_id: id,
+                question,
+                options,
+                min_rank: Rank::Thrall,
+                secs,
+            },
+        })
+    }
+
+    /// Research is withheld while a Plebiscite waits or runs: the next move is the audience's.
+    fn research_withheld(&self) -> bool {
+        self.plebiscite_hex().is_some()
+    }
+
     // ----- ops -------------------------------------------------------------------------
 
     /// Validate and apply the brain's ops. An accepted op yields its `op` event followed by
     /// any consequence (a closed `vote`, `segment_end`/`segment_start`...). A rejected op
     /// yields one `moderation` event (stage `output`, action `rejected:<op>`) whose `rule`
-    /// names the failed check.
+    /// names the failed check. A `dispatch_research` refused at the re-search cap
+    /// (`research_cap_reached`) is followed by the `start_poll` of that hex's Plebiscite as
+    /// soon as a poll can open.
     pub fn apply_ops(&mut self, now_ms: TsMs, ops: &[Op]) -> Vec<StreamEvent> {
         self.observe(now_ms);
         let mut events = Vec::new();
@@ -671,6 +840,7 @@ impl SegmentRuntime {
                     format!("rejected:{}", op_tag(op)),
                 )),
             }
+            events.extend(self.open_due_plebiscite(now_ms));
         }
         events
     }
@@ -733,6 +903,7 @@ impl SegmentRuntime {
                     min_rank: *min_rank,
                     closes_ms: now_ms + i64::from(*secs) * 1000,
                     kind: PollKind::Crowd,
+                    subject: None,
                     votes: BTreeMap::new(),
                 });
                 self.fire(Trigger::PollOpened);
@@ -788,9 +959,27 @@ impl SegmentRuntime {
                 if job_id.trim().is_empty() || brief.trim().is_empty() {
                     return Err("invalid_job");
                 }
-                if !self.jobs.insert(job_id.clone()) {
+                if self.jobs.contains(job_id) {
                     return Err("duplicate_job_id");
                 }
+                if self.research_withheld() {
+                    return Err("plebiscite_pending");
+                }
+                // A brief that names no single hex is not counted against any hex.
+                let target = target_hex(&self.case, brief);
+                if let Some(i) = target {
+                    let hex = self.case.hexes[i].id.clone();
+                    if self.searches(&hex) >= self.table.clock.max_searches_per_hex {
+                        // One Plebiscite per hex; later attempts are simply refused.
+                        if self.plebiscited.insert(hex.clone()) {
+                            self.plebiscite_due = Some(hex);
+                        }
+                        return Err("research_cap_reached");
+                    }
+                    *self.searches.entry(hex).or_default() += 1;
+                    self.file_findings(i);
+                }
+                self.jobs.insert(job_id.clone());
             }
             Op::ShowCard { card_id, title, .. } => {
                 if card_id.trim().is_empty() || title.trim().is_empty() {
@@ -851,6 +1040,7 @@ impl SegmentRuntime {
         if self.poll.as_ref().is_some_and(|p| now_ms >= p.closes_ms) {
             events.extend(self.close_poll(now_ms, true));
         }
+        events.extend(self.open_due_plebiscite(now_ms));
         let Some(rule) = self.handover_rule() else {
             return events;
         };
@@ -899,7 +1089,8 @@ impl SegmentRuntime {
 
     /// What the brain sees this tick. `rules_prompt` is stable within a segment (table text
     /// plus config facts); `state_summary` carries the live state. Untrusted chat text
-    /// (leads, proposals) is summarised as counts only.
+    /// (leads, proposals) is summarised as counts only. While a Plebiscite waits or runs,
+    /// `dispatch_research` is withheld from `allowed_ops`.
     pub fn context(&self, ccv: u32, elapsed_s: u32) -> SegmentContext {
         SegmentContext {
             segment: self.table.id,
@@ -908,7 +1099,13 @@ impl SegmentRuntime {
             allowed_ops: if self.signed_off {
                 Vec::new()
             } else {
-                self.table.allowed_ops.clone()
+                let withheld = self.research_withheld();
+                self.table
+                    .allowed_ops
+                    .iter()
+                    .filter(|o| !(withheld && o.as_str() == "dispatch_research"))
+                    .cloned()
+                    .collect()
             },
             ccv,
             elapsed_s,
@@ -947,7 +1144,97 @@ impl SegmentRuntime {
                 );
             }
         }
+        if t.allows_op("dispatch_research") {
+            p.push_str(&format!(
+                "\nResearch: name exactly one hex in every dispatch_research brief (\"HEX-04: \
+                 trace the treasury wallet\"). The bone-clerks search a hex at most {} times \
+                 per stream; after that its next move goes to the Plebiscite, which opens by \
+                 itself. Never re-dispatch a spent hex: annex it with the evidence you hold, \
+                 or let the vote decide.",
+                t.clock.max_searches_per_hex
+            ));
+            if self.case_file.is_some() {
+                p.push_str(
+                    " The case file holds planted FICTIONAL demo records: quote them as the \
+                     demo's records, never as real findings.",
+                );
+            }
+        }
         p
+    }
+
+    /// The research block of the state summary: searches per hex against the cap, what the
+    /// case file has yielded, spent hexes and the Plebiscite. Planted records are fixed data,
+    /// never chat, so their titles may enter the prompt.
+    fn research_lines(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        if self.searches.is_empty() {
+            return lines;
+        }
+        let cap = self.table.clock.max_searches_per_hex;
+        let counts: Vec<String> = self
+            .searches
+            .iter()
+            .map(|(h, n)| {
+                let spent = if *n >= cap { " SPENT" } else { "" };
+                format!("{h} {n}/{cap}{spent}")
+            })
+            .collect();
+        lines.push(format!("bone-clerk searches: {}", counts.join(", ")));
+        if let Some(file) = &self.case_file {
+            let found: Vec<String> = self
+                .filed
+                .iter()
+                .filter_map(|id| file.records.iter().find(|r| &r.id == id))
+                .map(|r| format!("{} {} {}: {}", r.hex, r.id, grade_name(r.grade), r.title))
+                .collect();
+            if !found.is_empty() {
+                lines.push(format!(
+                    "case file (planted FICTIONAL demo records): {}",
+                    found.join("; ")
+                ));
+            }
+            let empty: Vec<&str> = self
+                .searches
+                .keys()
+                .filter(|h| file.records_for(h).next().is_none())
+                .map(String::as_str)
+                .collect();
+            if !empty.is_empty() {
+                lines.push(format!("searched, nothing on file: {}", empty.join(", ")));
+            }
+        }
+        let spent: Vec<&str> = self
+            .searches
+            .iter()
+            .filter(|(_, n)| **n >= cap)
+            .map(|(h, _)| h.as_str())
+            .collect();
+        if !spent.is_empty() {
+            lines.push(format!(
+                "SPENT: {} searched {cap} times. Do NOT dispatch_research on them again; annex \
+                 with the evidence you hold, or leave them fogged.",
+                spent.join(", ")
+            ));
+        }
+        if let Some(hex) = self.plebiscite_hex() {
+            lines.push(format!(
+                "PLEBISCITE on {hex}: the audience decides its next move. No research until \
+                 it closes; campaign for your favourite option."
+            ));
+        } else if let Some((hex, verdict)) = &self.last_plebiscite {
+            lines.push(match verdict {
+                Some(option) => format!(
+                    "PLEBISCITE on {hex} decided: \"{option}\". Carry it out; do not search \
+                     {hex} again."
+                ),
+                None => format!(
+                    "PLEBISCITE on {hex} drew no votes: your call, but {hex} is not searched \
+                     again."
+                ),
+            });
+        }
+        lines
     }
 
     fn state_summary(&self) -> String {
@@ -1029,6 +1316,9 @@ impl SegmentRuntime {
             }
             if !self.jobs.is_empty() {
                 lines.push(format!("research jobs dispatched: {}", self.jobs.len()));
+            }
+            if self.table.allows_op("dispatch_research") {
+                lines.extend(self.research_lines());
             }
         }
         if !self.proposals.is_empty() {

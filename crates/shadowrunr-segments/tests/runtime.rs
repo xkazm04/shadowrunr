@@ -836,6 +836,319 @@ fn seg02a_poll_and_research() {
     );
 }
 
+// ----- SEG-02A research: the case file and the re-search cap -------------------------------
+
+fn research(job_id: &str, brief: &str) -> Op {
+    Op::DispatchResearch {
+        job_id: job_id.into(),
+        brief: brief.into(),
+    }
+}
+
+fn hex<'a>(rt: &'a SegmentRuntime, id: &str) -> &'a Hex {
+    rt.case().hexes.iter().find(|h| h.id == id).unwrap()
+}
+
+/// (poll_id, options) of every `start_poll` op in `evs`.
+fn started_polls(evs: &[StreamEvent]) -> Vec<(String, Vec<String>)> {
+    evs.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Op {
+                op: Op::StartPoll {
+                    poll_id, options, ..
+                },
+                ..
+            } => Some((poll_id.clone(), options.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn research_on_a_seeded_hex_files_its_planted_records() {
+    let mut rt = seg02a();
+    assert!(rt.case_file().is_some(), "the demo case ships its records");
+    // HEX-04 starts with only a chain explorer source: no DOC yet.
+    assert_eq!(
+        rejections(&rt.apply_ops(0, &[reveal("HEX-04", EvidenceGrade::Doc)]))[0].1,
+        "doc_requires_primary_source"
+    );
+    let evs = rt.apply_ops(
+        1_000,
+        &[research("r1", "HEX-04: trace the treasury wallet")],
+    );
+    assert_eq!(accepted_ops(&evs), 1);
+    assert!(rejections(&evs).is_empty());
+    assert_eq!(rt.searches("HEX-04"), 1);
+    let summary = rt.context(10, 1).state_summary;
+    assert!(
+        summary.contains("bone-clerk searches: HEX-04 1/2"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains("case file (planted FICTIONAL demo records): HEX-04 DOC-03 DOC"),
+        "{summary}"
+    );
+    assert!(summary.contains("HEX-04 CLM-02 CLM"), "{summary}");
+    assert!(hex(&rt, "HEX-04")
+        .sources
+        .iter()
+        .any(|s| s == "https://records.example/morrowgate-fco/freeze-0003"));
+    // The filed DOC record lets the hex be annexed at DOC under the existing rule.
+    assert_eq!(
+        accepted_ops(&rt.apply_ops(2_000, &[reveal("HEX-04", EvidenceGrade::Doc)])),
+        1
+    );
+    // A second search files nothing twice.
+    rt.apply_ops(3_000, &[research("r2", "hex4 once more")]);
+    let sources = &hex(&rt, "HEX-04").sources;
+    assert_eq!(sources.len(), 3, "{sources:?}");
+    let summary = rt.context(10, 3).state_summary;
+    assert_eq!(summary.matches("DOC-03").count(), 1, "{summary}");
+    assert!(summary.contains("HEX-04 2/2 SPENT"), "{summary}");
+}
+
+#[test]
+fn research_on_an_empty_hex_finds_nothing() {
+    let mut rt = seg02a();
+    let before = hex(&rt, "HEX-08").sources.clone();
+    let evs = rt.apply_ops(0, &[research("r1", "HEX-08: who controls Mirecrown Trust")]);
+    assert_eq!(accepted_ops(&evs), 1);
+    assert_eq!(rt.searches("HEX-08"), 1);
+    assert_eq!(hex(&rt, "HEX-08").sources, before);
+    let summary = rt.context(10, 1).state_summary;
+    assert!(
+        summary.contains("searched, nothing on file: HEX-08"),
+        "{summary}"
+    );
+    assert!(!summary.contains("case file ("), "{summary}");
+}
+
+#[test]
+fn a_brief_naming_no_hex_is_not_counted() {
+    let mut rt = seg02a();
+    for (i, brief) in [
+        "map the shell chain",
+        "follow every wallet",
+        "Mirecrown and Ashpetal",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let evs = rt.apply_ops(0, &[research(&format!("r{i}"), brief)]);
+        assert_eq!(accepted_ops(&evs), 1, "{brief}");
+    }
+    assert!(rt.case().hexes.iter().all(|h| rt.searches(&h.id) == 0));
+    assert!(!rt
+        .context(10, 0)
+        .state_summary
+        .contains("bone-clerk searches"));
+}
+
+#[test]
+fn third_search_on_a_hex_goes_to_a_plebiscite() {
+    let mut rt = seg02a();
+    let ctx = rt.context(10, 0);
+    assert!(ctx.rules_prompt.contains("at most 2 times per stream"));
+    assert!(ctx.rules_prompt.contains("planted FICTIONAL demo records"));
+    for (job, t) in [("r1", 1_000), ("r2", 2_000)] {
+        let evs = rt.apply_ops(t, &[research(job, "HEX-07: the moon maintenance thread")]);
+        assert_eq!(accepted_ops(&evs), 1);
+        assert!(started_polls(&evs).is_empty());
+    }
+    assert_eq!(rt.searches("HEX-07"), 2);
+    assert!(rt.context(10, 2).state_summary.contains("SPENT: HEX-07"));
+
+    // The third attempt is refused and the next move goes to the audience.
+    let evs = rt.apply_ops(3_000, &[research("r3", "hex 7, try again")]);
+    assert_eq!(
+        rejections(&evs),
+        [(ModStage::Output, "research_cap_reached".to_string())]
+    );
+    assert_eq!(
+        started_polls(&evs),
+        [(
+            "plebiscite-HEX-07".to_string(),
+            vec![
+                "Annex HEX-07".to_string(),
+                "Leave HEX-07 fogged".to_string(),
+                "Search HEX-01".to_string(),
+                "Search HEX-11".to_string(),
+            ]
+        )]
+    );
+    assert_eq!(rt.searches("HEX-07"), 2, "a refused search is not counted");
+    assert_eq!(rt.open_poll_id(), Some("plebiscite-HEX-07"));
+    assert_eq!(rt.plebiscite_hex(), Some("HEX-07"));
+    assert_eq!(rt.state(), "jury_poll");
+
+    // Malakor's turn context says so, and research is withheld until the vote closes.
+    let ctx = rt.context(10, 3);
+    assert!(!ctx.allowed_ops.iter().any(|o| o == "dispatch_research"));
+    assert!(ctx.allowed_ops.iter().any(|o| o == "reveal_hex"));
+    assert!(
+        ctx.state_summary
+            .contains("PLEBISCITE on HEX-07: the audience decides"),
+        "{}",
+        ctx.state_summary
+    );
+    assert!(ctx
+        .state_summary
+        .contains("open Plebiscite plebiscite-HEX-07"));
+    assert_eq!(
+        rejections(&rt.apply_ops(4_000, &[research("r4", "HEX-01: the syndicate")]))[0].1,
+        "plebiscite_pending"
+    );
+
+    // The audience votes; the clock closes the Plebiscite and the verdict reaches the context.
+    rt.ingest_chat(
+        5_000,
+        &[
+            msg("v1", 5_000, "a", Rank::Thrall, "!vote Annex HEX-07"),
+            msg("v2", 5_000, "b", Rank::Thrall, "!vote 3"),
+            msg("v3", 5_000, "c", Rank::Warlock, "!vote annex hex-07"),
+        ],
+    );
+    let evs = rt.tick(63_000, 10);
+    assert_eq!(votes(&evs).len(), 1);
+    assert!(votes(&evs)[0].1, "the Plebiscite closed");
+    assert_eq!(rt.open_poll_id(), None);
+    let ctx = rt.context(10, 63);
+    assert!(
+        ctx.state_summary
+            .contains("PLEBISCITE on HEX-07 decided: \"Annex HEX-07\""),
+        "{}",
+        ctx.state_summary
+    );
+    assert!(ctx.allowed_ops.iter().any(|o| o == "dispatch_research"));
+
+    // A spent hex stays refused, and it gets no second Plebiscite.
+    let evs = rt.apply_ops(64_000, &[research("r5", "HEX-07: one last look")]);
+    assert_eq!(rejections(&evs)[0].1, "research_cap_reached");
+    assert!(started_polls(&evs).is_empty());
+    // Other hexes can still be searched.
+    assert_eq!(
+        accepted_ops(&rt.apply_ops(65_000, &[research("r6", "HEX-11: the help desk")])),
+        1
+    );
+}
+
+#[test]
+fn the_plebiscite_waits_for_an_open_poll_to_close() {
+    let mut rt = seg02a();
+    rt.apply_ops(0, &[poll("next", &["HEX-02", "HEX-04"], Rank::Thrall, 30)]);
+    rt.apply_ops(
+        1_000,
+        &[
+            research("r1", "HEX-08: Mirecrown"),
+            research("r2", "HEX-08: Mirecrown again"),
+        ],
+    );
+    let evs = rt.apply_ops(2_000, &[research("r3", "HEX-08: Mirecrown, third time")]);
+    assert_eq!(rejections(&evs)[0].1, "research_cap_reached");
+    assert!(started_polls(&evs).is_empty(), "a poll is already open");
+    assert_eq!(rt.open_poll_id(), Some("next"));
+    assert_eq!(rt.plebiscite_hex(), Some("HEX-08"));
+    assert!(!rt
+        .context(10, 2)
+        .allowed_ops
+        .iter()
+        .any(|o| o == "dispatch_research"));
+
+    // The crowd poll closes on the clock and the Plebiscite opens in the same tick.
+    let evs = rt.tick(30_000, 10);
+    let polls = started_polls(&evs);
+    assert_eq!(polls.len(), 1, "{evs:?}");
+    assert_eq!(polls[0].0, "plebiscite-HEX-08");
+    // HEX-08 links only to HEX-03.
+    assert_eq!(
+        polls[0].1,
+        ["Annex HEX-08", "Leave HEX-08 fogged", "Search HEX-03"]
+    );
+    assert_eq!(rt.open_poll_id(), Some("plebiscite-HEX-08"));
+}
+
+#[test]
+fn a_custom_case_has_no_planted_records_but_keeps_the_cap() {
+    let mut case = demo_case();
+    case.id = "CUSTOM-01".into();
+    let mut c = cfg();
+    c.case = Some(case);
+    let mut rt = SegmentRuntime::with_config(SegmentId::Seg02aHexmap, c).unwrap();
+    rt.start(0);
+    assert!(rt.case_file().is_none());
+    assert!(!rt.context(10, 0).rules_prompt.contains("planted FICTIONAL"));
+    rt.apply_ops(1_000, &[research("r1", "HEX-04: the wallet")]);
+    rt.apply_ops(2_000, &[research("r2", "HEX-04: the wallet")]);
+    assert!(!rt.context(10, 2).state_summary.contains("case file ("));
+    let evs = rt.apply_ops(3_000, &[research("r3", "HEX-04: the wallet")]);
+    assert_eq!(rejections(&evs)[0].1, "research_cap_reached");
+    assert_eq!(started_polls(&evs)[0].0, "plebiscite-HEX-04");
+
+    // A case file that does not belong to the case is refused at start.
+    let mut c = cfg();
+    let mut other = demo_case();
+    other.id = "CUSTOM-02".into();
+    c.case = Some(other);
+    c.case_file = Some(shadowrunr_segments::CaseFile::demo());
+    assert!(matches!(
+        SegmentRuntime::with_config(SegmentId::Seg02aHexmap, c),
+        Err(SegmentError::Config { .. })
+    ));
+}
+
+fn scripted_research_run() -> String {
+    let mut rt = seg02a();
+    let mut out = Vec::new();
+    let briefs = [
+        "HEX-07: the moon maintenance thread",
+        "Trace the hops out of treasury wallet demo-0001",
+        "HEX-08: Mirecrown",
+        "hex 7 again",
+        "HEX-07 a third time",
+        "map the shell chain",
+    ];
+    for step in 0..30_i64 {
+        let now = step * 10_000;
+        let chat: Vec<ChatMsg> = (0..4)
+            .map(|i| {
+                let text = match (step + i) % 3 {
+                    0 => "!vote 1".to_string(),
+                    1 => "!grade HEX-04 DOC".to_string(),
+                    _ => "!hint hex7 the moon is lying".to_string(),
+                };
+                msg(
+                    &format!("m{step}-{i}"),
+                    now,
+                    &format!("v{i}"),
+                    Rank::Acolyte,
+                    &text,
+                )
+            })
+            .collect();
+        out.extend(rt.ingest_chat(now, &chat));
+        if let Some(b) = briefs.get(step as usize) {
+            out.extend(rt.apply_ops(now, &[research(&format!("r{step}"), b)]));
+        }
+        out.extend(rt.tick(now, 12));
+    }
+    out.push(StreamEvent::Op {
+        ts_ms: 0,
+        op: Op::MarkMoment {
+            label: rt.context(12, 300).state_summary,
+        },
+    });
+    serde_json::to_string(&out).unwrap()
+}
+
+#[test]
+fn research_and_plebiscite_are_deterministic() {
+    let a = scripted_research_run();
+    assert_eq!(a, scripted_research_run());
+    assert!(a.contains("research_cap_reached"), "{a}");
+    assert!(a.contains("plebiscite-HEX-07"), "{a}");
+}
+
 // ----- context and determinism ------------------------------------------------------------
 
 #[test]
