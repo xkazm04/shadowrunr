@@ -377,6 +377,7 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::Moderation { ts_ms, .. }
         | StreamEvent::Handover { ts_ms, .. }
         | StreamEvent::Job { ts_ms, .. }
+        | StreamEvent::Health { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms,
     }
 }
@@ -510,6 +511,14 @@ pub fn body(ev: &StreamEvent) -> String {
             summary
                 .as_ref()
                 .map(|s| format!(": {}", clip(s, 160)))
+                .unwrap_or_default()
+        ),
+        StreamEvent::Health { state, detail, .. } => format!(
+            "health {}{}",
+            wire(state),
+            detail
+                .as_ref()
+                .map(|d| format!(": {}", clip(d, 160)))
                 .unwrap_or_default()
         ),
         StreamEvent::StreamEnd { reason, .. } => format!("stream_end {}", wire(reason)),

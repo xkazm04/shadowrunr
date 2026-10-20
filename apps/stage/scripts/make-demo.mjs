@@ -233,6 +233,7 @@ say(88600, "Begone, Disruptor. Your valuation was always theoretical.");
 op(92500, { op: "show_card", card_id: "card-confidence", title: "Chat's faith in the Disruptor", body: "Measured by the ledger after the funnel: 12% of minions would subscribe." });
 say(93500, "Twelve percent of you would subscribe. I have noted your names. In ink.");
 job(96000, "mem-consolidate-1", "done", "14 minion dossiers updated");
+push({ type: "health", ts_ms: 97000, state: "healthy" });
 const mProp = chat(98000, V.vex, "!propose audit the Disruptor's rocket next stream", { cmd: "propose", text: "audit the Disruptor's rocket next stream" });
 op(99500, { op: "highlight", msg_id: mProp });
 say(100000, "A Warlock proposes. Vexilla_Nine, your proposal is entered for the Lord's dispatch.", [mProp]);

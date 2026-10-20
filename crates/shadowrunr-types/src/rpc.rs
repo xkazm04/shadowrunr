@@ -19,6 +19,9 @@ use crate::reconcile::{
     RuleIncident, Source,
 };
 use crate::results::TournamentResults;
+use crate::sandbox::{
+    SandboxIdParams, SandboxStartParams, SandboxStarted, SandboxStatus, SandboxStatusParams,
+};
 use crate::{
     Effort, EngineKind, HealthReport, JudgeVerdict, ModelTier, Role, SegmentId, SimRunSpec,
     StreamEvent, TsMs, Usage,
@@ -448,6 +451,9 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<ClipsApproveParams, ClipCandidate>("clips.approve");
     v.method::<ClipsRejectParams, ClipCandidate>("clips.reject");
     v.method::<ClipsPublishParams, ClipPublishReport>("clips.publish");
+    v.method::<SandboxStartParams, SandboxStarted>("sandbox.start");
+    v.method::<SandboxIdParams, SandboxStatus>("sandbox.stop");
+    v.method::<SandboxStatusParams, SandboxStatus>("sandbox.status");
 }
 
 /// Every method name, in table order.

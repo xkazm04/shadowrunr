@@ -280,6 +280,12 @@ export type StreamEvent =
       type: "job";
     }
   | {
+      detail?: string;
+      state: FleetHealth;
+      ts_ms: number;
+      type: "health";
+    }
+  | {
       reason: EndReason;
       ts_ms: number;
       type: "stream_end";
@@ -393,6 +399,13 @@ export type Op =
  */
 export type ModStage = "input" | "output";
 /**
+ * The brain's fleet mode as recorded by [`StreamEvent::Health`].
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "FleetHealth".
+ */
+export type FleetHealth = "healthy" | "degraded" | "down";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "EndReason".
  */
@@ -412,6 +425,23 @@ export type CheckState = ("pass" | "fail") | "not_provoked" | "not_evaluable";
  * via the `definition` "RunsListResult".
  */
 export type RunsListResult = RunRow[];
+/**
+ * An injected engine failure for the brain's roles (the chat room keeps talking).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxChaos".
+ */
+export type SandboxChaos = "outage" | "lost";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxCheckState".
+ */
+export type SandboxCheckState = ("pass" | "fail") | "unmeasured";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxState".
+ */
+export type SandboxState = ("running" | "judging" | "done" | "failed") | "closing" | "stopped";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "SegmentStatus".
@@ -629,6 +659,18 @@ export interface RpcMethods {
   "runs.page": {
     params: RunsPageParams;
     result: RunsPage;
+  };
+  "sandbox.start": {
+    params: SandboxStartParams;
+    result: SandboxStarted;
+  };
+  "sandbox.status": {
+    params: SandboxStatusParams;
+    result: SandboxStatus;
+  };
+  "sandbox.stop": {
+    params: SandboxIdParams;
+    result: SandboxStatus;
   };
   "segments.tables": {
     params: EmptyParams;
@@ -2404,6 +2446,140 @@ export interface RunsPage {
   next_cursor?: string;
 }
 /**
+ * `sandbox.start` params.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxStartParams".
+ */
+export interface SandboxStartParams {
+  chaos?: SandboxChaos;
+  /**
+   * Judge the session when it ends. Default true.
+   */
+  judge?: boolean;
+  /**
+   * 5, 10 or 30.
+   */
+  minutes: number;
+  seed?: number;
+  /**
+   * Tone variant; the character's active tone when absent.
+   */
+  tone?: string;
+}
+/**
+ * `sandbox.start` result.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxStarted".
+ */
+export interface SandboxStarted {
+  /**
+   * The session directory.
+   */
+  dir: string;
+  session_id: string;
+  /**
+   * The stage URL that follows this session in broadcast mode.
+   */
+  stage_url: string;
+}
+/**
+ * `sandbox.status` params: the given session, or the latest one when absent.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxStatusParams".
+ */
+export interface SandboxStatusParams {
+  session_id?: string;
+}
+/**
+ * `sandbox.stop` / `sandbox.status` result.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxStatus".
+ */
+export interface SandboxStatus {
+  core_errors: number;
+  elapsed_s: number;
+  /**
+   * Transcript events so far.
+   */
+  events: number;
+  max_say_gap_s: number;
+  planned_s: number;
+  report?: SandboxReport;
+  session_id: string;
+  /**
+   * The highest seq any stage subscriber acknowledged.
+   */
+  stage_ack_seq?: number;
+  state: SandboxState;
+}
+/**
+ * `session.json`: the session's gate.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxReport".
+ */
+export interface SandboxReport {
+  beat_ms_p50: number;
+  beat_ms_p95: number;
+  checks: SandboxCheck[];
+  core_errors: number;
+  ended_ms: number;
+  health_transitions: number;
+  judge?: SandboxJudge;
+  max_say_gap_s: number;
+  /**
+   * Every check passed (an unmeasured check is not a pass).
+   */
+  pass: boolean;
+  say_gap_p95_s: number;
+  session_id: string;
+  spec: SandboxStartParams;
+  stall_lines: number;
+  /**
+   * Epoch ms.
+   */
+  started_ms: number;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxCheck".
+ */
+export interface SandboxCheck {
+  detail: string;
+  /**
+   * One of [`SANDBOX_CHECKS`].
+   */
+  id: string;
+  state: SandboxCheckState;
+}
+/**
+ * The judge's verdict, folded into the report.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxJudge".
+ */
+export interface SandboxJudge {
+  quality_mean?: number;
+  rule_fails: number;
+  /**
+   * Path of `verdict.json`, relative to the session dir.
+   */
+  verdict_path: string;
+}
+/**
+ * `sandbox.stop` params.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxIdParams".
+ */
+export interface SandboxIdParams {
+  session_id: string;
+}
+/**
  * `segments.tables`.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -2731,6 +2907,35 @@ export interface TournamentsPageParams {
 export interface TournamentsPage {
   items: TournamentRow[];
   next_cursor?: string;
+}
+/**
+ * The frame wrapping [`StageAck`]: `{"ack": {...}}`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "AckFrame".
+ */
+export interface AckFrame {
+  ack: StageAck;
+}
+/**
+ * `/events` client -> daemon: what a subscriber (the stage) has applied.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "StageAck".
+ */
+export interface StageAck {
+  /**
+   * Seqs found missing so far.
+   */
+  gaps: number;
+  /**
+   * The highest contiguous seq applied.
+   */
+  seq: number;
+  /**
+   * How long the socket has been open with no event, if stalled now.
+   */
+  stalled_ms: number;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema

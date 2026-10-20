@@ -18,6 +18,7 @@ pub mod preflight;
 pub mod report_wire;
 pub mod rpc;
 pub mod runs;
+pub mod sandbox;
 pub mod server;
 
 #[cfg(test)]

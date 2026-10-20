@@ -63,6 +63,7 @@ const SAMPLES: Record<StreamEvent["type"], unknown> = {
   moderation: { type: "moderation", ts_ms: 8, stage: "input", rule: "anti-brigade", msg_id: "m1", action: "withheld" },
   handover: { type: "handover", ts_ms: 9, from: "SEG-01", to: "SEG-02A", reason: "dare" },
   job: { type: "job", ts_ms: 10, job_id: "r-01", status: "done", summary: "two hops" },
+  health: { type: "health", ts_ms: 11, state: "down", detail: "every route failed" },
   stream_end: { type: "stream_end", ts_ms: 11, reason: "sim_complete" },
 };
 

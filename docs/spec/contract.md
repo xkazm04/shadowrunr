@@ -29,6 +29,7 @@ One `StreamEvent` per line, tagged `"type"`:
 - `moderation` (with `stage: input|output`)
 - `handover`
 - `job`
+- `health` (the brain's fleet mode changed: `state: healthy|degraded|down`, optional `detail`)
 - `stream_end`
 
 The `op` payload is the action grammar, tagged `"op"`:
@@ -821,3 +822,38 @@ pass > not_provoked; quality facts pooled, run facts one per run. `judge.json` g
 `windows: [{window, from_s, to_s, lines?, outcome: judged|cached|void, void_reason?, failed,
 not_evaluable, passed, facts, sampled_turns, raw_reply?}]`; `<run_dir>/judge-windows/w<k>.json`
 caches parsed windows. Every window void is a void run.
+
+## Appendix (sandbox): wall-clock sessions on the real engine
+
+A sandbox session runs the simulated room and the real brain on the wall clock. Stream time is
+wall time since the session started, so a slow engine call shows up as a silence. The daemon
+hosts a session; `shadowrunr stream sandbox` drives it.
+
+- `sandbox.start`:
+  - Params: `{minutes: 5|10|30, seed?, chaos?: outage|lost, judge? (default true), tone?}`.
+  - Returns: `{session_id, dir, stage_url}`.
+  - Preflight runs first: red refuses with `preflight_red`. A second session, or a session
+    while a live sim runs, is refused with `conflict`.
+- `sandbox.stop {session_id}`: the closing window starts at once and the host signs off.
+  Returns `SandboxStatus`.
+- `sandbox.status {session_id?}`: the given session, or the latest one. Returns
+  `{session_id, state: running|closing|judging|done|failed|stopped, elapsed_s, planned_s,
+  events, max_say_gap_s, core_errors, stage_ack_seq?, report?}`.
+- `runs/sandbox/<session_id>/`: spec.json, transcript.jsonl (flushed per event), ledger.jsonl,
+  and session.json. session.json is the `SandboxReport`:
+  `{session_id, spec, started_ms, ended_ms, pass, checks: [{id, state: pass|fail|unmeasured,
+  detail}], max_say_gap_s, say_gap_p95_s, beat_ms_p50, beat_ms_p95, core_errors, stall_lines,
+  health_transitions, judge?: {verdict_path, rule_fails, quality_mean?}}`.
+  - Check ids, in order: `say_gap`, `core_errors`, `sign_off`, `chaos`, `stage_ack`, `judge`.
+  - `pass` needs every check to pass. An unmeasured check (no stage acked, judge skipped) is
+    not a pass.
+- `/events` client frame `{"ack": {"seq", "gaps", "stalled_ms"}}`: a subscriber reports the
+  highest contiguous seq it applied, the gaps it found, and how long it has been stalled. The
+  daemon records the frames per connection for the `stage_ack` check.
+- Chaos wraps only the brain's engine, so the room keeps talking:
+  - `outage`: 90 s of fleet errors from half-way.
+  - `lost`: fleet errors from half-way to the end (10 and 30 minute sessions only).
+- During an outage the host speaks model-free stall lines from the character package. Each
+  is a `say` followed by `moderation {output, engine_stall, spoke}`. `health` events record
+  every fleet-mode change.
+- CLI exit codes: 0 pass, 6 gate fail, 2 usage error.

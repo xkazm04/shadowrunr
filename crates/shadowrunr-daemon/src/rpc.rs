@@ -354,6 +354,9 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
                 p.platforms.as_deref(),
             )?)
         }
+        "sandbox.start" => ok(crate::sandbox::start(state.clone(), params(req.params)?).await?),
+        "sandbox.stop" => ok(crate::sandbox::stop(state, params(req.params)?).await?),
+        "sandbox.status" => ok(crate::sandbox::status(state, params(req.params)?).await?),
         other => Err(RpcError::new(
             ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),

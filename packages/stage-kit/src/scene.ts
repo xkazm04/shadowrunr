@@ -255,6 +255,8 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
       if (ev.summary !== undefined) patch.summary = ev.summary;
       return { ...s, jobs: upsertJob(s.jobs, ev.job_id, at, patch) };
     }
+    case "health":
+      return s;
     case "stream_end":
       return { ...s, ended: { reason: ev.reason, at } };
   }

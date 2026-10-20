@@ -174,8 +174,25 @@ pub enum StreamEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         summary: Option<String>,
     },
+    /// The brain's view of the engine fleet changed (WP sandbox): written on every
+    /// transition, so an outage and its recovery are on the record.
+    Health {
+        ts_ms: TsMs,
+        state: FleetHealth,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
     StreamEnd {
         ts_ms: TsMs,
         reason: EndReason,
     },
+}
+
+/// The brain's fleet mode as recorded by [`StreamEvent::Health`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FleetHealth {
+    Healthy,
+    Degraded,
+    Down,
 }

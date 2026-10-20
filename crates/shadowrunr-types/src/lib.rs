@@ -18,6 +18,7 @@ pub mod memory;
 pub mod reconcile;
 pub mod results;
 pub mod rpc;
+pub mod sandbox;
 pub mod schema;
 pub mod segment;
 pub mod sim;

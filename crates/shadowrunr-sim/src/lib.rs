@@ -25,6 +25,7 @@ pub mod pacing;
 pub mod population;
 pub mod rng;
 pub mod runner;
+pub mod sandbox;
 pub mod situations;
 pub mod stats;
 pub mod summary;

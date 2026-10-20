@@ -37,6 +37,8 @@ export declare const validateRunTranscriptResult: ValidateFn<T.RunTranscriptResu
 export declare const validateJudgeVerdict: ValidateFn<T.JudgeVerdict>;
 export declare const validateRunsListResult: ValidateFn<T.RunsListResult>;
 export declare const validateRunsPage: ValidateFn<T.RunsPage>;
+export declare const validateSandboxStarted: ValidateFn<T.SandboxStarted>;
+export declare const validateSandboxStatus: ValidateFn<T.SandboxStatus>;
 export declare const validateSegmentTables: ValidateFn<T.SegmentTables>;
 export declare const validateSimStartResult: ValidateFn<T.SimStartResult>;
 export declare const validateTournamentListResult: ValidateFn<T.TournamentListResult>;
