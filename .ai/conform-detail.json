@@ -1829,6 +1829,80 @@
           "evidence": "apps/console/scripts/check-bundle.mjs:70 Resolution failure is represented separately as null and explicitly rejected, without adding an absence member to a closed kind set."
         }
       ]
+    },
+    "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0/ipc-contract": {
+      "context": "contract-package",
+      "subject": "ipc-contract",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-20",
+      "evaluatedTs": "2026-10-20T21:30:09.228Z",
+      "worker": "c023aae1-f4d4-4e69-abb2-abada6da98e7",
+      "techniques": [
+        {
+          "technique": "drift-gates",
+          "verdict": "deviation",
+          "evidence": "packages/contract/scripts/check.mjs:31 The drift check diffs a curated file list instead of the whole contract directory, failing to catch untracked files or orphans."
+        },
+        {
+          "technique": "generated-type-contracts",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/generate.mjs:17 Generates TypeScript types, validators, and metadata into a single dedicated output directory from the exported JSON Schema."
+        },
+        {
+          "technique": "casing-and-naming",
+          "verdict": "conformant",
+          "evidence": "packages/contract/src/generated/meta.ts:8 Publishes RPC method names as a frozen constant array rather than free-floating strings."
+        },
+        {
+          "technique": "error-shape-mapping",
+          "verdict": "conformant",
+          "evidence": "packages/contract/src/door.ts:94 Decodes and validates error reply envelopes against the generated schema to produce typed DoorError results."
+        }
+      ],
+      "registryProposal": "Clarify the standard's distinction between a response-decoding validation door (which validates and normalizes boundary bytes into typed results) and a call-wrapping chokepoint (which manages invocation, timeouts, and retries), particularly when split across separate contract and client packages."
+    },
+    "3b37a94d-3e69-4c44-8598-301f66448d9a/ipc-contract": {
+      "context": "types-crate",
+      "subject": "ipc-contract",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-20",
+      "evaluatedTs": "2026-10-20T21:30:09.228Z",
+      "techniques": [
+        {
+          "technique": "drift-gates",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-types/tests/schema_drift.rs:10 Tests only files returned by export_files() instead of diffing the schema directory, ignoring untracked files and the downstream contract package."
+        },
+        {
+          "technique": "casing-and-naming",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-types/src/chat.rs:50 Wire casing is not declared once globally; types declare conflicting per-type casing annotations like UPPERCASE, lowercase, and snake_case."
+        },
+        {
+          "technique": "command-registration",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:4 Documentation claims the daemon's dispatch test reads visit_methods to prevent skew, but no automated dispatch parity test exists."
+        },
+        {
+          "technique": "generated-type-contracts",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-types/src/schema.rs:52 Acts as the single authoring authority, generating draft 2020-12 JSON Schema for domain shapes and binding RPC method parameters and results."
+        },
+        {
+          "technique": "error-shape-mapping",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-types/src/error.rs:14 Defines a closed 10-code error taxonomy, structured ErrorBody, ErrorEnvelope, and legacy code mapping."
+        }
+      ],
+      "registryProposal": "When the engine crate defines an authoritative method visitor table like visit_methods, the standard should specify how registration parity tests in consuming crates (like daemon dispatch) can be co-located or verified without circular dependencies.",
+      "withdrawn": {
+        "worker": "c023aae1-f4d4-4e69-abb2-abada6da98e7",
+        "state": "deviation",
+        "at": "2026-10-20T21:30:35.788956+00:00",
+        "reason": "reviewer (sonnet): The technique claim that no automated dispatch parity test exists is false: crates/shadowrunr-daemon/src/e2e/catalog.rs:163 `every_contract_method_is_dispatched` iterates `method_names()` and asserts none returns method_not_found."
+      }
     }
   }
 }

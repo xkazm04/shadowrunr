@@ -2562,7 +2562,11 @@
           "revision": 6,
           "changedAt": "2026-08-31",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/contract/scripts/check.mjs:31 The drift check diffs only a curated list of five file pairs rather than the full contract directory, leaving untracked new files and deleted orphans undetected.",
+          "evaluatedAt": "2026-10-20",
+          "evaluatedAgainst": "sha256-b2:c9cce81ffdd6456a",
+          "evaluatedRevision": 6
         },
         {
           "subject": "agent-instruction-files",

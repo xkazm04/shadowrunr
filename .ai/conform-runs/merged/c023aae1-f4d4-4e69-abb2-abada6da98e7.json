@@ -1,0 +1,84 @@
+{
+  "schema": "conform-run/1",
+  "worker": "c023aae1-f4d4-4e69-abb2-abada6da98e7",
+  "subject": "ipc-contract",
+  "evaluatedAt": "2026-10-20T21:30:09.228533+00:00",
+  "provider": "agy",
+  "model": "gemini-3.8-flash-high",
+  "pairs": [
+    {
+      "context": "contract-package",
+      "subject": "ipc-contract",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "packages/contract/scripts/check.mjs:31 The drift check diffs only a curated list of five file pairs rather than the full contract directory, leaving untracked new files and deleted orphans undetected.",
+      "techniques": [
+        {
+          "technique": "drift-gates",
+          "verdict": "deviation",
+          "evidence": "packages/contract/scripts/check.mjs:31 The drift check diffs a curated file list instead of the whole contract directory, failing to catch untracked files or orphans."
+        },
+        {
+          "technique": "generated-type-contracts",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/generate.mjs:17 Generates TypeScript types, validators, and metadata into a single dedicated output directory from the exported JSON Schema."
+        },
+        {
+          "technique": "casing-and-naming",
+          "verdict": "conformant",
+          "evidence": "packages/contract/src/generated/meta.ts:8 Publishes RPC method names as a frozen constant array rather than free-floating strings."
+        },
+        {
+          "technique": "error-shape-mapping",
+          "verdict": "conformant",
+          "evidence": "packages/contract/src/door.ts:94 Decodes and validates error reply envelopes against the generated schema to produce typed DoorError results."
+        }
+      ],
+      "registryProposal": "Clarify the standard's distinction between a response-decoding validation door (which validates and normalizes boundary bytes into typed results) and a call-wrapping chokepoint (which manages invocation, timeouts, and retries), particularly when split across separate contract and client packages."
+    }
+  ],
+  "declined": [
+    {
+      "subject": "ipc-contract",
+      "context": "types-crate",
+      "reason": "withdrawn after review: reviewer (sonnet): The technique claim that no automated dispatch parity test exists is false: crates/shadowrunr-daemon/src/e2e/catalog.rs:163 `every_contract_method_is_dispatched` iterates `method_names()` and asserts none returns method_not_found."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-20T21:30:09.228533+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "ipc-contract"
+      ],
+      "techniques": [
+        "casing-and-naming",
+        "drift-gates",
+        "error-shape-mapping",
+        "generated-type-contracts"
+      ],
+      "deviations": 1,
+      "context": "contract-package",
+      "via": "curator-multi:agy",
+      "model": "gemini-3.8-flash-high"
+    },
+    {
+      "ts": "2026-10-20T21:30:09.228533+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "ipc-contract"
+      ],
+      "techniques": [
+        "casing-and-naming",
+        "command-registration",
+        "drift-gates",
+        "error-shape-mapping",
+        "generated-type-contracts"
+      ],
+      "deviations": 1,
+      "context": "types-crate",
+      "via": "curator-multi:agy",
+      "model": "gemini-3.8-flash-high"
+    }
+  ]
+}
