@@ -1,0 +1,20 @@
+/* The judge: fail cards on the left, quality bars and the notes (serif) on the right. */
+
+.judge { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 1fr); gap: var(--sr-space-base); align-items: start; }
+.cards { display: flex; flex-direction: column; gap: var(--sr-space-near); margin-top: var(--sr-space-near); }
+.card { display: flex; flex-direction: column; gap: var(--sr-space-cozy); padding: var(--sr-space-near) var(--sr-space-base); border-left: var(--sr-stroke-heavy) solid var(--sr-color-fail); background: color-mix(in srgb, var(--sr-color-verdict-failed-ground) 30%, var(--sr-color-surface-card)); }
+.rule { margin: 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-subhead); line-height: 1.15; }
+.req { margin: 0; max-width: 75ch; font-size: var(--sr-size-small); color: var(--sr-color-text-note); }
+.refs { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact); align-items: center; }
+
+.dims { margin: var(--sr-space-cozy) 0 0; padding: 0; list-style: none; }
+.dim { display: grid; grid-template-columns: minmax(0, 1fr) 7.5rem 3.5rem; gap: var(--sr-space-cozy); align-items: center; padding: var(--sr-space-snug) 0; font-size: var(--sr-size-small); border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); }
+.dim > :last-child { text-align: right; }
+.qbar { display: flex; height: .5rem; background: color-mix(in srgb, var(--sr-color-fail) 55%, var(--sr-color-track)); }
+.qbar i { display: block; height: 100%; background: var(--sr-color-ok); }
+.aside { margin: var(--sr-space-cozy) 0 0; font-size: var(--sr-size-micro); color: var(--sr-color-text-mute); }
+.notes { margin: var(--sr-space-cozy) 0 0; max-width: 72ch; font-family: var(--sr-font-serif); font-size: var(--sr-size-body); line-height: 1.6; }
+
+@media (max-width: 60rem) {
+  .judge { grid-template-columns: minmax(0, 1fr); }
+}
