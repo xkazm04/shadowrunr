@@ -8,10 +8,12 @@
 //! 3. pre-filter chat (viewers removed after a crisis line, term rules, safety-critical
 //!    disclosures, room-scaled rate caps, injection tagging, flood/copypasta clusters); a
 //!    disclosure puts its viewer in care ([`care`]);
-//! 4. pick messages (safety-critical first; deterministic, or `Role::ChatPicker` above a
-//!    volume threshold);
+//! 4. orchestrate and pick: [`orchestrate`] drops repeats of answered waves, decides the beat's
+//!    mode (cold open, react, bit, bridge, mixed, hold) and writes its `beat_plan`; the picker
+//!    then passes at most the plan's ceiling (safety-critical first; deterministic, or
+//!    `Role::ChatPicker` above a volume threshold). A hold ends the beat there;
 //! 5. recall and compose (stable prefix, with the Lord's brief when the stream has one, +
-//!    per-turn block);
+//!    per-turn block, with the beat's prepared material when it voices some);
 //! 6. call the core thread (warm session when available, else `complete`); a fleet-class
 //!    failure speaks a model-free stall line instead once Malakor was quiet long enough
 //!    ([`stall`]);
@@ -26,6 +28,7 @@ pub mod fleet;
 pub mod grammar;
 pub mod memory;
 pub mod moderation;
+pub mod orchestrate;
 pub mod picker;
 pub mod pool;
 pub mod rules;
@@ -69,10 +72,12 @@ use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line};
 use moderation::{
-    gate_line, gate_text, output_events, InputFilter, Policy, RemovedNames, TermAction,
-    CRISIS_BAN_RULE, NAME_WITHHELD,
+    gate_line, gate_text, output_events, recast_in_character, InputFilter, Policy, RemovedNames,
+    TermAction, AI_DISCLOSURE_LINE, CRISIS_BAN_RULE, NAME_WITHHELD,
 };
+use orchestrate::{requests::claims_authority, BeatInputs, Orchestrator};
 use picker::{PickContext, Picker};
+use shadowrunr_types::prep::BeatMode;
 use stall::{stall_due, Staller, STALL_RULE};
 use util::{fnv1a64, near_duplicate, one_line, REPEAT_WINDOW};
 use working::{select_window, WindowItem, WorkingSet, RECENCY_FLOOR};
@@ -238,6 +243,8 @@ pub struct Brain {
     cover: Option<tokio::sync::mpsc::UnboundedSender<StreamEvent>>,
     /// The approved stream prep the orchestrator voices ([`Brain::set_prep`]).
     prep: Option<shadowrunr_types::prep::StreamPrep>,
+    /// Decides each beat's mode ([`orchestrate`]).
+    orch: Orchestrator,
     /// When this beat started, on the tokio clock (for [`Brain::on_air_ms`]).
     beat_clock: tokio::time::Instant,
     hexes: Vec<HexInfo>,
@@ -302,6 +309,7 @@ impl Brain {
             session_retry_tick: 0,
             cover: None,
             prep: None,
+            orch: Orchestrator::new(salt),
             beat_clock: tokio::time::Instant::now(),
             hexes: Vec::new(),
             turns: Vec::new(),
@@ -757,8 +765,10 @@ impl Brain {
         self.working.expire(now_ms);
         self.collect_jobs(now_ms, &mut ev)?;
 
-        // Pre-filter and pick. A disclosure puts its viewer in care (or restarts it).
+        // Pre-filter, orchestrate and pick. A disclosure puts its viewer in care (or restarts
+        // it).
         self.update_care(now_ms, &inbox, &mut ev);
+        self.orch.observe_inbox(&inbox);
         let (cands, mods) = self.filter.filter(now_ms, inbox, &self.policy);
         ev.extend(mods);
         for c in cands.iter().filter(|c| c.safety.is_some()) {
@@ -766,6 +776,17 @@ impl Brain {
             let how = self.care.begin(&v.id, &v.name, &c.msg.id, now_ms);
             ev.push(care_event(now_ms, &c.msg.id, how.as_str()));
         }
+        let cands = self.orch.screen(now_ms, cands, &mut ev);
+        let mut plan = self.orch.plan(&BeatInputs {
+            now_ms,
+            ctx,
+            cands: &cands,
+            prep: self.prep.as_ref(),
+            last_say_ms: self.last_say_ms,
+            names: &self.names,
+            max_picks: self.picker.config().max_picks,
+        });
+        let cands = self.orch.offered(&plan, &cands);
         let viewer_ids: Vec<String> = {
             let mut seen = HashSet::new();
             cands
@@ -787,7 +808,7 @@ impl Brain {
         let corr = format!("{}:pick:{}", self.cfg.stream_id, self.ticks);
         let pick = self
             .picker
-            .pick(&cands, &pctx, self.engine.as_ref(), &corr)
+            .pick_upto(&cands, &pctx, self.engine.as_ref(), &corr, plan.ceiling)
             .await;
         self.filter
             .note_answered(pick.chosen.iter().map(|c| c.msg.viewer.id.as_str()));
@@ -798,6 +819,21 @@ impl Brain {
                 reason: pick.reason.clone(),
             });
         }
+        ev.push(self.orch.commit(&mut plan, &pick, now_ms));
+        if plan.mode == BeatMode::Hold {
+            if self
+                .ticks
+                .is_multiple_of(u64::from(self.tuning.episode_every_ticks.max(1)))
+            {
+                self.flush_turns(now_ms)?;
+            }
+            return Ok(ev);
+        }
+        // A forged decree or an injection in the picks: a recast line rebuts it.
+        let authority = pick
+            .chosen
+            .iter()
+            .any(|c| c.injection || claims_authority(&c.msg.text));
 
         // Recall.
         let pkg = &self.cfg.character;
@@ -902,6 +938,8 @@ impl Brain {
             fresh_bit: std::mem::take(&mut self.fresh_bit),
             brief: self.brief.as_ref(),
             care_note: care.as_deref(),
+            material: plan.material.as_deref(),
+            beat_note: plan.note.as_deref(),
         });
         self.last_prompt = Some(prompt.clone());
 
@@ -993,8 +1031,15 @@ impl Brain {
         for line in lines {
             match line {
                 Line::Say(text) => {
-                    let (out, fired) = gate_line(&text, &self.policy, &self.hexes, crisis);
+                    let (mut out, fired) = gate_line(&text, &self.policy, &self.hexes, crisis);
                     ev.extend(output_events(now_ms, &fired));
+                    // A recast line fits the beat: a rebuttal when it answered a forged decree.
+                    if recast_in_character(&fired) && out != AI_DISCLOSURE_LINE {
+                        out = self.orch.recast(authority, &text);
+                    }
+                    if out.is_empty() {
+                        continue;
+                    }
                     // A viewer removed from chat is never named again, whoever brought them up.
                     let out = match self.removed_names.withhold(&out) {
                         None => out,
@@ -1036,6 +1081,9 @@ impl Brain {
                 Line::Foil { foil, text } => {
                     let (out, fired) = gate_text(&text, &self.policy, &self.hexes);
                     ev.extend(output_events(now_ms, &fired));
+                    if out.is_empty() {
+                        continue;
+                    }
                     turn.push(format!("{foil}: {out}"));
                     ev.push(StreamEvent::Say {
                         ts_ms: now_ms,

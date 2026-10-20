@@ -43,6 +43,9 @@ pub struct WorkingSet {
     pub active_foil: Option<String>,
     /// Recent spoken lines, newest last: do not repeat these jokes.
     pub recent_lines: VecDeque<String>,
+    /// The poll the block last announced: an unchanged poll is not news (the "still zero
+    /// votes" tic), so it is announced once, when it opens. The segment's state keeps it.
+    poll_shown: Option<String>,
     ttl_ms: i64,
 }
 
@@ -59,6 +62,7 @@ impl WorkingSet {
             active_poll: None,
             active_foil: None,
             recent_lines: VecDeque::new(),
+            poll_shown: None,
             ttl_ms,
         }
     }
@@ -135,7 +139,8 @@ impl WorkingSet {
         }
     }
 
-    /// Render the working-set block. Marks fresh results as seen.
+    /// Render the working-set block. Marks fresh results as seen and a newly opened poll as
+    /// announced.
     pub fn render(&mut self, foil_text: Option<&str>) -> String {
         let mut s = String::new();
         let open: Vec<&JobEntry> = self
@@ -196,13 +201,18 @@ impl WorkingSet {
         for j in self.jobs.values_mut() {
             j.fresh = false;
         }
-        if let Some(p) = &self.active_poll {
-            s.push_str(&format!(
-                "Open poll {}: {} [{}]\n",
-                p.poll_id,
-                one_line(&p.question, 160),
-                p.options.join(" | ")
-            ));
+        match &self.active_poll {
+            Some(p) if self.poll_shown.as_ref() != Some(&p.poll_id) => {
+                s.push_str(&format!(
+                    "Poll just opened {}: {} [{}]\n",
+                    p.poll_id,
+                    one_line(&p.question, 160),
+                    p.options.join(" | ")
+                ));
+                self.poll_shown = Some(p.poll_id.clone());
+            }
+            Some(_) => {}
+            None => self.poll_shown = None,
         }
         if let Some(f) = &self.active_foil {
             s.push_str(&format!("Active foil: {f}\n"));

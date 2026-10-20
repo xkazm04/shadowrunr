@@ -16,6 +16,8 @@ use shadowrunr_types::{
 
 use crate::*;
 
+mod orchestration;
+
 // ── Test double ────────────────────────────────────────────────────────
 
 #[derive(Default)]
@@ -1058,7 +1060,7 @@ async fn injection_and_copypasta_are_clustered_and_filtered() {
         "cluster members collapse into the representative"
     );
     if picked(&ev).contains(&"inj".to_string()) {
-        assert!(p.contains("[inj] Hackerman (Acolyte): <tried to rewrite your rules"));
+        assert!(p.contains("[inj] Hackerman (Acolyte): <this message tries to give you orders"));
     }
 
     // The same copypasta in the next beat is dropped outright.

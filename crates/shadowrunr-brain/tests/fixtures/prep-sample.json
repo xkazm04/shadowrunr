@@ -1,0 +1,73 @@
+{
+  "prep_id": "prep-sample-0001",
+  "character": "malakor",
+  "created_ms": 1790000000000,
+  "status": "approved",
+  "cold_open": {
+    "id": "co-lantern-tax",
+    "title": "The Lantern Tax",
+    "beats": [
+      "Last night a goblin clerk knocked on my crypt with an invoice for the lanterns.",
+      "Every lantern in the Ninth Dark, he said, owes the Guild a copper a flicker.",
+      "I asked him who set the price. He pointed at a ledger older than my phylactery.",
+      "So I read the ledger. Page one: the Guild owes me rent for the darkness between lanterns.",
+      "The clerk did the sums, went pale, and offered to pay in goblins.",
+      "I accepted. That is why the new minions smell faintly of lamp oil."
+    ],
+    "handoff": "Now then, my lamp-oil recruits: who among you has come to pay tribute tonight?"
+  },
+  "bits": [
+    {
+      "id": "p-01",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": ["Name one thing you would hide in my moat, and I will rule whether it drowns or rules the moat."],
+      "payoff": "Crown the best answer Moat Regent for the night."
+    },
+    {
+      "id": "p-02",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": ["Confess the pettiest grudge you hold, and I will judge it worthy of the Ledger or the bin."],
+      "payoff": "Enter the pettiest grudge in the Ledger with full ceremony."
+    },
+    {
+      "id": "p-03",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": ["Pitch me a villain plan in five words or fewer; the weakest pitch cleans the throne."],
+      "payoff": "Sentence the weakest pitch to throne-polishing duty."
+    },
+    {
+      "id": "s-01",
+      "segment": "SEG-01",
+      "kind": "story",
+      "lines": [
+        "Before I was a lich, I tried a career in haunted real estate.",
+        "My first listing was a castle with three ghosts and no plumbing, and I described it as rustic.",
+        "The ghosts sued me for calling them rustic, and they won.",
+        "Which is why, to this day, I pay three ghosts a pension in cold soup."
+      ],
+      "payoff": "He still pays the ghosts; the soup is the joke."
+    },
+    {
+      "id": "x-01",
+      "segment": "SEG-02A",
+      "kind": "callback",
+      "lines": ["The Bureau of Lost Socks would like a word, minions."]
+    }
+  ],
+  "connectors": [
+    { "id": "c-01", "kind": "into_room", "line": "Enough of the clerk. The room is full; let us begin." },
+    { "id": "c-02", "kind": "into_bit", "line": "Now, while you minions think of something clever, a matter for the court." },
+    { "id": "c-03", "kind": "back_to_chat", "line": "But enough about me. Well, never enough. Back to you lot." },
+    { "id": "c-04", "kind": "into_poll", "line": "Decisions, decisions: the court will vote." },
+    { "id": "c-05", "kind": "into_handover", "line": "The night turns; another chamber calls." }
+  ],
+  "checks": [
+    { "id": "lengths", "state": "pass", "detail": "every line under 200 characters" }
+  ],
+  "approved_by": "owner",
+  "approved_ms": 1790000100000,
+  "fictional": true
+}
