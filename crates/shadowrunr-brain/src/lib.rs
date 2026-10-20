@@ -2,7 +2,8 @@
 //! memory, worker pool, chat picker, moderation gates and the fleet-loss policy.
 //!
 //! One `Brain::tick` is one beat of the core thread:
-//! 1. fleet check (sign off after the grace period);
+//! 1. fleet check (a `health` event when the fleet mode changed; sign off after the grace
+//!    period);
 //! 2. collect finished background jobs (never awaits one);
 //! 3. pre-filter chat (viewers removed after a crisis line, term rules, safety-critical
 //!    disclosures, room-scaled rate caps, injection tagging, flood/copypasta clusters); a
@@ -11,9 +12,12 @@
 //!    volume threshold);
 //! 5. recall and compose (stable prefix, with the Lord's brief when the stream has one, +
 //!    per-turn block);
-//! 6. call the core thread (warm session when available, else `complete`);
+//! 6. call the core thread (warm session when available, else `complete`); a fleet-class
+//!    failure speaks a model-free stall line instead once Malakor was quiet long enough
+//!    ([`stall`]);
 //! 7. parse spoken lines, `OP:` and `NOTE:`; gate output; dispatch research jobs; once a
-//!    crisis line went out, remove that viewer from chat when `crisis-chat-ban` is enabled.
+//!    crisis line went out, remove that viewer from chat when `crisis-chat-ban` is enabled
+//!    (their name is withheld from his lines for the rest of the stream).
 
 pub mod care;
 pub mod character;
@@ -25,6 +29,7 @@ pub mod moderation;
 pub mod picker;
 pub mod pool;
 pub mod rules;
+pub mod stall;
 pub mod util;
 pub mod working;
 
@@ -37,7 +42,8 @@ use std::sync::Arc;
 
 use shadowrunr_types::{
     Case, ChatMsg, Engine, EngineError, EngineKind, EngineReply, EngineRequest, EpisodeKind,
-    FactScope, ModelTier, Op, Role, SegmentContext, Speaker, StreamEvent, TsMs, WarmSession,
+    FactScope, FleetHealth, ModelTier, Op, Role, SegmentContext, Speaker, StreamEvent, TsMs,
+    WarmSession,
 };
 
 pub use character::{
@@ -53,6 +59,7 @@ pub use moderation::{FilterConfig, HexInfo, PolicySource};
 pub use picker::PickerConfig;
 pub use pool::{Job, JobCtx, JobRunner, JobStatus, JobUpdate, ResearchRunner, WorkerPool};
 pub use rules::{CharacterRule, RuleState, RulesOverride};
+pub use stall::StallBank;
 
 pub use compose::{brief_summary, build_stream_brief, load_stream_brief, normalize_stream_brief};
 pub use shadowrunr_types::reconcile::StreamBrief;
@@ -62,9 +69,11 @@ use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line};
 use moderation::{
-    gate_line, gate_text, output_events, InputFilter, Policy, TermAction, CRISIS_BAN_RULE,
+    gate_line, gate_text, output_events, InputFilter, Policy, RemovedNames, TermAction,
+    CRISIS_BAN_RULE, NAME_WITHHELD,
 };
 use picker::{PickContext, Picker};
+use stall::{stall_due, Staller, STALL_RULE};
 use util::{fnv1a64, near_duplicate, one_line, REPEAT_WINDOW};
 use working::{select_window, WindowItem, WorkingSet, RECENCY_FLOOR};
 
@@ -122,6 +131,9 @@ pub struct BrainTuning {
     /// Seconds a viewer stays in care after a self-harm disclosure (no roasting or joking
     /// about them; see [`care`]). A new disclosure restarts it.
     pub care_window_s: u64,
+    /// While the fleet fails, a beat with no line from the model speaks a stall line once
+    /// Malakor has been quiet this many seconds (see [`stall`]).
+    pub stall_every_s: u64,
 }
 
 impl Default for BrainTuning {
@@ -138,12 +150,10 @@ impl Default for BrainTuning {
             working_set_ttl_ms: working::WORKING_SET_TTL_MS,
             consolidate_at_end: true,
             care_window_s: care::DEFAULT_CARE_WINDOW_S,
+            stall_every_s: stall::DEFAULT_STALL_EVERY_S,
         }
     }
 }
-
-const SIGN_OFF_LINE: &str = "The Lord of the Darkness recalls me to the crypt... Guard the \
-    throne room, minions. I shall return.";
 
 /// Recalled facts beyond the briefing, and the always-included tier per scope.
 const RECALL_FACTS: usize = 8;
@@ -158,6 +168,27 @@ const SESSION_RETRY_BEATS: u64 = 10;
 /// the disclosure's message id.
 fn care_event(now_ms: TsMs, msg_id: &str, action: &str) -> StreamEvent {
     moderation::input_event(now_ms, care::CARE_RULE, msg_id, action)
+}
+
+/// The `health` record's state for a fleet mode.
+fn fleet_health(mode: FleetMode) -> FleetHealth {
+    match mode {
+        FleetMode::Healthy => FleetHealth::Healthy,
+        FleetMode::Degraded => FleetHealth::Degraded,
+        FleetMode::Down => FleetHealth::Down,
+    }
+}
+
+/// A short, label-free cause for a fleet-class core failure (the error's own text may name an
+/// account).
+fn failure_detail(e: &EngineError) -> &'static str {
+    match e {
+        EngineError::RateLimited { .. } => "core call rate limited",
+        EngineError::Unavailable { .. } => "core call unavailable",
+        EngineError::Timeout { .. } => "core call timed out",
+        EngineError::Io { .. } => "core call i/o error",
+        _ => "core call failed",
+    }
 }
 
 fn fleet_class(e: &EngineError) -> bool {
@@ -185,12 +216,19 @@ pub struct Brain {
     care: CareLedger,
     /// Display names of viewers removed from chat (`crisis-chat-ban`), in ban order.
     removed: Vec<String>,
+    /// The same names as the output gate withholds them from Malakor's lines.
+    removed_names: RemovedNames,
     picker: Picker,
     working: WorkingSet,
     fleet: FleetWatch,
     fleet_probe: Option<Arc<dyn FleetProbe>>,
     fleet_override: Option<FleetMode>,
     engine_down: bool,
+    /// The fleet mode last recorded with a `health` event (healthy before the first one).
+    health: FleetMode,
+    stall: Staller,
+    /// When Malakor last spoke (model line, stall line or sign-off), on the `now_ms` clock.
+    last_say_ms: Option<TsMs>,
     session: Option<Box<dyn WarmSession>>,
     session_turns: u32,
     /// No warm open before this beat: the last one failed. Engines report "no sessions" and
@@ -243,12 +281,16 @@ impl Brain {
             filter,
             care: CareLedger::new(tuning.care_window_s),
             removed: Vec::new(),
+            removed_names: RemovedNames::new(),
             picker: Picker::new(tuning.picker.clone()),
             working: WorkingSet::new(tuning.working_set_ttl_ms),
             fleet: FleetWatch::new(tuning.fleet_grace_s),
             fleet_probe: None,
             fleet_override: None,
             engine_down: false,
+            health: FleetMode::Healthy,
+            stall: Staller::new(),
+            last_say_ms: None,
             session: None,
             session_turns: 0,
             session_retry_tick: 0,
@@ -511,10 +553,54 @@ impl Brain {
         self.engine.complete(req).await
     }
 
+    /// A `health` event when the fleet mode differs from the one last recorded.
+    fn note_health(&mut self, now_ms: TsMs, detail: &str, ev: &mut Vec<StreamEvent>) {
+        let mode = self.fleet_mode();
+        if mode != self.health {
+            self.health = mode;
+            ev.push(StreamEvent::Health {
+                ts_ms: now_ms,
+                state: fleet_health(mode),
+                detail: Some(detail.to_string()),
+            });
+        }
+    }
+
+    /// A model-free stall line (see [`stall`]) when one is due: the say, then its
+    /// `engine_stall` record. It stays out of the turn record, the repetition guard and the
+    /// working set: the model never said it.
+    fn stall_events(&mut self, now_ms: TsMs, ev: &mut Vec<StreamEvent>) {
+        let due = stall_due(
+            self.fleet_mode(),
+            self.last_say_ms,
+            now_ms,
+            self.tuning.stall_every_s,
+        );
+        if !due {
+            return;
+        }
+        let Some(line) = self.stall.next(&self.cfg.character.stalls, self.salt) else {
+            return;
+        };
+        let (text, fired) = gate_text(line, &self.policy, &self.hexes);
+        ev.extend(output_events(now_ms, &fired));
+        ev.push(StreamEvent::Say {
+            ts_ms: now_ms,
+            speaker: Speaker::Malakor,
+            foil: None,
+            text,
+            replying_to: Vec::new(),
+            first_text_ms: None,
+        });
+        ev.push(moderation::output_event(now_ms, STALL_RULE, "spoke"));
+        self.last_say_ms = Some(now_ms);
+    }
+
     fn sign_off_events(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
         let grace = self.tuning.fleet_grace_s;
-        // Every spoken line goes through the output gate, the fixed sign-off included.
-        let (text, fired) = gate_text(SIGN_OFF_LINE, &self.policy, &self.hexes);
+        // Every spoken line goes through the output gate, the package's sign-off included.
+        let line = self.cfg.character.stalls.sign_off.clone();
+        let (text, fired) = gate_text(&line, &self.policy, &self.hexes);
         let mut ev = output_events(now_ms, &fired);
         ev.push(StreamEvent::Say {
             ts_ms: now_ms,
@@ -530,6 +616,7 @@ impl Brain {
                 reason: format!("fleet_lost: engine degraded or down for {grace}s"),
             },
         });
+        self.last_say_ms = Some(now_ms);
         ev
     }
 
@@ -559,6 +646,15 @@ impl Brain {
         ctx: &SegmentContext,
     ) -> Result<Vec<StreamEvent>, BrainError> {
         let mut ev = Vec::new();
+        if self.fleet.signed_off() {
+            return Ok(ev);
+        }
+        let reported = match self.fleet_mode() {
+            FleetMode::Healthy => "fleet healthy",
+            FleetMode::Degraded => "fleet reports degraded",
+            FleetMode::Down => "fleet reports down",
+        };
+        self.note_health(now_ms, reported, &mut ev);
         match self.fleet.observe(now_ms, self.fleet_mode()) {
             FleetVerdict::Gone => return Ok(ev),
             FleetVerdict::SignOff => {
@@ -754,14 +850,18 @@ impl Brain {
         let reply = match self.call_core(prompt).await {
             Ok(r) => {
                 self.engine_down = false;
+                self.note_health(now_ms, "core call answered", &mut ev);
                 r
             }
             Err(e) if fleet_class(&e) => {
                 self.engine_down = true;
+                self.note_health(now_ms, failure_detail(&e), &mut ev);
                 self.record_turn(&turn, now_ms)?;
                 // The grace clock starts at the failure, not at the next beat.
                 if self.fleet.observe(now_ms, FleetMode::Down) == FleetVerdict::SignOff {
                     ev.extend(self.sign_off_events(now_ms));
+                } else {
+                    self.stall_events(now_ms, &mut ev);
                 }
                 return Ok(ev);
             }
@@ -799,6 +899,21 @@ impl Brain {
                 Line::Say(text) => {
                     let (out, fired) = gate_line(&text, &self.policy, &self.hexes, crisis);
                     ev.extend(output_events(now_ms, &fired));
+                    // A viewer removed from chat is never named again, whoever brought them up.
+                    let out = match self.removed_names.withhold(&out) {
+                        None => out,
+                        Some(kept) => {
+                            ev.push(moderation::output_event(
+                                now_ms,
+                                CRISIS_BAN_RULE,
+                                NAME_WITHHELD,
+                            ));
+                            if kept.is_empty() {
+                                continue;
+                            }
+                            kept
+                        }
+                    };
                     // Repetition guard: never say a near-duplicate of a recent line.
                     if guard_repeats && self.spoken.iter().any(|p| near_duplicate(&out, p)) {
                         ev.push(moderation::output_event(now_ms, "repetition", "suppressed"));
@@ -811,6 +926,7 @@ impl Brain {
                     }
                     self.working.remember_line(&out);
                     turn.push(format!("Malakor: {out}"));
+                    self.last_say_ms = Some(now_ms);
                     say_idx.push(ev.len());
                     ev.push(StreamEvent::Say {
                         ts_ms: now_ms,
@@ -901,6 +1017,7 @@ impl Brain {
             for c in pick.chosen.iter().filter(|c| c.safety.is_some()) {
                 if self.filter.ban(&c.msg.viewer.id) {
                     self.removed.push(c.msg.viewer.name.clone());
+                    self.removed_names.add(&c.msg.viewer.name);
                     ev.push(moderation::input_event(
                         now_ms,
                         CRISIS_BAN_RULE,

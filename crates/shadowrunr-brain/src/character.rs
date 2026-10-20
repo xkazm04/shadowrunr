@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use shadowrunr_types::Rank;
 
 use crate::rules::{resolve_rules, CharacterRule, RulesOverride};
+use crate::stall::StallBank;
 use crate::BrainError;
 
 /// Rank titles as the character says them (`[ranks]` in character.toml).
@@ -88,6 +89,9 @@ pub struct CharacterPackage {
     pub situations: SituationBank,
     /// Every optional rule (`rules/<id>.md`), sorted by id, with its effective state.
     pub rules: Vec<CharacterRule>,
+    /// `stalls.toml`: model-free stall lines and the fleet-loss sign-off (built-in defaults
+    /// when the file is absent).
+    pub stalls: StallBank,
 }
 
 impl CharacterPackage {
@@ -227,6 +231,7 @@ pub fn load_character_with(
     };
 
     let rules = resolve_rules(dir, &meta.id, &meta.rules, overrides)?;
+    let stalls = StallBank::load(dir)?;
 
     Ok(CharacterPackage {
         id: meta.id,
@@ -242,6 +247,7 @@ pub fn load_character_with(
         bible,
         situations,
         rules,
+        stalls,
     })
 }
 

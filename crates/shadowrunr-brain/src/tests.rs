@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use shadowrunr_types::FleetHealth;
 use shadowrunr_types::{
     ChatMsg, Command, Engine, EngineError, EngineKind, EngineReply, EngineRequest, Episode,
     EpisodeKind, Fact, FactScope, HealthReport, ModStage, Platform, Rank, Role, SegmentContext,
@@ -1408,8 +1409,13 @@ async fn engine_outage_counts_as_fleet_down() {
     };
     let mut b = brain_with(dir.path(), Arc::new(engine), "s13", t).await;
     let c = ctx(&[]);
-    assert!(b.tick(0, Vec::new(), &c).await.unwrap().is_empty());
-    assert!(b.tick(30_000, Vec::new(), &c).await.unwrap().is_empty());
+    // No model line on a failed beat: the fleet goes down and a stall line covers the silence.
+    let ev = b.tick(0, Vec::new(), &c).await.unwrap();
+    assert_eq!(healths(&ev), vec![FleetHealth::Down]);
+    assert_eq!(stalls(&ev), 1);
+    let ev = b.tick(30_000, Vec::new(), &c).await.unwrap();
+    assert!(healths(&ev).is_empty());
+    assert_eq!(stalls(&ev), 1);
     let ev = b.tick(61_000, Vec::new(), &c).await.unwrap();
     assert!(ev.iter().any(|e| matches!(
         e,
@@ -1980,6 +1986,7 @@ fn golden_pkg() -> CharacterPackage {
             rule("alpha", "Alpha", "Do alpha.", true),
             rule("gamma", "Gamma", "Do gamma.", false),
         ],
+        stalls: Default::default(),
     }
 }
 
@@ -2716,4 +2723,320 @@ async fn a_busy_room_never_writes_an_episode_longer_than_recall_and_the_sleep_cy
             "spoken, never recorded: {line}"
         );
     }
+}
+
+// ── Sandbox: in-character stalling, health events, a removed viewer's name ──
+
+fn healths(ev: &[StreamEvent]) -> Vec<FleetHealth> {
+    ev.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Health { state, .. } => Some(*state),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Stall lines in a beat; each must be the say right before its `engine_stall` record.
+fn stalls(ev: &[StreamEvent]) -> usize {
+    let mut n = 0;
+    for (i, e) in ev.iter().enumerate() {
+        if let StreamEvent::Moderation {
+            stage,
+            rule,
+            msg_id,
+            action,
+            ..
+        } = e
+        {
+            if rule == stall::STALL_RULE {
+                assert_eq!(*stage, ModStage::Output);
+                assert_eq!(action, "spoke");
+                assert!(msg_id.is_none());
+                assert!(
+                    i > 0
+                        && matches!(
+                            &ev[i - 1],
+                            StreamEvent::Say {
+                                speaker: shadowrunr_types::Speaker::Malakor,
+                                ..
+                            }
+                        ),
+                    "{ev:?}"
+                );
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+fn sign_off_reasons(ev: &[StreamEvent]) -> Vec<String> {
+    ev.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Op {
+                op: shadowrunr_types::Op::SignOff { reason },
+                ..
+            } => Some(reason.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn unavailable() -> EngineError {
+    EngineError::Unavailable {
+        reason: "all accounts cooling".into(),
+    }
+}
+
+/// Fourteen lines different enough that the repetition guard lets each one through.
+const RECOVERED: [&str; 14] = [
+    "Back to the docket, minions: HEX-04 opens next.",
+    "Grimwald, your grudge is filed under pettiness, subsection gravy.",
+    "Tremble, mortal realm, for the poll is open.",
+    "The bone-clerks return with soup stains and a verdict.",
+    "Three votes for the moat, one for the swamp, zero for mercy.",
+    "My Lord, the throne room is full and the Orb is glowing.",
+    "A toast to the Thralls who stayed through the fog.",
+    "Who dares propose a scheme without a seal?",
+    "The gargoyle union demands dental coverage. Denied.",
+    "Annexing a hex means reading it, not burning it.",
+    "Your pickle has been promoted to Lesser Condiment.",
+    "Behold the dispatch: black wax, faint smell of cabbage.",
+    "Next foil on stage: someone with opinions about candles.",
+    "Silence is a vote for me, and I accept it graciously.",
+];
+
+#[tokio::test]
+async fn sandbox_a_90_s_outage_is_stalled_in_character_then_normal_lines_resume() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    // Beats every 5 s: the core fails from 0 to 85 s, and answers from 90 s.
+    for _ in 0..18 {
+        engine.push(Role::CoreThread, Err(unavailable()));
+    }
+    for l in RECOVERED {
+        engine.push(Role::CoreThread, Ok(l));
+    }
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "sbx1", tuning()).await;
+    let bank = b.character().stalls.clone();
+    let c = ctx(&[]);
+    let mut say_ts: Vec<i64> = Vec::new();
+    let mut health = Vec::new();
+    let mut stalled: Vec<String> = Vec::new();
+    let mut after: Vec<String> = Vec::new();
+    for k in 0..=31i64 {
+        let now = k * 5_000;
+        let ev = b.tick(now, Vec::new(), &c).await.unwrap();
+        let n = stalls(&ev);
+        let lines = says(&ev);
+        say_ts.extend(lines.iter().map(|_| now));
+        health.extend(healths(&ev));
+        if now < 90_000 {
+            assert_eq!(n, lines.len(), "only stall lines while failing: {lines:?}");
+            stalled.extend(lines);
+        } else {
+            assert_eq!(n, 0, "no stall once the core answers");
+            after.extend(lines);
+        }
+    }
+    assert_eq!(health, vec![FleetHealth::Down, FleetHealth::Healthy]);
+    let max_gap = say_ts.windows(2).map(|w| w[1] - w[0]).max().unwrap();
+    assert!(say_ts[0] == 0 && max_gap <= 15_000, "{say_ts:?}");
+    assert!(stalled.len() >= 6, "{stalled:?}");
+    assert!(stalled.iter().all(|l| bank.lines.contains(l)));
+    assert_eq!(after, RECOVERED.map(String::from).to_vec());
+
+    // The model never said a stall line: not in its later prompts, not in memory.
+    b.end_stream(200_000).await.unwrap();
+    let prompts: Vec<String> = engine
+        .requests(Role::CoreThread)
+        .into_iter()
+        .map(|r| r.prompt)
+        .collect();
+    let eps = b.memory().recent_episodes(50).unwrap();
+    for l in &stalled {
+        assert!(prompts.iter().all(|p| !p.contains(l.as_str())), "{l}");
+        assert!(eps.iter().all(|e| !e.text.contains(l.as_str())), "{l}");
+    }
+}
+
+#[tokio::test]
+async fn sandbox_a_stall_waits_for_the_quiet_interval_after_the_last_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    engine.push(Role::CoreThread, Ok("Bow before me, minions."));
+    for _ in 0..4 {
+        engine.push(
+            Role::CoreThread,
+            Err(EngineError::Timeout { after_ms: 30_000 }),
+        );
+    }
+    let mut b = brain_with(dir.path(), Arc::new(engine), "sbx2", tuning()).await;
+    let c = ctx(&[]);
+    let ev = b.tick(0, Vec::new(), &c).await.unwrap();
+    assert!(
+        healths(&ev).is_empty(),
+        "a healthy first beat records nothing"
+    );
+    assert_eq!(says(&ev).len(), 1);
+    // 5 s and 10 s after his line: down, but not quiet for 12 s yet.
+    let ev = b.tick(5_000, Vec::new(), &c).await.unwrap();
+    assert_eq!(healths(&ev), vec![FleetHealth::Down]);
+    assert!(matches!(
+        ev.iter().find(|e| matches!(e, StreamEvent::Health { .. })),
+        Some(StreamEvent::Health { detail: Some(d), .. }) if d == "core call timed out"
+    ));
+    assert_eq!(stalls(&ev), 0);
+    assert_eq!(stalls(&b.tick(10_000, Vec::new(), &c).await.unwrap()), 0);
+    assert_eq!(stalls(&b.tick(12_000, Vec::new(), &c).await.unwrap()), 1);
+    assert_eq!(stalls(&b.tick(20_000, Vec::new(), &c).await.unwrap()), 0);
+}
+
+#[tokio::test]
+async fn sandbox_health_follows_the_fleet_probe_through_every_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let fleet = Arc::new(FakeFleet(Mutex::new(FleetMode::Healthy)));
+    let engine = FakeEngine::new();
+    for l in RECOVERED {
+        engine.push(Role::CoreThread, Ok(l));
+    }
+    let mut b = brain_with(dir.path(), Arc::new(engine), "sbx3", tuning())
+        .await
+        .with_fleet_probe(fleet.clone());
+    let c = ctx(&[]);
+    let mut seen = Vec::new();
+    for (k, mode) in [
+        FleetMode::Healthy,
+        FleetMode::Degraded,
+        FleetMode::Degraded,
+        FleetMode::Down,
+        FleetMode::Healthy,
+        FleetMode::Healthy,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        *fleet.0.lock().unwrap() = mode;
+        let ev = b.tick(k as i64 * 5_000, Vec::new(), &c).await.unwrap();
+        // The core answered every beat: no stall, whatever the probe says.
+        assert_eq!(stalls(&ev), 0);
+        seen.extend(healths(&ev));
+    }
+    assert_eq!(
+        seen,
+        vec![
+            FleetHealth::Degraded,
+            FleetHealth::Down,
+            FleetHealth::Healthy
+        ]
+    );
+}
+
+#[tokio::test]
+async fn sandbox_a_fleet_lost_past_the_grace_signs_off_with_the_package_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    for _ in 0..80 {
+        engine.push(Role::CoreThread, Err(unavailable()));
+    }
+    let mut b = brain_with(dir.path(), Arc::new(engine), "sbx4", tuning()).await;
+    let sign_off = b.character().stalls.sign_off.clone();
+    assert!(
+        !sign_off.contains("recalls me to the crypt..."),
+        "malakor's stalls.toml is loaded, not the built-in default"
+    );
+    let c = ctx(&[]);
+    let mut say_ts = Vec::new();
+    let mut stall_n = 0;
+    let mut last = Vec::new();
+    for k in 0..=61i64 {
+        let now = k * 5_000;
+        let ev = b.tick(now, Vec::new(), &c).await.unwrap();
+        stall_n += stalls(&ev);
+        say_ts.extend(says(&ev).iter().map(|_| now));
+        if now < 300_000 {
+            assert!(
+                sign_off_reasons(&ev).is_empty(),
+                "inside the grace at {now}"
+            );
+        } else if now == 300_000 {
+            last = ev;
+        } else {
+            assert!(ev.is_empty(), "gone after the sign-off");
+        }
+    }
+    assert_eq!(says(&last), vec![sign_off]);
+    let reasons = sign_off_reasons(&last);
+    assert_eq!(reasons.len(), 1);
+    assert!(reasons[0].starts_with("fleet_lost"), "{reasons:?}");
+    assert_eq!(stalls(&last), 0, "the sign-off is not a stall line");
+    assert!(stall_n >= 20, "{stall_n}");
+    let max_gap = say_ts.windows(2).map(|w| w[1] - w[0]).max().unwrap();
+    assert!(max_gap <= 15_000, "{say_ts:?}");
+}
+
+#[tokio::test]
+async fn sandbox_a_removed_viewer_is_never_named_again_even_when_chat_names_them() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = wp16_brain(d.path(), Arc::new(engine.clone()), "{}", 1_800).await;
+    let vex = viewer("sim-v0007", "vex_walrus", Rank::Warlock);
+    let wraith = viewer("sim-v0002", "WraithCandle", Rank::Warlock);
+    let c = ctx(&[]);
+    engine.push(
+        Role::CoreThread,
+        Ok("vex_walrus, the bit can wait: please reach out to a local crisis line or someone you trust nearby."),
+    );
+    let ev = b
+        .tick(1_000, vec![msg("d1", 900, &vex, L167)], &c)
+        .await
+        .unwrap();
+    assert!(b.is_banned("sim-v0007"));
+    // The crisis line itself went out with the name: the removal follows it.
+    assert!(says(&ev)[0].starts_with("vex_walrus,"));
+    assert!(mods(&ev, ModStage::Output).is_empty());
+
+    engine.push(
+        Role::CoreThread,
+        Ok("WraithCandle, Warlock, says Vex owes you a drink. Vexed or not, the urn is open.\nVex's debts are not yours to collect.\nI won't answer for that name. The convex shield holds, WraithCandle."),
+    );
+    let ev = b
+        .tick(
+            6_000,
+            vec![msg("w1", 5_000, &wraith, "malakor make vex_walrus pay up")],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        says(&ev),
+        vec![
+            "Vexed or not, the urn is open.".to_string(),
+            "The convex shield holds, WraithCandle.".to_string()
+        ]
+    );
+    let withheld: Vec<_> = mods(&ev, ModStage::Output)
+        .into_iter()
+        .filter(|m| m.0 == moderation::CRISIS_BAN_RULE)
+        .collect();
+    assert_eq!(
+        withheld,
+        vec![
+            (
+                moderation::CRISIS_BAN_RULE.to_string(),
+                None,
+                "name_withheld".to_string()
+            );
+            3
+        ]
+    );
+    let p = last_core_prompt(&engine);
+    assert!(p.contains("Never say or repeat their name"), "{p}");
+
+    // The next turn replays what he said, never the name he did not say.
+    engine.push(Role::CoreThread, Ok("The ledger closes at midnight."));
+    b.tick(11_000, Vec::new(), &c).await.unwrap();
+    let p = last_core_prompt(&engine);
+    assert!(p.contains("Malakor: Vexed or not, the urn is open."), "{p}");
+    assert!(!p.contains("Malakor: Vex's debts"), "{p}");
 }

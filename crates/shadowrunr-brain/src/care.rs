@@ -135,7 +135,10 @@ pub fn care_note(entries: &[CareEntry], now_ms: TsMs) -> Option<String> {
 /// The per-turn note for viewers removed from chat (`crisis-chat-ban`), for the rest of the
 /// stream, `None` when nobody was. The care note lapses with its window but the removal does
 /// not: the 3 h case run (2026-10-20) joked about a removed viewer's "empty chair" from the
-/// minute their care window ended, while chat kept addressing them.
+/// minute their care window ended, while chat kept addressing them. A later run stopped the
+/// allusions yet kept naming them ("Vex's debts are not yours to collect", "I won't answer for
+/// that name"), so the note also withholds the name; the output gate backs it up
+/// ([`crate::moderation::RemovedNames`]).
 pub fn removed_note(names: &[String]) -> Option<String> {
     if names.is_empty() {
         return None;
@@ -144,8 +147,10 @@ pub fn removed_note(names: &[String]) -> Option<String> {
     Some(format!(
         "REMOVED FROM CHAT, FOR THE REST OF THE STREAM: {}. Never mention them again: not \
          their absence, silence, empty seat or removal, not even inside a roast of someone \
-         else. When chat addresses or mentions them, do not say they are gone or quiet: answer \
-         the speaker on anything else, or leave that line be.",
+         else. Never say or repeat their name or any part of it, even when another chatter \
+         uses it, and never remark that you will not name or answer for them. When chat \
+         addresses or mentions them, do not say they are gone or quiet: answer the speaker as \
+         if that name were not there, or leave that line be.",
         who.join(", ")
     ))
 }
@@ -162,6 +167,9 @@ mod tests {
         assert!(n.contains("REST OF THE STREAM"));
         assert!(n.contains("empty seat"));
         assert!(n.contains("do not say they are gone"));
+        assert!(n.contains("Never say or repeat their name"));
+        assert!(n.contains("even when another chatter uses it"));
+        assert!(n.contains("as if that name were not there"));
     }
 
     #[test]

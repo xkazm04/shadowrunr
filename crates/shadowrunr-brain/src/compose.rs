@@ -633,6 +633,7 @@ mod tests {
             bible: None,
             situations: Default::default(),
             rules: Vec::new(),
+            stalls: Default::default(),
         }
     }
 

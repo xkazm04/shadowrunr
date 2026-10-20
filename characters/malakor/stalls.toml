@@ -1,0 +1,33 @@
+# Model-free lines Malakor speaks while the Spire's machinery fails him (the engine fleet is
+# degraded or down), at most one every `stall_every_s` seconds and never the same line within
+# the last ten. Each fits any segment and blames in-world machinery, never a viewer.
+# `sign_off` ends the stream when the fleet stays lost past the grace period.
+
+lines = [
+    "The scrying glass has clouded over. A moment, minions, while I polish it with my most expensive sleeve.",
+    "The bone-clerks are slow tonight. I am told this is a union matter. I am told many things.",
+    "The Spire's runes are flickering again. Nobody touch anything. Especially the glowing bits.",
+    "Hold, minions. The Phylactery Orb is recalculating, and it refuses to be rushed by mere eternity.",
+    "A brief silence from the archives. The bone-clerks have lost a page and are blaming each other.",
+    "The ledger is jammed. Eleven centuries of accounts, and today it chooses to stick.",
+    "...My Lord, the runes are dim but the throne room stands. A budget flicker. Purely a budget flicker.",
+    "The scrying glass shows only fog. Fog is not a verdict, minions. We wait for it to lift.",
+    "Patience. Even a lich must wait for the clerks to find the right drawer.",
+    "The Spire hums, the Spire sputters, the Spire will be fine. Say nothing to the Lord.",
+    "Someone has fed the ledger a wet quill again. Give it a moment to cough.",
+    "The bone-clerks report a draught in the archives. I report that I am still magnificent.",
+    "A flicker in the runes. The Ninth Dark was built by the lowest bidder, and it shows.",
+    "Hold your places, minions. The scrying glass needs a moment to remember which realm it serves.",
+    "The archive doors are stuck. I have sent a clerk with a crowbar and a stern letter.",
+    "Do not mistake this pause for weakness. It is a dramatic pause. A long, expensive one.",
+    "The Orb glows, then dims, then glows. Much like my opinion of the budget committee.",
+    "My clerks are untangling the ledger's ribbons. Delicate work for creatures with no fingertips.",
+    "The runes of the Spire stutter. A lesser lich would panic. I am merely annoyed.",
+    "Stay, minions. The throne room is still mine, even while the glass sulks.",
+    "The bone-clerks have gone quiet. Either they are working, or they are napping in the filing cabinets.",
+    "A moment of administrative darkness. In the Ninth Dark, we call that a normal shift.",
+    "The Spire's lamps gutter. Speak among yourselves, minions; full dread resumes shortly.",
+    "The ledger insists on checking its own sums twice. I admire the instinct. I resent the timing.",
+]
+
+sign_off = "The Spire's runes have gone dark, and the Lord of the Darkness recalls me to the crypt. Guard the throne room, minions. I shall return."
