@@ -152,6 +152,16 @@ impl LedgerEngine {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    /// Another engine writing to this ledger: one file, rows in call order, each engine's
+    /// calls ledgered as they come out of it (a sandbox's brain behind its chaos wrapper).
+    pub fn sibling(&self, inner: Arc<dyn Engine>) -> Self {
+        Self {
+            inner,
+            sink: self.sink.clone(),
+            path: self.path.clone(),
+        }
+    }
 }
 
 fn meta(req: &EngineRequest) -> (Role, ModelTier, Effort, Option<String>) {

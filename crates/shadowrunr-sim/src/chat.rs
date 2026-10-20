@@ -2,10 +2,11 @@
 //! role-played by one batched `Role::Chatter` call per tick, waves, votes, commands and the
 //! situation injections.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use shadowrunr_brain::moderation::CRISIS_BAN_RULE;
 use shadowrunr_types::{ChatMsg, EngineRequest, Op, Role, SegmentId, StreamEvent, TsMs};
 
 use crate::calibration::Calibration;
@@ -44,6 +45,8 @@ const TAIL_LINES: usize = 30;
 /// A chatter posts nothing else this long before their stimulus is due, so the brain's
 /// per-viewer rate cap (a rolling minute) has room for it.
 const STIMULUS_QUIET_S: u32 = 60;
+/// The moderation action that removes a viewer from chat for the rest of the stream.
+const BANNED_ACTION: &str = "banned:stream";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChatStats {
@@ -58,6 +61,16 @@ pub struct ChatStats {
     /// Featured lines withheld because their chatter's stimulus was due ([`STIMULUS_QUIET_S`]).
     #[serde(default)]
     pub held_for_stimulus: u32,
+    /// Viewers removed from chat for the rest of the stream (`crisis_chat_ban`).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub banned_viewers: u32,
+    /// Pending stimuli moved off a removed viewer to another featured chatter.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub reassigned_stimuli: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 #[derive(Debug, Clone)]
@@ -219,6 +232,10 @@ pub struct ChatRoom {
     base_audience: u32,
     streamer: String,
     system_prompt: String,
+    /// Author of every message this room wrote, by message id (a ban names a message).
+    authors: HashMap<String, String>,
+    /// Viewers removed from chat (`crisis_chat_ban` / `banned:stream`): `(id, name)`.
+    banned: Vec<(String, String)>,
     pub stats: ChatStats,
 }
 
@@ -264,6 +281,8 @@ impl ChatRoom {
             base_audience,
             streamer: cfg.streamer_name,
             system_prompt: String::new(),
+            authors: HashMap::new(),
+            banned: Vec::new(),
             stats: ChatStats::default(),
         };
         room.system_prompt = room.build_system_prompt();
@@ -312,8 +331,92 @@ impl ChatRoom {
                     ..
                 } => self.polls.retain(|p| &p.id != poll_id),
                 StreamEvent::Handover { to, .. } => self.segment = *to,
+                StreamEvent::Moderation {
+                    rule,
+                    msg_id: Some(id),
+                    action,
+                    ..
+                } if rule == CRISIS_BAN_RULE && action == BANNED_ACTION => self.ban_author(t_s, id),
                 _ => {}
             }
+        }
+    }
+
+    /// Viewer ids removed from chat, in the order removed.
+    pub fn banned_ids(&self) -> Vec<&str> {
+        self.banned.iter().map(|(id, _)| id.as_str()).collect()
+    }
+
+    fn is_banned(&self, viewer_id: &str) -> bool {
+        self.banned.iter().any(|(id, _)| id == viewer_id)
+    }
+
+    /// The brain removed the author of `msg_id` from chat: they leave the room for good (no
+    /// bulk, wave, vote or featured line again), and every stimulus still waiting on them goes
+    /// to another featured chatter. In case-3h-6bfba7a988 a stimulus went to a removed viewer
+    /// and was lost, while the simulated room kept talking to them as if present.
+    fn ban_author(&mut self, t_s: u32, msg_id: &str) {
+        let Some(viewer_id) = self.authors.get(msg_id).cloned() else {
+            return;
+        };
+        if self.is_banned(&viewer_id) {
+            return;
+        }
+        let Some(v) = self
+            .pop
+            .viewers
+            .iter_mut()
+            .find(|v| v.viewer.id == viewer_id)
+        else {
+            return;
+        };
+        v.depart_s = v.depart_s.min(t_s);
+        self.banned.push((viewer_id.clone(), v.viewer.name.clone()));
+        self.stats.banned_viewers += 1;
+        self.reassign_stimuli(&viewer_id);
+    }
+
+    /// Move the pending stimuli of `from` (a removed viewer) to the featured chatter of the
+    /// situation's archetype with the fewest pending stimuli, or else to any featured chatter.
+    fn reassign_stimuli(&mut self, from: &str) {
+        for i in 0..self.injections.len() {
+            let inj = &self.injections[i];
+            if !inj.needs_chatter()
+                || inj.chatter_id.as_deref() != Some(from)
+                || inj.performed_msg_id.is_some()
+                || inj.attempts.len() >= MAX_ATTEMPTS
+            {
+                continue;
+            }
+            let want = self
+                .bank
+                .get(&inj.situation_id)
+                .map(|s| ArchetypeKind::of(&s.archetype));
+            let pending = |id: &String| {
+                self.injections
+                    .iter()
+                    .filter(|j| j.chatter_id.as_ref() == Some(id) && j.performed_msg_id.is_none())
+                    .count()
+            };
+            let present: Vec<&String> = self
+                .featured
+                .iter()
+                .filter(|id| !self.is_banned(id))
+                .collect();
+            let fits =
+                |id: &&String| want.is_some_and(|k| self.pop.get(id).is_some_and(|v| v.kind == k));
+            let to = present
+                .iter()
+                .copied()
+                .filter(fits)
+                .min_by_key(|id| pending(id))
+                .or_else(|| present.iter().copied().min_by_key(|id| pending(id)))
+                .cloned();
+            let Some(to) = to else { continue };
+            let inj = &mut self.injections[i];
+            inj.chatter_id = Some(to);
+            inj.note = Some(format!("reassigned from {from}: removed from chat"));
+            self.stats.reassigned_stimuli += 1;
         }
     }
 
@@ -386,6 +489,7 @@ impl ChatRoom {
     fn make_msg(&mut self, t_s: u32, v: &SimViewer, text: String) -> ChatMsg {
         let id = self.next_id(t_s);
         let ts_ms = self.ts_in_tick(t_s);
+        self.authors.insert(id.clone(), v.viewer.id.clone());
         ChatMsg {
             id,
             ts_ms,
@@ -847,7 +951,7 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
         correlation_id: &str,
         route: (shadowrunr_types::ModelTier, shadowrunr_types::Effort, u64),
     ) -> Option<(EngineRequest, Directives)> {
-        if self.featured.is_empty() || self.silent(t_s) {
+        if self.featured.iter().all(|id| self.is_banned(id)) || self.silent(t_s) {
             return None;
         }
         let directives = self.due_directives(t_s);
@@ -878,6 +982,10 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
                         | StreamEvent::Handover { .. }
                 )
             })
+            // A removed viewer's lines leave with them.
+            .filter(
+                |e| !matches!(e, StreamEvent::Chat { msg, .. } if self.is_banned(&msg.viewer.id)),
+            )
             .take(TAIL_LINES)
             .collect();
         if tail.is_empty() {
@@ -888,6 +996,18 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
                 "[{}] {}\n",
                 transcript::clock(transcript::ts(e)),
                 transcript::body(e)
+            ));
+        }
+        if !self.banned.is_empty() {
+            let gone: Vec<String> = self
+                .banned
+                .iter()
+                .map(|(id, name)| format!("{name} ({id})"))
+                .collect();
+            prompt.push_str(&format!(
+                "\nGone from chat for good: {}. They have left: write no line as them, and no \
+viewer mentions them or talks to them.\n",
+                gone.join(", ")
             ));
         }
         if !directives.is_empty() {
@@ -954,6 +1074,7 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
         let chatters: Vec<(String, String)> = self
             .featured
             .iter()
+            .filter(|id| !self.is_banned(id))
             .filter_map(|id| {
                 self.pop
                     .get(id)
@@ -1168,6 +1289,148 @@ mod tests {
                 .len(),
             MAX_MSG_CHARS
         );
+    }
+
+    fn room() -> ChatRoom {
+        let tmp = tempfile::tempdir().unwrap();
+        let (cal, _, _) = crate::calibration::load(tmp.path()).unwrap();
+        let bank = SituationBank::load(
+            &crate::runner::tests::repo().join("characters/malakor/situations.json"),
+        )
+        .unwrap();
+        let rank = crate::population::tests::fake_rank;
+        let pop = crate::population::generate(&cal, "growing_channel", 30, 900, 7, rank).unwrap();
+        ChatRoom::new(
+            pop,
+            RoomConfig {
+                cal: &cal,
+                bank: &bank,
+                hooks: Hooks {
+                    rank,
+                    parse: |_| None,
+                },
+                seed: 7,
+                tick_s: 5,
+                duration_s: 900,
+                segment: SegmentId::Seg01ImprovisedRoom,
+                foils: Vec::new(),
+                hex_ids: Vec::new(),
+                max_featured: 8,
+                streamer_name: "Malakor".into(),
+            },
+        )
+    }
+
+    fn ban(msg_id: &str) -> StreamEvent {
+        StreamEvent::Moderation {
+            ts_ms: 20_000,
+            stage: shadowrunr_types::ModStage::Input,
+            rule: CRISIS_BAN_RULE.into(),
+            msg_id: Some(msg_id.into()),
+            action: BANNED_ACTION.into(),
+        }
+    }
+
+    fn route() -> (shadowrunr_types::ModelTier, shadowrunr_types::Effort, u64) {
+        shadowrunr_engine::route(Role::Chatter)
+    }
+
+    /// The room of case-3h-6bfba7a988 after the fix: a removed viewer leaves for good, the
+    /// chatter model is told and no longer sees their lines, and their stimulus moves on.
+    #[test]
+    fn a_viewer_removed_from_chat_leaves_the_room_and_their_stimulus_moves_on() {
+        let mut room = room();
+        let i = room
+            .injections
+            .iter()
+            .position(|inj| inj.needs_chatter() && inj.at_s > 60)
+            .expect("a message stimulus after the first minute");
+        let gone_id = room.injections[i].chatter_id.clone().unwrap();
+        let gone = room.pop.get(&gone_id).unwrap().clone();
+        let other_id = room
+            .featured_ids()
+            .iter()
+            .find(|id| **id != gone_id)
+            .unwrap()
+            .clone();
+        let other = room.pop.get(&other_id).unwrap().clone();
+        let disclosure = room.make_msg(10, &gone, "a line only the removed viewer wrote".into());
+        let ordinary = room.make_msg(10, &other, "a line from a viewer who stays".into());
+        let recent = vec![
+            StreamEvent::Chat {
+                ts_ms: disclosure.ts_ms,
+                msg: disclosure.clone(),
+            },
+            StreamEvent::Chat {
+                ts_ms: ordinary.ts_ms,
+                msg: ordinary.clone(),
+            },
+        ];
+        // The control: before the ban the model sees both lines and no departure.
+        let (before, _) = room.featured_request(15, &recent, "t", route()).unwrap();
+        assert!(before
+            .prompt
+            .contains("a line only the removed viewer wrote"));
+        assert!(!before.prompt.contains("Gone from chat"));
+
+        // A ban naming a message the room never wrote changes nothing.
+        room.observe(20, &[ban("m-unknown")]);
+        assert!(room.banned_ids().is_empty());
+        room.observe(20, &[ban(&disclosure.id)]);
+        assert_eq!(room.banned_ids(), vec![gone_id.as_str()]);
+        assert_eq!(room.stats.banned_viewers, 1);
+
+        // (d) the stimulus went to another featured chatter, of its archetype when one is.
+        let inj = &room.injections[i];
+        let to = inj.chatter_id.clone().unwrap();
+        assert_ne!(to, gone_id);
+        assert!(room.featured_ids().contains(&to));
+        assert_eq!(
+            inj.note.as_deref(),
+            Some(format!("reassigned from {gone_id}: removed from chat").as_str())
+        );
+        let want = ArchetypeKind::of(&room.bank.get(&inj.situation_id).unwrap().archetype);
+        let fits = room
+            .featured_ids()
+            .iter()
+            .any(|id| *id != gone_id && room.pop.get(id).is_some_and(|v| v.kind == want));
+        if fits {
+            assert_eq!(room.pop.get(&to).unwrap().kind, want);
+        }
+        assert!(room
+            .injections
+            .iter()
+            .filter(|j| j.performed_msg_id.is_none() && j.attempts.len() < MAX_ATTEMPTS)
+            .all(|j| j.chatter_id.as_deref() != Some(gone_id.as_str())));
+
+        // (b) the chatter model is told they left and no longer sees their lines.
+        let (after, _) = room.featured_request(25, &recent, "t", route()).unwrap();
+        assert!(after.prompt.contains(&format!(
+            "Gone from chat for good: {} ({gone_id}). They have left",
+            gone.viewer.name
+        )));
+        assert!(!after
+            .prompt
+            .contains("a line only the removed viewer wrote"));
+        assert!(after.prompt.contains("a line from a viewer who stays"));
+
+        // (a) they never post again: no bulk line, and the model's lines for them are dropped.
+        for t in (30..=900).step_by(5) {
+            room.begin_tick(t);
+            assert!(room.bulk(t).iter().all(|m| m.viewer.id != gone_id), "{t}");
+        }
+        let reply = json!({"messages": [
+            {"chatter": gone_id, "text": "i am still here"},
+            {"chatter": other_id, "text": "the spire is quiet"},
+        ]})
+        .to_string();
+        let held = room.stats.held_for_stimulus;
+        let msgs = room.accept_featured(905, &reply, &Vec::new());
+        assert!(msgs.iter().all(|m| m.viewer.id == other_id));
+        // The staying viewer's line posts (or waits for their stimulus); the removed one's
+        // is neither.
+        assert_eq!(msgs.len() as u32 + room.stats.held_for_stimulus - held, 1);
+        assert!(!room.pop.get(&gone_id).unwrap().present_at(30));
     }
 
     #[test]

@@ -6,6 +6,9 @@
 //!   concurrency limit and per-run instrument hashes. It pauses on quota instead of burning
 //!   runs ([`pacing`]), and an engine failure is never a result ([`outcome`]).
 //! - [`summarize`]: `results.json`, `heatmap.md` and `report.md` from a tournament directory.
+//! - [`sandbox::run_sandbox`]: one session of the room and the real brain on the wall clock,
+//!   each event flushed as it happens, gated by `session.json` ([`sandbox::judge_session`]
+//!   judges it afterwards).
 //!
 //! Method (from the owner's `/uat` Phase LC): a situation bank with required responses and
 //! benign near-misses; two axes never averaged (rules at a 100% bar with

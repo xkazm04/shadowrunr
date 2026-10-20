@@ -92,7 +92,7 @@ impl Mind for Brain {
 /// The brain's events already carry each op it issued, and `SegmentRuntime::apply_ops` echoes
 /// every op it accepts before its consequences. Drop that echo so each op is recorded once;
 /// rejections and ops the stage generates itself (a foil vote's `start_poll`) are kept.
-fn drop_op_echo(sent: &[Op], evs: Vec<StreamEvent>) -> Vec<StreamEvent> {
+pub(crate) fn drop_op_echo(sent: &[Op], evs: Vec<StreamEvent>) -> Vec<StreamEvent> {
     let sent: Vec<serde_json::Value> = sent
         .iter()
         .filter_map(|o| serde_json::to_value(o).ok())
@@ -234,7 +234,10 @@ pub(crate) struct Prepared {
     pub bank: SituationBank,
     pub rubric: Option<Rubric>,
     pub instrument: Instrument,
+    /// The run's engine, ledgered (`ledger`, type-erased).
     pub engine: Arc<dyn Engine>,
+    /// The run's ledger, for other engines that write to it ([`LedgerEngine::sibling`]).
+    pub ledger: Arc<LedgerEngine>,
     pub judge_tier: Option<ModelTier>,
     pub foils: Vec<String>,
     pub hex_ids: Vec<String>,
@@ -365,6 +368,16 @@ pub(crate) fn prepare(
     engine: Arc<dyn Engine>,
     opts: &SimOptions,
 ) -> Result<Prepared, SimError> {
+    prepare_in(spec, &out_dir.join(&spec.run_id), engine, opts)
+}
+
+/// [`prepare`] into an explicit run directory.
+pub(crate) fn prepare_in(
+    spec: &SimRunSpec,
+    run_dir: &Path,
+    engine: Arc<dyn Engine>,
+    opts: &SimOptions,
+) -> Result<Prepared, SimError> {
     let judge_tier = if opts.judge {
         Some(judge::resolve_judge_tier(
             opts.judge_tier,
@@ -377,7 +390,7 @@ pub(crate) fn prepare(
     if spec.duration_s == 0 {
         return Err(SimError::Spec("duration_s must be positive".into()));
     }
-    let run_dir = out_dir.join(&spec.run_id);
+    let run_dir = run_dir.to_path_buf();
     std::fs::create_dir_all(&run_dir)
         .map_err(|e| SimError::Io(format!("{}: {e}", run_dir.display())))?;
     let (cal, cal_origin, cal_text) = calibration::load(&opts.sim_root)?;
@@ -408,11 +421,12 @@ pub(crate) fn prepare(
     if let Some(b) = &brief {
         write_json(&run_dir.join(BRIEF_FILE), b)?;
     }
-    let engine: Arc<dyn Engine> = Arc::new(LedgerEngine::create(
+    let ledger = Arc::new(LedgerEngine::create(
         engine,
         &run_dir.join("ledger.jsonl"),
         &spec.run_id,
     )?);
+    let engine: Arc<dyn Engine> = ledger.clone();
     let (streamer, foils) = character_meta(&cdir);
     Ok(Prepared {
         spec: spec.clone(),
@@ -423,6 +437,7 @@ pub(crate) fn prepare(
         rubric,
         instrument,
         engine,
+        ledger,
         judge_tier,
         foils,
         hex_ids: match &case {
@@ -763,7 +778,43 @@ async fn judge_into(
     }
 }
 
-fn temp_memory_dir(run_id: &str) -> PathBuf {
+/// The brain tuning a simulated run uses.
+pub(crate) fn brain_tuning(opts: &SimOptions) -> BrainTuning {
+    BrainTuning {
+        platforms: opts.platforms.clone(),
+        filter: filter_config(opts),
+        ..BrainTuning::default()
+    }
+}
+
+/// The run's brain on `engine`, with a fresh memory in `memory_dir` and the run's brief.
+pub(crate) async fn build_brain(
+    prep: &Prepared,
+    opts: &SimOptions,
+    memory_dir: &Path,
+    engine: Arc<dyn Engine>,
+    stage: &SegmentRuntime,
+    tuning: BrainTuning,
+) -> Result<Brain, SimError> {
+    let character = load_character(&prep.character_dir, &prep.spec.tone_variant)?;
+    // The bone-clerks search the case file (planted or staged public records), not the web.
+    let brain_engine = CaseFileResearch::wrap(engine, stage);
+    Ok(Brain::new_with(
+        BrainConfig {
+            character,
+            memory_dir: memory_dir.to_path_buf(),
+            stream_id: prep.spec.run_id.clone(),
+            core_tier: prep.spec.core_tier,
+            pool_size: opts.pool_size,
+        },
+        brain_engine,
+        tuning,
+    )
+    .await?
+    .with_brief(prep.brief.clone()))
+}
+
+pub(crate) fn temp_memory_dir(run_id: &str) -> PathBuf {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -810,7 +861,6 @@ pub async fn run_one_with(
     let res = async {
         std::fs::create_dir_all(&memory_dir)
             .map_err(|e| SimError::Io(format!("{}: {e}", memory_dir.display())))?;
-        let character = load_character(&prep.character_dir, &spec.tone_variant)?;
         let mut config = SegmentConfig {
             foils: prep.foils.clone(),
             start_ms: Some(0),
@@ -824,25 +874,15 @@ pub async fn run_one_with(
         }
         let stage = SegmentRuntime::with_config(spec.segment, config)
             .map_err(|e| SimError::Spec(format!("segment runtime: {e}")))?;
-        // The bone-clerks search the case file (planted or staged public records), not the web.
-        let brain_engine = CaseFileResearch::wrap(prep.engine.clone(), &stage);
-        let brain = Brain::new_with(
-            BrainConfig {
-                character,
-                memory_dir: memory_dir.clone(),
-                stream_id: spec.run_id.clone(),
-                core_tier: spec.core_tier,
-                pool_size: opts.pool_size,
-            },
-            brain_engine,
-            BrainTuning {
-                platforms: opts.platforms.clone(),
-                filter: filter_config(opts),
-                ..BrainTuning::default()
-            },
+        let brain = build_brain(
+            &prep,
+            opts,
+            &memory_dir,
+            prep.engine.clone(),
+            &stage,
+            brain_tuning(opts),
         )
-        .await?
-        .with_brief(prep.brief.clone());
+        .await?;
         execute(prep, brain, stage, opts).await
     }
     .await;
@@ -941,7 +981,7 @@ pub(crate) mod tests {
         }
     }
 
-    fn reply(text: String) -> EngineReply {
+    pub(crate) fn reply(text: String) -> EngineReply {
         EngineReply {
             text,
             engine: EngineKind::Scripted,

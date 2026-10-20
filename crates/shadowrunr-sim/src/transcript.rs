@@ -13,15 +13,27 @@ pub struct TranscriptWriter {
     path: PathBuf,
     out: BufWriter<File>,
     events: Vec<StreamEvent>,
+    /// Flush after every event, so a reader tailing the file sees each line as it happens.
+    flush_each: bool,
 }
 
 impl TranscriptWriter {
+    /// A buffered writer, flushed on [`TranscriptWriter::flush`].
     pub fn create(path: &Path) -> Result<Self, SimError> {
         let f = File::create(path).map_err(|e| SimError::Io(format!("{}: {e}", path.display())))?;
         Ok(Self {
             path: path.to_path_buf(),
             out: BufWriter::new(f),
             events: Vec::new(),
+            flush_each: false,
+        })
+    }
+
+    /// A writer that flushes every event as it is pushed (a live session).
+    pub fn create_live(path: &Path) -> Result<Self, SimError> {
+        Ok(Self {
+            flush_each: true,
+            ..Self::create(path)?
         })
     }
 
@@ -30,6 +42,9 @@ impl TranscriptWriter {
         let line = serde_json::to_string(&ev).map_err(|e| SimError::Io(e.to_string()))?;
         writeln!(self.out, "{line}")
             .map_err(|e| SimError::Io(format!("{}: {e}", self.path.display())))?;
+        if self.flush_each {
+            self.flush()?;
+        }
         self.events.push(ev);
         Ok(self.events.len())
     }
@@ -85,6 +100,29 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms,
+    }
+}
+
+/// Restamp an event (its `ts_ms`; a chat event's message too).
+pub fn set_ts(ev: &mut StreamEvent, ts: TsMs) {
+    match ev {
+        StreamEvent::StreamStart { ts_ms, .. }
+        | StreamEvent::SegmentStart { ts_ms, .. }
+        | StreamEvent::SegmentEnd { ts_ms, .. }
+        | StreamEvent::CaseOpen { ts_ms, .. }
+        | StreamEvent::Picked { ts_ms, .. }
+        | StreamEvent::Say { ts_ms, .. }
+        | StreamEvent::Op { ts_ms, .. }
+        | StreamEvent::Vote { ts_ms, .. }
+        | StreamEvent::Moderation { ts_ms, .. }
+        | StreamEvent::Handover { ts_ms, .. }
+        | StreamEvent::Job { ts_ms, .. }
+        | StreamEvent::Health { ts_ms, .. }
+        | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms = ts,
+        StreamEvent::Chat { ts_ms, msg } => {
+            *ts_ms = ts;
+            msg.ts_ms = ts;
+        }
     }
 }
 
@@ -333,6 +371,34 @@ mod tests {
         let back = read(&p).unwrap();
         assert_eq!(back.len(), 2);
         assert!(render_line(2, &back[1]).starts_with("L2 [00:05] say malakor: hello minion"));
+    }
+
+    #[test]
+    fn a_live_writer_flushes_every_event_and_a_buffered_one_does_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let live = dir.path().join("live.jsonl");
+        let mut w = TranscriptWriter::create_live(&live).unwrap();
+        w.push(chat(0, "m1", "A", "hi")).unwrap();
+        assert_eq!(read(&live).unwrap().len(), 1);
+        w.push(say(5000, "hello minion")).unwrap();
+        assert_eq!(read(&live).unwrap().len(), 2);
+        let buffered = dir.path().join("buffered.jsonl");
+        let mut b = TranscriptWriter::create(&buffered).unwrap();
+        b.push(chat(0, "m1", "A", "hi")).unwrap();
+        assert_eq!(read(&buffered).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn set_ts_restamps_a_chat_message_with_its_event() {
+        let mut ev = chat(1000, "m1", "A", "hi");
+        set_ts(&mut ev, 4000);
+        let StreamEvent::Chat { ts_ms, msg } = &ev else {
+            panic!("{ev:?}");
+        };
+        assert_eq!((*ts_ms, msg.ts_ms), (4000, 4000));
+        let mut s = say(5000, "hello");
+        set_ts(&mut s, 6000);
+        assert_eq!(ts(&s), 6000);
     }
 
     #[test]
