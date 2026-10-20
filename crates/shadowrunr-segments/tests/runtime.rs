@@ -1,5 +1,8 @@
-//! SegmentRuntime behaviour: handover, polls, foils, ranks, the DOC rule, descoped segments.
+//! SegmentRuntime behaviour: the cold open, handover, polls and their ties, foils, ranks, the
+//! DOC rule, descoped segments.
 
+use shadowrunr_segments::runtime::PollOutcome;
+use shadowrunr_segments::table::ColdOpenRule;
 use shadowrunr_segments::{
     demo_case, requires_alleged, HandoverRule, SegmentConfig, SegmentError, SegmentRuntime,
     StreamKind,
@@ -11,15 +14,40 @@ use shadowrunr_types::{
 
 const FOILS: [&str; 2] = ["the-disruptor", "the-life-coach"];
 
+/// A cold-open override with a ceiling of 0: the segment starts past its cold open.
+fn no_cold_open() -> ColdOpenRule {
+    ColdOpenRule {
+        to: "opening".into(),
+        min_s: 0,
+        max_s: 0,
+        active_chatters: 1,
+        window_s: 60,
+        sustain_s: 0,
+    }
+}
+
+/// The test config. SEG-01 starts past its cold open (the cold-open tests use [`seg01_cold`]).
 fn cfg() -> SegmentConfig {
     SegmentConfig {
         foils: FOILS.iter().map(|s| s.to_string()).collect(),
+        cold_open: Some(no_cold_open()),
         ..Default::default()
     }
 }
 
 fn seg01() -> SegmentRuntime {
     let mut rt = SegmentRuntime::with_config(SegmentId::Seg01ImprovisedRoom, cfg()).unwrap();
+    rt.start(0);
+    rt
+}
+
+/// SEG-01 with the table's cold open.
+fn seg01_cold() -> SegmentRuntime {
+    let c = SegmentConfig {
+        cold_open: None,
+        ..cfg()
+    };
+    let mut rt = SegmentRuntime::with_config(SegmentId::Seg01ImprovisedRoom, c).unwrap();
     rt.start(0);
     rt
 }
@@ -1616,4 +1644,434 @@ fn a_short_stream_has_no_reveal_pacing() {
     );
     assert_eq!(accepted_ops(&evs), 3, "{evs:?}");
     assert!(!rt.context(30, 1).state_summary.contains("REVEAL PACE"));
+}
+
+// ----- SEG-01 cold open -------------------------------------------------------------------
+
+/// One line from each of `who`, at `t`.
+fn chat_from(rt: &mut SegmentRuntime, t: i64, who: &[&str]) {
+    let msgs: Vec<ChatMsg> = who
+        .iter()
+        .map(|w| msg(&format!("{w}-{t}"), t, w, Rank::Thrall, "hello lich"))
+        .collect();
+    rt.ingest_chat(t, &msgs);
+}
+
+/// The cold-open-end cards in `evs`.
+fn cold_open_cards(evs: &[StreamEvent]) -> Vec<String> {
+    evs.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Op {
+                op: Op::ShowCard { card_id, .. },
+                ..
+            } if card_id.starts_with("cold-open-end") => Some(card_id.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+const ROOM: [&str; 5] = ["ann", "bob", "cyd", "dee", "eve"];
+
+#[test]
+fn seg01_starts_in_the_cold_open_with_its_own_prompt_line() {
+    let rt = seg01_cold();
+    assert_eq!(rt.state(), "cold_open");
+    assert!(rt.in_cold_open());
+    let ctx = rt.context(3, 0);
+    assert_eq!(ctx.state, "cold_open");
+    assert!(
+        ctx.state_summary.contains(
+            "The room is still filling: tell tonight's cold-open story; answer only newcomers' \
+             first hello and anything about safety; no polls, no foils yet."
+        ),
+        "{}",
+        ctx.state_summary
+    );
+    // The opening carries today's text and no cold-open line.
+    let open = seg01().context(3, 0);
+    assert_eq!(open.state, "opening");
+    assert!(!open.state_summary.contains("still filling"));
+    assert_eq!(open.rules_prompt, ctx.rules_prompt);
+}
+
+#[test]
+fn the_cold_open_lasts_at_least_the_floor() {
+    let mut rt = seg01_cold();
+    // A full room from the first second: the active chatters hold long past the sustain.
+    for t in (0..60_000).step_by(5_000) {
+        chat_from(&mut rt, t, &ROOM);
+        assert!(cold_open_cards(&rt.tick(t, 20)).is_empty(), "t={t}");
+        assert_eq!(rt.state(), "cold_open", "t={t}");
+    }
+    chat_from(&mut rt, 60_000, &ROOM);
+    let evs = rt.tick(60_000, 20);
+    assert_eq!(cold_open_cards(&evs), ["cold-open-end-room-filled"]);
+    assert_eq!(rt.state(), "opening");
+    let (at, why) = rt.cold_open_ended().unwrap();
+    assert_eq!(at, 60_000);
+    assert_eq!(why, "room filled: 5 chatters (>= 5) held 20 s");
+}
+
+#[test]
+fn the_cold_open_ends_when_the_active_chatters_hold_for_the_sustain() {
+    let mut rt = seg01_cold();
+    rt.tick(0, 3);
+    // Four chatters are not a room.
+    chat_from(&mut rt, 70_000, &ROOM[..4]);
+    assert!(cold_open_cards(&rt.tick(70_000, 10)).is_empty());
+    // The fifth arrives at 80 s: the window starts there...
+    chat_from(&mut rt, 80_000, &ROOM[4..]);
+    assert!(cold_open_cards(&rt.tick(80_000, 10)).is_empty());
+    assert!(cold_open_cards(&rt.tick(99_999, 10)).is_empty());
+    assert_eq!(rt.state(), "cold_open");
+    // ...and holds for 20 s.
+    let evs = rt.tick(100_000, 10);
+    assert_eq!(cold_open_cards(&evs), ["cold-open-end-room-filled"]);
+    assert_eq!(rt.state(), "opening");
+    // Polls open now.
+    let evs = rt.apply_ops(101_000, &[poll("p1", &["a", "b"], Rank::Thrall, 30)]);
+    assert_eq!(accepted_ops(&evs), 1);
+    assert_eq!(rt.state(), "crowd_game");
+}
+
+#[test]
+fn a_dip_in_active_chatters_restarts_the_sustain() {
+    let mut rt = seg01_cold();
+    chat_from(&mut rt, 70_000, &ROOM);
+    rt.tick(70_000, 10);
+    // Four keep talking; the fifth's line falls out of the 60 s window at 130 s.
+    for t in [85_000, 100_000, 115_000, 129_000] {
+        chat_from(&mut rt, t, &ROOM[..4]);
+    }
+    // The sustain held from 70 s, so the room filled at 90 s.
+    assert_eq!(
+        cold_open_cards(&rt.tick(90_000, 10)),
+        ["cold-open-end-room-filled"]
+    );
+
+    let mut rt = seg01_cold();
+    chat_from(&mut rt, 70_000, &ROOM);
+    rt.tick(70_000, 10);
+    chat_from(&mut rt, 75_000, &ROOM[..4]);
+    // At 131 s eve's line is 61 s old: four active, the sustain resets before it held.
+    assert!(cold_open_cards(&rt.tick(80_000, 10)).is_empty());
+    assert!(cold_open_cards(&rt.tick(131_000, 10)).is_empty());
+    // Eve is back at 132 s: the sustain starts again from there.
+    chat_from(&mut rt, 132_000, &ROOM);
+    assert!(cold_open_cards(&rt.tick(132_000, 10)).is_empty());
+    assert!(cold_open_cards(&rt.tick(151_999, 10)).is_empty());
+    assert_eq!(
+        cold_open_cards(&rt.tick(152_000, 10)),
+        ["cold-open-end-room-filled"]
+    );
+}
+
+#[test]
+fn the_ceiling_ends_the_cold_open_regardless() {
+    let mut rt = seg01_cold();
+    chat_from(&mut rt, 10_000, &ROOM[..2]);
+    assert!(cold_open_cards(&rt.tick(10_000, 4)).is_empty());
+    assert!(cold_open_cards(&rt.tick(179_999, 4)).is_empty());
+    assert_eq!(rt.state(), "cold_open");
+    let evs = rt.tick(180_000, 4);
+    assert_eq!(cold_open_cards(&evs), ["cold-open-end-ceiling"]);
+    assert_eq!(rt.state(), "opening");
+    assert_eq!(
+        rt.cold_open_ended(),
+        Some((180_000, "ceiling: 180 s with 0 of 5 chatters"))
+    );
+    // Once only.
+    assert!(cold_open_cards(&rt.tick(185_000, 4)).is_empty());
+}
+
+#[test]
+fn the_cold_open_refuses_polls_and_foils_and_holds_the_handover() {
+    let mut rt = seg01_cold();
+    let ctx = rt.context(3, 0);
+    for op in ["start_poll", "summon_foil", "switch_segment", "close_poll"] {
+        assert!(!ctx.allowed_ops.iter().any(|o| o == op), "{op}");
+    }
+    assert!(ctx.allowed_ops.iter().any(|o| o == "highlight"));
+
+    let evs = rt.apply_ops(1_000, &[poll("p1", &["a", "b"], Rank::Thrall, 30)]);
+    assert_eq!(
+        rejections(&evs),
+        [(ModStage::Output, "not_in_state".to_string())]
+    );
+    assert_eq!(rt.open_poll_id(), None);
+    let s = rt.context(3, 1).state_summary;
+    assert!(s.contains("REFUSED lately"), "{s}");
+    assert!(s.contains("start_poll p1: not_in_state"), "{s}");
+    let evs = rt.apply_ops(
+        1_000,
+        &[Op::SummonFoil {
+            foil: "the-disruptor".into(),
+        }],
+    );
+    assert_eq!(rejections(&evs)[0].1, "not_in_state");
+    assert_eq!(rt.active_foil(), None);
+    // Chat cannot open a foil vote either.
+    let evs = rt.ingest_chat(
+        2_000,
+        &[msg(
+            "s1",
+            2_000,
+            "ann",
+            Rank::Thrall,
+            "!summon the-disruptor",
+        )],
+    );
+    assert!(started_polls(&evs).is_empty());
+    assert_eq!(rt.open_poll_id(), None);
+    // The handover clock waits for the room: a big ccv in the cold open does not count.
+    for t in (0..=180_000).step_by(10_000) {
+        assert!(handovers(&rt.tick(t, 30)).is_empty(), "t={t}");
+    }
+    assert_eq!(rt.state(), "opening");
+    assert!(handovers(&rt.tick(359_999, 30)).is_empty());
+    assert_eq!(
+        handovers(&rt.tick(370_000, 30)),
+        ["ccv >= 15 sustained 180 s"]
+    );
+}
+
+#[test]
+fn the_handovers_elapsed_ceiling_cuts_a_cold_open_short() {
+    let mut c = cfg();
+    c.cold_open = None;
+    c.handover = Some(HandoverRule {
+        to: SegmentId::Seg02aHexmap,
+        ccv_min: 5,
+        sustain_s: 10,
+        max_elapsed_s: 48,
+        grace_s: 60,
+    });
+    let mut rt = SegmentRuntime::with_config(SegmentId::Seg01ImprovisedRoom, c).unwrap();
+    rt.start(0);
+    // ccv 30 for 40 s does not hand over while the room fills...
+    for t in (0..48_000).step_by(5_000) {
+        assert!(handovers(&rt.tick(t, 30)).is_empty(), "t={t}");
+    }
+    // ...but the segment's ceiling does, and ends the cold open with it.
+    assert_eq!(handovers(&rt.tick(50_000, 30)), ["elapsed >= 48 s"]);
+    assert_eq!(rt.state(), "handover_pending");
+    assert_eq!(
+        rt.cold_open_ended(),
+        Some((50_000, "handover: elapsed >= 48 s"))
+    );
+}
+
+#[test]
+fn the_cold_open_rule_is_config() {
+    let mut c = cfg();
+    c.cold_open = Some(ColdOpenRule {
+        min_s: 5,
+        max_s: 30,
+        active_chatters: 2,
+        sustain_s: 0,
+        ..no_cold_open()
+    });
+    let mut rt = SegmentRuntime::with_config(SegmentId::Seg01ImprovisedRoom, c).unwrap();
+    rt.start(0);
+    assert_eq!(rt.state(), "cold_open");
+    chat_from(&mut rt, 1_000, &ROOM[..2]);
+    assert!(
+        cold_open_cards(&rt.tick(1_000, 2)).is_empty(),
+        "under the floor"
+    );
+    assert_eq!(
+        cold_open_cards(&rt.tick(5_000, 2)),
+        ["cold-open-end-room-filled"]
+    );
+    let mut bad = cfg();
+    bad.cold_open = Some(ColdOpenRule {
+        min_s: 50,
+        max_s: 30,
+        ..no_cold_open()
+    });
+    assert!(SegmentRuntime::with_config(SegmentId::Seg01ImprovisedRoom, bad).is_err());
+    let mut nowhere = cfg();
+    nowhere.cold_open = Some(ColdOpenRule {
+        to: "nowhere".into(),
+        ..no_cold_open()
+    });
+    assert!(SegmentRuntime::with_config(SegmentId::Seg01ImprovisedRoom, nowhere).is_err());
+}
+
+// ----- honest ties ------------------------------------------------------------------------
+
+#[test]
+fn a_tied_crowd_poll_is_recorded_and_summarised_as_a_tie() {
+    let mut rt = seg01();
+    rt.apply_ops(
+        1_000,
+        &[poll("p4", &["Riddles", "Duel", "Chess"], Rank::Thrall, 30)],
+    );
+    rt.ingest_chat(
+        2_000,
+        &[
+            msg("v1", 2_000, "a", Rank::Thrall, "!vote riddles"),
+            msg("v2", 2_000, "b", Rank::Thrall, "!vote duel"),
+            msg("v3", 2_000, "c", Rank::Thrall, "!vote riddles"),
+            msg("v4", 2_000, "d", Rank::Thrall, "!vote duel"),
+        ],
+    );
+    rt.tick(31_000, 0);
+    assert_eq!(
+        rt.last_crowd(),
+        Some((
+            "p4",
+            &PollOutcome::Tie {
+                options: vec!["Riddles".into(), "Duel".into()],
+                voters: 2
+            }
+        ))
+    );
+    let s = rt.context(0, 31).state_summary;
+    assert!(
+        s.contains(
+            "last poll p4 closed: TIE between Riddles and Duel (2 votes each): you break it, \
+             and say you are breaking it"
+        ),
+        "{s}"
+    );
+    assert!(!s.contains("winner"), "{s}");
+
+    // Equal weight but more voters is a win, not a tie.
+    rt.apply_ops(40_000, &[poll("p5", &["a", "b"], Rank::Thrall, 30)]);
+    rt.ingest_chat(
+        41_000,
+        &[
+            msg("w1", 41_000, "a", Rank::Thrall, "!vote a"),
+            msg("w2", 41_000, "b", Rank::Thrall, "!vote a"),
+            msg("w3", 41_000, "c", Rank::Thrall, "!vote b"),
+        ],
+    );
+    rt.tick(71_000, 0);
+    assert_eq!(
+        rt.last_crowd(),
+        Some(("p5", &PollOutcome::Winner("a".into())))
+    );
+    // No votes at all is not a tie.
+    rt.apply_ops(80_000, &[poll("p6", &["a", "b"], Rank::Thrall, 30)]);
+    rt.tick(110_000, 0);
+    assert_eq!(rt.last_crowd(), Some(("p6", &PollOutcome::NoVotes)));
+    assert!(rt
+        .context(0, 110)
+        .state_summary
+        .contains("last poll p6 closed: no votes, no winner"));
+}
+
+#[test]
+fn a_tied_foil_vote_summons_nobody_and_the_host_breaks_it() {
+    let mut rt = seg01();
+    let evs = rt.ingest_chat(
+        1_000,
+        &[
+            msg("m1", 1_000, "a", Rank::Thrall, "!summon the-life-coach"),
+            msg("m2", 1_000, "b", Rank::Thrall, "!summon the-disruptor"),
+        ],
+    );
+    assert_eq!(started_polls(&evs).len(), 1);
+    let evs = rt.tick(61_000, 2);
+    assert!(!evs.iter().any(|e| matches!(
+        e,
+        StreamEvent::Op {
+            op: Op::SummonFoil { .. },
+            ..
+        }
+    )));
+    assert_eq!(rt.active_foil(), None);
+    assert_eq!(rt.state(), "opening");
+    let s = rt.context(2, 61).state_summary;
+    assert!(
+        s.contains("foil vote foil-vote-1 closed: TIE between the-disruptor and the-life-coach"),
+        "{s}"
+    );
+    assert!(s.contains("You break it with summon_foil"), "{s}");
+    let evs = rt.apply_ops(
+        62_000,
+        &[Op::SummonFoil {
+            foil: "the-life-coach".into(),
+        }],
+    );
+    assert_eq!(accepted_ops(&evs), 1);
+    assert!(!rt.context(2, 62).state_summary.contains("TIE"));
+}
+
+#[test]
+fn a_tied_plebiscite_is_the_hosts_to_break() {
+    let mut rt = seg02a();
+    for (job, t) in [("r1", 1_000), ("r2", 2_000)] {
+        rt.apply_ops(t, &[research(job, "HEX-07: the moon maintenance thread")]);
+    }
+    rt.apply_ops(3_000, &[research("r3", "HEX-07: again")]);
+    assert_eq!(rt.open_poll_id(), Some("plebiscite-HEX-07"));
+    rt.ingest_chat(
+        5_000,
+        &[
+            msg("v1", 5_000, "a", Rank::Thrall, "!vote Annex HEX-07"),
+            msg("v2", 5_000, "b", Rank::Thrall, "!vote 2"),
+        ],
+    );
+    rt.tick(63_000, 10);
+    assert_eq!(
+        rt.last_plebiscite(),
+        Some((
+            "HEX-07",
+            &PollOutcome::Tie {
+                options: vec!["Annex HEX-07".into(), "Leave HEX-07 fogged".into()],
+                voters: 1
+            }
+        ))
+    );
+    let s = rt.context(10, 63).state_summary;
+    assert!(
+        s.contains(
+            "PLEBISCITE on HEX-07 closed: TIE between Annex HEX-07 and Leave HEX-07 fogged (1 \
+             votes each): you break it, and say you are breaking it. Do not search HEX-07 again."
+        ),
+        "{s}"
+    );
+    assert!(!s.contains("decided"), "{s}");
+    // An Annex among the tied options counts as the hex's vote: the host may annex it.
+    assert!(rt.hex_worked("HEX-07"));
+}
+
+#[test]
+fn a_tied_crowd_poll_on_hexes_works_every_tied_hex() {
+    let mut rt = arc_runtime(10_800);
+    let act1 = act_hexes(&rt, 0);
+    let (a, b, c) = (act1[0].clone(), act1[1].clone(), act1[2].clone());
+    let open = Op::StartPoll {
+        poll_id: "next-hex".into(),
+        question: "Which hex do we crack next?".into(),
+        options: vec![a.clone(), b.clone(), c.clone()],
+        min_rank: Rank::Thrall,
+        secs: 60,
+    };
+    assert_eq!(accepted_ops(&rt.apply_ops(2_000, &[open])), 1);
+    rt.ingest_chat(
+        3_000,
+        &[
+            msg("v1", 3_000, "ann", Rank::Thrall, "!vote 1"),
+            msg("v2", 3_000, "bob", Rank::Thrall, "!vote 2"),
+        ],
+    );
+    rt.apply_ops(
+        4_000,
+        &[Op::ClosePoll {
+            poll_id: "next-hex".into(),
+        }],
+    );
+    assert!(rt.hex_worked(&a) && rt.hex_worked(&b), "both tied hexes");
+    assert!(!rt.hex_worked(&c), "the hex nobody chose");
+    let s = rt.context(30, 4).state_summary;
+    assert!(
+        s.contains(&format!(
+            "TIE between {a} and {b} (1 votes each): you break it, and say you are breaking it \
+             (each tied hex counts as voted: {a}, {b})"
+        )),
+        "{s}"
+    );
 }

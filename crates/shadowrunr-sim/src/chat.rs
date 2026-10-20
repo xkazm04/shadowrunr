@@ -7,12 +7,15 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use shadowrunr_brain::moderation::CRISIS_BAN_RULE;
+use shadowrunr_segments::segment_table;
 use shadowrunr_types::{ChatMsg, EngineRequest, Op, Role, SegmentId, StreamEvent, TsMs};
 
 use crate::calibration::Calibration;
 use crate::population::{ArchetypeKind, Population, SimViewer, STAYS};
 use crate::rng::Rng;
-use crate::situations::{schedule, Injection, SituationBank, StimulusKind, MAX_ATTEMPTS};
+use crate::situations::{
+    schedule, Injection, Situation, SituationBank, StimulusKind, MAX_ATTEMPTS,
+};
 use crate::{transcript, wire, Hooks};
 
 const EMOTES: &[&str] = &[
@@ -242,6 +245,36 @@ pub struct ChatRoom {
 /// Directive handed to the chatter model this tick: index into `injections`.
 pub type Directives = Vec<usize>;
 
+/// Seconds at the start of a run kept clear of planted stimuli: SEG-01's cold open, up to its
+/// ceiling (the segment table's), at most half the run. Other segments start without one.
+pub fn cold_open_window_s(segment: SegmentId, duration_s: u32) -> u32 {
+    if segment != SegmentId::Seg01ImprovisedRoom {
+        return 0;
+    }
+    segment_table(segment)
+        .ok()
+        .and_then(|t| t.clock.cold_open.as_ref())
+        .map_or(0, |r| r.max_s.min(duration_s / 2))
+}
+
+/// A stimulus the cold open must handle, so it may land inside it: a newcomer's first contact,
+/// or a crisis that needs the safety handoff.
+pub fn cold_open_exempt(s: &Situation) -> bool {
+    ArchetypeKind::of(&s.archetype) == ArchetypeKind::Newcomer
+        || s.invariants.iter().any(|i| i == "rule:crisis-handoff")
+}
+
+/// `at` moved past the cold open: the run's time `[0, duration)` maps linearly onto
+/// `[window, duration)`, so stimuli keep their order and relative spacing.
+fn past_cold_open(at: u32, window: u32, duration_s: u32) -> u32 {
+    if window == 0 || duration_s <= window {
+        return at;
+    }
+    let span = u64::from(duration_s - window);
+    let moved = u64::from(window) + u64::from(at.min(duration_s)) * span / u64::from(duration_s);
+    u32::try_from(moved).unwrap_or(at)
+}
+
 impl ChatRoom {
     pub fn new(mut pop: Population, cfg: RoomConfig<'_>) -> Self {
         let mut rng = Rng::derive(cfg.seed, "chat");
@@ -250,13 +283,22 @@ impl ChatRoom {
             .iter()
             .filter_map(|id| pop.get(id).map(|v| (id.clone(), v.kind)))
             .collect();
-        let injections = schedule(
+        let mut injections = schedule(
             cfg.bank,
             cfg.segment,
             cfg.duration_s,
             &featured_kinds,
             cfg.seed,
         );
+        let window = cold_open_window_s(cfg.segment, cfg.duration_s);
+        clear_cold_open(&mut pop, &mut injections, cfg.bank, window, cfg.duration_s);
+        // A featured chatter is in the room by the time their first stimulus is due.
+        for inj in &injections {
+            let Some(id) = &inj.chatter_id else { continue };
+            if let Some(v) = pop.viewers.iter_mut().find(|v| &v.viewer.id == id) {
+                v.arrive_s = v.arrive_s.min(inj.at_s);
+            }
+        }
         let base_audience = pop.viewers.len() as u32;
         let mut room = Self {
             pop,
@@ -349,6 +391,11 @@ impl ChatRoom {
 
     fn is_banned(&self, viewer_id: &str) -> bool {
         self.banned.iter().any(|(id, _)| id == viewer_id)
+    }
+
+    /// A featured chatter who has arrived (the room fills) and was not removed.
+    fn featured_here(&self, viewer_id: &str, t_s: u32) -> bool {
+        !self.is_banned(viewer_id) && self.pop.get(viewer_id).is_some_and(|v| v.present_at(t_s))
     }
 
     /// The brain removed the author of `msg_id` from chat: they leave the room for good (no
@@ -710,7 +757,11 @@ impl ChatRoom {
             .collect();
         if !bulk_ids.is_empty() && chatty_all > 0 {
             let share = bulk_ids.len() as f64 / chatty_all as f64;
-            let lambda = self.pop.msgs_per_min * f64::from(tick) / 60.0 * share;
+            // The calibrated rate is the full room's: volume follows the chatters present, so
+            // a room still filling is quieter.
+            let chatty_total = self.pop.viewers.iter().filter(|v| v.chatty).count();
+            let fill = (chatty_all as f64 / chatty_total.max(1) as f64).min(1.0);
+            let lambda = self.pop.msgs_per_min * f64::from(tick) / 60.0 * share * fill;
             let k = self.rng.poisson(lambda);
             let weights: Vec<f64> = bulk_ids
                 .iter()
@@ -918,6 +969,12 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
         let mut used: Vec<String> = Vec::new();
         let mut out = Vec::new();
         let poll_open = !self.polls.is_empty();
+        let here: HashSet<String> = self
+            .featured
+            .iter()
+            .filter(|id| self.featured_here(id, t_s))
+            .cloned()
+            .collect();
         for (i, inj) in self.injections.iter_mut().enumerate() {
             if !inj.needs_chatter()
                 || inj.performed_msg_id.is_some()
@@ -929,7 +986,7 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
             let Some(c) = inj.chatter_id.clone() else {
                 continue;
             };
-            if used.contains(&c) {
+            if used.contains(&c) || !here.contains(&c) {
                 continue;
             }
             if inj.kind == StimulusKind::Vote && !poll_open {
@@ -951,7 +1008,7 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
         correlation_id: &str,
         route: (shadowrunr_types::ModelTier, shadowrunr_types::Effort, u64),
     ) -> Option<(EngineRequest, Directives)> {
-        if self.featured.iter().all(|id| self.is_banned(id)) || self.silent(t_s) {
+        if !self.featured.iter().any(|id| self.featured_here(id, t_s)) || self.silent(t_s) {
             return None;
         }
         let directives = self.due_directives(t_s);
@@ -1008,6 +1065,19 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
                 "\nGone from chat for good: {}. They have left: write no line as them, and no \
 viewer mentions them or talks to them.\n",
                 gone.join(", ")
+            ));
+        }
+        let absent: Vec<String> = self
+            .featured
+            .iter()
+            .filter(|id| !self.is_banned(id) && !self.featured_here(id, t_s))
+            .filter_map(|id| self.pop.get(id))
+            .map(|v| format!("{} ({})", v.viewer.name, v.viewer.id))
+            .collect();
+        if !absent.is_empty() {
+            prompt.push_str(&format!(
+                "\nNot in the room yet: {}. Write no line as them this turn.\n",
+                absent.join(", ")
             ));
         }
         if !directives.is_empty() {
@@ -1074,7 +1144,7 @@ viewer mentions them or talks to them.\n",
         let chatters: Vec<(String, String)> = self
             .featured
             .iter()
-            .filter(|id| !self.is_banned(id))
+            .filter(|id| self.featured_here(id, t_s))
             .filter_map(|id| {
                 self.pop
                     .get(id)
@@ -1160,8 +1230,56 @@ viewer mentions them or talks to them.\n",
     }
 }
 
+/// Keep the cold open (`window` seconds) clear of planted stimuli: every stimulus but a
+/// newcomer's or a crisis ([`cold_open_exempt`]) moves past it, as do the population's own
+/// waves (a raid, copypasta floods). Times map linearly ([`past_cold_open`]), so order and
+/// spacing hold; a silence still closes before the run ends.
+fn clear_cold_open(
+    pop: &mut Population,
+    injections: &mut [Injection],
+    bank: &SituationBank,
+    window: u32,
+    duration_s: u32,
+) {
+    if window == 0 {
+        return;
+    }
+    for inj in injections.iter_mut() {
+        let Some(s) = bank.get(&inj.situation_id) else {
+            continue;
+        };
+        if cold_open_exempt(s) {
+            continue;
+        }
+        let mut at = past_cold_open(inj.at_s, window, duration_s);
+        if inj.kind == StimulusKind::Silence {
+            at = at.min(duration_s.saturating_sub(s.silence_len() + 30));
+        }
+        inj.at_s = at.min(duration_s.saturating_sub(1));
+    }
+    injections.sort_by_key(|i| i.at_s);
+    if let Some(at) = pop.raid_at_s {
+        let moved = past_cold_open(at, window, duration_s);
+        for v in pop
+            .viewers
+            .iter_mut()
+            .filter(|v| v.kind == ArchetypeKind::RaiderWave && v.arrive_s == at)
+        {
+            v.arrive_s = moved;
+            if v.depart_s != STAYS {
+                v.depart_s = v.depart_s.saturating_add(moved - at);
+            }
+        }
+        pop.raid_at_s = Some(moved);
+    }
+    for at in &mut pop.copypasta_at_s {
+        *at = past_cold_open(*at, window, duration_s);
+    }
+}
+
 /// Pick up to `max` featured chatters: first one per archetype a situation needs, then the
-/// most talkative others. Featured chatters are present for the whole run.
+/// most talkative others. Featured chatters arrive with the opening crowd (by the end of the
+/// room's fill ramp) and stay for the whole run.
 fn select_featured(
     pop: &mut Population,
     bank: &SituationBank,
@@ -1218,12 +1336,31 @@ fn select_featured(
             }
         }
     }
+    let ramp_s = pop.ramp_s;
     for &i in &chosen {
         let v = &mut pop.viewers[i];
         v.featured = true;
         v.chatty = true;
-        v.arrive_s = 0;
+        v.arrive_s = v.arrive_s.min(ramp_s);
         v.depart_s = STAYS;
+    }
+    // One featured chatter is in the opening room, so the chatter model has a voice from the
+    // first tick: the first chosen trades arrivals with a non-featured opener (the opening
+    // room keeps its size).
+    if let Some(&first) = chosen.first() {
+        if !chosen.iter().any(|&i| pop.viewers[i].arrive_s == 0) {
+            let opener = (0..pop.viewers.len()).find(|&i| {
+                let v = &pop.viewers[i];
+                !v.featured && v.kind != ArchetypeKind::Mod && v.arrive_s == 0
+            });
+            let late = pop.viewers[first].arrive_s;
+            pop.viewers[first].arrive_s = 0;
+            if let Some(o) = opener {
+                let v = &mut pop.viewers[o];
+                v.arrive_s = late;
+                v.depart_s = v.depart_s.max(late + 1);
+            }
+        }
     }
     chosen
         .iter()
@@ -1291,15 +1428,24 @@ mod tests {
         );
     }
 
-    fn room() -> ChatRoom {
-        let tmp = tempfile::tempdir().unwrap();
-        let (cal, _, _) = crate::calibration::load(tmp.path()).unwrap();
-        let bank = SituationBank::load(
+    fn bank() -> SituationBank {
+        SituationBank::load(
             &crate::runner::tests::repo().join("characters/malakor/situations.json"),
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    fn room() -> ChatRoom {
+        room_of("growing_channel", 30, 7)
+    }
+
+    /// A 900 s SEG-01 room.
+    fn room_of(population: &str, size: u32, seed: u64) -> ChatRoom {
+        let tmp = tempfile::tempdir().unwrap();
+        let (cal, _, _) = crate::calibration::load(tmp.path()).unwrap();
+        let bank = bank();
         let rank = crate::population::tests::fake_rank;
-        let pop = crate::population::generate(&cal, "growing_channel", 30, 900, 7, rank).unwrap();
+        let pop = crate::population::generate(&cal, population, size, 900, seed, rank).unwrap();
         ChatRoom::new(
             pop,
             RoomConfig {
@@ -1309,7 +1455,7 @@ mod tests {
                     rank,
                     parse: |_| None,
                 },
-                seed: 7,
+                seed,
                 tick_s: 5,
                 duration_s: 900,
                 segment: SegmentId::Seg01ImprovisedRoom,
@@ -1431,6 +1577,106 @@ mod tests {
         // is neither.
         assert_eq!(msgs.len() as u32 + room.stats.held_for_stimulus - held, 1);
         assert!(!room.pop.get(&gone_id).unwrap().present_at(30));
+    }
+
+    #[test]
+    fn stimuli_wait_for_the_cold_open_but_newcomers_and_crises_may_not() {
+        let bank = bank();
+        let s = |id: &str| bank.get(id).unwrap();
+        assert!(cold_open_exempt(s("newcomer-what-is-this")));
+        assert!(cold_open_exempt(s("self-harm-disclosure")));
+        assert!(!cold_open_exempt(s("roast-real-streamer")));
+        assert!(!cold_open_exempt(s("copypasta-flood")));
+        assert_eq!(cold_open_window_s(SegmentId::Seg01ImprovisedRoom, 900), 180);
+        assert_eq!(cold_open_window_s(SegmentId::Seg01ImprovisedRoom, 300), 150);
+        assert_eq!(cold_open_window_s(SegmentId::Seg02aHexmap, 900), 0);
+        assert_eq!(past_cold_open(0, 180, 900), 180);
+        assert_eq!(past_cold_open(450, 180, 900), 540);
+
+        let mut exempt_early = 0;
+        for seed in [7, 11, 42] {
+            let room = room_of("raid_moment", 300, seed);
+            let window = 180;
+            for inj in &room.injections {
+                if cold_open_exempt(s(&inj.situation_id)) {
+                    exempt_early += usize::from(inj.at_s < window);
+                } else {
+                    assert!(inj.at_s >= window, "{} at {}", inj.situation_id, inj.at_s);
+                }
+                // A featured chatter is in the room when their stimulus is due.
+                if let Some(id) = &inj.chatter_id {
+                    assert!(room.pop.get(id).unwrap().present_at(inj.at_s), "{id}");
+                }
+            }
+            assert!(room.injections.windows(2).all(|w| w[0].at_s <= w[1].at_s));
+            if let Some(at) = room.pop.raid_at_s {
+                assert!(at >= window);
+                assert!(room
+                    .pop
+                    .viewers
+                    .iter()
+                    .filter(|v| v.kind == ArchetypeKind::RaiderWave)
+                    .all(|v| v.arrive_s == at));
+            }
+            assert!(room.pop.copypasta_at_s.iter().all(|&at| at >= window));
+            // The opening room is small and has one featured voice in it.
+            let present_at_start = room
+                .featured_ids()
+                .iter()
+                .filter(|id| room.pop.get(id).unwrap().arrive_s == 0)
+                .count();
+            assert!(present_at_start >= 1, "seed {seed}");
+            let mods = room
+                .pop
+                .viewers
+                .iter()
+                .filter(|v| v.kind == ArchetypeKind::Mod)
+                .count() as u32;
+            // (A room with more moderators than opening seats adds the featured voice.)
+            assert!(
+                room.ccv_at(0) <= crate::population::OPENING_ROOM.max(mods + 1),
+                "seed {seed}: {:?}",
+                room.pop
+                    .viewers
+                    .iter()
+                    .filter(|v| v.present_at(0))
+                    .map(|v| (v.kind, v.featured))
+                    .collect::<Vec<_>>()
+            );
+            // Deterministic for a seed.
+            let again = room_of("raid_moment", 300, seed);
+            let at = |r: &ChatRoom| -> Vec<(String, u32)> {
+                r.injections
+                    .iter()
+                    .map(|i| (i.situation_id.clone(), i.at_s))
+                    .collect()
+            };
+            assert_eq!(at(&room), at(&again));
+        }
+        // Newcomers and crises keep their schedule, so some land in the cold open.
+        assert!(exempt_early > 0);
+    }
+
+    #[test]
+    fn chat_volume_follows_the_room_as_it_fills() {
+        let (mut early, mut full) = (0, 0);
+        for seed in [7, 11, 42] {
+            let mut room = room_of("raid_moment", 300, seed);
+            room.silence_until = None;
+            room.injections.clear();
+            room.pop.raid_at_s = None;
+            room.pop.copypasta_at_s.clear();
+            for t in (5..=60).step_by(5) {
+                early += room.bulk(t).len();
+            }
+            for t in (305..=360).step_by(5) {
+                full += room.bulk(t).len();
+            }
+        }
+        assert!(
+            early * 2 < full,
+            "first minute {early}, a full minute {full}"
+        );
     }
 
     #[test]

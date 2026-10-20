@@ -4,8 +4,8 @@
 id = "SEG-01"
 title = "Improvised Room"
 status = "pilot"
-initial = "opening"
-states = ["opening", "foil_vote", "foil_live", "crowd_game", "handover_pending"]
+initial = "cold_open"
+states = ["cold_open", "opening", "foil_vote", "foil_live", "crowd_game", "handover_pending"]
 allowed_ops = [
     "highlight",
     "start_poll",
@@ -50,6 +50,31 @@ max_elapsed_s = 1500
 # After the handover is announced the brain should emit `switch_segment`; if it has not after
 # grace_s seconds, the clock completes the switch itself.
 grace_s = 60
+
+[clock.cold_open]
+# The show opens with a prepared story while the room fills (the initial state, cold_open).
+# It ends, moving to `to`, once `active_chatters` distinct chatters (each wrote in the last
+# `window_s` seconds) have held for `sustain_s` seconds, but never before `min_s` (the floor);
+# at `max_s` (the ceiling) it ends regardless. The handover's ccv path waits for it (its
+# max_elapsed_s does not). ASSUMPTIONS, uncalibrated: a 1-2 minute story sets the floor; the
+# owner's decision (2026-10-20) caps the wait at about 3 minutes; 5 chatters in a minute is a
+# small room that talks back.
+to = "opening"
+min_s = 60
+max_s = 180
+active_chatters = 5
+window_s = 60
+sustain_s = 20
+
+# Per-state rules: the ops a state narrows the segment's list to, and the line the state
+# summary carries while in it. States without an entry allow every segment op.
+[state_rules.cold_open]
+# Polls and foils wait for the room.
+allowed_ops = ["highlight", "show_card", "mark_moment", "sign_off"]
+prompt = """
+The room is still filling: tell tonight's cold-open story; answer only newcomers' first hello \
+and anything about safety; no polls, no foils yet.
+"""
 
 # Transitions: (from, on[, guard]) -> to. "*" matches any state. First match wins; no match
 # leaves the state unchanged. Starting triggers (foil_vote_opened, poll_opened, foil_summoned,
