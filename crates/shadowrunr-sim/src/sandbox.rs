@@ -1368,6 +1368,8 @@ mod tests {
         sign_off: bool,
         /// The nth core call (0-based) takes this long.
         slow_core: Option<(usize, Duration)>,
+        /// Every core call takes at least this long.
+        core_delay: Duration,
         chatter_delay: Duration,
         core_calls: Mutex<Vec<Instant>>,
         chatter_calls: Mutex<Vec<Instant>>,
@@ -1379,6 +1381,7 @@ mod tests {
                 fake: FakeEngine::new(""),
                 sign_off: true,
                 slow_core: None,
+                core_delay: Duration::ZERO,
                 chatter_delay: Duration::ZERO,
                 core_calls: Mutex::new(Vec::new()),
                 chatter_calls: Mutex::new(Vec::new()),
@@ -1426,6 +1429,9 @@ mod tests {
                         if at == n {
                             tokio::time::sleep(d).await;
                         }
+                    }
+                    if !self.core_delay.is_zero() {
+                        tokio::time::sleep(self.core_delay).await;
                     }
                     Ok(reply(self.core_text(&req.prompt)))
                 }
@@ -1649,6 +1655,32 @@ mod tests {
             .collect();
         assert_eq!(covered, vec![27_000]);
         assert!(r.beat_ms_p95 >= 12_000, "{}", r.beat_ms_p95);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn steady_slowish_calls_are_never_covered() {
+        // Every core call takes 7 s, so the beats overrun and a line lands every 7 s on air:
+        // never 12 s quiet, never a cover line. Before the on-air clock the brain counted the
+        // previous call's 7 s as quiet and covered every call 5 s in
+        // (sbx-20261020-154322-5m: 12 cover lines in 5 min).
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = opts(tmp.path());
+        let engine = Arc::new(HostEngine {
+            core_delay: Duration::from_millis(7_000),
+            ..HostEngine::new()
+        });
+        let (_stop_tx, stop) = watch::channel(false);
+        let out = session(
+            sandbox_run(tmp.path(), 5, 90),
+            engine,
+            &opts,
+            no_sink(),
+            stop,
+        )
+        .await;
+        let r = &out.report;
+        assert_eq!(r.stall_lines, 0, "{r:?}");
+        assert_eq!(state(r, "say_gap"), SandboxCheckState::Pass, "{r:?}");
     }
 
     #[tokio::test(start_paused = true)]

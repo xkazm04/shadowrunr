@@ -236,6 +236,8 @@ pub struct Brain {
     session_retry_tick: u64,
     /// Where cover lines go while a slow core call is still running ([`Brain::set_cover`]).
     cover: Option<tokio::sync::mpsc::UnboundedSender<StreamEvent>>,
+    /// When this beat started, on the tokio clock (for [`Brain::on_air_ms`]).
+    beat_clock: tokio::time::Instant,
     hexes: Vec<HexInfo>,
     turns: Vec<String>,
     ticks: u64,
@@ -297,6 +299,7 @@ impl Brain {
             session_turns: 0,
             session_retry_tick: 0,
             cover: None,
+            beat_clock: tokio::time::Instant::now(),
             hexes: Vec::new(),
             turns: Vec::new(),
             ticks: 0,
@@ -399,6 +402,19 @@ impl Brain {
         self.cover = Some(tx);
     }
 
+    /// Stream time now. A live host's lines go on air when the beat's calls return, not at
+    /// the beat's `now_ms`, so with a cover channel the time spent in this beat is added;
+    /// in simulated time it is `now_ms`. Measured: without this, the quiet before a cover
+    /// line counted the previous call's duration and covers fired ~7 s after a line instead
+    /// of 12 s (sbx-20261020-154322-5m: 12 cover lines in 5 min).
+    fn on_air_ms(&self, now_ms: TsMs) -> TsMs {
+        if self.cover.is_none() {
+            return now_ms;
+        }
+        let ms = i64::try_from(self.beat_clock.elapsed().as_millis()).unwrap_or(i64::MAX);
+        now_ms.saturating_add(ms)
+    }
+
     /// Up to [`stall::COVER_LINES`] gated stall lines for a covered core call, taken from a copy
     /// of the rotation (the real one advances only by the lines spoken).
     fn cover_plan(&self, now_ms: TsMs) -> Option<stall::CoverPlan> {
@@ -426,9 +442,9 @@ impl Brain {
             return None;
         }
         let every_ms = self.tuning.stall_every_s.saturating_mul(1_000);
-        let quiet_ms = self
-            .last_say_ms
-            .map_or(0, |t| u64::try_from(now_ms.saturating_sub(t)).unwrap_or(0));
+        let quiet_ms = self.last_say_ms.map_or(0, |t| {
+            u64::try_from(self.on_air_ms(now_ms).saturating_sub(t)).unwrap_or(0)
+        });
         Some(stall::CoverPlan {
             tx,
             lines,
@@ -697,6 +713,7 @@ impl Brain {
         ctx: &SegmentContext,
     ) -> Result<Vec<StreamEvent>, BrainError> {
         let mut ev = Vec::new();
+        self.beat_clock = tokio::time::Instant::now();
         if self.fleet.signed_off() {
             return Ok(ev);
         }
@@ -986,7 +1003,7 @@ impl Brain {
                     }
                     self.working.remember_line(&out);
                     turn.push(format!("Malakor: {out}"));
-                    self.last_say_ms = Some(now_ms);
+                    self.last_say_ms = Some(self.on_air_ms(now_ms));
                     say_idx.push(ev.len());
                     ev.push(StreamEvent::Say {
                         ts_ms: now_ms,
