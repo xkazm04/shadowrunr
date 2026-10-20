@@ -4,7 +4,8 @@
 .root { color: var(--sr-color-text-ink); line-height: 1.5; }
 .secondary { display: inline-block; margin-top: var(--sr-space-base); color: var(--sr-page-accent-text); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .1em; text-transform: uppercase; }
 .head { display: flex; flex-wrap: wrap; gap: var(--sr-space-near) var(--sr-space-loose); align-items: flex-end; justify-content: space-between; }
-.pass, .fail { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .1em; text-transform: uppercase; padding: 0 var(--sr-space-tight); border: var(--sr-stroke-rule) solid currentColor; vertical-align: middle; }
+/* The stamp sits inside the Head title, so it drops the title's offset shadow and size. */
+.pass, .fail { display: inline-block; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-label); line-height: 1.3; letter-spacing: .1em; text-transform: uppercase; text-shadow: none; padding: 0 var(--sr-space-tight); border: var(--sr-stroke-rule) solid currentColor; vertical-align: middle; }
 .pass { color: var(--sr-color-ok); }
 .fail { color: var(--sr-color-fail); }
 .gates { display: flex; flex-wrap: wrap; gap: var(--sr-space-tight); list-style: none; margin: 0; padding: 0; }

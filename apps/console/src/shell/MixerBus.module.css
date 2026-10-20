@@ -8,7 +8,7 @@
   bottom: 0;
   z-index: var(--sr-z-chrome);
   display: grid;
-  grid-template-columns: auto repeat(6, 1fr);
+  grid-template-columns: auto repeat(var(--bus-channels), 1fr);
   gap: var(--sr-space-compact);
   height: var(--bus-height);
   padding: var(--sr-space-tight) var(--sr-space-near);
@@ -99,13 +99,13 @@
 
 .channel[aria-current="page"] .tally { background: var(--sr-color-signal); box-shadow: 0 0 .6rem var(--sr-color-signal); }
 
-.bus[data-compact="true"] { grid-template-columns: repeat(6, 1fr); }
+.bus[data-compact="true"] { grid-template-columns: repeat(var(--bus-channels), 1fr); }
 .bus[data-compact="true"] .label,
 .bus[data-compact="true"] .mini,
 .bus[data-compact="true"] .name small { display: none; }
 .bus[data-compact="true"] .channel { grid-template-columns: 1fr; }
 
-.bus[data-narrow="true"] { grid-template-columns: repeat(6, 1fr); gap: var(--sr-space-tick); padding: var(--sr-space-tick); }
+.bus[data-narrow="true"] { grid-template-columns: repeat(var(--bus-channels), 1fr); gap: var(--sr-space-tick); padding: var(--sr-space-tick); }
 .bus[data-narrow="true"] .label,
 .bus[data-narrow="true"] .mini { display: none; }
 .bus[data-narrow="true"] .channel { grid-template-columns: 1fr; padding: var(--sr-space-tick); text-align: center; }

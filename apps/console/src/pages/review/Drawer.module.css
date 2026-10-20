@@ -1,12 +1,13 @@
 /* The moment drawer: 705 px (44.0625rem) from the right, over the page, its own scroll, a sticky
-   head. It sits above the spread's sticky tabs. */
+   head. While open it sits above the shell's chrome and mixer bus, so its close button and lower
+   lines are never covered; Esc or the close button returns them. */
 
 .drawer {
   position: fixed;
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: calc(var(--sr-z-spread-tabs) + 1);
+  z-index: calc(var(--sr-z-chrome) + 1);
   width: min(44.0625rem, 100vw);
   overflow: auto;
   padding: 0 var(--sr-space-roomy) var(--sr-space-wide);

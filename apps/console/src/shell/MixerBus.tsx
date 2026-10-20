@@ -9,7 +9,7 @@ export const BUS_REM = { full: 4.2, compact: 2.6 } as const;
 
 export function MixerBus(props: { pages: PageRegistry; onAir: PageId; compact: boolean; narrow: boolean }) {
   const height = props.compact || props.narrow ? BUS_REM.compact : BUS_REM.full;
-  const style = { "--bus-height": `${height}rem` } as CSSProperties;
+  const style = { "--bus-height": `${height}rem`, "--bus-channels": PAGE_IDS.length } as CSSProperties;
   return (
     <nav
       className={styles.bus}

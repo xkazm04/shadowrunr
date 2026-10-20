@@ -1,5 +1,5 @@
 import { Suspense, type CSSProperties } from "react";
-import { RouteLink, type Crumb, type PageId } from "../router";
+import { PAGE_IDS, RouteLink, type Crumb, type PageId } from "../router";
 import type { Rect, View } from "./layout";
 import { INTRO } from "./Intro";
 import styles from "./Poster.module.css";
@@ -90,7 +90,7 @@ function Spine(props: { copy: PosterCopy; num: string; module: PageModule; crumb
       </nav>
       <div className={styles.spineTitle}>
         <small>
-          {props.num} / 06 · {props.copy.tag}
+          {props.num} / {String(PAGE_IDS.length).padStart(2, "0")} · {props.copy.tag}
         </small>
         {props.copy.name}
       </div>
