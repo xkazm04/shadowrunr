@@ -3,7 +3,7 @@ import { PAGE_IDS, RouteLink, type Crumb, type PageId } from "../router";
 import type { Rect, View } from "./layout";
 import { INTRO } from "./Intro";
 import styles from "./Poster.module.css";
-import { pageNumber } from "./posters";
+import { LIGHT_FACES, pageNumber } from "./posters";
 import type { PageModule, PosterCopy } from "./types";
 
 export interface PosterProps {
@@ -122,6 +122,7 @@ export function Poster({ registerHit, ...p }: PosterProps) {
       data-alt={p.index % 2 === 1}
       data-still={p.still}
       data-narrow={p.narrow}
+      data-grain={!LIGHT_FACES.has(p.id)}
       style={style}
       aria-label={`${num} · ${p.copy.name}`}
     >

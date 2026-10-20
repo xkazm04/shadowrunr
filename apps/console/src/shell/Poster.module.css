@@ -20,7 +20,10 @@
   will-change: left, width;
 }
 
-/* The print grain over everything on the poster (fidelity role: texture). */
+/* The print grain over a dark poster's face and spine (fidelity role: texture). The light faces
+   (data-grain="false": paper, ochre, straw) carry none, the owner's exception for readability
+   (REJECTED.md, 2026-10-20); opacity 0 keeps that a measured value for fidelity/texture.py. On
+   the open poster the grain drops under the layer-1 body, so it never prints over content. */
 .poster::after {
   content: "";
   position: absolute;
@@ -31,6 +34,9 @@
   opacity: var(--sr-grain-opacity-poster);
   pointer-events: none;
 }
+
+.poster[data-grain="false"]::after { opacity: 0; }
+.poster[data-view="l1"][data-active="true"]::after { z-index: var(--sr-z-under); }
 
 .poster[data-still="true"] { transition: none; }
 

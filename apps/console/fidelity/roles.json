@@ -37,6 +37,7 @@
     }
   },
   "texture": {
+    "$comment": "The owner's exception (2026-10-20, packages/tokens/REJECTED.md): no print grain on the light posters (characters, segments, review) or on the layer-2 spread, for readability. The port prints the light faces' grain at opacity 0, so contract.texture.json holds \"0\" for characters and segments where the winner had 0.4; a fresh `texture.py capture` writes the winner's 0.4 back, so re-apply the exception after one.",
     "pages": ["characters", "onair", "segments", "reconcile", "brain", "simulator"],
     "halftoneA": { "winner": "#poster-{page} .pf-ht:not(.b)", "port": "#poster-{page} [data-role=poster-halftone-a]" },
     "halftoneB": { "winner": "#poster-{page} .pf-ht.b", "port": "#poster-{page} [data-role=poster-halftone-b]" },

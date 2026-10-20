@@ -1,6 +1,7 @@
 // Layer 2 of Reconcile & Plan: the winner's four tabs (l2b.js P3.L2.reconcile) as routes:
 //   reconcile/report[/held|failed]   reconcile/plan   reconcile/directives   reconcile/chat
 import { pageRoute, RouteLink, useRouter } from "../../router";
+import { buttonClass } from "../../ui/Button";
 import { Tabs, type TabItem } from "../../ui/Section";
 import { StatePanel } from "../../ui/States";
 import { ChatPage } from "./ChatPage";
@@ -47,7 +48,7 @@ function Body({ tab, second, extra, sub }: { tab: TabId | undefined; second: str
     return (
       <>
         <StatePanel state="invalid" title={`There is no page at ${sub.join(" / ")}`} hint="The report, plan options, directives and the Lord’s chat are the pages here." />
-        <RouteLink to={pageRoute("reconcile", "report")} className={styles.secondary}>
+        <RouteLink to={pageRoute("reconcile", "report")} className={buttonClass("secondary")}>
           Open the report
         </RouteLink>
       </>

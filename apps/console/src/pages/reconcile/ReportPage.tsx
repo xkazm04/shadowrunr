@@ -15,6 +15,7 @@ import { incidentTotal, Incidents } from "./Incidents";
 import { dateTime, ruleLabel, sourceLabel, triptych } from "./model";
 import { RefLinks } from "./Refs";
 import { Synthesis } from "./Synthesis";
+import { Button } from "../../ui/Button";
 
 export type ReportFilter = "all" | "held" | "failed";
 
@@ -105,9 +106,9 @@ function EvidenceList({ items, tone }: { items: readonly Evidence[]; tone: "g" |
         ))}
       </ul>
       {items.length > shown.length && (
-        <button type="button" className={styles.secondary} onClick={() => setLimit((n) => n + EVIDENCE_PAGE)}>
+        <Button type="button" variant="secondary" onClick={() => setLimit((n) => n + EVIDENCE_PAGE)}>
           Show {Math.min(EVIDENCE_PAGE, items.length - shown.length)} more of {items.length - shown.length}
-        </button>
+        </Button>
       )}
     </>
   );

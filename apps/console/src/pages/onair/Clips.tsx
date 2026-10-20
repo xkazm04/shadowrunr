@@ -11,6 +11,7 @@ import { Chip } from "../../ui/Chip";
 import { StatBand } from "../../ui/StatBand";
 import { STATUS_LABEL, STATUS_ORDER, STATUS_TONE, WEIGHTS_LABEL, score } from "./clipModel";
 import styles from "./Clips.module.css";
+import { Button } from "../../ui/Button";
 
 const PAGE = 50;
 
@@ -36,20 +37,20 @@ export function Clips() {
               ))}
             </ul>
             <div className={styles.pager}>
-              <button type="button" className={styles.secondary} disabled={cursors.length === 1} onClick={() => setCursors((c) => c.slice(0, -1))}>
+              <Button type="button" variant="secondary" disabled={cursors.length === 1} onClick={() => setCursors((c) => c.slice(0, -1))}>
                 Previous
-              </button>
+              </Button>
               <span className={styles.dim}>
                 {p.items.length} of {p.total}
               </span>
-              <button
+              <Button
                 type="button"
-                className={styles.secondary}
+                variant="secondary"
                 disabled={p.next_cursor === undefined}
                 onClick={() => p.next_cursor !== undefined && setCursors((c) => [...c, p.next_cursor])}
               >
                 Next
-              </button>
+              </Button>
             </div>
           </>
         )}

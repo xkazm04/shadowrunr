@@ -5,6 +5,7 @@ import { LLM_TIMEOUT_MS, useMutation, useRpc, viewOfError } from "../../data";
 import { ConnectionState } from "../../kit";
 import styles from "./Layer2.module.css";
 import { session } from "./session";
+import { Button } from "../../ui/Button";
 
 export function NoReport() {
   const tournaments = useRpc("tournament.list", {});
@@ -53,9 +54,9 @@ export function NoReport() {
               ))}
             </select>
           </label>
-          <button type="submit" className={styles.primary} disabled={run.pending || !source} data-role="reconcile-run">
+          <Button type="submit" variant="primary" disabled={run.pending || !source} data-role="reconcile-run">
             {run.pending ? "Reconciling…" : "Run reconcile"}
-          </button>
+          </Button>
         </form>
         {run.pending && (
           <p className={styles.pending} role="status">
@@ -72,9 +73,9 @@ export function NoReport() {
             <span>Or open a report by id</span>
             <input type="text" value={openId} onChange={(e) => setOpenId(e.target.value)} placeholder="rec-1792284840627" spellCheck={false} />
           </label>
-          <button type="submit" className={styles.secondary} disabled={openId.trim().length === 0}>
+          <Button type="submit" variant="secondary" disabled={openId.trim().length === 0}>
             Open
-          </button>
+          </Button>
         </form>
       </section>
     </ConnectionState>

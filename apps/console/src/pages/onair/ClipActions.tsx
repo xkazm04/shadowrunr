@@ -9,6 +9,7 @@ import { Chip } from "../../ui/Chip";
 import { Section } from "../../ui/Section";
 import { approveBlock, canPublish, canRender, unmeasuredChecks } from "./clipModel";
 import styles from "./Clips.module.css";
+import { Button } from "../../ui/Button";
 
 /** `clips.render` records a video frame by frame: minutes, not seconds. */
 const RENDER_TIMEOUT_MS = 15 * 60_000;
@@ -59,9 +60,9 @@ function Approve({ c }: { c: ClipCandidate }) {
           <input type="text" value={reason} maxLength={240} onChange={(e) => setReason(e.target.value)} placeholder="why approving without this check is sound" />
         </label>
       )}
-      <button type="submit" className={styles.primary} disabled={!ready || approve.pending}>
+      <Button type="submit" variant="primary" disabled={!ready || approve.pending}>
         {approve.pending ? "Signing…" : "Approve for upload"}
-      </button>
+      </Button>
       {block !== null && <p className={styles.dim}>{block}</p>}
       {block === null && <p className={styles.dim}>Signing attests the cut keeps its context and the captions claim no more than it shows.</p>}
       {error && (
@@ -93,9 +94,9 @@ function Reject({ c }: { c: ClipCandidate }) {
         <span>Reject with a reason</span>
         <input type="text" value={reason} maxLength={240} onChange={(e) => setReason(e.target.value)} placeholder="what is wrong with this cut" />
       </label>
-      <button type="submit" className={styles.secondary} disabled={!reason.trim() || reject.pending}>
+      <Button type="submit" variant="secondary" disabled={!reason.trim() || reject.pending}>
         {reject.pending ? "Rejecting…" : "Reject"}
-      </button>
+      </Button>
       {error && (
         <p className={styles.formError} role="alert">
           {error}
@@ -110,15 +111,15 @@ function RenderButton({ c }: { c: ClipCandidate }) {
   const [error, setError] = useState<string | undefined>();
   return (
     <span className={styles.rowAction}>
-      <button
+      <Button
         type="button"
-        className={styles.secondary}
+        variant="secondary"
         disabled={!canRender(c) || render.pending}
         title={canRender(c) ? "record the stage to a vertical MP4, or a poster frame when the tools are missing" : "only a draft waiting for the owner is re-rendered"}
         onClick={() => void render.run({ id: c.id }).then((r) => setError(r.ok ? undefined : explain(r.error)))}
       >
         {render.pending ? "Rendering…" : "Render draft"}
-      </button>
+      </Button>
       {error && <small role="alert">{error}</small>}
     </span>
   );
@@ -131,9 +132,9 @@ function Publish({ c }: { c: ClipCandidate }) {
   const enabled = canPublish(c);
   return (
     <span className={styles.rowAction}>
-      <button
+      <Button
         type="button"
-        className={styles.secondary}
+        variant="secondary"
         disabled={!enabled || publish.pending}
         data-role="onair-clip-publish"
         title={enabled ? "write the exact request each platform would get; nothing is sent" : "only an owner-approved clip may be published"}
@@ -147,7 +148,7 @@ function Publish({ c }: { c: ClipCandidate }) {
         }
       >
         {publish.pending ? "Writing…" : "Publish (dry run)"}
-      </button>
+      </Button>
       {!enabled && <small className={styles.dim}>approve first</small>}
       {error && <small role="alert">{error}</small>}
       {result && <DryRuns rows={result} title="DRY RUN — nothing is sent" />}

@@ -13,6 +13,7 @@ import { Section } from "../../ui/Section";
 import styles from "./Layer2.module.css";
 import { incidentGroups, ruleLabel } from "./model";
 import { RefLinks } from "./Refs";
+import { Button } from "../../ui/Button";
 
 type SourceFacet = "all" | "verdict" | "moderation";
 /** An incident with its position, so identical incidents still get distinct row keys. */
@@ -70,9 +71,9 @@ function Paged({ report, rule }: { report: ReconcileReport; rule: string | undef
         Showing {int(loaded)} of {int(rule === undefined ? incidentTotal(report) : (incidentGroups(report).find((g) => g.rule === rule)?.n ?? loaded))}
         {rule !== undefined && ` for ${ruleLabel(rule)}`}.{" "}
         {incidents.more && (
-          <button type="button" className={styles.secondary} onClick={() => setPages((p) => p + STEP)}>
+          <Button type="button" variant="secondary" onClick={() => setPages((p) => p + STEP)}>
             Load {int(STEP * INCIDENT_PAGE)} more
-          </button>
+          </Button>
         )}
       </p>
       <QueryView query={incidents.query} isEmpty={(d) => d.length === 0} emptyTitle="No incidents for this rule">

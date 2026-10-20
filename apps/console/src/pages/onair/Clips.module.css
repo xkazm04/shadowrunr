@@ -53,9 +53,3 @@
 .formError { margin: var(--sr-space-compact) 0; padding: var(--sr-space-snug) var(--sr-space-near); border-left: .4rem solid var(--sr-color-fail); background: var(--sr-color-verdict-failed-ground); color: var(--sr-color-verdict-failed-ink); font-size: var(--sr-size-small); }
 .dry { flex-basis: 100%; margin-top: var(--sr-space-compact); padding: var(--sr-space-near); border: var(--sr-stroke-rule) dashed var(--sr-color-text-ink); }
 .dry > b { font-family: var(--sr-font-display); letter-spacing: .08em; text-transform: uppercase; }
-
-.secondary,
-.primary { display: inline-block; padding: var(--sr-space-tight) var(--sr-space-base); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-surface-paper); color: var(--sr-color-text-ink); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-control); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; box-shadow: .2rem .2rem 0 var(--sr-color-text-ink); }
-.primary { background: var(--sr-page-accent, var(--sr-color-signal)); color: var(--sr-color-chrome-ink); }
-.primary:disabled,
-.secondary:disabled { opacity: .55; cursor: default; box-shadow: none; }

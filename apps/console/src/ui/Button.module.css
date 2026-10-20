@@ -1,0 +1,45 @@
+/* The native button (the winner's l2.css .btn): display caps, a 2px ink border on paper and a hard
+   ink offset that grows as the button lifts on hover and collapses when it is pressed. A link
+   that acts as a button takes the same look through buttonClass(). */
+
+.button {
+  --btn-offset: var(--sr-color-text-ink);
+  display: inline-block;
+  padding: var(--sr-space-tight) var(--sr-space-base);
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  background: var(--sr-color-surface-paper);
+  color: var(--sr-color-text-ink);
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-control);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: .2rem .2rem 0 var(--btn-offset);
+  transition: transform .15s, box-shadow .15s;
+}
+
+/* The page's accent ground; the console's signal outside a page. */
+.primary { background: var(--sr-page-accent, var(--sr-color-signal)); color: var(--sr-color-chrome-ink); }
+
+/* Ink-filled, its offset in the page accent. Its own colour is paper, so focus rings in ink. */
+.ink {
+  --btn-offset: var(--sr-page-accent, var(--sr-color-signal));
+  background: var(--sr-color-text-ink);
+  color: var(--sr-color-surface-paper);
+}
+
+/* Compact: the inline size beside running text (On Air's run actions). */
+.compact { padding: var(--sr-space-tick) var(--sr-space-close); font-size: inherit; letter-spacing: .08em; }
+
+.button:hover:not(:disabled) { transform: translate(-.1rem, -.1rem); box-shadow: .3rem .3rem 0 var(--btn-offset); }
+.button:active:not(:disabled) { transform: translate(.2rem, .2rem); box-shadow: 0 0 0 var(--btn-offset); }
+.button:disabled { opacity: .55; cursor: default; box-shadow: none; }
+
+.button:focus-visible { outline: var(--sr-stroke-heavy) solid currentcolor; outline-offset: var(--sr-stroke-heavy); }
+.ink:focus-visible { outline-color: var(--sr-color-text-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .button { transition: none; }
+}

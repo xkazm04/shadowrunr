@@ -12,4 +12,11 @@ export const POSTERS: Readonly<Record<PageId, PosterCopy>> = {
   reconcile: { name: "Reconcile & plan", short: "Plan", tag: "The Morning After", lines: ["Morning", "After"] },
 };
 
+/**
+ * The posters printed on light stock: paper, ochre and straw, relative luminance .4 and up. The
+ * owner took the print grain off them, face and layer 1, for readability (REJECTED.md,
+ * 2026-10-20); the dark posters keep it on their face.
+ */
+export const LIGHT_FACES: ReadonlySet<PageId> = new Set<PageId>(["characters", "segments", "review"]);
+
 export const pageNumber = (id: PageId): string => String(PAGE_IDS.indexOf(id) + 1).padStart(2, "0");

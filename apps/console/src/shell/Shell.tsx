@@ -10,6 +10,7 @@ import { INTRO, Intro } from "./Intro";
 import { effectOf, modeOf, type KeyContext } from "./keyActions";
 import { BUS_REM, MixerBus } from "./MixerBus";
 import { POSTERS } from "./posters";
+import { riseKey } from "./rise";
 import styles from "./Shell.module.css";
 import { Spread } from "./Spread";
 import type { PageRegistry } from "./types";
@@ -140,7 +141,7 @@ export function Shell(props: ShellProps) {
       >
         {Layer2 && route.view === "page" && route.sub.length > 0 && (
           <Suspense fallback={<StatePanel state="loading" title="Loading" />}>
-            <Layer2 sub={route.sub} />
+            <Layer2 key={riseKey(route.page, route.sub)} sub={route.sub} />
           </Suspense>
         )}
       </Spread>

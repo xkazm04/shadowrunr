@@ -101,28 +101,7 @@ button.inc[aria-pressed="true"] span { text-decoration: underline; text-decorati
 .field select { font: inherit; font-size: var(--sr-size-small); padding: var(--sr-space-snug) var(--sr-space-compact); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-surface-field); color: var(--sr-color-text-ink); }
 .grow { flex: 1; min-width: 14rem; }
 
-.primary,
-.secondary {
-  display: inline-block;
-  font-family: var(--sr-font-display);
-  font-weight: var(--sr-weight-bold);
-  text-transform: uppercase;
-  letter-spacing: .1em;
-  font-size: var(--sr-size-control);
-  padding: var(--sr-space-tight) var(--sr-space-base);
-  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
-  background: var(--sr-color-surface-paper);
-  color: var(--sr-color-text-ink);
-  text-decoration: none;
-  cursor: pointer;
-  box-shadow: .2rem .2rem 0 var(--sr-color-text-ink);
-  transition: transform .15s, box-shadow .15s;
-}
-.primary { background: var(--sr-page-accent); color: var(--sr-color-chrome-ink); }
-.primary:hover:not(:disabled),
-.secondary:hover:not(:disabled) { transform: translate(-.1rem, -.1rem); box-shadow: .3rem .3rem 0 var(--sr-color-text-ink); }
-.primary:disabled,
-.secondary:disabled { opacity: .55; cursor: default; box-shadow: none; }
+/* Buttons are ui/Button; the layouts below only place them. */
 
 .pending { margin: var(--sr-space-compact) 0; font-family: var(--sr-font-serif); font-style: italic; color: var(--sr-color-text-note); }
 .formError { margin: var(--sr-space-compact) 0; padding: var(--sr-space-snug) var(--sr-space-near); border-left: .4rem solid var(--sr-color-fail); background: var(--sr-color-verdict-failed-ground); color: var(--sr-color-verdict-failed-ink); font-size: var(--sr-size-small); }
@@ -168,7 +147,7 @@ button.inc[aria-pressed="true"] span { text-decoration: underline; text-decorati
 .composer { position: sticky; top: 5rem; border: var(--sr-stroke-heavy) solid var(--sr-color-text-ink); padding: var(--sr-space-base) var(--sr-space-loose); background: var(--sr-color-surface-field); box-shadow: .4rem .4rem 0 var(--sr-color-text-ink); }
 .composer h2 { margin: 0 0 var(--sr-space-snug); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-title); text-transform: uppercase; }
 .composer h3 { margin: var(--sr-space-near) 0 var(--sr-space-tick); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-label); text-transform: uppercase; letter-spacing: .06em; }
-.composer .primary { margin-top: var(--sr-space-near); }
+.seal { margin-top: var(--sr-space-near); }
 .sealed { margin-top: var(--sr-space-loose); padding-top: var(--sr-space-near); border-top: var(--sr-stroke-heavy) solid var(--sr-color-text-ink); }
 
 .plain { list-style: none; margin: var(--sr-space-snug) 0; }
@@ -178,7 +157,7 @@ button.inc[aria-pressed="true"] span { text-decoration: underline; text-decorati
 /* Directives. */
 .struck { text-decoration: line-through; opacity: .6; }
 .rowAction { display: inline-flex; align-items: center; gap: var(--sr-space-compact); }
-.rowAction .secondary { font-size: var(--sr-size-caption); padding: 0 var(--sr-space-compact); box-shadow: none; }
+.rowAction > button { font-size: var(--sr-size-caption); padding: 0 var(--sr-space-compact); box-shadow: none; }
 .rowAction small { color: var(--sr-color-fail); }
 
 /* The Lord's chat (l2.css .chatbox, .msgs, .m). */
