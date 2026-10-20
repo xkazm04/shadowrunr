@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRpc } from "../../data";
 import { QueryView } from "../../kit";
 import { pageRoute, useRouter } from "../../router";
+import { Button } from "../../ui/Button";
 import { Chip } from "../../ui/Chip";
 import { FilterTable, type Column } from "../../ui/FilterTable";
 import { Section } from "../../ui/Section";
@@ -50,13 +51,13 @@ function Runs(props: { selected: string | undefined }) {
   const next = page.data?.next_cursor;
   const pager = (
     <span className={styles.pager}>
-      <button type="button" disabled={cursors.length === 0} onClick={() => setCursors((c) => c.slice(0, -1))}>
+      <Button size="compact" disabled={cursors.length === 0} onClick={() => setCursors((c) => c.slice(0, -1))}>
         Previous {RUN_PAGE}
-      </button>
+      </Button>
       <span>Page {cursors.length + 1}</span>
-      <button type="button" disabled={next === undefined} onClick={() => next !== undefined && setCursors((c) => [...c, next])}>
+      <Button size="compact" disabled={next === undefined} onClick={() => next !== undefined && setCursors((c) => [...c, next])}>
         Next {RUN_PAGE}
-      </button>
+      </Button>
     </span>
   );
   return (

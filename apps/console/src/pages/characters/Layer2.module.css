@@ -13,21 +13,6 @@
 .headNote { font-size: var(--sr-size-body); letter-spacing: .06em; color: var(--sr-color-text-mute); text-transform: none; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); }
 
 .leadRow { padding-top: .9rem; display: flex; gap: var(--sr-space-cozy); }
-.lead {
-  font-family: var(--sr-font-display);
-  font-weight: var(--sr-weight-bold);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  font-size: var(--sr-size-body);
-  text-decoration: none;
-  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
-  padding: var(--sr-space-hair) var(--sr-space-near);
-  background: var(--sr-color-surface-card);
-  color: var(--sr-color-text-ink);
-  white-space: nowrap;
-}
-.lead:hover,
-.lead:focus-visible { background: var(--sr-color-row-hover); }
 
 .kv { display: grid; grid-template-columns: minmax(7rem, max-content) 1fr; gap: .35rem var(--sr-space-base); margin: var(--sr-space-cozy) 0; font-size: var(--sr-size-small); }
 .kvRow { display: contents; }
@@ -74,15 +59,15 @@
 
 /* tones */
 .toneHero { display: grid; grid-template-columns: 1.1fr 1fr; gap: var(--sr-space-gutter); margin: var(--sr-space-base) 0; padding: var(--sr-space-wide); background: var(--sr-color-surface-press); color: var(--sr-color-text-on-dark); box-shadow: .5rem .5rem 0 var(--sr-page-accent); }
-.toneHero h2 { margin: var(--sr-space-tight) 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: 5rem; line-height: .95; text-transform: uppercase; color: var(--sr-color-text-on-dark); text-shadow: .04em .035em 0 var(--sr-color-signal); }
+.toneHero h2 { margin: var(--sr-space-tight) 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: 5rem; line-height: .95; text-transform: uppercase; color: var(--sr-color-text-on-dark); text-shadow: .04em .035em 0 var(--sr-page-overprint); }
 .toneHero h3 { margin: var(--sr-space-roomy) 0 var(--sr-space-tight); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-kicker); letter-spacing: .1em; text-transform: uppercase; color: var(--sr-color-ok-bright); }
 .toneHero .kv dt { color: var(--sr-color-text-mute-on-dark); }
-.toneHero .voice { color: var(--sr-color-text-on-dark); border-color: var(--sr-color-signal); }
+.toneHero .voice { color: var(--sr-color-text-on-dark); border-color: var(--sr-page-overprint); }
 .toneHero .plain li { border-color: color-mix(in srgb, var(--sr-color-text-on-dark) 20%, transparent); }
 .toneHero a { color: var(--sr-color-link-on-press); }
 .desc { font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-kicker); }
 .heroNote { font-size: var(--sr-size-small); color: var(--sr-color-text-mute-on-dark); }
-.actv { display: inline-block; background: var(--sr-color-signal); color: var(--sr-color-chrome-ink); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .2em; text-transform: uppercase; padding: var(--sr-space-hair) var(--sr-space-near); transform: rotate(-1.5deg); border: var(--sr-stroke-rule) solid var(--sr-color-chrome-ink); }
+.actv { display: inline-block; background: var(--sr-page-overprint); color: var(--sr-color-chrome-ink); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .2em; text-transform: uppercase; padding: var(--sr-space-hair) var(--sr-space-near); transform: rotate(-1.5deg); border: var(--sr-stroke-rule) solid var(--sr-color-chrome-ink); }
 .quotes { list-style: none; padding: 0; margin: 0; }
 .quotes li { margin: var(--sr-space-near) 0; }
 .toneGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: var(--sr-space-loose); }
@@ -148,18 +133,5 @@
   .rule { flex-direction: column; align-items: flex-start; }
 }
 
-.toneSet {
-  margin-left: auto;
-  padding: var(--sr-space-hair) var(--sr-space-cozy);
-  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
-  background: var(--sr-color-surface-card);
-  color: var(--sr-color-text-ink);
-  font-family: var(--sr-font-display);
-  font-weight: var(--sr-weight-bold);
-  font-size: var(--sr-size-caption);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-.toneSet:disabled { opacity: .55; cursor: default; }
+.toneSet { margin-left: auto; font-size: var(--sr-size-caption); }
 .toneSetError { flex-basis: 100%; color: var(--sr-color-fail); }

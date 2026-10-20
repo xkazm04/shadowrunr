@@ -1,6 +1,10 @@
 .pills { display: flex; flex-wrap: wrap; gap: var(--sr-space-snug); }
 
+/* Inline-flex, so a Pill's inner pieces (a swatch, a key hint) sit in line with its label. */
 .pill {
+  display: inline-flex;
+  gap: var(--sr-space-tick);
+  align-items: center;
   padding: var(--sr-space-tick) var(--sr-space-close);
   border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
   background: none;
@@ -16,4 +20,4 @@
 .pill[aria-pressed="true"] { background: var(--sr-color-text-ink); color: var(--sr-color-surface-paper); }
 .pill:not([aria-pressed="true"]):hover { background: var(--sr-color-surface-hover-paper); }
 
-.count { margin-left: var(--sr-space-tick); opacity: .7; }
+.count { opacity: .7; }

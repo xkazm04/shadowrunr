@@ -3,13 +3,13 @@
 // possibly absent: the sandbox ledger fills what its engine reported.
 import { useState } from "react";
 import type { LedgerEntry, ReviewSession, Role } from "@shadowrunr/contract";
+import { Section } from "../../ui/Section";
+import { EmptyState } from "../../ui/States";
 import styles from "./EngineCalls.module.css";
 import { fmtClock, human, ROLE_NAME, TIER_NAME } from "./names";
 import type { TabProps } from "./tab";
 import { PAGE, Pager, pct, secs } from "./tabkit";
 import kit from "./tabkit.module.css";
-
-/** Display names for model tiers. Local until names.ts carries them. */
 
 /** A ledger stamp below this is already stream milliseconds; above it, Unix milliseconds. */
 const UNIX_MS = 1e11;
@@ -75,10 +75,9 @@ export function EngineCalls(props: TabProps) {
   const [sel, setSel] = useState<{ minute: number; page: number } | null>(null);
   if (rs.calls.length === 0) {
     return (
-      <section className={kit.panel} data-role="review-calls">
-        <div className={kit.kicker}>Engine calls</div>
-        <p className={kit.empty}>No engine calls were recorded for this session.</p>
-      </section>
+      <div data-role="review-calls" data-rise>
+        <EmptyState title="No engine calls" hint="No engine calls were recorded for this session." />
+      </div>
     );
   }
   const roles = roleRows(rs.calls);
@@ -86,40 +85,38 @@ export function EngineCalls(props: TabProps) {
   const maxN = Math.max(1, ...mins.map((m) => m.n));
   const rows = sel ? rs.calls.filter((c) => Math.min(mins.length - 1, Math.floor(callAt(rs, c) / 60)) === sel.minute).sort((a, b) => a.ts_ms - b.ts_ms) : [];
   return (
-    <div className={kit.stack} data-role="review-calls">
-      <section className={`${kit.panel} ${kit.scroll}`}>
-        <div className={kit.kicker}>Step 1 · by role</div>
-        <h2 className={kit.title}>{rs.calls.length} engine calls</h2>
-        <table className={kit.table} data-role="review-calls-roles">
-          <thead>
-            <tr>
-              <th>Role</th>
-              <th className={kit.num}>Calls</th>
-              <th className={kit.num}>Errors</th>
-              <th className={kit.num}>Typical time</th>
-              <th className={kit.num}>Slow (p95)</th>
-              <th className={kit.num}>First words</th>
-              <th className={kit.num}>Cost, USD</th>
-            </tr>
-          </thead>
-          <tbody>
-            {roles.map((r) => (
-              <tr key={r.name}>
-                <td>{r.name}</td>
-                <td className={kit.num}>{r.calls}</td>
-                <td className={`${kit.num} ${r.errors ? kit.bad : ""}`}>{r.errors}</td>
-                <td className={kit.num}>{secs(r.p50)}</td>
-                <td className={kit.num}>{secs(r.p95)}</td>
-                <td className={kit.num}>{secs(r.firstP50)}</td>
-                <td className={kit.num}>{r.cost === undefined ? "–" : r.cost.toFixed(2)}</td>
+    <div data-role="review-calls" data-rise>
+      <Section title="Step 1 · By role" right={`${rs.calls.length} engine calls`}>
+        <div className={kit.scroll}>
+          <table className={kit.table} data-role="review-calls-roles">
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th className={kit.num}>Calls</th>
+                <th className={kit.num}>Errors</th>
+                <th className={kit.num}>Typical time</th>
+                <th className={kit.num}>Slow (p95)</th>
+                <th className={kit.num}>First words</th>
+                <th className={kit.num}>Cost, USD</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-      <section className={kit.panel}>
-        <div className={kit.kicker}>Step 2 · calls per minute</div>
-        <h2 className={kit.title}>Pick a minute to see its calls</h2>
+            </thead>
+            <tbody>
+              {roles.map((r) => (
+                <tr key={r.name}>
+                  <td>{r.name}</td>
+                  <td className={kit.num}>{r.calls}</td>
+                  <td className={`${kit.num} ${r.errors ? kit.bad : ""}`}>{r.errors}</td>
+                  <td className={kit.num}>{secs(r.p50)}</td>
+                  <td className={kit.num}>{secs(r.p95)}</td>
+                  <td className={kit.num}>{secs(r.firstP50)}</td>
+                  <td className={kit.num}>{r.cost === undefined ? "–" : r.cost.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+      <Section title="Step 2 · Calls per minute" right="Pick a minute to see its calls">
         <div className={styles.minutes} data-role="review-calls-minutes">
           {mins.map((m, i) => {
             const label = `${fmtClock(i * 60)}: ${m.n} calls${m.err ? `, ${m.err} errors` : ""}`;
@@ -131,52 +128,50 @@ export function EngineCalls(props: TabProps) {
             );
           })}
         </div>
-        <div className={styles.axis}>
+        <div className={kit.axis}>
           <span>00:00</span>
           <span>{fmtClock(mins.length * 60)}</span>
         </div>
-      </section>
-      <section className={`${kit.panel} ${kit.scroll}`}>
-        <div className={kit.kicker}>Step 3 · calls</div>
+      </Section>
+      <Section title="Step 3 · Calls" right={sel ? `Minute ${fmtClock(sel.minute * 60)} · ${rows.length} calls` : undefined}>
         {!sel ? (
-          <p className={kit.empty}>The full list is never shown at once. Pick a minute above.</p>
+          <p className={kit.note}>The full list is never shown at once. Pick a minute above.</p>
         ) : (
-          <>
-            <h2 className={kit.title}>
-              Minute {fmtClock(sel.minute * 60)} · {rows.length} calls
-            </h2>
-            <table className={kit.table} data-role="review-calls-rows">
-              <thead>
-                <tr>
-                  <th>At</th>
-                  <th>Role</th>
-                  <th>Model</th>
-                  <th className={kit.num}>Time</th>
-                  <th className={kit.num}>First words</th>
-                  <th className={kit.num}>Cost</th>
-                  <th>Problem</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(sel.page * PAGE, (sel.page + 1) * PAGE).map((c, i) => (
-                  <tr key={`${c.ts_ms}-${i}`}>
-                    <td className={kit.mono}>{fmtClock(callAt(rs, c))}</td>
-                    <td>{ROLE_NAME[c.role] ?? human(c.role)}</td>
-                    <td>{c.model ?? (c.tier ? TIER_NAME[c.tier] : "–")}</td>
-                    <td className={kit.num}>{secs(c.duration_ms)}</td>
-                    <td className={kit.num}>{secs(c.first_text_ms)}</td>
-                    <td className={kit.num}>{c.cost_usd === undefined ? "–" : c.cost_usd.toFixed(4)}</td>
-                    <td className={c.error_kind ? kit.bad : undefined} title={c.fallback_reason}>
-                      {c.error_kind ? human(c.error_kind) : c.fallback_reason ? "Fell back to another route" : ""}
-                    </td>
+          <div key={sel.minute} className={styles.minute}>
+            <div className={kit.scroll}>
+              <table className={kit.table} data-role="review-calls-rows">
+                <thead>
+                  <tr>
+                    <th>At</th>
+                    <th>Role</th>
+                    <th>Model</th>
+                    <th className={kit.num}>Time</th>
+                    <th className={kit.num}>First words</th>
+                    <th className={kit.num}>Cost</th>
+                    <th>Problem</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.slice(sel.page * PAGE, (sel.page + 1) * PAGE).map((c, i) => (
+                    <tr key={`${c.ts_ms}-${i}`}>
+                      <td className={kit.mono}>{fmtClock(callAt(rs, c))}</td>
+                      <td>{ROLE_NAME[c.role] ?? human(c.role)}</td>
+                      <td>{c.model ?? (c.tier ? TIER_NAME[c.tier] : "–")}</td>
+                      <td className={kit.num}>{secs(c.duration_ms)}</td>
+                      <td className={kit.num}>{secs(c.first_text_ms)}</td>
+                      <td className={kit.num}>{c.cost_usd === undefined ? "–" : c.cost_usd.toFixed(4)}</td>
+                      <td className={c.error_kind ? kit.bad : undefined} title={c.fallback_reason}>
+                        {c.error_kind ? human(c.error_kind) : c.fallback_reason ? "Fell back to another route" : ""}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pager page={sel.page} total={rows.length} onPage={(page) => setSel({ minute: sel.minute, page })} label="Calls" />
-          </>
+          </div>
         )}
-      </section>
+      </Section>
     </div>
   );
 }

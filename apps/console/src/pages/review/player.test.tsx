@@ -91,7 +91,7 @@ describe("the review player", () => {
     await press("ArrowLeft");
     expect(current()).toBe(all[0]);
     expect(screen.getByRole("button", { name: /Landed/ }).getAttribute("aria-pressed")).toBe("true");
-    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe("true");
   });
 
   it("shows the done state with mark totals, and steps through all of them again", async () => {
@@ -103,7 +103,7 @@ describe("the review player", () => {
     expect(done?.textContent).toMatch(/Flat\s*\d+/);
     await act(async () => fireEvent.click(screen.getByRole("button", { name: `Step through all ${all.length} again` })));
     expect(current()).toBe(all[0]);
-    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe("false");
     await press("ArrowRight");
     expect(current()).toBe(all[1]);
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Open on the timeline" })));

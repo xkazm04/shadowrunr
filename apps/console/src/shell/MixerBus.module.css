@@ -109,3 +109,8 @@
 .bus[data-narrow="true"] .label,
 .bus[data-narrow="true"] .mini { display: none; }
 .bus[data-narrow="true"] .channel { grid-template-columns: 1fr; padding: var(--sr-space-tick); text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .channel { transition: border-color .2s; }
+  .channel:hover { transform: none; }
+}

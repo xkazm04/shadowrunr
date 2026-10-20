@@ -38,14 +38,15 @@ export function Layer2({ sub }: { readonly sub: readonly string[] }) {
   const [seg, arg, extra] = sub;
   const tab = isTab(seg) ? seg : undefined;
   return (
-    <div className={styles.l2} data-role="simulator-l2">
-      <span className={styles.sr}>Layer 2 · The Trials</span>
+    <div className={styles.l2} data-page="simulator" data-role="simulator-l2">
       <Tabs items={TABS} value={tab ?? "tournaments"} onSelect={(id) => router.navigate(pageRoute("simulator", id))} label="Simulator pages" />
       {tab === undefined || extra !== undefined ? (
         <EmptyState title="There is no such simulator page" hint="Pick Tournaments, Runs, Verdicts or Heatmap above." />
       ) : (
         <Body key={tab} tab={tab} arg={arg} />
       )}
+      {/* Last, so the entrance stagger counts the tabs and the head first, not this hidden label. */}
+      <span className={styles.sr}>Layer 2 · The Trials</span>
     </div>
   );
 }

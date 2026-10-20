@@ -1,39 +1,30 @@
-/* What the layer 2 tabs share: panels, kickers, plain buttons, tables, tick strips and pagers.
-   Condensed display for structure, sans for UI, mono for time and figures. */
+/* What the layer 2 tabs share, in the console's print: ruled tables (a display-bold head over a
+   heavy ink rule, hairlines only between rows), the serif note, the small display sub-head, tick
+   strips and pagers. Blocks are Sections on flat paper; cards are the exception. */
 
-.panel { min-width: 0; padding: var(--sr-space-base); background: var(--sr-color-surface-card); border: var(--sr-stroke-hair) solid var(--sr-color-line); }
-.kicker { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-caption); letter-spacing: .12em; text-transform: uppercase; color: var(--sr-color-text-mute); }
-.label { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--sr-color-text-mute); }
-.title { margin: var(--sr-space-tight) 0 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-subhead); letter-spacing: .02em; line-height: 1.15; text-wrap: balance; }
-.lede { margin: var(--sr-space-compact) 0 0; max-width: 72ch; font-size: var(--sr-size-small); color: var(--sr-color-text-mute); }
-.empty { margin: var(--sr-space-near) 0 0; font-size: var(--sr-size-small); font-style: italic; color: var(--sr-color-text-mute); }
-.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(20rem, 29rem); gap: var(--sr-space-base); align-items: start; }
-.stack { display: flex; flex-direction: column; gap: var(--sr-space-near); }
+.note { max-width: 46rem; margin: 0 0 var(--sr-space-base); font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-body); line-height: 1.45; color: var(--sr-color-text-note); }
+.note kbd { padding: 0 var(--sr-space-snug); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); font-family: var(--sr-font-mono); font-style: normal; font-size: var(--sr-size-micro); color: var(--sr-color-text-ink); }
+.sub { margin: 0 0 var(--sr-space-tight); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .14em; text-transform: uppercase; color: var(--sr-color-text-ink); }
+.stack { display: flex; flex-direction: column; gap: var(--sr-space-base); }
 .mono { font-family: var(--sr-font-mono); font-variant-numeric: tabular-nums; }
 
-.btn { padding: var(--sr-space-snug) var(--sr-space-near); border: var(--sr-stroke-hair) solid var(--sr-color-line); background: var(--sr-color-surface-card); color: var(--sr-color-text-ink); font: inherit; font-size: var(--sr-size-caption); cursor: pointer; }
-.btn:hover { background: var(--sr-color-row-hover); }
-.btn:disabled { opacity: .45; cursor: default; }
-.btn:focus-visible { outline: var(--sr-stroke-rule) solid var(--sr-color-signal); outline-offset: var(--sr-space-hair); }
-
+/* A plain bounded table (simulator .table, FilterTable .th). */
 .table { width: 100%; border-collapse: collapse; font-size: var(--sr-size-small); }
-.table th, .table td { padding: var(--sr-space-snug) var(--sr-space-cozy); text-align: left; vertical-align: baseline; border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); }
-.table th { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--sr-color-text-mute); }
+.table th { padding: var(--sr-space-compact) var(--sr-space-close); border-bottom: var(--sr-stroke-heavy) solid var(--sr-color-text-ink); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .1em; text-transform: uppercase; text-align: left; white-space: nowrap; }
+.table td { padding: .55rem var(--sr-space-close); border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); text-align: left; vertical-align: baseline; }
+.table tbody tr:hover { background: var(--sr-color-row-hover); }
 .table .num { text-align: right; font-family: var(--sr-font-mono); font-variant-numeric: tabular-nums; }
-.table .bad { color: var(--sr-color-fail); }
+.table .bad { font-weight: var(--sr-weight-semibold); color: var(--sr-color-fail); }
 .scroll { overflow-x: auto; }
 
+/* Tick strips: when things happened. Plain ticks in ink, marked ones ok, the current one in the page accent. */
 .strip { min-width: 6rem; }
 .ticks { display: block; width: 100%; height: .9rem; background: var(--sr-color-track); }
 .tick, .tickOk, .tickOn { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
-.tick { stroke: var(--sr-color-text-note); }
+.tick { stroke: var(--sr-color-text-ink); }
 .tickOk { stroke: var(--sr-color-ok); }
-.tickOn { stroke: var(--sr-color-signal); stroke-width: 3; }
+.tickOn { stroke: var(--sr-page-accent); stroke-width: 4; }
 .axis { display: flex; justify-content: space-between; margin-top: var(--sr-space-hair); font-family: var(--sr-font-mono); font-size: var(--sr-size-micro); color: var(--sr-color-text-mute); }
 
-.pager { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact); align-items: center; margin-top: var(--sr-space-cozy); }
-.showing { font-size: var(--sr-size-caption); color: var(--sr-color-text-mute); }
-
-@media (max-width: 60rem) {
-  .split { grid-template-columns: minmax(0, 1fr); }
-}
+.pager { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact); align-items: center; margin-top: var(--sr-space-near); font-size: var(--sr-size-small); }
+.showing { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-caption); letter-spacing: .08em; text-transform: uppercase; color: var(--sr-color-text-mute); }

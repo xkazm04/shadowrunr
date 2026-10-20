@@ -51,3 +51,13 @@
 }
 
 .intro[data-narrow="true"] .title span { font-size: 5rem; }
+
+/* Reduced motion: the title only fades in and out, without the drift and scale. */
+@keyframes intro-fade {
+  0%, 100% { opacity: 0; }
+  18%, 70% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title { animation-name: intro-fade; }
+}

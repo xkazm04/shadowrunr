@@ -43,6 +43,9 @@ export const GATE_MARK_NAME: Readonly<Record<GateMarkId, string>> = { care: "Car
 export type WallOrder = "oldest" | "fails" | "roast";
 export const WALL_ORDER: readonly (readonly [WallOrder, string])[] = [["oldest", "Oldest first"], ["fails", "Most rule fails"], ["roast", "Most roasting"]];
 
+/** A silence longer than this, in seconds, reads as a failure (the wall's facts, layer 2's figures). */
+export const SILENCE_LIMIT_S = 15;
+
 /** The timeline's row sizes, in seconds. */
 export const ROW_SIZES: readonly (readonly [number, string])[] = [[10, "10 s"], [30, "30 s"], [60, "1 min"], [120, "2 min"]];
 export const RANK_NAME: Readonly<Record<string, string>> = { thrall: "Thrall", acolyte: "Acolyte", cultist: "Cultist", warlock: "Warlock", lich: "Lich", dread_council: "Dread Council" };

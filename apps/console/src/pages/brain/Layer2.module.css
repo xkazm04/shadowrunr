@@ -49,19 +49,6 @@
 .mono { font-family: var(--sr-font-mono); font-size: var(--sr-size-micro); overflow-wrap: anywhere; }
 
 .role { display: inline-flex; align-items: center; gap: var(--sr-space-tight); white-space: nowrap; }
-.role i { width: .7rem; height: .7rem; border-radius: var(--sr-radius-round); border: var(--sr-stroke-hair) solid var(--sr-color-line); }
+.role i { width: .7rem; height: .7rem; border-radius: var(--sr-radius-round); border: var(--sr-stroke-hair) solid var(--sr-color-text-ink); }
 
 .link { color: var(--sr-page-accent-text, var(--sr-color-ok)); font-weight: var(--sr-weight-semibold); overflow-wrap: anywhere; }
-
-.more {
-  padding: var(--sr-space-tick) var(--sr-space-close);
-  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
-  background: var(--sr-color-text-ink);
-  font-family: var(--sr-font-display);
-  font-weight: var(--sr-weight-bold);
-  font-size: var(--sr-size-small);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--sr-color-surface-paper);
-  cursor: pointer;
-}

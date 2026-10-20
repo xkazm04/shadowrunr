@@ -157,3 +157,11 @@
   .cr,
   .hot { transition: none; }
 }
+
+/* Body text prints on plain stock: the name and the portrait may overlap the motif art, but the
+   facts line, the tone note, the guests row and the footer knock it out with the face. */
+.r,
+.tone em,
+.foils { background: var(--sr-page-face); box-shadow: 0 0 0 var(--sr-space-tight) var(--sr-page-face); }
+.r { align-self: flex-start; }
+.root > :last-child { background: var(--sr-page-face); }

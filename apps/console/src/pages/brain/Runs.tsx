@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import type { RunRow } from "@shadowrunr/contract";
 import { usePaged } from "../../data";
 import { pageRoute, RouteLink, useRouter } from "../../router";
+import { Button } from "../../ui/Button";
 import { State } from "../../ui/Chip";
 import { FilterTable, type Column, type Facets } from "../../ui/FilterTable";
 import { Section } from "../../ui/Section";
@@ -65,9 +66,9 @@ export function Runs() {
       title={`Runs · ${int(items.length)}${runs.more ? "+" : ""}`}
       right={
         runs.more ? (
-          <button type="button" className={styles.more} onClick={() => setPages((p) => p + STEP)}>
+          <Button variant="ink" size="compact" onClick={() => setPages((p) => p + STEP)}>
             Load {int(STEP * PAGE)} more
-          </button>
+          </Button>
         ) : undefined
       }
     >

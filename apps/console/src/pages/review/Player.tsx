@@ -4,6 +4,10 @@
 // and in the note, the shell keymap keeps its meaning.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { pageRoute, useRouter } from "../../router";
+import { Button } from "../../ui/Button";
+import { RateBar } from "../../ui/RateBar";
+import { EmptyState } from "../../ui/States";
+import { Switch } from "../../ui/Switch";
 import type { SayLine } from "./derive";
 import { FeedbackPanel, type FeedbackHandle } from "./FeedbackPanel";
 import { KIND_NAME, type ShownKind } from "./names";
@@ -11,7 +15,6 @@ import styles from "./Player.module.css";
 import { PlayerDone, PlayerSide, TagLine } from "./PlayerParts";
 import { Script } from "./Script";
 import type { TabProps } from "./tab";
-import kit from "./tabkit.module.css";
 
 /** Where the player stands: an index into the kind's lines, or the done state. */
 interface At {
@@ -31,7 +34,7 @@ function seek(n: number, from: number, ok: (i: number) => boolean, wrap: boolean
   return -1;
 }
 
-/** A text field the player's keys must leave alone (a checkbox is not one). */
+/** A text field the player's keys must leave alone (a checkbox or a switch is not one). */
 function typing(t: EventTarget | null): boolean {
   if (!(t instanceof HTMLElement)) return false;
   if (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return true;
@@ -39,7 +42,7 @@ function typing(t: EventTarget | null): boolean {
 }
 
 export function Player(props: TabProps) {
-  if (!props.kind) return <p className={kit.empty}>Pick a type on Review by type to start the player.</p>;
+  if (!props.kind) return <EmptyState title="No type picked" hint="Pick a type on Review by type to start the player." />;
   // A new kind starts a new walk.
   return <Walk key={props.kind} {...props} kind={props.kind} />;
 }
@@ -119,25 +122,23 @@ function Walk(props: TabProps & { kind: ShownKind }) {
   }
   return (
     <div ref={root} className={styles.player} tabIndex={-1} onKeyDown={onKeyDown} data-role="review-player" data-line={line.line}>
-      <section className={`${kit.panel} ${styles.stage}`}>
+      <section className={styles.stage}>
         <div className={styles.count}>
           <div>
-            <div className={kit.kicker} data-role="review-player-pos">
+            <div className={styles.pos} data-role="review-player-pos">
               {KIND_NAME[kind]} {cur + 1} of {n}
             </div>
             <span className={styles.big}>
               {markedNow} marked · {n - markedNow} to go
             </span>
           </div>
-          <label className={styles.skip}>
-            <input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} /> Skip lines I already marked
-          </label>
+          <Switch checked={skip} onChange={setSkip} label="Skip lines I already marked" />
         </div>
-        <div className={styles.bar} role="img" aria-label={`${markedNow} of ${n} marked`}>
-          <i style={{ width: `${(100 * markedNow) / Math.max(1, n)}%` }} />
+        <RateBar rate={markedNow / Math.max(1, n)} n={n} label={`${markedNow} of ${n} marked`} />
+        <div key={line.line} className={styles.step} data-role="review-player-step">
+          <Script rs={rs} d={d} line={line.line} context={2} />
+          <TagLine say={line} />
         </div>
-        <Script rs={rs} d={d} line={line.line} context={2} />
-        <TagLine say={line} />
         <FeedbackPanel
           ref={panel}
           line={line.line}
@@ -147,12 +148,10 @@ function Walk(props: TabProps & { kind: ShownKind }) {
           onSaved={next}
           before={
             <>
-              <button type="button" onClick={back} disabled={cur === 0}>
+              <Button onClick={back} disabled={cur === 0}>
                 Previous
-              </button>
-              <button type="button" onClick={skipOn}>
-                Skip
-              </button>
+              </Button>
+              <Button onClick={skipOn}>Skip</Button>
             </>
           }
         />

@@ -15,7 +15,7 @@ import styles from "./Clips.module.css";
 export function ClipDetail({ id }: { id: string }) {
   const q = useRpc("clips.get", { id });
   return (
-    <div data-role="onair-clip-detail">
+    <div data-role="onair-clip-detail" data-rise>
       <QueryView query={q}>{(c) => <Detail c={c} />}</QueryView>
     </div>
   );

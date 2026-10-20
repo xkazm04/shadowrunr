@@ -10,11 +10,13 @@ import { OpenInStage } from "../../kit/OpenInStage";
 import { RouteLink, pageRoute, useRouter } from "../../router";
 import { Section } from "../../ui/Section";
 import { StatBand } from "../../ui/StatBand";
+import { EmptyState } from "../../ui/States";
 import { VirtualList } from "../../ui/VirtualList";
 import { runSource, selectSource } from "./feed";
 import styles from "./Layer2.module.css";
 import { int, span as clock } from "../../kit/events";
 import { beatsOf, countsOf } from "./beats";
+import { Button, buttonClass } from "../../ui/Button";
 
 function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent[]; tournamentId: string; runId: string }) {
   const router = useRouter();
@@ -41,24 +43,25 @@ function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent
         ))}
       </div>
       <div className={styles.actions}>
-        <button
+        <Button
           type="button"
-          className={styles.primary}
+          variant="ink"
+          size="compact"
           onClick={() => {
             selectSource(runSource({ run_id: runId, tournament_id: tournamentId }));
             router.navigate(pageRoute("onair"));
           }}
         >
           Replay on screen
-        </button>
-        <OpenInStage runId={`${tournamentId}/${runId}`} className={styles.primary} role="onair-open-stage" />
+        </Button>
+        <OpenInStage runId={`${tournamentId}/${runId}`} className={buttonClass("ink", "compact")} role="onair-open-stage" />
         <RouteLink to={pageRoute("brain", "transcripts", runId)} className={styles.more}>
           Read the transcript
         </RouteLink>
       </div>
       <h3 className={styles.sub}>Beats · {int(beats.length)}</h3>
       {beats.length === 0 ? (
-        <p className={styles.note}>No beats: the core thread called no ops in this run.</p>
+        <EmptyState title="No beats" hint="The core thread called no ops in this run." />
       ) : (
         <VirtualList
           className={styles.beats}

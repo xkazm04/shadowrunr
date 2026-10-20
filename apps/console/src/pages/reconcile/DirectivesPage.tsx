@@ -12,6 +12,7 @@ import { FilterTable, type Column } from "../../ui/FilterTable";
 import { Head } from "../../ui/Section";
 import styles from "./Layer2.module.css";
 import { dateTime } from "./model";
+import { Button } from "../../ui/Button";
 
 /** Segments a directive may be scoped to (SEG-02B is descoped). */
 const SCOPES: readonly SegmentId[] = ["SEG-01", "SEG-02A"];
@@ -87,9 +88,9 @@ function AddForm() {
             ))}
           </select>
         </label>
-        <button type="submit" className={styles.primary} disabled={add.pending || text.trim().length === 0}>
+        <Button type="submit" variant="primary" disabled={add.pending || text.trim().length === 0}>
           {add.pending ? "Adding…" : "Add directive"}
-        </button>
+        </Button>
       </form>
       {error && (
         <p className={styles.formError} role="alert">
@@ -112,18 +113,18 @@ function Proposal({ d }: { d: Directive }) {
       <Chip tone="caution" title="Proposed by the Reconciler in the Lord’s chat: inactive until kept">
         Proposed
       </Chip>
-      <button
+      <Button
         type="button"
-        className={styles.secondary}
+        variant="secondary"
         disabled={busy}
         aria-label={`Keep ${label}`}
         onClick={() => void keep.run({ kind: d.kind, text: d.text, ...(d.scope === undefined ? {} : { scope: d.scope }) }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))}
       >
         Keep
-      </button>
-      <button type="button" className={styles.secondary} disabled={busy} aria-label={`Drop ${label}`} onClick={() => void drop.run({ id: d.id }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))}>
+      </Button>
+      <Button type="button" variant="secondary" disabled={busy} aria-label={`Drop ${label}`} onClick={() => void drop.run({ id: d.id }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))}>
         Drop
-      </button>
+      </Button>
       {error && <small role="alert">{error}</small>}
     </span>
   );
@@ -135,16 +136,16 @@ function Deactivate({ d }: { d: Directive }) {
   if (!d.active) return <span className={styles.dim}>Off</span>;
   return (
     <span className={styles.rowAction}>
-      <button
+      <Button
         type="button"
-        className={styles.secondary}
+        variant="secondary"
         disabled={off.pending}
         onClick={() =>
           void off.run({ id: d.id }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))
         }
       >
         {off.pending ? "Turning off…" : "Deactivate"}
-      </button>
+      </Button>
       {error && <small role="alert">{error}</small>}
     </span>
   );

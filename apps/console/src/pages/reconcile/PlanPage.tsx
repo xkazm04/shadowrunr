@@ -13,6 +13,7 @@ import styles from "./Layer2.module.css";
 import { evidenceRefs, OPTION_KIND_LABEL, parseDiff } from "./model";
 import { RefLinks } from "./Refs";
 import { session, useSession } from "./session";
+import { Button } from "../../ui/Button";
 
 export function PlanPage({ reportId }: { reportId: string }) {
   const { proposals } = useReport(reportId);
@@ -36,8 +37,8 @@ function PlanGrid({ reportId, options }: { reportId: string; options: readonly P
   const s = useSession();
   const chosen = new Set(s.chosen[reportId] ?? []);
   return (
-    <div className={styles.plangrid}>
-      <div className={styles.opts}>
+    <div className={styles.plangrid} data-rise>
+      <div className={styles.opts} data-rise>
         {options.map((o) => (
           <OptionCard key={o.option_id} option={o} on={chosen.has(o.option_id)} onToggle={() => session.toggleOption(reportId, o.option_id)} />
         ))}
@@ -107,9 +108,9 @@ function Composer({ reportId, chosen, sealed }: { reportId: string; chosen: read
       )}
       <h3>Directives riding along</h3>
       <p className={styles.dim}>{directives.data ? `${active} active` : directives.errorView ? directives.errorView.title : "Loading"}</p>
-      <button type="button" className={styles.primary} onClick={() => void seal()} disabled={choose.pending} data-role="reconcile-seal">
+      <Button type="button" variant="primary" className={styles.seal} onClick={() => void seal()} disabled={choose.pending} data-role="reconcile-seal">
         {choose.pending ? "Composing…" : sealed ? "Seal again" : "Seal this plan"}
-      </button>
+      </Button>
       {choose.pending && (
         <p className={styles.pending} role="status">
           The planner is writing the Lord’s dispatch and the running order.

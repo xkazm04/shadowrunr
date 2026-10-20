@@ -42,9 +42,9 @@ export function Layer2({ sub }: { readonly sub: readonly string[] }) {
   const router = useRouter();
   const [floor, run, line] = sub;
   return (
-    <div className={styles.page} data-role="brain-layer2">
-      <Head kicker="Layer 2 · Brain floor" title={isFloor(floor) ? titleOf(floor, run) : "The Brain"} lede={isFloor(floor) ? ledeOf(floor, run) : undefined} />
+    <div className={styles.page} data-page="brain" data-role="brain-layer2">
       {isFloor(floor) && <Tabs label="Brain floors" items={FLOORS} value={floor} onSelect={(id) => router.navigate(pageRoute("brain", id))} />}
+      <Head kicker="Layer 2 · Brain floor" title={isFloor(floor) ? titleOf(floor, run) : "The Brain"} lede={isFloor(floor) ? ledeOf(floor, run) : undefined} />
       {floor === "engine" && <Engine />}
       {floor === "transcripts" && run === undefined && <Runs />}
       {floor === "transcripts" && run !== undefined && <Viewer run={run} line={lineOf(line)} />}

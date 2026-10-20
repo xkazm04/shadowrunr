@@ -1,0 +1,14 @@
+/* The in-page push-in: the spread's own move (Spread.module.css), from the picked row's rect. The
+   push replaces the entrance rise the spread gives a page's blocks, whose selectors are far more
+   specific, hence the !important; the reduced-motion rule below keeps the same weight. */
+
+.push[data-push="true"] { animation: pushin .62s var(--sr-ease-move) both !important; transform-origin: 50% 50%; }
+
+@keyframes pushin {
+  from { opacity: 0; transform: var(--push-from, scale(.6)); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .push[data-push="true"] { animation: none !important; }
+}

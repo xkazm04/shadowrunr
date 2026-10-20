@@ -39,3 +39,8 @@
 .switch[aria-checked="true"] .knob { transform: translateX(1.3rem); }
 
 .state { min-width: 2.2rem; color: var(--sr-color-text-mute); }
+
+@media (prefers-reduced-motion: reduce) {
+  .track,
+  .knob { transition: none; }
+}

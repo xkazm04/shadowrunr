@@ -9,12 +9,14 @@ import { RankEngagement } from "../../kit/RankEngagement";
 import { RateBar } from "../../ui/RateBar";
 import { Head, Section } from "../../ui/Section";
 import { StatBand } from "../../ui/StatBand";
+import { EmptyState } from "../../ui/States";
 import { useReport } from "./hooks";
 import styles from "./Layer2.module.css";
 import { incidentTotal, Incidents } from "./Incidents";
 import { dateTime, ruleLabel, sourceLabel, triptych } from "./model";
 import { RefLinks } from "./Refs";
 import { Synthesis } from "./Synthesis";
+import { Button } from "../../ui/Button";
 
 export type ReportFilter = "all" | "held" | "failed";
 
@@ -33,7 +35,7 @@ export function ReportPage({ reportId, filter }: { reportId: string; filter: Rep
 function ReportBody({ report, filter, proposed }: { report: ReconcileReport; filter: ReportFilter; proposed: number | undefined }) {
   const t = triptych(report, []);
   return (
-    <div data-role="reconcile-report">
+    <div data-role="reconcile-report" data-rise>
       <p className={styles.meta}>
         <code>{report.report_id}</code> · {sourceLabel(report.source)} · {dateTime(report.created_ms)}
       </p>
@@ -105,9 +107,9 @@ function EvidenceList({ items, tone }: { items: readonly Evidence[]; tone: "g" |
         ))}
       </ul>
       {items.length > shown.length && (
-        <button type="button" className={styles.secondary} onClick={() => setLimit((n) => n + EVIDENCE_PAGE)}>
+        <Button type="button" variant="secondary" onClick={() => setLimit((n) => n + EVIDENCE_PAGE)}>
           Show {Math.min(EVIDENCE_PAGE, items.length - shown.length)} more of {items.length - shown.length}
-        </button>
+        </Button>
       )}
     </>
   );
@@ -150,7 +152,7 @@ function SegmentSection({ s, filter }: { s: SegmentFinding; filter: ReportFilter
 function Ranks({ rows }: { rows: readonly RankRow[] }) {
   return (
     <Section title="Which ranks got answered">
-      {rows.length === 0 ? <p className={styles.dim}>No ranked chat in this report.</p> : <RankEngagement rows={rows} />}
+      {rows.length === 0 ? <EmptyState title="No ranked chat in this report" /> : <RankEngagement rows={rows} />}
     </Section>
   );
 }

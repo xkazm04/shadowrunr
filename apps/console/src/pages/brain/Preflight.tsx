@@ -6,6 +6,7 @@ import type { HealthReport, PreflightRunResult } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { useKeyCommand } from "../../kit/keyCommands";
 import { queryKey, useDataLayer, useRpc } from "../../data";
+import { Button } from "../../ui/Button";
 import { Chip, type Tone } from "../../ui/Chip";
 import { PREFLIGHT_PARAMS, rowState, tally, titleOf, verdictOf, worstState, type RowState } from "./preflightModel";
 import styles from "./Preflight.module.css";
@@ -78,9 +79,9 @@ export function Preflight() {
         <span className={styles.last} data-role="brain-preflight-last">
           {at === undefined ? "Not run yet" : `Last run ${timeOf(at)}`}
         </span>
-        <button type="button" className={styles.rerun} onClick={rerun} disabled={query.refreshing} data-role="brain-preflight-rerun">
+        <Button variant="ink" size="compact" onClick={rerun} disabled={query.refreshing} data-role="brain-preflight-rerun">
           {query.refreshing ? "Running…" : "Re-run"}
-        </button>
+        </Button>
       </div>
       <QueryView<PreflightRunResult>
         query={query}
