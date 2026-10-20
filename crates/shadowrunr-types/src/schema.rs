@@ -93,6 +93,7 @@ fn wire_types(gen: &mut SchemaGenerator) {
     gen.subschema_for::<rpc::EventFrame>();
     gen.subschema_for::<crate::sandbox::AckFrame>();
     gen.subschema_for::<crate::review::SessionTags>();
+    gen.subschema_for::<crate::prep::StreamPrep>();
     gen.subschema_for::<reconcile::SegmentMetrics>();
     gen.subschema_for::<CharacterRuleInfo>();
 }

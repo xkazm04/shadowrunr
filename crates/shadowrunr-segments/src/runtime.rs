@@ -1483,6 +1483,7 @@ impl SegmentRuntime {
             segment: self.table.id,
             rules_prompt: self.rules_prompt(),
             state_summary: self.state_summary(),
+            state: self.state.clone(),
             allowed_ops: if self.signed_off {
                 Vec::new()
             } else {

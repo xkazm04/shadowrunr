@@ -364,6 +364,11 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
             ok(crate::review::feedback_list(state, params(req.params)?).await?)
         }
         "review.tag" => ok(crate::review::tag(state, params(req.params)?).await?),
+        "prep.generate" => ok(crate::prep::generate(state.clone(), params(req.params)?).await?),
+        "prep.list" => ok(crate::prep::list(state).await?),
+        "prep.get" => ok(crate::prep::get(state, params(req.params)?).await?),
+        "prep.approve" => ok(crate::prep::approve(state, params(req.params)?).await?),
+        "prep.retire" => ok(crate::prep::retire(state, params(req.params)?).await?),
         other => Err(RpcError::new(
             ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),

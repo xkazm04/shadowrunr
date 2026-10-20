@@ -66,6 +66,10 @@ pub struct SegmentContext {
     pub rules_prompt: String,
     /// Current state: open poll, active foil, revealed hexes, elapsed time...
     pub state_summary: String,
+    /// The segment state machine's current state (`cold_open`, `opening`, `foil_vote`...);
+    /// the orchestrator reads it to know the room is still filling.
+    #[serde(default)]
+    pub state: String,
     /// `Op` tags (serde names) the brain may emit in this segment.
     pub allowed_ops: Vec<String>,
     /// Concurrent viewers right now.

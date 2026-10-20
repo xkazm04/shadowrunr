@@ -15,6 +15,7 @@ pub mod live;
 pub mod paging;
 pub mod policy_install;
 pub mod preflight;
+pub mod prep;
 pub mod report_wire;
 pub mod review;
 pub mod rpc;

@@ -15,6 +15,7 @@ pub mod engine;
 pub mod error;
 pub mod event;
 pub mod memory;
+pub mod prep;
 pub mod reconcile;
 pub mod results;
 pub mod review;

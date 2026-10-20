@@ -1197,6 +1197,7 @@ pub(crate) mod tests {
                 segment: self.segment,
                 rules_prompt: "rules".into(),
                 state_summary: "state".into(),
+                state: "opening".into(),
                 allowed_ops: vec!["start_poll".into()],
                 ccv,
                 elapsed_s,

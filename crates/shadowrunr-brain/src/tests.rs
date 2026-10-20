@@ -197,6 +197,7 @@ fn ctx(allowed: &[&str]) -> SegmentContext {
         segment: SegmentId::Seg01ImprovisedRoom,
         rules_prompt: "SEG-01 Improvised Room: riff with chat, summon foils, run polls.".into(),
         state_summary: "No poll open. No foil on stage.".into(),
+        state: "opening".into(),
         allowed_ops: allowed.iter().map(|s| s.to_string()).collect(),
         ccv: 30,
         elapsed_s: 120,

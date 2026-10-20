@@ -299,6 +299,7 @@ fn set_ts(ev: &mut StreamEvent, at: i64) {
         | StreamEvent::Handover { ts_ms, .. }
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
+        | StreamEvent::BeatPlan { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms = at,
     }
 }

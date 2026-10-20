@@ -28,6 +28,8 @@ export declare const validateLordChatReply: ValidateFn<T.LordChatReply>;
 export declare const validateNextStreamPlan: ValidateFn<T.NextStreamPlan>;
 export declare const validatePlanProposalsResult: ValidateFn<T.PlanProposalsResult>;
 export declare const validatePreflightRunResult: ValidateFn<T.PreflightRunResult>;
+export declare const validateStreamPrep: ValidateFn<T.StreamPrep>;
+export declare const validatePrepListResult: ValidateFn<T.PrepListResult>;
 export declare const validateRankTableInfo: ValidateFn<T.RankTableInfo>;
 export declare const validateIncidentsPage: ValidateFn<T.IncidentsPage>;
 export declare const validateReconcileListResult: ValidateFn<T.ReconcileListResult>;

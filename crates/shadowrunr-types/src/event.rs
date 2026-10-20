@@ -174,6 +174,17 @@ pub enum StreamEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         summary: Option<String>,
     },
+    /// What the orchestrator chose for this beat: the record that makes its choices judgeable.
+    BeatPlan {
+        ts_ms: TsMs,
+        mode: crate::prep::BeatMode,
+        /// The prepared bit or cold-open beat it voiced, if any.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bit_id: Option<String>,
+        /// Chat messages passed to the voice this beat.
+        picks: u32,
+        reason: String,
+    },
     /// The brain's view of the engine fleet changed (WP sandbox): written on every
     /// transition, so an outage and its recovery are on the record.
     Health {

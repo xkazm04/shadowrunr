@@ -643,6 +643,7 @@ mod tests {
             segment: SegmentId::Seg01ImprovisedRoom,
             rules_prompt: "R".into(),
             state_summary: "S".into(),
+            state: String::new(),
             allowed_ops: Vec::new(),
             ccv: 1,
             elapsed_s: 1,
