@@ -3268,7 +3268,7 @@ return errors === 0;
 }
 validate434.evaluated = {"dynamicProps":false,"dynamicItems":false};
 
-const schema173 = {"description":"What the orchestrator chose for one beat (`StreamEvent::BeatPlan`).","oneOf":[{"const":"cold_open","description":"A cold-open story beat (room still filling).","type":"string"},{"const":"react","description":"Answer picked chat.","type":"string"},{"const":"bit","description":"Voice a prepared bit.","type":"string"},{"const":"bridge","description":"A connector line, then chat or a bit.","type":"string"},{"const":"mixed","description":"A bit and picked chat in the same beat.","type":"string"},{"const":"hold","description":"Nothing to say this beat (the gap is still under the ceiling).","type":"string"}]};
+const schema173 = {"description":"What the orchestrator chose for one beat (`StreamEvent::BeatPlan`).","oneOf":[{"const":"cold_open","description":"A cold-open story beat (room still filling).","type":"string"},{"const":"react","description":"Answer picked chat.","type":"string"},{"const":"bit","description":"Voice a prepared bit.","type":"string"},{"const":"bridge","description":"A connector line, then chat or a bit.","type":"string"},{"const":"mixed","description":"A bit and picked chat in the same beat.","type":"string"},{"const":"hold","description":"Nothing to say this beat (the gap is still under the ceiling).","type":"string"},{"const":"improvise","description":"A quiet beat with nothing prepared that fits: the host fills it in his own words.","type":"string"}]};
 
 function validate438(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -3464,18 +3464,50 @@ if(_valid0){
 valid0 = true;
 passing0 = 5;
 }
+const _errs13 = errors;
+if(typeof data !== "string"){
+const err12 = {instancePath,schemaPath:"#/oneOf/6/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err12];
+}
+else {
+vErrors.push(err12);
+}
+errors++;
+}
+if("improvise" !== data){
+const err13 = {instancePath,schemaPath:"#/oneOf/6/const",keyword:"const",params:{allowedValue: "improvise"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err13];
+}
+else {
+vErrors.push(err13);
+}
+errors++;
+}
+var _valid0 = _errs13 === errors;
+if(_valid0 && valid0){
+valid0 = false;
+passing0 = [passing0, 6];
+}
+else {
+if(_valid0){
+valid0 = true;
+passing0 = 6;
+}
+}
 }
 }
 }
 }
 }
 if(!valid0){
-const err12 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+const err14 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
-vErrors = [err12];
+vErrors = [err14];
 }
 else {
-vErrors.push(err12);
+vErrors.push(err14);
 }
 errors++;
 validate438.errors = vErrors;

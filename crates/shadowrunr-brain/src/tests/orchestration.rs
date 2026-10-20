@@ -164,7 +164,7 @@ async fn after_the_cold_open_quiet_beats_voice_bits_once_each() {
                 holds += 1;
                 assert!(says(&ev).is_empty(), "a hold says nothing");
             }
-            BeatMode::Bit | BeatMode::Bridge => {
+            BeatMode::Bit | BeatMode::Bridge | BeatMode::Improvise => {
                 if let Some(id) = bit {
                     assert!(b.last_prompt().unwrap().contains("# Tonight's material"));
                     if started.last() != Some(&id) {

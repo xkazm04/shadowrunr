@@ -459,7 +459,7 @@ export type ModStage = "input" | "output";
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "BeatMode".
  */
-export type BeatMode = "cold_open" | "react" | "bit" | "bridge" | "mixed" | "hold";
+export type BeatMode = "cold_open" | "react" | "bit" | "bridge" | "mixed" | "hold" | "improvise";
 /**
  * The brain's fleet mode as recorded by [`StreamEvent::Health`].
  *

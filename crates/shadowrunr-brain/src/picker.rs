@@ -67,6 +67,9 @@ pub struct PickContext {
     pub poll_options: Vec<String>,
     /// Lowercase names the character answers to.
     pub names: Vec<String>,
+    /// Message ids that are their viewer's first message this stream (the orchestrator's
+    /// first contacts): boosted, so a newcomer is greeted before the regulars.
+    pub first_contacts: HashSet<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -269,6 +272,10 @@ impl Picker {
         {
             s += 0.5;
             why.push("poll");
+        }
+        if ctx.first_contacts.contains(&c.msg.id) {
+            s += 1.2;
+            why.push("first_contact");
         }
         if ctx.regulars.contains(&c.msg.viewer.id) {
             s += 0.6;

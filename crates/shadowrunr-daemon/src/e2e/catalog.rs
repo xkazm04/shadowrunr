@@ -128,7 +128,7 @@ async fn segments_tables_and_ranks_table_are_the_running_data() {
     assert_eq!(gated, vec!["propose"]);
     let seg01 = &t.segments[0];
     assert_eq!(seg01.title, "Improvised Room");
-    assert_eq!(seg01.initial, "opening");
+    assert_eq!(seg01.initial, "cold_open");
     assert!(seg01.allowed_ops.contains(&"summon_foil".to_string()));
     assert_eq!(seg01.commands, ["summon", "propose", "vote"]);
     assert_eq!(seg01.clock.handover.as_ref().map(|h| h.ccv_min), Some(15));

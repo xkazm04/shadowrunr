@@ -918,8 +918,8 @@ like a real case. It is never written live in a quiet moment.
     lines[], payoff?}], connectors: [{id, kind, line}], checks: [{id, state: pass|fail, detail}],
     approved_by?, approved_ms?, fictional?}`.
   - Connector `kind` is one of: into_room, into_bit, back_to_chat, into_poll, into_handover.
-  - Streams use the newest approved prep. With none, the stream runs without prepared bits and
-    says so in its `stream_start`. A sim may use a `fictional` sample.
+  - Streams use the newest approved prep. With none, a live stream runs without prepared bits;
+    simulated rooms use the character's `fictional` sample (see "Prep in runs" below).
 - RPCs:
   - `prep.generate {report_id?}` -> `StreamPrep` (staged), written by the `planner` role.
   - `prep.list {}` -> `PrepSummary[]`.
@@ -929,7 +929,32 @@ like a real case. It is never written live in a quiet moment.
 - `SegmentContext.state` is the segment's current state. The `cold_open` state is SEG-01's
   first state. It lasts until the room has filled (active chatters held over a sustain window),
   within a floor and a ceiling of seconds.
-- `beat_plan` is written once per beat, before the beat's lines.
+- `beat_plan {ts_ms, mode, bit_id?, picks, reason}` is written once per beat, after `picked` and
+  before the beat's lines. No `beat_plan` is written on the sign-off beat or after it.
+  - `mode`: `cold_open` (a story beat or the gathering open), `react`, `bit` (prepared material),
+    `bridge` (a connector line), `mixed` (a bit line plus one pick), `hold` (nothing said: the
+    last line is recent, never two holds in a row), `improvise` (a quiet beat with nothing
+    prepared that fits).
+  - `reason` is for a reviewer to read, e.g. "room filling: cold open lines 1-2/6", "quiet 10 s:
+    premise p-03", "react: question; wave of 9 acknowledged". Its wording is not a contract.
+- **The cold open (SEG-01).** `[clock.cold_open]` in `seg-01.toml` holds `min_s`, `max_s`,
+  `active_chatters` (distinct chatters in a rolling 60 s) and `sustain_s`; `to` names the next
+  state. `[state_rules.<state>]` may restrict `ops` and add a `prompt` line to the state summary.
+  In the cold open only `highlight`, `show_card`, `mark_moment` and `sign_off` are allowed;
+  `start_poll` and `summon_foil` are refused with `not_in_state`. Its end is recorded as a
+  runtime `show_card` with `card_id` `cold-open-end-room-filled` or `cold-open-end-ceiling`.
+  Only first contacts and safety reach the voice during it.
+- **Ties.** A tie is two or more options sharing both the top weight and the top voter count.
+  The runtime never picks a winner on a tie: the summary says "TIE between A and B (n votes
+  each): you break it, and say you are breaking it". A tied foil vote summons nobody; a tied
+  jury gives no grade; a tied crowd poll counts every tied hex option as that hex's vote.
+- **New moderation values.** Input rule `wave_repeat` (action `dropped`): a paste wave already
+  answered this stream. Output rule `mechanism_leak` (action `removed` or `dropped`): a sentence
+  describing the moderation machinery. A `persona_leak` or `character_break` line answering a
+  forged decree is recast as an in-character rebuttal.
+- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/2`: the cold open and a room that fills
+  over about three minutes (stimuli other than newcomers and crises wait for it). Tournaments
+  before and after do not mix.
 
 **Prep in runs.** A sim's `run.json` and a sandbox session's `spec.json` carry
 `prep`: the approved prep id, `sample` (the character's fictional

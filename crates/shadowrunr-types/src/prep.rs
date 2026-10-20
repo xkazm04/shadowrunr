@@ -163,6 +163,8 @@ pub enum BeatMode {
     Mixed,
     /// Nothing to say this beat (the gap is still under the ceiling).
     Hold,
+    /// A quiet beat with nothing prepared that fits: the host fills it in his own words.
+    Improvise,
 }
 
 #[cfg(test)]

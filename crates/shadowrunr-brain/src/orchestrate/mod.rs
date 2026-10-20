@@ -680,7 +680,7 @@ impl Orchestrator {
             "no prep"
         };
         Plan::new(
-            BeatMode::Bit,
+            BeatMode::Improvise,
             Offer::SafetyOnly,
             0,
             format!("{lead}quiet {quiet_s} s, {why}: improvised"),

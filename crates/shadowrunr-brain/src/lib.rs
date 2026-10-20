@@ -804,6 +804,11 @@ impl Brain {
                 .map(|p| p.options.clone())
                 .unwrap_or_default(),
             names: self.names.clone(),
+            first_contacts: cands
+                .iter()
+                .filter(|c| self.orch.is_first_contact(&c.msg.id))
+                .map(|c| c.msg.id.clone())
+                .collect(),
         };
         let corr = format!("{}:pick:{}", self.cfg.stream_id, self.ticks);
         let pick = self

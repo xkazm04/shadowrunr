@@ -44,6 +44,11 @@
           "const": "hold",
           "description": "Nothing to say this beat (the gap is still under the ceiling).",
           "type": "string"
+        },
+        {
+          "const": "improvise",
+          "description": "A quiet beat with nothing prepared that fits: the host fills it in his own words.",
+          "type": "string"
         }
       ]
     },
