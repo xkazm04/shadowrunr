@@ -41,6 +41,9 @@ const MAX_MSG_CHARS: usize = 300;
 const MAX_PER_CHATTER: usize = 2;
 /// Transcript lines shown to the chatter model.
 const TAIL_LINES: usize = 30;
+/// A chatter posts nothing else this long before their stimulus is due, so the brain's
+/// per-viewer rate cap (a rolling minute) has room for it.
+const STIMULUS_QUIET_S: u32 = 60;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChatStats {
@@ -52,6 +55,9 @@ pub struct ChatStats {
     pub featured_engine_errors: u32,
     pub featured_parse_errors: u32,
     pub silent_ticks: u32,
+    /// Featured lines withheld because their chatter's stimulus was due ([`STIMULUS_QUIET_S`]).
+    #[serde(default)]
+    pub held_for_stimulus: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -963,11 +969,24 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
         };
         let mut out = Vec::new();
         let mut performed: Vec<usize> = Vec::new();
+        // A chatter whose stimulus is due within the rate cap's minute (or pending a retry)
+        // posts nothing else: the 3 h case run (2026-10-20) had 5 stimuli dropped by the
+        // brain's per-viewer rate cap before the streamer ever saw them.
+        let quiet: HashSet<String> = self
+            .injections
+            .iter()
+            .filter(|inj| {
+                matches!(inj.kind, StimulusKind::Message | StimulusKind::Vote)
+                    && inj.performed_msg_id.is_none()
+                    && inj.attempts.len() < crate::situations::MAX_ATTEMPTS
+                    && t_s + STIMULUS_QUIET_S >= inj.at_s
+            })
+            .filter_map(|inj| inj.chatter_id.clone())
+            .collect();
         for line in lines {
             let Some(v) = self.pop.get(&line.chatter).cloned() else {
                 continue;
             };
-            let msg = self.make_msg(t_s, &v, line.text.clone());
             // Does this message perform one of this tick's directives?
             let hit = directives.iter().copied().find(|&i| {
                 let inj = &self.injections[i];
@@ -987,6 +1006,11 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
                         .starts_with("!vote");
                 tagged && shape_ok
             });
+            if hit.is_none() && quiet.contains(&line.chatter) {
+                self.stats.held_for_stimulus += 1;
+                continue;
+            }
+            let msg = self.make_msg(t_s, &v, line.text.clone());
             if let Some(i) = hit {
                 performed.push(i);
                 self.injections[i].performed_msg_id = Some(msg.id.clone());

@@ -1341,6 +1341,21 @@ pub(crate) mod tests {
                 );
             }
         }
+        // The stimulus chatter kept quiet beforehand: the rate cap never drops a stimulus.
+        assert!(record.chat.held_for_stimulus > 0);
+        for inj in &record.injections {
+            let Some(id) = &inj.performed_msg_id else {
+                continue;
+            };
+            assert!(
+                !events.iter().any(
+                    |e| matches!(e, StreamEvent::Moderation { rule, msg_id: Some(m), action, .. }
+                    if rule == "rate_cap" && m == id && action == "dropped")
+                ),
+                "{} was rate-capped",
+                inj.situation_id
+            );
+        }
 
         let v: JudgeVerdict = read_json(&dir.join("verdict.json")).unwrap();
         assert_eq!(v.judge_tier, ModelTier::Opus);
