@@ -4,10 +4,10 @@
 //! its live broadcast through the [`EventSink`], and completes the report's `stage_ack` and
 //! `judge` checks; this module fills in `say_gap`, `core_errors`, `sign_off` and `chaos`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use shadowrunr_types::sandbox::{SandboxReport, SandboxStartParams};
+use shadowrunr_types::sandbox::{SandboxJudge, SandboxReport, SandboxStartParams};
 use shadowrunr_types::{Engine, ModelTier, StreamEvent};
 use tokio::sync::watch;
 
@@ -26,6 +26,8 @@ pub struct SandboxRun {
     pub core_tier: ModelTier,
     /// Tone when `params.tone` is absent (the character's active tone).
     pub default_tone: String,
+    /// Planned length in seconds; `None` = `params.minutes * 60`. Tests only.
+    pub planned_s: Option<u32>,
 }
 
 /// Called once per transcript event, in order, as it happens; `seq` is the event's 1-based
@@ -57,4 +59,15 @@ pub async fn run_sandbox(
 ) -> Result<SandboxReport, SimError> {
     let _ = (run, engine, opts, sink, stop, progress);
     Err(SimError::Spec("sandbox sessions are not built yet".into()))
+}
+
+/// Judge a finished session in `dir` with the windowed judge (as a tournament run is), write
+/// `verdict.json` and `judge.json` there, and summarise the verdict for the report.
+pub async fn judge_session(
+    dir: &Path,
+    engine: Arc<dyn Engine>,
+    opts: &SimOptions,
+) -> Result<SandboxJudge, SimError> {
+    let _ = (dir, engine, opts);
+    Err(SimError::Spec("sandbox judging is not built yet".into()))
 }
