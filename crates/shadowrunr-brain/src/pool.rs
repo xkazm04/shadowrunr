@@ -138,6 +138,8 @@ pub struct WorkerPool {
     tx: mpsc::UnboundedSender<JobUpdate>,
     rx: Mutex<mpsc::UnboundedReceiver<JobUpdate>>,
     routed: Mutex<HashMap<String, Vec<JobUpdate>>>,
+    /// Origins given up by [`WorkerPool::release`]; their updates are dropped on arrival.
+    released: Mutex<HashSet<String>>,
     tokens: Arc<Mutex<HashMap<String, CancellationToken>>>,
     /// Every id this pool handed out: a finished job's id is never reused, because the
     /// working set, episodes and transcript key jobs by id.
@@ -155,6 +157,7 @@ impl WorkerPool {
             tx,
             rx: Mutex::new(rx),
             routed: Mutex::new(HashMap::new()),
+            released: Mutex::new(HashSet::new()),
             tokens: Arc::new(Mutex::new(HashMap::new())),
             issued: Mutex::new(HashSet::new()),
             counter: AtomicU64::new(0),
@@ -259,11 +262,28 @@ impl WorkerPool {
         let mut routed = self.routed.lock().unwrap_or_else(|p| p.into_inner());
         {
             let mut rx = self.rx.lock().unwrap_or_else(|p| p.into_inner());
+            let released = self.released.lock().unwrap_or_else(|p| p.into_inner());
             while let Ok(u) = rx.try_recv() {
+                if released.contains(&u.origin) {
+                    continue;
+                }
                 routed.entry(u.origin.clone()).or_default().push(u);
             }
         }
         routed.remove(origin).unwrap_or_default()
+    }
+
+    /// Forget `origin` for good: drop whatever is routed to it and stop routing its later
+    /// updates, for an origin that will never collect again (a side thread that ended with
+    /// a job in flight). Not called by anything yet. Do not release an origin you may
+    /// dispatch for again.
+    pub fn release(&self, origin: &str) {
+        let mut routed = self.routed.lock().unwrap_or_else(|p| p.into_inner());
+        routed.remove(origin);
+        self.released
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(origin.to_string());
     }
 }
 
@@ -289,6 +309,30 @@ mod tests {
             self.current.fetch_sub(1, Ordering::SeqCst);
             Ok(format!("{} done", ctx.brief))
         }
+    }
+
+    #[tokio::test]
+    async fn a_released_origin_keeps_no_updates() {
+        let pool = WorkerPool::new(1);
+        let job = |ms| Job {
+            job_id: None,
+            brief: "b".into(),
+            runner: Arc::new(SlowJob {
+                current: Arc::new(AtomicUsize::new(0)),
+                peak: Arc::new(AtomicUsize::new(0)),
+                ms,
+            }),
+        };
+        pool.dispatch("gone", job(30));
+        pool.dispatch("live", job(1));
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        pool.collect("live");
+        pool.release("gone");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let mut live = Vec::new();
+        wait_terminal(&pool, "live", 1, &mut live).await;
+        assert!(pool.collect("gone").is_empty());
+        assert!(pool.routed.lock().unwrap().is_empty());
     }
 
     async fn wait_terminal(pool: &WorkerPool, origin: &str, n: usize, acc: &mut Vec<JobUpdate>) {
