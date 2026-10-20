@@ -13,7 +13,7 @@
 // Shaders: glow-shaders.ts. Pure helpers (mesh, palette, ground line): glow-geom.ts.
 
 import type { Pose } from "./driver";
-import { BODY_COVER, CONTEXT_ATTRIBUTES, gridMesh, groundLine, rigColors } from "./glow-geom";
+import { BODY_COVER, CONTEXT_ATTRIBUTES, gapCentre, gapHalf, gridMesh, groundLine, rigColors } from "./glow-geom";
 import { FS, KIND, VS } from "./glow-shaders";
 import type { LayerSpec, LoadedForm } from "./layers";
 
@@ -65,6 +65,7 @@ export async function createGlowRenderer(
   const { spec, images } = form;
   const R = spec.rig;
   const colors = rigColors(R);
+  const upperLip = spec.layers.some((l) => l.kind === "aperture_upper");
   const W = spec.width;
   const H = spec.height;
   const first = canvas.getContext("webgl2", CONTEXT_ATTRIBUTES);
@@ -288,10 +289,7 @@ export async function createGlowRenderer(
       gl.uniform1f(loc("u_glintGain"), gp.gain);
     }
     const lift = ap ? pose.open * (ap.open_frac ?? 0.15) * (ap.bottom - ap.top) * (0.75 + 0.35 * Math.min(1, voice)) : 0;
-    if (ap) {
-      gl.uniform4f(loc("u_aper"), ap.top, ap.seam_y, ap.bottom, lift);
-      gl.uniform2f(loc("u_aperX"), ap.x0, ap.x1);
-    }
+    if (ap) gl.uniform2f(loc("u_aperX"), ap.x0, ap.x1);
     gl.uniform2f(loc("u_size"), W, H);
     gl.uniform1i(loc("u_pass"), 0);
     gl.uniform1f(loc("u_body"), BODY_COVER);
@@ -311,6 +309,11 @@ export async function createGlowRenderer(
       const l = d.spec;
       const kind = d.kind;
       if (kind === 8 && lift < 0.2) continue;
+      if (ap && kind >= 6 && kind <= 8) {
+        // the hinged layers move by the lift; the light between them is centred in the gap they open
+        const lit = kind === 8;
+        gl.uniform4f(loc("u_aper"), ap.top, lit ? gapCentre(ap.seam_y, lift, upperLip) : ap.seam_y, ap.bottom, lit ? gapHalf(lift, upperLip) : lift);
+      }
       gl.uniform1i(loc("u_kind"), kind);
       gl.uniform1f(loc("u_depth"), l.depth ?? 0);
       gl.uniform1f(loc("u_follow"), l.follow ?? (kind === 0 || kind === 1 ? 0 : 1));

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shadowrunr-rig"
+version = "0.1.0"
+description = "Malakor's face rig: split the owner's portrait into the stage's glow-rig layers, offline."
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+# The spec and layers.json checks are the standard library; the masks and the split are numpy;
+# PIL reads and writes the pictures. The portrait, the layers and the LaMa weights are the
+# operator's files, never committed and never downloaded.
+dependencies = ["numpy", "pillow"]
+
+[project.optional-dependencies]
+# Inpainting what lay behind a lifted element: big-lama (Apache-2.0) as TorchScript.
+lama = ["torch"]
+
+[tool.setuptools]
+packages = ["shadowrunr_rig"]

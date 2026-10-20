@@ -69,6 +69,20 @@ export function rigColors(rig: RigSpec): { mouth: Rgb; lineCore: Rgb; lineGlow: 
 }
 
 /**
+ * Where the light in an open aperture sits. With both lips hinged (an `aperture_upper` layer) the
+ * gap is the seam +- the lift; with only a lower jaw the upper teeth stay and the gap runs from the
+ * seam down to seam + lift, so its light is centred there, half as tall.
+ */
+export function gapCentre(seamY: number, lift: number, upperLip: boolean): number {
+  return upperLip ? seamY : seamY + lift / 2;
+}
+
+/** The half height of the aperture's gap (see `gapCentre`). */
+export function gapHalf(lift: number, upperLip: boolean): number {
+  return upperLip ? lift : lift / 2;
+}
+
+/**
  * How much of the stage a solid's darkest part still covers. At 1 the rig's dark solids read as
  * a cut-out, at 0 as light alone. A little keeps them a body.
  */

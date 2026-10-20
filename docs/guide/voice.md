@@ -263,6 +263,49 @@ and the sidecar exits on its own. In a hard-kill test it was gone within 0.8 s.
 that is not there, is 404, and the stage draws its placeholder. Responses carry
 `cache-control: no-cache`, so a re-split rig shows on the next load.
 
+## Building the face rig
+
+The face rig is a layer split of the owner's portrait. It is made offline by `tools/rig`
+(`python -m shadowrunr_rig`) from a hand-measured region spec. For Malakor's M8 portrait the
+spec is `characters/malakor/rig/m8.spec.json`.
+
+**Never commit the portrait or any layer cut from it.** They are the owner's files, and both
+live under `data/`, which is gitignored:
+- the portrait is `<data>/avatar/portraits/m8/portrait.png`;
+- the rig is written to `<data>/avatar/rig/`, where `/avatar/{file}` serves it.
+
+The spec holds only polygons and points, and it is committed.
+
+You need a Python with numpy and Pillow, plus torch for inpainting
+(`pip install ./tools/rig[lama]`), and big-lama as TorchScript (`big-lama.pt`, Apache-2.0).
+Nothing downloads the model. From `tools/rig`:
+
+```
+python -m shadowrunr_rig   --portrait <data>/avatar/portraits/m8/portrait.png   --spec ../../characters/malakor/rig/m8.spec.json   --out <data>/avatar/rig   --lama <path to big-lama.pt>
+```
+
+The run removes the old PNGs in `--out` and writes `layers.json` plus one PNG per layer. It
+refuses to write a `layers.json` the stage would refuse. It then prints how closely the rest frame
+recomposes the portrait. Reload the stage to see the new rig.
+
+What the M8 rig holds, back to front:
+
+| Layer | Kind | What it does |
+|---|---|---|
+| `background` | static | The near-black ground, with everything above it filled in. |
+| `torso` | body | The robe, the collar and the quill-and-ledger clasp. It breathes. |
+| `head` | head | The skull above the jaw, with the upper teeth and dark sockets. Behind the jaw it holds the dark mouth. |
+| `mouth_glow` | aperture_glow | A faint teal light in the open mouth (drawn by the renderer). |
+| `jaw` | aperture_lower | The lower jaw and teeth. It drops on open vowels. |
+| `shard_*` (11) | float | The crown's obsidian shards. They drift. |
+| `eye_l`, `eye_r` | eye | The teal soul-fire, as light. Blinks dim it and the voice warms it. |
+| `monocle` | pulse | The ember ring and its sparks, as light. It pulses slowly. |
+
+The rig's own lights are teal in the mouth and an ember ground line. The bust dissolves into
+the ground line, so its robe never meets the edge of the slot.
+
+`tools/rig/README.md` covers the spec format and the tests.
+
 ## The stage
 
 The stage draws Malakor's face in its avatar slot: above his caption in the improv layouts, and
