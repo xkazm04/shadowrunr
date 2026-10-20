@@ -23,6 +23,7 @@ pub mod sandbox;
 pub mod schema;
 pub mod segment;
 pub mod sim;
+pub mod voice;
 
 pub use chat::*;
 pub use engine::*;

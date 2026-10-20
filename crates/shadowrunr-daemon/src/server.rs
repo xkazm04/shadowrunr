@@ -98,7 +98,7 @@ pub fn origin_allowed(origin: &str, extra: &[String]) -> bool {
     }
 }
 
-fn origin_ok(headers: &HeaderMap, extra: &[String]) -> bool {
+pub(crate) fn origin_ok(headers: &HeaderMap, extra: &[String]) -> bool {
     match headers.get(header::ORIGIN) {
         None => true,
         Some(v) => v.to_str().is_ok_and(|o| origin_allowed(o, extra)),
@@ -136,6 +136,8 @@ pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/rpc", post(rpc_handler))
         .route("/events", get(events_handler))
+        .route("/voice", get(crate::voice::voice_handler))
+        .route("/avatar/{file}", get(crate::voice::avatar_handler))
         .layer(cors)
         .with_state(state)
 }

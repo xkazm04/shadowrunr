@@ -6699,6 +6699,252 @@
       ],
       "type": "object"
     },
+    "Viseme": {
+      "description": "The Oculus 15 mouth shapes. A sentence's timeline is a run of these.",
+      "enum": [
+        "sil",
+        "PP",
+        "FF",
+        "TH",
+        "DD",
+        "kk",
+        "CH",
+        "SS",
+        "nn",
+        "RR",
+        "aa",
+        "E",
+        "ih",
+        "oh",
+        "ou"
+      ],
+      "type": "string"
+    },
+    "VisemeSpan": {
+      "description": "One mouth shape over `[start_ms, end_ms)` of its utterance's audio.",
+      "properties": {
+        "end_ms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "start_ms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "$ref": "#/$defs/Viseme"
+        }
+      },
+      "required": [
+        "v",
+        "start_ms",
+        "end_ms"
+      ],
+      "type": "object"
+    },
+    "VoiceFollow": {
+      "description": "What a `/voice` client sends: which live run to voice. `run_id` absent = the newest live\nrun, following it as runs start. Each message replaces the previous choice.",
+      "properties": {
+        "run_id": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "VoiceFollowFrame": {
+      "description": "The frame wrapping [`VoiceFollow`]: `{\"follow\": {...}}`.",
+      "properties": {
+        "follow": {
+          "$ref": "#/$defs/VoiceFollow"
+        }
+      },
+      "required": [
+        "follow"
+      ],
+      "type": "object"
+    },
+    "VoiceFrame": {
+      "description": "Everything `GET /voice` may push.",
+      "oneOf": [
+        {
+          "description": "Sent on connect and whenever the state changes.",
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "state": {
+              "$ref": "#/$defs/VoiceState"
+            },
+            "type": {
+              "const": "status",
+              "type": "string"
+            },
+            "visemes": {
+              "description": "Whether utterances carry mouth shapes (the durations model is present).",
+              "type": "boolean"
+            },
+            "voice": {
+              "description": "The voice id (e.g. `af_heart`), when one is configured.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "state",
+            "visemes"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One rendered sentence of a `say` line.",
+          "properties": {
+            "duration_ms": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "id": {
+              "description": "`<run_id>:<seq>:<part>`: unique per run.",
+              "type": "string"
+            },
+            "last": {
+              "description": "True on the line's last sentence.",
+              "type": "boolean"
+            },
+            "part": {
+              "description": "0-based sentence index within the line.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "pcm": {
+              "description": "Mono PCM16 little-endian, base64.",
+              "type": "string"
+            },
+            "run_id": {
+              "type": "string"
+            },
+            "sample_rate": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "seq": {
+              "description": "The `say` event's seq in its run (contract § event resume).",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "text": {
+              "description": "This sentence's text, as spoken.",
+              "type": "string"
+            },
+            "type": {
+              "const": "utterance",
+              "type": "string"
+            },
+            "visemes": {
+              "description": "Empty when the voice has no mouth shapes: the stage drives the mouth from loudness.",
+              "items": {
+                "$ref": "#/$defs/VisemeSpan"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "run_id",
+            "seq",
+            "part",
+            "last",
+            "text",
+            "sample_rate",
+            "duration_ms",
+            "pcm"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A line that will not be spoken (or the rest of it, from `part`).",
+          "properties": {
+            "part": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "reason": {
+              "$ref": "#/$defs/VoiceSkip"
+            },
+            "run_id": {
+              "type": "string"
+            },
+            "seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "skipped",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "run_id",
+            "seq",
+            "part",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "VoiceSkip": {
+      "oneOf": [
+        {
+          "const": "late",
+          "description": "Its audio could not start within `max_lag_ms` of its `say`.",
+          "type": "string"
+        },
+        {
+          "const": "queue_full",
+          "description": "More than `max_queue` lines were waiting; the oldest went.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "The render failed or timed out.",
+          "type": "string"
+        }
+      ]
+    },
+    "VoiceState": {
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "`[voice] enabled = false`: no voice by configuration.",
+          "type": "string"
+        },
+        {
+          "const": "starting",
+          "description": "The sidecar is warming up (the first render loads the model).",
+          "type": "string"
+        },
+        {
+          "const": "ready",
+          "description": "Speaking.",
+          "type": "string"
+        },
+        {
+          "const": "degraded",
+          "description": "Enabled but not speaking: engine missing, sidecar exited, renders failing. `reason` says.",
+          "type": "string"
+        }
+      ]
+    },
     "VoteTally": {
       "properties": {
         "option": {

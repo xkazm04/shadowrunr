@@ -583,6 +583,85 @@ export type FactScope = "viewer" | "character" | "world" | "case";
  * via the `definition` "ServerFrame".
  */
 export type ServerFrame = EventFrame | ErrorEnvelope | StreamEvent;
+/**
+ * The Oculus 15 mouth shapes. A sentence's timeline is a run of these.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Viseme".
+ */
+export type Viseme =
+  "sil" | "PP" | "FF" | "TH" | "DD" | "kk" | "CH" | "SS" | "nn" | "RR" | "aa" | "E" | "ih" | "oh" | "ou";
+/**
+ * Everything `GET /voice` may push.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceFrame".
+ */
+export type VoiceFrame =
+  | {
+      reason?: string;
+      state: VoiceState;
+      type: "status";
+      /**
+       * Whether utterances carry mouth shapes (the durations model is present).
+       */
+      visemes: boolean;
+      /**
+       * The voice id (e.g. `af_heart`), when one is configured.
+       */
+      voice?: string;
+    }
+  | {
+      duration_ms: number;
+      /**
+       * `<run_id>:<seq>:<part>`: unique per run.
+       */
+      id: string;
+      /**
+       * True on the line's last sentence.
+       */
+      last: boolean;
+      /**
+       * 0-based sentence index within the line.
+       */
+      part: number;
+      /**
+       * Mono PCM16 little-endian, base64.
+       */
+      pcm: string;
+      run_id: string;
+      sample_rate: number;
+      /**
+       * The `say` event's seq in its run (contract § event resume).
+       */
+      seq: number;
+      /**
+       * This sentence's text, as spoken.
+       */
+      text: string;
+      type: "utterance";
+      /**
+       * Empty when the voice has no mouth shapes: the stage drives the mouth from loudness.
+       */
+      visemes?: VisemeSpan[];
+    }
+  | {
+      part: number;
+      reason: VoiceSkip;
+      run_id: string;
+      seq: number;
+      type: "skipped";
+    };
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceState".
+ */
+export type VoiceState = "off" | "starting" | "ready" | "degraded";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceSkip".
+ */
+export type VoiceSkip = "late" | "queue_full" | "error";
 
 /**
  * Shadowrunr OS wire contract, generated from crates/shadowrunr-types. Do not edit; run `pnpm -C packages/contract generate`.
@@ -3382,4 +3461,34 @@ export interface Subscribe {
    * `<run_id>`, `<tournament_id>/<run_id>` or `live`.
    */
   subscribe: string;
+}
+/**
+ * One mouth shape over `[start_ms, end_ms)` of its utterance's audio.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VisemeSpan".
+ */
+export interface VisemeSpan {
+  end_ms: number;
+  start_ms: number;
+  v: Viseme;
+}
+/**
+ * What a `/voice` client sends: which live run to voice. `run_id` absent = the newest live
+ * run, following it as runs start. Each message replaces the previous choice.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceFollow".
+ */
+export interface VoiceFollow {
+  run_id?: string;
+}
+/**
+ * The frame wrapping [`VoiceFollow`]: `{"follow": {...}}`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceFollowFrame".
+ */
+export interface VoiceFollowFrame {
+  follow: VoiceFollow;
 }

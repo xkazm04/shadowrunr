@@ -903,3 +903,53 @@ line everywhere: the same as the `/events` seq and the judge's `<run>#<line>` re
   - `review.tag {session_id, force?}` -> `SessionTags`.
 - Stall lines, timeline buckets and every display name are computed in the console, never
   stored or sent.
+
+## Appendix (voice): Malakor's local voice, the face rig, `/voice`
+
+Malakor speaks through a local voice: Kokoro (Apache-2.0) run by sherpa-onnx, once per
+sentence, on the operator's machine. The voice is optional. `[voice] enabled = false` is the
+default, and with the voice off, degraded or slow, the stream runs exactly as it does without one:
+the brain never waits on audio.
+
+**Types** (`shadowrunr_types::voice`, generated into `@shadowrunr/contract`):
+- `VoiceFrame`, tagged on `type`:
+  - `status {state: off|starting|ready|degraded, reason?, voice?, visemes}`
+  - `utterance {id, run_id, seq, part, last, text, sample_rate, duration_ms, pcm, visemes?}`.
+    `pcm` is mono PCM16LE in base64. `visemes` is `[{v, start_ms, end_ms}]` over the Oculus 15
+    set (`sil PP FF TH DD kk CH SS nn RR aa E ih oh ou`), and is omitted when the voice has no
+    mouth shapes.
+  - `skipped {run_id, seq, part, reason: late|queue_full|error}`
+- `VoiceFollowFrame` = `{"follow": {"run_id"?}}`, sent by the client. With no `run_id`, the
+  newest live run is followed, and the follow moves to each new run as it starts.
+
+**`GET /voice`** (WebSocket, same origin rule as `/events`):
+- `status` is sent on connect and on every state change.
+- For the followed **live** run, each `say` with `speaker: malakor` is rendered a sentence at a
+  time. Each sentence is sent as one `utterance`, in order: `part` counts from 0, and `last` marks
+  the final sentence.
+- Foil lines and replays are not voiced in v1.
+- **Bounded:**
+  - at most `max_queue` lines wait to render; past that, the oldest is `skipped` with `queue_full`;
+  - a line whose first audio cannot start within `max_lag_ms` of its `say` is `skipped` with `late`;
+  - a failed or timed-out render is `skipped` with `error`, together with the rest of its line.
+- The client plays the audio. Audio is the one clock: the mouth follows playback time, never the
+  wall clock.
+
+**`GET /avatar/{file}`** serves the face rig from `<data>/avatar/rig/`: `layers.json` and the PNGs
+it names, in the glow-rig format (a `FormSpec` with `rig_type: "glow"`). The rig is built offline
+from the owner's portrait. It returns 404 when there is no rig, and the stage then draws its
+bundled placeholder. File names are a single path segment; anything else returns 404.
+
+**The sidecar** (`tools/voice`, `python -m shadowrunr_voice`) is a daemon-private process
+speaking JSON lines on stdio:
+- Out, first: `{"type":"hello","protocol":1,"voice","sample_rate","visemes":bool,"reason"?}`.
+- In: `{"type":"say","id","text"}` and `{"type":"cancel","ids":[...]}`.
+- Out, per sentence: `{"type":"audio","id","part","last","text","sample_rate","pcm","visemes":[[v,start_ms,end_ms]]}`.
+- Out, on failure: `{"type":"error","id","part","reason"}`.
+- It exits when its stdin closes.
+- Text goes to sherpa as one argument in an argument list, never through a shell.
+- The espeak-ng data and the engine binary are the operator's install. Neither is bundled.
+
+**Disclosure:** while the voice is on, the stage shows "synthetic voice". The voice is Kokoro's
+stock `af_heart` (sid 3 of kokoro-multi-lang-v1_0). It is no real person's voice, and voice
+cloning is out of scope.
