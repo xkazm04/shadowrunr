@@ -21,6 +21,7 @@ mod paging;
 mod resilience;
 mod review;
 mod sandbox;
+mod voice;
 
 pub(crate) fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

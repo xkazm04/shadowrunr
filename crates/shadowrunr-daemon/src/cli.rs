@@ -107,6 +107,9 @@ pub enum Command {
     /// Session review on the running daemon: line tags for the Review page.
     #[command(subcommand)]
     Review(ReviewCommand),
+    /// Malakor's local voice: probe the [voice] setup, speak one line through the sidecar.
+    #[command(subcommand)]
+    Voice(crate::voice::cli::VoiceCommand),
 }
 
 #[derive(Debug, Subcommand)]
@@ -491,6 +494,7 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
             Ok(ExitCode::from(sandbox_cmd(&cfg, a).await))
         }
         Command::Review(ReviewCommand::Tag(a)) => Ok(ExitCode::from(review_tag_cmd(&cfg, a).await)),
+        Command::Voice(c) => Ok(ExitCode::from(crate::voice::cli::run(&cfg, c).await)),
     }
 }
 
@@ -1376,12 +1380,14 @@ async fn daemon_cmd(
     let scripted = engine.is_scripted();
     let state = server::AppState::new(cfg, engine);
     crate::integrations::activity::start_for_daemon(&state);
+    let voice = crate::voice::start(&state);
     let (addr, serve) = server::bind(state.clone(), port)
         .await
         .map_err(|e| format!("bind 127.0.0.1:{port}: {e}"))?;
     println!(
-        "shadowrunr daemon on http://{addr} ({} engine): POST /rpc, GET /events",
-        if scripted { "scripted" } else { "live" }
+        "shadowrunr daemon on http://{addr} ({} engine): POST /rpc, GET /events, GET /voice{}",
+        if scripted { "scripted" } else { "live" },
+        if voice.is_some() { " (voice on)" } else { "" }
     );
     let serve = tokio::spawn(serve);
     tokio::select! {
@@ -1396,6 +1402,11 @@ async fn daemon_cmd(
         Ok(Err(e)) => return Err(format!("server task: {e}")),
         Err(_) => eprintln!("connections still open after {SHUTDOWN_GRACE:?}; exiting"),
     }
+    // The voice sidecar stops with the daemon: stdin closed, then killed after its grace.
+    if let Some(voice) = voice {
+        let _ = tokio::time::timeout(SHUTDOWN_GRACE, voice).await;
+    }
+    state.voice.stop();
     Ok(ExitCode::SUCCESS)
 }
 

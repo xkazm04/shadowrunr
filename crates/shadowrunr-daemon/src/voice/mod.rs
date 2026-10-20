@@ -1,25 +1,39 @@
 //! Malakor's voice and face assets (contract appendix (voice)).
 //!
-//! - `GET /voice`: a WebSocket that pushes [`VoiceFrame`]s. The daemon gives each Malakor `say`
-//!   of the followed live run to the voice sidecar (`tools/voice`, JSON lines on stdio) and
-//!   forwards every rendered sentence as an `utterance`. Bounded: a line whose audio cannot
-//!   start within `max_lag_ms` of its `say` is `skipped`, and the queue holds `max_queue` lines.
-//! - `GET /avatar/{file}`: the face rig the stage draws (`layers.json` plus its PNGs) from
-//!   `<data>/avatar/rig/`; 404 when there is none, and the stage draws its bundled placeholder.
+//! - `GET /voice` (`socket`): a WebSocket that pushes `VoiceFrame`s. The voice service
+//!   (`service`, one [`VoiceHub`] per daemon) gives each Malakor `say` of a followed live run to
+//!   the voice sidecar (`sidecar`: `tools/voice`, JSON lines on stdio, behind the
+//!   [`renderer::Renderer`] seam) and forwards every rendered sentence as an `utterance`.
+//!   Bounded: the queue holds `max_queue` lines, a line whose audio cannot start within
+//!   `max_lag_ms` of its `say` is `skipped`, and a slow client loses frames, never the service.
+//! - `GET /avatar/{file}` (`avatar`): the face rig the stage draws (`layers.json` plus its
+//!   PNGs) from `<data>/avatar/rig/`; 404 when there is none, and the stage draws its bundled
+//!   placeholder.
+//! - `shadowrunr voice check|say` (`cli`, with `probe`).
 //!
 //! Optional end to end: with `[voice] enabled = false` (the default) `/voice` says `off` and
 //! nothing is spawned; a missing engine or a dead sidecar is `degraded` with the reason, and the
 //! stream itself never waits on the voice.
 
+pub mod avatar;
+pub mod cli;
+pub mod probe;
+pub mod renderer;
+pub mod service;
+pub mod sidecar;
+pub mod socket;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path as UrlPath, State};
+use axum::extract::ws::WebSocketUpgrade;
+use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
-use shadowrunr_types::voice::{VoiceFrame, VoiceState};
+
+pub use avatar::avatar_handler;
+pub use service::VoiceHub;
 
 use crate::server::AppState;
 
@@ -93,7 +107,7 @@ pub fn rig_dir(data: &Path) -> PathBuf {
     data.join("avatar").join("rig")
 }
 
-/// `GET /voice`. Stub until AV-2: says the voice is off and holds the socket open.
+/// `GET /voice`: the origin rule of `/events`, then one session (`socket`).
 pub async fn voice_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -102,31 +116,17 @@ pub async fn voice_handler(
     if !crate::server::origin_ok(&headers, &state.cfg.daemon.extra_origins) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    ws.on_upgrade(move |socket| session(state, socket))
+    ws.on_upgrade(move |socket| socket::session(state, socket))
 }
 
-async fn session(_state: Arc<AppState>, mut socket: WebSocket) {
-    let off = VoiceFrame::Status {
-        state: VoiceState::Off,
-        reason: Some("voice not built yet".into()),
-        voice: None,
-        visemes: false,
-    };
-    let text = serde_json::to_string(&off).unwrap_or_default();
-    if socket.send(Message::Text(text.into())).await.is_err() {
-        return;
+/// Daemon hook: with `[voice] enabled`, start the sidecar and speak through it until the
+/// daemon shuts down. Returns the supervisor, which ends once the sidecar has stopped.
+pub fn start(state: &Arc<AppState>) -> Option<tokio::task::JoinHandle<()>> {
+    if !state.voice.enabled() {
+        return None;
     }
-    while let Some(Ok(msg)) = socket.recv().await {
-        if matches!(msg, Message::Close(_)) {
-            break;
-        }
-    }
-}
-
-/// `GET /avatar/{file}`. Stub until AV-2: no rig.
-pub async fn avatar_handler(
-    State(_state): State<Arc<AppState>>,
-    UrlPath(_file): UrlPath<String>,
-) -> Response {
-    StatusCode::NOT_FOUND.into_response()
+    let (renderer, task) =
+        sidecar::SidecarRenderer::start(state.voice.config().clone(), state.shutdown_signal());
+    state.voice.attach(renderer, state.shutdown_signal());
+    Some(task)
 }
