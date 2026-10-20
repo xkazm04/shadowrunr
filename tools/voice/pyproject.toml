@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shadowrunr-voice"
+version = "0.1.0"
+description = "Malakor's voice sidecar: Kokoro through the operator's sherpa-onnx install, JSON lines on stdio."
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+# The protocol, the splitter and the engine runs need nothing beyond the standard library. The
+# engine binary, espeak-ng (GPL) and the Kokoro model are the operator's install, never bundled.
+dependencies = []
+
+[project.optional-dependencies]
+# Mouth shapes: Kokoro's durations subgraph, run on CPU.
+visemes = ["numpy", "onnxruntime"]
+
+[tool.setuptools]
+packages = ["shadowrunr_voice"]
