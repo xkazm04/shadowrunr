@@ -234,6 +234,8 @@ pub struct Brain {
     /// No warm open before this beat: the last one failed. Engines report "no sessions" and
     /// "all accounts cooling" alike (`Unavailable`), so a failure backs off, never disables.
     session_retry_tick: u64,
+    /// Where cover lines go while a slow core call is still running ([`Brain::set_cover`]).
+    cover: Option<tokio::sync::mpsc::UnboundedSender<StreamEvent>>,
     hexes: Vec<HexInfo>,
     turns: Vec<String>,
     ticks: u64,
@@ -294,6 +296,7 @@ impl Brain {
             session: None,
             session_turns: 0,
             session_retry_tick: 0,
+            cover: None,
             hexes: Vec::new(),
             turns: Vec::new(),
             ticks: 0,
@@ -386,6 +389,54 @@ impl Brain {
     /// Viewers in care after a self-harm disclosure, oldest first.
     pub fn in_care(&self) -> &[care::CareEntry] {
         self.care.active()
+    }
+
+    /// A live host's cover channel: while a core call is still running once Malakor has been
+    /// quiet `stall_every_s`, a stall line goes out here at once instead of waiting for the
+    /// beat to end (`stall::cover_call`). Without it (simulated time), slow calls are not
+    /// covered.
+    pub fn set_cover(&mut self, tx: tokio::sync::mpsc::UnboundedSender<StreamEvent>) {
+        self.cover = Some(tx);
+    }
+
+    /// Up to [`stall::COVER_LINES`] gated stall lines for a covered core call, taken from a copy
+    /// of the rotation (the real one advances only by the lines spoken).
+    fn cover_plan(&self, now_ms: TsMs) -> Option<stall::CoverPlan> {
+        let tx = self.cover.clone()?;
+        let mut rotation = self.stall.clone();
+        let mut lines = Vec::new();
+        for _ in 0..stall::COVER_LINES {
+            let Some(line) = rotation.next(&self.cfg.character.stalls, self.salt) else {
+                break;
+            };
+            let (text, fired) = gate_text(line, &self.policy, &self.hexes);
+            let mut events = output_events(now_ms, &fired);
+            events.push(StreamEvent::Say {
+                ts_ms: now_ms,
+                speaker: Speaker::Malakor,
+                foil: None,
+                text,
+                replying_to: Vec::new(),
+                first_text_ms: None,
+            });
+            events.push(moderation::output_event(now_ms, STALL_RULE, stall::COVERED));
+            lines.push(events);
+        }
+        if lines.is_empty() {
+            return None;
+        }
+        let every_ms = self.tuning.stall_every_s.saturating_mul(1_000);
+        let quiet_ms = self
+            .last_say_ms
+            .map_or(0, |t| u64::try_from(now_ms.saturating_sub(t)).unwrap_or(0));
+        Some(stall::CoverPlan {
+            tx,
+            lines,
+            first_after: std::time::Duration::from_millis(
+                every_ms.saturating_sub(quiet_ms).max(stall::MIN_COVER_MS),
+            ),
+            every: std::time::Duration::from_millis(every_ms.max(stall::MIN_COVER_MS)),
+        })
     }
 
     /// Whether a viewer was removed from chat for the rest of the stream.
@@ -846,8 +897,17 @@ impl Brain {
             })
             .collect();
 
-        // Core thread.
-        let reply = match self.call_core(prompt).await {
+        // Core thread, covered in character when it runs long on a live host.
+        let plan = self.cover_plan(now_ms);
+        let (result, covered) = stall::cover_call(self.call_core(prompt), plan).await;
+        if let Some((spoken, at)) = covered {
+            for _ in 0..spoken {
+                self.stall.next(&self.cfg.character.stalls, self.salt);
+            }
+            let at_ms = i64::try_from(at.as_millis()).unwrap_or(i64::MAX);
+            self.last_say_ms = Some(now_ms.saturating_add(at_ms));
+        }
+        let reply = match result {
             Ok(r) => {
                 self.engine_down = false;
                 self.note_health(now_ms, "core call answered", &mut ev);

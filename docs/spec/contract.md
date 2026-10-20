@@ -856,6 +856,11 @@ hosts a session; `shadowrunr stream sandbox` drives it.
 - During an outage the host speaks model-free stall lines from the character package. Each
   is a `say` followed by `moderation {output, engine_stall, spoke}`. `health` events record
   every fleet-mode change.
+- A slow core call that has not answered once Malakor has been quiet `stall_every_s` (12 s),
+  and never sooner than 4 s into the call, is covered while it runs. A stall line goes out at
+  once, then the model's reply follows when it lands, with at most 2 lines per call. The line
+  is a `say` followed by `moderation {output, engine_stall, covered}`. Only a live host (a
+  sandbox session) covers slow calls; simulated time does not.
 - CLI exit codes: 0 pass, 6 gate fail, 2 usage error, 1 a refused start (pre-flight red,
   conflict).
 - The character package may carry `stalls.toml` (`lines = [...]`, `sign_off = "..."`); absent,

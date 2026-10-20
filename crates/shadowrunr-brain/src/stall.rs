@@ -4,23 +4,82 @@
 //! package (`stalls.toml`) instead of leaving the throne room silent. The same file carries
 //! the fleet-loss sign-off.
 //!
+//! A live host also covers a SLOW call: when a core call is still running once Malakor has
+//! been quiet `stall_every_s`, a stall line goes out at once on the brain's cover channel and
+//! the model's reply follows when it lands ([`cover_call`]; record `engine_stall` /
+//! `covered`). The 5-minute sandbox smoke run saw an 18.4 s successful call leave a 19.1 s
+//! silence, past the 15 s ceiling: failure-only stalling cannot see that case.
+//!
 //! Stall lines are not the model's words: they never enter the turn record, the repetition
 //! guard, the working set or memory. Each one is a `say` followed by the output moderation
 //! record `engine_stall` / `spoke`.
 
 use std::collections::VecDeque;
 use std::fs;
+use std::future::Future;
 use std::path::Path;
+use std::time::Duration;
 
 use serde::Deserialize;
-use shadowrunr_types::TsMs;
+use shadowrunr_types::{StreamEvent, TsMs};
+use tokio::time::{sleep_until, Instant};
 
 use crate::fleet::FleetMode;
 use crate::util::fnv1a64;
 use crate::BrainError;
 
-/// The output moderation rule recording a stall line (action `spoke`).
+/// The output moderation rule recording a stall line (action `spoke`, or `covered` for a
+/// line that covered a slow call).
 pub const STALL_RULE: &str = "engine_stall";
+
+/// The `engine_stall` action of a line spoken while a slow core call was still running.
+pub const COVERED: &str = "covered";
+
+/// At most this many cover lines over one core call (its timeout is 30 s).
+pub const COVER_LINES: usize = 2;
+
+/// A cover line never goes out sooner than this into a core call.
+pub const MIN_COVER_MS: u64 = 4_000;
+
+/// The cover for one core call: prepared lines (each the events of one stall line), when the
+/// first goes out after the call starts, and the spacing of the next.
+pub struct CoverPlan {
+    pub tx: tokio::sync::mpsc::UnboundedSender<StreamEvent>,
+    pub lines: Vec<Vec<StreamEvent>>,
+    pub first_after: Duration,
+    pub every: Duration,
+}
+
+/// Await `call`, sending a prepared cover line each time its deadline passes first. Returns
+/// the call's result and, when any line went out, how many and when the last did (time since
+/// the call started).
+pub async fn cover_call<F, R>(call: F, plan: Option<CoverPlan>) -> (R, Option<(usize, Duration)>)
+where
+    F: Future<Output = R>,
+{
+    let Some(plan) = plan else {
+        return (call.await, None);
+    };
+    tokio::pin!(call);
+    let start = Instant::now();
+    let mut next = start + plan.first_after;
+    let mut spoken = 0usize;
+    let mut last = Duration::ZERO;
+    loop {
+        tokio::select! {
+            biased;
+            r = &mut call => return (r, (spoken > 0).then_some((spoken, last))),
+            _ = sleep_until(next), if spoken < plan.lines.len() => {
+                for ev in &plan.lines[spoken] {
+                    let _ = plan.tx.send(ev.clone());
+                }
+                spoken += 1;
+                last = start.elapsed();
+                next += plan.every;
+            }
+        }
+    }
+}
 
 /// Seconds since Malakor last spoke before a failed beat speaks a stall line.
 pub const DEFAULT_STALL_EVERY_S: u64 = 12;
@@ -151,6 +210,57 @@ impl Staller {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn plan(
+        n: usize,
+        first_s: u64,
+    ) -> (CoverPlan, tokio::sync::mpsc::UnboundedReceiver<StreamEvent>) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let line = |i: usize| {
+            vec![StreamEvent::Moderation {
+                ts_ms: 0,
+                stage: shadowrunr_types::ModStage::Output,
+                rule: STALL_RULE.into(),
+                msg_id: None,
+                action: format!("line{i}"),
+            }]
+        };
+        let p = CoverPlan {
+            tx,
+            lines: (0..n).map(line).collect(),
+            first_after: Duration::from_secs(first_s),
+            every: Duration::from_secs(12),
+        };
+        (p, rx)
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_slow_call_is_covered_at_its_deadline_and_again_every_interval() {
+        let (p, mut rx) = plan(2, 7);
+        let call = async {
+            tokio::time::sleep(Duration::from_secs(25)).await;
+            "reply"
+        };
+        let (r, covered) = cover_call(call, Some(p)).await;
+        assert_eq!(r, "reply");
+        // Lines at 7 s and 19 s into the call; the reply at 25 s.
+        assert_eq!(covered, Some((2, Duration::from_secs(19))));
+        assert!(rx.try_recv().is_ok() && rx.try_recv().is_ok() && rx.try_recv().is_err());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_call_that_lands_before_the_deadline_is_never_covered() {
+        let (p, mut rx) = plan(2, 7);
+        let call = async {
+            tokio::time::sleep(Duration::from_secs(6)).await;
+            1
+        };
+        let (_, covered) = cover_call(call, Some(p)).await;
+        assert_eq!(covered, None);
+        assert!(rx.try_recv().is_err());
+        // Without a plan (simulated time) the call is simply awaited.
+        assert_eq!(cover_call(async { 2 }, None).await, (2, None));
+    }
     use crate::moderation::{gate_text, Policy};
 
     fn malakor_dir() -> std::path::PathBuf {

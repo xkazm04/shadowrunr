@@ -562,6 +562,8 @@ struct Session {
     start: Instant,
     log: Log,
     chat_rx: mpsc::UnboundedReceiver<Vec<ChatMsg>>,
+    /// Cover lines the brain speaks while a slow core call runs, on air as they arrive.
+    cover_rx: mpsc::UnboundedReceiver<StreamEvent>,
     room: JoinHandle<ChatRoom>,
     room_done: watch::Sender<bool>,
     chaos: Arc<ChaosCounters>,
@@ -668,7 +670,22 @@ impl Session {
                     .push_str(&closing_line(now, deadline, stopped_ms.is_some()));
             }
             let mut done = now;
-            match mind.tick(now, msgs, &ctx).await {
+            let beat = {
+                let tick = mind.tick(now, msgs, &ctx);
+                tokio::pin!(tick);
+                loop {
+                    tokio::select! {
+                        biased;
+                        r = &mut tick => break r,
+                        Some(mut ev) = self.cover_rx.recv() => {
+                            transcript::set_ts(&mut ev, since_ms(self.start).max(now));
+                            self.log.push(ev)?;
+                            self.progress(closing, self.log.events().len() as u64);
+                        }
+                    }
+                }
+            };
+            match beat {
                 Ok(mut evs) => {
                     // The beat's events happen when the brain is done with it.
                     done = since_ms(self.start).max(now);
@@ -1138,9 +1155,12 @@ pub async fn run_sandbox(
             ..runner::brain_tuning(&run_opts)
         };
         let fleet_grace_s = tuning.fleet_grace_s;
-        let brain =
+        let mut brain =
             runner::build_brain(&prep, &run_opts, &memory_dir, brain_engine, &stage, tuning)
                 .await?;
+        // A slow core call is covered in character while it runs (the line goes on air now).
+        let (cover_tx, cover_rx) = mpsc::unbounded_channel();
+        brain.set_cover(cover_tx);
 
         let pop = population::generate(
             &prep.cal,
@@ -1215,6 +1235,7 @@ pub async fn run_sandbox(
             start,
             log,
             chat_rx,
+            cover_rx,
             room,
             room_done,
             chaos: counters,
@@ -1610,14 +1631,23 @@ mod tests {
             "{gaps:?}"
         );
         assert!(gaps.iter().all(|g| *g >= 5_000), "no burst: {gaps:?}");
-        // The slow line is stamped when it was spoken: a 17 s silence fails the gate.
+        // The slow call (20 s to 32 s) is covered in character: Malakor last spoke at 15 s, so a
+        // stall line goes out at 27 s, mid-call, and the reply lands at 32 s. Without the cover
+        // this was a 17 s silence that failed the gate.
         let r = &out.report;
-        assert_eq!(r.max_say_gap_s, 17.0, "{r:?}");
-        assert_eq!(state(r, "say_gap"), SandboxCheckState::Fail);
-        assert_eq!(
-            detail(r, "say_gap"),
-            "max 17.0 s, from 00:15 to 00:32 (ceiling 15 s)"
-        );
+        assert_eq!(r.max_say_gap_s, 12.0, "{r:?}");
+        assert_eq!(state(r, "say_gap"), SandboxCheckState::Pass);
+        assert_eq!(r.stall_lines, 1, "{r:?}");
+        let covered: Vec<TsMs> = out
+            .events
+            .iter()
+            .filter(|e| {
+                matches!(e, StreamEvent::Moderation { rule, action, .. }
+                if rule == "engine_stall" && action == "covered")
+            })
+            .map(transcript::ts)
+            .collect();
+        assert_eq!(covered, vec![27_000]);
         assert!(r.beat_ms_p95 >= 12_000, "{}", r.beat_ms_p95);
     }
 
