@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TOKENS_COLOR } from "@shadowrunr/tokens";
 
 import { createGlowRenderer } from "./glow";
-import { CONTEXT_ATTRIBUTES, groundLine, groundMask, LINE_CORE, MOUTH_LIGHT, rigColors, tokenRgb } from "./glow-geom";
+import { CONTEXT_ATTRIBUTES, gapCentre, gapHalf, groundLine, groundMask, LINE_CORE, MOUTH_LIGHT, rigColors, tokenRgb } from "./glow-geom";
 import { checkSpec, fetchRig, loadForm, type Fetcher, type FormSpec, type LoadedForm } from "./layers";
 import { ART, placeholderSpec } from "./placeholder";
 
@@ -151,5 +151,13 @@ describe("the renderer's pure parts", () => {
     const breathing = [0, 1.3, 2.6, 3.9].map((t) => groundLine(g, ART, { t, activity: 1, voice: 0 }).gain);
     expect(Math.max(...breathing) - Math.min(...breathing)).toBeGreaterThan(0.05);
     expect(groundLine(g, ART, { t: 0, activity: 0, voice: 0.8 }).gain).toBeGreaterThan(rest(0) * 1.2);
+  });
+
+  it("the mouth light fills the gap the aperture opens: around the seam with two lips, below it with a jaw alone", () => {
+    // both lips part from the seam: the gap is seam +- lift
+    expect([gapCentre(500, 20, true), gapHalf(20, true)]).toEqual([500, 20]);
+    // a jaw alone drops from the seam: the gap is seam .. seam + lift, so nothing lights the upper teeth
+    expect([gapCentre(500, 20, false), gapHalf(20, false)]).toEqual([510, 10]);
+    expect(gapCentre(500, 20, false) - gapHalf(20, false)).toBe(500);
   });
 });
