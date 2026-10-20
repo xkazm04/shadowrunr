@@ -1,0 +1,32 @@
+/* The player: the moment on the left (count, progress, script, tag, feedback, keys), where it
+   sits in the session on the right. */
+
+.player { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 21rem); gap: var(--sr-space-base); align-items: start; outline: none; }
+.stage { display: flex; flex-direction: column; gap: var(--sr-space-base); }
+.count { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sr-space-compact); align-items: baseline; }
+.big { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-subhead); }
+.skip { display: inline-flex; gap: var(--sr-space-tight); align-items: center; font-size: var(--sr-size-small); color: var(--sr-color-text-mute); }
+.bar { display: flex; height: .4rem; background: var(--sr-color-track); }
+.bar i { display: block; height: 100%; background: var(--sr-color-ok); }
+
+.tag { display: flex; flex-wrap: wrap; gap: var(--sr-space-tight) var(--sr-space-near); align-items: center; margin: 0; font-size: var(--sr-size-small); }
+.chip { display: inline-flex; gap: var(--sr-space-tight); align-items: center; padding: var(--sr-space-hair) var(--sr-space-compact); background: var(--sr-color-surface-chip); border: var(--sr-stroke-hair) solid var(--sr-color-line); }
+.swatch { width: .6rem; height: .6rem; border-radius: var(--sr-radius-round); }
+.aim { color: var(--sr-color-text-mute); }
+
+.keys { margin: 0; font-size: var(--sr-size-micro); color: var(--sr-color-text-mute); }
+.keys kbd, .totals b { font-family: var(--sr-font-mono); font-weight: var(--sr-weight-semibold); }
+.keys kbd { padding: 0 var(--sr-space-tight); border: var(--sr-stroke-hair) solid var(--sr-color-line); }
+
+.where { margin: var(--sr-space-tight) 0 0; font-size: var(--sr-size-small); }
+.facts { display: flex; flex-direction: column; gap: var(--sr-space-hair); margin: var(--sr-space-tight) 0 0; padding: 0; list-style: none; font-size: var(--sr-size-small); }
+.good { color: var(--sr-color-ok); }
+.bad { color: var(--sr-color-fail); }
+
+.doneTitle { margin: 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-heading); text-transform: uppercase; letter-spacing: .03em; line-height: 1.05; }
+.totals { display: flex; flex-wrap: wrap; gap: var(--sr-space-hair) var(--sr-space-near); margin: 0; padding: 0; list-style: none; font-size: var(--sr-size-small); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact); }
+
+@media (max-width: 60rem) {
+  .player { grid-template-columns: minmax(0, 1fr); }
+}

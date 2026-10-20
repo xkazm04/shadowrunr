@@ -1,6 +1,166 @@
-// WP3: steps through every line of one kind until each has a mark. Stub with its final props; the work package that owns it replaces the body.
+// The player: every line of one kind in transcript order, one at a time, until each has the
+// operator's mark. Keys bind on the player's own container (focused on mount and on every step)
+// and are consumed there, so the shell's bare 1-7 page jumps never see them; outside the player,
+// and in the note, the shell keymap keeps its meaning.
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { pageRoute, useRouter } from "../../router";
+import type { SayLine } from "./derive";
+import { FeedbackPanel, type FeedbackHandle } from "./FeedbackPanel";
+import { KIND_NAME, type ShownKind } from "./names";
+import styles from "./Player.module.css";
+import { PlayerDone, PlayerSide, TagLine } from "./PlayerParts";
+import { Script } from "./Script";
 import type { TabProps } from "./tab";
+import kit from "./tabkit.module.css";
 
-export function Player(_props: TabProps) {
-  return <p data-role="review-player-stub">Not built yet.</p>;
+/** Where the player stands: an index into the kind's lines, or the done state. */
+interface At {
+  readonly i: number;
+  /** ← landed here: show this line even when it is marked (for this step only). */
+  readonly hold: boolean;
+  readonly done: boolean;
+}
+
+/** The first index from `from` on (wrapping once) that `ok` accepts, or -1. */
+function seek(n: number, from: number, ok: (i: number) => boolean, wrap: boolean): number {
+  for (let k = 0; k < n; k++) {
+    const j = from + k;
+    if (j >= n && !wrap) return -1;
+    if (ok(j % n)) return j % n;
+  }
+  return -1;
+}
+
+/** A text field the player's keys must leave alone (a checkbox is not one). */
+function typing(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false;
+  if (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return true;
+  return t instanceof HTMLInputElement && t.type !== "checkbox" && t.type !== "radio";
+}
+
+export function Player(props: TabProps) {
+  if (!props.kind) return <p className={kit.empty}>Pick a type on Review by type to start the player.</p>;
+  // A new kind starts a new walk.
+  return <Walk key={props.kind} {...props} kind={props.kind} />;
+}
+
+function Walk(props: TabProps & { kind: ShownKind }) {
+  const { rs, d, feedback, kind } = props;
+  const list: readonly SayLine[] = d.says.filter((s) => s.kind === kind);
+  const n = list.length;
+  const [skip, setSkip] = useState(true);
+  const [at, setAt] = useState<At>({ i: 0, hold: false, done: false });
+  const router = useRouter();
+  const panel = useRef<FeedbackHandle>(null);
+  const root = useRef<HTMLDivElement>(null);
+  // A save resolves after its optimistic write re-rendered, so `next` reads the newest marks
+  // through this ref. Were it a render behind, the render-time skip below still lands right.
+  const marks = useRef(feedback.byLine);
+  useEffect(() => {
+    marks.current = feedback.byLine;
+  });
+  const marked = (i: number) => marks.current.has(list[i]?.line ?? -1);
+  const shown = (i: number) => feedback.byLine.has(list[i]?.line ?? -1);
+  const markedNow = list.filter((s) => feedback.byLine.has(s.line)).length;
+
+  // The line on screen: skip-marked moves past a marked line unless ← just landed on it.
+  let cur = -1;
+  if (!at.done && n > 0) {
+    const i = Math.min(at.i, n - 1);
+    cur = !skip || at.hold || !shown(i) ? i : seek(n, i, (j) => !shown(j), true);
+  }
+  const line = cur >= 0 ? list[cur] : undefined;
+
+  useEffect(() => {
+    const el = root.current;
+    if (el && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
+  }, [line?.line]);
+
+  const go = (i: number) => setAt(i < 0 ? { i: 0, hold: false, done: true } : { i, hold: false, done: false });
+  /** After a save: the next line the filter accepts, else any unmarked line, else done. */
+  const next = () => {
+    const after = seek(n, cur + 1, (j) => !skip || !marked(j), false);
+    go(after >= 0 ? after : seek(n, 0, (j) => !marked(j), false));
+  };
+  const skipOn = () => go(n === 0 ? -1 : seek(n, cur + 1, (j) => !skip || !marked(j) || j === cur, true));
+  const back = () => setAt({ i: Math.max(0, cur - 1), hold: true, done: false });
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.defaultPrevented || !line) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (e.key === "Enter" && ctrl && !e.altKey) {
+      e.preventDefault();
+      panel.current?.save();
+      return;
+    }
+    if (typing(e.target) || ctrl || e.altKey) return;
+    if (/^[1-8]$/.test(e.key)) panel.current?.toggle(Number(e.key) - 1);
+    else if (e.key === "Enter") panel.current?.save();
+    else if (e.key === "ArrowRight") skipOn();
+    else if (e.key === "ArrowLeft") back();
+    else return;
+    // Consumed: the shell's keymap (bare 1-7 jump pages) skips a prevented event.
+    e.preventDefault();
+  };
+
+  if (!line) {
+    return (
+      <PlayerDone
+        kind={kind}
+        list={list}
+        feedback={feedback}
+        onPick={() => router.navigate(pageRoute("review", rs.row.session_id, "types"))}
+        onAgain={() => {
+          setSkip(false);
+          go(0);
+        }}
+      />
+    );
+  }
+  return (
+    <div ref={root} className={styles.player} tabIndex={-1} onKeyDown={onKeyDown} data-role="review-player" data-line={line.line}>
+      <section className={`${kit.panel} ${styles.stage}`}>
+        <div className={styles.count}>
+          <div>
+            <div className={kit.kicker} data-role="review-player-pos">
+              {KIND_NAME[kind]} {cur + 1} of {n}
+            </div>
+            <span className={styles.big}>
+              {markedNow} marked · {n - markedNow} to go
+            </span>
+          </div>
+          <label className={styles.skip}>
+            <input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} /> Skip lines I already marked
+          </label>
+        </div>
+        <div className={styles.bar} role="img" aria-label={`${markedNow} of ${n} marked`}>
+          <i style={{ width: `${(100 * markedNow) / Math.max(1, n)}%` }} />
+        </div>
+        <Script rs={rs} d={d} line={line.line} context={2} />
+        <TagLine say={line} />
+        <FeedbackPanel
+          ref={panel}
+          line={line.line}
+          feedback={feedback}
+          keys
+          saveLabel="Save and next"
+          onSaved={next}
+          before={
+            <>
+              <button type="button" onClick={back} disabled={cur === 0}>
+                Previous
+              </button>
+              <button type="button" onClick={skipOn}>
+                Skip
+              </button>
+            </>
+          }
+        />
+        <p className={styles.keys}>
+          <kbd>1</kbd>–<kbd>8</kbd> toggle a mark · <kbd>Enter</kbd> save and next · <kbd>→</kbd> skip · <kbd>←</kbd> back · in the note, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> saves
+        </p>
+      </section>
+      <PlayerSide rs={rs} d={d} list={list} cur={cur} marked={(l) => feedback.byLine.has(l)} openLine={props.openLine} />
+    </div>
+  );
 }

@@ -1,0 +1,11 @@
+/* Review by type: one card per kind, its identity colour, "n of m marked" and a progress bar. */
+
+.cards { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact); margin: var(--sr-space-near) 0 0; padding: 0; list-style: none; }
+.card { display: grid; grid-template-columns: .65rem auto; column-gap: var(--sr-space-tight); row-gap: var(--sr-space-hair); align-items: center; min-width: 9rem; padding: var(--sr-space-snug) var(--sr-space-cozy); text-align: left; background: var(--sr-color-surface-card); color: var(--sr-color-text-ink); border: var(--sr-stroke-hair) solid var(--sr-color-line); font: inherit; cursor: pointer; }
+.card:hover { background: var(--sr-color-row-hover); border-color: var(--sr-color-text-mute); }
+.card:focus-visible { outline: var(--sr-stroke-rule) solid var(--sr-color-signal); outline-offset: var(--sr-space-hair); }
+.swatch { width: .65rem; height: .65rem; border-radius: var(--sr-radius-round); }
+.name { font-size: var(--sr-size-small); }
+.n { grid-column: 2; font-family: var(--sr-font-mono); font-size: var(--sr-size-micro); color: var(--sr-color-text-mute); }
+.bar { grid-column: 1 / -1; display: block; height: .25rem; margin-top: var(--sr-space-hair); background: var(--sr-color-track); }
+.bar i { display: block; height: 100%; background: var(--sr-color-ok); }

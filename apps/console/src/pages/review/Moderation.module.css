@@ -1,0 +1,16 @@
+/* Moderation: grouped tables of what happened, the chosen kind's occurrences in a sticky side panel. */
+
+.group + .group { margin-top: var(--sr-space-loose); }
+.group table { margin-top: var(--sr-space-compact); }
+.when { width: 34%; }
+.pick { padding: 0; text-align: left; background: none; border: 0; color: var(--sr-color-text-ink); font: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--sr-color-line); text-underline-offset: .2em; }
+.pick:hover { text-decoration-color: currentColor; }
+.pick:focus-visible { outline: var(--sr-stroke-rule) solid var(--sr-color-signal); outline-offset: var(--sr-space-hair); }
+.on td { background: var(--sr-color-row-selected); }
+
+.side { position: sticky; top: var(--sr-space-cozy); }
+.list { margin: var(--sr-space-cozy) 0 0; padding: 0; list-style: none; }
+.occ { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr) auto; gap: var(--sr-space-cozy); width: 100%; padding: var(--sr-space-snug) var(--sr-space-tight); text-align: left; background: none; border: 0; border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); color: var(--sr-color-text-ink); font: inherit; font-size: var(--sr-size-small); cursor: pointer; }
+.occ:hover { background: var(--sr-color-row-hover); }
+.occ:focus-visible { outline: var(--sr-stroke-rule) solid var(--sr-color-signal); outline-offset: calc(-1 * var(--sr-stroke-rule)); }
+.open { color: var(--sr-color-text-mute); }
