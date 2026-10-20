@@ -3,6 +3,7 @@
 // A fold stands in for a run of quiet rows.
 import { memo } from "react";
 import type { SegmentId } from "@shadowrunr/contract";
+import { Chip, type Tone } from "../../ui/Chip";
 import { mergeMarks, visibleSays, type Bucket } from "./buckets";
 import { fmtClock, GATE_MARK_NAME, KIND_INK, KIND_NAME, SEGMENT_NAME, SHOW_MARK_NAME, type GateMarkId, type ShowMarkId, type ShownKind } from "./names";
 import styles from "./Timeline.module.css";
@@ -12,8 +13,8 @@ export const DOT_CAP = 40;
 /** Show marks per row before "+n". */
 const MARK_CAP = 3;
 
-const MARK_TONE: Readonly<Partial<Record<ShowMarkId, string | undefined>>> = { engine_down: styles.bad, engine_degraded: styles.bad, engine_back: styles.good };
-const GATE_TONE: Readonly<Record<GateMarkId, string | undefined>> = { care: styles.bad, persona: styles.bad, alleged: undefined, judge_fail: styles.bad };
+const MARK_TONE: Readonly<Partial<Record<ShowMarkId, Tone>>> = { engine_down: "fail", engine_degraded: "fail", engine_back: "ok" };
+const GATE_TONE: Readonly<Record<GateMarkId, Tone>> = { care: "fail", persona: "fail", alleged: "neutral", judge_fail: "fail" };
 const GATES: readonly Exclude<GateMarkId, "judge_fail">[] = ["care", "persona", "alleged"];
 
 export function segmentClass(seg: SegmentId | string | undefined): string | undefined {
@@ -41,10 +42,12 @@ export interface RowProps {
   readonly maxChat: number;
   readonly segment: string | undefined;
   readonly selected: boolean;
+  /** The row a deep link landed on: it flashes once. */
+  readonly flash: boolean;
   readonly onOpen: (row: number) => void;
 }
 
-export const TimelineRow = memo(function TimelineRow({ b, shown, voted, maxChat, segment, selected, onOpen }: RowProps) {
+export const TimelineRow = memo(function TimelineRow({ b, shown, voted, maxChat, segment, selected, flash, onOpen }: RowProps) {
   const vis = visibleSays(b, shown);
   const nv = vis.filter((s) => voted.has(s.line)).length;
   const marks = mergeMarks(b.show);
@@ -52,8 +55,9 @@ export const TimelineRow = memo(function TimelineRow({ b, shown, voted, maxChat,
   return (
     <button
       type="button"
-      className={`${styles.cols} ${styles.row}`}
+      className={`${styles.cols} ${styles.row}${flash ? ` ${styles.flash}` : ""}`}
       aria-current={selected ? "true" : undefined}
+      data-flash={flash || undefined}
       aria-label={`${fmtClock(b.from)}: ${vis.length} lines shown${nv ? `, ${nv} marked` : ""}${marks.length ? `, ${marks.map((m) => SHOW_MARK_NAME[m.id]).join(", ")}` : ""}`}
       data-row={b.i}
       data-role="review-tl-row"
@@ -83,21 +87,21 @@ export const TimelineRow = memo(function TimelineRow({ b, shown, voted, maxChat,
       </span>
       <span className={styles.marks}>
         {marks.slice(0, MARK_CAP).map((m) => (
-          <span key={m.id} className={`${styles.mk} ${MARK_TONE[m.id] ?? ""}`}>
+          <Chip key={m.id} tone={MARK_TONE[m.id] ?? "neutral"}>
             {SHOW_MARK_NAME[m.id]}
             {m.n > 1 ? ` ×${m.n}` : ""}
-          </span>
+          </Chip>
         ))}
         {marks.length > MARK_CAP && <span className={styles.more}>+{marks.length - MARK_CAP}</span>}
       </span>
       <span className={`${styles.marks} ${styles.cGate}`}>
         {GATES.filter((g) => b.gates[g]).map((g) => (
-          <span key={g} className={`${styles.mk} ${GATE_TONE[g] ?? ""}`}>
+          <Chip key={g} tone={GATE_TONE[g]}>
             {GATE_MARK_NAME[g]}
             {(b.gates[g] ?? 0) > 1 ? ` ${b.gates[g]}` : ""}
-          </span>
+          </Chip>
         ))}
-        {b.fails > 0 && <span className={`${styles.mk} ${GATE_TONE.judge_fail}`}>{GATE_MARK_NAME.judge_fail}</span>}
+        {b.fails > 0 && <Chip tone={GATE_TONE.judge_fail}>{GATE_MARK_NAME.judge_fail}</Chip>}
       </span>
       <span className={`${styles.you} ${styles.cYou} ${vis.length && nv === vis.length ? styles.all : ""}`} data-role="review-tl-you">
         {nv ? `✓ ${nv}/${vis.length}` : vis.length ? `– /${vis.length}` : ""}

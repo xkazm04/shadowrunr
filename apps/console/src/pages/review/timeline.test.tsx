@@ -1,5 +1,5 @@
 // The timeline tab in jsdom, mounted through layer 2 on the route so deep links are real:
-// rows and folding, the kind filter, voted rings, the drawer (row list, moment, Esc, ×, focus),
+// rows and folding, the kind filter, voted rings, the drawer (row list, moment, Esc, Close, focus),
 // the optimistic feedback save, and the DOM budget on a 2,500-event session.
 import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -36,6 +36,8 @@ const dots = () => [...document.querySelectorAll<HTMLElement>("[data-role='revie
 const dot = (line: number) => document.querySelector<HTMLElement>(`[data-role='review-tl-row'] [data-line='${line}']`);
 const rowButton = (i: number) => document.querySelector<HTMLButtonElement>(`[data-role='review-tl-row'][data-row='${i}']`);
 const drawer = () => role("review-drawer");
+/** The drawer stays mounted through its exit wipe; closed is `data-open="false"`. */
+const drawerOpen = () => drawer()?.getAttribute("data-open") === "true";
 const press = (name: string) => act(async () => fireEvent.click(screen.getByRole("button", { name })));
 
 describe("review timeline", () => {
@@ -109,7 +111,7 @@ describe("review timeline", () => {
     await act(async () => fireEvent.click(role("review-drawer-back") as HTMLElement));
     expect(drawer()?.textContent).toContain("4 of 4 lines shown");
     await act(async () => fireEvent.keyDown(drawer() as HTMLElement, { key: "Escape" }));
-    expect(drawer()).toBeNull();
+    expect(drawerOpen()).toBe(false);
     expect(document.activeElement).toBe(rowButton(0));
   });
 
@@ -119,23 +121,26 @@ describe("review timeline", () => {
     const note = drawer()?.querySelector("textarea") as HTMLTextAreaElement;
     note.focus();
     await act(async () => fireEvent.keyDown(note, { key: "Escape" }));
-    expect(drawer()).not.toBeNull();
+    expect(drawerOpen()).toBe(true);
     expect(document.activeElement).toBe(drawer());
     await act(async () => fireEvent.keyDown(drawer() as HTMLElement, { key: "Escape" }));
-    expect(drawer()).toBeNull();
+    expect(drawerOpen()).toBe(false);
   });
 
-  it("opens the moment from the route's line with its row selected, and × drops the line from the route", async () => {
+  it("opens the moment from the route's line with its row selected, and Close drops the line from the route", async () => {
     const { rs, lines } = smallSession();
     const m = await mount(rs, lines.failing);
     expect(role("review-moment-kicker")?.textContent).toBe(`03:40 · Investigation · line ${lines.failing}`);
     expect(role("review-moment-judge")?.textContent).toContain("Failed: Viewer asks to be roasted hard");
     expect(rowButton(7)?.getAttribute("aria-current")).toBe("true");
+    // The row the link landed on flashes once in the page accent.
+    expect(rowButton(7)?.dataset["flash"]).toBe("true");
+    expect(rowButton(0)?.dataset["flash"]).toBeUndefined();
     expect(document.activeElement).toBe(drawer());
     expect(screen.getByRole("button", { name: "All lines in 03:30–04:00" })).toBeTruthy();
-    await act(async () => fireEvent.click(role("review-drawer-close") as HTMLElement));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Close details" })));
     await settle();
-    expect(drawer()).toBeNull();
+    expect(drawerOpen()).toBe(false);
     expect(m.router.getRoute()).toEqual(pageRoute("review", SID, "timeline"));
     // The same deep link opens it again.
     await act(async () => m.router.navigate(pageRoute("review", SID, "timeline", String(lines.failing))));

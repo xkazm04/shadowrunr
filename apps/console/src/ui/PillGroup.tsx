@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import styles from "./PillGroup.module.css";
 
 export interface PillOption<T extends string> {
@@ -30,3 +31,18 @@ export function PillGroup<T extends string>(props: {
     </div>
   );
 }
+
+/**
+ * One on/off pill, for a multi-select set (kind filters, feedback marks) where any number may be
+ * pressed. It looks like a PillGroup pill; the caller lays the set out with `pillRow`.
+ */
+export function Pill(props: { pressed: boolean; onToggle: () => void; children: ReactNode; title?: string }) {
+  return (
+    <button type="button" className={styles.pill} aria-pressed={props.pressed} title={props.title} onClick={props.onToggle}>
+      {props.children}
+    </button>
+  );
+}
+
+/** The row a set of `Pill`s sits in. */
+export const pillRow = styles.pills;

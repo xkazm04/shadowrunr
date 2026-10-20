@@ -20,6 +20,8 @@ export interface DrawerProps {
   readonly page?: string;
   /** Close's accessible name, when "Close" alone would be ambiguous. */
   readonly closeLabel?: string;
+  /** `wide` fits a detail pane whose rows must stay one line each (Review's timeline moment). */
+  readonly size?: "regular" | "wide";
   readonly "data-role"?: string;
   readonly children: ReactNode;
 }
@@ -82,7 +84,7 @@ export function Drawer(props: DrawerProps) {
   return createPortal(
     <aside
       ref={ref}
-      className={styles.drawer}
+      className={props.size === "wide" ? `${styles.drawer} ${styles.wide}` : styles.drawer}
       role="dialog"
       aria-modal="false"
       aria-labelledby={titleId}

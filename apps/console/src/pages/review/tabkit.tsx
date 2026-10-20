@@ -1,5 +1,6 @@
 // Pieces the layer 2 tabs share: a tick strip of when things happened (one SVG, however many
 // ticks), a pager of fixed-size pages, and the Malakor line a moment opens on.
+import { Button } from "../../ui/Button";
 import type { Derived } from "./derive";
 import { fmtClock } from "./names";
 import styles from "./tabkit.module.css";
@@ -46,7 +47,7 @@ export interface Tick {
 
 const W = 1000;
 
-/** When things happened across the session, as one SVG: plain ticks, then marked (ok), then the current one (signal). */
+/** When things happened across the session, as one SVG: plain ticks in ink, marked ones (ok), the current one in the page accent. */
 export function TickStrip(props: { ticks: readonly Tick[]; lengthS: number; label: string; axis?: boolean }) {
   const L = Math.max(1, props.lengthS);
   const path = (tone: Tick["tone"]) =>
@@ -81,12 +82,12 @@ export function Pager(props: { page: number; total: number; onPage: (page: numbe
   const to = Math.min(props.total, (props.page + 1) * PAGE);
   return (
     <nav className={styles.pager} aria-label={props.label}>
-      <button type="button" className={styles.btn} disabled={props.page <= 0} onClick={() => props.onPage(props.page - 1)}>
+      <Button size="compact" disabled={props.page <= 0} onClick={() => props.onPage(props.page - 1)}>
         Previous
-      </button>
-      <button type="button" className={styles.btn} disabled={props.page >= last} onClick={() => props.onPage(props.page + 1)}>
+      </Button>
+      <Button size="compact" disabled={props.page >= last} onClick={() => props.onPage(props.page + 1)}>
         Next
-      </button>
+      </Button>
       <span className={styles.showing}>
         Showing {from} to {to} of {props.total}
       </span>

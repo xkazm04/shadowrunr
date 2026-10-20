@@ -1,7 +1,9 @@
-// Quick feedback on one line: toggle marks, an optional note, save. The player variant shows key
+// Quick feedback on one line: toggle marks (pills), an optional note, save (the ink button). The player variant shows key
 // numbers and lets its caller bind keys through the returned handle.
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from "react";
 import type { FeedbackTag } from "@shadowrunr/contract";
+import { Button } from "../../ui/Button";
+import { Pill, pillRow } from "../../ui/PillGroup";
 import type { Feedback } from "./hooks";
 import { FEEDBACK } from "./names";
 import styles from "./FeedbackPanel.module.css";
@@ -45,13 +47,13 @@ export const FeedbackPanel = forwardRef<FeedbackHandle, {
   useImperativeHandle(ref, () => ({ toggle: (i) => { const t = FEEDBACK[i]; if (t) toggle(t[0]); }, save: () => void save() }));
   return (
     <section className={styles.fb} data-role="review-feedback" aria-label="Your feedback">
-      <div className={styles.kicker}>Your feedback</div>
-      <div className={styles.tags}>
+      <h3 className={styles.kicker}>Your feedback</h3>
+      <div className={pillRow}>
         {FEEDBACK.map(([id, name], i) => (
-          <button key={id} type="button" aria-pressed={tags.includes(id)} onClick={() => toggle(id)}>
+          <Pill key={id} pressed={tags.includes(id)} onToggle={() => toggle(id)}>
             {name}
-            {props.keys && <kbd>{i + 1}</kbd>}
-          </button>
+            {props.keys && <kbd className={styles.kbd}>{i + 1}</kbd>}
+          </Pill>
         ))}
       </div>
       <label className={styles.label} htmlFor={`fb-note-${props.line}`}>Note, optional</label>
@@ -65,7 +67,7 @@ export const FeedbackPanel = forwardRef<FeedbackHandle, {
       />
       <div className={styles.actions}>
         {props.before}
-        <button type="button" className={styles.primary} disabled={props.feedback.pending} onClick={() => void save()}>{props.saveLabel ?? "Save"}</button>
+        <Button variant="ink" disabled={props.feedback.pending} onClick={() => void save()}>{props.saveLabel ?? "Save"}</Button>
         {status && <span className={status === "Saved" ? styles.ok : styles.err} role="status">{status}</span>}
       </div>
     </section>

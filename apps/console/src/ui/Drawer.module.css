@@ -30,6 +30,9 @@
   transition: clip-path .6s var(--sr-ease-move), visibility 0s .6s;
 }
 
+/* Wide: about half as wide again as the old 470px column (Review's moment pane). */
+.wide { width: min(44rem, 100vw); }
+
 /* The offset shadow sits outside the box, so the open clip leaves room for it on the left. */
 .drawer[data-open="true"] {
   clip-path: inset(0 0 0 -.6rem);

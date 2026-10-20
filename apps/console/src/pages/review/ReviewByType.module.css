@@ -1,11 +1,29 @@
-/* Review by type: one card per kind, its identity colour, "n of m marked" and a progress bar. */
+/* Review by type: one native card per kind (onair .card: 2px ink on card, a display-bold name),
+   its square identity swatch, "n of m marked" and a rate bar. Hover lifts the card on the page
+   accent's offset, the selection stamp of reconcile's .opt. */
 
-.cards { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact); margin: var(--sr-space-near) 0 0; padding: 0; list-style: none; }
-.card { display: grid; grid-template-columns: .65rem auto; column-gap: var(--sr-space-tight); row-gap: var(--sr-space-hair); align-items: center; min-width: 9rem; padding: var(--sr-space-snug) var(--sr-space-cozy); text-align: left; background: var(--sr-color-surface-card); color: var(--sr-color-text-ink); border: var(--sr-stroke-hair) solid var(--sr-color-line); font: inherit; cursor: pointer; }
-.card:hover { background: var(--sr-color-row-hover); border-color: var(--sr-color-text-mute); }
-.card:focus-visible { outline: var(--sr-stroke-rule) solid var(--sr-color-signal); outline-offset: var(--sr-space-hair); }
-.swatch { width: .65rem; height: .65rem; border-radius: var(--sr-radius-round); }
-.name { font-size: var(--sr-size-small); }
-.n { grid-column: 2; font-family: var(--sr-font-mono); font-size: var(--sr-size-micro); color: var(--sr-color-text-mute); }
-.bar { grid-column: 1 / -1; display: block; height: .25rem; margin-top: var(--sr-space-hair); background: var(--sr-color-track); }
-.bar i { display: block; height: 100%; background: var(--sr-color-ok); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--sr-space-loose); margin: 0; padding: 0; list-style: none; }
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sr-space-compact);
+  width: 100%;
+  padding: var(--sr-space-near) var(--sr-space-base);
+  text-align: left;
+  background: var(--sr-color-surface-card);
+  color: var(--sr-color-text-ink);
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
+  font: inherit;
+  cursor: pointer;
+  transition: transform .15s, box-shadow .2s;
+}
+.card:hover { transform: translate(-.1rem, -.1rem); box-shadow: .4rem .4rem 0 var(--sr-page-accent); }
+.head { display: flex; gap: var(--sr-space-compact); align-items: center; }
+.swatch { flex: none; width: .9rem; height: .9rem; border: var(--sr-stroke-hair) solid var(--sr-color-text-ink); }
+.name { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-subhead); line-height: 1; text-transform: uppercase; }
+.n { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-caption); letter-spacing: .08em; text-transform: uppercase; color: var(--sr-color-text-mute); }
+
+@media (prefers-reduced-motion: reduce) {
+  .card { transition: box-shadow .2s; }
+  .card:hover { transform: none; }
+}
