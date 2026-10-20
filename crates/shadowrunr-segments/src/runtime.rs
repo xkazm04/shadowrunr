@@ -24,6 +24,9 @@ use crate::SegmentError;
 /// How many chat message ids the runtime remembers for `highlight` validation.
 const SEEN_MSG_CAP: usize = 10_000;
 
+/// How long a refused op stays named in the state summary.
+const REFUSED_SHOWN_MS: TsMs = 60_000;
+
 /// Runtime configuration. Every field has a working default.
 #[derive(Debug, Clone, Default)]
 pub struct SegmentConfig {
@@ -337,6 +340,17 @@ const GRADES: [EvidenceGrade; 4] = [
     EvidenceGrade::Spc,
 ];
 
+/// An op as the state summary names it: its tag and what it targets.
+fn op_label(op: &Op) -> String {
+    match op {
+        Op::StartPoll { poll_id, .. } => format!("start_poll {poll_id}"),
+        Op::ClosePoll { poll_id } => format!("close_poll {poll_id}"),
+        Op::RevealHex { hex, .. } => format!("reveal_hex {hex}"),
+        Op::SummonFoil { foil } => format!("summon_foil {foil}"),
+        other => op_tag(other).to_string(),
+    }
+}
+
 fn grade_name(g: EvidenceGrade) -> &'static str {
     match g {
         EvidenceGrade::Doc => "DOC",
@@ -355,6 +369,12 @@ pub struct SegmentRuntime {
     last_now_ms: TsMs,
     poll: Option<Poll>,
     used_poll_ids: BTreeSet<String>,
+    /// The last crowd poll closed: its id and winner (`None` on a tie or no votes).
+    last_crowd: Option<(String, Option<String>)>,
+    /// Ops refused lately, newest last: (when, "close_poll p3: no_such_poll"). The state
+    /// summary names them so the model never tells chat a refused op happened: the 3 h case
+    /// run (2026-10-20) narrated polls as open after 16 refused start_polls.
+    refused: Vec<(TsMs, String)>,
     foil_vote_seq: u32,
     active_foil: Option<String>,
     /// A foil carried over from a previous segment as a "skeptical observer".
@@ -455,6 +475,8 @@ impl SegmentRuntime {
             last_now_ms: 0,
             poll: None,
             used_poll_ids: BTreeSet::new(),
+            last_crowd: None,
+            refused: Vec::new(),
             foil_vote_seq: 0,
             active_foil: None,
             observer_foil: None,
@@ -769,6 +791,17 @@ impl SegmentRuntime {
             .position(|h| h.id == raw || canon.as_deref() == Some(h.id.as_str()))
     }
 
+    /// `want`, or `want-2`, `want-3`... when that id was used already.
+    fn fresh_poll_id(&self, want: &str) -> String {
+        let mut id = want.to_string();
+        let mut n = 1;
+        while self.used_poll_ids.contains(&id) {
+            n += 1;
+            id = format!("{want}-{n}");
+        }
+        id
+    }
+
     fn open_poll(&mut self, poll: Poll) {
         self.used_poll_ids.insert(poll.id.clone());
         self.poll = Some(poll);
@@ -791,6 +824,7 @@ impl SegmentRuntime {
         let mut events = vec![self.vote_event(now_ms, &poll, true)];
         match poll.kind {
             PollKind::Crowd => {
+                self.last_crowd = Some((poll.id.clone(), winner(&poll.tallies())));
                 // A crowd vote whose winner names one hex counts as that hex's beat of work.
                 if resolve {
                     if let Some(i) =
@@ -1134,19 +1168,26 @@ impl SegmentRuntime {
         for op in ops {
             match self.apply_op(now_ms, op) {
                 Ok(consequences) => {
-                    events.push(StreamEvent::Op {
-                        ts_ms: now_ms,
-                        op: op.clone(),
-                    });
+                    let mut op = op.clone();
+                    // A re-minted poll id: the transcript records the id the poll has.
+                    if let (Op::StartPoll { poll_id, .. }, Some(p)) = (&mut op, &self.poll) {
+                        poll_id.clone_from(&p.id);
+                    }
+                    events.push(StreamEvent::Op { ts_ms: now_ms, op });
                     events.extend(consequences);
                 }
-                Err(rule) => events.push(moderation(
-                    now_ms,
-                    ModStage::Output,
-                    rule,
-                    None,
-                    format!("rejected:{}", op_tag(op)),
-                )),
+                Err(rule) => {
+                    self.refused.retain(|(t, _)| now_ms - t < REFUSED_SHOWN_MS);
+                    self.refused
+                        .push((now_ms, format!("{}: {rule}", op_label(op))));
+                    events.push(moderation(
+                        now_ms,
+                        ModStage::Output,
+                        rule,
+                        None,
+                        format!("rejected:{}", op_tag(op)),
+                    ))
+                }
             }
             events.extend(self.open_due_plebiscite(now_ms));
         }
@@ -1185,9 +1226,12 @@ impl SegmentRuntime {
                     return Err("poll_already_open");
                 }
                 self.require_state(Trigger::PollOpened)?;
-                if poll_id.trim().is_empty() || self.used_poll_ids.contains(poll_id) {
+                if poll_id.trim().is_empty() {
                     return Err("duplicate_poll_id");
                 }
+                // A reused id is re-minted (`p3` -> `p3-2`) rather than refused: the model
+                // reuses short ids, and close_poll by the id it used still finds the poll.
+                let poll_id = &self.fresh_poll_id(poll_id);
                 if question.trim().is_empty() {
                     return Err("invalid_poll_question");
                 }
@@ -1217,7 +1261,15 @@ impl SegmentRuntime {
                 self.fire(Trigger::PollOpened);
             }
             Op::ClosePoll { poll_id } => {
-                if self.poll.as_ref().is_none_or(|p| &p.id != poll_id) {
+                let named = |p: &Poll| {
+                    &p.id == poll_id
+                        || (p.kind == PollKind::Crowd
+                            && p.id
+                                .strip_prefix(poll_id.as_str())
+                                .and_then(|r| r.strip_prefix('-'))
+                                .is_some_and(|n| n.parse::<u32>().is_ok()))
+                };
+                if !self.poll.as_ref().is_some_and(named) {
                     return Err("no_such_poll");
                 }
                 return Ok(self.close_poll(now_ms, true));
@@ -1835,7 +1887,28 @@ impl SegmentRuntime {
         }
         match &self.poll {
             Some(p) => lines.push(p.summary(self.last_now_ms)),
-            None => lines.push("no poll open".into()),
+            None => lines.push(
+                "no poll open: never tell chat a poll is open or counting until start_poll is accepted".into(),
+            ),
+        }
+        if let Some((id, won)) = &self.last_crowd {
+            lines.push(match won {
+                Some(w) => format!("last poll {id} closed: winner {w}"),
+                None => format!("last poll {id} closed: no winner (tie or no votes)"),
+            });
+        }
+        let now = self.last_now_ms;
+        let refused: Vec<&str> = self
+            .refused
+            .iter()
+            .filter(|(t, _)| now - t < REFUSED_SHOWN_MS)
+            .map(|(_, r)| r.as_str())
+            .collect();
+        if !refused.is_empty() {
+            lines.push(format!(
+                "REFUSED lately, so these did NOT happen (never tell chat they did): {}",
+                refused.join("; ")
+            ));
         }
         if self.handover_pending_since.is_some() {
             if let Some(rule) = self.handover_rule() {

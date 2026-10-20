@@ -323,12 +323,48 @@ fn poll_lifecycle_rank_weighted() {
     assert_eq!(rt.open_poll_id(), None);
     assert_eq!(rt.state(), "opening");
 
-    // Poll ids are single-use.
+    assert!(rt
+        .context(0, 31)
+        .state_summary
+        .contains("last poll p1 closed: winner Duel"));
+
+    // Poll ids are single-use: a reused one is re-minted, and the transcript says so.
     let evs = rt.apply_ops(40_000, &[poll("p1", &["a", "b"], Rank::Thrall, 30)]);
-    assert_eq!(
-        rejections(&evs),
-        [(ModStage::Output, "duplicate_poll_id".to_string())]
+    assert!(rejections(&evs).is_empty());
+    assert!(evs.iter().any(|e| matches!(e,
+        StreamEvent::Op { op: Op::StartPoll { poll_id, .. }, .. } if poll_id == "p1-2")));
+    assert_eq!(rt.open_poll_id(), Some("p1-2"));
+    // close_poll by the id the model used finds the re-minted poll.
+    let evs = rt.apply_ops(
+        41_000,
+        &[Op::ClosePoll {
+            poll_id: "p1".into(),
+        }],
     );
+    assert!(votes(&evs)[0].1, "closed");
+    assert!(rt
+        .context(0, 41)
+        .state_summary
+        .contains("last poll p1-2 closed"));
+}
+
+#[test]
+fn a_refused_op_is_named_in_the_state_for_a_minute() {
+    let mut rt = seg01();
+    rt.apply_ops(
+        1_000,
+        &[Op::ClosePoll {
+            poll_id: "p9".into(),
+        }],
+    );
+    let s = rt.context(0, 1).state_summary;
+    assert!(s.contains("no poll open: never tell chat"), "{s}");
+    assert!(
+        s.contains("REFUSED lately, so these did NOT happen (never tell chat they did): close_poll p9: no_such_poll"),
+        "{s}"
+    );
+    rt.tick(62_000, 0);
+    assert!(!rt.context(0, 62).state_summary.contains("REFUSED"));
 }
 
 #[test]
