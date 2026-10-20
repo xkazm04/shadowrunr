@@ -1788,6 +1788,47 @@
           "evidence": "crates/shadowrunr-segments/src/case.rs:15 The demo world is hand-authored JSON parsed directly; there is no generated fixture-variation stream to seed, and runtime time is supplied through arguments."
         }
       ]
+    },
+    "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa/invariant-placement": {
+      "context": "console-build-and-desktop-shell",
+      "subject": "invariant-placement",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-20",
+      "evaluatedTs": "2026-10-20T21:14:07.330Z",
+      "worker": "fbca0297-b174-4665-9fa9-38b26f0c504f",
+      "techniques": [
+        {
+          "technique": "build-time-evaluation-of-cross-value-invariants",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/app/shell.dom.test.tsx:154 This relation involves fixed, checked-in values; package.json:8 builds without running this test or evaluating the relation."
+        },
+        {
+          "technique": "derived-properties-cannot-be-forged",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-token-refs.mjs:42 Token-reference validity is computed from actual CSS definitions and source references rather than maintained as an annotation; unknown references cause failure."
+        },
+        {
+          "technique": "paired-sites-localize-the-fault",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/scripts/check-bundle.mjs:25 The checker consumes an artifact produced by Vite across a tool boundary; this is external artifact validation rather than an internal paired write/read assertion."
+        },
+        {
+          "technique": "placement-precedes-gate",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-size.mjs:27 A source-file length rule is an arrangement constraint, appropriately enforced by a gate over files rather than a value encoding."
+        },
+        {
+          "technique": "repairing-check-erases-its-evidence",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/scripts/check-size.mjs:36 The reviewed size, bundle and token-reference checkers refuse violations instead of defensively repairing their inputs."
+        },
+        {
+          "technique": "shape-with-a-not-applicable-member",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/scripts/check-bundle.mjs:70 Resolution failure is represented separately as null and explicitly rejected, without adding an absence member to a closed kind set."
+        }
+      ]
     }
   }
 }

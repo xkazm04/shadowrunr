@@ -1085,7 +1085,11 @@
           "revision": 9,
           "changedAt": "2026-09-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/budgets/dom.json:8 The fixed wall-budget derivation is checked in a Vitest test rather than during the console build, allowing an inconsistent table to pass the build command.",
+          "evaluatedAt": "2026-10-20",
+          "evaluatedAgainst": "sha256-b2:c6563834f502429c",
+          "evaluatedRevision": 9
         },
         {
           "subject": "deployment-contract",
