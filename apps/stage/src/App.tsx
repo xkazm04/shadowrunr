@@ -16,14 +16,17 @@ import {
   type CaseSource,
 } from "./source";
 import { LiveSession } from "./live";
+import type { FaceSource } from "./avatar/types";
+import { rigBaseUrl, voiceUrl } from "./voice/urls";
+import { pageStorage, readVoiceOn, voiceBlocked, writeVoiceOn } from "./voice/toggle";
+import { FaceMixer, useVoice } from "./voice/useVoice";
+import { unlockAudio } from "./voice/webaudio";
 import { SignalLostSlate, StageErrorBoundary, StalledMark, fmtClock, streamElapsed } from "./Slates";
 import { Stage } from "./Stage";
 
 const BUILTIN_CASE: Case = parseCase(demoCaseJson);
 const EMPTY_SCENE: SceneState = initialScene();
 const NO_EVENTS: StreamEvent[] = [];
-/** No synthetic voice is configured: Malakor is text only, and the disclosure says so. */
-const VOICE = false;
 /** Keep showing the last frame (the outro) this long before a loop restarts. */
 const END_HOLD_MS = 8000;
 
@@ -210,6 +213,35 @@ export function App() {
     };
   }, [live, params]);
 
+  // ── Voice and face ───────────────────────────────────────────────────────────
+  const storage = useMemo(pageStorage, []);
+  const [voiceOn, setVoiceOn] = useState(() => params.voice || readVoiceOn(storage));
+  const headless = typeof navigator !== "undefined" && navigator.webdriver === true;
+  const blocked = voiceBlocked({ live, on: voiceOn, headless });
+  const mixer = useMemo(() => new FaceMixer(), []);
+  const [demoFace, setDemoFace] = useState<FaceSource | null>(null);
+  useEffect(() => {
+    const mode = params.face;
+    if (!import.meta.env.DEV || !mode) return;
+    void import("./avatar/demo").then((m) => {
+      if (m.isDemoMode(mode)) setDemoFace(m.demoSource(mode));
+    });
+  }, [params.face]);
+  const followRun = live ? liveRef.current?.store.runId || (params.run === "live" ? null : params.run) : null;
+  const voice = useVoice({ blocked, url: useMemo(() => voiceUrl(params.ws), [params.ws]), runId: followRun, mixer });
+  const voiceShown = blocked === null && voice.status.state === "ready";
+  const rigBase = useMemo(() => (live ? rigBaseUrl(params.ws) : null), [live, params.ws]);
+  const toggleVoice = useCallback(
+    (on: boolean) => {
+      // the click is the gesture the browser wants before any audio may sound
+      if (on) unlockAudio();
+      setVoiceOn(on);
+      writeVoiceOn(storage, on);
+    },
+    [storage],
+  );
+  const captionSpeaking = useCallback((s: boolean) => mixer.setCaption(s), [mixer]);
+
   // ── Keyboard ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (params.broadcast || live) return;
@@ -315,7 +347,7 @@ export function App() {
         className="canvas-frame"
         style={{ width: CANVAS_W, height: CANVAS_H, transform: `translate(${fit.left}px, ${fit.top}px) scale(${fit.scale})` }}
       >
-        <StageErrorBoundary voice={VOICE}>
+        <StageErrorBoundary voice={voiceShown}>
           <Stage
             scene={scene}
             now={now}
@@ -324,9 +356,12 @@ export function App() {
             sourceTag={live ? "LIVE" : "REPLAY"}
             debug={params.debug}
             broadcast={params.broadcast}
-            voice={VOICE}
+            voice={voiceShown}
             {...(elapsed === null ? {} : { clock: fmtClock(elapsed) })}
             overlay={overlay}
+            face={demoFace ?? mixer}
+            rigBase={rigBase}
+            onCaptionSpeaking={captionSpeaking}
           />
         </StageErrorBoundary>
       </div>
@@ -349,6 +384,9 @@ export function App() {
           onSpeed={setSpeed}
           onFile={(f) => void onFile(f)}
           broadcastHref={broadcastHref}
+          voiceOn={voiceOn}
+          voiceStatus={voice.status}
+          onVoice={toggleVoice}
         />
       )}
       {dragging && !params.broadcast && (

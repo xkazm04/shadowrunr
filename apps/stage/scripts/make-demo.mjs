@@ -234,6 +234,7 @@ op(92500, { op: "show_card", card_id: "card-confidence", title: "Chat's faith in
 say(93500, "Twelve percent of you would subscribe. I have noted your names. In ink.");
 job(96000, "mem-consolidate-1", "done", "14 minion dossiers updated");
 push({ type: "health", ts_ms: 97000, state: "healthy" });
+push({ type: "beat_plan", ts_ms: 97100, mode: "react", picks: 1, reason: "a viewer proposal to answer" });
 const mProp = chat(98000, V.vex, "!propose audit the Disruptor's rocket next stream", { cmd: "propose", text: "audit the Disruptor's rocket next stream" });
 op(99500, { op: "highlight", msg_id: mProp });
 say(100000, "A Warlock proposes. Vexilla_Nine, your proposal is entered for the Lord's dispatch.", [mProp]);

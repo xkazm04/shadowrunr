@@ -1,10 +1,11 @@
-/* The kind proportion bar and its key. Kind colours are inline (ink.ts). */
+/* The kind proportion bar and its key, as the prototype's legend (.tl-leg): the bar on the track
+   in an ink frame, square swatches, display-semibold uppercase names. Kind colours are inline (ink.ts). */
 
 .mix { min-width: 0; }
-.bar { display: flex; height: .875rem; overflow: hidden; background: var(--sr-color-wash); }
+.bar { display: flex; height: .875rem; overflow: hidden; border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-track); }
 .bar span { display: block; height: 100%; }
-.big { height: 1.25rem; }
-.key { display: flex; flex-wrap: wrap; gap: var(--sr-space-tick) var(--sr-space-near); margin: var(--sr-space-compact) 0 0; padding: 0; list-style: none; font-size: var(--sr-size-caption); }
-.key li { display: inline-flex; gap: var(--sr-space-snug); align-items: baseline; }
-.key i { display: inline-block; flex: none; width: .5625rem; height: .5625rem; border-radius: var(--sr-radius-round); }
-.key b { font-family: var(--sr-font-mono); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-micro); }
+.big { height: 1.4rem; }
+.key { display: flex; flex-wrap: wrap; gap: var(--sr-space-tick) var(--sr-space-near); margin: var(--sr-space-compact) 0 0; padding: 0; list-style: none; font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-caption); letter-spacing: .08em; text-transform: uppercase; }
+.key li { display: inline-flex; gap: var(--sr-space-snug); align-items: center; }
+.key i { display: inline-block; flex: none; width: .7rem; height: .7rem; border: var(--sr-stroke-hair) solid var(--sr-color-text-ink); }
+.key b { font-weight: var(--sr-weight-bold); font-variant-numeric: tabular-nums; }

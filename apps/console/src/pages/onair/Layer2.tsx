@@ -24,7 +24,7 @@ export function Layer2({ sub }: { readonly sub: readonly string[] }) {
   const [tab, a, b] = sub;
   const known = tab === "rundown" || tab === "dispatch" || tab === "clips";
   return (
-    <div className={styles.l2} data-page="onair" data-role="onair-layer2">
+    <div className={styles.l2} data-page="onair" data-role="onair-layer2" data-rise>
       <Tabs items={TABS} value={known ? tab : "rundown"} onSelect={(id) => router.navigate(pageRoute("onair", id))} label="On Air sections" />
       {tab === "rundown" && (
         <>

@@ -73,6 +73,8 @@ export function eventText(ev: StreamEvent): string {
       return `${ev.from} → ${ev.to} · ${ev.reason}`;
     case "job":
       return `${ev.job_id} ${ev.status}${ev.summary ? ` · ${ev.summary}` : ""}`;
+    case "beat_plan":
+      return `${ev.mode.replace(/_/g, " ")}${ev.bit_id ? ` · ${ev.bit_id}` : ""} · ${ev.picks} picked · ${ev.reason}`;
     case "health":
       return `engine ${ev.state}${ev.detail ? ` · ${ev.detail}` : ""}`;
     case "stream_end":

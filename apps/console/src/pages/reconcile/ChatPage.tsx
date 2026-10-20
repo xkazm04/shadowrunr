@@ -12,6 +12,7 @@ import { Chip } from "../../ui/Chip";
 import { Head } from "../../ui/Section";
 import styles from "./Layer2.module.css";
 import { session, useSession, type ChatTurn } from "./session";
+import { Button } from "../../ui/Button";
 
 /** Turns kept in the DOM; older ones fold into a count (the log is bounded, not virtualised). */
 export const CHAT_WINDOW = 50;
@@ -75,9 +76,9 @@ export function ChatPage({ reportId }: { reportId: string | undefined }) {
                 placeholder="e.g. Never let him repeat the poll line in an empty room."
               />
             </label>
-            <button type="submit" className={styles.primary} disabled={send.pending || text.trim().length === 0}>
+            <Button type="submit" variant="primary" disabled={send.pending || text.trim().length === 0}>
               Send
-            </button>
+            </Button>
           </form>
         </div>
       </ConnectionState>
@@ -145,18 +146,18 @@ function Proposal({ d }: { d: Directive }) {
       <Chip tone="caution" title={`${title}, proposed: inactive until kept`}>
         {label}
       </Chip>
-      <button
+      <Button
         type="button"
-        className={styles.secondary}
+        variant="secondary"
         disabled={busy}
         aria-label={`Keep ${label}`}
         onClick={() => void keep.run({ kind: d.kind, text: d.text, ...(d.scope === undefined ? {} : { scope: d.scope }) }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))}
       >
         Keep
-      </button>
-      <button type="button" className={styles.secondary} disabled={busy} aria-label={`Drop ${label}`} onClick={() => void drop.run({ id: d.id }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))}>
+      </Button>
+      <Button type="button" variant="secondary" disabled={busy} aria-label={`Drop ${label}`} onClick={() => void drop.run({ id: d.id }).then((r) => setError(r.ok ? undefined : viewOfError(r.error).title))}>
         Drop
-      </button>
+      </Button>
       {error && <small role="alert">{error}</small>}
     </span>
   );

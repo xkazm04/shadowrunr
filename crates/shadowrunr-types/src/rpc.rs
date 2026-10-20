@@ -14,6 +14,7 @@ use crate::clips::{
     ClipCandidate, ClipIdParams, ClipPublishReport, ClipScanReport, ClipsApproveParams,
     ClipsListParams, ClipsPage, ClipsPublishParams, ClipsRejectParams, ClipsScanParams,
 };
+use crate::prep::{PrepApproveParams, PrepGenerateParams, PrepIdParams, PrepSummary, StreamPrep};
 use crate::reconcile::{
     Directive, DirectiveKind, LordChatReply, NextStreamPlan, PlanOption, ReconcileReport,
     RuleIncident, Source,
@@ -463,6 +464,11 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<FeedbackSetParams, LineFeedback>("review.feedback.set");
     v.method::<FeedbackListParams, Vec<LineFeedback>>("review.feedback.list");
     v.method::<ReviewTagParams, SessionTags>("review.tag");
+    v.method::<PrepGenerateParams, StreamPrep>("prep.generate");
+    v.method::<EmptyParams, Vec<PrepSummary>>("prep.list");
+    v.method::<PrepIdParams, StreamPrep>("prep.get");
+    v.method::<PrepApproveParams, StreamPrep>("prep.approve");
+    v.method::<PrepIdParams, StreamPrep>("prep.retire");
 }
 
 /// Every method name, in table order.

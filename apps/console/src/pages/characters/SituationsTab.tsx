@@ -8,6 +8,8 @@ import { pageRoute, RouteLink, useRouter } from "../../router";
 import { Chip, ChipRow, State } from "../../ui/Chip";
 import { FilterTable, type Column, type Facets } from "../../ui/FilterTable";
 import { Head, Section } from "../../ui/Section";
+import { buttonClass } from "../../ui/Button";
+import { PushIn } from "../../ui/PushIn";
 import { StatePanel } from "../../ui/States";
 import styles from "./Layer2.module.css";
 import { Inline } from "../../ui/Markdown";
@@ -102,12 +104,14 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
           </select>
         </label>
         <ResultsState tournaments={tournaments.data?.length} listError={tournaments.errorView?.title} resultsError={results.errorView?.title} />
-        <RouteLink to={pageRoute("simulator", "heatmap")} className={styles.lead}>
+        <RouteLink to={pageRoute("simulator", "heatmap")} className={buttonClass("secondary", "compact")}>
           The trials heatmap
         </RouteLink>
       </div>
       {selected !== undefined && !sel && <StatePanel state="empty" title={`No situation "${selected}" in this package`} />}
-      {sel && <Detail s={sel} t={tallies?.get(sel.id)} tid={tid} />}
+      <PushIn trigger={sel?.id} from={pickedRow}>
+        {sel && <Detail s={sel} t={tallies?.get(sel.id)} tid={tid} />}
+      </PushIn>
       {d.situations.length === 0 ? (
         <StatePanel state="empty" title="No situations yet" hint="situations.json holds the sim's situation bank." />
       ) : (
@@ -129,6 +133,9 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
     </>
   );
 }
+
+/** The situation row just picked: where its detail pushes in from. */
+const pickedRow = (): Element | null => document.querySelector("[data-role='characters-situations'] [aria-selected='true']");
 
 function ResultsState(p: { tournaments: number | undefined; listError: string | undefined; resultsError: string | undefined }) {
   let text: string | undefined;

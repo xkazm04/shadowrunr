@@ -15,6 +15,7 @@ pub mod engine;
 pub mod error;
 pub mod event;
 pub mod memory;
+pub mod prep;
 pub mod reconcile;
 pub mod results;
 pub mod review;
@@ -23,6 +24,7 @@ pub mod sandbox;
 pub mod schema;
 pub mod segment;
 pub mod sim;
+pub mod voice;
 
 pub use chat::*;
 pub use engine::*;

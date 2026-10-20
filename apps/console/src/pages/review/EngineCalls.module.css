@@ -1,9 +1,19 @@
-/* Engine calls: the per-minute bars, an error overlay on each, the picked minute outlined. */
+/* Engine calls: the per-minute bars in the page accent on the track, an error overlay on each in
+   the fail colour, the picked minute in ink with an ink frame; the picked minute's table settles in. */
 
-.minutes { display: flex; gap: var(--sr-space-hair); align-items: flex-end; height: 4.5rem; margin-top: var(--sr-space-near); }
+.minutes { display: flex; gap: var(--sr-space-hair); align-items: flex-end; height: 4.5rem; padding-bottom: var(--sr-space-hair); border-bottom: var(--sr-stroke-rule) solid var(--sr-color-text-ink); }
 .minutes button { position: relative; flex: 1; min-width: .25rem; height: 100%; padding: 0; background: var(--sr-color-track); border: 0; cursor: pointer; }
-.minutes button i { position: absolute; right: 0; bottom: 0; left: 0; background: var(--sr-color-text-mute); }
+.minutes button i { position: absolute; right: 0; bottom: 0; left: 0; background: var(--sr-page-accent); }
 .minutes button i.err { background: var(--sr-color-fail); }
-.minutes button:hover i:not(.err) { background: var(--sr-color-text-ink); }
-.minutes button[aria-pressed="true"], .minutes button:focus-visible { outline: var(--sr-stroke-rule) solid var(--sr-color-signal); outline-offset: var(--sr-space-hair); }
-.axis { display: flex; justify-content: space-between; margin-top: var(--sr-space-hair); font-family: var(--sr-font-mono); font-size: var(--sr-size-micro); color: var(--sr-color-text-mute); }
+.minutes button:hover i:not(.err),
+.minutes button[aria-pressed="true"] i:not(.err) { background: var(--sr-color-text-ink); }
+.minutes button[aria-pressed="true"] { outline: var(--sr-stroke-rule) solid var(--sr-color-text-ink); outline-offset: var(--sr-space-hair); }
+
+.minute { animation: settle .45s var(--sr-ease-settle) backwards; }
+@keyframes settle {
+  from { opacity: 0; transform: translateY(var(--sr-space-near)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .minute { animation: none; }
+}

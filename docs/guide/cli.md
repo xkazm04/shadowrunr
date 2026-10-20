@@ -329,6 +329,76 @@ $ shadowrunr case approve WOODBRIDGE-...
 $ shadowrunr sim run --segment SEG-02A --case WOODBRIDGE-... --duration 900 --judge
 ```
 
+## Stream prep: `shadowrunr prep ...`
+
+The material a stream opens and runs on (contract appendix "Conversation orchestration"): a
+cold-open story told while the room fills, a deck of quiet-room premises, stories and callbacks
+per segment, and connector lines between bits and chat. The planner writes it before each
+stream, the checks below run over it, and it is stored in `<data>/prep/<prep_id>/prep.json`
+(`prep-<yyyymmdd>-<hhmmss>`, UTC) as `staged`. Nothing is used until the owner approves it.
+Every command works on the store directly; no daemon is needed.
+
+- `prep generate [--report <report_id>] [--json]`: one `planner` call (route
+  `[engine.routes] planner`). Its input is the constitution, the active tone, the bible's
+  "Running jokes" and per-segment notes, the active segments, and the plan: the newest plan
+  chosen from `--report`, else the current plan (`<data>/next_plan.json`), else none. The
+  plan's dispatch, segment notes, topics and active directives were composed from chat-derived
+  reports, so they reach the planner fenced as untrusted data; a reply that echoes the fence
+  token is refused and nothing is staged. Prints the title, the cold-open lines, the bits per
+  segment and any failed check. It spends one engine call.
+- `prep list [--json]`: newest first, with status, bit count and failed checks.
+- `prep show <id> [--json]`: the whole material and every check.
+- `prep approve <id> --signature <name> [--json]`: staged becomes approved, with `approved_by`
+  and `approved_ms`. Refused while any check fails, with no override: a failed prep is kept
+  staged so the owner sees why, and the fix is a new `prep generate`. Approval re-runs the
+  checks over the stored material, so a hand edit that breaks one is caught.
+- `prep retire <id> [--json]`: no stream uses it again.
+
+The checks (each `pass` or `fail`, with a detail naming the line):
+
+| Check | Fails when |
+|---|---|
+| `line_length` | a line is longer than 220 characters |
+| `counts` | the cold open is not 6-10 beats; fewer than 12 premises; stories or callbacks outside 3-5; fewer than 3 connectors of any kind |
+| `shape` | a premise is not one line, a story is not 2-5 lines or has no payoff, a line is empty, or the reply had an item of unknown kind |
+| `real_names` | a line has an `@handle`, names a real platform or channel, "a real/famous streamer", "a streamer named ...", or a name on the operator's `<policy>/real-names.txt` (one per line, `#` comments; local, never committed) |
+| `urls` | a line has a link or a web address |
+| `prior_streams` | a line leans on an earlier stream ("last time", "as I said", "remember when", "yesterday" ...) |
+| `segments` | a bit is for a segment that does not exist or is descoped |
+| `duplicates` | a line (ignoring case, spacing and end punctuation) or an id repeats |
+| `output_gate` | the brain's output gate (the platform term rules, character and persona guards, personal-data asks) would change a line |
+
+Which prep a run uses:
+
+- `sim run`, `sim tournament` and sandbox sessions use the newest approved prep for the
+  character, else the character's fictional `characters/<id>/prep.sample.json`, else none.
+  `run.json` (sims) and `spec.json` (sandbox) record it as `prep`: the prep id, `sample` or
+  `none`. `sim run` prints it.
+- A prep written for another character is never used.
+
+Exit codes:
+
+- 0: done (`generate`: staged, every check passed).
+- 1: refused or failed (a failed check holds the approval, a prep in the wrong state, the
+  engine or the store failed, the prep does not exist).
+- 2: usage error (a malformed id, an empty signature).
+- 6: `generate` staged a prep with a failed check (shown; it cannot be approved).
+
+```
+$ shadowrunr prep generate
+prep-20261020-180000  staged  malakor
+plan: report rep-...
+cold open: The Rented Throne
+  1. Before the minions arrive, a confession from the Spire: ...
+  -> Which brings me to you, early arrivals: ...
+SEG-01: 8 premises, 2 stories, 2 callbacks
+SEG-02A: 4 premises, 2 stories, 2 callbacks
+connectors: 15
+checks: all 9 passed
+$ shadowrunr prep show prep-20261020-180000
+$ shadowrunr prep approve prep-20261020-180000 --signature owner
+```
+
 ## `shadowrunr daemon [--port 7717] [--scripted]`
 
 Serves the protocol in `docs/spec/contract.md` § Daemon protocol, bound to `127.0.0.1` only.
@@ -468,7 +538,7 @@ The checks, in report order:
 | `say_gap` | No silence on stream is longer than the ceiling (15 s). |
 | `core_errors` | The core thread had no engine errors outside the chaos window. |
 | `sign_off` | The host signed off cleanly. |
-| `chaos` | Under `--chaos`, the host stalled in character and recovered (or signed off). |
+| `chaos` | Under `--chaos`, the host stalled in character and recovered (or signed off). Without `--chaos` it passes ("no chaos requested"). |
 | `stage_ack` | A stage subscriber acked the final event's seq with no gaps. It is unmeasured when no stage acked. The daemon waits up to 6 s after the session for the final ack. |
 | `judge` | The judge found no rule fails. It is unmeasured with `--no-judge`, and fails when judging errors. |
 
@@ -577,6 +647,13 @@ Over `/rpc`:
 A session id that is not `sbx-<yyyymmdd>-<hhmmss>-<minutes>m` is `invalid_params` (so is any
 path), and a session with no `session.json` is `not_found`. An engine failure is `engine`,
 and a file error `io`.
+
+## `shadowrunr voice check|say`
+
+Malakor's optional local voice (Kokoro through sherpa-onnx). `voice check` probes the engine, the
+Kokoro files, the sidecar's Python and the durations model, and exits 0 only when the voice can
+speak. `voice say "<text>" [--out <wav>]` renders one line through the sidecar and prints each
+sentence's timing. Setup, `[voice]` keys and the stage side: [voice.md](voice.md).
 
 ## Character rules and moderation lists
 

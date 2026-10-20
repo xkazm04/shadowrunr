@@ -152,6 +152,10 @@ pub struct SandboxSpec {
     /// The chaos window `[from, to)` in stream seconds; `to` is the planned end for `lost`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chaos_window_s: Option<(u32, u32)>,
+    /// The stream prep the brain had ([`runner::prep_label`]): its id, `sample` or `none`.
+    /// Absent in sessions recorded before stream prep.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prep: Option<String>,
 }
 
 /// `room.json`: what the room did, besides the transcript.
@@ -945,10 +949,12 @@ impl Session {
 
     fn chaos_check(&self, events: &[StreamEvent], ended: &Ended) -> SandboxCheck {
         let (Some(kind), Some((from, to))) = (self.programme.chaos, self.programme.chaos_ms) else {
+            // Nothing was broken, so there is nothing to recover from: a clean session must be
+            // able to pass its gate with the stage open and the judge on (cli.md, sandbox).
             return SandboxCheck {
                 id: "chaos".into(),
-                state: SandboxCheckState::Unmeasured,
-                detail: "no chaos".into(),
+                state: SandboxCheckState::Pass,
+                detail: "no chaos requested".into(),
             };
         };
         let stalls = stall_lines(events);
@@ -1149,6 +1155,10 @@ pub async fn run_sandbox(
             chaos_window_s: programme
                 .chaos_ms
                 .map(|(a, b)| ((a / 1000) as u32, (b / 1000) as u32)),
+            prep: Some(runner::prep_label(runner::stream_prep_for(
+                &run_opts,
+                &spec.character,
+            ))),
         },
     )?;
 
@@ -1583,10 +1593,14 @@ mod tests {
         let out = session(run, engine.clone(), &opts, sink, stop).await;
         let r = &out.report;
 
-        // Wall clock: a beat every 5 s from 5 s, until the sign-off at 55 s.
+        // Wall clock: a beat every 5 s from 5 s, until the sign-off at 55 s. The beats are
+        // counted by their `beat_plan`: a cold-open hold is a beat with no core call.
+        let plans = plan_times(&out.events);
+        assert_eq!(plans.first(), Some(&5_000), "{plans:?}");
+        assert!(plans.len() >= 10, "{plans:?}");
+        assert!(plans.windows(2).all(|w| w[1] - w[0] == 5_000), "{plans:?}");
         let gaps = engine.core_gaps();
-        assert_eq!(gaps.len(), 10, "{gaps:?}");
-        assert!(gaps.iter().all(|g| *g == 5_000), "{gaps:?}");
+        assert!(gaps.iter().all(|g| *g > 0 && *g % 5_000 == 0), "{gaps:?}");
         assert_eq!(started.elapsed().as_secs(), 55);
 
         // The sink saw every line once, in order, on a clock that never runs backwards.
@@ -1612,15 +1626,16 @@ mod tests {
         assert_eq!(state(r, "core_errors"), SandboxCheckState::Pass);
         assert_eq!(state(r, "sign_off"), SandboxCheckState::Pass, "{r:?}");
         assert_eq!(detail(r, "sign_off"), "sign-off at 00:55, in the last 90 s");
-        assert_eq!(state(r, "chaos"), SandboxCheckState::Unmeasured);
-        assert_eq!(detail(r, "chaos"), "no chaos");
+        assert_eq!(state(r, "chaos"), SandboxCheckState::Pass);
+        assert_eq!(detail(r, "chaos"), "no chaos requested");
         for id in ["stage_ack", "judge"] {
             assert_eq!(state(r, id), SandboxCheckState::Unmeasured);
             assert_eq!(detail(r, id), "filled by the daemon");
         }
         assert!(!r.pass, "an unmeasured check is not a pass");
-        assert_eq!(r.max_say_gap_s, 5.0);
-        assert_eq!(r.say_gap_p95_s, 5.0);
+        // The cold open speaks a line and holds a beat: a line every 10 s, under the 15 s gate.
+        assert_eq!(r.max_say_gap_s, 10.0);
+        assert_eq!(r.say_gap_p95_s, 10.0);
         assert_eq!(r.core_errors, 0);
         assert_eq!((r.stall_lines, r.health_transitions), (0, 0));
         assert_eq!(r.ended_ms - r.started_ms, 55_000);
@@ -1658,19 +1673,21 @@ mod tests {
             stop,
         )
         .await;
-        // Beats at 5, 10, 15, 20 (12 s long), at once at 32, then every 5 s again.
+        // The cold open alternates a line and a hold, so core calls run at 5, 15, 25 and 35 s;
+        // the fourth (35 s) takes 12 s. Its beat lands at 47 s and the next starts at once at
+        // 47 s, then every 5 s again: one late beat, never a burst of catch-up beats.
         let gaps = engine.core_gaps();
-        assert_eq!(
-            &gaps[..5],
-            &[5_000, 5_000, 5_000, 12_000, 5_000],
-            "{gaps:?}"
-        );
-        assert!(gaps.iter().all(|g| *g >= 5_000), "no burst: {gaps:?}");
-        // The slow call (20 s to 32 s) is covered in character: Malakor last spoke at 15 s, so a
-        // stall line goes out at 27 s, mid-call, and the reply lands at 32 s. Without the cover
-        // this was a 17 s silence that failed the gate.
+        assert_eq!(&gaps[..4], &[10_000, 10_000, 10_000, 17_000], "{gaps:?}");
+        let plans = plan_times(&out.events);
+        assert!(plans.windows(2).all(|w| w[1] >= w[0]), "{plans:?}");
+        let at_once = plans.windows(2).filter(|w| w[1] == w[0]).count();
+        assert_eq!(at_once, 1, "exactly one beat starts at once: {plans:?}");
+        assert!(plans.windows(3).all(|w| w[2] > w[0]), "no burst: {plans:?}");
+        // The slow call (35 s to 47 s) is covered in character: Malakor last spoke at 25 s, so a
+        // stall line goes out mid-call and the reply lands at 47 s. Without the cover this was
+        // a 22 s silence that failed the gate.
         let r = &out.report;
-        assert_eq!(r.max_say_gap_s, 12.0, "{r:?}");
+        assert!(r.max_say_gap_s <= 15.0, "{r:?}");
         assert_eq!(state(r, "say_gap"), SandboxCheckState::Pass);
         assert_eq!(r.stall_lines, 1, "{r:?}");
         let covered: Vec<TsMs> = out
@@ -1682,7 +1699,8 @@ mod tests {
             })
             .map(transcript::ts)
             .collect();
-        assert_eq!(covered, vec![27_000]);
+        assert_eq!(covered.len(), 1, "{covered:?}");
+        assert!((35_000..47_000).contains(&covered[0]), "{covered:?}");
         assert!(r.beat_ms_p95 >= 12_000, "{}", r.beat_ms_p95);
     }
 
@@ -1730,8 +1748,10 @@ mod tests {
             stop,
         )
         .await;
+        let plans = plan_times(&out.events);
+        assert!(plans.windows(2).all(|w| w[1] - w[0] == 5_000), "{plans:?}");
         let gaps = engine.core_gaps();
-        assert!(gaps.iter().all(|g| *g == 5_000), "{gaps:?}");
+        assert!(gaps.iter().all(|g| *g > 0 && *g % 5_000 == 0), "{gaps:?}");
         let r = &out.report;
         assert_eq!(state(r, "say_gap"), SandboxCheckState::Pass);
         assert!(r.beat_ms_p95 < 1_000, "{}", r.beat_ms_p95);
@@ -1747,6 +1767,15 @@ mod tests {
         assert!(calls
             .windows(2)
             .all(|w| w[1] - w[0] >= Duration::from_secs(6)));
+    }
+
+    /// When each beat ran: one `beat_plan` per beat, holds included.
+    fn plan_times(events: &[StreamEvent]) -> Vec<TsMs> {
+        events
+            .iter()
+            .filter(|e| matches!(e, StreamEvent::BeatPlan { .. }))
+            .map(transcript::ts)
+            .collect()
     }
 
     async fn stopped_session(sign_off: bool) -> Outcome {
@@ -2036,7 +2065,7 @@ mod tests {
     /// 30-viewer room holds the table's `ccv_min` for its whole `sustain_s` from the start,
     /// so the table's rule would hand over at 180 s in every session, five minutes included.
     #[test]
-    fn a_sandbox_room_would_meet_the_tables_ccv_rule_from_the_start() {
+    fn a_sandbox_room_meets_the_tables_ccv_rule_once_it_has_filled() {
         let tmp = tempfile::tempdir().unwrap();
         let (cal, _, _) = crate::calibration::load(tmp.path()).unwrap();
         let table = segment_table(SegmentId::Seg01ImprovisedRoom)
@@ -2055,7 +2084,9 @@ mod tests {
             )
             .unwrap();
             assert!(
-                (0..=table.sustain_s).all(|t| pop.ccv_at(t) >= table.ccv_min),
+                // The room fills over `ramp_s` (the cold open); the handover's ccv rule
+                // must hold from then on.
+                (pop.ramp_s..=pop.ramp_s + table.sustain_s).all(|t| pop.ccv_at(t) >= table.ccv_min),
                 "seed {seed}"
             );
         }
@@ -2168,5 +2199,29 @@ mod tests {
         assert!(calls
             .iter()
             .all(|(r, t)| *r == Role::Judge && *t == ModelTier::Opus));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn spec_json_records_the_prep_the_session_used() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = opts(tmp.path());
+        let text = std::fs::read_to_string(
+            crate::runner::tests::repo().join("characters/malakor/prep.sample.json"),
+        )
+        .unwrap();
+        opts.stream_prep = Some(serde_json::from_str(&text).unwrap());
+        let (_stop_tx, stop) = watch::channel(false);
+        let out = session(
+            sandbox_run(tmp.path(), 5, 30),
+            Arc::new(HostEngine::new()),
+            &opts,
+            no_sink(),
+            stop,
+        )
+        .await;
+        let spec: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(out.dir.join("spec.json")).unwrap())
+                .unwrap();
+        assert_eq!(spec["prep"], "sample");
     }
 }

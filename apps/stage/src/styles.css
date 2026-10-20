@@ -346,6 +346,50 @@ body {
   letter-spacing: 0.1em;
 }
 
+/* Malakor's face (src/avatar): drawn over the silhouette, which stays as the fallback until the
+   face is ready (no WebGL2, or the form did not load, keeps the silhouette). */
+.avatar-face {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.avatar-face canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+.avatar-slot:has(.avatar-face[data-face="ready"]) .silhouette {
+  visibility: hidden;
+}
+
+/* The disclosure beside the face while the voice is on. */
+.voice-label {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sr-color-scrim) 82%, transparent);
+  border: 1px solid var(--verdigris-dim);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--bone);
+  white-space: nowrap;
+}
+
+.layout-hexmap .voice-label {
+  bottom: -6px;
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
 .layout-hexmap .avatar-slot {
   border-radius: 50%;
   background: radial-gradient(circle, rgba(47, 143, 120, 0.25), rgba(6, 8, 7, 0.9) 70%);
@@ -2074,6 +2118,22 @@ body {
 .ctl-speed.on {
   border-color: var(--verdigris);
   color: var(--verdigris);
+}
+
+.ctl-voice-state {
+  color: var(--dim);
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctl-voice-state.state-ready {
+  color: var(--verdigris);
+}
+
+.ctl-voice-state.state-degraded {
+  color: var(--bronze);
 }
 
 .ctl-speeds {

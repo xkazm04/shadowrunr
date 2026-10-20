@@ -1,8 +1,10 @@
 // Moderation: every moderation record, grouped by what happened (safety & care, persona,
 // accuracy, engine cover, chat filters, show mechanics), each kind with how often and when. A
-// kind opens its occurrences in the side panel, 20 at a time, and each opens its moment.
+// kind opens its occurrences in the sticky side column, 20 at a time, and each opens its moment.
 import { useState } from "react";
 import type { ReviewSession } from "@shadowrunr/contract";
+import { Section } from "../../ui/Section";
+import { EmptyState } from "../../ui/States";
 import { tsOf } from "./derive";
 import styles from "./Moderation.module.css";
 import { fmtClock, MOD_GROUP_NOTE, MOD_GROUPS, modName, type ModGroup, type ModName } from "./names";
@@ -38,46 +40,53 @@ export function Moderation(props: TabProps) {
     const l = sayNear(d, line);
     if (l !== undefined) props.openLine(l);
   };
+  if (groups.length === 0) {
+    return (
+      <div data-role="review-moderation" data-rise>
+        <EmptyState title="No moderation records" hint="Nothing in this session was changed, held back or refused." />
+      </div>
+    );
+  }
   return (
-    <div className={kit.split} data-role="review-moderation">
-      <section className={`${kit.panel} ${kit.scroll}`}>
-        {groups.length === 0 && <p className={kit.empty}>No moderation records in this session.</p>}
+    <div className={styles.split} data-role="review-moderation" data-rise>
+      <div className={kit.scroll}>
         {groups.map(({ group, kinds }) => (
-          <section key={group} className={styles.group} data-role="review-mod-group" data-group={group}>
-            <div className={kit.kicker}>{group}</div>
-            {MOD_GROUP_NOTE[group] && <p className={kit.lede}>{MOD_GROUP_NOTE[group]}</p>}
-            <table className={kit.table}>
-              <thead>
-                <tr>
-                  <th>What happened</th>
-                  <th className={kit.num}>Times</th>
-                  <th className={styles.when}>When in the session</th>
-                </tr>
-              </thead>
-              <tbody>
-                {kinds.map((k) => (
-                  <tr key={k.key} className={sel?.key === k.key ? styles.on : undefined}>
-                    <td>
-                      <button type="button" className={styles.pick} aria-pressed={sel?.key === k.key} onClick={() => setSel({ key: k.key, page: 0 })}>
-                        {k.name}
-                      </button>
-                    </td>
-                    <td className={kit.num}>{k.items.length}</td>
-                    <td className={styles.when}>
-                      <TickStrip ticks={k.items} lengthS={d.lengthS} label={`${k.items.length} times across the session`} />
-                    </td>
+          <div key={group} data-role="review-mod-group" data-group={group}>
+            <Section title={group} right={`${kinds.reduce((n, k) => n + k.items.length, 0)} records`}>
+              {MOD_GROUP_NOTE[group] && <p className={kit.note}>{MOD_GROUP_NOTE[group]}</p>}
+              <table className={kit.table}>
+                <thead>
+                  <tr>
+                    <th>What happened</th>
+                    <th className={kit.num}>Times</th>
+                    <th className={styles.when}>When in the session</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+                </thead>
+                <tbody>
+                  {kinds.map((k) => (
+                    <tr key={k.key} className={sel?.key === k.key ? styles.on : undefined}>
+                      <td>
+                        <button type="button" className={styles.pick} aria-pressed={sel?.key === k.key} onClick={() => setSel({ key: k.key, page: 0 })}>
+                          {k.name}
+                        </button>
+                      </td>
+                      <td className={kit.num}>{k.items.length}</td>
+                      <td className={styles.when}>
+                        <TickStrip ticks={k.items} lengthS={d.lengthS} label={`${k.items.length} times across the session`} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Section>
+          </div>
         ))}
-      </section>
-      <aside className={`${kit.panel} ${styles.side}`} data-role="review-mod-occurrences">
+      </div>
+      <aside className={styles.side} data-role="review-mod-occurrences">
         {picked && sel ? (
-          <>
-            <div className={kit.kicker}>{picked.group}</div>
-            <h2 className={kit.title}>{picked.name}</h2>
+          <div key={picked.key} className={styles.sideBody}>
+            <div className={styles.kicker}>{picked.group}</div>
+            <h2 className={styles.title}>{picked.name}</h2>
             <ol className={styles.list}>
               {picked.items.slice(sel.page * PAGE, (sel.page + 1) * PAGE).map((o) => (
                 <li key={o.line}>
@@ -90,11 +99,11 @@ export function Moderation(props: TabProps) {
               ))}
             </ol>
             <Pager page={sel.page} total={picked.items.length} onPage={(page) => setSel({ key: picked.key, page })} label="Occurrences" />
-          </>
+          </div>
         ) : (
           <>
-            <div className={kit.kicker}>Occurrences</div>
-            <p className={kit.empty}>Pick a row to list when it happened. Each one opens the moment on the timeline.</p>
+            <div className={styles.kicker}>Occurrences</div>
+            <p className={kit.note}>Pick a row to list when it happened. Each one opens the moment on the timeline.</p>
           </>
         )}
       </aside>

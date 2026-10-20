@@ -64,6 +64,7 @@
 {"type":"say","ts_ms":93500,"speaker":"malakor","text":"Twelve percent of you would subscribe. I have noted your names. In ink.","first_text_ms":715}
 {"type":"job","ts_ms":96000,"job_id":"mem-consolidate-1","status":"done","summary":"14 minion dossiers updated"}
 {"type":"health","ts_ms":97000,"state":"healthy"}
+{"type":"beat_plan","ts_ms":97100,"mode":"react","picks":1,"reason":"a viewer proposal to answer"}
 {"type":"chat","ts_ms":98000,"msg":{"id":"m0035","ts_ms":98000,"viewer":{"id":"v-vex","name":"Vexilla_Nine","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"!propose audit the Disruptor's rocket next stream","command":{"cmd":"propose","text":"audit the Disruptor's rocket next stream"}}}
 {"type":"op","ts_ms":99500,"op":{"op":"highlight","msg_id":"m0035"}}
 {"type":"say","ts_ms":100000,"speaker":"malakor","text":"A Warlock proposes. Vexilla_Nine, your proposal is entered for the Lord's dispatch.","replying_to":["m0035"],"first_text_ms":1172}

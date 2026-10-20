@@ -1,7 +1,7 @@
 // The 1920x1080 broadcast canvas. Every element sits in a named region; the active layout
 // decides each region's rect, and CSS transitions animate the move on segment changes.
 
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
 
 import type { Case } from "@shadowrunr/contract";
 import { captionAt, type MapModel, type SceneState } from "@shadowrunr/stage-kit";
@@ -28,7 +28,10 @@ import {
   VotePanel,
   visiblePoll,
 } from "@shadowrunr/stage-kit/ui";
+import { Avatar } from "./avatar/Avatar";
+import type { FaceSource } from "./avatar/types";
 import { layoutRects, type Rect, type Region } from "./layouts";
+import { SYNTHETIC_VOICE } from "./voice/names";
 
 function RegionBox({ name, rect, children }: { name: Region; rect: Rect; children: ReactNode }) {
   const style: CSSProperties = { left: rect.x, top: rect.y, width: rect.w, height: rect.h };
@@ -56,6 +59,9 @@ export function Stage({
   voice = false,
   clock,
   overlay,
+  face,
+  rigBase = null,
+  onCaptionSpeaking,
 }: {
   scene: SceneState;
   now: number;
@@ -71,6 +77,12 @@ export function Stage({
   clock?: string;
   /** Feed-health slates, drawn above the scene and below the disclosure. */
   overlay?: ReactNode;
+  /** Malakor's face signal; without one the slot shows the silhouette only. */
+  face?: FaceSource;
+  /** The daemon's `/avatar/` base, when there is a daemon (else the face is the placeholder). */
+  rigBase?: string | null;
+  /** Hears whether a `say` caption is on screen (the face's level-less speaking phase). */
+  onCaptionSpeaking?: (speaking: boolean) => void;
 }) {
   const poll = visiblePoll(scene, now);
   const rects = layoutRects(scene.layout, { poll: poll !== null, foil: scene.foil !== null });
@@ -78,6 +90,8 @@ export function Stage({
   // Captions queue under a burst: the one showing now, not simply the latest line said.
   const caption = captionAt(scene, now);
   const speaking = isSpeaking(caption, now);
+  useEffect(() => onCaptionSpeaking?.(speaking), [speaking, onCaptionSpeaking]);
+  const faceSize = Math.round(Math.min(rects.avatar.w, rects.avatar.h));
 
   return (
     <div className={`canvas layout-${scene.layout}${debug ? " debug" : ""}`} data-layout={scene.layout}>
@@ -97,7 +111,9 @@ export function Stage({
       <RegionBox name="avatar" rect={rects.avatar}>
         <div className="avatar-slot">
           <Silhouette speaking={speaking} small={hexmap} />
-          {!hexmap && !broadcast && <div className="avatar-note">avatar slot · placeholder silhouette</div>}
+          {face && <Avatar className="avatar-face" rigBase={rigBase} size={faceSize} source={face} />}
+          {voice && <div className="voice-label">{SYNTHETIC_VOICE}</div>}
+          {!hexmap && !broadcast && <div className="avatar-note">avatar slot · face rig or procedural placeholder</div>}
         </div>
       </RegionBox>
 

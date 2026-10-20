@@ -1,15 +1,13 @@
-/* Quick feedback: marks as toggle buttons, a note, save. */
+/* Quick feedback: marks as pills, the note as the native field (2px ink on the field ground),
+   save as the ink button with the page accent's offset. */
 
 .fb { display: flex; flex-direction: column; gap: var(--sr-space-cozy); border-top: var(--sr-stroke-heavy) solid var(--sr-color-text-ink); padding-top: var(--sr-space-near); }
-.kicker, .label { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-micro); letter-spacing: .12em; text-transform: uppercase; color: var(--sr-color-text-mute); }
-.tags { display: flex; flex-wrap: wrap; gap: var(--sr-space-tight); }
-.tags button { display: inline-flex; gap: var(--sr-space-compact); align-items: baseline; padding: var(--sr-space-snug) var(--sr-space-cozy); border: var(--sr-stroke-hair) solid var(--sr-color-line); background: var(--sr-color-surface-card); color: var(--sr-color-text-ink); font-size: var(--sr-size-caption); cursor: pointer; }
-.tags button[aria-pressed="true"] { background: var(--sr-color-text-ink); color: var(--sr-color-surface-paper); border-color: var(--sr-color-text-ink); }
-.tags kbd { font-family: var(--sr-font-mono); font-size: var(--sr-size-micro); opacity: .7; }
-.fb textarea { width: 100%; min-height: 3.6rem; resize: vertical; font: var(--sr-size-caption)/1.45 var(--sr-font-sans); padding: var(--sr-space-compact); background: var(--sr-color-surface-field); color: var(--sr-color-text-ink); border: var(--sr-stroke-hair) solid var(--sr-color-line); }
-.actions { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact); align-items: center; }
-.actions button { padding: var(--sr-space-snug) var(--sr-space-near); border: var(--sr-stroke-hair) solid var(--sr-color-line); background: var(--sr-color-surface-card); color: var(--sr-color-text-ink); font-size: var(--sr-size-caption); cursor: pointer; }
-.actions .primary { background: var(--sr-color-signal); border-color: var(--sr-color-signal); color: var(--sr-color-text-on-signal); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .08em; text-transform: uppercase; }
-.actions button:disabled { opacity: .5; cursor: default; }
-.ok { font-size: var(--sr-size-micro); color: var(--sr-color-ok); }
-.err { font-size: var(--sr-size-micro); color: var(--sr-color-fail); }
+.kicker { margin: 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .14em; text-transform: uppercase; }
+.label { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .12em; text-transform: uppercase; color: var(--sr-color-text-mute); }
+.kbd { font-family: var(--sr-font-mono); font-weight: var(--sr-weight-regular); font-size: var(--sr-size-micro); opacity: .7; }
+.fb textarea { width: 100%; min-height: 3.6rem; resize: vertical; font: var(--sr-size-small)/1.45 var(--sr-font-sans); padding: var(--sr-space-snug) var(--sr-space-compact); background: var(--sr-color-surface-field); color: var(--sr-color-text-ink); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); border-radius: var(--sr-radius-none); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--sr-space-near); align-items: center; }
+.ok,
+.err { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .08em; text-transform: uppercase; }
+.ok { color: var(--sr-color-ok); }
+.err { color: var(--sr-color-fail); text-transform: none; letter-spacing: 0; font-family: var(--sr-font-sans); }

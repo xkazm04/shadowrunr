@@ -1,22 +1,25 @@
-// Layer 1 of Session review: the session wall. Two panels (the line mix across every session,
-// and your marks across them), an order control, then one row per sandbox session with its
-// verdict, gate squares, mix bar and facts; each row opens the session's timeline.
+// Layer 1 of Session review: the poster face. Two display numerals over a hotspot light (how
+// many sessions, with the line mix across all of them; how many lines carry your marks, by
+// mark), an order control, then the sessions as a lit list: one row per sandbox session with its
+// verdict, gate squares, mix bar and facts, the hovered row lit and the rest knocked back. Each
+// row opens the session's timeline.
 import { useMemo, useState } from "react";
 import type { LineFeedback, ReviewSessionRow, SandboxCheckState } from "@shadowrunr/contract";
 import { useRpc } from "../../data";
 import { PosterFrame } from "../../kit/PosterFrame";
 import { QueryView } from "../../kit/QueryView";
 import { pageRoute, RouteLink } from "../../router";
+import { State } from "../../ui/Chip";
+import { PillGroup } from "../../ui/PillGroup";
 import { VirtualList } from "../../ui/VirtualList";
 import { useSessions } from "./hooks";
 import styles from "./Layer1.module.css";
 import { MixBar, shownMix, type Mix } from "./MixBar";
-import { CHECK_NAME, CHECK_STATE_NAME, FEEDBACK, human, sessionTitle, WALL_ORDER, type ShownKind, type WallOrder } from "./names";
+import { CHECK_NAME, CHECK_STATE_NAME, FEEDBACK, human, sessionTitle, SILENCE_LIMIT_S, WALL_ORDER, type ShownKind, type WallOrder } from "./names";
 
 const NONE = {} as const;
 const CHECK_CLASS: Readonly<Record<SandboxCheckState, string | undefined>> = { pass: styles.ckPass, fail: styles.ckFail, unmeasured: styles.ckUnmeasured };
-/** A silence longer than this reads as a failure. */
-const SILENCE_LIMIT_S = 15;
+const ORDER_OPTIONS = WALL_ORDER.map(([id, label]) => ({ id, label }));
 
 export function Layer1({ active }: { readonly active: boolean }) {
   if (!active) return null;
@@ -41,6 +44,7 @@ function Wall() {
       }}
     >
       <div className={styles.hero}>
+        <div className={styles.light} aria-hidden="true" data-role="review-light" />
         <QueryView
           query={sessions}
           isEmpty={(rows) => rows.length === 0}
@@ -78,27 +82,18 @@ function WallBody({ rows, feedback }: { rows: readonly ReviewSessionRow[]; feedb
   const lines = rows.reduce((n, r) => n + r.lines, 0);
   return (
     <>
-      <div className={styles.panels}>
-        <section className={styles.panel} data-role="review-wall-all">
-          <div className={styles.kicker}>All sessions</div>
-          <h3 className={styles.h3}>
-            {rows.length.toLocaleString("en-US")} sessions · {lines.toLocaleString("en-US")} lines from Malakor
-          </h3>
+      <div className={styles.figs}>
+        <section className={styles.fig} data-role="review-wall-all">
+          <b className={styles.n}>{rows.length.toLocaleString("en-US")}</b>
+          <span className={styles.w}>{rows.length === 1 ? "Session" : "Sessions"}</span>
+          <p className={styles.cap}>{lines.toLocaleString("en-US")} lines from Malakor</p>
           <MixBar mix={all} big />
         </section>
         <YourFeedback rows={rows} feedback={feedback} />
       </div>
       <div className={styles.sortbar}>
-        <span className={styles.kicker} id="review-wall-order">
-          Order
-        </span>
-        <span className={styles.seg} role="group" aria-labelledby="review-wall-order">
-          {WALL_ORDER.map(([id, name]) => (
-            <button key={id} type="button" aria-pressed={order === id} onClick={() => setOrder(id)}>
-              {name}
-            </button>
-          ))}
-        </span>
+        <span className={styles.kicker}>Order</span>
+        <PillGroup options={ORDER_OPTIONS} value={order} onChange={setOrder} label="Order" />
       </div>
       <div className={styles.listBox}>
         <VirtualList
@@ -124,9 +119,9 @@ function YourFeedback({ rows, feedback }: { rows: readonly ReviewSessionRow[]; f
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1]);
   return (
-    <section className={styles.panel} data-role="review-wall-feedback">
-      <div className={styles.kicker}>Your feedback</div>
-      <h3 className={styles.h3}>{marked.toLocaleString("en-US")} lines marked</h3>
+    <section className={styles.fig} data-role="review-wall-feedback">
+      <b className={styles.n}>{marked.toLocaleString("en-US")}</b>
+      <span className={styles.w}>{marked === 1 ? "Line marked" : "Lines marked"}</span>
       {totals.length > 0 ? (
         <ul className={styles.totals}>
           {totals.map(([name, n]) => (
@@ -136,7 +131,7 @@ function YourFeedback({ rows, feedback }: { rows: readonly ReviewSessionRow[]; f
           ))}
         </ul>
       ) : (
-        marked === 0 && <p className={styles.empty}>Nothing marked yet. Open a session and review a type, or pick single moments on its timeline.</p>
+        marked === 0 && <p className={styles.cap}>Nothing marked yet. Open a session and review a type, or pick single moments on its timeline.</p>
       )}
     </section>
   );
@@ -147,11 +142,11 @@ function SessionRow({ r }: { r: ReviewSessionRow }) {
   return (
     <RouteLink to={pageRoute("review", r.session_id)} className={styles.row} data-role="review-wall-row">
       <div className={styles.who}>
+        <h3 className={styles.h3}>{sessionTitle(r.minutes, r.chaos)}</h3>
         <div className={styles.headline}>
-          <h3 className={styles.h3}>{sessionTitle(r.minutes, r.chaos)}</h3>
-          <span className={r.pass ? styles.pass : styles.fail}>{r.pass ? "passed" : "failed"}</span>
+          <State value={r.pass ? "pass" : "fail"} label={r.pass ? "passed" : "failed"} />
+          <span className={styles.id}>{r.session_id}</span>
         </div>
-        <div className={styles.id}>{r.session_id}</div>
         <ul className={styles.checks} aria-label="Gate checks">
           {r.checks.map((c) => (
             <li key={c.id} className={CHECK_CLASS[c.state]} data-state={c.state} title={`${CHECK_NAME[c.id] ?? human(c.id)}: ${CHECK_STATE_NAME[c.state]}. ${c.detail}`} />

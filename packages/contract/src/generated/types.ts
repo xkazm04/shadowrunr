@@ -146,6 +146,33 @@ export type HealthState = "green" | "amber" | "red";
  */
 export type PreflightRunResult = HealthReport[];
 /**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "BitKind".
+ */
+export type BitKind = "premise" | "story" | "callback";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PrepCheckState".
+ */
+export type PrepCheckState = "pass" | "fail";
+/**
+ * Where a connector line bridges.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ConnectorKind".
+ */
+export type ConnectorKind = "into_room" | "into_bit" | "back_to_chat" | "into_poll" | "into_handover";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PrepStatus".
+ */
+export type PrepStatus = "staged" | "approved" | "retired";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PrepListResult".
+ */
+export type PrepListResult = PrepSummary[];
+/**
  * The weighted rank ladder, lowest first. `Thrall` is a non-subscriber who votes with
  * channel points at weight 1. Rank derivation and vote weights live in shadowrunr-segments.
  *
@@ -294,6 +321,20 @@ export type StreamEvent =
       type: "job";
     }
   | {
+      /**
+       * The prepared bit or cold-open beat it voiced, if any.
+       */
+      bit_id?: string;
+      mode: BeatMode;
+      /**
+       * Chat messages passed to the voice this beat.
+       */
+      picks: number;
+      reason: string;
+      ts_ms: number;
+      type: "beat_plan";
+    }
+  | {
       detail?: string;
       state: FleetHealth;
       ts_ms: number;
@@ -412,6 +453,13 @@ export type Op =
  * via the `definition` "ModStage".
  */
 export type ModStage = "input" | "output";
+/**
+ * What the orchestrator chose for one beat (`StreamEvent::BeatPlan`).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "BeatMode".
+ */
+export type BeatMode = "cold_open" | "react" | "bit" | "bridge" | "mixed" | "hold" | "improvise";
 /**
  * The brain's fleet mode as recorded by [`StreamEvent::Health`].
  *
@@ -583,6 +631,85 @@ export type FactScope = "viewer" | "character" | "world" | "case";
  * via the `definition` "ServerFrame".
  */
 export type ServerFrame = EventFrame | ErrorEnvelope | StreamEvent;
+/**
+ * The Oculus 15 mouth shapes. A sentence's timeline is a run of these.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Viseme".
+ */
+export type Viseme =
+  "sil" | "PP" | "FF" | "TH" | "DD" | "kk" | "CH" | "SS" | "nn" | "RR" | "aa" | "E" | "ih" | "oh" | "ou";
+/**
+ * Everything `GET /voice` may push.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceFrame".
+ */
+export type VoiceFrame =
+  | {
+      reason?: string;
+      state: VoiceState;
+      type: "status";
+      /**
+       * Whether utterances carry mouth shapes (the durations model is present).
+       */
+      visemes: boolean;
+      /**
+       * The voice id (e.g. `af_heart`), when one is configured.
+       */
+      voice?: string;
+    }
+  | {
+      duration_ms: number;
+      /**
+       * `<run_id>:<seq>:<part>`: unique per run.
+       */
+      id: string;
+      /**
+       * True on the line's last sentence.
+       */
+      last: boolean;
+      /**
+       * 0-based sentence index within the line.
+       */
+      part: number;
+      /**
+       * Mono PCM16 little-endian, base64.
+       */
+      pcm: string;
+      run_id: string;
+      sample_rate: number;
+      /**
+       * The `say` event's seq in its run (contract § event resume).
+       */
+      seq: number;
+      /**
+       * This sentence's text, as spoken.
+       */
+      text: string;
+      type: "utterance";
+      /**
+       * Empty when the voice has no mouth shapes: the stage drives the mouth from loudness.
+       */
+      visemes?: VisemeSpan[];
+    }
+  | {
+      part: number;
+      reason: VoiceSkip;
+      run_id: string;
+      seq: number;
+      type: "skipped";
+    };
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceState".
+ */
+export type VoiceState = "off" | "starting" | "ready" | "degraded";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceSkip".
+ */
+export type VoiceSkip = "late" | "queue_full" | "error";
 
 /**
  * Shadowrunr OS wire contract, generated from crates/shadowrunr-types. Do not edit; run `pnpm -C packages/contract generate`.
@@ -675,6 +802,26 @@ export interface RpcMethods {
   "preflight.run": {
     params: EmptyParams;
     result: PreflightRunResult;
+  };
+  "prep.approve": {
+    params: PrepApproveParams;
+    result: StreamPrep;
+  };
+  "prep.generate": {
+    params: PrepGenerateParams;
+    result: StreamPrep;
+  };
+  "prep.get": {
+    params: PrepIdParams;
+    result: StreamPrep;
+  };
+  "prep.list": {
+    params: EmptyParams;
+    result: PrepListResult;
+  };
+  "prep.retire": {
+    params: PrepIdParams;
+    result: StreamPrep;
   };
   "ranks.table": {
     params: RanksTableParams;
@@ -1826,6 +1973,134 @@ export interface HealthReport {
   check: string;
   detail: string;
   state: HealthState;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PrepApproveParams".
+ */
+export interface PrepApproveParams {
+  prep_id: string;
+  /**
+   * The owner's signature.
+   */
+  signature: string;
+}
+/**
+ * `prep.json`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "StreamPrep".
+ */
+export interface StreamPrep {
+  /**
+   * Set on approval.
+   */
+  approved_by?: string;
+  approved_ms?: number;
+  bits: PrepBit[];
+  character: string;
+  checks: PrepCheck[];
+  cold_open: ColdOpen;
+  connectors: Connector[];
+  created_ms: number;
+  /**
+   * True for a fabricated sample (tests, sims without an approved prep).
+   */
+  fictional?: boolean;
+  /**
+   * The Reconcile report whose plan it was written from, if any.
+   */
+  plan_report?: string;
+  prep_id: string;
+  status: PrepStatus;
+}
+/**
+ * One prepared bit, for one segment.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PrepBit".
+ */
+export interface PrepBit {
+  id: string;
+  kind: BitKind;
+  /**
+   * The lines in order (a premise has one).
+   */
+  lines: string[];
+  /**
+   * What lands at the end, so the host knows where the bit goes.
+   */
+  payoff?: string;
+  segment: SegmentId;
+}
+/**
+ * A mechanical check over the prep (lengths, no real people, no callbacks a newcomer missed...).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PrepCheck".
+ */
+export interface PrepCheck {
+  detail: string;
+  id: string;
+  state: PrepCheckState;
+}
+/**
+ * The cold open: a short story told in beats while the room fills.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ColdOpen".
+ */
+export interface ColdOpen {
+  /**
+   * The story's lines in order, one or two voiced per beat.
+   */
+  beats: string[];
+  /**
+   * The line that hands over from the story to the room.
+   */
+  handoff: string;
+  id: string;
+  title: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Connector".
+ */
+export interface Connector {
+  id: string;
+  kind: ConnectorKind;
+  line: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PrepGenerateParams".
+ */
+export interface PrepGenerateParams {
+  /**
+   * Write from this Reconcile report's plan; the current plan when absent.
+   */
+  report_id?: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PrepIdParams".
+ */
+export interface PrepIdParams {
+  prep_id: string;
+}
+/**
+ * One row of `prep.list`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PrepSummary".
+ */
+export interface PrepSummary {
+  bits: number;
+  created_ms: number;
+  failed_checks: number;
+  prep_id: string;
+  status: PrepStatus;
+  title: string;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -3351,6 +3626,11 @@ export interface SegmentContext {
   rules_prompt: string;
   segment: SegmentId;
   /**
+   * The segment state machine's current state (`cold_open`, `opening`, `foil_vote`...);
+   * the orchestrator reads it to know the room is still filling.
+   */
+  state?: string;
+  /**
    * Current state: open poll, active foil, revealed hexes, elapsed time...
    */
   state_summary: string;
@@ -3382,4 +3662,34 @@ export interface Subscribe {
    * `<run_id>`, `<tournament_id>/<run_id>` or `live`.
    */
   subscribe: string;
+}
+/**
+ * One mouth shape over `[start_ms, end_ms)` of its utterance's audio.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VisemeSpan".
+ */
+export interface VisemeSpan {
+  end_ms: number;
+  start_ms: number;
+  v: Viseme;
+}
+/**
+ * What a `/voice` client sends: which live run to voice. `run_id` absent = the newest live
+ * run, following it as runs start. Each message replaces the previous choice.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceFollow".
+ */
+export interface VoiceFollow {
+  run_id?: string;
+}
+/**
+ * The frame wrapping [`VoiceFollow`]: `{"follow": {...}}`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceFollowFrame".
+ */
+export interface VoiceFollowFrame {
+  follow: VoiceFollow;
 }

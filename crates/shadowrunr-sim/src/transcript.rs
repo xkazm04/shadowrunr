@@ -99,6 +99,7 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::Handover { ts_ms, .. }
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
+        | StreamEvent::BeatPlan { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms,
     }
 }
@@ -118,6 +119,7 @@ pub fn set_ts(ev: &mut StreamEvent, ts: TsMs) {
         | StreamEvent::Handover { ts_ms, .. }
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
+        | StreamEvent::BeatPlan { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms = ts,
         StreamEvent::Chat { ts_ms, msg } => {
             *ts_ms = ts;
@@ -206,6 +208,11 @@ pub fn body(ev: &StreamEvent) -> String {
         StreamEvent::Handover {
             from, to, reason, ..
         } => format!("handover {} -> {}: {reason}", wire(from), wire(to)),
+        StreamEvent::BeatPlan { mode, bit_id, picks, reason, .. } => format!(
+            "beat_plan {}{} picks={picks}: {reason}",
+            wire(mode),
+            bit_id.as_deref().map(|b| format!(" bit={b}")).unwrap_or_default()
+        ),
         StreamEvent::Health { state, detail, .. } => format!(
             "health {}{}",
             wire(state),

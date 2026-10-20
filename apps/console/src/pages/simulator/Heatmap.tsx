@@ -165,7 +165,7 @@ function CellDetail({ tournamentId, c }: { tournamentId: string; c: CellResult }
       </p>
       <h3>Failing rules</h3>
       {failing.length === 0 ? (
-        <p className={styles.dim}>No rule failed in this cell.</p>
+        <EmptyState title="No rule failed in this cell" />
       ) : (
         <table className={styles.table}>
           <tbody>

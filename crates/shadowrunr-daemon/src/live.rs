@@ -339,6 +339,7 @@ pub async fn start_sim(
 
     let engine = state.engine.engine.clone();
     let mut opts = state.cfg.sim_options(judge);
+    opts.stream_prep = crate::prep::for_sim(&state.cfg, &spec.character);
     opts.data_dir = state.cfg.paths.data.clone();
     opts.brief = match brief {
         Some(b) => shadowrunr_sim::BriefSource::Inline(Box::new(b)),

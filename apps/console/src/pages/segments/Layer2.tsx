@@ -1,6 +1,7 @@
 // Layer 2 of Segments & ranks: the winner's three tabs (l2b.js P3.L2.segments) as routes:
 //   segments/tables[/<SEG>]   segments/commands   segments/ranks[/<report id>]
 import { pageRoute, RouteLink, useRouter } from "../../router";
+import { buttonClass } from "../../ui/Button";
 import { Tabs, type TabItem } from "../../ui/Section";
 import { StatePanel } from "../../ui/States";
 import { CommandsPage } from "./Commands";
@@ -30,7 +31,7 @@ export function Layer2({ sub }: { readonly sub: readonly string[] }) {
       {!known ? (
         <>
           <StatePanel state="invalid" title={`There is no page at ${sub.join(" / ")}`} hint="The segment tables, the chat commands and the ranks are the pages here." />
-          <RouteLink to={pageRoute("segments", "tables")} className={styles.secondary}>
+          <RouteLink to={pageRoute("segments", "tables")} className={buttonClass("secondary")}>
             Open the segment tables
           </RouteLink>
         </>

@@ -220,7 +220,9 @@ describe("fidelity: byte-equal to the winner", () => {
       "cubic-bezier(.2,.95,.25,1.12)",
     ]);
     expect(TOKENS.texture.grainImage).toContain("baseFrequency='.85' numOctaves='2' stitchTiles='stitch'");
-    expect([TOKENS.texture.grainOpacityPoster, TOKENS.texture.grainOpacitySpread]).toEqual([".4", ".32"]);
+    expect(TOKENS.texture.grainOpacityPoster).toBe(".4");
+    // The owner retired the spread grain (2026-10-20, REJECTED.md): no layer-2 opacity remains.
+    expect(TOKENS.texture).not.toHaveProperty("grainOpacitySpread");
     expect([TOKENS.texture.halftoneACell, TOKENS.texture.halftoneADot, TOKENS.texture.halftoneAEdge]).toEqual([".8rem", "26%", "28%"]);
     expect([TOKENS.texture.halftoneBCell, TOKENS.texture.halftoneBDot, TOKENS.texture.halftoneBEdge]).toEqual(["1.1rem", "22%", "24%"]);
     expect([TOKENS.layout.spine, TOKENS.layout.strip]).toEqual(["18.75rem", "3.6rem"]);

@@ -1,0 +1,18 @@
+/* The timeline's detail inside ui/Drawer: a row's lines (his words in serif italic, time in mono,
+   the kind as a square swatch), the tag line, and the judge's word on a line as evidence rules
+   (reconcile .evid): ok on the ok rule, failures on the deep signal rule. */
+
+.mlist { margin: 0; padding: 0; list-style: none; border-top: var(--sr-stroke-heavy) solid var(--sr-color-text-ink); }
+.mbtn { display: grid; grid-template-columns: 3rem .75rem minmax(0, 1fr) 1rem; gap: var(--sr-space-close); align-items: baseline; width: 100%; padding: var(--sr-space-compact) var(--sr-space-snug); border: 0; border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.mbtn:hover { background: var(--sr-color-row-hover); }
+.mt { font-family: var(--sr-font-mono); font-size: var(--sr-size-micro); font-variant-numeric: tabular-nums; color: var(--sr-color-text-note); }
+.tx { font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-body); line-height: 1.45; overflow-wrap: anywhere; }
+.check { font-weight: var(--sr-weight-bold); color: var(--sr-color-ok); }
+.sw { display: inline-block; flex: none; width: .7rem; height: .7rem; border: var(--sr-stroke-hair) solid var(--sr-color-text-ink); vertical-align: baseline; }
+
+.meta { display: flex; flex-wrap: wrap; gap: var(--sr-space-tight) var(--sr-space-near); align-items: center; font-size: var(--sr-size-small); }
+.aim { color: var(--sr-color-text-note); }
+
+.evid { display: flex; flex-direction: column; gap: var(--sr-space-tight); margin: 0; padding: 0; list-style: none; font-size: var(--sr-size-small); }
+.evid li { padding: var(--sr-space-snug) var(--sr-space-near); background: var(--sr-color-surface-card); border-left: .4rem solid var(--sr-color-ok); }
+.evid .evidE { border-left-color: var(--sr-color-signal-deep); }

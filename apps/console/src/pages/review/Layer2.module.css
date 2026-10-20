@@ -1,15 +1,27 @@
 /* Layer 2, Session review. The root carries data-page="review", so --sr-page-accent is the
-   page's violet. WP2 and WP3 add their own modules per tab; this one holds the frame only. */
+   page's violet. This module holds the frame: the verdict stamp and gate chips under the head,
+   and the caution note under the figures. Each tab has its own module. */
 
-.root { color: var(--sr-color-text-ink); line-height: 1.5; }
-.secondary { display: inline-block; margin-top: var(--sr-space-base); color: var(--sr-page-accent-text); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .1em; text-transform: uppercase; }
-.head { display: flex; flex-wrap: wrap; gap: var(--sr-space-near) var(--sr-space-loose); align-items: flex-end; justify-content: space-between; }
-/* The stamp sits inside the Head title, so it drops the title's offset shadow and size. */
-.pass, .fail { display: inline-block; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-label); line-height: 1.3; letter-spacing: .1em; text-transform: uppercase; text-shadow: none; padding: 0 var(--sr-space-tight); border: var(--sr-stroke-rule) solid currentColor; vertical-align: middle; }
-.pass { color: var(--sr-color-ok); }
-.fail { color: var(--sr-color-fail); }
-.gates { display: flex; flex-wrap: wrap; gap: var(--sr-space-tight); list-style: none; margin: 0; padding: 0; }
-.gates li { font-size: var(--sr-size-micro); padding: var(--sr-space-hair) var(--sr-space-compact); border: var(--sr-stroke-hair) solid var(--sr-color-line); }
-.gates .pass { border-color: var(--sr-color-ok); }
-.gates .fail { border-color: var(--sr-color-fail); background: color-mix(in srgb, var(--sr-color-verdict-failed-ground) 45%, transparent); }
-.gates .unmeasured { border-style: dashed; color: var(--sr-color-verdict-unevaluable-edge); }
+.root { color: var(--sr-color-text-ink); }
+
+/* The verdict: a rotated stamp on its verdict ground (characters .actv), the gate checks as chips. */
+.verdict { display: flex; flex-wrap: wrap; gap: var(--sr-space-near) var(--sr-space-loose); align-items: center; }
+.pass,
+.fail {
+  display: inline-block;
+  padding: var(--sr-space-hair) var(--sr-space-near);
+  border: var(--sr-stroke-rule) solid;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-label);
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  transform: rotate(-1.5deg);
+}
+.pass { background: var(--sr-color-verdict-held-ground); border-color: var(--sr-color-verdict-held-edge); color: var(--sr-color-verdict-held-ink); }
+.fail { background: var(--sr-color-verdict-failed-ground); border-color: var(--sr-color-verdict-failed-edge); color: var(--sr-color-verdict-failed-ink); }
+.id { margin-left: auto; font-family: var(--sr-font-mono); font-size: var(--sr-size-caption); color: var(--sr-color-text-mute); overflow-wrap: anywhere; }
+
+/* A caution rule (simulator .note): the session has no line types yet. */
+.caution { max-width: 52rem; margin: 0 0 var(--sr-space-base); padding: var(--sr-space-compact) var(--sr-space-near); border-left: var(--sr-stroke-heavy) solid var(--sr-color-caution-edge); background: var(--sr-color-surface-caution); color: var(--sr-color-text-on-caution); font-size: var(--sr-size-small); }
+.caution code { font-family: var(--sr-font-mono); font-size: var(--sr-size-caption); }

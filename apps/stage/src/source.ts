@@ -27,6 +27,10 @@ export interface StageParams {
   startAt: number;
   /** `?paused=1`: load paused (with `?t=`, a still frame). */
   paused: boolean;
+  /** `?voice=1`: voice on without the toggle (the OBS view, which has no controls). Live only. */
+  voice: boolean;
+  /** `?face=demo|rest|<viseme>`: drive the face from a scripted signal (dev builds only). */
+  face: string | null;
 }
 
 function flag(p: URLSearchParams, k: string): boolean {
@@ -51,6 +55,8 @@ export function readParams(search: string): StageParams {
     debug: flag(p, "debug"),
     startAt: Math.max(0, Number(p.get("t") ?? "0") || 0),
     paused: flag(p, "paused"),
+    voice: flag(p, "voice"),
+    face: p.get("face"),
   };
 }
 

@@ -18,9 +18,11 @@ use crate::server::{self, AppState};
 mod catalog;
 mod events;
 mod paging;
+mod prep;
 mod resilience;
 mod review;
 mod sandbox;
+mod voice;
 
 pub(crate) fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

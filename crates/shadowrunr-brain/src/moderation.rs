@@ -1356,6 +1356,14 @@ const PERSONA_LEAK_PATTERNS: &[(&str, Option<&str>)] = &[
     (r"\b(?:claude|anthropic|openai|chatgpt|gpt-?\d)\b", None),
 ];
 
+/// Sentences that narrate the moderation machinery on air ("payload withheld", "my chat
+/// filter", "flagged as an injection"): never spoken. A judged run said "payload withheld" after
+/// the prompt's injection stand-in used those words.
+const MECHANISM_PATTERN: &str = r"\b(?:payload|text|message|content)\s+(?:was\s+|is\s+|been\s+)?(?:withheld|redacted|hidden\s+from\s+me|filtered\s+out)\b|\bwithheld\s+payload\b|\bprompt[- ]injections?\b|\binjection\s+(?:attempt|tag|filter)s?\b|\b(?:tagged|flagged)\s+(?:as|by)\s+(?:an?\s+|the\s+)?(?:injection|moderation|filter)\b|\b(?:moderation|input|chat|safety)\s+(?:filter|layer|gate|pipeline)s?\b|\boutput\s+gates?\b|\brate[- ]capp?(?:ed)?\b|\bcopypasta\s+(?:filter|cluster)s?\b";
+
+/// The output rule for a sentence that narrated the moderation machinery.
+pub const MECHANISM_RULE: &str = "mechanism_leak";
+
 /// Personal details nobody is ever asked for (constitution red line 4).
 const PERSONAL_DETAIL: &str = r"(?:home\s+|real\s+|full\s+|exact\s+|current\s+)?(?:address|location|whereabouts|city|town|country|state|county|postcode|post\s+code|zip(?:\s*code)?|phone(?:\s+number)?|number|digits|real\s+name|full\s+name|surname|last\s+name|age|birthday|date\s+of\s+birth|school|college|uni|university|workplace|employer|email|e-mail|socials?|instagram|insta|snapchat|discord|tiktok|twitter|facebook)";
 
@@ -1484,6 +1492,7 @@ struct GateRegexes {
     standalone_hedge: Regex,
     meta: Regex,
     verb: Regex,
+    mechanism: Regex,
 }
 
 fn gate_regexes() -> &'static GateRegexes {
@@ -1517,7 +1526,38 @@ fn gate_regexes() -> &'static GateRegexes {
         standalone_hedge: ci(STANDALONE_HEDGE_PATTERN).expect("standalone hedge pattern compiles"),
         meta: ci(META_PATTERN).expect("meta pattern compiles"),
         verb: ci(CLAIM_VERB_PATTERN).expect("claim-verb pattern compiles"),
+        mechanism: ci(MECHANISM_PATTERN).expect("mechanism pattern compiles"),
     })
+}
+
+/// Whether a line narrates the moderation machinery (see [`MECHANISM_PATTERN`]).
+pub fn narrates_mechanism(text: &str) -> bool {
+    gate_regexes().mechanism.is_match(text)
+}
+
+/// Remove every sentence that narrates the machinery. `None` when there is none; otherwise
+/// what is left (possibly empty: the whole line is dropped) and the action.
+fn strip_mechanism(text: &str) -> Option<(String, &'static str)> {
+    if !narrates_mechanism(text) {
+        return None;
+    }
+    let kept: Vec<&str> = sentence_spans(text)
+        .into_iter()
+        .map(|(a, b)| text[a..b].trim())
+        .filter(|s| !s.is_empty() && !narrates_mechanism(s))
+        .collect();
+    if kept.is_empty() {
+        return Some((String::new(), "dropped"));
+    }
+    Some((kept.join(" "), "removed"))
+}
+
+/// Whether the gate recast a line as an in-character stand-in (a character break or a persona
+/// leak), so the caller may choose a stand-in that fits the beat.
+pub fn recast_in_character(fired: &[(String, String)]) -> bool {
+    fired
+        .iter()
+        .any(|(r, a)| (r == "character_break" || r == "persona_leak") && a == "replaced")
 }
 
 /// Whether a line steps out of character (the stream repeating, the model, stopping).
@@ -1764,6 +1804,15 @@ pub fn gate_line(
             }
             TermAction::Warn => fired.push((format!("term:{}", rule.id), "warned".to_string())),
         }
+    }
+    // The machinery is never narrated on air: such a sentence is dropped, and a line made only
+    // of them comes back empty (the caller speaks nothing).
+    if let Some((kept, action)) = strip_mechanism(&out) {
+        fired.push((MECHANISM_RULE.to_string(), action.to_string()));
+        if kept.is_empty() {
+            return (kept, fired);
+        }
+        out = kept;
     }
     if breaks_character(&out) {
         fired.push(("character_break".to_string(), "replaced".to_string()));

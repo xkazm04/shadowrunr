@@ -15,12 +15,14 @@ pub mod live;
 pub mod paging;
 pub mod policy_install;
 pub mod preflight;
+pub mod prep;
 pub mod report_wire;
 pub mod review;
 pub mod rpc;
 pub mod runs;
 pub mod sandbox;
 pub mod server;
+pub mod voice;
 
 #[cfg(test)]
 mod e2e;

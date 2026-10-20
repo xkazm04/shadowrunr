@@ -5,11 +5,12 @@ import { useMemo, useState } from "react";
 import type { LedgerEntry, TournamentsPage } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { usePaged, useRpc } from "../../data";
+import { Button } from "../../ui/Button";
 import { Chip } from "../../ui/Chip";
 import { FilterTable, type Column, type Facets } from "../../ui/FilterTable";
 import { Section } from "../../ui/Section";
 import { StatBand } from "../../ui/StatBand";
-import { StatePanel } from "../../ui/States";
+import { EmptyState, StatePanel } from "../../ui/States";
 import { latestTournament } from "./useBrain";
 import { summariseLedger, type EngineSummary } from "./engineModel";
 import { clock, int, msText, usd } from "../../kit/events";
@@ -90,12 +91,12 @@ function Tables({ rows, more, onMore }: { rows: readonly LedgerEntry[]; more: bo
       <EngineFloor s={s} />
       <Section title="Fallbacks" right={int(fallbacks.length)}>
         {fallbacks.length === 0 ? (
-          <p className={styles.note}>No call in these rows fell back to another engine.</p>
+          <EmptyState title="No fallbacks" hint="No call in these rows fell back to another engine." />
         ) : (
           <FilterTable rows={fallbacks} columns={cols} getKey={(r) => String(r.i)} haystack={haystack} label="Fallbacks" />
         )}
       </Section>
-      <Section title="Call ledger" right={more ? <button type="button" className={styles.more} onClick={onMore}>Load {STEP * PAGE} more</button> : `${int(rows.length)} rows`}>
+      <Section title="Call ledger" right={more ? <Button variant="ink" size="compact" onClick={onMore}>Load {STEP * PAGE} more</Button> : `${int(rows.length)} rows`}>
         <FilterTable rows={indexed} columns={cols} getKey={(r) => String(r.i)} haystack={haystack} label="Call ledger" facets={facets} placeholder="Filter by run, role, engine, model or error" />
       </Section>
     </>

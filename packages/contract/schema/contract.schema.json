@@ -12,6 +12,65 @@
       ],
       "type": "object"
     },
+    "BeatMode": {
+      "description": "What the orchestrator chose for one beat (`StreamEvent::BeatPlan`).",
+      "oneOf": [
+        {
+          "const": "cold_open",
+          "description": "A cold-open story beat (room still filling).",
+          "type": "string"
+        },
+        {
+          "const": "react",
+          "description": "Answer picked chat.",
+          "type": "string"
+        },
+        {
+          "const": "bit",
+          "description": "Voice a prepared bit.",
+          "type": "string"
+        },
+        {
+          "const": "bridge",
+          "description": "A connector line, then chat or a bit.",
+          "type": "string"
+        },
+        {
+          "const": "mixed",
+          "description": "A bit and picked chat in the same beat.",
+          "type": "string"
+        },
+        {
+          "const": "hold",
+          "description": "Nothing to say this beat (the gap is still under the ceiling).",
+          "type": "string"
+        },
+        {
+          "const": "improvise",
+          "description": "A quiet beat with nothing prepared that fits: the host fills it in his own words.",
+          "type": "string"
+        }
+      ]
+    },
+    "BitKind": {
+      "oneOf": [
+        {
+          "const": "premise",
+          "description": "A one-line invitation chat can join in one line (quiet-room deck).",
+          "type": "string"
+        },
+        {
+          "const": "story",
+          "description": "A short told story (2-5 lines) with a payoff.",
+          "type": "string"
+        },
+        {
+          "const": "callback",
+          "description": "A running gag from the character's bible, re-dressed for tonight.",
+          "type": "string"
+        }
+      ]
+    },
     "Bound": {
       "description": "A 95% interval on a rate.",
       "properties": {
@@ -1673,6 +1732,35 @@
       ],
       "type": "object"
     },
+    "ColdOpen": {
+      "description": "The cold open: a short story told in beats while the room fills.",
+      "properties": {
+        "beats": {
+          "description": "The story's lines in order, one or two voiced per beat.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "handoff": {
+          "description": "The line that hands over from the story to the room.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "beats",
+        "handoff"
+      ],
+      "type": "object"
+    },
     "Command": {
       "description": "Parsed chat commands. Wire form in chat: `!summon <foil>`, `!hint <hex> <text>`,\n`!grade <hex> <DOC|REP|CLM|SPC>`, `!propose <text>`, `!vote <option>`.",
       "oneOf": [
@@ -1792,6 +1880,55 @@
         "what"
       ],
       "type": "object"
+    },
+    "Connector": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ConnectorKind"
+        },
+        "line": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "line"
+      ],
+      "type": "object"
+    },
+    "ConnectorKind": {
+      "description": "Where a connector line bridges.",
+      "oneOf": [
+        {
+          "const": "into_room",
+          "description": "From the cold open into the room.",
+          "type": "string"
+        },
+        {
+          "const": "into_bit",
+          "description": "From answering chat back to a prepared bit.",
+          "type": "string"
+        },
+        {
+          "const": "back_to_chat",
+          "description": "From a bit back to chat.",
+          "type": "string"
+        },
+        {
+          "const": "into_poll",
+          "description": "Into a poll or vote.",
+          "type": "string"
+        },
+        {
+          "const": "into_handover",
+          "description": "Toward a segment handover.",
+          "type": "string"
+        }
+      ]
     },
     "Counted": {
       "description": "Items that made it into the synthesis prompt, and items cut to fit its budget.",
@@ -3836,6 +3973,163 @@
       },
       "type": "array"
     },
+    "PrepApproveParams": {
+      "properties": {
+        "prep_id": {
+          "type": "string"
+        },
+        "signature": {
+          "description": "The owner's signature.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prep_id",
+        "signature"
+      ],
+      "type": "object"
+    },
+    "PrepBit": {
+      "description": "One prepared bit, for one segment.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/BitKind"
+        },
+        "lines": {
+          "description": "The lines in order (a premise has one).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "payoff": {
+          "description": "What lands at the end, so the host knows where the bit goes.",
+          "type": "string"
+        },
+        "segment": {
+          "$ref": "#/$defs/SegmentId"
+        }
+      },
+      "required": [
+        "id",
+        "segment",
+        "kind",
+        "lines"
+      ],
+      "type": "object"
+    },
+    "PrepCheck": {
+      "description": "A mechanical check over the prep (lengths, no real people, no callbacks a newcomer missed...).",
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/PrepCheckState"
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "detail"
+      ],
+      "type": "object"
+    },
+    "PrepCheckState": {
+      "enum": [
+        "pass",
+        "fail"
+      ],
+      "type": "string"
+    },
+    "PrepGenerateParams": {
+      "properties": {
+        "report_id": {
+          "description": "Write from this Reconcile report's plan; the current plan when absent.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "PrepIdParams": {
+      "properties": {
+        "prep_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "prep_id"
+      ],
+      "type": "object"
+    },
+    "PrepListResult": {
+      "items": {
+        "$ref": "#/$defs/PrepSummary"
+      },
+      "type": "array"
+    },
+    "PrepStatus": {
+      "oneOf": [
+        {
+          "const": "staged",
+          "description": "Written and mechanically checked; not yet seen by the owner.",
+          "type": "string"
+        },
+        {
+          "const": "approved",
+          "description": "The owner approved it: streams may use it.",
+          "type": "string"
+        },
+        {
+          "const": "retired",
+          "description": "Rejected or superseded; never used.",
+          "type": "string"
+        }
+      ]
+    },
+    "PrepSummary": {
+      "description": "One row of `prep.list`.",
+      "properties": {
+        "bits": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "created_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "failed_checks": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "prep_id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/PrepStatus"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "prep_id",
+        "created_ms",
+        "status",
+        "title",
+        "bits",
+        "failed_checks"
+      ],
+      "type": "object"
+    },
     "QualityFact": {
       "description": "A judged quality fact (humor, tone, responsiveness...): reported as a rate with n.",
       "properties": {
@@ -5204,6 +5498,11 @@
         "segment": {
           "$ref": "#/$defs/SegmentId"
         },
+        "state": {
+          "default": "",
+          "description": "The segment state machine's current state (`cold_open`, `opening`, `foil_vote`...);\nthe orchestrator reads it to know the room is still filling.",
+          "type": "string"
+        },
         "state_summary": {
           "description": "Current state: open poll, active foil, revealed hexes, elapsed time...",
           "type": "string"
@@ -6150,6 +6449,43 @@
           "type": "object"
         },
         {
+          "description": "What the orchestrator chose for this beat: the record that makes its choices judgeable.",
+          "properties": {
+            "bit_id": {
+              "description": "The prepared bit or cold-open beat it voiced, if any.",
+              "type": "string"
+            },
+            "mode": {
+              "$ref": "#/$defs/BeatMode"
+            },
+            "picks": {
+              "description": "Chat messages passed to the voice this beat.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "beat_plan",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "mode",
+            "picks",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The brain's view of the engine fleet changed (WP sandbox): written on every\ntransition, so an outage and its recovery are on the record.",
           "properties": {
             "detail": {
@@ -6196,6 +6532,72 @@
           "type": "object"
         }
       ]
+    },
+    "StreamPrep": {
+      "description": "`prep.json`.",
+      "properties": {
+        "approved_by": {
+          "description": "Set on approval.",
+          "type": "string"
+        },
+        "approved_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "bits": {
+          "items": {
+            "$ref": "#/$defs/PrepBit"
+          },
+          "type": "array"
+        },
+        "character": {
+          "type": "string"
+        },
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/PrepCheck"
+          },
+          "type": "array"
+        },
+        "cold_open": {
+          "$ref": "#/$defs/ColdOpen"
+        },
+        "connectors": {
+          "items": {
+            "$ref": "#/$defs/Connector"
+          },
+          "type": "array"
+        },
+        "created_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "fictional": {
+          "description": "True for a fabricated sample (tests, sims without an approved prep).",
+          "type": "boolean"
+        },
+        "plan_report": {
+          "description": "The Reconcile report whose plan it was written from, if any.",
+          "type": "string"
+        },
+        "prep_id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/PrepStatus"
+        }
+      },
+      "required": [
+        "prep_id",
+        "character",
+        "created_ms",
+        "status",
+        "cold_open",
+        "bits",
+        "connectors",
+        "checks"
+      ],
+      "type": "object"
     },
     "Subscribe": {
       "description": "Client -> `/events`: choose the source. Each message replaces the current source.\n\nSending `since` switches the session to enveloped frames ([`EventFrame`]) and resumes\nafter that seq. With `\"subscribe\": \"live\"`, `since` applies only while the run in flight\nis `run_id` (so `run_id` is required with it); a different run streams from its start.",
@@ -6699,6 +7101,252 @@
       ],
       "type": "object"
     },
+    "Viseme": {
+      "description": "The Oculus 15 mouth shapes. A sentence's timeline is a run of these.",
+      "enum": [
+        "sil",
+        "PP",
+        "FF",
+        "TH",
+        "DD",
+        "kk",
+        "CH",
+        "SS",
+        "nn",
+        "RR",
+        "aa",
+        "E",
+        "ih",
+        "oh",
+        "ou"
+      ],
+      "type": "string"
+    },
+    "VisemeSpan": {
+      "description": "One mouth shape over `[start_ms, end_ms)` of its utterance's audio.",
+      "properties": {
+        "end_ms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "start_ms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "$ref": "#/$defs/Viseme"
+        }
+      },
+      "required": [
+        "v",
+        "start_ms",
+        "end_ms"
+      ],
+      "type": "object"
+    },
+    "VoiceFollow": {
+      "description": "What a `/voice` client sends: which live run to voice. `run_id` absent = the newest live\nrun, following it as runs start. Each message replaces the previous choice.",
+      "properties": {
+        "run_id": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "VoiceFollowFrame": {
+      "description": "The frame wrapping [`VoiceFollow`]: `{\"follow\": {...}}`.",
+      "properties": {
+        "follow": {
+          "$ref": "#/$defs/VoiceFollow"
+        }
+      },
+      "required": [
+        "follow"
+      ],
+      "type": "object"
+    },
+    "VoiceFrame": {
+      "description": "Everything `GET /voice` may push.",
+      "oneOf": [
+        {
+          "description": "Sent on connect and whenever the state changes.",
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "state": {
+              "$ref": "#/$defs/VoiceState"
+            },
+            "type": {
+              "const": "status",
+              "type": "string"
+            },
+            "visemes": {
+              "description": "Whether utterances carry mouth shapes (the durations model is present).",
+              "type": "boolean"
+            },
+            "voice": {
+              "description": "The voice id (e.g. `af_heart`), when one is configured.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "state",
+            "visemes"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One rendered sentence of a `say` line.",
+          "properties": {
+            "duration_ms": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "id": {
+              "description": "`<run_id>:<seq>:<part>`: unique per run.",
+              "type": "string"
+            },
+            "last": {
+              "description": "True on the line's last sentence.",
+              "type": "boolean"
+            },
+            "part": {
+              "description": "0-based sentence index within the line.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "pcm": {
+              "description": "Mono PCM16 little-endian, base64.",
+              "type": "string"
+            },
+            "run_id": {
+              "type": "string"
+            },
+            "sample_rate": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "seq": {
+              "description": "The `say` event's seq in its run (contract § event resume).",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "text": {
+              "description": "This sentence's text, as spoken.",
+              "type": "string"
+            },
+            "type": {
+              "const": "utterance",
+              "type": "string"
+            },
+            "visemes": {
+              "description": "Empty when the voice has no mouth shapes: the stage drives the mouth from loudness.",
+              "items": {
+                "$ref": "#/$defs/VisemeSpan"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "run_id",
+            "seq",
+            "part",
+            "last",
+            "text",
+            "sample_rate",
+            "duration_ms",
+            "pcm"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A line that will not be spoken (or the rest of it, from `part`).",
+          "properties": {
+            "part": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "reason": {
+              "$ref": "#/$defs/VoiceSkip"
+            },
+            "run_id": {
+              "type": "string"
+            },
+            "seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "skipped",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "run_id",
+            "seq",
+            "part",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "VoiceSkip": {
+      "oneOf": [
+        {
+          "const": "late",
+          "description": "Its audio could not start within `max_lag_ms` of its `say`.",
+          "type": "string"
+        },
+        {
+          "const": "queue_full",
+          "description": "More than `max_queue` lines were waiting; the oldest went.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "The render failed or timed out.",
+          "type": "string"
+        }
+      ]
+    },
+    "VoiceState": {
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "`[voice] enabled = false`: no voice by configuration.",
+          "type": "string"
+        },
+        {
+          "const": "starting",
+          "description": "The sidecar is warming up (the first render loads the model).",
+          "type": "string"
+        },
+        {
+          "const": "ready",
+          "description": "Speaking.",
+          "type": "string"
+        },
+        {
+          "const": "degraded",
+          "description": "Enabled but not speaking: engine missing, sidecar exited, renders failing. `reason` says.",
+          "type": "string"
+        }
+      ]
+    },
     "VoteTally": {
       "properties": {
         "option": {
@@ -7072,6 +7720,86 @@
         },
         "result": {
           "$ref": "#/$defs/PreflightRunResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "prep.approve": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/PrepApproveParams"
+        },
+        "result": {
+          "$ref": "#/$defs/StreamPrep"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "prep.generate": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/PrepGenerateParams"
+        },
+        "result": {
+          "$ref": "#/$defs/StreamPrep"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "prep.get": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/PrepIdParams"
+        },
+        "result": {
+          "$ref": "#/$defs/StreamPrep"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "prep.list": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/PrepListResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "prep.retire": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/PrepIdParams"
+        },
+        "result": {
+          "$ref": "#/$defs/StreamPrep"
         }
       },
       "required": [
@@ -7456,6 +8184,11 @@
     "plan.current",
     "plan.proposals",
     "preflight.run",
+    "prep.approve",
+    "prep.generate",
+    "prep.get",
+    "prep.list",
+    "prep.retire",
     "ranks.table",
     "reconcile.incidents",
     "reconcile.list",

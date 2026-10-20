@@ -1,0 +1,89 @@
+/* The side drawer, in the shell's language: it wipes in from the right like the spread
+   (clip-path, --sr-ease-move), its content rises after the wipe, and it wipes back out with its
+   visibility lagging the wipe, so closing is a motion, not a cut. Paper, a heavy ink left rule
+   and a hard accent offset; no blur.
+
+   Placement: it is portalled to the shell root, above the chrome and the mixer bus (chrome + 1)
+   and below the intro and the toast. Inside the spread it could not be: the spread's clip-path
+   makes it a stacking context at --sr-z-spread, under the chrome that sits over its top-right
+   corner, where the drawer's head and Close button are. */
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: calc(var(--sr-z-chrome) + 1);
+  display: flex;
+  flex-direction: column;
+  width: min(40rem, 100vw);
+  overflow: hidden auto;
+  border-left: var(--sr-stroke-heavy) solid var(--sr-color-text-ink);
+  background: var(--sr-color-surface-paper);
+  color: var(--sr-color-text-ink);
+  box-shadow: -.4rem .4rem 0 var(--sr-page-accent, var(--sr-color-signal));
+  outline: none;
+  clip-path: inset(0 0 0 100%);
+  visibility: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sr-color-chrome-ink) var(--sr-color-surface-chip);
+  transition: clip-path .6s var(--sr-ease-move), visibility 0s .6s;
+}
+
+/* Wide: about half as wide again as the old 470px column (Review's moment pane). */
+.wide { width: min(44rem, 100vw); }
+
+/* The offset shadow sits outside the box, so the open clip leaves room for it on the left. */
+.drawer[data-open="true"] {
+  clip-path: inset(0 0 0 -.6rem);
+  visibility: visible;
+  transition: clip-path .6s var(--sr-ease-move), visibility 0s;
+}
+
+.head {
+  position: sticky;
+  top: 0;
+  z-index: var(--sr-z-above);
+  display: flex;
+  gap: var(--sr-space-near);
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: var(--sr-space-loose) var(--sr-space-roomy) var(--sr-space-close);
+  border-bottom: var(--sr-stroke-heavy) solid var(--sr-color-text-ink);
+  background: var(--sr-color-surface-paper);
+}
+
+.kicker {
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-semibold);
+  font-size: var(--sr-size-micro);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--sr-color-text-mute);
+}
+
+.title {
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-title);
+  line-height: 1.05;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.actions { display: flex; flex: none; gap: var(--sr-space-compact); align-items: center; }
+
+.body { flex: 1; padding: var(--sr-space-base) var(--sr-space-roomy) var(--sr-space-wide); }
+
+/* The content rises once the wipe has mostly landed. */
+.drawer[data-open="true"] .body > * { animation: drawer-rise .6s var(--sr-ease-settle) .3s both; }
+
+@keyframes drawer-rise {
+  from { opacity: 0; transform: translateY(var(--sr-space-loose)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer,
+  .drawer * { animation-duration: .01s !important; animation-delay: 0s !important; transition-duration: .2s !important; transition-delay: 0s !important; }
+}

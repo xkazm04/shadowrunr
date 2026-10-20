@@ -16,6 +16,8 @@ use shadowrunr_types::{
 
 use crate::*;
 
+mod orchestration;
+
 // ── Test double ────────────────────────────────────────────────────────
 
 #[derive(Default)]
@@ -197,6 +199,7 @@ fn ctx(allowed: &[&str]) -> SegmentContext {
         segment: SegmentId::Seg01ImprovisedRoom,
         rules_prompt: "SEG-01 Improvised Room: riff with chat, summon foils, run polls.".into(),
         state_summary: "No poll open. No foil on stage.".into(),
+        state: "opening".into(),
         allowed_ops: allowed.iter().map(|s| s.to_string()).collect(),
         ccv: 30,
         elapsed_s: 120,
@@ -1057,7 +1060,7 @@ async fn injection_and_copypasta_are_clustered_and_filtered() {
         "cluster members collapse into the representative"
     );
     if picked(&ev).contains(&"inj".to_string()) {
-        assert!(p.contains("[inj] Hackerman (Acolyte): <tried to rewrite your rules"));
+        assert!(p.contains("[inj] Hackerman (Acolyte): <this message tries to give you orders"));
     }
 
     // The same copypasta in the next beat is dropped outright.
@@ -1839,8 +1842,10 @@ async fn the_llm_picker_cannot_skip_a_disclosure() {
         Role::ChatPicker,
         Ok(r#"{"picks":[{"msg_id":"c1","reason":"funny"},{"msg_id":"c2","reason":"q"},{"msg_id":"c3","reason":"q"}]}"#),
     );
+    // A safety beat offers the picker the disclosure alone (the rest of the room is carried),
+    // so the LLM path is forced with a zero threshold.
     let mut t = tuning();
-    t.picker.llm_threshold = 10;
+    t.picker.llm_threshold = 0;
     let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "llm", t).await;
     let mut inbox = Vec::new();
     for i in 0..15 {
@@ -1856,9 +1861,11 @@ async fn the_llm_picker_cannot_skip_a_disclosure() {
     inbox.push(msg("sad1", 100, &sad, "i dont want to be alive anymore"));
     let ev = b.tick(1_000, inbox, &ctx(&[])).await.unwrap();
     assert_eq!(
-        picked(&ev),
-        vec!["sad1".to_string(), "c1".to_string(), "c2".to_string()]
+        engine.requests(Role::ChatPicker).len(),
+        1,
+        "the LLM picker ran"
     );
+    assert_eq!(picked(&ev), vec!["sad1".to_string()]);
 }
 
 #[tokio::test]

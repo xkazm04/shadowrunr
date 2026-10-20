@@ -378,6 +378,7 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::Handover { ts_ms, .. }
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
+        | StreamEvent::BeatPlan { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms,
     }
 }
@@ -512,6 +513,21 @@ pub fn body(ev: &StreamEvent) -> String {
                 .as_ref()
                 .map(|s| format!(": {}", clip(s, 160)))
                 .unwrap_or_default()
+        ),
+        StreamEvent::BeatPlan {
+            mode,
+            bit_id,
+            picks,
+            reason,
+            ..
+        } => format!(
+            "beat_plan {}{} picks={picks} ({})",
+            wire(mode),
+            bit_id
+                .as_ref()
+                .map(|b| format!(" bit={b}"))
+                .unwrap_or_default(),
+            clip(reason, 120)
         ),
         StreamEvent::Health { state, detail, .. } => format!(
             "health {}{}",

@@ -79,11 +79,14 @@ describe("review wall", () => {
     await mount();
     const all = role("review-wall-all") as HTMLElement;
     const lines = sessionRows(6).reduce((n, r) => n + r.lines, 0);
-    expect(all.textContent).toContain(`6 sessions · ${lines.toLocaleString("en-US")} lines from Malakor`);
+    // The poster's numerals: the session count with its word, then the lines under it.
+    expect(all.querySelector("b")?.textContent).toBe("6");
+    expect(all.textContent).toContain(`Sessions${lines.toLocaleString("en-US")} lines from Malakor`);
     // The untagged session's lines show as untagged.
     expect(all.textContent).toContain("Untagged");
     const fb = role("review-wall-feedback") as HTMLElement;
-    expect(fb.textContent).toContain("3 lines marked");
+    expect(fb.querySelector("b")?.textContent).toBe("3");
+    expect(fb.textContent).toContain("Lines marked");
     expect(fb.textContent).toContain("Landed 2");
     expect(fb.textContent).toContain("Great roast 1");
     expect(fb.textContent).toContain("Too mean 1");

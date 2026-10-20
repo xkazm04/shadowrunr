@@ -24,7 +24,7 @@ use crate::SimError;
 
 /// Bump when the simulator's or the judge's logic changes in a way that changes verdicts
 /// (prompt templates, verification rules, scheduling).
-pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/1";
+pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/2";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstrumentFile {
@@ -402,9 +402,10 @@ mod tests {
         .unwrap()
     }
 
-    /// `fixture` hashed by the pre-WP15 code (the brief entry is the only change to
-    /// `compute`, and it is skipped without a brief): no brief must keep exactly this value.
-    const PRE_BRIEF_HASH: &str = "16bfb51c09466debd4947b6f5e0120d079ed4a930d3d665dc033cc0c746fbcac";
+    /// `fixture` hashed with no brief and no experiment: the golden that both entries must
+    /// leave untouched when absent. It moves only with `SIM_LOGIC_VERSION` (`/2`: the cold
+    /// open and the filling room).
+    const PRE_BRIEF_HASH: &str = "82012d490d605056bd85f0d6168d9b8eb596285024e0632423d62d6e4a3222a7";
 
     #[test]
     fn a_brief_joins_the_hash_only_when_present() {

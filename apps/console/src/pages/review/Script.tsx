@@ -1,6 +1,6 @@
 // One moment typeset as a script: the lines before it (muted), the chat it answered, every line of
 // its beat with the focused one highlighted, and the gates that touched it. Time, speaker and
-// line sit on one grid; his voice is serif, chat is sans, time is mono.
+// line sit on one grid; his voice is serif italic, chat is sans, time is mono.
 import type { ReviewSession, StreamEvent } from "@shadowrunr/contract";
 import type { Derived } from "./derive";
 import { tsOf } from "./derive";

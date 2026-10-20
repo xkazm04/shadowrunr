@@ -23,21 +23,6 @@
   color: var(--sr-color-text-mute);
 }
 
-.stage {
-  padding: var(--sr-space-tick) var(--sr-space-close);
-  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
-  background: var(--sr-color-text-ink);
-  font-family: var(--sr-font-display);
-  font-weight: var(--sr-weight-bold);
-  font-size: var(--sr-size-small);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--sr-color-surface-paper);
-  cursor: pointer;
-}
-.stage:hover,
-.stage:focus-visible { background: var(--sr-page-accent-text, var(--sr-color-signal-deep)); }
-
 .viewer { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--sr-space-loose); align-items: start; }
 
 /* The shared VirtualList viewport, sized and inked for the spread. */
@@ -111,7 +96,7 @@
   max-height: 40vh;
   overflow: auto;
   padding: var(--sr-space-near);
-  border: var(--sr-stroke-hair) solid var(--sr-color-line);
+  border: var(--sr-stroke-rule) solid var(--sr-color-text-ink);
   background: var(--sr-color-surface-field);
   font-family: var(--sr-font-mono);
   font-size: var(--sr-size-micro);
@@ -120,3 +105,13 @@
 }
 
 [data-narrow="true"] .viewer { grid-template-columns: minmax(0, 1fr); }
+
+/* A picked line's detail rises in place, keyed on the line. */
+.lineDetail { animation: line-in .35s var(--sr-ease-settle) backwards; }
+@keyframes line-in {
+  from { opacity: 0; transform: translateY(var(--sr-space-tight)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lineDetail { animation: none; }
+}
