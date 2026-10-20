@@ -33,7 +33,7 @@ export function Layer2({ sub }: { readonly sub: readonly string[] }) {
   const [head, second, ...rest] = sub;
   const tab = isTab(head) ? head : undefined;
   return (
-    <div className={styles.root} data-page="reconcile" data-role="reconcile-layer2">
+    <div className={styles.root} data-page="reconcile" data-role="reconcile-layer2" data-rise>
       <Tabs items={TABS} value={tab ?? "report"} label="Reconcile & plan" onSelect={(id) => router.navigate(pageRoute("reconcile", id))} />
       <Body tab={tab} second={second} extra={rest.length > 0} sub={sub} />
     </div>

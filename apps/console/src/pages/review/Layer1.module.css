@@ -7,9 +7,12 @@
 .root { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--sr-page-type); }
 .hero { position: relative; display: flex; flex: 1; flex-direction: column; gap: var(--sr-space-base); width: min(100%, var(--sr-layout-body-measure)); min-height: 0; margin: 0 auto; padding-bottom: var(--sr-space-near); }
 
-/* The hotspot light: a violet glow that rises behind the numerals. */
+/* The hotspot light: a violet glow that rises over the numerals. It prints over the plain grounds
+   below (multiply only darkens the stock, never the ink), so their knockouts never show as boxes. */
 .light {
   pointer-events: none;
+  z-index: var(--sr-z-above);
+  mix-blend-mode: multiply;
   position: absolute;
   left: -8rem;
   top: -10rem;
@@ -33,9 +36,13 @@
 .totals { display: flex; flex-wrap: wrap; gap: var(--sr-space-tick) var(--sr-space-near); margin: 0; padding: 0; list-style: none; font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-caption); letter-spacing: .08em; text-transform: uppercase; }
 .totals b { font-weight: var(--sr-weight-bold); font-variant-numeric: tabular-nums; }
 
-.sortbar { position: relative; display: flex; flex: none; flex-wrap: wrap; gap: var(--sr-space-near); align-items: center; padding-top: var(--sr-space-compact); border-top: var(--sr-stroke-heavy) solid var(--sr-page-type); }
+/* Body text prints on plain stock: the numerals and their words may overlap the tape art, but
+   the captions, the mix key, the order bar and the session list knock the art out with the face. */
+.fig > :not(.n, .w) { background: var(--sr-page-face); box-shadow: 0 0 0 var(--sr-space-tight) var(--sr-page-face); }
 
-.listBox { position: relative; flex: 1; min-height: 12rem; }
+.sortbar { position: relative; display: flex; flex: none; flex-wrap: wrap; gap: var(--sr-space-near); align-items: center; padding-top: var(--sr-space-compact); border-top: var(--sr-stroke-heavy) solid var(--sr-page-type); background: var(--sr-page-face); }
+
+.listBox { position: relative; flex: 1; min-height: 12rem; background: var(--sr-page-face); }
 
 .row {
   display: grid;
@@ -46,7 +53,7 @@
   border-bottom: var(--sr-stroke-rule) solid var(--sr-page-type);
   color: inherit;
   text-decoration: none;
-  transition: opacity .25s, background .25s;
+  transition: opacity .25s;
 }
 
 /* The hotspot light on the list: the hovered or focused row lit, the others knocked back. */
@@ -82,3 +89,5 @@
   .light { animation: none; }
   .row { transition: none; }
 }
+
+.root > :last-child { background: var(--sr-page-face); }

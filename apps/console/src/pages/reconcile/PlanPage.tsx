@@ -37,8 +37,8 @@ function PlanGrid({ reportId, options }: { reportId: string; options: readonly P
   const s = useSession();
   const chosen = new Set(s.chosen[reportId] ?? []);
   return (
-    <div className={styles.plangrid}>
-      <div className={styles.opts}>
+    <div className={styles.plangrid} data-rise>
+      <div className={styles.opts} data-rise>
         {options.map((o) => (
           <OptionCard key={o.option_id} option={o} on={chosen.has(o.option_id)} onToggle={() => session.toggleOption(reportId, o.option_id)} />
         ))}

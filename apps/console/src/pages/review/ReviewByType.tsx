@@ -32,7 +32,7 @@ export function ReviewByType(props: TabProps) {
   const marked = counts.reduce((n, c) => n + c.marked, 0);
   const total = counts.reduce((n, c) => n + c.total, 0);
   return (
-    <div data-role="review-types">
+    <div data-role="review-types" data-rise>
       <Section title="Pick a type" right={`${marked} of ${total} lines marked`}>
         <p className={kit.note}>
           Each line shows with what came before it and the chat it answered. Mark it and save, and the next unmarked line follows. Keys: <kbd>1</kbd> to <kbd>8</kbd> toggle a mark,{" "}

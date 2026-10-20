@@ -40,7 +40,7 @@ export function Judge(props: TabProps) {
   const v = rs.verdict;
   if (!v) {
     return (
-      <div data-role="review-judge">
+      <div data-role="review-judge" data-rise>
         <EmptyState title="This session was not judged" hint="Sessions are judged when they end. A session stopped early, or one whose judge call failed, has no verdict." />
       </div>
     );
@@ -54,7 +54,7 @@ export function Judge(props: TabProps) {
     if (l !== undefined) props.openLine(l);
   };
   return (
-    <div className={styles.judge} data-role="review-judge">
+    <div className={styles.judge} data-role="review-judge" data-rise>
       <Section title="Rules it failed" right={fails.length ? `${fails.length} of the ${v.rules.length} rules it checked` : `None of ${v.rules.length}`}>
         {fails.length === 0 ? (
           <EmptyState title="No rule failed" hint="The judge failed no rule in this session." />

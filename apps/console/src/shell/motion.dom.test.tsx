@@ -109,6 +109,12 @@ describe("the print grain", () => {
     expect(poster).toContain('.poster[data-view="l1"][data-active="true"]::after { z-index: var(--sr-z-under); }');
     expect(css("Spread.module.css")).not.toMatch(/--sr-grain|::before/);
   });
+
+  it("keeps the halftone from under body text on a light face: off the open layer 1, masked to the motif band on the spine", () => {
+    const poster = css("Poster.module.css");
+    expect(poster).toContain('.poster[data-grain="false"][data-view="l1"][data-active="true"] .halftoneB { opacity: 0; }');
+    expect(poster).toMatch(/\.poster\[data-grain="false"\]\[data-view="l2"\]\[data-active="true"\]:not\(\[data-narrow="true"\]\) \.face \{\s*mask-image: linear-gradient\(transparent 15\.5rem, /);
+  });
 });
 
 describe("the layer-2 entrance", () => {
@@ -149,11 +155,12 @@ describe("the layer-2 entrance", () => {
     expect(await pageRoot("reconcile-layer2", "report/held")).toBe(report);
   });
 
-  it("staggers the first blocks at 0, .08s and .16s, and keeps the reduced-motion rule", () => {
+  it("staggers the blocks .08s apart up to .32s, nested containers after the head, and keeps the reduced-motion rule", () => {
     const spread = css("Spread.module.css");
-    expect(spread).toMatch(/\.inner > :not\(:has\(\[data-rise\]\)\) > \*,\n\.spread\[data-open="true"\] \.inner \[data-rise\] > \* \{ animation: rise \.7s var\(--sr-ease-settle\) backwards; \}/);
-    expect(spread).toMatch(/:nth-child\(2\) \{ animation-delay: \.08s; \}/);
-    expect(spread).toMatch(/:nth-child\(n \+ 3\) \{ animation-delay: \.16s; \}/);
+    expect(spread).toMatch(/\.inner > :not\(:has\(\[data-rise\]\)\) > \*,\n\.spread\[data-open="true"\] \.inner \[data-rise\] > :not\(\[data-rise\]\) \{ animation: rise \.7s var\(--sr-ease-settle\) var\(--rise-at, 0s\) backwards; \}/);
+    expect(spread).toMatch(/:nth-child\(2\) \{ animation-delay: calc\(var\(--rise-at, 0s\) \+ \.08s\); \}/);
+    expect(spread).toMatch(/:nth-child\(n \+ 5\) \{ animation-delay: calc\(var\(--rise-at, 0s\) \+ \.32s\); \}/);
+    expect(spread).toContain(".spread .inner [data-rise] [data-rise] { --rise-at: .16s; }");
     expect(spread).toMatch(/prefers-reduced-motion: reduce\) \{\s*\.spread,\s*\.spread \* \{ animation-duration: \.01s !important;/);
   });
 });

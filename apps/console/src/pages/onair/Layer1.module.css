@@ -71,3 +71,9 @@
   .ctl { flex-wrap: wrap; height: auto; padding: var(--sr-space-tight) 0; }
   .sp { display: none; }
 }
+
+/* Reduced motion: the progress bar is a clock, not decoration, so it keeps its own duration
+   against the poster's blanket .01s (it moves linearly, with no easing or travel). */
+@media (prefers-reduced-motion: reduce) {
+  .prog i[data-run] { animation-duration: var(--rest, 0ms) !important; }
+}

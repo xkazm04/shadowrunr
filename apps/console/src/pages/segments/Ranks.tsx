@@ -6,6 +6,7 @@ import { QueryView } from "../../kit";
 import { RankEngagement } from "../../kit/RankEngagement";
 import { useNewestReport } from "../../kit/useNewestReport";
 import { pageRoute, RouteLink, useRouter } from "../../router";
+import { Button } from "../../ui/Button";
 import { Chip } from "../../ui/Chip";
 import { Head, Section } from "../../ui/Section";
 import { StatePanel } from "../../ui/States";
@@ -183,9 +184,9 @@ function ChooseReport() {
           <span>Report id</span>
           <input type="text" value={id} placeholder="rec-1792284840627" onChange={(e) => setId(e.target.value)} />
         </label>
-        <button type="submit" className={styles.btn} disabled={id.trim() === ""}>
+        <Button type="submit" variant="ink" disabled={id.trim() === ""}>
           Show engagement
-        </button>
+        </Button>
       </form>
     </div>
   );

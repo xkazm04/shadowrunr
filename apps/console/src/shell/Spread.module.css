@@ -39,16 +39,23 @@
   padding: var(--sr-space-loose) var(--sr-space-gutter) 5rem;
 }
 
-/* The entrance: the page's blocks rise in a stagger, its head at 0, the next block at .08s and
-   the rest at .16s. The shell keys the page root on its nested route (rise.ts), so the rise
+/* The entrance: the page's blocks rise in a stagger, .08s apart, from the head at 0 to the fifth
+   block and on at .32s. The shell keys the page root on its nested route (rise.ts), so the rise
    replays on every tab and list-to-detail move. The blocks are the page root's children; a page
-   whose blocks sit deeper marks their container `data-rise`, and the stagger moves there. */
+   whose blocks sit deeper marks their container `data-rise`, and the stagger moves there. A
+   `data-rise` inside another is not a block itself: its children carry on the stagger from
+   .16s, after the outer head, so the deep blocks never land before the page's head. */
 .spread[data-open="true"] .inner > :not(:has([data-rise])) > *,
-.spread[data-open="true"] .inner [data-rise] > * { animation: rise .7s var(--sr-ease-settle) backwards; }
+.spread[data-open="true"] .inner [data-rise] > :not([data-rise]) { animation: rise .7s var(--sr-ease-settle) var(--rise-at, 0s) backwards; }
 .spread[data-open="true"] .inner > :not(:has([data-rise])) > :nth-child(2),
-.spread[data-open="true"] .inner [data-rise] > :nth-child(2) { animation-delay: .08s; }
-.spread[data-open="true"] .inner > :not(:has([data-rise])) > :nth-child(n + 3),
-.spread[data-open="true"] .inner [data-rise] > :nth-child(n + 3) { animation-delay: .16s; }
+.spread[data-open="true"] .inner [data-rise] > :not([data-rise]):nth-child(2) { animation-delay: calc(var(--rise-at, 0s) + .08s); }
+.spread[data-open="true"] .inner > :not(:has([data-rise])) > :nth-child(3),
+.spread[data-open="true"] .inner [data-rise] > :not([data-rise]):nth-child(3) { animation-delay: calc(var(--rise-at, 0s) + .16s); }
+.spread[data-open="true"] .inner > :not(:has([data-rise])) > :nth-child(4),
+.spread[data-open="true"] .inner [data-rise] > :not([data-rise]):nth-child(4) { animation-delay: calc(var(--rise-at, 0s) + .24s); }
+.spread[data-open="true"] .inner > :not(:has([data-rise])) > :nth-child(n + 5),
+.spread[data-open="true"] .inner [data-rise] > :not([data-rise]):nth-child(n + 5) { animation-delay: calc(var(--rise-at, 0s) + .32s); }
+.spread .inner [data-rise] [data-rise] { --rise-at: .16s; }
 
 @keyframes rise {
   from { opacity: 0; transform: translateY(var(--sr-space-roomy)); }

@@ -167,3 +167,11 @@
 @media (prefers-reduced-motion: reduce) {
   .hot { transition: none; }
 }
+
+/* Body text prints on plain stock: the lifecycle words, the commands and the pyramid may overlap
+   the motif art, but the notes, the tags and the footer knock it out with the face. */
+.none,
+.ledgeTag,
+.stationTag,
+.sidingTag { background: var(--sr-page-face); box-shadow: 0 0 0 var(--sr-space-tight) var(--sr-page-face); }
+.root > :last-child { background: var(--sr-page-face); }

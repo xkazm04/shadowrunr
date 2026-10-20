@@ -15,7 +15,7 @@
 
 .ref { font-family: var(--sr-font-mono); font-size: var(--sr-size-caption); color: var(--sr-page-accent-text, var(--sr-color-signal-deep)); text-decoration: underline; text-underline-offset: .15em; overflow-wrap: anywhere; }
 .ref:hover,
-.ref:focus-visible { color: var(--sr-color-signal); }
+.ref:focus-visible { color: var(--sr-page-accent); }
 
 .refs { display: inline-flex; flex-wrap: wrap; gap: var(--sr-space-tight); }
 
@@ -24,7 +24,7 @@
 .dim { color: var(--sr-color-text-mute); font-size: var(--sr-size-caption); }
 
 .health { display: inline-flex; align-items: center; gap: var(--sr-space-tight); font-variant-numeric: tabular-nums; }
-.swatch { display: inline-block; width: .8rem; height: .8rem; border: var(--sr-stroke-hair) solid var(--sr-color-line); }
+.swatch { display: inline-block; width: .8rem; height: .8rem; border: var(--sr-stroke-hair) solid var(--sr-color-text-ink); }
 
 .note { max-width: 52rem; margin: var(--sr-space-base) 0; padding: var(--sr-space-compact) var(--sr-space-near); border-left: var(--sr-stroke-heavy) solid var(--sr-color-caution-edge); background: var(--sr-color-surface-caution); color: var(--sr-color-text-on-caution); font-size: var(--sr-size-small); }
 

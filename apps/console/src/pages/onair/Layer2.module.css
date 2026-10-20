@@ -9,8 +9,6 @@
 .sub { margin: var(--sr-space-loose) 0 var(--sr-space-compact); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-subhead); letter-spacing: .04em; text-transform: uppercase; }
 
 .pager { display: inline-flex; align-items: center; gap: var(--sr-space-compact); font-family: var(--sr-font-display); letter-spacing: .06em; text-transform: uppercase; }
-.pager button { padding: var(--sr-space-tick) var(--sr-space-close); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: none; color: inherit; font: inherit; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
-.pager button:disabled { cursor: default; opacity: .4; }
 
 .runs { height: 28rem; }
 .beats { height: 22rem; border-top: var(--sr-stroke-rule) solid var(--sr-color-text-ink); }

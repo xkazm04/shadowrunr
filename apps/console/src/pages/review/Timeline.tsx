@@ -122,6 +122,7 @@ export function Timeline(props: TabProps) {
       ref={rootRef}
       className={styles.root}
       data-role="review-timeline"
+      data-rise
       onAnimationEnd={(e) => {
         if (e.target instanceof HTMLElement && e.target.dataset["flash"]) setFlash(undefined);
       }}

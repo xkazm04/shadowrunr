@@ -188,3 +188,7 @@ button.inc[aria-pressed="true"] span { text-decoration: underline; text-decorati
   .inc i { grid-column: 1 / -1; grid-row: 2; }
   .m { max-width: 100%; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .opt { transition: none; }
+}

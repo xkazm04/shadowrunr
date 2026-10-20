@@ -42,13 +42,13 @@ export function Moderation(props: TabProps) {
   };
   if (groups.length === 0) {
     return (
-      <div data-role="review-moderation">
+      <div data-role="review-moderation" data-rise>
         <EmptyState title="No moderation records" hint="Nothing in this session was changed, held back or refused." />
       </div>
     );
   }
   return (
-    <div className={styles.split} data-role="review-moderation">
+    <div className={styles.split} data-role="review-moderation" data-rise>
       <div className={kit.scroll}>
         {groups.map(({ group, kinds }) => (
           <div key={group} data-role="review-mod-group" data-group={group}>

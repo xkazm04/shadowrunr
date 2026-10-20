@@ -10,6 +10,7 @@ import { QueryView } from "../../kit";
 import { Chip } from "../../ui/Chip";
 import { FilterTable, type Column } from "../../ui/FilterTable";
 import { Section } from "../../ui/Section";
+import { EmptyState } from "../../ui/States";
 import styles from "./Layer2.module.css";
 import { incidentGroups, ruleLabel } from "./model";
 import { RefLinks } from "./Refs";
@@ -97,7 +98,7 @@ export function Incidents({ report }: { report: ReconcileReport }) {
   return (
     <Section title={<>Red-line and moderation incidents <small className={styles.small}>{int(total)} logged</small></>}>
       {total === 0 ? (
-        <p className={styles.dim}>No incidents in this report.</p>
+        <EmptyState title="No incidents in this report" />
       ) : (
         <>
           <div className={styles.incs} data-role="reconcile-incidents">

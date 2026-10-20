@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import type { CharacterDetail } from "@shadowrunr/contract";
 import { useMutation, viewOfError } from "../../data";
 import { pageRoute, RouteLink } from "../../router";
+import { Button } from "../../ui/Button";
 import { Chip } from "../../ui/Chip";
 import { Head, Section } from "../../ui/Section";
 import { EmptyState } from "../../ui/States";
@@ -39,8 +40,8 @@ function MakeActive({ character, tone }: { character: string; tone: string }) {
   const [error, setError] = useState<string | undefined>(undefined);
   return (
     <>
-      <button
-        type="button"
+      <Button
+        size="compact"
         className={styles.toneSet}
         disabled={set.pending}
         data-role="characters-tone-set"
@@ -49,7 +50,7 @@ function MakeActive({ character, tone }: { character: string; tone: string }) {
         }
       >
         Make active
-      </button>
+      </Button>
       {error !== undefined && <small className={styles.toneSetError}>{error}</small>}
     </>
   );

@@ -4,6 +4,7 @@ import type { CharacterDetail } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { useRpc } from "../../data";
 import { RouteLink, useRouter } from "../../router";
+import { buttonClass } from "../../ui/Button";
 import { Tabs } from "../../ui/Section";
 import { EmptyState } from "../../ui/States";
 import { FoilsTab, TonesTab } from "./CastTabs";
@@ -17,10 +18,10 @@ export function PackagePage({ id, tab, situation }: { readonly id: string; reado
   const router = useRouter();
   const detail = useRpc("character.get", { id });
   return (
-    <div data-role="characters-package" data-tab={tab}>
+    <div data-role="characters-package" data-tab={tab} data-rise>
       <Tabs items={PKG_TABS} value={tab} label={`${detail.data?.name ?? id} · the package`} onSelect={(t) => router.navigate(pkgRoute(id, t))} />
       <div className={styles.leadRow}>
-        <RouteLink to={allRoute()} className={styles.lead}>
+        <RouteLink to={allRoute()} className={buttonClass("secondary", "compact")}>
           All characters
         </RouteLink>
       </div>

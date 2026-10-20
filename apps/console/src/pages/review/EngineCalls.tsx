@@ -75,7 +75,7 @@ export function EngineCalls(props: TabProps) {
   const [sel, setSel] = useState<{ minute: number; page: number } | null>(null);
   if (rs.calls.length === 0) {
     return (
-      <div data-role="review-calls">
+      <div data-role="review-calls" data-rise>
         <EmptyState title="No engine calls" hint="No engine calls were recorded for this session." />
       </div>
     );
@@ -85,7 +85,7 @@ export function EngineCalls(props: TabProps) {
   const maxN = Math.max(1, ...mins.map((m) => m.n));
   const rows = sel ? rs.calls.filter((c) => Math.min(mins.length - 1, Math.floor(callAt(rs, c) / 60)) === sel.minute).sort((a, b) => a.ts_ms - b.ts_ms) : [];
   return (
-    <div data-role="review-calls">
+    <div data-role="review-calls" data-rise>
       <Section title="Step 1 · By role" right={`${rs.calls.length} engine calls`}>
         <div className={kit.scroll}>
           <table className={kit.table} data-role="review-calls-roles">

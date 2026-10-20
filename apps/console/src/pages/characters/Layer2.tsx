@@ -1,6 +1,7 @@
 // Layer 2 of Characters (the winner's l2.js P3.L2.characters) as routes: all characters, then one
 // character's package with its six tabs.
 import { RouteLink } from "../../router";
+import { buttonClass } from "../../ui/Button";
 import { StatePanel } from "../../ui/States";
 import { AllPage } from "./AllPage";
 import styles from "./Layer2.module.css";
@@ -18,7 +19,7 @@ export function Layer2({ sub }: { readonly sub: readonly string[] }) {
       ) : (
         <>
           <StatePanel state="invalid" title={`There is no page at ${sub.join(" / ")}`} hint="All characters, and each character's package (constitution, optional rules, bible, tones, foils, situations), are the pages here." />
-          <RouteLink to={allRoute()} className={styles.lead}>
+          <RouteLink to={allRoute()} className={buttonClass("secondary", "compact")}>
             All characters
           </RouteLink>
         </>

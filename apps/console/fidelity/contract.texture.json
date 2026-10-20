@@ -1,7 +1,7 @@
 {
   "characters": {
     "halftoneA": {
-      "opacity": "0.55",
+      "opacity": "0",
       "mixBlendMode": "normal",
       "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(232, 84, 42) 0px, rgb(232, 84, 42) 26%, rgba(0, 0, 0, 0) 28%)",
       "backgroundSize": "14.4px 14.4px",
@@ -9,7 +9,7 @@
       "inset": "-100px -111.594px"
     },
     "halftoneB": {
-      "opacity": "0.35",
+      "opacity": "0",
       "mixBlendMode": "normal",
       "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(47, 125, 106) 0px, rgb(47, 125, 106) 22%, rgba(0, 0, 0, 0) 24%)",
       "backgroundSize": "19.8px 19.8px",
@@ -53,7 +53,7 @@
   },
   "segments": {
     "halftoneA": {
-      "opacity": "0.55",
+      "opacity": "0",
       "mixBlendMode": "normal",
       "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(168, 50, 28) 0px, rgb(168, 50, 28) 26%, rgba(0, 0, 0, 0) 28%)",
       "backgroundSize": "14.4px 14.4px",
@@ -61,7 +61,7 @@
       "inset": "-100px -111.594px"
     },
     "halftoneB": {
-      "opacity": "0.35",
+      "opacity": "0",
       "mixBlendMode": "normal",
       "backgroundImage": "radial-gradient(circle at 50% 50%, rgb(239, 230, 210) 0px, rgb(239, 230, 210) 22%, rgba(0, 0, 0, 0) 24%)",
       "backgroundSize": "19.8px 19.8px",

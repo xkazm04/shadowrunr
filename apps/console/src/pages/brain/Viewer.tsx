@@ -6,6 +6,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import type { RunTranscriptResult, StreamEvent } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { OpenInStage } from "../../kit/OpenInStage";
+import { buttonClass } from "../../ui/Button";
 import { useRpc } from "../../data";
 import { pageRoute, useRouter } from "../../router";
 import { PillGroup, type PillOption } from "../../ui/PillGroup";
@@ -69,7 +70,7 @@ function Detail({ events, index, run }: { events: readonly StreamEvent[]; index:
   const e = index === undefined ? undefined : events[index];
   if (index === undefined || !e) return <p className={styles.hint}>Select a line to read it in full, with its raw event.</p>;
   return (
-    <div data-role="brain-line-detail">
+    <div className={styles.lineDetail} data-role="brain-line-detail">
       <div className={styles.kicker}>
         Line {index + 1} · {run}#{index + 1}
       </div>
@@ -99,13 +100,13 @@ function Transcript({ run, line, events }: { run: string; line: number | undefin
         <span className={styles.count} aria-live="polite">
           {int(shown.length)} of {int(events.length)} lines
         </span>
-        <OpenInStage runId={run} className={styles.stage} role="brain-open-stage" />
+        <OpenInStage runId={run} className={buttonClass("ink")} role="brain-open-stage" />
       </div>
       {line !== undefined && selected === undefined && <p className={styles.hint}>This transcript has no line {line}; it ends at line {events.length}.</p>}
       <div className={styles.viewer}>
         <Lines events={events} shown={shown} selected={selected} onPick={pick} />
         <div className={styles.detail}>
-          <Detail events={events} index={selected} run={run} />
+          <Detail key={selected ?? "none"} events={events} index={selected} run={run} />
         </div>
       </div>
     </>
