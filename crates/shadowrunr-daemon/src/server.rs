@@ -1,5 +1,6 @@
-//! The daemon: axum on 127.0.0.1 only, serving `GET /events` (WebSocket, see `events`) and
-//! `POST /rpc` (docs/spec/contract.md § Daemon protocol).
+//! The daemon: axum on 127.0.0.1 only, serving `GET /events` (WebSocket, see `events`),
+//! `POST /rpc` (docs/spec/contract.md § Daemon protocol), and `GET /voice` and
+//! `GET /avatar/{file}` (see `voice`).
 //!
 //! Browser access is limited to `http://localhost:*`, `tauri://localhost` and
 //! `http://tauri.localhost` (the Tauri v2 window origin on Windows), plus any
@@ -8,7 +9,8 @@
 //! (and spend quota) from the operator's browser. Non-browser clients send no `Origin`.
 //!
 //! Shutdown is graceful: [`AppState::shutdown`] stops accepting connections, and every open
-//! `/events` socket is closed with code 1001 and the reason `daemon shutting down`.
+//! `/events` and `/voice` socket is closed with code 1001 and the reason `daemon shutting down`,
+//! and the voice sidecar is stopped.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -43,6 +45,8 @@ pub struct AppState {
     pub acks: AckBook,
     /// Sandbox sessions hosted since the daemon started.
     pub sandbox: SandboxRegistry,
+    /// Malakor's voice (`/voice`): idle until `voice::start`, and `off` unless enabled.
+    pub voice: Arc<crate::voice::VoiceHub>,
     shutdown: watch::Sender<bool>,
 }
 
@@ -56,6 +60,7 @@ impl AppState {
             },
             engine.engine.clone(),
         );
+        let voice = crate::voice::VoiceHub::new(cfg.voice.clone());
         Arc::new(Self {
             cfg: Arc::new(cfg),
             engine,
@@ -63,6 +68,7 @@ impl AppState {
             live: LiveRegistry::default(),
             acks: AckBook::default(),
             sandbox: SandboxRegistry::default(),
+            voice,
             shutdown: watch::Sender::new(false),
         })
     }
