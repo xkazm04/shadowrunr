@@ -1,0 +1,137 @@
+{
+ "schema": "conform-run/1",
+ "worker": "3e4135fb-2ac7-45fc-a1ad-8a07bc1ab83c",
+ "subject": "live-response-latency-budgeting",
+ "evaluatedAt": "2026-10-20T21:40:42.128565+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "stage-kit-scene-engine",
+   "subject": "live-response-latency-budgeting",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "packages/stage-kit/src/sceneModel.ts:39 Searches found no latency, say_gap or stall matches in this context; it models and replays supplied events, so generating timely host responses is outside its responsibility.",
+   "techniques": [
+    {
+     "technique": "dual-lane-fast-voice-slow-beats",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/scene.ts:296 Consumes job status events for display; it does not execute planning or generation lanes."
+    },
+    {
+     "technique": "first-word-budget-decomposition",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/playback.ts:43 Playback applies existing events; it does not run the chat-to-generated-reply pipeline."
+    },
+    {
+     "technique": "fleet-loss-grace-signoff",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/scene.ts:357 Records an upstream sign-off instruction; it does not detect route failures or decide the grace window."
+    },
+    {
+     "technique": "in-character-stalling",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/scene.ts:250 Caption text comes from the supplied speech event; this reducer does not select host lines during generation waits."
+    },
+    {
+     "technique": "latency-class-per-role",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/scene.ts:207 Copies the reported tier into scene metadata without assigning model routes, reasoning effort or timeouts."
+    },
+    {
+     "technique": "say-gap-ceiling",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/timing.ts:93 Calculates caption fading from estimated line duration; it does not judge pacing or control host utterances."
+    }
+   ],
+   "absenceTerms": [
+    "latency",
+    "stall"
+   ]
+  },
+  {
+   "context": "stage-kit-overlays",
+   "subject": "live-response-latency-budgeting",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "packages/stage-kit/src/ui/Caption.tsx:41 Searches found no latency, say_gap or stall matches in these components; they render supplied scene content and do not control generation deadlines or host speech.",
+   "techniques": [
+    {
+     "technique": "dual-lane-fast-voice-slow-beats",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/JobTicker.tsx:21 Displays existing jobs; it does not run slow work or arbitrate microphone ownership."
+    },
+    {
+     "technique": "first-word-budget-decomposition",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/Caption.tsx:58 Renders supplied caption text using elapsed display time, without producing a generated reply or audio."
+    },
+    {
+     "technique": "fleet-loss-grace-signoff",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/Overlays.tsx:159 Displays the supplied outro reason; outage detection, grace timing and authored sign-off selection happen upstream."
+    },
+    {
+     "technique": "in-character-stalling",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/Caption.tsx:9 Animates supplied words; it does not author, rotate or ration lines to cover generation waits."
+    },
+    {
+     "technique": "latency-class-per-role",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/JobTicker.tsx:5 Classifies status text for presentation; the timeout mention does not configure or execute a model-role timeout."
+    },
+    {
+     "technique": "say-gap-ceiling",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/Caption.tsx:43 Controls caption visibility; it neither evaluates silence gaps nor triggers host speech."
+    }
+   ],
+   "absenceTerms": [
+    "latency",
+    "stall"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-20T21:40:42.128565+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "live-response-latency-budgeting"
+   ],
+   "techniques": [
+    "dual-lane-fast-voice-slow-beats",
+    "first-word-budget-decomposition",
+    "fleet-loss-grace-signoff",
+    "in-character-stalling",
+    "latency-class-per-role",
+    "say-gap-ceiling"
+   ],
+   "deviations": 0,
+   "context": "stage-kit-scene-engine",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-20T21:40:42.128565+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "live-response-latency-budgeting"
+   ],
+   "techniques": [
+    "dual-lane-fast-voice-slow-beats",
+    "first-word-budget-decomposition",
+    "fleet-loss-grace-signoff",
+    "in-character-stalling",
+    "latency-class-per-role",
+    "say-gap-ceiling"
+   ],
+   "deviations": 0,
+   "context": "stage-kit-overlays",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

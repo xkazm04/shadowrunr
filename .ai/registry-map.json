@@ -3697,7 +3697,11 @@
           "revision": 1,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "packages/stage-kit/src/ui/Caption.tsx:41 Searches found no latency, say_gap or stall matches in these components; they render supplied scene content and do not control generation deadlines or host speech.",
+          "evaluatedAt": "2026-10-20",
+          "evaluatedAgainst": "sha256-b2:86997f9644956258",
+          "evaluatedRevision": 1
         },
         {
           "subject": "knowledge-registry",
@@ -3930,7 +3934,11 @@
           "revision": 1,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "packages/stage-kit/src/sceneModel.ts:39 Searches found no latency, say_gap or stall matches in this context; it models and replays supplied events, so generating timely host responses is outside its responsibility.",
+          "evaluatedAt": "2026-10-20",
+          "evaluatedAgainst": "sha256-b2:86997f9644956258",
+          "evaluatedRevision": 1
         },
         {
           "subject": "mcp-tools",
