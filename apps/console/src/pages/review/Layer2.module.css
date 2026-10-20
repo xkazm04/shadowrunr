@@ -1,0 +1,14 @@
+/* Layer 2, Session review. The root carries data-page="review", so --sr-page-accent is the
+   page's violet. WP2 and WP3 add their own modules per tab; this one holds the frame only. */
+
+.root { color: var(--sr-color-text-ink); line-height: 1.5; }
+.secondary { display: inline-block; margin-top: var(--sr-space-base); color: var(--sr-page-accent-text); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .1em; text-transform: uppercase; }
+.head { display: flex; flex-wrap: wrap; gap: var(--sr-space-near) var(--sr-space-loose); align-items: flex-end; justify-content: space-between; }
+.pass, .fail { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .1em; text-transform: uppercase; padding: 0 var(--sr-space-tight); border: var(--sr-stroke-rule) solid currentColor; vertical-align: middle; }
+.pass { color: var(--sr-color-ok); }
+.fail { color: var(--sr-color-fail); }
+.gates { display: flex; flex-wrap: wrap; gap: var(--sr-space-tight); list-style: none; margin: 0; padding: 0; }
+.gates li { font-size: var(--sr-size-micro); padding: var(--sr-space-hair) var(--sr-space-compact); border: var(--sr-stroke-hair) solid var(--sr-color-line); }
+.gates .pass { border-color: var(--sr-color-ok); }
+.gates .fail { border-color: var(--sr-color-fail); background: color-mix(in srgb, var(--sr-color-verdict-failed-ground) 45%, transparent); }
+.gates .unmeasured { border-style: dashed; color: var(--sr-color-verdict-unevaluable-edge); }

@@ -4,7 +4,8 @@ import { page as brain } from "../pages/brain";
 import { page as characters } from "../pages/characters";
 import { page as onair } from "../pages/onair";
 import { page as reconcile } from "../pages/reconcile";
+import { page as review } from "../pages/review";
 import { page as segments } from "../pages/segments";
 import { page as simulator } from "../pages/simulator";
 
-export const PAGES = { onair, characters, brain, segments, simulator, reconcile } satisfies PageRegistry;
+export const PAGES = { onair, characters, brain, segments, simulator, review, reconcile } satisfies PageRegistry;

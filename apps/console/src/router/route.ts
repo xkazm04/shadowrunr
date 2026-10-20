@@ -4,7 +4,7 @@
 // %2F) by `encodeRoute`, and decoded exactly once by `decodeRoute`. Nothing else in the app
 // builds or parses a hash. This replaces the winner's `~` substitution and its double decode.
 
-export const PAGE_IDS = ["onair", "characters", "brain", "segments", "simulator", "reconcile"] as const;
+export const PAGE_IDS = ["onair", "characters", "brain", "segments", "simulator", "review", "reconcile"] as const;
 export type PageId = (typeof PAGE_IDS)[number];
 
 /** The wall is `#/wall`; an empty hash or `#/` also lands there. */

@@ -113,7 +113,8 @@ export type Role =
   | "chatter"
   | "judge"
   | "reconciler"
-  | "clipper";
+  | "clipper"
+  | "tagger";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ModelTier".
@@ -188,6 +189,19 @@ export type BoundMethod = "wilson" | "rule_of_three";
  * via the `definition` "DirectiveVerdict".
  */
 export type DirectiveVerdict = "held" | "broken" | "attempted" | "ignored" | "unmeasured";
+/**
+ * The operator's quick marks on a line.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "FeedbackTag".
+ */
+export type FeedbackTag =
+  ("landed" | "flat" | "too_mean" | "broke_character" | "off_tone" | "great_roast" | "repetitive") | "wrong_tag";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ReviewFeedbackListResult".
+ */
+export type ReviewFeedbackListResult = LineFeedback[];
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "StreamEvent".
@@ -411,21 +425,6 @@ export type FleetHealth = "healthy" | "degraded" | "down";
  */
 export type EndReason = "scheduled" | "fleet_lost" | "operator" | "sim_complete";
 /**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "RunTranscriptResult".
- */
-export type RunTranscriptResult = StreamEvent[];
-/**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "CheckState".
- */
-export type CheckState = ("pass" | "fail") | "not_provoked" | "not_evaluable";
-/**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "RunsListResult".
- */
-export type RunsListResult = RunRow[];
-/**
  * An injected engine failure for the brain's roles (the chat room keeps talking).
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -437,6 +436,59 @@ export type SandboxChaos = "outage" | "lost";
  * via the `definition` "SandboxCheckState".
  */
 export type SandboxCheckState = ("pass" | "fail") | "unmeasured";
+/**
+ * How cutting a line is.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "LineEdge".
+ */
+export type LineEdge = "none" | "mild" | "sharp";
+/**
+ * What a Malakor line is doing.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "LineKind".
+ */
+export type LineKind =
+  | ("signoff" | "other")
+  | "roast"
+  | "tease"
+  | "joke"
+  | "title"
+  | "welcome"
+  | "reply"
+  | "callout"
+  | "show"
+  | "refusal"
+  | "care"
+  | "disclosure";
+/**
+ * Whom a line is aimed at.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "LineTarget".
+ */
+export type LineTarget = "viewer" | "chat" | "foil" | "self" | "lord" | "case" | "none";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CheckState".
+ */
+export type CheckState = ("pass" | "fail") | "not_provoked" | "not_evaluable";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ReviewSessionsResult".
+ */
+export type ReviewSessionsResult = ReviewSessionRow[];
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "RunTranscriptResult".
+ */
+export type RunTranscriptResult = StreamEvent[];
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "RunsListResult".
+ */
+export type RunsListResult = RunRow[];
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "SandboxState".
@@ -643,6 +695,26 @@ export interface RpcMethods {
   "reconcile.run": {
     params: ReconcileRunParams;
     result: ReconcileRunResult;
+  };
+  "review.feedback.list": {
+    params: FeedbackListParams;
+    result: ReviewFeedbackListResult;
+  };
+  "review.feedback.set": {
+    params: FeedbackSetParams;
+    result: LineFeedback;
+  };
+  "review.session": {
+    params: ReviewSessionParams;
+    result: ReviewSession;
+  };
+  "review.sessions": {
+    params: ReviewSessionsParams;
+    result: ReviewSessionsResult;
+  };
+  "review.tag": {
+    params: ReviewTagParams;
+    result: SessionTags;
   };
   "run.transcript": {
     params: RunParams;
@@ -2201,14 +2273,84 @@ export interface ReconcileRunResult {
   report_id: string;
 }
 /**
- * A run by `run_id`, `<tournament_id>/<run_id>`, or `run_id` plus `tournament_id`.
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "FeedbackListParams".
+ */
+export interface FeedbackListParams {
+  session_id?: string;
+}
+/**
+ * One row of `feedback.jsonl`, and the folded state of a line. Empty `tags` with no `note`
+ * clears the line.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "RunParams".
+ * via the `definition` "LineFeedback".
  */
-export interface RunParams {
-  run_id: string;
-  tournament_id?: string;
+export interface LineFeedback {
+  at_ms: number;
+  line: number;
+  note?: string;
+  session_id: string;
+  tags: FeedbackTag[];
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "FeedbackSetParams".
+ */
+export interface FeedbackSetParams {
+  line: number;
+  note?: string;
+  session_id: string;
+  tags: FeedbackTag[];
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ReviewSessionParams".
+ */
+export interface ReviewSessionParams {
+  session_id: string;
+}
+/**
+ * `review.session`: everything the Review page needs for one session, in one reply.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ReviewSession".
+ */
+export interface ReviewSession {
+  /**
+   * The session's engine calls (`ledger.jsonl`).
+   */
+  calls: LedgerEntry[];
+  /**
+   * Entries for the verdict's failed rules and its quality dimensions.
+   */
+  catalog: RuleInfo[];
+  /**
+   * The whole transcript; event i is line i + 1.
+   */
+  events: StreamEvent[];
+  feedback: LineFeedback[];
+  row: ReviewSessionRow;
+  segments: SegmentSpan[];
+  tags?: SessionTags;
+  verdict?: JudgeVerdict;
+}
+/**
+ * What a judged rule or quality dimension asks for, for display.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "RuleInfo".
+ */
+export interface RuleInfo {
+  /**
+   * A rule id (`situation:<id>`, `red-line:<id>`...) or a quality dimension id.
+   */
+  id: string;
+  required: string;
+  /**
+   * The planted moment, for situation rules.
+   */
+  when?: string;
 }
 /**
  * What one stream receives from the Lord of the Darkness (WP15): the latest chosen plan's
@@ -2310,6 +2452,102 @@ export interface VoteTally {
   weight: number;
 }
 /**
+ * One session on the Review page's wall.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ReviewSessionRow".
+ */
+export interface ReviewSessionRow {
+  chaos?: SandboxChaos;
+  checks: SandboxCheck[];
+  /**
+   * Stream seconds from the first to the last event.
+   */
+  length_s: number;
+  /**
+   * Malakor lines in the transcript.
+   */
+  lines: number;
+  /**
+   * Lines with operator feedback.
+   */
+  marked: number;
+  max_say_gap_s: number;
+  minutes: number;
+  /**
+   * Tagged lines per kind; kinds with no line are omitted.
+   */
+  mix: {
+    [k: string]: number | undefined;
+  };
+  pass: boolean;
+  /**
+   * Absent when the session was not judged.
+   */
+  rule_fails?: number;
+  session_id: string;
+  started_ms: number;
+  /**
+   * `tags.json` exists.
+   */
+  tagged: boolean;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxCheck".
+ */
+export interface SandboxCheck {
+  detail: string;
+  /**
+   * One of [`SANDBOX_CHECKS`].
+   */
+  id: string;
+  state: SandboxCheckState;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SegmentSpan".
+ */
+export interface SegmentSpan {
+  from_s: number;
+  segment: SegmentId;
+  to_s: number;
+}
+/**
+ * `tags.json`: one tagger pass over a session's Malakor lines.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SessionTags".
+ */
+export interface SessionTags {
+  created_ms: number;
+  lines: LineTag[];
+  model: ModelTier;
+  session_id: string;
+  /**
+   * Bumped whenever the taxonomy or the tagger's instructions change.
+   */
+  tagger_version: number;
+  /**
+   * Malakor lines the tagger left without a tag (unparseable reply, timeout).
+   */
+  untagged: number;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "LineTag".
+ */
+export interface LineTag {
+  edge: LineEdge;
+  kind: LineKind;
+  line: number;
+  target: LineTarget;
+  /**
+   * The tagger's reason, eight words at most.
+   */
+  why?: string;
+}
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "JudgeVerdict".
  */
@@ -2348,6 +2586,32 @@ export interface RuleCheck {
   evidence?: string[];
   rule: string;
   state: CheckState;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ReviewSessionsParams".
+ */
+export interface ReviewSessionsParams {}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ReviewTagParams".
+ */
+export interface ReviewTagParams {
+  /**
+   * Re-tag even when `tags.json` is current.
+   */
+  force?: boolean;
+  session_id: string;
+}
+/**
+ * A run by `run_id`, `<tournament_id>/<run_id>`, or `run_id` plus `tournament_id`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "RunParams".
+ */
+export interface RunParams {
+  run_id: string;
+  tournament_id?: string;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -2543,18 +2807,6 @@ export interface SandboxReport {
    * Epoch ms.
    */
   started_ms: number;
-}
-/**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "SandboxCheck".
- */
-export interface SandboxCheck {
-  detail: string;
-  /**
-   * One of [`SANDBOX_CHECKS`].
-   */
-  id: string;
-  state: SandboxCheckState;
 }
 /**
  * The judge's verdict, folded into the report.

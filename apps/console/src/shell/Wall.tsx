@@ -1,4 +1,4 @@
-// The season wall: six posters laid out by `layoutPosters`. Hover widens a poster on the wall
+// The season wall: seven posters laid out by `layoutPosters`. Hover widens a poster on the wall
 // and opens a rail strip on layer 1 (armed 1.1 s after arriving, so the strip the pointer
 // happens to rest on does not pop open).
 import { TOKENS_LAYOUT } from "@shadowrunr/tokens";
@@ -110,7 +110,7 @@ export function Wall(p: WallProps) {
     <div
       className={styles.wall}
       role="navigation"
-      aria-label="The season wall: six posters"
+      aria-label="The season wall: seven posters"
       onPointerOver={onPointerOver}
       onPointerLeave={onPointerLeave}
       onFocus={(e) => {

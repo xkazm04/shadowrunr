@@ -9,7 +9,7 @@ export function Intro(props: { narrow: boolean; onSkip: () => void }) {
     <div className={styles.intro} data-narrow={props.narrow} data-role="intro" onPointerDown={props.onSkip}>
       <div className={styles.title} aria-hidden="true">
         <span>Shadowrunr OS</span>
-        <em>Season 0 · six posters · two layers each</em>
+        <em>Season 0 · seven posters · two layers each</em>
       </div>
       <button type="button" className={styles.skip} onClick={props.onSkip}>
         Skip · any key

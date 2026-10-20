@@ -16,12 +16,12 @@ export function MixerBus(props: { pages: PageRegistry; onAir: PageId; compact: b
       data-compact={props.compact}
       data-narrow={props.narrow}
       data-role="mixer-bus"
-      aria-label="Vision mixer: six pages, keys 1 to 6"
+      aria-label="Vision mixer: seven pages, keys 1 to 7"
       style={style}
     >
       <div className={styles.label}>
         <b>Vision mixer</b>
-        keys 1–6 · tally = on air
+        keys 1–7 · tally = on air
       </div>
       {PAGE_IDS.map((id, i) => {
         const Mini = props.pages[id].Mini;

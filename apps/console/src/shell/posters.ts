@@ -8,6 +8,7 @@ export const POSTERS: Readonly<Record<PageId, PosterCopy>> = {
   brain: { name: "Brain", short: "Brain", tag: "The Brain", lines: ["The", "Brain"] },
   segments: { name: "Segments & ranks", short: "Ranks", tag: "The Programme", lines: ["The", "Pro-", "gramme"] },
   simulator: { name: "Simulator", short: "Trials", tag: "The Trials", lines: ["The", "Trials"] },
+  review: { name: "Session review", short: "Tape", tag: "The Tape", lines: ["The", "Tape"] },
   reconcile: { name: "Reconcile & plan", short: "Plan", tag: "The Morning After", lines: ["Morning", "After"] },
 };
 

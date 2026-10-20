@@ -1,4 +1,4 @@
-// The shell in jsdom: wall, six posters, every page's layer 1 and a nested layer 2, the mixer
+// The shell in jsdom: wall, seven posters, every page's layer 1 and a nested layer 2, the mixer
 // bus, keys, and the DOM-count budget (budgets/dom.json). Counts are gated; timings are not.
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -71,23 +71,23 @@ afterEach(() => {
 });
 
 describe("the shell", () => {
-  it("renders the wall with all six posters and no bus", () => {
+  it("renders the wall with all seven posters and no bus", () => {
     mount("#/wall");
     const posters = document.querySelectorAll("[data-role='poster']");
-    expect([...posters].map((p) => p.getAttribute("data-page"))).toEqual(["onair", "characters", "brain", "segments", "simulator", "reconcile"]);
+    expect([...posters].map((p) => p.getAttribute("data-page"))).toEqual(["onair", "characters", "brain", "segments", "simulator", "review", "reconcile"]);
     expect(document.querySelector("[data-role='mixer-bus']")).toBeNull();
     expect(screen.getByRole("status").textContent).toContain("Connecting");
   });
 
   it("renders every page's layer 1 and the mixer bus with the tally on it", async () => {
     mount("#/wall");
-    for (const id of ["onair", "characters", "brain", "segments", "simulator", "reconcile"] as const) {
+    for (const id of ["onair", "characters", "brain", "segments", "simulator", "review", "reconcile"] as const) {
       await go(encodeRoute(pageRoute(id)));
       await waitLayer1(id);
       const active = document.querySelector(`[data-role='poster'][data-page='${id}']`);
       expect(active?.getAttribute("data-active")).toBe("true");
       const channels = document.querySelectorAll("[data-role='bus-channel']");
-      expect(channels).toHaveLength(6);
+      expect(channels).toHaveLength(7);
       expect([...channels].filter((c) => c.getAttribute("aria-current") === "page").map((c) => c.getAttribute("data-page"))).toEqual([id]);
     }
   });
@@ -114,7 +114,7 @@ describe("the shell", () => {
     expect(router.getRoute()).toEqual({ view: "wall" });
   });
 
-  it("jumps pages with bare 1-6 and toggles the wall with M", async () => {
+  it("jumps pages with bare 1-7 and toggles the wall with M", async () => {
     mount("#/wall");
     await key("5");
     expect(router.getRoute()).toEqual(pageRoute("simulator"));
@@ -151,7 +151,7 @@ describe("DOM-count budget", () => {
     mount("#/wall");
     counts["wall"] = nodes();
     // The wall's line is the shell plus one motif allowance per poster; every motif keeps to it.
-    expect(BUDGETS.routes["wall"]).toBe(BUDGETS.allowances.shell + 6 * BUDGETS.allowances.motif);
+    expect(BUDGETS.routes["wall"]).toBe(BUDGETS.allowances.shell + 7 * BUDGETS.allowances.motif);
     for (const m of document.querySelectorAll("[data-role$='-motif']")) {
       const n = m.querySelectorAll("*").length + 2; // the art, its root and the face's motif box
       expect(n, `${m.getAttribute("data-role")}: ${n} nodes`).toBeLessThanOrEqual(BUDGETS.allowances.motif);

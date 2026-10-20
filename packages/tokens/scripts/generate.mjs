@@ -34,6 +34,8 @@ const PREFIX = {
   // A/1's canvas palettes (fidelity roles, kept exact): the brain scope and the simulator grid.
   brain: "--sr-brain-",
   sim: "--sr-sim-",
+  // Session review: line-kind identity colours shared by the Review page's timeline and player.
+  review: "--sr-review-",
 };
 
 const errors = [];

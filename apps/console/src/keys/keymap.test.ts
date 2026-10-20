@@ -33,11 +33,11 @@ describe("keymap conflict report", () => {
 });
 
 describe("bindings", () => {
-  it("jumps to a page with bare 1-6 at every level", () => {
+  it("jumps to a page with bare 1-7 at every level", () => {
     for (const mode of ["wall", "l1", "l2"] as const) {
-      for (let i = 1; i <= 6; i++) expect(resolve(KEYMAP, mode, String(i), false)?.action).toEqual({ type: "page", index: i - 1 });
+      for (let i = 1; i <= 7; i++) expect(resolve(KEYMAP, mode, String(i), false)?.action).toEqual({ type: "page", index: i - 1 });
     }
-    expect(resolve(KEYMAP, "l1", "7", false)).toBeUndefined();
+    expect(resolve(KEYMAP, "l1", "8", false)).toBeUndefined();
   });
 
   it("goes up on Esc, except on the wall (the owner's router fix)", () => {

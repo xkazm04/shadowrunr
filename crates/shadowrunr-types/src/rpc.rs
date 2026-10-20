@@ -19,6 +19,10 @@ use crate::reconcile::{
     RuleIncident, Source,
 };
 use crate::results::TournamentResults;
+use crate::review::{
+    FeedbackListParams, FeedbackSetParams, LineFeedback, ReviewSession, ReviewSessionParams,
+    ReviewSessionRow, ReviewSessionsParams, ReviewTagParams, SessionTags,
+};
 use crate::sandbox::{
     SandboxIdParams, SandboxStartParams, SandboxStarted, SandboxStatus, SandboxStatusParams,
 };
@@ -454,6 +458,11 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<SandboxStartParams, SandboxStarted>("sandbox.start");
     v.method::<SandboxIdParams, SandboxStatus>("sandbox.stop");
     v.method::<SandboxStatusParams, SandboxStatus>("sandbox.status");
+    v.method::<ReviewSessionsParams, Vec<ReviewSessionRow>>("review.sessions");
+    v.method::<ReviewSessionParams, ReviewSession>("review.session");
+    v.method::<FeedbackSetParams, LineFeedback>("review.feedback.set");
+    v.method::<FeedbackListParams, Vec<LineFeedback>>("review.feedback.list");
+    v.method::<ReviewTagParams, SessionTags>("review.tag");
 }
 
 /// Every method name, in table order.

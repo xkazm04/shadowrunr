@@ -4,7 +4,7 @@
 /** Pushed event type → RPC methods whose cached replies it makes stale. */
 export const EVENT_INVALIDATES: Readonly<Record<string, readonly string[]>> = {
   stream_start: ["runs.list", "runs.page", "tournament.list", "tournaments.page"],
-  stream_end: ["runs.list", "runs.page", "tournament.list", "tournaments.page", "tournament.results", "ledger.page"],
+  stream_end: ["runs.list", "runs.page", "tournament.list", "tournaments.page", "tournament.results", "ledger.page", "review.sessions"],
   segment_end: ["ledger.page"],
   job: ["ledger.page"],
 };
@@ -24,6 +24,9 @@ export const MUTATION_INVALIDATES: Readonly<Record<string, readonly string[]>> =
   "clips.approve": ["clips.list", "clips.get"],
   "clips.reject": ["clips.list", "clips.get"],
   "clips.publish": ["clips.get"],
+  // Feedback is optimistic on the page; only the wall's counts refetch, never the whole session.
+  "review.feedback.set": ["review.sessions", "review.feedback.list"],
+  "review.tag": ["review.sessions", "review.session"],
 };
 
 export function invalidatedByEvent(type: string): readonly string[] {

@@ -357,6 +357,13 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         "sandbox.start" => ok(crate::sandbox::start(state.clone(), params(req.params)?).await?),
         "sandbox.stop" => ok(crate::sandbox::stop(state, params(req.params)?).await?),
         "sandbox.status" => ok(crate::sandbox::status(state, params(req.params)?).await?),
+        "review.sessions" => ok(crate::review::sessions(state, params(req.params)?).await?),
+        "review.session" => ok(crate::review::session(state, params(req.params)?).await?),
+        "review.feedback.set" => ok(crate::review::feedback_set(state, params(req.params)?).await?),
+        "review.feedback.list" => {
+            ok(crate::review::feedback_list(state, params(req.params)?).await?)
+        }
+        "review.tag" => ok(crate::review::tag(state, params(req.params)?).await?),
         other => Err(RpcError::new(
             ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),
@@ -377,7 +384,7 @@ mod tests {
     #[test]
     fn engine_status_for_the_scripted_engine() {
         let st = engine_status(&EngineHandle::scripted());
-        assert_eq!(st.routes.len(), 9);
+        assert_eq!(st.routes.len(), shadowrunr_engine::ROLES.len());
         assert_eq!(st.routes[0].role, Role::CoreThread);
         for r in &st.routes {
             assert_eq!((r.tier, r.effort, r.timeout_ms), route(r.role));

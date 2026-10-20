@@ -141,8 +141,8 @@ describe("generated outputs", () => {
     }
   });
 
-  it("scopes a palette for all six pages", () => {
-    expect([...PAGE_IDS]).toEqual(["onair", "characters", "brain", "segments", "simulator", "reconcile"]);
+  it("scopes a palette for all seven pages", () => {
+    expect([...PAGE_IDS]).toEqual(["onair", "characters", "brain", "segments", "simulator", "review", "reconcile"]);
     for (const id of PAGE_IDS) {
       const block = new RegExp(`\\[data-page="${id}"\\] \\{([^}]*)\\}`).exec(css)?.[1] ?? "";
       for (const role of Object.keys(src.pageRole)) expect(block, `${id} ${role}`).toMatch(new RegExp(`--sr-page-${role}: #[0-9a-f]{6};`));
@@ -187,6 +187,8 @@ describe("fidelity: byte-equal to the winner", () => {
       brain: ["#14463d", "#efe6d2", "#e8542a", "#86d3bb", "#06110e", "#3a9b86", "#1b6150"],
       segments: ["#d6a85a", "#0b0f0e", "#a8321c", "#efe6d2", "#0b0f0e", "#d6a85a", "#7d5f12"],
       simulator: ["#8e2a1a", "#efe6d2", "#d6a85a", "#e8542a", "#0b0f0e", "#c9452c", "#8e2a1a"],
+      // Not from the winner: the seventh poster (Session review, 2026-10-20), straw under violet.
+      review: ["#f3dca6", "#0b0f0e", "#5a4a9a", "#e8542a", "#0b0f0e", "#5a4a9a", "#2a2060"],
       reconcile: ["#0b0f0e", "#efe6d2", "#2f7d6a", "#e8542a", "#0b0f0e", "#e8542a", "#b53a14"],
     };
     for (const id of PAGE_IDS) {

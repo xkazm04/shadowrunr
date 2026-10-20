@@ -45,6 +45,8 @@ pub enum Role {
     Reconciler,
     /// The clip factory's hook read of candidate windows (cheapest tier).
     Clipper,
+    /// Session review: types every Malakor line of a finished session (cheapest tier).
+    Tagger,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]

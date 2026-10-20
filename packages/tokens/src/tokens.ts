@@ -262,6 +262,25 @@ export const TOKENS_SIM = {
   unjudged: "rgba(255,255,255,.06)",
   font: "\"Barlow Condensed\",\"Arial Narrow\",sans-serif",
 } as const;
+/** The `review` roles resolved to their values. */
+export const TOKENS_REVIEW = {
+  kindRoast: "#c9452c",
+  kindTease: "#e8913f",
+  kindJoke: "#d6a85a",
+  kindTitle: "#5a4a9a",
+  kindWelcome: "#1b6150",
+  kindReply: "#2a2060",
+  kindCallout: "#8f877a",
+  kindShow: "#3a9b86",
+  kindRefusal: "#8e2a1a",
+  kindCare: "#ff9c82",
+  kindDisclosure: "#6b5f4a",
+  kindSignoff: "#0b0f0e",
+  kindStall: "#cdbf9f",
+  kindOther: "#cfc3a8",
+  kindUntagged: "#d4c5a1",
+  votedRing: "#1b6150",
+} as const;
 
 /** Every role resolved to its value (canvas and inline use). Primitives stay in the source JSON. */
 export const TOKENS = {
@@ -281,6 +300,7 @@ export const TOKENS = {
   layout: TOKENS_LAYOUT,
   brain: TOKENS_BRAIN,
   sim: TOKENS_SIM,
+  review: TOKENS_REVIEW,
 } as const;
 
 /** CSS custom-property prefix per role group; a role's property is prefix + kebab-case key. */
@@ -301,6 +321,7 @@ export const VAR_PREFIX = {
   layout: "--sr-layout-",
   brain: "--sr-brain-",
   sim: "--sr-sim-",
+  review: "--sr-review-",
 } as const;
 
 /** Values that change at a breakpoint, keyed by breakpoint role then CSS custom property. */
@@ -310,7 +331,7 @@ export const AT_BREAKPOINT = {
   },
 } as const;
 
-export const PAGE_IDS = ["onair", "characters", "brain", "segments", "simulator", "reconcile"] as const;
+export const PAGE_IDS = ["onair", "characters", "brain", "segments", "simulator", "review", "reconcile"] as const;
 export type PageId = (typeof PAGE_IDS)[number];
 
 /** Per-page palettes; tokens.css scopes them under [data-page="<id>"]. */
@@ -359,6 +380,15 @@ export const PAGE_PALETTES = {
     key: "#0b0f0e",
     accent: "#c9452c",
     accentText: "#8e2a1a",
+  },
+  review: {
+    face: "#f3dca6",
+    type: "#0b0f0e",
+    overprint: "#5a4a9a",
+    overprint2: "#e8542a",
+    key: "#0b0f0e",
+    accent: "#5a4a9a",
+    accentText: "#2a2060",
   },
   reconcile: {
     face: "#0b0f0e",

@@ -1,0 +1,4 @@
+/* Session review poster face. Ink comes from the page palette and the review kind tokens. */
+.motif { width: 100%; height: 100%; }
+.tape { fill: var(--sr-page-face); stroke: var(--sr-page-type); stroke-width: 3; }
+.reel { fill: none; stroke: var(--sr-page-type); stroke-width: 4; }

@@ -16,6 +16,7 @@ pub mod paging;
 pub mod policy_install;
 pub mod preflight;
 pub mod report_wire;
+pub mod review;
 pub mod rpc;
 pub mod runs;
 pub mod sandbox;

@@ -446,6 +446,24 @@
       "label-hover": { "value": "{color.apricot}", "description": "The hovered tournament tile's label." },
       "unjudged": { "value": "{color.white}", "alpha": ".06", "description": "A run with no verdict yet: an unlit slot on the simulator grid." },
       "font": { "value": ["{font.barlow-condensed}", "{font.arial-narrow}", "{font.generic-sans}"], "description": "The simulator canvas's label face (A/1's exact stack)." }
+    },
+    "review": {
+      "kind-roast": { "value": "{color.vermilion}", "description": "Session review: A roast: an insult aimed at a named viewer or the foil." },
+      "kind-tease": { "value": "{color.amber}", "description": "Session review: A tease: a light jab at a viewer or chat." },
+      "kind-joke": { "value": "{color.ochre}", "description": "Session review: A joke not aimed at a person." },
+      "kind-title": { "value": "{color.violet}", "description": "Session review: A mock title or rank granted to a viewer." },
+      "kind-welcome": { "value": "{color.pine}", "description": "Session review: A welcome to a newcomer, a raid, a gift or a return." },
+      "kind-reply": { "value": "{color.indigo}", "description": "Session review: A plain reply to chat." },
+      "kind-callout": { "value": "{color.gravel}", "description": "Session review: A call to action: vote, hint, summon, a countdown." },
+      "kind-show": { "value": "{color.sea}", "description": "Session review: Running the show: polls, case facts, reveals, framing." },
+      "kind-refusal": { "value": "{color.blood}", "description": "Session review: A refusal of a request or bait." },
+      "kind-care": { "value": "{color.salmon}", "description": "Session review: A sincere safety or crisis line." },
+      "kind-disclosure": { "value": "{color.mute}", "description": "Session review: He says he is an AI character or the case is fictional." },
+      "kind-signoff": { "value": "{color.ink}", "description": "Session review: The sign-off." },
+      "kind-stall": { "value": "{color.stone}", "description": "Session review: A stall line spoken because the engine was slow or failing." },
+      "kind-other": { "value": "{color.oat}", "description": "Session review: A line of no listed kind." },
+      "kind-untagged": { "value": "{color.paper-3}", "description": "Session review: A line the tagger has not typed." },
+      "voted-ring": { "value": "{color.pine}", "description": "Session review: the ring on a line the operator has marked." }
     }
   },
   "pageRole": {
@@ -463,6 +481,7 @@
     "brain": { "face": "{color.teal-deep}", "type": "{color.paper}", "overprint": "{color.ember}", "overprint-2": "{color.verdigris}", "key": "{color.abyss}", "accent": "{color.sea}", "accent-text": "{color.pine}" },
     "segments": { "face": "{color.ochre}", "type": "{color.ink}", "overprint": "{color.rust}", "overprint-2": "{color.paper}", "key": "{color.ink}", "accent": "{color.ochre}", "accent-text": "{color.ochre-deep}" },
     "simulator": { "face": "{color.blood}", "type": "{color.paper}", "overprint": "{color.ochre}", "overprint-2": "{color.ember}", "key": "{color.ink}", "accent": "{color.vermilion}", "accent-text": "{color.blood}" },
+    "review": { "face": "{color.straw}", "type": "{color.ink}", "overprint": "{color.violet}", "overprint-2": "{color.ember}", "key": "{color.ink}", "accent": "{color.violet}", "accent-text": "{color.indigo}" },
     "reconcile": { "face": "{color.ink}", "type": "{color.paper}", "overprint": "{color.teal}", "overprint-2": "{color.ember}", "key": "{color.ink}", "accent": "{color.ember}", "accent-text": "{color.ember-deep}" }
   },
   "rank": {

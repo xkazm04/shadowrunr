@@ -1,7 +1,7 @@
 // The one keymap registry. Every global key binding the console has is declared here, per mode,
 // and `conflictReport` (run as a test) proves no chord means two things in one mode.
 //
-// Bindings kept from the winner and A/1: bare 1-6 jump to a page at every level, M toggles the
+// Bindings kept from the winner and A/1: bare 1-7 jump to a page at every level, M toggles the
 // wall, Esc goes up one segment, arrows move along the wall or between posters. Owner's router
 // fix: Esc on the wall does nothing (the winner opened a poster).
 
@@ -38,7 +38,7 @@ export interface Binding {
 }
 
 const NAV: readonly Mode[] = ["wall", "l1", "l2"];
-const PAGE_COUNT = 6;
+const PAGE_COUNT = 7;
 
 export const KEYMAP: readonly Binding[] = [
   { chord: "*", modes: ["intro"], action: { type: "skip-intro" }, label: "Skip the intro" },

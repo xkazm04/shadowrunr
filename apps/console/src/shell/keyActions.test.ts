@@ -36,7 +36,7 @@ describe("key actions", () => {
   });
 
   it("wraps arrow movement on the wall and between pages", () => {
-    expect(effectOf({ type: "wall-focus", delta: -1 }, ctx({ route: WALL, hover: 0 }))).toEqual({ kind: "hover", index: 5 });
+    expect(effectOf({ type: "wall-focus", delta: -1 }, ctx({ route: WALL, hover: 0 }))).toEqual({ kind: "hover", index: 6 });
     expect(effectOf({ type: "page-step", delta: 1 }, ctx({ route: pageRoute("reconcile") }))).toEqual({
       kind: "navigate",
       route: pageRoute("onair"),

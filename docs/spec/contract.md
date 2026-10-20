@@ -59,7 +59,7 @@ Wire names that other components read verbatim:
 | `Rank`, lowest first | `thrall`, `acolyte`, `cultist`, `warlock`, `lich`, `dread_council` |
 | `EvidenceGrade` | `DOC`, `REP`, `CLM`, `SPC` |
 | `ModelTier` | `haiku`, `sonnet`, `opus` |
-| `Role` | `core_thread`, `chat_picker`, `planner`, `researcher`, `consolidator`, `chatter`, `judge`, `reconciler`, `clipper` |
+| `Role` | `core_thread`, `chat_picker`, `planner`, `researcher`, `consolidator`, `chatter`, `judge`, `reconciler`, `clipper`, `tagger` |
 | `CheckState` | `pass`, `fail`, `not_provoked`, `not_evaluable` |
 
 Chat commands:
@@ -173,6 +173,7 @@ merged.
 | judge | sonnet | medium | 900 s (whole-transcript judging) |
 | reconciler | opus | high | 600 s |
 | clipper | haiku | low | 60 s (one hook read per run; the cheapest tier) |
+| tagger | haiku | low | 60 s (types a finished session's lines in batches of about 60; the cheapest tier) |
 
 The core-thread entry is what the tournament recalibrates: the 2026-10-18 night tournament
 (n=60 per tier) moved it from haiku to sonnet on red-line fails (0.4% vs 1.9%). The judge
@@ -871,3 +872,34 @@ hosts a session; `shadowrunr stream sandbox` drives it.
   its first name-token of 3+ letters as a whole word) is repaired or dropped:
   `moderation {output, crisis_chat_ban, name_withheld}`. The simulated room stops that viewer
   posting, stops its chatters mentioning them, and reassigns their pending stimuli.
+
+## Appendix (session review): line tags, operator feedback, the Review page
+
+The console's Review page reads finished sandbox sessions. Line numbers are the 1-based transcript
+line everywhere: the same as the `/events` seq and the judge's `<run>#<line>` refs.
+
+- `runs/sandbox/<id>/tags.json` is `SessionTags`: `{session_id, tagger_version, model,
+  created_ms, lines: [{line, kind, target, edge, why?}], untagged}`.
+  - It is derived and versioned. `review.tag` rewrites it and nothing edits it by hand.
+  - `kind`: roast, tease, joke, title, welcome, reply, callout, show, refusal, care,
+    disclosure, signoff, other.
+  - `target`: viewer, chat, foil, self, lord, case, none.
+  - `edge`: none, mild, sharp.
+  - The `tagger` role (Haiku) types every Malakor line after the session is judged.
+  - `shadowrunr review tag <id>|--all [--force]` backfills.
+- `<data>/review/feedback.jsonl` is append-only `LineFeedback` rows: `{session_id, line, tags,
+  note?, at_ms}`.
+  - The latest row per `<session>#<line>` wins.
+  - Empty `tags` with no `note` clears the line.
+  - `tags` are landed, flat, too_mean, broke_character, off_tone, great_roast, repetitive and
+    wrong_tag.
+- RPCs:
+  - `review.sessions {}` -> `ReviewSessionRow[]`: newest first, every session under
+    runs/sandbox.
+  - `review.session {session_id}` -> `ReviewSession`: `{row, segments, events, tags?, verdict?,
+    catalog, calls, feedback}`, the whole session in one reply.
+  - `review.feedback.set {session_id, line, tags, note?}` -> `LineFeedback`.
+  - `review.feedback.list {session_id?}` -> `LineFeedback[]`, folded.
+  - `review.tag {session_id, force?}` -> `SessionTags`.
+- Stall lines, timeline buckets and every display name are computed in the console, never
+  stored or sent.

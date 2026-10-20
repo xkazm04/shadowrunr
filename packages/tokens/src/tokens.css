@@ -314,6 +314,23 @@
   --sr-sim-label-hover: #ffb15a;
   --sr-sim-unjudged: rgba(255,255,255,.06);
   --sr-sim-font: "Barlow Condensed","Arial Narrow",sans-serif;
+  /* review */
+  --sr-review-kind-roast: #c9452c;
+  --sr-review-kind-tease: #e8913f;
+  --sr-review-kind-joke: #d6a85a;
+  --sr-review-kind-title: #5a4a9a;
+  --sr-review-kind-welcome: #1b6150;
+  --sr-review-kind-reply: #2a2060;
+  --sr-review-kind-callout: #8f877a;
+  --sr-review-kind-show: #3a9b86;
+  --sr-review-kind-refusal: #8e2a1a;
+  --sr-review-kind-care: #ff9c82;
+  --sr-review-kind-disclosure: #6b5f4a;
+  --sr-review-kind-signoff: #0b0f0e;
+  --sr-review-kind-stall: #cdbf9f;
+  --sr-review-kind-other: #cfc3a8;
+  --sr-review-kind-untagged: #d4c5a1;
+  --sr-review-voted-ring: #1b6150;
   /* rank */
   --sr-rank-thrall: #8f877a;
   --sr-rank-acolyte: #cdbf9f;
@@ -382,6 +399,16 @@
   --sr-page-key: #0b0f0e;
   --sr-page-accent: #c9452c;
   --sr-page-accent-text: #8e2a1a;
+}
+
+[data-page="review"] {
+  --sr-page-face: #f3dca6;
+  --sr-page-type: #0b0f0e;
+  --sr-page-overprint: #5a4a9a;
+  --sr-page-overprint-2: #e8542a;
+  --sr-page-key: #0b0f0e;
+  --sr-page-accent: #5a4a9a;
+  --sr-page-accent-text: #2a2060;
 }
 
 [data-page="reconcile"] {
