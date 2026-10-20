@@ -1,0 +1,21 @@
+/* The script: time | speaker | line. His voice is serif at a reading measure; chat is sans; time
+   is mono. `compact` stacks time over speaker for narrow columns. */
+
+.script { display: grid; grid-template-columns: 3.3rem minmax(5.5rem, 7.5rem) minmax(0, 1fr); column-gap: var(--sr-space-near); row-gap: var(--sr-space-cozy); align-items: baseline; }
+.time { font-family: var(--sr-font-mono); font-size: var(--sr-size-micro); color: var(--sr-color-text-mute); font-variant-numeric: tabular-nums; }
+.who { font-family: var(--sr-font-display); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-caption); letter-spacing: .08em; text-transform: uppercase; color: var(--sr-color-text-mute); overflow-wrap: anywhere; }
+.mal { color: var(--sr-color-signal-deep); }
+.rank { display: block; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); text-transform: none; letter-spacing: 0; font-size: var(--sr-size-micro); }
+.voice { margin: 0; font-family: var(--sr-font-serif); font-size: var(--sr-size-label); line-height: 1.55; max-width: 62ch; overflow-wrap: anywhere; }
+.muted { color: var(--sr-color-text-mute); }
+.foil { font-style: italic; color: var(--sr-color-text-note); }
+.focus { background: color-mix(in srgb, var(--sr-color-signal) 10%, transparent); box-shadow: -.5rem 0 0 color-mix(in srgb, var(--sr-color-signal) 10%, transparent), .5rem 0 0 color-mix(in srgb, var(--sr-color-signal) 10%, transparent); }
+.chat { margin: 0; font-size: var(--sr-size-small); color: var(--sr-color-text-note); overflow-wrap: anywhere; }
+.gate { grid-column: 3; margin: calc(-1 * var(--sr-space-tight)) 0 0; font-size: var(--sr-size-micro); color: var(--sr-color-caution-edge); }
+.sep { grid-column: 1 / -1; border-top: var(--sr-stroke-hair) dashed var(--sr-color-line); }
+
+.compact { grid-template-columns: 3rem minmax(0, 1fr); row-gap: var(--sr-space-tick); }
+.compact .who { grid-column: 2; }
+.compact .time { grid-row: span 2; padding-top: var(--sr-space-hair); }
+.compact .voice, .compact .chat, .compact .gate { grid-column: 2; margin-bottom: var(--sr-space-compact); }
+.compact .voice { font-size: var(--sr-size-body); }
