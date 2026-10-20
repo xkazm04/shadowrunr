@@ -695,3 +695,21 @@ fn the_cli_summary_shows_the_cold_open_bits_and_failed_checks() {
     assert!(full.contains("payoff: He frames exclusion seven"));
     assert!(full.contains("conn-12 [into_poll]"));
 }
+
+#[test]
+fn a_reply_with_one_array_per_kind_parses_every_kind() {
+    let reply = r#"{"cold_open":{"title":"T","beats":["a","b"],"handoff":"h"},
+        "premises":[{"segment":"SEG-01","lines":["p"],"payoff":"x"}],
+        "stories":[{"segment":"SEG-01","lines":["s1","s2"],"payoff":"y"}],
+        "callbacks":[{"segment":"SEG-01","lines":["c"],"payoff":"z"}],
+        "connectors":[{"kind":"into_room","line":"go"}]}"#;
+    let m = super::planner::parse(reply).unwrap();
+    let ids: Vec<&str> = m.bits.iter().map(|b| b.id.as_str()).collect();
+    assert_eq!(ids, ["prem-01", "story-01", "cb-01"]);
+    let schema = super::planner::schema(&[shadowrunr_types::SegmentId::Seg01ImprovisedRoom]);
+    let req = schema["required"].as_array().unwrap();
+    for k in ["premises", "stories", "callbacks"] {
+        assert!(req.iter().any(|v| v == k), "{k} required");
+    }
+    assert_eq!(schema["properties"]["stories"]["minItems"], 3);
+}

@@ -160,10 +160,11 @@ into your reply.\n"
         "\n## What to write\n\
 - cold_open: a title and {}-{} beat lines telling one short tale from the Spire in order, \
 then a handoff line that turns from the story to the room.\n\
-- bits, across the segments above: at least {MIN_PREMISES} premises (one line each: an \
-invitation chat can join in one line, standing alone, with a payoff the host lands), {}-{} \
-stories ({}-{} lines each, with a payoff), and {}-{} callbacks (running gags from the bible, \
-re-dressed for tonight, needing no earlier stream).\n\
+- premises, across the segments above: at least {MIN_PREMISES} (one line each: an \
+invitation chat can join in one line, standing alone, with a payoff the host lands).\n\
+- stories: {}-{} short told stories ({}-{} lines each, with a payoff). Required; not premises.\n\
+- callbacks: {}-{} running gags from the bible, re-dressed for tonight, needing no earlier \
+stream (1-3 lines each, with a payoff). Required; not premises.\n\
 - connectors: at least {MIN_CONNECTORS_PER_KIND} lines of each kind: into_room (from the cold \
 open into the room), into_bit (from chat back to a prepared bit), back_to_chat (from a bit \
 back to chat), into_poll (into a vote), into_handover (toward the segment handover).\n\
@@ -185,9 +186,31 @@ Reply with JSON only, matching the schema.\n",
 pub fn schema(segments: &[SegmentId]) -> Value {
     let segs: Vec<String> = segments.iter().map(wire).collect();
     let line = json!({"type": "string", "maxLength": MAX_LINE_CHARS});
+    // One array per kind, each with its own count: a single `bits` array with a `kind` field
+    // let the model fill it with premises only (the first real run: 16 premises, 0 stories,
+    // 0 callbacks).
+    let bits = |min: usize, max: Option<usize>, min_lines: usize, max_lines: usize| {
+        let mut arr = json!({
+            "type": "array",
+            "minItems": min,
+            "items": {
+                "type": "object",
+                "required": ["segment", "lines", "payoff"],
+                "properties": {
+                    "segment": {"type": "string", "enum": segs},
+                    "lines": {"type": "array", "items": line, "minItems": min_lines, "maxItems": max_lines},
+                    "payoff": line
+                }
+            }
+        });
+        if let Some(max) = max {
+            arr["maxItems"] = json!(max);
+        }
+        arr
+    };
     json!({
         "type": "object",
-        "required": ["cold_open", "bits", "connectors"],
+        "required": ["cold_open", "premises", "stories", "callbacks", "connectors"],
         "properties": {
             "cold_open": {
                 "type": "object",
@@ -198,19 +221,9 @@ pub fn schema(segments: &[SegmentId]) -> Value {
                     "handoff": line
                 }
             },
-            "bits": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["segment", "kind", "lines"],
-                    "properties": {
-                        "segment": {"type": "string", "enum": segs},
-                        "kind": {"type": "string", "enum": ["premise", "story", "callback"]},
-                        "lines": {"type": "array", "items": line, "minItems": 1},
-                        "payoff": line
-                    }
-                }
-            },
+            "premises": bits(MIN_PREMISES, None, 1, 1),
+            "stories": bits(STORIES.0, Some(STORIES.1), STORY_LINES.0, STORY_LINES.1),
+            "callbacks": bits(CALLBACKS.0, Some(CALLBACKS.1), 1, 3),
             "connectors": {
                 "type": "array",
                 "items": {
@@ -254,7 +267,11 @@ struct RawConnector {
 #[serde(default)]
 struct RawPrep {
     cold_open: RawColdOpen,
+    /// The kinded array of the first schema; still read, so an older reply parses.
     bits: Vec<RawBit>,
+    premises: Vec<RawBit>,
+    stories: Vec<RawBit>,
+    callbacks: Vec<RawBit>,
     connectors: Vec<RawConnector>,
 }
 
@@ -294,7 +311,20 @@ pub fn parse(reply: &str) -> Option<Material> {
     };
     let mut bits = Vec::new();
     let mut n = [0usize; 3];
-    for (i, b) in raw.bits.into_iter().enumerate() {
+    let kinded = |v: Vec<RawBit>, k: &'static str| {
+        v.into_iter().map(move |b| RawBit {
+            kind: k.to_string(),
+            ..b
+        })
+    };
+    let all: Vec<RawBit> = raw
+        .bits
+        .into_iter()
+        .chain(kinded(raw.premises, "premise"))
+        .chain(kinded(raw.stories, "story"))
+        .chain(kinded(raw.callbacks, "callback"))
+        .collect();
+    for (i, b) in all.into_iter().enumerate() {
         let Some(kind) = parse_wire::<BitKind>(&b.kind) else {
             dropped
                 .shape
