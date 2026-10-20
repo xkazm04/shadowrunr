@@ -2478,6 +2478,23 @@ async fn crisis_chat_ban_removes_the_viewer_once_the_crisis_line_went_out() {
         vec![(Some("d3".into()), "dropped".into())]
     );
     assert_eq!(b.in_care()[0].since_ms, 11_000);
+
+    // Care ends with its window; the removal note stays for the rest of the stream.
+    engine.push(Role::CoreThread, Ok("Other1, the Ledger hears you."));
+    b.tick(
+        2_000_000,
+        vec![msg("o3", 1_999_000, &other, "where did SootGoblin24 go?")],
+        &c,
+    )
+    .await
+    .unwrap();
+    assert!(b.in_care().is_empty());
+    let p = last_core_prompt(&engine);
+    assert!(!p.contains("CARE, NO ROASTING"), "{p}");
+    assert!(
+        p.contains("REMOVED FROM CHAT, FOR THE REST OF THE STREAM: SootGoblin24"),
+        "{p}"
+    );
 }
 
 #[tokio::test]

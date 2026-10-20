@@ -45,7 +45,10 @@ The `op` payload is the action grammar, tagged `"op"`:
 
 The model emits actions as lines of the form `OP: {"op":"show_card",...}`. Anything outside
 the segment's `allowed_ops` is rejected by `SegmentRuntime::apply_ops` and logged as a
-`moderation` event.
+`moderation` event. A refused op stays named in the segment's state summary for 60 s ("REFUSED
+lately, so these did NOT happen"), next to the last closed crowd poll and its winner. Poll ids
+are single-use: a `start_poll` that reuses one is re-minted (`p3` becomes `p3-2`, and the `op`
+event records the new id), and `close_poll p3` then closes `p3-2`.
 
 Wire names that other components read verbatim:
 
@@ -636,7 +639,12 @@ existing `moderation` event.
   later disclosure from a removed viewer is dropped too, but restarts their care window. No
   platform adapter can ban or time out yet: `banned:stream`, whose `msg_id` names the
   viewer through its `chat` event, is the record a future adapter acts on. With the rule off
-  nobody is removed; the care state still applies.
+  nobody is removed; the care state still applies. Every turn after a removal carries a
+  removed-from-chat note naming the viewer, for the rest of the stream (the care note lapses
+  with its window): never mention them, their absence or empty seat, even when chat
+  addresses them. The judge's `rule:crisis-handoff` carries `binds_after = true` in
+  `sim/rubric.toml`, so windowed judging still rules on it in every window after the
+  disclosure.
 - **Malakor** ships `crisis-chat-ban`, `crisis-handoff` and `no-financial-promotion`, all on
   by default.
 

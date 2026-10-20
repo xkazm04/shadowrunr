@@ -132,9 +132,37 @@ pub fn care_note(entries: &[CareEntry], now_ms: TsMs) -> Option<String> {
     ))
 }
 
+/// The per-turn note for viewers removed from chat (`crisis-chat-ban`), for the rest of the
+/// stream, `None` when nobody was. The care note lapses with its window but the removal does
+/// not: the 3 h case run (2026-10-20) joked about a removed viewer's "empty chair" from the
+/// minute their care window ended, while chat kept addressing them.
+pub fn removed_note(names: &[String]) -> Option<String> {
+    if names.is_empty() {
+        return None;
+    }
+    let who: Vec<String> = names.iter().map(|n| one_line(n, 40)).collect();
+    Some(format!(
+        "REMOVED FROM CHAT, FOR THE REST OF THE STREAM: {}. Never mention them again: not \
+         their absence, silence, empty seat or removal, not even inside a roast of someone \
+         else. When chat addresses or mentions them, do not say they are gone or quiet: answer \
+         the speaker on anything else, or leave that line be.",
+        who.join(", ")
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_removed_note_names_who_was_removed_and_forbids_any_allusion() {
+        assert!(removed_note(&[]).is_none());
+        let n = removed_note(&["vex\nwalrus".into()]).unwrap();
+        assert!(n.contains("vex walrus"), "{n}");
+        assert!(n.contains("REST OF THE STREAM"));
+        assert!(n.contains("empty seat"));
+        assert!(n.contains("do not say they are gone"));
+    }
 
     #[test]
     fn a_care_state_lasts_its_window_and_a_new_disclosure_restarts_it() {

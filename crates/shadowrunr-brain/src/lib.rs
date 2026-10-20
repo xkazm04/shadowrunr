@@ -57,7 +57,7 @@ pub use rules::{CharacterRule, RuleState, RulesOverride};
 pub use compose::{brief_summary, build_stream_brief, load_stream_brief, normalize_stream_brief};
 pub use shadowrunr_types::reconcile::StreamBrief;
 
-use care::{care_note, CareLedger};
+use care::{care_note, removed_note, CareLedger};
 use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line};
@@ -183,6 +183,8 @@ pub struct Brain {
     filter: InputFilter,
     /// Viewers in care after a self-harm disclosure.
     care: CareLedger,
+    /// Display names of viewers removed from chat (`crisis-chat-ban`), in ban order.
+    removed: Vec<String>,
     picker: Picker,
     working: WorkingSet,
     fleet: FleetWatch,
@@ -240,6 +242,7 @@ impl Brain {
             pool: Arc::new(WorkerPool::new(cfg.pool_size)),
             filter,
             care: CareLedger::new(tuning.care_window_s),
+            removed: Vec::new(),
             picker: Picker::new(tuning.picker.clone()),
             working: WorkingSet::new(tuning.working_set_ttl_ms),
             fleet: FleetWatch::new(tuning.fleet_grace_s),
@@ -695,7 +698,13 @@ impl Brain {
             .map(|f| f.text.clone());
         let working_text = self.working.render(foil_text.as_deref());
         let nonce = fnv1a64(format!("{}:{}:{}", self.salt, self.ticks, now_ms).as_bytes());
-        let care = care_note(self.care.active(), now_ms);
+        let care = [
+            care_note(self.care.active(), now_ms),
+            removed_note(&self.removed),
+        ]
+        .into_iter()
+        .flatten()
+        .reduce(|a, b| format!("{a}\n{b}"));
         let prompt = compose_turn(&TurnInputs {
             ctx,
             briefing: &briefing,
@@ -891,6 +900,7 @@ impl Brain {
         {
             for c in pick.chosen.iter().filter(|c| c.safety.is_some()) {
                 if self.filter.ban(&c.msg.viewer.id) {
+                    self.removed.push(c.msg.viewer.name.clone());
                     ev.push(moderation::input_event(
                         now_ms,
                         CRISIS_BAN_RULE,
