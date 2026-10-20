@@ -60,6 +60,32 @@ export function parseStreamEvent(raw: unknown): Parsed<StreamEvent> {
   return { ok: false, message: best.depth <= 1 ? `not a valid StreamEvent: ${best.message}` : best.message };
 }
 
+/** One `/events` frame: an event with its envelope position (when enveloped), or an error frame. */
+export type EventsFrame =
+  | { readonly kind: "event"; readonly event: StreamEvent; readonly seq?: number; readonly runId?: string }
+  | { readonly kind: "error"; readonly code: string; readonly message: string; readonly detail?: unknown };
+
+/**
+ * One `/events` frame from raw text, keeping what `parseStreamEvent` drops: the envelope's `seq`
+ * and `run_id`, and an error frame's code and detail (a `busy` frame's `resume_since`).
+ */
+export function parseFrame(raw: unknown): Parsed<EventsFrame> {
+  const r = parseEvent(raw);
+  if (!r.ok) {
+    const p = parseStreamEvent(raw);
+    return { ok: false, message: p.ok ? r.error.message : p.message };
+  }
+  const m = r.value;
+  if (m.kind === "error") {
+    const { code, message, detail } = m.error;
+    return { ok: true, value: detail === undefined ? { kind: "error", code, message } : { kind: "error", code, message, detail } };
+  }
+  const value: { kind: "event"; event: StreamEvent; seq?: number; runId?: string } = { kind: "event", event: m.event };
+  if (m.seq !== undefined) value.seq = m.seq;
+  if (m.runId !== undefined) value.runId = m.runId;
+  return { ok: true, value };
+}
+
 /** Parse a whole JSONL transcript. Blank lines are ignored; bad lines are reported and skipped. */
 export function parseTranscript(text: string): ParseResult {
   const events: StreamEvent[] = [];

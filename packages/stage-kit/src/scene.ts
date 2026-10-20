@@ -6,24 +6,29 @@ import type { ChatMsg, StreamEvent } from "@shadowrunr/contract";
 import type { ChatMemory } from "./chatMemory";
 import { RANK_WEIGHT } from "./lore";
 import {
+  CAPTION_QUEUE_MAX,
   CHAT_MEMORY_MAX,
   DECREE_MAX,
   JOB_MAX,
   LANE_MAX,
   MOMENT_MAX,
+  QUEUED_HOLD_MS,
   REDACTION_MAX,
   initialScene,
   layoutFor,
   type Decree,
+  type Caption,
   type Hint,
   type Job,
   type LayoutId,
   type Poll,
   type Redaction,
   type SceneState,
+  type ScheduledCaption,
   type Seal,
   type Transition,
 } from "./sceneModel";
+import { wordTimings } from "./timing";
 import { RANKS, type TsMs } from "./vocab";
 
 function switchLayout(
@@ -148,6 +153,40 @@ function applyChat(s: SceneState, msg: ChatMsg, at: TsMs): SceneState {
   }
 }
 
+/**
+ * Put a caption on the queue. What showed before `c.at` and has since been followed leaves; the
+ * one showing at `c.at` stays; `c` waits behind those still queued, and when more than
+ * CAPTION_QUEUE_MAX wait the oldest waiting is skipped (never the one showing). Each waiting
+ * caption shows once the one before has revealed and held QUEUED_HOLD_MS, or when said if later.
+ */
+export function enqueueCaption(queue: readonly ScheduledCaption[], c: Caption): ScheduledCaption[] {
+  let current = -1;
+  for (let i = 0; i < queue.length; i++) if (queue[i]!.at <= c.at) current = i;
+  const showing = current >= 0 ? [queue[current]!] : [];
+  const waiting: ScheduledCaption[] = [
+    ...queue.slice(current + 1),
+    { ...c, saidAt: c.at, spokenMs: wordTimings(c.text).spokenMs },
+  ];
+  while (waiting.length > CAPTION_QUEUE_MAX) waiting.shift();
+  const out = showing;
+  for (const w of waiting) {
+    const prev = out[out.length - 1];
+    const at = prev ? Math.max(w.saidAt, prev.at + prev.spokenMs + QUEUED_HOLD_MS) : w.saidAt;
+    out.push({ ...w, at });
+  }
+  return out;
+}
+
+/** The caption showing at `now` (its `at` is when it started to show), or null. */
+export function captionAt(s: SceneState, now: TsMs): ScheduledCaption | null {
+  let found: ScheduledCaption | null = null;
+  for (const c of s.captions) {
+    if (c.at > now) break;
+    found = c;
+  }
+  return found;
+}
+
 /** Apply one event. Pure. */
 export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
   const at = ev.ts_ms;
@@ -208,7 +247,8 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
       const replyingTo = (ev.replying_to ?? [])
         .map((id) => s.chats.get(id)?.viewer.name)
         .filter((n): n is string => n !== undefined);
-      return { ...s, seq, caption: { id: seq, text: ev.text, at, replyingTo } };
+      const caption: Caption = { id: seq, text: ev.text, at, replyingTo };
+      return { ...s, seq, caption, captions: enqueueCaption(s.captions, caption) };
     }
     case "op":
       return applyOp(s, ev.op, at);

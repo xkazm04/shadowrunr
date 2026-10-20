@@ -6,7 +6,7 @@ import { GRADE_COLORS, RANK_COLORS } from "@shadowrunr/tokens";
 import { describe, expect, it } from "vitest";
 
 import { RANKS } from "./vocab";
-import { FOILS, GRADE, RANK_COLOR, RANK_TITLE, RANK_WEIGHT, foilInfo, isAlleged } from "./lore";
+import { DISCLOSURE, FOILS, GRADE, RANK_COLOR, RANK_TITLE, RANK_WEIGHT, disclosureText, foilInfo, isAlleged } from "./lore";
 
 const repo = join(__dirname, "..", "..", "..");
 
@@ -65,5 +65,13 @@ describe("lore helpers", () => {
   it("title-cases an unknown foil id", () => {
     expect(foilInfo("the-night-auditor").name).toBe("The Night Auditor");
     expect(foilInfo("the-inspector").name).toBe("The Inspector");
+  });
+});
+
+describe("disclosure", () => {
+  it("reads text only unless a voice is configured", () => {
+    expect(DISCLOSURE).toBe("AI character · text only");
+    expect(disclosureText(false)).toBe("AI character · text only");
+    expect(disclosureText(true)).toBe("AI character · synthetic voice");
   });
 });

@@ -36,6 +36,13 @@ export interface Caption {
   replyingTo: string[];
 }
 
+/** A caption on the stage's caption queue: `at` is when it shows, `saidAt` when it was said. */
+export interface ScheduledCaption extends Caption {
+  saidAt: TsMs;
+  /** When its last word has landed, from `at` (ms). */
+  spokenMs: number;
+}
+
 export interface FoilLine {
   id: number;
   foil: string;
@@ -135,6 +142,9 @@ export interface SceneState {
   transition: Transition | null;
   pendingSwitch: { to: SegmentId; at: TsMs } | null;
   caption: Caption | null;
+  /** The caption queue: the caption showing at the latest event (first), then those waiting,
+   * each scheduled to show once the one before has revealed and held. `captionAt` reads it. */
+  captions: ScheduledCaption[];
   foil: { id: string; since: TsMs } | null;
   foilLine: FoilLine | null;
   /** Remembered chat lines by id, oldest first (at most CHAT_MEMORY_MAX + CHAT_EVICT_SLACK). */
@@ -170,6 +180,10 @@ export const DECREE_MAX = 3;
 export const JOB_MAX = 12;
 export const MOMENT_MAX = 200;
 export const REDACTION_MAX = 20;
+/** Captions that may wait behind the one on screen; a burst beyond this skips the oldest waiting. */
+export const CAPTION_QUEUE_MAX = 3;
+/** How long a revealed caption holds when another is waiting behind it. */
+export const QUEUED_HOLD_MS = 2000;
 
 export function initialScene(): SceneState {
   return {
@@ -183,6 +197,7 @@ export function initialScene(): SceneState {
     transition: null,
     pendingSwitch: null,
     caption: null,
+    captions: [],
     foil: null,
     foilLine: null,
     chats: ChatMemory.EMPTY,

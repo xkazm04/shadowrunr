@@ -4,12 +4,13 @@
 import type { CSSProperties, ReactNode } from "react";
 
 import type { Case } from "@shadowrunr/contract";
-import { captionOpacity, wordTimings, type MapModel, type SceneState } from "@shadowrunr/stage-kit";
+import { captionAt, type MapModel, type SceneState } from "@shadowrunr/stage-kit";
 import {
   CaptionPanel,
   ChatLane,
   Decrees,
   DisclosureBadge,
+  EndCard,
   ExplainerCard,
   FoilCard,
   GradeTallyPanel,
@@ -38,12 +39,10 @@ function RegionBox({ name, rect, children }: { name: Region; rect: Rect; childre
   );
 }
 
-function isSpeaking(scene: SceneState, now: number): boolean {
-  const c = scene.caption;
-  if (!c) return false;
-  const line = wordTimings(c.text);
-  const e = now - c.at;
-  return e >= 0 && e <= line.spokenMs + 300 && captionOpacity(line, e) > 0;
+function isSpeaking(caption: ReturnType<typeof captionAt>, now: number): boolean {
+  if (!caption) return false;
+  const e = now - caption.at;
+  return e >= 0 && e <= caption.spokenMs + 300;
 }
 
 export function Stage({
@@ -53,6 +52,10 @@ export function Stage({
   caseFile,
   sourceTag,
   debug,
+  broadcast = false,
+  voice = false,
+  clock,
+  overlay,
 }: {
   scene: SceneState;
   now: number;
@@ -60,11 +63,21 @@ export function Stage({
   caseFile: Case | null;
   sourceTag: string;
   debug: boolean;
+  /** The OBS view: no production notes on the canvas. */
+  broadcast?: boolean;
+  /** A synthetic voice is configured (the disclosure says so). */
+  voice?: boolean;
+  /** The stream clock for the top bar (live mode). */
+  clock?: string;
+  /** Feed-health slates, drawn above the scene and below the disclosure. */
+  overlay?: ReactNode;
 }) {
   const poll = visiblePoll(scene, now);
   const rects = layoutRects(scene.layout, { poll: poll !== null, foil: scene.foil !== null });
   const hexmap = scene.layout === "hexmap";
-  const speaking = isSpeaking(scene, now);
+  // Captions queue under a burst: the one showing now, not simply the latest line said.
+  const caption = captionAt(scene, now);
+  const speaking = isSpeaking(caption, now);
 
   return (
     <div className={`canvas layout-${scene.layout}${debug ? " debug" : ""}`} data-layout={scene.layout}>
@@ -74,7 +87,7 @@ export function Stage({
       </div>
 
       <RegionBox name="topbar" rect={rects.topbar}>
-        <TopBar scene={scene} caseFile={caseFile} sourceTag={sourceTag} />
+        <TopBar scene={scene} caseFile={caseFile} sourceTag={sourceTag} {...(clock === undefined ? {} : { clock })} />
       </RegionBox>
 
       <RegionBox name="hexmap" rect={rects.hexmap}>
@@ -84,12 +97,12 @@ export function Stage({
       <RegionBox name="avatar" rect={rects.avatar}>
         <div className="avatar-slot">
           <Silhouette speaking={speaking} small={hexmap} />
-          {!hexmap && <div className="avatar-note">avatar slot · placeholder silhouette</div>}
+          {!hexmap && !broadcast && <div className="avatar-note">avatar slot · placeholder silhouette</div>}
         </div>
       </RegionBox>
 
       <RegionBox name="caption" rect={rects.caption}>
-        <CaptionPanel caption={scene.caption} redactions={scene.redactions} now={now} compact={hexmap} />
+        <CaptionPanel caption={caption} redactions={scene.redactions} now={now} compact={hexmap} />
       </RegionBox>
 
       <RegionBox name="foil" rect={rects.foil}>
@@ -133,7 +146,9 @@ export function Stage({
       <TransitionWipe scene={scene} now={now} />
       <Intro scene={scene} now={now} />
       <Outro scene={scene} now={now} />
-      <DisclosureBadge />
+      <EndCard scene={scene} now={now} />
+      {overlay}
+      <DisclosureBadge voice={voice} />
     </div>
   );
 }

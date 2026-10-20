@@ -2,7 +2,7 @@
 // daemon WebSocket (contract § daemon protocol).
 
 import type { Case, StreamEvent } from "@shadowrunr/contract";
-import { checkCase, parseStreamEvent } from "@shadowrunr/stage-kit/parse";
+import { checkCase, parseFrame, type EventsFrame } from "@shadowrunr/stage-kit/parse";
 
 export const DEFAULT_WS = "ws://127.0.0.1:7717/events";
 export const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 4, 8] as const;
@@ -106,18 +106,19 @@ export function revealedHexIds(events: readonly StreamEvent[]): string[] {
  * `events`. Older transcripts without one fall back to an explicit case (`?case=`, sidecar,
  * dropped), then to the built-in fictional demo case, used only when every hex the transcript
  * reveals exists in it (simulations run on that case), so an unrelated transcript never borrows
- * its title. Otherwise the map is drawn procedurally from hex ids.
+ * its title. Otherwise the map is drawn procedurally from hex ids. A live stream passes the
+ * scene's `revealed` order, since its bounded event ring may no longer hold the early reveals.
  */
 export function resolveCase(
   explicit: { case: Case; source: Exclude<CaseSource, "transcript" | "builtin" | "none"> } | null,
   events: readonly StreamEvent[],
   builtin: Case,
   current: Case | null = null,
+  revealed: readonly string[] = revealedHexIds(events),
 ): { case: Case | null; source: CaseSource } {
   const fromTranscript = current ?? transcriptCase(events);
   if (fromTranscript) return { case: fromTranscript, source: "transcript" };
   if (explicit) return explicit;
-  const revealed = revealedHexIds(events);
   const known = new Set(builtin.hexes.map((h) => h.id));
   if (revealed.length > 0 && revealed.every((id) => known.has(id))) {
     return { case: builtin, source: "builtin" };
@@ -127,50 +128,96 @@ export function resolveCase(
 
 export type WsStatus = "connecting" | "open" | "closed" | "error";
 
+export type { EventsFrame } from "@shadowrunr/stage-kit/parse";
+
+/** The parts of a browser WebSocket the link uses (tests pass a fake). */
+export interface SocketLike {
+  onopen: (() => void) | null;
+  onmessage: ((m: { data: unknown }) => void) | null;
+  onerror: (() => void) | null;
+  onclose: (() => void) | null;
+  send(data: string): void;
+  close(): void;
+  readonly readyState: number;
+}
+
+export interface DaemonHandlers {
+  onFrame: (f: EventsFrame) => void;
+  onStatus: (s: WsStatus, detail?: string) => void;
+  onBadMessage: (detail: string) => void;
+  /** Where to resume: the last seq applied and the run it belongs to (0 and "" before any). */
+  resume: () => { since: number; runId: string };
+}
+
+export interface DaemonLink {
+  /** Send a client frame (an ack); false when the socket is not open. */
+  send: (frame: unknown) => boolean;
+  /** Subscribe again from `resume()` on the open socket (after a gap or a `busy` frame). */
+  resubscribe: () => void;
+  close: () => void;
+}
+
+const OPEN = 1;
+
 /**
- * Subscribe on the daemon WebSocket. Sends `{"subscribe": run, "speed": speed}` on open; every
- * message is one StreamEvent. Returns a close function. Reconnects with backoff until closed.
+ * Subscribe on the daemon WebSocket, enveloped: every subscribe carries `since` and `run_id` from
+ * `resume()` (contract § event resume), so a reconnect continues after the last applied seq
+ * instead of replaying the run. Reconnects with backoff until closed.
  */
 export function connectDaemon(
   url: string,
   run: string,
   speed: number,
-  onEvent: (ev: StreamEvent) => void,
-  onStatus: (s: WsStatus, detail?: string) => void,
-  onBadMessage: (detail: string) => void,
-): () => void {
-  let ws: WebSocket | null = null;
+  h: DaemonHandlers,
+  socket: (url: string) => SocketLike = (u) => new WebSocket(u) as unknown as SocketLike,
+): DaemonLink {
+  let ws: SocketLike | null = null;
   let stopped = false;
   let retry = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
+  const subscribe = () => {
+    if (!ws || ws.readyState !== OPEN) return;
+    const r = h.resume();
+    ws.send(JSON.stringify({ subscribe: run, speed, since: r.since, run_id: r.runId }));
+  };
   const open = () => {
-    onStatus("connecting");
-    ws = new WebSocket(url);
-    ws.onopen = () => {
+    h.onStatus("connecting");
+    const s = socket(url);
+    ws = s;
+    s.onopen = () => {
       retry = 0;
-      onStatus("open");
-      ws?.send(JSON.stringify({ subscribe: run, speed }));
+      h.onStatus("open");
+      subscribe();
     };
-    ws.onmessage = (m) => {
+    s.onmessage = (m) => {
       if (typeof m.data !== "string") return;
-      // The contract door decodes and validates the frame (bare event or enveloped).
-      const r = parseStreamEvent(m.data);
-      if (r.ok) onEvent(r.value);
-      else onBadMessage(r.message);
+      // The contract door decodes and validates the frame.
+      const d = parseFrame(m.data);
+      if (d.ok) h.onFrame(d.value);
+      else h.onBadMessage(d.message);
     };
-    ws.onerror = () => onStatus("error", url);
-    ws.onclose = () => {
-      onStatus("closed");
+    s.onerror = () => h.onStatus("error", url);
+    s.onclose = () => {
+      if (ws !== s) return;
+      h.onStatus("closed");
       if (stopped) return;
       retry++;
       timer = setTimeout(open, Math.min(10_000, 500 * 2 ** Math.min(retry, 5)));
     };
   };
   open();
-  return () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-    ws?.close();
+  return {
+    send: (frame) => {
+      if (!ws || ws.readyState !== OPEN) return false;
+      ws.send(JSON.stringify(frame));
+      return true;
+    },
+    resubscribe: subscribe,
+    close: () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      ws?.close();
+    },
   };
 }

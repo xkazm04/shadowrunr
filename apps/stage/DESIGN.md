@@ -19,7 +19,7 @@ node apps/stage/scripts/make-demo.mjs   # regenerates fixtures/demo.jsonl
 | (none) | plays `fixtures/demo.jsonl` (bundled) |
 | `?file=<url>` | fetches a transcript; also tries the sidecar `<name>.case.json` |
 | `?case=<url>` | the SEG-02A `Case` to draw the hexmap with |
-| `?run=<run_id>` or `?run=live` | daemon WebSocket instead of a file; sends `{"subscribe": run, "speed": speed}` |
+| `?run=<run_id>` or `?run=live` | daemon WebSocket instead of a file (live mode, below); sends `{"subscribe": run, "speed": speed, "since", "run_id"}` |
 | `?ws=<url>` | WebSocket URL (default `ws://127.0.0.1:7717/events`) |
 | `?broadcast=1` | hides every control (the OBS view) |
 | `?speed=2` | playback speed (also 0.25x to 8x in the controls, `[` `]` keys) |
@@ -81,6 +81,56 @@ folds the events up to `t` (`Timeline.advanceTo`), and a still frame at `?t=` is
 animations play in real time when an element mounts; durations that matter to the show (who is
 on screen and for how long) are all in stream time, so they scale with the playback speed.
 
+## Live mode
+
+`?run=live` (or `?run=<run_id>`, or any `?ws=`) feeds the canvas from the daemon's `/events`
+socket instead of a file (`src/live.ts` on `connectDaemon` in `src/source.ts`). A sandbox
+session's stage URL is `?run=live&broadcast=1`; `shadowrunr stream sandbox --minutes 5` prints it
+(see docs/guide/cli.md), and the daemon must be running at the default
+`ws://127.0.0.1:7717/events` or the one `?ws=` names.
+
+- **Resume.** Every subscribe is enveloped (contract § event resume): the first sends
+  `"since": 0, "run_id": ""`, and a reconnect sends the last contiguous seq applied and its run
+  id, so the daemon continues where the stage left off. A frame at or below that seq is never
+  applied twice. A seq that skips ahead counts its missing seqs as gaps; the stage then holds
+  later frames and resubscribes from the last applied seq, which backfills the hole. A `busy`
+  frame (the daemon cut off a slow consumer) adds its `skipped` count to the gaps and
+  resubscribes the same way.
+- **New stream.** A different `run_id` in the envelope, or a `stream_start`, starts a fresh
+  scene and event store (as the console's `LiveFeed` does), and seq tracking restarts with the
+  run.
+- **Bounded store.** The scene is reduced one event at a time as frames arrive and covers the
+  whole stream. The events themselves live in a ring of the last 2,000, which only the
+  controls' debug views read (copied once per change, never in the broadcast view). A 30-minute
+  session therefore costs the same per event at minute 29 as at minute 1.
+- **Acks.** Every 5 s, and as soon as `stream_end` is applied, the stage sends
+  `{"ack": {"seq", "gaps", "stalled_ms"}}`: the highest contiguous seq applied, the gaps found in
+  this run, and the ms since the last event while the socket is open (0 when it is closed or
+  the stream has ended). The sandbox's `stage_ack` check reads these. File and demo replays
+  have no socket and send nothing.
+- **The clock.** The live clock is the last event's `ts_ms` plus the wall time since it
+  arrived (at most 120 s). Sandbox timestamps are wall ms since the start, so it runs in real
+  time, and the top bar shows the stream's elapsed time (mm:ss, from `stream_start`, frozen at
+  `stream_end`).
+
+**Feed slates.** They sit on the 1920x1080 canvas, so OBS shows them with `?broadcast=1`; the
+controls keep the debug detail (socket status, error frames, frames that failed validation).
+
+| State | What the canvas shows |
+|---|---|
+| socket down for 3 s | a dim slate "SIGNAL LOST · reconnecting" over the scene (not after `stream_end`: the end card stays) |
+| socket open, no event for 20 s | a small "signal stalled · N s" mark under the disclosure |
+| `stream_end` without `sign_off` | the end card; with a `sign_off` the outro stays |
+| a render throw in the canvas | a calm "The Spire is recomposing" slate with the disclosure; the error goes to the console and the canvas is retried after 5 s |
+
+**Caption queue.** When `say` events burst, Malakor's lines queue rather than overwrite each
+other. The reducer keeps a queue (`scene.captions`, read with `captionAt(scene, now)`): a new line waits
+until the line on screen has revealed every word and held 2 s, at most 3 lines wait, and on
+overflow the oldest waiting line is skipped, never the one on screen. A line said after the
+one before has finished shows at once. The schedule comes from event timestamps and the word
+timing alone, so replays and seeks show the same captions. `scene.caption` stays the latest
+line said, as the console reads it.
+
 ## Layouts
 
 | Layout | When | Dominant element |
@@ -92,8 +142,11 @@ on screen and for how long) are all in stream time, so they scale with the playb
 
 The right column stacks its panels top-down: a panel without content (no poll, no foil) gives
 its height to the chat lane, and the change animates. The minion-dispatch ticker spans the bottom
-in every layout. The disclosure badge **"AI character · synthetic voice"** sits above every layer,
-including the intro and the outro, and is never hidden.
+in every layout. The disclosure badge **"AI character · text only"** sits above every layer,
+including the intro, the outro and the feed slates, and is never hidden. It reads "AI character ·
+synthetic voice" only when a voice is configured (`DisclosureBadge`'s `voice`; the stage's
+`VOICE` constant is false, since Malakor has no voice yet). The avatar slot's "placeholder
+silhouette" note is a production note, so `?broadcast=1` drops it.
 
 ## Event → visual
 
@@ -108,13 +161,13 @@ including the intro and the outro, and is never hidden.
 | `chat` `!hint <hex>` | a dashed, moving outline and a count badge on that fogged hex |
 | `chat` `!grade <hex> <g>` | the minion-jury tally for that hex |
 | `picked` | the messages glow as "HEARD" in the lane and lift into "Heard by the Lich" cards with the viewer's sigil |
-| `say` (malakor) | kinetic caption: words appear on estimated timing (about 150 wpm, longer words slower, pauses after punctuation); emphasis on caps, numbers and the show's vocabulary; reply chips name the chatters answered; the Phylactery Orb pulses and the eyes brighten while he speaks |
+| `say` (malakor) | kinetic caption, through the caption queue (below): words appear on estimated timing (about 150 wpm, longer words slower, pauses after punctuation); emphasis on caps, numbers and the show's vocabulary; reply chips name the chatters answered; the Phylactery Orb pulses and the eyes brighten while he speaks |
 | `say` (foil) | the line, kinetic, in the foil card (SEG-01) or the Skeptical Observer badge (SEG-02A) |
 | `vote` | animated bars; length from the authoritative weighted tally, colour bands from the ranks of the ballots seen in chat; the min-rank sigil, a countdown ring; on `closed` the winner is ringed "chosen" and the panel lingers 9 s |
 | `moderation` (output) | a "REDACTED BY THE LORD" bar sweeps across the caption area for 3.8 s with the rule id |
 | `moderation` (input, with `msg_id`) | the message is struck through as "purged by the Warden" and any decree for it is removed |
 | `job` | the minion-dispatch ticker: queued ◇, running ◈ (spinning), done ✓ with its summary, failed ✕ |
-| `stream_end` | "transmission ended" line on the outro card |
+| `stream_end` | "transmission ended" line on the outro card; without a `sign_off` before it, an end card "The Spire goes dark" with the same ledger stats |
 
 | Op | Visual |
 |---|---|

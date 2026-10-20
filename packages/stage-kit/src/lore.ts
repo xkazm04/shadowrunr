@@ -110,4 +110,10 @@ export function foilInfo(id: string): FoilInfo {
   );
 }
 
-export const DISCLOSURE = "AI character · synthetic voice";
+/** The on-screen disclosure. Malakor speaks in text only until a voice is configured. */
+export const DISCLOSURE = "AI character · text only";
+export const VOICE_DISCLOSURE = "AI character · synthetic voice";
+
+export function disclosureText(voice: boolean): string {
+  return voice ? VOICE_DISCLOSURE : DISCLOSURE;
+}

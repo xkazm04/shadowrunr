@@ -267,6 +267,7 @@ body {
 
 .meta-pill,
 .source-pill,
+.clock-pill,
 .pending-switch {
   font-family: var(--mono);
   font-size: 13px;
@@ -279,6 +280,11 @@ body {
 
 .source-pill {
   color: var(--bronze);
+}
+
+.clock-pill {
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
 }
 
 .pending-switch {
@@ -1916,6 +1922,82 @@ body {
   font-size: 14px;
   color: var(--faint);
   letter-spacing: 0.16em;
+}
+
+/* ─── Feed health: the signal-lost slate, the stalled mark, the error fallback ─── */
+
+.signal-slate {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(6, 10, 9, 0.78), rgba(0, 0, 0, 0.9));
+  animation: fade-in 0.8s ease both;
+}
+
+.signal-slate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 40px 64px;
+  border: 1px solid var(--panel-edge-hi);
+  border-radius: 16px;
+  background: var(--panel);
+}
+
+.signal-slate-sigil {
+  width: 160px;
+  height: 184px;
+  opacity: 0.55;
+}
+
+.signal-slate-title {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 48px;
+  letter-spacing: 0.12em;
+  color: var(--bone);
+  animation: pulse-opacity 2.4s ease-in-out infinite;
+}
+
+.signal-slate.calm .signal-slate-title {
+  animation: none;
+}
+
+.signal-slate-sub {
+  font-size: 22px;
+  color: var(--dim);
+}
+
+.stalled-mark {
+  position: absolute;
+  right: 32px;
+  top: 92px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(6, 8, 7, 0.92);
+  border: 1px solid var(--bronze);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--bronze);
+  white-space: nowrap;
+  animation: fade-in 0.6s ease both;
+}
+
+.stalled-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bronze);
+  animation: pulse-opacity 1.6s ease-in-out infinite;
 }
 
 /* ─── Debug ────────────────────────────────────────────────────────────────── */

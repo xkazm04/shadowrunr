@@ -4,11 +4,10 @@ import demoCaseJson from "../fixtures/demo-case.json";
 import demoTranscript from "../fixtures/demo.jsonl?raw";
 import type { Case, StreamEvent } from "@shadowrunr/contract";
 import { Controls } from "./Controls";
-import { CANVAS_H, CANVAS_W, Timeline, buildMap, fitCanvas, initialScene, reduce, type SceneState } from "@shadowrunr/stage-kit";
+import { CANVAS_H, CANVAS_W, Timeline, buildMap, fitCanvas, initialScene, type SceneState } from "@shadowrunr/stage-kit";
 import { checkCase, parseCase, parseTranscript, type ParseIssue } from "@shadowrunr/stage-kit/parse";
 import {
   SPEEDS,
-  connectDaemon,
   fetchCase,
   fetchText,
   readParams,
@@ -16,9 +15,15 @@ import {
   sidecarCaseUrl,
   type CaseSource,
 } from "./source";
+import { LiveSession } from "./live";
+import { SignalLostSlate, StageErrorBoundary, StalledMark, fmtClock, streamElapsed } from "./Slates";
 import { Stage } from "./Stage";
 
 const BUILTIN_CASE: Case = parseCase(demoCaseJson);
+const EMPTY_SCENE: SceneState = initialScene();
+const NO_EVENTS: StreamEvent[] = [];
+/** No synthetic voice is configured: Malakor is text only, and the disclosure says so. */
+const VOICE = false;
 /** Keep showing the last frame (the outro) this long before a loop restarts. */
 const END_HOLD_MS = 8000;
 
@@ -171,29 +176,27 @@ export function App() {
   );
 
   // ── Live (daemon WebSocket) ──────────────────────────────────────────────────
-  const liveScene = useRef<SceneState>(initialScene());
-  const liveLast = useRef<{ ts: number; wall: number } | null>(null);
+  const liveRef = useRef<LiveSession | null>(null);
   const [, bump] = useState(0);
   useEffect(() => {
     if (!live || !params.run) return;
-    const close = connectDaemon(
-      params.ws,
-      params.run,
-      params.speed,
-      (ev) => {
-        liveScene.current = reduce(liveScene.current, ev);
-        liveLast.current = { ts: ev.ts_ms, wall: performance.now() };
-        setLoaded((l) => (l ? { ...l, events: [...l.events, ev] } : l));
-      },
-      (s, d) => setStatus(`daemon ${s}${d ? ` (${d})` : ""}`),
-      (d) => setLoaded((l) => (l ? { ...l, errors: [...l.errors, { line: 0, message: d }].slice(-200) } : l)),
-    );
+    const session = new LiveSession({
+      url: params.ws,
+      run: params.run,
+      speed: params.speed,
+      now: () => performance.now(),
+      onStatus: (s, d) => setStatus(`daemon ${s}${d ? ` (${d})` : ""}`),
+      onBadMessage: (d) => setLoaded((l) => (l ? { ...l, errors: [...l.errors, { line: 0, message: d }].slice(-200) } : l)),
+      onErrorFrame: (code, m) => setStatus(`daemon ${code}: ${m}`),
+    });
+    liveRef.current = session;
+    session.start();
     let raf = 0;
     let lastPaint = 0;
     const loop = (t: number) => {
       if (t - lastPaint >= 32) {
         lastPaint = t;
-        const ll = liveLast.current;
+        const ll = session.store.lastEvent;
         if (ll) setNow(ll.ts + Math.min(120_000, (t - ll.wall) * params.speed));
         bump((x) => x + 1);
       }
@@ -201,7 +204,8 @@ export function App() {
     };
     raf = requestAnimationFrame(loop);
     return () => {
-      close();
+      session.stop();
+      liveRef.current = null;
       cancelAnimationFrame(raf);
     };
   }, [live, params]);
@@ -269,18 +273,31 @@ export function App() {
   }, [live, onFile]);
 
   // ── Scene ────────────────────────────────────────────────────────────────────
+  const store = liveRef.current?.store ?? null;
+  // Live: the debug views read the bounded ring (copied once per change, and not at all in the
+  // broadcast view, which has none).
   const events = useMemo(() => loaded?.events ?? [], [loaded]);
-  const scene = live ? liveScene.current : timeline ? timeline.advanceTo(now) : initialScene();
-  const resolved = useMemo(
-    () => resolveCase(explicitCase, events, BUILTIN_CASE, scene.caseFile),
-    [explicitCase, events, scene.caseFile],
-  );
+  const liveEvents = store && !params.broadcast ? store.events() : NO_EVENTS;
+  const shown = live ? liveEvents : events;
+  const scene = live ? (store?.scene ?? EMPTY_SCENE) : timeline ? timeline.advanceTo(now) : EMPTY_SCENE;
   const revealKey = scene.revealOrder.join(",");
+  const resolved = useMemo(
+    () => resolveCase(explicitCase, shown, BUILTIN_CASE, scene.caseFile, live ? (revealKey ? revealKey.split(",") : []) : undefined),
+    [explicitCase, shown, scene.caseFile, live, revealKey],
+  );
   const map = useMemo(() => buildMap(resolved.case, revealKey ? revealKey.split(",") : []), [resolved.case, revealKey]);
   useOverflowAudit(params.debug, rootRef);
   if (params.debug) {
     (window as unknown as { __stage: unknown }).__stage = { now, applied: scene.applied, card: scene.card };
   }
+  const watch = store ? store.watch(performance.now()) : null;
+  const elapsed = live ? streamElapsed(scene, now) : null;
+  const overlay = watch && (
+    <>
+      {watch.disconnected && <SignalLostSlate />}
+      {!watch.disconnected && watch.stalled && <StalledMark ms={watch.stalledMs} />}
+    </>
+  );
 
   const broadcastHref = useMemo(() => {
     const p = new URLSearchParams(window.location.search);
@@ -288,8 +305,8 @@ export function App() {
     return `?${p.toString()}`;
   }, []);
 
-  const start = timeline?.start ?? (events[0]?.ts_ms ?? 0);
-  const end = timeline?.end ?? (events[events.length - 1]?.ts_ms ?? 0);
+  const start = timeline?.start ?? (live ? (scene.meta?.at ?? scene.t0 ?? 0) : (events[0]?.ts_ms ?? 0));
+  const end = timeline?.end ?? (live ? (scene.lastTs ?? 0) : (events[events.length - 1]?.ts_ms ?? 0));
   const caseSource: CaseSource = resolved.source;
 
   return (
@@ -298,18 +315,24 @@ export function App() {
         className="canvas-frame"
         style={{ width: CANVAS_W, height: CANVAS_H, transform: `translate(${fit.left}px, ${fit.top}px) scale(${fit.scale})` }}
       >
-        <Stage
-          scene={scene}
-          now={now}
-          map={map}
-          caseFile={resolved.case}
-          sourceTag={live ? "LIVE" : "REPLAY"}
-          debug={params.debug}
-        />
+        <StageErrorBoundary voice={VOICE}>
+          <Stage
+            scene={scene}
+            now={now}
+            map={map}
+            caseFile={resolved.case}
+            sourceTag={live ? "LIVE" : "REPLAY"}
+            debug={params.debug}
+            broadcast={params.broadcast}
+            voice={VOICE}
+            {...(elapsed === null ? {} : { clock: fmtClock(elapsed) })}
+            overlay={overlay}
+          />
+        </StageErrorBoundary>
       </div>
       {!params.broadcast && loaded && (
         <Controls
-          events={events}
+          events={shown}
           start={start}
           end={end}
           now={now}

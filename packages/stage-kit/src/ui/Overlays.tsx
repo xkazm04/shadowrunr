@@ -1,5 +1,5 @@
 import type { Case } from "@shadowrunr/contract";
-import { DISCLOSURE, SEGMENT_TITLE } from "../lore";
+import { SEGMENT_TITLE, disclosureText } from "../lore";
 import type { SceneState } from "../sceneModel";
 
 export const TRANSITION_MS = 1900;
@@ -15,12 +15,13 @@ const LAYOUT_TITLE = {
   descoped: "A descoped segment",
 } as const;
 
-/** Always on screen, above everything (contract with the audience, not a decoration). */
-export function DisclosureBadge() {
+/** Always on screen, above everything (contract with the audience, not a decoration).
+ * `voice` is true only once a synthetic voice is configured; until then it reads "text only". */
+export function DisclosureBadge({ voice = false }: { voice?: boolean }) {
   return (
     <div className="disclosure" role="note">
       <span className="disclosure-dot" />
-      {DISCLOSURE}
+      {disclosureText(voice)}
     </div>
   );
 }
@@ -29,10 +30,13 @@ export function TopBar({
   scene,
   caseFile,
   sourceTag,
+  clock,
 }: {
   scene: SceneState;
   caseFile: Case | null;
   sourceTag: string;
+  /** The stream's elapsed time (mm:ss), shown beside the source tag when given. */
+  clock?: string;
 }) {
   const seg = scene.segment;
   const hexmap = scene.layout === "hexmap";
@@ -60,6 +64,7 @@ export function TopBar({
           <span className="pending-switch">⟶ {SEGMENT_TITLE[scene.pendingSwitch.to]}</span>
         )}
         {scene.meta && <span className="meta-pill">{scene.meta.audienceSize} minions</span>}
+        {clock !== undefined && <span className="clock-pill">{clock}</span>}
         <span className="source-pill">{sourceTag}</span>
       </div>
     </div>
@@ -133,16 +138,20 @@ export function SealToast({ scene, now }: { scene: SceneState; now: number }) {
   );
 }
 
-export function Outro({ scene, now }: { scene: SceneState; now: number }) {
-  const o = scene.outro;
-  if (!o || now < o.at) return null;
+function ledgerStats(scene: SceneState): [string, number][] {
   const minions = new Set([...scene.chats.values()].map((m) => m.viewer.id)).size;
-  const stats: [string, number][] = [
+  return [
     ["minions in the ledger", minions],
     ["hexes burned through", scene.revealOrder.length],
     ["clips marked", scene.moments.length],
     ["lines redacted by the Lord", scene.redactions.length],
   ];
+}
+
+export function Outro({ scene, now }: { scene: SceneState; now: number }) {
+  const o = scene.outro;
+  if (!o || now < o.at) return null;
+  const stats = ledgerStats(scene);
   return (
     <div className="outro">
       <div className="outro-card">
@@ -158,6 +167,30 @@ export function Outro({ scene, now }: { scene: SceneState; now: number }) {
         </div>
         <div className="outro-catch">Let the deficit be recorded.</div>
         {scene.ended && <div className="outro-ended">transmission ended · {scene.ended.reason.replace(/_/g, " ")}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** The end card for a `stream_end` that came without a sign-off (the Outro covers one with). */
+export function EndCard({ scene, now }: { scene: SceneState; now: number }) {
+  const e = scene.ended;
+  if (!e || scene.outro || now < e.at) return null;
+  const stats = ledgerStats(scene);
+  return (
+    <div className="outro end-card">
+      <div className="outro-card">
+        <div className="outro-kicker">THE SPIRE GOES DARK</div>
+        <div className="outro-reason">The transmission has ended.</div>
+        <div className="outro-stats">
+          {stats.map(([k, v]) => (
+            <div key={k} className="outro-stat">
+              <span className="outro-num">{v}</span>
+              <span className="outro-key">{k}</span>
+            </div>
+          ))}
+        </div>
+        <div className="outro-ended">transmission ended · {e.reason.replace(/_/g, " ")}</div>
       </div>
     </div>
   );

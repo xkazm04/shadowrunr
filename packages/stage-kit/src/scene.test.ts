@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import type { Case, ChatMsg, Command, Rank, StreamEvent } from "@shadowrunr/contract";
-import { foldEvents, matchOption, reduce } from "./scene";
-import { CHAT_EVICT_SLACK, CHAT_MEMORY_MAX, DECREE_MAX, LANE_MAX, initialScene, layoutFor } from "./sceneModel";
+import { captionAt, enqueueCaption, foldEvents, matchOption, reduce } from "./scene";
+import {
+  CAPTION_QUEUE_MAX,
+  CHAT_EVICT_SLACK,
+  CHAT_MEMORY_MAX,
+  DECREE_MAX,
+  LANE_MAX,
+  QUEUED_HOLD_MS,
+  initialScene,
+  layoutFor,
+} from "./sceneModel";
+import { wordTimings } from "./timing";
 import { gradeTallies, pollBars } from "./tallies";
 
 function msg(id: string, rank: Rank = "thrall", command?: Command, viewerId = `v-${id}`): ChatMsg {
@@ -291,5 +301,68 @@ describe("a 100k-line transcript (10× scale)", () => {
     expect(s.chats.size).toBeLessThanOrEqual(CHAT_MEMORY_MAX + CHAT_EVICT_SLACK);
     expect(s.heard.size).toBeLessThanOrEqual(s.chats.size);
     expect(s.lane.every((id) => s.chats.has(id))).toBe(true);
+  });
+});
+
+describe("caption queue", () => {
+  const say = (ts: number, text: string): StreamEvent => ({ type: "say", ts_ms: ts, speaker: "malakor", text });
+
+  it("shows a lone caption when it is said", () => {
+    const s = foldEvents([say(1000, "Rise.")]);
+    expect(captionAt(s, 999)).toBeNull();
+    expect(captionAt(s, 1000)?.text).toBe("Rise.");
+    expect(s.caption?.text).toBe("Rise.");
+  });
+
+  it("queues a burst: each waits until the one before has revealed and held 2 s", () => {
+    const a = "The ledger opens, minions, and every line of it is mine.";
+    const s = foldEvents([say(0, a), say(100, "Second."), say(200, "Third.")]);
+    expect(s.captions.map((c) => c.text)).toEqual([a, "Second.", "Third."]);
+    const [first, second, third] = s.captions;
+    expect(second!.at).toBe(wordTimings(a).spokenMs + QUEUED_HOLD_MS);
+    expect(third!.at).toBe(second!.at + wordTimings("Second.").spokenMs + QUEUED_HOLD_MS);
+    // The first holds for its whole reveal: the burst does not overwrite it.
+    expect(captionAt(s, first!.spokenMs - 1)?.text).toBe(a);
+    expect(captionAt(s, second!.at)?.text).toBe("Second.");
+    expect(captionAt(s, third!.at + 10_000)?.text).toBe("Third.");
+    // `scene.caption` stays the latest line said, as the console reads it.
+    expect(s.caption?.text).toBe("Third.");
+  });
+
+  it("does not delay a line said after the one before has revealed and held", () => {
+    const s = foldEvents([say(0, "Rise."), say(60_000, "Kneel.")]);
+    expect(s.captions.map((c) => [c.text, c.at])).toEqual([
+      ["Rise.", 0],
+      ["Kneel.", 60_000],
+    ]);
+    const later = reduce(s, say(120_000, "Pay."));
+    expect(later.captions.map((c) => c.text)).toEqual(["Kneel.", "Pay."]);
+  });
+
+  it("keeps at most 3 waiting and skips the oldest waiting, never the one showing", () => {
+    const evs = [say(0, "One, the showing line, which is long enough to hold.")];
+    for (let i = 2; i <= 7; i++) evs.push(say(i, `Line ${i}.`));
+    const s = foldEvents(evs);
+    expect(s.captions.map((c) => c.text)).toEqual([
+      "One, the showing line, which is long enough to hold.",
+      "Line 5.",
+      "Line 6.",
+      "Line 7.",
+    ]);
+    expect(s.captions.length).toBe(1 + CAPTION_QUEUE_MAX);
+    // Rescheduled after the skip: the first waiting follows the showing one directly.
+    expect(s.captions[1]!.at).toBe(s.captions[0]!.spokenMs + QUEUED_HOLD_MS);
+    // A queued caption shows long enough to reveal every word.
+    for (let i = 1; i < s.captions.length; i++) {
+      const prev = s.captions[i - 1]!;
+      expect(s.captions[i]!.at - prev.at).toBeGreaterThanOrEqual(prev.spokenMs);
+    }
+  });
+
+  it("enqueueCaption drops captions that have been followed", () => {
+    let q = enqueueCaption([], { id: 1, text: "A.", at: 0, replyingTo: [] });
+    q = enqueueCaption(q, { id: 2, text: "B.", at: 50_000, replyingTo: [] });
+    q = enqueueCaption(q, { id: 3, text: "C.", at: 50_001, replyingTo: [] });
+    expect(q.map((c) => c.id)).toEqual([2, 3]);
   });
 });
