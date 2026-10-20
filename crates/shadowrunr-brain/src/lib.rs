@@ -236,6 +236,8 @@ pub struct Brain {
     session_retry_tick: u64,
     /// Where cover lines go while a slow core call is still running ([`Brain::set_cover`]).
     cover: Option<tokio::sync::mpsc::UnboundedSender<StreamEvent>>,
+    /// The approved stream prep the orchestrator voices ([`Brain::set_prep`]).
+    prep: Option<shadowrunr_types::prep::StreamPrep>,
     /// When this beat started, on the tokio clock (for [`Brain::on_air_ms`]).
     beat_clock: tokio::time::Instant,
     hexes: Vec<HexInfo>,
@@ -299,6 +301,7 @@ impl Brain {
             session_turns: 0,
             session_retry_tick: 0,
             cover: None,
+            prep: None,
             beat_clock: tokio::time::Instant::now(),
             hexes: Vec::new(),
             turns: Vec::new(),
@@ -392,6 +395,17 @@ impl Brain {
     /// Viewers in care after a self-harm disclosure, oldest first.
     pub fn in_care(&self) -> &[care::CareEntry] {
         self.care.active()
+    }
+
+    /// The approved stream prep for this stream: its cold open, bits and connectors. Without one,
+    /// the stream runs on chat and the segment's rules alone.
+    pub fn set_prep(&mut self, prep: shadowrunr_types::prep::StreamPrep) {
+        self.prep = Some(prep);
+    }
+
+    /// The stream's prep, if one was set.
+    pub fn prep(&self) -> Option<&shadowrunr_types::prep::StreamPrep> {
+        self.prep.as_ref()
     }
 
     /// A live host's cover channel: while a core call is still running once Malakor has been
