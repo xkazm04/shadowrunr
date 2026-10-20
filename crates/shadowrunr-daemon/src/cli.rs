@@ -11,6 +11,7 @@ use shadowrunr_sim::{
     plan_matrix, run_one_with, run_tournament, summarize, wire, BriefSource, FleetQuota,
     PlanReason, RunAction, TournamentOptions,
 };
+use shadowrunr_types::review::{ReviewSessionRow, ReviewTagParams, SessionTags};
 use shadowrunr_types::sandbox::{
     SandboxChaos, SandboxCheckState, SandboxStartParams, SandboxStarted, SandboxState,
     SandboxStatus,
@@ -103,6 +104,40 @@ pub enum Command {
     /// Streams on the running daemon.
     #[command(subcommand)]
     Stream(StreamCommand),
+    /// Session review on the running daemon: line tags for the Review page.
+    #[command(subcommand)]
+    Review(ReviewCommand),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ReviewCommand {
+    /// Tag every Malakor line of a finished sandbox session (`review.tag` on the running
+    /// daemon), or of every session with --all. A session whose tags.json is current is kept
+    /// unless --force.
+    #[command(after_help = REVIEW_TAG_EXIT_CODES)]
+    Tag(ReviewTagArgs),
+}
+
+/// `shadowrunr review tag` exit codes (also in docs/guide/cli.md).
+pub const REVIEW_TAG_EXIT_CODES: &str = "Exit codes:
+  0  every session was tagged (or already was)
+  1  tagging a session failed
+  2  usage error, or the daemon is not reachable";
+
+#[derive(Debug, Args)]
+#[command(group(clap::ArgGroup::new("which").required(true).args(["session_id", "all"])))]
+pub struct ReviewTagArgs {
+    /// The session id (sbx-<yyyymmdd>-<hhmmss>-<minutes>m).
+    pub session_id: Option<String>,
+    /// Every session under <runs>/sandbox.
+    #[arg(long)]
+    pub all: bool,
+    /// Re-tag even when tags.json is current.
+    #[arg(long)]
+    pub force: bool,
+    /// The daemon's port (default: [daemon] port, 7717).
+    #[arg(long)]
+    pub port: Option<u16>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -455,6 +490,7 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
         Command::Stream(StreamCommand::Sandbox(a)) => {
             Ok(ExitCode::from(sandbox_cmd(&cfg, a).await))
         }
+        Command::Review(ReviewCommand::Tag(a)) => Ok(ExitCode::from(review_tag_cmd(&cfg, a).await)),
     }
 }
 
@@ -496,9 +532,14 @@ pub struct DaemonClient {
 
 impl DaemonClient {
     pub fn new(port: u16) -> Self {
+        Self::with_timeout(port, std::time::Duration::from_secs(120))
+    }
+
+    /// A client whose calls may take up to `timeout` (a `review.tag` runs for minutes).
+    pub fn with_timeout(port: u16, timeout: std::time::Duration) -> Self {
         Self {
             http: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(120))
+                .timeout(timeout)
                 .build()
                 .unwrap_or_default(),
             url: format!("http://127.0.0.1:{port}/rpc"),
@@ -697,6 +738,83 @@ async fn sandbox_cmd(cfg: &Config, a: SandboxArgs) -> u8 {
             last_line = tokio::time::Instant::now();
             println!("{}", progress_line(&st));
         }
+    }
+}
+
+// ── review tag ──────────────────────────────────────────────────────────
+
+/// How long one `review.tag` call may take (a 30-minute session is about 15 batches).
+const REVIEW_TAG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+/// `<id>: tagged N, untagged M, calls K`. `calls` counts this call's tagger rows in the
+/// session's ledger (`?` when the ledger is not readable from here).
+pub fn review_tag_line(id: &str, tags: &SessionTags, calls: Option<u32>) -> String {
+    let calls = calls.map_or_else(|| "?".to_string(), |c| c.to_string());
+    format!(
+        "{id}: tagged {}, untagged {}, calls {calls}",
+        tags.lines.len(),
+        tags.untagged
+    )
+}
+
+async fn review_tag_cmd(cfg: &Config, a: ReviewTagArgs) -> u8 {
+    let port = a.port.unwrap_or(cfg.daemon.port);
+    let client = DaemonClient::with_timeout(port, REVIEW_TAG_TIMEOUT);
+    let unreachable = |e: &CallError| {
+        eprintln!("error: {e}");
+        if matches!(e, CallError::Unreachable(_)) {
+            eprintln!(
+                "no daemon on 127.0.0.1:{port}: start one with `shadowrunr daemon` (or pass --port)"
+            );
+        }
+        exit_for_error(e)
+    };
+    let ids: Vec<String> = match (&a.session_id, a.all) {
+        (Some(id), _) => vec![id.clone()],
+        (None, _) => match client
+            .call::<Vec<ReviewSessionRow>>("review.sessions", serde_json::json!({}))
+            .await
+        {
+            Ok(rows) => rows.into_iter().rev().map(|r| r.session_id).collect(),
+            Err(e) => return unreachable(&e),
+        },
+    };
+    if ids.is_empty() {
+        println!("no sessions under {}", cfg.paths.sandbox_runs().display());
+        return 0;
+    }
+    let mut failed = 0usize;
+    for id in &ids {
+        let since = runs::now_ms();
+        let params = ReviewTagParams {
+            session_id: id.clone(),
+            force: a.force,
+        };
+        match client
+            .call::<SessionTags>("review.tag", serde_json::json!(params))
+            .await
+        {
+            Ok(tags) => {
+                let calls = crate::review::rows::calls_since(
+                    &cfg.paths.sandbox_runs().join(id),
+                    shadowrunr_types::Role::Tagger,
+                    since,
+                );
+                println!("{}", review_tag_line(id, &tags, calls));
+            }
+            Err(e @ CallError::Unreachable(_)) => return unreachable(&e),
+            Err(e) if a.session_id.is_some() => return unreachable(&e).max(1),
+            Err(e) => {
+                eprintln!("{id}: {e}");
+                failed += 1;
+            }
+        }
+    }
+    if failed > 0 {
+        eprintln!("{failed} of {} sessions failed", ids.len());
+        1
+    } else {
+        0
     }
 }
 
@@ -1463,5 +1581,101 @@ mod tests {
             ..a
         };
         assert_eq!(sandbox_cmd(&cfg, a).await, EXIT_USAGE);
+    }
+
+    fn review_tag_args(args: &[&str]) -> ReviewTagArgs {
+        match parse(args).unwrap().command {
+            Command::Review(ReviewCommand::Tag(a)) => a,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn review_tag_takes_one_session_or_all_with_force() {
+        let a = review_tag_args(&["review", "tag", "sbx-20261020-120000-5m"]);
+        assert_eq!(a.session_id.as_deref(), Some("sbx-20261020-120000-5m"));
+        assert!(!a.all && !a.force);
+        let a = review_tag_args(&["review", "tag", "--all", "--force", "--port", "9000"]);
+        assert!(a.all && a.force && a.session_id.is_none());
+        assert_eq!(a.port, Some(9000));
+        for bad in [
+            &["review", "tag"][..],
+            &["review", "tag", "sbx-20261020-120000-5m", "--all"],
+            &["review", "tag", "--all", "--port", "x"],
+        ] {
+            let e = parse(bad).unwrap_err();
+            assert_eq!(e.exit_code(), 2, "{bad:?}: {e}");
+        }
+    }
+
+    /// Against a daemon whose engine tags: single, all and force exit 0; an unknown session
+    /// exits 1; a malformed id or no daemon exits 2.
+    #[tokio::test]
+    async fn review_tag_exit_codes() {
+        use crate::review::tests::{write_session, Mode, TagEngine, SID};
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = crate::e2e::test_config(tmp.path(), crate::e2e::repo().join("characters"));
+        write_session(&cfg.paths.sandbox_runs(), SID, 1_000);
+        write_session(&cfg.paths.sandbox_runs(), "sbx-20261021-120000-10m", 2_000);
+        let engine = TagEngine::new(Mode::Good);
+        let state = server::AppState::new(
+            cfg.clone(),
+            EngineHandle {
+                engine: engine.clone(),
+                fleet: None,
+            },
+        );
+        let addr = crate::e2e::start_state(state).await;
+        let port: u16 = addr.rsplit(':').next().unwrap().parse().unwrap();
+        let with_port = |args: &[&str]| ReviewTagArgs {
+            port: Some(port),
+            ..review_tag_args(args)
+        };
+        assert_eq!(
+            review_tag_cmd(&cfg, with_port(&["review", "tag", SID])).await,
+            0
+        );
+        assert_eq!(engine.calls(), 1);
+        assert_eq!(
+            review_tag_cmd(&cfg, with_port(&["review", "tag", "--all"])).await,
+            0
+        );
+        assert_eq!(engine.calls(), 2, "the tagged session is kept");
+        assert_eq!(
+            review_tag_cmd(&cfg, with_port(&["review", "tag", "--all", "--force"])).await,
+            0
+        );
+        assert_eq!(engine.calls(), 4);
+        let unknown = with_port(&["review", "tag", "sbx-19700101-000000-5m"]);
+        assert_eq!(review_tag_cmd(&cfg, unknown).await, 1);
+        let malformed = with_port(&["review", "tag", "../x"]);
+        assert_eq!(review_tag_cmd(&cfg, malformed).await, EXIT_USAGE);
+
+        let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let gone = free.local_addr().unwrap().port();
+        drop(free);
+        let a = ReviewTagArgs {
+            port: Some(gone),
+            ..review_tag_args(&["review", "tag", "--all"])
+        };
+        assert_eq!(review_tag_cmd(&cfg, a).await, EXIT_USAGE);
+    }
+
+    #[test]
+    fn review_tag_prints_tagged_untagged_and_calls() {
+        let tags: SessionTags = serde_json::from_value(serde_json::json!({
+            "session_id": "s", "tagger_version": 1, "model": "haiku", "created_ms": 0,
+            "lines": [{"line": 4, "kind": "joke", "target": "self", "edge": "none"}],
+            "untagged": 2
+        }))
+        .unwrap();
+        assert_eq!(
+            review_tag_line("s", &tags, Some(3)),
+            "s: tagged 1, untagged 2, calls 3"
+        );
+        assert_eq!(
+            review_tag_line("s", &tags, None),
+            "s: tagged 1, untagged 2, calls ?"
+        );
     }
 }

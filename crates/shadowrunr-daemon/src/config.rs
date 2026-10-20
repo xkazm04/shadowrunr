@@ -222,6 +222,11 @@ impl Paths {
     pub fn memory(&self) -> PathBuf {
         self.data.join("memory")
     }
+
+    /// `<data>/review`: the Review page's operator feedback (`feedback.jsonl`).
+    pub fn review_dir(&self) -> PathBuf {
+        self.data.join("review")
+    }
 }
 
 /// The loaded configuration.

@@ -520,6 +520,11 @@ async fn host(state: Arc<AppState>, session: Arc<Session>, live_run: Arc<LiveRun
         SandboxState::Done
     };
     session.end(end, Some(report));
+    // A judged session's lines are tagged in the background, after the slot is free; a
+    // tagger failure is only logged.
+    if judge {
+        crate::review::tag_after_judge(state, session.id.clone());
+    }
 }
 
 /// Wait, up to `grace`, for a subscriber to ack `final_seq` with no gaps. Nothing to wait for

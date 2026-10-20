@@ -19,6 +19,7 @@ mod catalog;
 mod events;
 mod paging;
 mod resilience;
+mod review;
 mod sandbox;
 
 pub(crate) fn repo() -> PathBuf {

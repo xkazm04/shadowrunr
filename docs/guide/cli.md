@@ -367,6 +367,8 @@ Methods:
   directive with `active: false`)
 - `lord.chat`
 - `sandbox.start`, `sandbox.stop`, `sandbox.status` (see [Sandbox sessions](#sandbox-sessions))
+- `review.sessions`, `review.session`, `review.feedback.set`, `review.feedback.list`,
+  `review.tag` (see [Session review](#session-review))
 
 Notes:
 - **Run ids:** `run_id` may be bare or `<tournament_id>/<run_id>`. A bare id that exists in
@@ -488,11 +490,12 @@ The session directory holds:
   `handover_s` and `chaos_window_s`.
 - `instrument.json` (plus `brief.json` when the stream has a brief).
 - `transcript.jsonl`: one event per line, flushed as it happens. Line n is `/events` seq n.
-- `ledger.jsonl`: every engine call from the brain, the room and the judge. Calls refused by
-  chaos show as `unavailable`.
+- `ledger.jsonl`: every engine call from the brain, the room, the judge and the tagger. Calls
+  refused by chaos show as `unavailable`.
 - `room.json`: featured chatters, stimuli, chat stats, removed viewers and brain errors.
 - `session.json`: the gate report.
 - `verdict.json`, `judge.json` and `judge-windows/`, after judging.
+- `tags.json`, after tagging (see [Session review](#session-review)).
 
 Over `/rpc`:
 - `sandbox.start {minutes, seed?, chaos?, judge?, tone?}` returns `{session_id, dir,
@@ -501,6 +504,79 @@ Over `/rpc`:
   unchanged.
 - `sandbox.status {session_id?}` returns the given session, or the latest one, including
   sessions from earlier daemon runs found on disk.
+
+## Session review
+
+The console's Review page reads finished sandbox sessions: every session directory under
+`<runs>/sandbox/` that has a `session.json`. Two files feed it besides the session's own:
+
+- `<runs>/sandbox/<session_id>/tags.json` types every Malakor line with a `kind` (roast, tease,
+  joke, title, welcome, reply, callout, show, refusal, care, disclosure, signoff, other), a
+  `target` (viewer, chat, foil, self, lord, case, none) and an `edge` (none, mild, sharp). It
+  is derived and versioned (`tagger_version` 1): tagging rewrites it whole, through a temp file
+  and a rename, and nothing edits it by hand. `untagged` counts the lines the model left
+  without a valid tag.
+- `<data>/review/feedback.jsonl` is the operator's marks and notes per line, append-only. Each
+  row is `{session_id, line, tags, note?, at_ms}`. The latest row per `<session>#<line>` wins,
+  and a row with no tags and no note clears the line. Each append takes a file lock and syncs,
+  so concurrent saves never interleave. A malformed row is skipped (the daemon logs how many)
+  and the rest of the log still folds.
+
+`line` is the 1-based transcript line everywhere: the `/events` seq and the judge's
+`<run>#<line>` refs.
+
+**Tagging.** After a session is judged (`sandbox.start` with the judge on), the daemon tags it
+in the background. The session's state does not wait for it, and a tagger failure is only
+logged (`review: tagging <id> failed: ...`); the session then shows `tagged: false`. The tagger
+sends about 60 lines per `tagger` call (Haiku, effort low), three calls at a time. Each line
+goes with its segment, up to three chat lines it answers and Malakor's previous line. A call
+that fails or a reply that does not parse is retried once; after that its lines are untagged.
+When every call fails at the engine, nothing is written. The calls land in the session's
+`ledger.jsonl` with correlation `tag:<session_id>`. The cost is about 15 Haiku calls per
+30-minute session.
+
+To tag, re-tag or backfill from the command line (a thin client of the running daemon, like
+`stream sandbox`):
+
+```
+shadowrunr review tag <session_id> [--force] [--port P]
+shadowrunr review tag --all [--force] [--port P]
+```
+
+A session whose `tags.json` is current is kept without a call unless `--force`. `--all` tags
+every session, oldest first. Each session prints one line:
+
+```
+sbx-20261020-170127-10m: tagged 412, untagged 3, calls 7
+```
+
+`calls` counts this run's tagger rows in the session's ledger (`?` when the ledger is not
+readable from where the command runs).
+
+Exit codes:
+- `0`: every session was tagged, or already was.
+- `1`: tagging a session failed (unknown session, engine down, a file error).
+- `2`: a usage error (including a malformed session id), or no daemon is reachable.
+
+Over `/rpc`:
+- `review.sessions {}` returns one row per session, newest first: minutes, chaos, start,
+  length, the gate, checks, the longest silence, `rule_fails` (absent when not judged), Malakor
+  lines, the tag mix, lines with feedback and `tagged`. Nothing is cached: each call reads
+  every session's files again, with a light pass over each transcript (7 ms for seven
+  sessions, 2.1 MB on disk, release build, 2026-10-20).
+- `review.session {session_id}` returns the whole session in one reply (a 30-minute session
+  of 2,497 events is about 750 KB of JSON): the row, segments, every event, `tags?`, `verdict?`, the catalog (what each failed rule and each judged quality
+  dimension asks for, from the character's `situations.json` and `sim/rubric.toml`), the
+  ledger rows and the session's feedback.
+- `review.feedback.set {session_id, line, tags, note?}` appends one row and returns it. The
+  line must be a Malakor line. Repeated tags are dropped, the note is trimmed (2,000
+  characters at most) and a blank note is absent.
+- `review.feedback.list {session_id?}` returns the folded feedback, by session and line.
+- `review.tag {session_id, force?}` tags the session and returns `tags.json`.
+
+A session id that is not `sbx-<yyyymmdd>-<hhmmss>-<minutes>m` is `invalid_params` (so is any
+path), and a session with no `session.json` is `not_found`. An engine failure is `engine`,
+and a file error `io`.
 
 ## Character rules and moderation lists
 
