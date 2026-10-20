@@ -1,0 +1,22 @@
+{
+ "schema": "conform-run/1",
+ "worker": "80fa6051-69a5-4562-8ff3-6a08c6bf2120",
+ "subject": "embedded-preview",
+ "evaluatedAt": "2026-10-20T00:31:46.048918+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "embedded-preview",
+   "context": "console-app-bootstrap",
+   "reason": "The embedded-preview standard governs hosting a live, separately served and built guest application inside a frame with process, communication, and trust boundaries kept explicit through a cross-frame request/response protocol (correlation IDs, timeouts, and handshakes), symmetric origin validation, an injected instrumentation agent with fallback, a centralized dev-server registry managing process-tree lifecycles, convention-based guest route discovery, and per-turn mutation checkpoints. By contrast, console-app-bootstrap provides the console application's entry point, root component composition (App.tsx, main.tsx, compose.ts), static shell page registry (pages.ts), global styling (global.css), keyboard shortcut handlers (keys/), and presentation/utility components (QueryView, Placeholder, LetterboxBands, PosterFrame, OpenInStage, openExternal). Its registry-map association was a lexical false positive on 'app' (App.tsx), 'frame' (PosterFrame.tsx, which is a CSS/DOM layout container providing a brand row and footer CTA for Layer 1 pages), and 'registry' (pages.ts, registering first-party console page modules). The stage helper OpenInStage explicitly opens the external broadcast stage in the system browser or new window via openExternal rather than embedding it, and this bootstrap hosts no embedded guest application or cross-frame bridge infrastructure."
+  },
+  {
+   "subject": "embedded-preview",
+   "context": "console-onair-page",
+   "reason": "The embedded-preview standard governs hosting a second, live application behind its own dev server inside an embedded frame, managing the cross-frame protocol, origin authentication, child dev-server process lifecycles, and guest mutation checkpoints. By contrast, console-onair-page is the operator console's On Air monitoring interface (Layer1.tsx, Layer2.tsx, RunDetail.tsx, Rundown.tsx, player.ts, feed.ts), presenting a live rundown, segment cards, transcript beats, and a broadcast screen reconstruction (Screen.tsx, ScreenHex.tsx, ScreenParts.tsx). The screen view is rendered directly in the host application's DOM via shared React component composition (@shadowrunr/stage-kit), which the embedded-preview standard explicitly excludes under 'When the subject does not apply' as same-origin, first-party embeds and static previews where component composition solves the problem without process or trust boundaries. Its registry-map association was a lexical false positive on 'pages' and 'preview' (from the context description 'screen preview rendered with stage-kit'), and external stage replay is delegated to openExternal rather than an embedded preview frame."
+  }
+ ],
+ "consults": []
+}
