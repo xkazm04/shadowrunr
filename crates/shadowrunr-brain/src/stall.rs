@@ -35,6 +35,10 @@ pub const STALL_RULE: &str = "engine_stall";
 /// The `engine_stall` action of a line spoken while a slow core call was still running.
 pub const COVERED: &str = "covered";
 
+/// A failed beat's stall is due this many seconds before `stall_every_s`: one beat, since a
+/// failed beat can only speak at a beat boundary.
+pub const FAILED_BEAT_SLACK_S: u64 = 5;
+
 /// At most this many cover lines over one core call (its timeout is 30 s).
 pub const COVER_LINES: usize = 2;
 

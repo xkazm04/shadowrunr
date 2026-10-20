@@ -2879,7 +2879,8 @@ async fn sandbox_a_stall_waits_for_the_quiet_interval_after_the_last_line() {
         "a healthy first beat records nothing"
     );
     assert_eq!(says(&ev).len(), 1);
-    // 5 s and 10 s after his line: down, but not quiet for 12 s yet.
+    // A failed beat's stall is due one beat early: at 7 s quiet (12 s budget less a 5 s beat).
+    // 5 s after his line: down, not quiet long enough yet.
     let ev = b.tick(5_000, Vec::new(), &c).await.unwrap();
     assert_eq!(healths(&ev), vec![FleetHealth::Down]);
     assert!(matches!(
@@ -2887,9 +2888,10 @@ async fn sandbox_a_stall_waits_for_the_quiet_interval_after_the_last_line() {
         Some(StreamEvent::Health { detail: Some(d), .. }) if d == "core call timed out"
     ));
     assert_eq!(stalls(&ev), 0);
-    assert_eq!(stalls(&b.tick(10_000, Vec::new(), &c).await.unwrap()), 0);
-    assert_eq!(stalls(&b.tick(12_000, Vec::new(), &c).await.unwrap()), 1);
-    assert_eq!(stalls(&b.tick(20_000, Vec::new(), &c).await.unwrap()), 0);
+    assert_eq!(stalls(&b.tick(10_000, Vec::new(), &c).await.unwrap()), 1);
+    // 2 s after that stall line: not again yet; 10 s after it: again.
+    assert_eq!(stalls(&b.tick(12_000, Vec::new(), &c).await.unwrap()), 0);
+    assert_eq!(stalls(&b.tick(20_000, Vec::new(), &c).await.unwrap()), 1);
 }
 
 #[tokio::test]

@@ -637,11 +637,16 @@ impl Brain {
     /// `engine_stall` record. It stays out of the turn record, the repetition guard and the
     /// working set: the model never said it.
     fn stall_events(&mut self, now_ms: TsMs, ev: &mut Vec<StreamEvent>) {
+        // A failed beat can only speak at a beat boundary, so it is due one beat early: a
+        // 12 s budget checked every 5 s otherwise lets a silence reach 17 s
+        // (sbx-20261020-155928-10m: 15.03 s inside its outage, over the 15 s ceiling).
         let due = stall_due(
             self.fleet_mode(),
             self.last_say_ms,
-            now_ms,
-            self.tuning.stall_every_s,
+            self.on_air_ms(now_ms),
+            self.tuning
+                .stall_every_s
+                .saturating_sub(stall::FAILED_BEAT_SLACK_S),
         );
         if !due {
             return;

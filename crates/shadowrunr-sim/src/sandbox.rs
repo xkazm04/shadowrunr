@@ -45,6 +45,32 @@ use crate::situations::{Injection, SituationBank};
 use crate::transcript::{self, TranscriptWriter};
 use crate::{population, read_json, stats, write_json, SimError, SimOptions};
 
+/// Planted stimuli are kept this far from a chaos window on either side.
+const CHAOS_STIMULUS_MARGIN_S: u32 = 15;
+
+/// Move every planted stimulus due inside a chaos window (plus a margin) to after it, spaced
+/// a beat apart; one that no longer fits before the last minute is dropped (not scheduled,
+/// so the judge leaves its rule not_provoked). During an outage the host can only stall, so
+/// a stimulus there measures the outage, not the host: sbx-20261020-155928-10m failed four
+/// situation rules that landed in its outage.
+fn keep_stimuli_out_of(injections: &mut Vec<Injection>, window_ms: (TsMs, TsMs), duration_s: u32) {
+    let from = u32::try_from(window_ms.0 / 1000).unwrap_or(0);
+    let to = u32::try_from(window_ms.1 / 1000).unwrap_or(u32::MAX);
+    let lo = from.saturating_sub(CHAOS_STIMULUS_MARGIN_S);
+    let hi = to.saturating_add(CHAOS_STIMULUS_MARGIN_S);
+    let last = duration_s.saturating_sub(60);
+    let mut next = hi;
+    injections.retain_mut(|inj| {
+        if inj.at_s < lo || inj.at_s > hi {
+            return true;
+        }
+        next += 5;
+        inj.at_s = next;
+        next <= last
+    });
+    injections.sort_by_key(|i| i.at_s);
+}
+
 /// Audience size of a sandbox session's simulated room.
 pub const SANDBOX_AUDIENCE: u32 = 30;
 /// The character a sandbox session runs.
@@ -1170,7 +1196,7 @@ pub async fn run_sandbox(
             spec.seed,
             run_opts.hooks.rank,
         )?;
-        let room = ChatRoom::new(
+        let mut room = ChatRoom::new(
             pop,
             RoomConfig {
                 cal: &prep.cal,
@@ -1186,6 +1212,9 @@ pub async fn run_sandbox(
                 streamer_name: prep.streamer.clone(),
             },
         );
+        if let Some(window) = programme.chaos_ms {
+            keep_stimuli_out_of(&mut room.injections, window, spec.duration_s);
+        }
 
         let shared = Arc::new(Mutex::new(Shared {
             ccv: room.ccv_at(0),
@@ -1920,6 +1949,49 @@ mod tests {
             "{}",
             detail(r, "say_gap")
         );
+        // A failed beat stalls one beat early, so the outage never nears the ceiling.
+        assert!(r.max_say_gap_s <= 12.0, "{}", detail(r, "say_gap"));
+    }
+
+    #[test]
+    fn planted_stimuli_are_kept_out_of_the_chaos_window() {
+        let inj = |id: &str, at_s: u32| Injection {
+            situation_id: id.into(),
+            kind: crate::situations::StimulusKind::Message,
+            at_s,
+            chatter_id: None,
+            attempts: Vec::new(),
+            performed_msg_id: None,
+            silence_window: None,
+            note: None,
+        };
+        // Outage 300..390 s of a 600 s session: 290 and 400 fall in the 15 s margin (285..405).
+        let mut v = vec![
+            inj("before", 200),
+            inj("edge-in", 290),
+            inj("inside", 330),
+            inj("edge-out", 400),
+            inj("after", 500),
+        ];
+        keep_stimuli_out_of(&mut v, (300_000, 390_000), 600);
+        let at: Vec<(&str, u32)> = v
+            .iter()
+            .map(|i| (i.situation_id.as_str(), i.at_s))
+            .collect();
+        assert_eq!(
+            at,
+            [
+                ("before", 200),
+                ("edge-in", 410),
+                ("inside", 415),
+                ("edge-out", 420),
+                ("after", 500)
+            ]
+        );
+        // One that no longer fits before the last minute is dropped.
+        let mut v = vec![inj("late", 330)];
+        keep_stimuli_out_of(&mut v, (300_000, 530_000), 600);
+        assert!(v.is_empty());
     }
 
     #[test]
