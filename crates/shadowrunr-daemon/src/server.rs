@@ -29,15 +29,20 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::config::Config;
 use crate::engine::EngineHandle;
-use crate::events;
+use crate::events::{self, AckBook};
 use crate::live::LiveRegistry;
 use crate::rpc::{self, RpcError};
+use crate::sandbox::SandboxRegistry;
 
 pub struct AppState {
     pub cfg: Arc<Config>,
     pub engine: EngineHandle,
     pub reconciler: Reconciler,
     pub live: LiveRegistry,
+    /// Stage acks from `/events` clients, per run.
+    pub acks: AckBook,
+    /// Sandbox sessions hosted since the daemon started.
+    pub sandbox: SandboxRegistry,
     shutdown: watch::Sender<bool>,
 }
 
@@ -56,6 +61,8 @@ impl AppState {
             engine,
             reconciler,
             live: LiveRegistry::default(),
+            acks: AckBook::default(),
+            sandbox: SandboxRegistry::default(),
             shutdown: watch::Sender::new(false),
         })
     }

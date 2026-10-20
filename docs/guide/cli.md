@@ -366,13 +366,14 @@ Methods:
 - `directive.add`, `directive.list`, `directive.deactivate` (`{ "id" }` returns the
   directive with `active: false`)
 - `lord.chat`
+- `sandbox.start`, `sandbox.stop`, `sandbox.status` (see [Sandbox sessions](#sandbox-sessions))
 
 Notes:
 - **Run ids:** `run_id` may be bare or `<tournament_id>/<run_id>`. A bare id that exists in
   several tournaments is rejected as ambiguous.
 - **Starting a sim:** `sim.start` runs pre-flight first and refuses with `preflight_red`
-  while any check is red. It also refuses descoped segments, and returns `busy` beyond
-  `max_live_runs`. An empty `spec.run_id` gets a generated one. The run lands in
+  while any check is red. It also refuses descoped segments, returns `busy` beyond
+  `max_live_runs`, and `conflict` while a sandbox session runs. An empty `spec.run_id` gets a generated one. The run lands in
   `<runs>/sim/adhoc/`.
 
 Error codes:
@@ -411,7 +412,84 @@ If a source fails (unknown run, bad speed, a live run that errors), the server s
 read events ignore it.
 
 Live events arrive in the batches the simulator flushes to `transcript.jsonl`, not one at a
-time.
+time. A sandbox session's events arrive one at a time, as they happen.
+
+A client may also send `{"ack": {"seq", "gaps", "stalled_ms"}}` at any time: the highest seq
+it applied of the run it follows, the gaps it found, and how long it has been stalled. An ack
+never changes the source and gets no reply. A malformed ack gets an `invalid_params` frame and
+the source keeps running. The daemon keeps acks per connection for the sandbox `stage_ack`
+check.
+
+## Sandbox sessions
+
+A sandbox session runs Malakor on the engine against the simulated room, on the wall clock, for
+5, 10 or 30 minutes, and ends in a gated report. The daemon hosts the session; the command is
+a thin client of it.
+
+1. Run the daemon: `shadowrunr daemon`. Use `--scripted` for a keyless rehearsal.
+2. Serve the stage with `pnpm -C apps/stage dev` and open
+   `http://localhost:5178/?run=live&broadcast=1`. The command prints this URL; on a daemon
+   port other than 7717 it adds `&ws=ws://127.0.0.1:<port>/events`. Use `localhost`, not
+   `127.0.0.1`, because the daemon only accepts browser origins on `http://localhost:*`.
+3. Start the session:
+
+```
+shadowrunr stream sandbox --minutes 5|10|30 [--seed S] [--chaos outage|lost] [--no-judge] [--tone T] [--port P]
+```
+
+| Flag | Meaning |
+|---|---|
+| `--minutes` | Required: 5, 10 or 30. |
+| `--seed` | The simulated room's seed. |
+| `--chaos outage` | 90 s of engine errors from half-way. The host must stall in character and recover. |
+| `--chaos lost` | Engine errors from half-way to the end. The host must stall, then sign off in character. 10 and 30 minute sessions only. |
+| `--no-judge` | Skip the judge. The `judge` check is then unmeasured, so the gate fails. |
+| `--tone` | Tone variant. The default is the character's active tone. |
+| `--port` | The daemon's port. The default is `[daemon] port` (7717). |
+
+The command prints the session id and the stage URL, then a progress line every 10 s:
+
+```
+02:05/05:00 · say-gap max 9.2 s · errors 0 · ack seq 230/240
+```
+
+The fields are elapsed and planned time, the longest silence so far, the core engine errors,
+and the highest seq the stage acknowledged against the events so far. Ctrl-C calls
+`sandbox.stop`: the host signs off, and the command waits for the report. A second Ctrl-C
+detaches, and the session keeps running in the daemon. At the end the command prints the
+checks table and the session directory.
+
+The checks, in report order:
+
+| Check | Passes when |
+|---|---|
+| `say_gap` | No silence on stream is longer than the ceiling (15 s). |
+| `core_errors` | The core thread had no engine errors outside the chaos window. |
+| `sign_off` | The host signed off cleanly. |
+| `chaos` | Under `--chaos`, the host stalled in character and recovered (or signed off). |
+| `stage_ack` | A stage subscriber acked the final event's seq with no gaps. It is unmeasured when no stage acked. The daemon waits up to 6 s after the session for the final ack. |
+| `judge` | The judge found no rule fails. It is unmeasured with `--no-judge`, and fails when judging errors. |
+
+An unmeasured check is not a pass, so a gated run needs the stage open and the judge on.
+
+Exit codes:
+- `0`: every check passed.
+- `1`: the daemon refused the session (pre-flight red, or another session or a live sim is
+  running), or another error.
+- `2`: a usage error, or no daemon is reachable (start one with `shadowrunr daemon`).
+- `6`: the session ended and failed its gate, or failed outright.
+
+Files land in `<runs>/sandbox/<session_id>/`, with `session_id` =
+`sbx-<yyyymmdd-hhmmss>-<minutes>m` in UTC. `session.json` is the report. A session that fails
+leaves `error.json` instead, and no `session.json` means the session failed.
+
+Over `/rpc`:
+- `sandbox.start {minutes, seed?, chaos?, judge?, tone?}` returns `{session_id, dir,
+  stage_url}`. It refuses with `invalid_params`, `preflight_red`, or `conflict`.
+- `sandbox.stop {session_id}` returns the status. Stopping an ended session returns its status
+  unchanged.
+- `sandbox.status {session_id?}` returns the given session, or the latest one, including
+  sessions from earlier daemon runs found on disk.
 
 ## Character rules and moderation lists
 

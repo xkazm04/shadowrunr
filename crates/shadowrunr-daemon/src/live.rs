@@ -11,7 +11,8 @@
 //!
 //! The sim writes its transcript through a buffered writer, so events reach subscribers in
 //! buffer-sized batches rather than one by one (see the WP5 report: an event sink in
-//! `SimOptions` would make this exact).
+//! `SimOptions` would make this exact). A sandbox session (`sandbox`) has no tailer: its
+//! event sink pushes each event into its `LiveRun` as it happens.
 
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
@@ -85,13 +86,28 @@ impl LiveRun {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Append one event. The lock is held across the broadcast so an attach sees each event
-    /// exactly once (in its history or on its receiver).
-    pub fn push(&self, frame: Frame) {
+    /// Append one event and return its seq. The lock is held across the broadcast so an
+    /// attach sees each event exactly once (in its history or on its receiver).
+    pub fn push(&self, frame: Frame) -> u64 {
         let mut g = self.lock();
         g.history.push(frame.clone());
         let seq = g.history.len() as u64;
         let _ = self.tx.send(LiveItem::Event(seq, frame));
+        seq
+    }
+
+    /// Events pushed so far: the seq of the last one.
+    pub fn len(&self) -> u64 {
+        self.lock().history.len() as u64
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Subscribers currently attached to what follows.
+    pub fn subscribers(&self) -> usize {
+        self.tx.receiver_count()
     }
 
     /// End the run. `error` reaches current subscribers as a final `{"error": {...}}` frame.
@@ -153,7 +169,12 @@ impl LiveRegistry {
         self.latest.subscribe()
     }
 
-    fn register(&self, run_id: &str, max: usize) -> Result<Arc<LiveRun>, RpcError> {
+    /// Whether any run is in flight.
+    pub fn any_in_flight(&self) -> bool {
+        !self.runs().is_empty()
+    }
+
+    pub(crate) fn register(&self, run_id: &str, max: usize) -> Result<Arc<LiveRun>, RpcError> {
         let mut runs = self.runs();
         if runs.contains_key(run_id) {
             return Err(RpcError::new(
@@ -174,7 +195,7 @@ impl LiveRegistry {
         Ok(run)
     }
 
-    fn remove(&self, run_id: &str) {
+    pub(crate) fn remove(&self, run_id: &str) {
         self.runs().remove(run_id);
     }
 }
@@ -268,9 +289,26 @@ pub fn brief_line(run_id: &str, brief: Option<&StreamBrief>) -> String {
     )
 }
 
-/// `sim.start`: refuse while a pre-flight check is red, then run in the background and
-/// stream on `/events`. The run lands in `<runs>/sim/<adhoc_dir>/<run_id>/`. The brain gets
-/// the brief from `<data>`; the run's `stream_start` event carries it, so On Air shows what
+/// `preflight_red`, naming every red check, when pre-flight is red.
+pub async fn refuse_if_red(state: &AppState) -> Result<(), RpcError> {
+    let reports = preflight::run_all(&state.cfg, &state.engine).await;
+    if !preflight::any_red(&reports) {
+        return Ok(());
+    }
+    let red: Vec<String> = reports
+        .iter()
+        .filter(|r| r.state == shadowrunr_types::HealthState::Red)
+        .map(|r| format!("{} {}", r.check, r.detail))
+        .collect();
+    Err(RpcError::new(
+        ErrorCode::PreflightRed,
+        format!("pre-flight is red: {}", red.join("; ")),
+    ))
+}
+
+/// `sim.start`: refuse while a pre-flight check is red or a sandbox session runs, then run in
+/// the background and stream on `/events`. The run lands in `<runs>/sim/<adhoc_dir>/<run_id>/`.
+/// The brain gets the brief from `<data>`; the run's `stream_start` event carries it, so On Air shows what
 /// Malakor actually received.
 pub async fn start_sim(
     state: Arc<AppState>,
@@ -278,18 +316,13 @@ pub async fn start_sim(
     judge: bool,
 ) -> Result<String, RpcError> {
     validate(&mut spec)?;
-    let reports = preflight::run_all(&state.cfg, &state.engine).await;
-    if preflight::any_red(&reports) {
-        let red: Vec<String> = reports
-            .iter()
-            .filter(|r| r.state == shadowrunr_types::HealthState::Red)
-            .map(|r| format!("{} {}", r.check, r.detail))
-            .collect();
+    if let Some(id) = state.sandbox.running() {
         return Err(RpcError::new(
-            ErrorCode::PreflightRed,
-            format!("pre-flight is red: {}", red.join("; ")),
+            ErrorCode::Conflict,
+            format!("sandbox session {id} is running"),
         ));
     }
+    refuse_if_red(&state).await?;
     let run_id = spec.run_id.clone();
     let brief = stream_brief(&state.cfg.paths.data)?;
     eprintln!("{}", brief_line(&run_id, brief.as_ref()));

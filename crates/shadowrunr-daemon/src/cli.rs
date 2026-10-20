@@ -11,6 +11,10 @@ use shadowrunr_sim::{
     plan_matrix, run_one_with, run_tournament, summarize, wire, BriefSource, FleetQuota,
     PlanReason, RunAction, TournamentOptions,
 };
+use shadowrunr_types::sandbox::{
+    SandboxChaos, SandboxCheckState, SandboxStartParams, SandboxStarted, SandboxState,
+    SandboxStatus,
+};
 use shadowrunr_types::{HealthState, ModelTier, SegmentId, SimRunSpec};
 
 use crate::config::Config;
@@ -96,6 +100,71 @@ pub enum Command {
     Personas(PersonasCommand),
     /// Serve the MCP tools (runs, transcripts, reports, pre-flight) on stdin/stdout.
     Mcp,
+    /// Streams on the running daemon.
+    #[command(subcommand)]
+    Stream(StreamCommand),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum StreamCommand {
+    /// A wall-clock sandbox session on the running daemon (`shadowrunr daemon`): the real
+    /// engine against the simulated room, on the stage, gated by a session report.
+    #[command(after_help = SANDBOX_EXIT_CODES)]
+    Sandbox(SandboxArgs),
+}
+
+/// `shadowrunr stream sandbox` exit codes (also in docs/guide/cli.md).
+pub const SANDBOX_EXIT_CODES: &str = "Exit codes:
+  0  the session passed every check
+  1  the daemon refused the session (pre-flight red, another session running) or another error
+  2  usage error, or the daemon is not reachable
+  6  the session ended and failed its gate (or failed outright)";
+
+fn parse_minutes(s: &str) -> Result<u32, String> {
+    s.parse::<u32>()
+        .ok()
+        .filter(|m| shadowrunr_types::sandbox::SANDBOX_MINUTES.contains(m))
+        .ok_or_else(|| format!("minutes must be 5, 10 or 30, got {s:?}"))
+}
+
+fn parse_chaos(s: &str) -> Result<SandboxChaos, String> {
+    serde_json::from_value(serde_json::Value::String(s.to_ascii_lowercase()))
+        .map_err(|_| format!("chaos must be outage or lost, got {s:?}"))
+}
+
+#[derive(Debug, Args)]
+pub struct SandboxArgs {
+    /// Session length: 5, 10 or 30 minutes.
+    #[arg(long, value_parser = parse_minutes)]
+    pub minutes: u32,
+    /// Seed for the simulated room.
+    #[arg(long)]
+    pub seed: Option<u64>,
+    /// Inject an engine failure from half-way: outage (90 s) or lost (to the end; 10 and 30
+    /// minute sessions only).
+    #[arg(long, value_parser = parse_chaos)]
+    pub chaos: Option<SandboxChaos>,
+    /// Skip the judge (the `judge` check is then unmeasured, so the gate fails).
+    #[arg(long)]
+    pub no_judge: bool,
+    /// Tone variant (default: the character's active tone).
+    #[arg(long)]
+    pub tone: Option<String>,
+    /// The daemon's port (default: [daemon] port, 7717).
+    #[arg(long)]
+    pub port: Option<u16>,
+}
+
+impl SandboxArgs {
+    pub fn params(&self) -> SandboxStartParams {
+        SandboxStartParams {
+            minutes: self.minutes,
+            seed: self.seed,
+            chaos: self.chaos,
+            judge: !self.no_judge,
+            tone: self.tone.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -383,6 +452,251 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
         Command::Mcp => crate::integrations::mcp::run_stdio(cfg)
             .await
             .map(|()| ExitCode::SUCCESS),
+        Command::Stream(StreamCommand::Sandbox(a)) => {
+            Ok(ExitCode::from(sandbox_cmd(&cfg, a).await))
+        }
+    }
+}
+
+// ── stream sandbox ──────────────────────────────────────────────────────
+
+/// Exit code: the session ended and failed its gate.
+pub const EXIT_GATE_FAIL: u8 = 6;
+/// Exit code: a usage error, or no daemon to talk to.
+pub const EXIT_USAGE: u8 = 2;
+
+const SANDBOX_POLL: std::time::Duration = std::time::Duration::from_secs(1);
+const PROGRESS_EVERY: std::time::Duration = std::time::Duration::from_secs(10);
+/// Status polls in a row that may fail before the daemon counts as gone.
+const UNREACHABLE_AFTER: u32 = 5;
+
+/// Why a daemon call failed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CallError {
+    /// No answer (nothing listening, a timeout, a body that is not a daemon reply).
+    Unreachable(String),
+    /// The daemon answered with an error.
+    Rpc { code: String, message: String },
+}
+
+impl std::fmt::Display for CallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unreachable(m) => write!(f, "daemon not reachable: {m}"),
+            Self::Rpc { code, message } => write!(f, "{code}: {message}"),
+        }
+    }
+}
+
+/// A thin `/rpc` client of the daemon on 127.0.0.1.
+pub struct DaemonClient {
+    http: reqwest::Client,
+    url: String,
+}
+
+impl DaemonClient {
+    pub fn new(port: u16) -> Self {
+        Self {
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(120))
+                .build()
+                .unwrap_or_default(),
+            url: format!("http://127.0.0.1:{port}/rpc"),
+        }
+    }
+
+    pub async fn call<T: serde::de::DeserializeOwned>(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<T, CallError> {
+        let body = serde_json::json!({ "method": method, "params": params });
+        let resp = self
+            .http
+            .post(&self.url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body.to_string())
+            .send()
+            .await
+            .map_err(|e| CallError::Unreachable(e.to_string()))?;
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| CallError::Unreachable(e.to_string()))?;
+        rpc_reply(&bytes)
+    }
+}
+
+/// `{"result"}` as `T`, or `{"error"}` as [`CallError::Rpc`].
+pub fn rpc_reply<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, CallError> {
+    let v: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|e| CallError::Unreachable(format!("not a daemon reply: {e}")))?;
+    if let Some(err) = v.get("error") {
+        return Err(CallError::Rpc {
+            code: err["code"].as_str().unwrap_or("internal").to_string(),
+            message: err["message"].as_str().unwrap_or("").to_string(),
+        });
+    }
+    serde_json::from_value(v.get("result").cloned().unwrap_or_default())
+        .map_err(|e| CallError::Unreachable(format!("unexpected reply: {e}")))
+}
+
+/// 2 for a usage error or no daemon, 1 for any other refusal.
+pub fn exit_for_error(e: &CallError) -> u8 {
+    match e {
+        CallError::Unreachable(_) => EXIT_USAGE,
+        CallError::Rpc { code, .. } if code == "invalid_params" => EXIT_USAGE,
+        CallError::Rpc { .. } => 1,
+    }
+}
+
+/// 0 when the ended session passed its gate, else 6.
+pub fn exit_for_status(st: &SandboxStatus) -> u8 {
+    match &st.report {
+        Some(r) if r.pass => 0,
+        _ => EXIT_GATE_FAIL,
+    }
+}
+
+fn mmss(s: u32) -> String {
+    format!("{:02}:{:02}", s / 60, s % 60)
+}
+
+/// `mm:ss/mm:ss · say-gap max X s · errors N · ack seq K/E`.
+pub fn progress_line(st: &SandboxStatus) -> String {
+    let ack = st
+        .stage_ack_seq
+        .map_or_else(|| "-".to_string(), |k| k.to_string());
+    let line = format!(
+        "{}/{} · say-gap max {:.1} s · errors {} · ack seq {ack}/{}",
+        mmss(st.elapsed_s),
+        mmss(st.planned_s),
+        st.max_say_gap_s,
+        st.core_errors,
+        st.events
+    );
+    match st.state {
+        SandboxState::Closing => format!("{line} · closing"),
+        SandboxState::Judging => format!("{line} · judging"),
+        _ => line,
+    }
+}
+
+/// The checks table and the verdict.
+pub fn report_table(st: &SandboxStatus) -> String {
+    let Some(r) = &st.report else {
+        return format!(
+            "session {}: {} with no report\n",
+            st.session_id,
+            wire(&st.state)
+        );
+    };
+    let mut out = format!("{:<12} {:<11} detail\n", "check", "state");
+    for c in &r.checks {
+        let state = match c.state {
+            SandboxCheckState::Pass => "pass",
+            SandboxCheckState::Fail => "FAIL",
+            SandboxCheckState::Unmeasured => "unmeasured",
+        };
+        out.push_str(&format!("{:<12} {:<11} {}\n", c.id, state, c.detail));
+    }
+    out.push_str(&format!(
+        "session {}: {}, {}\n",
+        st.session_id,
+        wire(&st.state),
+        if r.pass { "PASS" } else { "gate FAILED" }
+    ));
+    out
+}
+
+fn sandbox_ended(s: SandboxState) -> bool {
+    matches!(
+        s,
+        SandboxState::Done | SandboxState::Failed | SandboxState::Stopped
+    )
+}
+
+async fn sandbox_cmd(cfg: &Config, a: SandboxArgs) -> u8 {
+    let port = a.port.unwrap_or(cfg.daemon.port);
+    let client = DaemonClient::new(port);
+    let started: SandboxStarted = match client
+        .call("sandbox.start", serde_json::json!(a.params()))
+        .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: {e}");
+            if matches!(e, CallError::Unreachable(_)) {
+                eprintln!(
+                    "no daemon on 127.0.0.1:{port}: start one with `shadowrunr daemon` (or pass --port)"
+                );
+            }
+            return exit_for_error(&e);
+        }
+    };
+    let id = started.session_id.clone();
+    println!("session {id}");
+    println!("stage: {}", started.stage_url);
+    println!("(serve the stage with `pnpm -C apps/stage dev`; Ctrl-C stops the session)");
+
+    // One listener for the whole wait, so a Ctrl-C during a status call is not lost.
+    let (sig_tx, mut sig_rx) = tokio::sync::mpsc::unbounded_channel::<bool>();
+    tokio::spawn(async move {
+        loop {
+            let ok = tokio::signal::ctrl_c().await.is_ok();
+            if sig_tx.send(ok).is_err() || !ok {
+                return;
+            }
+        }
+    });
+    let mut stopping = false;
+    let mut failures = 0u32;
+    let mut last_line = tokio::time::Instant::now();
+    loop {
+        tokio::select! {
+            () = tokio::time::sleep(SANDBOX_POLL) => {}
+            Some(ok) = sig_rx.recv() => {
+                if !ok || stopping {
+                    eprintln!("detached: session {id} keeps running in the daemon");
+                    return 1;
+                }
+                stopping = true;
+                eprintln!("stopping {id}: the host signs off, then the report (Ctrl-C again to detach)");
+                if let Err(e) = client
+                    .call::<SandboxStatus>("sandbox.stop", serde_json::json!({ "session_id": id }))
+                    .await
+                {
+                    eprintln!("sandbox.stop: {e}");
+                }
+            }
+        }
+        let st: SandboxStatus = match client
+            .call("sandbox.status", serde_json::json!({ "session_id": id }))
+            .await
+        {
+            Ok(st) => {
+                failures = 0;
+                st
+            }
+            Err(e) => {
+                failures += 1;
+                if failures >= UNREACHABLE_AFTER || matches!(e, CallError::Rpc { .. }) {
+                    eprintln!("error: {e}");
+                    return exit_for_error(&e);
+                }
+                continue;
+            }
+        };
+        if sandbox_ended(st.state) {
+            println!("{}", progress_line(&st));
+            print!("{}", report_table(&st));
+            println!("dir: {}", started.dir);
+            return exit_for_status(&st);
+        }
+        if last_line.elapsed() >= PROGRESS_EVERY {
+            last_line = tokio::time::Instant::now();
+            println!("{}", progress_line(&st));
+        }
     }
 }
 
@@ -932,8 +1246,14 @@ async fn reconcile_cmd(
     Ok(ExitCode::SUCCESS)
 }
 
-async fn daemon_cmd(cfg: Config, port: Option<u16>, scripted: bool) -> Result<ExitCode, String> {
+async fn daemon_cmd(
+    mut cfg: Config,
+    port: Option<u16>,
+    scripted: bool,
+) -> Result<ExitCode, String> {
     let port = port.unwrap_or(cfg.daemon.port);
+    // The port it serves on, so the stage URLs it hands out point back at it.
+    cfg.daemon.port = port;
     let engine = EngineHandle::build(&cfg, scripted);
     let scripted = engine.is_scripted();
     let state = server::AppState::new(cfg, engine);
@@ -959,4 +1279,189 @@ async fn daemon_cmd(cfg: Config, port: Option<u16>, scripted: bool) -> Result<Ex
         Err(_) => eprintln!("connections still open after {SHUTDOWN_GRACE:?}; exiting"),
     }
     Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use shadowrunr_types::sandbox::{SandboxCheck, SandboxReport};
+
+    fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(std::iter::once("shadowrunr").chain(args.iter().copied()))
+    }
+
+    fn sandbox_args(args: &[&str]) -> SandboxArgs {
+        match parse(args).unwrap().command {
+            Command::Stream(StreamCommand::Sandbox(a)) => a,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn stream_sandbox_parses_its_flags() {
+        let a = sandbox_args(&[
+            "stream",
+            "sandbox",
+            "--minutes",
+            "10",
+            "--seed",
+            "3",
+            "--chaos",
+            "lost",
+            "--no-judge",
+            "--tone",
+            "theatrical",
+            "--port",
+            "9000",
+        ]);
+        assert_eq!(a.port, Some(9000));
+        assert_eq!(
+            a.params(),
+            SandboxStartParams {
+                minutes: 10,
+                seed: Some(3),
+                chaos: Some(SandboxChaos::Lost),
+                judge: false,
+                tone: Some("theatrical".into()),
+            }
+        );
+        let a = sandbox_args(&["stream", "sandbox", "--minutes", "5"]);
+        assert_eq!(
+            serde_json::to_string(&a.params()).unwrap(),
+            r#"{"minutes":5}"#,
+            "absent flags are omitted, judging is the default"
+        );
+        assert_eq!(a.port, None);
+        let a = sandbox_args(&["stream", "sandbox", "--minutes", "30", "--chaos", "OUTAGE"]);
+        assert_eq!(a.chaos, Some(SandboxChaos::Outage));
+    }
+
+    #[test]
+    fn stream_sandbox_usage_errors_exit_2() {
+        for bad in [
+            &["stream", "sandbox"][..],
+            &["stream", "sandbox", "--minutes", "7"],
+            &["stream", "sandbox", "--minutes", "five"],
+            &["stream", "sandbox", "--minutes", "5", "--chaos", "meteor"],
+            &["stream", "sandbox", "--minutes", "5", "--port", "x"],
+        ] {
+            let e = parse(bad).unwrap_err();
+            assert_eq!(e.exit_code(), 2, "{bad:?}: {e}");
+        }
+    }
+
+    fn status(state: SandboxState, pass: Option<bool>) -> SandboxStatus {
+        SandboxStatus {
+            session_id: "sbx-20261020-120000-5m".into(),
+            state,
+            elapsed_s: 125,
+            planned_s: 300,
+            events: 240,
+            max_say_gap_s: 9.25,
+            core_errors: 1,
+            stage_ack_seq: Some(230),
+            report: pass.map(|pass| SandboxReport {
+                session_id: "sbx-20261020-120000-5m".into(),
+                spec: SandboxStartParams {
+                    minutes: 5,
+                    seed: None,
+                    chaos: None,
+                    judge: true,
+                    tone: None,
+                },
+                started_ms: 0,
+                ended_ms: 300_000,
+                pass,
+                checks: vec![SandboxCheck {
+                    id: "say_gap".into(),
+                    state: if pass {
+                        SandboxCheckState::Pass
+                    } else {
+                        SandboxCheckState::Fail
+                    },
+                    detail: "max 9.3 s".into(),
+                }],
+                max_say_gap_s: 9.25,
+                say_gap_p95_s: 5.0,
+                beat_ms_p50: 800,
+                beat_ms_p95: 6_500,
+                core_errors: 1,
+                stall_lines: 0,
+                health_transitions: 0,
+                judge: None,
+            }),
+        }
+    }
+
+    #[test]
+    fn exit_codes_map_the_gate_and_the_errors() {
+        assert_eq!(exit_for_status(&status(SandboxState::Done, Some(true))), 0);
+        assert_eq!(
+            exit_for_status(&status(SandboxState::Stopped, Some(true))),
+            0
+        );
+        assert_eq!(exit_for_status(&status(SandboxState::Done, Some(false))), 6);
+        assert_eq!(exit_for_status(&status(SandboxState::Failed, None)), 6);
+        assert_eq!(exit_for_error(&CallError::Unreachable("refused".into())), 2);
+        let rpc = |code: &str| CallError::Rpc {
+            code: code.into(),
+            message: "m".into(),
+        };
+        assert_eq!(exit_for_error(&rpc("invalid_params")), 2);
+        assert_eq!(exit_for_error(&rpc("preflight_red")), 1);
+        assert_eq!(exit_for_error(&rpc("conflict")), 1);
+    }
+
+    #[test]
+    fn replies_progress_and_the_table_read_as_specified() {
+        let body = serde_json::json!({ "result": status(SandboxState::Running, None) });
+        let ok: SandboxStatus = rpc_reply(body.to_string().as_bytes()).unwrap();
+        assert_eq!(ok.events, 240);
+        let err = rpc_reply::<SandboxStatus>(br#"{"error":{"code":"conflict","message":"busy"}}"#)
+            .unwrap_err();
+        assert_eq!(
+            err,
+            CallError::Rpc {
+                code: "conflict".into(),
+                message: "busy".into()
+            }
+        );
+        assert!(matches!(
+            rpc_reply::<SandboxStatus>(b"<html>"),
+            Err(CallError::Unreachable(_))
+        ));
+
+        assert_eq!(
+            progress_line(&status(SandboxState::Running, None)),
+            "02:05/05:00 · say-gap max 9.2 s · errors 1 · ack seq 230/240"
+        );
+        let mut st = status(SandboxState::Judging, None);
+        st.stage_ack_seq = None;
+        assert_eq!(
+            progress_line(&st),
+            "02:05/05:00 · say-gap max 9.2 s · errors 1 · ack seq -/240 · judging"
+        );
+        let table = report_table(&status(SandboxState::Done, Some(false)));
+        assert!(
+            table.contains("say_gap      FAIL        max 9.3 s"),
+            "{table}"
+        );
+        assert!(table.contains("gate FAILED"), "{table}");
+    }
+
+    /// The command against a daemon that is not there: exit 2.
+    #[tokio::test]
+    async fn no_daemon_is_a_usage_exit() {
+        let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = free.local_addr().unwrap().port();
+        drop(free);
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::from_file_config(crate::config::FileConfig::default(), tmp.path());
+        let a = sandbox_args(&["stream", "sandbox", "--minutes", "5"]);
+        let a = SandboxArgs {
+            port: Some(port),
+            ..a
+        };
+        assert_eq!(sandbox_cmd(&cfg, a).await, EXIT_USAGE);
+    }
 }

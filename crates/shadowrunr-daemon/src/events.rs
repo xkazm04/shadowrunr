@@ -2,6 +2,11 @@
 //! `{"subscribe": "<run>|live", "speed"?, "since"?, "run_id"?}`; each message replaces the
 //! current source.
 //!
+//! A client may also send `{"ack": {"seq", "gaps", "stalled_ms"}}` at any time: what it has
+//! applied of the run it follows. Acks never change the source and get no reply; the
+//! [`AckBook`] keeps them per connection for the sandbox's `stage_ack` check. A frame that
+//! is neither (or a malformed ack) gets an `invalid_params` error frame.
+//!
 //! - Legacy mode (no `since`): each frame is one bare `StreamEvent`.
 //! - Enveloped mode (`since` present, `0` = from the start): each frame is
 //!   `{"seq", "run_id", "event"}`, and the source resumes after `since`. `seq` is the event's
@@ -12,13 +17,16 @@
 //! `busy` frame with `detail: {skipped, resume_since}`; resubscribing with that `since`
 //! backfills the gap from the run's history.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::extract::ws::{close_code, CloseFrame, Message, Utf8Bytes, WebSocket};
 use futures::{SinkExt, StreamExt};
 use serde_json::json;
 use shadowrunr_types::rpc::Subscribe;
+use shadowrunr_types::sandbox::{AckFrame, StageAck};
 use shadowrunr_types::ErrorCode;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::mpsc;
@@ -38,19 +46,133 @@ pub enum Out {
     Close(&'static str),
 }
 
+/// The run a connection last received an event from: the run its acks refer to.
+pub type Following = Arc<Mutex<Option<String>>>;
+
+/// What one connection acknowledged of one run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AckRecord {
+    /// The highest seq acked.
+    pub seq: u64,
+    /// The gaps the client reported (a running total, so the highest report).
+    pub gaps: u32,
+    /// The largest `stalled_ms` reported: ms since the client's last event. Routine acks carry
+    /// a few seconds; the stage counts 20 s and more as a stall.
+    pub max_stalled_ms: u64,
+    /// Epoch ms of the last ack.
+    pub last_ms: i64,
+}
+
+/// Stage acks per run id, per connection.
+#[derive(Default)]
+pub struct AckBook {
+    next_conn: AtomicU64,
+    runs: Mutex<HashMap<String, HashMap<u64, AckRecord>>>,
+}
+
+impl AckBook {
+    fn runs(&self) -> std::sync::MutexGuard<'_, HashMap<String, HashMap<u64, AckRecord>>> {
+        self.runs.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// A fresh connection id.
+    pub fn connection(&self) -> u64 {
+        self.next_conn.fetch_add(1, Ordering::Relaxed)
+    }
+
+    pub fn record(&self, run_id: &str, conn: u64, ack: StageAck, now_ms: i64) {
+        let mut runs = self.runs();
+        let r = runs
+            .entry(run_id.to_string())
+            .or_default()
+            .entry(conn)
+            .or_insert(AckRecord {
+                seq: 0,
+                gaps: 0,
+                max_stalled_ms: 0,
+                last_ms: now_ms,
+            });
+        r.seq = r.seq.max(ack.seq);
+        r.gaps = r.gaps.max(ack.gaps);
+        r.max_stalled_ms = r.max_stalled_ms.max(ack.stalled_ms);
+        r.last_ms = now_ms;
+    }
+
+    /// Every connection's record for a run.
+    pub fn for_run(&self, run_id: &str) -> Vec<AckRecord> {
+        self.runs()
+            .get(run_id)
+            .map(|m| m.values().copied().collect())
+            .unwrap_or_default()
+    }
+
+    /// The highest seq any connection acked for a run.
+    pub fn max_seq(&self, run_id: &str) -> Option<u64> {
+        self.for_run(run_id).iter().map(|r| r.seq).max()
+    }
+}
+
+/// A frame a client sends.
+#[derive(Debug, PartialEq)]
+enum ClientFrame {
+    Subscribe(Subscribe),
+    Ack(StageAck),
+    /// An `ack` frame that does not parse: an error frame, the source is kept.
+    BadAck(String),
+    /// Anything else: an error frame, and the source stops.
+    Bad(String),
+}
+
+fn parse_frame(text: &str) -> ClientFrame {
+    let v: serde_json::Value = match serde_json::from_str(text) {
+        Ok(v) => v,
+        Err(e) => return ClientFrame::Bad(format!("expected a JSON object: {e}")),
+    };
+    if v.get("ack").is_some() {
+        return match serde_json::from_value::<AckFrame>(v) {
+            Ok(f) => ClientFrame::Ack(f.ack),
+            Err(e) => ClientFrame::BadAck(format!(
+                "expected {{\"ack\": {{\"seq\", \"gaps\", \"stalled_ms\"}}}}: {e}"
+            )),
+        };
+    }
+    match serde_json::from_value::<Subscribe>(v) {
+        Ok(sub) => ClientFrame::Subscribe(sub),
+        Err(e) => ClientFrame::Bad(format!(
+            "expected {{\"subscribe\", \"speed\"?, \"since\"?}}: {e}"
+        )),
+    }
+}
+
 /// Writes frames for one subscription, in its mode.
 pub struct Emitter {
     tx: mpsc::Sender<Out>,
     enveloped: bool,
+    following: Following,
 }
 
 impl Emitter {
     pub fn new(tx: mpsc::Sender<Out>, enveloped: bool) -> Self {
-        Self { tx, enveloped }
+        Self::following(tx, enveloped, Following::default())
+    }
+
+    /// An emitter that notes, in `following`, the run each event came from.
+    pub fn following(tx: mpsc::Sender<Out>, enveloped: bool, following: Following) -> Self {
+        Self {
+            tx,
+            enveloped,
+            following,
+        }
     }
 
     /// Send one event; false once the socket is gone.
     pub async fn event(&self, run_id: &str, seq: u64, frame: Frame) -> bool {
+        {
+            let mut f = self.following.lock().unwrap_or_else(|p| p.into_inner());
+            if f.as_deref() != Some(run_id) {
+                *f = Some(run_id.to_string());
+            }
+        }
         let frame = if self.enveloped {
             let id = serde_json::to_string(run_id).unwrap_or_else(|_| "\"\"".into());
             Frame::from(format!(
@@ -105,6 +227,8 @@ pub async fn session(state: Arc<AppState>, socket: WebSocket) {
     });
     let shutdown = state.shutdown_signal();
     tokio::pin!(shutdown);
+    let conn = state.acks.connection();
+    let following = Following::default();
     let mut source: Option<tokio::task::JoinHandle<()>> = None;
     loop {
         let msg = tokio::select! {
@@ -122,19 +246,35 @@ pub async fn session(state: Arc<AppState>, socket: WebSocket) {
             Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
             Some(Ok(_)) => continue,
         };
+        let sub = match parse_frame(&text) {
+            ClientFrame::Ack(ack) => {
+                let run = following.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                if let Some(run) = run {
+                    state.acks.record(&run, conn, ack, runs::now_ms());
+                }
+                continue;
+            }
+            ClientFrame::BadAck(msg) => {
+                let _ = Emitter::new(tx.clone(), false)
+                    .error(RpcError::invalid(msg))
+                    .await;
+                continue;
+            }
+            ClientFrame::Subscribe(sub) => Ok(sub),
+            ClientFrame::Bad(msg) => Err(msg),
+        };
         if let Some(h) = source.take() {
             h.abort();
         }
-        match serde_json::from_str::<Subscribe>(&text) {
+        match sub {
             Ok(sub) => {
                 let state = state.clone();
-                let tx = tx.clone();
+                let emit = Emitter::following(tx.clone(), sub.since.is_some(), following.clone());
                 source = Some(tokio::spawn(async move {
-                    run_source(state, sub, tx).await;
+                    run_source(state, sub, emit).await;
                 }));
             }
-            Err(e) => {
-                let msg = format!("expected {{\"subscribe\", \"speed\"?, \"since\"?}}: {e}");
+            Err(msg) => {
                 let _ = Emitter::new(tx.clone(), false)
                     .error(RpcError::invalid(msg))
                     .await;
@@ -148,8 +288,7 @@ pub async fn session(state: Arc<AppState>, socket: WebSocket) {
     let _ = writer.await;
 }
 
-async fn run_source(state: Arc<AppState>, sub: Subscribe, tx: mpsc::Sender<Out>) {
-    let emit = Emitter::new(tx, sub.since.is_some());
+async fn run_source(state: Arc<AppState>, sub: Subscribe, emit: Emitter) {
     let since = sub.since.unwrap_or(0);
     if sub.subscribe == "live" {
         if sub.since.is_some() && sub.run_id.is_none() {
@@ -324,6 +463,74 @@ mod tests {
         assert!(backfill.rx.is_none());
         pump("r1", backfill, 0, &Emitter::new(tx, true)).await;
         assert_eq!(texts(&mut rx).len() as u64, total);
+    }
+
+    #[test]
+    fn client_frames_are_subscribe_ack_or_refused() {
+        assert!(matches!(
+            parse_frame(r#"{"subscribe":"live"}"#),
+            ClientFrame::Subscribe(s) if s.subscribe == "live"
+        ));
+        assert_eq!(
+            parse_frame(r#"{"ack":{"seq":9,"gaps":1,"stalled_ms":20}}"#),
+            ClientFrame::Ack(StageAck {
+                seq: 9,
+                gaps: 1,
+                stalled_ms: 20
+            })
+        );
+        assert!(matches!(
+            parse_frame(r#"{"ack":{"seq":"x"}}"#),
+            ClientFrame::BadAck(_)
+        ));
+        assert!(matches!(parse_frame(r#"{"hello":1}"#), ClientFrame::Bad(_)));
+        assert!(matches!(parse_frame("not json"), ClientFrame::Bad(_)));
+    }
+
+    #[test]
+    fn the_ack_book_keeps_each_connection_per_run() {
+        let book = AckBook::default();
+        let (a, b) = (book.connection(), book.connection());
+        assert_ne!(a, b);
+        assert_eq!(book.max_seq("r"), None);
+        let ack = |seq, gaps, stalled_ms| StageAck {
+            seq,
+            gaps,
+            stalled_ms,
+        };
+        book.record("r", a, ack(10, 0, 0), 1);
+        book.record("r", a, ack(7, 2, 900), 2);
+        book.record("r", b, ack(12, 0, 0), 3);
+        book.record("other", b, ack(99, 0, 0), 4);
+        let mut recs = book.for_run("r");
+        recs.sort_by_key(|r| r.seq);
+        assert_eq!(
+            recs,
+            vec![
+                AckRecord {
+                    seq: 10,
+                    gaps: 2,
+                    max_stalled_ms: 900,
+                    last_ms: 2
+                },
+                AckRecord {
+                    seq: 12,
+                    gaps: 0,
+                    max_stalled_ms: 0,
+                    last_ms: 3
+                },
+            ]
+        );
+        assert_eq!(book.max_seq("r"), Some(12));
+    }
+
+    #[tokio::test]
+    async fn an_emitter_notes_the_run_it_follows() {
+        let (tx, _rx) = mpsc::channel(4);
+        let following = Following::default();
+        let emit = Emitter::following(tx, true, following.clone());
+        assert!(emit.event("sbx-1", 1, Frame::from("{}")).await);
+        assert_eq!(following.lock().unwrap().as_deref(), Some("sbx-1"));
     }
 
     #[tokio::test]

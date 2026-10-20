@@ -213,6 +213,11 @@ impl Paths {
         self.runs.join("sim")
     }
 
+    /// `<runs>/sandbox`: sandbox sessions, one directory per session id.
+    pub fn sandbox_runs(&self) -> PathBuf {
+        self.runs.join("sandbox")
+    }
+
     /// `<data>/memory`: the brain's memory store.
     pub fn memory(&self) -> PathBuf {
         self.data.join("memory")
@@ -407,6 +412,10 @@ mod tests {
         assert_eq!(
             cfg.paths.sim_runs(),
             Path::new("/repo").join("runs").join("sim")
+        );
+        assert_eq!(
+            cfg.paths.sandbox_runs(),
+            Path::new("/repo").join("runs").join("sandbox")
         );
     }
 
