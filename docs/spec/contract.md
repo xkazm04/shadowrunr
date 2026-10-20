@@ -856,4 +856,13 @@ hosts a session; `shadowrunr stream sandbox` drives it.
 - During an outage the host speaks model-free stall lines from the character package. Each
   is a `say` followed by `moderation {output, engine_stall, spoke}`. `health` events record
   every fleet-mode change.
-- CLI exit codes: 0 pass, 6 gate fail, 2 usage error.
+- CLI exit codes: 0 pass, 6 gate fail, 2 usage error, 1 a refused start (pre-flight red,
+  conflict).
+- The character package may carry `stalls.toml` (`lines = [...]`, `sign_off = "..."`); absent,
+  built-in defaults apply. The fleet-loss sign-off speaks its `sign_off`.
+- `room.json` in the session dir holds the featured chatters, stimuli, chat stats, removed
+  viewers and brain errors (the judge reads the featured chatters and stimuli).
+- Once a viewer is removed by `crisis-chat-ban`, a Malakor line naming them (display name, or
+  its first name-token of 3+ letters as a whole word) is repaired or dropped:
+  `moderation {output, crisis_chat_ban, name_withheld}`. The simulated room stops that viewer
+  posting, stops its chatters mentioning them, and reassigns their pending stimuli.

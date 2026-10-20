@@ -483,6 +483,17 @@ Files land in `<runs>/sandbox/<session_id>/`, with `session_id` =
 `sbx-<yyyymmdd-hhmmss>-<minutes>m` in UTC. `session.json` is the report. A session that fails
 leaves `error.json` instead, and no `session.json` means the session failed.
 
+The session directory holds:
+- `spec.json`: the run spec plus the params, `planned_s`, `tick_s`, `programme`,
+  `handover_s` and `chaos_window_s`.
+- `instrument.json` (plus `brief.json` when the stream has a brief).
+- `transcript.jsonl`: one event per line, flushed as it happens. Line n is `/events` seq n.
+- `ledger.jsonl`: every engine call from the brain, the room and the judge. Calls refused by
+  chaos show as `unavailable`.
+- `room.json`: featured chatters, stimuli, chat stats, removed viewers and brain errors.
+- `session.json`: the gate report.
+- `verdict.json`, `judge.json` and `judge-windows/`, after judging.
+
 Over `/rpc`:
 - `sandbox.start {minutes, seed?, chaos?, judge?, tone?}` returns `{session_id, dir,
   stage_url}`. It refuses with `invalid_params`, `preflight_red`, or `conflict`.

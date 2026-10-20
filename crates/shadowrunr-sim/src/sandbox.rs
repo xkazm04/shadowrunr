@@ -1843,6 +1843,21 @@ mod tests {
             detail(r, "chaos")
         );
         assert_ne!(state(r, "chaos"), SandboxCheckState::Unmeasured);
+        // Integrated with the brain's stalling: the outage is covered in character, the
+        // fleet goes down and back, and silence stays under the ceiling throughout.
+        assert_eq!(
+            state(r, "chaos"),
+            SandboxCheckState::Pass,
+            "{}",
+            detail(r, "chaos")
+        );
+        assert!(r.stall_lines > 0 && r.health_transitions >= 2, "{r:?}");
+        assert_eq!(
+            state(r, "say_gap"),
+            SandboxCheckState::Pass,
+            "{}",
+            detail(r, "say_gap")
+        );
     }
 
     #[test]
