@@ -145,8 +145,182 @@ scope. Malakor is an original character.
 
 ## The daemon and the CLI
 
-<!-- AV-2: `/voice`, the sidecar's lifecycle, the queue and the skips, and the CLI. -->
+With `[voice] enabled = true`, `shadowrunr daemon` starts one voice service. It spawns the
+sidecar (`python -m shadowrunr_voice` in `[voice] sidecar`) with arguments from `[voice]`:
+`--engine-dir`, `--durations` (when set), `--sid`, `--voice` and `--render-timeout-ms`. The
+startup line ends with `(voice on)`. With the voice off, nothing is spawned and `/voice` says
+`off`.
+
+### Check the setup first
+
+```
+shadowrunr voice check
+```
+
+```
+[voice] is enabled (voice af_heart, sid 3)
+item                   state    detail
+engine                 ok       bin\sherpa-onnx-offline-tts.exe in engine_dir
+kokoro model.onnx      ok       kokoro\model.onnx in engine_dir
+kokoro voices.bin      ok       kokoro\voices.bin in engine_dir
+kokoro tokens.txt      ok       kokoro\tokens.txt in engine_dir
+kokoro espeak-ng-data  ok       kokoro\espeak-ng-data in engine_dir
+python                 ok       Python 3.12.9
+sidecar                ok       shadowrunr_voice imports
+mouth-shape packages   ok       numpy, onnxruntime
+durations model        ok       durations.onnx
+voice: ready to speak, with mouth shapes
+```
+
+`MISSING` (upper case) is an item the voice needs. `missing` (lower case) only costs the mouth
+shapes; the stage then moves the mouth from loudness. `--json` prints the items.
+
+| Exit | `voice check` |
+| --- | --- |
+| 0 | everything needed to speak is present (mouth shapes are optional) |
+| 1 | something needed is missing |
+| 2 | usage error |
+
+### Hear one line
+
+```
+shadowrunr voice say "I am Malakor. Kneel before the ledger of doom, mortals. Your socks are forfeit." --out
+```
+
+```
+sidecar ready in 865 ms, mouth shapes on
+part 0  at  1845 ms   1067 ms audio   10 visemes  I am Malakor.
+part 1  at  4047 ms   2382 ms audio   24 visemes  Kneel before the ledger of doom, mortals.
+part 2  at  6217 ms   1336 ms audio   16 visemes  Your socks are forfeit.
+3 part(s), 4785 ms of audio, 50 visemes, first part after 1845 ms, all in 6219 ms
+wrote <data>\voice\say-<ms>.wav
+```
+
+This runs the sidecar once, without a daemon, whether or not `[voice] enabled` is set. Each
+sentence prints as it arrives: when it arrived after the `say`, its audio length, its mouth
+shapes and its text. `--out` with no path writes `<data>/voice/say-<ms>.wav`, and `--out PATH`
+writes to PATH.
+
+| Exit | `voice say` |
+| --- | --- |
+| 0 | the whole line was spoken |
+| 1 | the sidecar did not start, or a sentence failed or timed out |
+| 2 | usage error |
+
+### What the daemon does with a line
+
+- **Only followed live runs are voiced.** That includes sandbox sessions. Replays and foil
+  lines are never voiced. A run is voiced while at least one `/voice` client follows it. Each
+  Malakor `say` becomes the line `<run_id>:<seq>`, and its sentences go out as `utterance`
+  frames with the ids `<run_id>:<seq>:<part>`.
+- **`max_queue`** (default 6): lines waiting to render. When a new line arrives past it, the
+  oldest waiting line is `skipped` with `queue_full`.
+- **`max_lag_ms`** (default 8000): the clock starts when the `say` reaches the daemon. A line
+  whose first sentence has not rendered by then is cancelled and `skipped` with `late`. A line
+  already that old when it leaves the queue is skipped without rendering.
+- **`render_timeout_ms`** (default 30000): one sentence, at most. A sentence that fails or
+  times out skips the rest of its line with `error`, from that part on. Three failed lines in a
+  row turn the status `degraded` ("renders failing: ..."), and the next spoken line clears it.
+- **The stream never waits.** The service reads each run's event broadcast. It never holds up
+  the brain, the transcript or `/events`.
+
+### Status and restarts
+
+| State | When |
+| --- | --- |
+| `off` | `[voice] enabled = false` |
+| `starting` | the sidecar is loading (its `hello` has not arrived) |
+| `ready` | speaking; `visemes` says whether mouth shapes come with it, and `reason` says why not |
+| `degraded` | the engine files are missing (nothing is spawned, and nothing retries until the config changes), the sidecar exited, or renders keep failing |
+
+When the sidecar exits, any line in flight is skipped from the part it reached. The sidecar
+restarts after 1 s, and the wait doubles on each exit up to 60 s. It restarts at most 3 times
+in any 5 minutes; after that it waits for the window to clear, and `reason` gives the time
+left.
+
+The sidecar never outlives the daemon. On shutdown the daemon closes the sidecar's stdin (the
+sidecar exits on EOF), waits 2 s, then kills it. If the daemon dies outright, the pipe closes
+and the sidecar exits on its own. In a hard-kill test it was gone within 0.8 s.
+
+### `/voice` for clients
+
+- The current `status` is sent on connect, and again on every change.
+- Nothing is followed until the client sends `{"follow": {}}` (the newest live run, moving to
+  each new run as it starts) or `{"follow": {"run_id": "..."}}`. A named run that is not live
+  yet is picked up when it starts.
+- **Malformed client frames are ignored.** The daemon logs each one on one stderr line. The
+  socket only ever carries `status`, `utterance` and `skipped`, and the current follow is kept.
+- **A slow client loses frames; it never slows the voice.** Each socket has a queue of 16
+  frames. When an utterance does not fit, that utterance and the rest of its line are dropped
+  for that client only. The client then gets one `skipped {reason: "queue_full"}` from the
+  first dropped part, as soon as there is room. Other clients are unaffected.
+- On daemon shutdown the socket closes with code 1001 and the reason `daemon shutting down`.
+
+### The face rig
+
+`GET /avatar/{file}` serves `<data>/avatar/rig/<file>`. The name must be one segment of
+`[A-Za-z0-9._-]` with no `..`, and end in `.json`, `.png` or `.webp`. Anything else, or a file
+that is not there, is 404, and the stage draws its placeholder. Responses carry
+`cache-control: no-cache`, so a re-split rig shows on the next load.
 
 ## The stage
 
-<!-- AV-3: the face, the placeholder rig, the loudness fallback, and the disclosure badge. -->
+The stage draws Malakor's face in its avatar slot: above his caption in the improv layouts, and
+in the small circle beside the caption in SEG-02A. The face works without the voice. While a
+`say` caption is on screen his head sways as he talks, and at rest he breathes and blinks.
+
+### Which face is drawn
+
+- **Live** (`?run=...`): the stage asks the daemon for `/avatar/layers.json`. If a rig is in
+  `<data>/avatar/rig/`, that rig is drawn.
+- **No rig, no daemon, or a replay:** the stage draws its procedural placeholder. This is a dark
+  crowned skull with an ember mouth seam, verdigris eye lights and floating crown shards. It is
+  painted in the browser, and no image file ships with it.
+- **A rig that does not load or check:** the stage draws the placeholder and logs why, once, in
+  the browser console. A plain 404 is not logged.
+- **No WebGL2:** the face is not drawn, and the slot keeps the SVG silhouette.
+- **Reduced motion** (the OS setting): the face is one still frame at rest.
+
+### Turning the voice on
+
+The voice plays only on live runs, and it is off by default.
+
+1. Open the stage on a live run: `http://localhost:5178/?run=live`. Give `?ws=` if your daemon is
+   not on `ws://127.0.0.1:7717/events`.
+2. In the controls at the bottom of the page, click **Voice**. The click also unlocks audio,
+   since browsers keep audio silent until a click. The setting is remembered in this browser.
+3. Read the voice state beside the button:
+   - `voice off` (with a reason): the toggle is off, or the stage is showing a replay;
+   - `voice starting`: connecting to the daemon's `/voice`;
+   - `voice ready`: the daemon's voice is up;
+   - `voice degraded` (with a reason): the engine is missing, the socket is closed, or audio is
+     blocked until a click.
+4. While the voice is on, the disclosure badge reads "AI character · synthetic voice", and a
+   "synthetic voice" label sits under the face.
+
+**OBS / broadcast view.** `?broadcast=1` hides the controls, so add `?voice=1`, for example
+`?run=live&broadcast=1&voice=1`. OBS's browser source normally plays audio without a click.
+If audio is still blocked, the stage stays silent and shows `degraded`. Route the browser
+source's audio in OBS as usual.
+
+### What the stage does with the audio
+
+- The stage follows the run it shows: it sends `{"follow": {"run_id"}}` and sends it again when
+  the run changes.
+- Each sentence is scheduled straight after the previous one, so the parts of a line play without
+  gaps.
+- The mouth follows the audio's own clock. The shape is read at the playback position (35 ms
+  ahead) and the loudness from the output. When a sentence has no mouth shapes, the mouth follows
+  loudness alone.
+- When the stage falls more than 6 s behind, it drops the oldest sentence that has not started.
+  It never talks later and later.
+- A headless browser (the clip recorder, any automation) is never voiced. Clips stay silent.
+
+### Looking at the face without a voice (dev builds)
+
+Run `pnpm -C apps/stage dev` and add `?face=` to the URL:
+- `?face=demo` loops a scripted line;
+- `?face=rest` holds the face at rest;
+- `?face=aa` (or any other mouth shape: `oh`, `E`, `PP`, ...) holds that shape mid-speech.
+
+This parameter does nothing in a production build.

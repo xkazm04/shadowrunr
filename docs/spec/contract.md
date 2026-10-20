@@ -927,10 +927,15 @@ the brain never waits on audio.
 - For the followed **live** run, each `say` with `speaker: malakor` is rendered a sentence at a
   time. Each sentence is sent as one `utterance`, in order: `part` counts from 0, and `last` marks
   the final sentence.
-- Foil lines and replays are not voiced in v1.
+- Foil lines and replays are not voiced in v1. Nothing is voiced until a client sends its
+  first `follow`, and a run is voiced only while some client follows it.
+- `starting` until the sidecar's `hello`. A missing engine or Kokoro file is `degraded` before
+  anything is spawned; a `hello` that carries a `reason` (no mouth shapes) is still `ready`,
+  with `visemes: false`.
 - **Bounded:**
   - at most `max_queue` lines wait to render; past that, the oldest is `skipped` with `queue_full`;
-  - a line whose first audio cannot start within `max_lag_ms` of its `say` is `skipped` with `late`;
+  - a line whose first sentence has not reached the daemon within `max_lag_ms` of its `say` is
+    `skipped` with `late` (measured at the daemon, not at playback);
   - a failed or timed-out render is `skipped` with `error`, together with the rest of its line.
 - The client plays the audio. Audio is the one clock: the mouth follows playback time, never the
   wall clock.
@@ -938,13 +943,17 @@ the brain never waits on audio.
 **`GET /avatar/{file}`** serves the face rig from `<data>/avatar/rig/`: `layers.json` and the PNGs
 it names, in the glow-rig format (a `FormSpec` with `rig_type: "glow"`). The rig is built offline
 from the owner's portrait. It returns 404 when there is no rig, and the stage then draws its
-bundled placeholder. File names are a single path segment; anything else returns 404.
+bundled placeholder. The rig may carry an optional `rig.colors` (the mouth light and the ground
+line); without it the stage uses its own tokens. File names are a single path segment; anything else returns 404.
 
 **The sidecar** (`tools/voice`, `python -m shadowrunr_voice`) is a daemon-private process
 speaking JSON lines on stdio:
 - Out, first: `{"type":"hello","protocol":1,"voice","sample_rate","visemes":bool,"reason"?}`.
-- In: `{"type":"say","id","text"}` and `{"type":"cancel","ids":[...]}`.
-- Out, per sentence: `{"type":"audio","id","part","last","text","sample_rate","pcm","visemes":[[v,start_ms,end_ms]]}`.
+- In: `{"type":"say","id","text"}` and `{"type":"cancel","ids":[...]}`. `cancel` gets no
+  reply: queued sentences of those ids are dropped and an in-flight render is killed.
+- Out, per sentence: `{"type":"audio","id","part","last","text","sample_rate","pcm","visemes"?:[[v,start_ms,end_ms]]}`.
+  `visemes` is omitted when the voice has no mouth shapes. `id` is a string, echoed as sent.
+  The daemon computes `duration_ms` from the PCM.
 - Out, on failure: `{"type":"error","id","part","reason"}`.
 - It exits when its stdin closes.
 - Text goes to sherpa as one argument in an argument list, never through a shell.
