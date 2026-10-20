@@ -1,0 +1,10 @@
+/* The kind proportion bar and its key. Kind colours are inline (ink.ts). */
+
+.mix { min-width: 0; }
+.bar { display: flex; height: .875rem; overflow: hidden; background: var(--sr-color-wash); }
+.bar span { display: block; height: 100%; }
+.big { height: 1.25rem; }
+.key { display: flex; flex-wrap: wrap; gap: var(--sr-space-tick) var(--sr-space-near); margin: var(--sr-space-compact) 0 0; padding: 0; list-style: none; font-size: var(--sr-size-caption); }
+.key li { display: inline-flex; gap: var(--sr-space-snug); align-items: baseline; }
+.key i { display: inline-block; flex: none; width: .5625rem; height: .5625rem; border-radius: var(--sr-radius-round); }
+.key b { font-family: var(--sr-font-mono); font-weight: var(--sr-weight-semibold); font-size: var(--sr-size-micro); }

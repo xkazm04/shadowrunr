@@ -1,7 +1,7 @@
 // Every label the Review page shows. Enum ids stay on the wire and never reach the screen:
 // line kinds, targets, edges, judged rules, quality dimensions, moderation records and engine
 // roles are named here, from the operator's side of the screen.
-import type { FeedbackTag, LineEdge, LineKind, LineTarget, Role } from "@shadowrunr/contract";
+import type { FeedbackTag, LineEdge, LineKind, LineTarget, Role, SandboxChaos, SandboxCheckState } from "@shadowrunr/contract";
 
 /** A line's kind as the page shows it. `stall` and `untagged` are page-side (derived), not wire kinds. */
 export type ShownKind = LineKind | "stall" | "untagged";
@@ -27,8 +27,26 @@ export const FEEDBACK: readonly (readonly [FeedbackTag, string])[] = [
 export const FEEDBACK_NAME: Readonly<Record<FeedbackTag, string>> = Object.fromEntries(FEEDBACK) as Record<FeedbackTag, string>;
 
 export const SEGMENT_NAME: Readonly<Record<string, string>> = { "SEG-01": "Improv room", "SEG-02A": "Investigation" };
+
+/** What a timeline row's show column says about an event: show ops, handovers, engine health. */
+export type ShowMarkId = "poll" | "poll_closed" | "reveal" | "foil_in" | "foil_out" | "card" | "sign_off" | "handover" | "engine_down" | "engine_degraded" | "engine_back";
+export const SHOW_MARK_NAME: Readonly<Record<ShowMarkId, string>> = {
+  poll: "Poll", poll_closed: "Poll closed", reveal: "Reveal", foil_in: "Foil in", foil_out: "Foil out", card: "Card", sign_off: "Sign-off",
+  handover: "Handover", engine_down: "Engine down", engine_degraded: "Engine degraded", engine_back: "Engine back",
+};
+/** A timeline row's gates and judge column: output gates by group, and the judge's failed rules. */
+export type GateMarkId = "care" | "persona" | "alleged" | "judge_fail";
+export const GATE_MARK_NAME: Readonly<Record<GateMarkId, string>> = { care: "Care", persona: "Persona", alleged: "Alleged", judge_fail: "Judge fail" };
+
+/** The wall's order control. */
+export type WallOrder = "oldest" | "fails" | "roast";
+export const WALL_ORDER: readonly (readonly [WallOrder, string])[] = [["oldest", "Oldest first"], ["fails", "Most rule fails"], ["roast", "Most roasting"]];
+
+/** The timeline's row sizes, in seconds. */
+export const ROW_SIZES: readonly (readonly [number, string])[] = [[10, "10 s"], [30, "30 s"], [60, "1 min"], [120, "2 min"]];
 export const RANK_NAME: Readonly<Record<string, string>> = { thrall: "Thrall", acolyte: "Acolyte", cultist: "Cultist", warlock: "Warlock", lich: "Lich", dread_council: "Dread Council" };
 export const CHECK_NAME: Readonly<Record<string, string>> = { say_gap: "Say gap", core_errors: "Core errors", sign_off: "Sign-off", chaos: "Chaos", stage_ack: "Stage ack", judge: "Judge" };
+export const CHECK_STATE_NAME: Readonly<Record<SandboxCheckState, string>> = { pass: "passed", fail: "failed", unmeasured: "not measured" };
 export const ROLE_NAME: Readonly<Partial<Record<Role, string>>> = {
   core_thread: "Malakor's voice", chatter: "Simulated chatters", chat_picker: "Chat picker", researcher: "Researchers",
   consolidator: "Memory", judge: "Judge", planner: "Planner", reconciler: "Reconcile", clipper: "Clip factory", tagger: "Line tagger",
@@ -112,6 +130,11 @@ export function modName(stage: string, rule: string, action: string): ModName {
     return R("Show mechanics", `His command to ${(op && OP_NAME[op]) || human(op ?? "act")} was refused`, REFUSAL_REASON[rule] ?? human(rule));
   }
   return R(stage === "input" ? "Chat filters" : "Other", human(rule), human(action));
+}
+
+/** A session's title. Layer2.tsx has the same function; it lives here too so the wall's chunk does not load layer 2's. */
+export function sessionTitle(minutes: number, chaos?: SandboxChaos): string {
+  return `${minutes}-minute session${chaos === "lost" ? " · engine lost" : chaos === "outage" ? " · engine outage" : ""}`;
 }
 
 export const fmtClock = (s: number): string => {
