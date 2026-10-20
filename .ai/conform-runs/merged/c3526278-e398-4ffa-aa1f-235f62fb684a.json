@@ -1,0 +1,22 @@
+{
+ "schema": "conform-run/1",
+ "worker": "c3526278-e398-4ffa-aa1f-235f62fb684a",
+ "subject": "document-text-extraction",
+ "evaluatedAt": "2026-10-20T00:24:31.080245+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "document-text-extraction",
+   "context": "console-brain-page",
+   "reason": "The document-text-extraction standard governs converting untrusted document byte containers (PDFs, scanned images, office files) into text for indexing or model consumption, enforcing completeness through typed unreadable-region refusals, extraction yield bands (complete, sparse, corrupt, empty), structural amplification caps, and optical recognition escalation. By contrast, console-brain-page is a frontend React UI for the operator console that visualizes engine telemetry, canvas pulse lanes (Plot.tsx, draw.ts), engine throughput/latency instruments (Instruments.tsx, Engine.tsx), and virtualized transcript event streams (Viewer.tsx). Its registry-map association was a lexical false positive on 'page' (web page routing in index.ts) and 'bands' (CSS/SVG letterbox art in BandArt.tsx, bands.test.tsx), containing no document ingestion or text extraction pipelines."
+  },
+  {
+   "subject": "document-text-extraction",
+   "context": "console-simulator-page",
+   "reason": "The document-text-extraction standard governs byte container parsing, optical recognition escalation, unreadable region lists, and markup escaping for document ingestion pipelines. By contrast, console-simulator-page is a frontend React UI for tournament simulation and judge result presentation (Layer1.tsx, Layer2.tsx, SimScreen.tsx, Tournaments.tsx) with canvas grid drawing (draw.ts), heatmap rendering (Heatmap.tsx), and judge quote verification against transcript event objects (quote.ts, Verdicts.tsx). Its registry-map association was a lexical false positive on 'page' (web page routing in index.ts) and 'bands' (CSS/SVG letterbox art in BandArt.tsx, bands.test.tsx), containing no document container extraction or OCR operations."
+  }
+ ],
+ "consults": []
+}
