@@ -215,6 +215,26 @@ pub struct RunRecord {
     /// The staged real case the run audited; absent for the fictional demo case.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub case: Option<RunCase>,
+    /// The stream prep the brain had ([`prep_label`]): its id, `sample` for the fictional
+    /// sample, or `none`. Absent in runs recorded before stream prep.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prep: Option<String>,
+}
+
+/// Which stream prep a run used, as `run.json` and a sandbox's `spec.json` record it: the
+/// prep's id (the fictional sample's id is `sample`), or `none`.
+pub fn prep_label(prep: Option<&shadowrunr_types::prep::StreamPrep>) -> String {
+    prep.map_or_else(|| "none".to_string(), |p| p.prep_id.clone())
+}
+
+/// The options' stream prep when it is for `character` (a prep is written for one character).
+pub(crate) fn stream_prep_for<'a>(
+    opts: &'a SimOptions,
+    character: &str,
+) -> Option<&'a shadowrunr_types::prep::StreamPrep> {
+    opts.stream_prep
+        .as_ref()
+        .filter(|p| p.character == character)
 }
 
 /// `error.json`: the run failed before a verdict. Void, not a fail.
@@ -674,6 +694,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
             content_sha256: c.content_sha256.clone(),
             unapproved_real_case: !c.approved_for_stream(),
         }),
+        prep: Some(prep_label(stream_prep_for(opts, &spec.character))),
     };
     write_json(&prep.run_dir.join("run.json"), &record)?;
 
@@ -799,7 +820,7 @@ pub(crate) async fn build_brain(
     let character = load_character(&prep.character_dir, &prep.spec.tone_variant)?;
     // The bone-clerks search the case file (planted or staged public records), not the web.
     let brain_engine = CaseFileResearch::wrap(engine, stage);
-    Ok(Brain::new_with(
+    let mut brain = Brain::new_with(
         BrainConfig {
             character,
             memory_dir: memory_dir.to_path_buf(),
@@ -811,7 +832,11 @@ pub(crate) async fn build_brain(
         tuning,
     )
     .await?
-    .with_brief(prep.brief.clone()))
+    .with_brief(prep.brief.clone());
+    if let Some(stream_prep) = stream_prep_for(opts, &prep.spec.character) {
+        brain.set_prep(stream_prep.clone());
+    }
+    Ok(brain)
 }
 
 pub(crate) fn temp_memory_dir(run_id: &str) -> PathBuf {
@@ -2393,5 +2418,95 @@ pub(crate) mod tests {
             "{}",
             &core[n - 1].prompt
         );
+    }
+
+    fn sample_prep() -> shadowrunr_types::prep::StreamPrep {
+        let text =
+            std::fs::read_to_string(repo().join("characters/malakor/prep.sample.json")).unwrap();
+        serde_json::from_str(&text).unwrap()
+    }
+
+    #[tokio::test]
+    async fn the_brain_gets_the_runs_prep_for_its_character_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        let s = spec("p1", ModelTier::Haiku, 3, 60);
+        let engine: Arc<dyn Engine> = Arc::new(shadowrunr_engine::ScriptedEngine);
+        let prep = prepare(&s, &tmp.path().join("out"), engine, &opts).unwrap();
+        let stage = SegmentRuntime::with_config(s.segment, SegmentConfig::default()).unwrap();
+        let mem = tmp.path().join("mem");
+        std::fs::create_dir_all(&mem).unwrap();
+
+        let brain = build_brain(
+            &prep,
+            &opts,
+            &mem,
+            prep.engine.clone(),
+            &stage,
+            brain_tuning(&opts),
+        )
+        .await
+        .unwrap();
+        assert!(brain.prep().is_none(), "no prep without one in the options");
+
+        opts.stream_prep = Some(sample_prep());
+        let brain = build_brain(
+            &prep,
+            &opts,
+            &mem,
+            prep.engine.clone(),
+            &stage,
+            brain_tuning(&opts),
+        )
+        .await
+        .unwrap();
+        assert_eq!(brain.prep().map(|p| p.prep_id.as_str()), Some("sample"));
+
+        let mut other = sample_prep();
+        other.character = "someone-else".into();
+        opts.stream_prep = Some(other);
+        let brain = build_brain(
+            &prep,
+            &opts,
+            &mem,
+            prep.engine.clone(),
+            &stage,
+            brain_tuning(&opts),
+        )
+        .await
+        .unwrap();
+        assert!(
+            brain.prep().is_none(),
+            "a prep for another character is not used"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_json_records_the_prep_the_run_used() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        opts.judge = false;
+        let out = tmp.path().join("out");
+        let engine: Arc<dyn Engine> = Arc::new(FakeEngine::new(""));
+        fake_run(
+            &out,
+            &opts,
+            spec("r-none", ModelTier::Haiku, 3, 30),
+            engine.clone(),
+        )
+        .await;
+        let record: RunRecord = read_json(&out.join("r-none/run.json")).unwrap();
+        assert_eq!(record.prep.as_deref(), Some("none"));
+
+        opts.stream_prep = Some(sample_prep());
+        fake_run(
+            &out,
+            &opts,
+            spec("r-sample", ModelTier::Haiku, 3, 30),
+            engine,
+        )
+        .await;
+        let record: RunRecord = read_json(&out.join("r-sample/run.json")).unwrap();
+        assert_eq!(record.prep.as_deref(), Some("sample"));
     }
 }

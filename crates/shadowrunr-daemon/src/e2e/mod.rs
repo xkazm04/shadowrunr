@@ -18,6 +18,7 @@ use crate::server::{self, AppState};
 mod catalog;
 mod events;
 mod paging;
+mod prep;
 mod resilience;
 mod review;
 mod sandbox;

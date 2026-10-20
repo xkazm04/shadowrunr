@@ -71,7 +71,7 @@ pub fn session_id(now_ms: i64, minutes: u32) -> String {
 }
 
 /// Days since 1970-01-01 to a proleptic Gregorian date (H. Hinnant's algorithm).
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
+pub(crate) fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let z = z + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
@@ -387,6 +387,9 @@ pub async fn start_with(
     };
     let mut opts = state.cfg.sim_options(p.judge);
     opts.data_dir = state.cfg.paths.data.clone();
+    // The newest approved prep, else the fictional sample (the session is a simulated room);
+    // spec.json records which.
+    opts.stream_prep = crate::prep::for_sim(&state.cfg, &state.cfg.sim.character);
     let engine = state.engine.engine.clone();
 
     let handle = tokio::runtime::Handle::current();
