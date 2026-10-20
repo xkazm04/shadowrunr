@@ -22,6 +22,12 @@ when apps/console or packages/contract changed:
 when a change touches live or wall-clock behaviour (the engine, the brain's beat, the daemon's live paths, the stage's live feed):
 - a real-engine smoke run on the built binary before ship, read from its artifacts (ledger per-call curve, transcript gaps), not from its exit code. Promoted 2026-10-20: the second spark where only the live run exposed defects (2026-10-18 token growth; 2026-10-20 slow-call silence and a beat-start clock).
 
+when tools/voice changed:
+- `python -S -m unittest discover -s tools/voice -t tools/voice` (stdlib only; `-S` proves no site-packages are needed)
+
+when a change touches the brain's beat or the opening (orchestrator, picker, segment states):
+- a real sandbox session with the stage held open and the judge on, read beat by beat from `beat_plan` reasons, not only from the gate. Promoted 2026-10-21: the gate passed the first orchestration run while the transcript showed 4 repeated gathering lines; the judge then caught a dropped question and an unannounced poll that unit tests had not modelled.
+
 builder:
 - the same three cargo commands, scoped with `-p <crate>` while iterating, then workspace-wide before reporting
 
@@ -55,3 +61,7 @@ builder:
 - 2026-10-20 (session-review-ui): adding a console page is a shell change. PAGE_IDS, the keymap's page count, poster copy, the mixer-bus grid, intro and wall copy, the wall DOM allowance, the page palettes in tokens and their tests all assume a fixed count. The scout must grep the shell for the count before the brief is written; two of these only showed in a rendered smoke run.
 - 2026-10-20 (session-review-ui): edit tokens.source.json (and other hand-formatted JSON) by text insertion. Reserialising it reformats the whole file.
 - 2026-10-20 (session-review-ui): a prototype artifact on the real data, iterated in place with the operator, made the app build churn-free. For UI sparks, prototype before the waves that settle placement and storage.
+- 2026-10-21 (cold-open / avatar / ui-refresh, three parallel tracks): a single reply array with a free `kind` field let the planner fill it with one kind only (16 premises, 0 stories); give each required kind its own array with its own count in the schema.
+- 2026-10-21: the sandbox gate could never pass without --chaos (chaos `unmeasured` = never a pass), invisible until a run had every other check green. When a gate composes checks, test the all-green path end to end, not only each check's failure.
+- 2026-10-21: a sandbox run from a worktree build reads the main checkout's config, so files new on the branch (prep.sample.json) are missing; point a scratch config's `characters`/`segments` at the branch for branch smoke runs.
+- 2026-10-21: the local voice renders at about real time; a talkative host outruns it (smoke: 20 sentences spoken, 73 late, 8 queue_full in 5 min). Voice throughput or speech-paced beats is the next avatar step, not a bound to loosen.
