@@ -26,6 +26,8 @@ node apps/stage/scripts/make-demo.mjs   # regenerates fixtures/demo.jsonl
 | `?loop=1` | restarts a finished replay after the outro has held for 8 s |
 | `?t=<seconds>&paused=1` | deep link to a still frame |
 | `?debug=1` | outlines regions and anything that overflows its box |
+| `?voice=1` | voice on without the toggle (the OBS view has no controls); live only |
+| `?face=demo`, `?face=rest`, `?face=aa` | dev builds only: drive the face from a scripted line, rest, or one held mouth shape |
 
 A `.jsonl` dropped anywhere on the page replaces the transcript; a dropped `.json` that parses as
 a `Case` replaces the case. Bad lines are skipped and listed (line number and field path) in the
@@ -226,6 +228,39 @@ Rank titles come from `characters/malakor/character.toml` and vote weights from
 bone-white skull, verdigris-bronze high collar and ribcage, charcoal chancellor robes, a cracked
 obsidian crown of floating astrolabe shards, and the green-glass Phylactery Orb. It has no hood,
 no ram-skull staff and no purple.
+
+It is now the fallback under the face: it shows until the face is drawn, and stays when it cannot
+be (no WebGL2, or the form did not load).
+
+## The face and the voice
+
+Malakor's face lives in the `avatar` region, above his caption in the improv layouts and beside it
+in SEG-02A. `src/avatar/` is a glow-rig renderer (WebGL2, one draw per layer, premultiplied light
+on a transparent canvas): `Avatar.tsx` is the box, and `runtime.ts` (the renderer, the driver and
+the placeholder painter) is loaded with `import()` when the face mounts.
+
+- **Form.** Live, the stage first tries the daemon's rig (`<daemon>/avatar/layers.json` and its
+  PNGs). With no rig (404), no daemon, or a spec that does not check, it draws the procedural
+  placeholder (`placeholder.ts`): a dark crowned skull, a hinged jaw under an ember seam, two
+  verdigris eye lights, five floating crown shards, an ink collar and an ember orb, painted on
+  canvases in the browser from the stage tokens. No image file is committed. Anything but a plain
+  404 is logged once with the reason. `data-form` on the face says which one is drawn.
+- **Motion.** `driver.ts` is seeded and procedural: breath, sway, blinks, saccades, nods on stressed
+  vowels, and the mouth from the viseme (or from loudness alone). The face runs on one frame clock
+  and stops asking for frames once it has settled. Under reduced motion it is one still frame.
+- **Signal.** The face reads a `FaceSignal` from `FaceMixer`: the voice while it sounds, else the
+  level-less speaking phase while a `say` caption is on screen, else rest.
+- **Voice** (`src/voice/`, live only, off by default). The Voice toggle in the controls turns it on
+  (remembered in localStorage) and unlocks the AudioContext inside the click. The stage connects
+  to `<daemon>/voice` and sends `{"follow": {"run_id"}}` for the run it is showing. Each
+  `utterance` is decoded from base64 PCM16 into an AudioBuffer and scheduled back to back on one
+  AudioContext. A frame at or behind what was accepted is dropped. Past 6 s of queued audio, the
+  oldest unstarted utterance is dropped and the rest close up. **The audio is the one clock**:
+  the mouth shape is read at `currentTime` minus the utterance's start (35 ms ahead), and the
+  loudness comes from an AnalyserNode. A headless browser is never voiced.
+- **Disclosure and status.** While the voice is on, the badge reads "AI character · synthetic
+  voice" and a "synthetic voice" label sits under the face. The controls show the voice state
+  (off, starting, ready, degraded) with its reason.
 
 ## Fitting the canvas
 

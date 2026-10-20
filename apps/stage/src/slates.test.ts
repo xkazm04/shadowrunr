@@ -92,8 +92,11 @@ describe("text-only honesty", () => {
     expect(html).not.toContain("synthetic voice");
     expect(html).not.toContain("avatar-note");
     const debugView = render([start, seg], 5000, { broadcast: false });
-    expect(debugView).toContain("avatar slot · placeholder silhouette");
-    expect(render([start, seg], 5000, { voice: true })).toContain("AI character · synthetic voice");
+    expect(debugView).toContain("avatar slot · face rig or procedural placeholder");
+    const voiced = render([start, seg], 5000, { voice: true });
+    expect(voiced).toContain("AI character · synthetic voice");
+    // and the small label beside the face says it too
+    expect(voiced).toContain('<div class="voice-label">synthetic voice</div>');
   });
 });
 

@@ -4,6 +4,8 @@ import type { StreamEvent } from "@shadowrunr/contract";
 import type { ParseIssue } from "@shadowrunr/stage-kit/parse";
 import { clipMarkers, segmentSpans } from "@shadowrunr/stage-kit";
 import { SPEEDS, type CaseSource } from "./source";
+import { VOICE_STATE_LABEL, VOICE_TOGGLE } from "./voice/names";
+import type { VoiceStatus } from "./voice/session";
 
 function fmt(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -37,6 +39,9 @@ export function Controls({
   onSpeed,
   onFile,
   broadcastHref,
+  voiceOn,
+  voiceStatus,
+  onVoice,
 }: {
   events: readonly StreamEvent[];
   start: number;
@@ -55,6 +60,10 @@ export function Controls({
   onSpeed: (s: number) => void;
   onFile: (f: File) => void;
   broadcastHref: string;
+  /** The Voice toggle (off by default, remembered per browser). */
+  voiceOn: boolean;
+  voiceStatus: VoiceStatus;
+  onVoice: (on: boolean) => void;
 }) {
   const [idle, setIdle] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
@@ -163,6 +172,18 @@ export function Controls({
             {errors.length} skipped · {warnings.length} warnings
           </button>
         )}
+        <button
+          className={`ctl-speed ctl-voice${voiceOn ? " on" : ""}`}
+          aria-pressed={voiceOn}
+          onClick={() => onVoice(!voiceOn)}
+          title="Malakor's synthetic voice (live runs only)"
+        >
+          {VOICE_TOGGLE}
+        </button>
+        <span className={`ctl-voice-state state-${voiceStatus.state}`} title={voiceStatus.reason ?? ""}>
+          {VOICE_STATE_LABEL[voiceStatus.state]}
+          {voiceStatus.reason ? ` · ${voiceStatus.reason}` : ""}
+        </span>
         <span className="ctl-hint">drop a .jsonl anywhere · space play/pause · ← → seek · [ ] speed</span>
         <a className="ctl-broadcast" href={broadcastHref} target="_blank" rel="noreferrer">
           broadcast view ↗
