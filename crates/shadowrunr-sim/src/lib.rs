@@ -39,12 +39,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Serialize;
+use shadowrunr_types::prep::StreamPrep;
 use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::{Command, Engine, JudgeVerdict, ModelTier, Rank, SimRunSpec};
 
 pub use outcome::{classify, RunClass};
 pub use pacing::{FleetQuota, PaceClock, QuotaBlock, QuotaGate};
-pub use runner::{judge_existing, run_one_with, Mind, RunRecord, RunStatus, Stage};
+pub use runner::{judge_existing, prep_label, run_one_with, Mind, RunRecord, RunStatus, Stage};
 pub use summary::{summarize, Results};
 pub use tournament::{
     exit_code, plan, plan_matrix, run_tournament, PlanReason, RunAction, StopReason,
@@ -181,6 +182,10 @@ pub struct SimOptions {
     /// for stream; the run then records `unapproved_real_case`. Its content hash joins the
     /// instrument hash as `case/<id>`.
     pub case: Option<String>,
+    /// The stream prep the run's brain voices (`Brain::set_prep`), as the host resolved it: the
+    /// newest approved prep, or the fictional sample. The run records which one it used as
+    /// `prep` ([`runner::prep_label`]).
+    pub stream_prep: Option<StreamPrep>,
 }
 
 /// The instrument entry name of the opt-5 rate-cap experiment.
@@ -235,6 +240,7 @@ impl Default for SimOptions {
             data_dir: PathBuf::from("data"),
             rate_cap_exemptions: false,
             case: None,
+            stream_prep: None,
         }
     }
 }

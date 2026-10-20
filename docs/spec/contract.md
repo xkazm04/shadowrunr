@@ -930,3 +930,10 @@ like a real case. It is never written live in a quiet moment.
   first state. It lasts until the room has filled (active chatters held over a sustain window),
   within a floor and a ceiling of seconds.
 - `beat_plan` is written once per beat, before the beat's lines.
+
+**Prep in runs.** A sim's `run.json` and a sandbox session's `spec.json` carry
+`prep`: the approved prep id, `sample` (the character's fictional
+`prep.sample.json`, used when no prep is approved), or `none`. Simulated rooms (sims, tournaments,
+`sim.start`, sandbox) fall back to the sample; the prep is not part of the instrument hash, so
+compare runs by their recorded `prep`. The planner checks also read an optional operator list of
+real names at `<policy>/real-names.txt` (gitignored with the rest of local policy, never committed).

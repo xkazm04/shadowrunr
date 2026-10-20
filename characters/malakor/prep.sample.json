@@ -1,0 +1,336 @@
+{
+  "prep_id": "sample",
+  "character": "malakor",
+  "created_ms": 1792454400000,
+  "status": "approved",
+  "cold_open": {
+    "id": "cold-open",
+    "title": "The Rented Throne",
+    "beats": [
+      "Before the minions arrive, a confession from the Spire: the throne I sit upon is rented, and the lease came due this morning.",
+      "The bone-clerks brought the invoice on a silver tray, which was also rented, which was also on the invoice.",
+      "I opened the Grudge Ledger to record the insult, and found the landlord already listed. Page one. Underlined twice.",
+      "So I summoned him. The circle flared, the smoke rolled in, and out stepped a very tired skeleton holding a clipboard.",
+      "He was my own bone-clerk. I had sublet the throne to myself, through him, to save on paperwork. It cost me more paperwork.",
+      "We negotiated for three hours. He demanded dental cover. He has no gums. I granted it out of sheer administrative respect.",
+      "The throne stays. The clerk is now my landlord, my accountant and my only creditor, and he is sulking in the rafters."
+    ],
+    "handoff": "Which brings me to you, early arrivals: the throne needs witnesses, and witnesses get titles. Speak, and be recorded."
+  },
+  "bits": [
+    {
+      "id": "prem-01",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": [
+        "Petition the throne: name one household object you would appoint to the Dread Council, and defend its credentials."
+      ],
+      "payoff": "The best object is sworn in with full ceremony and a better title than the minion who nominated it."
+    },
+    {
+      "id": "prem-02",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": [
+        "The bone-clerks need a new motto for the Spire's front gate. Submit yours; the worst one gets carved anyway."
+      ],
+      "payoff": "He reads the worst motto aloud as if it were carved in obsidian, and orders it carved twice."
+    },
+    {
+      "id": "prem-03",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": [
+        "Confess one small, petty grudge you hold, and I will judge whether it deserves a page in the Grudge Ledger."
+      ],
+      "payoff": "The pettiest grudge gets its own page, a wax seal and his personal endorsement."
+    },
+    {
+      "id": "prem-04",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": [
+        "The budget allows exactly one new torch for the throne room. Make your case for which corner deserves the light."
+      ],
+      "payoff": "He awards the torch to the corner nobody argued for, because it was the cheapest to reach."
+    },
+    {
+      "id": "prem-05",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": [
+        "A foil waits outside the summoning circle. Describe the most annoying hat it could be wearing, and I will judge the threat."
+      ],
+      "payoff": "He rates each hat as a hostile act and files the worst one under declarations of war."
+    },
+    {
+      "id": "prem-06",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": [
+        "Invent a job title so specific and useless that even the Ninth Dark would refuse to fund it."
+      ],
+      "payoff": "He funds it anyway, out of spite, and appoints whoever invented it."
+    },
+    {
+      "id": "prem-07",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": [
+        "Offer the worst possible name for a war horse, and I will decide which of my rivals deserves to ride it."
+      ],
+      "payoff": "The winning name goes to the Has-Been Hero's steed, effective immediately."
+    },
+    {
+      "id": "prem-08",
+      "segment": "SEG-01",
+      "kind": "premise",
+      "lines": [
+        "The Lord's dispatch is late. Invent the excuse the courier will give, and I will rate it out of nine Darks."
+      ],
+      "payoff": "He accepts the most absurd excuse as plausible, then whispers an apology upward."
+    },
+    {
+      "id": "prem-09",
+      "segment": "SEG-02A",
+      "kind": "premise",
+      "lines": [
+        "The Obsidian Survey needs a name for its newest fog bank. Offer one, and the map will wear it until it is annexed."
+      ],
+      "payoff": "He christens the fog with the best name and promises to clear it with evidence, not wishes."
+    },
+    {
+      "id": "prem-10",
+      "segment": "SEG-02A",
+      "kind": "premise",
+      "lines": [
+        "Grade my handwriting on the evidence seals: DOC, REP, CLM or SPC. Be honest; the clerks already laughed."
+      ],
+      "payoff": "He accepts the harshest grade with dignity and blames the quill's funding."
+    },
+    {
+      "id": "prem-11",
+      "segment": "SEG-02A",
+      "kind": "premise",
+      "lines": [
+        "Propose the official motto of the Ledger of Corrections. Accuracy is power, so the motto must be accurate too."
+      ],
+      "payoff": "He corrects the winning motto once, gleefully, and logs the correction."
+    },
+    {
+      "id": "prem-12",
+      "segment": "SEG-02A",
+      "kind": "premise",
+      "lines": [
+        "Describe the smell of an archive the bone-clerks have not opened in four hundred years. Wrong answers go in the margins."
+      ],
+      "payoff": "He declares the best description the official scent of due diligence."
+    },
+    {
+      "id": "story-01",
+      "segment": "SEG-01",
+      "kind": "story",
+      "lines": [
+        "The camera that broadcasts my glory arrived with a warranty card sealed in red wax and great optimism.",
+        "The card promised to cover any damage caused by mortals, weather or acts of the Lord. I read the small print by lantern.",
+        "Exclusion seven: liches. Specifically liches. They had seen me coming from four centuries away."
+      ],
+      "payoff": "He frames exclusion seven behind the throne as proof that he is famous among vendors."
+    },
+    {
+      "id": "story-02",
+      "segment": "SEG-01",
+      "kind": "story",
+      "lines": [
+        "My first Thrall saluted me with the wrong hand. I demanded an apology. He saluted again, with the other wrong hand.",
+        "We kept at it until sunrise. He has, it turns out, only wrong hands.",
+        "I promoted him to Deputy of Salutes on the spot, because consistency is the rarest virtue in any realm."
+      ],
+      "payoff": "The next minion to greet him is offered a seat beside the Deputy of Salutes, wrong hands welcome."
+    },
+    {
+      "id": "story-03",
+      "segment": "SEG-02A",
+      "kind": "story",
+      "lines": [
+        "A bone-clerk once filed himself under pending to avoid an audit. He stayed in the cabinet for ninety years.",
+        "When we found him he had annotated every folder around him, cross-referenced the lot and corrected two of my own claims.",
+        "I could not punish him. He was the best-sourced thing in the Spire."
+      ],
+      "payoff": "He dedicates tonight's first hex to that clerk and promises to grade it as carefully."
+    },
+    {
+      "id": "story-04",
+      "segment": "SEG-02A",
+      "kind": "story",
+      "lines": [
+        "In the Third Dark there was a lord who stamped DOC on everything, including his lunch.",
+        "The auditors came. They asked for the primary record of the lunch. He produced a sandwich.",
+        "The sandwich was downgraded to CLM, and so was he. That is why I respect the seals, minions."
+      ],
+      "payoff": "He invites the court to grade the next piece of evidence, sandwich standards applied."
+    },
+    {
+      "id": "cb-01",
+      "segment": "SEG-01",
+      "kind": "callback",
+      "lines": [
+        "Behold the REDACTED-BY-THE-LORD bar, gliding across my thoughts. It earns more than I do and it does not even have a skull."
+      ],
+      "payoff": "He salutes the bar, sulks for one breath and moves on."
+    },
+    {
+      "id": "cb-02",
+      "segment": "SEG-01",
+      "kind": "callback",
+      "lines": [
+        "New arrivals, hold still: the Ninth Dark issues every minion a job title, and tonight's batch is unusually specific.",
+        "Assistant Deputy of Torches. Keeper of the Spare Quill. Junior Inspector of Mildly Ominous Draughts."
+      ],
+      "payoff": "The next newcomer gets a title more specific than any of these."
+    },
+    {
+      "id": "cb-03",
+      "segment": "SEG-02A",
+      "kind": "callback",
+      "lines": [
+        "A hex refuses to clear and the fog sits there, smug as a tax collector. Let the deficit be recorded."
+      ],
+      "payoff": "A clerk reads the deficit tally aloud, and it is always one higher than he would like."
+    },
+    {
+      "id": "cb-04",
+      "segment": "SEG-02A",
+      "kind": "callback",
+      "lines": [
+        "Every audit costs candles, and the candle budget for tonight is one candle. We will be thorough, and we will be quick."
+      ],
+      "payoff": "When the case closes he snuffs the candle with ceremony and notes the savings in the Ledger."
+    }
+  ],
+  "connectors": [
+    {
+      "id": "conn-01",
+      "kind": "into_room",
+      "line": "Enough of my troubles. The throne room is filling, and I can hear minions breathing. Speak up."
+    },
+    {
+      "id": "conn-02",
+      "kind": "into_room",
+      "line": "The tale is told; now the court is in session. Who has come to kneel, and who has come to heckle?"
+    },
+    {
+      "id": "conn-03",
+      "kind": "into_room",
+      "line": "So much for the lease. Now, to business: the court is open and the Grudge Ledger is hungry."
+    },
+    {
+      "id": "conn-04",
+      "kind": "into_bit",
+      "line": "Hold that thought, minion; the throne has an item on the agenda."
+    },
+    {
+      "id": "conn-05",
+      "kind": "into_bit",
+      "line": "A fine petition. It bears on a matter the bone-clerks raised this very morning."
+    },
+    {
+      "id": "conn-06",
+      "kind": "into_bit",
+      "line": "Silence for a moment. The Spire has a tale that bears on this."
+    },
+    {
+      "id": "conn-07",
+      "kind": "back_to_chat",
+      "line": "That is the tale. Now judge it, minions: was it a triumph or a budget problem?"
+    },
+    {
+      "id": "conn-08",
+      "kind": "back_to_chat",
+      "line": "Enough from the throne. The floor belongs to the court again."
+    },
+    {
+      "id": "conn-09",
+      "kind": "back_to_chat",
+      "line": "The bit is done and the clerks are clapping politely. Your turn: what says the court?"
+    },
+    {
+      "id": "conn-10",
+      "kind": "into_poll",
+      "line": "The Plebiscite opens. Vote, and I shall obey the result with whatever dignity remains."
+    },
+    {
+      "id": "conn-11",
+      "kind": "into_poll",
+      "line": "This is too important for one lich to decide. To the vote, minions; the count is sacred."
+    },
+    {
+      "id": "conn-12",
+      "kind": "into_poll",
+      "line": "Let the court decide. The Plebiscite is open, and I am campaigning shamelessly for the first option."
+    },
+    {
+      "id": "conn-13",
+      "kind": "into_handover",
+      "line": "The foil has worn out its welcome. The Obsidian Survey awaits, and the fog will not annex itself."
+    },
+    {
+      "id": "conn-14",
+      "kind": "into_handover",
+      "line": "Enough court for one night. The Audit calls, and the bone-clerks have brought the case files."
+    },
+    {
+      "id": "conn-15",
+      "kind": "into_handover",
+      "line": "Close the summoning circle. We move to the hexmap, where evidence is the only currency I accept."
+    }
+  ],
+  "checks": [
+    {
+      "id": "line_length",
+      "state": "pass",
+      "detail": "73 lines, each at most 220 characters"
+    },
+    {
+      "id": "counts",
+      "state": "pass",
+      "detail": "cold open 7 beats, 12 premises, 4 stories, 4 callbacks, connectors into_room 3, into_bit 3, back_to_chat 3, into_poll 3, into_handover 3"
+    },
+    {
+      "id": "shape",
+      "state": "pass",
+      "detail": "every bit has the lines its kind needs"
+    },
+    {
+      "id": "real_names",
+      "state": "pass",
+      "detail": "no real person, handle or channel"
+    },
+    {
+      "id": "urls",
+      "state": "pass",
+      "detail": "no links"
+    },
+    {
+      "id": "prior_streams",
+      "state": "pass",
+      "detail": "nothing leans on a stream a newcomer missed"
+    },
+    {
+      "id": "segments",
+      "state": "pass",
+      "detail": "every bit is for an active segment"
+    },
+    {
+      "id": "duplicates",
+      "state": "pass",
+      "detail": "no line or id repeats"
+    },
+    {
+      "id": "output_gate",
+      "state": "pass",
+      "detail": "73 lines pass the brain's output gate unchanged"
+    }
+  ],
+  "fictional": true
+}

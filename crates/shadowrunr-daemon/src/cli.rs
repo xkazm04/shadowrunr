@@ -107,6 +107,10 @@ pub enum Command {
     /// Session review on the running daemon: line tags for the Review page.
     #[command(subcommand)]
     Review(ReviewCommand),
+    /// Stream prep: the planner's cold open, premise deck and connectors, checked and staged
+    /// for the owner's approval.
+    #[command(subcommand)]
+    Prep(crate::prep::cli::PrepCommand),
 }
 
 #[derive(Debug, Subcommand)]
@@ -491,6 +495,7 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
             Ok(ExitCode::from(sandbox_cmd(&cfg, a).await))
         }
         Command::Review(ReviewCommand::Tag(a)) => Ok(ExitCode::from(review_tag_cmd(&cfg, a).await)),
+        Command::Prep(c) => Ok(crate::prep::cli::run(&cfg, c).await),
     }
 }
 
@@ -993,6 +998,11 @@ async fn sim_run(cfg: &Config, a: SimRunArgs) -> Result<ExitCode, String> {
         opts.brief = resolve_brief(cfg, brief_source(b))?.0;
     }
     opts.case = a.case.clone();
+    opts.stream_prep = crate::prep::for_sim(cfg, &spec.character);
+    eprintln!(
+        "prep: {}",
+        shadowrunr_sim::prep_label(opts.stream_prep.as_ref())
+    );
     warn_unapproved_case(&opts)?;
     let engine = EngineHandle::build(cfg, a.scripted);
     eprintln!(
@@ -1158,6 +1168,7 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
     let mut sim = cfg.sim_options(!a.no_judge);
     sim.data_dir = cfg.paths.data.clone();
     sim.brief = brief;
+    sim.stream_prep = crate::prep::for_sim(cfg, &cfg.sim.character);
     if a.plan_only {
         // Reads only: no engine is built, nothing runs, nothing is written.
         let brief_line = match &sim.brief {

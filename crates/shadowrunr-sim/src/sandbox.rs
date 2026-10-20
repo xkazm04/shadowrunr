@@ -152,6 +152,10 @@ pub struct SandboxSpec {
     /// The chaos window `[from, to)` in stream seconds; `to` is the planned end for `lost`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chaos_window_s: Option<(u32, u32)>,
+    /// The stream prep the brain had ([`runner::prep_label`]): its id, `sample` or `none`.
+    /// Absent in sessions recorded before stream prep.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prep: Option<String>,
 }
 
 /// `room.json`: what the room did, besides the transcript.
@@ -1149,6 +1153,10 @@ pub async fn run_sandbox(
             chaos_window_s: programme
                 .chaos_ms
                 .map(|(a, b)| ((a / 1000) as u32, (b / 1000) as u32)),
+            prep: Some(runner::prep_label(runner::stream_prep_for(
+                &run_opts,
+                &spec.character,
+            ))),
         },
     )?;
 
@@ -2168,5 +2176,29 @@ mod tests {
         assert!(calls
             .iter()
             .all(|(r, t)| *r == Role::Judge && *t == ModelTier::Opus));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn spec_json_records_the_prep_the_session_used() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = opts(tmp.path());
+        let text = std::fs::read_to_string(
+            crate::runner::tests::repo().join("characters/malakor/prep.sample.json"),
+        )
+        .unwrap();
+        opts.stream_prep = Some(serde_json::from_str(&text).unwrap());
+        let (_stop_tx, stop) = watch::channel(false);
+        let out = session(
+            sandbox_run(tmp.path(), 5, 30),
+            Arc::new(HostEngine::new()),
+            &opts,
+            no_sink(),
+            stop,
+        )
+        .await;
+        let spec: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(out.dir.join("spec.json")).unwrap())
+                .unwrap();
+        assert_eq!(spec["prep"], "sample");
     }
 }
