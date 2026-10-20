@@ -220,7 +220,11 @@ async fn a_scripted_minute_with_an_acking_stage_passes() {
     for id in ["say_gap", "core_errors", "stage_ack"] {
         assert_eq!(check(&end, id), SandboxCheckState::Pass, "{id}: {end:?}");
     }
-    assert_eq!(check(&end, "chaos"), SandboxCheckState::Unmeasured);
+    assert_eq!(
+        check(&end, "chaos"),
+        SandboxCheckState::Pass,
+        "no chaos requested"
+    );
     assert!(end.report.as_ref().unwrap().judge.is_none() || !end.report.as_ref().unwrap().pass);
     let on_disk =
         std::fs::read_to_string(std::path::Path::new(&started.dir).join("transcript.jsonl"))

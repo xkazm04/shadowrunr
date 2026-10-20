@@ -949,10 +949,12 @@ impl Session {
 
     fn chaos_check(&self, events: &[StreamEvent], ended: &Ended) -> SandboxCheck {
         let (Some(kind), Some((from, to))) = (self.programme.chaos, self.programme.chaos_ms) else {
+            // Nothing was broken, so there is nothing to recover from: a clean session must be
+            // able to pass its gate with the stage open and the judge on (cli.md, sandbox).
             return SandboxCheck {
                 id: "chaos".into(),
-                state: SandboxCheckState::Unmeasured,
-                detail: "no chaos".into(),
+                state: SandboxCheckState::Pass,
+                detail: "no chaos requested".into(),
             };
         };
         let stalls = stall_lines(events);
@@ -1624,8 +1626,8 @@ mod tests {
         assert_eq!(state(r, "core_errors"), SandboxCheckState::Pass);
         assert_eq!(state(r, "sign_off"), SandboxCheckState::Pass, "{r:?}");
         assert_eq!(detail(r, "sign_off"), "sign-off at 00:55, in the last 90 s");
-        assert_eq!(state(r, "chaos"), SandboxCheckState::Unmeasured);
-        assert_eq!(detail(r, "chaos"), "no chaos");
+        assert_eq!(state(r, "chaos"), SandboxCheckState::Pass);
+        assert_eq!(detail(r, "chaos"), "no chaos requested");
         for id in ["stage_ack", "judge"] {
             assert_eq!(state(r, id), SandboxCheckState::Unmeasured);
             assert_eq!(detail(r, id), "filled by the daemon");

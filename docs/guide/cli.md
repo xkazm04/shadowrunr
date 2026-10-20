@@ -538,7 +538,7 @@ The checks, in report order:
 | `say_gap` | No silence on stream is longer than the ceiling (15 s). |
 | `core_errors` | The core thread had no engine errors outside the chaos window. |
 | `sign_off` | The host signed off cleanly. |
-| `chaos` | Under `--chaos`, the host stalled in character and recovered (or signed off). |
+| `chaos` | Under `--chaos`, the host stalled in character and recovered (or signed off). Without `--chaos` it passes ("no chaos requested"). |
 | `stage_ack` | A stage subscriber acked the final event's seq with no gaps. It is unmeasured when no stage acked. The daemon waits up to 6 s after the session for the final ack. |
 | `judge` | The judge found no rule fails. It is unmeasured with `--no-judge`, and fails when judging errors. |
 
