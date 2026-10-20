@@ -2,15 +2,14 @@
 // a time. The whole ledger is never listed at once. Every optional ledger field is read as
 // possibly absent: the sandbox ledger fills what its engine reported.
 import { useState } from "react";
-import type { LedgerEntry, ModelTier, ReviewSession, Role } from "@shadowrunr/contract";
+import type { LedgerEntry, ReviewSession, Role } from "@shadowrunr/contract";
 import styles from "./EngineCalls.module.css";
-import { fmtClock, human, ROLE_NAME } from "./names";
+import { fmtClock, human, ROLE_NAME, TIER_NAME } from "./names";
 import type { TabProps } from "./tab";
 import { PAGE, Pager, pct, secs } from "./tabkit";
 import kit from "./tabkit.module.css";
 
 /** Display names for model tiers. Local until names.ts carries them. */
-const TIER_NAME: Readonly<Record<ModelTier, string>> = { haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" };
 
 /** A ledger stamp below this is already stream milliseconds; above it, Unix milliseconds. */
 const UNIX_MS = 1e11;

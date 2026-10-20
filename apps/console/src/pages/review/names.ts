@@ -1,7 +1,7 @@
 // Every label the Review page shows. Enum ids stay on the wire and never reach the screen:
 // line kinds, targets, edges, judged rules, quality dimensions, moderation records and engine
 // roles are named here, from the operator's side of the screen.
-import type { FeedbackTag, LineEdge, LineKind, LineTarget, Role, SandboxChaos, SandboxCheckState } from "@shadowrunr/contract";
+import type { FeedbackTag, LineEdge, LineKind, LineTarget, ModelTier, Role, SandboxChaos, SandboxCheckState } from "@shadowrunr/contract";
 
 /** A line's kind as the page shows it. `stall` and `untagged` are page-side (derived), not wire kinds. */
 export type ShownKind = LineKind | "stall" | "untagged";
@@ -26,6 +26,7 @@ export const FEEDBACK: readonly (readonly [FeedbackTag, string])[] = [
 ];
 export const FEEDBACK_NAME: Readonly<Record<FeedbackTag, string>> = Object.fromEntries(FEEDBACK) as Record<FeedbackTag, string>;
 
+export const TIER_NAME: Readonly<Record<ModelTier, string>> = { haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" };
 export const SEGMENT_NAME: Readonly<Record<string, string>> = { "SEG-01": "Improv room", "SEG-02A": "Investigation" };
 
 /** What a timeline row's show column says about an event: show ops, handovers, engine health. */

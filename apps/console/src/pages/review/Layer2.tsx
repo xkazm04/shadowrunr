@@ -11,7 +11,7 @@ import { useDerived, useFeedback, useSession } from "./hooks";
 import { Judge } from "./Judge";
 import styles from "./Layer2.module.css";
 import { Moderation } from "./Moderation";
-import { CHECK_NAME, fmtClock, KIND_NAME, type ShownKind } from "./names";
+import { CHECK_NAME, fmtClock, KIND_NAME, sessionTitle, type ShownKind } from "./names";
 import { Player } from "./Player";
 import { ReviewByType } from "./ReviewByType";
 import type { TabId, TabProps } from "./tab";
@@ -20,10 +20,6 @@ import { Timeline } from "./Timeline";
 const TAB_IDS: readonly TabId[] = ["timeline", "types", "player", "judge", "moderation", "calls"];
 const isTab = (s: string | undefined): s is TabId => TAB_IDS.includes(s as TabId);
 const isKind = (s: string | undefined): s is ShownKind => s !== undefined && s in KIND_NAME;
-
-export function sessionTitle(minutes: number, chaos?: string): string {
-  return `${minutes}-minute session${chaos === "lost" ? " · engine lost" : chaos === "outage" ? " · engine outage" : ""}`;
-}
 
 export function Layer2({ sub }: { readonly sub: readonly string[] }) {
   const [sessionId, head, arg, ...rest] = sub;
