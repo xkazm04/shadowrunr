@@ -23,7 +23,7 @@
 //! Reviving either needs its command (`!enlist` / `!issue`, a contract change), its worker,
 //! and the cross-references stripped when descoping (digest section 5).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 use serde::Deserialize;
@@ -161,6 +161,70 @@ pub struct Transition {
     pub to: String,
 }
 
+/// The state a `[clock.cold_open]` rule clocks.
+pub const COLD_OPEN_STATE: &str = "cold_open";
+
+/// SEG-01's cold open: the room decides when it ends (distinct chatters held over a sustain
+/// window), the clock decides how long at most. The rule runs while the segment is in the
+/// [`COLD_OPEN_STATE`] state and moves it to `to` when it ends (a clock rule, like the
+/// handover's, rather than a transition row). All values are assumptions.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ColdOpenRule {
+    /// The state the segment enters when the cold open ends.
+    pub to: String,
+    /// Floor: the cold open lasts at least this long.
+    pub min_s: u32,
+    /// Ceiling: it ends at this point whatever the room does. A config override of 0 skips
+    /// the cold open (the segment starts in the state after it).
+    pub max_s: u32,
+    /// Distinct chatters who wrote in the last `window_s` seconds...
+    pub active_chatters: u32,
+    #[serde(default = "default_active_window_s")]
+    pub window_s: u32,
+    /// ...held without a dip for this long.
+    pub sustain_s: u32,
+}
+
+impl ColdOpenRule {
+    /// The rule fits `table`: it has the cold-open state and the `to` state, and the numbers
+    /// are consistent (a ceiling of 0, the skip, passes).
+    pub fn check(&self, table: &SegmentTable) -> Result<(), String> {
+        let has = |s: &str| table.states.iter().any(|x| x == s);
+        if !has(COLD_OPEN_STATE) || !has(&self.to) || self.to == COLD_OPEN_STATE {
+            return Err(format!(
+                "needs a {COLD_OPEN_STATE:?} state and another state to move to, not {:?}",
+                self.to
+            ));
+        }
+        if self.max_s > 0
+            && (self.min_s > self.max_s || self.active_chatters == 0 || self.window_s == 0)
+        {
+            return Err(
+                "a ceiling at or above the floor, and a positive chatter count and window".into(),
+            );
+        }
+        Ok(())
+    }
+}
+
+/// The rolling window distinct active chatters are counted over.
+fn default_active_window_s() -> u32 {
+    60
+}
+
+/// Per-state rules: what a state narrows and what it tells the host.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StateRules {
+    /// Ops allowed in this state, a subset of the segment's `allowed_ops`. Absent: all of them.
+    #[serde(default)]
+    pub allowed_ops: Option<Vec<String>>,
+    /// A short rules line the state summary carries while the segment is in this state.
+    #[serde(default)]
+    pub prompt: Option<String>,
+}
+
 /// SEG-01's handover clock rule. All values are assumptions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -197,6 +261,8 @@ pub struct ClockRules {
     pub plebiscite_secs: u32,
     #[serde(default)]
     pub handover: Option<HandoverRule>,
+    #[serde(default)]
+    pub cold_open: Option<ColdOpenRule>,
 }
 
 /// Searches per hex per stream before the Plebiscite takes over: twice ends the "fog stays
@@ -232,6 +298,7 @@ impl Default for ClockRules {
             max_searches_per_hex: default_max_searches_per_hex(),
             plebiscite_secs: default_plebiscite_secs(),
             handover: None,
+            cold_open: None,
         }
     }
 }
@@ -290,6 +357,9 @@ pub struct SegmentTable {
     pub clock: ClockRules,
     #[serde(default)]
     pub transitions: Vec<Transition>,
+    /// Rules per state name (`[state_rules.<state>]`): the ops it allows and its prompt line.
+    #[serde(default)]
+    pub state_rules: BTreeMap<String, StateRules>,
     /// The multi-act arc of a long stream (SEG-02A).
     #[serde(default)]
     pub arc: Option<ArcRules>,
@@ -354,6 +424,28 @@ impl SegmentTable {
                     .into(),
             ));
         }
+        for (state, rules) in &self.state_rules {
+            if !states.contains(state.as_str()) {
+                return Err(bad(format!("state_rules for unknown state {state:?}")));
+            }
+            if let Some(op) = rules
+                .allowed_ops
+                .iter()
+                .flatten()
+                .find(|o| !self.allows_op(o))
+            {
+                return Err(bad(format!(
+                    "state_rules.{state}: op {op:?} is not in the segment's allowed_ops"
+                )));
+            }
+        }
+        if let Some(r) = &c.cold_open {
+            if r.max_s == 0 {
+                return Err(bad("clock.cold_open: the ceiling must be positive".into()));
+            }
+            r.check(self)
+                .map_err(|e| bad(format!("clock.cold_open: {e}")))?;
+        }
         if let Some(arc) = &self.arc {
             let acts = u32::try_from(arc.acts.len()).unwrap_or(u32::MAX);
             if acts < 2
@@ -382,6 +474,26 @@ impl SegmentTable {
 
     pub fn allows_op(&self, tag: &str) -> bool {
         self.allowed_ops.iter().any(|o| o == tag)
+    }
+
+    /// Whether `tag` is allowed in `state`: the segment allows it and the state's rules, if
+    /// they list ops, list it too.
+    pub fn allows_op_in(&self, state: &str, tag: &str) -> bool {
+        self.allows_op(tag)
+            && self
+                .state_rules
+                .get(state)
+                .and_then(|r| r.allowed_ops.as_ref())
+                .is_none_or(|ops| ops.iter().any(|o| o == tag))
+    }
+
+    /// The rules line of `state`, if the table gives it one.
+    pub fn state_prompt(&self, state: &str) -> Option<&str> {
+        self.state_rules
+            .get(state)
+            .and_then(|r| r.prompt.as_deref())
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
     }
 
     pub fn allows_command(&self, name: &str) -> bool {
@@ -511,6 +623,7 @@ mod tests {
         assert_eq!(
             t.states,
             [
+                "cold_open",
                 "opening",
                 "foil_vote",
                 "foil_live",
@@ -535,6 +648,54 @@ mod tests {
         let h = t.clock.handover.unwrap();
         assert_eq!((h.ccv_min, h.sustain_s, h.max_elapsed_s), (15, 180, 1500));
         assert_eq!(h.to, SegmentId::Seg02aHexmap);
+    }
+
+    #[test]
+    fn seg01_opens_cold_and_the_table_holds_polls_and_foils_back() {
+        let t = segment_table(SegmentId::Seg01ImprovisedRoom).unwrap();
+        assert_eq!(t.initial, COLD_OPEN_STATE);
+        let c = t.clock.cold_open.as_ref().unwrap();
+        assert_eq!(
+            (c.min_s, c.max_s, c.active_chatters, c.window_s, c.sustain_s),
+            (60, 180, 5, 60, 20)
+        );
+        assert_eq!(c.to, "opening");
+        // The cold open leaves by its clock only: no row starts anything in it.
+        assert!(!t.transitions.iter().any(|r| r.from == COLD_OPEN_STATE));
+        for op in ["start_poll", "summon_foil", "switch_segment"] {
+            assert!(t.allows_op(op));
+            assert!(!t.allows_op_in(COLD_OPEN_STATE, op), "{op}");
+            assert!(t.allows_op_in("opening", op), "{op}");
+        }
+        assert!(t.allows_op_in(COLD_OPEN_STATE, "highlight"));
+        assert!(!t.accepts(COLD_OPEN_STATE, Trigger::PollOpened));
+        assert!(!t.accepts(COLD_OPEN_STATE, Trigger::FoilVoteOpened));
+        assert!(t
+            .state_prompt(COLD_OPEN_STATE)
+            .is_some_and(|p| p.starts_with("The room is still filling")));
+        assert_eq!(t.state_prompt("opening"), None);
+    }
+
+    #[test]
+    fn invalid_cold_open_and_state_rules_rejected() {
+        let src = SEGMENT_TABLE_SOURCES[0].1;
+        let inverted = src.replace("min_s = 60", "min_s = 600");
+        assert!(SegmentTable::from_toml_str("x", &inverted).is_err());
+        let nowhere = src.replace("to = \"opening\"\nmin_s", "to = \"nowhere\"\nmin_s");
+        assert_ne!(nowhere, src);
+        assert!(SegmentTable::from_toml_str("x", &nowhere).is_err());
+        let to_itself = src.replace("to = \"opening\"\nmin_s", "to = \"cold_open\"\nmin_s");
+        assert!(SegmentTable::from_toml_str("x", &to_itself).is_err());
+        let no_ceiling = src.replace("max_s = 180", "max_s = 0");
+        assert!(SegmentTable::from_toml_str("x", &no_ceiling).is_err());
+        let foreign_op = src.replace(
+            "allowed_ops = [\"highlight\", \"show_card\"",
+            "allowed_ops = [\"reveal_hex\", \"show_card\"",
+        );
+        assert_ne!(foreign_op, src);
+        assert!(SegmentTable::from_toml_str("x", &foreign_op).is_err());
+        let unknown_state = src.replace("[state_rules.cold_open]", "[state_rules.nowhere]");
+        assert!(SegmentTable::from_toml_str("x", &unknown_state).is_err());
     }
 
     #[test]

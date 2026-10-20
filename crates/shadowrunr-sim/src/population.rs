@@ -59,6 +59,22 @@ impl ArchetypeKind {
 /// "Never leaves" marker for `depart_s`.
 pub const STAYS: u32 = u32::MAX;
 
+/// The room fills (instrument change 2026-10-20: rooms used to start with most of the audience
+/// present and talking at t=0, so a cold open never ran). ASSUMPTION, uncalibrated: about this
+/// many viewers (moderators included) are present when the stream starts...
+pub const OPENING_ROOM: u32 = 3;
+
+/// ...and the rest of the opening crowd arrives over this many seconds. ASSUMPTION,
+/// uncalibrated: the owner's "a couple of minutes for viewers to come", inside the 2-4 minutes
+/// a new stream's room takes to settle.
+pub const FILL_RAMP_S: u32 = 180;
+
+/// The arrival ramp of a run `duration_s` long: [`FILL_RAMP_S`], or a third of a short run so
+/// its room still fills.
+pub fn fill_ramp_s(duration_s: u32) -> u32 {
+    FILL_RAMP_S.min(duration_s / 3).max(1)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimViewer {
     pub viewer: Viewer,
@@ -90,6 +106,10 @@ pub struct Population {
     pub msgs_per_min: f64,
     pub raid_at_s: Option<u32>,
     pub copypasta_at_s: Vec<u32>,
+    /// Seconds the opening crowd took to arrive ([`fill_ramp_s`]); 0 for a room present
+    /// from the start (a small room, or a population from before the ramp).
+    #[serde(default)]
+    pub ramp_s: u32,
 }
 
 impl Population {
@@ -239,6 +259,13 @@ pub fn generate(
     };
 
     let small_room = audience_size <= 5;
+    let ramp_s = if small_room {
+        0
+    } else {
+        fill_ramp_s(duration_s)
+    };
+    // The opening crowd (most viewers): their arrivals are laid along the ramp below.
+    let mut opening: Vec<usize> = Vec::new();
     let mut names: Vec<String> = Vec::new();
     let mut viewers = Vec::with_capacity(slots.len());
     for (i, arch) in slots.iter().enumerate() {
@@ -264,9 +291,11 @@ pub fn generate(
             _ if small_room => (0, STAYS),
             _ => {
                 let arrive = if rng.chance(0.7) {
+                    opening.push(i);
                     0
                 } else {
-                    (f64::from(duration_s) * rng.range_f64(0.0, 0.4)) as u32
+                    // Latecomers: never in the opening room.
+                    ((f64::from(duration_s) * rng.range_f64(0.0, 0.4)) as u32).max(1)
                 };
                 let depart = if rng.chance(0.15) {
                     (f64::from(duration_s) * rng.range_f64(0.5, 1.0)) as u32
@@ -294,6 +323,27 @@ pub fn generate(
             depart_s,
             featured: false,
         });
+    }
+
+    // The room fills: the first of the opening crowd (in the shuffled slot order) make the
+    // opening room with the moderators; the others arrive one stratum of the ramp each, so the
+    // count climbs steadily to the full opening crowd at `ramp_s`.
+    if ramp_s > 0 {
+        let mods = viewers
+            .iter()
+            .filter(|v| v.kind == ArchetypeKind::Mod)
+            .count();
+        let at_start = (OPENING_ROOM as usize)
+            .saturating_sub(mods)
+            .min(opening.len());
+        let ramped = &opening[at_start..];
+        let n = ramped.len().max(1) as f64;
+        for (k, &i) in ramped.iter().enumerate() {
+            let at = ((k as f64 + rng.f64()) / n * f64::from(ramp_s)).ceil() as u32;
+            let v = &mut viewers[i];
+            v.arrive_s = at.clamp(1, ramp_s);
+            v.depart_s = v.depart_s.max(v.arrive_s + 1);
+        }
     }
 
     // Chatting share: draw exactly round(share * n) chatters, weighted by archetype rate.
@@ -324,6 +374,7 @@ pub fn generate(
         msgs_per_min,
         raid_at_s,
         copypasta_at_s,
+        ramp_s,
     })
 }
 
@@ -421,6 +472,59 @@ pub(crate) mod tests {
         let na: Vec<_> = a.viewers.iter().map(|v| v.viewer.name.clone()).collect();
         let nb: Vec<_> = b.viewers.iter().map(|v| v.viewer.name.clone()).collect();
         assert_ne!(na, nb, "different seed, different room");
+    }
+
+    #[test]
+    fn the_room_fills_over_minutes_and_deterministically() {
+        let cal = Calibration::default_assumption();
+        for (pop, size, duration) in [
+            ("growing_channel", 30u32, 1200u32),
+            ("raid_moment", 300, 3600),
+            ("growing_channel", 30, 300),
+        ] {
+            let p = generate(&cal, pop, size, duration, 42, fake_rank).unwrap();
+            let ramp = fill_ramp_s(duration);
+            assert_eq!(p.ramp_s, ramp);
+            assert_eq!(ramp, if duration == 300 { 100 } else { FILL_RAMP_S });
+            let mods = p
+                .viewers
+                .iter()
+                .filter(|v| v.kind == ArchetypeKind::Mod)
+                .count() as u32;
+            // About three at the start (the moderators always come early)...
+            let at0 = p.ccv_at(0);
+            assert!(
+                at0 >= 1 && at0 <= OPENING_ROOM.max(mods),
+                "{pop}: {at0} at t=0"
+            );
+            // ...climbing steadily, never falling, while the room fills...
+            let curve: Vec<u32> = (0..=ramp).step_by(10).map(|t| p.ccv_at(t)).collect();
+            assert!(curve.windows(2).all(|w| w[0] <= w[1]), "{pop}: {curve:?}");
+            let mid = p.ccv_at(ramp / 2);
+            assert!(at0 < mid && mid < p.ccv_at(ramp), "{pop}: {curve:?}");
+            // ...to most of the audience by the end of the ramp (the rest are latecomers).
+            assert!(
+                f64::from(p.ccv_at(ramp)) >= 0.5 * f64::from(size),
+                "{pop}: {} of {size} at {ramp} s",
+                p.ccv_at(ramp)
+            );
+            assert!(p.viewers.iter().all(|v| v.arrive_s <= duration));
+
+            let again = generate(&cal, pop, size, duration, 42, fake_rank).unwrap();
+            let arrivals = |p: &Population| -> Vec<(u32, u32)> {
+                p.viewers.iter().map(|v| (v.arrive_s, v.depart_s)).collect()
+            };
+            assert_eq!(arrivals(&p), arrivals(&again), "same seed, same ramp");
+            let other = generate(&cal, pop, size, duration, 43, fake_rank).unwrap();
+            assert_ne!(
+                arrivals(&p),
+                arrivals(&other),
+                "different seed, different ramp"
+            );
+        }
+        // A tiny room is all there from the start.
+        let p = generate(&cal, "small_new_channel", 3, 1200, 42, fake_rank).unwrap();
+        assert_eq!((p.ramp_s, p.ccv_at(0)), (0, 3));
     }
 
     #[test]

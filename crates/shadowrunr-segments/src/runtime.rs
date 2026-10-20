@@ -17,7 +17,8 @@ use crate::evidence::{ResearchAllowlist, SourceAllowlist};
 use crate::ranks::RankTable;
 use crate::research::{target_hex, CaseFile};
 use crate::table::{
-    op_tag, segment_name, segment_table, ArcRules, GuardFacts, HandoverRule, SegmentTable, Trigger,
+    op_tag, segment_name, segment_table, ArcRules, ColdOpenRule, GuardFacts, HandoverRule,
+    SegmentTable, Trigger, COLD_OPEN_STATE,
 };
 use crate::SegmentError;
 
@@ -53,6 +54,9 @@ pub struct SegmentConfig {
     pub planned_s: Option<u32>,
     /// Overrides the table's handover thresholds (assumptions) for segments that have one.
     pub handover: Option<HandoverRule>,
+    /// Overrides the table's cold-open rule (assumptions) for segments that have one. A
+    /// ceiling (`max_s`) of 0 skips the cold open: the segment starts in the state after it.
+    pub cold_open: Option<ColdOpenRule>,
     /// Segment start time. `None`: the first `now_ms` the runtime sees.
     pub start_ms: Option<TsMs>,
 }
@@ -291,20 +295,61 @@ impl Poll {
     }
 }
 
-/// Highest weight wins; ties go to more voters, then to the earlier option. No votes, no
-/// winner.
-fn winner(tallies: &[VoteTally]) -> Option<String> {
-    let mut best: Option<&VoteTally> = None;
-    for t in tallies.iter().filter(|t| t.voters > 0) {
-        let better = best.is_none_or(|b| {
-            t.weight > b.weight + 1e-9
-                || ((t.weight - b.weight).abs() <= 1e-9 && t.voters > b.voters)
-        });
-        if better {
-            best = Some(t);
+/// How a vote closed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PollOutcome {
+    NoVotes,
+    Winner(String),
+    /// Two or more options share the top weight and the top voter count. The runtime never
+    /// picks among them: the host breaks the tie on air.
+    Tie {
+        options: Vec<String>,
+        voters: u32,
+    },
+}
+
+impl PollOutcome {
+    /// The tied options as "A and B" / "A, B and C".
+    fn tied(options: &[String]) -> String {
+        match options.split_last() {
+            Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+            _ => options.join(""),
         }
     }
-    best.map(|t| t.option.clone())
+}
+
+/// Highest weight wins; equal weight goes to more voters. Options level on both are a tie,
+/// in option order.
+fn outcome(tallies: &[VoteTally]) -> PollOutcome {
+    let mut top: Vec<&VoteTally> = Vec::new();
+    for t in tallies.iter().filter(|t| t.voters > 0) {
+        let Some(b) = top.first() else {
+            top.push(t);
+            continue;
+        };
+        let level = (t.weight - b.weight).abs() <= 1e-9;
+        if t.weight > b.weight + 1e-9 || (level && t.voters > b.voters) {
+            top = vec![t];
+        } else if level && t.voters == b.voters {
+            top.push(t);
+        }
+    }
+    match top.as_slice() {
+        [] => PollOutcome::NoVotes,
+        [one] => PollOutcome::Winner(one.option.clone()),
+        many => PollOutcome::Tie {
+            options: many.iter().map(|t| t.option.clone()).collect(),
+            voters: many[0].voters,
+        },
+    }
+}
+
+/// The outright winner. No votes or a tie, no winner.
+fn winner(tallies: &[VoteTally]) -> Option<String> {
+    match outcome(tallies) {
+        PollOutcome::Winner(w) => Some(w),
+        _ => None,
+    }
 }
 
 fn moderation(
@@ -369,8 +414,17 @@ pub struct SegmentRuntime {
     last_now_ms: TsMs,
     poll: Option<Poll>,
     used_poll_ids: BTreeSet<String>,
-    /// The last crowd poll closed: its id and winner (`None` on a tie or no votes).
-    last_crowd: Option<(String, Option<String>)>,
+    /// The last crowd poll closed: its id and how it closed.
+    last_crowd: Option<(String, PollOutcome)>,
+    /// The last foil vote that closed level: its id and the tied foils, until a foil is
+    /// summoned or another foil vote opens.
+    foil_tie: Option<(String, Vec<String>)>,
+    /// Cold open: viewer id -> when they last wrote (ingest time), while the room fills.
+    chatters: BTreeMap<String, TsMs>,
+    /// Cold open: since when the active chatters have held at the rule's count.
+    room_since: Option<TsMs>,
+    /// When the cold open ended and why ("room filled ..." / "ceiling ...").
+    cold_open_ended: Option<(TsMs, String)>,
     /// Ops refused lately, newest last: (when, "close_poll p3: no_such_poll"). The state
     /// summary names them so the model never tells chat a refused op happened: the 3 h case
     /// run (2026-10-20) narrated polls as open after 16 refused start_polls.
@@ -397,8 +451,8 @@ pub struct SegmentRuntime {
     plebiscite_due: Option<String>,
     /// Hexes that have had their Plebiscite (one per hex per stream).
     plebiscited: BTreeSet<String>,
-    /// The last closed Plebiscite: (hex, winning option; `None` when nobody voted).
-    last_plebiscite: Option<(String, Option<String>)>,
+    /// The last closed Plebiscite: its hex and how it closed.
+    last_plebiscite: Option<(String, PollOutcome)>,
     seen: HashSet<String>,
     seen_order: VecDeque<String>,
     signed_off: bool,
@@ -444,6 +498,11 @@ impl SegmentRuntime {
                 });
             }
         }
+        if let (Some(c), Some(_)) = (&config.cold_open, &table.clock.cold_open) {
+            c.check(table).map_err(|e| SegmentError::Config {
+                detail: format!("cold open: {e}"),
+            })?;
+        }
         let case = config.case.clone().unwrap_or_else(demo_case);
         validate_case(&case)?;
         // The owner gate: a real case goes out live only once the owner approved it.
@@ -466,7 +525,7 @@ impl SegmentRuntime {
             }
             _ => None,
         };
-        Ok(Self {
+        let mut rt = Self {
             started_ms: config.start_ms,
             config,
             table,
@@ -476,6 +535,10 @@ impl SegmentRuntime {
             poll: None,
             used_poll_ids: BTreeSet::new(),
             last_crowd: None,
+            foil_tie: None,
+            chatters: BTreeMap::new(),
+            room_since: None,
+            cold_open_ended: None,
             refused: Vec::new(),
             foil_vote_seq: 0,
             active_foil: None,
@@ -498,7 +561,18 @@ impl SegmentRuntime {
             arc,
             reveals: Vec::new(),
             voted: BTreeSet::new(),
-        })
+        };
+        rt.skip_cold_open();
+        Ok(rt)
+    }
+
+    /// A cold-open override with a ceiling of 0 starts the segment past its cold open.
+    fn skip_cold_open(&mut self) {
+        if let Some(rule) = self.cold_open_rule().filter(|r| r.max_s == 0) {
+            if self.in_cold_open() {
+                self.state = rule.to;
+            }
+        }
     }
 
     fn startable_table(segment: SegmentId) -> Result<&'static SegmentTable, SegmentError> {
@@ -621,7 +695,8 @@ impl SegmentRuntime {
         out
     }
 
-    /// The jury's leading grade for a hex: advice for the brain, never proof.
+    /// The jury's leading grade for a hex: advice for the brain, never proof. A level jury
+    /// leads with nothing.
     pub fn jury_grade(&self, hex: &str) -> Option<EvidenceGrade> {
         let w = winner(&self.jury_tally(hex))?;
         GRADES.iter().copied().find(|g| grade_name(*g) == w)
@@ -670,6 +745,28 @@ impl SegmentRuntime {
 
     pub fn is_handover_pending(&self) -> bool {
         self.handover_pending_since.is_some()
+    }
+
+    /// The segment is in its cold open: the room is still filling.
+    pub fn in_cold_open(&self) -> bool {
+        self.state == COLD_OPEN_STATE
+    }
+
+    /// When the cold open ended and why (`room filled: ...` or `ceiling: ...`).
+    pub fn cold_open_ended(&self) -> Option<(TsMs, &str)> {
+        self.cold_open_ended
+            .as_ref()
+            .map(|(t, why)| (*t, why.as_str()))
+    }
+
+    /// How the last crowd poll closed: its id and outcome.
+    pub fn last_crowd(&self) -> Option<(&str, &PollOutcome)> {
+        self.last_crowd.as_ref().map(|(id, o)| (id.as_str(), o))
+    }
+
+    /// How the last Plebiscite closed: its hex and outcome.
+    pub fn last_plebiscite(&self) -> Option<(&str, &PollOutcome)> {
+        self.last_plebiscite.as_ref().map(|(h, o)| (h.as_str(), o))
     }
 
     // ----- internals -------------------------------------------------------------------
@@ -783,6 +880,72 @@ impl SegmentRuntime {
             .map(|table_rule| self.config.handover.unwrap_or(table_rule))
     }
 
+    fn cold_open_rule(&self) -> Option<ColdOpenRule> {
+        self.table
+            .clock
+            .cold_open
+            .as_ref()
+            .map(|table_rule| self.config.cold_open.as_ref().unwrap_or(table_rule).clone())
+    }
+
+    /// The cold-open clock: once past the floor, the room filling (the active chatters held
+    /// for the sustain window) ends it; the ceiling ends it regardless. The end is put on the
+    /// record as a `show_card` the runtime emits itself, its id naming the reason.
+    fn cold_open_tick(&mut self, now_ms: TsMs) -> Option<StreamEvent> {
+        if !self.in_cold_open() {
+            return None;
+        }
+        let rule = self.cold_open_rule()?;
+        let window = i64::from(rule.window_s) * 1000;
+        self.chatters.retain(|_, t| now_ms - *t < window);
+        let active = u32::try_from(self.chatters.len()).unwrap_or(u32::MAX);
+        if active >= rule.active_chatters {
+            self.room_since.get_or_insert(now_ms);
+        } else {
+            self.room_since = None;
+        }
+        let elapsed = now_ms - self.started_ms.unwrap_or(now_ms);
+        let filled = elapsed >= i64::from(rule.min_s) * 1000
+            && self
+                .room_since
+                .is_some_and(|s| now_ms - s >= i64::from(rule.sustain_s) * 1000);
+        let ceiling = elapsed >= i64::from(rule.max_s) * 1000;
+        if !filled && !ceiling {
+            return None;
+        }
+        let (card_id, why, body) = if filled {
+            (
+                "cold-open-end-room-filled",
+                format!(
+                    "room filled: {active} chatters (>= {}) held {} s",
+                    rule.active_chatters, rule.sustain_s
+                ),
+                "The hall has filled: the Improvised Room is open.",
+            )
+        } else {
+            (
+                "cold-open-end-ceiling",
+                format!(
+                    "ceiling: {} s with {active} of {} chatters",
+                    rule.max_s, rule.active_chatters
+                ),
+                "The doors stand open: the Improvised Room begins.",
+            )
+        };
+        self.cold_open_ended = Some((now_ms, why));
+        self.chatters.clear();
+        self.room_since = None;
+        self.state = rule.to;
+        Some(StreamEvent::Op {
+            ts_ms: now_ms,
+            op: Op::ShowCard {
+                card_id: card_id.into(),
+                title: "THE ROOM IS OPEN".into(),
+                body: body.into(),
+            },
+        })
+    }
+
     fn find_hex(&self, raw: &str) -> Option<usize> {
         let canon = normalize_hex(raw);
         self.case
@@ -824,37 +987,59 @@ impl SegmentRuntime {
         let mut events = vec![self.vote_event(now_ms, &poll, true)];
         match poll.kind {
             PollKind::Crowd => {
-                self.last_crowd = Some((poll.id.clone(), winner(&poll.tallies())));
+                let result = outcome(&poll.tallies());
                 // A crowd vote whose winner names one hex counts as that hex's beat of work.
+                // On a tie the host breaks it, so every tied option that names a hex counts:
+                // whichever he picks may be revealed.
                 if resolve {
-                    if let Some(i) =
-                        winner(&poll.tallies()).and_then(|w| target_hex(&self.case, &w))
-                    {
+                    let chosen: &[String] = match &result {
+                        PollOutcome::Winner(w) => std::slice::from_ref(w),
+                        PollOutcome::Tie { options, .. } => options,
+                        PollOutcome::NoVotes => &[],
+                    };
+                    for i in chosen.iter().filter_map(|o| target_hex(&self.case, o)) {
                         self.voted.insert(self.case.hexes[i].id.clone());
                     }
                 }
+                self.last_crowd = Some((poll.id.clone(), result));
                 self.fire(Trigger::PollClosed);
             }
             PollKind::Plebiscite => {
                 if resolve {
                     if let Some(hex) = poll.subject.clone() {
-                        let won = winner(&poll.tallies());
-                        if won.as_deref().is_some_and(|w| w.starts_with("Annex ")) {
+                        // A tie is the host's to break, like a crowd poll's: an "Annex" option
+                        // among the tied ones still counts as the hex's vote.
+                        let result = outcome(&poll.tallies());
+                        let annex = match &result {
+                            PollOutcome::Winner(w) => w.starts_with("Annex "),
+                            PollOutcome::Tie { options, .. } => {
+                                options.iter().any(|o| o.starts_with("Annex "))
+                            }
+                            PollOutcome::NoVotes => false,
+                        };
+                        if annex {
                             self.voted.insert(hex.clone());
                         }
-                        self.last_plebiscite = Some((hex, won));
+                        self.last_plebiscite = Some((hex, result));
                     }
                 }
                 self.fire(Trigger::PollClosed);
             }
             PollKind::Foil => {
                 if resolve {
-                    if let Some(foil) = winner(&poll.tallies()) {
-                        self.active_foil = Some(foil.clone());
-                        events.push(StreamEvent::Op {
-                            ts_ms: now_ms,
-                            op: Op::SummonFoil { foil },
-                        });
+                    // A level foil vote summons nobody: the host breaks it with summon_foil.
+                    match outcome(&poll.tallies()) {
+                        PollOutcome::Winner(foil) => {
+                            self.active_foil = Some(foil.clone());
+                            events.push(StreamEvent::Op {
+                                ts_ms: now_ms,
+                                op: Op::SummonFoil { foil },
+                            });
+                        }
+                        PollOutcome::Tie { options, .. } => {
+                            self.foil_tie = Some((poll.id.clone(), options));
+                        }
+                        PollOutcome::NoVotes => {}
                     }
                 }
                 self.fire(Trigger::FoilVoteClosed);
@@ -881,6 +1066,9 @@ impl SegmentRuntime {
         self.started_ms = Some(now_ms);
         self.ccv_since = None;
         self.handover_pending_since = None;
+        self.chatters.clear();
+        self.room_since = None;
+        self.skip_cold_open();
         if let Some(foil) = self.active_foil.take() {
             self.observer_foil = Some(foil);
         }
@@ -897,10 +1085,15 @@ impl SegmentRuntime {
         let mut events = Vec::new();
         let mut poll_dirty = false;
         let mut graded: BTreeSet<String> = BTreeSet::new();
+        let cold_open = self.in_cold_open();
         for msg in msgs {
             self.remember_msg(&msg.id);
             if self.signed_off {
                 continue;
+            }
+            // The cold open counts who is talking (ingest time: the runtime's own clock).
+            if cold_open {
+                self.chatters.insert(msg.viewer.id.clone(), now_ms);
             }
             let Some(cmd) = msg.command.clone().or_else(|| parse_command(&msg.text)) else {
                 continue;
@@ -1022,6 +1215,7 @@ impl SegmentRuntime {
         let secs = self.table.clock.foil_vote_secs;
         let question = "Which foil shall the Arch-Lich summon?".to_string();
         let options = self.config.foils.clone();
+        self.foil_tie = None;
         self.open_poll(Poll {
             id: id.clone(),
             question: question.clone(),
@@ -1209,6 +1403,10 @@ impl SegmentRuntime {
         if !self.table.allows_op(op_tag(op)) {
             return Err("op_not_allowed");
         }
+        // The state narrows the segment's ops (the cold open holds polls and foils back).
+        if !self.table.allows_op_in(&self.state, op_tag(op)) {
+            return Err("not_in_state");
+        }
         match op {
             Op::Highlight { msg_id } => {
                 if !self.seen.contains(msg_id) {
@@ -1283,6 +1481,7 @@ impl SegmentRuntime {
                     return Err("foil_already_active");
                 }
                 self.active_foil = Some(foil.clone());
+                self.foil_tie = None;
                 self.fire(Trigger::FoilSummoned);
             }
             Op::DismissFoil => {
@@ -1413,10 +1612,14 @@ impl SegmentRuntime {
 
     // ----- clock -----------------------------------------------------------------------
 
-    /// Clock: poll timeouts (a closed `vote`; a foil vote also summons its winner) and the
-    /// handover rule. When the rule fires it emits `handover` and enters the
-    /// `handover_pending` state; the brain is expected to emit `switch_segment`, and after
-    /// the rule's grace period the clock switches by itself (`segment_end`, `segment_start`).
+    /// Clock: poll timeouts (a closed `vote`; a foil vote also summons its winner), the cold
+    /// open and the handover rule. The cold open ends when the room fills or at its ceiling
+    /// (a runtime `show_card`, `cold-open-end-room-filled` / `cold-open-end-ceiling`, then the
+    /// state after it). The handover's audience path waits for it; the handover's elapsed
+    /// ceiling does not, and cuts a cold open short. When the handover rule fires it
+    /// emits `handover` and enters the `handover_pending` state; the brain is expected to emit
+    /// `switch_segment`, and after the rule's grace period the clock switches by itself
+    /// (`segment_end`, `segment_start`).
     pub fn tick(&mut self, now_ms: TsMs, ccv: u32) -> Vec<StreamEvent> {
         self.observe(now_ms);
         let mut events = Vec::new();
@@ -1428,6 +1631,7 @@ impl SegmentRuntime {
         }
         events.extend(self.open_due_plebiscite(now_ms));
         events.extend(self.arc_tick(now_ms));
+        events.extend(self.cold_open_tick(now_ms));
         let Some(rule) = self.handover_rule() else {
             return events;
         };
@@ -1439,7 +1643,10 @@ impl SegmentRuntime {
             }
             return events;
         }
-        if ccv >= rule.ccv_min {
+        // The audience path waits for the cold open: a room still filling is not a room that
+        // held. The segment's own ceiling (`max_elapsed_s`) still applies.
+        let cold = self.in_cold_open();
+        if ccv >= rule.ccv_min && !cold {
             self.ccv_since.get_or_insert(now_ms);
         } else {
             self.ccv_since = None;
@@ -1455,6 +1662,12 @@ impl SegmentRuntime {
             } else {
                 format!("elapsed >= {} s", rule.max_elapsed_s)
             };
+            if cold {
+                // A handover due before the room filled cuts the cold open short.
+                self.cold_open_ended = Some((now_ms, format!("handover: {reason}")));
+                self.chatters.clear();
+                self.room_since = None;
+            }
             events.push(StreamEvent::Handover {
                 ts_ms: now_ms,
                 from: self.table.id,
@@ -1476,8 +1689,10 @@ impl SegmentRuntime {
 
     /// What the brain sees this tick. `rules_prompt` is stable within a segment (table text
     /// plus config facts); `state_summary` carries the live state. Untrusted chat text
-    /// (leads, proposals) is summarised as counts only. While a Plebiscite waits or runs,
-    /// `dispatch_research` is withheld from `allowed_ops`.
+    /// (leads, proposals) is summarised as counts only, and the current state's table line
+    /// (`[state_rules.<state>] prompt`) leads the summary. `allowed_ops` is narrowed to the
+    /// state's own list when it has one (the cold open), and while a Plebiscite waits or runs,
+    /// `dispatch_research` is withheld from it.
     pub fn context(&self, ccv: u32, elapsed_s: u32) -> SegmentContext {
         SegmentContext {
             segment: self.table.id,
@@ -1492,6 +1707,7 @@ impl SegmentRuntime {
                 self.table
                     .allowed_ops
                     .iter()
+                    .filter(|o| self.table.allows_op_in(&self.state, o))
                     .filter(|o| !(withheld && o.as_str() == "dispatch_research"))
                     .filter(|o| !(unsealed && o.as_str() == "sign_off"))
                     .filter(|o| !(self.arc.is_some() && o.as_str() == "switch_segment"))
@@ -1704,11 +1920,16 @@ impl SegmentRuntime {
             ));
         } else if let Some((hex, verdict)) = &self.last_plebiscite {
             lines.push(match verdict {
-                Some(option) => format!(
+                PollOutcome::Winner(option) => format!(
                     "PLEBISCITE on {hex} decided: \"{option}\". Carry it out; do not search \
                      {hex} again."
                 ),
-                None => format!(
+                PollOutcome::Tie { options, voters } => format!(
+                    "PLEBISCITE on {hex} closed: TIE between {} ({voters} votes each): you \
+                     break it, and say you are breaking it. Do not search {hex} again.",
+                    PollOutcome::tied(options)
+                ),
+                PollOutcome::NoVotes => format!(
                     "PLEBISCITE on {hex} drew no votes: your call, but {hex} is not searched \
                      again."
                 ),
@@ -1877,6 +2098,9 @@ impl SegmentRuntime {
             self.table.title,
             self.state
         )];
+        if let Some(line) = self.table.state_prompt(&self.state) {
+            lines.push(line.to_string());
+        }
         if self.signed_off {
             lines.push("signed off: the show is over".into());
         }
@@ -1892,11 +2116,35 @@ impl SegmentRuntime {
                 "no poll open: never tell chat a poll is open or counting until start_poll is accepted".into(),
             ),
         }
-        if let Some((id, won)) = &self.last_crowd {
-            lines.push(match won {
-                Some(w) => format!("last poll {id} closed: winner {w}"),
-                None => format!("last poll {id} closed: no winner (tie or no votes)"),
+        if let Some((id, result)) = &self.last_crowd {
+            lines.push(match result {
+                PollOutcome::Winner(w) => format!("last poll {id} closed: winner {w}"),
+                PollOutcome::Tie { options, voters } => {
+                    let hexes: Vec<&str> = options
+                        .iter()
+                        .filter_map(|o| target_hex(&self.case, o))
+                        .map(|i| self.case.hexes[i].id.as_str())
+                        .collect();
+                    let voted = if hexes.is_empty() || !self.table.allows_op("reveal_hex") {
+                        String::new()
+                    } else {
+                        format!(" (each tied hex counts as voted: {})", hexes.join(", "))
+                    };
+                    format!(
+                        "last poll {id} closed: TIE between {} ({voters} votes each): you break \
+                         it, and say you are breaking it{voted}",
+                        PollOutcome::tied(options)
+                    )
+                }
+                PollOutcome::NoVotes => format!("last poll {id} closed: no votes, no winner"),
             });
+        }
+        if let (Some((id, foils)), None) = (&self.foil_tie, &self.active_foil) {
+            lines.push(format!(
+                "foil vote {id} closed: TIE between {}: nobody was summoned. You break it with \
+                 summon_foil, and say you are breaking it",
+                PollOutcome::tied(foils)
+            ));
         }
         let now = self.last_now_ms;
         let refused: Vec<&str> = self
