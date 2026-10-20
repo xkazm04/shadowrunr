@@ -648,6 +648,13 @@ A session id that is not `sbx-<yyyymmdd>-<hhmmss>-<minutes>m` is `invalid_params
 path), and a session with no `session.json` is `not_found`. An engine failure is `engine`,
 and a file error `io`.
 
+## `shadowrunr voice check|say`
+
+Malakor's optional local voice (Kokoro through sherpa-onnx). `voice check` probes the engine, the
+Kokoro files, the sidecar's Python and the durations model, and exits 0 only when the voice can
+speak. `voice say "<text>" [--out <wav>]` renders one line through the sidecar and prints each
+sentence's timing. Setup, `[voice]` keys and the stage side: [voice.md](voice.md).
+
 ## Character rules and moderation lists
 
 ```

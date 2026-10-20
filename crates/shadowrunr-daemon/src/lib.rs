@@ -22,6 +22,7 @@ pub mod rpc;
 pub mod runs;
 pub mod sandbox;
 pub mod server;
+pub mod voice;
 
 #[cfg(test)]
 mod e2e;

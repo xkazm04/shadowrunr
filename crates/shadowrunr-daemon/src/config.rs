@@ -28,6 +28,9 @@ pub struct FileConfig {
     /// `[research]`: the off-stream SEG-02A research pipeline (`shadowrunr case research`).
     #[serde(default)]
     pub research: crate::casework::ResearchConfig,
+    /// `[voice]`: Malakor's local voice (off by default).
+    #[serde(default)]
+    pub voice: crate::voice::VoiceConfig,
 }
 
 /// `[paths]`, as written in the file (relative to the file's directory unless absolute).
@@ -245,6 +248,8 @@ pub struct Config {
     pub clips: ClipsConfig,
     /// `[research]`.
     pub research: crate::casework::ResearchConfig,
+    /// `[voice]`, with its paths resolved against the root.
+    pub voice: crate::voice::VoiceConfig,
 }
 
 #[derive(Debug)]
@@ -361,6 +366,7 @@ impl Config {
                 ..fc.clips
             },
             research: fc.research,
+            voice: fc.voice.resolved(root),
         }
     }
 

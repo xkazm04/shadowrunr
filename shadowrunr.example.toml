@@ -129,3 +129,18 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # fetch_timeout_s = 30
 # discovery_timeout_s = 900
 # extraction_timeout_s = 900
+
+# Malakor's local voice and face (contract appendix (voice); docs/guide/voice.md). Off unless
+# `enabled = true`. Kokoro runs through sherpa-onnx, once per sentence, on this machine; nothing
+# is sent anywhere. Paths are machine-local: keep them in your own shadowrunr.toml.
+# [voice]
+# enabled = false
+# python = "python"                 # interpreter for `python -m shadowrunr_voice`
+# sidecar = "tools/voice"           # the sidecar package's parent directory
+# engine_dir = "<sherpa-onnx TTS home: bin/ and kokoro/>"
+# durations_model = "<kokoro durations subgraph .onnx; absent = no mouth shapes>"
+# voice = "af_heart"                # with its verified speaker id
+# sid = 3
+# max_queue = 6                     # lines waiting to render; the oldest is skipped past it
+# max_lag_ms = 8000                 # skip a line whose audio cannot start within this of its say
+# render_timeout_ms = 30000
