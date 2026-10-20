@@ -948,6 +948,17 @@ like a real case. It is never written live in a quiet moment.
   The runtime never picks a winner on a tie: the summary says "TIE between A and B (n votes
   each): you break it, and say you are breaking it". A tied foil vote summons nobody; a tied
   jury gives no grade; a tied crowd poll counts every tied hex option as that hex's vote.
+- **Carried chat and room events.** A message that needs an answer (question, mention, first
+  contact, `!propose`/`!summon`, mocked injection) but was not picked because of a hold, a
+  safety beat, the cold-open filter or the pick ceiling is carried for up to 25 s (at most 6)
+  and competes in later beats; expiry writes an input moderation record, rule `carry`, action
+  `expired`. A safety beat answers only the disclosure. A vote that closes (crowd poll, foil
+  vote, plebiscite) or a handover falling due is a room event: the next non-safety beat
+  (`react` or `bridge`) announces it once, a tie as a tie. In the cold open, after the story's
+  handoff, quiet beats voice the segment's deck (`bit`), at most one gathering line
+  (`cold_open`), and without a prep an in-character aside (`improvise`) between gathering lines
+  at least 20 s apart. These are read from the runtime's state summary today; a structured
+  `SegmentContext` field is the planned replacement.
 - **New moderation values.** Input rule `wave_repeat` (action `dropped`): a paste wave already
   answered this stream. Output rule `mechanism_leak` (action `removed` or `dropped`): a sentence
   describing the moderation machinery. A `persona_leak` or `character_break` line answering a

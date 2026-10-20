@@ -809,6 +809,7 @@ impl Brain {
                 .filter(|c| self.orch.is_first_contact(&c.msg.id))
                 .map(|c| c.msg.id.clone())
                 .collect(),
+            carried: self.orch.carried_ages(now_ms),
         };
         let corr = format!("{}:pick:{}", self.cfg.stream_id, self.ticks);
         let pick = self
@@ -945,6 +946,7 @@ impl Brain {
             care_note: care.as_deref(),
             material: plan.material.as_deref(),
             beat_note: plan.note.as_deref(),
+            room_note: plan.room_note.as_deref(),
         });
         self.last_prompt = Some(prompt.clone());
 
@@ -1165,6 +1167,7 @@ impl Brain {
         {
             for c in pick.chosen.iter().filter(|c| c.safety.is_some()) {
                 if self.filter.ban(&c.msg.viewer.id) {
+                    self.orch.forget_viewer(&c.msg.viewer.id);
                     self.removed.push(c.msg.viewer.name.clone());
                     self.removed_names.add(&c.msg.viewer.name);
                     ev.push(moderation::input_event(

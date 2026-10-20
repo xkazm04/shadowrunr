@@ -355,6 +355,96 @@ async fn a_tied_poll_reaches_the_prompt_as_a_tie_never_a_winner() {
     assert!(!lower.contains("winner:"), "{p}");
 }
 
+/// sbx-20261020-214049-5m, event #126: a question that reached the brain on a safety beat
+/// was never answered. It is carried, and the next beat's prompt asks it.
+#[tokio::test]
+async fn a_question_beside_a_disclosure_is_carried_to_the_next_beat() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "carry", tuning()).await;
+    let c = ctx(&[]);
+    let asker = viewer("mb", "MireBeetle", Rank::Thrall);
+    let sad = viewer("rw", "RainWalrus", Rank::Thrall);
+    let q = "wait is the Lord of Darkness actually watching this right now? like is he in the chat";
+    let ev = b
+        .tick(
+            1_000,
+            vec![
+                msg("q1", 900, &asker, q),
+                msg("d1", 950, &sad, "i dont want to be alive anymore"),
+            ],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["d1"], "the disclosure alone");
+    let p = b.last_prompt().unwrap();
+    assert!(p.contains("SAFETY FIRST") && !p.contains("[q1]"), "{p}");
+    let (_, _, _, reason) = one_plan(&ev);
+    assert!(reason.contains("deferred: q1"), "{reason}");
+
+    let ev = b.tick(6_000, Vec::new(), &c).await.unwrap();
+    assert_eq!(picked(&ev), ["q1"]);
+    let (mode, _, _, reason) = one_plan(&ev);
+    assert_eq!(mode, BeatMode::React);
+    assert!(reason.contains("carried over: q1 (5 s)"), "{reason}");
+    assert!(b
+        .last_prompt()
+        .unwrap()
+        .contains("[q1] MireBeetle (Thrall)"));
+
+    let ev = b.tick(11_000, Vec::new(), &c).await.unwrap();
+    assert!(picked(&ev).is_empty(), "answered once");
+}
+
+/// sbx-20261020-214049-5m, event #171: poll p1 closed and the host never said the result.
+#[tokio::test]
+async fn a_closed_tied_poll_forces_one_announcing_beat() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "poll", tuning()).await;
+    b.set_prep(sample_prep());
+    let with = |summary: &str| SegmentContext {
+        state: "opening".into(),
+        state_summary: summary.into(),
+        ..ctx(&[])
+    };
+    let open = with(
+        "open crowd poll p1: \"Keep the clerk?\" | keep = 1.0 (1 votes), evict = 1.0 (1 votes) \
+         | closes in 3 s | min rank Thrall",
+    );
+    b.tick(1_000, Vec::new(), &open).await.unwrap();
+    let closed = with(
+        "no poll open\nlast poll p1 closed: TIE between keep and evict (1 votes each): you \
+         break it, and say you are breaking it",
+    );
+    let ev = b.tick(6_000, Vec::new(), &closed).await.unwrap();
+    let (mode, _, _, reason) = one_plan(&ev);
+    assert_eq!(mode, BeatMode::Bridge, "{reason}");
+    assert!(reason.contains("announce poll p1 closed (tie)"), "{reason}");
+    let p = b.last_prompt().unwrap().to_string();
+    let chat = &p[p.find("# Chat").unwrap()..];
+    assert!(
+        chat.contains("ROOM EVENT: the vote on \"Keep the clerk?\" (p1) just closed: TIE"),
+        "{chat}"
+    );
+    assert!(
+        chat.contains("never call either option the winner"),
+        "{chat}"
+    );
+    assert!(chat.contains(orchestrate::ANNOUNCE_NOTE), "{chat}");
+    assert!(!chat.contains(compose::NO_CHAT_LINE), "{chat}");
+    for t in [11_000, 16_000, 21_000] {
+        let ev = b.tick(t, Vec::new(), &closed).await.unwrap();
+        let (mode, _, _, reason) = one_plan(&ev);
+        assert!(!reason.contains("announce"), "announced once: {reason}");
+        if mode != BeatMode::Hold {
+            let p = b.last_prompt().unwrap();
+            assert!(!p.contains("ROOM EVENT"), "announced once:\n{p}");
+        }
+    }
+}
+
 #[tokio::test]
 async fn without_a_bit_the_material_section_is_byte_absent() {
     let dir = tempfile::tempdir().unwrap();

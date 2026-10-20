@@ -6,7 +6,11 @@
 //! - **Cold open** (`ctx.state == "cold_open"`): the prep's story, one or two lines a beat, in
 //!   order; then its handoff. Only first contacts and safety reach the voice (at most one first
 //!   contact a beat). Without a prep: one short "the room is gathering" open with no premise.
-//!   Once the story is told he holds or greets first contacts until the state changes.
+//!   Once the story is told he greets first contacts, holds every other quiet beat, and voices
+//!   the segment's prepared deck (premises first) under the same filter; one gathering line
+//!   only when the deck is empty. Without a prep: gathering lines [`GATHERING_SPACING_MS`]
+//!   apart; between them a hold, or a short aside (no welcome) where a hold would let the
+//!   silence pass [`HOLD_GAP_MS`].
 //! - **After it**, per beat: `react` when chat is worth answering; `bit` when the room is quiet
 //!   (a prepared bit for the current segment, shuffled, never repeated in the stream); `bridge`
 //!   for a connector line between the two (into a bit, back to chat, into a poll or a handover);
@@ -16,27 +20,39 @@
 //!
 //! Rules: a bit is offered once and marked used; the room answering a bit skips its next line;
 //! a raid, a safety pick or a segment change expires the queued bit and connector; a safety beat
-//! never voices prepared material. Votes and lone emotes never fill a pick, and a wave once
-//! answered is not picked again this stream.
+//! never voices prepared material and offers only the safety pick. Votes and lone emotes never
+//! fill a pick, and a wave once answered is not picked again this stream.
+//!
+//! A message that needs an answer (a question, a mention, a first contact, a proposal or a
+//! summons, a mockable injection) and that a beat could not answer (a hold, a safety beat, the
+//! cold-open filter, the pick ceiling) is carried into the next beats for [`CARRY_MS`], at most
+//! [`CARRY_MAX`] at once, competing with fresh chat with a small age bonus; once answered it is
+//! never offered again. Waves and votes are never carried.
+//!
+//! A vote that closed and a handover that fell due are room events ([`room`]): the next beat
+//! that is not a safety beat announces them, once, and expires the queued bit.
 //!
 //! The thresholds are assumptions to tune against sandbox runs, not measurements:
 //! [`QUIET_BIT_MS`], [`BIT_SPACING_MS`], [`HOLD_GAP_MS`], [`THIN_REACT_STREAK`],
-//! [`THIN_ROOM_MAX`], [`RAID_FIRST_CONTACTS`].
+//! [`THIN_ROOM_MAX`], [`RAID_FIRST_CONTACTS`], [`CARRY_MS`], [`CARRY_MAX`],
+//! [`GATHERING_SPACING_MS`].
 
 pub mod requests;
+pub mod room;
 #[cfg(test)]
 mod tests;
 
 use std::collections::{HashMap, HashSet};
 
 use shadowrunr_types::prep::{BeatMode, BitKind, ConnectorKind, PrepBit, StreamPrep};
-use shadowrunr_types::{ChatMsg, SegmentContext, StreamEvent, TsMs};
+use shadowrunr_types::{ChatMsg, Command, SegmentContext, StreamEvent, TsMs};
 
 use crate::moderation::{self, Candidate, IN_CHARACTER_LINES};
 use crate::picker::{is_bare_emote, is_question, is_vote, mentions, Pick};
 use crate::util::{fnv1a64, normalize, one_line, similarity};
 
 use requests::{Rotation, REBUTTALS};
+use room::RoomWatch;
 
 /// The segment state in which the room is still filling.
 pub const COLD_OPEN_STATE: &str = "cold_open";
@@ -64,10 +80,28 @@ const PASTER_MIN_CHARS: usize = 40;
 const TWO_LINES_MAX_CHARS: usize = 220;
 /// Words from which a plain remark is worth answering.
 const REMARK_MIN_WORDS: usize = 4;
+/// How long a message a beat could not answer is carried into the next beats (assumption:
+/// two to five beats, so the answer still reads as one to the asker).
+pub const CARRY_MS: i64 = 25_000;
+/// The most messages carried at once; the oldest go first.
+pub const CARRY_MAX: usize = 6;
+/// The `input` moderation rule that records a carried message dropped unanswered.
+pub const CARRY_RULE: &str = "carry";
+/// Without a prep, at least this long between two gathering lines of the cold open
+/// (assumption); he holds in between.
+pub const GATHERING_SPACING_MS: i64 = 20_000;
 
 /// The beat note for an open with no prepared story, and for gathering lines after one.
 pub const GATHERING_NOTE: &str = "(The room is still gathering. One short in-character line \
 that welcomes whoever is arriving: no premise, no poll, no call to action, no count.)";
+
+/// The beat note between gathering lines of a cold open with no prep: talk, but no welcome.
+pub const ASIDE_NOTE: &str = "(The room is still gathering. One short in-character aside: a \
+boast, a grievance or an observation about your lair. No welcome, no premise, no poll, no call \
+to action, no count.)";
+
+/// The beat note when a room event is announced and no chat is picked.
+pub const ANNOUNCE_NOTE: &str = "(No chat to answer this beat: make the announcement above.)";
 
 /// What one beat needs from the brain.
 pub struct BeatInputs<'a> {
@@ -107,6 +141,8 @@ pub struct Plan {
     pub material: Option<String>,
     /// A line for a beat with no chat (the gathering open).
     pub note: Option<String>,
+    /// The room events this beat announces (a closed vote, a handover due), chat or no chat.
+    pub room_note: Option<String>,
     pub reason: String,
 }
 
@@ -119,9 +155,20 @@ impl Plan {
             bit_id: None,
             material: None,
             note: None,
+            room_note: None,
             reason,
         }
     }
+}
+
+/// A message carried past a beat that could not answer it.
+#[derive(Debug, Clone)]
+struct Carried {
+    cand: Candidate,
+    /// When it first reached a beat.
+    since: TsMs,
+    /// It was its viewer's first message.
+    first: bool,
 }
 
 /// A multi-line bit being told across beats.
@@ -150,6 +197,19 @@ pub struct Orchestrator {
     cold_next: usize,
     handoff_done: bool,
     gathering_done: bool,
+    /// The one gathering line allowed after the handoff (deck empty) was spoken.
+    deck_gathering_done: bool,
+    /// When the last gathering line was spoken (no prep).
+    last_gathering_ms: Option<TsMs>,
+    /// Messages carried into the next beat.
+    carried: Vec<Carried>,
+    /// Messages carried into this beat: id to (since, first contact).
+    carried_in: HashMap<String, (TsMs, bool)>,
+    /// This beat's messages that are carried if no pick answers them.
+    carry_next: Vec<Carried>,
+    /// Ids of messages picked this stream: never offered again.
+    answered: HashSet<String>,
+    room: RoomWatch,
     /// A connector queued by a state change.
     pending: Option<ConnectorKind>,
     connector_uses: HashMap<&'static str, usize>,
@@ -195,6 +255,22 @@ fn worth(c: &Candidate, first: bool, names: &[String]) -> Option<&'static str> {
 /// Never fills a pick: a vote (the segment counts it) or a lone emote.
 fn is_filler(c: &Candidate) -> bool {
     c.safety.is_none() && (is_vote(c) || (c.count == 1 && is_bare_emote(&c.msg.text)))
+}
+
+/// Whether an unanswered message is carried: one that asks for an answer, never a wave, a
+/// vote, a remark or a safety pick (which is never left unanswered).
+fn carries(c: &Candidate, first: bool, names: &[String]) -> bool {
+    if c.count > 1 || c.safety.is_some() {
+        return false;
+    }
+    match worth(c, first, names) {
+        Some("first contact" | "mention" | "question" | "mockable") => true,
+        Some("command") => matches!(
+            c.msg.command,
+            Some(Command::Propose { .. } | Command::Summon { .. })
+        ),
+        _ => false,
+    }
 }
 
 fn kind_label(k: BitKind) -> &'static str {
@@ -260,13 +336,30 @@ impl Orchestrator {
         }
     }
 
-    /// Whether a message was its viewer's first this stream.
+    /// Whether a message was its viewer's first this stream (in this beat's inbox, or carried
+    /// from an earlier one).
     pub fn is_first_contact(&self, msg_id: &str) -> bool {
-        self.first.contains(msg_id)
+        self.first.contains(msg_id) || self.carried_in.get(msg_id).is_some_and(|c| c.1)
+    }
+
+    /// How long each message carried into this beat has waited, by id (the picker's age
+    /// bonus).
+    pub fn carried_ages(&self, now_ms: TsMs) -> HashMap<String, i64> {
+        self.carried_in
+            .iter()
+            .map(|(id, (since, _))| (id.clone(), now_ms.saturating_sub(*since)))
+            .collect()
+    }
+
+    /// Stop carrying a viewer's messages (they were removed from chat).
+    pub fn forget_viewer(&mut self, viewer_id: &str) {
+        self.carried.retain(|k| k.cand.msg.viewer.id != viewer_id);
     }
 
     /// Drop repeats of a wave already answered (an `input` record, `wave_repeat` / `dropped`)
     /// and fold near-duplicate pastes into one candidate, so several pasters are never picked.
+    /// Then add the messages carried from earlier beats, dropping those that waited
+    /// [`CARRY_MS`] (an `input` record, [`CARRY_RULE`] / `expired`).
     pub fn screen(
         &mut self,
         now_ms: TsMs,
@@ -309,7 +402,21 @@ impl Orchestrator {
                 None => out.push((norm, c)),
             }
         }
-        out.into_iter().map(|(_, c)| c).collect()
+        let mut out: Vec<Candidate> = out.into_iter().map(|(_, c)| c).collect();
+        self.carried_in.clear();
+        for k in std::mem::take(&mut self.carried) {
+            let id = k.cand.msg.id.clone();
+            if self.answered.contains(&id) || out.iter().any(|c| c.msg.id == id) {
+                continue;
+            }
+            if now_ms.saturating_sub(k.since) >= CARRY_MS {
+                ev.push(moderation::input_event(now_ms, CARRY_RULE, &id, "expired"));
+                continue;
+            }
+            self.carried_in.insert(id, (k.since, k.first));
+            out.push(k.cand);
+        }
+        out
     }
 
     /// The candidates this plan lets the picker see.
@@ -320,7 +427,7 @@ impl Orchestrator {
                 c.safety.is_some()
                     || match plan.offer {
                         Offer::SafetyOnly => false,
-                        Offer::FirstContact => self.first.contains(&c.msg.id) && !is_vote(c),
+                        Offer::FirstContact => self.is_first_contact(&c.msg.id) && !is_vote(c),
                         Offer::Chat => !is_filler(c),
                     }
             })
@@ -425,6 +532,32 @@ impl Orchestrator {
         (m, what)
     }
 
+    /// The room answered the bit being told: its next line is skipped. Returns the reason
+    /// fragment.
+    fn back_off(&mut self, prep: Option<&StreamPrep>) -> Option<String> {
+        let active = self.active_bit.clone()?;
+        let Some(bit) = prep.and_then(|p| p.bits.iter().find(|x| x.id == active.id)) else {
+            self.active_bit = None;
+            return None;
+        };
+        let next = active.next + 1;
+        if next >= bit.lines.len() {
+            self.active_bit = None;
+            self.bit_ended = true;
+        } else {
+            self.active_bit = Some(ActiveBit {
+                id: active.id,
+                next,
+            });
+        }
+        Some(format!(
+            "room answered {} {}: line {} skipped; ",
+            kind_label(bit.kind),
+            bit.id,
+            active.next + 1
+        ))
+    }
+
     /// Decide this beat. State that a decision consumes (a bit offered, a story line voiced, a
     /// connector used) is consumed here: the beat goes ahead whatever the engine does.
     pub fn plan(&mut self, b: &BeatInputs<'_>) -> Plan {
@@ -453,10 +586,24 @@ impl Orchestrator {
             }
         }
 
+        self.room.observe(&b.ctx.state, &b.ctx.state_summary);
+        self.carry_next = b
+            .cands
+            .iter()
+            .filter(|c| !self.answered.contains(&c.msg.id))
+            .filter_map(|c| {
+                let first = self.is_first_contact(&c.msg.id);
+                carries(c, first, b.names).then(|| Carried {
+                    cand: c.clone(),
+                    since: self.carried_in.get(&c.msg.id).map_or(now, |k| k.0),
+                    first,
+                })
+            })
+            .collect();
         let worthy: Vec<&'static str> = b
             .cands
             .iter()
-            .filter_map(|c| worth(c, self.first.contains(&c.msg.id), b.names))
+            .filter_map(|c| worth(c, self.is_first_contact(&c.msg.id), b.names))
             .collect();
         if !worthy.is_empty() || self.quiet_since.is_none() {
             self.quiet_since = Some(now);
@@ -472,16 +619,14 @@ impl Orchestrator {
             return p;
         }
 
-        // A state change queues its connector: the story cut short by a full room, a poll, a
-        // handover.
+        // A state change queues its connector: the story cut short by a full room, a poll. A
+        // handover falling due is a room event (below).
         if state_changed && !safety {
             let st = b.ctx.state.as_str();
             if prev_state.as_deref() == Some(COLD_OPEN_STATE) && !self.handoff_done {
                 self.pending = Some(ConnectorKind::IntoRoom);
             } else if st.contains("poll") || st.contains("vote") {
                 self.pending = Some(ConnectorKind::IntoPoll);
-            } else if st.contains("handover") {
-                self.pending = Some(ConnectorKind::IntoHandover);
             }
         }
 
@@ -497,13 +642,62 @@ impl Orchestrator {
             s.join("+")
         };
 
+        // A safety beat answers the disclosure alone: the rest of the room is carried.
         if safety {
+            let held = if self.room.has_pending() {
+                "prepared material and a room event held back"
+            } else {
+                "prepared material held back"
+            };
             return Plan::new(
                 BeatMode::React,
-                Offer::Chat,
+                Offer::SafetyOnly,
                 max,
-                format!("{lead}safety beat: prepared material held back"),
+                format!("{lead}safety beat: {held}"),
             );
+        }
+
+        // A closed vote or a handover due: announced now, once, over the queued bit.
+        let events = self.room.take();
+        if !events.is_empty() {
+            let labels: Vec<&str> = events.iter().map(|e| e.label.as_str()).collect();
+            let labels = labels.join(" and ");
+            if let Some(gone) = self.expire() {
+                lead.push_str(&format!("room event: {gone} expired; "));
+            }
+            let connector = events
+                .iter()
+                .find_map(|e| e.connector)
+                .and_then(|k| self.connector(b.prep, k).map(|l| (k, l)));
+            let (mode, with) = if chat > 0 {
+                (BeatMode::React, format!(" with chat ({signals})"))
+            } else {
+                (BeatMode::Bridge, String::new())
+            };
+            let mut p = Plan::new(
+                mode,
+                Offer::Chat,
+                chat,
+                format!("{lead}announce {labels}{with}"),
+            );
+            p.room_note = Some(
+                events
+                    .iter()
+                    .map(|e| e.note.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
+            if chat == 0 {
+                p.note = Some(ANNOUNCE_NOTE.into());
+            }
+            if let Some((k, line)) = connector {
+                p.material = Some(format!(
+                    "Connector ({}):\n- {}\n",
+                    connector_label(k),
+                    one_line(&line, 400)
+                ));
+            }
+            return p;
         }
 
         // A queued connector, with any chat worth answering.
@@ -542,22 +736,9 @@ impl Orchestrator {
                 .and_then(|p| p.bits.iter().find(|x| x.id == active.id));
             match bit {
                 None => self.active_bit = None,
-                Some(bit) if !worthy.is_empty() => {
-                    let next = active.next + 1;
-                    lead.push_str(&format!(
-                        "room answered {} {}: line {} skipped; ",
-                        kind_label(bit.kind),
-                        bit.id,
-                        active.next + 1
-                    ));
-                    if next >= bit.lines.len() {
-                        self.active_bit = None;
-                        self.bit_ended = true;
-                    } else {
-                        self.active_bit = Some(ActiveBit {
-                            id: active.id,
-                            next,
-                        });
+                Some(_) if !worthy.is_empty() => {
+                    if let Some(why) = self.back_off(b.prep) {
+                        lead.push_str(&why);
                     }
                 }
                 Some(bit) => {
@@ -691,11 +872,11 @@ impl Orchestrator {
         let firsts = b
             .cands
             .iter()
-            .any(|c| self.first.contains(&c.msg.id) && !is_vote(c));
+            .any(|c| self.is_first_contact(&c.msg.id) && !is_vote(c));
         if safety {
             return Plan::new(
                 BeatMode::React,
-                Offer::FirstContact,
+                Offer::SafetyOnly,
                 1,
                 "room filling: safety beat, story paused".into(),
             );
@@ -750,6 +931,7 @@ impl Orchestrator {
             }
         } else if !self.gathering_done {
             self.gathering_done = true;
+            self.last_gathering_ms = Some(b.now_ms);
             let mut p = Plan::new(
                 BeatMode::ColdOpen,
                 Offer::FirstContact,
@@ -760,29 +942,93 @@ impl Orchestrator {
             return p;
         }
         if firsts {
+            let lead = self.back_off(b.prep).unwrap_or_default();
             return Plan::new(
                 BeatMode::React,
                 Offer::FirstContact,
                 1,
-                "room filling: first contact".into(),
+                format!("room filling: {lead}first contact"),
             );
         }
         if may_hold {
-            return Plan::new(
-                BeatMode::Hold,
+            let why = if b.prep.is_some() {
+                "room filling: story told, hold"
+            } else {
+                "room filling, no prep: hold"
+            };
+            return Plan::new(BeatMode::Hold, Offer::SafetyOnly, 0, why.into());
+        }
+        let Some(prep) = b.prep else {
+            // No deck: a gathering line at most every GATHERING_SPACING_MS, an aside (no
+            // welcome) on the speaking beats between.
+            let since = self.last_gathering_ms.map(|t| b.now_ms.saturating_sub(t));
+            if let Some(s) = since.filter(|s| *s < GATHERING_SPACING_MS) {
+                let mut p = Plan::new(
+                    BeatMode::Improvise,
+                    Offer::SafetyOnly,
+                    0,
+                    format!(
+                        "room filling, no prep: aside, gathering line {} s ago",
+                        s / 1000
+                    ),
+                );
+                p.note = Some(ASIDE_NOTE.into());
+                return p;
+            }
+            self.last_gathering_ms = Some(b.now_ms);
+            let mut p = Plan::new(
+                BeatMode::ColdOpen,
                 Offer::SafetyOnly,
                 0,
-                "room filling: story told, hold".into(),
+                "room filling, no prep: gathering line".into(),
             );
+            p.note = Some(GATHERING_NOTE.into());
+            return p;
+        };
+        // The segment's deck, premises first: they invite the first chat.
+        let bit = match self.active_bit.clone() {
+            Some(a) => match prep.bits.iter().find(|x| x.id == a.id) {
+                Some(bit) => Some((bit, a.next)),
+                None => {
+                    self.active_bit = None;
+                    None
+                }
+            },
+            None => None,
         }
-        let mut p = Plan::new(
-            BeatMode::ColdOpen,
+        .or_else(|| self.next_bit(prep, b.ctx.segment, true).map(|bit| (bit, 0)));
+        if let Some((bit, from)) = bit {
+            let (m, what) = self.bit_lines(bit, from, 2);
+            if from == 0 {
+                self.last_bit_ms = Some(b.now_ms);
+            }
+            let mut p = Plan::new(
+                BeatMode::Bit,
+                Offer::FirstContact,
+                1,
+                format!("room filling: deck {what}"),
+            );
+            p.bit_id = Some(bit.id.clone());
+            p.material = Some(m);
+            return p;
+        }
+        if !self.deck_gathering_done {
+            self.deck_gathering_done = true;
+            let mut p = Plan::new(
+                BeatMode::ColdOpen,
+                Offer::SafetyOnly,
+                0,
+                "room filling: deck empty, one gathering line".into(),
+            );
+            p.note = Some(GATHERING_NOTE.into());
+            return p;
+        }
+        Plan::new(
+            BeatMode::Improvise,
             Offer::SafetyOnly,
             0,
-            "room filling: gathering line".into(),
-        );
-        p.note = Some(GATHERING_NOTE.into());
-        p
+            "room filling: deck empty, gathering line spent: improvised".into(),
+        )
     }
 
     /// Settle the beat after the picker: the final mode, the waves answered, the streaks, and
@@ -803,6 +1049,46 @@ impl Orchestrator {
             plan.reason
                 .push_str(&format!("; wave of {} acknowledged", c.viewers.max(1)));
         }
+
+        // What was answered is never offered again; what needed an answer and got none is
+        // carried, newest first, while it is young enough.
+        let chosen: HashSet<&str> = pick.chosen.iter().map(|c| c.msg.id.as_str()).collect();
+        let late: Vec<String> = pick
+            .chosen
+            .iter()
+            .filter_map(|c| {
+                let (since, _) = self.carried_in.get(&c.msg.id)?;
+                Some(format!(
+                    "{} ({} s)",
+                    c.msg.id,
+                    now_ms.saturating_sub(*since) / 1000
+                ))
+            })
+            .collect();
+        if !late.is_empty() {
+            plan.reason
+                .push_str(&format!("; carried over: {}", late.join(", ")));
+        }
+        self.answered.extend(chosen.iter().map(|s| s.to_string()));
+        let mut carry: Vec<Carried> = std::mem::take(&mut self.carry_next)
+            .into_iter()
+            .filter(|k| {
+                !chosen.contains(k.cand.msg.id.as_str())
+                    && now_ms.saturating_sub(k.since) < CARRY_MS
+            })
+            .collect();
+        carry.sort_by_key(|k| std::cmp::Reverse(k.since));
+        carry.truncate(CARRY_MAX);
+        let fresh: Vec<&str> = carry
+            .iter()
+            .filter(|k| !self.carried_in.contains_key(&k.cand.msg.id))
+            .map(|k| k.cand.msg.id.as_str())
+            .collect();
+        if !fresh.is_empty() {
+            plan.reason
+                .push_str(&format!("; deferred: {}", fresh.join(", ")));
+        }
+        self.carried = carry;
         match plan.mode {
             BeatMode::React => self.react_streak += 1,
             BeatMode::Hold => {}

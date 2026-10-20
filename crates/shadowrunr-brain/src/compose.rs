@@ -393,6 +393,9 @@ pub struct TurnInputs<'a> {
     /// The orchestrator's line for a beat with no chat to answer (the room is gathering, say);
     /// it replaces the default quiet-beat text.
     pub beat_note: Option<&'a str>,
+    /// The room events this beat announces (a closed vote, a handover due): they open the
+    /// chat section, chat or no chat, after the care note.
+    pub room_note: Option<&'a str>,
 }
 
 /// The optional rule a self-harm disclosure invokes when the operator has it enabled.
@@ -608,6 +611,10 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
         chat.push_str(note);
         chat.push('\n');
     }
+    if let Some(note) = t.room_note {
+        chat.push_str(note);
+        chat.push('\n');
+    }
     if t.picked.is_empty() {
         let line = match (t.beat_note, t.material.is_some()) {
             (Some(n), _) => n,
@@ -755,6 +762,7 @@ mod tests {
             care_note: None,
             material: None,
             beat_note: None,
+            room_note: None,
         });
         let open = format!("<memory_{nonce:016x}>");
         let close = format!("</memory_{nonce:016x}>");

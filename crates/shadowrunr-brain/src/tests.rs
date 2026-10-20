@@ -1842,8 +1842,10 @@ async fn the_llm_picker_cannot_skip_a_disclosure() {
         Role::ChatPicker,
         Ok(r#"{"picks":[{"msg_id":"c1","reason":"funny"},{"msg_id":"c2","reason":"q"},{"msg_id":"c3","reason":"q"}]}"#),
     );
+    // A safety beat offers the picker the disclosure alone (the rest of the room is carried),
+    // so the LLM path is forced with a zero threshold.
     let mut t = tuning();
-    t.picker.llm_threshold = 10;
+    t.picker.llm_threshold = 0;
     let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "llm", t).await;
     let mut inbox = Vec::new();
     for i in 0..15 {
@@ -1859,9 +1861,11 @@ async fn the_llm_picker_cannot_skip_a_disclosure() {
     inbox.push(msg("sad1", 100, &sad, "i dont want to be alive anymore"));
     let ev = b.tick(1_000, inbox, &ctx(&[])).await.unwrap();
     assert_eq!(
-        picked(&ev),
-        vec!["sad1".to_string(), "c1".to_string(), "c2".to_string()]
+        engine.requests(Role::ChatPicker).len(),
+        1,
+        "the LLM picker ran"
     );
+    assert_eq!(picked(&ev), vec!["sad1".to_string()]);
 }
 
 #[tokio::test]

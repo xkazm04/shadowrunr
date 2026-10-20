@@ -70,7 +70,15 @@ pub struct PickContext {
     /// Message ids that are their viewer's first message this stream (the orchestrator's
     /// first contacts): boosted, so a newcomer is greeted before the regulars.
     pub first_contacts: HashSet<String>,
+    /// Messages an earlier beat could not answer, carried by the orchestrator, with how long
+    /// they have waited (ms): a small age bonus so fresh chat does not starve them.
+    pub carried: HashMap<String, i64>,
 }
+
+/// The age bonus of a carried message: a base, plus a little per second waited, capped.
+const CARRIED_BONUS: f64 = 0.3;
+const CARRIED_BONUS_PER_S: f64 = 0.02;
+const CARRIED_BONUS_MAX: f64 = 0.8;
 
 #[derive(Debug, Clone, Default)]
 pub struct Pick {
@@ -280,6 +288,11 @@ impl Picker {
         if ctx.regulars.contains(&c.msg.viewer.id) {
             s += 0.6;
             why.push("regular");
+        }
+        if let Some(age_ms) = ctx.carried.get(&c.msg.id) {
+            let age_s = (*age_ms).max(0) as f64 / 1000.0;
+            s += (CARRIED_BONUS + CARRIED_BONUS_PER_S * age_s).min(CARRIED_BONUS_MAX);
+            why.push("carried");
         }
         if c.count > 1 {
             s += (0.5 * f64::from(c.count).log2()).min(1.5);

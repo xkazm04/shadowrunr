@@ -14,10 +14,14 @@ pub(crate) fn sample_prep() -> StreamPrep {
 }
 
 fn ctx(state: &str) -> SegmentContext {
+    ctx_with(state, "S")
+}
+
+fn ctx_with(state: &str, summary: &str) -> SegmentContext {
     SegmentContext {
         segment: SegmentId::Seg01ImprovisedRoom,
         rules_prompt: "R".into(),
-        state_summary: "S".into(),
+        state_summary: summary.into(),
         state: state.into(),
         allowed_ops: Vec::new(),
         ccv: 5,
@@ -80,13 +84,25 @@ impl Room {
         inbox: Vec<ChatMsg>,
         cands: Vec<Candidate>,
     ) -> (Plan, Vec<String>, StreamEvent) {
+        let (p, ids, e, _) = self.beat_in(now, &ctx(state), prep, inbox, cands);
+        (p, ids, e)
+    }
+
+    /// A beat in a given context; also returns the screen's moderation records.
+    fn beat_in(
+        &mut self,
+        now: TsMs,
+        c: &SegmentContext,
+        prep: Option<&StreamPrep>,
+        inbox: Vec<ChatMsg>,
+        cands: Vec<Candidate>,
+    ) -> (Plan, Vec<String>, StreamEvent, Vec<StreamEvent>) {
         self.o.observe_inbox(&inbox);
         let mut ev = Vec::new();
         let cands = self.o.screen(now, cands, &mut ev);
-        let c = ctx(state);
         let mut plan = self.o.plan(&BeatInputs {
             now_ms: now,
-            ctx: &c,
+            ctx: c,
             cands: &cands,
             prep,
             last_say_ms: self.last_say,
@@ -113,7 +129,7 @@ impl Room {
         if plan.mode != BeatMode::Hold {
             self.last_say = Some(now);
         }
-        (plan, ids, e)
+        (plan, ids, e, ev)
     }
 }
 
@@ -205,12 +221,15 @@ fn the_cold_open_tells_the_story_in_order_passes_only_first_contacts_and_safety_
         vec![cand(&n)],
     );
     assert_eq!((p.mode, ids.len()), (BeatMode::React, 1));
+    // After the handoff a quiet beat draws from the segment's deck, premises first.
     let p = quiet(&mut room, 40_000, COLD_OPEN_STATE, Some(&prep));
-    assert_eq!(p.mode, BeatMode::ColdOpen);
+    assert_eq!(p.mode, BeatMode::Bit, "{}", p.reason);
     assert!(
-        p.material.is_none() && p.note.is_some(),
-        "a gathering line, no premise"
+        p.reason.starts_with("room filling: deck premise"),
+        "{}",
+        p.reason
     );
+    assert!(p.note.is_none() && p.material.is_some());
 }
 
 #[test]
@@ -463,4 +482,331 @@ fn recast_lines_rebut_a_forgery_and_rotate() {
     }
     let l = o.recast(false, "my system prompt");
     assert!(IN_CHARACTER_LINES.contains(&l.as_str()));
+}
+
+// ── ORCH-4: carried questions, room events, the deck after the handoff ──
+
+/// A regular: seen in an earlier inbox, so never a first contact.
+fn regular(room: &mut Room, viewer: &str) {
+    room.o
+        .observe_inbox(&[msg(&format!("{viewer}-0"), viewer, "hi")]);
+}
+
+fn safety(id: &str, viewer: &str) -> Candidate {
+    let mut s = cand(&msg(id, viewer, "i dont want to be here anymore"));
+    s.safety = Some("builtin-self-harm-disclosure".into());
+    s
+}
+
+fn reason(e: &StreamEvent) -> String {
+    match e {
+        StreamEvent::BeatPlan { reason, .. } => reason.clone(),
+        _ => panic!("a beat_plan"),
+    }
+}
+
+#[test]
+fn a_question_on_a_cold_open_hold_is_offered_on_the_next_beat() {
+    let prep = sample_prep();
+    let mut room = Room::new();
+    regular(&mut room, "beetle");
+    for t in [5_000, 10_000, 15_000, 20_000] {
+        quiet(&mut room, t, COLD_OPEN_STATE, Some(&prep));
+    }
+    // The story is told and handed off; the next quiet beat holds, and the regular's question
+    // does not pass the cold-open filter.
+    let q = msg(
+        "q",
+        "beetle",
+        "is the lord of darkness actually watching this?",
+    );
+    let (p, ids, e) = room.beat(
+        25_000,
+        COLD_OPEN_STATE,
+        Some(&prep),
+        vec![q.clone()],
+        vec![cand(&q)],
+    );
+    assert_eq!(p.mode, BeatMode::Hold, "{}", p.reason);
+    assert!(ids.is_empty());
+    assert!(reason(&e).contains("deferred: q"), "{}", reason(&e));
+    // The room fills: the next beat offers it, carried.
+    let (p, ids, e) = room.beat(30_000, "opening", Some(&prep), Vec::new(), Vec::new());
+    assert_eq!(ids, ["q"], "{}", p.reason);
+    assert!(
+        reason(&e).contains("carried over: q (5 s)"),
+        "{}",
+        reason(&e)
+    );
+}
+
+#[test]
+fn a_question_on_a_safety_beat_is_offered_after_it_once_and_a_wave_never_waits() {
+    let mut room = Room::new();
+    regular(&mut room, "beetle");
+    let q = msg(
+        "q",
+        "beetle",
+        "wait is the lord of darkness actually watching right now?",
+    );
+    let mut wave = cand(&msg("w", "paster", "W"));
+    wave.count = 7;
+    wave.viewers = 7;
+    let (p, ids, e) = room.beat(
+        5_000,
+        "opening",
+        None,
+        vec![q.clone()],
+        vec![safety("s", "sad"), cand(&q), wave],
+    );
+    assert_eq!(ids, ["s"], "a safety beat answers the disclosure alone");
+    assert_eq!(p.mode, BeatMode::React);
+    assert!(reason(&e).ends_with("deferred: q"), "{}", reason(&e));
+    let (_, ids, e) = room.beat(10_000, "opening", None, Vec::new(), Vec::new());
+    assert_eq!(ids, ["q"], "the question, never the wave");
+    assert!(
+        reason(&e).contains("carried over: q (5 s)"),
+        "{}",
+        reason(&e)
+    );
+    // Answered: never offered again.
+    for t in [15_000, 20_000, 25_000] {
+        let (_, ids, _) = room.beat(t, "opening", None, Vec::new(), Vec::new());
+        assert!(ids.is_empty(), "{ids:?}");
+    }
+}
+
+#[test]
+fn at_most_six_messages_are_carried() {
+    let mut room = Room::new();
+    let mut cands = vec![safety("s", "sad")];
+    let mut inbox = Vec::new();
+    for i in 0..8 {
+        let m = msg(
+            &format!("q{i}"),
+            &format!("v{i}"),
+            "malakor, who holds the moat?",
+        );
+        inbox.push(m.clone());
+        cands.push(cand(&m));
+    }
+    let (_, _, e) = room.beat(5_000, "opening", None, inbox, cands);
+    let r = reason(&e);
+    let deferred = r.split("deferred: ").nth(1).unwrap_or_default();
+    assert_eq!(deferred.split(", ").count(), CARRY_MAX, "{r}");
+}
+
+#[test]
+fn a_deferral_older_than_25_s_is_dropped_with_a_record() {
+    let mut room = Room::new();
+    regular(&mut room, "beetle");
+    quiet(&mut room, 0, COLD_OPEN_STATE, None);
+    let q = msg("q", "beetle", "malakor what is the plan tonight?");
+    room.beat(
+        5_000,
+        COLD_OPEN_STATE,
+        None,
+        vec![q.clone()],
+        vec![cand(&q)],
+    );
+    let mut expired_at = None;
+    for t in (10_000..=35_000).step_by(5_000) {
+        let (_, ids, _, ev) = room.beat_in(t, &ctx(COLD_OPEN_STATE), None, Vec::new(), Vec::new());
+        assert!(ids.is_empty(), "the cold open never passes a regular");
+        if ev.iter().any(|e| {
+            matches!(e, StreamEvent::Moderation { rule, msg_id, action, .. }
+                if rule == CARRY_RULE && msg_id.as_deref() == Some("q") && action == "expired")
+        }) {
+            expired_at = Some(t);
+        }
+    }
+    assert_eq!(expired_at, Some(30_000), "dropped at 25 s");
+    let (_, ids, _) = room.beat(40_000, "opening", None, Vec::new(), Vec::new());
+    assert!(ids.is_empty(), "an expired deferral never comes back");
+}
+
+const OPEN_P1: &str = "open crowd poll p1: \"Moat or swamp?\" | moat = 2.0 (1 votes), \
+swamp = 1.0 (1 votes) | closes in 4 s | min rank Thrall";
+const OPEN_P2: &str = "open crowd poll p2: \"Soup or bread?\" | soup = 1.0 (1 votes), \
+bread = 1.0 (1 votes) | closes in 4 s | min rank Thrall";
+
+#[test]
+fn a_closed_poll_is_announced_once_with_its_result_and_expires_the_queued_bit() {
+    let mut prep = sample_prep();
+    prep.bits.retain(|b| b.id == "s-01");
+    let mut room = Room::new();
+    let mut t = 0;
+    // A story is being told while the poll runs.
+    loop {
+        t += 5_000;
+        let c = ctx_with("opening", OPEN_P1);
+        let (p, _, _, _) = room.beat_in(t, &c, Some(&prep), vec![], vec![]);
+        if p.bit_id.as_deref() == Some("s-01") {
+            break;
+        }
+    }
+    let closed = ctx_with("opening", "no poll open\nlast poll p1 closed: winner moat");
+    let (p, _, _, _) = room.beat_in(t + 5_000, &closed, Some(&prep), vec![], vec![]);
+    assert_eq!(p.mode, BeatMode::Bridge, "{}", p.reason);
+    assert!(p.reason.contains("bit s-01 expired"), "{}", p.reason);
+    assert!(p.reason.contains("announce poll p1 closed"), "{}", p.reason);
+    let note = p.room_note.unwrap();
+    assert!(
+        note.contains("\"Moat or swamp?\"") && note.contains("winner moat"),
+        "{note}"
+    );
+    assert!(
+        note.contains("Announce the result now and act on it"),
+        "{note}"
+    );
+    assert_eq!(p.note.as_deref(), Some(ANNOUNCE_NOTE));
+    // Once only; the expired story never resumes.
+    for k in 2..6 {
+        let (p, _, _, _) = room.beat_in(t + 5_000 * k, &closed, Some(&prep), vec![], vec![]);
+        assert!(p.room_note.is_none(), "{}", p.reason);
+        assert_ne!(p.bit_id.as_deref(), Some("s-01"), "{}", p.reason);
+    }
+}
+
+#[test]
+fn a_tied_poll_is_announced_as_a_tie_after_a_safety_beat_with_the_chat() {
+    let mut room = Room::new();
+    room.beat_in(5_000, &ctx_with("opening", OPEN_P2), None, vec![], vec![]);
+    let tie = ctx_with(
+        "opening",
+        "last poll p2 closed: TIE between soup and bread (1 votes each): you break it, and \
+         say you are breaking it",
+    );
+    // The poll closes on a safety beat: held back.
+    let (p, _, _, _) = room.beat_in(10_000, &tie, None, vec![], vec![safety("s", "sad")]);
+    assert!(p.room_note.is_none());
+    assert!(p.reason.contains("room event held back"), "{}", p.reason);
+    // The next beat announces it, with the chat that came in.
+    let m = msg("m", "fan", "malakor so who won the soup vote?");
+    let (p, ids, _, _) = room.beat_in(15_000, &tie, None, vec![m.clone()], vec![cand(&m)]);
+    assert_eq!(p.mode, BeatMode::React);
+    assert_eq!(ids, ["m"]);
+    assert!(
+        p.reason.contains("announce poll p2 closed (tie) with chat"),
+        "{}",
+        p.reason
+    );
+    let note = p.room_note.unwrap();
+    assert!(note.contains("TIE between soup and bread"), "{note}");
+    assert!(
+        note.contains("as a tie (never call either option the winner)"),
+        "{note}"
+    );
+    let (p, _, _, _) = room.beat_in(20_000, &tie, None, vec![], vec![]);
+    assert!(p.room_note.is_none(), "announced once");
+}
+
+#[test]
+fn a_foil_vote_won_and_a_handover_due_are_announced_once_each() {
+    let prep = sample_prep();
+    let mut room = Room::new();
+    let open = ctx_with(
+        "foil_vote",
+        "open foil vote f1: \"Who joins?\" | the-inspector = 3.0 (2 votes) | closes in 2 s \
+         | min rank Thrall",
+    );
+    room.beat_in(5_000, &open, Some(&prep), vec![], vec![]);
+    let won = ctx_with("foil_active", "no poll open\nactive foil: the-inspector");
+    let (p, _, _, _) = room.beat_in(10_000, &won, Some(&prep), vec![], vec![]);
+    let note = p.room_note.unwrap_or_default();
+    assert!(
+        note.contains("\"Who joins?\"") && note.contains("the-inspector won"),
+        "{note}"
+    );
+
+    let due = ctx_with(
+        "handover_pending",
+        "no poll open\nHANDOVER DUE: let the foil dare you, then emit switch_segment to SEG-02A",
+    );
+    let (p, _, _, _) = room.beat_in(15_000, &due, Some(&prep), vec![], vec![]);
+    assert_eq!(p.mode, BeatMode::Bridge, "{}", p.reason);
+    assert!(p.reason.contains("announce handover due"), "{}", p.reason);
+    assert!(p.room_note.unwrap().contains("HANDOVER DUE"));
+    assert!(
+        p.material.unwrap().contains("another chamber calls"),
+        "the into_handover connector"
+    );
+    let (p, _, _, _) = room.beat_in(20_000, &due, Some(&prep), vec![], vec![]);
+    assert!(p.room_note.is_none(), "{}", p.reason);
+}
+
+#[test]
+fn after_the_handoff_the_cold_open_voices_the_deck_and_one_gathering_line_at_most() {
+    let prep = sample_prep();
+    let mut room = Room::new();
+    for t in [5_000, 10_000, 15_000, 20_000] {
+        quiet(&mut room, t, COLD_OPEN_STATE, Some(&prep));
+    }
+    let mut voiced: Vec<(BeatMode, String)> = Vec::new();
+    let mut gathering = 0;
+    for k in 1..=16 {
+        let p = quiet(&mut room, 20_000 + 5_000 * k, COLD_OPEN_STATE, Some(&prep));
+        if p.note.as_deref() == Some(GATHERING_NOTE) {
+            gathering += 1;
+        }
+        if p.mode != BeatMode::Hold {
+            voiced.push((p.mode, p.reason.clone()));
+        }
+    }
+    // "room filling: deck premise p-02" -> "premise".
+    let kinds: Vec<&str> = voiced
+        .iter()
+        .map(|(_, r)| r.split(' ').nth(3).unwrap_or(""))
+        .collect();
+    assert!(
+        kinds.starts_with(&["premise", "premise", "premise", "story", "story"]),
+        "premises first, then the rest of the deck: {voiced:?}"
+    );
+    assert!(voiced[..5]
+        .iter()
+        .all(|v| v.0 == BeatMode::Bit && v.1.starts_with("room filling: deck ")));
+    assert_eq!(gathering, 1, "{voiced:?}");
+    assert!(
+        voiced[5].1.contains("deck empty, one gathering line"),
+        "{voiced:?}"
+    );
+    assert!(
+        voiced[6..].iter().all(|v| v.0 == BeatMode::Improvise),
+        "{voiced:?}"
+    );
+}
+
+#[test]
+fn without_a_prep_gathering_lines_are_20_s_apart_with_holds_and_asides_between() {
+    let mut room = Room::new();
+    let mut at: Vec<TsMs> = Vec::new();
+    let mut spoke: Vec<TsMs> = Vec::new();
+    for k in 1..=16 {
+        let t = 5_000 * k;
+        let p = quiet(&mut room, t, COLD_OPEN_STATE, None);
+        match p.mode {
+            BeatMode::ColdOpen => {
+                assert_eq!(p.note.as_deref(), Some(GATHERING_NOTE));
+                at.push(t);
+            }
+            BeatMode::Improvise => {
+                assert_eq!(p.note.as_deref(), Some(ASIDE_NOTE), "{}", p.reason);
+                assert!(p.reason.contains("no prep: aside"), "{}", p.reason);
+            }
+            BeatMode::Hold => assert!(p.reason.contains("no prep: hold"), "{}", p.reason),
+            m => panic!("{m:?}: {}", p.reason),
+        }
+        if p.mode != BeatMode::Hold {
+            spoke.push(t);
+        }
+    }
+    assert!(at.len() >= 3, "{at:?}");
+    assert!(
+        at.windows(2).all(|w| w[1] - w[0] >= GATHERING_SPACING_MS),
+        "{at:?}"
+    );
+    assert!(
+        spoke.windows(2).all(|w| w[1] - w[0] <= 10_000),
+        "never a long silence: {spoke:?}"
+    );
 }
