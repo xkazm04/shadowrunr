@@ -1,0 +1,130 @@
+{
+ "schema": "conform-run/1",
+ "worker": "3fd498c0-62d5-43cc-ad7c-015ce3207468",
+ "subject": "demo-data-plane",
+ "evaluatedAt": "2026-10-20T00:10:30.072140+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "stage-app",
+   "subject": "demo-data-plane",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/App.tsx:102 A failed transcript request automatically substitutes fabricated demo content, violating the requirement for explicit demo entry.",
+   "techniques": [
+    {
+     "technique": "fake-surface-honesty-contract",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/App.tsx:102 The request's catch handler loads fixtures; disclosing the fallback in status text does not satisfy the never-auto-entered clause."
+    },
+    {
+     "technique": "fixture-self-consistency",
+     "verdict": "deviation",
+     "evidence": "apps/stage/scripts/make-demo.mjs:20 Fixture vote totals use hand-copied rank weights instead of deriving them from ranks.toml, creating a second authority that can drift."
+    },
+    {
+     "technique": "network-faithful-mocks",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/App.tsx:117 The demo plays a recorded event timeline rather than implementing a mock network query/write client; external sources use actual fetch and WebSocket calls."
+    },
+    {
+     "technique": "one-interface-many-planes",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/App.tsx:273 The consuming component selects between separate live and replay mechanisms directly; shared event types do not provide a complete source interface enforcing operation parity."
+    },
+    {
+     "technique": "runtime-dispatch-not-build-flag",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/App.tsx:105 The default branch enters the demo without an explicit demo selection, although both sources ship in the same artifact."
+    },
+    {
+     "technique": "seeded-determinism",
+     "verdict": "conformant",
+     "evidence": "apps/stage/scripts/make-demo.mjs:60 A checked-in seed drives the explicit LCG used for generated chatter and timing variation, with a documented regeneration command and scripted timestamps."
+    }
+   ],
+   "registryProposal": "Reconcile the count rule: the golden path prohibits fabricated action-provoking counts categorically, while the honesty-contract technique explicitly permits coherent counts within a declared demo world."
+  },
+  {
+   "context": "segments-runtime",
+   "subject": "demo-data-plane",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-segments/src/runtime.rs:427 Missing case configuration selects fictional demo data even for a live stream, making absence an implicit demo selector.",
+   "techniques": [
+    {
+     "technique": "fake-surface-honesty-contract",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/src/runtime.rs:437 Absent case and record configuration automatically installs planted demo records; fictional labels and provenance validation do not replace explicit entry."
+    },
+    {
+     "technique": "fixture-self-consistency",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/data/demo-case.json:6 Demo entity identifiers lack the required fabricated affix: HEX-01 uses the same canonical namespace accepted for real-case hexes, despite the containing case being labelled fictional."
+    },
+    {
+     "technique": "network-faithful-mocks",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/src/research.rs:14 Both planted and real research records are read locally from staged case files; this runtime does not replace a live network client with a mock."
+    },
+    {
+     "technique": "one-interface-many-planes",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/src/research.rs:385 Real and fictional case files are inputs to the same report/runtime implementation, rather than separate client implementations requiring operation parity."
+    },
+    {
+     "technique": "runtime-dispatch-not-build-flag",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/src/runtime.rs:427 The constructor chooses demo data from missing configuration instead of an explicitly declared demo plane."
+    },
+    {
+     "technique": "seeded-determinism",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/src/case.rs:15 The demo world is hand-authored JSON parsed directly; there is no generated fixture-variation stream to seed, and runtime time is supplied through arguments."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-20T00:10:30.072140+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "demo-data-plane"
+   ],
+   "techniques": [
+    "fake-surface-honesty-contract",
+    "fixture-self-consistency",
+    "network-faithful-mocks",
+    "one-interface-many-planes",
+    "runtime-dispatch-not-build-flag",
+    "seeded-determinism"
+   ],
+   "deviations": 1,
+   "context": "stage-app",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-20T00:10:30.072140+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "demo-data-plane"
+   ],
+   "techniques": [
+    "fake-surface-honesty-contract",
+    "fixture-self-consistency",
+    "network-faithful-mocks",
+    "one-interface-many-planes",
+    "runtime-dispatch-not-build-flag",
+    "seeded-determinism"
+   ],
+   "deviations": 1,
+   "context": "segments-runtime",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

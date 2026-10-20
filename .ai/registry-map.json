@@ -3336,7 +3336,11 @@
           "revision": 4,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:427 Missing case configuration selects fictional demo data even for a live stream, making absence an implicit demo selector.",
+          "evaluatedAt": "2026-10-20",
+          "evaluatedAgainst": "sha256-b2:952fe6652c22027d",
+          "evaluatedRevision": 4
         },
         {
           "subject": "test-harness",
@@ -3628,7 +3632,11 @@
           "revision": 4,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/App.tsx:102 A failed transcript request automatically substitutes fabricated demo content, violating the requirement for explicit demo entry.",
+          "evaluatedAt": "2026-10-20",
+          "evaluatedAgainst": "sha256-b2:952fe6652c22027d",
+          "evaluatedRevision": 4
         },
         {
           "subject": "quality-gates",
