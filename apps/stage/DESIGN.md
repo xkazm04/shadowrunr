@@ -402,6 +402,16 @@ the placeholder painter) is loaded with `import()` when the face mounts.
 - **Disclosure and status.** While the voice is on, the badge reads "AI character · synthetic
   voice" and a "synthetic voice" label sits under the face. The controls show the voice state
   (off, starting, ready, degraded) with its reason.
+- **The voice panel** (`health.ts`, operator view only). The state chip opens a panel of what went
+  wrong for the followed run: the seconds of audio waiting, the lines the stage's cap dropped, the
+  lines the daemon did not voice by its reason ("3 lines not voiced by the daemon (2 queue full,
+  1 late)"), the frames the guard refused with the last reason, and the reconnect pending (attempt
+  and countdown). The chip adds "N lost" when any line will not sound whole. The counts reset when
+  the followed run changes, as the daemon's voice.jsonl counts them. The chip offers the one action
+  its state calls for: **Enable audio** when the context is suspended (it resumes the context inside
+  the press and leaves the toggle on), and **Reconnect now** while the socket waits out its backoff
+  (it opens at once; the attempt count carries on). The broadcast view has no controls and is never
+  offered an action.
 
 ## Fitting the canvas
 

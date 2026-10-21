@@ -7,6 +7,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { RESTING, type FaceSignal, type FaceSource } from "../avatar/types";
 import { VoiceCaptions, type SaidLine, type VoiceCaptionView } from "./captions";
+import type { VoiceHealth } from "./health";
+import { VOICE_ACTION_LABEL, type VoiceAction } from "./names";
 import { playoutOf, type PlayoutClock } from "./playout";
 import type { FaceState } from "./report";
 import type { VoiceSession, VoiceStatus } from "./session";
@@ -77,6 +79,10 @@ export interface VoiceView {
   caption(runId: string, said: readonly SaidLine[], streamNow: number): VoiceCaptionView | null;
   /** The face drawn, for the daemon (sent while the voice runs, and again when it starts). */
   face(state: FaceState): void;
+  /** What went wrong for the followed run, read now (null while no session runs). */
+  health(): VoiceHealth | null;
+  /** Do what the status's `action` offers; called inside the operator's click. */
+  act(action: VoiceAction): void;
 }
 
 /**
@@ -92,12 +98,26 @@ export function heardCaptions(captions: VoiceCaptions, playout: PlayoutClock) {
 
 /**
  * The status the stage shows for a session's: a ready voice whose audio does not run is waiting
- * for a click in a browser, and only waiting in the broadcast view, which never asks for one.
+ * for the operator's Enable audio press in a browser, and only waiting in the broadcast view, which
+ * never asks for one. In the operator view a socket waiting out its backoff (`reconnecting`) offers
+ * Reconnect now. The broadcast view is never offered an action: it has no one to press it.
  */
-export function shownStatus(status: VoiceStatus, running: boolean, broadcast: boolean): VoiceStatus {
-  if (status.state !== "ready" || running) return status;
-  if (broadcast) return { state: "starting", reason: "waiting for the audio to start" };
-  return { state: "degraded", reason: "audio is blocked until a click on the page" };
+export function shownStatus(status: VoiceStatus, running: boolean, broadcast: boolean, reconnecting = false): VoiceStatus {
+  if (status.state === "ready" && !running) {
+    if (broadcast) return { state: "starting", reason: "waiting for the audio to start" };
+    return { state: "degraded", reason: `audio is blocked until you press ${VOICE_ACTION_LABEL.unlock}`, action: "unlock" };
+  }
+  if (reconnecting && !broadcast && status.state !== "ready") return { ...status, action: "retry" };
+  return status;
+}
+
+/**
+ * Do what the voice chip offers. Unlock resumes the page's AudioContext inside the press (the
+ * gesture a browser wants) and leaves the Voice toggle as it is; retry opens the socket now.
+ */
+export function runVoiceAction(action: VoiceAction, session: { retryNow(): void } | null): void {
+  if (action === "unlock") unlockAudio();
+  else session?.retryNow();
 }
 
 /**
@@ -109,6 +129,8 @@ export function useVoice(opts: { blocked: string | null; url: string; runId: str
   const { blocked, url, runId, mixer, broadcast } = opts;
   const [status, setStatus] = useState<VoiceStatus>({ state: "off" });
   const session = useRef<VoiceSession | null>(null);
+  // the running session as render sees it (the ref is for callbacks; render reads this)
+  const [liveSession, setLiveSession] = useState<VoiceSession | null>(null);
   const runIdRef = useRef(runId);
   runIdRef.current = runId;
   const captions = useMemo(() => new VoiceCaptions(), []);
@@ -142,6 +164,7 @@ export function useVoice(opts: { blocked: string | null; url: string; runId: str
           },
         });
         session.current = s;
+        setLiveSession(s);
         s.follow(runIdRef.current);
         if (faceRef.current) s.face(faceRef.current);
         s.start();
@@ -154,6 +177,7 @@ export function useVoice(opts: { blocked: string | null; url: string; runId: str
       mixer.setVoice(null);
       session.current?.stop();
       session.current = null;
+      setLiveSession(null);
     };
     // the run is followed by the effect below (a run change is a follow frame, not a reconnect)
   }, [blocked, url, mixer, broadcast, captions]);
@@ -166,6 +190,8 @@ export function useVoice(opts: { blocked: string | null; url: string; runId: str
     faceRef.current = state;
     session.current?.face(state);
   }, []);
+  const health = useCallback(() => session.current?.health() ?? null, []);
+  const act = useCallback((action: VoiceAction) => runVoiceAction(action, session.current), []);
   const caption = useCallback(
     (run: string, said: readonly SaidLine[], streamNow: number) => {
       const audio = sharedAudio();
@@ -174,14 +200,16 @@ export function useVoice(opts: { blocked: string | null; url: string; runId: str
     [captions],
   );
 
-  if (blocked !== null) return { status: { state: "off", reason: blocked }, playing: false, followsAudio: false, caption, face };
-  const running = audioRunning();
-  const shown = shownStatus(status, running, broadcast);
+  if (blocked !== null) return { status: { state: "off", reason: blocked }, playing: false, followsAudio: false, caption, face, health, act };
+  const sounding = audioRunning();
+  const shown = shownStatus(status, sounding, broadcast, liveSession?.health().reconnect != null);
   return {
     status: shown,
-    playing: (session.current?.player.playing ?? false) && running,
-    followsAudio: shown.state === "ready" && running,
+    playing: (session.current?.player.playing ?? false) && sounding,
+    followsAudio: shown.state === "ready" && sounding,
     caption,
     face,
+    health,
+    act,
   };
 }

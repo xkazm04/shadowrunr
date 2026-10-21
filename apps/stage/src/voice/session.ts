@@ -7,12 +7,18 @@
 // The same socket carries the stage's reports (`report.ts`): each part's start, each line the
 // stage's cap dropped, and the face drawn. A report made while the socket is down is not kept,
 // except the face, which is sent again on every open: the daemon only ever reads them.
+//
+// What goes wrong for the followed run is kept for the controls' voice panel (`health.ts`): each
+// line the daemon skipped and why, each line the cap dropped, each frame the guard refused, and the
+// reconnect pending, which `retryNow()` opens at once.
 
 import type { VoiceState } from "@shadowrunr/contract";
 
 import { frames, type Clock } from "../avatar/motion";
 import type { SocketLike } from "../source";
 import { parseVoiceFrame } from "./frame";
+import { EMPTY_HEALTH, healthSnapshot, reduceHealth, type HealthEvent, type HealthState, type VoiceHealth } from "./health";
+import type { VoiceAction } from "./names";
 import { VoicePlayer, type AudioLike, type PlayerEvents } from "./player";
 import { PlayoutClock } from "./playout";
 import { faceFrame, playedFrame, stageDroppedFrame, type FaceState, type VoiceClientFrame } from "./report";
@@ -20,6 +26,8 @@ import { faceFrame, playedFrame, stageDroppedFrame, type FaceState, type VoiceCl
 export interface VoiceStatus {
   state: VoiceState;
   reason?: string;
+  /** What the operator can do about it from the voice chip (set by `shownStatus`). */
+  action?: VoiceAction;
 }
 
 /** The follow frame for a run: `null` follows the newest live run. */
@@ -60,6 +68,7 @@ export class VoiceSession {
   private heardRun: string | null = null;
   private faceNow: { state: FaceState; at: number } | null = null;
   private faceSent = "";
+  private healthState: HealthState = EMPTY_HEALTH;
 
   constructor(private readonly o: VoiceSessionOptions) {
     const ev = o.events ?? {};
@@ -75,6 +84,7 @@ export class VoiceSession {
           ev.started?.(p, lateS);
         },
         dropped: (runId, seq) => {
+          this.note({ type: "stage_dropped" });
           this.report(stageDroppedFrame(runId, seq));
           ev.dropped?.(runId, seq);
         },
@@ -94,10 +104,24 @@ export class VoiceSession {
     this.open();
   }
 
+  /** What went wrong for the followed run so far, and the audio waiting now. */
+  health(): VoiceHealth {
+    return healthSnapshot(this.healthState, this.player.ahead, this.wall());
+  }
+
+  /** Open the socket now instead of waiting out the backoff (the attempt count carries on). */
+  retryNow(): void {
+    if (this.stopped || this.timer === null) return;
+    clearTimeout(this.timer);
+    this.timer = null;
+    this.open();
+  }
+
   /** Follow `runId` (null: the newest live run); sent now when the socket is open, else on open. */
   follow(runId: string | null): void {
     if (runId === this.runId) return;
     this.runId = runId;
+    this.note({ type: "run", runId });
     this.send();
     this.sendFace();
   }
@@ -137,7 +161,13 @@ export class VoiceSession {
     this.report(faceFrame(run, f.state, f.at));
   }
 
+  private note(e: HealthEvent) {
+    this.healthState = reduceHealth(this.healthState, e);
+  }
+
   private open() {
+    this.timer = null;
+    this.note({ type: "connecting" });
     this.o.onStatus({ state: "starting", reason: "connecting to the voice" });
     const s = (this.o.socket ?? ((u) => new WebSocket(u) as SocketLike))(this.o.url);
     this.ws = s;
@@ -151,6 +181,7 @@ export class VoiceSession {
       if (typeof m.data !== "string") return;
       const f = parseVoiceFrame(m.data);
       if (!f.ok) {
+        this.note({ type: "bad", message: f.message });
         this.o.onBadFrame?.(f.message);
         return;
       }
@@ -164,12 +195,15 @@ export class VoiceSession {
       } else if (v.type === "utterance") {
         if (this.runId === null || v.run_id === this.runId) {
           this.heardRun = v.run_id;
+          this.note({ type: "run", runId: v.run_id });
           this.o.onUtterance?.();
           this.player.accept(v);
           this.sendFace();
         }
       } else if (this.runId === null || v.run_id === this.runId) {
-        // a skipped line never arrives as audio; only its caption needs to know
+        // a skipped line never arrives as audio: its caption and the panel need to know
+        this.note({ type: "run", runId: v.run_id });
+        this.note({ type: "skipped", seq: v.seq, reason: v.reason });
         this.o.onSkipped?.(v.run_id, v.seq);
       }
     };
@@ -179,7 +213,9 @@ export class VoiceSession {
       if (this.stopped) return;
       this.o.onStatus({ state: "degraded", reason: "the voice socket closed; reconnecting" });
       this.retry++;
-      this.timer = setTimeout(() => this.open(), Math.min(10_000, 500 * 2 ** Math.min(this.retry, 5)));
+      const delay = Math.min(10_000, 500 * 2 ** Math.min(this.retry, 5));
+      this.note({ type: "retrying", attempt: this.retry, dueAt: this.wall() + delay });
+      this.timer = setTimeout(() => this.open(), delay);
     };
   }
 }

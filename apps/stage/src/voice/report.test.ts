@@ -268,7 +268,7 @@ describe("broadcast audio", () => {
     const onAir = shownStatus(ready, false, true);
     expect(onAir.state).toBe("starting");
     expect(onAir.reason).not.toMatch(/click/i);
-    expect(shownStatus(ready, false, false)).toEqual({ state: "degraded", reason: "audio is blocked until a click on the page" });
+    expect(shownStatus(ready, false, false)).toEqual({ state: "degraded", reason: "audio is blocked until you press Enable audio", action: "unlock" });
     expect(shownStatus(ready, true, true)).toEqual(ready);
   });
 });

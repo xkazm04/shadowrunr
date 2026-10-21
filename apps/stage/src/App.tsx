@@ -402,6 +402,8 @@ export function App() {
           voiceOn={voiceOn}
           voiceStatus={voice.status}
           onVoice={toggleVoice}
+          voiceHealth={voice.health}
+          onVoiceAction={voice.act}
           dvr={dvr === null ? null : { windowStart, behind: dvr.mode === "behind", behindMs: view?.behindMs ?? 0, onGoLive: () => dispatchDvr({ type: "goLive" }) }}
         />
       )}

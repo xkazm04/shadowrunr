@@ -4,7 +4,8 @@ import type { StreamEvent } from "@shadowrunr/contract";
 import type { ParseIssue } from "@shadowrunr/stage-kit/parse";
 import { clipMarkers, segmentSpans } from "@shadowrunr/stage-kit";
 import { SPEEDS, type CaseSource } from "./source";
-import { VOICE_STATE_LABEL, VOICE_TOGGLE } from "./voice/names";
+import { healthRows, linesLost, type VoiceHealth } from "./voice/health";
+import { VOICE_ACTION_LABEL, VOICE_STATE_LABEL, VOICE_TOGGLE, type VoiceAction } from "./voice/names";
 import type { VoiceStatus } from "./voice/session";
 
 function fmt(ms: number): string {
@@ -63,6 +64,8 @@ export function Controls({
   voiceOn,
   voiceStatus,
   onVoice,
+  voiceHealth = () => null,
+  onVoiceAction = () => {},
   dvr = null,
 }: {
   events: readonly StreamEvent[];
@@ -86,11 +89,16 @@ export function Controls({
   voiceOn: boolean;
   voiceStatus: VoiceStatus;
   onVoice: (on: boolean) => void;
+  /** What went wrong for the followed run, read at each render (null while no voice session runs). */
+  voiceHealth?: () => VoiceHealth | null;
+  /** The voice chip's action (Enable audio, Reconnect now), run inside the click. */
+  onVoiceAction?: (action: VoiceAction) => void;
   /** Live preview only: the DVR over the held window (null for a replay). */
   dvr?: DvrControls | null;
 }) {
   const [idle, setIdle] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
+  const [showVoice, setShowVoice] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const track = useRef<HTMLDivElement | null>(null);
   const span = Math.max(1, end - start);
@@ -132,8 +140,11 @@ export function Controls({
   };
 
   const issues = errors.length + warnings.length;
+  const health = voiceOn ? voiceHealth() : null;
+  const lost = health ? linesLost(health) : 0;
+  const voiceAction = voiceStatus.action;
   return (
-    <div className={`controls${idle && playing && !showIssues ? " idle" : ""}`}>
+    <div className={`controls${idle && playing && !showIssues && !showVoice ? " idle" : ""}`}>
       <div className="controls-row">
         <button className="ctl-btn" onClick={() => onPlay(!playing)} disabled={inert} title="Space">
           {playing ? "❚❚" : "▶"}
@@ -219,15 +230,36 @@ export function Controls({
         >
           {VOICE_TOGGLE}
         </button>
-        <span className={`ctl-voice-state state-${voiceStatus.state}`} title={voiceStatus.reason ?? ""}>
+        <button
+          className={`ctl-voice-state state-${voiceStatus.state}${showVoice ? " open" : ""}`}
+          aria-expanded={showVoice}
+          disabled={health === null}
+          onClick={() => setShowVoice(!showVoice)}
+          title={voiceStatus.reason ?? ""}
+        >
           {VOICE_STATE_LABEL[voiceStatus.state]}
           {voiceStatus.reason ? ` · ${voiceStatus.reason}` : ""}
-        </span>
+          {lost > 0 ? ` · ${lost} lost` : ""}
+        </button>
+        {voiceAction && (
+          <button className="ctl-speed ctl-voice-act" onClick={() => onVoiceAction(voiceAction)}>
+            {VOICE_ACTION_LABEL[voiceAction]}
+          </button>
+        )}
         <span className="ctl-hint">drop a .jsonl anywhere · space play/pause · ← → seek · [ ] speed</span>
         <a className="ctl-broadcast" href={broadcastHref} target="_blank" rel="noreferrer">
           broadcast view ↗
         </a>
       </div>
+      {showVoice && health && (
+        <div className="ctl-voice-panel" role="status">
+          {healthRows(health).map((row) => (
+            <div key={row} className="voice-row">
+              {row}
+            </div>
+          ))}
+        </div>
+      )}
       {showIssues && (
         <div className="ctl-issue-list">
           {[...errors.map((e) => ({ ...e, kind: "error" })), ...warnings.map((w) => ({ ...w, kind: "warning" }))]
