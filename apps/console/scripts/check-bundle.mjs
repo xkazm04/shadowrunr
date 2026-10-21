@@ -7,6 +7,7 @@
 //   <page>.l1/.l2  each page layer's lazy chunk plus what it imports beyond the entry
 //   door           @shadowrunr/contract's door with its eager validators (ServerFrame + ErrorEnvelope),
 //                  loaded in parallel with the first paint; other lazy chunks are named in OTHER_ROUTES
+//   goto           the Go to palette (Ctrl+K), loaded on its first open
 //   door.result    each method result validator chunk (generated/results/<Def>.js), loaded on that
 //                  method's first reply; its line is a PER-CHUNK max, so the largest one is gated
 // Budgets live in budgets/bundle.json. A route without a budget, or a budget without a route,
@@ -30,6 +31,7 @@ const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
 /** Lazy chunks that are not page layers. */
 const OTHER_ROUTES = [
   [/^src\/data\/contractDoor\.ts$/, "door"],
+  [/^src\/shell\/GoToPalette\.tsx$/, "goto"],
   [/(^|\/)contract\/src\/generated\/results\/\w+\.js$/, "door.result"],
 ];
 /** Routes made of many chunks, each held to the line on its own: the largest one is reported. */

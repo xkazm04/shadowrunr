@@ -42,4 +42,9 @@ describe("key actions", () => {
       route: pageRoute("onair"),
     });
   });
+
+  it("opens the go-to palette on its key", () => {
+    expect(effectOf({ type: "goto" }, ctx({ route: pageRoute("brain", "transcripts") }))).toEqual({ kind: "open-goto" });
+    expect(effectOf({ type: "goto" }, ctx({ route: WALL }))).toEqual({ kind: "open-goto" });
+  });
 });

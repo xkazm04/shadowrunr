@@ -1,0 +1,84 @@
+/* Go to anything: one field over a dimmed season, in the chrome's language (ink rule, paper,
+   hard signal offset, display caps). Above the chrome and the drawer, below the intro. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--sr-z-chrome) + 2);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh var(--sr-space-cozy) 0;
+  background: color-mix(in srgb, var(--sr-color-scrim) 55%, transparent);
+}
+
+.box {
+  display: flex;
+  flex-direction: column;
+  width: min(40rem, 100%);
+  max-height: 70vh;
+  border: var(--sr-stroke-heavy) solid var(--sr-color-chrome-ink);
+  background: var(--sr-color-surface-paper);
+  box-shadow: .4rem .4rem 0 var(--sr-color-signal);
+  color: var(--sr-color-text-ink);
+}
+
+.field {
+  padding: var(--sr-space-near) var(--sr-space-cozy);
+  border: 0;
+  border-bottom: var(--sr-stroke-rule) solid var(--sr-color-chrome-ink);
+  background: transparent;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  font-size: var(--sr-size-body);
+  letter-spacing: .04em;
+  color: inherit;
+  outline: none;
+}
+
+.field::placeholder { color: var(--sr-color-text-mute); }
+
+.list {
+  margin: 0;
+  padding: 0;
+  overflow: hidden auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sr-space-near);
+  padding: var(--sr-space-compact) var(--sr-space-cozy);
+  cursor: pointer;
+}
+
+.option[aria-selected="true"] { background: var(--sr-color-chrome-ink); color: var(--sr-color-surface-paper); }
+.option[aria-selected="true"] .hint { color: var(--sr-color-signal); }
+
+.label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.hint {
+  flex: none;
+  font-family: var(--sr-font-display);
+  font-size: var(--sr-size-caption);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--sr-color-text-mute);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--sr-space-near) var(--sr-space-cozy);
+  color: var(--sr-color-text-mute);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .box { animation: drop .16s var(--sr-ease-move); }
+}
+
+@keyframes drop {
+  from { transform: translateY(-.5rem); opacity: 0; }
+}

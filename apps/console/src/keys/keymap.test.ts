@@ -51,6 +51,13 @@ describe("bindings", () => {
     expect(resolve(KEYMAP, "l2", "1", true)).toBeUndefined();
   });
 
+  it("opens Go to on Ctrl+K at every level, never while typing, without a conflict", () => {
+    for (const mode of ["wall", "l1", "l2"] as const) expect(resolve(KEYMAP, mode, "Ctrl+k", false)?.action).toEqual({ type: "goto" });
+    expect(resolve(KEYMAP, "l2", "Ctrl+k", true)).toBeUndefined();
+    expect(chordOf(key("K", { ctrlKey: true }))).toBe("Ctrl+k");
+    expect(conflictReport(KEYMAP).conflicts).toEqual([]);
+  });
+
   it("skips the intro on any key", () => {
     expect(resolve(KEYMAP, "intro", "q", false)?.action).toEqual({ type: "skip-intro" });
   });

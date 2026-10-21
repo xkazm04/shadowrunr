@@ -16,6 +16,8 @@ export type KeyAction =
   | { readonly type: "page-step"; readonly delta: 1 | -1 }
   | { readonly type: "skip-intro" }
   | { readonly type: "blur" }
+  /** Open the Go to palette (shell/GoToPalette.tsx): a page, a recent place or a pasted ref. */
+  | { readonly type: "goto" }
   | { readonly type: "command"; readonly command: KeyCommand };
 
 /** A page command (kit/keyCommands.ts): the page on screen that owns it runs it. */
@@ -48,6 +50,7 @@ export const KEYMAP: readonly Binding[] = [
     action: { type: "page", index: i },
     label: `Jump to page ${i + 1}`,
   })),
+  { chord: "Ctrl+k", modes: NAV, action: { type: "goto" }, label: "Go to anything" },
   { chord: "m", modes: NAV, action: { type: "toggle-wall" }, label: "Toggle the season wall" },
   { chord: "Escape", modes: ["l1", "l2"], action: { type: "up" }, label: "Up one level" },
   { chord: "Escape", modes: NAV, action: { type: "blur" }, label: "Leave the text field", typing: "only" },

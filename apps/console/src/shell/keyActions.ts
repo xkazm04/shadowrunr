@@ -1,6 +1,6 @@
 // What each keymap action does to the shell, as a pure function of the current state.
 import type { KeyAction, KeyCommand, Mode } from "../keys";
-import { PAGE_IDS, WALL, layerOf, pageRoute, up, type PageId, type Route } from "../router";
+import { PAGE_IDS, WALL, encodeRoute, layerOf, pageRoute, up, type PageId, type Route } from "../router";
 
 export interface KeyContext {
   readonly route: Route;
@@ -15,6 +15,7 @@ export type Effect =
   | { readonly kind: "hover"; readonly index: number }
   | { readonly kind: "skip-intro" }
   | { readonly kind: "blur" }
+  | { readonly kind: "open-goto" }
   | { readonly kind: "command"; readonly command: KeyCommand }
   | { readonly kind: "none" };
 
@@ -51,8 +52,20 @@ export function effectOf(action: KeyAction, ctx: KeyContext): Effect {
       return { kind: "skip-intro" };
     case "blur":
       return { kind: "blur" };
+    case "goto":
+      return { kind: "open-goto" };
     case "command":
       return { kind: "command", command: action.command };
   }
 }
 
+
+/**
+ * The places visited this session, newest first: a route moves to the front when revisited, the
+ * wall is not a place, and the list keeps 8. Held in shell state only, never persisted.
+ */
+export function nextRecents(recents: readonly Route[], route: Route): readonly Route[] {
+  if (route.view === "wall") return recents;
+  const key = encodeRoute(route);
+  return [route, ...recents.filter((r) => encodeRoute(r) !== key)].slice(0, 8);
+}

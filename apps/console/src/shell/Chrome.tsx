@@ -20,10 +20,13 @@ function ConnectionChip() {
   );
 }
 
-export function Chrome(props: { onWall: boolean; narrow: boolean; onToggleWall: () => void }) {
+export function Chrome(props: { onWall: boolean; narrow: boolean; onToggleWall: () => void; onGoTo: () => void }) {
   return (
     <header className={styles.chrome} data-narrow={props.narrow}>
       <ConnectionChip />
+      <button type="button" className={styles.gotoBtn} onClick={props.onGoTo} aria-keyshortcuts="Control+K">
+        Go to · Ctrl K
+      </button>
       <button type="button" className={styles.wallBtn} onClick={props.onToggleWall} aria-label={props.onWall ? "Back to the page (M)" : "Open the season wall (M)"}>
         <i className={styles.wallIcon} aria-hidden="true" />
         <span>Season</span>
