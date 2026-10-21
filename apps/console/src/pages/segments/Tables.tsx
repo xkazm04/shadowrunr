@@ -123,7 +123,6 @@ const COLUMNS: readonly Column<SegmentTableInfo>[] = [
 
 function Portfolio({ segments, selected }: { segments: readonly SegmentTableInfo[]; selected: string | undefined }) {
   const router = useRouter();
-  const counts = statusCounts(segments);
   return (
     <Section title="Portfolio" right={`${segments.length.toLocaleString("en-US")} tables`}>
       <div className={styles.tableBox} data-role="segments-portfolio">
@@ -138,9 +137,9 @@ function Portfolio({ segments, selected }: { segments: readonly SegmentTableInfo
             label: "Lifecycle",
             initial: "all",
             options: [
-              { id: "all", label: "All", count: segments.length },
-              { id: "runnable", label: "Runnable", count: segments.length - counts.descoped },
-              { id: "descoped", label: "Descoped", count: counts.descoped },
+              { id: "all", label: "All" },
+              { id: "runnable", label: "Runnable" },
+              { id: "descoped", label: "Descoped" },
             ],
             predicate: (s, f) => f === "all" || (f === "descoped") === (s.status === "descoped"),
           }}

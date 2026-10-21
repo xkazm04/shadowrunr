@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { facetCounts, filterRows, nextSort } from "./filterRows";
@@ -271,5 +273,22 @@ describe("facet counts", () => {
     expect(screen.getByText(/of 48,000/).textContent).toBe("11 of 48,000");
     // One haystack pass per query change feeds both the rows and the counts.
     expect(hay).toBeLessThanOrEqual(48_000);
+  });
+
+  it("leaves no hand-computed facet count in the migrated pages (Incidents keeps the daemon's)", () => {
+    const pages = [
+      "src/pages/brain/Engine.tsx",
+      "src/pages/brain/Runs.tsx",
+      "src/pages/characters/SituationsTab.tsx",
+      "src/pages/simulator/Runs.tsx",
+      "src/pages/reconcile/DirectivesPage.tsx",
+      "src/pages/segments/Tables.tsx",
+      "src/pages/onair/Rundown.tsx",
+    ];
+    for (const f of pages) {
+      const src = readFileSync(join(process.cwd(), f), "utf8");
+      expect(src, f).not.toMatch(/\bcount\b\s*[:,}]/);
+    }
+    expect(readFileSync(join(process.cwd(), "src/pages/reconcile/Incidents.tsx"), "utf8")).toMatch(/counts: "given"/);
   });
 });

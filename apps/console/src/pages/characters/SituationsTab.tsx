@@ -52,12 +52,11 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
   const tallies = useMemo(() => (results.data ? situationTallies(results.data) : undefined), [results.data]);
 
   const facets = useMemo((): Facets<Situation, string> => {
-    const counts = new Map<string, number>();
-    for (const s of d.situations) counts.set(s.archetype, (counts.get(s.archetype) ?? 0) + 1);
+    const archetypes = new Set(d.situations.map((s) => s.archetype));
     return {
       label: "Archetype",
       initial: ALL,
-      options: [{ id: ALL, label: "All", count: d.situations.length }, ...[...counts].map(([id, count]) => ({ id, label: id.replace(/_/g, " "), count }))],
+      options: [{ id: ALL, label: "All" }, ...[...archetypes].map((id) => ({ id, label: id.replace(/_/g, " ") }))],
       predicate: (s, f) => f === ALL || s.archetype === f,
     };
   }, [d.situations]);

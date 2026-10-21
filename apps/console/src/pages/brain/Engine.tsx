@@ -73,10 +73,10 @@ function Tables({ rows, more, onMore }: { rows: readonly LedgerEntry[]; more: bo
     () => ({
       label: "Filter by role",
       initial: "all",
-      options: [{ id: "all", label: "all", count: rows.length }, ...s.routes.map((r) => ({ id: r.role, label: r.role.replace("_", " "), count: r.calls }))],
+      options: [{ id: "all", label: "all" }, ...s.routes.map((r) => ({ id: r.role, label: r.role.replace("_", " ") }))],
       predicate: (r, f) => f === "all" || r.l.role === f,
     }),
-    [s, rows.length],
+    [s],
   );
   return (
     <>

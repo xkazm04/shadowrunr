@@ -1,6 +1,5 @@
 // simulator/runs: every run across tournaments, virtualised, with a text filter, a verdict
 // facet and sortable columns. Rows open the run's verdict.
-import { useMemo } from "react";
 import type { RunRow } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { pageRoute, useRouter } from "../../router";
@@ -32,24 +31,20 @@ const columns: readonly Column<RunRow>[] = [
 
 const haystack = (r: RunRow) => `${r.run_id} ${r.tournament_id} ${r.spec.tone_variant} ${r.spec.core_tier} ${r.spec.segment} ${r.spec.audience_size}`;
 
+const FACETS: Facets<RunRow, VerdictFacet> = {
+  label: "Verdict",
+  initial: "all",
+  options: [
+    { id: "all", label: "All" },
+    { id: "judged", label: "Judged" },
+    { id: "unjudged", label: "Not judged" },
+  ],
+  predicate: (r, f) => f === "all" || (f === "judged") === r.has_verdict,
+};
+
 export function RunsPage() {
   const router = useRouter();
   const paged = usePaged("runs.page", { limit: PAGE_LIMIT });
-  const rows = paged.query.data ?? [];
-  const judged = rows.reduce((a, r) => a + (r.has_verdict ? 1 : 0), 0);
-  const facets = useMemo<Facets<RunRow, VerdictFacet>>(
-    () => ({
-      label: "Verdict",
-      initial: "all",
-      options: [
-        { id: "all", label: "All", count: rows.length },
-        { id: "judged", label: "Judged", count: judged },
-        { id: "unjudged", label: "Not judged", count: rows.length - judged },
-      ],
-      predicate: (r, f) => f === "all" || (f === "judged") === r.has_verdict,
-    }),
-    [rows.length, judged],
-  );
   return (
     <>
       <Head kicker="Simulator · layer 2" title="Runs" lede="Each run is one simulated stream with a spec, a transcript, a judge verdict and a ledger." />
@@ -62,7 +57,7 @@ export function RunsPage() {
             haystack={haystack}
             label="Runs"
             placeholder={`Filter ${int(all.length)} runs${paged.done ? "" : " (loading more)"}`}
-            facets={facets}
+            facets={FACETS}
             onActivate={(r) => router.navigate(pageRoute("simulator", "verdicts", r.run_id))}
           />
         )}

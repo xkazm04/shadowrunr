@@ -55,6 +55,8 @@ function Table({ rows, judged, total }: { rows: readonly RuleIncident[]; judged:
             { id: "moderation", label: "Moderation", ...(judged === undefined ? {} : { count: total - judged }) },
           ],
           predicate: (i, f) => f === "all" || i.source === f,
+          // The daemon's totals (red_line_counts) cover rows a cut list never sends: print them as given.
+          counts: "given",
         }}
       />
     </div>
