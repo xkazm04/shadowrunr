@@ -294,7 +294,7 @@ class Warm(unittest.TestCase):
         gate.touch()
         self.wait_until(lambda: sorted(self.states(pool).values()) == ["live", "live"], "ready")
         # Both workers are back: two sentences at once render on two processes, the new one too.
-        self.say(sidecar, "z", "One PAUSE10 here. Two here.")
+        self.say(sidecar, "z", "The first one PAUSE10 waits here. The second one is spoken here.")
         self.sink.wait_for(lambda m: len(m) == 4)
         respawned = (folder / "3.txt").read_text(encoding="utf-8").strip()
         self.assertIn(respawned, self.pid_lines()[-2:])

@@ -77,7 +77,7 @@ the mouth shapes.
 
 **Which engine runs.** `--engine auto` (the default) takes the warm engine when the sidecar's
 Python can import sherpa_onnx and numpy and Kokoro's files are there. Otherwise it runs the
-binary per sentence, and if the warm workers fail to load it falls back to the binary too.
+binary per sentence, and if no warm worker loads it falls back to the binary too.
 `--engine warm` demands the warm engine (the voice is dead without it), and `--engine process`
 always runs the binary. The `hello` has no field for the engine, so its `reason` ends with it:
 `engine: warm (3 workers loaded in 2.1 s)`, or `engine: process (the warm engine is off:
@@ -97,8 +97,17 @@ A worker process gives each render a stream of its own and a priority class of i
 **Cancelling.** A sentence cannot be stopped inside the model. A cancelled line's sentences that
 have not started never start; a sentence already rendering finishes below normal priority and
 its result is thrown away, and its worker is free again when it ends. A sentence past
-`render_timeout_ms` kills its worker, and the next sentence that needs that worker starts a new
-one (a model load). A worker that dies is replaced the same way.
+`render_timeout_ms` kills its worker.
+
+**Dead and broken workers.** The pool supervises its workers. A worker that dies, or is killed
+for its timeout, is respawned by the pool in the background from the moment it is dead, so the
+model load overlaps the sentences the other workers are speaking; no sentence ever waits for a
+load, and a sentence's render timeout never includes one. A slot whose loads fail 3 times within
+60 s is quarantined: the sidecar's log names it once, with its last output, and the pool carries
+on with the workers it has. At startup the pool keeps every worker that loads and respawns the
+rest, so one bad load does not cost the warm engine: the hello then says `engine: warm (2 of 3
+workers loaded in 2.1 s)`. Only when no worker loads does `auto` fall back to the binary. With
+every slot quarantined each sentence fails at once with `the warm engine is not running`.
 
 **Memory.** Each worker holds its own copy of the model: about 520 MB working set and 1 GB
 committed per worker (3 workers: about 1.6 GB resident).
