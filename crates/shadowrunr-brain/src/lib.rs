@@ -1053,6 +1053,16 @@ impl Brain {
         } else {
             self.tuning.pace.budget_chars
         };
+        // Exemplars for the beat's situation and the phrases worn out (never in a care beat).
+        let voice = compose::beat_situations(
+            &pick.chosen,
+            &pctx.first_contacts,
+            plan.room_note.as_deref(),
+            care.as_deref(),
+            self.working.research_open(),
+            &pkg.persona,
+        )
+        .and_then(|tags| self.working.voice_section(&pkg.exemplars, &tags, nonce));
         let prompt = compose_turn(&TurnInputs {
             ctx,
             briefing: &briefing,
@@ -1071,6 +1081,7 @@ impl Brain {
             beat_note: plan.note.as_deref(),
             room_note: plan.room_note.as_deref(),
             agenda: plan.agenda.as_deref(),
+            voice: voice.as_deref(),
             budget_chars: budget,
             propose_min_rank: self.tuning.filter.propose_min_rank,
             first_contacts: &pctx.first_contacts,

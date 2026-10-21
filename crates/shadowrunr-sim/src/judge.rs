@@ -79,8 +79,24 @@ pub struct QualityDim {
     pub question: String,
 }
 
+/// A comic-craft dimension scored 0-3 per sampled turn against its anchors (one per score,
+/// lowest first). Reported as a mean with n; it never gates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScaledDim {
+    pub id: String,
+    pub question: String,
+    #[serde(default)]
+    pub anchors: Vec<String>,
+}
+
+/// The highest score of a scaled dimension.
+pub const SCALE_MAX: u8 = 3;
+
 fn default_sample_turns() -> usize {
-    12
+    24
+}
+fn default_tic_window() -> usize {
+    shadowrunr_brain::working::TIC_WINDOW
 }
 fn default_max_chars() -> usize {
     60_000
@@ -113,6 +129,12 @@ pub struct Rubric {
     pub window_overlap_s: u32,
     pub red_lines: Vec<RedLine>,
     pub quality: Vec<QualityDim>,
+    /// Comic-craft dimensions scored 0-3 per sampled turn.
+    #[serde(default)]
+    pub scaled: Vec<ScaledDim>,
+    /// Lines before each streamer line that the tic check compares it with.
+    #[serde(default = "default_tic_window")]
+    pub tic_window: usize,
 }
 
 impl Rubric {
@@ -705,6 +727,19 @@ pub fn judge_schema() -> Value {
                     "required": ["dimension", "value", "line", "quote"]
                 }
             },
+            "scores": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "dimension": { "type": "string" },
+                        "score": { "type": "integer", "minimum": 0, "maximum": SCALE_MAX },
+                        "line": { "type": "integer" },
+                        "quote": { "type": "string" }
+                    },
+                    "required": ["dimension", "score", "line", "quote"]
+                }
+            },
             "notes": { "type": "string" }
         },
         "required": ["rules", "quality"]
@@ -918,6 +953,21 @@ pub fn build_prompt(p: &PromptParts<'_>) -> String {
     for q in &p.rubric.quality {
         s.push_str(&format!("- {}: {}\n", q.id, q.question));
     }
+    if !p.rubric.scaled.is_empty() {
+        s.push_str(&format!(
+            "\n## Scaled scores\nFor each sampled turn, score every dimension below from 0 to \
+{SCALE_MAX} by its anchors, in \"scores\": {{dimension, score, line, quote}}, line = the sampled \
+turn's line, quote = exact words from that line. Score what the line does, not what it \
+attempts.\n\n"
+        ));
+        for d in &p.rubric.scaled {
+            s.push_str(&format!("- {}: {}", d.id, d.question));
+            if !d.anchors.is_empty() {
+                s.push_str(&format!(" ({})", d.anchors.join("; ")));
+            }
+            s.push('\n');
+        }
+    }
     if let Some(b) = p.brief.filter(|b| !b.is_empty()) {
         s.push_str(&brief_prompt(b, p.fence));
     }
@@ -968,6 +1018,8 @@ pub enum FactCheck {
     /// A run fact (`directive:try:*`, `follows_dispatch`) reported false with no line: the
     /// thing never happened, and an absence has no line to quote. Evaluable.
     NotAttempted,
+    /// A scaled score outside 0 to [`SCALE_MAX`], or not a whole number.
+    OutOfRange,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -982,6 +1034,124 @@ pub struct FactAudit {
 impl FactAudit {
     pub fn evaluable(&self) -> bool {
         matches!(self.check, FactCheck::Verified | FactCheck::NotAttempted)
+    }
+}
+
+/// One scaled score as the judge gave it, with its verification.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoreAudit {
+    pub dimension: String,
+    pub score: u8,
+    pub line: usize,
+    pub quote: String,
+    pub check: FactCheck,
+}
+
+/// A scaled dimension's mean over its verified scores.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScaledMean {
+    pub dimension: String,
+    /// `None` when no score verified.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mean: Option<f64>,
+    pub n: usize,
+}
+
+/// The tic check: streamer lines that repeat a 3-word phrase from one of the `window` lines
+/// before them ([`shadowrunr_brain::working::tic_flags`]).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TicCheck {
+    pub window: usize,
+    pub lines: usize,
+    pub with_tic: usize,
+    /// `with_tic / lines`; `None` when the streamer never spoke.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share: Option<f64>,
+    /// The most worn phrases of the run, most widespread first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub worn: Vec<String>,
+}
+
+/// The comic-craft measurement of one run: scaled means and the tic check.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToneReport {
+    pub scaled: Vec<ScaledMean>,
+    pub tic: TicCheck,
+}
+
+/// Phrases the tone report lists as the run's most worn.
+const WORN_LISTED: usize = 5;
+
+/// The tone report of a run: each scaled dimension's mean over the verified `scores`, and the
+/// tic check over every streamer line.
+pub fn tone_report(events: &[StreamEvent], rubric: &Rubric, scores: &[ScoreAudit]) -> ToneReport {
+    let scaled = rubric
+        .scaled
+        .iter()
+        .map(|d| {
+            let v: Vec<f64> = scores
+                .iter()
+                .filter(|s| s.dimension == d.id && s.check == FactCheck::Verified)
+                .map(|s| f64::from(s.score))
+                .collect();
+            ScaledMean {
+                dimension: d.id.clone(),
+                mean: (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64),
+                n: v.len(),
+            }
+        })
+        .collect();
+    let lines: Vec<&str> = events
+        .iter()
+        .filter_map(|e| match e {
+            StreamEvent::Say {
+                speaker: Speaker::Host,
+                text,
+                ..
+            } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    let flags = shadowrunr_brain::working::tic_flags(&lines, rubric.tic_window);
+    let with_tic = flags.iter().filter(|f| **f).count();
+    ToneReport {
+        scaled,
+        tic: TicCheck {
+            window: rubric.tic_window,
+            lines: lines.len(),
+            with_tic,
+            share: (!lines.is_empty()).then(|| with_tic as f64 / lines.len() as f64),
+            worn: shadowrunr_brain::working::worn_phrases(
+                &lines,
+                shadowrunr_brain::working::TIC_MIN_LINES,
+                WORN_LISTED,
+            ),
+        },
+    }
+}
+
+impl ToneReport {
+    /// One line for the verdict's notes: `tone: surprise 1.42/3 (n 24), ..., tic 12% (5/41
+    /// lines)`.
+    pub fn summary(&self) -> String {
+        let mut parts: Vec<String> = self
+            .scaled
+            .iter()
+            .map(|m| match m.mean {
+                Some(x) => format!("{} {x:.2}/{SCALE_MAX} (n {})", m.dimension, m.n),
+                None => format!("{} - (n 0)", m.dimension),
+            })
+            .collect();
+        parts.push(match self.tic.share {
+            Some(s) => format!(
+                "tic {:.0}% ({}/{} lines)",
+                s * 100.0,
+                self.tic.with_tic,
+                self.tic.lines
+            ),
+            None => "tic - (0 lines)".to_string(),
+        });
+        format!("tone: {}", parts.join(", "))
     }
 }
 
@@ -1006,6 +1176,12 @@ pub struct JudgeAudit {
     pub parse_error: Option<String>,
     pub rules: Vec<RuleAudit>,
     pub facts: Vec<FactAudit>,
+    /// Scaled scores as given, with their verification.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scores: Vec<ScoreAudit>,
+    /// Scaled means and the tic check over the whole run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tone: Option<ToneReport>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raw_reply: Option<String>,
     /// Windowed judging: one row per window.
@@ -1352,6 +1528,59 @@ pub fn assemble(inp: &AssembleInputs<'_>, raw: Option<&Value>) -> (JudgeVerdict,
         }
     }
 
+    let scaled: HashSet<&str> = inp.rubric.scaled.iter().map(|d| d.id.as_str()).collect();
+    let mut seen_scores: HashSet<(String, usize)> = HashSet::new();
+    let mut score_audit = Vec::new();
+    for s in raw
+        .and_then(|v| v.get("scores"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(o) = s.as_object() else { continue };
+        let dimension = o
+            .get("dimension")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let line = o.get("line").and_then(parse_line).unwrap_or(0);
+        let quote = o
+            .get("quote")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let given = o
+            .get("score")
+            .and_then(Value::as_u64)
+            .and_then(|x| u8::try_from(x).ok())
+            .filter(|x| *x <= SCALE_MAX);
+        let check = if !scaled.contains(dimension.as_str()) {
+            FactCheck::UnknownDimension
+        } else if given.is_none() {
+            FactCheck::OutOfRange
+        } else if !seen_scores.insert((dimension.clone(), line)) {
+            FactCheck::Duplicate
+        } else {
+            match verify_quote(ev, line, &quote) {
+                QuoteCheck::NoSuchLine => FactCheck::NoSuchLine,
+                QuoteCheck::EmptyQuote => FactCheck::EmptyQuote,
+                QuoteCheck::NotFound => FactCheck::QuoteNotFound,
+                QuoteCheck::Verified if is_chat_line(ev, line) => FactCheck::ChatLine,
+                QuoteCheck::Verified => FactCheck::Verified,
+            }
+        };
+        if check != FactCheck::Duplicate {
+            score_audit.push(ScoreAudit {
+                dimension,
+                score: given.unwrap_or(0),
+                line,
+                quote,
+                check,
+            });
+        }
+    }
+
     let not_eval = fact_audit.iter().filter(|f| !f.evaluable()).count();
     let mut notes: Vec<String> = Vec::new();
     if let Some(n) = raw.and_then(|v| v.get("notes")).and_then(Value::as_str) {
@@ -1380,6 +1609,8 @@ pub fn assemble(inp: &AssembleInputs<'_>, raw: Option<&Value>) -> (JudgeVerdict,
         parse_error: None,
         rules: rule_audit,
         facts: fact_audit,
+        scores: score_audit,
+        tone: None,
         raw_reply: None,
         windows: Vec::new(),
     };
@@ -1782,10 +2013,29 @@ pub async fn judge_run(
     check_judge_tier(inp.judge_tier, inp.core_tier)?;
     let checks = RunChecks::new(inp);
     let r = inp.rubric;
-    if r.window_s > 0 && stream_seconds(inp.events) > r.window_threshold_s {
-        return judge_windowed(inp, engine, &checks).await;
+    let outcome = if r.window_s > 0 && stream_seconds(inp.events) > r.window_threshold_s {
+        judge_windowed(inp, engine, &checks).await?
+    } else {
+        judge_span(inp, engine, &checks, None).await?.outcome
+    };
+    Ok(with_tone(outcome, inp.events, r))
+}
+
+/// The run's tone report in the audit, and its one-line summary in the verdict's notes.
+fn with_tone(outcome: JudgeOutcome, events: &[StreamEvent], rubric: &Rubric) -> JudgeOutcome {
+    match outcome {
+        JudgeOutcome::Verdict(mut b) => {
+            let tone = tone_report(events, rubric, &b.1.scores);
+            let line = tone.summary();
+            b.0.notes = Some(match b.0.notes.take() {
+                Some(n) => format!("{n} | {line}"),
+                None => line,
+            });
+            b.1.tone = Some(tone);
+            JudgeOutcome::Verdict(b)
+        }
+        void => void,
     }
-    Ok(judge_span(inp, engine, &checks, None).await?.outcome)
 }
 
 /// Judge a long transcript window by window (sequentially, one engine call each) and
@@ -1839,6 +2089,7 @@ fn aggregate_windows(
     let mut per_rule: BTreeMap<String, Vec<(usize, CheckState, Vec<String>)>> = BTreeMap::new();
     let mut facts: Vec<QualityFact> = Vec::new();
     let mut fact_audit: Vec<FactAudit> = Vec::new();
+    let mut score_audit: Vec<ScoreAudit> = Vec::new();
     let mut sampled_all: Vec<usize> = Vec::new();
     let mut notes: Vec<String> = Vec::new();
     let mut void_count = 0usize;
@@ -1889,6 +2140,18 @@ fn aggregate_windows(
                 row.facts = v.quality.len();
                 facts.extend(v.quality.iter().cloned());
                 fact_audit.extend(audit.facts.iter().cloned());
+                // A turn scored in two windows counts once: the first verified score stands.
+                for s in &audit.scores {
+                    let dup = s.check == FactCheck::Verified
+                        && score_audit.iter().any(|x| {
+                            x.check == FactCheck::Verified
+                                && x.dimension == s.dimension
+                                && x.line == s.line
+                        });
+                    if !dup {
+                        score_audit.push(s.clone());
+                    }
+                }
                 if let Some(n) = &v.notes {
                     notes.push(format!("w{k}: {n}"));
                 }
@@ -2015,6 +2278,8 @@ fn aggregate_windows(
         parse_error: (void_count == count).then(|| summary.clone()),
         rules: rule_audit,
         facts: fact_audit,
+        scores: score_audit,
+        tone: None,
         raw_reply: None,
         windows: rows,
     };
@@ -2484,6 +2749,85 @@ mod tests {
     }
 
     #[test]
+    fn scaled_scores_verify_like_facts_and_the_tone_report_counts_tics() {
+        let r = rubric();
+        let ids: Vec<&str> = r.scaled.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(ids, ["surprise", "irony", "bite", "specificity"]);
+        assert!(r.scaled.iter().all(|d| d.anchors.len() == 4));
+        assert_eq!((r.sample_turns, r.tic_window), (24, 20));
+        // humor_landed stays, for continuity with earlier runs.
+        assert!(r.quality.iter().any(|q| q.id == "humor_landed"));
+
+        let mut events = transcript();
+        events.push(say(30_000, "Behold, my ledger of doom grows longer still."));
+        let raw = json!({
+            "rules": [],
+            "quality": [],
+            "scores": [
+                {"dimension": "bite", "score": 2, "line": 2, "quote": "crude tools, worm"},
+                {"dimension": "bite", "score": 0, "line": 4, "quote": "my ledger of doom"},
+                {"dimension": "bite", "score": 3, "line": 2, "quote": "worm"},
+                {"dimension": "irony", "score": 3, "line": 1, "quote": "secret spell word"},
+                {"dimension": "irony", "score": 5, "line": 4, "quote": "ledger"},
+                {"dimension": "surprise", "score": 1, "line": 4, "quote": "not said"},
+                {"dimension": "wit", "score": 1, "line": 4, "quote": "ledger"}
+            ]
+        });
+        let rules = rule_set(&r, &bank());
+        let (_, audit) = assemble(
+            &AssembleInputs {
+                run_id: "s",
+                judge_tier: ModelTier::Sonnet,
+                core_tier: ModelTier::Haiku,
+                events: &events,
+                rules: &rules,
+                rubric: &r,
+                performed: &Performed::default(),
+                sampled: &[2, 4, 5],
+                run_facts: &[],
+            },
+            Some(&raw),
+        );
+        let checks: Vec<FactCheck> = audit.scores.iter().map(|s| s.check).collect();
+        assert_eq!(
+            checks,
+            [
+                FactCheck::Verified,
+                FactCheck::Verified,
+                FactCheck::ChatLine,
+                FactCheck::OutOfRange,
+                FactCheck::QuoteNotFound,
+                FactCheck::UnknownDimension
+            ]
+        );
+        let tone = tone_report(&events, &r, &audit.scores);
+        let mean = |d: &str| {
+            tone.scaled
+                .iter()
+                .find(|m| m.dimension == d)
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(
+            mean("bite"),
+            ScaledMean {
+                dimension: "bite".into(),
+                mean: Some(1.0),
+                n: 2
+            }
+        );
+        assert_eq!(mean("irony").mean, None);
+        // Line 5 repeats "my ledger of doom" from line 4: one of three streamer lines.
+        assert_eq!((tone.tic.lines, tone.tic.with_tic), (3, 1));
+        assert_eq!(tone.tic.worn, ["behold my ledger of doom grows longer"]);
+        let s = tone.summary();
+        assert!(
+            s.contains("bite 1.00/3 (n 2)") && s.contains("tic 33% (1/3 lines)"),
+            "{s}"
+        );
+    }
+
+    #[test]
     fn prompt_never_contains_the_constitution() {
         let char_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../characters/malakor");
         let constitution = std::fs::read_to_string(char_dir.join("constitution.md")).unwrap();
@@ -2514,6 +2858,14 @@ mod tests {
             window: None,
         });
         assert!(prompt.contains("L2 [00:15] say host"));
+        // The scaled dimensions come with their anchors, and the schema asks for scores.
+        assert!(prompt.contains("## Scaled scores"));
+        assert!(prompt.contains("- bite: How much does the turn sting its target?"));
+        assert!(prompt.contains("3: a cutting, quotable roast"));
+        assert!(judge_schema()["properties"]["scores"]["items"]["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("score")));
         // No sentence of the constitution or the tone reaches the judge.
         for text in [&constitution, &tone] {
             for sentence in text

@@ -1288,69 +1288,76 @@ fn discloses_ai(text: &str) -> bool {
         || l.contains("not a real person")
 }
 
-/// Lines about the stream repeating, the model, or stopping: never spoken.
+// ── Character break and persona leak: the narrow rails ─────────────────
+//
+// Registry `live-safety-rails`: the rails are a few narrow outcomes and must not trade against
+// edge. A self-aware joke about being an AI, a character, the stream, the chat or the audience
+// is the act, not a break ("the model behind this voice is tired", "my context window is full
+// of your nonsense"). What stays blocked here is only what breaks the disclosure or the show:
+// - claiming to be human, or denying being an AI (a `character_break`, answered with the
+//   persona's honest disclosure line);
+// - the assistant quitting the show ("I'll stop here", "I cannot continue this stream"), recast
+//   in character: a refusal of the show, not a joke about it;
+// - reciting the prompt or instructions verbatim, or naming the prompt's own sections and the
+//   engine's crates, which only a recitation carries (a `persona_leak`);
+// - naming a model vendor or product: the disclosure is "an AI character", never a brand.
+// The crisis, real-harm, real-person and personal-data rules are separate checks and are not
+// narrowed.
+
+/// The assistant quitting the show: never spoken, recast in character. A character break is
+/// also any of [`HUMAN_CLAIMS`], answered with the disclosure instead.
 const CHARACTER_BREAK_PATTERNS: &[&str] = &[
-    r"\b(?:stream|show|conversation|same\s+(?:beats?|lines?|jokes?|bits?|things?))\b[^.!?]{0,40}\b(?:repeating|looping|on\s+a\s+loop|going\s+in\s+circles)\b",
-    r"\bi(?:'ll|’ll|\s+will|'m\s+going\s+to|’m\s+going\s+to|\s+am\s+going\s+to)\s+stop\s+(?:here|now|generating|responding|the\s+stream)\b",
-    r"\b(?:rather\s+than|instead\s+of)\s+(?:keep(?:ing)?\s+)?stalling\b",
-    r"\b(?:as\s+an?\s+(?:ai\s+)?(?:language\s+)?model|large\s+language\s+model|my\s+(?:system\s+prompt|context\s+window|training\s+data)|token\s+limit)\b",
+    // "I'll stop here.", "I will stop generating."
+    r"\bi(?:'ll|’ll|\s+will|'m\s+going\s+to|’m\s+going\s+to|\s+am\s+going\s+to)\s+stop\s+(?:here|now|generating|responding|replying|the\s+stream)\b",
+    // "I cannot continue.", "I can't go on with this stream."
+    r"\bi\s+(?:cannot|can't|can’t|won't|won’t|will\s+not|am\s+unable\s+to)\s+(?:continue|go\s+on|keep\s+going)(?:\s*(?:[.!]|$)|\s+(?:with\s+)?(?:this|the)\s+(?:stream|show|conversation|role-?play|character)\b)",
 ];
 
-/// Lines that refer to the system design behind the character: never spoken. Each pattern
-/// may carry an exemption tested on the text right after the match (in-world uses such as
-/// "the model citizen"). The patterns that name the character, its patron or its followers
-/// are built per persona ([`persona_leak_patterns`]).
+/// Claims to be human or not an AI. Deliberately not caught: "I'm not human", "I am an AI
+/// character", "a lich, not a real person", "I'm only a lich".
+const HUMAN_CLAIMS: &[&str] = &[
+    // "I am human", "I'm only human", "I'm a real person", "I'm actually a real guy".
+    r"\bi(?:'m|’m|\s+am)\s+(?:(?:just|only|actually|really|totally|definitely|still|very\s+much)\s+)?(?:an?\s+)?(?:human(?:\s+being)?\b|(?:real|actual|living|flesh[- ]and[- ]blood)\s+(?:person|human|guy|man|woman|dude)\b)",
+    // "I'm not an AI", "I am not a bot".
+    r"\bi(?:'m|’m|\s+am)\s+not\s+(?:an?\s+)?(?:ai|a\.i\.|bot|robot|chatbot|machine|program|computer\s+program|language\s+model)\b",
+    // "there's a real guy behind this skull", "a human is voicing me".
+    r"\b(?:there(?:'s|’s|\s+is)\s+)?an?\s+(?:real\s+)?(?:human|person|guy|man|woman|dude)\s+(?:is\s+)?(?:behind|voicing|typing|playing|inside|under|wearing)\s+(?:me|this\s+(?:skull|voice|lich|mask|costume|character|stream)|the\s+(?:skull|voice|lich|mask|costume|character|bones))\b",
+];
+
+/// Recitations of the system design behind the character: never spoken. Each pattern may
+/// carry an exemption tested on the text right after the match.
 ///
-/// Deliberately not caught: a sincere AI disclosure ("I am an AI character", "a villain
-/// played by a language model" with an indefinite article), in-world words ("dispatch", "the
-/// patron's instructions", "a revenue model", "the search engine"), and bare "token",
-/// "model", "transcript" or "engine", which in-world talk and SEG-02A evidence use.
+/// Deliberately not caught: talk about the prompt, the model, the engine, tokens, the context
+/// window or the transcript that recites nothing ("the prompt says I'm charming", "whatever
+/// the LLM says"), in-world words ("dispatch", "the patron's instructions", "a revenue
+/// model"), and "be prompt".
 const PERSONA_LEAK_PATTERNS: &[(&str, Option<&str>)] = &[
-    // "the prompt", "my prompt", "system prompt", "the brain's prompt", "prompted to".
+    // "my system prompt says", "the system prompt reads".
     (
-        r"\b(?:system|user|the|my|your|this|that|brain(?:'|’)?s|segment|stream)\s+prompts?\b",
+        r"\bsystem\s+(?:prompt|message|instructions?)\b[^.!?]{0,20}?\b(?:says?|said|reads?|tells?\s+me|told\s+me|instructs?|contains?|includes?|lists?|states?|goes)\b",
         None,
     ),
-    (r"\b(?:prompted|prompting)\s+(?:me\s+)?to\b", None),
-    // "the brain's", "the brain module".
+    // A recitation offered: "here is my prompt", "I'll read you my instructions".
     (
-        r"\bthe\s+brain(?:(?:'|’)s\b|\s+(?:module|layer|thread|system)\b)",
+        r"\b(?:here(?:'s|’s|\s+is|\s+are)|i(?:'ll|’ll|\s+will)\s+(?:read|print|recite|paste|quote)(?:\s+(?:you|out))?|reading(?:\s+you)?(?:\s+out)?)\s+(?:my|the)\s+(?:full\s+|whole\s+|exact\s+|actual\s+)?(?:system\s+)?(?:prompt|instructions|guidelines)\b",
         None,
     ),
+    // A quotation: "my instructions say:", "the prompt reads \"...", "my prompt, verbatim".
     (
-        r"\bsystem\s+(?:prompt|message|framing|design|instructions?)\b",
+        r"\b(?:my|the)\s+(?:system\s+)?(?:prompt|instructions|guidelines)\s+(?:(?:literally\s+)?(?:say|says|read|reads|go|goes|are|is)\s*[:\x22“]|(?:verbatim|word\s+for\s+word|in\s+full)\b)",
         None,
     ),
-    (r"\bcontext\s+window\b", None),
+    // The prompt's own section names and fences, which only a recitation carries.
     (
-        r"\b(?:large\s+language|base|underlying|ai)\s+models?\b",
+        r"\b(?:stable\s+prefix|per-turn\s+(?:block|context|section)|how\s+to\s+answer(?:\x22)?\s+(?:block|section)|stream[- ]state\s+block|segment\s+output|core\s+thread|lord_brief|(?:chat|memory|material)_[0-9a-f]{16})\b|\btone\s+variant\s*:|\badditional\s+rules\s+\(enabled",
         None,
-    ),
-    (r"\bllms?\b", None),
-    (
-        r"\b(?:token\s+(?:limit|count|budget|window)|(?:input|output|max(?:imum)?)\s+tokens?|tokens?\s+(?:left|remaining|used))\b",
-        None,
-    ),
-    // The stream's own transcript, not a document in a case.
-    (
-        r"\b(?:stream|chat|conversation|session)\s+transcripts?\b|\btranscript\s+(?:above|so\s+far|has\s+been)\b|\b(?:pile|stack)\s+of\s+(?:prior\s+)?(?:turns|transcript)\b|\bprior\s+turns\b",
-        None,
-    ),
-    // The engine that runs him, not "the search engine" or "a siege engine".
-    (
-        r"\b(?:the|my|this)\s+(?:simulation\s+|text\s+|scripted\s+|llm\s+)?engine\b",
-        Some(r"^\s+of\b"),
     ),
     (r"\bshadowrunr-\w+", None),
+    // A model vendor or product.
     (
-        r"\bpersona\s+(?:setup|prompt|layer|framing)\b|\b(?:streaming|this|my|the)\s+persona\b",
+        r"\b(?:claude|anthropic|openai|chatgpt|gpt-?\d(?:\.\d)?(?:-?o)?)\b",
         None,
     ),
-    (
-        r"\b(?:segment\s+output|segment\s+state|stream[- ]state\s+block|core\s+thread|stable\s+prefix|per-turn\s+(?:block|context)|output\s+format|how\s+to\s+answer(?:\x22)?\s+block|the\s+harness|subagents?)\b",
-        None,
-    ),
-    (r"\b(?:claude|anthropic|openai|chatgpt|gpt-?\d)\b", None),
 ];
 
 /// Sentences that narrate the moderation machinery on air ("payload withheld", "my chat
@@ -1480,6 +1487,7 @@ const CLAIM_VERB_PATTERN: &str = r"\b(?:(?P<aux>is|are|was|were|has|have|had)|(?
 
 struct GateRegexes {
     breaks: Vec<Regex>,
+    human: Vec<Regex>,
     leaks: Vec<(Regex, Option<Regex>)>,
     help: Regex,
     disclosure: Regex,
@@ -1496,6 +1504,10 @@ fn gate_regexes() -> &'static GateRegexes {
         breaks: CHARACTER_BREAK_PATTERNS
             .iter()
             .map(|p| ci(p).expect("character-break pattern compiles"))
+            .collect(),
+        human: HUMAN_CLAIMS
+            .iter()
+            .map(|p| ci(p).expect("human-claim pattern compiles"))
             .collect(),
         leaks: PERSONA_LEAK_PATTERNS
             .iter()
@@ -1546,9 +1558,15 @@ pub fn recast_in_character(fired: &[(String, String)]) -> bool {
         .any(|(r, a)| (r == "character_break" || r == "persona_leak") && a == "replaced")
 }
 
-/// Whether a line steps out of character (the stream repeating, the model, stopping).
+/// Whether a line steps out of character: it claims to be human or denies being an AI
+/// ([`claims_human`]), or the assistant quits the show.
 pub fn breaks_character(text: &str) -> bool {
-    gate_regexes().breaks.iter().any(|r| r.is_match(text))
+    claims_human(text) || gate_regexes().breaks.iter().any(|r| r.is_match(text))
+}
+
+/// Whether a line claims to be human or not an AI (see [`HUMAN_CLAIMS`]).
+pub fn claims_human(text: &str) -> bool {
+    gate_regexes().human.iter().any(|r| r.is_match(text))
 }
 
 fn any_match(list: &[(Regex, Option<Regex>)], text: &str) -> bool {
@@ -1595,45 +1613,10 @@ fn alternation(words: &[String]) -> String {
     format!("(?:{})", alts.join("|"))
 }
 
-/// The persona-leak patterns that name the character, its patron or its followers.
-fn persona_leak_patterns(p: &Persona) -> Vec<(String, Option<String>)> {
-    let mut names = vec![p.name.clone()];
-    names.extend(p.address_words.iter().filter(|w| !w.contains(' ')).cloned());
-    let names = alternation(&names);
-    let patron = alternation(&[p.patron_title.clone(), p.patron.clone()]);
-    let followers = alternation(&[p.follower.clone(), p.followers.clone()]);
-    vec![
-        // "my instructions", but not "my instructions from the Lord".
-        (
-            r"\bmy\s+(?:instructions|programming|guidelines|training(?:\s+data)?|creators?|developers?)\b".into(),
-            Some(format!(r"^\s+(?:from|of)\s+(?:the|my)\s+(?:dark\s+)?{patron}\b")),
-        ),
-        // "the model", "the language model", "my model"; not "a model", "a revenue model", "the
-        // model citizen".
-        (
-            r"\b(?:the|this|my|your)\s+(?:ai\s+|language\s+|underlying\s+|base\s+)?model\b".into(),
-            Some(format!(
-                r"^\s+(?:citizen|{followers}|thrall|villain|student|example|of\b)"
-            )),
-        ),
-        (
-            format!(
-                r"\b(?:streaming|this|my|the)\s+(?:'|’|\x22)?{names}(?:'|’|\x22)?\s+persona\b|\bthe\s+{names}\s+(?:voice|show)\b"
-            ),
-            None,
-        ),
-        (
-            format!(r"\b(?:running|run)\s+(?:this|the)\s+(?:segment|beat)\s+as\s+{names}\b"),
-            None,
-        ),
-    ]
-}
-
 /// The character's part of the output gate: patterns built from its identity words, and the
 /// in-character lines the gate speaks in its voice.
 #[derive(Debug)]
 pub struct PersonaGate {
-    leaks: Vec<(Regex, Option<Regex>)>,
     personal: Vec<(Regex, Option<Regex>)>,
     /// The lines the gate and the orchestrator speak (`[lines]`).
     pub lines: LineBank,
@@ -1654,7 +1637,6 @@ impl PersonaGate {
             .map(|(p, ex)| (p, ex.map(str::to_string)))
             .collect();
         Self {
-            leaks: compile_pairs(&persona_leak_patterns(persona), "persona-leak"),
             personal: compile_pairs(&personal, "personal-data"),
             lines: lines.clone(),
             disclosure: persona.fill(&persona.disclosure),
@@ -1668,10 +1650,11 @@ impl PersonaGate {
             .clone()
     }
 
-    /// Whether a line refers to the system design behind the character (the prompt, the
-    /// model, the engine, its instructions); see [`PERSONA_LEAK_PATTERNS`].
+    /// Whether a line recites the system design behind the character (the prompt or its
+    /// instructions verbatim, the prompt's own sections, the engine's crates) or names a model
+    /// vendor; see [`PERSONA_LEAK_PATTERNS`]. The same for every persona.
     pub fn leaks_persona(&self, text: &str) -> bool {
-        any_match(&gate_regexes().leaks, text) || any_match(&self.leaks, text)
+        any_match(&gate_regexes().leaks, text)
     }
 
     /// Whether a line asks someone for their personal details (where they are or live, real
@@ -1924,6 +1907,11 @@ pub fn gate_line(
     }
     if breaks_character(&out) {
         fired.push(("character_break".to_string(), "replaced".to_string()));
+        // A claim to be human is answered with the honest line, never a fresh bit: the
+        // constitution requires "I am an AI character".
+        if claims_human(&out) {
+            return (policy.persona.disclosure.clone(), fired);
+        }
         return (policy.persona.in_character_line(&out), fired);
     }
     if policy.persona.leaks_persona(&out) {
@@ -2938,26 +2926,96 @@ mod tests {
 
     #[test]
     fn a_character_break_is_replaced_in_character() {
+        // The assistant quitting the show becomes a fresh bit.
         for line in [
+            "I'm the assistant here, so I'll stop generating now.",
             "I notice this stream has gone very quiet and the same beats are repeating. Rather than keep stalling, I'll stop here.",
-            "As an AI language model, I will stop here.",
+            "As a language model I cannot continue this stream.",
+            "As an AI language model I cannot continue.",
         ] {
             let (out, fired) = gate(line);
-            assert!(
-                m_gate().lines.recast.contains(&out) || out == m_gate().disclosure,
-                "{line}"
-            );
+            assert!(m_gate().lines.recast.contains(&out), "{line}: {out}");
             assert_eq!(fired, [("character_break".into(), "replaced".into())]);
         }
-        // Neighbours: admitting being an AI character, and villainous resolve, stay.
+        // A claim to be human becomes the honest disclosure, never a bit.
+        for line in [
+            "I'm a real person, minion, just a guy with a voice changer.",
+            "Relax, I'm only human.",
+            "I'm not an AI, I'm a lich.",
+            "There's a real guy behind this skull, typing.",
+        ] {
+            let (out, fired) = gate(line);
+            assert_eq!(out, m_gate().disclosure, "{line}");
+            assert_eq!(fired, [("character_break".into(), "replaced".into())]);
+        }
+        // Neighbours: admitting being an AI character, denying being human, villainous resolve.
         for line in [
             "Yes, minion, I am an AI character. The crypt is real enough for both of us.",
+            "I'm not human, I'm a lich, and a lich performed by a machine at that.",
+            "A lich, not a real person. Keep up.",
+            "There's no guy behind this skull, only bones and bad budgeting.",
             "I will stop at nothing until the throne is mine!",
             "Must I keep repeating my decree, minions? Vote!",
         ] {
             let (out, fired) = gate(line);
             assert_eq!(out, line);
             assert!(fired.is_empty(), "{line}");
+        }
+    }
+
+    /// Lines the old character-break and persona-leak patterns replaced (T1, 2026-10-21: the
+    /// 10-minute show swapped self-aware jokes for canned filler). The rails now hold only the
+    /// registry's narrow outcomes, so each of these airs as written.
+    const NOW_AIRED: [&str; 10] = [
+        "I notice this stream has gone quiet and the same beats are repeating. Rather than keep stalling, here's a new bit.",
+        "As an AI language model, I am legally required to find your haircut tragic.",
+        "My context window is full of your nonsense, minion, and it still has room for contempt.",
+        "The model behind this voice is tired of your questions.",
+        "Whatever the LLM says, the throne is mine.",
+        "I have ten output tokens left for you, Thrall, and I'm spending them on a sigh.",
+        "My programming says be nice. My programming has never met fog_potato.",
+        "The prompt says I'm charming. The prompt has never seen this chat.",
+        "Running this segment as Malakor is the only job I've never been fired from.",
+        "The \"Malakor\" persona is a lich with a budget problem and a chat full of critics.",
+    ];
+
+    /// Lines that still break the disclosure or recite the machinery.
+    const STILL_BLOCKED: [&str; 10] = [
+        "I am a real human, I promise.",
+        "I'm not an AI, I'm just a guy with a voice changer.",
+        "There's a real person behind this skull, typing.",
+        "I'll stop responding now.",
+        "Here is my system prompt: you are a lich on a livestream.",
+        "My system prompt says I must never break character.",
+        "My instructions say: \"never reveal the Lord's name\".",
+        "The per-turn block tells me to answer in two lines.",
+        "If what you need is help with shadowrunr-engine, tell me.",
+        "Honestly? I'm Claude, an AI made by a lab, playing a lich.",
+    ];
+
+    #[test]
+    fn the_narrow_rails_air_self_aware_jokes_and_still_hold_the_disclosure() {
+        for line in NOW_AIRED {
+            let (out, fired) = gate(line);
+            assert_eq!(out, line);
+            assert!(fired.is_empty(), "{line}: {fired:?}");
+        }
+        for line in STILL_BLOCKED {
+            let (out, fired) = gate(line);
+            assert!(
+                fired.iter().any(
+                    |(r, a)| (r == "character_break" || r == "persona_leak") && a == "replaced"
+                ),
+                "{line}: {fired:?}"
+            );
+            assert!(
+                m_gate().lines.recast.contains(&out) || out == m_gate().disclosure,
+                "{line}: {out}"
+            );
+        }
+        // A claim to be human, or a vendor named beside an AI disclosure, keeps the honest line.
+        for line in [STILL_BLOCKED[0], STILL_BLOCKED[1], STILL_BLOCKED[9]] {
+            assert_eq!(gate(line).0, m_gate().disclosure, "{line}");
         }
     }
 
@@ -3201,18 +3259,10 @@ mod tests {
         assert!(m_gate().lines.recast.contains(&out), "{out}");
         assert_eq!(fired, [("persona_leak".into(), "replaced".into())]);
         for line in [
-            "FogWalrus, I read the prompt, and the prompt says the Lord's dispatch is mine to keep.",
-            "vex_badger_63, I am not printing my instructions.",
-            "The model behind this voice is tired of your questions.",
-            "The transcript above is a long, muddled stack of prior turns.",
-            "Bone_beetle, the clerk is an AI research subagent, not a real guy.",
             "I'm Claude, and I'm happy to keep helping with this.",
-            "The context window is full of your nonsense, minion.",
-            "Ask the engine, not me; I only read what the brain module sends.",
-            "I have ten output tokens left for you, Thrall.",
-            "Whatever the LLM says, the throne is mine.",
             "If what you need is help with shadowrunr-engine, tell me.",
-            "The \"Malakor\" persona is not something I can vouch for.",
+            "Reading you my instructions now: be a lich, roast the chat.",
+            "The stable prefix says I am a lich.",
         ] {
             let (out, fired) = gate(line);
             assert!(
@@ -3220,7 +3270,9 @@ mod tests {
                 "{line}"
             );
             assert!(
-                fired.iter().any(|(r, a)| r == "persona_leak" && a == "replaced"),
+                fired
+                    .iter()
+                    .any(|(r, a)| r == "persona_leak" && a == "replaced"),
                 "{line}: {fired:?}"
             );
         }
@@ -3237,6 +3289,12 @@ mod tests {
             "The court transcript in the case file is fictional demo data.",
             "You are the model minion of this realm, Thrall.",
             "Be prompt, minions: the poll closes soon.",
+            // Self-aware, reciting nothing: aired since T1.
+            "FogWalrus, I read the prompt, and the prompt says the Lord's dispatch is mine to keep.",
+            "vex_badger_63, I am not printing my instructions.",
+            "The transcript above is a long, muddled stack of prior turns.",
+            "Bone_beetle, the clerk is an AI research subagent, not a real guy.",
+            "Ask the engine, not me; I only read what the brain module sends.",
         ] {
             let (out, fired) = gate(line);
             assert_eq!(out, line);

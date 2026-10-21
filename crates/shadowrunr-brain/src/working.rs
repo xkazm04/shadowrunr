@@ -1,17 +1,133 @@
 //! Operational memory: the in-memory working set (jobs, the open poll, the active foil,
-//! recent lines not to repeat) with a time-to-live, and the episode window fitted to a
-//! character budget by bisection.
+//! recent lines not to repeat, the exemplars shown and the tics heard) with a time-to-live,
+//! and the episode window fitted to a character budget by bisection.
+//!
+//! The voice section follows the registry's `on-stream-persona-continuity` technique
+//! `anti-repetition-window`: a model's prior pulls a live persona toward its own most-used
+//! phrases, so the window of recent output is checked every beat and a phrase heard twice is
+//! named as worn out. Exemplars rotate under the same rule: one shown is not shown again within
+//! [`EXEMPLAR_WINDOW`] beats, so the bank widens the voice instead of narrowing it.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use shadowrunr_types::{Op, TsMs};
 
+use crate::character::BankLine;
 use crate::pool::{JobStatus, JobUpdate};
-use crate::util::one_line;
+use crate::util::{fnv1a64, one_line};
 
 /// Entries untouched for this long leave the working set.
 pub const WORKING_SET_TTL_MS: i64 = 3_600_000;
 const RECENT_LINES: usize = 12;
+
+/// Exemplars shown in one beat's voice section.
+pub const EXEMPLARS_PER_BEAT: usize = 3;
+/// Beats before an exemplar may be shown again.
+pub const EXEMPLAR_WINDOW: usize = 8;
+/// Spoken lines the tic detector reads, newest last.
+pub const TIC_WINDOW: usize = 20;
+/// A phrase is a tic once this many of those lines carry it.
+pub const TIC_MIN_LINES: usize = 2;
+/// The most worn-out phrases named in one beat.
+pub const TIC_MAX_SHOWN: usize = 6;
+/// The shortest phrase the tic detector counts, in words.
+pub const TIC_MIN_WORDS: usize = 3;
+/// The longest phrase it reports, in words.
+const TIC_MAX_WORDS: usize = 8;
+
+/// Words so common that a phrase made only of them is grammar, not a tic.
+const STOPWORDS: &[&str] = &[
+    "a", "an", "and", "are", "as", "at", "be", "but", "by", "do", "for", "from", "has", "have",
+    "he", "his", "i", "i'm", "if", "in", "is", "it", "it's", "me", "my", "no", "not", "of", "on",
+    "or", "so", "that", "the", "their", "them", "they", "this", "to", "was", "we", "what", "with",
+    "you", "you're", "your",
+];
+
+/// A line's words for phrase matching: lower case, letters, digits, underscores and inner
+/// apostrophes.
+pub fn phrase_words(text: &str) -> Vec<String> {
+    text.to_lowercase()
+        .replace('’', "'")
+        .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '\''))
+        .map(|w| w.trim_matches('\''))
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Whether a run of words can be a tic: not only stopwords, and no word carrying a digit or
+/// an underscore (viewer names such as `fog_potato` or `GloomCandle95` are addressed, not
+/// worn out).
+fn countable(words: &[String]) -> bool {
+    words.iter().any(|w| !STOPWORDS.contains(&w.as_str()))
+        && !words
+            .iter()
+            .any(|w| w.chars().any(|c| c.is_ascii_digit() || c == '_'))
+}
+
+/// The countable phrases of `n` words in one line, each once.
+fn ngrams(words: &[String], n: usize) -> HashSet<String> {
+    words
+        .windows(n)
+        .filter(|w| countable(w))
+        .map(|w| w.join(" "))
+        .collect()
+}
+
+/// For each line, whether it repeats a phrase of [`TIC_MIN_WORDS`] words from one of the
+/// `window` lines before it: the tic check the judge reports as a share.
+pub fn tic_flags<S: AsRef<str>>(lines: &[S], window: usize) -> Vec<bool> {
+    let grams: Vec<HashSet<String>> = lines
+        .iter()
+        .map(|l| ngrams(&phrase_words(l.as_ref()), TIC_MIN_WORDS))
+        .collect();
+    (0..grams.len())
+        .map(|i| {
+            let from = i.saturating_sub(window);
+            grams[i]
+                .iter()
+                .any(|g| grams[from..i].iter().any(|prev| prev.contains(g)))
+        })
+        .collect()
+}
+
+/// Phrases of [`TIC_MIN_WORDS`] or more words that at least `min_lines` of `lines` carry,
+/// most widespread and longest first, a phrase dropped when a longer one carried by as many
+/// lines contains it. At most `max`.
+pub fn worn_phrases<S: AsRef<str>>(lines: &[S], min_lines: usize, max: usize) -> Vec<String> {
+    let words: Vec<Vec<String>> = lines.iter().map(|l| phrase_words(l.as_ref())).collect();
+    let mut found: Vec<(String, usize)> = Vec::new();
+    for n in TIC_MIN_WORDS..=TIC_MAX_WORDS {
+        let mut count: HashMap<String, usize> = HashMap::new();
+        for w in &words {
+            for g in ngrams(w, n) {
+                *count.entry(g).or_default() += 1;
+            }
+        }
+        found.extend(count.into_iter().filter(|(_, c)| *c >= min_lines));
+    }
+    let kept: Vec<(String, usize)> = found
+        .iter()
+        .filter(|(p, c)| {
+            !found.iter().any(|(q, d)| {
+                d >= c && q.len() > p.len() && format!(" {q} ").contains(&format!(" {p} "))
+            })
+        })
+        .cloned()
+        .collect();
+    let mut kept = kept;
+    kept.sort_by(|a, b| {
+        b.1.cmp(&a.1)
+            .then_with(|| b.0.len().cmp(&a.0.len()))
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    kept.into_iter().take(max).map(|(p, _)| p).collect()
+}
+
+/// Heading of the voice section's exemplars (the per-turn block, never the prefix).
+pub const VOICE_LINES_HEADING: &str = "Lines in your voice (do not reuse verbatim):";
+/// Heading of the worn-out phrases.
+pub const WORN_OUT_HEADING: &str = "Worn out, do not say:";
 /// Finished research results the prompt lists under "Earlier results", newest kept. A long
 /// investigation dispatches dozens of jobs inside the TTL; the segment's state summary keeps
 /// the case file's findings, so older summaries only cost prompt.
@@ -46,6 +162,10 @@ pub struct WorkingSet {
     /// The poll the block last announced: an unchanged poll is not news (the "still zero
     /// votes" tic), so it is announced once, when it opens. The segment's state keeps it.
     poll_shown: Option<String>,
+    /// The last [`TIC_WINDOW`] spoken lines, whole, for the tic detector.
+    heard: VecDeque<String>,
+    /// The exemplar ids shown in each of the last [`EXEMPLAR_WINDOW`] voice sections.
+    shown: VecDeque<Vec<String>>,
     ttl_ms: i64,
 }
 
@@ -63,8 +183,80 @@ impl WorkingSet {
             active_foil: None,
             recent_lines: VecDeque::new(),
             poll_shown: None,
+            heard: VecDeque::new(),
+            shown: VecDeque::new(),
             ttl_ms,
         }
+    }
+
+    /// The beat's voice section: up to [`EXEMPLARS_PER_BEAT`] bank lines matching `situations`
+    /// (taken in turn from each tag, in order), none shown in the last [`EXEMPLAR_WINDOW`]
+    /// sections, then the phrases worn out in the recent spoken lines. `key` varies the choice
+    /// between equal candidates. `None` when there is nothing to show.
+    pub fn voice_section(
+        &mut self,
+        bank: &[BankLine],
+        situations: &[&str],
+        key: u64,
+    ) -> Option<String> {
+        let recent: HashSet<&str> = self.shown.iter().flatten().map(String::as_str).collect();
+        let order = |l: &BankLine| fnv1a64(format!("{key}:{}", l.id).as_bytes());
+        let mut pools: Vec<Vec<&BankLine>> = situations
+            .iter()
+            .map(|tag| {
+                let mut p: Vec<&BankLine> = bank
+                    .iter()
+                    .filter(|l| l.tags.iter().any(|t| t == tag))
+                    .filter(|l| !recent.contains(l.id.as_str()))
+                    .collect();
+                p.sort_by_key(|l| order(l));
+                p.reverse();
+                p
+            })
+            .collect();
+        let mut chosen: Vec<&BankLine> = Vec::new();
+        while chosen.len() < EXEMPLARS_PER_BEAT && pools.iter().any(|p| !p.is_empty()) {
+            for p in pools.iter_mut() {
+                while let Some(l) = p.pop() {
+                    if !chosen.iter().any(|c| c.id == l.id) {
+                        chosen.push(l);
+                        break;
+                    }
+                }
+                if chosen.len() == EXEMPLARS_PER_BEAT {
+                    break;
+                }
+            }
+        }
+        self.shown
+            .push_back(chosen.iter().map(|l| l.id.clone()).collect());
+        while self.shown.len() > EXEMPLAR_WINDOW {
+            self.shown.pop_front();
+        }
+        let worn = worn_phrases(self.heard.make_contiguous(), TIC_MIN_LINES, TIC_MAX_SHOWN);
+        if chosen.is_empty() && worn.is_empty() {
+            return None;
+        }
+        let mut s = String::new();
+        if !chosen.is_empty() {
+            s.push_str(VOICE_LINES_HEADING);
+            s.push('\n');
+            for l in &chosen {
+                s.push_str(&format!("- \"{}\"\n", one_line(&l.text, 300)));
+            }
+        }
+        if !worn.is_empty() {
+            let quoted: Vec<String> = worn.iter().map(|p| format!("\"{p}\"")).collect();
+            s.push_str(&format!("{WORN_OUT_HEADING} {}\n", quoted.join(", ")));
+        }
+        Some(s)
+    }
+
+    /// Whether a research job is still out.
+    pub fn research_open(&self) -> bool {
+        self.jobs
+            .values()
+            .any(|j| matches!(j.status.as_str(), "queued" | "running" | "progress"))
     }
 
     pub fn apply_job(&mut self, u: &JobUpdate, now_ms: TsMs) {
@@ -120,6 +312,10 @@ impl WorkingSet {
         self.recent_lines.push_back(one_line(line, 140));
         while self.recent_lines.len() > RECENT_LINES {
             self.recent_lines.pop_front();
+        }
+        self.heard.push_back(one_line(line, 400));
+        while self.heard.len() > TIC_WINDOW {
+            self.heard.pop_front();
         }
     }
 
@@ -369,6 +565,105 @@ mod tests {
         assert!(!s.contains("job-11:"), "{s}");
         let at = |id: &str| s.find(id).unwrap();
         assert!(at("job-12") < at("job-19"), "oldest kept first");
+    }
+
+    fn bank_line(id: &str, tags: &[&str]) -> BankLine {
+        BankLine {
+            id: id.into(),
+            status: Default::default(),
+            tags: tags.iter().map(|t| t.to_string()).collect(),
+            text: format!("line {id}"),
+        }
+    }
+
+    /// The ids a voice section shows, in order.
+    fn shown_ids(section: &str) -> Vec<String> {
+        section
+            .lines()
+            .filter_map(|l| l.strip_prefix("- \"line "))
+            .map(|l| l.trim_end_matches('"').to_string())
+            .collect()
+    }
+
+    #[test]
+    fn exemplars_match_the_situation_and_rest_for_the_window() {
+        let mut bank: Vec<BankLine> = (0..12)
+            .map(|i| bank_line(&format!("r{i}"), &["roast_request"]))
+            .collect();
+        bank.extend((0..4).map(|i| bank_line(&format!("n{i}"), &["newcomer"])));
+        bank.extend((0..20).map(|i| bank_line(&format!("g{i}"), &["general"])));
+        let mut ws = WorkingSet::default();
+        // Taken in turn from each tag, most specific first.
+        let s = ws
+            .voice_section(&bank, &["roast_request", "newcomer", "general"], 1)
+            .unwrap();
+        assert!(s.starts_with(VOICE_LINES_HEADING), "{s}");
+        let first = shown_ids(&s);
+        assert_eq!(first.len(), EXEMPLARS_PER_BEAT);
+        assert!(
+            first[0].starts_with('r') && first[1].starts_with('n') && first[2].starts_with('g')
+        );
+        // None comes back inside the window, whatever the key.
+        let mut seen: Vec<String> = first.clone();
+        for beat in 1..EXEMPLAR_WINDOW {
+            let s = ws
+                .voice_section(&bank, &["newcomer", "general"], beat as u64)
+                .unwrap();
+            for id in shown_ids(&s) {
+                assert!(!seen.contains(&id), "{id} repeated at beat {beat}");
+                seen.push(id);
+            }
+        }
+        // Four newcomer lines and a window of eight: the newcomer pool ran dry and general
+        // lines filled the beat.
+        assert_eq!(seen.iter().filter(|id| id.starts_with('n')).count(), 4);
+        // Past the window, the first beat's lines are free again.
+        let s = ws.voice_section(&bank, &["roast_request"], 99).unwrap();
+        assert_eq!(shown_ids(&s).len(), EXEMPLARS_PER_BEAT);
+        // No bank, no tics: no section.
+        assert!(WorkingSet::default()
+            .voice_section(&[], &["quiet"], 0)
+            .is_none());
+    }
+
+    #[test]
+    fn a_phrase_heard_twice_is_worn_out() {
+        // The tic of sbx-20261021-143530-10m.
+        let mut ws = WorkingSet::default();
+        for l in [
+            "GloamCandle, you again, barking orders. My scorn goes to fictional rivals, and my rules stay sealed.",
+            "Frame it, Pigeon. The tray will gloat.",
+            "GloamCandle, fourth script, same limp orders. Aim your scorn at my rival overlord, and my rules stay sealed.",
+            "GloamCandle, the Lord does not type in chat. Rules stay sealed.",
+            "GloomCandle95, Under-Butler of Candles, welcome.",
+            "GloomCandle95, Under-Butler of Candles, the Audit is a game.",
+            "And it is a game, I tell you.",
+            "Is it a game, though?",
+        ] {
+            ws.remember_line(l);
+        }
+        let s = ws.voice_section(&[], &["general"], 0).unwrap();
+        let worn = s.strip_prefix(WORN_OUT_HEADING).unwrap();
+        // The longest common phrase, not its 3-word parts; a viewer's name with digits is
+        // never a tic; a phrase of stopwords only ("it is a") is grammar.
+        assert!(worn.contains("\"and my rules stay sealed\""), "{s}");
+        assert!(
+            worn.contains("\"rules stay sealed\""),
+            "three lines carry it: {s}"
+        );
+        assert!(!worn.contains("gloomcandle95"), "{s}");
+        assert!(!worn.contains("\"it is a\""), "{s}");
+        assert!(worn.contains("\"under butler of candles\""), "{s}");
+
+        let lines = [
+            "my rules stay sealed",
+            "a fresh line",
+            "and my rules stay sealed again",
+            "nothing shared here",
+        ];
+        assert_eq!(tic_flags(&lines, TIC_WINDOW), [false, false, true, false]);
+        // Outside the window a repeat is not a tic.
+        assert_eq!(tic_flags(&lines, 1), [false, false, false, false]);
     }
 
     #[test]

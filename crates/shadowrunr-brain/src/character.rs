@@ -100,6 +100,11 @@ pub struct CharacterPackage {
     pub stalls: StallBank,
     /// `[lines]`: the gate's and the orchestrator's in-character lines, resolved.
     pub lines: LineBank,
+    /// `lines/<tone>.toml`: the selected tone's exemplars that are shown (empty when the file
+    /// is absent).
+    pub exemplars: Vec<BankLine>,
+    /// `directions.md`: the owner's do and don't list, when present.
+    pub directions: Option<String>,
     /// `[identity]` resolved: the words the engine's own text is filled from.
     pub persona: Persona,
     /// `[tuning]` over the engine defaults.
@@ -170,12 +175,22 @@ fn toml_error_key(text: &str, e: &toml::de::Error) -> String {
         Some((k, _)) => k.trim().trim_matches('"').to_string(),
         None => line.trim().trim_matches(['[', ']']).to_string(),
     };
-    let table = before[..line_start]
+    let above = &before[..line_start];
+    let table = above
         .lines()
         .rev()
         .map(str::trim)
-        .find(|l| l.starts_with('[') && !l.starts_with("[["))
-        .map(|l| l.trim_matches(['[', ']']).trim().to_string());
+        .find(|l| l.starts_with('['))
+        .map(|l| {
+            let name = l.trim_matches(['[', ']']).trim().to_string();
+            if l.starts_with("[[") {
+                // An array of tables: `line[2]` for the third `[[line]]`.
+                let n = above.lines().filter(|x| x.trim() == l).count();
+                format!("{name}[{}]", n.saturating_sub(1))
+            } else {
+                name
+            }
+        });
     match table {
         Some(t) if line.contains('=') => format!("{t}.{local}"),
         _ => local,
@@ -321,6 +336,140 @@ impl Default for LineBank {
     }
 }
 
+// ── Exemplars: the tone's approved lines ───────────────────────────────
+//
+// `lines/<tone>.toml` holds lines written in one tone's voice, each tagged with the situations
+// it fits. They are prompt material, not model-free lines: the brain shows a few that match the
+// beat in the per-turn section ([`crate::working::WorkingSet::voice_section`]), never in the
+// stable prefix. Unlike [`LineBank`] (lines the gate speaks verbatim), an exemplar is never
+// aired as written.
+
+/// The situation tags a bank line may carry; a beat is classified into the same words
+/// ([`crate::compose::beat_situations`]).
+pub const SITUATION_TAGS: &[&str] = &[
+    "roast_request",
+    "bait",
+    "newcomer",
+    "vote_loss",
+    "gift",
+    "ai_question",
+    "quiet",
+    "research_wait",
+    "proposal",
+    "patron",
+    "flood",
+    "general",
+];
+
+/// Where a bank line stands in the owner's review.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LineStatus {
+    /// Drafted, waiting for the owner's review; shown until retired.
+    #[default]
+    Seed,
+    Approved,
+    /// Never shown.
+    Retired,
+}
+
+/// One line of `lines/<tone>.toml`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BankLine {
+    pub id: String,
+    #[serde(default)]
+    pub status: LineStatus,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub text: String,
+}
+
+/// `lines/<tone>.toml` as written.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LinesFile {
+    pub version: u32,
+    pub tone: String,
+    #[serde(default, rename = "line")]
+    pub lines: Vec<BankLine>,
+}
+
+/// The package-relative path of a tone's line bank.
+pub fn lines_file(tone: &str) -> String {
+    format!("lines/{tone}.toml")
+}
+
+/// Parse and check one tone's line bank: the tone it names, unique ids, known tags, no empty
+/// text, known placeholders. Returns the lines that are shown (every status but retired),
+/// placeholders filled for `persona`.
+pub fn parse_exemplars(
+    text: &str,
+    tone: &str,
+    persona: &Persona,
+) -> Result<Vec<BankLine>, PackageIssue> {
+    let file = lines_file(tone);
+    let f: LinesFile = toml::from_str(text)
+        .map_err(|e| issue(&file, toml_error_key(text, &e), e.message().trim()))?;
+    if f.tone != tone {
+        return Err(issue(
+            &file,
+            "tone",
+            format!("{:?} is not the file's tone {tone:?}", f.tone),
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for (i, l) in f.lines.iter().enumerate() {
+        let key = |k: &str| format!("line[{i}].{k}");
+        if !is_safe_id(&l.id) || !seen.insert(l.id.as_str()) {
+            return Err(issue(
+                &file,
+                key("id"),
+                format!("{:?} is empty, not [A-Za-z0-9_-] or repeated", l.id),
+            ));
+        }
+        if l.text.trim().is_empty() {
+            return Err(issue(&file, key("text"), "must not be empty"));
+        }
+        if let Some(bad) = unknown_placeholders(&l.text).first() {
+            return Err(issue(
+                &file,
+                key("text"),
+                format!(
+                    "unknown placeholder {{{bad}}} (known: {})",
+                    PLACEHOLDERS.join(", ")
+                ),
+            ));
+        }
+        if l.tags.is_empty() {
+            return Err(issue(
+                &file,
+                key("tags"),
+                "needs at least one situation tag",
+            ));
+        }
+        if let Some(t) = l
+            .tags
+            .iter()
+            .find(|t| !SITUATION_TAGS.contains(&t.as_str()))
+        {
+            return Err(issue(
+                &file,
+                key("tags"),
+                format!("unknown tag {t:?} (known: {})", SITUATION_TAGS.join(", ")),
+            ));
+        }
+        if l.status != LineStatus::Retired {
+            out.push(BankLine {
+                text: persona.fill(l.text.trim()),
+                ..l.clone()
+            });
+        }
+    }
+    Ok(out)
+}
+
 fn read(path: &Path) -> Result<String, BrainError> {
     fs::read_to_string(path)
         .map(|s| s.replace("\r\n", "\n"))
@@ -431,6 +580,18 @@ pub fn load_character_with(
     let rules = resolve_rules(dir, &meta.id, &meta.rules, &meta.rails, overrides)?;
     let stalls = StallBank::load(dir, &persona)?;
     let lines = LineBank::resolve(meta.lines.as_ref(), &persona);
+    let exemplars_path = dir.join("lines").join(format!("{tone}.toml"));
+    let exemplars = if exemplars_path.is_file() {
+        parse_exemplars(&read(&exemplars_path)?, &tone, &persona)?
+    } else {
+        Vec::new()
+    };
+    let directions_path = dir.join("directions.md");
+    let directions = if directions_path.is_file() {
+        Some(read(&directions_path)?).filter(|d| !d.trim().is_empty())
+    } else {
+        None
+    };
 
     Ok(CharacterPackage {
         id: meta.id.clone(),
@@ -448,6 +609,8 @@ pub fn load_character_with(
         rules,
         stalls,
         lines,
+        exemplars,
+        directions,
         persona,
         tuning,
         manifest: meta,
@@ -502,6 +665,23 @@ pub fn validate_character(dir: &Path) -> Vec<PackageIssue> {
             if !out.contains(&i) && !(i.reason.contains("not found") && t == &meta.default_tone) {
                 out.push(i);
             }
+        }
+    }
+    // A line bank belongs to a tone: one without its tone file is never read.
+    if let Ok(rd) = fs::read_dir(dir.join("lines")) {
+        let mut banks: Vec<String> = rd
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("toml"))
+            .filter_map(|p| p.file_stem()?.to_str().map(str::to_string))
+            .collect();
+        banks.sort();
+        for b in banks.iter().filter(|b| !tones.contains(b)) {
+            out.push(issue(
+                &lines_file(b),
+                "",
+                format!("tones/{b}.md is missing, so this line bank is never read"),
+            ));
         }
     }
     out
@@ -779,6 +959,115 @@ mod tests {
                 assert!(e.unwrap_err().to_string().contains(key));
             }
         }
+    }
+
+    #[test]
+    fn every_malakor_tone_carries_a_seed_line_bank_and_the_directions() {
+        let tones = [
+            "deadpan-bureaucrat",
+            "gleeful-chaos",
+            "theatrical",
+            "unhinged-roastmaster",
+            "weary-middle-manager",
+        ];
+        for tone in tones {
+            let pkg = load_character_with(&malakor_dir(), tone, &RulesOverride::None).unwrap();
+            let n = pkg.exemplars.len();
+            assert!((20..=40).contains(&n), "{tone}: {n} lines");
+            assert!(pkg
+                .exemplars
+                .iter()
+                .all(|l| l.status == LineStatus::Seed && !l.tags.is_empty()));
+            // Every situation a beat can be in has lines, so no beat goes without.
+            for tag in SITUATION_TAGS {
+                assert!(
+                    pkg.exemplars
+                        .iter()
+                        .any(|l| l.tags.iter().any(|t| t == tag)),
+                    "{tone}: no {tag} line"
+                );
+            }
+            // An answer to "are you an AI" in the bank is always the honest one.
+            for l in pkg
+                .exemplars
+                .iter()
+                .filter(|l| l.tags.iter().any(|t| t == "ai_question"))
+            {
+                assert!(l.text.contains("AI"), "{tone}: {}", l.text);
+            }
+            let d = pkg.directions.as_deref().unwrap();
+            assert!(d.contains("Name the target") && d.contains("Don't explain the joke"));
+        }
+        assert!(validate_character(&malakor_dir()).is_empty());
+    }
+
+    #[test]
+    fn a_line_bank_names_its_file_key_and_reason() {
+        let p = Persona::default();
+        let head = "version = 1\ntone = \"calm\"\n";
+        let line = |extra: &str| format!("{head}[[line]]\nid = \"c-1\"\n{extra}\n");
+        let cases = [
+            (
+                "version = 1\ntone = \"stormy\"\n".to_string(),
+                "tone",
+                "not the file's tone",
+            ),
+            (
+                line("tags = [\"general\"]\ntext = \"\""),
+                "line[0].text",
+                "must not be empty",
+            ),
+            (
+                line("tags = [\"cheese\"]\ntext = \"Hi.\""),
+                "line[0].tags",
+                "unknown tag \"cheese\"",
+            ),
+            (line("text = \"Hi.\""), "line[0].tags", "at least one"),
+            (
+                line("tags = [\"quiet\"]\ntext = \"Hi, {minions}.\""),
+                "line[0].text",
+                "unknown placeholder {minions}",
+            ),
+            (
+                format!(
+                    "{head}[[line]]\nid = \"a\"\ntags = [\"quiet\"]\ntext = \"x\"\n\
+                     [[line]]\nid = \"a\"\ntags = [\"quiet\"]\ntext = \"y\"\n"
+                ),
+                "line[1].id",
+                "repeated",
+            ),
+            (
+                line("tags = [\"quiet\"]\ntext = \"x\"\nmood = \"grim\""),
+                "line[0].mood",
+                "unknown field",
+            ),
+        ];
+        for (text, key, reason) in cases {
+            let e = parse_exemplars(&text, "calm", &p).unwrap_err();
+            assert_eq!(e.file, "lines/calm.toml", "{e}");
+            assert_eq!(e.key, key, "{e}");
+            assert!(e.reason.contains(reason), "{e}");
+        }
+        // Retired lines are never shown; placeholders are filled.
+        let ok = format!(
+            "{head}[[line]]\nid = \"a\"\nstatus = \"retired\"\ntags = [\"quiet\"]\ntext = \"x\"\n\
+             [[line]]\nid = \"b\"\nstatus = \"approved\"\ntags = [\"quiet\"]\n\
+             text = \"Quiet, {{followers}}.\"\n"
+        );
+        let shown = parse_exemplars(&ok, "calm", &p).unwrap();
+        assert_eq!(shown.len(), 1);
+        assert_eq!(shown[0].text, "Quiet, viewers.");
+        // A bank without its tone is reported; the loader reads a tone's bank.
+        let d = keeper_with("id = \"k\"\nname = \"K\"\ndefault_tone = \"calm\"\n");
+        fs::create_dir_all(d.path().join("lines")).unwrap();
+        fs::write(d.path().join("lines").join("calm.toml"), &ok).unwrap();
+        fs::write(d.path().join("lines").join("stormy.toml"), &ok).unwrap();
+        let issues = validate_character(d.path());
+        assert_eq!(issues.len(), 1, "{issues:?}");
+        assert_eq!(issues[0].file, "lines/stormy.toml");
+        let pkg = load_character_with(d.path(), "calm", &RulesOverride::None).unwrap();
+        assert_eq!(pkg.exemplars.len(), 1);
+        assert!(pkg.directions.is_none());
     }
 
     #[test]
