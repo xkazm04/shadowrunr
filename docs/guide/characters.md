@@ -125,6 +125,37 @@ Fill in, at least: `name`, `tagline` and `[identity]`; the constitution's identi
 awareness sections; one tone; `bible.md`; `[lines]`; `stalls.toml`. Then run a sandbox
 session or a short sim and review it before tuning anything.
 
+## Tone Lab
+
+The console's Tone Lab (Characters, the package, the Tone Lab tab) is where the owner directs a
+character's voice. It works on one tone at a time and writes two files of the package:
+`lines/<tone>.toml`, the line bank the brain shows the model as examples, and `directions.md`,
+the do and don't list read with the tone on every stream. The daemon writes them in the
+package directory, inside the repo, and nothing else. **Changed files stay uncommitted until
+you commit them**; the tab says which files it changed.
+
+- **The bank.** Every line of the tone with its status and situations, filtered by status and
+  situation. Approve a seed, retire a line (it is never shown again), bring a retired one back,
+  or edit a line as a new approved line (the old one stays as it is).
+- **Variants.** Pick a situation, optionally paste a line to improve and a note on what to
+  change, and draft one to five lines. The core model writes them from the constitution, the
+  tone, the directions and a few bank lines for that situation. Nothing is saved until you
+  approve a candidate, as written or edited; it joins the bank approved, tagged with the
+  situation. Lines the output gate would change are dropped, and so are lines already in the
+  bank.
+- **From Review.** Lines you mark Great roast or Landed in a Review session become bank
+  candidates (add one to the bank of the tone it was spoken in, or draft variants of it); lines
+  marked Flat or Too mean become direction suggestions (append your note to the directions, or
+  draft variants with it). A candidate leaves the list once its text is in a bank.
+- **Send to Tone Lab.** On a host line in Review, the button opens the Tone Lab with that line,
+  your note and the situation of the chat it answered in the variants panel.
+- **Directions.** `directions.md` as a plain text area, saved whole.
+
+Every write is a text edit (a new `[[line]]` block appended, or one `status` line changed), so
+your comments and layout survive. The package is validated after each write, and a write that
+would make it invalid is undone and refused with the issue named. The RPCs are in
+[docs/spec/contract.md](../spec/contract.md) (the Tone Lab appendix).
+
 ## Voice, face and clips
 
 - **Voice.** The daemon's `[voice]` in `shadowrunr.toml` sets up the engine. The configured

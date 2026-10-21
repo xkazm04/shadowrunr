@@ -1679,3 +1679,75 @@ string citing a REP or CLM record stated as fact. A run with no string leaves it
 **Clips.** A clip's scene events keep every `show_screen`, `record_shown` and `link_pinned` up to
 the end of the cut, so a replay opens on the screen that was up with the strings already
 pinned, and draws the cut's own strings in.
+
+## Appendix (Tone Lab): the owner directs the voice, package files written by the daemon
+
+The console's Tone Lab (a tab of the character's package page) reads and writes two package
+files, `lines/<tone>.toml` (the line bank above) and `directions.md`. The types live in
+`shadowrunr_types::tone`; `LineStatus` there is the bank's `status`, and `LineSituation` is the
+twelve situation tags.
+
+| method | params | result |
+|---|---|---|
+| `tone.variants` | `{ character, tone, situation: LineSituation, line?, note?, n }` | `ToneVariants` |
+| `tone.lines.list` | `{ character, tone }` | `ToneLines` |
+| `tone.lines.add` | `{ character, tone, text, tags: LineSituation[], status?: LineStatus }` | `ToneLineWrite` |
+| `tone.lines.set_status` | `{ character, tone, id, status: LineStatus }` | `ToneLineWrite` |
+| `tone.directions.get` | `{ character }` | `ToneDirections` |
+| `tone.directions.set` | `{ character, text }` | `ToneDirections` |
+| `tone.inbox` | `{ character }` | `ToneInbox` |
+| `tone.review_line` | `{ character, session_id, line }` | `ToneReviewItem` |
+
+```
+ToneLine       { id, status: LineStatus, tags: [LineSituation], text }   // as written: every status, placeholders unfilled
+ToneLines      { character, tone, file, lines: [ToneLine] }              // file: "lines/<tone>.toml"; no file = no lines
+ToneLineWrite  { line: ToneLine, file }
+ToneDirections { character, file, text }                                 // file: "directions.md"; text "" without the file
+ToneVariants   { candidates: [string], gated? }                          // gated: dropped by the output gate, omitted when 0
+ToneReviewItem { session_id, line, text, tone, situation?, tags: [FeedbackTag], note?, at_ms? }
+ToneInbox      { candidates: [ToneReviewItem], suggestions: [ToneReviewItem] }
+```
+
+- **Where it writes.** Only `<paths.characters>/<character>/lines/<tone>.toml` and
+  `<paths.characters>/<character>/directions.md`. `character` is a package id
+  (`[A-Za-z0-9._-]`, a directory with `character.toml`), `tone` is `[A-Za-z0-9_-]` naming one of
+  the package's `tones/*.md` (else `invalid_params` or `not_found`), and the package dir and
+  each existing target must resolve, symlinks followed, inside `paths.characters`. The owner
+  commits the files; the daemon never runs git.
+- **How it writes.** By text: `tone.lines.add` appends one `[[line]]` block (after a blank
+  line, the file's line ends kept), `tone.lines.set_status` rewrites that line's `status = ...`
+  (or inserts one after its `id`), and nothing else in the file changes. Each edit is checked by
+  parsing the file before and after (the old bank plus exactly the change), written through a
+  temp file and a rename, then the package is validated as `character validate` does. A write
+  that adds an error is undone (a new file removed) and refused with `invalid_params`, the new
+  issues in `detail.issues` (`CharacterIssue[]`). Writes run one at a time.
+- **`tone.lines.add`.** `text` is whitespace-normalised to one line of at most 400 characters,
+  with known placeholders only; `tags` deduplicated, at least one; `status` defaults to
+  `approved` and `retired` is refused. A line the brain's output gate would change is refused.
+  The same text already in the bank (ignoring case) is `conflict`. The id follows the file's
+  scheme: the prefix most of its ids carry, one past the highest number, as wide as the widest
+  (`ur-28` -> `ur-29`); a file without ids starts at `<initials>-01` (`weary-middle-manager` ->
+  `wm-01`, `theatrical` -> `th-01`). A missing file is created with `version = 1` and `tone`.
+- **`tone.lines.set_status`.** Approve a seed, retire a line, or bring a retired line back;
+  setting the status it has writes nothing. An unknown id is `not_found`.
+- **`tone.directions.set`.** Replaces `directions.md` with `text` (LF line ends, one trailing
+  newline), at most 20,000 characters.
+- **`tone.variants`.** One core-model call (`core_thread`'s route, correlation
+  `tone.variants:<character>`, through the engine and its ledger like every call). The system
+  prompt is the constitution, the tone file and `directions.md`; the prompt names the situation,
+  shows up to 5 bank lines tagged with it (approved, then seeds) and, when given, the line to
+  improve and the owner's note, each in an untrusted-data fence. `n` is 1 to 5; `line` and
+  `note` at most 2,000 characters. The reply is JSON `{"lines": [...]}` (a bare array or plain
+  lines are accepted). Candidates are normalised, at most 400 characters, deduplicated, never a
+  bank line (any status) or the line being improved, and must pass the output gate unchanged;
+  at most `n` come back. Nothing is written. An engine failure is `engine`.
+- **`tone.inbox`.** Review feedback (`feedback.jsonl`, folded) on sandbox sessions whose
+  `stream_start.character` is `character`. A line marked `great_roast` or `landed` is a
+  candidate unless its text is already in one of the package's banks; a line marked `flat` or
+  `too_mean` is a suggestion. Each list is newest first (by the feedback's `at_ms`), at most 100.
+  `tone` is the session's `tone_variant`. `situation` is the first tag the brain's beat
+  classifier gives the chat messages the line answers (`replying_to`); absent when it answers
+  none, or when the beat would carry no roast material.
+- **`tone.review_line`.** The same item for any host line of a session ("Send to Tone Lab"),
+  with its feedback when there is any. A line that is not a host `say` and a session of another
+  character are `invalid_params`; a missing session is `not_found`.

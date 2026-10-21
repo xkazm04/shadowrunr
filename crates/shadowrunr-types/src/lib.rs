@@ -2,7 +2,7 @@
 //! stage and the transcript files read these exact serde names. Change one only together with
 //! `docs/spec/contract.md`.
 //!
-//! `rpc`, `catalog`, `character`, `reconcile`, `results` and `clips` hold the daemon protocol types (reach them by module path);
+//! `rpc`, `catalog`, `character`, `reconcile`, `results`, `clips` and `tone` hold the daemon protocol types (reach them by module path);
 //! `schema` exports the whole contract as JSON Schema for `@shadowrunr/contract`.
 //!
 //! Absent-value convention: optional fields are omitted from JSON (`skip_serializing_if`),
@@ -25,6 +25,7 @@ pub mod sandbox;
 pub mod schema;
 pub mod segment;
 pub mod sim;
+pub mod tone;
 pub mod voice;
 
 pub use chat::*;

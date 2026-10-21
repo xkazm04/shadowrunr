@@ -106,7 +106,9 @@ describe("routes", () => {
     expect(readSub(["malakor", "package"])).toEqual({ kind: "package", id: "malakor", tab: "constitution" });
     expect(readSub(["malakor", "package", "rules"])).toEqual({ kind: "package", id: "malakor", tab: "rules" });
     expect(readSub(["malakor", "package", "situations", "empty-room"])).toEqual({ kind: "package", id: "malakor", tab: "situations", situation: "empty-room" });
-    for (const bad of [["all", "x"], ["malakor", "nope"], ["malakor", "package", "nope"], ["malakor", "package", "rules", "x"], ["malakor", "package", "situations", "a", "b"]]) {
+    expect(readSub(["malakor", "package", "tone-lab"])).toEqual({ kind: "package", id: "malakor", tab: "tone-lab" });
+    expect(readSub(["malakor", "package", "tone-lab", "sbx-1", "12"])).toEqual({ kind: "package", id: "malakor", tab: "tone-lab", from: { session: "sbx-1", line: 12 } });
+    for (const bad of [["all", "x"], ["malakor", "nope"], ["malakor", "package", "nope"], ["malakor", "package", "rules", "x"], ["malakor", "package", "situations", "a", "b"], ["malakor", "package", "tone-lab", "sbx-1"], ["malakor", "package", "tone-lab", "sbx-1", "0"], ["malakor", "package", "tone-lab", "sbx-1", "x"], ["malakor", "package", "tone-lab", "sbx-1", "2", "3"]]) {
       expect(readSub(bad).kind).toBe("invalid");
     }
   });
@@ -117,6 +119,9 @@ describe("routes", () => {
     expect(crumbLabel("package", 2, [])).toBe("Package");
     expect(crumbLabel("rules", 3, [])).toBe("Optional rules");
     expect(crumbLabel("empty-room", 4, ["characters", "malakor", "package", "situations", "empty-room"])).toBe("empty-room");
+    expect(crumbLabel("tone-lab", 3, [])).toBe("Tone Lab");
+    expect(crumbLabel("sbx-1", 4, ["characters", "malakor", "package", "tone-lab", "sbx-1", "12"])).toBe("From Review");
+    expect(crumbLabel("12", 5, ["characters", "malakor", "package", "tone-lab", "sbx-1", "12"])).toBe("Line 12");
   });
 });
 

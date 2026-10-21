@@ -26,6 +26,7 @@ pub mod rpc;
 pub mod runs;
 pub mod sandbox;
 pub mod server;
+pub mod tone;
 pub mod voice;
 
 #[cfg(test)]

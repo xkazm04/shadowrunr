@@ -384,6 +384,20 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         "prep.get" => ok(crate::prep::get(state, params(req.params)?).await?),
         "prep.approve" => ok(crate::prep::approve(state, params(req.params)?).await?),
         "prep.retire" => ok(crate::prep::retire(state, params(req.params)?).await?),
+        "tone.variants" => ok(crate::tone::rpc_variants(state, params(req.params)?).await?),
+        "tone.lines.list" => ok(crate::tone::rpc_lines_list(state, params(req.params)?).await?),
+        "tone.lines.add" => ok(crate::tone::rpc_lines_add(state, params(req.params)?).await?),
+        "tone.lines.set_status" => {
+            ok(crate::tone::rpc_lines_set_status(state, params(req.params)?).await?)
+        }
+        "tone.directions.get" => {
+            ok(crate::tone::rpc_directions_get(state, params(req.params)?).await?)
+        }
+        "tone.directions.set" => {
+            ok(crate::tone::rpc_directions_set(state, params(req.params)?).await?)
+        }
+        "tone.inbox" => ok(crate::tone::rpc_inbox(state, params(req.params)?).await?),
+        "tone.review_line" => ok(crate::tone::rpc_review_line(state, params(req.params)?).await?),
         other => Err(RpcError::new(
             ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),

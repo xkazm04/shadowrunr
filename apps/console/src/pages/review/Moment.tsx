@@ -4,7 +4,8 @@
 // drawer moves from the row's lines to a moment and back. The drawer handles Esc and focus.
 import type { ReactNode } from "react";
 import type { ReviewSession } from "@shadowrunr/contract";
-import { Button } from "../../ui/Button";
+import { pageRoute, RouteLink } from "../../router";
+import { Button, buttonClass } from "../../ui/Button";
 import { Chip } from "../../ui/Chip";
 import { Drawer } from "../../ui/Drawer";
 import { EmptyState } from "../../ui/States";
@@ -129,9 +130,23 @@ function momentView(props: MomentProps, line: number): View | undefined {
           <JudgeOn d={d} line={line} />
         </section>
         {say && <FeedbackPanel line={line} feedback={props.feedback} />}
+        {say && <ToToneLab rs={rs} line={line} />}
       </>
     ),
   };
+}
+
+/** "Send to Tone Lab": the character's Tone Lab with this line and its situation prefilled. */
+function ToToneLab({ rs, line }: { rs: ReviewSession; line: number }) {
+  const start = rs.events.find((e) => e.type === "stream_start");
+  if (start?.type !== "stream_start") return null;
+  return (
+    <div>
+      <RouteLink to={pageRoute("characters", start.character, "package", "tone-lab", rs.row.session_id, String(line))} className={buttonClass("secondary", "compact")} data-role="review-to-tone-lab">
+        Send to Tone Lab
+      </RouteLink>
+    </div>
+  );
 }
 
 function TagMeta({ say }: { say: SayLine }) {

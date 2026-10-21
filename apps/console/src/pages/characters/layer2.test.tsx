@@ -129,7 +129,7 @@ describe("characters/<id>/package", () => {
     expect(role("characters-package")?.getAttribute("data-tab")).toBe("constitution");
     expect(role("characters-redlines")?.children).toHaveLength(9);
     expect(screen.getByRole("heading", { name: "Who he is" })).toBeTruthy();
-    expect(screen.getAllByRole("tab")).toHaveLength(7);
+    expect(screen.getAllByRole("tab")).toHaveLength(8);
   });
 
   it("switches tabs by route", async () => {

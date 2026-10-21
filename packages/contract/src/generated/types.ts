@@ -695,6 +695,32 @@ export type SandboxState = ("running" | "judging" | "done" | "failed") | "closin
  */
 export type SegmentStatus = "pilot" | "trial" | "regular" | "flagship" | "retired" | "descoped";
 /**
+ * The situation tags a bank line may carry; each beat is classified into the same words.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "LineSituation".
+ */
+export type LineSituation =
+  | "roast_request"
+  | "bait"
+  | "newcomer"
+  | "vote_loss"
+  | "gift"
+  | "ai_question"
+  | "quiet"
+  | "research_wait"
+  | "proposal"
+  | "patron"
+  | "flood"
+  | "general";
+/**
+ * Where a bank line stands in the owner's review (`status` in `lines/<tone>.toml`).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "LineStatus".
+ */
+export type LineStatus = "approved" | "seed" | "retired";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "TournamentListResult".
  */
@@ -1108,6 +1134,38 @@ export interface RpcMethods {
   "sim.start": {
     params: SimStartParams;
     result: SimStartResult;
+  };
+  "tone.directions.get": {
+    params: ToneDirectionsGetParams;
+    result: ToneDirections;
+  };
+  "tone.directions.set": {
+    params: ToneDirectionsSetParams;
+    result: ToneDirections;
+  };
+  "tone.inbox": {
+    params: ToneInboxParams;
+    result: ToneInbox;
+  };
+  "tone.lines.add": {
+    params: ToneLinesAddParams;
+    result: ToneLineWrite;
+  };
+  "tone.lines.list": {
+    params: ToneLinesParams;
+    result: ToneLines;
+  };
+  "tone.lines.set_status": {
+    params: ToneLinesSetStatusParams;
+    result: ToneLineWrite;
+  };
+  "tone.review_line": {
+    params: ToneReviewLineParams;
+    result: ToneReviewItem;
+  };
+  "tone.variants": {
+    params: ToneVariantsParams;
+    result: ToneVariants;
   };
   "tournament.list": {
     params: EmptyParams;
@@ -3981,6 +4039,222 @@ export interface SimStartParams {
  */
 export interface SimStartResult {
   run_id: string;
+}
+/**
+ * `tone.directions.get`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneDirectionsGetParams".
+ */
+export interface ToneDirectionsGetParams {
+  character: string;
+}
+/**
+ * `directions.md` as it stands.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneDirections".
+ */
+export interface ToneDirections {
+  character: string;
+  /**
+   * `directions.md`.
+   */
+  file: string;
+  /**
+   * Empty when the file does not exist.
+   */
+  text: string;
+}
+/**
+ * `tone.directions.set`: replace `directions.md` with `text`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneDirectionsSetParams".
+ */
+export interface ToneDirectionsSetParams {
+  character: string;
+  text: string;
+}
+/**
+ * `tone.inbox`: Review feedback on the character's sessions, mapped for the Tone Lab.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneInboxParams".
+ */
+export interface ToneInboxParams {
+  character: string;
+}
+/**
+ * `tone.inbox` result, newest first in each list.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneInbox".
+ */
+export interface ToneInbox {
+  /**
+   * Lines marked `great_roast` or `landed`, not yet in their tone's bank: bank candidates.
+   */
+  candidates: ToneReviewItem[];
+  /**
+   * Lines marked `flat` or `too_mean`, with the owner's note: direction suggestions.
+   */
+  suggestions: ToneReviewItem[];
+}
+/**
+ * One host line from Review, with what the owner said about it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneReviewItem".
+ */
+export interface ToneReviewItem {
+  /**
+   * When the feedback was given; absent without feedback.
+   */
+  at_ms?: number;
+  /**
+   * The 1-based transcript line.
+   */
+  line: number;
+  note?: string;
+  session_id: string;
+  situation?: LineSituation;
+  /**
+   * The owner's marks on the line (empty without feedback).
+   */
+  tags: FeedbackTag[];
+  text: string;
+  /**
+   * The session's tone (`stream_start.tone_variant`).
+   */
+  tone: string;
+}
+/**
+ * `tone.lines.add`: append a line to the bank, with the next id of the file's scheme.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneLinesAddParams".
+ */
+export interface ToneLinesAddParams {
+  character: string;
+  status?: LineStatus;
+  /**
+   * One or more.
+   */
+  tags: LineSituation[];
+  text: string;
+  tone: string;
+}
+/**
+ * What a bank write changed: the line as it now stands, and the file it went to.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneLineWrite".
+ */
+export interface ToneLineWrite {
+  /**
+   * The package-relative path written, `lines/<tone>.toml`.
+   */
+  file: string;
+  line: ToneLine;
+}
+/**
+ * One line of a bank as written: placeholders unfilled, every status.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneLine".
+ */
+export interface ToneLine {
+  id: string;
+  status: LineStatus;
+  tags: LineSituation[];
+  text: string;
+}
+/**
+ * `tone.lines.list`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneLinesParams".
+ */
+export interface ToneLinesParams {
+  character: string;
+  tone: string;
+}
+/**
+ * `tone.lines.list` result: a tone's whole bank in file order (empty without the file).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneLines".
+ */
+export interface ToneLines {
+  character: string;
+  /**
+   * The package-relative path, `lines/<tone>.toml`.
+   */
+  file: string;
+  lines: ToneLine[];
+  tone: string;
+}
+/**
+ * `tone.lines.set_status`: approve a seed, or retire a line.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneLinesSetStatusParams".
+ */
+export interface ToneLinesSetStatusParams {
+  character: string;
+  id: string;
+  status: LineStatus;
+  tone: string;
+}
+/**
+ * `tone.review_line`: one host line of a Review session, for "Send to Tone Lab".
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneReviewLineParams".
+ */
+export interface ToneReviewLineParams {
+  character: string;
+  line: number;
+  session_id: string;
+}
+/**
+ * `tone.variants`: the core model writes up to `n` candidate lines in `tone` for
+ * `situation`. Nothing is written; a candidate becomes a bank line through `tone.lines.add`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneVariantsParams".
+ */
+export interface ToneVariantsParams {
+  character: string;
+  /**
+   * A line to improve on (a Review line, a bank line).
+   */
+  line?: string;
+  /**
+   * 1..=5.
+   */
+  n: number;
+  /**
+   * The owner's note on what to change.
+   */
+  note?: string;
+  situation: LineSituation;
+  tone: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ToneVariants".
+ */
+export interface ToneVariants {
+  /**
+   * At most `n`, deduplicated, none already in the bank.
+   */
+  candidates: string[];
+  /**
+   * Candidates the brain's output gate would have changed, dropped; omitted when 0.
+   */
+  gated?: number;
 }
 /**
  * One row of `tournament.list` and `tournaments.page`.

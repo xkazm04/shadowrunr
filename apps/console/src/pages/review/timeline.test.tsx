@@ -161,6 +161,14 @@ describe("review timeline", () => {
     expect(m.calls.filter((c) => c === "review.session")).toHaveLength(1);
   });
 
+  it("sends a host line to the character's Tone Lab", async () => {
+    const { rs, lines } = smallSession();
+    await mount(rs, lines.joke);
+    const link = role("review-to-tone-lab");
+    expect(link?.textContent).toBe("Send to Tone Lab");
+    expect(link?.getAttribute("href")).toBe(encodeRoute(pageRoute("characters", "malakor", "package", "tone-lab", SID, String(lines.joke))));
+  });
+
   it("rolls the check back when the save fails", async () => {
     const { rs, lines } = smallSession();
     await mount(rs, lines.joke, daemon(rs, () => ({ status: 500, body: { error: { code: "io", message: "disk gone" } } })));
