@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import type { StreamEvent } from "@shadowrunr/contract";
 import { buildMap, foldEvents } from "@shadowrunr/stage-kit";
-import { CARD_MS, DECREE_MS } from "@shadowrunr/stage-kit/ui";
+import { DECREE_FADE_MS, DECREE_MIN_SHOW_MS } from "@shadowrunr/stage-kit";
+import { CARD_MS, DECREE_MS, Decrees } from "@shadowrunr/stage-kit/ui";
 import { TICKER_LINGER_MS, tickerActive } from "./OnAir";
 import { Stage } from "./Stage";
 
@@ -160,5 +161,38 @@ describe("no empty slots", () => {
     expect(tickerActive(done, 20_000 + TICKER_LINGER_MS)).toBe(false);
     expect(render([start, seg], 5000)).toMatch(/region region-ticker hidden/);
     expect(render([start, seg, job(10_000, "running")], 11_000)).not.toMatch(/region region-ticker hidden/);
+  });
+});
+
+describe("the decree slot shows one card at a time", () => {
+  const line = (n: number): StreamEvent => ({
+    type: "chat",
+    ts_ms: 100 + n,
+    msg: { id: `m${n}`, ts_ms: 100 + n, viewer: { id: `v${n}`, name: `viewer${n}`, platform: "sim", rank: "thrall", months: 0, gifted: 0, is_mod: false }, text: `line ${n}` },
+  });
+  const pick = (n: number, ts: number): StreamEvent => ({ type: "picked", ts_ms: ts, msg_ids: [`m${n}`], reason: "deterministic top 1 of 2" });
+  const scene = foldEvents([start, line(1), line(2), line(3), pick(1, 1000), pick(2, 1700), pick(3, 2900)]);
+  const html = (now: number, onAir = true) => renderToStaticMarkup(createElement(Decrees, { scene, now, onAir }));
+  const cards = (h: string) => (h.match(/class="decree /g) ?? []).length;
+
+  it("through a burst and after it, never more than one card", () => {
+    for (let now = 0; now < 20_000; now += 100) expect(cards(html(now)), `at ${now}`).toBeLessThanOrEqual(1);
+    expect(html(1500)).toContain("line 1");
+    expect(html(1000 + DECREE_MIN_SHOW_MS + 10)).toContain("line 2");
+    expect(html(1000 + 2 * DECREE_MIN_SHOW_MS + 10)).toContain("line 3");
+  });
+
+  it("the card fades out before the next enters, which lifts in", () => {
+    const handover = 1000 + DECREE_MIN_SHOW_MS;
+    expect(html(handover - DECREE_FADE_MS / 2)).toMatch(/decree decree-picked leaving/);
+    expect(html(handover)).toMatch(/decree decree-picked lifting/);
+  });
+
+  it("after the last turn, the last line is held; the reason shows only off air", () => {
+    expect(html(30_000)).toContain("LAST HEARD BY THE LICH");
+    expect(html(30_000)).toContain("line 3");
+    expect(html(1500)).not.toContain("deterministic");
+    expect(html(1500, false)).toContain("deterministic");
+    expect(html(30_000, false)).not.toContain("deterministic");
   });
 });

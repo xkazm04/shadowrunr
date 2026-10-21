@@ -1619,7 +1619,7 @@ body {
   animation: rune-in 0.8s var(--move) both;
 }
 
-/* ─── Standing card and last heard (OnAir.tsx) ─────────────────────────────── */
+/* ─── Standing card (OnAir.tsx), held decree (Decrees) ─────────────────────────────── */
 
 .standing {
   height: 100%;
@@ -1695,12 +1695,6 @@ body {
 }
 .layout-hexmap .standing-what {
   font-size: 15px;
-}
-
-/* drawn over the (empty) live decree stack, in the same box */
-.decrees.decrees-held {
-  position: absolute;
-  inset: 0;
 }
 
 .decree.decree-held {
