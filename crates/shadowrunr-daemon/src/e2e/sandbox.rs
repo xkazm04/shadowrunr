@@ -203,6 +203,7 @@ async fn a_scripted_minute_with_an_acking_stage_passes() {
         chaos: None,
         judge: true,
         tone: None,
+        record: false,
     };
     let started = start_with(state.clone(), p, sixty_seconds()).await.unwrap();
     let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{addr}/events"))
@@ -246,6 +247,7 @@ async fn a_scripted_minute_nobody_watches_leaves_stage_ack_unmeasured() {
         chaos: None,
         judge: false,
         tone: None,
+        record: false,
     };
     let started = start_with(state.clone(), p, sixty_seconds()).await.unwrap();
     let end = until_ended(&addr, &started.session_id, 300).await;

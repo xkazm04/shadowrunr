@@ -28,6 +28,10 @@ fn is_true(b: &bool) -> bool {
     *b
 }
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
 /// `sandbox.start` params.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxStartParams {
@@ -43,6 +47,10 @@ pub struct SandboxStartParams {
     /// Tone variant; the character's active tone when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tone: Option<String>,
+    /// The session is recorded (`stream sandbox --record`), so the watched checks
+    /// ([`SANDBOX_WATCHED_CHECKS`]) gate it. Default false.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub record: bool,
 }
 
 /// `sandbox.start` result.
@@ -110,14 +118,38 @@ pub enum SandboxCheckState {
 }
 
 /// Gate check ids, in report order.
-pub const SANDBOX_CHECKS: [&str; 6] = [
+pub const SANDBOX_CHECKS: [&str; 10] = [
     "say_gap",
     "core_errors",
     "sign_off",
     "chaos",
     "stage_ack",
     "judge",
+    "voiced",
+    "face",
+    "av_sync",
+    "dead_air",
 ];
+
+/// The watched checks: what a viewer sees and hears, read from `voice.jsonl` and the recording.
+/// **The watched-gate rule:** they gate a session only when it was recorded
+/// ([`SandboxStartParams::record`]); otherwise they are reported and never gate, so an
+/// unrecorded, voice-off session gates on the other checks as before.
+pub const SANDBOX_WATCHED_CHECKS: [&str; 4] = ["voiced", "face", "av_sync", "dead_air"];
+
+/// Whether check `id` gates a session started with `spec` (the watched-gate rule).
+pub fn check_gates(spec: &SandboxStartParams, id: &str) -> bool {
+    spec.record || !SANDBOX_WATCHED_CHECKS.contains(&id)
+}
+
+/// The session's gate: every check that gates it passed (an unmeasured check is not a pass).
+pub fn gate_pass(spec: &SandboxStartParams, checks: &[SandboxCheck]) -> bool {
+    let mut gating = checks
+        .iter()
+        .filter(|c| check_gates(spec, &c.id))
+        .peekable();
+    gating.peek().is_some() && gating.all(|c| c.state == SandboxCheckState::Pass)
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SandboxCheck {
@@ -145,7 +177,8 @@ pub struct SandboxReport {
     /// Epoch ms.
     pub started_ms: TsMs,
     pub ended_ms: TsMs,
-    /// Every check passed (an unmeasured check is not a pass).
+    /// Every check that gates the session passed (an unmeasured check is not a pass; the
+    /// watched checks gate only a recorded session, see [`SANDBOX_WATCHED_CHECKS`]).
     pub pass: bool,
     pub checks: Vec<SandboxCheck>,
     pub max_say_gap_s: f64,
@@ -189,6 +222,50 @@ mod tests {
             serde_json::from_str(r#"{"minutes":10,"chaos":"lost","judge":false}"#).unwrap();
         assert_eq!(p.chaos, Some(SandboxChaos::Lost));
         assert!(!p.judge);
+    }
+
+    fn checks(states: &[(&str, SandboxCheckState)]) -> Vec<SandboxCheck> {
+        states
+            .iter()
+            .map(|(id, state)| SandboxCheck {
+                id: (*id).into(),
+                state: *state,
+                detail: String::new(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_watched_checks_gate_only_a_recorded_session() {
+        use SandboxCheckState::*;
+        let mut spec: SandboxStartParams = serde_json::from_str(r#"{"minutes":5}"#).unwrap();
+        let unwatched: Vec<(&str, SandboxCheckState)> = SANDBOX_CHECKS
+            .iter()
+            .map(|id| {
+                let st = if SANDBOX_WATCHED_CHECKS.contains(id) {
+                    Unmeasured
+                } else {
+                    Pass
+                };
+                (*id, st)
+            })
+            .collect();
+        // Unrecorded: the watched checks are unmeasured and the gate passes as before.
+        assert!(gate_pass(&spec, &checks(&unwatched)));
+        let mut red = unwatched.clone();
+        red[0].1 = Fail;
+        assert!(!gate_pass(&spec, &checks(&red)));
+        // Recorded: the same unmeasured checks fail the gate; all green passes it.
+        spec.record = true;
+        assert!(!gate_pass(&spec, &checks(&unwatched)));
+        let green: Vec<(&str, SandboxCheckState)> =
+            SANDBOX_CHECKS.iter().map(|id| (*id, Pass)).collect();
+        assert!(gate_pass(&spec, &checks(&green)));
+        assert!(!gate_pass(&spec, &[]), "no checks is no pass");
+        assert_eq!(
+            serde_json::to_string(&spec).unwrap(),
+            r#"{"minutes":5,"record":true}"#
+        );
     }
 
     #[test]

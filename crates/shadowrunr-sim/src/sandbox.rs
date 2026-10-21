@@ -2,7 +2,9 @@
 //! is wall time since the session started, so a slow engine call shows up as a silence
 //! (`say-gap-ceiling`). The daemon hosts a session (`sandbox.start`), hands every event to
 //! its live broadcast through the [`EventSink`], and completes the report's `stage_ack` and
-//! `judge` checks; this module fills in `say_gap`, `core_errors`, `sign_off` and `chaos`.
+//! `judge` checks; this module fills in `say_gap`, `core_errors`, `sign_off` and `chaos`. The
+//! watched checks (`voiced`, `face`, `av_sync`, `dead_air`) are left `unmeasured` for the daemon
+//! and the recorder.
 //!
 //! - The host beats every `tick_s` on a tokio interval. A beat that overruns starts the next
 //!   one at once and never bursts to catch up; each event is stamped when it happens.
@@ -31,8 +33,8 @@ use serde::{Deserialize, Serialize};
 use shadowrunr_brain::{BrainTuning, PaceConfig, SpeechClock};
 use shadowrunr_segments::{segment_table, HandoverRule, SegmentConfig, SegmentRuntime};
 use shadowrunr_types::sandbox::{
-    SandboxChaos, SandboxCheck, SandboxCheckState, SandboxJudge, SandboxReport, SandboxStartParams,
-    SANDBOX_CHECKS, SANDBOX_MINUTES,
+    gate_pass, SandboxChaos, SandboxCheck, SandboxCheckState, SandboxJudge, SandboxReport,
+    SandboxStartParams, SANDBOX_CHECKS, SANDBOX_MINUTES,
 };
 use shadowrunr_types::{
     ChatMsg, CheckState, EndReason, Engine, EngineError, EngineReply, EngineRequest, FleetHealth,
@@ -906,26 +908,27 @@ impl Session {
 
         let sign_off = self.sign_off_check(events, ended);
         let chaos = self.chaos_check(events, ended);
-        let daemon = |id: &str| SandboxCheck {
+        let later = |id: &str, by: &str| SandboxCheck {
             id: id.into(),
             state: SandboxCheckState::Unmeasured,
-            detail: "filled by the daemon".into(),
+            detail: format!("filled {by}"),
         };
-        let checks = vec![
-            say_gap,
-            core,
-            sign_off,
-            chaos,
-            daemon(SANDBOX_CHECKS[4]),
-            daemon(SANDBOX_CHECKS[5]),
-        ];
+        let mut checks = vec![say_gap, core, sign_off, chaos];
+        for id in &SANDBOX_CHECKS[4..] {
+            let by = match *id {
+                "voiced" | "face" => "by the daemon from voice.jsonl",
+                "av_sync" | "dead_air" => "from the recording",
+                _ => "by the daemon",
+            };
+            checks.push(later(id, by));
+        }
         debug_assert!(checks.iter().map(|c| c.id.as_str()).eq(SANDBOX_CHECKS));
         SandboxReport {
             session_id: self.run.session_id.clone(),
             spec: self.run.params.clone(),
             started_ms: self.started_ms,
             ended_ms: self.started_ms + ended.end_ms,
-            pass: checks.iter().all(|c| c.state == SandboxCheckState::Pass),
+            pass: gate_pass(&self.run.params, &checks),
             checks,
             max_say_gap_s,
             say_gap_p95_s: stats::percentile(&gap_ms, 95.0).unwrap_or(0) as f64 / 1000.0,
@@ -1580,6 +1583,7 @@ mod tests {
                 chaos: None,
                 judge: false,
                 tone: None,
+                record: false,
             },
             dir: dir.join("sbx-test"),
             core_tier: ModelTier::Haiku,
@@ -1709,6 +1713,11 @@ mod tests {
             assert_eq!(state(r, id), SandboxCheckState::Unmeasured);
             assert_eq!(detail(r, id), "filled by the daemon");
         }
+        for id in ["voiced", "face", "av_sync", "dead_air"] {
+            assert_eq!(state(r, id), SandboxCheckState::Unmeasured);
+        }
+        assert_eq!(detail(r, "voiced"), "filled by the daemon from voice.jsonl");
+        assert_eq!(detail(r, "dead_air"), "filled from the recording");
         assert!(!r.pass, "an unmeasured check is not a pass");
         // The cold open speaks a line and holds a beat: a line every 10 s, under the 15 s gate.
         // Speech-aware, each line's 2.25 s on air (36 characters at 18 a second, plus the

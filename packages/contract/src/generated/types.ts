@@ -3023,6 +3023,11 @@ export interface SandboxStartParams {
    * 5, 10 or 30.
    */
   minutes: number;
+  /**
+   * The session is recorded (`stream sandbox --record`), so the watched checks
+   * ([`SANDBOX_WATCHED_CHECKS`]) gate it. Default false.
+   */
+  record?: boolean;
   seed?: number;
   /**
    * Tone variant; the character's active tone when absent.
@@ -3094,7 +3099,8 @@ export interface SandboxReport {
   judge?: SandboxJudge;
   max_say_gap_s: number;
   /**
-   * Every check passed (an unmeasured check is not a pass).
+   * Every check that gates the session passed (an unmeasured check is not a pass; the
+   * watched checks gate only a recorded session, see [`SANDBOX_WATCHED_CHECKS`]).
    */
   pass: boolean;
   say_gap_p95_s: number;

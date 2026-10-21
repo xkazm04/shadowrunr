@@ -135,6 +135,9 @@ What happens:
 5. When the session has its report, the file moves into the session directory as
    `recording.<ext>` (OBS's own container: `mp4` with OBS's default hybrid MP4, else `mkv`),
    beside `recording.json`.
+6. The watched checks are measured from the recording and `voice.jsonl` and written into the
+   session's `session.json`; the checks table and the exit code are the merged report's (see
+   [The watched checks](#the-watched-checks)).
 
 If the session fails to start, the recording is stopped and deleted. Ctrl-C works as without
 `--record`; a second Ctrl-C detaches the command and stops the recording.
@@ -179,6 +182,46 @@ an onset), map each `played` line to file time with `stream_offset_ms`, and comp
 starts that follow a pause show as onsets. In the sessions measured so far, speech starts about
 200 ms after its `played` time, at the head and the tail alike (no drift); about 70 ms of that is
 the silence at the start of each Kokoro sentence.
+
+## The watched checks
+
+A recorded session's report carries four checks beside `say_gap`, `stage_ack` and the rest,
+each `pass`, `FAIL` or `unmeasured` with a detail:
+
+| Check | Reads | Passes when |
+| --- | --- | --- |
+| `voiced` | `voice.jsonl` | at least 90% of Malakor's lines played in full (no part skipped or dropped) |
+| `face` | `voice.jsonl` `face` events | the rig was drawn for at least 95% of the session (unknown counts as silhouette) |
+| `av_sync` | the recording | head and tail offsets within -45/+125 ms of the run's constant, drift at most 40 ms |
+| `dead_air` | the recording | no silence longer than 15 s between the cold open and the sign-off |
+
+`av_sync` uses the method above (`silencedetect` at -35 dB over 0.25 s, each onset matched to the
+nearest `played` time within 600 ms). The constant (the median offset, about 200 ms through OBS)
+is reported, not judged: what is judged is how far the head and the tail sit from it, and the
+drift between them. `dead_air` runs `silencedetect` at -50 dB, at least 1 s, and reports the
+longest stretch on the show clock. The thresholds and how each is measured are in the contract
+(spec/contract.md, sandbox appendix).
+
+**They gate only a recorded session.** `stream sandbox --record` starts the session with
+`record: true`, and then an unmeasured watched check fails the gate like any other. A session
+started without `--record` reports them (`unmeasured` when the voice was off) and gates on the
+other checks as before; the checks table marks them `(not gating: unrecorded)`.
+
+### Recomputing them: `shadowrunr stream check`
+
+```
+shadowrunr stream check <runs>/sandbox/<session id> [--write]
+```
+
+Recomputes the four watched checks from the run dir (ffmpeg from `[clips] ffmpeg`), prints the
+checks table and the gate, and with `--write` writes them into `session.json`. It needs no
+daemon.
+
+| Exit | `stream check` |
+| --- | --- |
+| 0 | the session passes its gate |
+| 2 | usage error, or the run dir has no readable `session.json` |
+| 6 | the session fails its gate |
 
 ## Troubleshooting
 
