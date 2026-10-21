@@ -1,6 +1,6 @@
-// The clip factory's view model: status order and labels, chip tones, the owner's act rules
-// and the window bar's geometry. Pure, so the views stay thin and the rules are testable.
-import type { ClipCandidate, ClipFeedbackTag, ClipFootage, ClipStatus, ClipWeights, GateState } from "@shadowrunr/contract";
+// The clip factory's view model: status order and labels, chip tones, the wording of the
+// daemon's owner-act blocks and the window bar's geometry. Pure, so the views stay thin and the rules are testable.
+import type { ClipActBlock, ClipCandidate, ClipFeedbackTag, ClipFootage, ClipStatus, ClipWeights, GateState } from "@shadowrunr/contract";
 import type { Tone } from "../../ui/Chip";
 
 /** The gate funnel, in publish order; `rejected` is the side exit. */
@@ -44,24 +44,13 @@ export const score = (s: number): string => s.toFixed(3);
 
 export const SIGNALS: readonly (keyof ClipWeights)[] = ["marker", "chat", "audio", "hook"];
 
-/** Why the owner cannot approve now, or `null` when approval may be signed. */
-export function approveBlock(c: ClipCandidate): string | null {
-  if (c.status !== "pending_owner_gate") return `The clip is ${STATUS_LABEL[c.status].toLowerCase()}, not waiting at the owner gate.`;
-  if (c.render === undefined) return "There is no render to approve yet.";
-  if (c.window.needs_reauthoring) return "The setup cannot fit the band: re-author the moment, do not approve the cut.";
-  const failed = c.gate.checks.filter((k) => k.state === "fail").map((k) => k.id);
-  if (failed.length > 0) return `Held by ${failed.join(", ")}: a failed check holds whatever the score, and no override applies.`;
-  return null;
+/** Why the daemon refuses an act now (`acts`, derived from the contract's one owner-act rule). */
+export function blockText(b: ClipActBlock): string {
+  if (b.kind === "status") return `The clip's status is ${STATUS_LABEL[b.status]}.`;
+  if (b.kind === "no_render") return "There is no render to approve yet.";
+  if (b.kind === "needs_reauthoring") return "The setup cannot fit the band: re-author the moment, do not approve the cut.";
+  return `Held by ${b.checks.join(", ")}: a failed check holds whatever the score, and no override applies.`;
 }
-
-/** The checks an approval would override (each needs the recorded reason). */
-export const unmeasuredChecks = (c: ClipCandidate): string[] => c.gate.checks.filter((k) => k.state === "unmeasured").map((k) => k.id);
-
-/** Whether a dry-run publish may be asked for. */
-export const canPublish = (c: ClipCandidate): boolean => c.status === "approved_for_upload";
-
-/** Whether the draft may be re-rendered (only before the owner acts). */
-export const canRender = (c: ClipCandidate): boolean => c.status === "rendered_draft" || c.status === "pending_owner_gate";
 
 /** The window bar: the pre-roll and payoff as shares of the band's maximum, plus the band. */
 export function windowBar(c: ClipCandidate): { preroll: number; payoff: number; min: number; over: boolean } {

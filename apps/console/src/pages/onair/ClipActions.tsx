@@ -1,13 +1,13 @@
-// The owner's acts on one clip. Approving is a signature, never a default: it is refused while
-// a check fails or the cut needs re-authoring, and an unmeasured check needs a recorded
-// override reason. Publishing is a dry run that writes the request each platform would get;
+// The owner's acts on one clip, as the daemon allows them in `acts` (the page never re-decides
+// the rule). Approving is a signature, never a default, and an unmeasured check needs a
+// recorded override reason. Publishing is a dry run that writes the request each platform would get;
 // nothing is sent. Rendering records the stage to video when the daemon has the tools.
-import type { ClipCandidate, ClipDryRun } from "@shadowrunr/contract";
+import type { ClipAct, ClipCandidate, ClipDryRun } from "@shadowrunr/contract";
 import { useState, type FormEvent } from "react";
 import { useMutation, viewOfError, type DataError } from "../../data";
 import { Chip } from "../../ui/Chip";
 import { Section } from "../../ui/Section";
-import { approveBlock, canPublish, canRender, unmeasuredChecks } from "./clipModel";
+import { blockText } from "./clipModel";
 import styles from "./Clips.module.css";
 import { Button } from "../../ui/Button";
 
@@ -15,6 +15,12 @@ import { Button } from "../../ui/Button";
 const RENDER_TIMEOUT_MS = 15 * 60_000;
 
 const explain = (e: DataError) => `${viewOfError(e).title}: ${e.message}`;
+
+/** The daemon's block on `act`, `null` when allowed; a reply without `acts` allows nothing. */
+const blockOf = (c: ClipCandidate, act: ClipAct): string | null => {
+  const s = c.acts?.[act];
+  return s === undefined ? "The daemon did not say what this clip allows." : s.blocked ? blockText(s.blocked) : null;
+};
 
 export function ClipActions({ c }: { c: ClipCandidate }) {
   return (
@@ -35,8 +41,8 @@ function Approve({ c }: { c: ClipCandidate }) {
   const [signature, setSignature] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | undefined>();
-  const block = approveBlock(c);
-  const unmeasured = unmeasuredChecks(c);
+  const block = blockOf(c, "approve");
+  const unmeasured = c.acts?.approve.override_needed ?? [];
   const needsReason = unmeasured.length > 0;
   const ready = block === null && signature.trim() !== "" && (!needsReason || reason.trim() !== "");
 
@@ -78,7 +84,7 @@ function Reject({ c }: { c: ClipCandidate }) {
   const reject = useMutation("clips.reject");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | undefined>();
-  if (c.status === "rejected" || c.status === "published") return null;
+  if (blockOf(c, "reject") !== null) return null;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -109,13 +115,14 @@ function Reject({ c }: { c: ClipCandidate }) {
 function RenderButton({ c }: { c: ClipCandidate }) {
   const render = useMutation("clips.render", { timeoutMs: RENDER_TIMEOUT_MS });
   const [error, setError] = useState<string | undefined>();
+  const block = blockOf(c, "render");
   return (
     <span className={styles.rowAction}>
       <Button
         type="button"
         variant="secondary"
-        disabled={!canRender(c) || render.pending}
-        title={canRender(c) ? "record the stage to a vertical MP4, or a poster frame when the tools are missing" : "only a draft waiting for the owner is re-rendered"}
+        disabled={block !== null || render.pending}
+        title={block ?? "record the stage to a vertical MP4, or a poster frame when the tools are missing"}
         onClick={() => void render.run({ id: c.id }).then((r) => setError(r.ok ? undefined : explain(r.error)))}
       >
         {render.pending ? "Rendering…" : "Render draft"}
@@ -129,15 +136,15 @@ function Publish({ c }: { c: ClipCandidate }) {
   const publish = useMutation("clips.publish");
   const [result, setResult] = useState<ClipDryRun[] | null>(null);
   const [error, setError] = useState<string | undefined>();
-  const enabled = canPublish(c);
+  const block = blockOf(c, "publish");
   return (
     <span className={styles.rowAction}>
       <Button
         type="button"
         variant="secondary"
-        disabled={!enabled || publish.pending}
+        disabled={block !== null || publish.pending}
         data-role="onair-clip-publish"
-        title={enabled ? "write the exact request each platform would get; nothing is sent" : "only an owner-approved clip may be published"}
+        title={block ?? "write the exact request each platform would get; nothing is sent"}
         onClick={() =>
           void publish.run({ id: c.id }).then((r) => {
             if (r.ok) {
@@ -149,7 +156,6 @@ function Publish({ c }: { c: ClipCandidate }) {
       >
         {publish.pending ? "Writing…" : "Publish (dry run)"}
       </Button>
-      {!enabled && <small className={styles.dim}>approve first</small>}
       {error && <small role="alert">{error}</small>}
       {result && <DryRuns rows={result} title="DRY RUN — nothing is sent" />}
     </span>
