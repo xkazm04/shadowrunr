@@ -1,6 +1,7 @@
 // Layer 2 of Session review: one sandbox session and its tabs, as routes:
 //   review/<session>[/timeline[/<line>]]   review/<session>/types   review/<session>/player/<kind>
 //   review/<session>/judge   review/<session>/moderation   review/<session>/calls
+//   review/<A>/compare/<B>   (two sessions; the tab bar's "Compare with previous" opens it)
 // The tabs come first; under them each tab has the page head, the verdict and its gate checks,
 // the session's figures, then the tab's sections. That body is keyed on the tab and marked
 // `data-rise`, so the shell's entrance rise staggers head, verdict and body on every tab change.
@@ -12,8 +13,10 @@ import { Chip, ChipRow, toneOfState } from "../../ui/Chip";
 import { Head, Tabs, type TabItem } from "../../ui/Section";
 import { StatBand } from "../../ui/StatBand";
 import { StatePanel } from "../../ui/States";
+import { Compare } from "./CompareView";
+import { previousOf } from "./compare";
 import { EngineCalls } from "./EngineCalls";
-import { useDerived, useFeedback, useSession } from "./hooks";
+import { useDerived, useFeedback, useSession, useSessions } from "./hooks";
 import { Judge } from "./Judge";
 import styles from "./Layer2.module.css";
 import { Moderation } from "./Moderation";
@@ -24,7 +27,7 @@ import { ReviewByType } from "./ReviewByType";
 import type { TabId, TabProps } from "./tab";
 import { Timeline } from "./Timeline";
 
-const TAB_IDS: readonly TabId[] = ["timeline", "types", "player", "judge", "moderation", "calls"];
+const TAB_IDS: readonly TabId[] = ["timeline", "types", "player", "judge", "moderation", "calls", "compare"];
 const isTab = (s: string | undefined): s is TabId => TAB_IDS.includes(s as TabId);
 const isKind = (s: string | undefined): s is ShownKind => s !== undefined && s in KIND_NAME;
 
@@ -36,30 +39,52 @@ const LEDE: Readonly<Record<TabId, string>> = {
   judge: "The rules the judge failed and the lines it points at, how the sampled lines scored, and what it wrote.",
   moderation: "Everything the gates changed, held back or refused, grouped by what happened.",
   calls: "Every engine call: by role first, then by minute, then the calls of one minute.",
+  compare: "Two sessions side by side: what got fixed, what broke, what moved.",
 };
 
 export function Layer2({ sub }: { readonly sub: readonly string[] }) {
   const [sessionId, head, arg, ...rest] = sub;
   const tab: TabId = isTab(head) ? head : "timeline";
-  const known = sessionId !== undefined && (head === undefined || isTab(head)) && rest.length === 0 && (tab !== "player" || isKind(arg));
-  const query = useSession(known ? sessionId : undefined);
+  const compare = tab === "compare";
+  const known =
+    sessionId !== undefined && (head === undefined || isTab(head)) && rest.length === 0 && (tab !== "player" || isKind(arg)) && (!compare || (arg !== undefined && arg !== sessionId));
+  const query = useSession(known && !compare ? sessionId : undefined);
+  const sessions = useSessions();
   return (
     <div className={styles.root} data-page="review" data-role="review-layer2">
       {!known ? (
-        <div data-rise>
-          <StatePanel state="invalid" title={`There is no page at ${sub.join(" / ")}`} hint="Pick a session on the wall; each has a timeline, a review by type, the judge, moderation and engine calls." />
-          <RouteLink to={pageRoute("review")} className={buttonClass("secondary")}>
-            Back to all sessions
-          </RouteLink>
-        </div>
+        <NoPage sub={sub} />
+      ) : compare ? (
+        <QueryView query={sessions}>
+          {(rows) =>
+            rows.some((r) => r.session_id === sessionId) && rows.some((r) => r.session_id === arg) ? (
+              <div data-rise>
+                <Compare a={sessionId} b={arg ?? ""} />
+              </div>
+            ) : (
+              <NoPage sub={sub} />
+            )
+          }
+        </QueryView>
       ) : (
-        <QueryView query={query}>{(rs) => <Session rs={rs} tab={tab} arg={arg} />}</QueryView>
+        <QueryView query={query}>{(rs) => <Session rs={rs} tab={tab} arg={arg} previous={sessions.data ? previousOf(sessions.data, rs.row.session_id)?.session_id : undefined} />}</QueryView>
       )}
     </div>
   );
 }
 
-function Session({ rs, tab, arg }: { rs: ReviewSession; tab: TabId; arg: string | undefined }) {
+function NoPage({ sub }: { sub: readonly string[] }) {
+  return (
+    <div data-rise>
+      <StatePanel state="invalid" title={`There is no page at ${sub.join(" / ")}`} hint="Pick a session on the wall; each has a timeline, a review by type, the judge, moderation and engine calls." />
+      <RouteLink to={pageRoute("review")} className={buttonClass("secondary")}>
+        Back to all sessions
+      </RouteLink>
+    </div>
+  );
+}
+
+function Session({ rs, tab, arg, previous }: { rs: ReviewSession; tab: TabId; arg: string | undefined; previous: string | undefined }) {
   const router = useRouter();
   const d = useDerived(rs);
   const feedback = useFeedback(rs);
@@ -72,6 +97,8 @@ function Session({ rs, tab, arg }: { rs: ReviewSession; tab: TabId; arg: string 
     { id: "judge", label: rs.row.rule_fails ? `Judge · ${rs.row.rule_fails} fails` : "Judge" },
     { id: "moderation", label: "Moderation" },
     { id: "calls", label: "Engine calls" },
+    // Opens the compare against the session started just before this one (A before, this one B).
+    ...(previous ? [{ id: "compare" as const, label: "Compare with previous" }] : []),
   ];
   const props: TabProps = {
     rs,
@@ -88,7 +115,7 @@ function Session({ rs, tab, arg }: { rs: ReviewSession; tab: TabId; arg: string 
   const replyP95 = pct(d.replyWaitS, 0.95);
   return (
     <>
-      <Tabs items={items} value={tab} label="Session review" onSelect={(t) => router.navigate(pageRoute("review", id, ...(t === "player" && kind ? ["player", kind] : [t])))} />
+      <Tabs items={items} value={tab} label="Session review" onSelect={(t) => router.navigate(t === "compare" && previous ? pageRoute("review", previous, "compare", id) : pageRoute("review", id, ...(t === "player" && kind ? ["player", kind] : [t])))} />
       <div key={tab} data-rise>
         <Head kicker={`Session review · ${tabName}`} title={sessionTitle(rs.row.minutes, rs.row.chaos)} lede={LEDE[tab]} />
         <div className={styles.verdict} data-role="review-verdict">

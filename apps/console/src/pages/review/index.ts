@@ -7,18 +7,12 @@ import { Glance, Mini, Motif } from "./Face";
 const Layer1 = lazy(() => import("./Layer1").then((m) => ({ default: m.Layer1 })));
 const Layer2 = lazy(() => import("./Layer2").then((m) => ({ default: m.Layer2 })));
 
-const TAB_LABELS: Readonly<Record<string, string>> = {
-  timeline: "Timeline",
-  types: "Review by type",
-  player: "Player",
-  judge: "Judge",
-  moderation: "Moderation",
-  calls: "Engine calls",
-};
+/** Tab names that differ from the humanized id; Timeline, Player, Judge, Moderation and Compare are their id. */
+const TAB_LABELS: Readonly<Record<string, string>> = { types: "Review by type", calls: "Engine calls" };
 
-/** Breadcrumbs: a session id verbatim, then its tab by name, then a line or a kind. */
-export function reviewLabel(segment: string, depth: number): string | undefined {
-  if (depth === 1) return segment;
+/** Breadcrumbs: a session id verbatim, then its tab by name, then a line or a kind; a compare's second session verbatim. */
+export function reviewLabel(segment: string, depth: number, parts: readonly string[] = []): string | undefined {
+  if (depth === 1 || (depth === 3 && parts[2] === "compare")) return segment;
   if (depth === 2) return TAB_LABELS[segment];
   return undefined;
 }
