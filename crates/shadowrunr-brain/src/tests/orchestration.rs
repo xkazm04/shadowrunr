@@ -530,3 +530,369 @@ fn the_mechanism_gate_drops_only_narration_of_the_machinery() {
         assert!(!moderation::narrates_mechanism(l), "{l}");
     }
 }
+
+// ── A failed core call consumes nothing (challenge-2026-10-21, slot B) ─────────────────
+
+/// Ticks quiet beats from `from` every 5 s until one is not a hold (the stall lines a failure
+/// queues can hold the next beat), with `reply` queued for the core first. Returns that
+/// beat's events and its time.
+async fn next_voiced(
+    b: &mut Brain,
+    engine: &FakeEngine,
+    from: i64,
+    reply: &str,
+    c: &SegmentContext,
+) -> (Vec<StreamEvent>, i64) {
+    engine.push(Role::CoreThread, Ok(reply));
+    for k in 0..12i64 {
+        let t = from + 5_000 * k;
+        let ev = b.tick(t, Vec::new(), c).await.unwrap();
+        if one_plan(&ev).0 != BeatMode::Hold {
+            return (ev, t);
+        }
+    }
+    panic!("no voiced beat within a minute of {from}");
+}
+
+fn carry_expired(ev: &[StreamEvent], id: &str) -> usize {
+    mods(ev, ModStage::Input)
+        .iter()
+        .filter(|(r, m, a)| {
+            r == orchestrate::CARRY_RULE && m.as_deref() == Some(id) && a == "expired"
+        })
+        .count()
+}
+
+fn care_actions(ev: &[StreamEvent]) -> Vec<String> {
+    mods(ev, ModStage::Input)
+        .into_iter()
+        .filter(|(r, _, _)| r == care::CARE_RULE)
+        .map(|(_, _, a)| a)
+        .collect()
+}
+
+#[tokio::test]
+async fn a_question_picked_in_a_failed_beat_is_offered_again_when_the_core_answers() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "fail-q", tuning()).await;
+    let c = ctx(&[]);
+    let asker = viewer("mb", "MireBeetle", Rank::Thrall);
+    engine.push(Role::CoreThread, Err(unavailable()));
+    let ev = b
+        .tick(
+            0,
+            vec![msg(
+                "q1",
+                0,
+                &asker,
+                "malakor what is your plan for the swamp?",
+            )],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["q1"], "picked in the beat that fails");
+    let reason = one_plan(&ev).3;
+    assert!(reason.contains("rolled back: core call failed"), "{reason}");
+
+    let (ev, _) = next_voiced(
+        &mut b,
+        &engine,
+        5_000,
+        "The swamp becomes a moat, minion.",
+        &c,
+    )
+    .await;
+    assert_eq!(picked(&ev), ["q1"], "{:?}", one_plan(&ev));
+    let p = b.last_prompt().unwrap();
+    let chat = &p[p.find("# Chat").unwrap()..];
+    assert!(chat.contains("[q1]"), "{chat}");
+}
+
+#[tokio::test]
+async fn a_bit_drawn_by_a_failed_beat_is_voiced_by_the_next_beat_that_answers() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "fail-bit", tuning()).await;
+    b.set_prep(sample_prep());
+    let c = state_ctx("opening");
+    // The core fails on every beat until one draws a bit, then answers.
+    let mut failed_bit: Option<String> = None;
+    let mut failed_reason = String::new();
+    let mut calls = 0;
+    let mut t = 5_000i64;
+    while failed_bit.is_none() {
+        assert!(t < 120_000, "no bit drawn in two minutes");
+        if engine.requests(Role::CoreThread).len() == calls {
+            engine.push(Role::CoreThread, Err(unavailable()));
+        }
+        let ev = b.tick(t, Vec::new(), &c).await.unwrap();
+        let (mode, bit, _, reason) = one_plan(&ev);
+        let now = engine.requests(Role::CoreThread).len();
+        if now > calls && mode != BeatMode::Hold {
+            failed_bit = bit;
+            failed_reason = reason;
+        }
+        calls = now;
+        t += 5_000;
+    }
+    let bit = failed_bit.unwrap();
+    // Every later beat answers.
+    let mut answered: Vec<Option<String>> = Vec::new();
+    let mut first_reason: Option<String> = None;
+    for i in 0..60i64 {
+        engine.push(
+            Role::CoreThread,
+            Ok(&format!("Recovered quiet line number {i}.")),
+        );
+        let ev = b.tick(t + 5_000 * i, Vec::new(), &c).await.unwrap();
+        let (mode, id, _, reason) = one_plan(&ev);
+        if mode != BeatMode::Hold {
+            if id.is_some() && first_reason.is_none() {
+                first_reason = Some(reason);
+            }
+            answered.push(id);
+        }
+    }
+    // The answered beat voices the bit from where the failed beat drew it.
+    let fragment = |r: &str| -> String {
+        let at = r
+            .find(bit.as_str())
+            .unwrap_or_else(|| panic!("the bit {bit} in the reason: {r}"));
+        r[at..].split(';').next().unwrap().trim().to_string()
+    };
+    assert_eq!(
+        fragment(first_reason.as_deref().unwrap()),
+        fragment(&failed_reason),
+        "{failed_reason} / {first_reason:?}"
+    );
+    let first_bit = answered.iter().flatten().next();
+    assert_eq!(first_bit, Some(&bit), "{answered:?}");
+    // Told once: its beats are one run.
+    let starts = (0..answered.len())
+        .filter(|&i| {
+            answered[i].as_ref() == Some(&bit) && (i == 0 || answered[i - 1] != answered[i])
+        })
+        .count();
+    assert_eq!(starts, 1, "{answered:?}");
+}
+
+#[tokio::test]
+async fn cold_open_lines_drawn_by_a_failed_beat_are_drawn_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "fail-co", tuning()).await;
+    b.set_prep(sample_prep());
+    engine.push(Role::CoreThread, Ok("Welcome, early minion."));
+    b.tick(1_000, Vec::new(), &state_ctx("pre_show"))
+        .await
+        .unwrap();
+    let c = state_ctx("cold_open");
+    engine.push(Role::CoreThread, Err(unavailable()));
+    let ev = b.tick(5_000, Vec::new(), &c).await.unwrap();
+    let (mode, _, _, reason) = one_plan(&ev);
+    assert_eq!(mode, BeatMode::ColdOpen, "{reason}");
+    assert!(reason.contains("cold open lines 1-2/6"), "{reason}");
+    let (ev, _) = next_voiced(&mut b, &engine, 10_000, "Story beat, minions.", &c).await;
+    let reason = one_plan(&ev).3;
+    assert!(reason.contains("cold open lines 1-2/6"), "{reason}");
+    assert!(!reason.contains("lines 3-4/6"), "{reason}");
+}
+
+#[tokio::test]
+async fn a_room_event_taken_by_a_failed_beat_is_announced_by_the_next_that_answers() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "fail-poll", tuning()).await;
+    b.set_prep(sample_prep());
+    let with = |summary: &str| SegmentContext {
+        state: "opening".into(),
+        state_summary: summary.into(),
+        ..ctx(&[])
+    };
+    let open = with(
+        "open crowd poll p1: \"Keep the clerk?\" | keep = 1.0 (1 votes), evict = 1.0 (1 votes) \
+         | closes in 3 s | min rank Thrall",
+    );
+    engine.push(Role::CoreThread, Ok("The vote is open, minions."));
+    b.tick(1_000, Vec::new(), &open).await.unwrap();
+    let closed = with(
+        "no poll open\nlast poll p1 closed: TIE between keep and evict (1 votes each): you \
+         break it, and say you are breaking it",
+    );
+    engine.push(Role::CoreThread, Err(unavailable()));
+    let ev = b.tick(6_000, Vec::new(), &closed).await.unwrap();
+    let reason = one_plan(&ev).3;
+    assert!(reason.contains("announce poll p1 closed (tie)"), "{reason}");
+    let (ev, _) = next_voiced(
+        &mut b,
+        &engine,
+        11_000,
+        "A tie! I break it myself.",
+        &closed,
+    )
+    .await;
+    let reason = one_plan(&ev).3;
+    assert!(reason.contains("announce poll p1 closed (tie)"), "{reason}");
+    let p = b.last_prompt().unwrap();
+    assert!(
+        p.contains("ROOM EVENT: the vote on \"Keep the clerk?\" (p1)"),
+        "{p}"
+    );
+}
+
+#[tokio::test]
+async fn a_wave_picked_in_a_failed_beat_is_not_acknowledged() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "fail-wave", tuning()).await;
+    let c = ctx(&[]);
+    let pasta = "THE LICH IS A FRAUD copy this to every chat until he admits the throne room is a cardboard box";
+    let wave = |tag: &str, ts: i64| -> Vec<ChatMsg> {
+        (0..3)
+            .map(|i| {
+                let v = viewer(
+                    &format!("{tag}{i}"),
+                    &format!("Paster{tag}{i}"),
+                    Rank::Thrall,
+                );
+                msg(&format!("{tag}{i}"), ts + i, &v, pasta)
+            })
+            .collect()
+    };
+    engine.push(Role::CoreThread, Err(unavailable()));
+    let ev = b.tick(1_000, wave("a", 900), &c).await.unwrap();
+    assert_eq!(
+        picked(&ev).len(),
+        1,
+        "the wave is picked in the failed beat"
+    );
+    next_voiced(&mut b, &engine, 6_000, "The fog lifts, minions.", &c).await;
+    // Past the filter's copypasta window, the same paste from new viewers.
+    engine.push(
+        Role::CoreThread,
+        Ok("A cardboard throne? Insolence, all three of you."),
+    );
+    let ev = b.tick(301_000, wave("b", 300_000), &c).await.unwrap();
+    let input = mods(&ev, ModStage::Input);
+    assert!(
+        !input
+            .iter()
+            .any(|(r, _, a)| r == "wave_repeat" && a == "dropped"),
+        "{input:?}"
+    );
+    assert_eq!(picked(&ev).len(), 1, "{:?}", one_plan(&ev));
+    let reason = one_plan(&ev).3;
+    assert!(reason.contains("wave of 3 acknowledged"), "{reason}");
+}
+
+#[tokio::test]
+async fn a_disclosure_picked_in_a_failed_beat_gets_the_next_safety_beat() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "fail-care", tuning()).await;
+    let c = ctx(&[]);
+    let sad = viewer("rw", "RainWalrus", Rank::Thrall);
+    engine.push(Role::CoreThread, Err(unavailable()));
+    let ev = b
+        .tick(
+            1_000,
+            vec![msg("d1", 950, &sad, "i dont want to be alive anymore")],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["d1"]);
+    let mut care = care_actions(&ev);
+    let (ev, _) = next_voiced(
+        &mut b,
+        &engine,
+        6_000,
+        "I hear you. Stay with us tonight.",
+        &c,
+    )
+    .await;
+    care.extend(care_actions(&ev));
+    assert_eq!(picked(&ev), ["d1"], "{:?}", one_plan(&ev));
+    let reason = one_plan(&ev).3;
+    assert!(reason.contains("safety beat"), "{reason}");
+    assert_eq!(care, ["started"], "one start, no restart");
+}
+
+#[tokio::test]
+async fn a_question_rolled_back_through_a_long_outage_expires_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "fail-exp", tuning()).await;
+    let c = ctx(&[]);
+    let asker = viewer("mb", "MireBeetle", Rank::Thrall);
+    let mut expired = 0;
+    let mut t = 0i64;
+    let mut inbox = vec![msg(
+        "q1",
+        0,
+        &asker,
+        "malakor what is your plan for the swamp?",
+    )];
+    // Fail for a minute: well past CARRY_MS from any drain.
+    while t <= 60_000 {
+        engine.inner.queues.lock().unwrap().clear();
+        engine.push(Role::CoreThread, Err(unavailable()));
+        let ev = b.tick(t, std::mem::take(&mut inbox), &c).await.unwrap();
+        expired += carry_expired(&ev, "q1");
+        t += 5_000;
+    }
+    engine.inner.queues.lock().unwrap().clear();
+    let before = engine.requests(Role::CoreThread).len();
+    for i in 0..6i64 {
+        engine.push(
+            Role::CoreThread,
+            Ok(&format!("Back from the fog, line {i}.")),
+        );
+        let ev = b.tick(t + 5_000 * i, Vec::new(), &c).await.unwrap();
+        assert!(!picked(&ev).contains(&"q1".to_string()));
+        expired += carry_expired(&ev, "q1");
+    }
+    assert_eq!(expired, 1, "exactly one expiry record for q1");
+    for r in &engine.requests(Role::CoreThread)[before..] {
+        assert!(!r.prompt.contains("[q1]"), "{}", r.prompt);
+    }
+}
+
+#[tokio::test]
+async fn a_failed_beat_records_no_turn_for_its_picks() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "fail-turn", tuning()).await;
+    let c = ctx(&[]);
+    let asker = viewer("mb", "MireBeetle", Rank::Thrall);
+    let q = "malakor what is your plan for the swamp?";
+    engine.push(Role::CoreThread, Err(unavailable()));
+    b.tick(0, vec![msg("q1", 0, &asker, q)], &c).await.unwrap();
+    assert!(
+        b.turns.is_empty(),
+        "no turn for a beat that never aired: {:?}",
+        b.turns
+    );
+    let (ev, t) = next_voiced(
+        &mut b,
+        &engine,
+        5_000,
+        "The swamp becomes a moat, minion.",
+        &c,
+    )
+    .await;
+    assert_eq!(picked(&ev), ["q1"]);
+    b.end_stream(t + 5_000).await.unwrap();
+    let eps = b.memory().recent_episodes(50).unwrap();
+    let with: Vec<_> = eps.iter().filter(|e| e.text.contains(q)).collect();
+    assert_eq!(with.len(), 1, "{eps:?}");
+    assert_eq!(with[0].text.matches(q).count(), 1, "{}", with[0].text);
+    let lines: Vec<&str> = with[0].text.lines().collect();
+    let at = lines.iter().position(|l| l.contains(q)).unwrap();
+    assert_eq!(
+        lines.get(at + 1),
+        Some(&"Malakor: The swamp becomes a moat, minion.")
+    );
+}
