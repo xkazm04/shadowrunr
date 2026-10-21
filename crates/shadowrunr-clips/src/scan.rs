@@ -345,6 +345,7 @@ fn set_ts(ev: &mut StreamEvent, at: i64) {
         | StreamEvent::SegmentStart { ts_ms, .. }
         | StreamEvent::SegmentEnd { ts_ms, .. }
         | StreamEvent::CaseOpen { ts_ms, .. }
+        | StreamEvent::RecordShown { ts_ms, .. }
         | StreamEvent::Chat { ts_ms, .. }
         | StreamEvent::Picked { ts_ms, .. }
         | StreamEvent::Say { ts_ms, .. }

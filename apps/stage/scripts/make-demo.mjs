@@ -276,6 +276,19 @@ chat(159000, V.wyrm, "!grade HEX-05 CLM", { cmd: "grade", hex: "HEX-05", grade: 
 chat(160300, V.dusk, "!grade HEX-05 SPC", { cmd: "grade", hex: "HEX-05", grade: "SPC" });
 chat(161200, V.obol, "!grade HEX-05 CLM", { cmd: "grade", hex: "HEX-05", grade: "CLM" });
 job(162000, "r-02", "done", "Snapshot shows the 4% promise on the landing page (fictional archive)");
+push({
+  type: "record_shown",
+  ts_ms: 162100,
+  record: {
+    id: "REP-01",
+    hex: "HEX-03",
+    grade: "REP",
+    title: "Glimmerquay landing page promises 4% a week (fictional)",
+    source: "https://records.example/glimmerquay/landing",
+    summary: "An archived landing page promising 4% a week to depositors (fictional archive).",
+    fictional: true,
+  },
+});
 op(164500, { op: "reveal_hex", hex: "HEX-02", grade: "REP" });
 push({ type: "picked", ts_ms: 166000, msg_ids: [h1], reason: "hint matches a fogged hex" });
 say(166500, "ashen_quill wants the wallet. Patience, Acolyte. The fog lifts by vote, not by whining.", [h1]);

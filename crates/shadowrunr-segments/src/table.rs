@@ -49,7 +49,7 @@ pub const SEGMENT_TABLE_SOURCES: [(&str, &str); 4] = [
 ];
 
 /// Every `Op` tag (serde name) in the action grammar.
-pub const OP_TAGS: [&str; 11] = [
+pub const OP_TAGS: [&str; 12] = [
     "highlight",
     "start_poll",
     "close_poll",
@@ -61,6 +61,7 @@ pub const OP_TAGS: [&str; 11] = [
     "mark_moment",
     "switch_segment",
     "sign_off",
+    "show_screen",
 ];
 
 /// Chat command names a segment may accept.
@@ -90,6 +91,7 @@ pub fn op_tag(op: &Op) -> &'static str {
         Op::MarkMoment { .. } => "mark_moment",
         Op::SwitchSegment { .. } => "switch_segment",
         Op::SignOff { .. } => "sign_off",
+        Op::ShowScreen { .. } => "show_screen",
     }
 }
 

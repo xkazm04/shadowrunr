@@ -52,7 +52,7 @@ const SEGMENT_IDS: readonly SegmentId[] = ["SEG-01", "SEG-02A", "SEG-02B-I", "SE
 const STATUSES: readonly SegmentStatus[] = ["pilot", "trial", "regular", "flagship", "retired", "descoped"];
 const RANKS: readonly Rank[] = ["thrall", "acolyte", "cultist", "warlock", "lich", "dread_council"];
 /** The daemon's op tags (crates/shadowrunr-types Op); the contest data does not list them. */
-const OP_TAGS = ["highlight", "start_poll", "close_poll", "summon_foil", "dismiss_foil", "reveal_hex", "dispatch_research", "show_card", "mark_moment", "switch_segment", "sign_off"];
+const OP_TAGS = ["highlight", "start_poll", "close_poll", "summon_foil", "dismiss_foil", "reveal_hex", "dispatch_research", "show_card", "mark_moment", "switch_segment", "sign_off", "show_screen"];
 
 const text = (files: Readonly<Record<string, unknown>>, path: string): string => {
   const v = files[path];

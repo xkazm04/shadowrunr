@@ -1564,6 +1564,9 @@ impl SegmentRuntime {
                     return Err("invalid_card");
                 }
             }
+            // No segment allows it yet (appendix (screens)): the allow-list and the runtime
+            // defaults land with the screens package.
+            Op::ShowScreen { .. } => return Err("screen_not_allowed"),
             Op::MarkMoment { label } => {
                 if label.trim().is_empty() {
                     return Err("invalid_moment");

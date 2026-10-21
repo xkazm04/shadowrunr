@@ -53,6 +53,49 @@ pub enum Op {
     SignOff {
         reason: String,
     },
+    /// Switch the broadcast's main screen (appendix (screens)). Only the screens the current
+    /// segment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.
+    ShowScreen {
+        screen: ScreenId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        record_id: Option<String>,
+    },
+}
+
+/// What fills the broadcast's main screen. `host` is the big-avatar room; the others put the
+/// content full-size with Malakor cut out in the bottom-left corner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenId {
+    /// The big-avatar room (the cold open, the improvised room).
+    Host,
+    /// The case hexmap full-size.
+    Hexmap,
+    /// A browser-styled window on one staged case record.
+    Browser,
+    /// Both windows: the browser in front of the hexmap.
+    Desk,
+}
+
+/// One staged case record as the stage shows it in the browser window: the segment runtime's
+/// record (PII-scrubbed for a real case) with nothing added. Absent provenance is omitted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ShownRecord {
+    /// `DOC-01`, `REP-02`... (the prefix is the grade).
+    pub id: String,
+    pub hex: String,
+    pub grade: EvidenceGrade,
+    pub title: String,
+    /// The publisher's URL (a reserved `*.example` URL for a fictional record).
+    pub source: String,
+    pub summary: String,
+    /// `YYYY-MM-DD` the research pipeline fetched it (real cases only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retrieved: Option<String>,
+    /// The Wayback capture it came through, when the publisher refused the fetch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
+    pub fictional: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -165,6 +208,11 @@ pub enum StreamEvent {
         from: SegmentId,
         to: SegmentId,
         reason: String,
+    },
+    /// A staged case record the stage may show (sent before the `show_screen` that names it).
+    RecordShown {
+        ts_ms: TsMs,
+        record: ShownRecord,
     },
     /// Background job lifecycle (research subagents etc.).
     Job {

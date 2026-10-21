@@ -101,7 +101,7 @@ describe("segments/commands", () => {
     expect([...(rows[4]?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href"))).toEqual(["#/segments/tables/SEG-01", "#/segments/tables/SEG-02A"]);
     const grid = role("segments-op-grid");
     expect([...(grid?.querySelectorAll("thead th") ?? [])].map((t) => t.textContent)).toEqual(["Op", "SEG-01", "SEG-02A", "Segments"]);
-    expect(all("segments-op-row")).toHaveLength(11);
+    expect(all("segments-op-row")).toHaveLength(12);
     const reveal = all("segments-op-row").find((r) => r.textContent?.startsWith("reveal_hex"));
     expect([...(reveal?.querySelectorAll("[aria-label]") ?? [])].map((x) => x.getAttribute("aria-label"))).toEqual(["not allowed", "allowed"]);
   });

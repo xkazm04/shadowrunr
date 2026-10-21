@@ -219,6 +219,9 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     }
     case "case_open":
       return { ...s, caseFile: ev.case };
+    // The screens package draws these (appendix (screens)); until then the stage ignores them.
+    case "record_shown":
+      return s;
     case "handover":
       s = { ...s, segment: ev.to, pendingSwitch: null };
       return switchLayout(s, layoutFor(ev.to), at, "handover", ev.reason);
@@ -356,6 +359,8 @@ function applyOp(s: SceneState, op: Extract<StreamEvent, { type: "op" }>["op"], 
       return { ...s, pendingSwitch: { to: op.to, at } };
     case "sign_off":
       return { ...s, outro: { reason: op.reason, at } };
+    case "show_screen":
+      return s;
   }
 }
 

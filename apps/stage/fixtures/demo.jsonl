@@ -110,6 +110,7 @@
 {"type":"chat","ts_ms":160300,"msg":{"id":"m0061","ts_ms":160300,"viewer":{"id":"v-dusk","name":"Duskbell","platform":"sim","rank":"thrall","months":0,"gifted":0,"is_mod":false},"text":"!grade HEX-05 SPC","command":{"cmd":"grade","hex":"HEX-05","grade":"SPC"}}}
 {"type":"chat","ts_ms":161200,"msg":{"id":"m0062","ts_ms":161200,"viewer":{"id":"v-obol","name":"obol_counter","platform":"sim","rank":"warlock","sub_tier":3,"months":2,"gifted":0,"is_mod":false},"text":"!grade HEX-05 CLM","command":{"cmd":"grade","hex":"HEX-05","grade":"CLM"}}}
 {"type":"job","ts_ms":162000,"job_id":"r-02","status":"done","summary":"Snapshot shows the 4% promise on the landing page (fictional archive)"}
+{"type":"record_shown","ts_ms":162100,"record":{"id":"REP-01","hex":"HEX-03","grade":"REP","title":"Glimmerquay landing page promises 4% a week (fictional)","source":"https://records.example/glimmerquay/landing","summary":"An archived landing page promising 4% a week to depositors (fictional archive).","fictional":true}}
 {"type":"op","ts_ms":164500,"op":{"op":"reveal_hex","hex":"HEX-02","grade":"REP"}}
 {"type":"chat","ts_ms":164773,"msg":{"id":"m0042","ts_ms":164773,"viewer":{"id":"v-wraith","name":"ledgerwraith","platform":"sim","rank":"cultist","sub_tier":1,"months":4,"gifted":0,"is_mod":false},"text":"inspector has never been right once"}}
 {"type":"picked","ts_ms":166000,"msg_ids":["m0056"],"reason":"hint matches a fogged hex"}

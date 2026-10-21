@@ -43,6 +43,7 @@ export const OP_NAMES = exhaustive<OpName>()([
   "mark_moment",
   "switch_segment",
   "sign_off",
+  "show_screen",
 ] as const);
 
 export const EVENT_TYPES = exhaustive<EventType>()([
@@ -57,6 +58,7 @@ export const EVENT_TYPES = exhaustive<EventType>()([
   "vote",
   "moderation",
   "handover",
+  "record_shown",
   "job",
   "beat_plan",
   "health",

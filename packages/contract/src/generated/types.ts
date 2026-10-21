@@ -329,6 +329,11 @@ export type StreamEvent =
       type: "handover";
     }
   | {
+      record: ShownRecord;
+      ts_ms: number;
+      type: "record_shown";
+    }
+  | {
       job_id: string;
       status: string;
       summary?: string;
@@ -462,7 +467,20 @@ export type Op =
   | {
       op: "sign_off";
       reason: string;
+    }
+  | {
+      op: "show_screen";
+      record_id?: string;
+      screen: ScreenId;
     };
+/**
+ * What fills the broadcast's main screen. `host` is the big-avatar room; the others put the
+ * content full-size with Malakor cut out in the bottom-left corner.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ScreenId".
+ */
+export type ScreenId = "host" | "hexmap" | "browser" | "desk";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ModStage".
@@ -2890,6 +2908,36 @@ export interface VoteTally {
    * Sum of rank-weighted votes.
    */
   weight: number;
+}
+/**
+ * One staged case record as the stage shows it in the browser window: the segment runtime's
+ * record (PII-scrubbed for a real case) with nothing added. Absent provenance is omitted.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ShownRecord".
+ */
+export interface ShownRecord {
+  fictional: boolean;
+  grade: EvidenceGrade;
+  hex: string;
+  /**
+   * `DOC-01`, `REP-02`... (the prefix is the grade).
+   */
+  id: string;
+  /**
+   * `YYYY-MM-DD` the research pipeline fetched it (real cases only).
+   */
+  retrieved?: string;
+  /**
+   * The publisher's URL (a reserved `*.example` URL for a fictional record).
+   */
+  source: string;
+  summary: string;
+  title: string;
+  /**
+   * The Wayback capture it came through, when the publisher refused the fetch.
+   */
+  via?: string;
 }
 /**
  * One session on the Review page's wall.

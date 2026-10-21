@@ -181,6 +181,7 @@ pub fn op_example(tag: &str) -> Option<&'static str> {
         "mark_moment" => r#"{"op":"mark_moment","label":"..."}"#,
         "switch_segment" => r#"{"op":"switch_segment","to":"SEG-02A"}"#,
         "sign_off" => r#"{"op":"sign_off","reason":"..."}"#,
+        "show_screen" => r#"{"op":"show_screen","screen":"browser","record_id":"DOC-01"}"#,
         _ => return None,
     })
 }
@@ -188,7 +189,7 @@ pub fn op_example(tag: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shadowrunr_types::{EvidenceGrade, Rank, SegmentId};
+    use shadowrunr_types::{EvidenceGrade, Rank, ScreenId, SegmentId};
 
     fn allowed(tags: &[&str]) -> Vec<String> {
         tags.iter().map(|s| s.to_string()).collect()
@@ -245,6 +246,7 @@ mod tests {
                 Op::MarkMoment { .. } => 8,
                 Op::SwitchSegment { .. } => 9,
                 Op::SignOff { .. } => 10,
+                Op::ShowScreen { .. } => 11,
             }
         }
         let s = |x: &str| x.to_string();
@@ -278,6 +280,10 @@ mod tests {
                 to: SegmentId::Seg02aHexmap,
             },
             Op::SignOff { reason: s("r") },
+            Op::ShowScreen {
+                screen: ScreenId::Browser,
+                record_id: Some(s("DOC-01")),
+            },
         ];
         let slots: Vec<usize> = ops.iter().map(slot).collect();
         assert_eq!(slots, (0..ops.len()).collect::<Vec<_>>());

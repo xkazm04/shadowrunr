@@ -369,6 +369,7 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::SegmentStart { ts_ms, .. }
         | StreamEvent::SegmentEnd { ts_ms, .. }
         | StreamEvent::CaseOpen { ts_ms, .. }
+        | StreamEvent::RecordShown { ts_ms, .. }
         | StreamEvent::Chat { ts_ms, .. }
         | StreamEvent::Picked { ts_ms, .. }
         | StreamEvent::Say { ts_ms, .. }
@@ -426,6 +427,13 @@ pub fn body(ev: &StreamEvent) -> String {
             case.hexes.len(),
             case.fictional
         ),
+        StreamEvent::RecordShown { record, .. } => {
+            format!(
+                "record_shown {} \"{}\"",
+                record.id,
+                clip(&record.title, 120)
+            )
+        }
         StreamEvent::Chat { msg, .. } => format!(
             "chat [{}] {} ({}): {}",
             msg.id,

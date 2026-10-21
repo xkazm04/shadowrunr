@@ -4101,6 +4101,26 @@
             "reason"
           ],
           "type": "object"
+        },
+        {
+          "description": "Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.",
+          "properties": {
+            "op": {
+              "const": "show_screen",
+              "type": "string"
+            },
+            "record_id": {
+              "type": "string"
+            },
+            "screen": {
+              "$ref": "#/$defs/ScreenId"
+            }
+          },
+          "required": [
+            "op",
+            "screen"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -5719,6 +5739,31 @@
       },
       "type": "object"
     },
+    "ScreenId": {
+      "description": "What fills the broadcast's main screen. `host` is the big-avatar room; the others put the\ncontent full-size with Malakor cut out in the bottom-left corner.",
+      "oneOf": [
+        {
+          "const": "host",
+          "description": "The big-avatar room (the cold open, the improvised room).",
+          "type": "string"
+        },
+        {
+          "const": "hexmap",
+          "description": "The case hexmap full-size.",
+          "type": "string"
+        },
+        {
+          "const": "browser",
+          "description": "A browser-styled window on one staged case record.",
+          "type": "string"
+        },
+        {
+          "const": "desk",
+          "description": "Both windows: the browser in front of the hexmap.",
+          "type": "string"
+        }
+      ]
+    },
     "SegmentContext": {
       "description": "What the segment runtime tells the brain each tick. Produced by\n`shadowrunr_segments::SegmentRuntime::context`, consumed by `shadowrunr_brain::Brain::tick`.",
       "properties": {
@@ -6118,6 +6163,52 @@
         "created_ms",
         "lines",
         "untagged"
+      ],
+      "type": "object"
+    },
+    "ShownRecord": {
+      "description": "One staged case record as the stage shows it in the browser window: the segment runtime's\nrecord (PII-scrubbed for a real case) with nothing added. Absent provenance is omitted.",
+      "properties": {
+        "fictional": {
+          "type": "boolean"
+        },
+        "grade": {
+          "$ref": "#/$defs/EvidenceGrade"
+        },
+        "hex": {
+          "type": "string"
+        },
+        "id": {
+          "description": "`DOC-01`, `REP-02`... (the prefix is the grade).",
+          "type": "string"
+        },
+        "retrieved": {
+          "description": "`YYYY-MM-DD` the research pipeline fetched it (real cases only).",
+          "type": "string"
+        },
+        "source": {
+          "description": "The publisher's URL (a reserved `*.example` URL for a fictional record).",
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "via": {
+          "description": "The Wayback capture it came through, when the publisher refused the fetch.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "hex",
+        "grade",
+        "title",
+        "source",
+        "summary",
+        "fictional"
       ],
       "type": "object"
     },
@@ -6682,6 +6773,28 @@
             "from",
             "to",
             "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A staged case record the stage may show (sent before the `show_screen` that names it).",
+          "properties": {
+            "record": {
+              "$ref": "#/$defs/ShownRecord"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "record_shown",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "record"
           ],
           "type": "object"
         },

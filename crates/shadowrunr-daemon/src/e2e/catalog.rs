@@ -111,7 +111,7 @@ async fn segments_tables_and_ranks_table_are_the_running_data() {
 
     let t: SegmentTables = typed(&rpc(&addr, "segments.tables", json!({})).await);
     assert_eq!(t.segments.len(), 4);
-    assert_eq!(t.op_tags.len(), 11);
+    assert_eq!(t.op_tags.len(), 12);
     assert_eq!(t.command_names.len(), 5);
     let names: Vec<&str> = t.commands.iter().map(|c| c.name.as_str()).collect();
     assert_eq!(names, t.command_names);

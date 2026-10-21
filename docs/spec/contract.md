@@ -44,6 +44,13 @@ The `op` payload is the action grammar, tagged `"op"`:
 - `mark_moment`
 - `switch_segment`
 - `sign_off`
+- `show_screen` (`screen`: `host` | `hexmap` | `browser` | `desk`, optional `record_id`): what
+  fills the broadcast's main screen. The contract is in place; no segment allows it yet, so the
+  runtime refuses it as `screen_not_allowed` until the screens package lands.
+
+A `record_shown {ts_ms, record}` event carries one staged case record (`ShownRecord`: `id`,
+`hex`, `grade`, `title`, `source`, `summary`, optional `retrieved` and `via`, `fictional`) for the
+stage's browser window. It is sent before the `show_screen` that names it.
 
 The model emits actions as lines of the form `OP: {"op":"show_card",...}`. Anything outside
 the segment's `allowed_ops` is rejected by `SegmentRuntime::apply_ops` and logged as a
