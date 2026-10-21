@@ -17,7 +17,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use shadowrunr_types::sandbox::{gate_pass, SandboxCheck, SandboxCheckState, SandboxReport};
+use shadowrunr_types::sandbox::{
+    gate_pass, SandboxCheck, SandboxCheckId, SandboxCheckState, SandboxReport,
+};
 use shadowrunr_types::voice::{VoiceLogEvent, VoiceLogLine};
 use shadowrunr_types::{Op, Speaker, StreamEvent, TsMs};
 
@@ -58,19 +60,15 @@ pub const DEAD_AIR_MIN_S: f64 = 1.0;
 /// `dead_air` passes when the longest silence is at most this: the say-gap ceiling.
 pub const DEAD_AIR_CEILING_S: f64 = 15.0;
 
-fn check(id: &str, state: SandboxCheckState, detail: String) -> SandboxCheck {
-    SandboxCheck {
-        id: id.into(),
-        state,
-        detail,
-    }
+fn check(id: SandboxCheckId, state: SandboxCheckState, detail: String) -> SandboxCheck {
+    SandboxCheck { id, state, detail }
 }
 
-fn unmeasured(id: &str, detail: impl Into<String>) -> SandboxCheck {
+fn unmeasured(id: SandboxCheckId, detail: impl Into<String>) -> SandboxCheck {
     check(id, SandboxCheckState::Unmeasured, detail.into())
 }
 
-fn verdict(id: &str, pass: bool, detail: String) -> SandboxCheck {
+fn verdict(id: SandboxCheckId, pass: bool, detail: String) -> SandboxCheck {
     let state = if pass {
         SandboxCheckState::Pass
     } else {
@@ -141,7 +139,7 @@ pub fn parse_voice(text: &str) -> Vec<VoiceLogLine> {
 /// `voiced`: the share of Malakor's `say` lines whose every rendered part was `played`, with
 /// nothing skipped or dropped. A line the voice never rendered is not voiced.
 pub fn voiced(show: &Show, voice: Option<&[VoiceLogLine]>) -> SandboxCheck {
-    const ID: &str = "voiced";
+    const ID: SandboxCheckId = SandboxCheckId::Voiced;
     let Some(voice) = voice else {
         return unmeasured(ID, "no voice.jsonl: the voice did not follow the session");
     };
@@ -233,7 +231,7 @@ pub fn voiced(show: &Show, voice: Option<&[VoiceLogLine]>) -> SandboxCheck {
 /// `face`: the share of the session `[0, end_ms]` the real rig was drawn. Before the first
 /// `face` event the state is unknown, which counts as silhouette.
 pub fn face(show: &Show, voice: Option<&[VoiceLogLine]>) -> SandboxCheck {
-    const ID: &str = "face";
+    const ID: SandboxCheckId = SandboxCheckId::Face;
     let events: Vec<(TsMs, bool)> = voice
         .unwrap_or_default()
         .iter()
@@ -374,7 +372,7 @@ fn median(v: &mut [i64]) -> i64 {
 /// - Pass when head and tail are each within `-AV_SYNC_EARLY_MS..=AV_SYNC_LATE_MS` of the
 ///   constant and `|tail - head| <= AV_DRIFT_MAX_MS`.
 pub fn av_sync(played_ms: &[TsMs], onsets_s: &[f64], stream_offset_ms: i64) -> SandboxCheck {
-    const ID: &str = "av_sync";
+    const ID: SandboxCheckId = SandboxCheckId::AvSync;
     if played_ms.is_empty() {
         return unmeasured(ID, "no played line in voice.jsonl");
     }
@@ -444,7 +442,7 @@ pub fn dead_air(
     stream_offset_ms: i64,
     file_s: Option<f64>,
 ) -> SandboxCheck {
-    const ID: &str = "dead_air";
+    const ID: SandboxCheckId = SandboxCheckId::DeadAir;
     let Some((from, to)) = show.span() else {
         return unmeasured(ID, "Malakor said nothing: no show to measure");
     };
@@ -542,8 +540,8 @@ pub fn measure(dir: &Path, report: &SandboxReport, ffmpeg: &str) -> Vec<SandboxC
                 "the session was not recorded".into()
             };
             (
-                unmeasured("av_sync", why.clone()),
-                unmeasured("dead_air", why),
+                unmeasured(SandboxCheckId::AvSync, why.clone()),
+                unmeasured(SandboxCheckId::DeadAir, why),
             )
         }
         Ok((rec, file)) => {
@@ -560,7 +558,7 @@ pub fn measure(dir: &Path, report: &SandboxReport, ffmpeg: &str) -> Vec<SandboxC
                         parse_silences(&log).iter().filter_map(|s| s.end).collect();
                     av_sync(&played, &onsets, rec.stream_offset_ms)
                 }
-                Err(e) => unmeasured("av_sync", e),
+                Err(e) => unmeasured(SandboxCheckId::AvSync, e),
             };
             let air = match silencedetect(ffmpeg, &file, DEAD_AIR_NOISE_DB, DEAD_AIR_MIN_S) {
                 Ok(log) => dead_air(
@@ -569,7 +567,7 @@ pub fn measure(dir: &Path, report: &SandboxReport, ffmpeg: &str) -> Vec<SandboxC
                     rec.stream_offset_ms,
                     parse_duration(&log),
                 ),
-                Err(e) => unmeasured("dead_air", e),
+                Err(e) => unmeasured(SandboxCheckId::DeadAir, e),
             };
             (av, air)
         }
@@ -848,10 +846,10 @@ mod tests {
     }
 
     fn report(record: bool) -> SandboxReport {
-        let checks = shadowrunr_types::sandbox::SANDBOX_CHECKS
+        let checks = SandboxCheckId::ALL
             .iter()
-            .map(|id| SandboxCheck {
-                id: (*id).into(),
+            .map(|&id| SandboxCheck {
+                id,
                 state: SandboxCheckState::Pass,
                 detail: String::new(),
             })
@@ -947,13 +945,11 @@ mod tests {
         std::fs::write(&log, &silences).unwrap();
         let ffmpeg = fake_ffmpeg(dir, &log);
         let mut r = report(true);
-        r.checks.retain(|c| {
-            !shadowrunr_types::sandbox::SANDBOX_WATCHED_CHECKS.contains(&c.id.as_str())
-        });
+        r.checks.retain(|c| !c.id.is_watched());
         std::fs::write(dir.join("session.json"), serde_json::to_string(&r).unwrap()).unwrap();
         let r = refresh(dir, &ffmpeg, true).unwrap();
         for id in ["voiced", "face", "av_sync", "dead_air"] {
-            let c = r.checks.iter().find(|c| c.id == id).unwrap();
+            let c = r.checks.iter().find(|c| c.id.as_str() == id).unwrap();
             assert_eq!(c.state, SandboxCheckState::Pass, "{id}: {}", c.detail);
         }
         assert!(r.pass);

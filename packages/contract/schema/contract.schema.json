@@ -3243,8 +3243,7 @@
           "type": "string"
         },
         "id": {
-          "description": "`care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,\n`ai_disclosure`, `handles_in_picture`, `evidence_badge_burnt`, `source_citation`,\n`no_open_correction`.",
-          "type": "string"
+          "$ref": "#/$defs/GateCheckId"
         },
         "mandatory": {
           "description": "Part of the SEG-02A / linked-case checklist.",
@@ -3260,6 +3259,22 @@
         "detail"
       ],
       "type": "object"
+    },
+    "GateCheckId": {
+      "description": "A clip publish-gate check, as it crosses the wire. The serde names are the ids\n`candidate.json` has always carried.",
+      "enum": [
+        "care_state",
+        "personal_data",
+        "brigade_call",
+        "blocked_term",
+        "injection_reply",
+        "ai_disclosure",
+        "handles_in_picture",
+        "evidence_badge_burnt",
+        "source_citation",
+        "no_open_correction"
+      ],
+      "type": "string"
     },
     "GateState": {
       "oneOf": [
@@ -5559,8 +5574,7 @@
           "type": "string"
         },
         "id": {
-          "description": "One of [`SANDBOX_CHECKS`].",
-          "type": "string"
+          "$ref": "#/$defs/SandboxCheckId"
         },
         "state": {
           "$ref": "#/$defs/SandboxCheckState"
@@ -5572,6 +5586,22 @@
         "detail"
       ],
       "type": "object"
+    },
+    "SandboxCheckId": {
+      "description": "A sandbox session's gate check, as it crosses the wire. The variants are in report order\n([`SandboxCheckId::ALL`]); the serde names are the ids `session.json` has always carried.",
+      "enum": [
+        "say_gap",
+        "core_errors",
+        "sign_off",
+        "chaos",
+        "stage_ack",
+        "judge",
+        "voiced",
+        "face",
+        "av_sync",
+        "dead_air"
+      ],
+      "type": "string"
     },
     "SandboxCheckState": {
       "oneOf": [
@@ -5665,7 +5695,7 @@
           "type": "number"
         },
         "pass": {
-          "description": "Every check that gates the session passed (an unmeasured check is not a pass; the\nwatched checks gate only a recorded session, see [`SANDBOX_WATCHED_CHECKS`]).",
+          "description": "Every check that gates the session passed (an unmeasured check is not a pass; the\nwatched checks gate only a recorded session, see [`SandboxCheckId::is_watched`]).",
           "type": "boolean"
         },
         "say_gap_p95_s": {
@@ -5723,7 +5753,7 @@
           "type": "integer"
         },
         "record": {
-          "description": "The session is recorded (`stream sandbox --record`), so the watched checks\n([`SANDBOX_WATCHED_CHECKS`]) gate it. Default false.",
+          "description": "The session is recorded (`stream sandbox --record`), so the watched checks\n([`SandboxCheckId::is_watched`]) gate it. Default false.",
           "type": "boolean"
         },
         "seed": {

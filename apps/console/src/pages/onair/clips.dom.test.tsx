@@ -20,7 +20,7 @@ const PAGE: ClipsPage = {
   total: 2,
 };
 
-const check = (id: string, state: GateCheck["state"], mandatory = false): GateCheck => ({ id, state, detail: `${id} detail`, ...(mandatory ? { mandatory } : {}) });
+const check = (id: GateCheck["id"], state: GateCheck["state"], mandatory = false): GateCheck => ({ id, state, detail: `${id} detail`, ...(mandatory ? { mandatory } : {}) });
 
 function clip(checks: GateCheck[], status: ClipCandidate["status"] = "pending_owner_gate"): ClipCandidate {
   const w = { marker: 0.35, chat: 0.25, audio: 0.15, hook: 0.25 };

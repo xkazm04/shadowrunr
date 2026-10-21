@@ -357,7 +357,7 @@ fn the_gate_reads_care_state_personal_data_brigades_and_injections() {
         "the disclosure is outside the cut"
     );
     let checks = gate::exclusions(&s, &cut, &policy());
-    let state = |id: &str| checks.iter().find(|c| c.id == id).unwrap().state;
+    let state = |id: &str| checks.iter().find(|c| c.id.as_str() == id).unwrap().state;
     assert_eq!(state("care_state"), GateState::Fail);
     assert_eq!(state("personal_data"), GateState::Fail);
     assert_eq!(state("brigade_call"), GateState::Fail);
@@ -699,7 +699,7 @@ async fn a_failed_check_holds_whatever_the_override() {
             c.gate
                 .checks
                 .iter()
-                .any(|k| k.id == "brigade_call" && k.state == GateState::Fail)
+                .any(|k| k.id.as_str() == "brigade_call" && k.state == GateState::Fail)
         })
         .expect("the brigade line is in a cut");
     assert!(held.gate.held);
