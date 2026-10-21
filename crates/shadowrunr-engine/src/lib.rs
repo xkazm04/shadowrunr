@@ -15,6 +15,7 @@ pub mod claude_cli;
 pub mod config;
 pub mod fleet;
 pub mod health;
+pub mod ladder;
 pub mod ledger;
 pub mod limits;
 pub mod model;

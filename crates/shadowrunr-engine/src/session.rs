@@ -11,8 +11,13 @@
 //!
 //! The process is reaped after the idle timeout (default 20 min) and respawned with
 //! `--resume <session_id>` on the next `send`. If it dies mid-turn, the session respawns once
-//! and retries. If the account hits a rate limit, it is cooled fleet-wide and the session
-//! moves to the next healthy account (fresh context, `fallback_reason` set).
+//! and retries. A failed turn walks the same ladder as a one-shot call ([`crate::ladder`]):
+//! a rate limit or a bad login cools the account fleet-wide, an overload does not, and either
+//! way the session moves to the next healthy account (fresh context, `fallback_reason` set);
+//! a request-side failure is returned unchanged. When no account is left and an API key is
+//! configured, the session degrades in place to a Messages API conversation seeded with its
+//! own turn mirror, and returns to a CLI account (fresh process) once one is healthy again.
+//! Every answered turn reports the fleet mode.
 //!
 //! [`ApiSession`] is the fleet-loss stand-in: a Messages API conversation that keeps its own
 //! history. Its `interrupt` is a no-op because a non-streaming request cannot be cut short.
@@ -32,7 +37,8 @@ use tokio::task::JoinHandle;
 
 use crate::api::Turn;
 use crate::claude_cli::{elapsed_ms, CallMode};
-use crate::fleet::FleetInner;
+use crate::fleet::{api_reply, FleetInner};
+use crate::ladder::{self, Attempts, Step};
 use crate::ledger::LedgerRow;
 use crate::limits::Failure;
 use crate::stream::{Feed, TurnOutcome, TurnParser};
@@ -116,6 +122,11 @@ pub struct ClaudeWarmSession {
     fallback_reason: Option<String>,
     seq: u64,
     reaper: JoinHandle<()>,
+    /// Every answered turn since open (user prompt, assistant text), whichever backend
+    /// answered it: what an in-place switch to the API carries.
+    mirror: Vec<Turn>,
+    /// No account was left: turns go to the Messages API until one is healthy again.
+    on_api: bool,
 }
 
 impl ClaudeWarmSession {
@@ -143,6 +154,8 @@ impl ClaudeWarmSession {
             fallback_reason: None,
             seq: 0,
             reaper,
+            mirror: Vec::new(),
+            on_api: false,
         };
         let p = s
             .spawn(None)
@@ -245,6 +258,42 @@ impl ClaudeWarmSession {
         r
     }
 
+    /// The API rung of a warm turn: no account is left, so the conversation continues in
+    /// place on the Messages API, seeded with the mirror. Without an API key the fleet is
+    /// down.
+    async fn api_rung(
+        &mut self,
+        prompt: String,
+        mut attempts: Attempts,
+    ) -> Result<EngineReply, EngineError> {
+        if self.inner.api.is_none() {
+            ladder::down(&self.inner);
+            return Err(attempts.unavailable());
+        }
+        self.on_api = true;
+        self.fallback_reason = Some(attempts.joined());
+        let res = api_turn(
+            &self.inner,
+            &self.template,
+            &mut self.mirror,
+            prompt,
+            attempts.joined(),
+        )
+        .await;
+        match res {
+            Ok(reply) => Ok(reply),
+            Err(f) => {
+                let msg = f.clone().into_engine_error("api");
+                if let Step::Stop(e) = ladder::step(f, "api") {
+                    return Err(e);
+                }
+                attempts.push(format!("api: {msg}"));
+                ladder::down(&self.inner);
+                Err(attempts.unavailable())
+            }
+        }
+    }
+
     fn fail_row(&self, started: Instant, kind: &str) {
         let label = self.account_label().to_string();
         self.inner.record(self.inner.failure_row(
@@ -275,101 +324,127 @@ impl WarmSession for ClaudeWarmSession {
             }
             self.in_flight = false;
         }
-        let timeout_ms = self.template.timeout_ms;
-        let mut respawns_left = 1u32;
-        let mut rotations_left = self.inner.accounts.len();
-        loop {
-            let started = Instant::now();
-            if guard.is_none() {
-                match self.spawn(self.session_id.clone()).await {
-                    Ok(p) => *guard = Some(p),
-                    Err(f) => {
-                        self.fail_row(started, f.kind());
-                        return Err(f.into_engine_error(self.account_label()));
-                    }
+        if self.on_api {
+            // Degraded in place: come back to a CLI account (fresh process; the API turns
+            // stay in the mirror) as soon as one is healthy again.
+            match self.inner.pick_account(&[]) {
+                Some(j) => {
+                    self.on_api = false;
+                    self.account_idx = j;
+                    self.session_id = None;
+                    self.fallback_reason = Some(format!(
+                        "api fallback ended; session moved to account {}, context reset",
+                        self.account_label()
+                    ));
+                }
+                None => {
+                    let mut attempts = Attempts::default();
+                    attempts.accounts_exhausted(&self.inner);
+                    return self.api_rung(prompt, attempts).await;
                 }
             }
-            let Some(p) = guard.as_mut() else {
-                continue;
+        }
+        let timeout_ms = self.template.timeout_ms;
+        let mut respawns_left = 1u32;
+        let mut tried = vec![self.account_idx];
+        let mut attempts = Attempts::default();
+        loop {
+            let started = Instant::now();
+            let spawn_failure = if guard.is_none() {
+                match self.spawn(self.session_id.clone()).await {
+                    Ok(p) => {
+                        *guard = Some(p);
+                        None
+                    }
+                    Err(f) => Some(f),
+                }
+            } else {
+                None
             };
-            self.in_flight = true;
-            let res = Self::turn(p, &prompt, timeout_ms).await;
-            self.in_flight = false;
-            let duration_ms = started.elapsed().as_millis() as u64;
-            match res {
-                Ok(o) => {
-                    if let Some(id) = &o.session_id {
-                        self.session_id = Some(id.clone());
-                    }
-                    shared.touch();
-                    let account = self.inner.accounts[self.account_idx].clone();
-                    let reply = self.inner.cli_reply(
-                        &account,
-                        &self.template,
-                        o,
-                        duration_ms,
-                        self.fallback_reason.clone(),
-                    );
-                    self.inner.record(self.row(&reply));
-                    return Ok(reply);
-                }
-                Err(TurnErr::Died(detail)) => {
-                    self.fail_row(started, "transient");
-                    if let Some(p) = guard.take() {
-                        p.kill().await;
-                    }
-                    if respawns_left == 0 {
-                        return Err(EngineError::Unavailable {
-                            reason: format!(
-                                "warm session on {} died twice: {detail}",
-                                self.account_label()
-                            ),
-                        });
-                    }
-                    respawns_left -= 1;
-                }
-                Err(TurnErr::Timeout) => {
-                    self.fail_row(started, "timeout");
-                    if let Some(p) = guard.take() {
-                        p.kill().await;
-                    }
-                    return Err(EngineError::Timeout {
-                        after_ms: timeout_ms,
-                    });
-                }
-                Err(TurnErr::Failed(f)) => {
-                    self.fail_row(started, f.kind());
-                    match f {
-                        Failure::RateLimited { reset_at_ms, rule } => {
-                            let from = self.account_label().to_string();
-                            self.inner.cool(self.account_idx, reset_at_ms);
+            let failure = match (spawn_failure, guard.as_mut()) {
+                (Some(f), _) => f,
+                (None, None) => continue,
+                (None, Some(p)) => {
+                    self.in_flight = true;
+                    let res = Self::turn(p, &prompt, timeout_ms).await;
+                    self.in_flight = false;
+                    let duration_ms = started.elapsed().as_millis() as u64;
+                    match res {
+                        Ok(o) => {
+                            if let Some(id) = &o.session_id {
+                                self.session_id = Some(id.clone());
+                            }
+                            shared.touch();
+                            let account = self.inner.accounts[self.account_idx].clone();
+                            let reply = self.inner.cli_reply(
+                                &account,
+                                &self.template,
+                                o,
+                                duration_ms,
+                                self.fallback_reason.clone(),
+                            );
+                            self.inner.record(self.row(&reply));
+                            push_exchange(&mut self.mirror, prompt, reply.text.clone());
+                            ladder::served(&self.inner, reply.engine);
+                            return Ok(reply);
+                        }
+                        Err(TurnErr::Died(detail)) => {
+                            self.fail_row(started, "transient");
                             if let Some(p) = guard.take() {
                                 p.kill().await;
                             }
-                            let next = self.inner.pick_account(&[self.account_idx]);
-                            match next {
-                                Some(j) if rotations_left > 0 => {
-                                    rotations_left -= 1;
-                                    self.account_idx = j;
-                                    self.session_id = None;
-                                    self.fallback_reason = Some(format!(
-                                        "account {from} rate-limited ({rule}); session moved, context reset"
-                                    ));
-                                }
-                                _ => {
-                                    return Err(EngineError::RateLimited {
-                                        account: from,
-                                        reset_at_ms,
-                                    })
-                                }
+                            if respawns_left == 0 {
+                                return Err(EngineError::Unavailable {
+                                    reason: format!(
+                                        "warm session on {} died twice: {detail}",
+                                        self.account_label()
+                                    ),
+                                });
                             }
+                            respawns_left -= 1;
+                            continue;
                         }
-                        Failure::Auth { .. } => {
-                            self.inner.cool(self.account_idx, None);
-                            return Err(f.into_engine_error(self.account_label()));
+                        Err(TurnErr::Timeout) => {
+                            self.fail_row(started, "timeout");
+                            if let Some(p) = guard.take() {
+                                p.kill().await;
+                            }
+                            return Err(EngineError::Timeout {
+                                after_ms: timeout_ms,
+                            });
                         }
-                        other => return Err(other.into_engine_error(self.account_label())),
+                        Err(TurnErr::Failed(f)) => f,
                     }
+                }
+            };
+            // The same ladder as a one-shot call.
+            self.fail_row(started, failure.kind());
+            let from = self.account_label().to_string();
+            let (cool, reason) = match ladder::step(failure, &from) {
+                Step::Stop(e) => return Err(e),
+                Step::Rotate { cool, reason } => (cool, reason),
+            };
+            if let Some(reset_at_ms) = cool {
+                self.inner.cool(self.account_idx, reset_at_ms);
+            }
+            if let Some(p) = guard.take() {
+                p.kill().await;
+            }
+            attempts.push(reason);
+            self.session_id = None;
+            match self.inner.pick_account(&tried) {
+                Some(j) => {
+                    tried.push(j);
+                    self.account_idx = j;
+                    respawns_left = 1;
+                    self.fallback_reason = Some(format!(
+                        "{}; session moved, context reset",
+                        attempts.joined()
+                    ));
+                }
+                None => {
+                    attempts.accounts_exhausted(&self.inner);
+                    return self.api_rung(prompt, attempts).await;
                 }
             }
         }
@@ -448,6 +523,68 @@ impl Drop for ClaudeWarmSession {
     }
 }
 
+/// Most turns a conversation history keeps. Whole exchanges are dropped from the front, so
+/// it always starts with a user turn.
+pub const MIRROR_MAX_TURNS: usize = 200;
+
+/// Append one answered exchange to a conversation history, oldest exchanges first out.
+fn push_exchange(history: &mut Vec<Turn>, prompt: String, reply: String) {
+    history.push(Turn {
+        role: "user",
+        text: prompt,
+    });
+    history.push(Turn {
+        role: "assistant",
+        text: reply,
+    });
+    let excess = history.len().saturating_sub(MIRROR_MAX_TURNS);
+    if excess > 0 {
+        history.drain(..excess + excess % 2);
+    }
+}
+
+/// One warm turn on the Messages API with `history` as the conversation so far: ledgers the
+/// outcome (warm), extends the history and reports the fleet mode on success.
+async fn api_turn(
+    inner: &FleetInner,
+    template: &EngineRequest,
+    history: &mut Vec<Turn>,
+    prompt: String,
+    fallback_reason: String,
+) -> Result<EngineReply, Failure> {
+    let Some(api) = &inner.api else {
+        return Err(Failure::Fatal(EngineError::Unavailable {
+            reason: "no api key configured".into(),
+        }));
+    };
+    let mut req = template.clone();
+    req.prompt = prompt.clone();
+    let started = Instant::now();
+    match api.complete(&req, history, inner.now()).await {
+        Ok(o) => {
+            let reply = api_reply(o, fallback_reason);
+            push_exchange(history, prompt, reply.text.clone());
+            let mut row =
+                LedgerRow::from_reply(inner.now(), req.role, &reply, req.correlation_id.clone());
+            row.warm = true;
+            inner.record(row);
+            ladder::served(inner, reply.engine);
+            Ok(reply)
+        }
+        Err(f) => {
+            inner.record(inner.failure_row(
+                &req,
+                EngineKind::AnthropicApi,
+                None,
+                started.elapsed().as_millis() as u64,
+                f.kind(),
+                true,
+            ));
+            Err(f)
+        }
+    }
+}
+
 /// Messages API conversation used when no fleet account can hold a warm session.
 pub struct ApiSession {
     inner: Arc<FleetInner>,
@@ -470,58 +607,15 @@ impl ApiSession {
 #[async_trait]
 impl WarmSession for ApiSession {
     async fn send(&mut self, prompt: String) -> Result<EngineReply, EngineError> {
-        let Some(api) = &self.inner.api else {
-            return Err(EngineError::Unavailable {
-                reason: "no api key configured".into(),
-            });
-        };
-        let mut req = self.template.clone();
-        req.prompt = prompt.clone();
-        let started = Instant::now();
-        match api.complete(&req, &self.history, self.inner.now()).await {
-            Ok(o) => {
-                self.history.push(Turn {
-                    role: "user",
-                    text: prompt,
-                });
-                self.history.push(Turn {
-                    role: "assistant",
-                    text: o.text.clone(),
-                });
-                let reply = EngineReply {
-                    text: o.text,
-                    engine: EngineKind::AnthropicApi,
-                    account: None,
-                    model: o.model,
-                    first_text_ms: None,
-                    duration_ms: o.duration_ms,
-                    usage: o.usage,
-                    cost_usd: Some(o.cost_usd),
-                    fallback_reason: Some(self.fallback_reason.clone()),
-                    session_id: None,
-                };
-                let mut row = LedgerRow::from_reply(
-                    self.inner.now(),
-                    req.role,
-                    &reply,
-                    req.correlation_id.clone(),
-                );
-                row.warm = true;
-                self.inner.record(row);
-                Ok(reply)
-            }
-            Err(f) => {
-                self.inner.record(self.inner.failure_row(
-                    &req,
-                    EngineKind::AnthropicApi,
-                    None,
-                    started.elapsed().as_millis() as u64,
-                    f.kind(),
-                    true,
-                ));
-                Err(f.into_engine_error("api"))
-            }
-        }
+        api_turn(
+            &self.inner,
+            &self.template,
+            &mut self.history,
+            prompt,
+            self.fallback_reason.clone(),
+        )
+        .await
+        .map_err(|f| f.into_engine_error("api"))
     }
 
     async fn interrupt(&mut self) -> Result<(), EngineError> {
@@ -530,5 +624,22 @@ impl WarmSession for ApiSession {
 
     async fn close(self: Box<Self>) -> Result<(), EngineError> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_mirror_keeps_whole_exchanges_and_starts_with_a_user_turn() {
+        let mut h = Vec::new();
+        for i in 0..(MIRROR_MAX_TURNS / 2 + 3) {
+            push_exchange(&mut h, format!("q{i}"), format!("a{i}"));
+        }
+        assert_eq!(h.len(), MIRROR_MAX_TURNS);
+        assert_eq!(h[0].role, "user");
+        assert_eq!(h[0].text, "q3");
+        assert_eq!(h.last().unwrap().role, "assistant");
     }
 }

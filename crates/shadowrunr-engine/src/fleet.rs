@@ -15,9 +15,10 @@ use shadowrunr_types::{
 use tokio::io::AsyncWriteExt;
 
 use crate::alt_cli::{self, AltCommand};
-use crate::api::{AnthropicApi, HttpTransport, ReqwestTransport};
+use crate::api::{AnthropicApi, ApiOutcome, HttpTransport, ReqwestTransport};
 use crate::claude_cli::{read_tail, Account, ClaudeCli, CliRunner};
 use crate::config::{EngineConfig, FallbackDriver, DEFAULT_AGY_MODEL, DEFAULT_CODEX_MODEL};
+use crate::ladder::{self, Attempts, Step};
 use crate::ledger::{Ledger, LedgerRow};
 use crate::limits::Failure;
 use crate::model::model_id;
@@ -287,6 +288,22 @@ impl FleetInner {
     }
 }
 
+/// The reply for a Messages API answer reached after the CLI rung was eliminated.
+pub fn api_reply(o: ApiOutcome, fallback_reason: String) -> EngineReply {
+    EngineReply {
+        text: o.text,
+        engine: EngineKind::AnthropicApi,
+        account: None,
+        model: o.model,
+        first_text_ms: None,
+        duration_ms: o.duration_ms,
+        usage: o.usage,
+        cost_usd: Some(o.cost_usd),
+        fallback_reason: Some(fallback_reason),
+        session_id: None,
+    }
+}
+
 /// Spawn an alternative CLI under the shared process cap and collect its stdout.
 async fn spawn_alt(
     cli: &ClaudeCli,
@@ -460,7 +477,7 @@ impl Engine for Fleet {
     async fn complete(&self, req: EngineRequest) -> Result<EngineReply, EngineError> {
         let inner = &self.inner;
         let req = inner.apply_route(req);
-        let mut reasons: Vec<String> = Vec::new();
+        let mut attempts = Attempts::default();
         let mut tried: Vec<usize> = Vec::new();
 
         while let Some(i) = inner.pick_account(&tried) {
@@ -471,15 +488,15 @@ impl Engine for Fleet {
             let duration_ms = started.elapsed().as_millis() as u64;
             match res {
                 Ok(o) => {
-                    let fallback = (!reasons.is_empty()).then(|| reasons.join("; "));
-                    let reply = inner.cli_reply(&account, &req, o, duration_ms, fallback);
+                    let reply =
+                        inner.cli_reply(&account, &req, o, duration_ms, attempts.fallback());
                     inner.record(LedgerRow::from_reply(
                         inner.now(),
                         req.role,
                         &reply,
                         req.correlation_id.clone(),
                     ));
-                    inner.set_mode(FleetMode::Primary);
+                    ladder::served(inner, reply.engine);
                     return Ok(reply);
                 }
                 Err(f) => {
@@ -491,55 +508,32 @@ impl Engine for Fleet {
                         f.kind(),
                         false,
                     ));
-                    match f {
-                        Failure::RateLimited { reset_at_ms, rule } => {
-                            inner.cool(i, reset_at_ms);
-                            reasons
-                                .push(format!("account {} rate-limited ({rule})", account.label));
+                    match ladder::step(f, &account.label) {
+                        Step::Rotate { cool, reason } => {
+                            if let Some(reset_at_ms) = cool {
+                                inner.cool(i, reset_at_ms);
+                            }
+                            attempts.push(reason);
                         }
-                        Failure::Auth { detail } => {
-                            inner.cool(i, None);
-                            reasons.push(format!("account {} auth: {detail}", account.label));
-                        }
-                        Failure::Transient { detail } => {
-                            reasons.push(format!("account {}: {detail}", account.label));
-                        }
-                        Failure::Fatal(e) => return Err(e),
+                        Step::Stop(e) => return Err(e),
                     }
                 }
             }
         }
-        if reasons.is_empty() {
-            reasons.push(if inner.accounts.is_empty() {
-                "no claude cli accounts configured".into()
-            } else {
-                "all claude cli accounts cooling".into()
-            });
-        }
+        attempts.accounts_exhausted(inner);
 
         if let Some(api) = &inner.api {
             let started = Instant::now();
             match api.complete(&req, &[], inner.now()).await {
                 Ok(o) => {
-                    let reply = EngineReply {
-                        text: o.text,
-                        engine: EngineKind::AnthropicApi,
-                        account: None,
-                        model: o.model,
-                        first_text_ms: None,
-                        duration_ms: o.duration_ms,
-                        usage: o.usage,
-                        cost_usd: Some(o.cost_usd),
-                        fallback_reason: Some(reasons.join("; ")),
-                        session_id: None,
-                    };
+                    let reply = api_reply(o, attempts.joined());
                     inner.record(LedgerRow::from_reply(
                         inner.now(),
                         req.role,
                         &reply,
                         req.correlation_id.clone(),
                     ));
-                    inner.set_mode(FleetMode::Degraded);
+                    ladder::served(inner, reply.engine);
                     return Ok(reply);
                 }
                 Err(f) => {
@@ -551,14 +545,16 @@ impl Engine for Fleet {
                         f.kind(),
                         false,
                     ));
-                    if let Failure::Fatal(e) = f {
+                    let msg = f.clone().into_engine_error("api");
+                    if let Step::Stop(e) = ladder::step(f, "api") {
                         return Err(e);
                     }
-                    reasons.push(format!("api: {}", f.into_engine_error("api")));
+                    attempts.push(format!("api: {msg}"));
                 }
             }
         }
 
+        // The alternative CLIs are the last rung: any failure there moves on.
         for driver in inner.fallbacks.clone() {
             let started = Instant::now();
             let engine = match driver {
@@ -568,14 +564,14 @@ impl Engine for Fleet {
             };
             match inner.run_alt(driver, &req).await {
                 Ok(mut reply) => {
-                    reply.fallback_reason = Some(reasons.join("; "));
+                    reply.fallback_reason = Some(attempts.joined());
                     inner.record(LedgerRow::from_reply(
                         inner.now(),
                         req.role,
                         &reply,
                         req.correlation_id.clone(),
                     ));
-                    inner.set_mode(FleetMode::Degraded);
+                    ladder::served(inner, reply.engine);
                     return Ok(reply);
                 }
                 Err(f) => {
@@ -587,15 +583,13 @@ impl Engine for Fleet {
                         f.kind(),
                         false,
                     ));
-                    reasons.push(format!("{engine:?}: {}", f.into_engine_error("alt")));
+                    attempts.push(format!("{engine:?}: {}", f.into_engine_error("alt")));
                 }
             }
         }
 
-        inner.set_mode(FleetMode::Down);
-        Err(EngineError::Unavailable {
-            reason: reasons.join("; "),
-        })
+        ladder::down(inner);
+        Err(attempts.unavailable())
     }
 
     async fn open_session(
@@ -604,37 +598,29 @@ impl Engine for Fleet {
     ) -> Result<Box<dyn WarmSession>, EngineError> {
         let inner = &self.inner;
         let template = inner.apply_route(template);
-        let mut reasons: Vec<String> = Vec::new();
+        let mut attempts = Attempts::default();
         let mut tried = Vec::new();
         while let Some(i) = inner.pick_account(&tried) {
             tried.push(i);
             match ClaudeWarmSession::open(inner.clone(), i, template.clone()).await {
                 Ok(s) => {
-                    inner.set_mode(FleetMode::Primary);
+                    ladder::served(inner, EngineKind::ClaudeCli);
                     return Ok(Box::new(s));
                 }
-                Err(e) => reasons.push(format!("account {}: {e}", inner.accounts[i].label)),
+                Err(e) => attempts.push(format!("account {}: {e}", inner.accounts[i].label)),
             }
         }
-        if reasons.is_empty() {
-            reasons.push(if inner.accounts.is_empty() {
-                "no claude cli accounts configured".into()
-            } else {
-                "all claude cli accounts cooling".into()
-            });
-        }
+        attempts.accounts_exhausted(inner);
         if inner.api.is_some() {
-            inner.set_mode(FleetMode::Degraded);
+            ladder::served(inner, EngineKind::AnthropicApi);
             return Ok(Box::new(ApiSession::new(
                 inner.clone(),
                 template,
-                reasons.join("; "),
+                attempts.joined(),
             )));
         }
-        inner.set_mode(FleetMode::Down);
-        Err(EngineError::Unavailable {
-            reason: reasons.join("; "),
-        })
+        ladder::down(inner);
+        Err(attempts.unavailable())
     }
 
     async fn health(&self) -> Vec<HealthReport> {
