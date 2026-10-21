@@ -1,6 +1,7 @@
 // The stage components (React). Their class names are styled by the host: apps/stage's
 // styles.css is the OBS skin for the 1920x1080 canvas.
 
+export * from "./Browser";
 export * from "./Caption";
 export * from "./ChatLane";
 export * from "./Decrees";

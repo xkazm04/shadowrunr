@@ -201,7 +201,7 @@ export function App() {
   const voice = useVoice({ blocked, url: useMemo(() => voiceUrl(params.ws), [params.ws]), runId: followRun, mixer, broadcast: params.broadcast });
   const voiceShown = blocked === null && voice.status.state === "ready";
   // the daemon serves the rig to replays too; without a daemon the face falls back to the placeholder
-  const rigBase = useMemo(() => rigBaseUrl(params.ws), [params.ws]);
+  const rigBase = useMemo(() => params.rig ?? rigBaseUrl(params.ws), [params.rig, params.ws]);
   const toggleVoice = useCallback(
     (on: boolean) => {
       // the click is the gesture the browser wants before any audio may sound
@@ -334,6 +334,7 @@ export function App() {
             overlay={overlay}
             face={demoFace ?? mixer}
             rigBase={rigBase}
+            variant={params.avatar}
             onCaptionSpeaking={captionSpeaking}
             {...(voiceCaption === undefined ? {} : { voiceCaption })}
             onFace={voice.face}

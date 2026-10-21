@@ -2,10 +2,11 @@
 // clock. Everything time-based in the view is derived from event timestamps (`at`) and the
 // playback clock, so seeking is just "fold the events up to t".
 
-import type { ChatMsg, StreamEvent } from "@shadowrunr/contract";
+import type { ChatMsg, ScreenId, SegmentId, ShownRecord, StreamEvent } from "@shadowrunr/contract";
 import type { ChatMemory } from "./chatMemory";
 import { RANK_WEIGHT } from "./lore";
 import {
+  BROWSER_TABS_MAX,
   CAPTION_QUEUE_MAX,
   CHAT_MEMORY_MAX,
   DECREE_MAX,
@@ -13,14 +14,14 @@ import {
   LANE_MAX,
   MOMENT_MAX,
   QUEUED_HOLD_MS,
+  RECORD_MAX,
   REDACTION_MAX,
+  defaultScreen,
   initialScene,
-  layoutFor,
   type Decree,
   type Caption,
   type Hint,
   type Job,
-  type LayoutId,
   type Poll,
   type Redaction,
   type SceneState,
@@ -31,18 +32,56 @@ import {
 import { wordTimings } from "./timing";
 import { RANKS, type TsMs } from "./vocab";
 
-function switchLayout(
+function setScreen(
   s: SceneState,
-  to: LayoutId,
+  to: ScreenId,
   at: TsMs,
   cause: Transition["cause"],
+  segment?: SegmentId,
   reason?: string,
 ): SceneState {
-  if (s.layout === to) return s;
+  if (s.layout === to) return s.screen === to ? s : { ...s, screen: to };
   const seq = s.seq + 1;
   const transition: Transition = { id: seq, from: s.layout, to, at, cause };
+  if (segment !== undefined) transition.segment = segment;
   if (reason !== undefined) transition.reason = reason;
-  return { ...s, seq, layout: to, transition };
+  return { ...s, seq, screen: to, layout: to, transition };
+}
+
+/** Bring a received record to the front of the browser window. */
+function openRecord(s: SceneState, id: string): SceneState {
+  const tabs = [id, ...s.tabs.filter((t) => t !== id)].slice(0, BROWSER_TABS_MAX);
+  return { ...s, tabs, activeRecord: id };
+}
+
+/** Remember a record, forgetting the oldest beyond RECORD_MAX (never an open tab). */
+function keepRecord(s: SceneState, record: ShownRecord): Record<string, ShownRecord> {
+  const records: Record<string, ShownRecord> = { ...s.records };
+  delete records[record.id];
+  records[record.id] = record;
+  let excess = Object.keys(records).length - RECORD_MAX;
+  for (const id of Object.keys(records)) {
+    if (excess <= 0) break;
+    if (id === record.id || s.tabs.includes(id)) continue;
+    delete records[id];
+    excess--;
+  }
+  return records;
+}
+
+/**
+ * `show_screen`. `host` and `hexmap` switch at once. `browser` and `desk` need a record: the one
+ * named, else the active one, else the latest received; until it has arrived the screen waits on
+ * hexmap and the record's `record_shown` completes the switch.
+ */
+function showScreen(s: SceneState, screen: ScreenId, recordId: string | undefined, at: TsMs): SceneState {
+  if (screen === "host" || screen === "hexmap") return setScreen({ ...s, pendingScreen: null }, screen, at, "screen");
+  const latest = Object.keys(s.records).pop();
+  const id = recordId ?? s.activeRecord ?? latest;
+  if (id !== undefined && s.records[id]) return setScreen(openRecord({ ...s, pendingScreen: null }, id), screen, at, "screen");
+  const pendingScreen: SceneState["pendingScreen"] = { screen, at };
+  if (recordId !== undefined) pendingScreen.recordId = recordId;
+  return setScreen({ ...s, pendingScreen }, "hexmap", at, "screen");
 }
 
 /** Match a chat vote to a poll option: exact (case-insensitive) text, or a 1-based index. */
@@ -255,9 +294,13 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
           at,
         },
       };
-    case "segment_start":
+    case "segment_start": {
+      // The segment_start that follows its handover keeps the screen the handover chose.
+      const fresh = prev.segment !== ev.segment || prev.layout === "boot";
       s = { ...s, segment: ev.segment, pendingSwitch: null };
-      return switchLayout(s, layoutFor(ev.segment), at, "segment_start");
+      if (!fresh) return s;
+      return setScreen({ ...s, pendingScreen: null }, defaultScreen(ev.segment), at, "segment_start", ev.segment);
+    }
     case "segment_end": {
       const seal: Seal = { segment: ev.segment, at };
       if (ev.ses !== undefined) seal.ses = ev.ses;
@@ -265,12 +308,15 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     }
     case "case_open":
       return { ...s, caseFile: ev.case };
-    // The screens package draws these (appendix (screens)); until then the stage ignores them.
-    case "record_shown":
-      return s;
+    case "record_shown": {
+      s = { ...s, records: keepRecord(s, ev.record) };
+      const p = s.pendingScreen;
+      if (!p || (p.recordId !== undefined && p.recordId !== ev.record.id)) return s;
+      return setScreen(openRecord({ ...s, pendingScreen: null }, ev.record.id), p.screen, at, "screen");
+    }
     case "handover":
-      s = { ...s, segment: ev.to, pendingSwitch: null };
-      return switchLayout(s, layoutFor(ev.to), at, "handover", ev.reason);
+      s = { ...s, segment: ev.to, pendingSwitch: null, pendingScreen: null };
+      return setScreen(s, defaultScreen(ev.to), at, "handover", ev.to, ev.reason);
     case "chat":
       return applyChat(s, ev.msg, at);
     case "picked": {
@@ -413,7 +459,7 @@ function applyOp(s: SceneState, op: Extract<StreamEvent, { type: "op" }>["op"], 
     case "sign_off":
       return { ...s, outro: { reason: op.reason, at } };
     case "show_screen":
-      return s;
+      return showScreen(s, op.screen, op.record_id, at);
   }
 }
 

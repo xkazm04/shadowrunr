@@ -28,6 +28,8 @@ node apps/stage/scripts/make-demo.mjs   # regenerates fixtures/demo.jsonl
 | `?debug=1` | outlines regions and anything that overflows its box |
 | `?voice=1` | voice on without the toggle (the OBS view has no controls); live only |
 | `?face=demo`, `?face=rest`, `?face=aa` | dev builds only: drive the face from a scripted line, rest, or one held mouth shape |
+| `?avatar=glow`, `?avatar=cut`, `?avatar=depth` | which renderer draws the face (`src/avatar/variants.ts`); default and anything unknown: `glow` |
+| `?rig=<url>` | the face rig's base URL (http or https; default: the daemon's `/avatar/` beside `?ws=`), e.g. a static server over a local copy of the rig |
 
 A `.jsonl` dropped anywhere on the page replaces the transcript; a dropped `.json` that parses as
 a `Case` replaces the case. Bad lines are skipped and listed (line number and field path) in the
@@ -133,18 +135,63 @@ one before has finished shows at once. The schedule comes from event timestamps 
 timing alone, so replays and seeks show the same captions. `scene.caption` stays the latest
 line said, as the console reads it.
 
-## Layouts
+## Screens and layouts
+
+The canvas draws `scene.layout`: `boot` before the first segment, then the main screen
+(contract `ScreenId`). A segment opens on its default screen (SEG-02A: `hexmap`; every other:
+`host`) on `segment_start` and `handover`, so a transcript without `show_screen` still renders;
+the runtime sends its own `show_screen` too. Inside a segment `show_screen` switches screens.
 
 | Layout | When | Dominant element |
 |---|---|---|
 | `boot` | before the first `segment_start` | the intro seal |
-| `improv` | `SEG-01` | Malakor's silhouette slot and a large kinetic caption; right column: foil card, vote panel, chat lane |
-| `hexmap` | `SEG-02A` | the hexmap (hexes on the left; a lane on the right for the observer badge, decrees and explainer cards, so nothing covers a hex); right column: hex inspector, minion jury, vote panel, chat lane; small Malakor and caption at the bottom |
-| `descoped` | `SEG-02B-*` | the `improv` arrangement (these segments are descoped) |
+| `host` | SEG-01 (and the descoped segments), or `show_screen host` | the big-avatar room: Malakor's slot and a large kinetic caption; right column: foil card, vote panel, chat lane |
+| `hexmap` | SEG-02A's default, or `show_screen hexmap` | the hexmap fills the content area |
+| `browser` | `show_screen browser [record_id]` | a staged record in a browser window filling the content area |
+| `desk` | `show_screen desk [record_id]` | the hexmap window behind (top-left, smaller, dimmed) and the browser window in front; the record's hex is lit on the map |
+
+**The streamer layout** (`hexmap`, `browser`, `desk`; `layout-corner` on the canvas): the content
+area is everything left of the right column. Malakor stands cut out over its bottom-left corner
+in a 448 px box whose bottom is the canvas's bottom edge (no badge, no backplate; the rig's torso
+is cut off at its box's bottom, like a streamer's cut-out, and so is the silhouette fallback's
+robe). The caption is a lower third from his right edge to the content's right edge. The foil
+badge, decrees and explainer cards float in the content's top-right. The right column is the
+chat lane, plus the vote while a poll is open; the hex inspector and the minion jury show on
+`hexmap` and `desk` only, and the minion ticker closes the column, so it never sits under him.
+The standing card (the segment's commands) shows between explainer cards on `host` and `hexmap`,
+not over a browser page.
+
+**No hex under him.** On `hexmap` and `desk` the map is fitted (`fitMap`, stage-kit) into its panel
+so that no hex's box touches Malakor's box or, on the desk, the browser window in front; on
+`hexmap` it also keeps the overlay lane clear while that costs less than a fifth of the scale.
+`hexFrame` (`layouts.ts`) says what stands over the panel; `stage.test.ts` checks the demo case.
+
+**The browser window** (`BrowserWindow`, stage-kit ui) shows the active record: tabs (at most 4,
+most recent first: record id and a short title), a URL bar with the source's host and path and a
+`retrieved YYYY-MM-DD` or `via Wayback` chip, a FICTIONAL ribbon for a fictional record, and the
+page: the grade badge (the grade vocabulary and colours), ALLEGED below DOC, the title, the
+summary (clamped) and the hex as a chip with its label. Nothing touches the network. Off air a
+"staged copy" note sits in the URL bar.
+
+**Records.** `record_shown` stores a record (at most 32, never an open tab). `show_screen browser`
+or `desk` opens the record named, else the one already open, else the latest received. A record
+that has not arrived yet is waited for: the screen shows the hexmap, and its `record_shown`
+completes the switch (the contract allows either order). `host`, `hexmap` or a handover drop
+the wait.
+
+**Moves.** A screen switch moves the same regions to new rects on the 0.95 s curve, with no wipe
+(a segment change keeps its wipe). The face is drawn at one size (560 px) and scaled to its box
+with a CSS transform on the same curve, so a handover glides him from the host room's box into
+the corner without the canvas re-allocating mid-move. Under reduced motion both moves are
+instant.
+
+**Where he looks** (`src/avatar/look.ts`, read by the face renderer every frame; `glow` ignores
+it): straight at the viewer on `host` (0, 0), toward the content from the corner (0.6, -0.2), and
+toward the chat column while the line on screen answers chatters (1, -0.1).
 
 The right column stacks its panels top-down: a panel without content (no poll, no foil) gives
-its height to the chat lane, and the change animates. The minion-dispatch ticker spans the bottom
-in every layout. The disclosure badge **"AI character · text only"** sits above every layer,
+its height to the chat lane, and the change animates. In the host room the minion-dispatch ticker
+spans the bottom. The disclosure badge **"AI character · text only"** sits above every layer,
 including the intro, the outro and the feed slates, and is never hidden. It reads "AI character ·
 synthetic voice" only when a voice is configured (`DisclosureBadge`'s `voice`; the stage's
 `VOICE` constant is false, since Malakor has no voice yet). The avatar slot's "placeholder
@@ -155,8 +202,9 @@ silhouette" note is a production note, so `?broadcast=1` drops it.
 | Event | Visual |
 |---|---|
 | `stream_start` | intro seal "Now broadcasting from the Obsidian Spire" (4.6 s); the audience size goes to the top bar |
-| `segment_start` | switches to the segment's layout (regions glide to new rects) |
-| `handover` | the same layout switch plus a skewed obsidian wipe with the new segment's title and Malakor's reason |
+| `segment_start` | switches to the segment's default screen (regions glide to new rects) |
+| `handover` | the same screen switch plus a skewed obsidian wipe with the new segment's title and Malakor's reason |
+| `record_shown` | stores the record for the browser window; completes a `show_screen` that waits for it |
 | `segment_end` | toast "SEG-xx sealed · SES +0.42" |
 | `chat` | a row in the chat lane: rank sigil, name in rank colour, command chip (`!summon`, `!hint`, `!grade`, `!propose`, `!vote`); the row waits until the input filter's beat that judged it has closed (`shownLane`), so a line the filter drops never shows its text, not even for the seconds before the beat |
 | `chat` `!vote` / `!summon` | a rank-weighted ballot in the open poll (feeds the rank colour bands) |
@@ -182,6 +230,7 @@ silhouette" note is a production note, so `?broadcast=1` drops it.
 | `mark_moment` | a subtle verdigris flash, a "✦ Clip marked" chip, and a marker on the scrubber timeline (click to jump 3 s before it) |
 | `switch_segment` | "⟶ next segment" chip in the top bar until the handover |
 | `sign_off` | the outro card: "The ledger is sealed", the reason, minions, hexes, clips, redactions, and "Let the deficit be recorded." |
+| `show_screen` | switches the main screen (above); `browser`/`desk` open the record in the browser window |
 
 ## SEG-02A specifics
 
@@ -234,8 +283,8 @@ be (no WebGL2, or the form did not load).
 
 ## The face and the voice
 
-Malakor's face lives in the `avatar` region, above his caption in the improv layouts and beside it
-in SEG-02A. `src/avatar/` is a glow-rig renderer (WebGL2, one draw per layer, premultiplied light
+Malakor's face lives in the `avatar` region, above his caption in the host room and cut out in
+the bottom-left corner of the content screens. `?avatar=` picks the renderer (`loadVariant`). `src/avatar/` is a glow-rig renderer (WebGL2, one draw per layer, premultiplied light
 on a transparent canvas): `Avatar.tsx` is the box, and `runtime.ts` (the renderer, the driver and
 the placeholder painter) is loaded with `import()` when the face mounts.
 
