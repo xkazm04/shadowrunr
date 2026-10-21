@@ -1273,7 +1273,21 @@ fn context_reports_table_and_state() {
     let rt = seg01();
     let ctx = rt.context(7, 42);
     assert_eq!(ctx.segment, SegmentId::Seg01ImprovisedRoom);
-    assert_eq!(ctx.allowed_ops, rt.table().allowed_ops);
+    // The menu is the gate's view: no poll to close and no foil to dismiss in the opening.
+    let menu: Vec<&str> = rt
+        .table()
+        .allowed_ops
+        .iter()
+        .map(String::as_str)
+        .filter(|o| !["close_poll", "dismiss_foil"].contains(o))
+        .collect();
+    assert_eq!(ctx.allowed_ops, menu);
+    assert!(
+        ctx.state_summary
+            .contains("not now: close_poll (no_such_poll), dismiss_foil (no_active_foil)"),
+        "{}",
+        ctx.state_summary
+    );
     assert_eq!((ctx.ccv, ctx.elapsed_s), (7, 42));
     assert!(ctx.rules_prompt.contains("the-disruptor, the-life-coach"));
     assert!(ctx.state_summary.contains("state opening"));
