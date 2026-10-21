@@ -200,7 +200,8 @@ export function App() {
   const followRun = live ? liveRef.current?.store.runId || (params.run === "live" ? null : params.run) : null;
   const voice = useVoice({ blocked, url: useMemo(() => voiceUrl(params.ws), [params.ws]), runId: followRun, mixer, broadcast: params.broadcast });
   const voiceShown = blocked === null && voice.status.state === "ready";
-  const rigBase = useMemo(() => (live ? rigBaseUrl(params.ws) : null), [live, params.ws]);
+  // the daemon serves the rig to replays too; without a daemon the face falls back to the placeholder
+  const rigBase = useMemo(() => rigBaseUrl(params.ws), [params.ws]);
   const toggleVoice = useCallback(
     (on: boolean) => {
       // the click is the gesture the browser wants before any audio may sound
