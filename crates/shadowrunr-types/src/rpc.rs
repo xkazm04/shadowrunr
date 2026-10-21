@@ -30,6 +30,11 @@ use crate::review::{
 use crate::sandbox::{
     SandboxIdParams, SandboxStartParams, SandboxStarted, SandboxStatus, SandboxStatusParams,
 };
+use crate::tone::{
+    ToneDirections, ToneDirectionsGetParams, ToneDirectionsSetParams, ToneInbox, ToneInboxParams,
+    ToneLineWrite, ToneLines, ToneLinesAddParams, ToneLinesParams, ToneLinesSetStatusParams,
+    ToneReviewItem, ToneReviewLineParams, ToneVariants, ToneVariantsParams,
+};
 use crate::{
     Effort, EngineKind, HealthReport, JudgeVerdict, ModelTier, Role, SegmentId, SimRunSpec,
     StreamEvent, TsMs, Usage,
@@ -554,6 +559,14 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<PrepIdParams, StreamPrep>("prep.get");
     v.method::<PrepApproveParams, StreamPrep>("prep.approve");
     v.method::<PrepIdParams, StreamPrep>("prep.retire");
+    v.method::<ToneVariantsParams, ToneVariants>("tone.variants");
+    v.method::<ToneLinesParams, ToneLines>("tone.lines.list");
+    v.method::<ToneLinesAddParams, ToneLineWrite>("tone.lines.add");
+    v.method::<ToneLinesSetStatusParams, ToneLineWrite>("tone.lines.set_status");
+    v.method::<ToneDirectionsGetParams, ToneDirections>("tone.directions.get");
+    v.method::<ToneDirectionsSetParams, ToneDirections>("tone.directions.set");
+    v.method::<ToneInboxParams, ToneInbox>("tone.inbox");
+    v.method::<ToneReviewLineParams, ToneReviewItem>("tone.review_line");
 }
 
 /// Every method name, in table order.

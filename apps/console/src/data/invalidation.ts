@@ -27,6 +27,9 @@ export const MUTATION_INVALIDATES: Readonly<Record<string, readonly string[]>> =
   "clips.feedback": ["clips.get"],
   // Feedback is optimistic on the page; only the wall's counts refetch, never the whole session.
   "review.feedback.set": ["review.sessions", "review.feedback.list"],
+  "tone.lines.add": ["tone.lines.list", "tone.inbox"],
+  "tone.lines.set_status": ["tone.lines.list"],
+  "tone.directions.set": ["tone.directions.get"],
   "review.tag": ["review.sessions", "review.session"],
 };
 

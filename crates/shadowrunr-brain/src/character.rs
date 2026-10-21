@@ -430,17 +430,9 @@ pub const SITUATION_TAGS: &[&str] = &[
     "general",
 ];
 
-/// Where a bank line stands in the owner's review.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LineStatus {
-    /// Drafted, waiting for the owner's review; shown until retired.
-    #[default]
-    Seed,
-    Approved,
-    /// Never shown.
-    Retired,
-}
+/// Where a bank line stands in the owner's review: the wire contract's, so the Tone Lab's RPCs
+/// and the file agree.
+pub use shadowrunr_types::tone::LineStatus;
 
 /// One line of `lines/<tone>.toml`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

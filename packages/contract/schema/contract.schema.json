@@ -4766,6 +4766,45 @@
         }
       ]
     },
+    "LineSituation": {
+      "description": "The situation tags a bank line may carry; each beat is classified into the same words.",
+      "enum": [
+        "roast_request",
+        "bait",
+        "newcomer",
+        "vote_loss",
+        "gift",
+        "ai_question",
+        "quiet",
+        "research_wait",
+        "proposal",
+        "patron",
+        "flood",
+        "general"
+      ],
+      "type": "string"
+    },
+    "LineStatus": {
+      "description": "Where a bank line stands in the owner's review (`status` in `lines/<tone>.toml`).",
+      "oneOf": [
+        {
+          "enum": [
+            "approved"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "seed",
+          "description": "Drafted, waiting for the owner's review; shown until retired.",
+          "type": "string"
+        },
+        {
+          "const": "retired",
+          "description": "Never shown.",
+          "type": "string"
+        }
+      ]
+    },
     "LineTag": {
       "properties": {
         "edge": {
@@ -8699,6 +8738,56 @@
       ],
       "type": "object"
     },
+    "ToneDirections": {
+      "description": "`directions.md` as it stands.",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "file": {
+          "description": "`directions.md`.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Empty when the file does not exist.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "file",
+        "text"
+      ],
+      "type": "object"
+    },
+    "ToneDirectionsGetParams": {
+      "description": "`tone.directions.get`.",
+      "properties": {
+        "character": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character"
+      ],
+      "type": "object"
+    },
+    "ToneDirectionsSetParams": {
+      "description": "`tone.directions.set`: replace `directions.md` with `text`.",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "text"
+      ],
+      "type": "object"
+    },
     "ToneFinding": {
       "properties": {
         "instrument_hash": {
@@ -8735,6 +8824,42 @@
       ],
       "type": "object"
     },
+    "ToneInbox": {
+      "description": "`tone.inbox` result, newest first in each list.",
+      "properties": {
+        "candidates": {
+          "description": "Lines marked `great_roast` or `landed`, not yet in their tone's bank: bank candidates.",
+          "items": {
+            "$ref": "#/$defs/ToneReviewItem"
+          },
+          "type": "array"
+        },
+        "suggestions": {
+          "description": "Lines marked `flat` or `too_mean`, with the owner's note: direction suggestions.",
+          "items": {
+            "$ref": "#/$defs/ToneReviewItem"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidates",
+        "suggestions"
+      ],
+      "type": "object"
+    },
+    "ToneInboxParams": {
+      "description": "`tone.inbox`: Review feedback on the character's sessions, mapped for the Tone Lab.",
+      "properties": {
+        "character": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character"
+      ],
+      "type": "object"
+    },
     "ToneInfo": {
       "description": "A tone variant (`tones/<id>.md`).",
       "properties": {
@@ -8748,6 +8873,276 @@
       "required": [
         "id",
         "text"
+      ],
+      "type": "object"
+    },
+    "ToneLine": {
+      "description": "One line of a bank as written: placeholders unfilled, every status.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/LineStatus"
+        },
+        "tags": {
+          "items": {
+            "$ref": "#/$defs/LineSituation"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "tags",
+        "text"
+      ],
+      "type": "object"
+    },
+    "ToneLineWrite": {
+      "description": "What a bank write changed: the line as it now stands, and the file it went to.",
+      "properties": {
+        "file": {
+          "description": "The package-relative path written, `lines/<tone>.toml`.",
+          "type": "string"
+        },
+        "line": {
+          "$ref": "#/$defs/ToneLine"
+        }
+      },
+      "required": [
+        "line",
+        "file"
+      ],
+      "type": "object"
+    },
+    "ToneLines": {
+      "description": "`tone.lines.list` result: a tone's whole bank in file order (empty without the file).",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "file": {
+          "description": "The package-relative path, `lines/<tone>.toml`.",
+          "type": "string"
+        },
+        "lines": {
+          "items": {
+            "$ref": "#/$defs/ToneLine"
+          },
+          "type": "array"
+        },
+        "tone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "tone",
+        "file",
+        "lines"
+      ],
+      "type": "object"
+    },
+    "ToneLinesAddParams": {
+      "description": "`tone.lines.add`: append a line to the bank, with the next id of the file's scheme.",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/LineStatus",
+          "description": "`approved` when absent; `retired` is refused."
+        },
+        "tags": {
+          "description": "One or more.",
+          "items": {
+            "$ref": "#/$defs/LineSituation"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        },
+        "tone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "tone",
+        "text",
+        "tags"
+      ],
+      "type": "object"
+    },
+    "ToneLinesParams": {
+      "description": "`tone.lines.list`.",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "tone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "tone"
+      ],
+      "type": "object"
+    },
+    "ToneLinesSetStatusParams": {
+      "description": "`tone.lines.set_status`: approve a seed, or retire a line.",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/LineStatus"
+        },
+        "tone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "tone",
+        "id",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ToneReviewItem": {
+      "description": "One host line from Review, with what the owner said about it.",
+      "properties": {
+        "at_ms": {
+          "description": "When the feedback was given; absent without feedback.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "line": {
+          "description": "The 1-based transcript line.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "note": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "situation": {
+          "$ref": "#/$defs/LineSituation",
+          "description": "The most specific situation of the chat the line answers; absent when none is\nderivable or the beat carried no roast material (a viewer in care)."
+        },
+        "tags": {
+          "description": "The owner's marks on the line (empty without feedback).",
+          "items": {
+            "$ref": "#/$defs/FeedbackTag"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        },
+        "tone": {
+          "description": "The session's tone (`stream_start.tone_variant`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "line",
+        "text",
+        "tone",
+        "tags"
+      ],
+      "type": "object"
+    },
+    "ToneReviewLineParams": {
+      "description": "`tone.review_line`: one host line of a Review session, for \"Send to Tone Lab\".",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "line": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "session_id",
+        "line"
+      ],
+      "type": "object"
+    },
+    "ToneVariants": {
+      "properties": {
+        "candidates": {
+          "description": "At most `n`, deduplicated, none already in the bank.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "gated": {
+          "description": "Candidates the brain's output gate would have changed, dropped; omitted when 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "candidates"
+      ],
+      "type": "object"
+    },
+    "ToneVariantsParams": {
+      "description": "`tone.variants`: the core model writes up to `n` candidate lines in `tone` for\n`situation`. Nothing is written; a candidate becomes a bank line through `tone.lines.add`.",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "line": {
+          "description": "A line to improve on (a Review line, a bank line).",
+          "type": "string"
+        },
+        "n": {
+          "description": "1..=5.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "note": {
+          "description": "The owner's note on what to change.",
+          "type": "string"
+        },
+        "situation": {
+          "$ref": "#/$defs/LineSituation"
+        },
+        "tone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "tone",
+        "situation",
+        "n"
       ],
       "type": "object"
     },
@@ -10367,6 +10762,134 @@
       ],
       "type": "object"
     },
+    "tone.directions.get": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ToneDirectionsGetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ToneDirections"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "tone.directions.set": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ToneDirectionsSetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ToneDirections"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "tone.inbox": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ToneInboxParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ToneInbox"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "tone.lines.add": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ToneLinesAddParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ToneLineWrite"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "tone.lines.list": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ToneLinesParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ToneLines"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "tone.lines.set_status": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ToneLinesSetStatusParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ToneLineWrite"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "tone.review_line": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ToneReviewLineParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ToneReviewItem"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "tone.variants": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ToneVariantsParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ToneVariants"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
     "tournament.list": {
       "additionalProperties": false,
       "properties": {
@@ -10467,6 +10990,14 @@
     "sandbox.stop",
     "segments.tables",
     "sim.start",
+    "tone.directions.get",
+    "tone.directions.set",
+    "tone.inbox",
+    "tone.lines.add",
+    "tone.lines.list",
+    "tone.lines.set_status",
+    "tone.review_line",
+    "tone.variants",
     "tournament.list",
     "tournament.results",
     "tournaments.page"
