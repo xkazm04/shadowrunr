@@ -236,6 +236,13 @@
     },
     "Case": {
       "properties": {
+        "acts": {
+          "description": "The board's regions, in order. Absent: the runtime's arc plan names them.",
+          "items": {
+            "$ref": "#/$defs/CaseAct"
+          },
+          "type": "array"
+        },
         "fictional": {
           "description": "True for fabricated demo or simulation cases. Must never be presented as real.",
           "type": "boolean"
@@ -266,6 +273,10 @@
           },
           "type": "array"
         },
+        "thesis": {
+          "description": "What the case asks, in one sentence: the board's heading.",
+          "type": "string"
+        },
         "title": {
           "type": "string"
         }
@@ -274,6 +285,25 @@
         "id",
         "title",
         "fictional",
+        "hexes"
+      ],
+      "type": "object"
+    },
+    "CaseAct": {
+      "description": "One act of a case: a region of the evidence board and the cards in it.",
+      "properties": {
+        "hexes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
         "hexes"
       ],
       "type": "object"
@@ -4003,6 +4033,10 @@
     "Hex": {
       "description": "One hex of a SEG-02A case map. Axial coordinates (q, r).",
       "properties": {
+        "date": {
+          "description": "When it happened, `YYYY-MM-DD`: the board's timeline strip.",
+          "type": "string"
+        },
         "fog": {
           "type": "boolean"
         },
@@ -4026,6 +4060,10 @@
         "r": {
           "format": "int32",
           "type": "integer"
+        },
+        "role": {
+          "$ref": "#/$defs/HexRole",
+          "description": "What the card is in the case's story (appendix (screens and board))."
         },
         "sources": {
           "description": "Source URLs; a DOC grade requires at least one allowlisted primary source.",
@@ -4052,6 +4090,22 @@
         "domain",
         "shell_company",
         "claim"
+      ],
+      "type": "string"
+    },
+    "HexRole": {
+      "description": "A card's part in the case's story, drawn as its glyph on the evidence board.",
+      "enum": [
+        "victim",
+        "promoter",
+        "shell",
+        "processor",
+        "regulator",
+        "claim",
+        "wallet",
+        "exchange",
+        "person",
+        "company"
       ],
       "type": "string"
     },
@@ -4548,6 +4602,21 @@
       ],
       "type": "string"
     },
+    "LinkRel": {
+      "description": "What a string pinned between two cards says (`pin_link`).",
+      "enum": [
+        "paid",
+        "owns",
+        "controls",
+        "promoted",
+        "processed",
+        "regulates",
+        "claims",
+        "supports",
+        "contradicts"
+      ],
+      "type": "string"
+    },
     "LordChatParams": {
       "properties": {
         "message": {
@@ -4909,7 +4978,35 @@
           "type": "object"
         },
         {
-          "description": "Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.\n`focus` names a case hex the map zooms to on `hexmap`/`desk` (absent: the overview).",
+          "description": "Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.\n`focus` names a case hex the map zooms to on `hexmap`/`desk` (absent: the overview).\nPin a labelled string between two face-up cards on the evidence board, citing the\nreturned record that shows it (appendix (screens and board)).",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "op": {
+              "const": "pin_link",
+              "type": "string"
+            },
+            "record_id": {
+              "type": "string"
+            },
+            "rel": {
+              "$ref": "#/$defs/LinkRel"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to",
+            "rel",
+            "record_id"
+          ],
+          "type": "object"
+        },
+        {
           "properties": {
             "focus": {
               "type": "string"
@@ -6684,7 +6781,12 @@
         },
         {
           "const": "desk",
-          "description": "Both windows: the browser in front of the hexmap.",
+          "description": "Both windows: the browser in front of the board.",
+          "type": "string"
+        },
+        {
+          "const": "board",
+          "description": "The evidence board: the case's cards and the strings pinned between them.",
           "type": "string"
         }
       ]
@@ -7130,6 +7232,10 @@
     "ShownRecord": {
       "description": "One staged case record as the stage shows it in the browser window: the segment runtime's\nrecord (PII-scrubbed for a real case) with nothing added. Absent provenance is omitted.",
       "properties": {
+        "date": {
+          "description": "When the record's event happened, `YYYY-MM-DD`.",
+          "type": "string"
+        },
         "fictional": {
           "type": "boolean"
         },
@@ -7786,6 +7892,44 @@
             "type",
             "ts_ms",
             "record"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A string the runtime accepted onto the evidence board (`pin_link`), with its record's\ngrade so the stage draws below-DOC as alleged.",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "grade": {
+              "$ref": "#/$defs/EvidenceGrade"
+            },
+            "record_id": {
+              "type": "string"
+            },
+            "rel": {
+              "$ref": "#/$defs/LinkRel"
+            },
+            "to": {
+              "type": "string"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "link_pinned",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "from",
+            "to",
+            "rel",
+            "record_id",
+            "grade"
           ],
           "type": "object"
         },

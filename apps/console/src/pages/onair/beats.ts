@@ -38,6 +38,8 @@ function opDetail(e: Extract<StreamEvent, { type: "op" }>): string {
       return o.msg_id;
     case "mark_moment":
       return o.label;
+    case "pin_link":
+      return `${o.from} ${o.rel} ${o.to}`;
     case "show_screen":
       return o.record_id ? `${o.screen} · ${o.record_id}` : o.screen;
   }

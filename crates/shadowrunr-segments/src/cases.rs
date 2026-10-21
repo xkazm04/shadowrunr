@@ -604,6 +604,8 @@ pub(crate) mod tests {
             grade: None,
             fog: true,
             sources: vec![src.into()],
+            role: None,
+            date: None,
         };
         let case = Case {
             id: "TEST-REAL-01".into(),
@@ -652,6 +654,8 @@ pub(crate) mod tests {
                 ),
             ],
             links: vec![("HEX-01".into(), "HEX-03".into())],
+            thesis: None,
+            acts: Vec::new(),
         };
         let mut wayback = record(
             "CLM-01",

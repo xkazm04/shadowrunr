@@ -864,6 +864,8 @@ fn doc_reveal_with_regulator_source_passes() {
         grade: None,
         fog: true,
         sources: vec!["https://www.sec.gov/litigation/complaints/test.pdf".into()],
+        role: None,
+        date: None,
     });
     let mut c = cfg();
     c.case = Some(case);

@@ -45,12 +45,25 @@ The `op` payload is the action grammar, tagged `"op"`:
 - `mark_moment`
 - `switch_segment`
 - `sign_off`
-- `show_screen` (`screen`: `host` | `hexmap` | `browser` | `desk`, optional `record_id`,
+- `show_screen` (`screen`: `host` | `hexmap` | `browser` | `desk` | `board`, optional `record_id`,
   optional `focus`): what fills the broadcast's main screen. Only the screens the segment and its
   state allow; `browser` and `desk` need a record whose research job has come back; `focus` names
   a case hex the map zooms to on `hexmap` and `desk` (absent: the overview). The runtime also
   emits it itself (the segment's default screen, a returning research job's record, the
   investigation's own moves). See Appendix (screens).
+- `pin_link` (`from`, `to`: hex ids; `rel`: `paid` | `owns` | `controls` | `promoted` |
+  `processed` | `regulates` | `claims` | `supports` | `contradicts`; `record_id`): pin a labelled
+  string between two face-up cards on the evidence board, citing the returned record that shows
+  it. The contract is in place; no segment allows it yet (refused as `screen_not_allowed`) until
+  the evidence-board package lands. An accepted pin is announced as `link_pinned {ts_ms, from,
+  to, rel, record_id, grade}`, `grade` being the record's, so the stage draws below-DOC as
+  alleged.
+
+The evidence board's case data: `Hex` gains optional `role` (`victim` | `promoter` | `shell` |
+`processor` | `regulator` | `claim` | `wallet` | `exchange` | `person` | `company`) and `date`
+(`YYYY-MM-DD`, the timeline); `Case` gains optional `thesis` (what the case asks) and `acts`
+(`CaseAct {name, hexes}`, the board's regions); `ShownRecord` gains optional `date`. All are
+omitted when absent. The `board` screen draws as the map until the board package lands.
 
 A `record_shown {ts_ms, record}` event carries one staged case record (`ShownRecord`: `id`,
 `hex`, `grade`, `title`, `source`, `summary`, optional `retrieved` and `via`, `fictional`) for the

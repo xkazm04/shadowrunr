@@ -75,7 +75,9 @@ function keepRecord(s: SceneState, record: ShownRecord): Record<string, ShownRec
  * hexmap and the record's `record_shown` completes the switch. A `focus` zooms the map on `hexmap`
  * and `desk`, and is ignored elsewhere; without one the map is the overview.
  */
-function showScreen(s: SceneState, screen: ScreenId, recordId: string | undefined, focus: string | undefined, at: TsMs): SceneState {
+function showScreen(s: SceneState, wire: ScreenId, recordId: string | undefined, focus: string | undefined, at: TsMs): SceneState {
+  // Until the evidence board is drawn (appendix (screens and board)), the board shows as the map.
+  const screen = wire === "board" ? "hexmap" : wire;
   s = { ...s, mapFocus: screen === "hexmap" || screen === "desk" ? (focus ?? null) : null };
   if (screen === "host" || screen === "hexmap") return setScreen({ ...s, pendingScreen: null }, screen, at, "screen");
   const latest = Object.keys(s.records).pop();
@@ -310,6 +312,9 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     }
     case "case_open":
       return { ...s, caseFile: ev.case };
+    // The board's strings (appendix (screens and board)): drawn by the board package.
+    case "link_pinned":
+      return s;
     case "record_shown": {
       s = { ...s, records: keepRecord(s, ev.record) };
       const p = s.pendingScreen;
@@ -462,6 +467,8 @@ function applyOp(s: SceneState, op: Extract<StreamEvent, { type: "op" }>["op"], 
       return { ...s, outro: { reason: op.reason, at } };
     case "show_screen":
       return showScreen(s, op.screen, op.record_id, op.focus, at);
+    case "pin_link":
+      return s;
   }
 }
 

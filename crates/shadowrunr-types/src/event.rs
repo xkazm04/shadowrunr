@@ -56,6 +56,14 @@ pub enum Op {
     /// Switch the broadcast's main screen (appendix (screens)). Only the screens the current
     /// segment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.
     /// `focus` names a case hex the map zooms to on `hexmap`/`desk` (absent: the overview).
+    /// Pin a labelled string between two face-up cards on the evidence board, citing the
+    /// returned record that shows it (appendix (screens and board)).
+    PinLink {
+        from: String,
+        to: String,
+        rel: crate::segment::LinkRel,
+        record_id: String,
+    },
     ShowScreen {
         screen: ScreenId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -76,8 +84,10 @@ pub enum ScreenId {
     Hexmap,
     /// A browser-styled window on one staged case record.
     Browser,
-    /// Both windows: the browser in front of the hexmap.
+    /// Both windows: the browser in front of the board.
     Desk,
+    /// The evidence board: the case's cards and the strings pinned between them.
+    Board,
 }
 
 /// One staged case record as the stage shows it in the browser window: the segment runtime's
@@ -99,6 +109,9 @@ pub struct ShownRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub via: Option<String>,
     pub fictional: bool,
+    /// When the record's event happened, `YYYY-MM-DD`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -219,6 +232,16 @@ pub enum StreamEvent {
     RecordShown {
         ts_ms: TsMs,
         record: ShownRecord,
+    },
+    /// A string the runtime accepted onto the evidence board (`pin_link`), with its record's
+    /// grade so the stage draws below-DOC as alleged.
+    LinkPinned {
+        ts_ms: TsMs,
+        from: String,
+        to: String,
+        rel: crate::segment::LinkRel,
+        record_id: String,
+        grade: EvidenceGrade,
     },
     /// Background job lifecycle (research subagents etc.).
     Job {

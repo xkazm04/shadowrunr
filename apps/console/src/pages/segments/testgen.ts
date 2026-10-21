@@ -4,7 +4,7 @@
 // a closed enum in the contract, so scaled segments reuse the four real ids.
 import type { CommandInfo, RankRow, RankTableInfo, ReconcileReport, SegmentId, SegmentStatus, SegmentTableInfo, SegmentTables } from "@shadowrunr/contract";
 
-const OP_TAGS = ["highlight", "start_poll", "close_poll", "summon_foil", "dismiss_foil", "reveal_hex", "dispatch_research", "show_card", "mark_moment", "switch_segment", "sign_off", "show_screen"];
+const OP_TAGS = ["highlight", "start_poll", "close_poll", "summon_foil", "dismiss_foil", "reveal_hex", "dispatch_research", "show_card", "mark_moment", "switch_segment", "sign_off", "show_screen", "pin_link"];
 const COMMANDS = ["summon", "hint", "grade", "propose", "vote"];
 
 const seg01: SegmentTableInfo = {

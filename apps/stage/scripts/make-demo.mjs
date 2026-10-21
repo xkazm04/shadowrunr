@@ -297,6 +297,8 @@ push({
     fictional: true,
   },
 });
+// A string pinned on the evidence board (drawn once the board package lands).
+push({ type: "link_pinned", ts_ms: 162200, from: "HEX-01", to: "HEX-05", rel: "claims", record_id: "REP-01", grade: "REP" });
 // The research job came back: the runtime opens its record in the browser window.
 op(162600, { op: "show_screen", screen: "browser", record_id: "REP-01" });
 push({ type: "say", ts_ms: 163200, speaker: "malakor", text: "The archive remembers what Glimmerquay would rather forget. Four percent a week, in their own words. REPORTED, minions, so ALLEGED.", first_text_ms: 1100 });

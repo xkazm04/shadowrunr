@@ -1305,6 +1305,8 @@ async fn the_alleged_gate_fires() {
             ),
         ],
         links: Vec::new(),
+        thesis: None,
+        acts: Vec::new(),
     });
     let mut c = ctx(&["reveal_hex"]);
     c.segment = SegmentId::Seg02aHexmap;
@@ -1344,6 +1346,8 @@ fn hex(
         grade,
         fog: false,
         sources: Vec::new(),
+        role: None,
+        date: None,
     }
 }
 

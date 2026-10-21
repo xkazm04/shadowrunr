@@ -37,6 +37,7 @@ const SAMPLES: Record<StreamEvent["type"], unknown> = {
   },
   segment_start: { type: "segment_start", ts_ms: 1, segment: "SEG-01" },
   segment_end: { type: "segment_end", ts_ms: 2, segment: "SEG-02A", ses: 0.4 },
+  link_pinned: { type: "link_pinned", ts_ms: 4, from: "HEX-04", to: "HEX-09", rel: "paid", record_id: "DOC-01", grade: "DOC" },
   record_shown: {
     type: "record_shown",
     ts_ms: 3,
@@ -86,6 +87,7 @@ const OPS: Record<string, unknown> = {
   switch_segment: { op: "switch_segment", to: "SEG-02A" },
   sign_off: { op: "sign_off", reason: "done" },
   show_screen: { op: "show_screen", screen: "browser", record_id: "DOC-01" },
+  pin_link: { op: "pin_link", from: "HEX-04", to: "HEX-09", rel: "paid", record_id: "DOC-01" },
 };
 
 describe("parseStreamEvent: every StreamEvent type, through the contract door", () => {

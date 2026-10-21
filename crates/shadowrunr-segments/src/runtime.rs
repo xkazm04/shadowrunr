@@ -1672,6 +1672,9 @@ impl SegmentRuntime {
             // Appendix (screens): the state's allow-list, then a record on file for the
             // browser window, then a case hex to focus. A `record_id` on `host` or `hexmap`
             // and a `focus` on `host` or `browser` are ignored.
+            // No segment allows it yet (appendix (screens and board)): the board package
+            // brings its validation.
+            Op::PinLink { .. } => return Err("screen_not_allowed"),
             Op::ShowScreen {
                 screen,
                 record_id,
@@ -1695,7 +1698,7 @@ impl SegmentRuntime {
                         }
                         Some(id)
                     }
-                    ScreenId::Host | ScreenId::Hexmap => None,
+                    ScreenId::Host | ScreenId::Hexmap | ScreenId::Board => None,
                 };
                 let focus = match (screen, focus) {
                     (ScreenId::Hexmap | ScreenId::Desk, Some(raw)) => {
@@ -1784,6 +1787,7 @@ impl SegmentRuntime {
             retrieved: r.retrieved.clone(),
             via: r.via.clone(),
             fictional: file.fictional,
+            date: None,
         };
         self.shown.insert(id.to_string());
         Some(StreamEvent::RecordShown {

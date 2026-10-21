@@ -373,6 +373,15 @@ export type StreamEvent =
       type: "record_shown";
     }
   | {
+      from: string;
+      grade: EvidenceGrade;
+      record_id: string;
+      rel: LinkRel;
+      to: string;
+      ts_ms: number;
+      type: "link_pinned";
+    }
+  | {
       job_id: string;
       status: string;
       summary?: string;
@@ -409,6 +418,14 @@ export type StreamEvent =
  * via the `definition` "HexKind".
  */
 export type HexKind = "entity" | "wallet" | "domain" | "shell_company" | "claim";
+/**
+ * A card's part in the case's story, drawn as its glyph on the evidence board.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "HexRole".
+ */
+export type HexRole =
+  "victim" | "promoter" | "shell" | "processor" | "regulator" | "claim" | "wallet" | "exchange" | "person" | "company";
 /**
  * Parsed chat commands. Wire form in chat: `!summon <foil>`, `!hint <hex> <text>`,
  * `!grade <hex> <DOC|REP|CLM|SPC>`, `!propose <text>`, `!vote <option>`.
@@ -508,11 +525,26 @@ export type Op =
       reason: string;
     }
   | {
+      from: string;
+      op: "pin_link";
+      record_id: string;
+      rel: LinkRel;
+      to: string;
+    }
+  | {
       focus?: string;
       op: "show_screen";
       record_id?: string;
       screen: ScreenId;
     };
+/**
+ * What a string pinned between two cards says (`pin_link`).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "LinkRel".
+ */
+export type LinkRel =
+  "paid" | "owns" | "controls" | "promoted" | "processed" | "regulates" | "claims" | "supports" | "contradicts";
 /**
  * What fills the broadcast's main screen. `host` is the big-avatar room; the others put the
  * content full-size with Malakor cut out in the bottom-left corner.
@@ -520,7 +552,7 @@ export type Op =
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ScreenId".
  */
-export type ScreenId = "host" | "hexmap" | "browser" | "desk";
+export type ScreenId = "host" | "hexmap" | "browser" | "desk" | "board";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ModStage".
@@ -2949,6 +2981,10 @@ export interface StreamBrief {
  */
 export interface Case {
   /**
+   * The board's regions, in order. Absent: the runtime's arc plan names them.
+   */
+  acts?: CaseAct[];
+  /**
    * True for fabricated demo or simulation cases. Must never be presented as real.
    */
   fictional: boolean;
@@ -2958,7 +2994,21 @@ export interface Case {
    * Pairs of hex ids.
    */
   links?: [string, string][];
+  /**
+   * What the case asks, in one sentence: the board's heading.
+   */
+  thesis?: string;
   title: string;
+}
+/**
+ * One act of a case: a region of the evidence board and the cards in it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CaseAct".
+ */
+export interface CaseAct {
+  hexes: string[];
+  name: string;
 }
 /**
  * One hex of a SEG-02A case map. Axial coordinates (q, r).
@@ -2967,6 +3017,10 @@ export interface Case {
  * via the `definition` "Hex".
  */
 export interface Hex {
+  /**
+   * When it happened, `YYYY-MM-DD`: the board's timeline strip.
+   */
+  date?: string;
   fog: boolean;
   grade?: EvidenceGrade;
   id: string;
@@ -2974,6 +3028,7 @@ export interface Hex {
   label: string;
   q: number;
   r: number;
+  role?: HexRole;
   /**
    * Source URLs; a DOC grade requires at least one allowlisted primary source.
    */
@@ -3027,6 +3082,10 @@ export interface VoteTally {
  * via the `definition` "ShownRecord".
  */
 export interface ShownRecord {
+  /**
+   * When the record's event happened, `YYYY-MM-DD`.
+   */
+  date?: string;
   fictional: boolean;
   grade: EvidenceGrade;
   hex: string;

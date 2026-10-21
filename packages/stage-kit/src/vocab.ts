@@ -44,6 +44,7 @@ export const OP_NAMES = exhaustive<OpName>()([
   "switch_segment",
   "sign_off",
   "show_screen",
+  "pin_link",
 ] as const);
 
 export const EVENT_TYPES = exhaustive<EventType>()([
@@ -59,6 +60,7 @@ export const EVENT_TYPES = exhaustive<EventType>()([
   "moderation",
   "handover",
   "record_shown",
+  "link_pinned",
   "job",
   "beat_plan",
   "health",

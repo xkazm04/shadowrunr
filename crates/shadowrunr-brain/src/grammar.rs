@@ -189,6 +189,9 @@ pub fn op_example(tag: &str) -> Option<&'static str> {
         "switch_segment" => r#"{"op":"switch_segment","to":"SEG-02A"}"#,
         "sign_off" => r#"{"op":"sign_off","reason":"..."}"#,
         "show_screen" => r#"{"op":"show_screen","screen":"browser","record_id":"DOC-01"}"#,
+        "pin_link" => {
+            r#"{"op":"pin_link","from":"HEX-04","to":"HEX-09","rel":"paid","record_id":"DOC-01"}"#
+        }
         _ => return None,
     })
 }
@@ -200,7 +203,7 @@ mod tests {
     fn prefixes() -> Vec<String> {
         crate::tests::malakor_package().persona.reply_prefixes
     }
-    use shadowrunr_types::{EvidenceGrade, Rank, ScreenId, SegmentId};
+    use shadowrunr_types::{EvidenceGrade, LinkRel, Rank, ScreenId, SegmentId};
 
     fn allowed(tags: &[&str]) -> Vec<String> {
         tags.iter().map(|s| s.to_string()).collect()
@@ -259,6 +262,7 @@ mod tests {
                 Op::SwitchSegment { .. } => 9,
                 Op::SignOff { .. } => 10,
                 Op::ShowScreen { .. } => 11,
+                Op::PinLink { .. } => 12,
             }
         }
         let s = |x: &str| x.to_string();
@@ -296,6 +300,12 @@ mod tests {
                 screen: ScreenId::Browser,
                 record_id: Some(s("DOC-01")),
                 focus: None,
+            },
+            Op::PinLink {
+                from: s("HEX-04"),
+                to: s("HEX-09"),
+                rel: LinkRel::Paid,
+                record_id: s("DOC-01"),
             },
         ];
         let slots: Vec<usize> = ops.iter().map(slot).collect();

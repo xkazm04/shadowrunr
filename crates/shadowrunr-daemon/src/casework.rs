@@ -1163,6 +1163,8 @@ pub fn assemble(
             grade: None,
             fog: true,
             sources,
+            role: None,
+            date: None,
         });
     }
     let mut counters: BTreeMap<&str, usize> = BTreeMap::new();
@@ -1251,6 +1253,8 @@ pub fn assemble(
         fictional: false,
         hexes,
         links,
+        thesis: None,
+        acts: Vec::new(),
     };
     let file = CaseFile {
         case_id: case_id.clone(),
