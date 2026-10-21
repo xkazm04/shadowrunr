@@ -8,7 +8,6 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -16,8 +15,8 @@ use serde_json::Value;
 use shadowrunr_types::{Effort, EngineError, EngineRequest, ModelTier};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
-use tokio::sync::Semaphore;
 
+use crate::admission::Admission;
 use crate::limits::Failure;
 use crate::model::{effort_str, model_id};
 use crate::stream::{Feed, TurnOutcome, TurnParser};
@@ -154,17 +153,18 @@ pub struct ClaudeCli {
     pub bin: String,
     pub work_dir: PathBuf,
     pub safe_mode: bool,
-    /// Global cap on live CLI processes.
-    pub sem: Arc<Semaphore>,
+    /// The cap on live CLI processes (claude, codex, agy), split into a live reserve and a
+    /// shared lane. Every spawn site admits through it before starting a process.
+    pub admission: Admission,
 }
 
 impl ClaudeCli {
-    pub fn new(bin: String, work_dir: PathBuf, safe_mode: bool, max_live: usize) -> Self {
+    pub fn new(bin: String, work_dir: PathBuf, safe_mode: bool, admission: Admission) -> Self {
         Self {
             bin,
             work_dir,
             safe_mode,
-            sem: Arc::new(Semaphore::new(max_live.max(1))),
+            admission,
         }
     }
 
@@ -230,19 +230,13 @@ impl ClaudeCli {
     }
 
     /// One stateless call: spawn, write the prompt, parse the stream until the result.
+    /// `req.timeout_ms` bounds the read. The caller has already admitted the process
+    /// ([`Admission::admit`]) and passes the budget left after its wait.
     pub async fn run_once(
         &self,
         account: &Account,
         req: &EngineRequest,
     ) -> Result<TurnOutcome, Failure> {
-        let _permit = self
-            .sem
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| Failure::Transient {
-                detail: "process semaphore closed".into(),
-            })?;
         let sp = self
             .system_prompt_file(&req.system)
             .map_err(Failure::Fatal)?;
@@ -494,7 +488,12 @@ pub(crate) mod tests {
     #[test]
     fn system_prompt_file_is_content_addressed() {
         let dir = tempfile::tempdir().unwrap();
-        let cli = ClaudeCli::new("claude".into(), dir.path().to_path_buf(), true, 2);
+        let cli = ClaudeCli::new(
+            "claude".into(),
+            dir.path().to_path_buf(),
+            true,
+            Admission::new(2, 0),
+        );
         let a = cli.system_prompt_file("I am Malakor.").unwrap();
         let b = cli.system_prompt_file("I am Malakor.").unwrap();
         let c = cli.system_prompt_file("I am someone else.").unwrap();

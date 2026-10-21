@@ -14,6 +14,7 @@ use shadowrunr_types::{
 };
 use tokio::io::AsyncWriteExt;
 
+use crate::admission::{self, deadline_in, remaining_ms, Admission};
 use crate::alt_cli::{self, AltCommand};
 use crate::api::{AnthropicApi, ApiOutcome, HttpTransport, ReqwestTransport};
 use crate::claude_cli::{read_tail, Account, ClaudeCli, CliRunner};
@@ -190,6 +191,7 @@ impl FleetInner {
             correlation_id: req.correlation_id.clone(),
             error_kind: Some(kind.to_string()),
             warm,
+            queue_ms: 0,
         }
     }
 
@@ -215,18 +217,24 @@ impl FleetInner {
         }
     }
 
+    /// One alternative-CLI attempt within the call's `deadline`; also returns how long it
+    /// waited for a process slot.
     async fn run_alt(
         &self,
         driver: FallbackDriver,
         req: &EngineRequest,
-    ) -> Result<EngineReply, Failure> {
+        deadline: Instant,
+    ) -> (Result<EngineReply, Failure>, u64) {
         let work_dir = self.cfg.work_dir();
         let (cmd, engine, model) = match driver {
             FallbackDriver::LocalGemma => {
-                return Err(Failure::Transient {
-                    detail: "local_gemma is not implemented in v0.1 (GPU work is out of scope)"
-                        .into(),
-                })
+                let detail = "local_gemma is not implemented in v0.1 (GPU work is out of scope)";
+                return (
+                    Err(Failure::Transient {
+                        detail: detail.into(),
+                    }),
+                    0,
+                );
             }
             FallbackDriver::Codex => {
                 let head = self
@@ -265,15 +273,19 @@ impl FleetInner {
             }
         };
         let started = Instant::now();
-        let (stdout, exit_ok) = spawn_alt(&self.cli, &cmd, work_dir, req.timeout_ms).await?;
+        let (res, queue_ms) = spawn_alt(&self.cli, &cmd, work_dir, req, deadline).await;
+        let (stdout, exit_ok) = match res {
+            Ok(out) => out,
+            Err(f) => return (Err(f), queue_ms),
+        };
         let parsed = match engine {
             EngineKind::CodexCli => alt_cli::parse_codex(&stdout),
             _ => alt_cli::parse_agy(&stdout),
         };
         if let Some(f) = alt_cli::classify(&parsed, exit_ok) {
-            return Err(f);
+            return (Err(f), queue_ms);
         }
-        Ok(EngineReply {
+        let reply = EngineReply {
             text: parsed.text,
             engine,
             account: None,
@@ -284,7 +296,8 @@ impl FleetInner {
             cost_usd: None,
             fallback_reason: None,
             session_id: None,
-        })
+        };
+        (Ok(reply), queue_ms)
     }
 }
 
@@ -304,21 +317,30 @@ pub fn api_reply(o: ApiOutcome, fallback_reason: String) -> EngineReply {
     }
 }
 
-/// Spawn an alternative CLI under the shared process cap and collect its stdout.
+/// Spawn an alternative CLI under the process cap and collect its stdout. The wait for a
+/// slot and the run both spend from `deadline`; the wait is returned beside the result.
 async fn spawn_alt(
     cli: &ClaudeCli,
     cmd: &AltCommand,
     work_dir: PathBuf,
+    req: &EngineRequest,
+    deadline: Instant,
+) -> (Result<(String, bool), Failure>, u64) {
+    let admitted = match cli.admission.admit(req.role, deadline).await {
+        Ok(a) => a,
+        Err(e) => return (Err(admission::spent(req.timeout_ms)), e.waited_ms),
+    };
+    let res = run_alt_process(cmd, work_dir, remaining_ms(deadline), req.timeout_ms).await;
+    drop(admitted.permit);
+    (res, admitted.waited_ms)
+}
+
+async fn run_alt_process(
+    cmd: &AltCommand,
+    work_dir: PathBuf,
+    budget_ms: u64,
     timeout_ms: u64,
 ) -> Result<(String, bool), Failure> {
-    let _permit = cli
-        .sem
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|_| Failure::Transient {
-            detail: "process semaphore closed".into(),
-        })?;
     let Some((exe, args)) = cmd.argv.split_first() else {
         return Err(Failure::Transient {
             detail: "empty alt argv".into(),
@@ -353,13 +375,9 @@ async fn spawn_alt(
         let ok = child.wait().await.map(|s| s.success()).unwrap_or(false);
         (out, ok)
     };
-    tokio::time::timeout(Duration::from_millis(timeout_ms), run)
+    tokio::time::timeout(Duration::from_millis(budget_ms), run)
         .await
-        .map_err(|_| {
-            Failure::Fatal(EngineError::Timeout {
-                after_ms: timeout_ms,
-            })
-        })
+        .map_err(|_| admission::spent(timeout_ms))
 }
 
 /// The production engine stack. Hold it concretely (`Arc<Fleet>`) to read
@@ -376,7 +394,7 @@ impl Fleet {
             cfg.claude_bin(),
             cfg.work_dir(),
             cfg.safe_mode(),
-            cfg.max_live_processes(),
+            Admission::new(cfg.max_live_processes(), cfg.live_reserved_processes()),
         );
         let runner: Arc<dyn CliRunner> = Arc::new(cli.clone());
         Self::with_parts(
@@ -477,6 +495,9 @@ impl Engine for Fleet {
     async fn complete(&self, req: EngineRequest) -> Result<EngineReply, EngineError> {
         let inner = &self.inner;
         let req = inner.apply_route(req);
+        // One budget for the whole call, counted from now: waiting for a process slot spends
+        // it, and every attempt runs with what is left.
+        let deadline = deadline_in(req.timeout_ms);
         let mut attempts = Attempts::default();
         let mut tried: Vec<usize> = Vec::new();
 
@@ -484,30 +505,61 @@ impl Engine for Fleet {
             tried.push(i);
             let account = inner.accounts[i].clone();
             let started = Instant::now();
-            let res = inner.runner.run(&account, &req).await;
+            let admitted = match inner.cli.admission.admit(req.role, deadline).await {
+                Ok(a) => a,
+                Err(e) => {
+                    // The budget ran out in the queue: no other account would start sooner.
+                    let mut row = inner.failure_row(
+                        &req,
+                        EngineKind::ClaudeCli,
+                        Some(account.label.clone()),
+                        started.elapsed().as_millis() as u64,
+                        "timeout",
+                        false,
+                    );
+                    row.queue_ms = e.waited_ms;
+                    inner.record(row);
+                    return Err(EngineError::Timeout {
+                        after_ms: req.timeout_ms,
+                    });
+                }
+            };
+            let mut attempt = req.clone();
+            attempt.timeout_ms = remaining_ms(deadline).max(1);
+            let res = inner
+                .runner
+                .run(&account, &attempt)
+                .await
+                .map_err(|f| admission::whole_budget(f, req.timeout_ms));
+            drop(admitted.permit);
+            let queue_ms = admitted.waited_ms;
             let duration_ms = started.elapsed().as_millis() as u64;
             match res {
                 Ok(o) => {
                     let reply =
                         inner.cli_reply(&account, &req, o, duration_ms, attempts.fallback());
-                    inner.record(LedgerRow::from_reply(
+                    let mut row = LedgerRow::from_reply(
                         inner.now(),
                         req.role,
                         &reply,
                         req.correlation_id.clone(),
-                    ));
+                    );
+                    row.queue_ms = queue_ms;
+                    inner.record(row);
                     ladder::served(inner, reply.engine);
                     return Ok(reply);
                 }
                 Err(f) => {
-                    inner.record(inner.failure_row(
+                    let mut row = inner.failure_row(
                         &req,
                         EngineKind::ClaudeCli,
                         Some(account.label.clone()),
                         duration_ms,
                         f.kind(),
                         false,
-                    ));
+                    );
+                    row.queue_ms = queue_ms;
+                    inner.record(row);
                     match ladder::step(f, &account.label) {
                         Step::Rotate { cool, reason } => {
                             if let Some(reset_at_ms) = cool {
@@ -562,27 +614,32 @@ impl Engine for Fleet {
                 FallbackDriver::Agy => EngineKind::AgyCli,
                 FallbackDriver::LocalGemma => EngineKind::LocalGemma,
             };
-            match inner.run_alt(driver, &req).await {
+            let (res, queue_ms) = inner.run_alt(driver, &req, deadline).await;
+            match res {
                 Ok(mut reply) => {
                     reply.fallback_reason = Some(attempts.joined());
-                    inner.record(LedgerRow::from_reply(
+                    let mut row = LedgerRow::from_reply(
                         inner.now(),
                         req.role,
                         &reply,
                         req.correlation_id.clone(),
-                    ));
+                    );
+                    row.queue_ms = queue_ms;
+                    inner.record(row);
                     ladder::served(inner, reply.engine);
                     return Ok(reply);
                 }
                 Err(f) => {
-                    inner.record(inner.failure_row(
+                    let mut row = inner.failure_row(
                         &req,
                         engine,
                         None,
                         started.elapsed().as_millis() as u64,
                         f.kind(),
                         false,
-                    ));
+                    );
+                    row.queue_ms = queue_ms;
+                    inner.record(row);
                     attempts.push(format!("{engine:?}: {}", f.into_engine_error("alt")));
                 }
             }
@@ -598,15 +655,19 @@ impl Engine for Fleet {
     ) -> Result<Box<dyn WarmSession>, EngineError> {
         let inner = &self.inner;
         let template = inner.apply_route(template);
+        let deadline = deadline_in(template.timeout_ms);
         let mut attempts = Attempts::default();
         let mut tried = Vec::new();
         while let Some(i) = inner.pick_account(&tried) {
             tried.push(i);
-            match ClaudeWarmSession::open(inner.clone(), i, template.clone()).await {
+            match ClaudeWarmSession::open(inner.clone(), i, template.clone(), deadline).await {
                 Ok(s) => {
                     ladder::served(inner, EngineKind::ClaudeCli);
                     return Ok(Box::new(s));
                 }
+                // The budget ran out waiting for a process slot; every account shares that
+                // queue, so the next one would only wait again.
+                Err(e @ EngineError::Timeout { .. }) => return Err(e),
                 Err(e) => attempts.push(format!("account {}: {e}", inner.accounts[i].label)),
             }
         }
@@ -696,7 +757,12 @@ mod tests {
         let stub = Arc::new(StubTransport::ok("Kneel, minion."));
         let now = Arc::new(AtomicI64::new(1_700_000_000_000));
         let n2 = now.clone();
-        let cli = ClaudeCli::new("claude".into(), dir.path().into(), true, 2);
+        let cli = ClaudeCli::new(
+            "claude".into(),
+            dir.path().into(),
+            true,
+            Admission::new(2, 0),
+        );
         let fleet = Fleet::with_parts(
             &cfg,
             cli,

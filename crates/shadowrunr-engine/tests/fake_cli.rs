@@ -550,3 +550,196 @@ async fn warm_turn_model_not_found_is_returned_not_rotated() {
     }
     assert!(calls(&dir_b).is_empty());
 }
+
+// ---- Admission by lane, deadline at enqueue ----
+//
+// Ordering, not wall-clock bounds, carries the verdicts: a slow fake CLI holds its slot for
+// far longer than a fast one takes, and the tests assert which process had started or
+// finished when an answer came back.
+
+fn role_req(role: Role, timeout_ms: u64) -> EngineRequest {
+    EngineRequest {
+        role,
+        ..req(timeout_ms)
+    }
+}
+
+/// Wait (bounded) until `cond` holds. A wait, never a verdict.
+async fn until(what: &str, mut cond: impl FnMut() -> bool) {
+    let give_up = std::time::Instant::now() + Duration::from_secs(20);
+    while !cond() {
+        assert!(
+            std::time::Instant::now() < give_up,
+            "timed out waiting: {what}"
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
+
+fn raw_ledger(w: &World) -> Vec<Value> {
+    std::fs::read_to_string(w.root.path().join("ledger.jsonl"))
+        .unwrap_or_default()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_core_turn_is_admitted_ahead_of_queued_judges() {
+    let mut w = World::new();
+    w.cfg.max_live_processes = Some(2);
+    w.cfg.live_reserved_processes = Some(1);
+    let dir = w.account(
+        "main",
+        json!({"fixture": fixture("claude_success.jsonl"), "delay_ms": 4000}),
+    );
+    let fleet = std::sync::Arc::new(Fleet::new(&w.cfg));
+    let adm = fleet.inner().cli.admission.clone();
+    let f1 = fleet.clone();
+    let judge1 = tokio::spawn(async move { f1.complete(role_req(Role::Judge, 60_000)).await });
+    until("judge 1 spawned", || calls(&dir).len() == 1).await;
+    let f2 = fleet.clone();
+    let judge2 = tokio::spawn(async move { f2.complete(role_req(Role::Judge, 60_000)).await });
+    until("judge 2 queued", || adm.waiting() == 1).await;
+    // The core thread's process runs fast.
+    set_fake(&dir, json!({"fixture": fixture("claude_success.jsonl")}));
+    let core = fleet
+        .complete(role_req(Role::CoreThread, 20_000))
+        .await
+        .unwrap();
+    assert_eq!(core.text, "ok");
+    assert!(
+        !judge1.is_finished(),
+        "the core turn did not wait for a judge"
+    );
+    assert_eq!(calls(&dir).len(), 2, "judge 2 is the one still waiting");
+    assert_eq!(adm.waiting(), 1);
+    assert!(judge1.await.unwrap().is_ok());
+    assert!(judge2.await.unwrap().is_ok());
+    let core_row = w
+        .ledger()
+        .into_iter()
+        .find(|r| r.role == Role::CoreThread)
+        .unwrap();
+    assert_eq!(core_row.queue_ms, 0);
+}
+
+#[tokio::test]
+async fn a_core_turn_that_waits_past_its_budget_times_out_in_the_queue() {
+    let mut w = World::new();
+    w.cfg.max_live_processes = Some(1);
+    let dir = w.account(
+        "main",
+        json!({"fixture": fixture("claude_success.jsonl"), "delay_ms": 4000}),
+    );
+    let fleet = std::sync::Arc::new(Fleet::new(&w.cfg));
+    let f1 = fleet.clone();
+    let research =
+        tokio::spawn(async move { f1.complete(role_req(Role::Researcher, 60_000)).await });
+    until("research spawned", || calls(&dir).len() == 1).await;
+    match fleet.complete(role_req(Role::CoreThread, 300)).await {
+        Err(EngineError::Timeout { after_ms }) => assert_eq!(after_ms, 300),
+        other => panic!("{other:?}"),
+    }
+    assert!(
+        !research.is_finished(),
+        "the core turn's budget covered its wait, not the research job"
+    );
+    assert_eq!(
+        calls(&dir).len(),
+        1,
+        "no process was spawned for the core turn"
+    );
+    let rows = w.ledger();
+    let row = rows.iter().find(|r| r.role == Role::CoreThread).unwrap();
+    assert_eq!(row.error_kind.as_deref(), Some("timeout"));
+    assert!(row.queue_ms >= 250, "{row:?}");
+    assert!(research.await.unwrap().is_ok());
+}
+
+#[tokio::test]
+async fn a_chat_pick_gets_in_while_a_warm_core_holds_a_slot_and_judges_fill_the_batch_lane() {
+    let mut w = World::new();
+    w.cfg.max_live_processes = Some(3);
+    w.cfg.live_reserved_processes = Some(2);
+    let dir = w.account("main", json!({"fixture": fixture("claude_success.jsonl")}));
+    let fleet = std::sync::Arc::new(Fleet::new(&w.cfg));
+    let adm = fleet.inner().cli.admission.clone();
+    let mut core = fleet
+        .open_session(role_req(Role::CoreThread, 20_000))
+        .await
+        .unwrap();
+    core.send("warm up".into()).await.unwrap();
+    set_fake(
+        &dir,
+        json!({"fixture": fixture("claude_success.jsonl"), "delay_ms": 4000}),
+    );
+    let f1 = fleet.clone();
+    let judge1 = tokio::spawn(async move { f1.complete(role_req(Role::Judge, 60_000)).await });
+    until("judge 1 spawned", || calls(&dir).len() == 2).await;
+    let f2 = fleet.clone();
+    let judge2 = tokio::spawn(async move { f2.complete(role_req(Role::Judge, 60_000)).await });
+    until("judge 2 queued", || adm.waiting() == 1).await;
+    set_fake(&dir, json!({"fixture": fixture("claude_success.jsonl")}));
+    let pick = fleet
+        .complete(role_req(Role::ChatPicker, 20_000))
+        .await
+        .expect("the chat pick is admitted on the live reserve");
+    assert_eq!(pick.text, "ok");
+    assert!(!judge1.is_finished());
+    assert_eq!(adm.waiting(), 1, "judge 2 still waits");
+    assert!(judge1.await.unwrap().is_ok());
+    assert!(judge2.await.unwrap().is_ok());
+    core.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn batch_roles_never_take_a_reserved_slot() {
+    let mut w = World::new();
+    w.cfg.max_live_processes = Some(2);
+    w.cfg.live_reserved_processes = Some(1);
+    w.account(
+        "main",
+        json!({"fixture": fixture("claude_success.jsonl"), "delay_ms": 400}),
+    );
+    let fleet = std::sync::Arc::new(Fleet::new(&w.cfg));
+    let started = std::time::Instant::now();
+    let (a, b, c) = tokio::join!(
+        fleet.complete(role_req(Role::Judge, 60_000)),
+        fleet.complete(role_req(Role::Judge, 60_000)),
+        fleet.complete(role_req(Role::Judge, 60_000)),
+    );
+    assert!(a.is_ok() && b.is_ok() && c.is_ok());
+    // One shared slot: three 400 ms judges run one after another.
+    assert!(started.elapsed() >= Duration::from_millis(1200));
+    // Exactly two of the three queued, each behind the one before it.
+    let rows = w.ledger();
+    let mut queued: Vec<u64> = rows.iter().map(|r| r.queue_ms).collect();
+    queued.sort_unstable();
+    assert_eq!(queued[0], 0, "{rows:?}");
+    assert!(queued[1] >= 350 && queued[2] >= 750, "{queued:?}");
+}
+
+#[tokio::test]
+async fn queue_time_is_ledgered_only_when_a_call_waited() {
+    let mut w = World::new();
+    w.cfg.max_live_processes = Some(1);
+    let dir = w.account(
+        "main",
+        json!({"fixture": fixture("claude_success.jsonl"), "delay_ms": 300}),
+    );
+    let fleet = std::sync::Arc::new(Fleet::new(&w.cfg));
+    let adm = fleet.inner().cli.admission.clone();
+    let f1 = fleet.clone();
+    let first = tokio::spawn(async move { f1.complete(role_req(Role::Planner, 20_000)).await });
+    until("first spawned", || calls(&dir).len() == 1).await;
+    let f2 = fleet.clone();
+    let second = tokio::spawn(async move { f2.complete(role_req(Role::Tagger, 20_000)).await });
+    until("second queued", || adm.waiting() == 1).await;
+    assert!(first.await.unwrap().is_ok());
+    assert!(second.await.unwrap().is_ok());
+    let raw = raw_ledger(&w);
+    let row = |role: &str| raw.iter().find(|r| r["role"] == role).unwrap().clone();
+    assert!(row("planner").get("queue_ms").is_none(), "{raw:?}");
+    assert!(row("tagger")["queue_ms"].as_u64().unwrap() > 0, "{raw:?}");
+}

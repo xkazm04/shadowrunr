@@ -9,6 +9,7 @@
 //! failure, appends one row to the ledger. Tests use [`ScriptedEngine`] or the
 //! `shadowrunr-fake-claude` binary and never spend quota.
 
+pub mod admission;
 pub mod alt_cli;
 pub mod api;
 pub mod claude_cli;

@@ -19,6 +19,11 @@
 //! own turn mirror, and returns to a CLI account (fresh process) once one is healthy again.
 //! Every answered turn reports the fleet mode.
 //!
+//! The live process holds one admission permit ([`crate::admission`]) for its whole life;
+//! a core-thread session takes it from the live reserve. A `send` has one budget, the
+//! template's `timeout_ms`, counted from the moment it is called: waiting for a slot to
+//! (re)spawn spends it, and the turn reads with what is left.
+//!
 //! [`ApiSession`] is the fleet-loss stand-in: a Messages API conversation that keeps its own
 //! history. Its `interrupt` is a no-op because a non-streaming request cannot be cut short.
 
@@ -32,9 +37,10 @@ use serde_json::json;
 use shadowrunr_types::{EngineError, EngineKind, EngineReply, EngineRequest, WarmSession};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{Child, ChildStdin, ChildStdout};
-use tokio::sync::{Mutex, OwnedSemaphorePermit};
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
+use crate::admission::{self, remaining_ms, Permit};
 use crate::api::Turn;
 use crate::claude_cli::{elapsed_ms, CallMode};
 use crate::fleet::{api_reply, FleetInner};
@@ -50,7 +56,7 @@ struct LiveProc {
     child: Child,
     stdin: ChildStdin,
     lines: Lines<BufReader<ChildStdout>>,
-    _permit: OwnedSemaphorePermit,
+    _permit: Permit,
 }
 
 impl LiveProc {
@@ -131,10 +137,12 @@ pub struct ClaudeWarmSession {
 
 impl ClaudeWarmSession {
     /// Open on the given account and spawn the process eagerly, so the first `send` is warm.
+    /// The wait for a process slot ends at `deadline` with [`EngineError::Timeout`].
     pub async fn open(
         inner: Arc<FleetInner>,
         account_idx: usize,
         template: EngineRequest,
+        deadline: Instant,
     ) -> Result<Self, EngineError> {
         let idle_ms = inner.cfg.idle_timeout_ms();
         let shared = Arc::new(Shared {
@@ -158,8 +166,9 @@ impl ClaudeWarmSession {
             on_api: false,
         };
         let p = s
-            .spawn(None)
+            .spawn(None, deadline)
             .await
+            .0
             .map_err(|f| f.into_engine_error(&s.inner.accounts[s.account_idx].label))?;
         *s.shared.proc.lock().await = Some(p);
         s.shared.touch();
@@ -170,16 +179,30 @@ impl ClaudeWarmSession {
         &self.inner.accounts[self.account_idx].label
     }
 
-    async fn spawn(&self, resume: Option<String>) -> Result<LiveProc, Failure> {
-        let cli = &self.inner.cli;
-        let permit = cli
-            .sem
-            .clone()
-            .acquire_owned()
+    /// Admit and spawn the live process; also returns how long it waited for a slot.
+    async fn spawn(
+        &self,
+        resume: Option<String>,
+        deadline: Instant,
+    ) -> (Result<LiveProc, Failure>, u64) {
+        let admitted = match self
+            .inner
+            .cli
+            .admission
+            .admit(self.template.role, deadline)
             .await
-            .map_err(|_| Failure::Transient {
-                detail: "process semaphore closed".into(),
-            })?;
+        {
+            Ok(a) => a,
+            Err(e) => return (Err(admission::spent(self.template.timeout_ms)), e.waited_ms),
+        };
+        (
+            self.start(resume, admitted.permit).await,
+            admitted.waited_ms,
+        )
+    }
+
+    async fn start(&self, resume: Option<String>, permit: Permit) -> Result<LiveProc, Failure> {
+        let cli = &self.inner.cli;
         let sp = cli
             .system_prompt_file(&self.template.system)
             .map_err(Failure::Fatal)?;
@@ -294,22 +317,26 @@ impl ClaudeWarmSession {
         }
     }
 
-    fn fail_row(&self, started: Instant, kind: &str) {
+    fn fail_row(&self, started: Instant, kind: &str, queue_ms: u64) {
         let label = self.account_label().to_string();
-        self.inner.record(self.inner.failure_row(
+        let mut row = self.inner.failure_row(
             &self.template,
             EngineKind::ClaudeCli,
             Some(label),
             started.elapsed().as_millis() as u64,
             kind,
             true,
-        ));
+        );
+        row.queue_ms = queue_ms;
+        self.inner.record(row);
     }
 }
 
 #[async_trait]
 impl WarmSession for ClaudeWarmSession {
     async fn send(&mut self, prompt: String) -> Result<EngineReply, EngineError> {
+        let timeout_ms = self.template.timeout_ms;
+        let deadline = admission::deadline_in(timeout_ms);
         let shared = self.shared.clone();
         let mut guard = shared.proc.lock().await;
         if self.in_flight {
@@ -344,14 +371,16 @@ impl WarmSession for ClaudeWarmSession {
                 }
             }
         }
-        let timeout_ms = self.template.timeout_ms;
         let mut respawns_left = 1u32;
         let mut tried = vec![self.account_idx];
         let mut attempts = Attempts::default();
         loop {
             let started = Instant::now();
+            let mut queue_ms = 0;
             let spawn_failure = if guard.is_none() {
-                match self.spawn(self.session_id.clone()).await {
+                let (res, waited) = self.spawn(self.session_id.clone(), deadline).await;
+                queue_ms = waited;
+                match res {
                     Ok(p) => {
                         *guard = Some(p);
                         None
@@ -366,7 +395,10 @@ impl WarmSession for ClaudeWarmSession {
                 (None, None) => continue,
                 (None, Some(p)) => {
                     self.in_flight = true;
-                    let res = Self::turn(p, &prompt, timeout_ms).await;
+                    let res = match remaining_ms(deadline) {
+                        0 => Err(TurnErr::Timeout),
+                        left => Self::turn(p, &prompt, left).await,
+                    };
                     self.in_flight = false;
                     let duration_ms = started.elapsed().as_millis() as u64;
                     match res {
@@ -383,13 +415,15 @@ impl WarmSession for ClaudeWarmSession {
                                 duration_ms,
                                 self.fallback_reason.clone(),
                             );
-                            self.inner.record(self.row(&reply));
+                            let mut row = self.row(&reply);
+                            row.queue_ms = queue_ms;
+                            self.inner.record(row);
                             push_exchange(&mut self.mirror, prompt, reply.text.clone());
                             ladder::served(&self.inner, reply.engine);
                             return Ok(reply);
                         }
                         Err(TurnErr::Died(detail)) => {
-                            self.fail_row(started, "transient");
+                            self.fail_row(started, "transient", queue_ms);
                             if let Some(p) = guard.take() {
                                 p.kill().await;
                             }
@@ -405,7 +439,7 @@ impl WarmSession for ClaudeWarmSession {
                             continue;
                         }
                         Err(TurnErr::Timeout) => {
-                            self.fail_row(started, "timeout");
+                            self.fail_row(started, "timeout", queue_ms);
                             if let Some(p) = guard.take() {
                                 p.kill().await;
                             }
@@ -418,7 +452,7 @@ impl WarmSession for ClaudeWarmSession {
                 }
             };
             // The same ladder as a one-shot call.
-            self.fail_row(started, failure.kind());
+            self.fail_row(started, failure.kind(), queue_ms);
             let from = self.account_label().to_string();
             let (cool, reason) = match ladder::step(failure, &from) {
                 Step::Stop(e) => return Err(e),

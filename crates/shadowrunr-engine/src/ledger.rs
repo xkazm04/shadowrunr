@@ -34,6 +34,14 @@ pub struct LedgerRow {
     /// True when the call was a turn of a warm session.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub warm: bool,
+    /// Time spent waiting for a process slot before the call could start (included in
+    /// `duration_ms`). Absent when the call did not wait.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub queue_ms: u64,
+}
+
+fn is_zero(v: &u64) -> bool {
+    *v == 0
 }
 
 impl LedgerRow {
@@ -57,6 +65,7 @@ impl LedgerRow {
             correlation_id,
             error_kind: None,
             warm: false,
+            queue_ms: 0,
         }
     }
 }
@@ -135,6 +144,7 @@ mod tests {
             correlation_id: None,
             error_kind: Some("timeout".into()),
             warm: false,
+            queue_ms: 0,
         };
         l.append(&row);
         l.append(&row);
@@ -143,6 +153,7 @@ mod tests {
         assert!(!text.contains("null"));
         assert!(!text.contains("first_text_ms"));
         assert!(!text.contains("warm"));
+        assert!(!text.contains("queue_ms"));
         let back: LedgerRow = serde_json::from_str(text.lines().next().unwrap()).unwrap();
         assert_eq!(
             serde_json::to_value(&back).unwrap(),

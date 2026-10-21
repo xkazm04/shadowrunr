@@ -83,6 +83,7 @@ impl FallbackDriver {
 }
 
 pub const DEFAULT_MAX_LIVE_PROCESSES: usize = 6;
+pub const DEFAULT_LIVE_RESERVED_PROCESSES: usize = 2;
 pub const DEFAULT_IDLE_TIMEOUT_MS: u64 = 20 * 60 * 1000;
 pub const DEFAULT_COOLDOWN_MS: u64 = 15 * 60 * 1000;
 pub const DEFAULT_API_BASE_URL: &str = "https://api.anthropic.com";
@@ -119,6 +120,11 @@ pub struct EngineConfig {
     /// Global cap on live CLI processes (one-shot calls and warm sessions). Default 6.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_live_processes: Option<usize>,
+    /// Of `max_live_processes`, how many only the live lane (core thread, chat picker,
+    /// chatters) may take, so background work cannot starve the live voice. Default 2,
+    /// clamped below the cap (with a cap of 1 the single slot is shared).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_reserved_processes: Option<usize>,
     /// Warm-session idle timeout. Default 20 minutes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idle_timeout_ms: Option<u64>,
@@ -201,6 +207,13 @@ impl EngineConfig {
             .max(1)
     }
 
+    /// The live lane's reserve, clamped below [`EngineConfig::max_live_processes`].
+    pub fn live_reserved_processes(&self) -> usize {
+        self.live_reserved_processes
+            .unwrap_or(DEFAULT_LIVE_RESERVED_PROCESSES)
+            .min(self.max_live_processes() - 1)
+    }
+
     pub fn idle_timeout_ms(&self) -> u64 {
         self.idle_timeout_ms.unwrap_or(DEFAULT_IDLE_TIMEOUT_MS)
     }
@@ -269,5 +282,28 @@ mod tests {
             FallbackDriver::parse("local_gemma"),
             Some(FallbackDriver::LocalGemma)
         );
+    }
+
+    #[test]
+    fn the_live_reserve_defaults_to_two_and_stays_below_the_cap() {
+        let cfg = EngineConfig::default();
+        assert_eq!(cfg.live_reserved_processes(), 2);
+        assert!(cfg.live_reserved_processes() < cfg.max_live_processes());
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(!json.contains("live_reserved_processes"), "{json}");
+        // One permit: one shared slot, the old behaviour.
+        let one = EngineConfig {
+            max_live_processes: Some(1),
+            ..Default::default()
+        };
+        assert_eq!(one.live_reserved_processes(), 0);
+        let two = EngineConfig {
+            max_live_processes: Some(2),
+            live_reserved_processes: Some(5),
+            ..Default::default()
+        };
+        assert_eq!(two.live_reserved_processes(), 1);
+        let back: EngineConfig = serde_json::from_str(r#"{"live_reserved_processes":0}"#).unwrap();
+        assert_eq!(back.live_reserved_processes(), 0);
     }
 }
