@@ -373,10 +373,13 @@ pub(crate) fn rubric_path(opts: &SimOptions) -> PathBuf {
 }
 
 /// The instrument identity for a spec, without running anything. Reads the options' brief.
+/// The base hash does not depend on `core_tier`; the per-run hash carries the judge tier the
+/// options resolve for it (none with judging off).
 pub(crate) fn instrument_for(
     opts: &SimOptions,
     character: &str,
     tone: &str,
+    core_tier: ModelTier,
     calibration_text: &str,
 ) -> Result<Instrument, SimError> {
     let brief = opts.resolved_brief()?;
@@ -385,16 +388,42 @@ pub(crate) fn instrument_for(
         opts,
         character,
         tone,
+        run_judge_tier(opts, core_tier)?,
         calibration_text,
         brief.as_ref(),
         case.as_ref(),
     )
 }
 
+/// The judge tier a run with this core tier is judged by, `None` with judging off.
+fn run_judge_tier(opts: &SimOptions, core_tier: ModelTier) -> Result<Option<ModelTier>, SimError> {
+    if !opts.judge {
+        return Ok(None);
+    }
+    judge::resolve_judge_tier(opts.judge_tier, &opts.judge_tiers, core_tier).map(Some)
+}
+
+/// The harness knobs that change what a run does (each an instrument entry `harness/<knob>`).
+/// Platforms are sorted: which platforms' term rules apply does not depend on their order.
+fn harness_knobs(opts: &SimOptions) -> Vec<(&'static str, String)> {
+    let mut platforms = opts.platforms.clone();
+    platforms.sort();
+    vec![
+        ("tick_s", opts.tick_s.to_string()),
+        (
+            "featured_every_ticks",
+            opts.featured_every_ticks.to_string(),
+        ),
+        ("max_featured", opts.max_featured.to_string()),
+        ("platforms", platforms.join(",")),
+    ]
+}
+
 fn instrument_with(
     opts: &SimOptions,
     character: &str,
     tone: &str,
+    judge_tier: Option<ModelTier>,
     calibration_text: &str,
     brief: Option<&StreamBrief>,
     case: Option<&StagedCase>,
@@ -408,6 +437,9 @@ fn instrument_with(
         brief,
         experiments: &opts.experiments(),
         case: case.map(|c| (c.case.id.as_str(), c.content_sha256.as_str())),
+        prep: stream_prep_for(opts, character),
+        harness: &harness_knobs(opts),
+        judge_tier,
     })
 }
 
@@ -525,6 +557,7 @@ pub(crate) fn prepare_in(
         opts,
         &spec.character,
         &spec.tone_variant,
+        judge_tier,
         &cal_text,
         brief.as_ref(),
         case.as_ref(),
@@ -2193,7 +2226,7 @@ pub(crate) mod tests {
         let data = tmp.path().join("data");
         brief_data(&data);
         let (_, _, cal) = calibration::load(&opts.sim_root).unwrap();
-        let plain_hash = instrument_for(&opts, "malakor", "theatrical", &cal)
+        let plain_hash = instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal)
             .unwrap()
             .instrument_hash;
         opts.data_dir = data.clone();
@@ -2280,10 +2313,11 @@ pub(crate) mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut opts = test_opts(&tmp.path().join("sim"));
         let (_, _, cal) = calibration::load(&opts.sim_root).unwrap();
-        let none = instrument_for(&opts, "malakor", "theatrical", &cal).unwrap();
+        let none = instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal).unwrap();
         opts.brief = crate::BriefSource::Current;
         opts.data_dir = tmp.path().join("empty-data");
-        let current_empty = instrument_for(&opts, "malakor", "theatrical", &cal).unwrap();
+        let current_empty =
+            instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal).unwrap();
         assert_eq!(none.instrument_hash, current_empty.instrument_hash);
         assert_eq!(none.base_hash, current_empty.base_hash);
         assert_eq!(
@@ -2397,11 +2431,12 @@ pub(crate) mod tests {
         let id = stage_real_case(&data);
         opts.data_dir = data.clone();
         let (_, _, cal) = calibration::load(&opts.sim_root).unwrap();
-        let plain = instrument_for(&opts, "malakor", "theatrical", &cal)
+        let plain = instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal)
             .unwrap()
             .instrument_hash;
         opts.case = Some(id.clone());
-        let with_case = instrument_for(&opts, "malakor", "theatrical", &cal).unwrap();
+        let with_case =
+            instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal).unwrap();
         assert_ne!(with_case.instrument_hash, plain, "the case joins the hash");
         let staged = opts.staged_case().unwrap().unwrap();
         assert!(with_case
@@ -2437,7 +2472,7 @@ pub(crate) mod tests {
             .approve(&id, 0)
             .unwrap();
         assert_eq!(
-            instrument_for(&opts, "malakor", "theatrical", &cal)
+            instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal)
                 .unwrap()
                 .instrument_hash,
             with_case.instrument_hash
@@ -2460,7 +2495,7 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(err.to_string().contains("SEG-02A"), "{err}");
         opts.case = Some("NO-SUCH-CASE".into());
-        assert!(instrument_for(&opts, "malakor", "theatrical", &cal).is_err());
+        assert!(instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal).is_err());
     }
 
     /// Searches every fogged hex the bone-clerks have not searched yet, reveals every fogged
@@ -2774,6 +2809,124 @@ pub(crate) mod tests {
         .await;
         let record: RunRecord = read_json(&out.join("r-sample/run.json")).unwrap();
         assert_eq!(record.prep.as_deref(), Some("sample"));
+    }
+
+    // ---- what a run reads joins the instrument -------------------------------------------
+
+    #[test]
+    fn the_prep_the_brain_voices_joins_the_base_hash() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        let (_, _, cal) = calibration::load(&opts.sim_root).unwrap();
+        let none = instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal).unwrap();
+        assert!(
+            !none.files.iter().any(|f| f.path == "prep.json"),
+            "no prep: no entry"
+        );
+
+        opts.stream_prep = Some(sample_prep());
+        let a = instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal).unwrap();
+        assert!(a.files.iter().any(|f| f.path == "prep.json"));
+        assert_ne!(a.base_hash, none.base_hash);
+
+        let mut edited = sample_prep();
+        edited.bits[0].lines[0].push_str(" And one more thing.");
+        opts.stream_prep = Some(edited);
+        let b = instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal).unwrap();
+        assert_ne!(
+            b.base_hash, a.base_hash,
+            "a changed bit is a new instrument"
+        );
+    }
+
+    #[test]
+    fn every_harness_knob_joins_the_base_hash() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = test_opts(&tmp.path().join("sim"));
+        let (_, _, cal) = calibration::load(&opts.sim_root).unwrap();
+        let base = |o: &SimOptions| {
+            instrument_for(o, "malakor", "theatrical", ModelTier::Haiku, &cal)
+                .unwrap()
+                .base_hash
+        };
+        let h0 = base(&opts);
+        let i0 = instrument_for(&opts, "malakor", "theatrical", ModelTier::Haiku, &cal).unwrap();
+        for knob in [
+            "tick_s",
+            "featured_every_ticks",
+            "max_featured",
+            "platforms",
+        ] {
+            assert!(
+                i0.files.iter().any(|f| f.path == format!("harness/{knob}")),
+                "harness/{knob}"
+            );
+        }
+        let variants: Vec<(&str, SimOptions)> = vec![
+            (
+                "featured_every_ticks",
+                SimOptions {
+                    featured_every_ticks: opts.featured_every_ticks + 1,
+                    ..opts.clone()
+                },
+            ),
+            (
+                "max_featured",
+                SimOptions {
+                    max_featured: 4,
+                    ..opts.clone()
+                },
+            ),
+            (
+                "tick_s",
+                SimOptions {
+                    tick_s: 10,
+                    ..opts.clone()
+                },
+            ),
+            (
+                "platforms",
+                SimOptions {
+                    platforms: vec!["youtube".into()],
+                    ..opts.clone()
+                },
+            ),
+        ];
+        for (knob, o) in variants {
+            assert_ne!(base(&o), h0, "{knob}");
+        }
+    }
+
+    #[test]
+    fn the_resolved_judge_tier_joins_the_instrument_hash() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = test_opts(&tmp.path().join("sim"));
+        assert_eq!(opts.judge_tiers, vec![ModelTier::Opus, ModelTier::Sonnet]);
+        let inst = |id: &str, core: ModelTier| {
+            let engine: Arc<dyn Engine> = Arc::new(shadowrunr_engine::ScriptedEngine);
+            prepare(
+                &spec(id, core, 3, 60),
+                &tmp.path().join("out"),
+                engine,
+                &opts,
+            )
+            .unwrap()
+            .instrument
+        };
+        let haiku = inst("j-haiku", ModelTier::Haiku);
+        let sonnet = inst("j-sonnet", ModelTier::Sonnet);
+        let opus = inst("j-opus", ModelTier::Opus);
+        assert!(haiku.files.iter().any(|f| f.path == "judge/opus"));
+        assert!(opus.files.iter().any(|f| f.path == "judge/sonnet"));
+        assert_eq!(haiku.base_hash, opus.base_hash, "the judge is per run");
+        assert_ne!(
+            haiku.instrument_hash, opus.instrument_hash,
+            "an Opus judge and a Sonnet judge never share a cell"
+        );
+        assert_eq!(
+            haiku.instrument_hash, sonnet.instrument_hash,
+            "same tone, same judge: same instrument"
+        );
     }
 
     // ---- the streamer screen (appendix (screens and board)) ----------------------------
