@@ -19,6 +19,7 @@
 pub mod calibration;
 pub mod casefile;
 pub mod chat;
+pub mod decision;
 pub mod instrument;
 pub mod judge;
 pub mod judging;

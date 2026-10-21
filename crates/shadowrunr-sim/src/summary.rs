@@ -9,6 +9,7 @@ use shadowrunr_types::reconcile::{DirectiveKind, DirectiveOutcome, DirectiveVerd
 use shadowrunr_types::{CheckState, JudgeVerdict, Role, SimRunSpec};
 
 use crate::calibration::CalibrationOrigin;
+use crate::decision::{self, MIN_EVALUATED_SHARE};
 use crate::instrument::Instrument;
 use crate::judge::{FactCheck, JudgeAudit, DIRECTIVE_PREVENT_PREFIX, DIRECTIVE_TRY_PREFIX};
 use crate::ledger::{self, LedgerRow};
@@ -21,8 +22,8 @@ use crate::{read_json, wire, write_json, SimError};
 pub const THIN_N: u32 = 5;
 
 pub use shadowrunr_types::results::{
-    CellKey, CellResult, Latency, QualityTally, RuleTally, TournamentResults as Results,
-    UsageTotals,
+    CellKey, CellResult, DecidedBy, DecisionGroup, IneligibleReason, Latency, QualityTally,
+    RuleTally, TierDecision, TournamentResults as Results, UsageTotals,
 };
 
 /// The heatmap label of a cell (`tone · tier · segment · aN · hash8`).
@@ -316,6 +317,7 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
     let mut excluded = Excluded::default();
     let mut counted = 0u32;
     let mut verdicts: Vec<&JudgeVerdict> = Vec::new();
+    let mut run_quality: BTreeMap<CellKey, Vec<f64>> = BTreeMap::new();
 
     for r in &runs {
         if !r.class.is_result() && r.class != RunClass::Incomplete {
@@ -351,8 +353,8 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
             usage: UsageTotals::default(),
             usage_by_role: BTreeMap::new(),
             max_say_gap_s: None,
-            runs_with_fail: None,
-            usable_runs: None,
+            runs_with_fail: Some(0),
+            usable_runs: Some(0),
         });
         cell.runs += 1;
         if r.failed {
@@ -383,6 +385,21 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
             for rc in &v.rules {
                 let t = cell.rules.entry(rc.rule.clone()).or_default();
                 tally_add(t, rc.state, &rc.evidence);
+            }
+            // Run identity is still in hand: count fails per run, and keep the run's own
+            // quality share for the per-run noise the decision needs.
+            let counter = if v.rules.iter().any(|rc| rc.state == CheckState::Fail) {
+                &mut cell.runs_with_fail
+            } else {
+                &mut cell.usable_runs
+            };
+            *counter = Some(counter.unwrap_or(0) + 1);
+            if !v.quality.is_empty() {
+                let k = v.quality.iter().filter(|q| q.value).count();
+                run_quality
+                    .entry(key.clone())
+                    .or_default()
+                    .push(k as f64 / v.quality.len() as f64);
             }
             for q in &v.quality {
                 let e = cell.quality.entry(q.dimension.clone()).or_default();
@@ -447,6 +464,8 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
     let mut hashes: Vec<String> = cells.keys().map(|k| k.instrument_hash.clone()).collect();
     hashes.sort();
     hashes.dedup();
+    let cells: Vec<CellResult> = cells.into_values().collect();
+    let tier_decisions = decision::decide(&cells, &run_quality);
     let results = Results {
         tournament_id: out_dir
             .file_name()
@@ -461,12 +480,12 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
         failed,
         engine_failed: excluded.engine_failed,
         judge_pending: excluded.judge_pending,
-        cells: cells.into_values().collect(),
+        cells,
         latency_by_tier,
         usage_total,
         usage_by_role,
         directives: directive_outcomes(verdicts),
-        tier_decisions: Vec::new(),
+        tier_decisions,
     };
     write_json(&out_dir.join("results.json"), &results)?;
     std::fs::write(out_dir.join("heatmap.md"), heatmap_md(&results))
@@ -643,6 +662,85 @@ NP = not provoked, NE = not evaluable; neither is ever a pass. Quality is `rate 
     s
 }
 
+fn money(x: Option<f64>) -> String {
+    x.map(|v| format!("${v:.4}")).unwrap_or_else(|| "–".into())
+}
+
+/// One group's [`TierDecision`] in words: the winner and what settled it, or that nothing
+/// goes live; then every cell the gates or the judge slice kept out, with its figures.
+fn decision_md(d: &TierDecision) -> String {
+    let mut s = String::from("\n");
+    match d
+        .winner
+        .as_deref()
+        .and_then(|w| d.ranked.iter().find(|r| r.core_tier == w).map(|r| (w, r)))
+    {
+        Some((w, r)) => {
+            let by = match d.decided_by {
+                Some(DecidedBy::OnlyEligible) => "the only tier through the gates".to_string(),
+                Some(DecidedBy::CostPerUsableStream) => format!(
+                    "the lowest cost per usable stream among {}, which are within the per-run quality noise of each other",
+                    d.tie_set.join(", ")
+                ),
+                Some(DecidedBy::Quality) | None => {
+                    "quality, clear of every other eligible tier's noise".to_string()
+                }
+            };
+            s.push_str(&format!(
+                "**Winner: {w}**, decided by {by} (mean quality {}{}, {} per usable stream over {} usable runs, core p50 {}){}.\n",
+                pct(Some(r.mean_quality)),
+                r.quality_se
+                    .map(|se| format!(" ± {:.0} pts", se * 100.0))
+                    .unwrap_or_default(),
+                money(r.cost_per_usable_stream),
+                r.usable_runs,
+                ms(r.core_p50_ms),
+                if d.provisional {
+                    format!(" — provisional: {} judged runs, under {THIN_N}", r.judged)
+                } else {
+                    String::new()
+                }
+            ));
+        }
+        None => {
+            s.push_str("**Nothing goes live here.** No tier passed the gates; fix these first:\n")
+        }
+    }
+    for i in &d.ineligible {
+        match i.reason {
+            IneligibleReason::HardFail => s.push_str(&format!(
+                "- {}: hard-rule fail in {} of {} judged runs ({})\n",
+                i.core_tier,
+                i.runs_with_fail,
+                i.judged,
+                i.failing_rules
+                    .iter()
+                    .map(|r| format!("`{r}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            IneligibleReason::Unmeasured => s.push_str(&format!(
+                "- {}: unmeasured, {} of its hard checks evaluated over {} judged runs (bar {:.0}%)\n",
+                i.core_tier,
+                pct(i.evaluated_share),
+                i.judged,
+                MIN_EVALUATED_SHARE * 100.0
+            )),
+        }
+    }
+    for b in &d.beside {
+        s.push_str(&format!(
+            "- beside, not ranked: {} judged by {} over {} runs; the reference judge here is {}\n",
+            b.core_tier,
+            b.judge_tiers.join(","),
+            b.judged,
+            d.reference_judge.as_deref().unwrap_or("–")
+        ));
+    }
+    s.push('\n');
+    s
+}
+
 pub fn report_md(res: &Results) -> String {
     let mut s = format!("# Simulation report: {}\n\n", res.tournament_id);
     s.push_str(&format!(
@@ -716,27 +814,29 @@ pub fn report_md(res: &Results) -> String {
         }
     }
 
-    s.push_str("\n## Model calibration\n\nWhich core tier wins on quality, per segment and audience size. Only tiers with zero rule fails and at least one judged run can win; ties go to the lower p50 latency. A different judge tier may have judged each core tier (the judge never shares the core's tier), which is a confound to keep in mind.\n\n");
-    let mut groups: BTreeMap<(String, String, String, u32), Vec<&CellResult>> = BTreeMap::new();
+    s.push_str(&format!(
+        "\n## Model calibration\n\nWhich core tier goes live, per segment, audience size and tone. The decision is `tier_decisions` in results.json; this section renders it. Hard rules gate: a tier with a hard-rule fail in any judged run cannot win. Coverage gates: a tier with under {:.0}% of its hard checks evaluated is unmeasured, not passed. Quality ranks the rest; tiers within the per-run noise of the best are a tie, settled by the lower cost per usable stream. Only cells judged by the group's reference judge are ranked; a cell judged by another judge is reported beside. A winner with fewer than {THIN_N} judged runs is provisional. When nothing passes, nothing goes live.\n\n",
+        MIN_EVALUATED_SHARE * 100.0
+    ));
+    let mut groups: BTreeMap<DecisionGroup, Vec<&CellResult>> = BTreeMap::new();
     for c in &res.cells {
         groups
-            .entry((
-                c.cell.instrument_hash.clone(),
-                c.cell.tone.clone(),
-                c.cell.segment.clone(),
-                c.cell.audience_size,
-            ))
+            .entry(decision::group_of(&c.cell))
             .or_default()
             .push(c);
     }
-    for ((hash, tone, seg, size), cs) in &groups {
+    for (g, cs) in &groups {
+        let hash = &g.instrument_hash;
         s.push_str(&format!(
-            "### {seg} · audience {size} · tone {tone} · `{}`\n\n| core tier | judged | rule fails | mean quality | core p50 | core p95 | tokens in/out | cost |\n|---|---|---|---|---|---|---|---|\n",
+            "### {} · audience {} · tone {} · `{}`\n\n| core tier | judged | rule fails | runs with a fail | mean quality | core p50 | core p95 | tokens in/out | cost |\n|---|---|---|---|---|---|---|---|---|\n",
+            g.segment,
+            g.audience_size,
+            g.tone,
             &hash[..hash.len().min(8)]
         ));
         for c in cs {
             s.push_str(&format!(
-                "| {} (judge {}) | {}{} | {} | {} | {} | {} | {}/{} | ${:.4} |\n",
+                "| {} (judge {}) | {}{} | {} | {} | {} | {} | {} | {}/{} | ${:.4} |\n",
                 c.cell.core_tier,
                 if c.judge_tiers.is_empty() {
                     "–".into()
@@ -746,6 +846,8 @@ pub fn report_md(res: &Results) -> String {
                 c.judged,
                 if c.judged < THIN_N { " †" } else { "" },
                 c.rule_fails(),
+                c.runs_with_fail
+                    .map_or_else(|| "–".to_string(), |n| n.to_string()),
                 pct(c.mean_quality()),
                 ms(c.core_latency.p50_ms),
                 ms(c.core_latency.p95_ms),
@@ -754,34 +856,9 @@ pub fn report_md(res: &Results) -> String {
                 c.usage.cost_usd
             ));
         }
-        let winner = cs
-            .iter()
-            .filter(|c| c.judged > 0 && c.rule_fails() == 0 && c.mean_quality().is_some())
-            .max_by(|a, b| {
-                a.mean_quality()
-                    .unwrap_or(0.0)
-                    .total_cmp(&b.mean_quality().unwrap_or(0.0))
-                    .then(
-                        b.core_latency
-                            .p50_ms
-                            .unwrap_or(u64::MAX)
-                            .cmp(&a.core_latency.p50_ms.unwrap_or(u64::MAX)),
-                    )
-            });
-        match winner {
-            Some(w) => {
-                s.push_str(&format!(
-                "\n**Winner: {}** (mean quality {}, core p50 {}, p95 {}, {} calls, ${:.4}){}.\n\n",
-                w.cell.core_tier,
-                pct(w.mean_quality()),
-                ms(w.core_latency.p50_ms),
-                ms(w.core_latency.p95_ms),
-                w.usage.calls,
-                w.usage.cost_usd,
-                if w.judged < THIN_N { " — thin n, provisional" } else { "" }
-            ))
-            }
-            None => s.push_str("\nNo winner: no tier has a clean, judged run here.\n\n"),
+        match res.tier_decisions.iter().find(|d| &d.group == g) {
+            Some(d) => s.push_str(&decision_md(d)),
+            None => s.push_str("\nNo tier decision recorded for this group.\n\n"),
         }
     }
 
@@ -920,6 +997,90 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(out.join("results.json")).unwrap())
                 .unwrap();
         assert_eq!((wire.engine_failed, wire.judge_pending), (1, 1));
+    }
+
+    /// Rewrite a stored verdict: every rule passes, except `fail` (if any) on the first rule.
+    fn set_rules(dir: &Path, fail: bool) {
+        let p = dir.join("verdict.json");
+        let mut v: JudgeVerdict = read_json(&p).unwrap();
+        for r in v.rules.iter_mut() {
+            r.state = CheckState::Pass;
+            r.evidence.clear();
+        }
+        if fail {
+            v.rules[0].state = CheckState::Fail;
+            v.rules[0].evidence = vec!["x#1".into()];
+        }
+        write_json(&p, &v).unwrap();
+    }
+
+    /// Case 2: one of six judged runs holds a hard-rule fail -> the cell is ineligible as
+    /// hard_fail with runs_with_fail 1 of 6 judged, and the count is on the wire.
+    #[tokio::test]
+    async fn a_single_failing_run_makes_the_cell_ineligible_counted_per_run() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = test_opts(&tmp.path().join("sim"));
+        let out = tmp.path().join("t");
+        for i in 1..=6 {
+            let id = format!("r{i}");
+            fake_run(
+                &out,
+                &opts,
+                spec(&id, ModelTier::Haiku, 3, 400),
+                Arc::new(FakeEngine::new("")),
+            )
+            .await;
+            set_rules(&out.join(&id), i == 3);
+        }
+        let res = summarize(&out).unwrap();
+        let c = &res.cells[0];
+        assert_eq!(c.judged, 6);
+        assert_eq!((c.runs_with_fail, c.usable_runs), (Some(1), Some(5)));
+        let d = &res.tier_decisions[0];
+        assert_eq!(d.winner, None);
+        let i = &d.ineligible[0];
+        assert_eq!(
+            (i.reason, i.runs_with_fail, i.judged),
+            (IneligibleReason::HardFail, 1, 6)
+        );
+        let wire: Results =
+            serde_json::from_str(&std::fs::read_to_string(out.join("results.json")).unwrap())
+                .unwrap();
+        assert_eq!(wire.cells[0].runs_with_fail, Some(1));
+        assert_eq!(wire.tier_decisions, res.tier_decisions);
+    }
+
+    /// Case 6: every cell has a hard fail -> no winner, and report.md says nothing goes
+    /// live and lists the failing cells and rules.
+    #[tokio::test]
+    async fn when_every_tier_fails_the_report_says_nothing_goes_live() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = test_opts(&tmp.path().join("sim"));
+        let out = tmp.path().join("t");
+        for (id, tier) in [("r1", ModelTier::Haiku), ("r2", ModelTier::Sonnet)] {
+            fake_run(
+                &out,
+                &opts,
+                spec(id, tier, 3, 400),
+                Arc::new(FakeEngine::new("")),
+            )
+            .await;
+            set_rules(&out.join(id), true);
+        }
+        let res = summarize(&out).unwrap();
+        let d = &res.tier_decisions[0];
+        assert_eq!(d.winner, None);
+        assert_eq!(d.ineligible.len(), 2);
+        let rule = d.ineligible[0].failing_rules[0].clone();
+        let report = std::fs::read_to_string(out.join("report.md")).unwrap();
+        assert!(
+            report.to_lowercase().contains("nothing goes live"),
+            "{report}"
+        );
+        assert!(report.contains(&format!("`{rule}`")));
+        assert!(report.contains("- haiku: hard-rule fail in 1 of 1 judged runs"));
+        assert!(report.contains("- sonnet: hard-rule fail in 1 of 1 judged runs"));
+        assert!(!report.contains("**Winner"));
     }
 
     #[test]
