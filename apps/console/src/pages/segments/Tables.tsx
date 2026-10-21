@@ -132,6 +132,7 @@ function Portfolio({ segments, selected }: { segments: readonly SegmentTableInfo
           getKey={(s) => s.id}
           haystack={(s) => `${s.id} ${s.title} ${s.status}`}
           label="Segment portfolio"
+          viewKey="segments.tables"
           placeholder="Filter by id, title or lifecycle"
           facets={{
             label: "Lifecycle",

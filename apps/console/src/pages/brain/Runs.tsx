@@ -78,6 +78,7 @@ export function Runs() {
           getKey={qualifiedRun}
           haystack={haystack}
           label="Runs"
+          viewKey="brain.runs"
           facets={facets}
           placeholder="Filter by run, tournament, tone, tier or segment"
           onActivate={(r) => router.navigate(pageRoute("brain", "transcripts", qualifiedRun(r)))}
