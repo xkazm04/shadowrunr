@@ -8,6 +8,8 @@ protocol is ``docs/spec/contract.md`` appendix (voice).
 - :mod:`.sidecar`: the protocol: ``hello``, then ``say`` and ``cancel`` in, ``audio`` and
   ``error`` out.
 - :mod:`.engine`: one engine run per sentence, its arguments, its WAV, sherpa's pause cut.
+- :mod:`.warm`: the warm engine, Kokoro kept loaded in one worker process per pool slot; only
+  the worker imports sherpa_onnx and numpy.
 - :mod:`.text`: where a line's sentences end.
 - :mod:`.visemes`: token durations to mouth shapes; only its durations model needs numpy and
   onnxruntime, imported when it is built.

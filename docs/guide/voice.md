@@ -1,8 +1,9 @@
 # Malakor's voice
 
 Malakor can speak his lines aloud. The voice is Kokoro (Apache-2.0), run on the operator's
-machine by sherpa-onnx's `sherpa-onnx-offline-tts`, one sentence at a time. Nothing is sent
-anywhere. The voice is optional and off by default. With it off, degraded or slow, the stream
+machine by sherpa-onnx, one sentence at a time: kept loaded in the sidecar's worker processes
+when its Python has sherpa-onnx (the warm engine), otherwise by `sherpa-onnx-offline-tts` once
+per sentence. Nothing is sent anywhere. The voice is optional and off by default. With it off, degraded or slow, the stream
 runs exactly as it does without one, and the brain never waits on audio.
 
 The pieces:
@@ -50,6 +51,55 @@ Check the install by hand:
 If a file is missing, the sidecar still starts. It says which file is missing in its `hello`,
 replies `error` to every line, and the daemon reports the voice as degraded.
 
+## The warm engine (recommended)
+
+Run as a binary, the engine loads Kokoro for every sentence: about half a second of each render
+is the load. The warm engine keeps the model loaded instead. The sidecar starts one worker
+process per `render_workers` slot, each holding its own `sherpa_onnx.OfflineTts`, loads them all
+before its `hello`, and hands each sentence to a free worker. It needs the `sherpa-onnx` Python
+package (which bundles its own onnxruntime and espeak-ng; it is still the operator's install,
+never the repo's) and the same Kokoro files under `<engine dir>/kokoro/`. The `bin/` binary stays
+the fallback, and the daemon's `voice check` still asks for it.
+
+Make one venv for the voice with uv, outside the repo:
+
+```
+uv venv <voice venv> --python 3.12
+uv pip install --python <voice venv> sherpa-onnx onnxruntime numpy
+```
+
+Point `[voice] python` at its interpreter (`<voice venv>/Scripts/python.exe` on Windows,
+`<voice venv>/bin/python` elsewhere). The same venv has numpy and onnxruntime, so it also gives
+the mouth shapes.
+
+**Which engine runs.** `--engine auto` (the default) takes the warm engine when the sidecar's
+Python can import sherpa_onnx and numpy and Kokoro's files are there. Otherwise it runs the
+binary per sentence, and if the warm workers fail to load it falls back to the binary too.
+`--engine warm` demands the warm engine (the voice is dead without it), and `--engine process`
+always runs the binary. The `hello` has no field for the engine, so its `reason` ends with it:
+`engine: warm (3 workers loaded in 2.1 s)`, or `engine: process (the warm engine is off:
+sherpa_onnx is not installed)`. `shadowrunr voice say` prints that line when the sidecar is
+ready, and the stage shows it beside the voice state.
+
+**What is the same.** The audio is the engine's own: the same sample rate and PCM16, and sherpa's
+pause cut, replayed sample for sample when the mouth shapes are on, exactly as for the binary.
+The token ids for the mouth shapes come from the same debug print. Kokoro's decoder adds a little
+noise of its own, so no two renders of a sentence are bit-identical with either engine; the
+lengths match within a few samples and the token ids match exactly.
+
+**Why processes, not threads.** sherpa's `generate` releases the GIL, so threads would run in
+parallel, but sherpa prints the token ids only to the native stderr, which threads would share.
+A worker process gives each render a stream of its own and a priority class of its own.
+
+**Cancelling.** A sentence cannot be stopped inside the model. A cancelled line's sentences that
+have not started never start; a sentence already rendering finishes below normal priority and
+its result is thrown away, and its worker is free again when it ends. A sentence past
+`render_timeout_ms` kills its worker, and the next sentence that needs that worker starts a new
+one (a model load). A worker that dies is replaced the same way.
+
+**Memory.** Each worker holds its own copy of the model: about 520 MB working set and 1 GB
+committed per worker (3 workers: about 1.6 GB resident).
+
 ## Mouth shapes (optional)
 
 The face moves its mouth through 15 shapes (the Oculus visemes). The sidecar works them out from
@@ -57,8 +107,8 @@ Kokoro's own token durations. This needs:
 
 - **Kokoro's durations subgraph**: a small `.onnx` cut from `model.onnx` that predicts only how
   long each token lasts. It runs in tens of milliseconds per sentence.
-- **A Python with numpy and onnxruntime.** The sidecar itself needs only the standard library,
-  so make a venv for it:
+- **A Python with numpy and onnxruntime.** The sidecar itself needs only the standard library.
+  The warm engine's venv above already has both; for the binary alone, make a venv:
 
   ```
   python -m venv <venv>
@@ -107,47 +157,73 @@ render_workers = 3
 | `max_lag_ms` | `15000` | A line whose first audio cannot start this soon after its `say` is skipped (`late`). |
 | `render_timeout_ms` | `30000` | One sentence's render, at most. Past it, the line is skipped (`error`). |
 | `lines_in_flight` | `3` | Lines handed to the sidecar at once, so it can render ahead into the next line. Their audio still goes out in order. |
-| `render_workers` | `3` | Engine runs the sidecar renders at once (`--workers`). |
-| `render_threads` | none | Each engine run's threads (`--threads`). Absent: 2. Keep `render_workers` x threads within the physical cores (6 of 8 leaves room for the brain and the stage). |
+| `render_workers` | `3` | Engine runs the sidecar renders at once (`--workers`); on the warm engine, the loaded workers. |
+| `render_threads` | none | Each engine run's threads (`--threads`). Absent: 2 for the binary, 4 for the warm engine (measured below). |
 
 ## The sidecar
 
 ```
-python -m shadowrunr_voice --engine-dir <dir> [--durations <onnx>] --sid 3 --voice af_heart [--render-timeout-ms N] [--workers N] [--threads N]
+python -m shadowrunr_voice --engine-dir <dir> [--durations <onnx>] --sid 3 --voice af_heart [--render-timeout-ms N] [--workers N] [--threads N] [--engine auto|warm|process]
 ```
 
 The package is found from the `sidecar` directory (as the working directory, or on
 `PYTHONPATH`). It speaks JSON lines on stdio, one object per line:
 
 - First, `hello`: the protocol version, the voice, the sample rate (24000), whether mouth shapes
-  are on, and a `reason` when something is missing.
+  are on, and a `reason`: what is missing, then the engine in use. On the warm engine it comes
+  once every worker has loaded.
 - For each `say`, the line is cut into sentences. A first sentence over about 120 characters is
-  cut at a comma, so the first audio starts early. Each sentence is one engine run, and each
+  cut at a comma, so the first audio starts early. Each sentence is one render, and each
   sentence goes out as one `audio` message: mono PCM16 in base64, plus its mouth shapes in
   milliseconds.
-- **The render pool.** Up to `--workers` engine runs (default 3) render at once, each with
-  `--threads` threads (default 2). Sentences start in the order they arrived, across lines: every
+- **The render pool.** Up to `--workers` renders (default 3) run at once, each with
+  `--threads` threads (default 2 for the binary, 4 for the warm engine). Sentences start in the order they arrived, across lines: every
   sentence of a line before the next line's first, so the next line starts rendering while the
   current one's last sentence still is. The output stays in order (lines as they arrived, each
   line's sentences in order): a sentence that finishes early waits for its turn.
 - **Head of line first.** The sentence about to be sent next always takes the first free
   worker, and it runs at normal priority. A look-ahead run (any later sentence) starts at below
-  normal priority on Windows and is raised to normal once it is the one being waited for, so
+  normal priority on Windows and is raised to normal once it is the one being waited for (a warm
+  worker sets its own priority class when the sidecar tells it), so
   rendering ahead never takes CPU from the sentence the audience is waiting to hear. (Elsewhere
   every run has the same priority.)
 - A failed or timed-out render is an `error` for that sentence, and the rest of the line is
-  dropped (its later sentences still rendering are killed). `cancel` kills the named lines'
-  renders in flight and drops their sentences that have not started.
+  dropped (its later sentences still rendering are killed, or on the warm engine discarded).
+  `cancel` kills the named lines' renders in flight (the warm engine discards them) and drops
+  their sentences that have not started.
 - It exits when its stdin closes. stdout carries the protocol only; its log goes to stderr.
 
-The text reaches the engine as one argument in an argument list, never through a shell. On
+The text reaches the binary as one argument in an argument list, never through a shell. On
 Windows, characters the console code page cannot carry are folded first, so the engine always
-reads the same single argument.
+reads the same single argument. A warm worker gets the text as a JSON line on its stdin.
 
-Measured on the development machine (16 logical cores, CPU only, October 2026, n = 4 lines of
-three sentences each): the first audio arrives 2.0 to 2.2 s after the `say`. Each sentence takes
-2.0 to 2.3 s to render for 2.0 to 2.5 s of audio, about half a second of which is the model
-load that every engine run pays, so the engine only just keeps ahead of playback. Mouth shapes add 20 to 50 ms per sentence.
+Measured on the development machine with the binary (16 logical cores, CPU only, October 2026,
+n = 4 lines of three sentences each): the first audio arrives 2.0 to 2.2 s after the `say`. Each
+sentence takes 2.0 to 2.3 s to render for 2.0 to 2.5 s of audio, about half a second of which is
+the model load that every engine run pays, so the engine only just keeps ahead of playback.
+Mouth shapes add 20 to 50 ms per sentence.
+
+With the warm engine (same machine, October 2026, 8 physical cores and 16 logical, CPU only,
+sentences of 60 to 110 characters): a worker loads in 1.7 to 2.0 s alone, and 3 workers load
+together in 2.0 to 3.7 s. A sentence alone renders at RTF 0.32 with 4 threads (0.23 with 8, 0.41
+with 3), against about 0.8 for the binary with 2. In a burst of 12 sentences, 3 workers x 4
+threads made 6.7 to 6.9 s of audio a second, 2 x 4 made 5.4, 3 x 3 made 5.8 to 6.2, one 8-thread
+engine made 2.0 to 4.4, and the binary (3 x 2) made 2.7 to 3.4. Hence 3 workers (the
+`render_workers` default) of 4 threads: 12 threads on 8 cores, with every look-ahead below normal
+priority so the oversubscription falls on sentences nobody is waiting for yet.
+
+Replays of two 5-minute sandbox shows (`shadowrunr voice replay`, `max_lag_ms` 15000, 3 workers;
+n = 1 to 3 per row, run back to back with the binary on a shared machine, with its CPU load):
+
+| Show | Engine | Lines voiced | First audio p50 / p90 | Machine CPU load (mean) |
+|---|---|---|---|---|
+| paced (24 lines) | warm | 24/24, 24/24, 24/24 | 1.6 / 2.0 s, 1.9 / 3.3 s, 5.3 / 7.3 s | 30%, 74%, 98% |
+| paced (24 lines) | binary | 24/24, 20/24, 21/24 | 3.3 / 5.3 s, 3.7 / 6.2 s, 3.8 / 9.2 s | 39%, 70%, 65% |
+| unpaced (91 lines) | warm | 91/91 | 2.3 / 3.4 s | 49% |
+| unpaced (91 lines) | binary | 87/91 | 5.9 / 11.9 s | 67% |
+
+The first audio is under 2 s at the median while the machine has room; under a saturated CPU the
+voice still keeps every line, but each sentence waits for cores like everything else.
 
 The pool's defaults (3 workers x 2 threads) come from replays of a 5-minute sandbox show
 (`shadowrunr voice replay`, below; 8 physical cores, October 2026, n = 1 to 2 replays per point,
@@ -184,7 +260,8 @@ scope. Malakor is an original character.
 
 With `[voice] enabled = true`, `shadowrunr daemon` starts one voice service. It spawns the
 sidecar (`python -m shadowrunr_voice` in `[voice] sidecar`) with arguments from `[voice]`:
-`--engine-dir`, `--durations` (when set), `--sid`, `--voice` and `--render-timeout-ms`. The
+`--engine-dir`, `--durations` (when set), `--sid`, `--voice`, `--render-timeout-ms`,
+`--workers` and `--threads` (when set); the engine is the sidecar's `auto` choice. The
 startup line ends with `(voice on)`. With the voice off, nothing is spawned and `/voice` says
 `off`.
 

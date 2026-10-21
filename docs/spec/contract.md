@@ -1029,8 +1029,8 @@ the brain never waits on audio.
 - Foil lines and replays are not voiced in v1. Nothing is voiced until a client sends its
   first `follow`, and a run is voiced only while some client follows it.
 - `starting` until the sidecar's `hello`. A missing engine or Kokoro file is `degraded` before
-  anything is spawned; a `hello` that carries a `reason` (no mouth shapes) is still `ready`,
-  with `visemes: false`.
+  anything is spawned; a `hello` that carries a `reason` (no mouth shapes, the engine in use) is
+  still `ready`, with `visemes` as the hello says.
 - **Bounded:**
   - at most `max_queue` lines wait to render; past that, the oldest is `skipped` with `queue_full`;
   - at most `lines_in_flight` lines are with the sidecar at once. Their frames still go out one
@@ -1057,7 +1057,13 @@ line); without it the stage uses its own tokens. File names are a single path se
 speaking JSON lines on stdio:
 - Out, first: `{"type":"hello","protocol":1,"voice","sample_rate","visemes":bool,"reason"?}`.
 - In: `{"type":"say","id","text"}` and `{"type":"cancel","ids":[...]}`. `cancel` gets no
-  reply: queued sentences of those ids are dropped and an in-flight render is killed.
+  reply: queued sentences of those ids are dropped and an in-flight render is killed, or, on the
+  warm engine, finishes unheard and its result is discarded.
+- The engine: the warm engine keeps Kokoro loaded in one worker process per `--workers` slot,
+  loaded before `hello`; without sherpa-onnx in the sidecar's Python it is the per-sentence
+  binary (`--engine auto|warm|process`, default `auto`). The hello has no field for it: its
+  `reason` ends with `engine: warm (N workers loaded in S s)` or `engine: process` and why, after
+  any missing-mouth-shapes reason. Either engine sends the same audio and mouth shapes.
 - Out, per sentence: `{"type":"audio","id","part","last","text","sample_rate","pcm","visemes"?:[[v,start_ms,end_ms]]}`.
   `visemes` is omitted when the voice has no mouth shapes. `id` is a string, echoed as sent.
   The daemon computes `duration_ms` from the PCM.

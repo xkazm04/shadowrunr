@@ -17,6 +17,12 @@ shapes and sends it. A sentence that finished early waits, rendered, for its tur
 ``cancel`` drops the named lines: their waiting sentences never start and their renders in
 flight are killed; it answers nothing. A failed sentence ends its line, and that line's later
 sentences still rendering are killed.
+
+**The engine.** With ``--engine auto`` (the default) the pool is warm (:mod:`.warm`): one worker
+process per slot keeps Kokoro loaded, so a sentence costs its render, not a model load. Without
+sherpa_onnx and numpy in this interpreter, or without Kokoro's files, it is the per-sentence
+binary (:mod:`.engine`). A warm render cannot be killed: a cancelled one finishes unheard, and
+its slot is free when it ends.
 """
 
 from __future__ import annotations
@@ -35,10 +41,12 @@ from typing import IO, Any
 from .engine import SAMPLE_RATE, EngineError, KokoroPaths, Render, Rendered, paths_for
 from .text import split_line
 from .visemes import Durations, load_symbols, sentence_visemes, to_ms
+from .warm import WarmPool, WarmRender, missing_package, worker_argv
 
 __all__ = [
     "DEFAULT_THREADS",
     "DEFAULT_WORKERS",
+    "WARM_THREADS",
     "PROTOCOL",
     "Faces",
     "Out",
@@ -55,6 +63,11 @@ MAX_CHARS = 2000
 #: ``workers x threads`` at most 6 of an 8-core host's (docs/guide/voice.md).
 DEFAULT_WORKERS = 3
 DEFAULT_THREADS = 2
+#: A warm worker's threads by default. Measured on an 8-core, 16-thread host: 3 workers x 4
+#: threads rendered a sentence at RTF 0.32 alone and a 12-sentence burst at 6.8x real time,
+#: against 0.41 and 6.0x at 3 x 3 (docs/guide/voice.md). Look-ahead runs below normal priority,
+#: so the oversubscription falls on the sentences nobody is waiting for.
+WARM_THREADS = 4
 
 Send = Callable[[dict[str, Any]], None]
 
@@ -83,10 +96,15 @@ class Settings:
     durations: Path | None = None
     #: Engine runs at once (the pool).
     workers: int = DEFAULT_WORKERS
-    #: Each run's ``--num-threads``.
-    threads: int = DEFAULT_THREADS
+    #: Each run's ``--num-threads``; ``None`` is the engine's default (``DEFAULT_THREADS`` for
+    #: the binary, ``WARM_THREADS`` for a warm worker).
+    threads: int | None = None
     #: Replaces the engine executable: a test's ``[python, fake_engine.py]``.
     command: Sequence[str] | None = None
+    #: ``auto`` (warm when it can run), ``warm`` or ``process`` (:mod:`.warm`).
+    engine: str = "auto"
+    #: Replaces a warm worker's command line: a test's ``[python, fake_warm.py]``.
+    warm_command: Sequence[str] | None = None
 
 
 class Faces:
@@ -141,9 +159,51 @@ def open_faces(settings: Settings, paths: KokoroPaths) -> tuple[Faces | None, st
     return faces, None
 
 
-def hello(settings: Settings) -> tuple[dict[str, Any], str | None, Faces | None]:
-    """The hello, the reason every ``say`` fails with (``None`` when the engine is there), and
-    the face when the visemes are on."""
+def open_warm(
+    settings: Settings, paths: KokoroPaths, faced: bool
+) -> tuple[WarmPool | None, str | None]:
+    """The warm pool, loaded, or ``None`` and why not (``None`` when it was not wanted).
+
+    ``auto`` takes the warm pool when this interpreter has sherpa_onnx and numpy and Kokoro's
+    files are there, and otherwise falls back to the per-sentence binary. A test's fake binary
+    (``command``) is never paired with the real warm engine."""
+    if settings.engine == "process" or (
+        settings.engine == "auto" and settings.command is not None and not settings.warm_command
+    ):
+        return None, None
+    if settings.warm_command is None:
+        lacking = missing_package()
+        if lacking is not None:
+            return None, f"{lacking} is not installed"
+        if paths.missing(exe=False):
+            return None, "Kokoro's files are missing"
+        threads = settings.threads if settings.threads is not None else WARM_THREADS
+        argv = worker_argv(settings.engine_dir, settings.sid, threads, faced)
+    else:
+        argv = [*settings.warm_command, *(["--faced"] if faced else [])]
+    pool = WarmPool(argv, settings.workers)
+    try:
+        load_ms = pool.start()
+    except EngineError as exc:
+        print(f"voice: the warm engine would not load: {exc}", file=sys.stderr, flush=True)
+        return None, f"it would not load: {exc}"
+    print(
+        f"voice: warm engine, {len(pool.workers)} workers loaded in {load_ms} ms",
+        file=sys.stderr,
+        flush=True,
+    )
+    return pool, None
+
+
+def hello(
+    settings: Settings,
+) -> tuple[dict[str, Any], str | None, Faces | None, WarmPool | None]:
+    """The hello, the reason every ``say`` fails with (``None`` when the engine is there), the
+    face when the visemes are on, and the warm pool when it is the engine.
+
+    ``reason`` names what the voice lacks (mouth shapes), then the engine in use: ``engine:
+    warm (N workers loaded in S s)`` or ``engine: process`` with why the warm one is not. The
+    hello has no field of its own for it."""
     paths = paths_for(settings.engine_dir)
     message: dict[str, Any] = {
         "type": "hello",
@@ -152,18 +212,32 @@ def hello(settings: Settings) -> tuple[dict[str, Any], str | None, Faces | None]
         "sample_rate": SAMPLE_RATE,
         "visemes": False,
     }
-    missing = paths.missing(exe=settings.command is None)
+    faces, why = None, None
+    if not paths.missing(exe=False):
+        faces, why = open_faces(settings, paths)
+    warm, not_warm = open_warm(settings, paths, faces is not None)
+    if warm is None and settings.engine == "warm":
+        dead = f"the warm engine is not running: {not_warm}"
+        message["reason"] = dead
+        return message, dead, None, None
+    missing = paths.missing(exe=warm is None and settings.command is None)
     if missing:
+        if warm is not None:
+            warm.close()
         more = f" (and {len(missing) - 1} more)" if len(missing) > 1 else ""
         dead = f"the engine is not installed: {missing[0]} is missing from the engine dir{more}"
         message["reason"] = dead
-        return message, dead, None
-    faces, why = open_faces(settings, paths)
+        return message, dead, None, None
+    if warm is not None:
+        engine = f"engine: warm ({len(warm.workers)} workers loaded in {warm.load_ms / 1000:.1f} s)"
+    elif not_warm is not None:
+        engine = f"engine: process (the warm engine is off: {not_warm})"
+    else:
+        engine = "engine: process"
     if faces is not None:
         message["visemes"] = True
-    elif why is not None:
-        message["reason"] = why
-    return message, None, faces
+    message["reason"] = f"{why}; {engine}" if why is not None else engine
+    return message, None, faces, warm
 
 
 @dataclass
@@ -176,7 +250,7 @@ class _Line:
     #: Why the line is an error at part 0 without a render: no engine, too long, no words.
     problem: str | None = None
     #: The renders started so far, in part order: ``renders[i]`` is ``parts[i]``.
-    renders: list[Render] = field(default_factory=list)
+    renders: list[Render | WarmRender] = field(default_factory=list)
     #: Parts already sent; ``parts[sent]`` is the one the sender waits for next.
     sent: int = 0
     cancelled: bool = False
@@ -196,14 +270,16 @@ class Sidecar:
         *,
         dead: str | None = None,
         faces: Faces | None = None,
+        warm: WarmPool | None = None,
     ) -> None:
         self.settings = settings
         self.paths = paths_for(settings.engine_dir)
         self.send = send
         self.dead = dead
         self.faces = faces
-        self.workers = max(settings.workers, 1)
-        self.threads = max(settings.threads, 1)
+        self.warm = warm
+        self.workers = len(warm.workers) if warm is not None else max(settings.workers, 1)
+        self.threads = max(settings.threads if settings.threads is not None else DEFAULT_THREADS, 1)
         self._lock = threading.Condition()
         #: Lines not yet fully sent, in arrival order; the first is the one being sent.
         self._lines: collections.deque[_Line] = collections.deque()
@@ -257,9 +333,10 @@ class Sidecar:
 
     def cancel(self, ids: list[Any]) -> None:
         """Drop the named lines: their waiting sentences are never started, and their renders
-        in flight are killed. Nothing more is sent for them."""
+        in flight are killed, or on the warm engine finish unheard. Nothing more is sent for
+        them."""
         wanted = [i for i in ids if _is_id(i)]
-        renders: list[Render] = []
+        renders: list[Render | WarmRender] = []
         with self._lock:
             kept: collections.deque[_Line] = collections.deque()
             for line in self._lines:
@@ -285,6 +362,8 @@ class Sidecar:
         for render in renders:
             render.cancel()
         self._worker.join(timeout=5)
+        if self.warm is not None:
+            self.warm.close()
 
     # -- the pool --------------------------------------------------------------------------------
 
@@ -306,23 +385,35 @@ class Sidecar:
                 if self._running >= self.workers:
                     return
                 urgent = line is self._lines[0] and len(line.renders) == line.sent
-                render = Render(
-                    self.paths,
-                    self.settings.sid,
-                    line.parts[len(line.renders)],
-                    self.settings.timeout_s,
-                    faced=self.faces is not None,
-                    command=self.settings.command,
-                    threads=self.threads,
-                    urgent=urgent,
-                    on_done=self._ended,
-                )
+                sentence = line.parts[len(line.renders)]
+                render: Render | WarmRender
+                if self.warm is not None:
+                    render = WarmRender(
+                        self.warm,
+                        sentence,
+                        self.settings.timeout_s,
+                        faced=self.faces is not None,
+                        urgent=urgent,
+                        on_done=self._ended,
+                    )
+                else:
+                    render = Render(
+                        self.paths,
+                        self.settings.sid,
+                        sentence,
+                        self.settings.timeout_s,
+                        faced=self.faces is not None,
+                        command=self.settings.command,
+                        threads=self.threads,
+                        urgent=urgent,
+                        on_done=self._ended,
+                    )
                 line.renders.append(render)
                 self._running += 1
                 render.start()
 
-    def _ended(self, _render: Render) -> None:
-        """A render's thread: its process is gone, so its slot is free."""
+    def _ended(self, _render: Render | WarmRender) -> None:
+        """A render's thread: its process is gone, or its warm worker is free, so its slot is."""
         with self._lock:
             self._running -= 1
             self._pump()

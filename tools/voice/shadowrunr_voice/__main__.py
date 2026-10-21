@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """``python -m shadowrunr_voice --engine-dir <dir> [--durations <onnx>] --sid 3 --voice af_heart
-[--render-timeout-ms N] [--workers N] [--threads N]``: the voice sidecar, JSON lines on stdio (see :mod:`.sidecar`).
+[--render-timeout-ms N] [--workers N] [--threads N] [--engine auto|warm|process]``: the voice
+sidecar, JSON lines on stdio (see :mod:`.sidecar`).
 
 The protocol owns the process's real stdout. Anything else that prints, onnxruntime's native
 logger included, goes to stderr at the file-descriptor level, so a library's chatter cannot
@@ -17,7 +18,8 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import IO
 
-from .sidecar import DEFAULT_THREADS, DEFAULT_WORKERS, Out, Settings, Sidecar, hello
+from .sidecar import DEFAULT_THREADS, DEFAULT_WORKERS, WARM_THREADS, Out, Settings, Sidecar, hello
+from .warm import ENGINES
 
 
 def _protocol_stream() -> IO[str]:
@@ -50,7 +52,17 @@ def parse(argv: Sequence[str] | None = None) -> Settings:
         "--workers", type=int, default=DEFAULT_WORKERS, help="engine runs at once (the pool)"
     )
     parser.add_argument(
-        "--threads", type=int, default=DEFAULT_THREADS, help="--num-threads per engine run"
+        "--threads",
+        type=int,
+        default=None,
+        help=f"threads per engine run (default {DEFAULT_THREADS}, {WARM_THREADS} when warm)",
+    )
+    parser.add_argument(
+        "--engine",
+        choices=ENGINES,
+        default="auto",
+        help="warm: Kokoro kept loaded per worker; process: the binary per sentence; "
+        "auto: warm when sherpa_onnx is installed",
     )
     args = parser.parse_args(argv)
     return Settings(
@@ -60,15 +72,16 @@ def parse(argv: Sequence[str] | None = None) -> Settings:
         timeout_s=max(args.render_timeout_ms, 1) / 1000,
         durations=Path(args.durations) if args.durations else None,
         workers=max(args.workers, 1),
-        threads=max(args.threads, 1),
+        threads=max(args.threads, 1) if args.threads is not None else None,
+        engine=args.engine,
     )
 
 
 def run(settings: Settings, inbox: Iterable[bytes | str], out: Out) -> int:
     """Hello, then every line of ``inbox`` until it ends; then the sidecar stops."""
-    message, dead, faces = hello(settings)
+    message, dead, faces, warm = hello(settings)
     out.send(message)
-    sidecar = Sidecar(settings, out.send, dead=dead, faces=faces)
+    sidecar = Sidecar(settings, out.send, dead=dead, faces=faces, warm=warm)
     try:
         for raw in inbox:
             if raw.strip():
