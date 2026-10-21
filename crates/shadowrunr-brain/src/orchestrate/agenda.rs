@@ -88,7 +88,7 @@ pub struct Directives {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Agenda {
     loops: Vec<OpenLoop>,
     /// Loops that closed since the last voiced beat (research back, a vote closed).

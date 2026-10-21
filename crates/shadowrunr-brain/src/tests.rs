@@ -1448,7 +1448,7 @@ async fn engine_outage_counts_as_fleet_down() {
 }
 
 #[tokio::test]
-async fn a_beat_is_one_turn_record_whether_the_engine_answered_or_not() {
+async fn a_failed_beat_is_no_turn_record_and_the_beat_that_answers_its_picks_is_one() {
     let dir = tempfile::tempdir().unwrap();
     let engine = FakeEngine::new();
     engine.push(
@@ -1472,12 +1472,14 @@ async fn a_beat_is_one_turn_record_whether_the_engine_answered_or_not() {
     )
     .await
     .unwrap();
-    // Beat 2 answers; beat 3 sees beat 1 as ONE turn and beat 2 as one more.
+    // Beat 1 aired nothing, so it is no turn: its picks are carried. Beat 2 answers them;
+    // beat 3 sees beat 2 as ONE turn, the picks and the answer together.
     b.tick(6_000, Vec::new(), &c).await.unwrap();
     b.tick(11_000, Vec::new(), &c).await.unwrap();
     let p = last_core_prompt(&engine);
-    assert_eq!(p.matches("[this-stream-").count(), 2, "{p}");
+    assert_eq!(p.matches("[this-stream-").count(), 1, "{p}");
     assert!(p.contains("[this-stream-1] Alba"), "{p}");
+    assert!(p.contains("Malakor: Bow before me."), "{p}");
 }
 
 #[tokio::test]

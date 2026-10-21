@@ -39,6 +39,14 @@
 //! A vote that closed and a handover that fell due are room events ([`room`]): the next beat
 //! that is not a safety beat announces them, once, and expires the queued bit.
 //!
+//! **Consume on delivery.** [`Orchestrator::plan`] and [`Orchestrator::commit`] decide a beat
+//! and stage what it consumes (picks answered, waves acknowledged, a bit or cold-open lines
+//! drawn, a connector used, room events taken, the through-line's pick-up). The brain opens a
+//! [`BeatTxn`] before the plan and settles it after the core call: a delivered beat keeps
+//! what it staged; a failed one is [rolled back](Orchestrator::rollback), its picks carried
+//! again with their original clocks (a safety pick included), so the next beat that speaks
+//! still owes them, the bit and the vote announcement.
+//!
 //! **Speech pacing** ([`crate::pace`]): while more than `speech_lead_ms` of his speech is still
 //! queued, a beat is a `hold` with reason `speaking: N.N s queued`, before anything else is
 //! decided. A safety beat and a goodbye beat (`CLOSING NOW`) are never held; the wrap-up window
@@ -120,6 +128,9 @@ const REMARK_MIN_WORDS: usize = 4;
 /// How long a message a beat could not answer is carried into the next beats (assumption:
 /// two to five beats, so the answer still reads as one to the asker).
 pub const CARRY_MS: i64 = 25_000;
+/// Appended to the `beat_plan` reason of a beat whose core call failed: what it planned was
+/// rolled back ([`Orchestrator::rollback`]).
+pub const ROLLED_BACK: &str = "; rolled back: core call failed";
 /// The most messages carried at once; the oldest go first.
 pub const CARRY_MAX: usize = 6;
 /// The `input` moderation rule that records a carried message dropped unanswered: action
@@ -252,7 +263,14 @@ struct ActiveBit {
     next: usize,
 }
 
-#[derive(Debug, Default)]
+/// A beat in flight: the orchestrator as it stood before the beat was planned. Dropping it
+/// keeps the beat (delivered); [`Orchestrator::rollback`] restores it (the core call failed).
+#[derive(Debug)]
+pub struct BeatTxn {
+    before: Box<Orchestrator>,
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Orchestrator {
     seed: u64,
     beats: u64,
@@ -282,6 +300,9 @@ pub struct Orchestrator {
     carry_next: Vec<Carried>,
     /// Ids the carry cap dropped at the last commit, for their records.
     capped: Vec<String>,
+    /// The last commit's picks that would have been carried, had no pick answered them: what
+    /// a rollback carries again, with their original clocks.
+    unsettled: Vec<Carried>,
     /// Ids of messages picked this stream: never offered again.
     answered: HashSet<String>,
     room: RoomWatch,
@@ -583,6 +604,44 @@ impl Orchestrator {
         out
     }
 
+    /// Open a beat: what [`Self::rollback`] restores if its core call fails. Taken after
+    /// [`Self::screen`] (its records are real either way) and before [`Self::plan`].
+    pub fn begin(&self) -> BeatTxn {
+        BeatTxn {
+            before: Box::new(self.clone()),
+        }
+    }
+
+    /// The beat's core call failed: nothing it planned or committed is consumed. The bit and
+    /// story position, the connector, the room events, the waves, the answered ids and the
+    /// through-line are as before the plan; the picks are carried again with their original
+    /// `since` and `expires` (a fresh one from this beat, a safety pick included), beside what
+    /// the beat deferred, so the next beat that speaks answers them or expires them once.
+    pub fn rollback(&mut self, txn: BeatTxn, pick: &Pick, now_ms: TsMs) {
+        let after = std::mem::replace(self, *txn.before);
+        let mut carry = after.carried;
+        for k in after.unsettled {
+            if !carry.iter().any(|x| x.cand.msg.id == k.cand.msg.id) {
+                carry.push(k);
+            }
+        }
+        for c in pick.chosen.iter().filter(|c| c.safety.is_some()) {
+            if carry.iter().any(|x| x.cand.msg.id == c.msg.id) {
+                continue;
+            }
+            let k = self.carried_in.get(&c.msg.id).cloned().unwrap_or(Carried {
+                cand: c.clone(),
+                since: now_ms,
+                first: self.first.contains(&c.msg.id),
+                expires: now_ms.saturating_add(CARRY_MS),
+                held: false,
+                owned: None,
+            });
+            carry.push(k);
+        }
+        self.carried = carry;
+    }
+
     /// The candidates this plan lets the picker see.
     pub fn offered(&self, plan: &Plan, cands: &[Candidate]) -> Vec<Candidate> {
         cands
@@ -727,7 +786,8 @@ impl Orchestrator {
     }
 
     /// Decide this beat. State that a decision consumes (a bit offered, a story line voiced, a
-    /// connector used) is consumed here: the beat goes ahead whatever the engine does. Then the
+    /// connector used) is staged here: it stands once the beat is delivered, and a failed core
+    /// call rolls it back ([`Self::begin`], [`Self::rollback`]). Then the
     /// through-line: the open loops are brought up to date, and a voiced beat outside the cold
     /// open, safety, a room event and the goodbye gets its pick-up and lead-in ([`agenda`]).
     pub fn plan(&mut self, b: &BeatInputs<'_>) -> Plan {
@@ -1391,7 +1451,13 @@ impl Orchestrator {
                 self.asked.insert((c.msg.viewer.id.clone(), a));
             }
         }
-        let mut carry: Vec<Carried> = std::mem::take(&mut self.carry_next)
+        let staged = std::mem::take(&mut self.carry_next);
+        self.unsettled = staged
+            .iter()
+            .filter(|k| chosen.contains(k.cand.msg.id.as_str()))
+            .cloned()
+            .collect();
+        let mut carry: Vec<Carried> = staged
             .into_iter()
             .filter(|k| !chosen.contains(k.cand.msg.id.as_str()) && (k.held || now_ms < k.expires))
             .collect();

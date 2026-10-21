@@ -81,9 +81,9 @@ use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line};
 use moderation::{InputFilter, Policy, RemovedNames, CRISIS_BAN_RULE};
-use orchestrate::{requests::claims_authority, BeatInputs, Orchestrator};
+use orchestrate::{requests::claims_authority, BeatInputs, BeatTxn, Orchestrator, ROLLED_BACK};
 use outgate::{GateCtx, Surface};
-use picker::{PickContext, Picker};
+use picker::{Pick, PickContext, Picker};
 use shadowrunr_types::prep::BeatMode;
 use stall::{stall_due, Staller, STALL_RULE};
 use util::{fnv1a64, one_line, REPEAT_WINDOW};
@@ -626,6 +626,24 @@ impl Brain {
         self.store.write_episode(&ep)
     }
 
+    /// The beat's core call failed: the orchestrator un-consumes the beat ([`Orchestrator::rollback`]),
+    /// a fresh research bit stays fresh, and the beat's `beat_plan` says it was rolled back so
+    /// the transcript stays complete.
+    fn roll_back_beat(
+        &mut self,
+        txn: BeatTxn,
+        pick: &Pick,
+        now_ms: TsMs,
+        fresh_bit: bool,
+        beat_plan: &mut StreamEvent,
+    ) {
+        self.orch.rollback(txn, pick, now_ms);
+        self.fresh_bit |= fresh_bit;
+        if let StreamEvent::BeatPlan { reason, .. } = beat_plan {
+            reason.push_str(ROLLED_BACK);
+        }
+    }
+
     /// One beat's lines as one turn of the pending stream episode; a beat with no lines adds
     /// nothing. Recall and the sleep cycle read the first EPISODE_ITEM_CHARS of an episode,
     /// so a turn that would carry the pending episode past that starts the next one.
@@ -833,6 +851,8 @@ impl Brain {
         let core_ms = self.cover.as_ref().and(self.latency.median());
         let lead_ms = pace::lookahead_lead(&self.tuning.pace, core_ms);
         let queued_ms = self.speech.queued_ms(now_ms);
+        // What the beat consumes stands only once its core call is delivered.
+        let txn = self.orch.begin();
         let mut plan = self.orch.plan(&BeatInputs {
             now_ms,
             ctx,
@@ -877,8 +897,6 @@ impl Brain {
             .picker
             .pick_upto(&cands, &pctx, self.engine.as_ref(), &corr, plan.ceiling)
             .await;
-        self.filter
-            .note_answered(pick.chosen.iter().map(|c| c.msg.viewer.id.as_str()));
         if !pick.chosen.is_empty() {
             ev.push(StreamEvent::Picked {
                 ts_ms: now_ms,
@@ -889,8 +907,11 @@ impl Brain {
         let beat_plan = self.orch.commit(&mut plan, &pick, now_ms);
         // Every message the carry cap dropped leaves a record.
         ev.extend(self.orch.take_capped(now_ms));
+        let plan_at = ev.len();
         ev.push(beat_plan);
         if plan.mode == BeatMode::Hold {
+            self.filter
+                .note_answered(pick.chosen.iter().map(|c| c.msg.viewer.id.as_str()));
             if self
                 .ticks
                 .is_multiple_of(u64::from(self.tuning.episode_every_ticks.max(1)))
@@ -987,6 +1008,7 @@ impl Brain {
             .map(|f| f.text.clone());
         let working_text = self.working.render(foil_text.as_deref());
         let nonce = fnv1a64(format!("{}:{}:{}", self.salt, self.ticks, now_ms).as_bytes());
+        let fresh_bit = std::mem::take(&mut self.fresh_bit);
         let care = [
             care_note(self.care.active(), now_ms),
             removed_note(&self.removed),
@@ -1018,7 +1040,7 @@ impl Brain {
             pkg,
             active_foil: active_foil.as_deref(),
             nonce,
-            fresh_bit: std::mem::take(&mut self.fresh_bit),
+            fresh_bit,
             brief: self.brief.as_ref(),
             care_note: care.as_deref(),
             material: plan.material.as_deref(),
@@ -1090,12 +1112,15 @@ impl Brain {
             Ok(r) => {
                 self.engine_down = false;
                 self.note_health(now_ms, "core call answered", &mut ev);
+                self.filter
+                    .note_answered(pick.chosen.iter().map(|c| c.msg.viewer.id.as_str()));
                 r
             }
             Err(e) if fleet_class(&e) => {
                 self.engine_down = true;
                 self.note_health(now_ms, failure_detail(&e), &mut ev);
-                self.record_turn(&turn, now_ms)?;
+                // Nothing aired: the picks are owed, not conversation, so no turn records them.
+                self.roll_back_beat(txn, &pick, now_ms, fresh_bit, &mut ev[plan_at]);
                 // The grace clock starts at the failure, not at the next beat.
                 if self.fleet.observe(now_ms, FleetMode::Down) == FleetVerdict::SignOff {
                     ev.extend(self.sign_off_events(now_ms));
@@ -1104,7 +1129,10 @@ impl Brain {
                 }
                 return Ok(ev);
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                self.roll_back_beat(txn, &pick, now_ms, fresh_bit, &mut ev[plan_at]);
+                return Err(e.into());
+            }
         };
         let mut lines = parse_reply(&reply.text, &ctx.allowed_ops, active_foil.as_deref());
         // The beat's speech budget: spoken lines past it go whole, the last first.
