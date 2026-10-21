@@ -357,7 +357,7 @@ pub fn render_checks(
         out.push(check(
             GateCheckId::HandlesInPicture,
             GateState::Unmeasured,
-            "the 16:9 cut is the broadcast picture: the stage's chat column, and its captions when Malakor names a viewer, show viewer handles (the 9:16 crop and its burnt-in captions do not); a person confirms they may be shown",
+            "the 16:9 cut is the broadcast picture: the stage's chat column, and its captions when the host names a viewer, show viewer handles (the 9:16 crop and its burnt-in captions do not); a person confirms they may be shown",
         ));
     }
     if !required {

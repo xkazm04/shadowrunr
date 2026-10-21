@@ -630,6 +630,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         core_tier: spec.core_tier,
         audience_size: spec.audience_size,
         brief: prep.brief.clone(),
+        host_name: Some(prep.persona.name.clone()),
     })?;
     w.push_all(stage.start(0, spec.segment))?;
 

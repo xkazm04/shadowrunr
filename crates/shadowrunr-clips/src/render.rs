@@ -29,6 +29,7 @@ use shadowrunr_types::clips::{
 use shadowrunr_types::{Case, EvidenceGrade, StreamEvent};
 
 use crate::footage;
+use crate::host::{is_host, ClipHost, HOST_SPEAKER};
 use crate::store::{write_bytes, write_json};
 use crate::{clock, now_ms, ClipError, Result, HEIGHT, WIDTH};
 
@@ -73,6 +74,10 @@ pub struct ClipInput {
     pub case: Option<Case>,
     pub disclosure: String,
     pub provenance: String,
+    /// Who the host is (the run's character); a draft written before it was recorded reads
+    /// the neutral host.
+    #[serde(default)]
+    pub host: ClipHost,
 }
 
 pub fn grade_name(g: Option<EvidenceGrade>) -> String {
@@ -202,7 +207,7 @@ pub fn poster_svg(input: &ClipInput, payoff: &ClipCaption, setup: Option<&ClipCa
         s.push_str(&format!(
             r##"<text x="72" y="{ty}" font-family="IBM Plex Mono, Consolas, monospace" font-size="30" fill="#8f877a">{}</text>
 "##,
-            xml(&speaker_title(&st.speaker))
+            xml(&speaker_title(&st.speaker, &input.host))
         ));
         ty += 56;
         for l in wrap(&st.text, 44, 4) {
@@ -218,7 +223,7 @@ pub fn poster_svg(input: &ClipInput, payoff: &ClipCaption, setup: Option<&ClipCa
     s.push_str(&format!(
         r##"<text x="72" y="{ty}" font-family="IBM Plex Mono, Consolas, monospace" font-size="32" fill="#ff6a2b">{}</text>
 "##,
-        xml(&speaker_title(&payoff.speaker))
+        xml(&speaker_title(&payoff.speaker, &input.host))
     ));
     ty += 84;
     // Never into the citation strip (it starts at 1600).
@@ -268,10 +273,10 @@ pub fn poster_svg(input: &ClipInput, payoff: &ClipCaption, setup: Option<&ClipCa
     s
 }
 
-fn speaker_title(speaker: &str) -> String {
+fn speaker_title(speaker: &str, host: &ClipHost) -> String {
     match speaker {
-        "malakor" => "ARCH-LICH MALAKOR".into(),
-        "viewer" => "A MINION ASKS".into(),
+        s if is_host(s) => host.full_name.to_uppercase(),
+        "viewer" => host.viewer_asks(),
         foil => foil
             .trim_start_matches("the-")
             .replace('-', " ")
@@ -301,13 +306,13 @@ fn ass_time(ms: i64) -> String {
     )
 }
 
-pub fn srt(captions: &[ClipCaption]) -> String {
+pub fn srt(captions: &[ClipCaption], host: &ClipHost) -> String {
     let mut out = String::new();
     for (i, c) in captions.iter().enumerate() {
-        let who = if c.speaker == "malakor" {
+        let who = if is_host(&c.speaker) {
             String::new()
         } else {
-            format!("[{}] ", speaker_title(&c.speaker))
+            format!("[{}] ", speaker_title(&c.speaker, host))
         };
         out.push_str(&format!(
             "{}\n{} --> {}\n{}{}\n\n",
@@ -321,17 +326,18 @@ pub fn srt(captions: &[ClipCaption]) -> String {
     out
 }
 
-pub fn ass(captions: &[ClipCaption]) -> String {
+pub fn ass(captions: &[ClipCaption], host: &ClipHost) -> String {
+    let host_style = host.style();
     let mut out = format!(
         "[Script Info]\nScriptType: v4.00+\nPlayResX: {WIDTH}\nPlayResY: {HEIGHT}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n\
 [V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\
-Style: Malakor,IBM Plex Sans Condensed,64,&H00D2E6EF,&H000000FF,&H00120F0B,&H96000000,1,0,0,0,100,100,0,0,1,4,0,2,72,72,360,1\n\
+Style: {host_style},IBM Plex Sans Condensed,64,&H00D2E6EF,&H000000FF,&H00120F0B,&H96000000,1,0,0,0,100,100,0,0,1,4,0,2,72,72,360,1\n\
 Style: Other,IBM Plex Sans Condensed,56,&H00A5BFCD,&H000000FF,&H00120F0B,&H96000000,0,1,0,0,100,100,0,0,1,4,0,2,72,72,360,1\n\n\
 [Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     );
     for c in captions {
-        let style = if c.speaker == "malakor" {
-            "Malakor"
+        let style = if is_host(&c.speaker) {
+            host_style.as_str()
         } else {
             "Other"
         };
@@ -340,7 +346,7 @@ Style: Other,IBM Plex Sans Condensed,56,&H00A5BFCD,&H000000FF,&H00120F0B,&H96000
             "Dialogue: 0,{},{},{style},{},0,0,0,,{}\n",
             ass_time(c.start_ms),
             ass_time(c.end_ms),
-            speaker_title(&c.speaker),
+            speaker_title(&c.speaker, host),
             text
         ));
     }
@@ -376,13 +382,19 @@ pub fn write_draft(
     let fallback = ClipCaption {
         start_ms: 0,
         end_ms: input.duration_ms,
-        speaker: "malakor".into(),
+        speaker: HOST_SPEAKER.into(),
         text: c.title.clone(),
         unvoiced: false,
     };
     write_json(&dir.join("clip.json"), input)?;
-    write_bytes(&dir.join("captions.srt"), srt(&input.captions).as_bytes())?;
-    write_bytes(&dir.join("captions.ass"), ass(&input.captions).as_bytes())?;
+    write_bytes(
+        &dir.join("captions.srt"),
+        srt(&input.captions, &input.host).as_bytes(),
+    )?;
+    write_bytes(
+        &dir.join("captions.ass"),
+        ass(&input.captions, &input.host).as_bytes(),
+    )?;
     write_bytes(
         &dir.join("poster.svg"),
         poster_svg(input, payoff.unwrap_or(&fallback), setup).as_bytes(),
@@ -411,12 +423,11 @@ pub fn write_draft(
     Ok(render)
 }
 
-/// The payoff caption: the longest Malakor line of the cut's anchor beat, else the longest
-/// Malakor line, else the last caption.
+/// The payoff caption: the longest host line, else the last caption.
 fn payoff_caption(captions: &[ClipCaption]) -> Option<&ClipCaption> {
     captions
         .iter()
-        .filter(|c| c.speaker == "malakor")
+        .filter(|c| is_host(&c.speaker))
         .max_by_key(|c| c.text.len())
         .or_else(|| captions.last())
 }
@@ -754,6 +765,7 @@ fn cut_from_recording(
     c: &ClipCandidate,
     t: &RenderTools,
     rec: &ClipRecording,
+    host: &ClipHost,
 ) -> std::result::Result<(ClipRender, footage::Span), String> {
     for (tool, arg) in [(&t.ffmpeg, "-version"), (&t.ffprobe, "-version")] {
         if !runs(tool, arg) {
@@ -785,6 +797,7 @@ fn cut_from_recording(
         span.shift_ms,
         span.dur_ms,
         header.as_ref(),
+        host,
     );
     write_bytes(&dir.join("captions-9x16.ass"), vass.as_bytes()).map_err(io)?;
     footage::cut_vertical(&t.ffmpeg, dir, rec, span, &rf, "captions-9x16.ass")?;
@@ -858,7 +871,7 @@ pub fn render(dir: &Path, c: &ClipCandidate, t: Option<&RenderTools>) -> Result<
     };
     if let Some(rec) = &c.recording {
         let poster = write_draft(dir, c, &input, "")?;
-        return match cut_from_recording(dir, c, tools, rec) {
+        return match cut_from_recording(dir, c, tools, rec, &input.host) {
             Ok((mut r, span)) => {
                 let keep = ["captions_srt", "captions_ass", "stage_input"];
                 r.files.extend(

@@ -1,0 +1,11 @@
+# Model-free lines the host speaks while the engine fleet is degraded or down, at most one every
+# `stall_every_s` seconds and never the same line within the last ten. Each fits any segment
+# and blames in-world machinery, never a viewer. Write ten or more; with none, the engine's
+# neutral stall lines are used. The fleet-loss sign-off is `[identity] sign_off`.
+
+# ? Which stall lines does the character speak while its machinery fails?
+# options: a list of free text
+# default: ["FILL: a stall line that blames the in-world machinery."]
+lines = [
+    "FILL: a stall line that blames the in-world machinery.",
+]

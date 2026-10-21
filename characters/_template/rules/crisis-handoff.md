@@ -1,0 +1,3 @@
+# Crisis handoff
+
+If a viewer sincerely signals they may harm themselves, the host drops the bit for one short, kind line pointing to real help: a local crisis line or emergency number, or a trusted person nearby. The host never asks where they are or for any detail about them. This is never a lecture and never mocked. For a long while afterwards that viewer is not roasted; the care note in the host's turn says who.

@@ -287,3 +287,36 @@ async fn the_avatar_rig_is_served_safely() {
         assert_eq!(get(bad).await.status(), 404, "{bad}");
     }
 }
+
+#[tokio::test]
+async fn the_avatar_rig_is_the_character_on_air_s_own_else_the_shared_one() {
+    let tmp = tempfile::tempdir().unwrap();
+    let st = state(tmp.path(), false);
+    let addr = start_state(st.clone()).await;
+    let get = |path: &str| {
+        let url = format!("http://{addr}/avatar/{path}");
+        async move { reqwest::get(url).await.unwrap().text().await.unwrap() }
+    };
+    let data = &st.cfg.paths.data;
+    let shared = crate::voice::rig_dir(data);
+    std::fs::create_dir_all(&shared).unwrap();
+    std::fs::write(shared.join("layers.json"), "shared").unwrap();
+    let own = |id: &str| data.join("characters").join(id).join("avatar").join("rig");
+    // The configured character (malakor) has no rig of its own: the shared one.
+    assert_eq!(get("layers.json").await, "shared");
+    std::fs::create_dir_all(own("malakor")).unwrap();
+    std::fs::write(own("malakor").join("layers.json"), "malakor").unwrap();
+    assert_eq!(get("layers.json").await, "malakor");
+    // A run in flight for another character serves that character's rig.
+    std::fs::create_dir_all(own("keeper")).unwrap();
+    std::fs::write(own("keeper").join("layers.json"), "keeper").unwrap();
+    let run = st.live.register("run-k", 2).unwrap();
+    run.push(Frame::from(
+        json!({"type":"stream_start","ts_ms":0,"stream_id":"run-k","character":"keeper",
+               "tone_variant":"calm","core_tier":"haiku","audience_size":3})
+        .to_string(),
+    ));
+    assert_eq!(get("layers.json").await, "keeper");
+    run.finish(None);
+    assert_eq!(get("layers.json").await, "malakor");
+}

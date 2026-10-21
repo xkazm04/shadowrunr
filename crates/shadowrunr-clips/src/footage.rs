@@ -2,7 +2,7 @@
 //!
 //! A recorded run has `recording.json` beside its `recording.<ext>`: OBS rendered the stage
 //! itself, so the file holds the broadcast picture (with the stage's own captions and its AI
-//! badge) and Malakor's voice on one clock. A stream-clock time `t` sits at
+//! badge) and the host's voice on one clock. A stream-clock time `t` sits at
 //! `t - stream_offset_ms` in the file. From it a render makes:
 //!
 //! - `cut-16x9.mp4`: the window trimmed out of the recording, re-encoded H.264/AAC so the cut
@@ -22,6 +22,7 @@ use serde::Deserialize;
 use shadowrunr_types::clips::{ClipCaption, ClipRecording, ClipWindow};
 use shadowrunr_types::SegmentId;
 
+use crate::host::{is_host, ClipHost};
 use crate::render::{quiet, ClipHeader};
 
 /// Speech starts this long after its `played` time.
@@ -225,7 +226,7 @@ const BADGE_TOP: u32 = 60;
 const BADGE_SCALE_NUM: u32 = 3;
 const BADGE_SCALE_DEN: u32 = 2;
 
-/// The reframe for a segment's stage screens (SEG-02A shows the content screens with Malakor in
+/// The reframe for a segment's stage screens (SEG-02A shows the content screens with the host in
 /// the corner; everything else is the host screen's big face).
 pub fn reframe_for(segment: SegmentId) -> Reframe {
     let scaled_h = |r: Rect| r.h * V_WIDTH / r.w;
@@ -301,10 +302,10 @@ fn ass_text(s: &str) -> String {
     s.replace(['\n', '{', '}'], " ").replace('\\', "/")
 }
 
-fn speaker_name(speaker: &str) -> String {
+fn speaker_name(speaker: &str, host: &ClipHost) -> String {
     match speaker {
-        "malakor" => "MALAKOR".into(),
-        "viewer" => "A MINION ASKS".into(),
+        s if is_host(s) => host.name.to_uppercase(),
+        "viewer" => host.viewer_asks(),
         foil => foil
             .trim_start_matches("the-")
             .replace('-', " ")
@@ -374,6 +375,7 @@ pub fn vertical_ass(
     shift_ms: i64,
     dur_ms: i64,
     header: Option<&ClipHeader>,
+    host: &ClipHost,
 ) -> String {
     let mut out = ass_head(V_WIDTH, V_HEIGHT, rf.caption_top);
     // One line on screen at a time: each ends where the next begins.
@@ -391,7 +393,7 @@ pub fn vertical_ass(
         );
         out.push_str(&format!(
             "Dialogue: 0,{a},{b},Speaker,,0,0,0,,{}\n",
-            ass_text(&speaker_name(&c.speaker))
+            ass_text(&speaker_name(&c.speaker, host))
         ));
         let style = if c.unvoiced { "Unheard" } else { "Line" };
         out.push_str(&format!(
@@ -647,7 +649,12 @@ mod tests {
             },
         ];
         let rf = reframe_for(SegmentId::Seg01ImprovisedRoom);
-        let a = vertical_ass(&caps, &rf, 0, 3_800, None);
+        let host = ClipHost {
+            full_name: "Arch-Lich Malakor".into(),
+            name: "Malakor".into(),
+            follower: "minion".into(),
+        };
+        let a = vertical_ass(&caps, &rf, 0, 3_800, None, &host);
         assert!(a.contains("PlayResX: 1080\nPlayResY: 1920"));
         assert!(a.contains("Dialogue: 0,0:00:00.00,0:00:02.00,Speaker,,0,0,0,,MALAKOR"));
         assert!(
@@ -657,7 +664,7 @@ mod tests {
         assert!(a.contains(",0:00:02.50,0:00:03.80,Speaker,,0,0,0,,AUDITOR"));
         // A head lost before the recording began moves every line earlier; a line wholly
         // before the cut is dropped.
-        let a = vertical_ass(&caps, &rf, -2_200, 1_600, None);
+        let a = vertical_ass(&caps, &rf, -2_200, 1_600, None, &host);
         assert!(!a.contains("MALAKOR"));
         assert!(a.contains("Dialogue: 0,0:00:00.30,0:00:01.60,Unheard"));
         assert!(!a.contains("ALLEGED"));
@@ -668,7 +675,7 @@ mod tests {
             fictional: true,
             citation: vec!["https://example.org/a".into()],
         };
-        let a = vertical_ass(&caps, &rf, 0, 4_000, Some(&h));
+        let a = vertical_ass(&caps, &rf, 0, 4_000, Some(&h), &host);
         assert!(a.contains("Header,,0,0,0,,ALLEGED · CLM · The Tray · FICTIONAL DEMO CASE"));
         assert!(a.contains("Cite,,0,0,0,,SOURCES · example.org/a"));
         let l = landscape_ass(1920, 1080, 4_000, &h);

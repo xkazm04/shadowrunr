@@ -119,6 +119,7 @@ export function Stage({
   const frame = hexFrame(scene.layout, rects);
   const record = scene.activeRecord === null ? undefined : scene.records[scene.activeRecord];
   const content = scene.layout === "browser" || scene.layout === "desk";
+  const host = scene.meta?.hostName ?? "Host";
 
   return (
     <div className={`canvas layout-${scene.layout}${corner ? " layout-corner" : ""}${debug ? " debug" : ""}`} data-layout={scene.layout}>
@@ -152,7 +153,7 @@ export function Stage({
           <Silhouette speaking={speaking} small={corner} />
           {face && (
             <div className="avatar-stand" style={{ width: FACE_PX, height: FACE_PX, transform: `translate(-50%, -50%) scale(${faceScale.toFixed(4)})` }}>
-              <Avatar className="avatar-face" rigBase={rigBase} size={FACE_PX} source={face} variant={variant} look={look} {...(onFace ? { onFace } : {})} />
+              <Avatar className="avatar-face" rigBase={rigBase} size={FACE_PX} source={face} variant={variant} look={look} label={host} {...(onFace ? { onFace } : {})} />
             </div>
           )}
           {voice && <div className="voice-label">{SYNTHETIC_VOICE}</div>}
@@ -162,9 +163,9 @@ export function Stage({
 
       <RegionBox name="caption" rect={rects.caption}>
         {voiceCaption === undefined ? (
-          <CaptionPanel caption={caption} redactions={scene.redactions} now={now} compact={corner} onAir={broadcast} />
+          <CaptionPanel caption={caption} redactions={scene.redactions} now={now} compact={corner} onAir={broadcast} speaker={host} />
         ) : (
-          <VoiceCaptionPanel view={voiceCaption} redactions={scene.redactions} now={now} compact={corner} onAir={broadcast} />
+          <VoiceCaptionPanel view={voiceCaption} redactions={scene.redactions} now={now} compact={corner} onAir={broadcast} speaker={host} />
         )}
       </RegionBox>
 

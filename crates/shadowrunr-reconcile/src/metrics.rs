@@ -71,7 +71,7 @@ struct SegAcc {
     ms: i64,
     chat: u32,
     answered: u32,
-    malakor: u32,
+    host: u32,
     ops: u32,
     moderation: u32,
     polls: u32,
@@ -212,7 +212,7 @@ fn segments(runs: &[RunData]) -> Vec<SegmentMetrics> {
                 StreamEvent::Say {
                     speaker: Speaker::Host,
                     ..
-                } => a.malakor += 1,
+                } => a.host += 1,
                 StreamEvent::Op { .. } => a.ops += 1,
                 StreamEvent::Moderation { .. } => a.moderation += 1,
                 _ => {}
@@ -242,8 +242,8 @@ fn segments(runs: &[RunData]) -> Vec<SegmentMetrics> {
                 minutes,
                 chat_msgs: a.chat,
                 chat_per_min: per_min(a.chat),
-                malakor_lines: a.malakor,
-                malakor_lines_per_min: per_min(a.malakor),
+                host_lines: a.host,
+                host_lines_per_min: per_min(a.host),
                 answered: rate(a.answered, a.chat),
                 ops: a.ops,
                 moderation_events: a.moderation,
@@ -565,6 +565,7 @@ mod directive_tests {
                 data_dir: tmp.path().join("data"),
                 runs_root: tmp.path().to_path_buf(),
                 characters_root: None,
+                persona: Default::default(),
             },
             Arc::new(shadowrunr_engine::ScriptedEngine),
             Arc::new(|| 1_000),

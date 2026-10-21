@@ -60,7 +60,8 @@ fn pause_after(word: &str) -> i64 {
 /// Who a spoken line belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Who {
-    Malakor,
+    /// The stream's host (`Speaker::Host`).
+    Host,
     Foil(String),
     /// A viewer's message a host line answers, shown before the answer (its question).
     Viewer {
@@ -71,7 +72,7 @@ pub enum Who {
 impl Who {
     pub fn label(&self) -> String {
         match self {
-            Who::Malakor => "malakor".into(),
+            Who::Host => crate::host::HOST_SPEAKER.into(),
             Who::Foil(f) => f.clone(),
             Who::Viewer { .. } => "viewer".into(),
         }
@@ -327,7 +328,7 @@ impl Stream {
                 line_no: *line_no,
                 ts_ms: *ts_ms,
                 who: match speaker {
-                    Speaker::Host => Who::Malakor,
+                    Speaker::Host => Who::Host,
                     Speaker::Foil => Who::Foil(foil.clone().unwrap_or_else(|| "foil".into())),
                 },
                 text: text.clone(),

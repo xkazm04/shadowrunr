@@ -16,6 +16,7 @@ use crate::engine::EngineHandle;
 use crate::server::{self, AppState};
 
 mod catalog;
+mod character;
 mod events;
 mod media;
 mod paging;

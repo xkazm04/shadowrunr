@@ -297,6 +297,11 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
             let p: CharacterGetParams = params(req.params)?;
             ok(catalog::character_get(cfg, &p.id)?)
         }
+        "character.validate" => {
+            let p: CharacterValidateParams = params(req.params)?;
+            let dir = catalog::character_dir(cfg, &p.id)?;
+            ok(crate::character::validate(&dir))
+        }
         "character.tone.set" => {
             let p: CharacterToneSetParams = params(req.params)?;
             ok(catalog::character_tone_set(cfg, &p.id, &p.tone)?)
