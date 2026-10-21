@@ -21,6 +21,7 @@ pub mod casefile;
 pub mod chat;
 pub mod instrument;
 pub mod judge;
+pub mod judging;
 pub mod ledger;
 pub mod matrix;
 pub mod outcome;
