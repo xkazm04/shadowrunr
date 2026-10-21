@@ -1,6 +1,7 @@
 // Evidence refs (`<run_id>#<line>`) as links into the Brain's transcript viewer, by route:
 // `#/brain/transcripts/<run>/<line>`. A ref that does not parse is shown as plain text.
-import { pageRoute, RouteLink } from "../../router";
+import { RouteLink } from "../../router";
+import { transcriptRoute } from "../../router/brain";
 import styles from "./Layer2.module.css";
 import { parseRef, refLabel } from "../../kit/events";
 
@@ -15,7 +16,7 @@ export function RefLinks({ refs }: { refs: readonly string[] | undefined }) {
       {shown.map((r, i) => {
         const p = parseRef(r);
         return p ? (
-          <RouteLink key={`${r}-${i}`} to={pageRoute("brain", "transcripts", p.runId, String(p.line))} className={styles.ref} title={`Open ${r} in the transcript`} data-role="reconcile-ref">
+          <RouteLink key={`${r}-${i}`} to={transcriptRoute(p, p.line)} className={styles.ref} title={`Open ${r} in the transcript`} data-role="reconcile-ref">
             {refLabel(r)}
           </RouteLink>
         ) : (

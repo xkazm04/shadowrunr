@@ -13,6 +13,7 @@ import { Section } from "../../ui/Section";
 import { StatBand } from "../../ui/StatBand";
 import { EmptyState } from "../../ui/States";
 import { VirtualList } from "../../ui/VirtualList";
+import { transcriptRoute } from "../../router/brain";
 import { runSource, selectSource } from "./feed";
 import styles from "./Layer2.module.css";
 import { int, span as clock } from "../../kit/events";
@@ -66,7 +67,7 @@ function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent
           Replay on screen
         </Button>
         <OpenInStage runId={`${tournamentId}/${runId}`} className={buttonClass("ink", "compact")} role="onair-open-stage" />
-        <RouteLink to={pageRoute("brain", "transcripts", runId)} className={styles.more}>
+        <RouteLink to={transcriptRoute({ tournamentId, runId })} className={styles.more}>
           Read the transcript
         </RouteLink>
       </div>
@@ -90,7 +91,7 @@ function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent
                 </button>
                 <b>{b.kind}</b>
                 <span className={styles.detail}>{b.detail}</span>
-                <RouteLink to={pageRoute("brain", "transcripts", runId, String(b.line))} className={styles.ref}>
+                <RouteLink to={transcriptRoute({ tournamentId, runId }, b.line)} className={styles.ref}>
                   L{b.line}
                 </RouteLink>
               </div>
