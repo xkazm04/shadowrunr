@@ -10,10 +10,12 @@ from array import array
 from pathlib import Path
 
 from shadowrunr_voice.engine import (
+    BELOW_NORMAL_PRIORITY_CLASS,
     FACE_ARGS,
     EngineError,
     Render,
     build_args,
+    creation_flags,
     narrow_safe,
     paths_for,
     read_pcm,
@@ -102,6 +104,32 @@ class BuildArgs(unittest.TestCase):
             args = build_args(paths, 3, Path(tmp) / "o.wav", "Hi.", code_page=None, extra=FACE_ARGS)
             self.assertFalse(any(a.startswith("--kokoro-lexicon") for a in args))
             self.assertEqual(args[-3:], [*FACE_ARGS, " Hi."])
+
+    def test_threads_are_the_pools_share(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = paths_for(engine_dir(Path(tmp)))
+            args = build_args(paths, 3, Path(tmp) / "o.wav", "Hi.", code_page=None, threads=5)
+            self.assertIn("--num-threads=5", args)
+            zero = build_args(paths, 3, Path(tmp) / "o.wav", "Hi.", code_page=None, threads=0)
+            self.assertIn("--num-threads=1", zero)
+
+
+class Priority(unittest.TestCase):
+    def test_look_ahead_starts_below_normal_on_windows(self) -> None:
+        urgent, ahead = creation_flags(True), creation_flags(False)
+        if sys.platform == "win32":
+            self.assertFalse(urgent & BELOW_NORMAL_PRIORITY_CLASS)
+            self.assertTrue(ahead & BELOW_NORMAL_PRIORITY_CLASS)
+        else:
+            self.assertEqual((urgent, ahead), (0, 0))
+
+    def test_promote_is_once_and_safe_before_the_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            render = Render(paths_for(engine_dir(Path(tmp))), 3, "Hi.", 5.0, urgent=False)
+            render.promote()  # no process yet: only the flag
+            self.assertTrue(render.urgent)
+            render.promote()
+            self.assertTrue(render.urgent)
 
     def test_missing_names_the_files_relative_to_the_engine_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -7,7 +7,7 @@ voices, tokens, espeak-ng data, the US-English lexicon when present).
 
 **The arguments** are the ones Personas and athena run: ``--kokoro-model``, ``--kokoro-voices``,
 ``--kokoro-tokens``, ``--kokoro-data-dir``, ``--kokoro-lexicon`` when present,
-``--num-threads=2``, ``--sid``, ``--output-filename``, then the text. No shell, ever: the text is
+``--num-threads`` (the pool's share of the cores), ``--sid``, ``--output-filename``, then the text. No shell, ever: the text is
 one argument in a list, so nothing a model wrote can become a command. On Windows the run carries
 ``CREATE_NO_WINDOW``.
 
@@ -31,14 +31,16 @@ import time
 import unicodedata
 import wave
 from array import array
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 __all__ = [
     "ANSI_CODE_PAGE",
+    "BELOW_NORMAL_PRIORITY_CLASS",
     "ENGINE_FILENAME",
     "FACE_ARGS",
+    "NORMAL_PRIORITY_CLASS",
     "SAMPLE_RATE",
     "EngineError",
     "KokoroPaths",
@@ -75,9 +77,29 @@ class EngineError(Exception):
     """A sentence the engine did not render. The message is one line, with no local paths."""
 
 
-def creation_flags() -> int:
-    """``CREATE_NO_WINDOW`` on Windows, so a run from a windowless daemon flashes no console."""
-    return getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+#: Windows priority classes: a look-ahead run yields the CPU to the sentence being waited for.
+BELOW_NORMAL_PRIORITY_CLASS = 0x4000
+NORMAL_PRIORITY_CLASS = 0x20
+
+
+def creation_flags(urgent: bool = True) -> int:
+    """``CREATE_NO_WINDOW`` on Windows, so a run from a windowless daemon flashes no console, and
+    ``BELOW_NORMAL_PRIORITY_CLASS`` for a run nobody is waiting for yet. 0 elsewhere."""
+    if sys.platform != "win32":
+        return 0
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return flags if urgent else flags | BELOW_NORMAL_PRIORITY_CLASS
+
+
+def _set_priority(proc: subprocess.Popen[bytes], priority_class: int) -> None:
+    """Change a running engine's priority class (Windows only; best effort)."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    handle = getattr(proc, "_handle", None)
+    if handle is not None:
+        ctypes.windll.kernel32.SetPriorityClass(int(handle), priority_class)  # type: ignore[attr-defined]
 
 
 # --- the files ------------------------------------------------------------------------------------
@@ -193,6 +215,7 @@ def build_args(
     text: str,
     code_page: int | None = ANSI_CODE_PAGE,
     extra: Sequence[str] = (),
+    threads: int = 2,
 ) -> list[str]:
     """The engine's flags, text last and positional. No executable. ``extra`` goes just before
     the text: :data:`FACE_ARGS` when visemes are on."""
@@ -205,7 +228,7 @@ def build_args(
     if paths.lexicon.is_file():
         args.append(f"--kokoro-lexicon={paths.lexicon}")
     args += [
-        "--num-threads=2",
+        f"--num-threads={max(threads, 1)}",
         f"--sid={sid}",
         f"--output-filename={output}",
         *extra,
@@ -311,7 +334,10 @@ class Rendered:
 class Render:
     """One sentence on its own thread: the process, its WAV, and a way to stop it early.
 
-    ``command`` replaces the engine executable (a test's ``[python, fake_engine.py]``)."""
+    ``command`` replaces the engine executable (a test's ``[python, fake_engine.py]``).
+    ``on_done`` is called on the render's thread once it has ended, however it ended.
+    ``urgent`` is false for a look-ahead run: on Windows it starts below normal priority, and
+    :meth:`promote` raises it once the sentence is the one being waited for."""
 
     paths: KokoroPaths
     sid: int
@@ -319,6 +345,9 @@ class Render:
     timeout_s: float
     faced: bool = False
     command: Sequence[str] | None = None
+    threads: int = 2
+    urgent: bool = True
+    on_done: Callable[[Render], None] | None = None
     sample_rate: int = SAMPLE_RATE
     result: Rendered | None = None
     error: EngineError | None = None
@@ -342,6 +371,19 @@ class Render:
             raise self.error
         return self.result
 
+    def promote(self) -> None:
+        """This sentence is the one being waited for now: full priority from here on."""
+        with self.lock:
+            if self.urgent:
+                return
+            self.urgent = True
+            proc = self.proc
+        if proc is not None and proc.poll() is None:
+            try:
+                _set_priority(proc, NORMAL_PRIORITY_CLASS)
+            except OSError:
+                pass
+
     def cancel(self) -> None:
         with self.lock:
             self.cancelled = True
@@ -361,6 +403,11 @@ class Render:
         finally:
             self.took_ms = round((time.monotonic() - began) * 1000)
             self.done.set()
+            if self.on_done is not None:
+                try:
+                    self.on_done(self)
+                except Exception as exc:  # the pool's bookkeeping must not kill the thread
+                    print(f"voice: after a render: {exc!r}", file=sys.stderr, flush=True)
 
     def _run(self) -> Rendered | None:
         exe = list(self.command) if self.command is not None else [str(self.paths.exe)]
@@ -374,6 +421,7 @@ class Render:
                     output,
                     self.sentence,
                     extra=FACE_ARGS if self.faced else (),
+                    threads=self.threads,
                 ),
             ]
             with self.lock:
@@ -385,7 +433,7 @@ class Render:
                         stdin=subprocess.DEVNULL,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
-                        creationflags=creation_flags(),
+                        creationflags=creation_flags(self.urgent),
                     )
                 except OSError as exc:
                     raise EngineError(

@@ -107,7 +107,12 @@ pub fn sidecar_args(cfg: &VoiceConfig) -> Vec<String> {
         cfg.voice.clone(),
         "--render-timeout-ms".into(),
         cfg.render_timeout_ms.to_string(),
+        "--workers".into(),
+        cfg.render_workers.max(1).to_string(),
     ]);
+    if let Some(t) = cfg.render_threads {
+        a.extend(["--threads".into(), t.max(1).to_string()]);
+    }
     a
 }
 
@@ -501,10 +506,22 @@ mod tests {
         assert_eq!(
             sidecar_args(&cfg).join(" "),
             "-m shadowrunr_voice --engine-dir E --durations D.onnx --sid 3 --voice af_heart \
-             --render-timeout-ms 30000"
+             --render-timeout-ms 30000 --workers 3"
         );
         let bare = sidecar_args(&VoiceConfig::default()).join(" ");
         assert!(!bare.contains("--durations") && !bare.contains("--engine-dir"));
+        assert!(
+            !bare.contains("--threads"),
+            "threads default to the sidecar's share"
+        );
+        let pinned = VoiceConfig {
+            render_workers: 0,
+            render_threads: Some(2),
+            ..VoiceConfig::default()
+        };
+        assert!(sidecar_args(&pinned)
+            .join(" ")
+            .ends_with("--workers 1 --threads 2"));
     }
 
     #[test]

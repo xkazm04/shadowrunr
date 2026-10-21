@@ -4,12 +4,13 @@
 //!   (`service`, one [`VoiceHub`] per daemon) gives each Malakor `say` of a followed live run to
 //!   the voice sidecar (`sidecar`: `tools/voice`, JSON lines on stdio, behind the
 //!   [`renderer::Renderer`] seam) and forwards every rendered sentence as an `utterance`.
-//!   Bounded: the queue holds `max_queue` lines, a line whose audio cannot start within
-//!   `max_lag_ms` of its `say` is `skipped`, and a slow client loses frames, never the service.
+//!   Bounded: the queue holds `max_queue` lines, up to `lines_in_flight` more are rendering, a
+//!   line whose audio cannot start within `max_lag_ms` of its `say` is `skipped`, and a slow
+//!   client loses frames, never the service.
 //! - `GET /avatar/{file}` (`avatar`): the face rig the stage draws (`layers.json` plus its
 //!   PNGs) from `<data>/avatar/rig/`; 404 when there is none, and the stage draws its bundled
 //!   placeholder.
-//! - `shadowrunr voice check|say` (`cli`, with `probe`).
+//! - `shadowrunr voice check|say|replay` (`cli`, with `probe` and `replay`).
 //!
 //! Optional end to end: with `[voice] enabled = false` (the default) `/voice` says `off` and
 //! nothing is spawned; a missing engine or a dead sidecar is `degraded` with the reason, and the
@@ -19,6 +20,7 @@ pub mod avatar;
 pub mod cli;
 pub mod probe;
 pub mod renderer;
+pub mod replay;
 pub mod service;
 pub mod sidecar;
 pub mod socket;
@@ -64,6 +66,14 @@ pub struct VoiceConfig {
     pub max_lag_ms: u64,
     /// One sentence's render, at most.
     pub render_timeout_ms: u64,
+    /// Lines handed to the sidecar at once. Their audio still goes out one line after another,
+    /// in order; the sidecar renders ahead into the later ones.
+    pub lines_in_flight: usize,
+    /// Engine runs the sidecar renders at once (`--workers`).
+    pub render_workers: usize,
+    /// Each engine run's threads (`--threads`). Absent = the sidecar's default (2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub render_threads: Option<u32>,
 }
 
 impl Default for VoiceConfig {
@@ -79,6 +89,9 @@ impl Default for VoiceConfig {
             max_queue: 6,
             max_lag_ms: 8_000,
             render_timeout_ms: 30_000,
+            lines_in_flight: 3,
+            render_workers: 3,
+            render_threads: None,
         }
     }
 }

@@ -8,11 +8,15 @@
 - Out, on failure: ``{"type":"error","id","part","reason"}``, and the rest of that line is dropped.
 - It exits when its stdin closes, killing any render still running.
 
-Lines are rendered one at a time, in the order they arrive. Within a line the next sentence's
-engine run starts as soon as the current one's audio is in, before the current sentence's mouth
-shapes are worked out and it is sent, so the engine is never idle while a line has more to say.
-``cancel`` drops the named lines still waiting and kills the one being rendered; it answers
-nothing.
+**The render pool.** Up to ``--workers`` engine runs render at once, each with ``--num-threads``
+set to its share of the cores. Sentences start in arrival order across lines (every sentence of
+a line before the next line's first), so line 2's first sentence can render while line 1's last
+one does. The output is still strictly ordered: lines in the order they arrived, and each line's
+sentences in order, because one sender waits on each sentence in turn, works out its mouth
+shapes and sends it. A sentence that finished early waits, rendered, for its turn.
+``cancel`` drops the named lines: their waiting sentences never start and their renders in
+flight are killed; it answers nothing. A failed sentence ends its line, and that line's later
+sentences still rendering are killed.
 """
 
 from __future__ import annotations
@@ -24,7 +28,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
 
@@ -32,11 +36,25 @@ from .engine import SAMPLE_RATE, EngineError, KokoroPaths, Render, Rendered, pat
 from .text import split_line
 from .visemes import Durations, load_symbols, sentence_visemes, to_ms
 
-__all__ = ["PROTOCOL", "Faces", "Out", "Sidecar", "Settings", "hello", "open_faces"]
+__all__ = [
+    "DEFAULT_THREADS",
+    "DEFAULT_WORKERS",
+    "PROTOCOL",
+    "Faces",
+    "Out",
+    "Settings",
+    "Sidecar",
+    "hello",
+    "open_faces",
+]
 
 PROTOCOL = 1
 #: The longest line accepted. Malakor's lines are a few sentences; this bounds a runaway one.
 MAX_CHARS = 2000
+#: Engine runs at once, and each run's ``--num-threads``, by default: sized by physical cores,
+#: ``workers x threads`` at most 6 of an 8-core host's (docs/guide/voice.md).
+DEFAULT_WORKERS = 3
+DEFAULT_THREADS = 2
 
 Send = Callable[[dict[str, Any]], None]
 
@@ -63,6 +81,10 @@ class Settings:
     voice: str = "af_heart"
     timeout_s: float = 30.0
     durations: Path | None = None
+    #: Engine runs at once (the pool).
+    workers: int = DEFAULT_WORKERS
+    #: Each run's ``--num-threads``.
+    threads: int = DEFAULT_THREADS
     #: Replaces the engine executable: a test's ``[python, fake_engine.py]``.
     command: Sequence[str] | None = None
 
@@ -149,11 +171,23 @@ class _Line:
     id: Any
     text: str
     at: float
+    #: The sentences, or empty when the line fails as a whole (``problem``).
+    parts: list[str] = field(default_factory=list)
+    #: Why the line is an error at part 0 without a render: no engine, too long, no words.
+    problem: str | None = None
+    #: The renders started so far, in part order: ``renders[i]`` is ``parts[i]``.
+    renders: list[Render] = field(default_factory=list)
+    #: Parts already sent; ``parts[sent]`` is the one the sender waits for next.
+    sent: int = 0
+    cancelled: bool = False
 
 
 class Sidecar:
-    """Lines in, sentences out. ``feed`` takes each message from the reader; one worker thread
-    renders."""
+    """Lines in, sentences out. ``feed`` takes each message from the reader.
+
+    A pool of up to ``workers`` engine runs renders sentences in arrival order, across lines; one
+    sender thread sends them, waiting on each in turn, so the output stays in order however the
+    renders finish."""
 
     def __init__(
         self,
@@ -168,13 +202,15 @@ class Sidecar:
         self.send = send
         self.dead = dead
         self.faces = faces
+        self.workers = max(settings.workers, 1)
+        self.threads = max(settings.threads, 1)
         self._lock = threading.Condition()
-        self._queue: collections.deque[_Line] = collections.deque()
-        self._current: _Line | None = None
-        self._renders: list[Render] = []
-        self._cancelled = False
+        #: Lines not yet fully sent, in arrival order; the first is the one being sent.
+        self._lines: collections.deque[_Line] = collections.deque()
+        #: Engine runs started and not yet ended.
+        self._running = 0
         self._closed = False
-        self._worker = threading.Thread(target=self._work, name="voice-worker", daemon=True)
+        self._worker = threading.Thread(target=self._work, name="voice-sender", daemon=True)
         self._worker.start()
 
     # -- in --------------------------------------------------------------------------------------
@@ -203,46 +239,105 @@ class Sidecar:
         if not isinstance(text, str):
             self.send(_error(ident, 0, "the say has no text"))
             return
+        line = _Line(ident, text, time.monotonic())
+        if self.dead is not None:
+            line.problem = self.dead
+        elif len(text) > MAX_CHARS:
+            line.problem = f"the line is longer than {MAX_CHARS} characters"
+        else:
+            line.parts = split_line(text)
+            if not line.parts:
+                line.problem = "the line has no words"
         with self._lock:
-            self._queue.append(_Line(ident, text, time.monotonic()))
-            self._lock.notify()
+            if self._closed:
+                return
+            self._lines.append(line)
+            self._pump()
+            self._lock.notify_all()
 
     def cancel(self, ids: list[Any]) -> None:
+        """Drop the named lines: their waiting sentences are never started, and their renders
+        in flight are killed. Nothing more is sent for them."""
         wanted = [i for i in ids if _is_id(i)]
+        renders: list[Render] = []
         with self._lock:
-            kept = [line for line in self._queue if not _named(line.id, wanted)]
-            self._queue = collections.deque(kept)
-            current = self._current
-            if current is None or not _named(current.id, wanted):
-                return
-            self._cancelled = True
-            renders = list(self._renders)
+            kept: collections.deque[_Line] = collections.deque()
+            for line in self._lines:
+                if _named(line.id, wanted):
+                    line.cancelled = True
+                    renders += line.renders
+                else:
+                    kept.append(line)
+            self._lines = kept
+            self._lock.notify_all()
         for render in renders:
             render.cancel()
 
     def close(self) -> None:
-        """stdin closed: nothing more is rendered, and the render in flight is killed."""
+        """stdin closed: nothing more is rendered, and every render in flight is killed."""
         with self._lock:
             self._closed = True
-            self._queue.clear()
-            self._cancelled = True
-            renders = list(self._renders)
-            self._lock.notify()
+            renders = [r for line in self._lines for r in line.renders]
+            for line in self._lines:
+                line.cancelled = True
+            self._lines.clear()
+            self._lock.notify_all()
         for render in renders:
             render.cancel()
         self._worker.join(timeout=5)
 
-    # -- the worker ------------------------------------------------------------------------------
+    # -- the pool --------------------------------------------------------------------------------
+
+    def _pump(self) -> None:
+        """Start sentences, the earliest unstarted first, while the pool has room. The lock is
+        held.
+
+        **Head of line first.** The sentence the sender waits for next is always the earliest
+        unstarted one, so it takes the first free worker: a later sentence only ever gets a
+        worker nothing earlier needs. It also runs at full priority, while a look-ahead run
+        starts below normal (Windows) and is promoted once it is the one waited for, so
+        look-ahead never takes CPU from the sentence the viewer is waiting to hear."""
+        if self._closed:
+            return
+        for line in self._lines:
+            if self._running >= self.workers:
+                return
+            while not line.cancelled and len(line.renders) < len(line.parts):
+                if self._running >= self.workers:
+                    return
+                urgent = line is self._lines[0] and len(line.renders) == line.sent
+                render = Render(
+                    self.paths,
+                    self.settings.sid,
+                    line.parts[len(line.renders)],
+                    self.settings.timeout_s,
+                    faced=self.faces is not None,
+                    command=self.settings.command,
+                    threads=self.threads,
+                    urgent=urgent,
+                    on_done=self._ended,
+                )
+                line.renders.append(render)
+                self._running += 1
+                render.start()
+
+    def _ended(self, _render: Render) -> None:
+        """A render's thread: its process is gone, so its slot is free."""
+        with self._lock:
+            self._running -= 1
+            self._pump()
+            self._lock.notify_all()
+
+    # -- the sender ------------------------------------------------------------------------------
 
     def _work(self) -> None:
         while True:
             with self._lock:
-                while not self._queue and not self._closed:
+                while not self._lines and not self._closed:
                     self._lock.wait()
                 if self._closed:
                     return
-                line = self._queue.popleft()
-                self._current, self._cancelled, self._renders = line, False, []
+                line = self._lines[0]
             try:
                 self._speak(line)
             except Exception as exc:  # one line's bug must not end the voice
@@ -250,39 +345,26 @@ class Sidecar:
                 self.send(_error(line.id, 0, f"the sidecar failed ({type(exc).__name__})"))
             finally:
                 with self._lock:
-                    self._current, self._renders = None, []
-
-    def _start(self, sentence: str) -> Render | None:
-        render = Render(
-            self.paths,
-            self.settings.sid,
-            sentence,
-            self.settings.timeout_s,
-            faced=self.faces is not None,
-            command=self.settings.command,
-        )
-        with self._lock:
-            if self._cancelled:
-                return None
-            self._renders.append(render)
-        return render.start()
+                    if self._lines and self._lines[0] is line:
+                        self._lines.popleft()
+                    left = list(line.renders)
+                    self._pump()
+                # A failed line's later sentences may still be running: they are not wanted.
+                for render in left:
+                    render.cancel()
 
     def _speak(self, line: _Line) -> None:
-        if self.dead is not None:
-            self.send(_error(line.id, 0, self.dead))
+        if line.problem is not None:
+            self.send(_error(line.id, 0, line.problem))
             return
-        if len(line.text) > MAX_CHARS:
-            self.send(_error(line.id, 0, f"the line is longer than {MAX_CHARS} characters"))
-            return
-        parts = split_line(line.text)
-        if not parts:
-            self.send(_error(line.id, 0, "the line has no words"))
-            return
-        pending = self._start(parts[0])
-        for part, sentence in enumerate(parts):
-            if pending is None:
-                return
-            render = pending
+        for part, sentence in enumerate(line.parts):
+            with self._lock:
+                while len(line.renders) <= part and not line.cancelled and not self._closed:
+                    self._lock.wait()
+                if line.cancelled or self._closed:
+                    return
+                render = line.renders[part]
+            render.promote()
             try:
                 rendered = render.wait()
             except EngineError as exc:
@@ -290,18 +372,15 @@ class Sidecar:
                 return
             if rendered is None:
                 return
-            pending = self._start(parts[part + 1]) if part + 1 < len(parts) else None
             visemes = self.faces.visemes(rendered, SAMPLE_RATE) if self.faces else None
             with self._lock:
-                if self._cancelled:
-                    if pending is not None:
-                        pending.cancel()
+                if line.cancelled or self._closed:
                     return
             message: dict[str, Any] = {
                 "type": "audio",
                 "id": line.id,
                 "part": part,
-                "last": part == len(parts) - 1,
+                "last": part == len(line.parts) - 1,
                 "text": sentence,
                 "sample_rate": SAMPLE_RATE,
                 "pcm": base64.b64encode(rendered.pcm).decode("ascii"),
@@ -309,6 +388,8 @@ class Sidecar:
             if visemes is not None:
                 message["visemes"] = visemes
             self.send(message)
+            with self._lock:
+                line.sent = part + 1
             print(
                 f"voice: part {part} rendered in {render.took_ms} ms, sent "
                 f"{round((time.monotonic() - line.at) * 1000)} ms after its say",
