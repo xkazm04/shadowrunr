@@ -129,7 +129,7 @@ describe("brain/preflight", () => {
       emitKeyCommand("rerun");
     });
     await settle(8);
-    expect(document.querySelector("[data-state='degraded']")?.textContent).toContain("Showing the last good reply");
+    expect(document.querySelector("[data-state='degraded']")?.textContent).toMatch(/Showing the reply from \d\d:\d\d:\d\d · /);
     expect(roles("brain-preflight-row")).toHaveLength(9);
   });
 

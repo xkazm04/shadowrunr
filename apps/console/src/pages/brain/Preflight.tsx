@@ -4,20 +4,15 @@
 import { useState } from "react";
 import type { HealthReport, PreflightRunResult } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
+import { timeOf } from "../../kit/freshness";
 import { useKeyCommand } from "../../kit/keyCommands";
-import { queryKey, useDataLayer, useRpc } from "../../data";
+import { useRpc } from "../../data";
 import { Button } from "../../ui/Button";
 import { Chip, type Tone } from "../../ui/Chip";
 import { PREFLIGHT_PARAMS, rowState, tally, titleOf, verdictOf, worstState, type RowState } from "./preflightModel";
 import styles from "./Preflight.module.css";
 
 const TONE: Readonly<Record<RowState, Tone>> = { green: "ok", amber: "caution", red: "fail", expected: "muted" };
-
-/** A wall-clock time `HH:MM:SS`. */
-export function timeOf(ms: number): string {
-  const d = new Date(ms);
-  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
-}
 
 function Row({ report, open, onToggle }: { report: HealthReport; open: boolean; onToggle: () => void }) {
   const state = rowState(report);
@@ -68,9 +63,8 @@ function Board({ reports }: { reports: PreflightRunResult }) {
 
 export function Preflight() {
   const query = useRpc("preflight.run", PREFLIGHT_PARAMS);
-  const layer = useDataLayer();
-  // The time of the last good run: the cache stamps it; this render follows the query's snapshot.
-  const at = layer.cache.getSnapshot(queryKey("preflight.run", PREFLIGHT_PARAMS)).updatedAt;
+  // The time of the last good run, as the cache stamped it.
+  const at = query.updatedAt;
   const rerun = query.reload;
   useKeyCommand("rerun", rerun);
   return (

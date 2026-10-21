@@ -162,6 +162,8 @@ describe("DOM-count budget", () => {
     await go("#/simulator/tournaments");
     await waitLayer2();
     counts["wall+l2"] = nodes();
+    // The freshness strip is never part of the counted path: QueryView adds no node unless the feed cannot vouch.
+    expect(document.querySelectorAll("[data-role='query-freshness']")).toHaveLength(0);
     for (const [route, n] of Object.entries(counts)) {
       const budget = BUDGETS.routes[route];
       expect(budget, `budget for ${route}`).toBeDefined();

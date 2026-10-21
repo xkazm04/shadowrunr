@@ -1,0 +1,24 @@
+/* One line over the region it dates: no panel, no layout change for the content below it. */
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sr-space-compact);
+  margin: 0 0 var(--sr-space-compact);
+  padding: var(--sr-space-tight) var(--sr-space-compact);
+  border-left: .4rem solid var(--sr-color-caution-edge);
+  background: var(--sr-color-surface-caution);
+  color: var(--sr-color-text-on-caution);
+  font-size: var(--sr-size-caption);
+  pointer-events: auto;
+}
+
+/* Read by assistive tech, never seen: the busy mark adds no box. */
+.busy {
+  position: absolute;
+  width: var(--sr-stroke-hair);
+  height: var(--sr-stroke-hair);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

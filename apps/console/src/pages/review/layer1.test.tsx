@@ -115,7 +115,7 @@ describe("review wall", () => {
     const m = await mount((method, sent) => (method === "review.sessions" && ++n > 1 ? fail("io", "disk gone") : base(method, sent)));
     await act(async () => m.layer.cache.refetch("review.sessions", {}));
     await settle(8);
-    expect(document.querySelector("[data-state='degraded']")?.textContent).toContain("Showing the last good reply");
+    expect(document.querySelector("[data-state='degraded']")?.textContent).toMatch(/Showing the reply from \d\d:\d\d:\d\d · /);
     expect(roles("review-wall-row")).toHaveLength(6);
   });
 

@@ -1,8 +1,11 @@
 // One way to show a query: loading, offline, degraded or empty states, otherwise the content.
-// Pages use it so every surface has its offline, empty and degraded states by construction.
+// Pages use it so every surface has its offline, empty and degraded states by construction,
+// and its age stated whenever the live feed cannot vouch for it (freshness.ts).
 import type { ReactNode } from "react";
-import { useConnection, type Query } from "../data";
+import { useConnection, useDataLayer, type Query } from "../data";
 import { OfflineState, StatePanel } from "../ui/States";
+import { FreshnessLine } from "./FreshnessLine";
+import { freshnessOf, timeOf } from "./freshness";
 
 export function QueryView<T>(props: {
   query: Query<T>;
@@ -13,16 +16,21 @@ export function QueryView<T>(props: {
   children: (data: T) => ReactNode;
 }) {
   const { query } = props;
+  const connection = useConnection();
+  const layer = useDataLayer();
   if (query.data !== undefined) {
     if (props.isEmpty?.(query.data)) {
       return <StatePanel state="empty" title={props.emptyTitle ?? "Nothing here yet"} {...(props.emptyHint === undefined ? {} : { hint: props.emptyHint })} />;
     }
+    const freshness = freshnessOf(query, connection, layer.reopenedAt());
+    const held = query.updatedAt === undefined ? "Showing the last good reply" : `Showing the reply from ${timeOf(query.updatedAt)}`;
     return (
       <>
+        <FreshnessLine freshness={freshness} updatedAt={query.updatedAt} refreshing={query.refreshing} connection={connection} onRefresh={query.reload} />
         {query.errorView && (
           <StatePanel
             state="degraded"
-            title={`Showing the last good reply · ${query.errorView.title}`}
+            title={`${held} · ${query.errorView.title}`}
             hint={query.errorView.hint}
             action={{ label: "Retry", onClick: query.reload }}
           />
