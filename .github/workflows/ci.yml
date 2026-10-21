@@ -10,6 +10,13 @@
 # fidelity gate, which needs the local contest arena and stays local-only.
 #
 # Every action is pinned to a full commit SHA; the tag is in the comment beside it.
+#
+# The lane set is derived, not remembered: `node scripts/ci-lanes.mjs --check` (first web step)
+# replays pnpm-workspace.yaml, every package's gate scripts (check, typecheck, test, lint, build)
+# and every tools/* Python suite, and fails when one is not scheduled below, when a step names a
+# package, script or suite that does not exist, or when it cannot parse a pnpm/python run line.
+# Adding a gate script to a package therefore means adding its step here. Rust lanes are the one
+# fixed `rust` job and are not part of that count.
 
 name: ci
 
@@ -84,6 +91,11 @@ jobs:
       - name: pnpm install
         run: pnpm install --frozen-lockfile
 
+      - name: lanes (every declared gate is scheduled here)
+        run: node scripts/ci-lanes.mjs --check
+      - name: lanes planner test
+        run: node --test scripts/ci-lanes.test.mjs
+
       - name: tokens drift
         run: pnpm -C packages/tokens check
       - name: contract drift
@@ -121,3 +133,28 @@ jobs:
         run: pnpm -C apps/console lint
       - name: console build (includes the per-route bundle budget)
         run: pnpm -C apps/console build
+
+  python:
+    name: python (voice, rig, avatar)
+    # tools/voice is stdlib-only (its tests drive a fake engine, never a model); tools/rig and
+    # tools/avatar need numpy and pillow. No model, engine binary or secret is fetched.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: pip install
+        run: python -m pip install numpy pillow
+      - name: voice sidecar unittest
+        working-directory: tools/voice
+        run: python -m unittest discover -t . -s tests
+      - name: rig unittest
+        working-directory: tools/rig
+        run: python -m unittest discover -t . -s tests
+      - name: avatar unittest
+        working-directory: tools/avatar
+        run: python -m unittest test_depth_map test_learned_depth
