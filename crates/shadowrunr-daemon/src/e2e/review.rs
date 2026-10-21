@@ -101,6 +101,7 @@ async fn a_judged_sandbox_session_is_tagged_after_it_ends() {
         chaos: None,
         judge: true,
         tone: None,
+        record: false,
     };
     let hosting = Hosting {
         planned_s: Some(60),

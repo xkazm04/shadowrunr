@@ -874,7 +874,9 @@ wall time since the session started, so a slow engine call shows up as a silence
 hosts a session; `shadowrunr stream sandbox` drives it.
 
 - `sandbox.start`:
-  - Params: `{minutes: 5|10|30, seed?, chaos?: outage|lost, judge? (default true), tone?}`.
+  - Params: `{minutes: 5|10|30, seed?, chaos?: outage|lost, judge? (default true), tone?,
+    record? (default false)}`. `record` says the session is recorded (`stream sandbox
+    --record`), so the watched checks gate it.
   - Returns: `{session_id, dir, stage_url}`.
   - Preflight runs first: red refuses with `preflight_red`. A second session, or a session
     while a live sim runs, is refused with `conflict`.
@@ -898,13 +900,15 @@ hosts a session; `shadowrunr stream sandbox` drives it.
   0), but the spacing and the silence spread apply to them too.
 - `sandbox.status {session_id?}`: the given session, or the latest one. Returns
   `{session_id, state: running|closing|judging|done|failed|stopped, elapsed_s, planned_s,
-  events, max_say_gap_s, core_errors, stage_ack_seq?, report?}`.
+  events, max_say_gap_s, core_errors, stage_ack_seq?, report?}`. Once the session has ended,
+  `report` is read from its session.json (the recorder merges its checks into the file).
 - `runs/sandbox/<session_id>/`: spec.json, transcript.jsonl (flushed per event), ledger.jsonl,
   and session.json. session.json is the `SandboxReport`:
   `{session_id, spec, started_ms, ended_ms, pass, checks: [{id, state: pass|fail|unmeasured,
   detail}], max_say_gap_s, say_gap_p95_s, beat_ms_p50, beat_ms_p95, core_errors, stall_lines,
   health_transitions, judge?: {verdict_path, rule_fails, quality_mean?}}`.
-  - Check ids, in order: `say_gap`, `core_errors`, `sign_off`, `chaos`, `stage_ack`, `judge`.
+  - Check ids, in order: `say_gap`, `core_errors`, `sign_off`, `chaos`, `stage_ack`, `judge`,
+    then the watched checks `voiced`, `face`, `av_sync`, `dead_air` (below).
   - `sign_off` passes when the first sign-off lands in the last 30 s of the planned length
     (within 10 s of a stop; for `lost` chaos, the fleet-loss sign-off in time).
   - `say_gap` (and `max_say_gap_s`, `say_gap_p95_s`) is speech-aware: the silence before each of
@@ -913,8 +917,41 @@ hosts a session; `shadowrunr stream sandbox` drives it.
     below), floored at 0, from the session start. A long line followed by a drain is not a
     silence; 15 s of nobody speaking still fails. The check's detail also gives the old
     say-to-say maximum.
-  - `pass` needs every check to pass. An unmeasured check (no stage acked, judge skipped) is
-    not a pass.
+  - `pass` needs every check that gates the session to pass. An unmeasured check (no stage
+    acked, judge skipped) is not a pass. **The watched-gate rule:** the watched checks gate a
+    session only when it was started with `record: true`; otherwise they are reported and never
+    gate, so an unrecorded, voice-off session gates as before.
+- **The watched checks**: what a viewer sees and hears. Each threshold is a named constant in
+  the daemon's `record::watch`; "assumption" marks one not yet measured against viewers.
+  - `voiced` (from `voice.jsonl`): the share of Malakor's `say` lines (by `seq`, the transcript
+    line) whose every `rendered` part was `played`, with nothing `skipped` or `stage_dropped`;
+    a line never rendered is not voiced. Pass at ≥ 90% (assumption, the PACE target). The detail
+    counts skips by reason, `stage_dropped`, lines partly played and lines never rendered.
+    Unmeasured with no `voice.jsonl` or nothing rendered (the voice was off).
+  - `face` (from `voice.jsonl` `face` events): the share of `[0, session end]` the rig was
+    drawn. Time before the first `face` event is unknown and counts as silhouette; an event
+    before 0 sets the state at 0. Pass at ≥ 95% (assumption). Unmeasured with no `face` event.
+  - `av_sync` (from the recording): ffmpeg `silencedetect` at -35 dB over 0.25 s (measured,
+    REC) finds speech onsets (each silence's end). Each onset is matched to the nearest
+    `played` time shifted into the file (`ts_ms - stream_offset_ms`) within 600 ms, one played
+    part per onset; its offset is `onset - played` (positive: the sound is later). The run's
+    **constant** is the median offset over every match: the recording path's delay (~200 ms
+    through OBS's browser source), reported and never judged. **Head** and **tail** are the
+    medians of the first and the last `min(8, matches / 2)` matches. Pass when head and tail are
+    each within -45/+125 ms of the constant (assumption, the `video-assembly` registry subject)
+    and `|tail - head|` (the drift) is ≤ 40 ms (assumption). Unmeasured with fewer than 4
+    matches, no recording, or ffmpeg failing.
+  - `dead_air` (from the recording): the longest silence at -50 dB of at least 1 s
+    (assumptions; the programme audio is digitally silent between lines, so the floor loses
+    nothing) inside the show: from Malakor's first line (the cold open) to the first `sign_off`
+    op, else the session end, on the stream clock shifted into the file. Pass at ≤ 15 s, the
+    say-gap ceiling. The detail gives the longest stretch and when it was, on the stream clock.
+    It is the audio truth beside the speech-clock `say_gap`.
+  - Who fills them: the sim leaves all four unmeasured; the daemon fills `voiced` and `face`
+    when the session ends (after its voice has played out, at most 45 s, beside the judge); the
+    recording checks stay unmeasured until `stream sandbox --record` has moved the recording
+    into the run dir, then it recomputes all four and rewrites session.json.
+    `shadowrunr stream check <dir> [--write]` recomputes them offline.
 - `/events` client frame `{"ack": {"seq", "gaps", "stalled_ms"}}`: a subscriber reports the
   highest contiguous seq it applied, the gaps it found, and how long it has been stalled. The
   daemon records the frames per connection for the `stage_ack` check.
@@ -1068,11 +1105,15 @@ like a real case. It is never written live in a quiet moment.
   answered this stream. Output rule `mechanism_leak` (action `removed` or `dropped`): a sentence
   describing the moderation machinery. A `persona_leak` or `character_break` line answering a
   forged decree is recast as an in-character rebuttal.
-- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/4`: two picks a beat, gifts carried,
-  chat held through the cold open, the situational notes, a sandbox session that runs its full
-  length, and a sim run's `max_say_gap_s` measured speech-aware as a sandbox session's is
-  (`/3` paced beats to his speech; `/2` added the cold open and a room that fills over about
-  three minutes). Pacing applies to sims too, since the show is voiced and sims measure what
+- **Carried bait first.** A prompt-injection attempt carried from an earlier beat takes the
+  beat's next slot after the safety picks, oldest first, ahead of fresh and ordinary carried
+  chat, so he mocks it before it expires; still one injection a beat, one pick per viewer and
+  the share and whale caps. The deterministic reason marks it `bait_first`.
+- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/5`: carried bait picked first (`/4`:
+  two picks a beat, gifts carried, chat held through the cold open, the situational notes, a
+  sandbox session that runs its full length, and a sim run's `max_say_gap_s` measured
+  speech-aware as a sandbox session's is; `/3` paced beats to his speech; `/2` added the cold
+  open and a room that fills over about three minutes). Pacing applies to sims too, since the show is voiced and sims measure what
   airs. Tournaments before and after do not mix.
 
 **Prep in runs.** A sim's `run.json` and a sandbox session's `spec.json` carry

@@ -5533,7 +5533,7 @@
           "type": "number"
         },
         "pass": {
-          "description": "Every check passed (an unmeasured check is not a pass).",
+          "description": "Every check that gates the session passed (an unmeasured check is not a pass; the\nwatched checks gate only a recorded session, see [`SANDBOX_WATCHED_CHECKS`]).",
           "type": "boolean"
         },
         "say_gap_p95_s": {
@@ -5589,6 +5589,10 @@
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "record": {
+          "description": "The session is recorded (`stream sandbox --record`), so the watched checks\n([`SANDBOX_WATCHED_CHECKS`]) gate it. Default false.",
+          "type": "boolean"
         },
         "seed": {
           "format": "uint64",

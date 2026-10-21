@@ -3,14 +3,16 @@
 //!
 //! - `obs`: a small obs-websocket v5 client.
 //! - [`prepare`]: 1920x1080 at 30 fps, the scene [`SCENE`] holding the browser source [`INPUT`]
-//!   on the live stage URL ([`stage_url`]), the scene on program, OBS's global desktop and mic
-//!   inputs muted (the recording carries the stage's audio only).
+//!   on the live stage URL ([`stage_url`]), freshly loaded, the scene on program, OBS's global
+//!   desktop and mic inputs muted (the recording carries the stage's audio only).
 //! - [`start`] / [`stop`]: record into a directory, and the file OBS wrote.
 //! - [`wait_for_voice`]: the voice runs seconds behind the events, so after the session ends
 //!   the recorder waits until its last line has played (from the run's `voice.jsonl`).
 //! - [`Recording`]: `recording.json`, written beside the recording in the run dir.
 //! - `cli`: `shadowrunr record check`, and `shadowrunr stream sandbox --record`, which drives
 //!   all of the above around one session.
+//! - `watch`: the watched checks (`voiced`, `face`, `av_sync`, `dead_air`), measured from
+//!   `voice.jsonl` and the recording into the session's report.
 //!
 //! **The password is a secret.** It comes from the environment variable `[record]
 //! obs_password_env` names, else from OBS's own obs-websocket config file; it is never printed,
@@ -18,6 +20,7 @@
 
 pub mod cli;
 pub mod obs;
+pub mod watch;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -247,11 +250,18 @@ pub async fn prepare(obs: &mut Obs, url: &str) -> Result<(), ObsError> {
     match created {
         Ok(_) => {}
         Err(e) if e.code() == Some(code::RESOURCE_ALREADY_EXISTS) => {
-            // It exists: point it at this URL (which reloads the page), and make sure it is in
-            // the scene.
+            // It exists: point it at this URL, reload the page without its cache (the same URL
+            // does not reload it, and a page left from the last session keeps the face it drew
+            // then: sbx-20261021-095610-5m kept a placeholder from before the rig was served),
+            // and make sure it is in the scene.
             obs.request(
                 "SetInputSettings",
                 json!({ "inputName": INPUT, "inputSettings": settings, "overlay": true }),
+            )
+            .await?;
+            obs.request(
+                "PressInputPropertiesButton",
+                json!({ "inputName": INPUT, "propertyName": "refreshnocache" }),
             )
             .await?;
             let item = obs
@@ -681,6 +691,7 @@ mod tests {
                 "CreateScene",
                 "CreateInput",
                 "SetInputSettings",
+                "PressInputPropertiesButton",
                 "GetSceneItemId",
                 "CreateSceneItem",
                 "SetCurrentProgramScene",

@@ -22968,7 +22968,7 @@ validate739.evaluated = {"props":{"dir":true,"session_id":true,"stage_url":true}
 
 export const validateSandboxStatus = validate740;
 const schema213 = {"description":"`sandbox.stop` / `sandbox.status` result.","properties":{"core_errors":{"format":"uint32","minimum":0,"type":"integer"},"elapsed_s":{"format":"uint32","minimum":0,"type":"integer"},"events":{"description":"Transcript events so far.","format":"uint64","minimum":0,"type":"integer"},"max_say_gap_s":{"format":"double","type":"number"},"planned_s":{"format":"uint32","minimum":0,"type":"integer"},"report":{"$ref":"#/$defs/SandboxReport","description":"Present once the session ended."},"session_id":{"type":"string"},"stage_ack_seq":{"description":"The highest seq any stage subscriber acknowledged.","format":"uint64","minimum":0,"type":"integer"},"state":{"$ref":"#/$defs/SandboxState"}},"required":["session_id","state","elapsed_s","planned_s","events","max_say_gap_s","core_errors"],"type":"object"};
-const schema214 = {"description":"`session.json`: the session's gate.","properties":{"beat_ms_p50":{"format":"uint64","minimum":0,"type":"integer"},"beat_ms_p95":{"format":"uint64","minimum":0,"type":"integer"},"checks":{"items":{"$ref":"#/$defs/SandboxCheck"},"type":"array"},"core_errors":{"format":"uint32","minimum":0,"type":"integer"},"ended_ms":{"format":"int64","type":"integer"},"health_transitions":{"format":"uint32","minimum":0,"type":"integer"},"judge":{"$ref":"#/$defs/SandboxJudge"},"max_say_gap_s":{"format":"double","type":"number"},"pass":{"description":"Every check passed (an unmeasured check is not a pass).","type":"boolean"},"say_gap_p95_s":{"format":"double","type":"number"},"session_id":{"type":"string"},"spec":{"$ref":"#/$defs/SandboxStartParams"},"stall_lines":{"format":"uint32","minimum":0,"type":"integer"},"started_ms":{"description":"Epoch ms.","format":"int64","type":"integer"}},"required":["session_id","spec","started_ms","ended_ms","pass","checks","max_say_gap_s","say_gap_p95_s","beat_ms_p50","beat_ms_p95","core_errors","stall_lines","health_transitions"],"type":"object"};
+const schema214 = {"description":"`session.json`: the session's gate.","properties":{"beat_ms_p50":{"format":"uint64","minimum":0,"type":"integer"},"beat_ms_p95":{"format":"uint64","minimum":0,"type":"integer"},"checks":{"items":{"$ref":"#/$defs/SandboxCheck"},"type":"array"},"core_errors":{"format":"uint32","minimum":0,"type":"integer"},"ended_ms":{"format":"int64","type":"integer"},"health_transitions":{"format":"uint32","minimum":0,"type":"integer"},"judge":{"$ref":"#/$defs/SandboxJudge"},"max_say_gap_s":{"format":"double","type":"number"},"pass":{"description":"Every check that gates the session passed (an unmeasured check is not a pass; the\nwatched checks gate only a recorded session, see [`SANDBOX_WATCHED_CHECKS`]).","type":"boolean"},"say_gap_p95_s":{"format":"double","type":"number"},"session_id":{"type":"string"},"spec":{"$ref":"#/$defs/SandboxStartParams"},"stall_lines":{"format":"uint32","minimum":0,"type":"integer"},"started_ms":{"description":"Epoch ms.","format":"int64","type":"integer"}},"required":["session_id","spec","started_ms","ended_ms","pass","checks","max_say_gap_s","say_gap_p95_s","beat_ms_p50","beat_ms_p95","core_errors","stall_lines","health_transitions"],"type":"object"};
 const schema215 = {"description":"The judge's verdict, folded into the report.","properties":{"quality_mean":{"format":"double","type":"number"},"rule_fails":{"format":"uint32","minimum":0,"type":"integer"},"verdict_path":{"description":"Path of `verdict.json`, relative to the session dir.","type":"string"}},"required":["verdict_path","rule_fails"],"type":"object"};
 
 function validate541(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
@@ -23050,7 +23050,7 @@ return errors === 0;
 }
 validate541.evaluated = {"props":{"quality_mean":true,"rule_fails":true,"verdict_path":true},"dynamicProps":false,"dynamicItems":false};
 
-const schema210 = {"description":"`sandbox.start` params.","properties":{"chaos":{"$ref":"#/$defs/SandboxChaos"},"judge":{"description":"Judge the session when it ends. Default true.","type":"boolean"},"minutes":{"description":"5, 10 or 30.","format":"uint32","minimum":0,"type":"integer"},"seed":{"format":"uint64","minimum":0,"type":"integer"},"tone":{"description":"Tone variant; the character's active tone when absent.","type":"string"}},"required":["minutes"],"type":"object"};
+const schema210 = {"description":"`sandbox.start` params.","properties":{"chaos":{"$ref":"#/$defs/SandboxChaos"},"judge":{"description":"Judge the session when it ends. Default true.","type":"boolean"},"minutes":{"description":"5, 10 or 30.","format":"uint32","minimum":0,"type":"integer"},"record":{"description":"The session is recorded (`stream sandbox --record`), so the watched checks\n([`SANDBOX_WATCHED_CHECKS`]) gate it. Default false.","type":"boolean"},"seed":{"format":"uint64","minimum":0,"type":"integer"},"tone":{"description":"Tone variant; the character's active tone when absent.","type":"string"}},"required":["minutes"],"type":"object"};
 
 function validate531(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -23115,20 +23115,11 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.seed !== undefined){
-let data3 = data.seed;
+if(data.record !== undefined){
 const _errs6 = errors;
-if(!(((typeof data3 == "number") && (!(data3 % 1) && !isNaN(data3))) && (isFinite(data3)))){
-validate531.errors = [{instancePath:instancePath+"/seed",schemaPath:"#/properties/seed/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+if(typeof data.record !== "boolean"){
+validate531.errors = [{instancePath:instancePath+"/record",schemaPath:"#/properties/record/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
-}
-if(errors === _errs6){
-if((typeof data3 == "number") && (isFinite(data3))){
-if(data3 < 0 || isNaN(data3)){
-validate531.errors = [{instancePath:instancePath+"/seed",schemaPath:"#/properties/seed/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
-return false;
-}
-}
 }
 var valid0 = _errs6 === errors;
 }
@@ -23136,16 +23127,38 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.tone !== undefined){
+if(data.seed !== undefined){
+let data4 = data.seed;
 const _errs8 = errors;
-if(typeof data.tone !== "string"){
-validate531.errors = [{instancePath:instancePath+"/tone",schemaPath:"#/properties/tone/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(!(((typeof data4 == "number") && (!(data4 % 1) && !isNaN(data4))) && (isFinite(data4)))){
+validate531.errors = [{instancePath:instancePath+"/seed",schemaPath:"#/properties/seed/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
+}
+if(errors === _errs8){
+if((typeof data4 == "number") && (isFinite(data4))){
+if(data4 < 0 || isNaN(data4)){
+validate531.errors = [{instancePath:instancePath+"/seed",schemaPath:"#/properties/seed/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
 }
 var valid0 = _errs8 === errors;
 }
 else {
 var valid0 = true;
+}
+if(valid0){
+if(data.tone !== undefined){
+const _errs10 = errors;
+if(typeof data.tone !== "string"){
+validate531.errors = [{instancePath:instancePath+"/tone",schemaPath:"#/properties/tone/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid0 = _errs10 === errors;
+}
+else {
+var valid0 = true;
+}
 }
 }
 }
@@ -23161,7 +23174,7 @@ return false;
 validate531.errors = vErrors;
 return errors === 0;
 }
-validate531.evaluated = {"props":{"chaos":true,"judge":true,"minutes":true,"seed":true,"tone":true},"dynamicProps":false,"dynamicItems":false};
+validate531.evaluated = {"props":{"chaos":true,"judge":true,"minutes":true,"record":true,"seed":true,"tone":true},"dynamicProps":false,"dynamicItems":false};
 
 
 function validate539(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){

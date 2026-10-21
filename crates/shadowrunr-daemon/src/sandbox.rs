@@ -6,8 +6,10 @@
 //! `{"subscribe": "live"}` or `{"subscribe": "<session_id>"}`. The session's event sink pushes
 //! each event into that run as it happens (no transcript tailing). When the run returns, the
 //! daemon completes the report's `stage_ack` check from the [`AckBook`] (after up to
-//! [`ACK_GRACE`] for the stage's final ack), runs the judge unless `judge` is false, and
-//! rewrites `session.json`. A session that fails leaves `error.json` instead.
+//! [`ACK_GRACE`] for the stage's final ack), runs the judge unless `judge` is false while the
+//! voice plays out, fills the watched checks it can from `voice.jsonl`
+//! ([`crate::record::watch`]), and rewrites `session.json`. A session that fails leaves
+//! `error.json` instead.
 //!
 //! One session at a time, and never beside a live `sim.start` run (`conflict`).
 
@@ -195,10 +197,23 @@ impl Session {
             report: None,
         };
         if let Some(r) = &phase.report {
-            fold_report(&mut st, r);
+            // Once ended, `session.json` is the report: the recorder's watched checks are
+            // merged into the file after the session ends.
+            let on_disk = is_ended(phase.state)
+                .then(|| read_report(&self.dir))
+                .flatten()
+                .filter(|d| d.session_id == r.session_id);
+            fold_report(&mut st, on_disk.as_ref().unwrap_or(r));
         }
         st
     }
+}
+
+/// `<dir>/session.json`, when it reads.
+fn read_report(dir: &Path) -> Option<SandboxReport> {
+    std::fs::read_to_string(dir.join("session.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
 }
 
 fn is_ended(s: SandboxState) -> bool {
@@ -493,7 +508,19 @@ async fn host(state: Arc<AppState>, session: Arc<Session>, live_run: Arc<LiveRun
 
     if judge {
         session.set_state(SandboxState::Judging);
-        match (h.hosting.judge)(dir.clone(), h.engine, h.opts).await {
+    }
+    // The voice runs seconds behind the events: its last lines play out (logged in
+    // voice.jsonl) while the judge reads the transcript.
+    let judging = async {
+        if judge {
+            Some((h.hosting.judge)(dir.clone(), h.engine, h.opts).await)
+        } else {
+            None
+        }
+    };
+    let (judged, _) = tokio::join!(judging, crate::record::wait_for_voice(&dir));
+    if let Some(judged) = judged {
+        match judged {
             Ok(j) => {
                 let st = if j.rule_fails == 0 {
                     SandboxCheckState::Pass
@@ -518,7 +545,13 @@ async fn host(state: Arc<AppState>, session: Arc<Session>, live_run: Arc<LiveRun
             "skipped".into(),
         );
     }
-    report.pass = all_pass(&report.checks);
+    // The watched checks from voice.jsonl; the recording is not in the run dir yet, so
+    // `stream sandbox --record` measures it once it is.
+    if let Some(log) = state.voice.logs().get(&session.id) {
+        log.sync();
+    }
+    let watched = crate::record::watch::measure(&dir, &report, &state.cfg.clips.ffmpeg);
+    crate::record::watch::merge(&mut report, watched);
 
     if let Err(e) = write_durable(&dir.join("session.json"), &report) {
         let msg = format!("write session.json: {e}");
@@ -602,14 +635,9 @@ fn set_check(report: &mut SandboxReport, id: &str, state: SandboxCheckState, det
     }
 }
 
-/// Every check passed (an unmeasured check is not a pass).
-pub fn all_pass(checks: &[SandboxCheck]) -> bool {
-    !checks.is_empty() && checks.iter().all(|c| c.state == SandboxCheckState::Pass)
-}
-
 /// Write JSON through a synced temp file and a rename, so a crash leaves the old file or the
 /// new one, never half of either.
-fn write_durable<T: Serialize>(path: &Path, v: &T) -> std::io::Result<()> {
+pub(crate) fn write_durable<T: Serialize>(path: &Path, v: &T) -> std::io::Result<()> {
     let text = serde_json::to_vec_pretty(v).map_err(std::io::Error::other)?;
     let tmp = path.with_extension("json.tmp");
     {
@@ -640,9 +668,7 @@ fn status_from_disk(cfg: &Config, id: &str) -> Option<SandboxStatus> {
     if !dir.is_dir() {
         return None;
     }
-    let report: Option<SandboxReport> = std::fs::read_to_string(dir.join("session.json"))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok());
+    let report = read_report(&dir);
     let events = std::fs::read_to_string(dir.join("transcript.jsonl"))
         .map(|t| t.lines().filter(|l| !l.trim().is_empty()).count() as u64)
         .unwrap_or(0);
@@ -770,6 +796,7 @@ pub(crate) mod tests {
             chaos,
             judge: true,
             tone: None,
+            record: false,
         };
         assert!(validate(&p(5, None)).is_ok());
         assert!(validate(&p(10, Some(SandboxChaos::Lost))).is_ok());
@@ -795,6 +822,7 @@ pub(crate) mod tests {
             chaos: None,
             judge,
             tone: None,
+            record: false,
         }
     }
 
@@ -803,7 +831,9 @@ pub(crate) mod tests {
             .iter()
             .map(|id| SandboxCheck {
                 id: id.to_string(),
-                state: if matches!(*id, "stage_ack" | "judge") {
+                state: if matches!(*id, "stage_ack" | "judge")
+                    || shadowrunr_types::sandbox::SANDBOX_WATCHED_CHECKS.contains(id)
+                {
                     SandboxCheckState::Unmeasured
                 } else {
                     SandboxCheckState::Pass
@@ -958,6 +988,91 @@ pub(crate) mod tests {
         assert!(st.sandbox.running().is_none());
         let latest = status(&st, SandboxStatusParams::default()).await.unwrap();
         assert_eq!(latest.session_id, started.session_id);
+    }
+
+    #[tokio::test]
+    async fn a_recorded_session_is_gated_by_the_watched_checks_the_daemon_fills_from_voice_jsonl() {
+        let tmp = tempfile::tempdir().unwrap();
+        let st = state(tmp.path());
+        let inner = fake_run(5, Duration::ZERO, Some((st.clone(), 0)), false);
+        // The run leaves its transcript and the voice's log: two lines, both played, the rig
+        // drawn from the start.
+        let run: RunFn = Arc::new(move |run, engine, opts, sink, stop, progress| {
+            let dir = run.dir.clone();
+            let fut = inner(run, engine, opts, sink, stop, progress);
+            Box::pin(async move {
+                let say = |t: i64| {
+                    format!(r#"{{"type":"say","ts_ms":{t},"speaker":"malakor","text":"Kneel."}}"#)
+                };
+                std::fs::write(
+                    dir.join("transcript.jsonl"),
+                    [say(900), say(5_000)].join(
+                        "
+",
+                    ),
+                )
+                .unwrap();
+                let voice = [
+                    r#"{"ts_ms":0,"seq":0,"event":"face","reason":"rig"}"#,
+                    r#"{"ts_ms":950,"seq":1,"event":"rendered","part":0,"duration_ms":900}"#,
+                    r#"{"ts_ms":990,"seq":1,"event":"played","part":0}"#,
+                    r#"{"ts_ms":5050,"seq":2,"event":"rendered","part":0,"duration_ms":900}"#,
+                    r#"{"ts_ms":5090,"seq":2,"event":"played","part":0}"#,
+                ];
+                std::fs::write(
+                    dir.join("voice.jsonl"),
+                    voice.join(
+                        "
+",
+                    ),
+                )
+                .unwrap();
+                fut.await
+            })
+        });
+        let h = hosting(run, fake_judge(Some(0)));
+        let p = SandboxStartParams {
+            record: true,
+            ..params(true)
+        };
+        let started = start_with(st.clone(), p, h).await.unwrap();
+        let end = until_ended(&st, &started.session_id).await;
+        let report = end.report.clone().unwrap();
+        let check = |id: &str| report.checks.iter().find(|c| c.id == id).unwrap().clone();
+        assert_eq!(
+            check("voiced").state,
+            SandboxCheckState::Pass,
+            "{:?}",
+            check("voiced")
+        );
+        assert_eq!(
+            check("face").state,
+            SandboxCheckState::Pass,
+            "{:?}",
+            check("face")
+        );
+        // The recording is not in the run dir yet: unmeasured, and a recorded session's gate
+        // fails on it.
+        assert_eq!(check("av_sync").state, SandboxCheckState::Unmeasured);
+        assert_eq!(check("dead_air").detail, "no recording.json");
+        assert!(!report.pass);
+
+        // The recorder merges its checks into session.json; the status reads the file.
+        let mut merged = report.clone();
+        for c in merged.checks.iter_mut() {
+            c.state = SandboxCheckState::Pass;
+        }
+        merged.pass = true;
+        write_durable(&Path::new(&started.dir).join("session.json"), &merged).unwrap();
+        let again = status(
+            &st,
+            SandboxStatusParams {
+                session_id: Some(started.session_id.clone()),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(again.report, Some(merged));
     }
 
     #[tokio::test]

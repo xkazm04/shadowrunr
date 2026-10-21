@@ -49,7 +49,7 @@ export const SILENCE_LIMIT_S = 15;
 /** The timeline's row sizes, in seconds. */
 export const ROW_SIZES: readonly (readonly [number, string])[] = [[10, "10 s"], [30, "30 s"], [60, "1 min"], [120, "2 min"]];
 export const RANK_NAME: Readonly<Record<string, string>> = { thrall: "Thrall", acolyte: "Acolyte", cultist: "Cultist", warlock: "Warlock", lich: "Lich", dread_council: "Dread Council" };
-export const CHECK_NAME: Readonly<Record<string, string>> = { say_gap: "Say gap", core_errors: "Core errors", sign_off: "Sign-off", chaos: "Chaos", stage_ack: "Stage ack", judge: "Judge" };
+export const CHECK_NAME: Readonly<Record<string, string>> = { say_gap: "Say gap", core_errors: "Core errors", sign_off: "Sign-off", chaos: "Chaos", stage_ack: "Stage ack", judge: "Judge", voiced: "Voiced", face: "Face", av_sync: "A/V sync", dead_air: "Dead air" };
 export const CHECK_STATE_NAME: Readonly<Record<SandboxCheckState, string>> = { pass: "passed", fail: "failed", unmeasured: "not measured" };
 export const ROLE_NAME: Readonly<Partial<Record<Role, string>>> = {
   core_thread: "Malakor's voice", chatter: "Simulated chatters", chat_picker: "Chat picker", researcher: "Researchers",

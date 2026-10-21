@@ -13,8 +13,8 @@ use shadowrunr_sim::{
 };
 use shadowrunr_types::review::{ReviewSessionRow, ReviewTagParams, SessionTags};
 use shadowrunr_types::sandbox::{
-    SandboxChaos, SandboxCheckState, SandboxStartParams, SandboxStarted, SandboxState,
-    SandboxStatus,
+    check_gates, SandboxChaos, SandboxCheckState, SandboxReport, SandboxStartParams,
+    SandboxStarted, SandboxState, SandboxStatus,
 };
 use shadowrunr_types::{HealthState, ModelTier, SegmentId, SimRunSpec};
 
@@ -158,6 +158,25 @@ pub enum StreamCommand {
     /// engine against the simulated room, on the stage, gated by a session report.
     #[command(after_help = SANDBOX_EXIT_CODES)]
     Sandbox(SandboxArgs),
+    /// Recompute a finished session's watched checks (voiced, face, av_sync, dead_air) from
+    /// its run dir offline, and print its checks and gate. No daemon needed.
+    #[command(after_help = CHECK_EXIT_CODES)]
+    Check(CheckArgs),
+}
+
+/// `shadowrunr stream check` exit codes (also in docs/guide/recording.md).
+pub const CHECK_EXIT_CODES: &str = "Exit codes:
+  0  the session passes its gate
+  2  usage error, or the run dir has no readable session.json
+  6  the session fails its gate";
+
+#[derive(Debug, Args)]
+pub struct CheckArgs {
+    /// The session's run dir (<runs>/sandbox/<session id>).
+    pub dir: PathBuf,
+    /// Write the recomputed checks into the run dir's session.json.
+    #[arg(long)]
+    pub write: bool,
 }
 
 /// `shadowrunr stream sandbox` exit codes (also in docs/guide/cli.md).
@@ -216,6 +235,7 @@ impl SandboxArgs {
             chaos: self.chaos,
             judge: !self.no_judge,
             tone: self.tone.clone(),
+            record: self.record,
         }
     }
 }
@@ -508,6 +528,7 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
         Command::Stream(StreamCommand::Sandbox(a)) => {
             Ok(ExitCode::from(sandbox_cmd(&cfg, a).await))
         }
+        Command::Stream(StreamCommand::Check(a)) => Ok(ExitCode::from(check_cmd(&cfg, a).await)),
         Command::Review(ReviewCommand::Tag(a)) => Ok(ExitCode::from(review_tag_cmd(&cfg, a).await)),
         Command::Prep(c) => Ok(crate::prep::cli::run(&cfg, c).await),
         Command::Voice(c) => Ok(ExitCode::from(crate::voice::cli::run(&cfg, c).await)),
@@ -660,7 +681,12 @@ pub fn report_table(st: &SandboxStatus) -> String {
             SandboxCheckState::Fail => "FAIL",
             SandboxCheckState::Unmeasured => "unmeasured",
         };
-        out.push_str(&format!("{:<12} {:<11} {}\n", c.id, state, c.detail));
+        let note = if check_gates(&r.spec, &c.id) {
+            ""
+        } else {
+            " (not gating: unrecorded)"
+        };
+        out.push_str(&format!("{:<12} {:<11} {}{note}\n", c.id, state, c.detail));
     }
     out.push_str(&format!(
         "session {}: {}, {}\n",
@@ -728,6 +754,48 @@ async fn finish_recording(rec: &mut crate::record::cli::Armed, st: &SandboxStatu
         ),
         Err(e) => eprintln!("recording: {e}"),
     }
+}
+
+/// Recompute the watched checks of the session in `dir` and rewrite its session.json.
+async fn refresh_watched(cfg: &Config, dir: &Path) -> Result<SandboxReport, String> {
+    let (dir, ffmpeg) = (dir.to_path_buf(), cfg.clips.ffmpeg.clone());
+    tokio::task::spawn_blocking(move || crate::record::watch::refresh(&dir, &ffmpeg, true))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// `stream check <dir>`: the watched checks recomputed offline, the checks table and the gate.
+async fn check_cmd(cfg: &Config, a: CheckArgs) -> u8 {
+    let (dir, ffmpeg, write) = (a.dir.clone(), cfg.clips.ffmpeg.clone(), a.write);
+    let r =
+        tokio::task::spawn_blocking(move || crate::record::watch::refresh(&dir, &ffmpeg, write))
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| r);
+    let report = match r {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return EXIT_USAGE;
+        }
+    };
+    let st = SandboxStatus {
+        session_id: report.session_id.clone(),
+        state: SandboxState::Done,
+        elapsed_s: u32::try_from((report.ended_ms - report.started_ms).max(0) / 1000)
+            .unwrap_or(u32::MAX),
+        planned_s: report.spec.minutes * 60,
+        events: 0,
+        max_say_gap_s: report.max_say_gap_s,
+        core_errors: report.core_errors,
+        stage_ack_seq: None,
+        report: Some(report),
+    };
+    print!("{}", report_table(&st));
+    if a.write {
+        println!("written: {}", a.dir.join("session.json").display());
+    }
+    exit_for_status(&st)
 }
 
 async fn sandbox_cmd(cfg: &Config, a: SandboxArgs) -> u8 {
@@ -830,12 +898,20 @@ async fn sandbox_cmd(cfg: &Config, a: SandboxArgs) -> u8 {
             }
         }
         if sandbox_ended(st.state) {
+            let mut st = st;
+            if let Some(r) = rec.as_mut() {
+                finish_recording(r, &st, &started.dir).await;
+                // The recording is in: its watched checks join session.json.
+                if st.report.is_some() {
+                    match refresh_watched(cfg, Path::new(&started.dir)).await {
+                        Ok(report) => st.report = Some(report),
+                        Err(e) => eprintln!("watched checks: {e}"),
+                    }
+                }
+            }
             println!("{}", progress_line(&st));
             print!("{}", report_table(&st));
             println!("dir: {}", started.dir);
-            if let Some(r) = rec.as_mut() {
-                finish_recording(r, &st, &started.dir).await;
-            }
             return exit_for_status(&st);
         }
         if last_line.elapsed() >= PROGRESS_EVERY {
@@ -1558,6 +1634,7 @@ mod tests {
                 chaos: Some(SandboxChaos::Lost),
                 judge: false,
                 tone: Some("theatrical".into()),
+                record: false,
             }
         );
         let a = sandbox_args(&["stream", "sandbox", "--minutes", "5"]);
@@ -1603,6 +1680,7 @@ mod tests {
                     chaos: None,
                     judge: true,
                     tone: None,
+                    record: false,
                 },
                 started_ms: 0,
                 ended_ms: 300_000,

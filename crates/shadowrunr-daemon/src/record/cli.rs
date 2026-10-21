@@ -8,7 +8,9 @@
 //!    play out (it runs seconds behind the events; `wait_for_voice`), then [`TAIL`] longer so
 //!    the end card is in it, then stops;
 //! 3. once the session has its report, the file moves into the run dir as `recording.<ext>`
-//!    beside `recording.json`, whose `stream_offset_ms` comes from the report's `started_ms`.
+//!    beside `recording.json`, whose `stream_offset_ms` comes from the report's `started_ms`;
+//! 4. then the watched checks are measured from it ([`super::watch::refresh`]) into
+//!    `session.json`.
 
 use std::path::{Path, PathBuf};
 
