@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { Case, ChatMsg, Command, Rank, ShownRecord, StreamEvent } from "@shadowrunr/contract";
-import { captionAt, enqueueCaption, foldEvents, matchOption, reduce, shownLane } from "./scene";
+import { matchOption } from "./ballots";
+import { captionAt, enqueueCaption, foldEvents, reduce, shownLane } from "./scene";
 import {
   BROWSER_TABS_MAX,
   CAPTION_QUEUE_MAX,
@@ -346,11 +347,11 @@ describe("polls", () => {
     expect(after.polls.p!.observed).toEqual(s.polls.p!.observed);
   });
 
-  it("moves a changed vote instead of doubling it, and counts !summon as a ballot", () => {
-    let s = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "f", question: "Foil?", options: ["the-disruptor", "the-inspector"], min_rank: "thrall", secs: 40 }));
+  it("moves a changed vote instead of doubling it, and counts !summon as a ballot in a foil vote", () => {
+    let s = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "foil-vote-1", question: "Foil?", options: ["the-disruptor", "the-inspector"], min_rank: "thrall", secs: 40 }));
     s = reduce(s, chat(2, msg("a", "warlock", { cmd: "summon", foil: "the-disruptor" }, "same")));
     s = reduce(s, chat(3, msg("b", "warlock", { cmd: "summon", foil: "the-inspector" }, "same")));
-    const p = s.polls.f!;
+    const p = s.polls["foil-vote-1"]!;
     expect(p.observed["the-disruptor"]).toEqual({ warlock: 0 });
     expect(p.observed["the-inspector"]).toEqual({ warlock: 2 });
     expect(pollBars(p)[0]!.bands).toEqual([{ rank: "unattributed", share: 1 }]);
@@ -362,15 +363,28 @@ describe("polls", () => {
     expect(s.activePoll).toBe("late");
   });
 
-  it("matches options by text, index and unique prefix", () => {
+  // The runtime's rule (Poll::option_index): a unique prefix is NOT a ballot, so the screen may
+  // not count one either. ballots.test.ts holds the screen to runtime-generated vectors.
+  it("matches options by index and exact text, never by prefix, as the runtime does", () => {
     const o = ["the-disruptor", "the-inspector", "HEX-04"];
     expect(matchOption(o, "HEX-04")).toBe("HEX-04");
     expect(matchOption(o, "hex-04")).toBe("HEX-04");
     expect(matchOption(o, "2")).toBe("the-inspector");
     expect(matchOption(o, "9")).toBeNull();
-    expect(matchOption(o, "the-d")).toBe("the-disruptor");
+    expect(matchOption(o, "the-d")).toBeNull();
     expect(matchOption(o, "the")).toBeNull();
     expect(matchOption(o, " ")).toBeNull();
+    let s = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "p", question: "?", options: o, min_rank: "thrall", secs: 30 }));
+    s = reduce(s, chat(2, msg("a", "warlock", { cmd: "vote", option: "the-d" })));
+    expect(s.polls.p!.ballots).toEqual({});
+  });
+
+  it("counts !summon only in a foil vote: a crowd poll ignores it", () => {
+    let s = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "p", question: "?", options: ["the-disruptor", "the-inspector"], min_rank: "thrall", secs: 30 }));
+    s = reduce(s, chat(2, msg("a", "warlock", { cmd: "summon", foil: "the-disruptor" })));
+    expect(s.polls.p!.ballots).toEqual({});
+    s = reduce(s, chat(3, msg("b", "warlock", { cmd: "vote", option: "the-disruptor" })));
+    expect(Object.keys(s.polls.p!.ballots)).toEqual(["v-b"]);
   });
 });
 

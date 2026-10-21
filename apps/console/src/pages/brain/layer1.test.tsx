@@ -94,7 +94,8 @@ describe("brain layer 1", () => {
     expect(count("runs.page")).toBe(1);
     expect(count("ledger.page")).toBe(WINDOW.ledgerPages);
     expect(count("run.transcript")).toBe(9);
-    expect(screen.getByText(/first pages only/)).toBeTruthy();
+    expect(count("ledger.summary")).toBe(1);
+    expect(screen.getByText(/lanes drawn from the first pages/)).toBeTruthy();
     expect(n).toBeLessThan(400);
     console.info(`brain l1 dom-count at 10x: ${n}`);
   });
@@ -118,6 +119,41 @@ describe("brain layer 1", () => {
     await settle(8);
     expect(document.querySelector("[data-role='brain-layer1']")).toBeNull();
     expect(calls).toEqual([]);
+  });
+
+  // 3 runs x 3,000 rows: 9,000 ledger rows, past the 6,000-row window; the tournament row says
+  // 2,400 runs while the window holds 3, so the HUD's runs can only come from the row.
+  const whole = () => {
+    const s = season({ tournaments: 1, runs: 3, rowsPerRun: 3_000, transcriptLines: 10 });
+    return { ...s, tournaments: s.tournaments.map((t) => ({ ...t, runs: 2_400 })) };
+  };
+  const hud = () => document.querySelector("[data-role='brain-scope']")?.textContent ?? "";
+
+  it("quotes the tournament's whole ledger from ledger.summary, not the page window", async () => {
+    const s = whole();
+    const { calls } = mount(<Layer1 active />, daemon(s), "#/brain");
+    await settle(20);
+    expect(calls.filter((c) => c === "ledger.summary")).toHaveLength(1);
+    expect(hud()).toContain("9,000calls · 2,400 runs");
+    const perRole = new Map<string, number>();
+    for (const l of s.ledger) perRole.set(l.role, (perRole.get(l.role) ?? 0) + 1);
+    const lamps = [...document.querySelectorAll("[data-role='brain-lamp']")];
+    expect(lamps).toHaveLength(perRole.size);
+    for (const lamp of lamps) {
+      const role = lamp.getAttribute("data-lamp") ?? "";
+      expect(lamp.textContent, role).toContain(String(perRole.get(role)));
+    }
+    expect(screen.getByText(/lanes drawn from the first pages/)).toBeTruthy();
+    expect(screen.queryByText("Newest tournament · first pages only")).toBeNull();
+  });
+
+  it("falls back to the window's fold, labelled, when ledger.summary fails", async () => {
+    const base = daemon(whole());
+    mount(<Layer1 active />, (m, sent) => (m === "ledger.summary" ? { status: 500, body: { error: { code: "internal", message: "boom" } } } : base(m, sent)), "#/brain");
+    await settle(20);
+    expect(hud()).toContain(`${(WINDOW.ledgerPages * WINDOW.pageSize).toLocaleString("en-US")}calls`);
+    expect(screen.getByText("Newest tournament · first pages only")).toBeTruthy();
+    expect(document.querySelector("[data-role='brain-scope-canvas']")).not.toBeNull();
   });
 
   it("shows the offline state when the daemon is down", async () => {

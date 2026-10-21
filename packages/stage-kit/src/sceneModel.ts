@@ -1,7 +1,7 @@
 // The scene model: what the stage shows at a moment, as plain data. `reduce` (scene.ts) builds it
 // from StreamEvents; nothing here reads a clock.
 
-import type { Case, EndReason, EvidenceGrade, LinkRel, ModelTier, Rank, ScreenId, SegmentId, ShownRecord, VoteTally } from "@shadowrunr/contract";
+import type { Case, Command, EndReason, EvidenceGrade, LinkRel, ModelTier, Rank, ScreenId, SegmentId, ShownRecord, VoteTally } from "@shadowrunr/contract";
 import { ChatMemory } from "./chatMemory";
 import type { TsMs } from "./vocab";
 
@@ -105,6 +105,21 @@ export interface Poll {
   /** viewer id → option, so a changed vote moves rather than doubles. */
   ballots: Record<string, { option: string; rank: Rank }>;
 }
+
+/** A ballot command from chat, held until the poll it may count in opens. */
+export interface PendingBallot {
+  voter: Voter;
+  cmd: Command;
+}
+
+/** Who cast a ballot: the rule reads only the viewer's id and rank. */
+export interface Voter {
+  id: string;
+  rank: Rank;
+}
+
+/** At most this many pending ballots are held; the oldest go first. */
+export const PENDING_BALLOT_MAX = 256;
 
 export interface HexState {
   grade: EvidenceGrade;
@@ -228,6 +243,11 @@ export interface SceneState {
   decrees: Decree[];
   polls: Record<string, Poll>;
   activePoll: string | null;
+  /** `!vote`/`!summon` lines seen while no poll was open, since the runtime last answered a chat
+   * batch. A transcript logs a batch's chat before what the runtime emitted for it, so the
+   * `!summon` that opens a foil vote arrives before its `start_poll`; that op casts these
+   * (ballots.ts `openFoilVote`). Any other event but an input verdict clears them. */
+  pendingBallots: readonly PendingBallot[];
   hexes: Record<string, HexState>;
   revealOrder: string[];
   /** The evidence board's strings, in the order pinned (at most LINK_MAX). */
@@ -296,6 +316,7 @@ export function initialScene(): SceneState {
     decrees: [],
     polls: {},
     activePoll: null,
+    pendingBallots: [],
     hexes: {},
     revealOrder: [],
     links: [],

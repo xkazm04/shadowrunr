@@ -4,9 +4,9 @@
 /** Pushed event type → RPC methods whose cached replies it makes stale. */
 export const EVENT_INVALIDATES: Readonly<Record<string, readonly string[]>> = {
   stream_start: ["runs.list", "runs.page", "tournament.list", "tournaments.page"],
-  stream_end: ["runs.list", "runs.page", "tournament.list", "tournaments.page", "tournament.results", "ledger.page", "review.sessions"],
-  segment_end: ["ledger.page"],
-  job: ["ledger.page"],
+  stream_end: ["runs.list", "runs.page", "tournament.list", "tournaments.page", "tournament.results", "ledger.page", "ledger.summary", "review.sessions"],
+  segment_end: ["ledger.page", "ledger.summary"],
+  job: ["ledger.page", "ledger.summary"],
 };
 
 /** Mutating RPC method → methods to refetch once it succeeds. */

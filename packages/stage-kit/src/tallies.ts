@@ -29,13 +29,13 @@ export interface PollBar {
 /**
  * The options that lead a tally, by the runtime's rule (`outcome` in shadowrunr-segments):
  * highest weight wins, equal weight goes to more voters, options level on both tie. Options
- * nobody voted for never lead. The screen reads this rather than its own rule, so the bar it
+ * nobody voted for never lead, whatever weight a row carries (`outcome` skips `voters == 0`). The screen reads this rather than its own rule, so the bar it
  * crowns is the result the host announces.
  */
 export function leaders(rows: readonly { option: string; weight: number; voters: number }[]): string[] {
   let top: { option: string; weight: number; voters: number }[] = [];
   for (const t of rows) {
-    if (t.voters <= 0 && t.weight <= 0) continue;
+    if (t.voters <= 0) continue;
     const b = top[0];
     if (!b) {
       top = [t];
@@ -50,8 +50,9 @@ export function leaders(rows: readonly { option: string; weight: number; voters:
 
 /**
  * Bars for a poll. Lengths come from the authoritative tallies; the rank colour bands inside
- * each bar come from the rank-weighted `!vote` messages seen in chat. When chat shows no votes
- * for an option, its bar is one neutral "unattributed" band.
+ * each bar come from the rank-weighted ballots seen in chat, counted by the runtime's rule
+ * (ballots.ts, pinned to runtime-generated vectors). When chat shows no votes for an option,
+ * its bar is one neutral "unattributed" band.
  */
 export function pollBars(poll: Poll): PollBar[] {
   const authoritative = poll.tallies.some((t) => t.weight > 0 || t.voters > 0);

@@ -3,8 +3,8 @@
 // playback clock, so seeking is just "fold the events up to t".
 
 import type { ChatMsg, ScreenId, SegmentId, ShownRecord, StreamEvent } from "@shadowrunr/contract";
+import { castBallot, openFoilVote } from "./ballots";
 import type { ChatMemory } from "./chatMemory";
-import { RANK_WEIGHT } from "./lore";
 import {
   BROWSER_TABS_MAX,
   CAPTION_QUEUE_MAX,
@@ -14,6 +14,7 @@ import {
   LANE_MAX,
   LINK_MAX,
   MOMENT_MAX,
+  PENDING_BALLOT_MAX,
   QUEUED_HOLD_MS,
   RECORD_MAX,
   REDACTION_MAX,
@@ -23,6 +24,7 @@ import {
   type Caption,
   type Hint,
   type Job,
+  type PendingBallot,
   type PinnedLink,
   type Poll,
   type Redaction,
@@ -32,7 +34,7 @@ import {
   type Transition,
 } from "./sceneModel";
 import { wordTimings } from "./timing";
-import { RANKS, type TsMs } from "./vocab";
+import type { TsMs } from "./vocab";
 
 function setScreen(
   s: SceneState,
@@ -89,43 +91,6 @@ function showScreen(s: SceneState, screen: ScreenId, recordId: string | undefine
   const pendingScreen: SceneState["pendingScreen"] = { screen, at };
   if (recordId !== undefined) pendingScreen.recordId = recordId;
   return setScreen({ ...s, pendingScreen }, s.mapScreen, at, "screen");
-}
-
-/** Match a chat vote to a poll option: exact (case-insensitive) text, or a 1-based index. */
-export function matchOption(options: string[], raw: string): string | null {
-  const want = raw.trim().toLowerCase();
-  if (want === "") return null;
-  const exact = options.find((o) => o.toLowerCase() === want);
-  if (exact !== undefined) return exact;
-  if (/^\d+$/.test(want)) {
-    const idx = Number(want) - 1;
-    return options[idx] ?? null;
-  }
-  const prefix = options.filter((o) => o.toLowerCase().startsWith(want));
-  return prefix.length === 1 ? prefix[0]! : null;
-}
-
-function castBallot(poll: Poll, msg: ChatMsg, raw: string): Poll {
-  if (poll.closedAt !== undefined) return poll;
-  if (RANKS.indexOf(msg.viewer.rank) < RANKS.indexOf(poll.minRank)) return poll;
-  const option = matchOption(poll.options, raw);
-  if (option === null) return poll;
-  const observed: Poll["observed"] = {};
-  for (const [k, v] of Object.entries(poll.observed)) observed[k] = { ...v };
-  const prev = poll.ballots[msg.viewer.id];
-  if (prev) {
-    const bucket = observed[prev.option] ?? {};
-    bucket[prev.rank] = Math.max(0, (bucket[prev.rank] ?? 0) - RANK_WEIGHT[prev.rank]);
-    observed[prev.option] = bucket;
-  }
-  const bucket = observed[option] ?? {};
-  bucket[msg.viewer.rank] = (bucket[msg.viewer.rank] ?? 0) + RANK_WEIGHT[msg.viewer.rank];
-  observed[option] = bucket;
-  return {
-    ...poll,
-    observed,
-    ballots: { ...poll.ballots, [msg.viewer.id]: { option, rank: msg.viewer.rank } },
-  };
 }
 
 function addDecree(s: SceneState, d: Decree): Decree[] {
@@ -215,13 +180,18 @@ function applyChat(s: SceneState, msg: ChatMsg, at: TsMs): SceneState {
   switch (cmd.cmd) {
     case "vote":
     case "summon": {
+      // The runtime's ballot rule (ballots.ts): which command counts in which poll.
       const pollId = s.activePoll;
       const poll = pollId ? s.polls[pollId] : undefined;
-      if (poll && pollId) {
-        const raw = cmd.cmd === "vote" ? cmd.option : cmd.foil;
-        next = { ...next, polls: { ...s.polls, [pollId]: castBallot(poll, msg, raw) } };
+      const voter = { id: msg.viewer.id, rank: msg.viewer.rank };
+      if (poll && pollId && poll.closedAt === undefined) {
+        const cast = castBallot(poll, voter, cmd);
+        if (cast !== poll) next = { ...next, polls: { ...s.polls, [pollId]: cast } };
+        return next;
       }
-      return next;
+      // No poll open: the line may open a foil vote, whose `start_poll` the transcript logs next.
+      const pendingBallots = [...s.pendingBallots, { voter, cmd }].slice(-PENDING_BALLOT_MAX);
+      return { ...next, pendingBallots };
     }
     case "hint": {
       const prev = s.hints[cmd.hex];
@@ -279,12 +249,17 @@ export function captionAt(s: SceneState, now: TsMs): ScheduledCaption | null {
 /** Apply one event. Pure. */
 export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
   const at = ev.ts_ms;
+  // Chat and the input filter's verdicts on it are a batch; anything else follows the runtime's
+  // answer to it, which is where a foil vote the batch opened shows up.
+  const pending = prev.pendingBallots;
+  const inBatch = ev.type === "chat" || (ev.type === "moderation" && ev.stage === "input");
   let s: SceneState = closeBeat(
     {
       ...prev,
       t0: prev.t0 ?? at,
       lastTs: prev.lastTs === null ? at : Math.max(prev.lastTs, at),
       applied: prev.applied + 1,
+      ...(inBatch || pending.length === 0 ? {} : { pendingBallots: [] }),
     },
     at,
   );
@@ -363,7 +338,7 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
       return { ...s, seq, caption, captions: enqueueCaption(s.captions, caption) };
     }
     case "op":
-      return applyOp(s, ev.op, at);
+      return applyOp(s, ev.op, at, pending);
     case "vote": {
       // A jury tally is not a poll: it feeds the hex's grade tally and never takes the panel.
       if (ev.poll_id.startsWith("grade:")) {
@@ -421,7 +396,12 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
   }
 }
 
-function applyOp(s: SceneState, op: Extract<StreamEvent, { type: "op" }>["op"], at: TsMs): SceneState {
+function applyOp(
+  s: SceneState,
+  op: Extract<StreamEvent, { type: "op" }>["op"],
+  at: TsMs,
+  pending: readonly PendingBallot[],
+): SceneState {
   switch (op.op) {
     case "highlight": {
       if (!s.chats.has(op.msg_id) || s.purged[op.msg_id]) return s;
@@ -444,7 +424,8 @@ function applyOp(s: SceneState, op: Extract<StreamEvent, { type: "op" }>["op"], 
         observed: {},
         ballots: {},
       };
-      return { ...s, polls: { ...s.polls, [op.poll_id]: poll }, activePoll: op.poll_id };
+      const opened = openFoilVote(poll, pending);
+      return { ...s, polls: { ...s.polls, [op.poll_id]: opened }, activePoll: op.poll_id };
     }
     case "close_poll": {
       const poll = s.polls[op.poll_id];

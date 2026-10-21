@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "noEmit": true, "noUnusedLocals": true, "noUnusedParameters": true, "types": ["node"] },
+  "compilerOptions": { "noEmit": true, "noUnusedLocals": true, "noUnusedParameters": true, "resolveJsonModule": true, "types": ["node"] },
   "include": ["src"]
 }

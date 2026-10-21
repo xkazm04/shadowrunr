@@ -1,6 +1,6 @@
 // Test-only (imported by *.test.ts[x] only): contract-valid generated data at any scale and a
 // scripted daemon that pages it by cursor. Every value is generated, never presented as real.
-import type { LedgerEntry, ModelTier, Role, RunRow, StreamEvent, TournamentRow } from "@shadowrunr/contract";
+import type { AccountSummary, LedgerEntry, LedgerSummary, ModelTier, Role, RouteSummary, RunRow, StreamEvent, TournamentRow } from "@shadowrunr/contract";
 import { ok, page, param, type Script } from "../../kit/testing";
 import type { Ctx } from "./draw";
 
@@ -77,6 +77,71 @@ export function transcript(n: number, runId = "gen.run"): StreamEvent[] {
   return out;
 }
 
+const rank = (sorted: readonly number[], p: number): number | undefined =>
+  sorted.length === 0 ? undefined : sorted[Math.min(sorted.length, Math.max(1, Math.ceil((p / 100) * sorted.length))) - 1];
+
+/** What the daemon's `ledger.summary` answers for `rows`: every row folded once (its definitions:
+ * failed calls out of the durations, nearest rank, a missing cost counted as uncosted). */
+export function ledgerSummary(rows: readonly LedgerEntry[]): LedgerSummary {
+  const out: LedgerSummary = { calls: rows.length, errors: 0, fallbacks: 0, cost_usd: 0, uncosted_calls: 0, cache_read_tokens: 0, unrouted: 0, routes: [], accounts: [] };
+  const roles = new Map<string, { r: RouteSummary; dur: number[]; first: number[] }>();
+  const accounts = new Map<string, AccountSummary>();
+  const add = <T,>(xs: T[], x: T | undefined) => {
+    if (x !== undefined && !xs.includes(x)) xs.push(x);
+  };
+  for (const l of rows) {
+    const failed = l.error_kind !== undefined;
+    if (failed) out.errors++;
+    if (l.fallback_reason !== undefined) out.fallbacks++;
+    if (l.cost_usd === undefined) out.uncosted_calls++;
+    else out.cost_usd += l.cost_usd;
+    out.cache_read_tokens += l.usage.cache_read_tokens ?? 0;
+    let e = roles.get(l.role);
+    if (!e) {
+      e = { r: { role: l.role, calls: 0, errors: 0, fallbacks: 0, tiers: [], efforts: [], engines: [], models: [] }, dur: [], first: [] };
+      roles.set(l.role, e);
+    }
+    e.r.calls++;
+    if (failed) e.r.errors++;
+    if (l.fallback_reason !== undefined) e.r.fallbacks++;
+    add(e.r.tiers, l.tier);
+    add(e.r.efforts, l.effort);
+    add(e.r.engines, l.engine);
+    add(e.r.models, l.model);
+    if (!failed) e.dur.push(l.duration_ms);
+    if (l.first_text_ms !== undefined) e.first.push(l.first_text_ms);
+    if (l.engine === undefined || l.account === undefined) {
+      out.unrouted++;
+      continue;
+    }
+    const key = `${l.engine}|${l.account}`;
+    const a = accounts.get(key) ?? { engine: l.engine, account: l.account, calls: 0, errors: 0, models: [], last_ts_ms: 0 };
+    a.calls++;
+    if (failed) a.errors++;
+    const m = l.model === undefined ? undefined : a.models.find((x) => x.model === l.model);
+    if (m) m.calls++;
+    else if (l.model !== undefined) a.models.push({ model: l.model, calls: 1 });
+    if (l.ts_ms >= a.last_ts_ms) {
+      a.last_ts_ms = l.ts_ms;
+      if (l.error_kind === undefined) delete a.last_error;
+      else a.last_error = l.error_kind;
+    }
+    accounts.set(key, a);
+  }
+  const num = (x: number, y: number) => x - y;
+  for (const { r, dur, first } of roles.values()) {
+    dur.sort(num);
+    first.sort(num);
+    const p50 = rank(dur, 50);
+    const p95 = rank(dur, 95);
+    const f50 = rank(first, 50);
+    out.routes.push({ ...r, ...(p50 === undefined ? {} : { duration_p50_ms: p50 }), ...(p95 === undefined ? {} : { duration_p95_ms: p95 }), ...(f50 === undefined ? {} : { first_text_p50_ms: f50 }) });
+  }
+  out.routes.sort((x, y) => y.calls - x.calls);
+  out.accounts = [...accounts.values()].sort((x, y) => y.calls - x.calls);
+  return out;
+}
+
 export interface Season {
   readonly tournaments: TournamentRow[];
   readonly runs: RunRow[];
@@ -104,6 +169,8 @@ export function daemon(s: Season | null, transcripts = new Map<string, StreamEve
         return page(s.runs, sent);
       case "ledger.page":
         return page(param(sent, "tournament_id") === undefined ? [] : s.ledger, sent);
+      case "ledger.summary":
+        return ok(ledgerSummary(param(sent, "tournament_id") === undefined ? [] : s.ledger));
       case "run.transcript": {
         const id = param(sent, "run_id") ?? "";
         let tr = transcripts.get(id);

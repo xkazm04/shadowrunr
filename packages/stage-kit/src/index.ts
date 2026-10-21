@@ -6,6 +6,7 @@
 export * from "./vocab";
 export * from "./sceneModel";
 export * from "./scene";
+export * from "./ballots";
 export * from "./tallies";
 export * from "./playback";
 export * from "./hexgrid";
