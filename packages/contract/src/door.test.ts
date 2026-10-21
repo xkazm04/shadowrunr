@@ -288,3 +288,63 @@ describe("per-method result validators (lazy)", () => {
     expect(Object.keys(loaders).sort()).toEqual([...RPC_METHODS].sort());
   });
 });
+
+describe("tagged unions validate by their tag (the first issue is the real one)", () => {
+  const start = {
+    type: "stream_start",
+    ts_ms: 0,
+    stream_id: "s",
+    character: "malakor",
+    tone_variant: "theatrical",
+    core_tier: "haiku",
+    audience_size: 3,
+  };
+
+  function invalidOf(r: { ok: boolean; error?: unknown }) {
+    expect(r.ok).toBe(false);
+    const e = (r as { error: { kind: string } }).error;
+    expect(e.kind).toBe("invalid");
+    return e as { kind: "invalid"; path: string; message: string; issues: { path: string; message: string }[] };
+  }
+
+  it("a bare stream_end without its reason names 'reason', not the envelope's seq", () => {
+    const e = invalidOf(parseEvent({ type: "stream_end", ts_ms: 5 }));
+    expect(e.issues[0]?.message).toContain("'reason'");
+    expect(e.message).toContain("'reason'");
+  });
+
+  it("an enveloped health without its state names '/event' 'state' in at most two issues", () => {
+    const e = invalidOf(parseEvent({ seq: 9, run_id: "r", event: { type: "health", ts_ms: 1 } }));
+    expect(e.path).toBe("/event");
+    expect(e.issues[0]?.message).toContain("'state'");
+    expect(e.issues.length).toBeLessThanOrEqual(2);
+  });
+
+  it("a stream_start with a bad field names that field's path", () => {
+    const e = invalidOf(parseEvent({ ...start, audience_size: "three" }));
+    expect(e.path).toBe("/audience_size");
+  });
+
+  it("an unknown tag value is reported at the tag, as not in the union", () => {
+    const e = invalidOf(parseEvent({ type: "teleport", ts_ms: 1 }));
+    expect(e.path).toBe("/type");
+    expect(e.issues[0]?.message).toContain('"teleport"');
+    expect(e.issues[0]?.message).toMatch(/not one of the union/);
+  });
+
+  it("a malformed event inside run.transcript names its missing field", async () => {
+    const r = await parseRpcResult("run.transcript", {
+      result: [start, { type: "say", ts_ms: 1, speaker: "lord" }],
+    });
+    const e = invalidOf(r);
+    expect(e.path).toBe("/result/1");
+    expect(e.issues[0]?.message).toContain("'text'");
+  });
+
+  it("still accepts an error frame that carries extra fields, and an event with a stray key (accepted set unchanged)", () => {
+    expect(parseEvent({ error: { code: "busy", message: "x" }, extra: 1 }).ok).toBe(true);
+    expect(parseEvent({ type: "health", ts_ms: 1, state: "ok", error: "x" }).ok).toBe(
+      parseEvent({ type: "health", ts_ms: 1, state: "ok" }).ok,
+    );
+  });
+});
