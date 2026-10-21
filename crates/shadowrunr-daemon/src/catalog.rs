@@ -10,8 +10,11 @@ use shadowrunr_brain::rules::{self, RulesOverride};
 use shadowrunr_brain::{load_character_with, BrainError, CharacterPackage};
 use shadowrunr_segments::command::COMMAND_SPECS;
 use shadowrunr_segments::ranks::LADDER;
-use shadowrunr_segments::table::{self, Guard, Trigger, COMMAND_NAMES, OP_TAGS};
-use shadowrunr_segments::RankTable;
+use shadowrunr_segments::table::{
+    self, ArcRules, ClockRules, ColdOpenRule, Guard, StateRules, Transition, Trigger,
+    COMMAND_NAMES, OP_TAGS,
+};
+use shadowrunr_segments::{HandoverRule, RankTable, SegmentTable};
 use shadowrunr_types::catalog::*;
 
 use crate::config::Config;
@@ -332,6 +335,146 @@ fn guard_name(g: Guard) -> &'static str {
     }
 }
 
+/// One table as the operator sees it. Every struct is destructured without `..`, so a rule
+/// added to a table does not compile until the operator's view carries it too.
+fn segment_table_info(t: &SegmentTable) -> SegmentTableInfo {
+    let SegmentTable {
+        id,
+        title,
+        status,
+        initial,
+        states,
+        allowed_ops,
+        screens,
+        commands,
+        switch_to,
+        rules_prompt,
+        design_notes,
+        clock,
+        transitions,
+        state_rules,
+        arc,
+    } = t;
+    let ClockRules {
+        foil_vote_secs,
+        poll_min_secs,
+        poll_max_secs,
+        max_poll_options,
+        max_searches_per_hex,
+        plebiscite_secs,
+        handover,
+        cold_open,
+    } = clock;
+    SegmentTableInfo {
+        id: *id,
+        title: title.clone(),
+        status: *status,
+        initial: initial.clone(),
+        states: states.clone(),
+        allowed_ops: allowed_ops.clone(),
+        screens: screens.clone(),
+        commands: commands.clone(),
+        switch_to: switch_to.clone(),
+        rules_prompt: rules_prompt.clone(),
+        design_notes: design_notes.clone(),
+        clock: ClockInfo {
+            foil_vote_secs: *foil_vote_secs,
+            poll_min_secs: *poll_min_secs,
+            poll_max_secs: *poll_max_secs,
+            max_poll_options: u32::try_from(*max_poll_options).unwrap_or(u32::MAX),
+            max_searches_per_hex: *max_searches_per_hex,
+            plebiscite_secs: *plebiscite_secs,
+            handover: handover.map(|h| {
+                let HandoverRule {
+                    to,
+                    ccv_min,
+                    sustain_s,
+                    max_elapsed_s,
+                    grace_s,
+                } = h;
+                HandoverInfo {
+                    to,
+                    ccv_min,
+                    sustain_s,
+                    max_elapsed_s,
+                    grace_s,
+                }
+            }),
+            cold_open: cold_open.as_ref().map(|c| {
+                let ColdOpenRule {
+                    to,
+                    min_s,
+                    max_s,
+                    active_chatters,
+                    window_s,
+                    sustain_s,
+                } = c;
+                ColdOpenInfo {
+                    to: to.clone(),
+                    min_s: *min_s,
+                    max_s: *max_s,
+                    active_chatters: *active_chatters,
+                    window_s: *window_s,
+                    sustain_s: *sustain_s,
+                }
+            }),
+        },
+        transitions: transitions
+            .iter()
+            .map(|r| {
+                let Transition {
+                    from,
+                    on,
+                    guard,
+                    to,
+                } = r;
+                TransitionInfo {
+                    from: from.clone(),
+                    on: trigger_name(*on).into(),
+                    guard: guard.map(|g| guard_name(g).into()),
+                    to: to.clone(),
+                }
+            })
+            .collect(),
+        state_rules: state_rules
+            .iter()
+            .map(|(state, r)| {
+                let StateRules {
+                    allowed_ops,
+                    prompt,
+                    screens,
+                } = r;
+                let info = StateRulesInfo {
+                    allowed_ops: allowed_ops.clone(),
+                    prompt: prompt.clone(),
+                    screens: screens.clone(),
+                };
+                (state.clone(), info)
+            })
+            .collect(),
+        arc: arc.as_ref().map(|a| {
+            let ArcRules {
+                min_planned_s,
+                acts,
+                seal_s,
+                reveal_pacing,
+                reveal_gap_pct,
+                reveal_needs_work,
+                recap_cooldown_s,
+            } = a;
+            ArcInfo {
+                min_planned_s: *min_planned_s,
+                acts: acts.clone(),
+                seal_s: *seal_s,
+                reveal_pacing: *reveal_pacing,
+                reveal_gap_pct: *reveal_gap_pct,
+                reveal_needs_work: *reveal_needs_work,
+                recap_cooldown_s: *recap_cooldown_s,
+            }
+        }),
+    }
+}
+
 /// `segments.tables`: the compiled-in tables the segment runtime interprets, and the chat
 /// commands with the rank gate of `<segments>/ranks.toml`.
 pub fn segment_tables(cfg: &Config) -> Result<SegmentTables, RpcError> {
@@ -339,44 +482,7 @@ pub fn segment_tables(cfg: &Config) -> Result<SegmentTables, RpcError> {
     let ranks = RankTable::load_or_builtin(&path)
         .map_err(|e| RpcError::io(format!("{}: {e}", path.display())))?;
     let tables = table::tables().map_err(|e| RpcError::internal(e.to_string()))?;
-    let segments = tables
-        .iter()
-        .map(|t| SegmentTableInfo {
-            id: t.id,
-            title: t.title.clone(),
-            status: t.status,
-            initial: t.initial.clone(),
-            states: t.states.clone(),
-            allowed_ops: t.allowed_ops.clone(),
-            commands: t.commands.clone(),
-            switch_to: t.switch_to.clone(),
-            rules_prompt: t.rules_prompt.clone(),
-            design_notes: t.design_notes.clone(),
-            clock: ClockInfo {
-                foil_vote_secs: t.clock.foil_vote_secs,
-                poll_min_secs: t.clock.poll_min_secs,
-                poll_max_secs: t.clock.poll_max_secs,
-                max_poll_options: u32::try_from(t.clock.max_poll_options).unwrap_or(u32::MAX),
-                handover: t.clock.handover.map(|h| HandoverInfo {
-                    to: h.to,
-                    ccv_min: h.ccv_min,
-                    sustain_s: h.sustain_s,
-                    max_elapsed_s: h.max_elapsed_s,
-                    grace_s: h.grace_s,
-                }),
-            },
-            transitions: t
-                .transitions
-                .iter()
-                .map(|r| TransitionInfo {
-                    from: r.from.clone(),
-                    on: trigger_name(r.on).into(),
-                    guard: r.guard.map(|g| guard_name(g).into()),
-                    to: r.to.clone(),
-                })
-                .collect(),
-        })
-        .collect();
+    let segments = tables.iter().map(segment_table_info).collect();
     Ok(SegmentTables {
         segments,
         op_tags: OP_TAGS.iter().map(|s| s.to_string()).collect(),
@@ -423,4 +529,83 @@ pub fn rank_table(cfg: &Config, character: Option<&str>) -> Result<RankTableInfo
             })
             .collect(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+
+    /// Key paths of a table, `[]` for an array of tables (`transitions[].from`).
+    fn toml_paths(v: &toml::Value, at: &str, out: &mut BTreeSet<String>) {
+        match v {
+            toml::Value::Table(t) => {
+                for (k, v) in t {
+                    let p = if at.is_empty() {
+                        k.clone()
+                    } else {
+                        format!("{at}.{k}")
+                    };
+                    out.insert(p.clone());
+                    toml_paths(v, &p, out);
+                }
+            }
+            toml::Value::Array(a) => {
+                for v in a.iter().filter(|v| v.is_table()) {
+                    toml_paths(v, &format!("{at}[]"), out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn json_paths(v: &serde_json::Value, at: &str, out: &mut BTreeSet<String>) {
+        match v {
+            serde_json::Value::Object(o) => {
+                for (k, v) in o {
+                    let p = if at.is_empty() {
+                        k.clone()
+                    } else {
+                        format!("{at}.{k}")
+                    };
+                    out.insert(p.clone());
+                    json_paths(v, &p, out);
+                }
+            }
+            serde_json::Value::Array(a) => {
+                for v in a.iter().filter(|v| v.is_object()) {
+                    json_paths(v, &format!("{at}[]"), out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The operator's view of a table carries every rule the table declares. Read from the
+    /// TOML sources rather than from the projection, so a rule added to a table and not to
+    /// `segments.tables` fails here instead of vanishing from the console.
+    #[test]
+    fn segment_tables_carry_every_declared_rule() {
+        let infos: Vec<serde_json::Value> = table::tables()
+            .unwrap()
+            .iter()
+            .map(|t| serde_json::to_value(segment_table_info(t)).unwrap())
+            .collect();
+        let mut missing = Vec::new();
+        for (file, src) in table::SEGMENT_TABLE_SOURCES {
+            let declared: toml::Value = toml::from_str(src).unwrap();
+            let id = declared["id"].as_str().unwrap();
+            let info = infos.iter().find(|i| i["id"] == id).unwrap();
+            let (mut want, mut have) = (BTreeSet::new(), BTreeSet::new());
+            toml_paths(&declared, "", &mut want);
+            json_paths(info, "", &mut have);
+            missing.extend(want.difference(&have).map(|p| format!("{file}: {p}")));
+        }
+        assert!(
+            missing.is_empty(),
+            "declared but not projected:\n{}",
+            missing.join("\n")
+        );
+    }
 }

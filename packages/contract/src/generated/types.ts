@@ -3378,6 +3378,7 @@ export interface SegmentTableInfo {
    * `Op` tags the brain may emit in this segment.
    */
   allowed_ops: string[];
+  arc?: ArcInfo;
   clock: ClockInfo;
   /**
    * Chat command names accepted in this segment.
@@ -3387,6 +3388,16 @@ export interface SegmentTableInfo {
   id: SegmentId;
   initial: string;
   rules_prompt: string;
+  /**
+   * Screens `show_screen` may put up; the first is the default at `segment_start`.
+   */
+  screens?: string[];
+  /**
+   * Per-state rules, keyed by state name; omitted when the table declares none.
+   */
+  state_rules?: {
+    [k: string]: StateRulesInfo | undefined;
+  };
   states: string[];
   status: SegmentStatus;
   switch_to: SegmentId[];
@@ -3394,15 +3405,73 @@ export interface SegmentTableInfo {
   transitions: TransitionInfo[];
 }
 /**
+ * SEG-02A's multi-act arc for a long stream.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ArcInfo".
+ */
+export interface ArcInfo {
+  acts: string[];
+  /**
+   * The arc runs only when the segment is planned for at least this long.
+   */
+  min_planned_s: number;
+  /**
+   * Direction only: at most one act recap per this many seconds; 0 is off.
+   */
+  recap_cooldown_s: number;
+  /**
+   * Least gap between two reveals, in percent of a slot; 0 is off.
+   */
+  reveal_gap_pct: number;
+  /**
+   * A reveal needs a search or a closed crowd vote on the hex first (`reveal_needs_work`).
+   */
+  reveal_needs_work: boolean;
+  /**
+   * One reveal slot per hex staged for an act (`reveal_not_due`).
+   */
+  reveal_pacing: boolean;
+  /**
+   * The seal window at the end of the planned time; `sign_off` waits for it.
+   */
+  seal_s: number;
+}
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ClockInfo".
  */
 export interface ClockInfo {
+  cold_open?: ColdOpenInfo;
   foil_vote_secs: number;
   handover?: HandoverInfo;
   max_poll_options: number;
+  /**
+   * Bone-clerk searches per hex per stream before a Plebiscite takes the hex's next move.
+   */
+  max_searches_per_hex?: number;
+  /**
+   * Length of that Plebiscite.
+   */
+  plebiscite_secs?: number;
   poll_max_secs: number;
   poll_min_secs: number;
+}
+/**
+ * SEG-01's cold open: ends at `to` once `active_chatters` distinct chatters (each wrote in
+ * the last `window_s` seconds) have held for `sustain_s`, never before `min_s`, and at
+ * `max_s` regardless. The handover's audience path waits for it; its ceiling does not.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ColdOpenInfo".
+ */
+export interface ColdOpenInfo {
+  active_chatters: number;
+  max_s: number;
+  min_s: number;
+  sustain_s: number;
+  to: string;
+  window_s: number;
 }
 /**
  * SEG-01's handover clock rule.
@@ -3416,6 +3485,20 @@ export interface HandoverInfo {
   max_elapsed_s: number;
   sustain_s: number;
   to: SegmentId;
+}
+/**
+ * What one state narrows (`[state_rules.<state>]`); an absent list means the segment's.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "StateRulesInfo".
+ */
+export interface StateRulesInfo {
+  allowed_ops?: string[];
+  /**
+   * The line the state summary carries while the segment is in this state.
+   */
+  prompt?: string;
+  screens?: string[];
 }
 /**
  * One transition row: `(from, on[, guard]) -> to`; `from = "*"` matches any state.

@@ -148,8 +148,59 @@ pub struct ClockInfo {
     pub poll_min_secs: u32,
     pub poll_max_secs: u32,
     pub max_poll_options: u32,
+    /// Bone-clerk searches per hex per stream before a Plebiscite takes the hex's next move.
+    #[serde(default)]
+    pub max_searches_per_hex: u32,
+    /// Length of that Plebiscite.
+    #[serde(default)]
+    pub plebiscite_secs: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handover: Option<HandoverInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cold_open: Option<ColdOpenInfo>,
+}
+
+/// SEG-01's cold open: ends at `to` once `active_chatters` distinct chatters (each wrote in
+/// the last `window_s` seconds) have held for `sustain_s`, never before `min_s`, and at
+/// `max_s` regardless. The handover's audience path waits for it; its ceiling does not.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ColdOpenInfo {
+    pub to: String,
+    pub min_s: u32,
+    pub max_s: u32,
+    pub active_chatters: u32,
+    pub window_s: u32,
+    pub sustain_s: u32,
+}
+
+/// What one state narrows (`[state_rules.<state>]`); an absent list means the segment's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StateRulesInfo {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_ops: Option<Vec<String>>,
+    /// The line the state summary carries while the segment is in this state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screens: Option<Vec<String>>,
+}
+
+/// SEG-02A's multi-act arc for a long stream.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ArcInfo {
+    /// The arc runs only when the segment is planned for at least this long.
+    pub min_planned_s: u32,
+    pub acts: Vec<String>,
+    /// The seal window at the end of the planned time; `sign_off` waits for it.
+    pub seal_s: u32,
+    /// One reveal slot per hex staged for an act (`reveal_not_due`).
+    pub reveal_pacing: bool,
+    /// Least gap between two reveals, in percent of a slot; 0 is off.
+    pub reveal_gap_pct: u32,
+    /// A reveal needs a search or a closed crowd vote on the hex first (`reveal_needs_work`).
+    pub reveal_needs_work: bool,
+    /// Direction only: at most one act recap per this many seconds; 0 is off.
+    pub recap_cooldown_s: u32,
 }
 
 /// One parsed segment table.
@@ -162,6 +213,9 @@ pub struct SegmentTableInfo {
     pub states: Vec<String>,
     /// `Op` tags the brain may emit in this segment.
     pub allowed_ops: Vec<String>,
+    /// Screens `show_screen` may put up; the first is the default at `segment_start`.
+    #[serde(default)]
+    pub screens: Vec<String>,
     /// Chat command names accepted in this segment.
     pub commands: Vec<String>,
     pub switch_to: Vec<SegmentId>,
@@ -170,6 +224,11 @@ pub struct SegmentTableInfo {
     pub design_notes: Option<String>,
     pub clock: ClockInfo,
     pub transitions: Vec<TransitionInfo>,
+    /// Per-state rules, keyed by state name; omitted when the table declares none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub state_rules: BTreeMap<String, StateRulesInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc: Option<ArcInfo>,
 }
 
 /// One chat command as the runtime's parser reads it (`shadowrunr-segments` `command.rs`).

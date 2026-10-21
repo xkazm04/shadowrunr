@@ -14,10 +14,12 @@ const seg01: SegmentTableInfo = {
   initial: "opening",
   states: ["opening", "foil_vote", "foil_live", "crowd_game", "handover_pending"],
   allowed_ops: ["highlight", "start_poll", "close_poll", "summon_foil", "dismiss_foil", "show_card", "mark_moment", "switch_segment", "sign_off"],
+  screens: ["host"],
   commands: ["summon", "propose", "vote"],
   switch_to: ["SEG-02A"],
   rules_prompt: "SEGMENT SEG-01: THE IMPROVISED ROOM.\nYou open the show and warm the room.",
-  clock: { foil_vote_secs: 60, poll_min_secs: 10, poll_max_secs: 600, max_poll_options: 6, handover: { to: "SEG-02A", ccv_min: 15, sustain_s: 180, max_elapsed_s: 1500, grace_s: 60 } },
+  clock: { foil_vote_secs: 60, poll_min_secs: 10, poll_max_secs: 600, max_poll_options: 6, handover: { to: "SEG-02A", ccv_min: 15, sustain_s: 180, max_elapsed_s: 1500, grace_s: 60 }, cold_open: { to: "opening", min_s: 60, max_s: 180, active_chatters: 5, window_s: 60, sustain_s: 20 } },
+  state_rules: { cold_open: { allowed_ops: ["highlight", "show_card", "mark_moment", "sign_off"], prompt: "The room is still filling.", screens: ["host"] } },
   transitions: [
     { from: "opening", on: "foil_vote_opened", to: "foil_vote" },
     { from: "foil_vote", on: "foil_vote_closed", guard: "foil_active", to: "foil_live" },
@@ -36,7 +38,8 @@ const seg02a: SegmentTableInfo = {
   commands: ["hint", "grade", "vote"],
   switch_to: [],
   rules_prompt: "SEGMENT SEG-02A: THE HEXMAP INVESTIGATION.",
-  clock: { foil_vote_secs: 60, poll_min_secs: 10, poll_max_secs: 600, max_poll_options: 6 },
+  clock: { foil_vote_secs: 60, poll_min_secs: 10, poll_max_secs: 600, max_poll_options: 6, max_searches_per_hex: 2, plebiscite_secs: 60 },
+  arc: { min_planned_s: 3600, acts: ["Anomaly and filing map", "Shell and archive trail", "Dossier sealed"], seal_s: 600, reveal_pacing: true, reveal_gap_pct: 50, reveal_needs_work: true, recap_cooldown_s: 900 },
   transitions: [{ from: "briefing", on: "hex_revealed", to: "investigating" }],
 };
 

@@ -12,6 +12,59 @@
       ],
       "type": "object"
     },
+    "ArcInfo": {
+      "description": "SEG-02A's multi-act arc for a long stream.",
+      "properties": {
+        "acts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "min_planned_s": {
+          "description": "The arc runs only when the segment is planned for at least this long.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "recap_cooldown_s": {
+          "description": "Direction only: at most one act recap per this many seconds; 0 is off.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reveal_gap_pct": {
+          "description": "Least gap between two reveals, in percent of a slot; 0 is off.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reveal_needs_work": {
+          "description": "A reveal needs a search or a closed crowd vote on the hex first (`reveal_needs_work`).",
+          "type": "boolean"
+        },
+        "reveal_pacing": {
+          "description": "One reveal slot per hex staged for an act (`reveal_not_due`).",
+          "type": "boolean"
+        },
+        "seal_s": {
+          "description": "The seal window at the end of the planned time; `sign_off` waits for it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "min_planned_s",
+        "acts",
+        "seal_s",
+        "reveal_pacing",
+        "reveal_gap_pct",
+        "reveal_needs_work",
+        "recap_cooldown_s"
+      ],
+      "type": "object"
+    },
     "BeatMode": {
       "description": "What the orchestrator chose for one beat (`StreamEvent::BeatPlan`).",
       "oneOf": [
@@ -1937,6 +1990,9 @@
     },
     "ClockInfo": {
       "properties": {
+        "cold_open": {
+          "$ref": "#/$defs/ColdOpenInfo"
+        },
         "foil_vote_secs": {
           "format": "uint32",
           "minimum": 0,
@@ -1946,6 +2002,20 @@
           "$ref": "#/$defs/HandoverInfo"
         },
         "max_poll_options": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_searches_per_hex": {
+          "default": 0,
+          "description": "Bone-clerk searches per hex per stream before a Plebiscite takes the hex's next move.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "plebiscite_secs": {
+          "default": 0,
+          "description": "Length of that Plebiscite.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -1995,6 +2065,48 @@
         "title",
         "beats",
         "handoff"
+      ],
+      "type": "object"
+    },
+    "ColdOpenInfo": {
+      "description": "SEG-01's cold open: ends at `to` once `active_chatters` distinct chatters (each wrote in\nthe last `window_s` seconds) have held for `sustain_s`, never before `min_s`, and at\n`max_s` regardless. The handover's audience path waits for it; its ceiling does not.",
+      "properties": {
+        "active_chatters": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sustain_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "to": {
+          "type": "string"
+        },
+        "window_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "to",
+        "min_s",
+        "max_s",
+        "active_chatters",
+        "window_s",
+        "sustain_s"
       ],
       "type": "object"
     },
@@ -6009,6 +6121,9 @@
           },
           "type": "array"
         },
+        "arc": {
+          "$ref": "#/$defs/ArcInfo"
+        },
         "clock": {
           "$ref": "#/$defs/ClockInfo"
         },
@@ -6030,6 +6145,21 @@
         },
         "rules_prompt": {
           "type": "string"
+        },
+        "screens": {
+          "default": [],
+          "description": "Screens `show_screen` may put up; the first is the default at `segment_start`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "state_rules": {
+          "additionalProperties": {
+            "$ref": "#/$defs/StateRulesInfo"
+          },
+          "description": "Per-state rules, keyed by state name; omitted when the table declares none.",
+          "type": "object"
         },
         "states": {
           "items": {
@@ -6425,6 +6555,28 @@
           "type": "string"
         }
       ]
+    },
+    "StateRulesInfo": {
+      "description": "What one state narrows (`[state_rules.<state>]`); an absent list means the segment's.",
+      "properties": {
+        "allowed_ops": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "prompt": {
+          "description": "The line the state summary carries while the segment is in this state.",
+          "type": "string"
+        },
+        "screens": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
     },
     "StreamBrief": {
       "description": "What one stream receives from the Lord of the Darkness (WP15): the latest chosen plan's\ndispatch, segments and topics, plus the directives that are active when the stream starts\n(never proposed or inactive ones). The brain renders it once, in its stable prefix; the sim\nhashes its canonical JSON into the instrument. Built by `shadowrunr_brain::build_stream_brief`\n(the one builder, used by the live path and the sim). A brief with nothing in it is no brief.",
