@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Malakor's depth map, made offline from the face rig (streamer-screen prototype B).
 
-    python tools/avatar/depth_map.py <rig dir> [--method analytic-v1]
+    python tools/avatar/depth_map.py <rig dir> [--method analytic-v1 | learned-v1] [--model-python <py>]
 
 Reads the rig's `layers.json` and its PNGs and writes, into the same folder:
 
@@ -19,8 +19,17 @@ from the owner's portrait, so the map is the owner's file too: it lives beside t
 **Methods.** A method turns the rig into a `Surface`: the depth of each visible pixel and the
 plane depth of each floating part. `analytic-v1` builds it from the rig's geometry and its
 layers (an ellipsoid head carved by the dark of its sockets, a forward jaw, the crown shards on
-a ring, a forward-leaning torso slab). A learned monocular map would be another method that
-returns the same `Surface`; everything after it (fill, encoding, the JSON) stays as it is.
+a ring, a forward-leaning torso slab). `learned-v1` puts a monocular depth model's map
+(Depth-Anything-V2-Small) on the same geometry: the head calibrated to that ellipsoid, the torso
+the same slab carved with the model's relief, the shards on the same planes. Everything after
+the method (fill, encoding, the JSON) is shared.
+
+**learned-v1 runs in two Pythons.** This script needs numpy and Pillow; the model step
+(`learned_depth.py`) needs numpy and onnxruntime. `--method learned-v1` writes the model's input
+beside the rig (`learned.in.npy`) and stops with exit 2 until `learned_depth.py` has written
+`learned.out.npy` and `learned.json` for that very input; run again, it writes the map. With
+`--model-python <python with onnxruntime>` (or `SHADOWRUNR_DEPTH_PYTHON`) it runs the model step
+itself. The `learned.*` files are cut from the portrait too, and stay beside the rig.
 """
 
 from __future__ import annotations
@@ -28,9 +37,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
 from typing import Callable
 
@@ -52,6 +64,7 @@ class Rig:
     alpha: dict[str, np.ndarray] = field(default_factory=dict)
     luma: dict[str, np.ndarray] = field(default_factory=dict)
     files: dict[str, bytes] = field(default_factory=dict)
+    folder: Path | None = None
 
 
 @dataclass
@@ -62,6 +75,9 @@ class Surface:
     depth: np.ndarray
     known: np.ndarray
     planes: dict[str, float]
+    # more files the method read (named in `inputs`), and more keys for `depth.json`
+    inputs: dict[str, bytes] = field(default_factory=dict)
+    meta: dict = field(default_factory=dict)
 
 
 def load_rig(folder: Path) -> Rig:
@@ -70,7 +86,7 @@ def load_rig(folder: Path) -> Rig:
     if spec.get("rig_type") != "glow":
         raise ValueError(f"layers.json is a {spec.get('rig_type')} rig, not a glow rig")
     w, h = int(spec["width"]), int(spec["height"])
-    rig = Rig(spec=spec, width=w, height=h)
+    rig = Rig(spec=spec, width=w, height=h, folder=folder)
     rig.files["layers.json"] = raw
     for layer in spec["layers"]:
         name, file = layer["name"], layer.get("file")
@@ -208,21 +224,28 @@ def crown_planes(rig: Rig) -> dict[str, float]:
     return planes
 
 
+def cover(rig: Rig, *wanted: str) -> np.ndarray:
+    """The union of the coverage of the layers of these kinds."""
+    a = np.zeros((rig.height, rig.width), np.float32)
+    for layer in rig.spec["layers"]:
+        if layer.get("kind") in wanted and layer["name"] in rig.alpha:
+            a = np.maximum(a, rig.alpha[layer["name"]])
+    return a
+
+
+def head_region(head_all: np.ndarray) -> np.ndarray:
+    """The head's region: its matte with the small gaps in it closed (between the cheekbone and the
+    jaw the collar shows through; a hole there would tear the head's mesh on every turn)."""
+    return np.maximum(smoothstep(0.35, 0.65, head_all), smoothstep(0.3, 0.55, blur(head_all, CLOSE_PX)))
+
+
 def analytic_v1(rig: Rig) -> Surface:
     layers = rig.spec["layers"]
     kinds = {l["name"]: l.get("kind") for l in layers}
     zeros = np.zeros((rig.height, rig.width), np.float32)
 
-    def cover(*wanted: str) -> np.ndarray:
-        a = zeros.copy()
-        for name, k in kinds.items():
-            if k in wanted and name in rig.alpha:
-                a = np.maximum(a, rig.alpha[name])
-        return a
-
-    body = cover("body")
-    skull = cover("head")
-    jaw = cover("aperture_lower", "aperture_upper")
+    skull = cover(rig, "head")
+    jaw = cover(rig, "aperture_lower", "aperture_upper")
     head_all = np.maximum(skull, jaw)
 
     # the head: the ellipsoid, carved where the skull is dark inside its own matte (the sockets,
@@ -232,9 +255,7 @@ def analytic_v1(rig: Rig) -> Surface:
         if k in ("head", "aperture_lower", "aperture_upper") and name in rig.luma:
             a = rig.alpha[name]
             lum = lum * (1.0 - a) + rig.luma[name] * a
-    # the head's region: its matte with the small gaps in it closed (between the cheekbone and the
-    # jaw the collar shows through; a hole there would tear the head's mesh on every turn)
-    closed = np.maximum(smoothstep(0.35, 0.65, head_all), smoothstep(0.3, 0.55, blur(head_all, CLOSE_PX)))
+    closed = head_region(head_all)
     inner = np.clip(blur(head_all, 6.0) * 2.0 - 1.0, 0.0, 1.0)  # away from the silhouette
     dark = smoothstep(0.32, 0.05, lum) * inner
     carve = blur(dark, 8.0)
@@ -243,11 +264,14 @@ def analytic_v1(rig: Rig) -> Surface:
     # the jaw a little forward, its edge eased in
     head_z = head_z + JAW_FORWARD_PX * blur(jaw, 3.0)
 
-    torso_z = torso_surface(rig)
+    return layered(rig, torso_surface(rig), head_z, closed)
 
-    # the visible surface, back to front: torso, head, then the floating parts at their planes
+
+def layered(rig: Rig, torso_z: np.ndarray, head_z: np.ndarray, closed: np.ndarray) -> Surface:
+    """The visible surface, back to front: the torso, the head over its closed region, then the
+    floating parts at their planes (`crown_planes`, whatever the method)."""
     planes = crown_planes(rig)
-    soft_body = smoothstep(0.35, 0.65, body)
+    soft_body = smoothstep(0.35, 0.65, cover(rig, "body"))
     depth = torso_z.copy()
     known = soft_body
     hard = closed
@@ -260,7 +284,202 @@ def analytic_v1(rig: Rig) -> Surface:
     return Surface(depth=depth.astype(np.float32), known=known.astype(np.float32), planes=planes)
 
 
-METHODS: dict[str, Callable[[Rig], Surface]] = {"analytic-v1": analytic_v1}
+# ---------------------------------------------------------------- the learned method
+
+# The model's input: the portrait at this square size (a multiple of the model's 14 px patch; the
+# Small model's own processor size), bicubic, normalised as the model was trained.
+MODEL_SIDE = 518
+MODEL_MEAN = (0.485, 0.456, 0.406)
+MODEL_STD = (0.229, 0.224, 0.225)
+# the files beside the rig the model step reads and writes (`learned_depth.py`)
+LEARNED_IN = "learned.in.npy"
+LEARNED_OUT = "learned.out.npy"
+LEARNED_META = "learned.json"
+# The calibration's two anchors on the head's ellipsoid, as fractions of its radii: the centre
+# disc, and the ring inside the rim.
+ANCHOR_CENTRE = 0.35
+ANCHOR_RIM = (0.8, 0.95)
+# The model's depth is trusted this far (px) inside a matte; nearer the edge it blends with the
+# backplate it was shown, so the edge takes the depth just inside it.
+EDGE_PX = 4.0
+# How far past the analytic head and torso the calibrated depth may reach, as a fraction of the
+# head's depth, before it is clipped (a stray value would move the renderer's pivot).
+REACH = 0.35
+# The torso's relief: the model's depth less its own blur at this sigma (px), at most this deep.
+RELIEF_SIGMA = 24.0
+RELIEF_MAX = 40.0
+
+
+class LearnedPending(Exception):
+    """The model step has not run on the current input (or ran on another one)."""
+
+
+def portrait(rig: Rig) -> tuple[np.ndarray, dict[str, bytes]]:
+    """The rig recomposed at rest, backplate included (what the model is shown): the cut layers
+    over each other, the light layers added. Returns the RGB (0..1) and the files it read beyond
+    `rig.files`."""
+    assert rig.folder is not None
+    w, h = rig.width, rig.height
+    rgb = np.zeros((h, w, 3), np.float32)
+    extra: dict[str, bytes] = {}
+    for layer in rig.spec["layers"]:
+        file = layer.get("file")
+        if not file:
+            continue
+        data = rig.files.get(file)
+        if data is None:
+            data = (rig.folder / file).read_bytes()
+            extra[file] = data
+        with Image.open(BytesIO(data)) as im:
+            px = np.asarray(im.convert("RGBA"), dtype=np.float32) / 255.0
+        x, y, _, _ = (int(round(v)) for v in layer.get("bbox", [0, 0, w, h]))
+        ph, pw = px.shape[:2]
+        x0, y0, x1, y1 = max(0, x), max(0, y), min(w, x + pw), min(h, y + ph)
+        if x1 <= x0 or y1 <= y0:
+            continue
+        sub = px[y0 - y : y1 - y, x0 - x : x1 - x]
+        a = sub[..., 3:4]
+        if layer.get("mode") == "light":
+            rgb[y0:y1, x0:x1] += sub[..., :3] * a
+        else:
+            rgb[y0:y1, x0:x1] = rgb[y0:y1, x0:x1] * (1.0 - a) + sub[..., :3] * a
+    return np.clip(rgb, 0.0, 1.0), extra
+
+
+def model_input(rgb: np.ndarray) -> bytes:
+    """The model's input as `.npy` bytes: 1x3xSxS float32, resized and normalised."""
+    im = Image.fromarray(np.rint(rgb * 255.0).astype(np.uint8), "RGB")
+    small = np.asarray(im.resize((MODEL_SIDE, MODEL_SIDE), Image.Resampling.BICUBIC), dtype=np.float32) / 255.0
+    norm = (small - np.array(MODEL_MEAN, np.float32)) / np.array(MODEL_STD, np.float32)
+    pixels = np.ascontiguousarray(norm.transpose(2, 0, 1)[None].astype(np.float32))
+    buf = BytesIO()
+    np.save(buf, pixels, allow_pickle=False)
+    return buf.getvalue()
+
+
+def write_learned_input(rig: Rig) -> tuple[bytes, dict[str, bytes]]:
+    """Write `learned.in.npy` beside the rig unless it already holds the current input."""
+    assert rig.folder is not None
+    rgb, extra = portrait(rig)
+    raw = model_input(rgb)
+    path = rig.folder / LEARNED_IN
+    if not path.is_file() or path.read_bytes() != raw:
+        path.write_bytes(raw)
+    return raw, extra
+
+
+def read_learned(rig: Rig, raw_in: bytes) -> tuple[np.ndarray, dict]:
+    """The model's output for `raw_in`, upsampled to the rig, and the model step's record."""
+    assert rig.folder is not None
+    meta_path, out_path = rig.folder / LEARNED_META, rig.folder / LEARNED_OUT
+    if not meta_path.is_file() or not out_path.is_file():
+        raise LearnedPending(f"no {LEARNED_OUT} beside the rig yet")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    out_raw = out_path.read_bytes()
+    if meta.get("input_sha256") != hashlib.sha256(raw_in).hexdigest():
+        raise LearnedPending(f"{LEARNED_OUT} was made from another input")
+    if meta.get("output_sha256") != hashlib.sha256(out_raw).hexdigest():
+        raise LearnedPending(f"{LEARNED_OUT} is not the file {LEARNED_META} names")
+    out = np.load(BytesIO(out_raw), allow_pickle=False).astype(np.float32)
+    if out.ndim != 2 or not np.isfinite(out).all():
+        raise ValueError(f"{LEARNED_OUT} is not a finite 2-D map")
+    big = Image.fromarray(out, "F").resize((rig.width, rig.height), Image.Resampling.BICUBIC)
+    return np.asarray(big, dtype=np.float32), meta
+
+
+@dataclass
+class Calibration:
+    """The model's depth `d` in source px: `gain * d + offset`, less the tilt (px at the head's
+    radius, across and down) the model leans the head by."""
+
+    gain: float
+    offset: float
+    tilt: tuple[float, float]
+
+    def head(self, rig: Rig, d: np.ndarray) -> np.ndarray:
+        head = rig.spec["rig"]["head"]
+        (cx, cy), (rx, ry) = head["center"], head["radius"]
+        ys, xs = np.mgrid[0 : rig.height, 0 : rig.width].astype(np.float32)
+        plane = self.tilt[0] * (xs - cx) / rx + self.tilt[1] * (ys - cy) / ry
+        return (self.gain * d + self.offset - plane).astype(np.float32)
+
+
+def calibrate(rig: Rig, d: np.ndarray, head_all: np.ndarray) -> Calibration:
+    """Put the model's depth `d` (nearer is larger, any scale and offset) onto the head's
+    ellipsoid: its median over the centre disc to the ellipsoid's there, and over the ring inside
+    the rim to the ellipsoid's there, both inside the head's matte. Then the plane the result
+    leans by against the ellipsoid (the model reads the bottom of a portrait as nearer) is
+    measured, to be taken off: the rig's head faces the viewer."""
+    head = rig.spec["rig"]["head"]
+    (cx, cy), (rx, ry) = head["center"], head["radius"]
+    ys, xs = np.mgrid[0 : rig.height, 0 : rig.width].astype(np.float32)
+    u, v = (xs - cx) / rx, (ys - cy) / ry
+    r = np.sqrt(u**2 + v**2)
+    inside = head_all > 0.5
+    ellipsoid = head_surface(rig)
+    centre = inside & (r <= ANCHOR_CENTRE)
+    rim = inside & (r >= ANCHOR_RIM[0]) & (r <= ANCHOR_RIM[1])
+    if centre.sum() < 16 or rim.sum() < 16:
+        raise ValueError("the head's matte does not cover its centre and rim; cannot calibrate the model")
+    dc, dr = float(np.median(d[centre])), float(np.median(d[rim]))
+    zc, zr = float(np.median(ellipsoid[centre])), float(np.median(ellipsoid[rim]))
+    if dc - dr <= 1e-6 * max(1.0, abs(dc)):
+        raise ValueError("the model does not put the head's centre before its rim; refusing to calibrate")
+    gain = (zc - zr) / (dc - dr)
+    offset = zc - gain * dc
+    body = inside & (r <= ANCHOR_RIM[1])
+    res = (gain * d[body] + offset - ellipsoid[body]).astype(np.float64)
+    basis = np.stack([np.ones_like(res), u[body].astype(np.float64), v[body].astype(np.float64)], 1)
+    coef = np.linalg.lstsq(basis, res, rcond=None)[0]
+    return Calibration(gain=gain, offset=offset, tilt=(float(coef[1]), float(coef[2])))
+
+
+def learned_v1(rig: Rig) -> Surface:
+    """The model's relative depth inside the figure, on the rig's geometry:
+
+    - the head: calibrated to the head's ellipsoid (so a turn keeps its size), its lean taken off;
+    - the torso: the analytic slab, carved with the model's relief at the head's scale (the folds,
+      the collar, the clasp), since across a region that large the model's depth follows the
+      picture's framing more than the figure;
+    - each matte's edge takes the depth just inside it, the head's region is closed as
+      `analytic-v1` closes it, and the floating parts stand on their planes."""
+    raw_in, extra = write_learned_input(rig)
+    d, step = read_learned(rig, raw_in)
+    skull = cover(rig, "head")
+    jaw = cover(rig, "aperture_lower", "aperture_upper")
+    head_all = np.maximum(skull, jaw)
+    body = cover(rig, "body")
+
+    def trusted(matte: np.ndarray) -> np.ndarray:
+        return smoothstep(0.85, 1.0, blur(matte, EDGE_PX))
+
+    cal = calibrate(rig, d, head_all)
+    deep = HEAD_DEPTH_FRAC * rig.spec["rig"]["head"]["radius"][0]
+    lo, hi = TORSO_TOP_Z - TORSO_LEAN_PX - REACH * deep, HEAD_FLOOR + deep * (1.0 + REACH)
+    head_raw = push_fill(cal.head(rig, d), trusted(head_all))
+    in_head = head_region(head_all) > 0.5
+    clipped = float(np.mean((head_raw[in_head] < lo) | (head_raw[in_head] > hi))) if in_head.any() else 0.0
+    head_z = np.clip(head_raw, lo, hi)
+
+    d_body = push_fill(d, trusted(body))
+    relief = np.clip(cal.gain * (d_body - blur(d_body, RELIEF_SIGMA)), -RELIEF_MAX, RELIEF_MAX)
+    torso_z = torso_surface(rig) + relief
+
+    surface = layered(rig, torso_z.astype(np.float32), head_z.astype(np.float32), head_region(head_all))
+    surface.inputs = extra
+    surface.meta = {
+        "model": step["model"],
+        "calibration": {
+            "gain": round(cal.gain, 6),
+            "offset": round(cal.offset, 3),
+            "tilt": [round(cal.tilt[0], 3), round(cal.tilt[1], 3)],
+            "clipped": round(clipped, 6),
+        },
+    }
+    return surface
+
+
+METHODS: dict[str, Callable[[Rig], Surface]] = {"analytic-v1": analytic_v1, "learned-v1": learned_v1}
 
 
 # ---------------------------------------------------------------- output
@@ -299,21 +518,54 @@ def make(folder: Path, method: str = "analytic-v1") -> dict:
         "far": far,
         "scale": round((near - far) / LEVELS, 9),
         "planes": surface.planes,
-        "inputs": {name: hashlib.sha256(data).hexdigest() for name, data in sorted(rig.files.items())},
+        "inputs": {
+            name: hashlib.sha256(data).hexdigest() for name, data in sorted({**rig.files, **surface.inputs}.items())
+        },
+        **surface.meta,
     }
     (folder / "depth.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return meta
+
+
+def run_model_step(folder: Path, python: Path, model: Path | None = None) -> None:
+    """Run `learned_depth.py` on the rig with `python` (one that has onnxruntime)."""
+    cmd = [str(python), "-I", str(Path(__file__).with_name("learned_depth.py")), str(folder)]
+    if model is not None:
+        cmd += ["--model", str(model)]
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    done = subprocess.run(cmd, creationflags=flags, check=False)
+    if done.returncode != 0:
+        raise ValueError(f"the model step failed (exit {done.returncode})")
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Write depth.png and depth.json beside a face rig's layers.json.")
     ap.add_argument("rig", type=Path, help="the rig folder (holds layers.json)")
     ap.add_argument("--method", default="analytic-v1", choices=sorted(METHODS))
+    ap.add_argument(
+        "--model-python",
+        type=Path,
+        default=os.environ.get("SHADOWRUNR_DEPTH_PYTHON") or None,
+        help="learned-v1: a python with onnxruntime to run the model step with (else it is run by hand)",
+    )
+    ap.add_argument("--model", type=Path, default=None, help="learned-v1: the model file, passed to the model step")
     args = ap.parse_args(argv)
     started = time.perf_counter()
     try:
-        meta = make(args.rig, args.method)
-    except (OSError, ValueError, KeyError) as error:
+        try:
+            meta = make(args.rig, args.method)
+        except LearnedPending as pending:
+            if not args.model_python:
+                print(
+                    f"depth_map: {pending}. Run the model step on {args.rig / LEARNED_IN}:\n"
+                    f"  <python with onnxruntime> {Path(__file__).with_name('learned_depth.py')} {args.rig}\n"
+                    f"then this again (or pass --model-python).",
+                    file=sys.stderr,
+                )
+                return 2
+            run_model_step(args.rig, Path(args.model_python), args.model)
+            meta = make(args.rig, args.method)
+    except (OSError, ValueError, KeyError, LearnedPending) as error:
         print(f"depth_map: {error}", file=sys.stderr)
         return 1
     took = time.perf_counter() - started
