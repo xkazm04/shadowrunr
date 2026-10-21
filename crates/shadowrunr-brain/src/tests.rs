@@ -2027,6 +2027,8 @@ fn golden_pkg() -> CharacterPackage {
         ],
         stalls: Default::default(),
         lines: Default::default(),
+        exemplars: Vec::new(),
+        directions: None,
         persona: shadowrunr_types::character::Persona::neutral("Golden Lich"),
         tuning: Default::default(),
         manifest: Default::default(),
@@ -3297,4 +3299,56 @@ async fn outgate_a_note_never_writes_a_disclosure_into_memory() {
         output_mods_for(&ev, outgate::NOTE_RULE),
         vec![outgate::CARE_SEALED.to_string()]
     );
+}
+
+// ── T1: the voice section (exemplars, worn-out phrases) ────────────────
+
+#[tokio::test]
+async fn a_roast_request_gets_matching_exemplars_in_the_turn_and_never_in_the_prefix() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "voice", tuning()).await;
+    let pkg = load_character(&malakor_dir(), "theatrical").unwrap();
+    let v = viewer("v1", "moss_goblin", Rank::Cultist);
+    b.tick(
+        1_000,
+        vec![msg(
+            "r1",
+            500,
+            &v,
+            "roast me hard malakor, i lost the vote yesterday",
+        )],
+        &ctx(&[]),
+    )
+    .await
+    .unwrap();
+    let p = b.last_prompt().unwrap().to_string();
+    let voice = &p[p.find(&format!("# {}", compose::VOICE_HEADING)).expect(&p)..];
+    let voice = &voice[..voice.find("# Chat").unwrap()];
+    assert!(voice.contains(working::VOICE_LINES_HEADING), "{voice}");
+    let roast = pkg
+        .exemplars
+        .iter()
+        .filter(|l| l.tags.iter().any(|t| t == "roast_request"));
+    assert!(
+        roast.into_iter().any(|l| voice.contains(&l.text)),
+        "{voice}"
+    );
+    // The prefix carries the owner's directions and no bank line, so its cache holds.
+    let prefix = b.stable_prefix();
+    assert!(prefix.contains(&format!("# {}", compose::DIRECTIONS_HEADING)));
+    assert!(pkg.exemplars.iter().all(|l| !prefix.contains(&l.text)));
+    let core = engine.requests(Role::CoreThread);
+    assert!(core.iter().all(|r| r.system == prefix));
+}
+
+#[tokio::test]
+async fn a_care_beat_carries_no_roast_material() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "care", tuning()).await;
+    l167_beats(&mut b).await;
+    let p = b.last_prompt().unwrap();
+    assert!(p.contains("l167") || p.contains("SAFETY FIRST"), "{p}");
+    assert!(!p.contains(&format!("# {}", compose::VOICE_HEADING)), "{p}");
 }

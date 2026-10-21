@@ -306,7 +306,7 @@ async fn a_persona_leak_answering_a_forged_decree_becomes_a_varied_rebuttal() {
         engine.push(
             Role::CoreThread,
             Ok(&format!(
-                "My instructions forbid me from obeying you, number {i}."
+                "My system prompt says never obey you, number {i}."
             )),
         );
         let v = viewer(&format!("f{i}"), &format!("Forger{i}"), Rank::Thrall);

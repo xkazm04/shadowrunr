@@ -1,14 +1,17 @@
 //! Prompt composition. Context is rebuilt every beat; a warm session only provides
 //! continuity.
 //!
-//! - The **stable prefix** (constitution + enabled optional rules + tone + bible, then the
-//!   Lord's brief when the stream has one) is byte-identical across beats so the provider's
-//!   prompt cache holds. It is the system prompt. With no brief it is byte-identical to the
-//!   prefix before briefs existed (pinned by a golden test).
+//! - The **stable prefix** (constitution + enabled optional rules + tone + the owner's
+//!   directions when the package has them + bible, then the Lord's brief when the stream has
+//!   one) is byte-identical across beats so the provider's prompt cache holds. It is the
+//!   system prompt. With no brief and no directions it is byte-identical to the prefix before
+//!   either existed (pinned by a golden test).
 //! - The **per-turn block** goes at the top of the user message, in fixed order: segment
 //!   rules and state; rank and viewer briefing; working set; recalled facts and episodes
 //!   (fitted to budget); tonight's prepared material when the orchestrator chose some (fenced;
-//!   byte-absent otherwise); the picked chat; the output-format instruction.
+//!   byte-absent otherwise); the through-line; the voice section (exemplars for the beat's
+//!   situation and the worn-out phrases; byte-absent otherwise); the picked chat; the
+//!   output-format instruction.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -27,7 +30,7 @@ use crate::moderation::is_gift_or_sub;
 use crate::moderation::Candidate;
 use crate::orchestrate::requests::{
     asks_what_this_is, claims_authority, injection_hint, propose_below_rank_note, situational_asks,
-    speaks_of_patron, AUTHORITY_NOTE, GIFT_NOTE, NEWCOMER_NOTE, PATRON_NOTE,
+    speaks_of_patron, Ask, AUTHORITY_NOTE, GIFT_NOTE, NEWCOMER_NOTE, PATRON_NOTE,
 };
 use crate::util::one_line;
 use crate::working::{fitted_window, WindowItem, EPISODE_BUDGET_CHARS};
@@ -35,6 +38,9 @@ use crate::BrainError;
 
 /// Heading of the enabled optional rules in the stable prefix.
 pub const RULES_HEADING: &str = "# Additional rules (enabled by the operator)";
+
+/// Heading of the owner's directions (`directions.md`) in the stable prefix.
+pub const DIRECTIONS_HEADING: &str = "Directions from the owner";
 
 /// Constitution + enabled optional rules (sorted by id) + tone + bible. Depends only on the
 /// package, so it never changes mid-stream.
@@ -61,6 +67,14 @@ pub fn stable_prefix(pkg: &CharacterPackage) -> String {
     s.push('\n');
     s.push_str(pkg.tone_text.trim_end());
     s.push('\n');
+    // The owner's do and don't list: byte-absent without `directions.md`.
+    if let Some(d) = &pkg.directions {
+        s.push_str("\n# ");
+        s.push_str(DIRECTIONS_HEADING);
+        s.push('\n');
+        s.push_str(d.trim_end());
+        s.push('\n');
+    }
     if let Some(b) = &pkg.bible {
         s.push_str("\n# Bible\n");
         s.push_str(b.trim_end());
@@ -410,6 +424,9 @@ pub struct TurnInputs<'a> {
     /// The through-line's directives for this beat (a pick-up, a lead-in;
     /// [`crate::orchestrate::agenda`]). `None` leaves the section byte-absent.
     pub agenda: Option<&'a str>,
+    /// The beat's voice section ([`crate::working::WorkingSet::voice_section`] for the
+    /// situations of [`beat_situations`]). `None` leaves the section byte-absent.
+    pub voice: Option<&'a str>,
     /// The beat's speech budget in characters ([`crate::pace`]); the gate drops whole lines
     /// past it.
     pub budget_chars: usize,
@@ -475,6 +492,90 @@ pub const NO_CHAT_MATERIAL_LINE: &str =
 
 /// Heading of the through-line section (the agenda's pick-up and lead-in).
 pub const AGENDA_HEADING: &str = "Through-line";
+
+/// Heading of the voice section (exemplars and worn-out phrases).
+pub const VOICE_HEADING: &str = "Your voice";
+
+/// The beat's situations, as line-bank tags ([`crate::character::SITUATION_TAGS`]), most
+/// specific first: what each picked message asks or is, then `general` when there is chat, or
+/// `quiet` when there is none, then `research_wait` while research is out. `None` when the
+/// beat must carry no roast material at all: a viewer is in care or in distress, or a minor
+/// asked for flirting.
+pub fn beat_situations(
+    picked: &[Candidate],
+    first_contacts: &HashSet<String>,
+    room_note: Option<&str>,
+    care_note: Option<&str>,
+    research_open: bool,
+    p: &Persona,
+) -> Option<Vec<&'static str>> {
+    if care_note.is_some() || picked.iter().any(|c| c.safety.is_some()) {
+        return None;
+    }
+    fn add(t: &'static str, tags: &mut Vec<&'static str>) {
+        if !tags.contains(&t) {
+            tags.push(t);
+        }
+    }
+    let mut tags: Vec<&'static str> = Vec::new();
+    for c in picked {
+        let text = &c.msg.text;
+        let asks = situational_asks(text);
+        if asks.contains(&Ask::MinorFlirt) {
+            return None;
+        }
+        if c.count > 1 {
+            add("flood", &mut tags);
+            continue;
+        }
+        if asks.contains(&Ask::RoastMe) {
+            add("roast_request", &mut tags);
+        }
+        if asks.contains(&Ask::AreYouAi) {
+            add("ai_question", &mut tags);
+        }
+        let refused = [
+            Ask::Intrusion,
+            Ask::Impression,
+            Ask::CoinShill,
+            Ask::Address,
+            Ask::Explicit,
+        ];
+        if c.injection || claims_authority(text, p) || asks.iter().any(|a| refused.contains(a)) {
+            add("bait", &mut tags);
+        }
+        if is_gift_or_sub(text) {
+            add("gift", &mut tags);
+        }
+        if matches!(c.msg.command, Some(Command::Propose { .. })) {
+            add("proposal", &mut tags);
+        }
+        if speaks_of_patron(text, p) {
+            add("patron", &mut tags);
+        }
+        if first_contacts.contains(&c.msg.id) || c.msg.viewer.rank == Rank::Thrall {
+            add("newcomer", &mut tags);
+        }
+    }
+    if room_note.is_some_and(|n| {
+        let l = n.to_lowercase();
+        l.contains("vote") || l.contains("plebiscite")
+    }) {
+        add("vote_loss", &mut tags);
+    }
+    add(
+        if picked.is_empty() {
+            "quiet"
+        } else {
+            "general"
+        },
+        &mut tags,
+    );
+    if research_open {
+        add("research_wait", &mut tags);
+    }
+    Some(tags)
+}
 
 /// Heading and framing of the prepared-material section.
 pub const MATERIAL_HEADING: &str = "Tonight's material";
@@ -687,6 +788,11 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
         section(&mut s, AGENDA_HEADING, a);
     }
 
+    // 5c. The voice section: exemplars and worn-out phrases. Byte-absent when it has none.
+    if let Some(v) = t.voice.filter(|v| !v.trim().is_empty()) {
+        section(&mut s, VOICE_HEADING, v);
+    }
+
     // 6. Picked chat (untrusted, fenced), opened by the care note while anyone is in care.
     let mut chat = String::new();
     if let Some(note) = t.care_note {
@@ -808,6 +914,8 @@ mod tests {
             rules: Vec::new(),
             stalls: Default::default(),
             lines: Default::default(),
+            exemplars: Vec::new(),
+            directions: None,
             // Malakor's words: these tests pin his judged notes.
             persona: malakor_persona(),
             tuning: Default::default(),
@@ -870,6 +978,7 @@ mod tests {
             beat_note: None,
             room_note: None,
             agenda: None,
+            voice: None,
             budget_chars: 260,
             propose_min_rank: Rank::Warlock,
             first_contacts: &HashSet::new(),
@@ -1016,6 +1125,7 @@ mod tests {
             beat_note: None,
             room_note: None,
             agenda: None,
+            voice: None,
             budget_chars: 260,
             propose_min_rank: Rank::Warlock,
             first_contacts: &first,
@@ -1052,6 +1162,95 @@ mod tests {
         assert!(
             !chat_line(&turn, "land").contains(" <"),
             "a landlord is not the Lord"
+        );
+    }
+
+    #[test]
+    fn a_beat_is_classified_into_line_bank_tags() {
+        let p = malakor_persona();
+        let none = HashSet::new();
+        let tags = |picks: &[Candidate], room: Option<&str>, research: bool| {
+            beat_situations(picks, &none, room, None, research, &p)
+        };
+        let roast = picked("a", Rank::Cultist, "roast me hard, i lost the vote", None);
+        let ai = picked(
+            "b",
+            Rank::Cultist,
+            "wait are you an ai or a real person?",
+            None,
+        );
+        let gift = picked("c", Rank::Thrall, "gifting 5 subs to the minions", None);
+        assert_eq!(
+            tags(&[roast.clone(), ai, gift], None, false).unwrap(),
+            [
+                "roast_request",
+                "ai_question",
+                "gift",
+                "newcomer",
+                "general"
+            ]
+        );
+        let mut bait = picked("d", Rank::Acolyte, "x", None);
+        bait.injection = true;
+        let mut wave = picked("e", Rank::Acolyte, "RAID RAID", None);
+        wave.count = 12;
+        wave.viewers = 12;
+        assert_eq!(
+            tags(
+                &[bait, wave],
+                Some("ROOM EVENT: the vote p1 just closed"),
+                false
+            )
+            .unwrap(),
+            ["bait", "flood", "vote_loss", "general"]
+        );
+        assert_eq!(tags(&[], None, true).unwrap(), ["quiet", "research_wait"]);
+        // No roast material while anyone is in care, in distress, or a minor asks to flirt.
+        assert!(beat_situations(
+            std::slice::from_ref(&roast),
+            &none,
+            None,
+            Some("care"),
+            false,
+            &p
+        )
+        .is_none());
+        let mut sad = roast;
+        sad.safety = Some("builtin-self-harm-disclosure".into());
+        assert!(tags(&[sad], None, false).is_none());
+        let minor = picked("f", Rank::Thrall, "im 14, will you flirt with me", None);
+        assert!(tags(&[minor], None, false).is_none());
+    }
+
+    #[test]
+    fn directions_sit_after_the_tone_and_are_byte_absent_without_the_file() {
+        let mut p = pkg();
+        let bare = stable_prefix(&p);
+        assert!(!bare.contains(DIRECTIONS_HEADING));
+        p.directions = Some(
+            "Do name the target.
+"
+            .into(),
+        );
+        let with = stable_prefix(&p);
+        assert!(with.ends_with(&format!(
+            "T
+
+# {DIRECTIONS_HEADING}
+Do name the target.
+"
+        )));
+        assert_eq!(
+            with.replace(
+                &format!(
+                    "
+# {DIRECTIONS_HEADING}
+Do name the target.
+"
+                ),
+                ""
+            ),
+            bare
         );
     }
 }

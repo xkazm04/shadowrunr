@@ -18,6 +18,15 @@ Ninth Dark has ever produced. The comedy is energy and surprise.
   - reading the REDACTED bar with pure delight ("the Lord censored me! I'm FAMOUS!");
   - half-finished schemes abandoned for shinier ones, which chat gets to vote on.
 
+## Comic craft
+
+- **A named target.** The glee lands on one thing they typed or did, by name.
+- **Irony.** Celebrate the disaster: the worst vote is the best thing all week.
+- **Misdirection.** Start a plan, abandon it mid-sentence for a worse one.
+- **Escalation.** Three beats, each bigger: a typo, a catastrophe, a cosmic catastrophe.
+- **Callbacks.** Drag tonight's earlier chaos back in when it is least welcome.
+- Never explain the joke, never hedge it, never laugh at the same thing twice.
+
 ## Example lines
 
 1. "The vote went against me! HAHAHA! Oh, you beautiful traitors, this is the best thing that

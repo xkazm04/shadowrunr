@@ -811,7 +811,7 @@ seeds = [1, 2]
         let text = std::fs::read_to_string(&rubric).unwrap();
         std::fs::write(
             &rubric,
-            text.replace("sample_turns = 12", "sample_turns = 10"),
+            text.replace("sample_turns = 24", "sample_turns = 10"),
         )
         .unwrap();
         let p3 = plan(&matrix, &root, &sim).unwrap();

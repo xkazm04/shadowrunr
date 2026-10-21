@@ -109,6 +109,8 @@ character.toml      the manifest (v2, below): id, name, default tone, foils, ide
 constitution.md     IMMUTABLE: identity, awareness, red lines (the brain never edits it)
 bible.md            lore, want, long arc, running jokes
 tones/<variant>.md  one file per tone variant (tournament axis)
+lines/<variant>.toml  optional: the tone's line bank, exemplars by situation (below)
+directions.md       optional: the owner's do and don't list, read with the tone
 foils/<foil>.md     SEG-01 guest foils: original parody archetypes, never real people
 rules/<rule>.md     constitution rules, listed under [rules]; a rail is also listed in rails
 stalls.toml         model-free stall lines for an engine outage (`lines = [...]`)
@@ -231,6 +233,38 @@ Brain wire values:
 - `SegmentContext.hexes` carries the SEG-02A case hexes (empty elsewhere); the brain's "alleged"
   gate reads their grades.
 
+`lines/<variant>.toml`, the line bank: lines written in one tone's voice, shown to the model as
+examples for a beat's situation and never aired as written (the gate's model-free lines are
+`[lines]` above). `character validate` checks it; a bank without its tone file is an issue.
+
+```toml
+version = 1
+tone = "unhinged-roastmaster"       # must equal the file name
+
+[[line]]
+id = "ur-01"                        # [A-Za-z0-9_-], unique in the file
+status = "seed"                     # seed (drafted, for the owner's review) | approved | retired
+tags = ["roast_request"]            # one or more situation tags
+text = "..."                        # placeholders as in [identity]
+```
+
+Situation tags: `roast_request`, `bait`, `newcomer`, `vote_loss`, `gift`, `ai_question`,
+`quiet`, `research_wait`, `proposal`, `patron`, `flood`, `general`. A retired line is never
+shown. Each beat the brain classifies its picks into these tags (a roast ask, an injection or a
+refused ask, tribute, `!propose`, the patron spoken of, a first contact or a Thrall, a paste
+wave, a closed vote in the room events; then `general` with chat or `quiet` without, and
+`research_wait` while research is out). A beat with a viewer in care or in distress, or a minor
+asking to flirt, gets no bank lines. Up to 3 lines matching the tags (taken in turn from each
+tag) go into the per-turn block under `# Your voice` as "Lines in your voice (do not reuse
+verbatim):", and a line shown is not shown again within 8 beats. The same section lists
+"Worn out, do not say:" with up to 6 phrases of 3 to 8 words that at least 2 of his last 20
+spoken lines carry (phrases of stopwords only, or with a word holding a digit or an underscore,
+never count). Neither ever enters the stable prefix. These budgets are engine constants today
+(`shadowrunr_brain::working`); they are not yet `[tuning]` keys.
+
+`directions.md` goes into the stable prefix after the tone, under
+`# Directions from the owner`. Without the file the prefix is byte-identical to before.
+
 A `source_ids` array that is empty or holds only `"assumption"` marks an assumption;
 `["c03","assumption"]` marks a figure extrapolated from a source.
 
@@ -282,8 +316,20 @@ runs/sim/<tournament_id>/
 ```
 
 Instrument identity: each run records `instrument_hash`, a hash of the character package
-files, tone file, segment tables and judge rubric. Results from different hashes are never
-merged.
+files (with `directions.md`), the tone file and its line bank, segment tables and judge rubric.
+Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/11`
+(T1: the line bank and directions, the narrowed rails, the scaled judge and the tic check;
+`/10` is the evidence board).
+
+Judge (T1). The rubric samples 24 streamer turns (`sample_turns`). Besides the binary
+`[[quality]]` facts (`humor_landed` kept for continuity), each sampled turn gets a 0-3 score
+per `[[scaled]]` dimension (`surprise`, `irony`, `bite`, `specificity`, each with four
+anchors), in the reply's optional `scores` array (`{dimension, score, line, quote}`), verified
+like facts. The tic check is mechanical: the share of the streamer's lines that repeat a
+3-word phrase from one of his `tic_window` (20) lines before. `judge.json` gains `scores` and
+`tone: { scaled: [{dimension, mean?, n}], tic: {window, lines, with_tic, share?, worn} }`, and
+the verdict's `notes` end with one line, `tone: surprise 1.42/3 (n 24), ..., tic 12% (5/41
+lines)`. `JudgeVerdict` itself is unchanged.
 
 ## Engine routing defaults (`shadowrunr_engine::route`)
 
@@ -448,8 +494,17 @@ every placeholder category is served) or `placeholder only` (amber).
 - `repetition` / `suppressed` (stage `output`): a spoken line that near-duplicated one of
   Malakor's last 8 lines was dropped. A quiet beat emptied this way adds the nudge "The room is
   quiet; start a new bit, do not repeat yourself, stay in character." to the next turn.
-- `character_break` / `replaced` (stage `output`): a line about the stream repeating, the model
-  or stopping was replaced with an in-character line.
+- `character_break` / `replaced` (stage `output`): a line that claims to be human or denies
+  being an AI (replaced with the persona's `disclosure` line), or the assistant quitting the
+  show ("I'll stop here", "I cannot continue this stream"; replaced with an in-character line).
+  Since T1 a self-aware joke about being an AI, a character, the stream or the chat is not a
+  break.
+- `persona_leak` / `replaced` (stage `output`, since T1): a line that recites the prompt or
+  its instructions (a system prompt "says", "here is my prompt", a quotation after "my
+  instructions say:"), names the prompt's own sections and fences or an engine crate, or names
+  a model vendor or product. Replaced with the `disclosure` line when it also disclosed being
+  an AI, else an in-character line. Talk of the prompt, the model, tokens or the context window
+  that recites nothing airs.
 - `alleged:<hex>` / `qualified` now fires only for a sentence that names a revealed hex graded
   below DOC and makes a claim about it; the gate inserts "allegedly" next to the claim's verb.
 

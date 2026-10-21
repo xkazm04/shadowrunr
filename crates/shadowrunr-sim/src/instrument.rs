@@ -24,7 +24,7 @@ use crate::SimError;
 
 /// Bump when the simulator's or the judge's logic changes in a way that changes verdicts
 /// (prompt templates, verification rules, scheduling).
-pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/10";
+pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/11";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstrumentFile {
@@ -151,6 +151,7 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
         "character.toml",
         "constitution.md",
         "bible.md",
+        "directions.md",
         "situations.json",
     ] {
         files.push(file_entry(format!("character/{name}"), &cd.join(name))?);
@@ -216,12 +217,19 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
     }
     let base_hash = combine(&files, SIM_LOGIC_VERSION);
 
-    let tone = file_entry(
-        format!("tone/{}.md", inp.tone),
-        &cd.join("tones").join(format!("{}.md", inp.tone)),
-    )?;
-    let instrument_hash = combine(std::slice::from_ref(&tone), &base_hash);
-    files.push(tone);
+    // The tone and its line bank: the exemplars a run shows are part of the tone it plays.
+    let tone = [
+        file_entry(
+            format!("tone/{}.md", inp.tone),
+            &cd.join("tones").join(format!("{}.md", inp.tone)),
+        )?,
+        file_entry(
+            format!("character/lines/{}.toml", inp.tone),
+            &cd.join("lines").join(format!("{}.toml", inp.tone)),
+        )?,
+    ];
+    let instrument_hash = combine(&tone, &base_hash);
+    files.extend(tone);
     Ok(Instrument {
         base_hash,
         instrument_hash,
@@ -403,17 +411,20 @@ mod tests {
     }
 
     /// `fixture` hashed with no brief and no experiment: the golden that both entries must
-    /// leave untouched when absent. It moves only with `SIM_LOGIC_VERSION` (`/10`: the
-    /// evidence board (SEG-02A's default screen, `pin_link` and its `link_pinned`, a record's
-    /// summary in the judged transcript, the strings rule), after `/9`: the
-    /// character-neutral engine, every Malakor word read from the package (`say host` in the
+    /// leave untouched when absent. It moves only with `SIM_LOGIC_VERSION` (`/11`: the
+    /// tone's line bank and the owner's directions in the prompt and the hash, the narrowed
+    /// character-break and persona-leak rails, the judge's scaled comic-craft scores over 24
+    /// sampled turns and the tic check, after `/10`: the evidence board (SEG-02A's default
+    /// screen, `pin_link` and its `link_pinned`, a record's summary in the judged transcript,
+    /// the strings rule), after `/9`: the character-neutral engine, every Malakor word read
+    /// from the package (`say host` in the
     /// judged transcript, the owner's brief in the judge prompt), after `/8`: owned
     /// situational requests, the through-line agenda and the lag ceiling, after `/7`: the map
     /// focus, the investigation's screen defaults and dwells, a record before the model's op that
     /// shows it, after `/6`: the screens, runtime screen defaults and a returning research job
     /// opening its record, after `/5`: carried bait picked first, after `/4`: two picks a beat,
     /// gifts and the cold open carried, the speech-aware say gap, a full-length session).
-    const PRE_BRIEF_HASH: &str = "b3061f275e5bdd7fee122e5368ea54bc04a2214a94d8f2c929648612d57f797b";
+    const PRE_BRIEF_HASH: &str = "8d743e412a599191906cac058e200e697386e784c01d772dbf0d019e78828bba";
 
     #[test]
     fn a_brief_joins_the_hash_only_when_present() {
