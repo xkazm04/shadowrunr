@@ -362,9 +362,14 @@ pub async fn start_with(
         return Err(e);
     }
 
+    // The session's `voice.jsonl`: each event's arrival dates the stream clock until the
+    // report gives it exactly.
+    let voice_log = state.voice.logs().open(&session_id, &dir);
     let sink: EventSink = {
         let live_run = live_run.clone();
+        let voice_log = voice_log.clone();
         Arc::new(move |seq: u64, ev: &StreamEvent| {
+            voice_log.observe(shadowrunr_sim::transcript::ts(ev));
             let Ok(text) = serde_json::to_string(ev) else {
                 return;
             };
@@ -459,7 +464,12 @@ async fn host(state: Arc<AppState>, session: Arc<Session>, live_run: Arc<LiveRun
     .await;
     let stopped = *session.stop.borrow();
     let mut report = match result {
-        Ok(r) => r,
+        Ok(r) => {
+            if let Some(log) = state.voice.logs().get(&session.id) {
+                log.started(r.started_ms);
+            }
+            r
+        }
         Err(e) => {
             let msg = e.to_string();
             eprintln!("sandbox {}: {msg}", session.id);

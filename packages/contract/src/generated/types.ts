@@ -620,6 +620,13 @@ export type ErrorCode =
   | "conflict"
   | "internal";
 /**
+ * Which face the stage draws.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "FaceState".
+ */
+export type FaceState = "rig" | "silhouette";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "FactScope".
  */
@@ -632,6 +639,13 @@ export type FactScope = "viewer" | "character" | "world" | "case";
  */
 export type ServerFrame = EventFrame | ErrorEnvelope | StreamEvent;
 /**
+ * Why the stage dropped a whole line.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "StageDropReason".
+ */
+export type StageDropReason = "stage_cap";
+/**
  * The Oculus 15 mouth shapes. A sentence's timeline is a run of these.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -639,6 +653,15 @@ export type ServerFrame = EventFrame | ErrorEnvelope | StreamEvent;
  */
 export type Viseme =
   "sil" | "PP" | "FF" | "TH" | "DD" | "kk" | "CH" | "SS" | "nn" | "RR" | "aa" | "E" | "ih" | "oh" | "ou";
+/**
+ * Everything a `/voice` client may send, told apart by its one key. Only `follow` changes what
+ * the socket sends; the reports (`played`, `stage_dropped`, `face`) go to the run's
+ * `voice.jsonl` and are never answered.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceClientFrame".
+ */
+export type VoiceClientFrame = VoiceFollowFrame | VoicePlayedFrame | VoiceStageDroppedFrame | VoiceFaceFrame;
 /**
  * Everything `GET /voice` may push.
  *
@@ -3675,6 +3698,15 @@ export interface VisemeSpan {
   v: Viseme;
 }
 /**
+ * The frame wrapping [`VoiceFollow`]: `{"follow": {...}}`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceFollowFrame".
+ */
+export interface VoiceFollowFrame {
+  follow: VoiceFollow;
+}
+/**
  * What a `/voice` client sends: which live run to voice. `run_id` absent = the newest live
  * run, following it as runs start. Each message replaces the previous choice.
  *
@@ -3685,11 +3717,69 @@ export interface VoiceFollow {
   run_id?: string;
 }
 /**
- * The frame wrapping [`VoiceFollow`]: `{"follow": {...}}`.
+ * `{"played": {...}}`.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "VoiceFollowFrame".
+ * via the `definition` "VoicePlayedFrame".
  */
-export interface VoiceFollowFrame {
-  follow: VoiceFollow;
+export interface VoicePlayedFrame {
+  played: VoicePlayed;
+}
+/**
+ * `played`: a part's audio started playing on the stage.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoicePlayed".
+ */
+export interface VoicePlayed {
+  /**
+   * When the audio started, in wall epoch ms (the stage's clock).
+   */
+  at_wall_ms: number;
+  part: number;
+  run_id: string;
+  seq: number;
+}
+/**
+ * `{"stage_dropped": {...}}`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceStageDroppedFrame".
+ */
+export interface VoiceStageDroppedFrame {
+  stage_dropped: VoiceStageDropped;
+}
+/**
+ * `stage_dropped`: the stage dropped a whole line and will not play it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceStageDropped".
+ */
+export interface VoiceStageDropped {
+  reason: StageDropReason;
+  run_id: string;
+  seq: number;
+}
+/**
+ * `{"face": {...}}`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceFaceFrame".
+ */
+export interface VoiceFaceFrame {
+  face: VoiceFace;
+}
+/**
+ * `face`: which face is drawn; sent on load and on every change.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceFace".
+ */
+export interface VoiceFace {
+  /**
+   * When it changed, in wall epoch ms (the stage's clock).
+   */
+  at_wall_ms: number;
+  run_id: string;
+  state: FaceState;
 }

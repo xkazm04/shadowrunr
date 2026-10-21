@@ -5,6 +5,9 @@
 //!   Without `run_id` it follows the newest live run and moves to each run as it starts; a named
 //!   run that is not live yet is picked up when it starts. Nothing is followed before the first
 //!   `follow`. Replays are never voiced: only runs in the `LiveRegistry` are followed.
+//! - The stage also reports on this socket (`played`, `stage_dropped`, `face`; contract
+//!   `VoiceClientFrame`). Each goes to its run's `voice.jsonl` (`log`) and is never answered;
+//!   a report never changes the follow.
 //! - **Malformed client frames are ignored and logged** (one stderr line, the frame cut to 120
 //!   characters). The socket carries only contract frames (`status`, `utterance`, `skipped`),
 //!   and the current follow stays as it was.
@@ -21,7 +24,7 @@ use std::sync::Arc;
 
 use axum::extract::ws::{close_code, CloseFrame, Message, Utf8Bytes, WebSocket};
 use futures::{SinkExt, StreamExt};
-use shadowrunr_types::voice::{VoiceFollowFrame, VoiceFrame, VoiceSkip};
+use shadowrunr_types::voice::{VoiceClientFrame, VoiceFrame, VoiceSkip};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TrySendError;
@@ -176,13 +179,30 @@ enum Follow {
     Run(String),
 }
 
-/// The follow a client frame asks for; `None` for anything that is not a `follow` frame.
-fn parse_follow(text: &str) -> Option<Follow> {
-    let f: VoiceFollowFrame = serde_json::from_str(text).ok()?;
-    Some(match f.follow.run_id {
-        Some(id) if !id.trim().is_empty() => Follow::Run(id),
-        _ => Follow::Newest,
+/// What a client frame is: a follow, a stage report, or nothing this socket knows.
+#[derive(Debug, Clone, PartialEq)]
+enum Client {
+    Follow(Follow),
+    Report(VoiceClientFrame),
+}
+
+fn parse_client(text: &str) -> Option<Client> {
+    Some(match serde_json::from_str::<VoiceClientFrame>(text).ok()? {
+        VoiceClientFrame::Follow(f) => Client::Follow(match f.follow.run_id {
+            Some(id) if !id.trim().is_empty() => Follow::Run(id),
+            _ => Follow::Newest,
+        }),
+        report => Client::Report(report),
     })
+}
+
+/// The follow a client frame asks for; `None` for anything that is not a `follow` frame.
+#[cfg(test)]
+fn parse_follow(text: &str) -> Option<Follow> {
+    match parse_client(text)? {
+        Client::Follow(f) => Some(f),
+        Client::Report(_) => None,
+    }
 }
 
 /// The live run `follow` points at now, if any.
@@ -263,8 +283,9 @@ pub async fn session(state: Arc<AppState>, socket: WebSocket) {
                     Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
                     Some(Ok(_)) => continue,
                 };
-                match parse_follow(&text) {
-                    Some(f) => {
+                match parse_client(&text) {
+                    Some(Client::Report(r)) => hub.logs().stage(&r),
+                    Some(Client::Follow(f)) => {
                         if follow.as_ref() != Some(&f) {
                             sub = None;
                         }
@@ -275,7 +296,7 @@ pub async fn session(state: Arc<AppState>, socket: WebSocket) {
                     }
                     None => {
                         let short: String = text.chars().take(120).collect();
-                        eprintln!("/voice: ignoring a frame that is not {{\"follow\": {{...}}}}: {short}");
+                        eprintln!("/voice: ignoring a frame that is not a client frame: {short}");
                     }
                 }
             }
@@ -373,6 +394,15 @@ mod tests {
             Some(Follow::Newest)
         );
         assert_eq!(parse_follow(r#"{"subscribe":"live"}"#), None);
+        assert!(matches!(
+            parse_client(r#"{"played":{"run_id":"r","seq":3,"part":0,"at_wall_ms":9}}"#),
+            Some(Client::Report(VoiceClientFrame::Played(_)))
+        ));
+        assert_eq!(
+            parse_follow(r#"{"played":{"run_id":"r","seq":3,"part":0,"at_wall_ms":9}}"#),
+            None
+        );
+        assert_eq!(parse_client(r#"{"played":{"run_id":"r"}}"#), None);
         assert_eq!(parse_follow("nope"), None);
     }
 

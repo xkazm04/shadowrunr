@@ -506,7 +506,7 @@ a thin client of it.
 3. Start the session:
 
 ```
-shadowrunr stream sandbox --minutes 5|10|30 [--seed S] [--chaos outage|lost] [--no-judge] [--tone T] [--port P]
+shadowrunr stream sandbox --minutes 5|10|30 [--seed S] [--chaos outage|lost] [--no-judge] [--tone T] [--port P] [--record]
 ```
 
 | Flag | Meaning |
@@ -518,6 +518,7 @@ shadowrunr stream sandbox --minutes 5|10|30 [--seed S] [--chaos outage|lost] [--
 | `--no-judge` | Skip the judge. The `judge` check is then unmeasured, so the gate fails. |
 | `--tone` | Tone variant. The default is the character's active tone. |
 | `--port` | The daemon's port. The default is `[daemon] port` (7717). |
+| `--record` | Record the session in OBS: the stage through a browser source, picture and voice in one file in the session directory. Refuses to start when OBS is not reachable. See [recording.md](recording.md). |
 
 The command prints the session id and the stage URL, then a progress line every 10 s:
 
@@ -547,7 +548,7 @@ An unmeasured check is not a pass, so a gated run needs the stage open and the j
 Exit codes:
 - `0`: every check passed.
 - `1`: the daemon refused the session (pre-flight red, or another session or a live sim is
-  running), or another error.
+  running), with `--record` OBS is not reachable or refused to record, or another error.
 - `2`: a usage error, or no daemon is reachable (start one with `shadowrunr daemon`).
 - `6`: the session ended and failed its gate, or failed outright.
 
@@ -566,6 +567,9 @@ The session directory holds:
 - `session.json`: the gate report.
 - `verdict.json`, `judge.json` and `judge-windows/`, after judging.
 - `tags.json`, after tagging (see [Session review](#session-review)).
+- `voice.jsonl`, when the voice follows the session: what the voice rendered and skipped, and
+  what the stage played (see voice.md).
+- `recording.<ext>` and `recording.json`, with `--record` (see [recording.md](recording.md)).
 
 Over `/rpc`:
 - `sandbox.start {minutes, seed?, chaos?, judge?, tone?}` returns `{session_id, dir,

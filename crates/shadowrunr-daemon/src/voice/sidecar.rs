@@ -1,8 +1,10 @@
 //! The sidecar process behind [`Renderer`]: `python -m shadowrunr_voice` in `[voice] sidecar`,
 //! JSON lines on stdio (contract appendix (voice)). One process per daemon, supervised:
 //!
-//! - Before anything is spawned, the engine's files are probed; a missing engine is
-//!   `degraded` with the file's name, and nothing is retried (the config has to change).
+//! - Before anything is spawned, the engine's files are probed; missing Kokoro files are
+//!   `degraded` with the file's name, and nothing is retried (the config has to change). A
+//!   missing binary is left to the `hello`: only a warm engine speaks without it
+//!   (`probe::hello_state`).
 //! - The process is `starting` until its `hello`, then `ready` (with or without mouth shapes).
 //! - When it exits, every line in flight fails from the part it reached, the state is
 //!   `degraded` with the exit status and the last stderr line, and it restarts with backoff:
@@ -397,7 +399,7 @@ impl SidecarRenderer {
                 }
                 *hello = true;
                 self.state
-                    .send_replace(RendererState::Ready { visemes, reason });
+                    .send_replace(probe::hello_state(&self.cfg, visemes, reason));
                 Ok(true)
             }
             SidecarLine::Audio {
@@ -572,7 +574,7 @@ mod tests {
 
         let mut hello = false;
         assert_eq!(
-            r.on_line(r#"{"type":"hello","protocol":1,"voice":"af_heart","sample_rate":24000,"visemes":false,"reason":"no numpy"}"#, &mut hello),
+            r.on_line(r#"{"type":"hello","protocol":1,"voice":"af_heart","sample_rate":24000,"visemes":false,"reason":"no numpy; engine: warm (3 workers loaded in 2.0 s)"}"#, &mut hello),
             Ok(true)
         );
         assert!(hello);
@@ -580,7 +582,7 @@ mod tests {
             *r.state.borrow(),
             RendererState::Ready {
                 visemes: false,
-                reason: Some("no numpy".into())
+                reason: Some("no numpy; engine: warm (3 workers loaded in 2.0 s)".into())
             }
         );
         r.on_line(r#"{"type":"audio","id":"r:4","part":0,"last":false,"text":"Kneel.","sample_rate":24000,"pcm":"AAAA","visemes":[["PP",0,40.4],["zz",40,80],["aa",40,90]]}"#, &mut hello).unwrap();

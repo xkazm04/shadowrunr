@@ -10,6 +10,8 @@
 //! - `GET /avatar/{file}` (`avatar`): the face rig the stage draws (`layers.json` plus its
 //!   PNGs) from `<data>/avatar/rig/`; 404 when there is none, and the stage draws its bundled
 //!   placeholder.
+//! - `<run dir>/voice.jsonl` (`log`): what the voice rendered and skipped, and what the stage
+//!   reported playing, on the session's stream clock.
 //! - `shadowrunr voice check|say|replay` (`cli`, with `probe` and `replay`).
 //!
 //! Optional end to end: with `[voice] enabled = false` (the default) `/voice` says `off` and
@@ -18,6 +20,7 @@
 
 pub mod avatar;
 pub mod cli;
+pub mod log;
 pub mod probe;
 pub mod renderer;
 pub mod replay;

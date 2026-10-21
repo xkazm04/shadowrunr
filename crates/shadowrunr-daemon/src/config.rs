@@ -31,6 +31,9 @@ pub struct FileConfig {
     /// `[voice]`: Malakor's local voice (off by default).
     #[serde(default)]
     pub voice: crate::voice::VoiceConfig,
+    /// `[record]`: the OBS recorder (`stream sandbox --record`, `record check`).
+    #[serde(default)]
+    pub record: crate::record::RecordConfig,
 }
 
 /// `[paths]`, as written in the file (relative to the file's directory unless absolute).
@@ -250,6 +253,8 @@ pub struct Config {
     pub research: crate::casework::ResearchConfig,
     /// `[voice]`, with its paths resolved against the root.
     pub voice: crate::voice::VoiceConfig,
+    /// `[record]`.
+    pub record: crate::record::RecordConfig,
 }
 
 #[derive(Debug)]
@@ -367,6 +372,7 @@ impl Config {
             },
             research: fc.research,
             voice: fc.voice.resolved(root),
+            record: fc.record,
         }
     }
 

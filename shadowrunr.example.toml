@@ -149,3 +149,13 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # lines_in_flight = 3               # lines with the sidecar at once; their audio still goes in order
 # render_workers = 3                # engine runs at once in the sidecar (warm: loaded workers)
 # render_threads = 2                # threads per engine run; absent = 2, or 4 for the warm engine
+
+# The OBS recorder: `shadowrunr stream sandbox --record` and `shadowrunr record check`
+# (docs/guide/recording.md). OBS renders the stage through a browser source; obs-websocket's
+# password is a secret and never goes here: it comes from the variable obs_password_env names,
+# else from OBS's own obs-websocket config file.
+# [record]
+# obs_host = "127.0.0.1"
+# obs_port = 4455
+# obs_password_env = "SHADOWRUNR_OBS_PASSWORD"
+# stage_url = "http://localhost:5178"   # the built stage, served on localhost (not 127.0.0.1)
