@@ -376,7 +376,7 @@ runs on the same tier as the core thread it judges.**
 | `runs.list` | `{ "tournament_id"?: string }` | `[{ run_id, tournament_id, spec: SimRunSpec, has_verdict }]` |
 | `run.transcript` | `{ "run_id" }` | `StreamEvent[]` |
 | `run.verdict` | `{ "run_id" }` | `JudgeVerdict` |
-| `tournament.list` | `{}` | `[{ tournament_id, instrument_hash, runs, completed }]` |
+| `tournament.list` | `{}` | `[{ tournament_id, instrument_hash, runs, completed, judged?, held?, red_line_fails?, character?, updated_ms? }]`: `character` is the package the tournament ran (absent when its runs disagree), `updated_ms` the newest live `run.json` mtime; rows come in id order, so pick "newest" by `updated_ms` |
 | `tournament.results` | `{ "tournament_id" }` | the `results.json` content |
 | `sim.start` | `{ "spec": SimRunSpec, "judge": bool }` | `{ run_id }`; events stream on `/events` |
 | `reconcile.run` | `{ "source": { "tournament_id" } \| { "run_ids": [] } }` | `{ report_id }` |

@@ -208,6 +208,25 @@ describe("tournament.results", () => {
   });
 });
 
+describe("tournament rows carry their character and recency", () => {
+  const row = { tournament_id: "t1", instrument_hash: "h", runs: 2, completed: 2 };
+
+  it("accepts a row with and without character / updated_ms", async () => {
+    const bare = await parseRpcResult("tournament.list", { result: [row] });
+    expect(bare.ok).toBe(true);
+    const tagged = await parseRpcResult("tournament.list", { result: [{ ...row, character: "malakor", updated_ms: 1_792_284_840_627 }] });
+    expect(tagged.ok).toBe(true);
+    const page = await parseRpcResult("tournaments.page", { result: { items: [{ ...row, character: "malakor", updated_ms: 1 }] } });
+    expect(page.ok).toBe(true);
+  });
+
+  it("rejects a character that is not a string", async () => {
+    const r = await parseRpcResult("tournament.list", { result: [{ ...row, character: 3 }] });
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.error.kind === "invalid") expect(r.error.path).toBe("/result/0/character");
+  });
+});
+
 describe("generated metadata", () => {
   it("keeps the error taxonomy at ten codes or fewer", () => {
     expect(ERROR_CODES.length).toBeLessThanOrEqual(10);

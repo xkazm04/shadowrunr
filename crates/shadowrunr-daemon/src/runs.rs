@@ -186,6 +186,31 @@ struct TournamentMeta {
     base_hash: String,
     #[serde(default)]
     runs: Option<usize>,
+    /// Written by the sim since the field existed; an older `tournament.json` falls back to
+    /// the runs' specs, as an ad-hoc directory does.
+    #[serde(default)]
+    character: Option<String>,
+}
+
+/// The one character every live run's spec names; `None` when they disagree or there are none.
+fn runs_character(runs: &[RunEntry]) -> Option<String> {
+    let mut it = runs.iter().map(|r| r.row.spec.character.as_str());
+    let first = it.next()?;
+    it.all(|c| c == first).then(|| first.to_string())
+}
+
+/// The newest live run's `run.json` mtime in ms since the epoch.
+fn newest_run_ms(runs: &[RunEntry]) -> Option<i64> {
+    runs.iter()
+        .filter_map(|r| {
+            std::fs::metadata(r.dir.join("run.json"))
+                .ok()?
+                .modified()
+                .ok()
+        })
+        .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+        .max()
 }
 
 /// Whether a run finished, by the WP13 rule (`shadowrunr_sim::outcome::classify`): judged, or
@@ -232,7 +257,9 @@ fn fold_runs(runs: &[RunEntry]) -> RunsFold {
 /// is neither a tournament nor holds runs. The instrument hash is the base hash from
 /// `tournament.json`; a directory without one (the ad-hoc directory) reports the runs' common
 /// base hash, or `mixed`. `completed` counts runs that finished (see [`finished`]); `judged`,
-/// `held` and `red_line_fails` fold the judged runs' verdicts (see [`fold_runs`]).
+/// `held` and `red_line_fails` fold the judged runs' verdicts (see [`fold_runs`]). `character`
+/// is the one the tournament ran (see [`runs_character`] for a directory that does not say);
+/// `updated_ms` is the newest live run's `run.json` mtime (see [`newest_run_ms`]).
 pub(crate) fn tournament_row(sim_root: &Path, tid: &str) -> Option<TournamentRow> {
     let t = sim_root.join(tid);
     let runs = tournament_runs(sim_root, tid);
@@ -259,7 +286,14 @@ pub(crate) fn tournament_row(sim_root: &Path, tid: &str) -> Option<TournamentRow
         }
     };
     let fold = fold_runs(&runs);
+    let character = meta
+        .as_ref()
+        .and_then(|m| m.character.clone())
+        .filter(|c| !c.is_empty())
+        .or_else(|| runs_character(&runs));
     Some(TournamentRow {
+        character,
+        updated_ms: newest_run_ms(&runs),
         completed: fold.completed,
         judged: fold.judged,
         held: (fold.held_n > 0).then(|| fold.held_sum / fold.held_n as f64),
@@ -587,6 +621,102 @@ mod tests {
         let row = serde_json::to_value(tournament_row(sim, "empty").unwrap()).unwrap();
         assert_eq!(row["judged"], serde_json::json!(2), "{row}");
         assert!(row.get("held").is_none(), "{row}");
+    }
+
+    /// Re-tags a written run's `spec.json` with another character.
+    fn set_character(dir: &Path, character: &str) {
+        let p = dir.join("spec.json");
+        let text = std::fs::read_to_string(&p).unwrap();
+        let text = text.replace("\"malakor\"", &format!("\"{character}\""));
+        std::fs::write(p, text).unwrap();
+    }
+
+    #[test]
+    fn a_tournament_row_carries_the_character_its_tournament_json_recorded() {
+        let tmp = tempfile::tempdir().unwrap();
+        let sim = tmp.path();
+        let t = sim.join("t1");
+        std::fs::create_dir_all(&t).unwrap();
+        std::fs::write(
+            t.join("tournament.json"),
+            r#"{"tournament_id":"t1","matrix_id":"m","base_hash":"b","character":"malakor","runs":2}"#,
+        )
+        .unwrap();
+        let row = tournament_row(sim, "t1").unwrap();
+        assert_eq!(row.character.as_deref(), Some("malakor"), "{row:?}");
+        assert_eq!(row.runs, 2);
+    }
+
+    #[test]
+    fn an_ad_hoc_directory_takes_its_runs_character_only_when_they_agree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let sim = tmp.path();
+        let one = sim.join("adhoc");
+        for id in ["a", "b"] {
+            write_run(&one.join(id), id, Some("simulated"), None, false, CLEAN);
+            set_character(&one.join(id), "kestrel");
+        }
+        // A moved-aside copy is history: its character never votes.
+        write_run(
+            &one.join("a.stale-1"),
+            "a",
+            Some("simulated"),
+            None,
+            false,
+            CLEAN,
+        );
+        let row = tournament_row(sim, "adhoc").unwrap();
+        assert_eq!(row.character.as_deref(), Some("kestrel"), "{row:?}");
+
+        let mixed = sim.join("mixed");
+        write_run(&mixed.join("a"), "a", Some("simulated"), None, false, CLEAN);
+        set_character(&mixed.join("a"), "kestrel");
+        write_run(&mixed.join("b"), "b", Some("simulated"), None, false, CLEAN);
+        let row = tournament_row(sim, "mixed").unwrap();
+        assert_eq!(row.character, None, "{row:?}");
+        let wire = serde_json::to_value(&row).unwrap();
+        assert!(wire.get("character").is_none(), "{wire}");
+    }
+
+    #[test]
+    fn updated_ms_is_the_newest_live_run_json_mtime() {
+        use std::time::{Duration, UNIX_EPOCH};
+        let tmp = tempfile::tempdir().unwrap();
+        let sim = tmp.path();
+        let stamp = |dir: &Path, s: u64| {
+            let f = std::fs::File::options()
+                .write(true)
+                .open(dir.join("run.json"))
+                .unwrap();
+            f.set_modified(UNIX_EPOCH + Duration::from_secs(s)).unwrap();
+        };
+        for (tid, s) in [("old", 100), ("new", 200)] {
+            let t = sim.join(tid);
+            write_run(&t.join("a"), "a", Some("simulated"), None, false, CLEAN);
+            stamp(&t.join("a"), s / 2);
+            write_run(&t.join("b"), "b", Some("simulated"), None, false, CLEAN);
+            stamp(&t.join("b"), s);
+        }
+        assert_eq!(
+            tournament_row(sim, "old").unwrap().updated_ms,
+            Some(100_000)
+        );
+        assert_eq!(
+            tournament_row(sim, "new").unwrap().updated_ms,
+            Some(200_000)
+        );
+
+        let empty = sim.join("empty");
+        std::fs::create_dir_all(&empty).unwrap();
+        std::fs::write(
+            empty.join("tournament.json"),
+            r#"{"base_hash":"b","runs":4}"#,
+        )
+        .unwrap();
+        let row = tournament_row(sim, "empty").unwrap();
+        assert_eq!(row.updated_ms, None, "{row:?}");
+        let wire = serde_json::to_value(&row).unwrap();
+        assert!(wire.get("updated_ms").is_none(), "{wire}");
     }
 
     #[test]

@@ -9285,6 +9285,10 @@
     "TournamentRow": {
       "description": "One row of `tournament.list` and `tournaments.page`.",
       "properties": {
+        "character": {
+          "description": "The character package the tournament ran: `tournament.json`'s `character`, else (an\nad-hoc directory) the one character every live run's spec names. Absent when the runs\ndisagree or nothing says; a picker never defaults to such a row.",
+          "type": "string"
+        },
         "completed": {
           "description": "Runs that finished (simulated, or judged when judging was on).",
           "format": "uint",
@@ -9320,6 +9324,11 @@
         },
         "tournament_id": {
           "type": "string"
+        },
+        "updated_ms": {
+          "description": "The newest live run's `run.json` mtime: when the tournament last produced a result.\nAbsent when no live run has written one. Tournament ids carry no date; this does.",
+          "format": "int64",
+          "type": "integer"
         }
       },
       "required": [

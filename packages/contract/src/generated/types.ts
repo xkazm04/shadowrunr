@@ -4366,6 +4366,12 @@ export interface ToneVariants {
  */
 export interface TournamentRow {
   /**
+   * The character package the tournament ran: `tournament.json`'s `character`, else (an
+   * ad-hoc directory) the one character every live run's spec names. Absent when the runs
+   * disagree or nothing says; a picker never defaults to such a row.
+   */
+  character?: string;
+  /**
    * Runs that finished (simulated, or judged when judging was on).
    */
   completed: number;
@@ -4390,6 +4396,11 @@ export interface TournamentRow {
   red_line_fails?: number;
   runs: number;
   tournament_id: string;
+  /**
+   * The newest live run's `run.json` mtime: when the tournament last produced a result.
+   * Absent when no live run has written one. Tournament ids carry no date; this does.
+   */
+  updated_ms?: number;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema

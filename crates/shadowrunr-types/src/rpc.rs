@@ -239,6 +239,15 @@ pub struct TournamentRow {
     /// Failed `red-line:*` checks summed over the judged runs; omitted when 0.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub red_line_fails: u32,
+    /// The character package the tournament ran: `tournament.json`'s `character`, else (an
+    /// ad-hoc directory) the one character every live run's spec names. Absent when the runs
+    /// disagree or nothing says; a picker never defaults to such a row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character: Option<String>,
+    /// The newest live run's `run.json` mtime: when the tournament last produced a result.
+    /// Absent when no live run has written one. Tournament ids carry no date; this does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_ms: Option<TsMs>,
 }
 
 /// `runs.page` filter; every present field must match.
