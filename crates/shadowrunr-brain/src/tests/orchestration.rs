@@ -465,7 +465,9 @@ async fn without_a_bit_the_material_section_is_byte_absent() {
     b.tick(6_000, Vec::new(), &ctx(&[])).await.unwrap();
     let p = b.last_prompt().unwrap();
     assert!(!p.contains("material_"), "{p}");
-    assert!(p.contains(compose::NO_CHAT_LINE), "{p}");
+    // A quiet beat bridges from the through-line (his last line), never generic filler.
+    assert!(p.contains("build on your last line"), "{p}");
+    assert!(p.contains("Never beg"), "{p}");
     assert!(
         !p.contains("call to action"),
         "the quiet text invites no status re-narration"

@@ -16,6 +16,7 @@ use shadowrunr_types::{
 
 use crate::*;
 
+mod flow;
 mod orchestration;
 mod pace;
 
@@ -190,6 +191,7 @@ fn unpaced() -> BrainTuning {
         pace: PaceConfig {
             speech_lead_ms: i64::MAX,
             budget_chars: usize::MAX,
+            lag_ceiling_ms: i64::MAX,
             ..PaceConfig::default()
         },
         ..tuning()

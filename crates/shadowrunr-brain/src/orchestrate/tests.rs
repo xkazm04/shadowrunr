@@ -112,6 +112,7 @@ impl Room {
             prep,
             speech_until_ms: self.speaking_until.max(self.last_say),
             speech_lead_ms: crate::pace::PaceConfig::default().speech_lead_ms,
+            expected_latency_ms: 0,
             closing: self.closing,
             names: &self.names,
             max_picks: crate::picker::PickerConfig::default().max_picks,
@@ -1068,4 +1069,51 @@ fn carried_chat_survives_a_long_drain_and_expires_25_s_after_it() {
         }
     }
     assert_eq!(expired_at, Some(45_000), "the drain at 20 s, plus 25 s");
+}
+
+#[test]
+fn an_owned_request_passes_the_cold_open_filter_and_is_never_capped() {
+    let prep = sample_prep();
+    let mut room = Room::new();
+    // A regular (seen before) asks to be roasted while the room fills: it reaches the voice.
+    room.o.observe_inbox(&[msg("old", "pigeon", "hi")]);
+    let r = msg(
+        "r",
+        "pigeon",
+        "i lost yesterday's vote, roast me hard no mercy",
+    );
+    let (p, ids, e) = room.beat(
+        5_000,
+        COLD_OPEN_STATE,
+        Some(&prep),
+        vec![r.clone()],
+        vec![cand(&r)],
+    );
+    assert_eq!(p.mode, BeatMode::ColdOpen);
+    assert_eq!(ids, ["r"]);
+    let StreamEvent::BeatPlan { reason, .. } = e else {
+        panic!("a beat_plan")
+    };
+    assert!(reason.contains("owed: r"), "{reason}");
+
+    // After the cold open: a hold carries the request with seven questions; the cap of six
+    // drops questions, never the request.
+    let mut inbox = vec![msg("r2", "otter", "roast me hard malakor, i can take it")];
+    for k in 0..7 {
+        inbox.push(msg(
+            &format!("q{k}"),
+            &format!("asker{k}"),
+            "malakor what is in the moat?",
+        ));
+    }
+    room.speaking_until = Some(60_000);
+    let cands: Vec<Candidate> = inbox.iter().map(cand).collect();
+    let (p, _, _, ev) = room.beat_in(50_000, &ctx("opening"), Some(&prep), inbox, cands);
+    assert_eq!(p.mode, BeatMode::Hold);
+    let capped: Vec<&StreamEvent> = ev
+        .iter()
+        .filter(|e| matches!(e, StreamEvent::Moderation { action, .. } if action == CAPPED))
+        .collect();
+    assert_eq!(capped.len(), 2, "{ev:?}");
+    assert!(!format!("{capped:?}").contains("\"r2\""), "{capped:?}");
 }
