@@ -113,6 +113,90 @@ describe("parseEvent", () => {
   });
 });
 
+describe("tournament.results", () => {
+  const usage = {
+    calls: 0,
+    errors: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_tokens: 0,
+    cache_creation_tokens: 0,
+    cost_usd: 0,
+  };
+  const key = { instrument_hash: "h", tone: "t", core_tier: "haiku", segment: "SEG-01", audience_size: 3 };
+  const cell = {
+    cell: key,
+    runs: 1,
+    judged: 1,
+    void: 0,
+    failed: 0,
+    judge_tiers: ["sonnet"],
+    rules: {},
+    quality: {},
+    core_latency: { n: 0 },
+    usage,
+    usage_by_role: {},
+  };
+  // A results.json written before tier decisions: no tier_decisions, no per-cell counts.
+  const old = {
+    tournament_id: "t",
+    instrument_hashes: ["h"],
+    calibration: [{ kind: "default_assumption" }],
+    runs: 1,
+    judged: 1,
+    void: 0,
+    failed: 0,
+    cells: [cell],
+    latency_by_tier: {},
+    usage_total: usage,
+    usage_by_role: {},
+  };
+
+  it("accepts a results.json written before tier decisions", () => {
+    expect(parseRpcResult("tournament.results", { result: old }).ok).toBe(true);
+  });
+
+  it("accepts a tier decision and the per-cell run counts", () => {
+    const decided = {
+      ...old,
+      cells: [{ ...cell, runs_with_fail: 0, usable_runs: 1 }],
+      tier_decisions: [
+        {
+          group: { instrument_hash: "h", tone: "t", segment: "SEG-01", audience_size: 3 },
+          reference_judge: "sonnet",
+          ranked: [{ core_tier: "haiku", judged: 1, usable_runs: 1, mean_quality: 0.8 }],
+          ineligible: [],
+          beside: [],
+          tie_set: ["haiku"],
+          winner: "haiku",
+          provisional: true,
+          decided_by: "only_eligible",
+        },
+      ],
+    };
+    const r = parseRpcResult("tournament.results", { result: decided });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.tier_decisions?.[0]?.winner).toBe("haiku");
+  });
+
+  it("rejects a decision reason outside the vocabulary", () => {
+    const bad = {
+      ...old,
+      tier_decisions: [
+        {
+          group: { instrument_hash: "h", tone: "t", segment: "SEG-01", audience_size: 3 },
+          ranked: [],
+          ineligible: [{ core_tier: "haiku", reason: "vibes", judged: 1, runs_with_fail: 0 }],
+          beside: [],
+          tie_set: [],
+          provisional: false,
+        },
+      ],
+    };
+    expect(parseRpcResult("tournament.results", { result: bad }).ok).toBe(false);
+  });
+});
+
 describe("generated metadata", () => {
   it("keeps the error taxonomy at ten codes or fewer", () => {
     expect(ERROR_CODES.length).toBeLessThanOrEqual(10);
