@@ -17,7 +17,7 @@ allowed_ops = [
     "switch_segment",
     "sign_off",
 ]
-# The main screen: the big-avatar room only (appendix (screens)).
+# The main screen: the big-avatar room only (appendix (screens and board)).
 screens = ["host"]
 commands = ["summon", "propose", "vote"]
 switch_to = ["SEG-02A"]

@@ -4978,7 +4978,7 @@
           "type": "object"
         },
         {
-          "description": "Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.\n`focus` names a case hex the map zooms to on `hexmap`/`desk` (absent: the overview).\nPin a labelled string between two face-up cards on the evidence board, citing the\nreturned record that shows it (appendix (screens and board)).",
+          "description": "Pin a labelled string between two face-up cards on the evidence board, citing the\nreturned record that shows it, filed under one of them (appendix (screens and board)).",
           "properties": {
             "from": {
               "type": "string"
@@ -5007,6 +5007,7 @@
           "type": "object"
         },
         {
+          "description": "Switch the broadcast's main screen (appendix (screens and board)). Only the screens the\ncurrent segment (and state) allows; `record_id` names a staged case record for\n`browser`/`desk`. `focus` names a case hex the map or board zooms to on\n`hexmap`/`board`/`desk` (absent: the overview).",
           "properties": {
             "focus": {
               "type": "string"
@@ -6771,7 +6772,7 @@
         },
         {
           "const": "hexmap",
-          "description": "The case hexmap full-size.",
+          "description": "The case hexmap full-size. No segment shows it now; kept for older transcripts.",
           "type": "string"
         },
         {

@@ -438,9 +438,15 @@ pub fn body(ev: &StreamEvent) -> String {
         StreamEvent::LinkPinned {
             from,
             to,
+            rel,
             record_id,
+            grade,
             ..
-        } => format!("link_pinned {from} -> {to} citing {record_id}"),
+        } => format!(
+            "link_pinned {from} -{}-> {to} citing {record_id} [{}]",
+            wire(rel),
+            wire(grade)
+        ),
         StreamEvent::Chat { msg, .. } => format!(
             "chat [{}] {} ({}): {}",
             msg.id,

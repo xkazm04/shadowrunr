@@ -298,6 +298,7 @@ push({
   },
 });
 // A string pinned on the evidence board (drawn once the board package lands).
+op(162200, { op: "pin_link", from: "HEX-01", to: "HEX-05", rel: "claims", record_id: "REP-01" });
 push({ type: "link_pinned", ts_ms: 162200, from: "HEX-01", to: "HEX-05", rel: "claims", record_id: "REP-01", grade: "REP" });
 // The research job came back: the runtime opens its record in the browser window.
 op(162600, { op: "show_screen", screen: "browser", record_id: "REP-01" });
