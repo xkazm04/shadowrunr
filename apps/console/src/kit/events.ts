@@ -38,6 +38,8 @@ function opText(ev: Extract<StreamEvent, { type: "op" }>): string {
       return `switch to ${o.to}`;
     case "sign_off":
       return `sign off: ${o.reason}`;
+    case "pin_link":
+      return `pin ${o.from} ${o.rel} ${o.to} · ${o.record_id}`;
     case "show_screen":
       return `screen ${o.screen}${o.record_id ? ` · ${o.record_id}` : ""}`;
   }
@@ -73,6 +75,8 @@ export function eventText(ev: StreamEvent): string {
       return `${ev.stage} · ${ev.rule} · ${ev.action}${ev.msg_id ? ` (${ev.msg_id})` : ""}`;
     case "handover":
       return `${ev.from} → ${ev.to} · ${ev.reason}`;
+    case "link_pinned":
+      return `${ev.from} ${ev.rel} ${ev.to} · ${ev.record_id} [${ev.grade}]`;
     case "record_shown":
       return `${ev.record.id} [${ev.record.grade}] ${ev.record.title}`;
     case "job":

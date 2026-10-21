@@ -370,6 +370,7 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::SegmentEnd { ts_ms, .. }
         | StreamEvent::CaseOpen { ts_ms, .. }
         | StreamEvent::RecordShown { ts_ms, .. }
+        | StreamEvent::LinkPinned { ts_ms, .. }
         | StreamEvent::Chat { ts_ms, .. }
         | StreamEvent::Picked { ts_ms, .. }
         | StreamEvent::Say { ts_ms, .. }
@@ -434,6 +435,12 @@ pub fn body(ev: &StreamEvent) -> String {
                 clip(&record.title, 120)
             )
         }
+        StreamEvent::LinkPinned {
+            from,
+            to,
+            record_id,
+            ..
+        } => format!("link_pinned {from} -> {to} citing {record_id}"),
         StreamEvent::Chat { msg, .. } => format!(
             "chat [{}] {} ({}): {}",
             msg.id,

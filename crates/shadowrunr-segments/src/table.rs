@@ -50,7 +50,7 @@ pub const SEGMENT_TABLE_SOURCES: [(&str, &str); 4] = [
 ];
 
 /// Every `Op` tag (serde name) in the action grammar.
-pub const OP_TAGS: [&str; 12] = [
+pub const OP_TAGS: [&str; 13] = [
     "highlight",
     "start_poll",
     "close_poll",
@@ -63,10 +63,11 @@ pub const OP_TAGS: [&str; 12] = [
     "switch_segment",
     "sign_off",
     "show_screen",
+    "pin_link",
 ];
 
 /// Every [`ScreenId`] (serde name), as `screens` lists them.
-pub const SCREEN_NAMES: [&str; 4] = ["host", "hexmap", "browser", "desk"];
+pub const SCREEN_NAMES: [&str; 5] = ["host", "hexmap", "browser", "desk", "board"];
 
 /// The screen a `screens` entry names. `None` for a name outside [`SCREEN_NAMES`].
 pub fn screen_id(name: &str) -> Option<ScreenId> {
@@ -75,6 +76,7 @@ pub fn screen_id(name: &str) -> Option<ScreenId> {
         "hexmap" => Some(ScreenId::Hexmap),
         "browser" => Some(ScreenId::Browser),
         "desk" => Some(ScreenId::Desk),
+        "board" => Some(ScreenId::Board),
         _ => None,
     }
 }
@@ -86,6 +88,7 @@ pub fn screen_name(id: ScreenId) -> &'static str {
         ScreenId::Hexmap => "hexmap",
         ScreenId::Browser => "browser",
         ScreenId::Desk => "desk",
+        ScreenId::Board => "board",
     }
 }
 
@@ -117,6 +120,7 @@ pub fn op_tag(op: &Op) -> &'static str {
         Op::SwitchSegment { .. } => "switch_segment",
         Op::SignOff { .. } => "sign_off",
         Op::ShowScreen { .. } => "show_screen",
+        Op::PinLink { .. } => "pin_link",
     }
 }
 

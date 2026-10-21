@@ -107,6 +107,7 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::SegmentEnd { ts_ms, .. }
         | StreamEvent::CaseOpen { ts_ms, .. }
         | StreamEvent::RecordShown { ts_ms, .. }
+        | StreamEvent::LinkPinned { ts_ms, .. }
         | StreamEvent::Chat { ts_ms, .. }
         | StreamEvent::Picked { ts_ms, .. }
         | StreamEvent::Say { ts_ms, .. }
@@ -129,6 +130,7 @@ pub fn set_ts(ev: &mut StreamEvent, ts: TsMs) {
         | StreamEvent::SegmentEnd { ts_ms, .. }
         | StreamEvent::CaseOpen { ts_ms, .. }
         | StreamEvent::RecordShown { ts_ms, .. }
+        | StreamEvent::LinkPinned { ts_ms, .. }
         | StreamEvent::Picked { ts_ms, .. }
         | StreamEvent::Say { ts_ms, .. }
         | StreamEvent::Op { ts_ms, .. }
@@ -179,6 +181,13 @@ pub fn body(ev: &StreamEvent) -> String {
             wire(&record.grade),
             record.title,
             record.hex
+        ),
+        StreamEvent::LinkPinned {
+            from, to, rel, record_id, grade, ..
+        } => format!(
+            "link_pinned {from} -{}-> {to} citing {record_id} [{}]",
+            wire(rel),
+            wire(grade)
         ),
         StreamEvent::Chat { msg, .. } => format!(
             "chat {} ({}{}) [{}]: {}",

@@ -2330,9 +2330,13 @@ pub(crate) mod tests {
                     grade: None,
                     fog: true,
                     sources: vec![format!("https://www.sec.gov/test/{}", i + 1)],
+                    role: None,
+                    date: None,
                 })
                 .collect(),
             links: vec![("HEX-01".into(), "HEX-03".into())],
+            thesis: None,
+            acts: Vec::new(),
         };
         let record = |id: &str, hex: &str, grade: EvidenceGrade, source: &str| CaseRecord {
             id: id.into(),

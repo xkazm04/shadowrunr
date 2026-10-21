@@ -96,7 +96,7 @@ export const dimName = (id: string): string => DIM_NAME[id] ?? human(id);
 
 const OP_NAME: Readonly<Record<string, string>> = {
   start_poll: "start a poll", close_poll: "close a poll", summon_foil: "summon a foil", dismiss_foil: "dismiss the foil", reveal_hex: "reveal a hex", highlight: "highlight a message",
-  show_card: "show a card", switch_segment: "switch segment", sign_off: "sign off", dispatch_research: "send a researcher", mark_moment: "mark a moment", show_screen: "switch the screen",
+  show_card: "show a card", switch_segment: "switch segment", sign_off: "sign off", dispatch_research: "send a researcher", mark_moment: "mark a moment", show_screen: "switch the screen", pin_link: "pin a string on the board",
 };
 const REFUSAL_REASON: Readonly<Record<string, string>> = {
   foil_already_active: "that foil is already on stage", unknown_msg: "the message does not exist", duplicate_poll_id: "the poll name was taken", no_such_poll: "no such poll is open",
