@@ -8,6 +8,8 @@ import {
   foilName,
   foilShort,
   hash32,
+  offeredTournaments,
+  pickTournament,
   rosterKicker,
   rosterWindow,
   selectedIndex,
@@ -169,11 +171,29 @@ describe("package markdown", () => {
 });
 
 describe("the default tournament for situation verdicts", () => {
-  it("is the one with the most finished runs, ties going last", async () => {
-    const { mostEvidence } = await import("./SituationsTab");
-    const row = (tournament_id: string, completed: number) => ({ tournament_id, completed, runs: 120, instrument_hash: "h" });
-    expect(mostEvidence([row("night-0dd8", 8), row("pilot-d1ef", 4), row("weary-0dd8", 57)])).toBe("weary-0dd8");
-    expect(mostEvidence([row("a", 4), row("b", 4)])).toBe("b");
-    expect(mostEvidence([])).toBeUndefined();
+  const row = (tournament_id: string, o: { character?: string; updated_ms?: number; completed?: number } = {}) => ({
+    tournament_id,
+    completed: o.completed ?? 4,
+    runs: 120,
+    instrument_hash: "h",
+    ...(o.character === undefined ? {} : { character: o.character }),
+    ...(o.updated_ms === undefined ? {} : { updated_ms: o.updated_ms }),
+  });
+
+  it("is this character's newest tournament, not the one with the most runs", () => {
+    const big = row("malakor-big", { character: "malakor", updated_ms: 100, completed: 40 });
+    const fresh = row("malakor-fresh", { character: "malakor", updated_ms: 200, completed: 3 });
+    expect(pickTournament([big, fresh], "malakor")?.tournament_id).toBe("malakor-fresh");
+    expect(pickTournament([fresh, big], "malakor")?.tournament_id).toBe("malakor-fresh");
+  });
+
+  it("offers a row without a character but never defaults to it, and never to another character's", () => {
+    const unknown = row("adhoc", { updated_ms: 900, completed: 90 });
+    const other = row("kestrel-new", { character: "kestrel", updated_ms: 950 });
+    const own = row("malakor-old", { character: "malakor", updated_ms: 100 });
+    expect(pickTournament([unknown, other, own], "malakor")?.tournament_id).toBe("malakor-old");
+    expect(pickTournament([unknown, other], "malakor")).toBeUndefined();
+    expect(offeredTournaments([unknown, other, own], "malakor").map((r) => r.tournament_id)).toEqual(["malakor-old", "adhoc"]);
+    expect(pickTournament([], "malakor")).toBeUndefined();
   });
 });

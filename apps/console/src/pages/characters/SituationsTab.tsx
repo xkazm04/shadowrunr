@@ -1,8 +1,10 @@
 // Situations: the sim's situation bank as a virtualised table. Each situation is judged as the
 // rule `situation:<id>`; its verdict results come from a tournament's results.json (every cell's
 // tally summed), and its failing evidence links to the run's verdict and the transcript line.
+// Only this character's tournaments are read (pickTournament): situation ids are generic, so
+// another package's verdicts would read as this one's.
 import { useMemo, useState } from "react";
-import type { CharacterDetail, Situation, TournamentRow } from "@shadowrunr/contract";
+import type { CharacterDetail, Situation } from "@shadowrunr/contract";
 import { useRpc } from "../../data";
 import { pageRoute, RouteLink, useRouter } from "../../router";
 import { transcriptRoute } from "../../router/brain";
@@ -15,7 +17,7 @@ import { StatePanel } from "../../ui/States";
 import styles from "./Layer2.module.css";
 import { Inline } from "../../ui/Markdown";
 import { int, parseRef } from "../../kit/events";
-import { failingRuns, judged, SITUATION_PREFIX, situationTallies, type SituationTally } from "./model";
+import { failingRuns, judged, offeredTournaments, pickTournament, SITUATION_PREFIX, situationTallies, type SituationTally } from "./model";
 import { pkgRoute } from "./routes";
 
 const ALL = "all";
@@ -23,14 +25,8 @@ const STATES = ["pass", "fail", "not_provoked", "not_evaluable"] as const;
 /** Failing evidence lines listed per situation; the rest are counted, not drawn. */
 const EVIDENCE_SHOWN = 40;
 
-/** The default tournament: the one with the most finished runs (ids carry no date); ties go last. */
-export function mostEvidence(rows: readonly TournamentRow[]): string | undefined {
-  let best: TournamentRow | undefined;
-  for (const r of rows) if (!best || r.completed >= best.completed) best = r;
-  return best?.tournament_id;
-}
-
-export function Outcomes({ t }: { readonly t: SituationTally | undefined }) {
+export function Outcomes({ t, none }: { readonly t: SituationTally | undefined; readonly none?: boolean }) {
+  if (none === true) return <span className={styles.dim}>no tournament</span>;
   if (!t) return <span className={styles.dim}>not in this tournament</span>;
   const shown = STATES.filter((k) => t[k] > 0);
   if (shown.length === 0) return <span className={styles.dim}>no verdicts</span>;
@@ -47,8 +43,9 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
   const router = useRouter();
   const tournaments = useRpc("tournament.list", {});
   const [picked, setPicked] = useState<string | undefined>(undefined);
-  const tids = (tournaments.data ?? []).map((t) => t.tournament_id);
-  const tid = picked !== undefined && tids.includes(picked) ? picked : mostEvidence(tournaments.data ?? []);
+  const offered = useMemo(() => offeredTournaments(tournaments.data ?? [], d.id), [tournaments.data, d.id]);
+  const tids = offered.map((t) => t.tournament_id);
+  const tid = picked !== undefined && tids.includes(picked) ? picked : pickTournament(offered, d.id)?.tournament_id;
   const results = useRpc("tournament.results", tid === undefined ? null : { tournament_id: tid });
   const tallies = useMemo(() => (results.data ? situationTallies(results.data) : undefined), [results.data]);
 
@@ -77,9 +74,9 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
         sortValue: (s) => s.archetype,
       },
       { id: "beh", header: "What the viewer does", cell: (s) => s.behaviour },
-      { id: "out", header: "Verdicts", cell: (s) => <Outcomes t={tallies?.get(s.id)} />, sortValue: (s) => -(tallies?.get(s.id)?.fail ?? 0) },
+      { id: "out", header: "Verdicts", cell: (s) => <Outcomes t={tallies?.get(s.id)} none={tid === undefined} />, sortValue: (s) => -(tallies?.get(s.id)?.fail ?? 0) },
     ],
-    [tallies],
+    [tallies, tid],
   );
 
   const sel = selected === undefined ? undefined : d.situations.find((s) => s.id === selected);
@@ -95,15 +92,20 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
         <label className={styles.fld}>
           <span>Verdicts from</span>
           <select value={tid ?? ""} disabled={tids.length === 0} onChange={(e) => setPicked(e.target.value)}>
-            {tids.length === 0 && <option value="">no tournament yet</option>}
-            {tids.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {tid === undefined && <option value="">{tids.length === 0 ? "no tournament yet" : "pick a tournament"}</option>}
+            {offered.map((t) => (
+              <option key={t.tournament_id} value={t.tournament_id}>
+                {t.character === undefined ? `${t.tournament_id} · character unknown` : t.tournament_id}
               </option>
             ))}
           </select>
         </label>
-        <ResultsState tournaments={tournaments.data?.length} listError={tournaments.errorView?.title} resultsError={results.errorView?.title} />
+        <ResultsState
+          tournaments={tournaments.data?.length}
+          name={tid === undefined ? d.name : undefined}
+          listError={tournaments.errorView?.title}
+          resultsError={results.errorView?.title}
+        />
         <RouteLink to={pageRoute("simulator", "heatmap")} className={buttonClass("secondary", "compact")}>
           The trials heatmap
         </RouteLink>
@@ -138,10 +140,12 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
 /** The situation row just picked: where its detail pushes in from. */
 const pickedRow = (): Element | null => document.querySelector("[data-role='characters-situations'] [aria-selected='true']");
 
-function ResultsState(p: { tournaments: number | undefined; listError: string | undefined; resultsError: string | undefined }) {
+/** `name` is set when no tournament is chosen: none of the listed ones is this character's. */
+function ResultsState(p: { tournaments: number | undefined; name: string | undefined; listError: string | undefined; resultsError: string | undefined }) {
   let text: string | undefined;
   if (p.listError !== undefined) text = `Tournaments unavailable · ${p.listError}`;
   else if (p.tournaments === 0) text = "No tournament has run yet: verdicts appear once one does.";
+  else if (p.tournaments !== undefined && p.name !== undefined) text = `No tournament has run for ${p.name} yet: verdicts appear once one does.`;
   else if (p.resultsError !== undefined) text = `Results unavailable · ${p.resultsError}`;
   return text === undefined ? null : (
     <span className={styles.warnInl} role="status">

@@ -17,6 +17,10 @@ interface Daemon {
   roster?: ReturnType<typeof genRoster>;
   results?: ReturnType<typeof genResults>;
   tournaments?: string[];
+  /** tournament.list rows as served, overriding `tournaments`. */
+  rows?: readonly Record<string, unknown>[];
+  /** Every tournament.results request body, in order. */
+  resultsSent?: string[];
   onSet?: (sent: string) => ReturnType<Script>;
   /** The daemon's rules.json override, changed by character.rules.set. */
   state?: Record<string, boolean>;
@@ -33,6 +37,7 @@ const daemon =
       case "character.list":
         return ok(o.roster ?? [malakorSummary()]);
       case "character.get":
+        if (/"id":"kestrel"/.test(sent)) return ok({ ...malakorDetail(), id: "kestrel", name: "Kestrel Vane" });
         return /"id":"malakor"/.test(sent) ? ok({ ...(o.v2 ? malakorParams() : malakorDetail()), ...(o.tone ? { active_tone: o.tone.value } : {}) }) : fail("not_found", "no such character");
       case "character.tone.set": {
         const tone = /"tone":"([^"]+)"/.exec(sent)?.[1] ?? "";
@@ -44,8 +49,12 @@ const daemon =
       case "character.rules.set":
         return o.onSet ? o.onSet(sent) : ok(malakorRules(o.state));
       case "tournament.list":
-        return ok((o.tournaments ?? ["t-pilot", "t-scale"]).map((id) => ({ tournament_id: id, runs: 4, completed: 4, instrument_hash: "h" })));
+        return ok(
+          o.rows ??
+            (o.tournaments ?? ["t-pilot", "t-scale"]).map((id, i) => ({ tournament_id: id, runs: 4, completed: 4, instrument_hash: "h", character: "malakor", updated_ms: 1000 + i })),
+        );
       case "tournament.results":
+        o.resultsSent?.push(sent);
         return ok(o.results ?? genResults(2, 1));
       default:
         return fail("method_not_found", method);
@@ -282,5 +291,34 @@ describe("situations link to their verdicts", () => {
     expect(role("characters-situation-evidence")?.querySelectorAll("li")).toHaveLength(40);
     expect(role("characters-situation")?.textContent).toContain("1,960 more lines across 40 runs");
     expect(nodes()).toBeLessThan(BUDGET);
+  });
+});
+
+describe("situation verdicts come only from this character's tournaments", () => {
+  const rows = [
+    { tournament_id: "malakor-big", instrument_hash: "h", runs: 40, completed: 40, character: "malakor", updated_ms: 100 },
+    { tournament_id: "kestrel-small", instrument_hash: "h", runs: 3, completed: 3, character: "kestrel", updated_ms: 50 },
+  ];
+
+  it("lists and reads only the package's own tournaments", async () => {
+    const resultsSent: string[] = [];
+    mount(["kestrel", "package", "situations"], { rows, resultsSent });
+    await settle(6);
+    const select = role("characters-situation-results")?.querySelector("select") as HTMLSelectElement | null;
+    expect([...(select?.options ?? [])].map((o) => o.value)).toEqual(["kestrel-small"]);
+    expect(select?.value).toBe("kestrel-small");
+    expect(resultsSent.length).toBeGreaterThan(0);
+    for (const sent of resultsSent) expect(sent).toContain(`"params":{"tournament_id":"kestrel-small"}`);
+  });
+
+  it("says no tournament has run for this character when only another's has, and fetches no verdicts", async () => {
+    const resultsSent: string[] = [];
+    mount(["kestrel", "package", "situations"], { rows: rows.slice(0, 1), resultsSent });
+    await settle(6);
+    expect(role("characters-situation-results")?.textContent).toContain("No tournament has run for Kestrel Vane yet");
+    expect(resultsSent).toEqual([]);
+    const table = role("characters-situations");
+    expect(table?.querySelectorAll("tbody tr[data-index]").length).toBeGreaterThan(0);
+    expect(table?.textContent).not.toMatch(/\d+ (pass|fail)/);
   });
 });

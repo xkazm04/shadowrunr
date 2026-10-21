@@ -1,7 +1,7 @@
 // Pure helpers for the Characters page: the roster window, display names, the generic avatar's
 // deterministic spec (the winner's sr-kit `avatarSpec`, kept exactly), and the situation
 // verdict tallies read out of a tournament's results.json.
-import type { CharacterSummary, FoilInfo, TournamentResults } from "@shadowrunr/contract";
+import type { CharacterSummary, FoilInfo, TournamentResults, TournamentRow } from "@shadowrunr/contract";
 import { refRun } from "../../kit/events";
 
 /** The roster switches to the dense "billing block" (two rows of ten) above this many. */
@@ -146,6 +146,27 @@ export function avatarSpec(seed: number): AvatarSpec {
 
 /** A non-Malakor character's avatar, seeded from its id as the winner seeded from the name. */
 export const avatarOf = (id: string): AvatarSpec => avatarSpec(hash32(id) + 7);
+
+// ---- which tournament a package's verdicts come from ----
+
+/**
+ * Whose evidence a package may read, newest first: this character's tournaments, then rows
+ * that do not say whose they are (labelled, offered, never the default). Another character's
+ * tournament is never offered: its situation ids may match this bank's and read as ours.
+ */
+export function offeredTournaments(rows: readonly TournamentRow[], character: string): TournamentRow[] {
+  const newest = (a: TournamentRow, b: TournamentRow) => (b.updated_ms ?? -1) - (a.updated_ms ?? -1);
+  return [...rows.filter((r) => r.character === character).sort(newest), ...rows.filter((r) => r.character === undefined).sort(newest)];
+}
+
+/**
+ * The default tournament: this character's newest (`updated_ms`), else none. Editing the
+ * package starts a new tournament, so the newest is the current package version's evidence;
+ * "most runs" would prefer a superseded version's.
+ */
+export function pickTournament(rows: readonly TournamentRow[], character: string): TournamentRow | undefined {
+  return offeredTournaments(rows, character).find((r) => r.character === character);
+}
 
 // ---- situation verdicts out of results.json ----
 
