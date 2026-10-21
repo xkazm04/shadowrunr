@@ -179,7 +179,9 @@ pub fn recording(cfg: &Config, session_id: &str) -> Result<ClipRunRecording, Rpc
     })
 }
 
-/// `clips.render`: records the stage when the tools exist; blocking, minutes for a video.
+/// `clips.render`: records the stage when the tools exist; blocking, minutes for a video. The
+/// store lock is held only to snapshot and to commit, so the owner's other acts never wait on
+/// it; a second render of the same clip is a conflict, and a failed one keeps the last video.
 pub fn render(cfg: &Config, id: &str) -> Result<ClipCandidate, RpcError> {
     let tools = cfg.render_tools();
     Ok(shadowrunr_clips::scan::rerender(
