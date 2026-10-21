@@ -8,8 +8,8 @@ use shadowrunr_segments::{
     StreamKind,
 };
 use shadowrunr_types::{
-    ChatMsg, Command, EvidenceGrade, Hex, HexKind, ModStage, Op, Platform, Rank, SegmentId,
-    StreamEvent, Viewer,
+    ChatMsg, Command, EvidenceGrade, Hex, HexKind, ModStage, Op, Platform, Rank, ScreenId,
+    SegmentId, StreamEvent, Viewer,
 };
 
 const FOILS: [&str; 2] = ["the-disruptor", "the-life-coach"];
@@ -257,7 +257,14 @@ fn clock_completes_the_switch_after_grace() {
                 segment: SegmentId::Seg02aHexmap,
                 ..
             },
-            StreamEvent::CaseOpen { .. }
+            StreamEvent::CaseOpen { .. },
+            StreamEvent::Op {
+                op: Op::ShowScreen {
+                    screen: ScreenId::Hexmap,
+                    record_id: None
+                },
+                ..
+            }
         ]
     ));
     assert_eq!(rt.segment(), SegmentId::Seg02aHexmap);
@@ -278,7 +285,8 @@ fn brain_switch_during_pending_handover_does_not_repeat_it() {
         }],
     );
     assert!(handovers(&evs).is_empty());
-    assert_eq!(accepted_ops(&evs), 1);
+    // The switch, and the new segment's default screen.
+    assert_eq!(accepted_ops(&evs), 2);
     assert_eq!(rt.segment(), SegmentId::Seg02aHexmap);
 }
 
@@ -666,9 +674,16 @@ fn start_in_seg02a_opens_the_fictional_demo_case() {
     let [StreamEvent::SegmentStart {
         ts_ms: 1_000,
         segment: SegmentId::Seg02aHexmap,
-    }, StreamEvent::CaseOpen { ts_ms: 1_000, case }] = evs.as_slice()
+    }, StreamEvent::CaseOpen { ts_ms: 1_000, case }, StreamEvent::Op {
+        ts_ms: 1_000,
+        op:
+            Op::ShowScreen {
+                screen: ScreenId::Hexmap,
+                record_id: None,
+            },
+    }] = evs.as_slice()
     else {
-        panic!("expected segment_start then case_open, got {evs:?}");
+        panic!("expected segment_start, case_open, then the default screen, got {evs:?}");
     };
     let demo = demo_case();
     assert_eq!(case.id, demo.id);
@@ -686,10 +701,19 @@ fn start_outside_seg02a_has_no_case_open() {
     let evs = rt.start(0);
     assert!(matches!(
         evs.as_slice(),
-        [StreamEvent::SegmentStart {
-            segment: SegmentId::Seg01ImprovisedRoom,
-            ..
-        }]
+        [
+            StreamEvent::SegmentStart {
+                segment: SegmentId::Seg01ImprovisedRoom,
+                ..
+            },
+            StreamEvent::Op {
+                op: Op::ShowScreen {
+                    screen: ScreenId::Host,
+                    record_id: None
+                },
+                ..
+            }
+        ]
     ));
 }
 
@@ -971,7 +995,11 @@ fn research_on_a_seeded_hex_files_its_planted_records() {
     let sources = &hex(&rt, "HEX-04").sources;
     assert_eq!(sources.len(), 3, "{sources:?}");
     let summary = rt.context(10, 3).state_summary;
-    assert_eq!(summary.matches("DOC-03").count(), 1, "{summary}");
+    let file_line = summary
+        .lines()
+        .find(|l| l.starts_with("case file"))
+        .unwrap();
+    assert_eq!(file_line.matches("DOC-03").count(), 1, "{summary}");
     assert!(summary.contains("HEX-04 2/2 SPENT"), "{summary}");
 }
 
@@ -2073,5 +2101,289 @@ fn a_tied_crowd_poll_on_hexes_works_every_tied_hex() {
              (each tied hex counts as voted: {a}, {b})"
         )),
         "{s}"
+    );
+}
+
+// ----- screens (appendix (screens)) -------------------------------------------------------
+
+fn screen(screen: ScreenId, record_id: Option<&str>) -> Op {
+    Op::ShowScreen {
+        screen,
+        record_id: record_id.map(str::to_string),
+    }
+}
+
+/// The `show_screen` ops in `evs`, as (screen, record_id).
+fn screens(evs: &[StreamEvent]) -> Vec<(ScreenId, Option<String>)> {
+    evs.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Op {
+                op: Op::ShowScreen { screen, record_id },
+                ..
+            } => Some((*screen, record_id.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Every event as its wire tag (`record_shown`, `op:show_screen`...), in order.
+fn tags(evs: &[StreamEvent]) -> Vec<String> {
+    evs.iter()
+        .map(|e| {
+            let v = serde_json::to_value(e).unwrap();
+            let t = v["type"].as_str().unwrap().to_string();
+            match v["op"]["op"].as_str() {
+                Some(op) => format!("{t}:{op}"),
+                None => t,
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn seg01_has_one_screen_and_the_cold_open_stays_on_host() {
+    let mut rt = seg01_cold();
+    assert!(rt.in_cold_open());
+    assert_eq!(rt.screen(), ScreenId::Host);
+    let evs = rt.apply_ops(1_000, &[screen(ScreenId::Hexmap, None)]);
+    assert_eq!(rejections(&evs)[0].1, "op_not_allowed");
+    assert_eq!(rt.screen(), ScreenId::Host);
+    // The cold open ends on its ceiling: still the big-avatar room, nothing to switch.
+    let evs = rt.tick(180_000, 0);
+    assert!(!rt.in_cold_open());
+    assert!(screens(&evs).is_empty(), "{evs:?}");
+    assert_eq!(rt.screen(), ScreenId::Host);
+    let ctx = rt.context(0, 180);
+    assert!(!ctx.allowed_ops.iter().any(|o| o == "show_screen"));
+    assert!(
+        !ctx.state_summary.contains("Screen:"),
+        "{}",
+        ctx.state_summary
+    );
+}
+
+#[test]
+fn browser_needs_a_record() {
+    let mut rt = seg02a();
+    let evs = rt.apply_ops(1_000, &[screen(ScreenId::Browser, None)]);
+    assert_eq!(rejections(&evs)[0].1, "no_record");
+    let evs = rt.apply_ops(1_000, &[screen(ScreenId::Desk, None)]);
+    assert_eq!(rejections(&evs)[0].1, "no_record");
+    assert_eq!(rt.screen(), ScreenId::Hexmap);
+    // The refusal is named in the state, like every other.
+    let summary = rt.context(0, 1).state_summary;
+    assert!(summary.contains("show_screen: no_record"), "{summary}");
+}
+
+#[test]
+fn a_record_must_be_filed_and_back_before_the_browser_shows_it() {
+    let mut rt = seg02a();
+    // DOC-03 is in the case file, but no bone-clerk has been sent for it yet.
+    let evs = rt.apply_ops(1_000, &[screen(ScreenId::Browser, Some("DOC-03"))]);
+    assert_eq!(rejections(&evs)[0].1, "record_not_filed");
+    assert!(!evs
+        .iter()
+        .any(|e| matches!(e, StreamEvent::RecordShown { .. })));
+    let evs = rt.apply_ops(1_000, &[screen(ScreenId::Desk, Some("NOPE-01"))]);
+    assert_eq!(rejections(&evs)[0].1, "record_not_filed");
+    rt.apply_ops(
+        2_000,
+        &[research("r1", "HEX-04: trace the treasury wallet")],
+    );
+    // Filed at dispatch (the case file and the DOC rule see it), but the job is still out.
+    let evs = rt.apply_ops(2_500, &[screen(ScreenId::Browser, Some("DOC-03"))]);
+    assert_eq!(rejections(&evs)[0].1, "record_not_returned");
+    assert!(!evs
+        .iter()
+        .any(|e| matches!(e, StreamEvent::RecordShown { .. })));
+    let summary = rt.context(0, 2).state_summary;
+    assert!(
+        summary.contains("Records on file: none yet"),
+        "a record still out is not offered: {summary}"
+    );
+    rt.job_done("r1", 2_800);
+    let evs = rt.apply_ops(3_000, &[screen(ScreenId::Browser, Some("CLM-02"))]);
+    assert!(rejections(&evs).is_empty(), "{evs:?}");
+    assert_eq!(rt.screen(), ScreenId::Browser);
+    assert_eq!(rt.screen_record(), Some("CLM-02"));
+}
+
+#[test]
+fn record_shown_goes_out_once_and_before_the_op_that_names_it() {
+    let mut rt = seg02a();
+    rt.apply_ops(0, &[research("r1", "HEX-04: trace the treasury wallet")]);
+    rt.job_done("r1", 500);
+    let evs = rt.apply_ops(1_000, &[screen(ScreenId::Desk, Some("CLM-02"))]);
+    assert_eq!(tags(&evs), ["record_shown", "op:show_screen"]);
+    let StreamEvent::RecordShown { ts_ms, record } = &evs[0] else {
+        unreachable!()
+    };
+    assert_eq!(*ts_ms, 1_000);
+    let filed = rt
+        .case_file()
+        .unwrap()
+        .records
+        .iter()
+        .find(|r| r.id == "CLM-02")
+        .unwrap();
+    assert_eq!(
+        (&record.id, &record.hex, record.grade, &record.title),
+        (&filed.id, &filed.hex, filed.grade, &filed.title)
+    );
+    assert_eq!(
+        (
+            &record.source,
+            &record.summary,
+            &record.retrieved,
+            &record.via
+        ),
+        (&filed.source, &filed.summary, &filed.retrieved, &filed.via)
+    );
+    assert!(record.fictional);
+    // Absent provenance is omitted on the wire, never null.
+    let line = serde_json::to_string(&evs[0]).unwrap();
+    assert!(!line.contains("null"), "{line}");
+    // Named again: no second record_shown.
+    let evs = rt.apply_ops(2_000, &[screen(ScreenId::Hexmap, None)]);
+    assert_eq!(tags(&evs), ["op:show_screen"]);
+    let evs = rt.apply_ops(3_000, &[screen(ScreenId::Browser, Some("CLM-02"))]);
+    assert_eq!(tags(&evs), ["op:show_screen"]);
+    // A refused op sends no record.
+    let evs = rt.apply_ops(4_000, &[screen(ScreenId::Browser, Some("DOC-01"))]);
+    assert_eq!(tags(&evs), ["moderation"]);
+}
+
+#[test]
+fn browser_and_desk_reopen_the_record_already_open() {
+    let mut rt = seg02a();
+    rt.apply_ops(0, &[research("r1", "HEX-04: trace the treasury wallet")]);
+    rt.job_done("r1", 500);
+    rt.apply_ops(1_000, &[screen(ScreenId::Browser, Some("DOC-03"))]);
+    let evs = rt.apply_ops(
+        2_000,
+        &[
+            // A record_id on the map is ignored: the map shows no record.
+            screen(ScreenId::Hexmap, Some("NOPE-01")),
+            screen(ScreenId::Desk, None),
+        ],
+    );
+    assert!(rejections(&evs).is_empty(), "{evs:?}");
+    assert_eq!(rt.screen(), ScreenId::Desk);
+    assert_eq!(rt.screen_record(), Some("DOC-03"));
+    let summary = rt.context(0, 2).state_summary;
+    assert!(
+        summary.contains("Screen: desk on DOC-03. Records on file, newest first: CLM-02, DOC-03"),
+        "{summary}"
+    );
+}
+
+#[test]
+fn a_returning_job_opens_its_first_filed_record() {
+    let mut rt = seg02a();
+    assert!(rt.job_done("r1", 500).is_empty(), "no such job yet");
+    rt.apply_ops(0, &[research("r1", "HEX-04: trace the treasury wallet")]);
+    let evs = rt.job_done("r1", 20_000);
+    assert_eq!(tags(&evs), ["record_shown", "op:show_screen"]);
+    assert_eq!(
+        screens(&evs),
+        [(ScreenId::Browser, Some("DOC-03".to_string()))]
+    );
+    assert_eq!(rt.screen(), ScreenId::Browser);
+    // Once per job.
+    assert!(rt.job_done("r1", 21_000).is_empty());
+    // A search that filed nothing opens nothing.
+    rt.apply_ops(
+        22_000,
+        &[research("r2", "HEX-08: who controls Mirecrown Trust")],
+    );
+    assert!(rt.job_done("r2", 30_000).is_empty());
+    // A refused dispatch is no job of the runtime's.
+    rt.apply_ops(31_000, &[research("r3", "HEX-04: again")]);
+    let evs = rt.apply_ops(32_000, &[research("r4", "HEX-04: and again")]);
+    assert_eq!(rejections(&evs)[0].1, "research_cap_reached");
+    assert!(rt.job_done("r4", 40_000).is_empty());
+}
+
+#[test]
+fn a_default_never_overrides_the_models_screen_within_the_hold() {
+    use shadowrunr_segments::runtime::SCREEN_HOLD_MS;
+    assert_eq!(SCREEN_HOLD_MS, 8_000);
+    let mut rt = seg02a();
+    rt.apply_ops(
+        0,
+        &[
+            research("r1", "HEX-04: trace the treasury wallet"),
+            research("r2", "HEX-01: the syndicate's licence"),
+        ],
+    );
+    rt.apply_ops(10_000, &[screen(ScreenId::Hexmap, None)]);
+    // Inside the hold: suppressed, and the job's default is spent.
+    assert!(rt.job_done("r1", 10_000 + SCREEN_HOLD_MS - 1).is_empty());
+    assert_eq!(rt.screen(), ScreenId::Hexmap);
+    assert!(rt.job_done("r1", 30_000).is_empty());
+    // At the end of the hold the next job's default goes up.
+    let evs = rt.job_done("r2", 10_000 + SCREEN_HOLD_MS);
+    assert_eq!(
+        screens(&evs),
+        [(ScreenId::Browser, Some("DOC-01".to_string()))]
+    );
+}
+
+#[test]
+fn no_screen_defaults_after_the_sign_off() {
+    let mut rt = seg02a();
+    rt.apply_ops(0, &[research("r1", "HEX-04: trace the treasury wallet")]);
+    rt.apply_ops(
+        1_000,
+        &[Op::SignOff {
+            reason: "done".into(),
+        }],
+    );
+    assert!(rt.is_signed_off());
+    assert!(rt.job_done("r1", 20_000).is_empty());
+    let evs = rt.apply_ops(21_000, &[screen(ScreenId::Hexmap, None)]);
+    assert_eq!(rejections(&evs)[0].1, "signed_off");
+}
+
+#[test]
+fn the_screen_line_is_short_and_capped() {
+    let mut rt = seg02a();
+    let summary = rt.context(0, 0).state_summary;
+    assert!(
+        summary.contains("Screen: hexmap. Records on file: none yet (browser and desk need one)"),
+        "{summary}"
+    );
+    rt.apply_ops(
+        0,
+        &[
+            research("r1", "HEX-01: the licence"),
+            research("r2", "HEX-04: the wallet"),
+            research("r3", "HEX-05: the promise"),
+        ],
+    );
+    let line = |rt: &SegmentRuntime| {
+        let summary = rt.context(0, 0).state_summary;
+        summary
+            .lines()
+            .find(|l| l.starts_with("Screen:"))
+            .unwrap()
+            .to_string()
+    };
+    // Filed, but no job is back yet: nothing to offer.
+    assert_eq!(
+        line(&rt),
+        "Screen: hexmap. Records on file: none yet (browser and desk need one)"
+    );
+    rt.job_done("r1", 10_000);
+    rt.job_done("r2", 20_000);
+    assert_eq!(
+        line(&rt),
+        "Screen: browser on DOC-03. Records on file, newest first: CLM-02, DOC-03, REP-01, DOC-01"
+    );
+    rt.job_done("r3", 30_000);
+    assert_eq!(
+        line(&rt),
+        "Screen: browser on REP-02. Records on file, newest first: REP-02, CLM-02, DOC-03, REP-01 \
+         +1 older"
     );
 }

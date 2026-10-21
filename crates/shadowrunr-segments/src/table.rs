@@ -27,7 +27,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 use serde::Deserialize;
-use shadowrunr_types::{Op, SegmentId, SegmentStatus};
+use shadowrunr_types::{Op, ScreenId, SegmentId, SegmentStatus};
 
 use crate::SegmentError;
 
@@ -63,6 +63,30 @@ pub const OP_TAGS: [&str; 12] = [
     "sign_off",
     "show_screen",
 ];
+
+/// Every [`ScreenId`] (serde name), as `screens` lists them.
+pub const SCREEN_NAMES: [&str; 4] = ["host", "hexmap", "browser", "desk"];
+
+/// The screen a `screens` entry names. `None` for a name outside [`SCREEN_NAMES`].
+pub fn screen_id(name: &str) -> Option<ScreenId> {
+    match name {
+        "host" => Some(ScreenId::Host),
+        "hexmap" => Some(ScreenId::Hexmap),
+        "browser" => Some(ScreenId::Browser),
+        "desk" => Some(ScreenId::Desk),
+        _ => None,
+    }
+}
+
+/// Serde name of a screen, as `screens` lists it.
+pub fn screen_name(id: ScreenId) -> &'static str {
+    match id {
+        ScreenId::Host => "host",
+        ScreenId::Hexmap => "hexmap",
+        ScreenId::Browser => "browser",
+        ScreenId::Desk => "desk",
+    }
+}
 
 /// Chat command names a segment may accept.
 pub const COMMAND_NAMES: [&str; 5] = ["summon", "hint", "grade", "propose", "vote"];
@@ -225,6 +249,10 @@ pub struct StateRules {
     /// A short rules line the state summary carries while the segment is in this state.
     #[serde(default)]
     pub prompt: Option<String>,
+    /// Screens allowed in this state, a subset of the segment's `screens`; the first is the
+    /// state's default. Absent: the segment's list.
+    #[serde(default)]
+    pub screens: Option<Vec<String>>,
 }
 
 /// SEG-01's handover clock rule. All values are assumptions.
@@ -349,6 +377,9 @@ pub struct SegmentTable {
     pub initial: String,
     pub states: Vec<String>,
     pub allowed_ops: Vec<String>,
+    /// Screens `show_screen` may put up (appendix (screens)); the first is the default the
+    /// runtime shows at `segment_start`.
+    pub screens: Vec<String>,
     pub commands: Vec<String>,
     /// Segments `switch_segment` may move to.
     pub switch_to: Vec<SegmentId>,
@@ -407,6 +438,35 @@ impl SegmentTable {
         {
             return Err(bad(format!("unknown op {op:?}")));
         }
+        let screens: BTreeSet<&str> = self.screens.iter().map(String::as_str).collect();
+        if self.screens.is_empty()
+            || screens.len() != self.screens.len()
+            || screens.iter().any(|n| screen_id(n).is_none())
+        {
+            return Err(bad(format!(
+                "screens: one or more distinct names from {SCREEN_NAMES:?}"
+            )));
+        }
+        if self.allows_op("show_screen") && self.screens.len() < 2 {
+            return Err(bad("show_screen needs two or more screens".into()));
+        }
+        // A default goes up with no record named, so it is never the browser window.
+        let shows_no_record = |list: &[String]| {
+            list.first()
+                .and_then(|n| screen_id(n))
+                .is_some_and(|s| matches!(s, ScreenId::Host | ScreenId::Hexmap))
+        };
+        if !shows_no_record(&self.screens)
+            || self
+                .state_rules
+                .values()
+                .filter_map(|r| r.screens.as_deref())
+                .any(|l| !shows_no_record(l))
+        {
+            return Err(bad(
+                "screens: a default (the first entry) is host or hexmap".into(),
+            ));
+        }
         if let Some(c) = self
             .commands
             .iter()
@@ -439,6 +499,13 @@ impl SegmentTable {
                 return Err(bad(format!(
                     "state_rules.{state}: op {op:?} is not in the segment's allowed_ops"
                 )));
+            }
+            if let Some(list) = &rules.screens {
+                if list.is_empty() || list.iter().any(|n| !screens.contains(n.as_str())) {
+                    return Err(bad(format!(
+                        "state_rules.{state}: screens must be a non-empty subset of the segment's"
+                    )));
+                }
             }
         }
         if let Some(r) = &c.cold_open {
@@ -487,6 +554,31 @@ impl SegmentTable {
                 .get(state)
                 .and_then(|r| r.allowed_ops.as_ref())
                 .is_none_or(|ops| ops.iter().any(|o| o == tag))
+    }
+
+    /// The screens allowed in `state`: the state's own list, or the segment's. The first is
+    /// the default.
+    pub fn screens_in(&self, state: &str) -> &[String] {
+        self.state_rules
+            .get(state)
+            .and_then(|r| r.screens.as_deref())
+            .unwrap_or(&self.screens)
+    }
+
+    /// Whether `screen` may fill the main screen in `state`.
+    pub fn allows_screen_in(&self, state: &str, screen: ScreenId) -> bool {
+        self.screens_in(state)
+            .iter()
+            .any(|n| n == screen_name(screen))
+    }
+
+    /// The default screen of `state`: the first of [`Self::screens_in`] (validated, so
+    /// `host` only as a fallback for an unvalidated table).
+    pub fn default_screen(&self, state: &str) -> ScreenId {
+        self.screens_in(state)
+            .first()
+            .and_then(|n| screen_id(n))
+            .unwrap_or(ScreenId::Host)
     }
 
     /// The rules line of `state`, if the table gives it one.
@@ -709,8 +801,58 @@ mod tests {
         want.remove("dismiss_foil");
         want.insert("reveal_hex");
         want.insert("dispatch_research");
+        want.insert("show_screen");
         let got: BTreeSet<&str> = two.allowed_ops.iter().map(String::as_str).collect();
         assert_eq!(got, want);
+    }
+
+    #[test]
+    fn screens_match_the_brief_and_the_cold_open_stays_on_host() {
+        let one = segment_table(SegmentId::Seg01ImprovisedRoom).unwrap();
+        assert_eq!(one.screens, ["host"]);
+        assert!(!one.allows_op("show_screen"));
+        assert_eq!(one.screens_in(COLD_OPEN_STATE), ["host"]);
+        assert!(!one.allows_op_in(COLD_OPEN_STATE, "show_screen"));
+        let two = segment_table(SegmentId::Seg02aHexmap).unwrap();
+        assert_eq!(two.screens, ["hexmap", "browser", "desk", "host"]);
+        assert_eq!(two.default_screen(&two.initial), ScreenId::Hexmap);
+        assert!(two.allows_op("show_screen"));
+        for s in &two.states {
+            assert!(two.allows_screen_in(s, ScreenId::Browser), "{s}");
+        }
+        for id in descoped_segments() {
+            assert_eq!(segment_table(id).unwrap().screens, ["host"]);
+        }
+        let p = two.rules_prompt.to_lowercase();
+        assert!(p.contains("go back to the hexmap"), "{p}");
+    }
+
+    #[test]
+    fn invalid_screens_rejected() {
+        let one = SEGMENT_TABLE_SOURCES[0].1;
+        let two = SEGMENT_TABLE_SOURCES[1].1;
+        let list = "screens = [\"hexmap\", \"browser\", \"desk\", \"host\"]";
+        assert!(two.contains(list));
+        for bad in [
+            "screens = []",
+            "screens = [\"hexmap\", \"cinema\"]",
+            "screens = [\"hexmap\", \"hexmap\"]",
+            // A default goes up with no record: never the browser window.
+            "screens = [\"browser\", \"hexmap\"]",
+            // show_screen with one screen has nothing to switch to.
+            "screens = [\"hexmap\"]",
+        ] {
+            let t = two.replace(list, bad);
+            assert!(SegmentTable::from_toml_str("x", &t).is_err(), "{bad}");
+        }
+        let cold = "allowed_ops = [\"highlight\", \"show_card\", \"mark_moment\", \"sign_off\"]\n\
+                    # The cold open is the big-avatar room, whatever the segment's screens.\n\
+                    screens = [\"host\"]";
+        assert!(one.contains(cold));
+        let outside = one.replace(cold, &cold.replace("[\"host\"]", "[\"hexmap\"]"));
+        assert!(SegmentTable::from_toml_str("x", &outside).is_err());
+        let empty = one.replace(cold, &cold.replace("[\"host\"]", "[]"));
+        assert!(SegmentTable::from_toml_str("x", &empty).is_err());
     }
 
     #[test]

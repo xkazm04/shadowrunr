@@ -771,9 +771,15 @@ impl Session {
                         Op::SignOff { reason } => Some(reason.clone()),
                         _ => None,
                     });
+                    let jobs = runner::jobs_done(&evs);
                     self.log.push_all(evs)?;
                     if !ops.is_empty() {
                         let ev = runner::drop_op_echo(&ops, stage.apply_ops(done, &ops));
+                        self.log.push_all(ev)?;
+                    }
+                    // After this beat's ops, so the model's own show_screen holds against them.
+                    for job in jobs {
+                        let ev = stage.job_done(&job, done);
                         self.log.push_all(ev)?;
                     }
                     if let Some(reason) = sign_off {

@@ -45,8 +45,9 @@ The `op` payload is the action grammar, tagged `"op"`:
 - `switch_segment`
 - `sign_off`
 - `show_screen` (`screen`: `host` | `hexmap` | `browser` | `desk`, optional `record_id`): what
-  fills the broadcast's main screen. The contract is in place; no segment allows it yet, so the
-  runtime refuses it as `screen_not_allowed` until the screens package lands.
+  fills the broadcast's main screen. Only the screens the segment and its state allow; `browser`
+  and `desk` need a record whose research job has come back. The runtime also emits it itself (the segment's default
+  screen, a returning research job's record). See Appendix (screens).
 
 A `record_shown {ts_ms, record}` event carries one staged case record (`ShownRecord`: `id`,
 `hex`, `grade`, `title`, `source`, `summary`, optional `retrieved` and `via`, `fictional`) for the
@@ -1247,3 +1248,81 @@ speaking JSON lines on stdio:
 **Disclosure:** while the voice is on, the stage shows "synthetic voice". The voice is Kokoro's
 stock `af_heart` (sid 3 of kokoro-multi-lang-v1_0). It is no real person's voice, and voice
 cloning is out of scope.
+
+## Appendix (screens): the streamer screen, its allow-lists and defaults
+
+What fills the broadcast's main screen is chosen by the model with `show_screen` and checked by
+`SegmentRuntime` against the segment table. The runtime also switches on its own events, so the
+screen never depends on the model remembering.
+
+**Allow-lists** (segment tables, `data/segments/*.toml`).
+- `screens = [...]`: the screens a segment may put up. Names come from `SCREEN_NAMES`: `host`,
+  `hexmap`, `browser`, `desk`. The first entry is the segment's default.
+- `[state_rules.<state>] screens = [...]`: an optional narrower list for one state, a non-empty
+  subset of the segment's. Its first entry is that state's default.
+- A default (any list's first entry) is `host` or `hexmap`: it goes up with no record named.
+- `show_screen` is in `allowed_ops` only for a segment with two or more screens.
+
+| Segment | `screens` | Default | `show_screen` allowed |
+|---|---|---|---|
+| SEG-01 | `host` | `host` | no |
+| SEG-01, state `cold_open` | `host` (locked) | `host` | no |
+| SEG-02A | `hexmap`, `browser`, `desk`, `host` | `hexmap` | yes |
+| SEG-02B-I, SEG-02B-II (descoped) | `host` | `host` | no |
+
+**Validation** (`apply_op`). After the generic checks (`signed_off`, `op_not_allowed`,
+`not_in_state`), a `show_screen` is refused, as a `moderation` event with action
+`rejected:show_screen`, by the first rule it fails:
+1. `screen_not_allowed`: the screen is not in the current state's list.
+2. `no_record`: `browser` or `desk` with no `record_id` and no record opened earlier in the
+   session. Without a `record_id`, the record last opened in the browser window is reopened.
+3. `record_not_filed`: the record is not one the bone-clerks filed this session (an accepted
+   `dispatch_research` that named its hex).
+4. `record_not_returned`: the record was filed, but its research job has not come back yet.
+   Records are filed at dispatch (the case-file line and the DOC rule see them at once); the
+   browser shows one only after `job_done` for its job.
+
+A `record_id` on `host` or `hexmap` is ignored.
+
+**`record_shown`.** The first time a record is named in a session, by the model's `show_screen`
+or by a runtime default, the runtime emits `record_shown`. It carries the case file's
+`CaseRecord` fields, copied (a real case's records are already scrubbed when staged), with the
+case file's `fictional`. The event goes out before the `op` event that shows the record, and
+never twice for the same id in one session.
+
+**Runtime defaults.** These are `op` events the runtime emits itself. The sim's echo filter
+drops at most one echo per op the model sent, so a default identical to the model's op survives.
+- `segment_start`, at the start and after every switch, is followed by `case_open` (SEG-02A) and
+  then `show_screen` with the new segment's default screen. It always goes out.
+- A state change whose list excludes the screen up emits `show_screen` with the state's default.
+  It follows the op that changed the state, or comes from the clock's tick. It always goes out:
+  an allow-list is a rule.
+- A research job comes back: the brain's `job` event with status `done` is fed to
+  `SegmentRuntime::job_done(job_id, ts)`. This is done by the sim runner and by the sandbox, after
+  the beat's ops. If the runtime accepted the job's `dispatch_research` and that dispatch filed
+  records, those records count as returned (shown from now on, whatever the screen does).
+  Then, if `browser` is allowed now, the runtime emits `record_shown` (first time only), then
+  `show_screen browser` with the first record that dispatch filed. Each job opens a record at
+  most once.
+
+**Hold rule.** The job default never overrides a `show_screen` the model made within
+`SCREEN_HOLD_MS` (8,000 ms; an assumption, uncalibrated). A default suppressed by the hold is
+spent: it does not fire later, though the job's records still count as returned. Nothing is emitted after a sign-off.
+
+**Event order**, in one call:
+- start: `segment_start`, `case_open` (SEG-02A), `show_screen` (default), then any arc card;
+- a model op: `record_shown` (if new), the `op` echo, its consequences, then any state default;
+- a returning job: `record_shown` (if new), then `show_screen browser`.
+
+**What the model sees.**
+- SEG-02A's rules prompt has one sentence on when to switch: show the record he is talking
+  about, and go back to the hexmap to choose the next hex.
+- When the segment allows `show_screen`, the state summary carries one line:
+  `Screen: <screen>[ on <record>][ (only <list> now)]. Records on file, newest first: <ids>
+  [+N older]`, at most 4 ids, returned records only (newest = latest back). Before any job is
+  back it reads `Records on file: none yet (browser and desk need one)`.
+- The ids only: the research block's case-file line already gives each record's hex, grade and
+  title.
+
+**Clips.** A clip's scene events keep every `show_screen` and `record_shown` up to the end of the
+cut, so a replay opens on the screen that was up.

@@ -17,6 +17,8 @@ allowed_ops = [
     "switch_segment",
     "sign_off",
 ]
+# The main screen: the big-avatar room only (appendix (screens)).
+screens = ["host"]
 commands = ["summon", "propose", "vote"]
 switch_to = ["SEG-02A"]
 
@@ -71,6 +73,8 @@ sustain_s = 20
 [state_rules.cold_open]
 # Polls and foils wait for the room.
 allowed_ops = ["highlight", "show_card", "mark_moment", "sign_off"]
+# The cold open is the big-avatar room, whatever the segment's screens.
+screens = ["host"]
 prompt = """
 The room is still filling: tell tonight's cold-open story; answer only newcomers' first hello \
 and anything about safety; no polls, no foils yet.

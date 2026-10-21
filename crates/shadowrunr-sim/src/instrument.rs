@@ -24,7 +24,7 @@ use crate::SimError;
 
 /// Bump when the simulator's or the judge's logic changes in a way that changes verdicts
 /// (prompt templates, verification rules, scheduling).
-pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/5";
+pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/6";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstrumentFile {
@@ -403,10 +403,11 @@ mod tests {
     }
 
     /// `fixture` hashed with no brief and no experiment: the golden that both entries must
-    /// leave untouched when absent. It moves only with `SIM_LOGIC_VERSION` (`/5`: carried bait
-    /// picked first, after `/4`: two picks a beat, gifts and the cold open carried, the
+    /// leave untouched when absent. It moves only with `SIM_LOGIC_VERSION` (`/6`: the screens,
+    /// runtime screen defaults and a returning research job opening its record, after `/5`:
+    /// carried bait picked first, after `/4`: two picks a beat, gifts and the cold open carried, the
     /// speech-aware say gap, a full-length session).
-    const PRE_BRIEF_HASH: &str = "c6abc7221950c0f7d4859e3e2c96fefa21416e5492c5c2864fda283c4996d65c";
+    const PRE_BRIEF_HASH: &str = "a986a484dc0c7b83e9e6d0de0a9aef2841e5eb90c28a103ff7532eb173a9ad9e";
 
     #[test]
     fn a_brief_joins_the_hash_only_when_present() {
