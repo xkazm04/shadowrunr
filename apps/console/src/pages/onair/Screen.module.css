@@ -121,13 +121,13 @@
 .slT { font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-kicker-lg); }
 .screen[data-slip] .scrSlip { opacity: 1; transform: rotate(-1.6deg); }
 
-.scrCard { position: absolute; left: 6%; right: 6%; top: 18%; z-index: var(--sr-z-screen-card); padding: var(--sr-space-cozy) var(--sr-space-near); border: var(--sr-space-tick) solid var(--ink); background: var(--sr-color-foil); color: var(--ink); box-shadow: .3rem .3rem 0 var(--ink); animation: card-in .45s var(--sr-ease-slam) var(--d, 0ms) both, card-out .45s var(--sr-ease-slam) calc(7s + var(--d, 0ms)) forwards; }
+.scrCard { position: absolute; left: 6%; right: 6%; top: 18%; z-index: var(--sr-z-screen-card); padding: var(--sr-space-cozy) var(--sr-space-near); border: var(--sr-space-tick) solid var(--ink); background: var(--sr-color-foil); color: var(--ink); box-shadow: .3rem .3rem 0 var(--ink); animation: card-in .45s var(--sr-ease-slam) var(--d, 0ms) both, card-out .45s var(--sr-ease-slam) calc(var(--out, 16s) - .45s + var(--d, 0ms)) forwards; }
 .scrCard b { display: block; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-label); line-height: 1.05; letter-spacing: .04em; text-transform: uppercase; }
 .scrCard span { display: block; margin-top: var(--sr-space-tick); font-size: var(--sr-size-caption); line-height: 1.3; }
 @keyframes card-in { from { opacity: 0; transform: scale(.9) rotate(1.2deg); } to { opacity: 1; transform: rotate(1.2deg); } }
 @keyframes card-out { to { opacity: 0; transform: scale(.9) rotate(1.2deg); } }
 
-.scrDecree { position: absolute; left: 3%; right: 3%; bottom: var(--sr-space-snug); z-index: var(--sr-z-screen-decree); display: flex; align-items: center; gap: var(--sr-space-cozy); padding: .35rem var(--sr-space-cozy); background: var(--paper); color: var(--ink); box-shadow: .25rem .25rem 0 var(--sr-color-signal); animation: decree-in .5s var(--sr-ease-slam) var(--d, 0ms) both, decree-out .5s var(--sr-ease-slam) calc(5.5s + var(--d, 0ms)) forwards; }
+.scrDecree { position: absolute; left: 3%; right: 3%; bottom: var(--sr-space-snug); z-index: var(--sr-z-screen-decree); display: flex; align-items: center; gap: var(--sr-space-cozy); padding: .35rem var(--sr-space-cozy); background: var(--paper); color: var(--ink); box-shadow: .25rem .25rem 0 var(--sr-color-signal); animation: decree-in .5s var(--sr-ease-slam) var(--d, 0ms) both, decree-out .5s var(--sr-ease-slam) calc(var(--out, 6.5s) - .5s + var(--d, 0ms)) forwards; }
 .scrDecree svg { flex: none; width: 2.4rem; }
 .scrDecree b { display: block; color: var(--sr-color-signal-deep); font-family: var(--sr-font-display); font-size: var(--sr-size-micro); letter-spacing: .16em; text-transform: uppercase; }
 .dcT { display: block; max-height: 2.4em; overflow: hidden; font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-small); line-height: 1.2; }
@@ -183,7 +183,7 @@
 @keyframes wi { to { opacity: 1; } }
 .cpT i { font-style: normal; opacity: .75; }
 
-.scrMoment { position: absolute; right: var(--sr-space-close); top: var(--sr-space-gutter); z-index: var(--sr-z-screen-decree); max-width: 60%; padding: var(--sr-space-hair) var(--sr-space-cozy); background: var(--sr-color-ok-bright); color: var(--ink); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .1em; text-transform: uppercase; animation: moment-in .4s var(--sr-ease-settle) var(--d, 0ms) both, moment-out .4s var(--sr-ease-settle) calc(3.6s + var(--d, 0ms)) forwards; }
+.scrMoment { position: absolute; right: var(--sr-space-close); top: var(--sr-space-gutter); z-index: var(--sr-z-screen-decree); max-width: 60%; padding: var(--sr-space-hair) var(--sr-space-cozy); background: var(--sr-color-ok-bright); color: var(--ink); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .1em; text-transform: uppercase; animation: moment-in .4s var(--sr-ease-settle) var(--d, 0ms) both, moment-out .4s var(--sr-ease-settle) calc(var(--out, 3.6s) - .4s + var(--d, 0ms)) forwards; }
 @keyframes moment-in { from { opacity: 0; transform: translateX(30%); } to { opacity: 1; transform: none; } }
 @keyframes moment-out { to { opacity: 0; transform: translateX(30%); } }
 

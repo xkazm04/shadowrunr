@@ -1,25 +1,26 @@
 // What the On Air screen shows, derived from a stage-kit scene: pure functions, no clock. The
-// "lives" (how long a card or a decree stays up) are the winner's stage.js timings in wall
-// seconds; a replay at speed s covers s transcript-seconds per wall-second.
+// screen is a screenprint of the broadcast, so WHETHER a timed overlay is up is the broadcast's
+// own on-screen schedule (stage-kit `onScreen`), in transcript time, at any replay speed; this
+// file keeps only the presentation (trims, bar scale, the CSS delay derived from `since`).
 import type { ChatMsg, EvidenceGrade, Rank, SegmentId } from "@shadowrunr/contract";
 import { foilInfo, pollBars, shownLane, type SceneState } from "@shadowrunr/stage-kit";
+import { captionOn, cardOn, decreeOn, foilLineOn, momentOn, pollOn, type Shown } from "@shadowrunr/stage-kit/ui";
 
-/** Wall-clock lives of the timed overlays, from the winner's `later(...)` calls. */
-export const LIFE_MS = { slip: 8000, card: 7000, decree: 5500, moment: 3600, pollAfterClose: 5000 } as const;
 /** The winner keeps the last six chat lines on screen. */
 export const CHAT_ROWS = 6;
 
 export interface Life {
   /** Still on screen at this position. */
   readonly live: boolean;
-  /** A negative CSS animation delay (ms): an overlay mounted late starts part-way through. */
+  /** A negative CSS animation delay (ms, transcript time): an overlay mounted late starts part-way through. */
   readonly delayMs: number;
+  /** How long it stays up from when it came on screen (Infinity while nothing ends it). */
+  readonly lifeMs: number;
 }
 
-/** Whether an overlay that appeared at `at` (transcript ms) is still up at `position`. */
-export function lifeOf(at: number, position: number, speed: number, lifeMs: number): Life {
-  const elapsedWall = Math.max(0, (position - at) / Math.max(speed, 1e-6));
-  return { live: elapsedWall < lifeMs, delayMs: -Math.round(elapsedWall) };
+/** An overlay the broadcast has on screen, `position - since` (transcript ms) into its life. */
+export function lifeOf(shown: Pick<Shown<unknown>, "since" | "until">, position: number): Life {
+  return { live: position < shown.until, delayMs: -Math.round(Math.max(0, position - shown.since)), lifeMs: shown.until - shown.since };
 }
 
 export interface ChatRow {
@@ -65,15 +66,15 @@ export interface VoteView {
   readonly question: string;
   readonly rows: readonly VoteRow[];
   readonly closed: boolean;
-  /** Set once the poll closed: the panel clears after LIFE_MS.pollAfterClose. */
+  /** Set once the poll closed: the panel clears when the broadcast's does (POLL_LINGER_MS). */
   readonly closing: Life | undefined;
 }
 
-export function voteView(scene: SceneState, position: number, speed: number): VoteView | null {
-  const poll = scene.activePoll === null ? undefined : scene.polls[scene.activePoll];
-  if (!poll) return null;
-  const closing = poll.closedAt === undefined ? undefined : lifeOf(poll.closedAt, position, speed, LIFE_MS.pollAfterClose);
-  if (closing && !closing.live) return null;
+export function voteView(scene: SceneState, position: number, _speed = 1): VoteView | null {
+  const shown = pollOn(scene, position);
+  if (!shown) return null;
+  const poll = shown.value;
+  const closing = poll.closedAt === undefined ? undefined : lifeOf({ since: poll.closedAt, until: shown.until }, position);
   const bars = pollBars(poll);
   const weights = bars.map((b) => b.weight);
   // The winner's scale: the bars never hit 100% until one option holds most of the weight.
@@ -130,9 +131,10 @@ export function captionWords(text: string): Word[] {
   return out;
 }
 
-export function captionView(scene: SceneState, position: number, speed: number): CaptionView | null {
-  const c = scene.caption;
-  const f = scene.foilLine;
+/** The lower third: the broadcast's queued caption showing now (or the foil's newer line). */
+export function captionView(scene: SceneState, position: number, _speed = 1): CaptionView | null {
+  const c = captionOn(scene, position)?.value ?? null;
+  const f = foilLineOn(scene, position)?.value ?? null;
   const useFoil = f !== null && (c === null || f.id > c.id);
   const line = useFoil ? f : c;
   if (line === null) return null;
@@ -145,7 +147,7 @@ export function captionView(scene: SceneState, position: number, speed: number):
     role: useFoil ? "Guest foil" : "Lord’s envoy",
     words: captionWords(text),
     talkSecs,
-    talk: lifeOf(line.at, position, speed, talkSecs * 1000),
+    talk: lifeOf({ since: line.at, until: line.at + talkSecs * 1000 }, position),
     parity: line.id % 2 === 0 ? "a" : "b",
   };
 }
@@ -156,34 +158,34 @@ export interface Timed<T> {
   readonly life: Life;
 }
 
-export function cardView(scene: SceneState, position: number, speed: number): Timed<{ title: string; body: string }> | null {
-  const c = scene.card;
-  if (!c) return null;
-  const life = lifeOf(c.at, position, speed, LIFE_MS.card);
-  if (!life.live) return null;
+export function cardView(scene: SceneState, position: number, _speed = 1): Timed<{ title: string; body: string }> | null {
+  const shown = cardOn(scene, position);
+  if (!shown) return null;
+  const c = shown.value;
   const body = c.body.length > 150 ? `${c.body.slice(0, 147)}…` : c.body;
-  return { key: `${c.id}@${c.at}`, value: { title: c.title, body }, life };
+  return { key: `${c.id}@${c.at}`, value: { title: c.title, body }, life: lifeOf(shown, position) };
 }
 
-/** The winner seals the first picked line of the latest pick as a decree. */
-export function decreeView(scene: SceneState, position: number, speed: number): Timed<string> | null {
-  const picked = scene.decrees.filter((d) => d.kind === "picked");
-  if (picked.length === 0) return null;
-  const at = Math.max(...picked.map((d) => d.at));
-  const d = picked.find((x) => x.at === at);
-  const m = d ? scene.chats.get(d.msgId) : undefined;
-  if (!d || !m) return null;
-  const life = lifeOf(d.at, position, speed, LIFE_MS.decree);
-  if (!life.live) return null;
-  return { key: d.key, value: m.text.slice(0, 110), life };
+export interface DecreeView extends Timed<string> {
+  /** What the broadcast's slot says the line is: highlighted, picked, or held after its turn. */
+  readonly label: string;
+  readonly held: boolean;
 }
 
-export function momentView(scene: SceneState, position: number, speed: number): Timed<string> | null {
-  const m = scene.moments[scene.moments.length - 1];
-  if (!m) return null;
-  const life = lifeOf(m.at, position, speed, LIFE_MS.moment);
-  if (!life.live) return null;
-  return { key: `${m.at}:${m.label}`, value: `Moment marked: ${m.label}`, life };
+/** The broadcast's decree slot: highlights and picks in queued turns, the last one held. */
+export function decreeView(scene: SceneState, position: number, _speed = 1): DecreeView | null {
+  const shown = decreeOn(scene, position);
+  if (!shown) return null;
+  const { turn, msg, held } = shown.value;
+  const label = held ? "Last heard by the Lich" : turn.decree.kind === "highlight" ? "Decree of the Lich" : "Decree · picked from chat";
+  return { key: shown.key, value: msg.text.slice(0, 110), life: lifeOf(shown, position), label, held };
+}
+
+export function momentView(scene: SceneState, position: number, _speed = 1): Timed<string> | null {
+  const shown = momentOn(scene, position);
+  if (!shown) return null;
+  const m = shown.value;
+  return { key: shown.key, value: `Moment marked: ${m.label}`, life: lifeOf(shown, position) };
 }
 
 /** The sign-off slate: Malakor's reason, or the end of the stream. */

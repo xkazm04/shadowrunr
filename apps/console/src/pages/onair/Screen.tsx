@@ -9,6 +9,7 @@ import type { FeedSnapshot } from "./player";
 import styles from "./Screen.module.css";
 import { ScreenHex } from "./ScreenHex";
 import { CaptionText, ChatLines, DecreeSeal, ScreenSet, VoteRows, lifeStyle } from "./ScreenParts";
+import type { Life } from "./view";
 import {
   captionView,
   cardView,
@@ -43,7 +44,13 @@ export interface ScreenProps {
   readonly dispatch?: string | undefined;
 }
 
+/** The overlay's CSS: how far into its life it is, and when its exit plays (never while held). */
+function timedStyle(life: Life): CSSProperties {
+  return { ...lifeStyle(life), "--out": Number.isFinite(life.lifeMs) ? `${life.lifeMs}ms` : "86400s" } as CSSProperties;
+}
+
 export function Screen(props: ScreenProps) {
+  // Every timed overlay runs on transcript time, as the broadcast's own replay clock does.
   const { scene, position, speed, playing, live } = props.snapshot;
   const seg = segmentOf(scene);
   const caption = captionView(scene, position, speed);
@@ -56,7 +63,7 @@ export function Screen(props: ScreenProps) {
   const talking = caption !== null && caption.talk.live;
   const rootStyle = {
     ...(caption ? { "--talk-iter": String(Math.max(1, Math.round(caption.talkSecs / 0.34))), "--talk-d": `${caption.talk.delayMs}ms` } : {}),
-    ...(vote?.closing ? { "--vote-gone": `${5000 + vote.closing.delayMs}ms` } : {}),
+    ...(vote?.closing ? { "--vote-gone": `${vote.closing.lifeMs + vote.closing.delayMs}ms` } : {}),
   } as CSSProperties;
 
   return (
@@ -125,16 +132,16 @@ export function Screen(props: ScreenProps) {
           <span className={styles.slT}>{props.dispatch ?? ""}</span>
         </RouteLink>
         {card && (
-          <div key={card.key} className={styles.scrCard} style={lifeStyle(card.life)} data-role="onair-card">
+          <div key={card.key} className={styles.scrCard} style={timedStyle(card.life)} data-role="onair-card">
             <b>{card.value.title}</b>
             <span>{card.value.body}</span>
           </div>
         )}
         {decree && (
-          <div key={decree.key} className={styles.scrDecree} style={lifeStyle(decree.life)} data-role="onair-decree">
+          <div key={decree.key} className={styles.scrDecree} style={timedStyle(decree.life)} data-role="onair-decree">
             <DecreeSeal />
             <div>
-              <b>Decree · picked from chat</b>
+              <b>{decree.label}</b>
               <span className={styles.dcT}>{decree.value}</span>
             </div>
           </div>
@@ -163,7 +170,7 @@ export function Screen(props: ScreenProps) {
       </div>
 
       {moment && (
-        <div key={moment.key} className={styles.scrMoment} style={lifeStyle(moment.life)} data-role="onair-moment">
+        <div key={moment.key} className={styles.scrMoment} style={timedStyle(moment.life)} data-role="onair-moment">
           {moment.value}
         </div>
       )}
