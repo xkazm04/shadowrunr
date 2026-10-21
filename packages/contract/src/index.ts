@@ -5,5 +5,5 @@
 export type * from "./generated/types";
 export { ERROR_CODES, RPC_METHODS } from "./generated/meta";
 export type { RpcMethod, RpcParams, RpcResult } from "./generated/meta";
-export { parseEvent, parseRpcResult } from "./door";
+export { parseEvent, parseRpcResult, preloadResultValidators } from "./door";
 export type { DoorError, EventMessage, Issue, Result } from "./door";

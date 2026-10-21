@@ -23,6 +23,8 @@ export function fromDoorError(e: DoorError, method?: string): DataError {
     }
     case "unknown_method":
       return dataError("method_not_found", e.message, { method: e.method });
+    case "unavailable_validator":
+      return dataError("unavailable", e.message, { reason: "validator_unavailable", method: e.method });
     case "parse":
       return dataError("internal", e.message, { reason: "invalid_payload", path: "", ...m });
     case "invalid":
@@ -31,8 +33,8 @@ export function fromDoorError(e: DoorError, method?: string): DataError {
 }
 
 export const contractDoor: Door = {
-  parseRpcResult(method, raw) {
-    const r = parseRpcResult(method, raw);
+  async parseRpcResult(method, raw) {
+    const r = await parseRpcResult(method, raw);
     return r.ok ? ok(r.value) : err(fromDoorError(r.error, method));
   },
   parseEvent(raw) {
