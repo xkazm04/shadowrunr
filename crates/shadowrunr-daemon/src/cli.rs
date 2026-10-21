@@ -652,6 +652,46 @@ impl DaemonClient {
             .map_err(|e| CallError::Unreachable(e.to_string()))?;
         rpc_reply(&bytes)
     }
+
+    /// Like [`Self::call`], but an error keeps the whole `/rpc` envelope (code, message and
+    /// detail) as an [`RpcError`]; the outer `Err` is "no daemon answered".
+    pub async fn call_envelope(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<Result<serde_json::Value, crate::rpc::RpcError>, String> {
+        let body = serde_json::json!({ "method": method, "params": params });
+        let resp = self
+            .http
+            .post(&self.url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body.to_string())
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+        rpc_envelope(&bytes)
+    }
+}
+
+/// `{"result"}` as `Ok(Ok)`, `{"error"}` as `Ok(Err)` with its detail kept; a body that is not a
+/// daemon reply is `Err`.
+pub fn rpc_envelope(
+    bytes: &[u8],
+) -> Result<Result<serde_json::Value, crate::rpc::RpcError>, String> {
+    let v: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|e| format!("not a daemon reply: {e}"))?;
+    if let Some(err) = v.get("error") {
+        let body: shadowrunr_types::ErrorBody = serde_json::from_value(err.clone())
+            .map_err(|e| format!("not a daemon error envelope: {e}"))?;
+        let mut e = crate::rpc::RpcError::new(body.code, body.message);
+        e.detail = body.detail;
+        return Ok(Err(e));
+    }
+    match v.get("result") {
+        Some(r) => Ok(Ok(r.clone())),
+        None => Err("not a daemon reply: no result".into()),
+    }
 }
 
 /// `{"result"}` as `T`, or `{"error"}` as [`CallError::Rpc`].
