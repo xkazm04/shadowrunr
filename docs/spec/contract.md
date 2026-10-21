@@ -1020,6 +1020,19 @@ the brain never waits on audio.
   - `skipped {run_id, seq, part, reason: late|queue_full|error}`
 - `VoiceFollowFrame` = `{"follow": {"run_id"?}}`, sent by the client. With no `run_id`, the
   newest live run is followed, and the follow moves to each new run as it starts.
+- `VoiceClientFrame`: everything a client may send, told apart by its one key (untagged):
+  - `{"follow": {...}}` (above);
+  - `VoicePlayedFrame` = `{"played": {run_id, seq, part, at_wall_ms}}`: the part's audio started
+    playing, at the stage's wall clock (epoch ms);
+  - `VoiceStageDroppedFrame` = `{"stage_dropped": {run_id, seq, reason: "stage_cap"}}`: the stage
+    dropped the whole line to stay within its cap;
+  - `VoiceFaceFrame` = `{"face": {run_id, state: "rig"|"silhouette", at_wall_ms}}`: the face
+    drawn (`FaceState`), sent on load and on every change.
+
+  The reports are written to the run's `voice.jsonl` and never answered. A report never changes
+  the follow, and an unknown or invalid frame is ignored.
+- `VoiceLogLine`: one `voice.jsonl` line (below). A file format, not a wire frame: it is not
+  generated into the TS contract.
 
 **`GET /voice`** (WebSocket, same origin rule as `/events`):
 - `status` is sent on connect and on every state change.
@@ -1028,9 +1041,11 @@ the brain never waits on audio.
   the final sentence.
 - Foil lines and replays are not voiced in v1. Nothing is voiced until a client sends its
   first `follow`, and a run is voiced only while some client follows it.
-- `starting` until the sidecar's `hello`. A missing engine or Kokoro file is `degraded` before
-  anything is spawned; a `hello` that carries a `reason` (no mouth shapes, the engine in use) is
-  still `ready`, with `visemes` as the hello says.
+- `starting` until the sidecar's `hello`. A missing Kokoro file is `degraded` before anything
+  is spawned; a `hello` that carries a `reason` (no mouth shapes, the engine in use) is still
+  `ready`, with `visemes` as the hello says. The engine binary is optional: without it the
+  sidecar is still spawned, and its `hello` is `ready` only when the reason names
+  `engine: warm`; otherwise the status is `degraded`, naming the binary and quoting the reason.
 - **Bounded:**
   - at most `max_queue` lines wait to render; past that, the oldest is `skipped` with `queue_full`;
   - at most `lines_in_flight` lines are with the sidecar at once. Their frames still go out one
@@ -1074,6 +1089,33 @@ speaking JSON lines on stdio:
 - It exits when its stdin closes.
 - Text goes to sherpa as one argument in an argument list, never through a shell.
 - The espeak-ng data and the engine binary are the operator's install. Neither is bundled.
+
+**Run-directory artifacts.** Absent values are omitted keys, never `null`.
+- `voice.jsonl`, written by the daemon for a sandbox session (the session opens it; events for a
+  run without one are dropped). One `VoiceLogLine` per line, in the order events happen:
+  `{"ts_ms", "seq", "event", "part"?, "reason"?, "duration_ms"?, "text"?}`.
+  - `event`: `rendered` (an `utterance` went out: `part`, `duration_ms`, `text`), `skipped` (the
+    service's `skipped`: `part`, `reason` `late`|`queue_full`|`error`), `played` (stage: `part`),
+    `stage_dropped` (stage: `reason` `stage_cap`), `face` (stage: `reason` `rig`|`silhouette`,
+    `seq` 0).
+  - `ts_ms` is the session's stream clock: wall epoch ms minus the session's `started_ms`; a
+    stage frame's `at_wall_ms` is converted the same way (`stage_dropped` carries no time and is
+    stamped on arrival). While the session runs, `started_ms` is estimated as the smallest
+    `arrival - event ts_ms` over its events; when the session ends, the file is rewritten on the
+    report's exact `started_ms`.
+  - Never blocking: a bounded queue (1024 lines) to a writer thread; a full queue drops the line,
+    and a write failure is logged once.
+- `recording.json` and `recording.<ext>`, written by `shadowrunr stream sandbox --record` (the
+  OBS recorder): `{"tool": "obs", "file", "started_wall_ms", "stream_offset_ms",
+  "ended_wall_ms", "width": 1920, "height": 1080, "fps": 30, "stage_url"}`.
+  - `started_wall_ms`: when OBS reported the recording started; `ended_wall_ms`: when it
+    answered the stop.
+  - `stream_offset_ms` = `started_wall_ms - started_ms` (the report's; the start time of a
+    session without a report): the stream-clock time of the file's first frame. It is negative
+    when recording started before the session. A stream-clock time `t` sits at
+    `t - stream_offset_ms` in the file.
+  - `file` is the absolute path of `recording.<ext>` in the session directory, with OBS's own
+    container extension (`mp4` with OBS's default hybrid MP4, else `mkv`).
 
 **Disclosure:** while the voice is on, the stage shows "synthetic voice". The voice is Kokoro's
 stock `af_heart` (sid 3 of kokoro-multi-lang-v1_0). It is no real person's voice, and voice

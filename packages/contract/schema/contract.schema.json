@@ -2721,6 +2721,21 @@
         }
       ]
     },
+    "FaceState": {
+      "description": "Which face the stage draws.",
+      "oneOf": [
+        {
+          "const": "rig",
+          "description": "The real layer rig.",
+          "type": "string"
+        },
+        {
+          "const": "silhouette",
+          "description": "A stand-in: the silhouette or the placeholder.",
+          "type": "string"
+        }
+      ]
+    },
     "Fact": {
       "properties": {
         "confidence": {
@@ -6069,6 +6084,16 @@
       ],
       "type": "object"
     },
+    "StageDropReason": {
+      "description": "Why the stage dropped a whole line.",
+      "oneOf": [
+        {
+          "const": "stage_cap",
+          "description": "Playing it would have put the stage more than its cap (`MAX_AHEAD_S`) behind.",
+          "type": "string"
+        }
+      ]
+    },
     "StreamBrief": {
       "description": "What one stream receives from the Lord of the Darkness (WP15): the latest chosen plan's\ndispatch, segments and topics, plus the directives that are active when the stream starts\n(never proposed or inactive ones). The brain renders it once, in its stable prefix; the sim\nhashes its canonical JSON into the instrument. Built by `shadowrunr_brain::build_stream_brief`\n(the one builder, used by the live path and the sim). A brief with nothing in it is no brief.",
       "properties": {
@@ -7146,6 +7171,57 @@
       ],
       "type": "object"
     },
+    "VoiceClientFrame": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VoiceFollowFrame"
+        },
+        {
+          "$ref": "#/$defs/VoicePlayedFrame"
+        },
+        {
+          "$ref": "#/$defs/VoiceStageDroppedFrame"
+        },
+        {
+          "$ref": "#/$defs/VoiceFaceFrame"
+        }
+      ],
+      "description": "Everything a `/voice` client may send, told apart by its one key. Only `follow` changes what\nthe socket sends; the reports (`played`, `stage_dropped`, `face`) go to the run's\n`voice.jsonl` and are never answered."
+    },
+    "VoiceFace": {
+      "description": "`face`: which face is drawn; sent on load and on every change.",
+      "properties": {
+        "at_wall_ms": {
+          "description": "When it changed, in wall epoch ms (the stage's clock).",
+          "format": "int64",
+          "type": "integer"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/FaceState"
+        }
+      },
+      "required": [
+        "run_id",
+        "state",
+        "at_wall_ms"
+      ],
+      "type": "object"
+    },
+    "VoiceFaceFrame": {
+      "description": "`{\"face\": {...}}`.",
+      "properties": {
+        "face": {
+          "$ref": "#/$defs/VoiceFace"
+        }
+      },
+      "required": [
+        "face"
+      ],
+      "type": "object"
+    },
     "VoiceFollow": {
       "description": "What a `/voice` client sends: which live run to voice. `run_id` absent = the newest live\nrun, following it as runs start. Each message replaces the previous choice.",
       "properties": {
@@ -7304,6 +7380,48 @@
         }
       ]
     },
+    "VoicePlayed": {
+      "description": "`played`: a part's audio started playing on the stage.",
+      "properties": {
+        "at_wall_ms": {
+          "description": "When the audio started, in wall epoch ms (the stage's clock).",
+          "format": "int64",
+          "type": "integer"
+        },
+        "part": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "seq": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "run_id",
+        "seq",
+        "part",
+        "at_wall_ms"
+      ],
+      "type": "object"
+    },
+    "VoicePlayedFrame": {
+      "description": "`{\"played\": {...}}`.",
+      "properties": {
+        "played": {
+          "$ref": "#/$defs/VoicePlayed"
+        }
+      },
+      "required": [
+        "played"
+      ],
+      "type": "object"
+    },
     "VoiceSkip": {
       "oneOf": [
         {
@@ -7322,6 +7440,40 @@
           "type": "string"
         }
       ]
+    },
+    "VoiceStageDropped": {
+      "description": "`stage_dropped`: the stage dropped a whole line and will not play it.",
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/StageDropReason"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "seq": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "run_id",
+        "seq",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "VoiceStageDroppedFrame": {
+      "description": "`{\"stage_dropped\": {...}}`.",
+      "properties": {
+        "stage_dropped": {
+          "$ref": "#/$defs/VoiceStageDropped"
+        }
+      },
+      "required": [
+        "stage_dropped"
+      ],
+      "type": "object"
     },
     "VoiceState": {
       "oneOf": [

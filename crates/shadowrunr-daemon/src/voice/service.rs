@@ -32,6 +32,7 @@ use tokio::sync::{broadcast, oneshot, watch, Notify, OwnedSemaphorePermit, Semap
 use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::Instant;
 
+use super::log::VoiceLogs;
 use super::renderer::{duration_ms, Part, Renderer, RendererState};
 use super::VoiceConfig;
 use crate::live::{Frame, LiveItem, LiveRun};
@@ -91,6 +92,8 @@ pub struct VoiceHub {
     queued: Notify,
     renderer: OnceLock<Arc<dyn Renderer>>,
     tasks: Mutex<Vec<JoinHandle<()>>>,
+    /// Each run's `voice.jsonl` (`log`): what went out, and what the stage reported.
+    logs: VoiceLogs,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -124,6 +127,7 @@ impl VoiceHub {
             queued: Notify::new(),
             renderer: OnceLock::new(),
             tasks: Mutex::new(Vec::new()),
+            logs: VoiceLogs::default(),
         })
     }
 
@@ -133,6 +137,11 @@ impl VoiceHub {
 
     pub fn config(&self) -> &VoiceConfig {
         &self.cfg
+    }
+
+    /// The runs' voice logs.
+    pub fn logs(&self) -> &VoiceLogs {
+        &self.logs
     }
 
     pub fn status(&self) -> watch::Receiver<VoiceItem> {
@@ -268,6 +277,7 @@ impl VoiceHub {
     }
 
     fn send(&self, run_id: &str, frame: VoiceFrame) {
+        self.logs.service(&frame);
         if let Some(r) = lock(&self.runs).get(run_id) {
             let _ = r.tx.send(VoiceItem::new(frame));
         }

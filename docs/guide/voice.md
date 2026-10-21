@@ -58,8 +58,11 @@ is the load. The warm engine keeps the model loaded instead. The sidecar starts 
 process per `render_workers` slot, each holding its own `sherpa_onnx.OfflineTts`, loads them all
 before its `hello`, and hands each sentence to a free worker. It needs the `sherpa-onnx` Python
 package (which bundles its own onnxruntime and espeak-ng; it is still the operator's install,
-never the repo's) and the same Kokoro files under `<engine dir>/kokoro/`. The `bin/` binary stays
-the fallback, and the daemon's `voice check` still asks for it.
+never the repo's) and the same Kokoro files under `<engine dir>/kokoro/`. The `bin/` binary is
+the fallback, and optional when the warm engine runs: `voice check` lists it as `missing` (lower
+case), and the daemon spawns the sidecar without it and lets the `hello` decide. The voice is
+`ready` only if the hello names `engine: warm`. Any other hello is `degraded`, saying that
+neither engine can run and quoting the sidecar's reason.
 
 Make one venv for the voice with uv, outside the repo:
 
@@ -373,7 +376,7 @@ the engine shares the CPU with whatever else runs.
 | `off` | `[voice] enabled = false` |
 | `starting` | the sidecar is loading (its `hello` has not arrived) |
 | `ready` | speaking; `visemes` says whether mouth shapes come with it, and `reason` says why not |
-| `degraded` | the engine files are missing (nothing is spawned, and nothing retries until the config changes), the sidecar exited, or renders keep failing |
+| `degraded` | Kokoro's files are missing (nothing is spawned, and nothing retries until the config changes), the binary is missing and the sidecar's `hello` does not name the warm engine, the sidecar exited, or renders keep failing |
 
 When the sidecar exits, any line in flight is skipped from the part it reached. The sidecar
 restarts after 1 s, and the wait doubles on each exit up to 60 s. It restarts at most 3 times
@@ -390,6 +393,10 @@ and the sidecar exits on its own. In a hard-kill test it was gone within 0.8 s.
 - Nothing is followed until the client sends `{"follow": {}}` (the newest live run, moving to
   each new run as it starts) or `{"follow": {"run_id": "..."}}`. A named run that is not live
   yet is picked up when it starts.
+- The stage also reports on the socket: `{"played": {...}}` when a part's audio starts,
+  `{"stage_dropped": {...}}` when it drops a whole line, and `{"face": {...}}` for the face it
+  draws. They go to the run's `voice.jsonl` (below), are never answered, and never change the
+  follow.
 - **Malformed client frames are ignored.** The daemon logs each one on one stderr line. The
   socket only ever carries `status`, `utterance` and `skipped`, and the current follow is kept.
 - **A slow client loses frames; it never slows the voice.** Each socket has a queue of 16
@@ -397,6 +404,31 @@ and the sidecar exits on its own. In a hard-kill test it was gone within 0.8 s.
   for that client only. The client then gets one `skipped {reason: "queue_full"}` from the
   first dropped part, as soon as there is room. Other clients are unaffected.
 - On daemon shutdown the socket closes with code 1001 and the reason `daemon shutting down`.
+
+### What the voice did: `voice.jsonl`
+
+A sandbox session's directory holds `voice.jsonl`: one line per voice event, in the order they
+happen, on the session's stream clock (the transcript's `ts_ms` clock).
+
+```
+{"ts_ms":13233,"seq":4,"event":"rendered","part":0,"duration_ms":4633,"text":"Before the minions arrive, ..."}
+{"ts_ms":13325,"seq":4,"event":"played","part":0}
+{"ts_ms":41020,"seq":22,"event":"skipped","part":0,"reason":"late"}
+```
+
+| `event` | Written when | Keys |
+| --- | --- | --- |
+| `rendered` | the daemon sent a sentence's `utterance` | `part`, `duration_ms`, `text` |
+| `skipped` | the daemon skipped the line from `part` | `part`, `reason` (`late`, `queue_full`, `error`) |
+| `played` | the stage started playing a part | `part` |
+| `stage_dropped` | the stage dropped the whole line | `reason` (`stage_cap`) |
+| `face` | the stage changed the face it draws | `reason` (`rig`, `silhouette`); `seq` is 0 |
+
+`seq` is the `say` event's seq. The stage's times are its own wall clock; the daemon converts
+them with the session's `started_ms`. While the session runs that clock is estimated from the
+events as they arrive, and when the session ends the file is rewritten on the report's exact
+`started_ms`. The log never holds up the stream: a full queue drops lines, and a write that
+fails is logged once on stderr. To line the log up with a recording, see `recording.md`.
 
 ### The face rig
 

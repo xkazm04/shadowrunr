@@ -96,6 +96,7 @@ fn wire_types(gen: &mut SchemaGenerator) {
     gen.subschema_for::<crate::prep::StreamPrep>();
     gen.subschema_for::<crate::voice::VoiceFrame>();
     gen.subschema_for::<crate::voice::VoiceFollowFrame>();
+    gen.subschema_for::<crate::voice::VoiceClientFrame>();
     gen.subschema_for::<reconcile::SegmentMetrics>();
     gen.subschema_for::<CharacterRuleInfo>();
 }

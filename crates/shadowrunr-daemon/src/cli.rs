@@ -115,6 +115,10 @@ pub enum Command {
     /// replay a recorded run through it.
     #[command(subcommand)]
     Voice(crate::voice::cli::VoiceCommand),
+    /// The OBS recorder: probe OBS without recording (`record check`). A session is recorded
+    /// with `stream sandbox --record`.
+    #[command(subcommand)]
+    Record(crate::record::cli::RecordCommand),
 }
 
 #[derive(Debug, Subcommand)]
@@ -159,7 +163,8 @@ pub enum StreamCommand {
 /// `shadowrunr stream sandbox` exit codes (also in docs/guide/cli.md).
 pub const SANDBOX_EXIT_CODES: &str = "Exit codes:
   0  the session passed every check
-  1  the daemon refused the session (pre-flight red, another session running) or another error
+  1  the daemon refused the session (pre-flight red, another session running), OBS is not
+     reachable or failed to record (--record), or another error
   2  usage error, or the daemon is not reachable
   6  the session ended and failed its gate (or failed outright)";
 
@@ -196,6 +201,11 @@ pub struct SandboxArgs {
     /// The daemon's port (default: [daemon] port, 7717).
     #[arg(long)]
     pub port: Option<u16>,
+    /// Record the session in OBS: the stage through a browser source, picture and voice in one
+    /// file, left in the run dir with recording.json. Refuses to start when OBS is not
+    /// reachable ([record] in shadowrunr.toml; docs/guide/recording.md).
+    #[arg(long)]
+    pub record: bool,
 }
 
 impl SandboxArgs {
@@ -501,6 +511,7 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
         Command::Review(ReviewCommand::Tag(a)) => Ok(ExitCode::from(review_tag_cmd(&cfg, a).await)),
         Command::Prep(c) => Ok(crate::prep::cli::run(&cfg, c).await),
         Command::Voice(c) => Ok(ExitCode::from(crate::voice::cli::run(&cfg, c).await)),
+        Command::Record(c) => Ok(ExitCode::from(crate::record::cli::run(&cfg, c).await)),
     }
 }
 
@@ -667,9 +678,68 @@ fn sandbox_ended(s: SandboxState) -> bool {
     )
 }
 
+/// The session is off the air: its last event is out (judging, or ended).
+fn sandbox_off_air(s: SandboxState) -> bool {
+    !matches!(s, SandboxState::Running | SandboxState::Closing)
+}
+
+fn no_daemon(port: u16) {
+    eprintln!("no daemon on 127.0.0.1:{port}: start one with `shadowrunr daemon` (or pass --port)");
+}
+
+/// `--record`: the daemon answers, then OBS is set up and recording. `Err` is the exit code.
+async fn arm_recording(
+    cfg: &Config,
+    client: &DaemonClient,
+    port: u16,
+) -> Result<crate::record::cli::Armed, u8> {
+    // Any reply (a "no session yet" error included) means the daemon is there.
+    if let Err(e @ CallError::Unreachable(_)) = client
+        .call::<serde_json::Value>("sandbox.status", serde_json::json!({}))
+        .await
+    {
+        eprintln!("error: {e}");
+        no_daemon(port);
+        return Err(exit_for_error(&e));
+    }
+    match crate::record::cli::arm(cfg, port).await {
+        Ok(r) => {
+            println!("recording: OBS is recording {}", r.stage_url);
+            Ok(r)
+        }
+        Err(e) => {
+            eprintln!("error: not recording, so the session does not start: {e}");
+            Err(1)
+        }
+    }
+}
+
+/// Move the recording into the session's dir with recording.json.
+async fn finish_recording(rec: &mut crate::record::cli::Armed, st: &SandboxStatus, dir: &str) {
+    // A session that failed has no report: its clock is the time it was started.
+    let started_ms = st
+        .report
+        .as_ref()
+        .map_or(rec.started_wall_ms, |r| r.started_ms);
+    match rec.finish(Path::new(dir), started_ms).await {
+        Ok(r) => println!(
+            "recording: {} (stream offset {} ms)",
+            r.file, r.stream_offset_ms
+        ),
+        Err(e) => eprintln!("recording: {e}"),
+    }
+}
+
 async fn sandbox_cmd(cfg: &Config, a: SandboxArgs) -> u8 {
     let port = a.port.unwrap_or(cfg.daemon.port);
     let client = DaemonClient::new(port);
+    let mut rec = None;
+    if a.record {
+        match arm_recording(cfg, &client, port).await {
+            Ok(r) => rec = Some(r),
+            Err(code) => return code,
+        }
+    }
     let started: SandboxStarted = match client
         .call("sandbox.start", serde_json::json!(a.params()))
         .await
@@ -678,9 +748,10 @@ async fn sandbox_cmd(cfg: &Config, a: SandboxArgs) -> u8 {
         Err(e) => {
             eprintln!("error: {e}");
             if matches!(e, CallError::Unreachable(_)) {
-                eprintln!(
-                    "no daemon on 127.0.0.1:{port}: start one with `shadowrunr daemon` (or pass --port)"
-                );
+                no_daemon(port);
+            }
+            if let Some(r) = rec {
+                r.abort().await;
             }
             return exit_for_error(&e);
         }
@@ -709,6 +780,11 @@ async fn sandbox_cmd(cfg: &Config, a: SandboxArgs) -> u8 {
             Some(ok) = sig_rx.recv() => {
                 if !ok || stopping {
                     eprintln!("detached: session {id} keeps running in the daemon");
+                    if let Some(r) = rec.as_mut() {
+                        if let Err(e) = r.stop().await {
+                            eprintln!("recording: could not stop OBS: {e}");
+                        }
+                    }
                     return 1;
                 }
                 stopping = true;
@@ -733,15 +809,33 @@ async fn sandbox_cmd(cfg: &Config, a: SandboxArgs) -> u8 {
                 failures += 1;
                 if failures >= UNREACHABLE_AFTER || matches!(e, CallError::Rpc { .. }) {
                     eprintln!("error: {e}");
+                    if let Some(r) = rec.as_mut() {
+                        if let Err(e) = r.stop().await {
+                            eprintln!("recording: could not stop OBS: {e}");
+                        }
+                    }
                     return exit_for_error(&e);
                 }
                 continue;
             }
         };
+        if let Some(r) = rec.as_mut().filter(|r| !r.is_stopped()) {
+            if sandbox_off_air(st.state) {
+                // The end card is on the stage: the voice plays out, a short tail, then the
+                // recording stops.
+                match r.stop_after_show(Path::new(&started.dir)).await {
+                    Ok(_) => println!("recording: stopped"),
+                    Err(e) => eprintln!("recording: could not stop OBS: {e}"),
+                }
+            }
+        }
         if sandbox_ended(st.state) {
             println!("{}", progress_line(&st));
             print!("{}", report_table(&st));
             println!("dir: {}", started.dir);
+            if let Some(r) = rec.as_mut() {
+                finish_recording(r, &st, &started.dir).await;
+            }
             return exit_for_status(&st);
         }
         if last_line.elapsed() >= PROGRESS_EVERY {

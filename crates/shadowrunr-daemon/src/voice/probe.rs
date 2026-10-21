@@ -1,14 +1,19 @@
-//! What the voice needs on this machine, item by item: the engine and Kokoro's files (from
-//! `engine_dir`), the python and the sidecar package, and, for mouth shapes, the durations model
-//! and numpy/onnxruntime. `shadowrunr voice check` prints the table; the service runs the file
-//! half before it spawns anything, so a missing engine is `degraded` with its name, not a
-//! crash loop.
+//! What the voice needs on this machine, item by item: Kokoro's files and the engine binary
+//! (from `engine_dir`), the python and the sidecar package, and, for mouth shapes, the durations
+//! model and numpy/onnxruntime. `shadowrunr voice check` prints the table; the service runs the
+//! file half before it spawns anything, so missing Kokoro files are `degraded` with their name,
+//! not a crash loop.
+//!
+//! The binary is not needed by itself: the sidecar's warm engine keeps Kokoro loaded in its own
+//! workers and never runs it. Whether the sidecar can speak without it is the sidecar's call,
+//! made in its `hello` (whose `reason` names the engine in use); [`hello_state`] reads it.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::Serialize;
 
+use super::renderer::RendererState;
 use super::VoiceConfig;
 
 /// The engine binary under `<engine_dir>/bin`.
@@ -17,6 +22,9 @@ pub const ENGINE_BIN: &str = if cfg!(windows) {
 } else {
     "sherpa-onnx-offline-tts"
 };
+
+/// What a `hello` reason names when the warm engine runs.
+pub const WARM_ENGINE: &str = "engine: warm";
 
 /// Kokoro's files under `<engine_dir>/kokoro`, all needed.
 pub const KOKORO_FILES: [&str; 4] = ["model.onnx", "voices.bin", "tokens.txt", "espeak-ng-data"];
@@ -60,7 +68,8 @@ impl Item {
     }
 }
 
-/// The engine binary and Kokoro's files.
+/// The engine binary and Kokoro's files. The binary is optional (the warm engine speaks
+/// without it); Kokoro's files are needed either way.
 pub fn engine_items(engine_dir: Option<&str>) -> Vec<Item> {
     let Some(dir) = engine_dir else {
         return vec![Item::new(
@@ -72,7 +81,11 @@ pub fn engine_items(engine_dir: Option<&str>) -> Vec<Item> {
     };
     let dir = PathBuf::from(dir);
     let bin = Path::new("bin").join(ENGINE_BIN);
-    let mut items = vec![file_item("engine", &dir, &bin, true)];
+    let mut engine = file_item("engine", &dir, &bin, false);
+    if !engine.ok() {
+        engine.detail.push_str(" (only the warm engine can speak)");
+    }
+    let mut items = vec![engine];
     for f in KOKORO_FILES {
         items.push(file_item(
             &format!("kokoro {f}"),
@@ -105,6 +118,29 @@ pub fn engine_missing(cfg: &VoiceConfig) -> Option<String> {
         .into_iter()
         .find(|i| i.needed && !i.ok())
         .map(|i| format!("voice engine missing: {}", i.detail))
+}
+
+/// Whether `<engine_dir>/bin` lacks the engine binary.
+pub fn engine_bin_missing(cfg: &VoiceConfig) -> bool {
+    cfg.engine_dir
+        .as_deref()
+        .is_none_or(|d| !Path::new(d).join("bin").join(ENGINE_BIN).exists())
+}
+
+/// The renderer's state on the sidecar's `hello`. With the binary there, `ready`. Without it
+/// only the warm engine can speak, so the hello must name it; any other hello is `degraded`,
+/// saying that neither engine can run and what the sidecar said.
+pub fn hello_state(cfg: &VoiceConfig, visemes: bool, reason: Option<String>) -> RendererState {
+    let warm = reason.as_deref().is_some_and(|r| r.contains(WARM_ENGINE));
+    if warm || !engine_bin_missing(cfg) {
+        return RendererState::Ready { visemes, reason };
+    }
+    let bin = Path::new("bin").join(ENGINE_BIN);
+    RendererState::Degraded(format!(
+        "voice engine missing: {} is not in engine_dir and the warm engine is not running ({})",
+        bin.to_string_lossy(),
+        reason.as_deref().unwrap_or("the sidecar gave no reason")
+    ))
 }
 
 /// The durations model (optional).
@@ -241,21 +277,73 @@ mod tests {
         let dir = d.path().to_string_lossy().into_owned();
         let items = engine_items(Some(&dir));
         assert_eq!(items.len(), 5);
-        assert!(items.iter().all(|i| !i.ok() && i.needed));
+        assert!(items.iter().all(|i| !i.ok()));
+        assert!(!items[0].needed && items[1..].iter().all(|i| i.needed));
         let cfg = VoiceConfig {
             engine_dir: Some(dir.clone()),
             ..VoiceConfig::default()
         };
-        assert!(engine_missing(&cfg).unwrap().contains(ENGINE_BIN));
+        assert!(engine_missing(&cfg).unwrap().contains("model.onnx"));
 
-        std::fs::create_dir_all(d.path().join("bin")).unwrap();
-        std::fs::write(d.path().join("bin").join(ENGINE_BIN), b"").unwrap();
+        // Kokoro's files alone are enough to spawn: the warm engine needs no binary.
         std::fs::create_dir_all(d.path().join("kokoro/espeak-ng-data")).unwrap();
         for f in ["model.onnx", "voices.bin", "tokens.txt"] {
             std::fs::write(d.path().join("kokoro").join(f), b"").unwrap();
         }
-        assert!(all_needed(&engine_items(Some(&dir))));
+        let items = engine_items(Some(&dir));
+        assert!(all_needed(&items));
+        assert!(
+            items[0].detail.contains("only the warm engine"),
+            "{}",
+            items[0].detail
+        );
         assert_eq!(engine_missing(&cfg), None);
+        assert!(engine_bin_missing(&cfg));
+
+        std::fs::create_dir_all(d.path().join("bin")).unwrap();
+        std::fs::write(d.path().join("bin").join(ENGINE_BIN), b"").unwrap();
+        assert!(engine_items(Some(&dir)).iter().all(Item::ok));
+        assert!(!engine_bin_missing(&cfg));
+    }
+
+    #[test]
+    fn without_the_binary_only_a_warm_hello_is_ready() {
+        let d = tempfile::tempdir().unwrap();
+        let cfg = VoiceConfig {
+            engine_dir: Some(d.path().to_string_lossy().into_owned()),
+            ..VoiceConfig::default()
+        };
+        let warm = Some("no numpy; engine: warm (3 workers loaded in 2.1 s)".to_string());
+        assert_eq!(
+            hello_state(&cfg, false, warm.clone()),
+            RendererState::Ready {
+                visemes: false,
+                reason: warm
+            }
+        );
+        let dead = Some("the engine is not installed: bin/x is missing".to_string());
+        match hello_state(&cfg, false, dead) {
+            RendererState::Degraded(why) => {
+                assert!(why.contains(ENGINE_BIN), "{why}");
+                assert!(why.contains("warm engine is not running"), "{why}");
+                assert!(why.contains("the engine is not installed"), "{why}");
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(matches!(
+            hello_state(&cfg, true, None),
+            RendererState::Degraded(_)
+        ));
+        // With the binary, any hello is ready (the process engine speaks).
+        std::fs::create_dir_all(d.path().join("bin")).unwrap();
+        std::fs::write(d.path().join("bin").join(ENGINE_BIN), b"").unwrap();
+        assert_eq!(
+            hello_state(&cfg, true, Some("engine: process".into())),
+            RendererState::Ready {
+                visemes: true,
+                reason: Some("engine: process".into())
+            }
+        );
     }
 
     #[test]
