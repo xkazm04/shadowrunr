@@ -76,9 +76,16 @@ pub struct ClipSignals {
     /// The raw z-score behind `chat`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_z: Option<f64>,
-    /// Programme audio energy: always unmeasured in the media-less phase.
+    /// Programme level: the window's RMS level against the whole recording's,
+    /// `clamp((window - stream + 6 dB) / 12 dB, 0, 1)`. Unmeasured without a recording.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audio: Option<f64>,
+    /// The window's RMS level behind `audio` (dBFS, ffmpeg `astats`, ungated: pauses count).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_db: Option<f64>,
+    /// The whole recording's RMS level `audio` is read against (dBFS).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_stream_db: Option<f64>,
     /// The model's hook read of the window's lines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hook: Option<f64>,
@@ -149,6 +156,11 @@ pub struct ClipWindow {
     pub needs_reauthoring: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// The spoken clock is the voice's real timing from the run's `voice.jsonl` (each voiced
+    /// line from its first `played` to its last part's `played` plus its duration), on the
+    /// stream clock. Absent: the caption model's estimate.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub voice_timed: bool,
 }
 
 /// Where the candidate came from. `transcript` is relative to the configured runs root
@@ -200,6 +212,10 @@ pub struct ClipCaption {
     /// `malakor`, or the foil id.
     pub speaker: String,
     pub text: String,
+    /// On a voice-timed cut: the line was never heard (the voice skipped it, the stage dropped
+    /// it, or it is a foil's), so it keeps its stream-clock time.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unvoiced: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -218,7 +234,8 @@ pub enum GateState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct GateCheck {
     /// `care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,
-    /// `ai_disclosure`, `evidence_badge_burnt`, `source_citation`, `no_open_correction`.
+    /// `ai_disclosure`, `handles_in_picture`, `evidence_badge_burnt`, `source_citation`,
+    /// `no_open_correction`.
     pub id: String,
     pub state: GateState,
     pub detail: String,
@@ -244,7 +261,8 @@ pub struct ClipGate {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ClipFile {
     pub path: String,
-    /// `video`, `poster`, `captions_srt`, `captions_ass`, `stage_input`, `manifest`.
+    /// `video`, `cut_16x9`, `cut_9x16`, `poster`, `captions_srt`, `captions_ass`,
+    /// `stage_input`, `manifest`.
     pub kind: String,
     pub bytes: u64,
 }
@@ -265,11 +283,25 @@ pub struct ClipOverlay {
     pub captions: String,
 }
 
+/// Where a render's picture comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ClipFootage {
+    /// Trimmed from the show's own recording (`recording.json`): `cut-16x9.mp4` and the
+    /// vertical reframe `cut-9x16.mp4`.
+    Recording,
+    /// Re-drawn by the stage from the transcript (no recording): `draft.mp4` or a poster.
+    Redrawn,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ClipRender {
-    /// `video` (an MP4 was recorded from the stage) or `poster` (a still poster frame plus
-    /// caption tracks, when recording tooling is missing).
+    /// `video` (an MP4 was cut from the recording or recorded from the stage) or `poster` (a
+    /// still poster frame plus caption tracks, when the tools are missing).
     pub kind: String,
+    /// Absent on renders made before cuts from the recording existed: re-drawn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub footage: Option<ClipFootage>,
     pub width: u32,
     pub height: u32,
     pub duration_s: f64,
@@ -339,6 +371,46 @@ pub struct ClipDryRun {
     pub note: String,
 }
 
+/// The show recording a candidate is cut from: the run's `recording.json`, read at scan time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ClipRecording {
+    /// The recording file (the run directory's `recording.<ext>`), as found at scan time.
+    pub file: String,
+    /// The stream-clock time of the file's first frame: a stream time `t` sits at
+    /// `t - stream_offset_ms` in the file.
+    pub stream_offset_ms: i64,
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    /// Speech starts this long after its `played` time, constant, with no drift (measured on
+    /// the recorded sessions: +200 ms, within 25 ms). A tolerance the cuts' pre-roll absorbs:
+    /// cut points are not shifted by it.
+    pub av_offset_ms: i64,
+}
+
+/// What a person watching the cut saw.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ClipFeedbackTag {
+    Landed,
+    Flat,
+    VoiceOffSync,
+    FaceWrong,
+    CaptionWrong,
+    CutTooEarly,
+    CutTooLate,
+    Boring,
+}
+
+/// Watched feedback on a cut. It never changes the candidate's state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ClipFeedback {
+    pub tags: Vec<ClipFeedbackTag>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    pub at_ms: TsMs,
+}
+
 /// A stored clip candidate.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ClipCandidate {
@@ -373,6 +445,12 @@ pub struct ClipCandidate {
     pub history: Vec<ClipTransition>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dry_runs: Vec<ClipDryRun>,
+    /// The run's show recording, when it has one: a render cuts it instead of re-drawing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recording: Option<ClipRecording>,
+    /// Watched feedback (`clips.feedback`); kept across a rescan of the same cut.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback: Option<ClipFeedback>,
 }
 
 /// A candidate as `clips.list` shows it.
@@ -508,6 +586,46 @@ pub struct ClipsPublishParams {
     /// Every platform when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub platforms: Option<Vec<ClipPlatform>>,
+}
+
+/// `clips.feedback`: replaces the candidate's watched feedback (any state; it changes none).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ClipsFeedbackParams {
+    pub id: String,
+    pub tags: Vec<ClipFeedbackTag>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// `clips.recording`: a sandbox session's show recording, for the Review player's watch pane.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ClipsRecordingParams {
+    pub session_id: String,
+}
+
+/// One line the voice was heard saying, on the stream clock (from `voice.jsonl`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ClipHeardLine {
+    /// The `say` event's transcript line (its seq).
+    pub line: u32,
+    pub start_ms: i64,
+    pub end_ms: i64,
+}
+
+/// A session's recording as the console plays it: a stream time `t` is at
+/// `t - stream_offset_ms` in the file.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ClipRunRecording {
+    pub session_id: String,
+    /// The file on the daemon: `/media/runs/sandbox/<session_id>/recording.mp4`.
+    pub media_path: String,
+    pub stream_offset_ms: i64,
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub av_offset_ms: i64,
+    /// Every heard line's real timing, by transcript line; empty without a voice log.
+    pub heard: Vec<ClipHeardLine>,
 }
 
 /// `clips.publish`: always a dry run in this build. No credentials exist and no adapter

@@ -24,6 +24,7 @@ export const MUTATION_INVALIDATES: Readonly<Record<string, readonly string[]>> =
   "clips.approve": ["clips.list", "clips.get"],
   "clips.reject": ["clips.list", "clips.get"],
   "clips.publish": ["clips.get"],
+  "clips.feedback": ["clips.get"],
   // Feedback is optimistic on the page; only the wall's counts refetch, never the whole session.
   "review.feedback.set": ["review.sessions", "review.feedback.list"],
   "review.tag": ["review.sessions", "review.session"],

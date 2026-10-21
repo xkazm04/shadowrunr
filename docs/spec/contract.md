@@ -653,14 +653,18 @@ existing `moderation` event.
 
 ## Appendix (Clips): the clip factory and its publish gate
 
-Media-less edition of the digest's § 7 (`docs/design/obsidian-program-digest.md`). The crate is
-`shadowrunr-clips`; the wire types are `shadowrunr_types::clips`. Nothing above changes except
-one new `Role` (`clipper`, routed above).
+The digest's § 7 (`docs/design/obsidian-program-digest.md`). The crate is `shadowrunr-clips`;
+the wire types are `shadowrunr_types::clips`. Nothing above changes except one new `Role`
+(`clipper`, routed above).
 
 **Candidates.** A transcript is read as beats of spoken lines on two clocks: the stream clock
-(`ts_ms`) and a *spoken* clock (each line starts at its beat or when the previous line ends, and
-lasts as long as the stage's caption model says; there is no TTS alignment yet). Signals per
-beat, each normalised to its own stream:
+(`ts_ms`) and a *spoken* clock. Without a voice log the spoken clock is estimated (each line
+starts at its beat or when the previous line ends, and lasts as long as the stage's caption
+model says). With the run's `voice.jsonl` it is the voice's real timing on the stream clock
+(`window.voice_timed`): a heard line runs from its first `played` to its last played part's
+`played` plus that part's `duration_ms`; a host line never heard (skipped, dropped, a foil's)
+keeps its `ts_ms`, lasts its estimate and its caption is `unvoiced`; a viewer's question ends a
+breath before its answer. Signals per beat, each normalised to its own stream:
 - `marker`: the strongest admitted marker of the beat, by kind (`mark_moment` 1.0,
   `hex_reveal` 0.8, `verdict_sealed` 0.7, `foil_roast` 0.6). `verdict_sealed` (a closed vote or
   a case's last hex annexed) stands in for RELEASE_ANNEXED, whose releases belong to the
@@ -672,7 +676,12 @@ beat, each normalised to its own stream:
   excluded) in the 10 s after the beat, as a z-score against the trailing 120 s (the whole
   stream until 6 beats exist), clipped to 0..3 and divided by 3. A flood or copypasta cluster in
   that window makes it unmeasured (a wave).
-- `audio`: always unmeasured (no audio yet).
+- `audio`: with the run's recording, the window's RMS level (ffmpeg `astats`, dBFS, ungated so
+  pauses count) against the whole recording's, `clamp((window - stream + 6) / 12, 0, 1)`; both
+  levels are kept (`audio_db`, `audio_stream_db`) and the provenance labels the signal an
+  assumption. Ungated on purpose: EBU R128 integrated loudness gates out everything 10 LU below
+  the programme, so a voice-only show reads the same in every window. Without a recording it is
+  unmeasured.
 - `hook`: one `clipper` call per run rates its (at most 8) pre-selected windows; the windows sit
   in an untrusted-data fence and carry no viewer handle. A failed or unparseable reply leaves
   the hook unmeasured for the run.
@@ -689,7 +698,10 @@ opens 12 s (spoken) before it, snapped earlier to a line start, keeps at least t
 payoff answers, closes 1.5 s after the payoff and is held in its band: SEG-01
 `seg01-split-stage` 25-35 s, SEG-02A `seg02a-alleged` 45-60 s, otherwise 15-60 s. A short cut
 takes the following lines, then earlier ones; a long one sheds pre-roll but never the setup,
-and when setup plus payoff cannot fit it is `needs_reauthoring` (never approved).
+and when setup plus payoff cannot fit it is `needs_reauthoring` (never approved). On real
+timing the edges snap to what is heard: the cut opens up to 0.4 s before its first line but
+never into the line heard before it, and the reaction beat stops where the next heard line
+starts.
 
 **Gate** (`ClipGate.checks`, each `pass | fail | unmeasured | not_applicable`):
 - on every clip: `care_state` (no line addresses or answers a viewer in care, read from the
@@ -697,7 +709,9 @@ and when setup plus payoff cannot fit it is `needs_reauthoring` (never approved)
   `personal_data` (the brain's `solicits_personal_data`, plus any `personal_data_ask` the output
   gate fired inside the cut), `brigade_call` (`brigade` term rules), `blocked_term` (other
   blocking term rules), `injection_reply` (a line answering an injection-tagged message is
-  unmeasured: a person confirms nothing was performed), `ai_disclosure` (burnt in);
+  unmeasured: a person confirms nothing was performed), `ai_disclosure` (burnt in, or the
+  stage's own badge in a cut from the recording), and on a cut from the recording
+  `handles_in_picture` (unmeasured: the 16:9 picture is the broadcast, chat column included);
 - the mandatory checklist when `requires_mandatory_gate` (SEG-02A or a linked case):
   `evidence_badge_burnt` (ALLEGED header + grade badge, `UNGRADED` when the cut claims no hex),
   `source_citation` (every claimed hex has a source and the citation is drawn),
@@ -714,12 +728,38 @@ needs `override_reason`, stored with the reasons it overrides. Approving attests
 fidelity and caption support. Nothing in this build reaches `published`: uploads are dry runs.
 
 **Render.** `<data>/clips/<id>/`: `candidate.json`, `clip.json` (the stage's input),
-`captions.srt`, `captions.ass`, `poster.svg`, `manifest.json`, and with the recording tools
-`draft.mp4` (1080x1920 H.264, recorded frame by frame from `apps/stage?clip=...&record=1`
-through the DevTools protocol, verified with ffprobe) plus `poster.png`. Captions are the exact
-transcript lines with viewer handles replaced by `[viewer]` and bleep rules applied. Without the
-tools the render is `kind: "poster"` with `fallback_reason`. Every write is temp + `sync_all` +
-rename under a lock on `<data>/clips/.lock`.
+`captions.srt`, `captions.ass`, `poster.svg` and `manifest.json`, then by `render.footage`:
+- `recording` (the run has `recording.json` and its file; `ClipCandidate.recording` keeps
+  `file`, `stream_offset_ms`, `width`, `height`, `fps` and `av_offset_ms` = 200, the measured
+  speech onset after `played`, which cuts are not shifted by): `cut-16x9.mp4`, the window
+  trimmed from the recording at `spoken_start_ms - stream_offset_ms` and re-encoded H.264/AAC
+  (frame-accurate, nothing burnt in but a SEG-02A cut's evidence header); `cut-9x16.mp4`,
+  1080x1920, the stage's face region (its layout's `avatar` rect, or the hexmap and a face
+  inset) under the stage's AI badge, with the lines burnt in from `captions-9x16.ass`; and
+  `poster.png`, a frame of the vertical. The manifest says "cut from the recording" and carries
+  `recording`, `file_span` and `av_offset_ms` with its provenance.
+- `redrawn` (no recording; an older render without `footage` is one): with the recording tools
+  `draft.mp4` (1080x1920 H.264, recorded frame by frame from `apps/stage?clip=...&record=1`
+  through the DevTools protocol) plus `poster.png`. The manifest says "re-drawn (no
+  recording)".
+
+Every video is verified with ffprobe. Captions are the exact transcript lines with viewer
+handles replaced by `[viewer]` and bleep rules applied. Without the tools the render is
+`kind: "poster"` with `fallback_reason`. Every write is temp + `sync_all` + rename under a lock
+on `<data>/clips/.lock`.
+
+**Watched feedback.** `clips.feedback` stores what a person saw when they played the cut
+(`ClipFeedback {tags, note?, at_ms}`; tags `landed`, `flat`, `voice_off_sync`, `face_wrong`,
+`caption_wrong`, `cut_too_early`, `cut_too_late`, `boring`; a note of at most 2000 characters).
+It changes no state, is allowed in any state, replaces the previous feedback (no tags and no
+note clear it) and carries over a rescan of the same cut.
+
+**Media.** The daemon serves `GET /media/clips/<id>/<file>` (`cut-16x9.mp4`, `cut-9x16.mp4`,
+`draft.mp4`, `poster.png`) and `GET /media/runs/sandbox/<session_id>/recording.mp4`, with one
+`Range: bytes=` range per request (206 with `Content-Range`; 416 when unsatisfiable). Any other
+name, a malformed id, or a path that would leave the clip or session directory is 404; a
+request with a foreign `Origin` is 403 (the `/rpc` origin rule). A session's timing reaches the
+console through `clips.recording`, not as a file.
 
 **Upload router** (`clips.publish`, dry run only; the crate has no HTTP client): YouTube
 `videos.insert` (resumable, `status.containsSyntheticMedia: true`, private, 100/day budget),
@@ -736,6 +776,8 @@ as not applicable: it clips a live broadcast and takes no file). Each request is
 | `clips.approve` | `{ "id", "signature", "override_reason"?, "note"? }` | `ClipCandidate` |
 | `clips.reject` | `{ "id", "reason", "by"? }` | `ClipCandidate` |
 | `clips.publish` | `{ "id", "platforms"? }` | `ClipPublishReport { id, dry_run: true, requests }` |
+| `clips.feedback` | `{ "id", "tags", "note"? }` | `ClipCandidate` |
+| `clips.recording` | `{ "session_id" }` | `ClipRunRecording { session_id, media_path, stream_offset_ms, width, height, fps, av_offset_ms, heard: [{ line, start_ms, end_ms }] }` (`not_found` without a `recording.mp4`) |
 
 Refusals are `conflict` (a held or unapproved clip), `not_found`, `invalid_params` or `io`.
 

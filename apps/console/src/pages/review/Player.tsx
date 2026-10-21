@@ -1,5 +1,5 @@
 // The player: every line of one kind in transcript order, one at a time, until each has the
-// operator's mark. Keys bind on the player's own container (focused on mount and on every step)
+// operator's mark, with the session's recording seeked to the line on request (WatchPane). Keys bind on the player's own container (focused on mount and on every step)
 // and are consumed there, so the shell's bare 1-7 page jumps never see them; outside the player,
 // and in the note, the shell keymap keeps its meaning.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
@@ -15,6 +15,7 @@ import styles from "./Player.module.css";
 import { PlayerDone, PlayerSide, TagLine } from "./PlayerParts";
 import { Script } from "./Script";
 import type { TabProps } from "./tab";
+import { WatchPane } from "./WatchPane";
 
 /** Where the player stands: an index into the kind's lines, or the done state. */
 interface At {
@@ -34,10 +35,10 @@ function seek(n: number, from: number, ok: (i: number) => boolean, wrap: boolean
   return -1;
 }
 
-/** A text field the player's keys must leave alone (a checkbox or a switch is not one). */
+/** A text field or the video the player's keys must leave alone (a checkbox or a switch is not one). */
 function typing(t: EventTarget | null): boolean {
   if (!(t instanceof HTMLElement)) return false;
-  if (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return true;
+  if (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.tagName === "VIDEO") return true;
   return t instanceof HTMLInputElement && t.type !== "checkbox" && t.type !== "radio";
 }
 
@@ -135,6 +136,7 @@ function Walk(props: TabProps & { kind: ShownKind }) {
           <Switch checked={skip} onChange={setSkip} label="Skip lines I already marked" />
         </div>
         <RateBar rate={markedNow / Math.max(1, n)} n={n} label={`${markedNow} of ${n} marked`} />
+        <WatchPane sessionId={rs.row.session_id} line={line.line} t={line.t} />
         <div key={line.line} className={styles.step} data-role="review-player-step">
           <Script rs={rs} d={d} line={line.line} context={2} />
           <TagLine say={line} />

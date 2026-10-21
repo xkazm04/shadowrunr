@@ -354,6 +354,16 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
                 p.platforms.as_deref(),
             )?)
         }
+        "clips.feedback" => {
+            let p: shadowrunr_types::clips::ClipsFeedbackParams = params(req.params)?;
+            ok(cfg
+                .clip_store()
+                .feedback(&p.id, &p.tags, p.note.as_deref())?)
+        }
+        "clips.recording" => {
+            let p: shadowrunr_types::clips::ClipsRecordingParams = params(req.params)?;
+            ok(crate::clips::recording(cfg, &p.session_id)?)
+        }
         "sandbox.start" => ok(crate::sandbox::start(state.clone(), params(req.params)?).await?),
         "sandbox.stop" => ok(crate::sandbox::stop(state, params(req.params)?).await?),
         "sandbox.status" => ok(crate::sandbox::status(state, params(req.params)?).await?),

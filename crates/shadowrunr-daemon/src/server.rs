@@ -1,6 +1,7 @@
 //! The daemon: axum on 127.0.0.1 only, serving `GET /events` (WebSocket, see `events`),
-//! `POST /rpc` (docs/spec/contract.md § Daemon protocol), and `GET /voice` and
-//! `GET /avatar/{file}` (see `voice`).
+//! `POST /rpc` (docs/spec/contract.md § Daemon protocol), `GET /voice` and
+//! `GET /avatar/{file}` (see `voice`), and `GET /media/clips/{id}/{file}` and
+//! `GET /media/runs/sandbox/{session}/{file}` (see `media`).
 //!
 //! Browser access is limited to `http://localhost:*`, `tauri://localhost` and
 //! `http://tauri.localhost` (the Tauri v2 window origin on Windows), plus any
@@ -144,6 +145,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/events", get(events_handler))
         .route("/voice", get(crate::voice::voice_handler))
         .route("/avatar/{file}", get(crate::voice::avatar_handler))
+        .route(
+            "/media/clips/{id}/{file}",
+            get(crate::media::clip_media_handler),
+        )
+        .route(
+            "/media/runs/sandbox/{session}/{file}",
+            get(crate::media::run_media_handler),
+        )
         .layer(cors)
         .with_state(state)
 }

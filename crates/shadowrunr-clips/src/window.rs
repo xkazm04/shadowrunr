@@ -1,4 +1,5 @@
-//! Peak minus pre-roll: a scored beat becomes a cut on the spoken clock.
+//! Peak minus pre-roll: a scored beat becomes a cut on the spoken clock (the voice's real
+//! timing when the run has a voice log, else the caption model's estimate).
 //!
 //! The payoff is the line of the anchor beat that carries the moment ([`payoff_line`]): a
 //! simulated beat holds three lines and ~30 s of speech, so the whole beat would not fit a
@@ -10,6 +11,11 @@
 //! line the payoff answers. A payoff and setup that cannot fit is flagged for re-authoring
 //! rather than cut. The 12 s pre-roll and the bands are the digest's craft defaults, not
 //! measurements.
+//!
+//! On the voice's real timing the edges snap to what is heard ([`edge_start`], [`edge_end`]):
+//! the cut opens up to [`VOICE_LEAD_MS`] before its first line, but never into the line heard
+//! before it, and its reaction tail stops where the next heard line starts, so no cut opens or
+//! closes on half a word.
 
 use shadowrunr_types::clips::MarkerKind;
 use shadowrunr_types::SegmentId;
@@ -20,6 +26,46 @@ use crate::transcript::{Stream, Who};
 pub const PREROLL_MS: i64 = 12_000;
 /// One beat of reaction after the payoff's last word.
 pub const REACTION_TAIL_MS: i64 = 1_500;
+/// On real timing, the breath of picture before the first line, when there is silence for it.
+pub const VOICE_LEAD_MS: i64 = 400;
+
+/// A line that made sound: a heard host line on real timing (a viewer's question is shown,
+/// never spoken; an unvoiced line was never heard).
+fn heard(l: &crate::transcript::Line) -> bool {
+    !l.unvoiced && !matches!(l.who, Who::Viewer { .. })
+}
+
+/// Where a cut whose first line is `first` opens: the line's start, and on real timing up to
+/// [`VOICE_LEAD_MS`] earlier but not before the previous heard line has ended.
+pub fn edge_start(stream: &Stream, first: usize) -> i64 {
+    let lines = &stream.lines;
+    let s = lines[first].spoken_start;
+    if !stream.voice_timed {
+        return s;
+    }
+    let prev = lines[..first]
+        .iter()
+        .rev()
+        .filter(|l| heard(l))
+        .take(3)
+        .map(|l| l.spoken_end)
+        .max();
+    s - prev.map_or(VOICE_LEAD_MS, |e| (s - e).clamp(0, VOICE_LEAD_MS))
+}
+
+/// Where a cut whose last line is `last` closes: one reaction beat after the line, and on real
+/// timing never past the start of the next heard line.
+pub fn edge_end(stream: &Stream, last: usize) -> i64 {
+    let lines = &stream.lines;
+    let e = lines[last].spoken_end + REACTION_TAIL_MS;
+    if !stream.voice_timed {
+        return e;
+    }
+    match lines[last + 1..].iter().find(|l| heard(l)) {
+        Some(n) => e.min(n.spoken_start.max(lines[last].spoken_end)),
+        None => e,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Band {
@@ -130,13 +176,17 @@ pub fn cut(stream: &Stream, payoff: usize, band: Band) -> Cut {
     };
     let target = payoff_start - PREROLL_MS;
     // The last line that starts at or before the target: the edge only ever moves earlier.
-    let mut first = lines[..=pf]
-        .partition_point(|l| l.spoken_start <= target)
-        .saturating_sub(1)
+    // A scan, not a bisection: on real timing an unheard line keeps its stream-clock time, so
+    // starts are not guaranteed to be in order.
+    let mut first = (0..=pf)
+        .rev()
+        .find(|&j| lines[j].spoken_start <= target)
+        .unwrap_or(0)
         .min(min_first);
     let mut last = pl;
-    let end_of = |last: usize| lines[last].spoken_end + REACTION_TAIL_MS;
-    let mut start = lines[first].spoken_start;
+    let end_of = |last: usize| edge_end(stream, last);
+    let start_of = |first: usize| edge_start(stream, first);
+    let mut start = start_of(first);
     let mut end = end_of(last);
     let mut note = None;
     let mut needs_reauthoring = false;
@@ -144,7 +194,7 @@ pub fn cut(stream: &Stream, payoff: usize, band: Band) -> Cut {
     if end - start > band.max_ms {
         while first < min_first && end - start > band.max_ms {
             first += 1;
-            start = lines[first].spoken_start;
+            start = start_of(first);
         }
         if end - start > band.max_ms {
             needs_reauthoring = true;
@@ -164,12 +214,9 @@ pub fn cut(stream: &Stream, payoff: usize, band: Band) -> Cut {
             last += 1;
             end = end_of(last);
         }
-        while first > 0
-            && end - start < band.min_ms
-            && end - lines[first - 1].spoken_start <= band.max_ms
-        {
+        while first > 0 && end - start < band.min_ms && end - start_of(first - 1) <= band.max_ms {
             first -= 1;
-            start = lines[first].spoken_start;
+            start = start_of(first);
         }
         if end - start < band.min_ms {
             end = start + band.min_ms;

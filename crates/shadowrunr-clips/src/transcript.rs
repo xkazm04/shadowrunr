@@ -7,7 +7,12 @@
 //! *spoken* clock: each line starts at its beat or when the previous line has finished,
 //! whichever is later, and lasts as long as the stage's caption model says it takes to say
 //! (`packages/stage-kit/src/timing.ts`, ported here so the caption files and the recorded
-//! stage agree). There is no TTS alignment in the media-less phase; the manifest says so.
+//! stage agree).
+//!
+//! **Real timing.** When the run has a `voice.jsonl`, [`Stream::apply_voice`] replaces the
+//! estimate with what the voice did: a heard line runs from its first `played` to its last
+//! part's end, on the stream clock. A host line never heard keeps its stream-clock time and is
+//! flagged `unvoiced`; a viewer's question moves with the line that answers it.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -15,6 +20,7 @@ use std::path::Path;
 use shadowrunr_brain::moderation::{Policy, TermAction};
 use shadowrunr_types::{Case, ModStage, SegmentId, Speaker, StreamEvent, TsMs};
 
+use crate::voice::VoiceTiming;
 use crate::{ClipError, Result};
 
 /// Stage-kit `wordTimings` constants (`packages/stage-kit/src/timing.ts`).
@@ -84,6 +90,8 @@ pub struct Line {
     pub replying_to: Vec<String>,
     pub spoken_start: i64,
     pub spoken_end: i64,
+    /// Real timing applied and this host line was never heard.
+    pub unvoiced: bool,
 }
 
 /// The lines spoken at one stream-clock tick (a viewer cue belongs to the beat it is
@@ -144,6 +152,8 @@ pub struct Stream {
     pub end_ms: TsMs,
     /// The spoken-clock time of each event (index-aligned with `events`).
     pub spoken_at: Vec<i64>,
+    /// The spoken clock is the voice's real timing ([`Stream::apply_voice`]).
+    pub voice_timed: bool,
 }
 
 /// Read `transcript.jsonl`. A torn last line (a run still being written) is skipped; a bad
@@ -305,6 +315,7 @@ impl Stream {
                     replying_to: Vec::new(),
                     spoken_start: start,
                     spoken_end: start + dur,
+                    unvoiced: false,
                 });
                 start += dur + BREATH_MS;
             }
@@ -321,6 +332,7 @@ impl Stream {
                 replying_to: replying_to.clone(),
                 spoken_start: start,
                 spoken_end: start + dur,
+                unvoiced: false,
             });
             cursor = start + dur + BREATH_MS;
             if new_beat {
@@ -348,7 +360,58 @@ impl Stream {
             injections,
             end_ms,
             spoken_at,
+            voice_timed: false,
         }
+    }
+
+    /// Re-time every line from the voice log: a heard host line takes its real start and end;
+    /// one never heard starts at its stream-clock time, lasts its estimate and is flagged
+    /// `unvoiced`; a viewer's question ends a breath before the line that answers it, lasting
+    /// its estimate but never reaching back past the line before it.
+    pub fn apply_voice(&mut self, timing: &VoiceTiming) {
+        // Each line's estimated length, before the re-timing.
+        let estimate: Vec<i64> = self
+            .lines
+            .iter()
+            .map(|l| l.spoken_end - l.spoken_start)
+            .collect();
+        for l in self.lines.iter_mut() {
+            if matches!(l.who, Who::Viewer { .. }) {
+                continue;
+            }
+            match timing.heard(u64::from(l.line_no)) {
+                Some(h) => {
+                    l.spoken_start = h.start_ms;
+                    l.spoken_end = h.end_ms;
+                    l.unvoiced = false;
+                }
+                None => {
+                    l.spoken_start = l.ts_ms;
+                    l.spoken_end = l.ts_ms + spoken_ms(&l.text).max(1);
+                    l.unvoiced = true;
+                }
+            }
+        }
+        for (i, len) in estimate.into_iter().enumerate() {
+            if !matches!(self.lines[i].who, Who::Viewer { .. }) {
+                continue;
+            }
+            let ev = self.lines[i].event;
+            let answer = (i + 1..self.lines.len()).find(|&j| {
+                self.lines[j].event == ev && !matches!(self.lines[j].who, Who::Viewer { .. })
+            });
+            if let Some(j) = answer {
+                let end = self.lines[j].spoken_start - BREATH_MS;
+                let floor = i
+                    .checked_sub(1)
+                    .map_or(i64::MIN, |p| self.lines[p].spoken_end + BREATH_MS);
+                let start = (end - len).max(floor).min(end - MIN_CUE_MS / 2);
+                self.lines[i].spoken_start = start;
+                self.lines[i].spoken_end = end.max(start + 1);
+            }
+        }
+        self.spoken_at = spoken_positions(&self.events, &self.lines);
+        self.voice_timed = true;
     }
 
     /// The segment running at `ts`.

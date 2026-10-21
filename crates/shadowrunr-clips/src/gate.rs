@@ -14,7 +14,9 @@
 //! - `injection_reply`: a host line answering a message moderation tagged as an injection is
 //!   unmeasured: whether the host performed any part of it takes a person to read.
 //!
-//! **Render and disclosure**: `ai_disclosure` (the AI-character badge is burnt in).
+//! **Render and disclosure**: `ai_disclosure` (the AI-character badge is burnt in), and on a cut
+//! from the recording `handles_in_picture` (unmeasured: the 16:9 broadcast picture shows the
+//! chat column, so a person confirms the handles may be shown).
 //!
 //! **The mandatory checklist** (SEG-02A or a linked case): `evidence_badge_burnt` (the
 //! ALLEGED header and grade badge), `source_citation` (every claimed hex has a source and the
@@ -312,7 +314,8 @@ pub fn corrections_check(data_dir: &Path, evidence: Option<&ClipEvidence>) -> Ga
     })
 }
 
-/// The render-dependent checks.
+/// The render-dependent checks. A cut from the recording adds `handles_in_picture`: the 16:9
+/// picture is the broadcast, chat column included, so it is held until a person confirms.
 pub fn render_checks(
     render: Option<&ClipRender>,
     evidence: Option<&ClipEvidence>,
@@ -332,6 +335,13 @@ pub fn render_checks(
             "the render carries no AI-character badge",
         ),
     });
+    if render.is_some_and(|r| r.files.iter().any(|f| f.kind == "cut_16x9")) {
+        out.push(check(
+            "handles_in_picture",
+            GateState::Unmeasured,
+            "the 16:9 cut is the broadcast picture: the stage's chat column, and its captions when Malakor names a viewer, show viewer handles (the 9:16 crop and its burnt-in captions do not); a person confirms they may be shown",
+        ));
+    }
     if !required {
         return out;
     }

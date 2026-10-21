@@ -32,6 +32,14 @@ export type ClipPlatform = "youtube" | "tiktok" | "twitch";
  */
 export type EvidenceGrade = "DOC" | "REP" | "CLM" | "SPC";
 /**
+ * What a person watching the cut saw.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipFeedbackTag".
+ */
+export type ClipFeedbackTag =
+  "landed" | "flat" | "voice_off_sync" | "face_wrong" | "caption_wrong" | "cut_too_early" | "cut_too_late" | "boring";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "GateState".
  */
@@ -63,6 +71,13 @@ export type ClipLane = "clip" | "review";
  * via the `definition` "MarkerKind".
  */
 export type MarkerKind = "mark_moment" | "foil_roast" | "hex_reveal" | "verdict_sealed";
+/**
+ * Where a render's picture comes from.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipFootage".
+ */
+export type ClipFootage = "recording" | "redrawn";
 /**
  * What `clips.scan` reads: one run (`run_id`, optionally qualified) or every result run of
  * a tournament.
@@ -762,6 +777,10 @@ export interface RpcMethods {
     params: ClipsApproveParams;
     result: ClipCandidate;
   };
+  "clips.feedback": {
+    params: ClipsFeedbackParams;
+    result: ClipCandidate;
+  };
   "clips.get": {
     params: ClipIdParams;
     result: ClipCandidate;
@@ -773,6 +792,10 @@ export interface RpcMethods {
   "clips.publish": {
     params: ClipsPublishParams;
     result: ClipPublishReport;
+  };
+  "clips.recording": {
+    params: ClipsRecordingParams;
+    result: ClipRunRecording;
   };
   "clips.reject": {
     params: ClipsRejectParams;
@@ -1168,6 +1191,7 @@ export interface ClipCandidate {
   created_ms: number;
   dry_runs?: ClipDryRun[];
   evidence?: ClipEvidence;
+  feedback?: ClipFeedback;
   gate: ClipGate;
   history: ClipTransition[];
   /**
@@ -1181,6 +1205,7 @@ export interface ClipCandidate {
    * 1 = the stream's best.
    */
   rank: number;
+  recording?: ClipRecording;
   rejection?: ClipRejection;
   render?: ClipRender;
   score: number;
@@ -1226,6 +1251,11 @@ export interface ClipCaption {
   speaker: string;
   start_ms: number;
   text: string;
+  /**
+   * On a voice-timed cut: the line was never heard (the voice skipped it, the stage dropped
+   * it, or it is a foil's), so it keeps its stream-clock time.
+   */
+  unvoiced?: boolean;
 }
 /**
  * One upload request the dry run wrote instead of sending.
@@ -1284,6 +1314,17 @@ export interface ClipHex {
   sources?: string[];
 }
 /**
+ * Watched feedback on a cut. It never changes the candidate's state.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipFeedback".
+ */
+export interface ClipFeedback {
+  at_ms: number;
+  note?: string;
+  tags: ClipFeedbackTag[];
+}
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ClipGate".
  */
@@ -1314,7 +1355,8 @@ export interface GateCheck {
   detail: string;
   /**
    * `care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,
-   * `ai_disclosure`, `evidence_badge_burnt`, `source_citation`, `no_open_correction`.
+   * `ai_disclosure`, `handles_in_picture`, `evidence_badge_burnt`, `source_citation`,
+   * `no_open_correction`.
    */
   id: string;
   /**
@@ -1365,6 +1407,32 @@ export interface ClipMarker {
   ts_ms: number;
 }
 /**
+ * The show recording a candidate is cut from: the run's `recording.json`, read at scan time.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipRecording".
+ */
+export interface ClipRecording {
+  /**
+   * Speech starts this long after its `played` time, constant, with no drift (measured on
+   * the recorded sessions: +200 ms, within 25 ms). A tolerance the cuts' pre-roll absorbs:
+   * cut points are not shifted by it.
+   */
+  av_offset_ms: number;
+  /**
+   * The recording file (the run directory's `recording.<ext>`), as found at scan time.
+   */
+  file: string;
+  fps: number;
+  height: number;
+  /**
+   * The stream-clock time of the file's first frame: a stream time `t` sits at
+   * `t - stream_offset_ms` in the file.
+   */
+  stream_offset_ms: number;
+  width: number;
+}
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ClipRejection".
  */
@@ -1384,10 +1452,11 @@ export interface ClipRender {
    */
   fallback_reason?: string;
   files: ClipFile[];
+  footage?: ClipFootage;
   height: number;
   /**
-   * `video` (an MP4 was recorded from the stage) or `poster` (a still poster frame plus
-   * caption tracks, when recording tooling is missing).
+   * `video` (an MP4 was cut from the recording or recorded from the stage) or `poster` (a
+   * still poster frame plus caption tracks, when the tools are missing).
    */
   kind: string;
   overlay: ClipOverlay;
@@ -1403,7 +1472,8 @@ export interface ClipRender {
 export interface ClipFile {
   bytes: number;
   /**
-   * `video`, `poster`, `captions_srt`, `captions_ass`, `stage_input`, `manifest`.
+   * `video`, `cut_16x9`, `cut_9x16`, `poster`, `captions_srt`, `captions_ass`,
+   * `stage_input`, `manifest`.
    */
   kind: string;
   path: string;
@@ -1471,9 +1541,18 @@ export interface ClipWeights {
  */
 export interface ClipSignals {
   /**
-   * Programme audio energy: always unmeasured in the media-less phase.
+   * Programme level: the window's RMS level against the whole recording's,
+   * `clamp((window - stream + 6 dB) / 12 dB, 0, 1)`. Unmeasured without a recording.
    */
   audio?: number;
+  /**
+   * The window's RMS level behind `audio` (dBFS, ffmpeg `astats`, ungated: pauses count).
+   */
+  audio_db?: number;
+  /**
+   * The whole recording's RMS level `audio` is read against (dBFS).
+   */
+  audio_stream_db?: number;
   /**
    * Crowd reaction: the distinct-chatter z-score against the stream's own baseline, clipped
    * to 0..=3 and divided by 3.
@@ -1572,6 +1651,23 @@ export interface ClipWindow {
    * `seg01-split-stage` (25-35 s), `seg02a-alleged` (45-60 s) or `default` (15-60 s).
    */
   style: string;
+  /**
+   * The spoken clock is the voice's real timing from the run's `voice.jsonl` (each voiced
+   * line from its first `played` to its last part's `played` plus its duration), on the
+   * stream clock. Absent: the caption model's estimate.
+   */
+  voice_timed?: boolean;
+}
+/**
+ * `clips.feedback`: replaces the candidate's watched feedback (any state; it changes none).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipsFeedbackParams".
+ */
+export interface ClipsFeedbackParams {
+  id: string;
+  note?: string;
+  tags: ClipFeedbackTag[];
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -1665,6 +1761,52 @@ export interface ClipPublishReport {
   dry_run: boolean;
   id: string;
   requests: ClipDryRun[];
+}
+/**
+ * `clips.recording`: a sandbox session's show recording, for the Review player's watch pane.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipsRecordingParams".
+ */
+export interface ClipsRecordingParams {
+  session_id: string;
+}
+/**
+ * A session's recording as the console plays it: a stream time `t` is at
+ * `t - stream_offset_ms` in the file.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipRunRecording".
+ */
+export interface ClipRunRecording {
+  av_offset_ms: number;
+  fps: number;
+  /**
+   * Every heard line's real timing, by transcript line; empty without a voice log.
+   */
+  heard: ClipHeardLine[];
+  height: number;
+  /**
+   * The file on the daemon: `/media/runs/sandbox/<session_id>/recording.mp4`.
+   */
+  media_path: string;
+  session_id: string;
+  stream_offset_ms: number;
+  width: number;
+}
+/**
+ * One line the voice was heard saying, on the stream clock (from `voice.jsonl`).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipHeardLine".
+ */
+export interface ClipHeardLine {
+  end_ms: number;
+  /**
+   * The `say` event's transcript line (its seq).
+   */
+  line: number;
+  start_ms: number;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema

@@ -1,18 +1,21 @@
 //! The clip factory and its publish gate (docs/spec/contract.md, appendix "Clips";
-//! docs/design/obsidian-program-digest.md § 7), media-less edition.
+//! docs/design/obsidian-program-digest.md § 7).
 //!
-//! A stream transcript is read as beats of spoken lines. Each beat is scored from independent
-//! signals, each normalised to its own stream: the host's moment markers (capped in rate and
-//! label length), the crowd's distinct-chatter z-score, programme audio (always unmeasured:
-//! there is no audio yet) and a model's hook read of the window (one cheapest-tier call per
+//! A stream transcript is read as beats of spoken lines, on the voice's real timing when the
+//! run has a `voice.jsonl`. Each beat is scored from independent signals, each normalised to
+//! its own stream: the host's moment markers (capped in rate and label length), the crowd's
+//! distinct-chatter z-score, programme loudness (measured on the show's recording when the run
+//! has one, else unmeasured) and a model's hook read of the window (one cheapest-tier call per
 //! run). The score is `0.35·marker + 0.25·chat + 0.15·audio + 0.25·hook` with the weights of
 //! unmeasured signals redistributed, and it is reported as an unmeasured design hypothesis.
 //! A peak becomes a window that reaches back by a pre-roll for its setup, snaps to whole
-//! lines and is clamped to its segment's style band. The best five per stream are drafted
-//! as vertical 1080x1920 renders (a stage recording when the tools exist, else a poster frame
-//! plus caption tracks), checked by the gate, and wait for the owner's signature. Upload
-//! adapters only write the request they would send.
+//! lines and is clamped to its segment's style band. The best five per stream are drafted,
+//! checked by the gate, and wait for the owner's signature. A render cuts a recorded run's
+//! footage (a 16:9 trim and a 9:16 reframe around the face and captions); a run without a
+//! recording is re-drawn by the stage (a vertical 1080x1920 video when the tools exist, else a
+//! poster frame plus caption tracks). Upload adapters only write the request they would send.
 
+pub mod footage;
 pub mod gate;
 pub mod hook;
 pub mod render;
@@ -21,6 +24,7 @@ pub mod signals;
 pub mod store;
 pub mod transcript;
 pub mod upload;
+pub mod voice;
 pub mod window;
 
 #[cfg(test)]
@@ -47,7 +51,7 @@ pub const NOMINAL_WEIGHTS: ClipWeights = ClipWeights {
 pub const WEIGHTS_PROVENANCE: &str = "unmeasured: design hypothesis from docs/design/obsidian-program-digest.md § 7; not yet scored against an editor's independent picks or clip retention";
 
 /// The label beside every ranking.
-pub const WEIGHTS_NOTE: &str = "weights unmeasured (0.35 marker, 0.25 chat, 0.15 audio, 0.25 hook; audio is unmeasured in the media-less phase and its share is redistributed over the measured signals)";
+pub const WEIGHTS_NOTE: &str = "weights unmeasured (0.35 marker, 0.25 chat, 0.15 audio, 0.25 hook; an unmeasured signal's share, such as audio for a run without a recording, is redistributed over the measured ones)";
 
 /// Candidates kept per stream.
 pub const TOP_PER_STREAM: usize = 5;

@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::catalog::{CharacterDetail, CharacterSummary, RankTableInfo, RuleState, SegmentTables};
 use crate::clips::{
-    ClipCandidate, ClipIdParams, ClipPublishReport, ClipScanReport, ClipsApproveParams,
-    ClipsListParams, ClipsPage, ClipsPublishParams, ClipsRejectParams, ClipsScanParams,
+    ClipCandidate, ClipIdParams, ClipPublishReport, ClipRunRecording, ClipScanReport,
+    ClipsApproveParams, ClipsFeedbackParams, ClipsListParams, ClipsPage, ClipsPublishParams,
+    ClipsRecordingParams, ClipsRejectParams, ClipsScanParams,
 };
 use crate::prep::{PrepApproveParams, PrepGenerateParams, PrepIdParams, PrepSummary, StreamPrep};
 use crate::reconcile::{
@@ -456,6 +457,8 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<ClipsApproveParams, ClipCandidate>("clips.approve");
     v.method::<ClipsRejectParams, ClipCandidate>("clips.reject");
     v.method::<ClipsPublishParams, ClipPublishReport>("clips.publish");
+    v.method::<ClipsFeedbackParams, ClipCandidate>("clips.feedback");
+    v.method::<ClipsRecordingParams, ClipRunRecording>("clips.recording");
     v.method::<SandboxStartParams, SandboxStarted>("sandbox.start");
     v.method::<SandboxIdParams, SandboxStatus>("sandbox.stop");
     v.method::<SandboxStatusParams, SandboxStatus>("sandbox.status");

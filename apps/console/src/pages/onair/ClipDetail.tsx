@@ -1,7 +1,8 @@
-// `#/onair/clips/<id>`: one candidate (`clips.get`). The cut as a bar against its band, the
-// signals with nominal and applied weights (an unmeasured signal named with its reason, never
-// shown as zero), the markers, the claim context, the gate checklist, the exact captions, the
-// render and the trail. The owner's acts sit at the foot (ClipActions).
+// `#/onair/clips/<id>`: one candidate (`clips.get`). The cut played as a viewer sees it beside
+// its lines on the voice's real timing (ClipPlayer), the watched feedback (ClipFeedback), the
+// cut as a bar against its band, the signals with nominal and applied weights (an unmeasured
+// signal named with its reason, never shown as zero), the markers, the claim context, the gate
+// checklist, the render and the trail. The owner's acts sit at the foot (ClipActions).
 import type { ClipCandidate } from "@shadowrunr/contract";
 import type { CSSProperties } from "react";
 import { useRpc } from "../../data";
@@ -9,7 +10,9 @@ import { QueryView } from "../../kit";
 import { Chip, ChipRow } from "../../ui/Chip";
 import { Head, Section } from "../../ui/Section";
 import { ClipActions } from "./ClipActions";
-import { GATE_TONE, SIGNALS, STATUS_LABEL, STATUS_TONE, WEIGHTS_LABEL, clock, pct, score, secs, windowBar } from "./clipModel";
+import { ClipFeedback } from "./ClipFeedback";
+import { ClipPlayer } from "./ClipPlayer";
+import { FOOTAGE_LABEL, GATE_TONE, SIGNALS, STATUS_LABEL, STATUS_TONE, WEIGHTS_LABEL, clock, footageOf, pct, score, secs, windowBar } from "./clipModel";
 import styles from "./Clips.module.css";
 
 export function ClipDetail({ id }: { id: string }) {
@@ -36,6 +39,8 @@ function Detail({ c }: { c: ClipCandidate }) {
         <Chip tone="muted">{c.segment}</Chip>
         <Chip tone="muted">{c.id}</Chip>
       </ChipRow>
+      <ClipPlayer c={c} />
+      <ClipFeedback key={c.feedback?.at_ms ?? 0} c={c} />
       <WindowBar c={c} />
       <Signals c={c} />
       {c.markers.length > 0 && (
@@ -82,17 +87,6 @@ function Detail({ c }: { c: ClipCandidate }) {
           ))}
         </ul>
       </Section>
-      <Section title="Captions" right="the exact transcript lines; viewer handles redacted">
-        <ol className={styles.captions}>
-          {c.captions.map((l, i) => (
-            <li key={i}>
-              <small>{secs(l.start_ms)}</small>
-              <b>{l.speaker}</b>
-              <span>{l.text}</span>
-            </li>
-          ))}
-        </ol>
-      </Section>
       <Render c={c} />
       <ClipActions c={c} />
       <Section title="Trail">
@@ -132,7 +126,7 @@ function WindowBar({ c }: { c: ClipCandidate }) {
         <em className={styles.min} />
       </div>
       <p className={styles.dim}>
-        {w.duration_s.toFixed(1)} s on the spoken clock · pre-roll {secs(w.preroll_ms)} · anchored by {w.driver}
+        {w.duration_s.toFixed(1)} s {w.voice_timed ? "on the voice’s real timing" : "on the estimated spoken clock"} · pre-roll {secs(w.preroll_ms)} · anchored by {w.driver}
         {w.lag_ms > 0 ? ` (lag ${secs(w.lag_ms)})` : ""} · stream clock {clock(w.start_ms)}–{clock(w.end_ms)} · lines {c.source.line_from}–{c.source.line_to}
       </p>
       {w.needs_reauthoring === true && <p className={styles.warn}>Needs re-authoring: the setup and payoff do not fit the band.</p>}
@@ -177,6 +171,11 @@ function Signals({ c }: { c: ClipCandidate }) {
           </li>
         ))}
         {s.chat_z !== undefined && <li>crowd z {s.chat_z.toFixed(2)} against the stream’s own baseline</li>}
+        {s.audio_db !== undefined && s.audio_stream_db !== undefined && (
+          <li data-role="onair-clip-level">
+            programme level {s.audio_db.toFixed(1)} dBFS RMS against the recording’s {s.audio_stream_db.toFixed(1)} dBFS
+          </li>
+        )}
         {s.hook_why !== undefined && <li>hook read: {s.hook_why}</li>}
       </ul>
       <p className={styles.note}>{c.scoring.provenance}</p>
@@ -188,7 +187,7 @@ function Render({ c }: { c: ClipCandidate }) {
   const r = c.render;
   if (!r) return null;
   return (
-    <Section title="Render" right={`${r.kind} · ${r.width}x${r.height} · ${r.duration_s.toFixed(1)} s`}>
+    <Section title="Render" right={`${FOOTAGE_LABEL[footageOf(c)]} · ${r.width}x${r.height} · ${r.duration_s.toFixed(1)} s`}>
       {r.fallback_reason !== undefined && r.fallback_reason !== "" && <p className={styles.warn}>No video: {r.fallback_reason}</p>}
       <ul className={styles.plain}>
         {r.files.map((f) => (

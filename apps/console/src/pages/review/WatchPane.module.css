@@ -1,0 +1,5 @@
+/* The player's watch pane: the switch, then the recording at the line. */
+
+.pane { display: flex; flex-direction: column; gap: var(--sr-space-compact); }
+.video { display: block; width: min(100%, 48rem); aspect-ratio: 16 / 9; background: var(--sr-color-text-ink); border: var(--sr-stroke-heavy) solid var(--sr-color-text-ink); }
+.note { margin: 0; color: var(--sr-color-text-mute); font-size: var(--sr-size-caption); }

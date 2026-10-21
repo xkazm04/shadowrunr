@@ -11,14 +11,16 @@ use std::path::{Path, PathBuf};
 use fs2::FileExt;
 use serde::Serialize;
 use shadowrunr_types::clips::{
-    ClipApproval, ClipCandidate, ClipRejection, ClipStatus, ClipSummary, ClipTransition,
-    ClipsListParams, ClipsPage, GateState,
+    ClipApproval, ClipCandidate, ClipFeedback, ClipFeedbackTag, ClipRejection, ClipStatus,
+    ClipSummary, ClipTransition, ClipsListParams, ClipsPage, GateState,
 };
 
 use crate::{now_ms, ClipError, Result};
 
 /// The largest page `clips.list` returns.
 pub const MAX_LIMIT: u32 = 500;
+/// The longest watched-feedback note.
+pub const MAX_NOTE_CHARS: usize = 2_000;
 
 #[derive(Debug, Clone)]
 pub struct ClipStore {
@@ -342,6 +344,38 @@ impl ClipStore {
             at_ms: at,
             by,
             note: Some(reason.to_string()),
+        });
+        self.save(&c)?;
+        Ok(c)
+    }
+
+    /// Watched feedback: replaces the clip's tags and note, in any state, and changes nothing
+    /// else. Tags are kept once each, in the order given; a blank note is dropped. No tags and
+    /// no note clear the feedback.
+    pub fn feedback(
+        &self,
+        id: &str,
+        tags: &[ClipFeedbackTag],
+        note: Option<&str>,
+    ) -> Result<ClipCandidate> {
+        let note = note.map(str::trim).filter(|n| !n.is_empty());
+        if note.is_some_and(|n| n.chars().count() > MAX_NOTE_CHARS) {
+            return Err(ClipError::Invalid(format!(
+                "a feedback note is at most {MAX_NOTE_CHARS} characters"
+            )));
+        }
+        let _lock = self.lock()?;
+        let mut c = self.load(id)?;
+        let mut kept: Vec<ClipFeedbackTag> = Vec::new();
+        for t in tags {
+            if !kept.contains(t) {
+                kept.push(*t);
+            }
+        }
+        c.feedback = (!kept.is_empty() || note.is_some()).then(|| ClipFeedback {
+            tags: kept,
+            note: note.map(String::from),
+            at_ms: now_ms(),
         });
         self.save(&c)?;
         Ok(c)
