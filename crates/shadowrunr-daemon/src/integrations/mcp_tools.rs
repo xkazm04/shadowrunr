@@ -5,6 +5,10 @@
 //!
 //! Read-only by default. `start_sim` is the one write; it runs only with
 //! `[personas] mcp_allow_writes = true`, and uses the scripted engine unless `live: true`.
+//!
+//! `start_sim` and `preflight` go through a running daemon when one answers on
+//! `[daemon] port` ([`super::mcp_backend`]): its guards and its engine, never a second set
+//! beside it. The result's `host` says where a sim runs (`daemon` | `mcp`).
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -58,7 +62,7 @@ pub const TOOLS: [ToolDef; 8] = [
     ToolDef {
         name: "start_sim",
         method: "sim.start",
-        description: "Start one text simulation in the background and return its run_id (read it later with get_transcript). Spec fields default to the [sim] config. Scripted engine (no quota) unless live is true. Disabled unless [personas] mcp_allow_writes = true.",
+        description: "Start one text simulation in the background and return its run_id (read it later with get_transcript). Spec fields default to the [sim] config. Scripted engine (no quota) unless live is true. When a daemon is running the sim runs in it, and live must match the daemon's engine. Disabled unless [personas] mcp_allow_writes = true.",
         write: true,
     },
     ToolDef {
@@ -179,6 +183,9 @@ impl Tools {
             "get_transcript" => self.transcript(args).await?,
             "start_sim" => self.start_sim(args).await?,
             "preflight" => {
+                if let Some(d) = super::mcp_backend::probe(self.cfg.daemon.port).await? {
+                    return Ok(d.call(t.method, json!({})).await?);
+                }
                 let state = self.live_state().await;
                 let mut v = self.rpc(&state, t.method, json!({})).await?;
                 let has_pf09 = v.as_array().is_some_and(|a| {
@@ -274,6 +281,19 @@ impl Tools {
         let live = args.get("live").and_then(Value::as_bool).unwrap_or(false);
         let judge = args.get("judge").and_then(Value::as_bool).unwrap_or(false);
         let spec = self.spec_with_defaults(args.get("spec"))?;
+        if let Some(d) = super::mcp_backend::probe(self.cfg.daemon.port).await? {
+            d.check_engine(live)?;
+            let res = d
+                .call("sim.start", json!({ "spec": spec, "judge": judge }))
+                .await?;
+            let run_id = res["run_id"].as_str().unwrap_or_default().to_string();
+            return Ok(json!({
+                "run_id": run_id,
+                "engine": d.engine(),
+                "run_dir": self.run_dir(&run_id).to_string_lossy(),
+                "host": "daemon",
+            }));
+        }
         let state = if live {
             self.live_state().await
         } else {
@@ -286,20 +306,24 @@ impl Tools {
         if let Ok(mut s) = self.started.lock() {
             s.push((state.clone(), run_id.clone()));
         }
-        let run_dir = self
-            .cfg
-            .paths
-            .sim_runs()
-            .join(&self.cfg.sim.adhoc_dir)
-            .join(&run_id);
         Ok(json!({
             "run_id": run_id,
             "engine": if state.engine.is_scripted() { "scripted" } else { "live" },
-            "run_dir": run_dir.to_string_lossy(),
+            "run_dir": self.run_dir(&run_id).to_string_lossy(),
+            "host": "mcp",
         }))
     }
 
-    /// Runs started here that are still in flight.
+    fn run_dir(&self, run_id: &str) -> std::path::PathBuf {
+        self.cfg
+            .paths
+            .sim_runs()
+            .join(&self.cfg.sim.adhoc_dir)
+            .join(run_id)
+    }
+
+    /// Runs started in this process that are still in flight (a daemon-hosted run is the
+    /// daemon's, never listed here).
     pub fn running(&self) -> Vec<String> {
         let Ok(s) = self.started.lock() else {
             return Vec::new();

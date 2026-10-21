@@ -15,6 +15,7 @@ pub mod activity;
 pub mod door;
 pub mod forwarder;
 pub mod mcp;
+pub mod mcp_backend;
 pub mod mcp_schema;
 pub mod mcp_tools;
 pub mod settings;

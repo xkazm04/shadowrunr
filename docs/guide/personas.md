@@ -134,18 +134,19 @@ emit}`).
 
 `shadowrunr mcp` is a Model Context Protocol server on stdin/stdout. It answers
 `initialize`, `ping`, `tools/list` and `tools/call`. Each tool runs the same handler as the
-daemon's `POST /rpc`, in-process.
+daemon's `POST /rpc`: read tools in-process, `start_sim` and `preflight` in the daemon when
+one is running (below).
 
 | Tool | `/rpc` method | Notes |
 |---|---|---|
 | `list_runs` | `runs.page` | Paged; `limit` defaults to 50; pass `next_cursor` back as `cursor`. |
 | `get_transcript` | `run.transcript` | Paged lines `{seq, event}`; `limit` defaults to 200. |
 | `get_tournament_results` | `tournament.results` | |
-| `start_sim` | `sim.start` | **Write.** Disabled unless `[personas] mcp_allow_writes = true`. Spec fields default to `[sim]`. Scripted unless `live: true`. |
+| `start_sim` | `sim.start` | **Write.** Disabled unless `[personas] mcp_allow_writes = true`. Spec fields default to `[sim]`. Scripted unless `live: true`. The result's `host` is `daemon` or `mcp`. |
 | `get_reconcile_report` | `reconcile.report` | |
 | `list_plan_options` | `plan.proposals` | |
 | `list_directives` | `directive.list` | |
-| `preflight` | `preflight.run` | Plus PF-09 when activity is configured. |
+| `preflight` | `preflight.run` | Plus PF-09 when activity is configured. The daemon's own rows when one is running. |
 
 **Schemas and errors.** Input schemas are cut from the generated wire contract (`$ref`s
 inlined). A failing handler returns an `isError` result carrying the `/rpc` error envelope
@@ -156,8 +157,19 @@ inlined). A failing handler returns an `isError` result carrying the `/rpc` erro
 Personas MCP client speaks it). stdout carries only protocol messages; diagnostics go to
 stderr.
 
-**Runs started over MCP** live in the MCP process. When stdin closes, the server waits for
-them to finish. If the client kills the process (Personas reaps idle stdio sessions after
+**One admission door.** On each `start_sim` and `preflight` call the server asks
+`127.0.0.1:<[daemon] port>` for `engine.status` (500 ms). When a daemon answers, the call goes
+to it over `/rpc`: the run is the daemon's, under every guard it holds (no sim while a
+sandbox session runs, `max_live_runs`, one run per run_id, its run directory never moved
+aside by a second process), on its engine fleet and quota ledger, visible in the console's
+live view and forwarding activity to Personas. `live` must match the daemon's engine: `live:
+true` against a scripted daemon, or a default (scripted) `start_sim` against a live daemon,
+is refused with `detail.reason = "engine_mismatch"`; no second fleet is built and no quota is
+spent. A daemon refusal comes back as the same `isError` envelope (`conflict`, `busy`,
+`preflight_red` with its detail).
+
+**With no daemon running**, runs started over MCP live in the MCP process (`host: "mcp"`).
+When stdin closes, the server waits for them to finish. If the client kills the process (Personas reaps idle stdio sessions after
 about 45 s), the run stops where it is and its partial transcript stays on disk. For long
 live runs, use the daemon.
 
