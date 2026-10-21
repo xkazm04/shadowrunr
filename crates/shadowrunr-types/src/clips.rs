@@ -30,6 +30,132 @@ pub enum ClipStatus {
     Rejected,
 }
 
+impl ClipStatus {
+    pub const ALL: [Self; 5] = [
+        Self::RenderedDraft,
+        Self::PendingOwnerGate,
+        Self::ApprovedForUpload,
+        Self::Published,
+        Self::Rejected,
+    ];
+
+    /// The wire name.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::RenderedDraft => "rendered_draft",
+            Self::PendingOwnerGate => "pending_owner_gate",
+            Self::ApprovedForUpload => "approved_for_upload",
+            Self::Published => "published",
+            Self::Rejected => "rejected",
+        }
+    }
+}
+
+impl std::fmt::Display for ClipStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad(self.as_str())
+    }
+}
+
+/// An owner act on a candidate; [`ClipCandidate::act_block`] says when it is allowed.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ClipAct {
+    Render,
+    Approve,
+    Reject,
+    Publish,
+}
+
+impl ClipAct {
+    pub const ALL: [Self; 4] = [Self::Render, Self::Approve, Self::Reject, Self::Publish];
+
+    /// The wire name.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Render => "render",
+            Self::Approve => "approve",
+            Self::Reject => "reject",
+            Self::Publish => "publish",
+        }
+    }
+}
+
+/// Why an act is refused: the daemon's error and the console's disabled control share it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ClipActBlock {
+    /// The candidate's state does not allow the act.
+    Status { status: ClipStatus },
+    /// Approval needs a render to sign.
+    NoRender,
+    /// The setup and payoff cannot fit the band: re-author, do not approve the cut.
+    NeedsReauthoring,
+    /// These checks failed: a failed check holds whatever the score, and no override applies.
+    HeldBy { checks: Vec<GateCheckId> },
+}
+
+impl ClipActBlock {
+    /// The refusal, after `clip <id> ` (the daemon's error text).
+    pub fn refusal(&self, act: ClipAct) -> String {
+        match (self, act) {
+            (Self::Status { status }, ClipAct::Render) => {
+                format!("is {status}: only a draft waiting for the owner is re-rendered")
+            }
+            (Self::Status { status }, ClipAct::Approve) => {
+                format!("is {status}, not pending_owner_gate")
+            }
+            (Self::Status { status }, ClipAct::Reject) => format!("is already {status}"),
+            (Self::Status { status }, ClipAct::Publish) => format!(
+                "is {status}: only an owner-approved clip (approved_for_upload) may be published"
+            ),
+            (Self::NoRender, _) => "has no render to approve".into(),
+            (Self::NeedsReauthoring, _) => {
+                "cannot hold its setup inside the band: re-author it, do not approve the cut".into()
+            }
+            (Self::HeldBy { checks }, _) => {
+                format!(
+                "is held by {}: a failed check holds whatever the score, and no override applies",
+                checks.iter().map(|k| k.as_str()).collect::<Vec<_>>().join(", ")
+            )
+            }
+        }
+    }
+}
+
+/// One act's verdict on one candidate.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ClipActState {
+    /// Absent: the act is allowed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked: Option<ClipActBlock>,
+    /// Unmeasured checks the act needs an override reason for.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub override_needed: Vec<GateCheckId>,
+}
+
+/// Every act's verdict, keyed by [`ClipAct`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ClipActs {
+    pub render: ClipActState,
+    pub approve: ClipActState,
+    pub reject: ClipActState,
+    pub publish: ClipActState,
+}
+
+impl ClipActs {
+    pub fn get(&self, act: ClipAct) -> &ClipActState {
+        match act {
+            ClipAct::Render => &self.render,
+            ClipAct::Approve => &self.approve,
+            ClipAct::Reject => &self.reject,
+            ClipAct::Publish => &self.publish,
+        }
+    }
+}
+
 /// What made a moment a marker. `mark_moment` is the host's own action; the others are
 /// structural beats of the show read from the transcript.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
@@ -505,6 +631,79 @@ pub struct ClipCandidate {
     /// Watched feedback (`clips.feedback`); kept across a rescan of the same cut.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feedback: Option<ClipFeedback>,
+    /// What may be done now: derived on every read, never stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acts: Option<ClipActs>,
+}
+
+impl ClipCandidate {
+    /// Why `act` is refused in the candidate's present state, or `None` when it is allowed.
+    /// The one statement of the publish gate's owner-act rule: `render` only before the owner
+    /// acts; `approve` only at the owner gate, rendered, fitting its band, with no failed
+    /// check; `reject` from any state before `published`; `publish` only once approved. The
+    /// store, the renderer and the uploader refuse through it; the console reads `acts`.
+    pub fn act_block(&self, act: ClipAct) -> Option<ClipActBlock> {
+        use ClipStatus as S;
+        let status = self.status;
+        let refused_by_status = match act {
+            ClipAct::Render => !matches!(status, S::RenderedDraft | S::PendingOwnerGate),
+            ClipAct::Approve => status != S::PendingOwnerGate,
+            ClipAct::Reject => matches!(status, S::Published | S::Rejected),
+            ClipAct::Publish => status != S::ApprovedForUpload,
+        };
+        if refused_by_status {
+            return Some(ClipActBlock::Status { status });
+        }
+        if act != ClipAct::Approve {
+            return None;
+        }
+        if self.render.is_none() {
+            return Some(ClipActBlock::NoRender);
+        }
+        if self.window.needs_reauthoring {
+            return Some(ClipActBlock::NeedsReauthoring);
+        }
+        let failed = self.checks_in(GateState::Fail);
+        (!failed.is_empty()).then_some(ClipActBlock::HeldBy { checks: failed })
+    }
+
+    /// The gate checks in `state`, in gate order.
+    pub fn checks_in(&self, state: GateState) -> Vec<GateCheckId> {
+        self.gate
+            .checks
+            .iter()
+            .filter(|k| k.state == state)
+            .map(|k| k.id)
+            .collect()
+    }
+
+    /// Every act's verdict. An allowed approval over unmeasured checks names them.
+    pub fn acts(&self) -> ClipActs {
+        let state = |act| {
+            let blocked = self.act_block(act);
+            let override_needed = if act == ClipAct::Approve && blocked.is_none() {
+                self.checks_in(GateState::Unmeasured)
+            } else {
+                Vec::new()
+            };
+            ClipActState {
+                blocked,
+                override_needed,
+            }
+        };
+        ClipActs {
+            render: state(ClipAct::Render),
+            approve: state(ClipAct::Approve),
+            reject: state(ClipAct::Reject),
+            publish: state(ClipAct::Publish),
+        }
+    }
+
+    /// `acts` filled in from the present state (what every read returns).
+    pub fn with_acts(mut self) -> Self {
+        self.acts = Some(self.acts());
+        self
+    }
 }
 
 /// A candidate as `clips.list` shows it.
@@ -694,6 +893,171 @@ pub struct ClipPublishReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A rendered candidate waiting at the owner gate with every check passing.
+    fn candidate(status: ClipStatus) -> ClipCandidate {
+        let w = serde_json::json!({"marker": 0.35, "chat": 0.25, "audio": 0.15, "hook": 0.25});
+        serde_json::from_value(serde_json::json!({
+            "id": "clip-00000000000000aa", "created_ms": 1, "status": status, "score": 0.5,
+            "rank": 1, "lane": "clip", "segment": "SEG-01", "title": "t",
+            "source": {"run_id": "r", "stream_id": "s", "transcript": "t.jsonl",
+                       "line_from": 1, "line_to": 2},
+            "window": {"anchor_ms": 0, "start_ms": 0, "end_ms": 1, "spoken_start_ms": 0,
+                       "spoken_end_ms": 30000, "duration_s": 30.0, "driver": "marker",
+                       "lag_ms": 0, "preroll_ms": 0, "band_s": [15, 60], "style": "default"},
+            "markers": [], "signals": {"marker": 1.0},
+            "scoring": {"nominal": w, "effective": w, "provenance": "unmeasured",
+                        "agreeing": []},
+            "captions": [],
+            "render": {"kind": "poster", "width": 1080, "height": 1920, "duration_s": 30.0,
+                       "files": [], "rendered_ms": 1,
+                       "overlay": {"alleged_header": false, "ai_disclosure": true,
+                                   "captions": "transcript"}},
+            "gate": {"requires_mandatory_gate": false, "held": false, "evaluated_ms": 1,
+                     "checks": [{"id": "care_state", "state": "pass", "detail": ""}]},
+            "history": []
+        }))
+        .unwrap()
+    }
+
+    fn with_check(mut c: ClipCandidate, id: GateCheckId, state: GateState) -> ClipCandidate {
+        c.gate.checks.push(GateCheck {
+            id,
+            state,
+            detail: "d".into(),
+            mandatory: false,
+        });
+        c
+    }
+
+    #[test]
+    fn a_clean_rendered_clip_at_the_gate_may_be_approved() {
+        let c = candidate(ClipStatus::PendingOwnerGate);
+        assert_eq!(c.act_block(ClipAct::Approve), None);
+        assert_eq!(c.acts().approve, ClipActState::default());
+    }
+
+    #[test]
+    fn approval_without_a_render_is_blocked_as_no_render() {
+        let mut c = candidate(ClipStatus::PendingOwnerGate);
+        c.render = None;
+        assert_eq!(c.act_block(ClipAct::Approve), Some(ClipActBlock::NoRender));
+        c.render = candidate(ClipStatus::PendingOwnerGate).render;
+        c.window.needs_reauthoring = true;
+        assert_eq!(
+            c.act_block(ClipAct::Approve),
+            Some(ClipActBlock::NeedsReauthoring)
+        );
+    }
+
+    #[test]
+    fn a_failed_check_holds_and_an_unmeasured_one_needs_an_override() {
+        let held = with_check(
+            candidate(ClipStatus::PendingOwnerGate),
+            GateCheckId::CareState,
+            GateState::Fail,
+        );
+        assert_eq!(
+            held.act_block(ClipAct::Approve),
+            Some(ClipActBlock::HeldBy {
+                checks: vec![GateCheckId::CareState]
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(held.acts().approve).unwrap(),
+            serde_json::json!({"blocked": {"kind": "held_by", "checks": ["care_state"]}})
+        );
+        let open = with_check(
+            candidate(ClipStatus::PendingOwnerGate),
+            GateCheckId::NoOpenCorrection,
+            GateState::Unmeasured,
+        );
+        assert_eq!(open.act_block(ClipAct::Approve), None);
+        assert_eq!(
+            serde_json::to_value(open.acts().approve).unwrap(),
+            serde_json::json!({"override_needed": ["no_open_correction"]})
+        );
+    }
+
+    #[test]
+    fn the_owner_act_table() {
+        use ClipAct as A;
+        use ClipStatus as S;
+        // allowed[status][act], acts in ClipAct::ALL order (render, approve, reject, publish).
+        let table: [(S, [bool; 4]); 5] = [
+            (S::RenderedDraft, [true, false, true, false]),
+            (S::PendingOwnerGate, [true, true, true, false]),
+            (S::ApprovedForUpload, [false, false, true, true]),
+            (S::Published, [false, false, false, false]),
+            (S::Rejected, [false, false, false, false]),
+        ];
+        assert_eq!(table.map(|r| r.0), ClipStatus::ALL);
+        for (status, row) in table {
+            let c = candidate(status);
+            let acts = c.acts();
+            for (act, allowed) in A::ALL.into_iter().zip(row) {
+                let block = c.act_block(act);
+                assert_eq!(block.is_none(), allowed, "{status} x {}", act.as_str());
+                if !allowed {
+                    assert_eq!(block, Some(ClipActBlock::Status { status }));
+                }
+                assert_eq!(acts.get(act).blocked, block);
+            }
+        }
+    }
+
+    #[test]
+    fn acts_are_never_stored_and_are_keyed_by_the_act_vocabulary() {
+        let c = candidate(ClipStatus::PendingOwnerGate);
+        let stored = serde_json::to_value(&c).unwrap();
+        assert!(stored.get("acts").is_none());
+        let read = serde_json::to_value(c.with_acts()).unwrap();
+        let keys: Vec<&str> = read["acts"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        let mut vocab: Vec<&str> = ClipAct::ALL.iter().map(|a| a.as_str()).collect();
+        vocab.sort_unstable();
+        assert_eq!(keys, vocab);
+        for a in ClipAct::ALL {
+            assert_eq!(
+                serde_json::to_string(&a).unwrap(),
+                format!("\"{}\"", a.as_str())
+            );
+        }
+        for s in ClipStatus::ALL {
+            assert_eq!(
+                serde_json::to_string(&s).unwrap(),
+                format!("\"{}\"", s.as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn the_contract_carries_acts_keyed_by_clip_act() {
+        let s = crate::schema::contract_schema();
+        let acts = &s["$defs"]["ClipCandidate"]["properties"]["acts"];
+        assert_eq!(acts["$ref"].as_str(), Some("#/$defs/ClipActs"), "{acts}");
+        let req = s["$defs"]["ClipCandidate"]["required"].to_string();
+        assert!(!req.contains("\"acts\""), "{req}");
+        let mut keys: Vec<String> = s["$defs"]["ClipActs"]["properties"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        keys.sort_unstable();
+        let mut vocab: Vec<String> = s["$defs"]["ClipAct"]["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        vocab.sort_unstable();
+        assert_eq!(keys, vocab);
+    }
 
     #[test]
     fn gate_check_ids_round_trip_under_their_wire_names() {

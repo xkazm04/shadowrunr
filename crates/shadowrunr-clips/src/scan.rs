@@ -20,9 +20,9 @@ use std::sync::Arc;
 use regex::Regex;
 use shadowrunr_brain::moderation::Policy;
 use shadowrunr_types::clips::{
-    ClipCandidate, ClipCaption, ClipEvidence, ClipHex, ClipLane, ClipMarker, ClipRecording,
-    ClipScanReport, ClipScanRun, ClipScoring, ClipSignals, ClipSource, ClipStatus, ClipTransition,
-    ClipWeights, ClipWindow,
+    ClipAct, ClipCandidate, ClipCaption, ClipEvidence, ClipHex, ClipLane, ClipMarker,
+    ClipRecording, ClipScanReport, ClipScanRun, ClipScoring, ClipSignals, ClipSource, ClipStatus,
+    ClipTransition, ClipWeights, ClipWindow,
 };
 use shadowrunr_types::{Engine, EvidenceGrade, Op, SegmentId, StreamEvent};
 
@@ -714,6 +714,7 @@ fn candidate(
         dry_runs: Vec::new(),
         recording: run.recording.cloned(),
         feedback: None,
+        acts: None,
     };
     (c, input_json)
 }
@@ -897,15 +898,7 @@ pub fn rerender(
 ) -> Result<ClipCandidate> {
     let _lock = store.lock()?;
     let mut c = store.load(id)?;
-    if !matches!(
-        c.status,
-        ClipStatus::RenderedDraft | ClipStatus::PendingOwnerGate
-    ) {
-        return Err(crate::ClipError::Conflict(format!(
-            "clip {id} is {}: only a draft waiting for the owner is re-rendered",
-            store::status_name(c.status)
-        )));
-    }
+    store::refuse_blocked(&c, ClipAct::Render)?;
     let r = render::render(&store.dir(id), &c, tools)?;
     let note = match &r.fallback_reason {
         Some(why) => format!("poster frame only: {why}"),
@@ -932,5 +925,5 @@ pub fn rerender(
         }),
     });
     store.save(&c)?;
-    Ok(c)
+    Ok(c.with_acts())
 }

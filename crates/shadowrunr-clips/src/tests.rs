@@ -8,7 +8,8 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use shadowrunr_brain::moderation::Policy;
 use shadowrunr_types::clips::{
-    ClipCaption, ClipPlatform, ClipStatus, ClipsListParams, GateState, MarkerKind,
+    ClipAct, ClipActBlock, ClipCandidate, ClipCaption, ClipPlatform, ClipStatus, ClipsListParams,
+    GateCheck, GateCheckId, GateState, MarkerKind,
 };
 use shadowrunr_types::{
     Engine, EngineError, EngineKind, EngineReply, EngineRequest, HealthReport, Role, StreamEvent,
@@ -1019,4 +1020,166 @@ fn on_real_timing_the_edges_never_open_or_close_on_another_heard_line() {
     assert_eq!(window::edge_start(&s, 0), 2_000 - window::VOICE_LEAD_MS);
     // An unheard line makes no sound: the third line's tail runs its full beat.
     assert_eq!(window::edge_end(&s, 2), 7_300 + window::REACTION_TAIL_MS);
+}
+
+/// One stored candidate of a fresh scan, as the template the owner-act cases vary.
+async fn stored_candidate(tmp: &Path) -> (ClipStore, ClipCandidate) {
+    let run = write_run(tmp, vec![say(300_000, "A line worth a cut.")]);
+    let store = ClipStore::new(&tmp.join("data"));
+    let opts = ScanOptions {
+        hook: false,
+        policy: policy(),
+        care_window_ms: 1_800_000,
+        ffmpeg: None,
+    };
+    let report = scan::scan(&store, &[run], None, &opts).await.unwrap();
+    let mut c = store.load(&report.top[0].id).unwrap();
+    if c.render.is_none() {
+        c.render = Some(render::render(&store.dir(&c.id), &c, None).unwrap());
+    }
+    for k in &mut c.gate.checks {
+        k.state = GateState::Pass;
+    }
+    c.window.needs_reauthoring = false;
+    (store, c)
+}
+
+fn with_gate_check(mut c: ClipCandidate, id: GateCheckId, state: GateState) -> ClipCandidate {
+    c.gate.checks.retain(|k| k.id != id);
+    c.gate.checks.push(GateCheck {
+        id,
+        state,
+        detail: "d".into(),
+        mandatory: false,
+    });
+    c
+}
+
+#[tokio::test]
+async fn approve_refuses_through_the_contracts_act_block() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, base) = stored_candidate(tmp.path()).await;
+    let mut at_gate = base.clone();
+    at_gate.status = ClipStatus::PendingOwnerGate;
+
+    // Clean and rendered: allowed, and a signature approves.
+    store.save(&at_gate).unwrap();
+    assert_eq!(at_gate.act_block(ClipAct::Approve), None);
+    let approved = store.approve(&at_gate.id, "owner", None, None).unwrap();
+    assert_eq!(approved.status, ClipStatus::ApprovedForUpload);
+    // The returned candidate's acts follow its new state.
+    let acts = approved.acts.as_ref().expect("acts derived");
+    assert!(acts.approve.blocked.is_some());
+    assert_eq!(acts.publish.blocked, None);
+
+    // No render: the block and the refusal are the same statement.
+    let mut bare = at_gate.clone();
+    bare.render = None;
+    store.save(&bare).unwrap();
+    let block = bare.act_block(ClipAct::Approve);
+    assert_eq!(block, Some(ClipActBlock::NoRender));
+    let err = store.approve(&bare.id, "owner", None, None).unwrap_err();
+    assert!(matches!(err, crate::ClipError::Conflict(_)), "{err}");
+    assert!(
+        err.to_string()
+            .contains(&block.unwrap().refusal(ClipAct::Approve)),
+        "{err}"
+    );
+
+    // A failed check holds; an unmeasured one only asks for the override.
+    let held = with_gate_check(at_gate.clone(), GateCheckId::CareState, GateState::Fail);
+    store.save(&held).unwrap();
+    assert_eq!(
+        held.act_block(ClipAct::Approve),
+        Some(ClipActBlock::HeldBy {
+            checks: vec![GateCheckId::CareState]
+        })
+    );
+    let err = store
+        .approve(&held.id, "owner", Some("x"), None)
+        .unwrap_err();
+    assert!(err.to_string().contains("held by care_state"), "{err}");
+    let open = with_gate_check(
+        at_gate.clone(),
+        GateCheckId::NoOpenCorrection,
+        GateState::Unmeasured,
+    );
+    store.save(&open).unwrap();
+    let read = store.load(&open.id).unwrap();
+    assert_eq!(read.act_block(ClipAct::Approve), None);
+    assert_eq!(
+        read.acts.unwrap().approve.override_needed,
+        vec![GateCheckId::NoOpenCorrection]
+    );
+    assert!(store.approve(&open.id, "owner", None, None).is_err());
+    assert!(store
+        .approve(&open.id, "owner", Some("read it"), None)
+        .is_ok());
+}
+
+#[tokio::test]
+async fn the_owner_act_table_is_what_the_store_renderer_and_uploader_do() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, base) = stored_candidate(tmp.path()).await;
+    type Vary = fn(&mut ClipCandidate);
+    let variants: [(&str, Vary); 4] = [
+        ("clean", |_| {}),
+        ("no render", |c| c.render = None),
+        ("re-author", |c| c.window.needs_reauthoring = true),
+        ("failed check", |c| {
+            *c = with_gate_check(c.clone(), GateCheckId::CareState, GateState::Fail);
+        }),
+    ];
+    let mut cells = 0;
+    for status in ClipStatus::ALL {
+        for (name, vary) in &variants {
+            for act in ClipAct::ALL {
+                let mut c = base.clone();
+                c.status = status;
+                vary(&mut c);
+                store.save(&c).unwrap();
+                let block = c.act_block(act);
+                let got = match act {
+                    ClipAct::Render => scan::rerender(&store, &c.id, None).map(|_| ()),
+                    ClipAct::Approve => store
+                        .approve(&c.id, "owner", Some("override"), None)
+                        .map(|_| ()),
+                    ClipAct::Reject => store.reject(&c.id, "no", None).map(|_| ()),
+                    ClipAct::Publish => upload::publish_dry_run(&store, &c.id, None).map(|_| ()),
+                };
+                let cell = format!("{status} x {} ({name})", act.as_str());
+                match (&block, &got) {
+                    (None, Ok(())) => {}
+                    (Some(b), Err(e)) => {
+                        assert!(matches!(e, crate::ClipError::Conflict(_)), "{cell}: {e}");
+                        assert_eq!(
+                            e.to_string(),
+                            crate::ClipError::Conflict(format!("clip {} {}", c.id, b.refusal(act)))
+                                .to_string(),
+                            "{cell}"
+                        );
+                    }
+                    _ => panic!("{cell}: act_block {block:?} but the act gave {got:?}"),
+                }
+                cells += 1;
+            }
+        }
+    }
+    assert_eq!(cells, 5 * 4 * variants.len());
+}
+
+#[tokio::test]
+async fn acts_are_derived_on_load_and_never_stored() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, base) = stored_candidate(tmp.path()).await;
+    // A candidate.json written before `acts` existed.
+    let mut old = serde_json::to_value(&base).unwrap();
+    old.as_object_mut().unwrap().remove("acts");
+    let path = store.dir(&base.id).join("candidate.json");
+    std::fs::write(&path, serde_json::to_string_pretty(&old).unwrap()).unwrap();
+    let read = store.load(&base.id).unwrap();
+    assert_eq!(read.acts, Some(read.acts()));
+    store.save(&read).unwrap();
+    let on_disk: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert!(on_disk.get("acts").is_none(), "{on_disk}");
 }

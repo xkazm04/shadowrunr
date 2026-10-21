@@ -15,12 +15,12 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use shadowrunr_types::clips::{
-    ClipCandidate, ClipDryRun, ClipPlatform, ClipPublishReport, ClipStatus,
+    ClipAct, ClipCandidate, ClipDryRun, ClipPlatform, ClipPublishReport,
 };
 
 use crate::render::{grade_name, DISCLOSURE};
-use crate::store::{status_name, write_json, ClipStore};
-use crate::{now_ms, ClipError, Result};
+use crate::store::{refuse_blocked, write_json, ClipStore};
+use crate::{now_ms, Result};
 
 /// Stands where a credential would go. Nothing is ever read from the environment.
 pub const NO_CREDENTIAL: &str = "<absent: no credentials are configured; dry run>";
@@ -278,12 +278,7 @@ pub fn publish_dry_run(
 ) -> Result<ClipPublishReport> {
     let _lock = store.lock()?;
     let mut c = store.load(id)?;
-    if c.status != ClipStatus::ApprovedForUpload {
-        return Err(ClipError::Conflict(format!(
-            "clip {id} is {}: only an owner-approved clip (approved_for_upload) may be published",
-            status_name(c.status)
-        )));
-    }
+    refuse_blocked(&c, ClipAct::Publish)?;
     let now = now_ms();
     let day = utc_day(now);
     let budget: BudgetFile = std::fs::read_to_string(store.root().join("upload-budget.json"))

@@ -22,23 +22,36 @@ export type CharacterRulesResult = RuleState[];
  */
 export type CharacterRulesSetResult = RuleState[];
 /**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "ClipPlatform".
- */
-export type ClipPlatform = "youtube" | "tiktok" | "twitch";
-/**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "EvidenceGrade".
- */
-export type EvidenceGrade = "DOC" | "REP" | "CLM" | "SPC";
-/**
- * What a person watching the cut saw.
+ * Why an act is refused: the daemon's error and the console's disabled control share it.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "ClipFeedbackTag".
+ * via the `definition` "ClipActBlock".
  */
-export type ClipFeedbackTag =
-  "landed" | "flat" | "voice_off_sync" | "face_wrong" | "caption_wrong" | "cut_too_early" | "cut_too_late" | "boring";
+export type ClipActBlock =
+  | {
+      kind: "status";
+      status: ClipStatus;
+    }
+  | {
+      kind: "no_render";
+    }
+  | {
+      kind: "needs_reauthoring";
+    }
+  | {
+      checks: GateCheckId[];
+      kind: "held_by";
+    };
+/**
+ * The publish states. `rendered_draft -> pending_owner_gate -> approved_for_upload ->
+ * published`, or `rejected` from any state before `published`. Only the owner moves a
+ * candidate to `approved_for_upload` or `rejected`; only a real upload moves it to
+ * `published` (dry runs never do).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipStatus".
+ */
+export type ClipStatus = "rendered_draft" | "pending_owner_gate" | "approved_for_upload" | "published" | "rejected";
 /**
  * A clip publish-gate check, as it crosses the wire. The serde names are the ids
  * `candidate.json` has always carried.
@@ -59,19 +72,27 @@ export type GateCheckId =
   | "no_open_correction";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipPlatform".
+ */
+export type ClipPlatform = "youtube" | "tiktok" | "twitch";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "EvidenceGrade".
+ */
+export type EvidenceGrade = "DOC" | "REP" | "CLM" | "SPC";
+/**
+ * What a person watching the cut saw.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipFeedbackTag".
+ */
+export type ClipFeedbackTag =
+  "landed" | "flat" | "voice_off_sync" | "face_wrong" | "caption_wrong" | "cut_too_early" | "cut_too_late" | "boring";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "GateState".
  */
 export type GateState = ("pass" | "fail" | "not_applicable") | "unmeasured";
-/**
- * The publish states. `rendered_draft -> pending_owner_gate -> approved_for_upload ->
- * published`, or `rejected` from any state before `published`. Only the owner moves a
- * candidate to `approved_for_upload` or `rejected`; only a real upload moves it to
- * `published` (dry runs never do).
- *
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "ClipStatus".
- */
-export type ClipStatus = "rendered_draft" | "pending_owner_gate" | "approved_for_upload" | "published" | "rejected";
 /**
  * `clip`: two or more independent signals agree. `review`: one signal carries it, or the
  * window could not hold its setup; it goes to the owner as a review case, never straight
@@ -627,6 +648,13 @@ export type CalibrationOrigin =
   | {
       kind: "default_assumption";
     };
+/**
+ * An owner act on a candidate; [`ClipCandidate::act_block`] says when it is allowed.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipAct".
+ */
+export type ClipAct = "render" | "approve" | "reject" | "publish";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "EngineError".
@@ -1232,6 +1260,7 @@ export interface ClipsApproveParams {
  * via the `definition` "ClipCandidate".
  */
 export interface ClipCandidate {
+  acts?: ClipActs;
   approval?: ClipApproval;
   captions: ClipCaption[];
   created_ms: number;
@@ -1265,6 +1294,31 @@ export interface ClipCandidate {
    */
   title: string;
   window: ClipWindow;
+}
+/**
+ * Every act's verdict, keyed by [`ClipAct`].
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipActs".
+ */
+export interface ClipActs {
+  approve: ClipActState;
+  publish: ClipActState;
+  reject: ClipActState;
+  render: ClipActState;
+}
+/**
+ * One act's verdict on one candidate.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipActState".
+ */
+export interface ClipActState {
+  blocked?: ClipActBlock;
+  /**
+   * Unmeasured checks the act needs an override reason for.
+   */
+  override_needed?: GateCheckId[];
 }
 /**
  * The owner's signature on `approved_for_upload`.
