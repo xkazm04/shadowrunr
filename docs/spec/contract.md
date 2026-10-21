@@ -436,13 +436,19 @@ the event envelope and the error envelope now live in `crates/shadowrunr-types` 
 | `invalid_params` | malformed request or params, a bad cursor, a refused origin (HTTP 403), a wrong content type (415), an unparseable body (400) |
 | `not_found` | the run, tournament, report, character or rule does not exist |
 | `method_not_found` | unknown RPC method |
-| `preflight_red` | a pre-flight check is red, so the action is refused |
+| `preflight_red` | a pre-flight check is red, so the action is refused; `detail.red` lists each red row as `{check, detail, remedy?}` (below) |
 | `busy` | a capacity limit (`max_live_runs`), or a slow `/events` consumer cut off (below) |
 | `engine` | the engine or a simulation failed, including a panicking sim |
 | `io` | a file could not be read or written, or a stored file is malformed |
 | `unavailable` | a needed dependency is not available (reserved) |
 | `conflict` | the request conflicts with current state (`sim.start` with a run id already running) |
 | `internal` | a daemon bug |
+
+`preflight_red` detail: `{"red": [{"check", "detail", "remedy"?}]}`, one entry per red check
+in board order. `detail` is the check's `HealthReport.detail`. `remedy` is the row's repair:
+`{"kind": "applied", "fix", "command", ...}` (`shadowrunr preflight --fix` applies it),
+`{"kind": "guided", "command"?, "file"?, "text"}` or `{"kind": "external", "text"}`. The
+message still names every red check. `HealthReport` and `preflight.run` are unchanged.
 
 Old names map onto it and keep the old name in `detail.reason`:
 - `synthesis` → `engine`; `sim_failed` → `engine`;
