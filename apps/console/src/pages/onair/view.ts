@@ -2,7 +2,7 @@
 // "lives" (how long a card or a decree stays up) are the winner's stage.js timings in wall
 // seconds; a replay at speed s covers s transcript-seconds per wall-second.
 import type { ChatMsg, EvidenceGrade, Rank, SegmentId } from "@shadowrunr/contract";
-import { foilInfo, pollBars, type SceneState } from "@shadowrunr/stage-kit";
+import { foilInfo, pollBars, shownLane, type SceneState } from "@shadowrunr/stage-kit";
 
 /** Wall-clock lives of the timed overlays, from the winner's `later(...)` calls. */
 export const LIFE_MS = { slip: 8000, card: 7000, decree: 5500, moment: 3600, pollAfterClose: 5000 } as const;
@@ -34,7 +34,8 @@ export interface ChatRow {
 
 export function chatRows(scene: SceneState, n = CHAT_ROWS): ChatRow[] {
   const out: ChatRow[] = [];
-  for (const id of scene.lane.slice(-n)) {
+  // What the broadcast draws: only the lines the runtime's input filter has judged.
+  for (const { id } of shownLane(scene).slice(-n)) {
     const m: ChatMsg | undefined = scene.chats.get(id);
     if (!m) continue;
     out.push({

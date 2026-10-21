@@ -149,8 +149,15 @@ export interface SceneState {
   foilLine: FoilLine | null;
   /** Remembered chat lines by id, oldest first (at most CHAT_MEMORY_MAX + CHAT_EVICT_SLACK). */
   chats: ChatMemory;
-  /** Most recent chat message ids, newest last. */
+  /** Most recent chat message ids, newest last: every line received, judged or not. The screen
+   * draws only `shownLane(scene)`, the lines the runtime's input filter has already judged. */
   lane: string[];
+  /** The input filter's watermark: the latest closed beat (`to`), the one before it (`prev`), and
+   * the beat whose verdicts are still arriving (`open`), from the `picked` and input `moderation`
+   * events. A beat closes when any later event arrives, so a screen that renders between two of
+   * its verdicts never shows a line its next verdict drops. A line at or before `to` is judged;
+   * `closedAt` is when `to` closed, the moment its lines came on screen. */
+  judged: { to: TsMs | null; prev: TsMs | null; open: TsMs | null; closedAt: TsMs | null };
   /** When each remembered line was picked for the core thread. */
   heard: ReadonlyMap<string, TsMs>;
   purged: Record<string, string>;
@@ -204,6 +211,7 @@ export function initialScene(): SceneState {
     foilLine: null,
     chats: ChatMemory.EMPTY,
     lane: [],
+    judged: { to: null, prev: null, open: null, closedAt: null },
     heard: new Map(),
     purged: {},
     decrees: [],

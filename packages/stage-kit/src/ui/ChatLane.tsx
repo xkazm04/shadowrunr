@@ -1,6 +1,7 @@
 import type { ChatMsg, Command } from "@shadowrunr/contract";
 import { Sigil } from "../art/Sigil";
 import { RANK_COLOR } from "../lore";
+import { shownLane } from "../scene";
 import type { SceneState } from "../sceneModel";
 
 export function commandLabel(c: Command): string {
@@ -33,8 +34,9 @@ function bodyText(m: ChatMsg): string {
 }
 
 export function ChatLane({ scene, now, title = "The Minions" }: { scene: SceneState; now: number; title?: string }) {
-  // Newest at the bottom; column-reverse clips the oldest at the top without measuring.
-  const ids = scene.lane.slice(-16).reverse();
+  // Newest at the bottom; column-reverse clips the oldest at the top without measuring. Only
+  // lines the input filter has judged: the chat lane is a path to broadcast like the caption.
+  const lines = shownLane(scene).slice(-16).reverse();
   return (
     <div className="panel chat-lane">
       <div className="panel-title">
@@ -42,13 +44,13 @@ export function ChatLane({ scene, now, title = "The Minions" }: { scene: SceneSt
         <span className="panel-sub">{scene.chats.size} lines in the ledger</span>
       </div>
       <div className="chat-rows" data-clip>
-        {ids.map((id) => {
+        {lines.map(({ id, shownAt }) => {
           const m = scene.chats.get(id);
           if (!m) return null;
           const purged = scene.purged[id];
           const heardAt = scene.heard.get(id);
           const isDecree = scene.decrees.some((d) => d.msgId === id);
-          const fresh = now - m.ts_ms < 700;
+          const fresh = now - shownAt < 700;
           const text = bodyText(m);
           return (
             <div

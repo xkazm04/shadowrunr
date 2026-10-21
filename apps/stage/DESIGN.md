@@ -158,7 +158,7 @@ silhouette" note is a production note, so `?broadcast=1` drops it.
 | `segment_start` | switches to the segment's layout (regions glide to new rects) |
 | `handover` | the same layout switch plus a skewed obsidian wipe with the new segment's title and Malakor's reason |
 | `segment_end` | toast "SEG-xx sealed · SES +0.42" |
-| `chat` | a row in the chat lane: rank sigil, name in rank colour, command chip (`!summon`, `!hint`, `!grade`, `!propose`, `!vote`) |
+| `chat` | a row in the chat lane: rank sigil, name in rank colour, command chip (`!summon`, `!hint`, `!grade`, `!propose`, `!vote`); the row waits until the input filter's beat that judged it has closed (`shownLane`), so a line the filter drops never shows its text, not even for the seconds before the beat |
 | `chat` `!vote` / `!summon` | a rank-weighted ballot in the open poll (feeds the rank colour bands) |
 | `chat` `!hint <hex>` | a dashed, moving outline and a count badge on that fogged hex |
 | `chat` `!grade <hex> <g>` | the minion-jury tally for that hex |
@@ -167,7 +167,7 @@ silhouette" note is a production note, so `?broadcast=1` drops it.
 | `say` (foil) | the line, kinetic, in the foil card (SEG-01) or the Skeptical Observer badge (SEG-02A) |
 | `vote` | animated bars; length from the authoritative weighted tally, colour bands from the ranks of the ballots seen in chat; the min-rank sigil, a countdown ring; on `closed` the winner is ringed "chosen" and the panel lingers 9 s |
 | `moderation` (output) | a "REDACTED BY THE LORD" bar sweeps across the caption area for 3.8 s with the rule id |
-| `moderation` (input, with `msg_id`) | the message is struck through as "purged by the Warden" and any decree for it is removed |
+| `moderation` (input, with `msg_id`) | when the filter withheld the text (`dropped`, `bleeped`, `tagged`, `priority:safety`, any new action), the message reads "purged by the Warden" and any decree for it is removed; a line it let through (`exempt:*`, `collapsed:*`, `warned`, `ignored`) keeps its text |
 | `job` | the minion-dispatch ticker: queued ◇, running ◈ (spinning), done ✓ with its summary, failed ✕ |
 | `stream_end` | "transmission ended" line on the outro card; without a `sign_off` before it, an end card "The Spire goes dark" with the same ledger stats |
 

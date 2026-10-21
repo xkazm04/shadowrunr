@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Case, ChatMsg, Command, Rank, StreamEvent } from "@shadowrunr/contract";
-import { captionAt, enqueueCaption, foldEvents, matchOption, reduce } from "./scene";
+import { captionAt, enqueueCaption, foldEvents, matchOption, reduce, shownLane } from "./scene";
 import {
   CAPTION_QUEUE_MAX,
   CHAT_EVICT_SLACK,
@@ -92,6 +92,47 @@ describe("chat, decrees, moderation", () => {
     expect(s.decrees).toHaveLength(DECREE_MAX);
     expect(s.decrees.map((d) => d.msgId)).toEqual(["b", "c", "d"]);
     expect(s.decrees[0]).toMatchObject({ kind: "picked", reason: "funny" });
+  });
+
+  it("draws a line only once the input filter's beat has judged it", () => {
+    let s = reduce(initialScene(), chat(100, msg("slur")));
+    s = reduce(s, chat(200, msg("ok")));
+    // Between arriving and the beat, the dropped line's text must not reach the screen.
+    expect(shownLane(s)).toEqual([]);
+    s = reduce(s, { type: "moderation", ts_ms: 5000, stage: "input", rule: "term:slur", msg_id: "slur", action: "dropped" });
+    // The beat's verdicts may still be arriving: only the line it named is drawn, as purged.
+    expect(shownLane(s).map((l) => l.id)).toEqual(["slur"]);
+    s = reduce(s, { type: "say", ts_ms: 5000, speaker: "malakor", text: "Next." });
+    expect(shownLane(s).map((l) => l.id)).toEqual(["slur"]);
+    s = reduce(s, chat(5200, msg("late")));
+    expect(shownLane(s).map((l) => l.id)).toEqual(["slur", "ok"]);
+    expect(shownLane(s)[1]).toEqual({ id: "ok", shownAt: 5200 });
+    expect(s.purged).toEqual({ slur: "term:slur" });
+    // A line after the beat waits for the next one, unless that beat named it.
+    s = reduce(s, { type: "picked", ts_ms: 10000, msg_ids: ["late"], reason: "top" });
+    expect(shownLane(s).map((l) => l.id)).toEqual(["slur", "ok", "late"]);
+    s = reduce(s, chat(10100, msg("next")));
+    expect(shownLane(s)[1]).toEqual({ id: "ok", shownAt: 200 });
+  });
+
+  it("a stall or name notice with no message does not release unjudged lines", () => {
+    let s = reduce(initialScene(), chat(100, msg("m1")));
+    s = reduce(s, { type: "moderation", ts_ms: 3000, stage: "input", rule: "name_withheld", action: "withheld" });
+    expect(shownLane(s)).toEqual([]);
+  });
+
+  it("purges only what the filter withheld, never a line it let through", () => {
+    let s = initialScene();
+    for (const id of ["ex", "rep", "warn", "tag", "safe"]) s = reduce(s, chat(1, msg(id)));
+    const mod = (id: string, rule: string, action: string): StreamEvent => ({ type: "moderation", ts_ms: 5, stage: "input", rule, msg_id: id, action });
+    s = reduce(s, mod("ex", "rate_cap", "exempt:sincere_question"));
+    s = reduce(s, mod("rep", "flood_cluster", "collapsed:7"));
+    s = reduce(s, mod("warn", "term:mild", "warned"));
+    s = reduce(s, mod("tag", "prompt_injection", "tagged"));
+    s = reduce(s, mod("safe", "safety:self_harm", "priority:safety"));
+    expect(Object.keys(s.purged).sort()).toEqual(["safe", "tag"]);
+    s = reduce(s, { type: "picked", ts_ms: 5, msg_ids: ["ex"], reason: "question" });
+    expect(s.decrees.map((d) => d.msgId)).toEqual(["ex"]);
   });
 
   it("input moderation purges a message and removes its decree; output moderation redacts", () => {

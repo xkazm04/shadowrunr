@@ -98,6 +98,50 @@ function upsertJob(jobs: Job[], id: string, at: TsMs, patch: Partial<Job>): Job[
   return next;
 }
 
+/** Input-filter actions that let a named message through: its text stays on screen. Every
+ * other action (`dropped`, `bleeped`, `tagged`, `priority:safety`, anything new) withholds it. */
+function letThrough(action: string): boolean {
+  return action === "warned" || action === "ignored" || action.startsWith("exempt:") || action.startsWith("collapsed:");
+}
+
+/** A verdict of the input filter's beat at `at`: that beat is open until a later event arrives. */
+function judgeTo(s: SceneState, at: TsMs): SceneState {
+  const j = s.judged;
+  if ((j.open !== null && at <= j.open) || (j.to !== null && at <= j.to)) return s;
+  return { ...s, judged: { ...j, open: at } };
+}
+
+/** Close the open beat once an event later than it arrives: every verdict of that beat is in. */
+function closeBeat(s: SceneState, at: TsMs): SceneState {
+  const j = s.judged;
+  if (j.open === null || at <= j.open) return s;
+  return { ...s, judged: { to: j.open, prev: j.to, open: null, closedAt: at } };
+}
+
+export interface ShownLine {
+  readonly id: string;
+  /** When the line came on screen: when the beat that judged it closed (or the line's own time
+   * for a line an earlier beat already released). */
+  readonly shownAt: TsMs;
+}
+
+/** The lane lines the screen may draw, oldest first: those the runtime's input filter has judged.
+ * A line waits for the beat that filters it, so a message the filter drops is never drawn with
+ * its text, not even for the seconds between arriving and being dropped. */
+export function shownLane(s: SceneState): ShownLine[] {
+  const out: ShownLine[] = [];
+  const j = s.judged;
+  for (const id of s.lane) {
+    const m = s.chats.get(id);
+    if (!m) continue;
+    const named = s.purged[id] !== undefined || s.heard.has(id);
+    if ((j.to === null || m.ts_ms > j.to) && !named) continue;
+    const shownAt = j.closedAt === null || (j.prev !== null && m.ts_ms <= j.prev) ? m.ts_ms : Math.max(m.ts_ms, j.closedAt);
+    out.push({ id, shownAt });
+  }
+  return out;
+}
+
 /** Keep only the entries whose message is still remembered. */
 function pruneRecord<V>(rec: Record<string, V>, chats: ChatMemory): Record<string, V> {
   const out: Record<string, V> = {};
@@ -189,12 +233,15 @@ export function captionAt(s: SceneState, now: TsMs): ScheduledCaption | null {
 /** Apply one event. Pure. */
 export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
   const at = ev.ts_ms;
-  let s: SceneState = {
-    ...prev,
-    t0: prev.t0 ?? at,
-    lastTs: prev.lastTs === null ? at : Math.max(prev.lastTs, at),
-    applied: prev.applied + 1,
-  };
+  let s: SceneState = closeBeat(
+    {
+      ...prev,
+      t0: prev.t0 ?? at,
+      lastTs: prev.lastTs === null ? at : Math.max(prev.lastTs, at),
+      applied: prev.applied + 1,
+    },
+    at,
+  );
   switch (ev.type) {
     case "stream_start":
       return {
@@ -227,6 +274,7 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     case "chat":
       return applyChat(s, ev.msg, at);
     case "picked": {
+      s = judgeTo(s, at);
       const heard = new Map(s.heard);
       let decrees = s.decrees;
       for (const id of ev.msg_ids) {
@@ -286,7 +334,9 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
         const red: Redaction = { key: `r${seq}`, at, rule: ev.rule, action: ev.action };
         return { ...s, seq, redactions: [...s.redactions, red].slice(-REDACTION_MAX) };
       }
-      if (ev.msg_id !== undefined) {
+      // Only a verdict on a message marks the filter's beat; a stall or name notice can fall between.
+      if (ev.msg_id !== undefined) s = judgeTo(s, at);
+      if (ev.msg_id !== undefined && !letThrough(ev.action)) {
         const id = ev.msg_id;
         return {
           ...s,
