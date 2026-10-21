@@ -1,12 +1,16 @@
 // On Air · Clips in jsdom over the data-layer doubles: the funnel and rows from `clips.list`,
-// one clip's gate checklist from `clips.get`, and the owner-act rules (signature required,
-// no approval over a failed check, an override reason for an unmeasured one, publish only
-// once approved).
-import type { ClipCandidate, ClipsPage, GateCheck } from "@shadowrunr/contract";
+// one clip's gate checklist from `clips.get`, and the owner acts as the daemon states them in
+// `acts` (signature required, no approval while blocked, an override reason for an unmeasured
+// check, publish only once approved). The page never re-decides the rule.
+import type { ClipAct, ClipActs, ClipActState, ClipCandidate, ClipsPage, GateCheck } from "@shadowrunr/contract";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { mountPage, ok, role, roles, settle, type Script } from "../../kit/testing";
+import * as clipModel from "./clipModel";
 import { Layer2 } from "./Layer2";
+
+// `acts` is keyed by the ClipAct vocabulary, exactly: a new act fails this line's typecheck.
+const ACT_KEYS: Readonly<Record<ClipAct, true>> = { render: true, approve: true, reject: true, publish: true } satisfies Readonly<Record<keyof ClipActs, true>>;
 
 const ID = "clip-00000000000000aa";
 
@@ -22,7 +26,12 @@ const PAGE: ClipsPage = {
 
 const check = (id: GateCheck["id"], state: GateCheck["state"], mandatory = false): GateCheck => ({ id, state, detail: `${id} detail`, ...(mandatory ? { mandatory } : {}) });
 
-function clip(checks: GateCheck[], status: ClipCandidate["status"] = "pending_owner_gate"): ClipCandidate {
+const blockedBy = (status: ClipCandidate["status"]): ClipActState => ({ blocked: { kind: "status", status } });
+/** What the daemon says of a clean, rendered clip at the owner gate. */
+const AT_GATE: ClipActs = { render: {}, approve: {}, reject: {}, publish: blockedBy("pending_owner_gate") };
+const APPROVED: ClipActs = { render: blockedBy("approved_for_upload"), approve: blockedBy("approved_for_upload"), reject: {}, publish: {} };
+
+function clip(checks: GateCheck[], status: ClipCandidate["status"] = "pending_owner_gate", acts: ClipActs = AT_GATE): ClipCandidate {
   const w = { marker: 0.35, chat: 0.25, audio: 0.15, hook: 0.25 };
   return {
     id: ID,
@@ -47,6 +56,7 @@ function clip(checks: GateCheck[], status: ClipCandidate["status"] = "pending_ow
     render: { kind: "poster", width: 1080, height: 1920, duration_s: 52.4, files: [{ path: "poster.svg", kind: "poster", bytes: 10 }], overlay: { alleged_header: true, grade_badge: "REP", citation: ["https://news.example/x"], ai_disclosure: true, captions: "transcript" }, fallback_reason: "recording tools missing", rendered_ms: 1 },
     gate: { requires_mandatory_gate: true, checks, held: checks.some((k) => k.state === "fail" || k.state === "unmeasured"), evaluated_ms: 1 },
     history: [{ status: "rendered_draft", at_ms: 1, by: "render" }],
+    acts,
   };
 }
 
@@ -97,7 +107,8 @@ describe("On Air · Clips", () => {
   });
 
   it("refuses approval over a failed check, whatever the signature", async () => {
-    mount(`#/onair/clips/${ID}`, (method) => (method === "clips.get" ? ok(clip([...PASSING, check("brigade_call", "fail")])) : ok(null)));
+    const acts: ClipActs = { ...AT_GATE, approve: { blocked: { kind: "held_by", checks: ["brigade_call"] } } };
+    mount(`#/onair/clips/${ID}`, (method) => (method === "clips.get" ? ok(clip([...PASSING, check("brigade_call", "fail")], "pending_owner_gate", acts)) : ok(null)));
     await settle();
     expect(screen.getByText(/Held by brigade_call/)).toBeTruthy();
     expect(screen.getByPlaceholderText("your name")).toHaveProperty("disabled", true);
@@ -105,7 +116,8 @@ describe("On Air · Clips", () => {
   });
 
   it("asks for an override reason when a check is unmeasured", async () => {
-    mount(`#/onair/clips/${ID}`, (method) => (method === "clips.get" ? ok(clip([...PASSING, check("no_open_correction", "unmeasured", true)])) : ok(null)));
+    const acts: ClipActs = { ...AT_GATE, approve: { override_needed: ["no_open_correction"] } };
+    mount(`#/onair/clips/${ID}`, (method) => (method === "clips.get" ? ok(clip([...PASSING, check("no_open_correction", "unmeasured", true)], "pending_owner_gate", acts)) : ok(null)));
     await settle();
     expect(role("onair-clip-override")?.textContent).toContain("no_open_correction");
     await act(async () => {
@@ -126,7 +138,7 @@ describe("On Air · Clips", () => {
     dispose?.();
     const m = mount(`#/onair/clips/${ID}`, (method) =>
       method === "clips.get"
-        ? ok(clip(PASSING, "approved_for_upload"))
+        ? ok(clip(PASSING, "approved_for_upload", APPROVED))
         : method === "clips.publish"
           ? ok({ id: ID, dry_run: true, requests: [{ platform: "youtube", at_ms: 1, file: "requests/youtube.json", applicable: false, budget_left: 100, note: "resumable upload" }] })
           : ok(null),
@@ -140,5 +152,29 @@ describe("On Air · Clips", () => {
     await settle();
     expect(m.calls).toContain("clips.publish");
     expect(role("onair-clip-dry-runs")?.textContent).toContain("DRY RUN — nothing is sent");
+  });
+
+  it("renders the daemon's acts, not its own reading of the checks", async () => {
+    // Every check passes here, yet the daemon holds approval by care_state: the page obeys acts.
+    const acts: ClipActs = { ...AT_GATE, approve: { blocked: { kind: "held_by", checks: ["care_state"] } } };
+    mount(`#/onair/clips/${ID}`, (method) => (method === "clips.get" ? ok(clip(PASSING, "pending_owner_gate", acts)) : ok(null)));
+    await settle();
+    expect(screen.getByPlaceholderText("your name")).toHaveProperty("disabled", true);
+    expect(approveButton()).toHaveProperty("disabled", true);
+    expect(role("onair-clip-approve")?.textContent).toContain("care_state");
+  });
+
+  it("shuts render and reject when the daemon blocks them, and opens publish when it allows it", async () => {
+    const acts: ClipActs = { render: blockedBy("published"), approve: blockedBy("published"), reject: blockedBy("published"), publish: {} };
+    mount(`#/onair/clips/${ID}`, (method) => (method === "clips.get" ? ok(clip(PASSING, "pending_owner_gate", acts)) : ok(null)));
+    await settle();
+    expect(screen.getByRole("button", { name: "Render draft" })).toHaveProperty("disabled", true);
+    expect(role("onair-clip-reject")).toBeNull();
+    expect(role("onair-clip-publish")).toHaveProperty("disabled", false);
+  });
+
+  it("the view model keeps no copy of the owner-act rule", () => {
+    expect(Object.keys(ACT_KEYS)).toHaveLength(4);
+    for (const gone of ["approveBlock", "canPublish", "canRender"]) expect(Object.keys(clipModel)).not.toContain(gone);
   });
 });
