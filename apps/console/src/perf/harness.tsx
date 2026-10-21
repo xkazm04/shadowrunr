@@ -66,6 +66,11 @@ export function mountPerf(ui: ReactNode, script: Script, hash: string) {
     timers,
     layer,
     socket: () => sockets.last(),
+    /** The daemon's side of every open `/events` subscription (a page may own its own). */
+    live: {
+      open: () => sockets.all.filter((s) => s.closed === null).forEach((s) => s.open()),
+      push: (f: unknown) => sockets.all.filter((s) => s.closed === null).forEach((s) => s.push(f)),
+    },
     commits: () => commits,
     dispose: () => {
       view.unmount();

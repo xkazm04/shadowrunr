@@ -25,6 +25,7 @@ export function pillsOf(tables: SegmentTables | undefined): { pills: RundownPill
 export function screenState(feed: OnAirFeed, offline: boolean): { status?: string; offAir?: string } {
   if (feed.source?.kind === "live") {
     if (offline) return { status: "Live · the daemon is not reachable", offAir: "The daemon is not reachable. The live feed resumes when it answers." };
+    if (feed.snapshot.gap) return { status: "Live · missed events, catching up" };
     return feed.snapshot.scene.applied === 0 ? { status: "Live · waiting for the stream", offAir: "Nothing is on air. A stream or a simulation shows here the moment it starts." } : {};
   }
   if (feed.runs.data === undefined) {

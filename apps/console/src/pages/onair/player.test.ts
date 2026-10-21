@@ -109,4 +109,32 @@ describe("LiveFeed", () => {
     expect(live.getSnapshot().scene.applied).toBe(1);
     expect(live.getSnapshot().scene.segment).toBe("SEG-02A");
   });
+
+  it("reset() starts over from an empty scene, still live", () => {
+    const live = new LiveFeed();
+    for (const e of transcript(10)) live.push(e, "r1");
+    let notified = 0;
+    live.subscribe(() => notified++);
+    live.reset();
+    expect(live.getSnapshot().scene.applied).toBe(0);
+    expect(live.getSnapshot().live).toBe(true);
+    expect(notified).toBe(1);
+    // The same run id after a reset is folded as a fresh run.
+    live.push({ type: "segment_start", ts_ms: 5, segment: "SEG-02A" }, "r1", 1);
+    expect(live.getSnapshot().scene.applied).toBe(1);
+  });
+
+  it("a gap holds until the next contiguous seq", () => {
+    const live = new LiveFeed();
+    const ev = transcript(5);
+    ev.forEach((e, i) => live.push(e, "r1", i + 1));
+    live.markGap();
+    expect(live.getSnapshot().gap).toBe(true);
+    const chat = ev[4];
+    if (!chat) throw new Error("no event");
+    live.push(chat, "r1", 9); // the frame past the hole: still catching up
+    expect(live.getSnapshot().gap).toBe(true);
+    live.push(chat, "r1", 10);
+    expect(live.getSnapshot().gap).toBe(false);
+  });
 });

@@ -3,7 +3,7 @@
 // coming back resumes the same replay at the same place. Nothing here persists across reloads.
 import type { RunRow, RunTranscriptResult } from "@shadowrunr/contract";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { useLiveEvents, useRpc, type Query } from "../../data";
+import { useDataLayer, useRpc, type Query } from "../../data";
 import { LiveFeed, ReplayPlayer, type Feed, type FeedSnapshot } from "./player";
 import { initialScene } from "@shadowrunr/stage-kit";
 
@@ -58,8 +58,14 @@ function ensureReplay(key: string, events: RunTranscriptResult): void {
   replay.set({ key, player: new ReplayPlayer(events) });
 }
 
-/** The live feed folds every `/events` event while On Air is mounted. */
+/**
+ * The live feed: the fold of the run in flight. While On Air is mounted and shows Live, it owns
+ * one `live` subscription that backfills the run from seq 1, so the scene does not depend on
+ * when the poster was opened; the subscription closes on unmount or on switching to a stored run.
+ */
 const live = new LiveFeed();
+/** Read-only for tests: the page's one live feed. */
+export const liveFeed: Feed = live;
 
 const IDLE_SNAPSHOT: FeedSnapshot = { scene: initialScene(), playing: false, position: 0, start: 0, end: 0, speed: 1, epoch: 0, live: false };
 const noSubscribe = () => () => undefined;
@@ -84,7 +90,19 @@ export function useOnAirFeed(active: boolean): OnAirFeed {
   const run = source?.kind === "run" ? source : null;
   const transcript = useRpc("run.transcript", run ? { run_id: run.runId, tournament_id: run.tournamentId } : null);
 
-  useLiveEvents((env) => live.push(env.event, env.runId));
+  const layer = useDataLayer();
+  const isLive = source?.kind === "live";
+  useEffect(() => {
+    if (!isLive) return;
+    live.reset();
+    const stream = layer.openLive(
+      (env) => live.push(env.event, env.runId, env.seq),
+      (issue) => {
+        if (issue.detail?.["reason"] === "gap") live.markGap();
+      },
+    );
+    return () => stream.close();
+  }, [layer, isLive]);
 
   const key = source ? sourceKey(source) : null;
   const events = run ? transcript.data : undefined;

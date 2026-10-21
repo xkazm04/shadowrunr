@@ -28,6 +28,12 @@ export interface DataLayer {
   mutate(method: string, params: unknown, opts?: CallOptions): Promise<Result<unknown, DataError>>;
   /** Live events (after the cache has seen them). */
   onLiveEvent(listener: (env: EventEnvelope) => void): () => void;
+  /**
+   * A dedicated `live` subscription owned by its caller: it backfills the run in flight from
+   * seq 1 (`since: 0, run_id: ""`), resumes after a drop, and reports gaps via `onIssue`.
+   * The caller closes it; nothing else does.
+   */
+  openLive(onEvent: (env: EventEnvelope) => void, onIssue?: (issue: DataError) => void): EventStream;
   /** Replays one run's transcript as events, with the same reconnect and resume. */
   openReplay(runId: string, onEvent: (env: EventEnvelope) => void, speed?: number): EventStream;
   start(): void;
@@ -74,6 +80,9 @@ export function createDataLayer(opts: DataLayerOptions): DataLayer {
     onLiveEvent(listener) {
       live.add(listener);
       return () => live.delete(listener);
+    },
+    openLive(onEvent, onIssue) {
+      return openEventStream({ ...streamOpts("live", onEvent), ...(onIssue ? { onIssue } : {}) });
     },
     openReplay(runId, onEvent, speed) {
       return openEventStream(streamOpts(runId, onEvent, speed));

@@ -27,19 +27,19 @@ describe("React commits per live event at On Air (10x fixture)", () => {
     selectSource(LIVE);
     const m = (mounted = mountPerf(<OnAirL1 active />, onairScript(), "#/onair"));
     await quiet(m, 400);
-    await act(async () => m.socket().open());
+    await act(async () => m.live.open());
     // The first event takes the screen off its "waiting for the stream" state; measure the next.
-    await act(async () => m.socket().push(frame(1, { type: "stream_start", ts_ms: 0, stream_id: "live-run", character: "malakor", tone_variant: "theatrical", core_tier: "haiku", audience_size: 300 })));
+    await act(async () => m.live.push(frame(1, { type: "stream_start", ts_ms: 0, stream_id: "live-run", character: "malakor", tone_variant: "theatrical", core_tier: "haiku", audience_size: 300 })));
     // A chat line is drawn only once the input filter's beat has judged it: a line, its beat,
     // then the measured event, the next chat, which closes that beat and brings the line up (the
     // beat picks another line, so nothing but the close can release this one).
-    await act(async () => m.socket().push(frame(2, chat(2))));
-    await act(async () => m.socket().push(frame(3, { type: "picked", ts_ms: 2500, msg_ids: ["live-m1"], reason: "top" })));
+    await act(async () => m.live.push(frame(2, chat(2))));
+    await act(async () => m.live.push(frame(3, { type: "picked", ts_ms: 2500, msg_ids: ["live-m1"], reason: "top" })));
     await quiet(m, 50);
     const budget = line(BUDGETS.commits, "onair.liveEvent");
 
     let c = m.commits();
-    await act(async () => m.socket().push(frame(4, chat(3))));
+    await act(async () => m.live.push(frame(4, chat(3))));
     await quiet(m, 50);
     const perEvent = m.commits() - c;
 

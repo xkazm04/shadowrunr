@@ -24,6 +24,8 @@ export interface FeedSnapshot {
   /** Bumped on play, pause and restart: the progress bar re-keys its CSS animation on it. */
   readonly epoch: number;
   readonly live: boolean;
+  /** Live only: the stream reported missed events and no contiguous frame has followed yet. */
+  readonly gap?: boolean;
 }
 
 export interface Feed {
@@ -164,23 +166,29 @@ export class ReplayPlayer implements Feed {
   }
 }
 
+const LIVE_START: FeedSnapshot = {
+  scene: initialScene(),
+  playing: true,
+  position: 0,
+  start: 0,
+  end: 0,
+  speed: 1,
+  epoch: 0,
+  live: true,
+  gap: false,
+};
+
 /**
- * The live feed: every `/events` event of the current live run folded into one scene. A new
- * run id (or a fresh `stream_start`) starts a new scene.
+ * The live feed: every event of the current live run folded into one scene. A new run id (or a
+ * fresh `stream_start`) starts a new scene. Its owner (On Air's page-owned subscription, which
+ * backfills the run in flight from seq 1) calls `reset()` before each new subscription, so the
+ * scene is always the fold of the run so far, not of what arrived while the page was open.
  */
 export class LiveFeed implements Feed {
   private readonly listeners = new Set<() => void>();
   private runId: string | undefined;
-  private snapshot: FeedSnapshot = {
-    scene: initialScene(),
-    playing: true,
-    position: 0,
-    start: 0,
-    end: 0,
-    speed: 1,
-    epoch: 0,
-    live: true,
-  };
+  private lastSeq: number | undefined;
+  private snapshot: FeedSnapshot = LIVE_START;
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -189,13 +197,36 @@ export class LiveFeed implements Feed {
 
   getSnapshot = (): FeedSnapshot => this.snapshot;
 
-  push(event: StreamEvent, runId?: string): void {
+  push(event: StreamEvent, runId?: string, seq?: number): void {
     const fresh = (runId !== undefined && runId !== this.runId) || event.type === "stream_start";
+    // The stream reports a hole before handing over the frame past it; the next contiguous frame
+    // (or a fresh run) means the scene is whole again from here on.
+    const contiguous = seq !== undefined && this.lastSeq !== undefined && seq === this.lastSeq + 1;
+    const gap = (this.snapshot.gap ?? false) && !(fresh || contiguous);
     if (runId !== undefined) this.runId = runId;
+    if (seq !== undefined) this.lastSeq = seq;
     const base = fresh ? initialScene() : this.snapshot.scene;
     const scene = reduce(base, event);
     const start = fresh ? event.ts_ms : this.snapshot.start;
-    this.snapshot = { ...this.snapshot, scene, start, position: event.ts_ms, end: Math.max(event.ts_ms, this.snapshot.end) };
+    const end = fresh ? event.ts_ms : Math.max(event.ts_ms, this.snapshot.end);
+    this.emit({ ...this.snapshot, scene, start, position: event.ts_ms, end, gap });
+  }
+
+  /** The stream missed events: say so until the next contiguous frame. */
+  markGap(): void {
+    if (this.snapshot.gap) return;
+    this.emit({ ...this.snapshot, gap: true });
+  }
+
+  /** Back to nothing on air (a new subscription is about to backfill the run from seq 1). */
+  reset(): void {
+    this.runId = undefined;
+    this.lastSeq = undefined;
+    this.emit(LIVE_START);
+  }
+
+  private emit(next: FeedSnapshot): void {
+    this.snapshot = next;
     for (const l of [...this.listeners]) l();
   }
 
