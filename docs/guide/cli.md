@@ -712,14 +712,25 @@ Kokoro files, the sidecar's Python and the durations model, and exits 0 only whe
 speak. `voice say "<text>" [--out <wav>]` renders one line through the sidecar and prints each
 sentence's timing. Setup, `[voice]` keys and the stage side: [voice.md](voice.md).
 
-## Character rules and moderation lists
+## Character packages, rules and moderation lists
 
 ```
+shadowrunr character new nova                                # characters/nova/ from characters/_template, then validated
+shadowrunr character new nova --from path/to/template        # from another template directory
+shadowrunr character validate nova                           # or a package directory; --json for the list
 shadowrunr character rules malakor                           # list rules: on / off / lock (a rail)
 shadowrunr character rules malakor --disable crisis-chat-ban  # operator override in <data>/characters/malakor/rules.json
 shadowrunr character rules malakor --disable crisis-handoff   # refused: a rail is always on, nothing is written
 shadowrunr policy install-list awdev1-better-profane-words   # downloads into policy/local/ (git-ignored, GPL-3.0, never committed)
 ```
+
+`character validate <dir|id>` prints each issue as `file: key: reason`, then a count. A value
+that still holds the template's `FILL:` placeholder is a warning (`(warning)` after the reason);
+everything else is an error. It exits 0 when there are no errors, 1 otherwise. `character new
+<id>` copies the template to `<characters>/<id>/`, sets its `id`, and prints the same list; it
+refuses an id starting with `_` and never overwrites an existing directory. The RPC
+`character.validate {id}` returns the same issues as `[{file, key?, reason, severity}]`. What a
+package holds, and every table of `character.toml`: [characters.md](characters.md).
 
 ## Personas
 

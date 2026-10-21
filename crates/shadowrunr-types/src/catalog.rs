@@ -6,6 +6,9 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::character::{
+    CharacterAvatar, CharacterIdentity, CharacterVoice, Provenance, RankThreshold, SegmentFlavour,
+};
 use crate::{Rank, SegmentId, SegmentStatus};
 
 /// One row of `character.list`.
@@ -122,6 +125,77 @@ pub struct CharacterDetail {
     pub rules: Vec<CharacterRuleInfo>,
     /// Rank wire name -> the title the character says.
     pub rank_titles: BTreeMap<Rank, String>,
+    /// `[identity]` as written; omitted when the package has none (the neutral identity).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<CharacterIdentity>,
+    /// `[voice]` as written: each field set overrides the daemon's `[voice]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voice: Option<CharacterVoice>,
+    /// `[avatar]` as written: `face` overrides `[stage] avatar`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<CharacterAvatar>,
+    /// `[ranks]` overrides of the engine ladder; omitted when the package sets none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rank_overrides: Option<RankOverrides>,
+    /// Every tuning key in table order, with the package's value over the engine default.
+    /// Absent (an older daemon): not shown.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tuning: Vec<TuningRow>,
+    /// `[segments.<id>]`: flavour appended to each segment's prompts; omitted when none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub segment_flavour: BTreeMap<SegmentId, SegmentFlavour>,
+}
+
+/// What a package's `[ranks]` changes in the engine ladder (`segments/data/ranks.toml`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RankOverrides {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub weights: BTreeMap<Rank, f64>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub thresholds: BTreeMap<Rank, RankThreshold>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub propose_min_rank: Option<Rank>,
+}
+
+/// One tuning key of a package: the value the engine runs with and where it came from.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TuningRow {
+    /// e.g. `carry_ms` (`_ms` milliseconds, `_s` seconds, else a count).
+    pub key: String,
+    /// The value in effect: the package's when it sets the key, else the engine default.
+    pub value: u64,
+    /// The engine default (`TUNING_DEFAULTS`).
+    pub default: u64,
+    /// The package sets this key in `[tuning]`.
+    pub set: bool,
+    /// The package's provenance when set, else the default's.
+    pub provenance: Provenance,
+    /// The run or lesson behind the value; omitted when none is named.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// What the key governs, in one line.
+    pub doc: String,
+}
+
+/// How bad a package issue is: an `error` fails `character validate`; a `warning` (a
+/// template placeholder still to fill) does not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueSeverity {
+    Error,
+    Warning,
+}
+
+/// One problem `character validate` found: `file: key: reason`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CharacterIssue {
+    /// Relative to the package, with `/` separators, e.g. `character.toml`.
+    pub file: String,
+    /// The dotted key (`tuning.carry_ms`) or `line <n>`; omitted when the issue is the file.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub key: String,
+    pub reason: String,
+    pub severity: IssueSeverity,
 }
 
 /// One transition row: `(from, on[, guard]) -> to`; `from = "*"` matches any state.

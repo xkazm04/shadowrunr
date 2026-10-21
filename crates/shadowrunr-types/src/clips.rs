@@ -335,7 +335,7 @@ pub struct ClipEvidence {
 pub struct ClipCaption {
     pub start_ms: i64,
     pub end_ms: i64,
-    /// `malakor`, or the foil id.
+    /// `host` (`malakor` on drafts written before character packages), or the foil id.
     pub speaker: String,
     pub text: String,
     /// On a voice-timed cut: the line was never heard (the voice skipped it, the stage dropped

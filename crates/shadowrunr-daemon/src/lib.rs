@@ -4,6 +4,7 @@
 pub mod case_cli;
 pub mod casework;
 pub mod catalog;
+pub mod character;
 pub mod cli;
 pub mod clips;
 pub mod clips_cli;

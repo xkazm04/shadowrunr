@@ -81,6 +81,35 @@ export function malakorDetail(): CharacterDetail {
   };
 }
 
+/** Malakor's package with character.toml v2's tables as the daemon serves them: his words, voice
+ *  and face, one ladder override, a tuning table where `carry_ms` differs from the engine default,
+ *  and SEG-01 flavour. */
+export function malakorParams(): CharacterDetail {
+  return {
+    ...malakorDetail(),
+    identity: {
+      name: "Malakor",
+      title: "Arch-Lich",
+      address_words: ["malakor", "lich", "overlord", "my lord"],
+      reply_prefixes: ["**Malakor:**", "Malakor:"],
+      patron: { name: "Lord of the Darkness", title: "Lord" },
+      follower: { one: "minion", many: "minions" },
+      researcher: { one: "bone-clerk", many: "bone-clerks" },
+      sign_off: "The Spire's runes have gone dark. I shall return.",
+      disclosure: "Yes, I am an AI character. The bit continues.",
+    },
+    voice: { voice: "af_heart", sid: 3 },
+    avatar: { rig: "rig/m8.spec.json", face: "cut" },
+    rank_overrides: { propose_min_rank: "warlock", weights: { lich: 3 }, thresholds: { acolyte: { min_gifted: 1, tiers: [{ tier: 1, min_months: 0 }] } } },
+    tuning: [
+      { key: "max_picks", value: 2, default: 2, set: true, provenance: "measured", source: "sbx-20261021-011413-5m", doc: "The most chat messages answered in one beat (a ceiling, not a quota)." },
+      { key: "carry_ms", value: 30000, default: 25000, set: true, provenance: "assumption", source: "a slower room", doc: "How long an unanswered message is carried into the next beats, ms." },
+      { key: "closing_s", value: 60, default: 60, set: false, provenance: "assumption", doc: "The closing window: the last this many seconds of a session (wrap-up), s." },
+    ],
+    segment_flavour: { "SEG-01": { rules_prompt: "The {followers} are the court.", states: { cold_open: "Open on a decree." } } },
+  };
+}
+
 export const malakorRules = (enabled: Readonly<Record<string, boolean>> = {}): RuleState[] => [
   // A rail: the daemon ignores any override for it and refuses character.rules.set.
   { id: "crisis-handoff", title: "Crisis handoff", default: true, enabled: true, locked: true },

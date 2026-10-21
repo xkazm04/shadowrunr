@@ -28,7 +28,8 @@ pub struct FileConfig {
     /// `[research]`: the off-stream SEG-02A research pipeline (`shadowrunr case research`).
     #[serde(default)]
     pub research: crate::casework::ResearchConfig,
-    /// `[voice]`: Malakor's local voice (off by default).
+    /// `[voice]`: the host's local voice (off by default); the configured character's
+    /// `[voice]` overrides it field by field.
     #[serde(default)]
     pub voice: crate::voice::VoiceConfig,
     /// `[record]`: the OBS recorder (`stream sandbox --record`, `record check`).
@@ -43,7 +44,8 @@ pub struct FileConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct StageConfig {
-    /// Which renderer draws Malakor's face (the stage's `?avatar=`).
+    /// Which renderer draws the host's face (the stage's `?avatar=`); the configured
+    /// character's `[avatar] face` overrides it.
     pub avatar: FaceVariant,
 }
 
@@ -287,11 +289,12 @@ pub struct Config {
     pub clips: ClipsConfig,
     /// `[research]`.
     pub research: crate::casework::ResearchConfig,
-    /// `[voice]`, with its paths resolved against the root.
+    /// `[voice]`, with its paths resolved against the root (after [`Config::load`], with the
+    /// configured character's `[voice]` over it).
     pub voice: crate::voice::VoiceConfig,
     /// `[record]`.
     pub record: crate::record::RecordConfig,
-    /// `[stage]`.
+    /// `[stage]` (after [`Config::load`], with the configured character's `[avatar] face`).
     pub stage: StageConfig,
 }
 
@@ -330,8 +333,15 @@ fn resolve(root: &Path, p: &str) -> PathBuf {
 
 impl Config {
     /// Load `explicit`, or discover the file upward from `cwd`, or fall back to defaults
-    /// rooted at `cwd`.
+    /// rooted at `cwd`. The configured character's `[voice]` and `[avatar] face` then override
+    /// the file's, field by field (`crate::character::apply_overrides`).
     pub fn load(explicit: Option<&Path>, cwd: &Path) -> Result<Self, ConfigError> {
+        let mut cfg = Self::load_file(explicit, cwd)?;
+        crate::character::apply_overrides(&mut cfg);
+        Ok(cfg)
+    }
+
+    fn load_file(explicit: Option<&Path>, cwd: &Path) -> Result<Self, ConfigError> {
         let file = match explicit {
             Some(p) => {
                 let p = resolve(cwd, &p.to_string_lossy());

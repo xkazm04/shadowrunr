@@ -205,9 +205,16 @@ pub struct SegmentMetrics {
     pub chat_msgs: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_per_min: Option<f64>,
-    pub malakor_lines: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub malakor_lines_per_min: Option<f64>,
+    /// Lines the host said (`say` with `speaker: host`). Reads the stored v1 name
+    /// `malakor_lines` too.
+    #[serde(alias = "malakor_lines")]
+    pub host_lines: u32,
+    #[serde(
+        default,
+        alias = "malakor_lines_per_min",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub host_lines_per_min: Option<f64>,
     /// SES proxy: share of chat messages that got an answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answered: Option<Rate>,

@@ -18,6 +18,7 @@ use shadowrunr_types::{
 
 use crate::gate;
 use crate::hook::{self, HookWindow};
+use crate::host::ClipHost;
 use crate::render;
 use crate::scan::{self, RunInput, ScanOptions};
 use crate::signals::{self, Crowd};
@@ -163,7 +164,7 @@ fn lines_play_back_to_back_and_questions_precede_their_answers() {
             msg_id: "q1".into()
         }
     );
-    assert!(matches!(l[1].who, Who::Malakor));
+    assert!(matches!(l[1].who, Who::Host));
     assert_eq!(l[0].spoken_start, 5_000);
     assert!(l[1].spoken_start >= l[0].spoken_end);
     assert!(
@@ -423,13 +424,69 @@ fn caption_tracks_are_well_formed() {
         text: "Bow.".into(),
         unvoiced: false,
     }];
+    let host = malakor_host();
     assert_eq!(
-        render::srt(&caps),
+        render::srt(&caps, &host),
         "1\n00:00:01,250 --> 00:00:03,725\nBow.\n\n"
     );
-    let ass = render::ass(&caps);
+    let ass = render::ass(&caps, &host);
     assert!(ass.contains("PlayResX: 1080") && ass.contains("PlayResY: 1920"));
-    assert!(ass.contains("Dialogue: 0,0:00:01.25,0:00:03.72,Malakor,"));
+    assert!(ass.contains("Style: Malakor,"));
+    assert!(ass.contains("Dialogue: 0,0:00:01.25,0:00:03.72,Malakor,ARCH-LICH MALAKOR,"));
+}
+
+fn malakor_host() -> ClipHost {
+    ClipHost {
+        full_name: "Arch-Lich Malakor".into(),
+        name: "Malakor".into(),
+        follower: "minion".into(),
+    }
+}
+
+/// A second character's draft names its own host everywhere a clip names one, and a stored
+/// `malakor` speaker still reads as the host.
+#[test]
+fn captions_and_the_hook_read_name_the_run_s_host() {
+    let keeper = ClipHost {
+        full_name: "Keeper Odile Marsh".into(),
+        name: "Odile".into(),
+        follower: "deckhand".into(),
+    };
+    let caps = vec![
+        ClipCaption {
+            start_ms: 0,
+            end_ms: 1_000,
+            speaker: "viewer".into(),
+            text: "Which ship?".into(),
+            unvoiced: false,
+        },
+        ClipCaption {
+            start_ms: 1_000,
+            end_ms: 2_000,
+            speaker: crate::host::HOST_SPEAKER.into(),
+            text: "The lamp ship.".into(),
+            unvoiced: false,
+        },
+        ClipCaption {
+            start_ms: 2_000,
+            end_ms: 3_000,
+            speaker: "malakor".into(),
+            text: "Stored before the rename.".into(),
+            unvoiced: false,
+        },
+    ];
+    let srt = render::srt(&caps, &keeper);
+    assert!(srt.contains("[A DECKHAND ASKS] Which ship?"), "{srt}");
+    assert!(srt.contains("\nThe lamp ship."), "{srt}");
+    assert!(srt.contains("\nStored before the rename."), "{srt}");
+    let ass = render::ass(&caps, &keeper);
+    assert!(ass.contains("Style: Odile,"), "{ass}");
+    assert!(ass.contains(",Odile,KEEPER ODILE MARSH,"), "{ass}");
+    for t in [&srt, &ass] {
+        assert!(!t.contains("MALAKOR") && !t.contains("MINION"), "{t}");
+    }
+    assert!(hook::system(&keeper).contains("Keeper Odile Marsh"));
+    assert!(!hook::system(&keeper).contains("Malakor"));
 }
 
 /// Answers every hook read with fixed scores; records the requests.
@@ -481,6 +538,7 @@ fn write_run(root: &Path, extra: Vec<StreamEvent>) -> RunInput {
         run_id: "r1".into(),
         dir,
         transcript_label: "sim/t1/r1/transcript.jsonl".into(),
+        host: malakor_host(),
     }
 }
 

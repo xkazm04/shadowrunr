@@ -1,7 +1,7 @@
 //! The watched checks: what a viewer of the show sees and hears, beside the checks that read
 //! text (contract § sandbox, the watched checks).
 //!
-//! - `voiced` and `face` read the run's `voice.jsonl`: which of Malakor's lines were played in
+//! - `voiced` and `face` read the run's `voice.jsonl`: which of the host's lines were played in
 //!   full, and which face the stage drew.
 //! - `av_sync` and `dead_air` read the recording (`recording.json` and the file it names) with
 //!   ffmpeg's `silencedetect`: speech onsets against the `played` times, and the longest real
@@ -25,7 +25,7 @@ use shadowrunr_types::{Op, Speaker, StreamEvent, TsMs};
 
 use super::{Recording, META_FILE};
 
-/// `voiced` passes when at least this share of Malakor's lines played in full. Assumption: the
+/// `voiced` passes when at least this share of the host's lines played in full. Assumption: the
 /// PACE target.
 pub const VOICED_MIN_SHARE: f64 = 0.90;
 /// `face` passes when the real rig was drawn for at least this share of the session.
@@ -86,7 +86,7 @@ fn clock(ts_ms: TsMs) -> String {
 /// What the watched checks need from `transcript.jsonl`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Show {
-    /// Malakor's `say` lines: their seq (the 1-based transcript line) and time.
+    /// The host's `say` lines: their seq (the 1-based transcript line) and time.
     pub says: Vec<(u64, TsMs)>,
     /// The first `sign_off` op.
     pub sign_off_ms: Option<TsMs>,
@@ -136,7 +136,7 @@ pub fn parse_voice(text: &str) -> Vec<VoiceLogLine> {
 
 // ── voiced ──────────────────────────────────────────────────────────────
 
-/// `voiced`: the share of Malakor's `say` lines whose every rendered part was `played`, with
+/// `voiced`: the share of the host's `say` lines whose every rendered part was `played`, with
 /// nothing skipped or dropped. A line the voice never rendered is not voiced.
 pub fn voiced(show: &Show, voice: Option<&[VoiceLogLine]>) -> SandboxCheck {
     const ID: SandboxCheckId = SandboxCheckId::Voiced;
@@ -153,7 +153,7 @@ pub fn voiced(show: &Show, voice: Option<&[VoiceLogLine]>) -> SandboxCheck {
         return unmeasured(ID, "the voice rendered nothing: it was off");
     }
     if show.says.is_empty() {
-        return unmeasured(ID, "Malakor said nothing");
+        return unmeasured(ID, "the host said nothing");
     }
     let mut rendered: HashMap<u64, HashSet<u32>> = HashMap::new();
     let mut played: HashMap<u64, HashSet<u32>> = HashMap::new();
@@ -444,7 +444,7 @@ pub fn dead_air(
 ) -> SandboxCheck {
     const ID: SandboxCheckId = SandboxCheckId::DeadAir;
     let Some((from, to)) = show.span() else {
-        return unmeasured(ID, "Malakor said nothing: no show to measure");
+        return unmeasured(ID, "the host said nothing: no show to measure");
     };
     let (a, b) = (
         (from - stream_offset_ms) as f64 / 1000.0,

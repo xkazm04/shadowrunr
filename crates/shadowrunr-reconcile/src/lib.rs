@@ -27,6 +27,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use shadowrunr_types::character::Persona;
 use shadowrunr_types::{Engine, EngineError, SegmentId, TsMs};
 
 pub use budget::{PromptBudget, DEFAULT_PROMPT_BUDGET_TOKENS};
@@ -113,6 +114,9 @@ pub struct ReconcileConfig {
     /// `characters/`: lets the Reconciler see the bible and tones, and lets diffs be checked
     /// against the current files. Without it, diffs get structural checks only.
     pub characters_root: Option<PathBuf>,
+    /// The configured character's persona: the synthesis, the dispatch and the owner chat are
+    /// written for its show (its name, patron and viewers). The neutral persona by default.
+    pub persona: Persona,
 }
 
 /// What `<data>/reconcile/<report_id>.json` holds.
@@ -248,6 +252,7 @@ impl Reconciler {
         // fence token is refused and the report falls back to the deterministic metrics.
         let synthesis = match synth::call(
             self.engine.as_ref(),
+            &self.cfg.persona,
             built.prompt,
             synth::synthesis_schema(),
             &report_id,
@@ -495,7 +500,7 @@ impl Reconciler {
         let created_ms = (self.clock)();
         let plan_id = format!("plan-{created_ms}");
         // The summary and the options' text are model output over viewer transcripts, and the
-        // dispatch is written in the Lord's voice: fenced as untrusted data. A reply that
+        // dispatch is written in the patron's voice: fenced as untrusted data. A reply that
         // echoes the fence token is refused, and no plan is stored.
         let opts = serde_json::to_string(&chosen).unwrap_or_default();
         let dirs = serde_json::to_string(&directives).unwrap_or_default();
@@ -504,7 +509,14 @@ impl Reconciler {
                 .map_err(ReconcileError::Io)?;
         let v = synth::call(
             self.engine.as_ref(),
-            synth::dispatch_prompt(&stored.report, &chosen, &directives, &fence),
+            &self.cfg.persona,
+            synth::dispatch_prompt(
+                &stored.report,
+                &chosen,
+                &directives,
+                &fence,
+                &self.cfg.persona,
+            ),
             synth::dispatch_schema(),
             &plan_id,
             Some(&fence),
@@ -654,6 +666,7 @@ impl Reconciler {
             shadowrunr_sim::judge::UntrustedFence::mint(&untrusted).map_err(ReconcileError::Io)?;
         let v = synth::call(
             self.engine.as_ref(),
+            &self.cfg.persona,
             synth::lord_chat_prompt(
                 report.as_ref(),
                 &active,
@@ -661,6 +674,7 @@ impl Reconciler {
                 &history,
                 message,
                 &fence,
+                &self.cfg.persona,
             ),
             synth::lord_chat_schema(),
             &format!("lord-chat-{now}"),

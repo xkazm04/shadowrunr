@@ -367,8 +367,21 @@ fn pf04_tables(cfg: &Config) -> Checked {
         shadowrunr_segments::active_segments(),
         shadowrunr_segments::descoped_segments(),
     );
+    // The configured character's config (its persona, tuning, flavour and rank overrides):
+    // what its streams start with. A package that does not load is PF-02's red; the engine
+    // defaults stand in here.
+    let config = match shadowrunr_brain::load_character(
+        &cfg.paths.characters.join(&cfg.sim.character),
+        "",
+    ) {
+        Ok(pkg) => match crate::character::segment_config(cfg, &pkg) {
+            Ok(c) => c,
+            Err(e) => return rep("PF-04", HealthState::Red, e),
+        },
+        Err(_) => SegmentConfig::default(),
+    };
     for &seg in &active {
-        if let Err(e) = SegmentRuntime::with_config(seg, SegmentConfig::default()) {
+        if let Err(e) = SegmentRuntime::with_config(seg, config.clone()) {
             return rep(
                 "PF-04",
                 HealthState::Red,

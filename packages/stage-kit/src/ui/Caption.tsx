@@ -33,6 +33,7 @@ export function CaptionPanel({
   now,
   compact,
   onAir = false,
+  speaker = "Host",
 }: {
   caption: CaptionT | null;
   redactions: Redaction[];
@@ -40,6 +41,8 @@ export function CaptionPanel({
   compact: boolean;
   /** The broadcast view: a redaction says that it happened, not which rule fired. */
   onAir?: boolean;
+  /** Who says the line (the stream's host name); shown upper-cased. */
+  speaker?: string;
 }) {
   const line = useMemo(() => (caption ? wordTimings(caption.text) : null), [caption]);
   const elapsed = caption ? now - caption.at : 0;
@@ -51,7 +54,7 @@ export function CaptionPanel({
       {caption && opacity > 0 && (
         <div className="caption" key={caption.id} style={{ opacity, fontSize: captionSize(caption.text, compact) }}>
           <div className="caption-head">
-            <span className="speaker">MALAKOR</span>
+            <span className="speaker">{speaker.toUpperCase()}</span>
             {caption.replyingTo.slice(0, 3).map((n) => (
               <span className="reply-chip" key={n}>
                 ↳ {n}

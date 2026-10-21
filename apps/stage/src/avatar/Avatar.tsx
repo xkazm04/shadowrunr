@@ -34,11 +34,13 @@ export interface AvatarProps {
   variant?: FaceVariant;
   /** Where he looks: a change wakes the face, which reads it on its own frames. */
   look?: LookSource;
+  /** The face's accessible name: the stream's host name (default "Host"). */
+  label?: string;
 }
 
 type Handle = { resize(size: number): void; dispose(): void };
 
-export function Avatar({ rigBase, size, source, className, onFace, variant = DEFAULT_FACE, look }: AvatarProps) {
+export function Avatar({ rigBase, size, source, className, onFace, variant = DEFAULT_FACE, look, label = "Host" }: AvatarProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const handleRef = useRef<Handle | null>(null);
@@ -104,7 +106,7 @@ export function Avatar({ rigBase, size, source, className, onFace, variant = DEF
       ref={rootRef}
       className={className}
       role="img"
-      aria-label="Arch-Lich Malakor"
+      aria-label={label}
       data-face="loading"
       data-variant={variant}
       style={{ width: size, height: size }}

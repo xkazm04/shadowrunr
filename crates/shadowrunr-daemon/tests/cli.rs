@@ -206,6 +206,58 @@ fn character_rules_cli_refuses_to_disable_a_rail() {
 }
 
 #[test]
+fn character_new_then_validate_passes_with_fill_warnings_and_validate_fails_on_errors() {
+    let tmp = tempfile::tempdir().unwrap();
+    let chars = tmp.path().join("characters");
+    std::fs::create_dir_all(&chars).unwrap();
+    write_config(tmp.path(), &chars);
+    let template = repo().join("characters").join("_template");
+    let from = template.to_string_lossy().into_owned();
+    let out = shadowrunr(tmp.path(), &["character", "new", "nova", "--from", &from]);
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(
+        out.status.success(),
+        "{text}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(text.contains("character.toml: identity.name: "), "{text}");
+    assert!(text.contains("0 error(s)"), "{text}");
+    assert!(chars.join("nova").join("character.toml").is_file());
+    let out = shadowrunr(tmp.path(), &["character", "validate", "nova"]);
+    assert!(out.status.success());
+    // A second `new` refuses to overwrite.
+    let out = shadowrunr(tmp.path(), &["character", "new", "nova", "--from", &from]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("already exists"));
+    // An error fails validate (exit 1), named file: key: reason.
+    let manifest = chars.join("nova").join("character.toml");
+    let t = std::fs::read_to_string(&manifest).unwrap();
+    std::fs::write(
+        &manifest,
+        t.replace("default_tone = \"baseline\"", "default_tone = \"stormy\""),
+    )
+    .unwrap();
+    let out = shadowrunr(tmp.path(), &["character", "validate", "nova"]);
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert_eq!(out.status.code(), Some(1), "{text}");
+    assert!(
+        text.contains("character.toml: default_tone: tones/stormy.md is missing"),
+        "{text}"
+    );
+    // A package directory works as well as an id.
+    let dir = repo().join("characters").join("malakor");
+    let out = shadowrunr(
+        tmp.path(),
+        &["character", "validate", &dir.to_string_lossy()],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+#[test]
 fn policy_install_list_cli_copies_a_local_source_into_policy_local() {
     let tmp = tempfile::tempdir().unwrap();
     let r = repo();

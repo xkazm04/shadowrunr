@@ -18,6 +18,7 @@
 pub mod footage;
 pub mod gate;
 pub mod hook;
+pub mod host;
 pub mod render;
 pub mod scan;
 pub mod signals;
@@ -30,6 +31,7 @@ pub mod window;
 #[cfg(test)]
 mod tests;
 
+pub use host::ClipHost;
 pub use render::{probe_tools, RenderTools, ToolProbe};
 pub use scan::{scan, RunInput, ScanOptions};
 pub use store::ClipStore;

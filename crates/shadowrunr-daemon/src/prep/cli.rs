@@ -215,6 +215,7 @@ fn reconciler(cfg: &Config, engine: std::sync::Arc<dyn Engine>) -> Reconciler {
             data_dir: cfg.paths.data.clone(),
             runs_root: cfg.paths.sim_runs(),
             characters_root: Some(cfg.paths.characters.clone()),
+            persona: crate::character::persona(cfg),
         },
         engine,
     )

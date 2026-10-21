@@ -123,7 +123,7 @@ fn words(text: &str) -> Vec<String> {
 }
 
 /// The line of `beat` that carries the moment: for a marker, the host line sharing most words
-/// with its label (a hex reveal also matches the hex id); for a foil roast, Malakor's first
+/// with its label (a hex reveal also matches the hex id); for a foil roast, the host's first
 /// answer after the foil's line; otherwise (a crowd peak) the beat's last host line, the one
 /// the crowd reacted to.
 pub fn payoff_line(stream: &Stream, beat: usize, marker: Option<(&MarkerKind, &str)>) -> usize {
@@ -139,11 +139,11 @@ pub fn payoff_line(stream: &Stream, beat: usize, marker: Option<(&MarkerKind, &s
             .iter()
             .copied()
             .skip_while(|&i| !matches!(stream.lines[i].who, Who::Foil(_)))
-            .find(|&i| matches!(stream.lines[i].who, Who::Malakor))
+            .find(|&i| matches!(stream.lines[i].who, Who::Host))
             .or_else(|| {
                 host.iter()
                     .copied()
-                    .find(|&i| matches!(stream.lines[i].who, Who::Malakor))
+                    .find(|&i| matches!(stream.lines[i].who, Who::Host))
             })
             .unwrap_or(last),
         Some((_, label)) => {
