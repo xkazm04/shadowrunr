@@ -180,3 +180,74 @@ async fn generate_from_an_unknown_report_is_not_found() {
     .await;
     assert_eq!(v["error"]["code"], "not_found", "{v}");
 }
+
+/// Answers the planner's revision call with one rewrite of conn-01.
+struct EditPlanner;
+
+#[async_trait]
+impl Engine for EditPlanner {
+    async fn complete(&self, req: EngineRequest) -> Result<EngineReply, EngineError> {
+        assert_eq!(req.role, Role::Planner);
+        let ops = json!({"ops": [{
+            "op": "rewrite", "target": "conn-01",
+            "line": "Tribute accepted at the Spire's front gate tonight.",
+            "why": "no links"
+        }]});
+        Ok(EngineReply {
+            text: ops.to_string(),
+            engine: EngineKind::Scripted,
+            account: None,
+            model: "fake-planner".into(),
+            first_text_ms: None,
+            duration_ms: 0,
+            usage: Usage::default(),
+            cost_usd: None,
+            fallback_reason: None,
+            session_id: None,
+        })
+    }
+    async fn open_session(&self, _: EngineRequest) -> Result<Box<dyn WarmSession>, EngineError> {
+        Err(EngineError::Unavailable {
+            reason: "fake planner".into(),
+        })
+    }
+    async fn health(&self) -> Vec<HealthReport> {
+        Vec::new()
+    }
+}
+
+#[tokio::test]
+async fn a_failed_prep_is_revised_on_its_one_line_and_the_owner_approves_the_revision() {
+    let tmp = tempfile::tempdir().unwrap();
+    let addr = serve(tmp.path(), true).await;
+    let g = rpc(&addr, "prep.generate", json!({})).await;
+    let base = g["result"]["prep_id"].as_str().unwrap().to_string();
+    let cfg = test_config(tmp.path(), repo().join("characters"));
+    let (new, rev) =
+        crate::prep::revise_with(&cfg, &EditPlanner, &base, &[], crate::runs::now_ms() + 1000)
+            .await
+            .unwrap();
+    assert_ne!(new.prep_id, base);
+    assert_eq!(rev.base, base);
+    assert!(crate::prep::checks::failed(&new.checks).is_empty());
+    let base_now = rpc(&addr, "prep.get", json!({ "prep_id": base })).await;
+    assert_eq!(base_now["result"]["status"], "staged");
+    assert_eq!(
+        base_now["result"]["connectors"][0]["line"],
+        "Tribute accepted at www.example.com tonight."
+    );
+    let ok = rpc(
+        &addr,
+        "prep.approve",
+        json!({ "prep_id": new.prep_id, "signature": "owner" }),
+    )
+    .await;
+    assert_eq!(ok["result"]["status"], "approved", "{ok}");
+    let refused = rpc(
+        &addr,
+        "prep.approve",
+        json!({ "prep_id": base, "signature": "owner" }),
+    )
+    .await;
+    assert_eq!(refused["error"]["code"], "conflict", "the base still holds");
+}

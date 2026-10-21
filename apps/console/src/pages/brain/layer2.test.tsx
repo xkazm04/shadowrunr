@@ -4,7 +4,9 @@ import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import DOM_BUDGETS from "../../../budgets/dom.json";
 import { pageRoute } from "../../router";
-import { brainLabel } from "./index";
+import { schemaLabel } from "../../router/schema";
+import { BRAIN_ROUTES } from "../../router/brain";
+import { page } from "./index";
 import { Layer2, lineOf } from "./Layer2";
 import { daemon, season, transcript } from "./testgen";
 import { mountPage as mount, nodes, ok, settle } from "../../kit/testing";
@@ -47,9 +49,15 @@ describe("brain/transcripts/<run>/<line>", () => {
     expect(lineOf("0")).toBeUndefined();
     expect(lineOf("x")).toBeUndefined();
     const parts = ["brain", "transcripts", "t/run.a", "7"];
-    expect(brainLabel("transcripts", 1, parts)).toBe("Transcripts");
-    expect(brainLabel("t/run.a", 2, parts)).toBe("t/run.a");
-    expect(brainLabel("7", 3, parts)).toBe("Line 7");
+    const label = schemaLabel(BRAIN_ROUTES);
+    expect(label("transcripts", 1, parts)).toBe("Transcripts");
+    expect(label("t/run.a", 2, parts)).toBe("t/run.a");
+    expect(label("7", 3, parts)).toBe("Line 7");
+  });
+
+  it("declares its grammar as the page module's routes (no hand-written label switch)", () => {
+    expect(page.routes).toBe(BRAIN_ROUTES);
+    expect("label" in page).toBe(false);
   });
 });
 

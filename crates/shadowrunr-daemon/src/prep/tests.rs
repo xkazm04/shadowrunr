@@ -851,3 +851,342 @@ fn the_guide_check_rows_are_the_rule_table() {
         );
     }
 }
+
+// ---- `prep revise`: an edit plan over the failing lines and the owner's notes ----
+
+const TAINT: &str = "Tribute accepted at www.example.com tonight.";
+const CLEAN: &str = "Tribute accepted at the Spire's front gate tonight.";
+
+/// Stage `edit(sample)` as a real (not fictional) prep at T0, with its checks.
+fn stage_base(cfg: &Config, edit: &dyn Fn(&mut StreamPrep)) -> StreamPrep {
+    let mut p = sample_prep();
+    edit(&mut p);
+    p.fictional = false;
+    p.prep_id = String::new();
+    p.created_ms = T0;
+    p.checks = check(cfg, &p, &Dropped::default()).unwrap();
+    store(cfg).stage(p).unwrap()
+}
+
+/// A planner whose edit plan is `ops`.
+fn edit_plan(ops: Value) -> Arc<FakePlanner> {
+    FakePlanner::new(json!({ "ops": ops }).to_string())
+}
+
+fn newest(cfg: &Config) -> StreamPrep {
+    let id = store(cfg).list().unwrap()[0].prep_id.clone();
+    store(cfg).load(&id).unwrap()
+}
+
+fn owned_lines(p: &StreamPrep) -> Vec<(String, String)> {
+    checks::lines(p)
+        .into_iter()
+        .map(|(at, l)| (at, l.to_string()))
+        .collect()
+}
+
+fn revision_json(cfg: &Config, id: &str) -> Value {
+    let path = store(cfg).root().join(id).join(revise::REVISION_FILE);
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn revise_rewrites_only_the_failing_line_and_stages_a_passing_prep() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    let base = stage_base(&cfg, &|p| p.connectors[0].line = TAINT.into());
+    assert_eq!(checks::failed(&base.checks), ["urls"]);
+    let fake = edit_plan(json!([
+        {"op": "rewrite", "target": "conn-01", "line": CLEAN, "why": "no links"}
+    ]));
+    assert_eq!(
+        prep_cli::revise_cmd(&cfg, fake.clone(), &base.prep_id, &[], false).await,
+        0
+    );
+    let new = newest(&cfg);
+    assert_ne!(new.prep_id, base.prep_id);
+    assert_eq!(new.status, PrepStatus::Staged);
+    assert_eq!(new.checks.len(), 9);
+    assert!(checks::failed(&new.checks).is_empty(), "{:?}", new.checks);
+    let (before, after) = (owned_lines(&base), owned_lines(&new));
+    assert_eq!(before.len(), after.len());
+    for ((at, x), (at2, y)) in before.iter().zip(&after) {
+        assert_eq!(at, at2);
+        if at == "conn-01" {
+            assert_eq!(y, CLEAN);
+        } else {
+            assert_eq!(x, y, "{at} is byte-identical to the base");
+        }
+    }
+    let reqs = fake.requests();
+    assert_eq!(reqs.len(), 1, "one planner call");
+    assert_eq!(reqs[0].role, Role::Planner);
+    assert!(reqs[0].allowed_tools.is_empty());
+    assert!(reqs[0].json_schema.is_some());
+}
+
+#[tokio::test]
+async fn an_op_on_a_line_no_finding_or_note_names_is_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    let base = stage_base(&cfg, &|p| p.connectors[0].line = TAINT.into());
+    let fake = edit_plan(json!([
+        {"op": "rewrite", "target": "conn-01", "line": CLEAN, "why": "no links"},
+        {"op": "rewrite", "target": "prem-04", "lines": ["A brand new premise."], "why": "fresher"}
+    ]));
+    assert_eq!(
+        prep_cli::revise_cmd(&cfg, fake, &base.prep_id, &[], false).await,
+        0
+    );
+    let new = newest(&cfg);
+    let prem = |p: &StreamPrep| p.bits.iter().find(|b| b.id == "prem-04").unwrap().clone();
+    assert_eq!(prem(&new), prem(&base), "prem-04 is unchanged");
+    let rev = revision_json(&cfg, &new.prep_id);
+    let refused = rev["refused_ops"].as_array().unwrap();
+    assert_eq!(refused.len(), 1, "{rev}");
+    assert_eq!(refused[0]["op"]["target"], "prem-04");
+    assert_eq!(refused[0]["reason"], "target not named");
+}
+
+#[tokio::test]
+async fn a_count_shortfall_is_an_insert_slot_the_plan_can_fill() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    let base = stage_base(&cfg, &|p| p.connectors.retain(|c| c.id != "conn-12"));
+    assert_eq!(checks::failed(&base.checks), ["counts"]);
+    assert!(detail(&base, "counts").contains("2 into_poll connectors (at least 3)"));
+    let policy = crate::clips::policy(&cfg).unwrap();
+    let ctx = CheckContext {
+        policy: &policy,
+        real_names: &[],
+    };
+    let found = checks::findings(&base, &ctx);
+    let slot = found.iter().find(|f| f.check == "counts").unwrap();
+    assert_eq!(slot.at, "insert:connector:into_poll");
+    assert_eq!(
+        slot.slot,
+        Some(checks::Slot {
+            kind: "into_poll".into(),
+            missing: 1
+        })
+    );
+    let fake = edit_plan(json!([{
+        "op": "insert", "target": "insert:connector:into_poll",
+        "line": "Votes open now, minions: the fog or the clerk takes the blame.",
+        "why": "a third poll lead-in"
+    }]));
+    assert_eq!(
+        prep_cli::revise_cmd(&cfg, fake, &base.prep_id, &[], false).await,
+        0
+    );
+    let new = newest(&cfg);
+    let added = new.connectors.iter().find(|c| c.id == "conn-16").unwrap();
+    assert_eq!(added.kind, shadowrunr_types::prep::ConnectorKind::IntoPoll);
+    assert_eq!(state(&new, "counts"), PrepCheckState::Pass);
+    assert!(checks::failed(&new.checks).is_empty(), "{:?}", new.checks);
+}
+
+#[tokio::test]
+async fn the_revision_prompt_names_every_failing_line_untruncated() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    let base = stage_base(&cfg, &|p| {
+        for (i, c) in p.connectors.iter_mut().take(11).enumerate() {
+            c.line = format!("Tribute flows to spire{i}.gg tonight, minion {i}.");
+        }
+    });
+    assert!(
+        detail(&base, "urls").contains("and 3 more"),
+        "the stored detail is prose, truncated"
+    );
+    let fake = edit_plan(json!([]));
+    prep_cli::revise_cmd(&cfg, fake.clone(), &base.prep_id, &[], false).await;
+    let prompt = fake.requests()[0].prompt.clone();
+    let failed = planner::section(&prompt, "What failed");
+    assert!(!failed.is_empty(), "{prompt}");
+    for i in 1..=11 {
+        assert!(
+            failed.contains(&format!("conn-{i:02}")),
+            "conn-{i:02}: {failed}"
+        );
+    }
+    assert!(!failed.contains("more"), "{failed}");
+}
+
+#[tokio::test]
+async fn an_owner_note_makes_a_passing_line_a_target_and_the_base_is_untouched() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    let base = stage_base(&cfg, &|_| {});
+    assert!(checks::failed(&base.checks).is_empty());
+    let path = store(&cfg)
+        .root()
+        .join(&base.prep_id)
+        .join(store::PREP_FILE);
+    let bytes = std::fs::read(&path).unwrap();
+    let fake = edit_plan(json!([{
+        "op": "rewrite", "target": "cb-02",
+        "lines": ["The fog filed a grievance against the moat.", "The moat counter-sued for damp."],
+        "why": "sharper"
+    }]));
+    let notes = vec!["cb-02: too flat".to_string()];
+    assert_eq!(
+        prep_cli::revise_cmd(&cfg, fake.clone(), &base.prep_id, &notes, false).await,
+        0
+    );
+    let prompt = &fake.requests()[0].prompt;
+    assert!(prompt.contains("cb-02") && prompt.contains("too flat"));
+    let new = newest(&cfg);
+    assert_ne!(new.prep_id, base.prep_id);
+    assert_eq!(new.status, PrepStatus::Staged);
+    let cb = new.bits.iter().find(|b| b.id == "cb-02").unwrap();
+    assert_eq!(cb.lines[1], "The moat counter-sued for damp.");
+    assert_eq!(std::fs::read(&path).unwrap(), bytes, "base bytes unchanged");
+    assert_eq!(
+        store(&cfg).load(&base.prep_id).unwrap().status,
+        PrepStatus::Staged
+    );
+    // A note on a line the prep does not have, or nothing to revise, is a usage error.
+    let none = edit_plan(json!([]));
+    let bad = vec!["zz-99: what".to_string()];
+    assert_eq!(
+        prep_cli::revise_cmd(&cfg, none.clone(), &base.prep_id, &bad, false).await,
+        2
+    );
+    assert_eq!(
+        prep_cli::revise_cmd(&cfg, none.clone(), &base.prep_id, &[], false).await,
+        2
+    );
+    assert!(none.requests().is_empty(), "no planner call was spent");
+}
+
+#[tokio::test]
+async fn revise_refuses_an_approved_or_retired_prep_and_a_fence_echo() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    let notes = vec!["cb-02: too flat".to_string()];
+    let approved = stage_base(&cfg, &|_| {});
+    approve_in(&cfg, &approved.prep_id, "owner", T0 + 1).unwrap();
+    let retired = stage_base(&cfg, &|_| {});
+    store(&cfg).retire(&retired.prep_id).unwrap();
+    for id in [&approved.prep_id, &retired.prep_id] {
+        let fake = edit_plan(json!([]));
+        let e = revise_with(&cfg, fake.as_ref(), id, &notes, T0 + 60_000)
+            .await
+            .unwrap_err();
+        assert_eq!(e.code, ErrorCode::Conflict, "{id}");
+        assert_eq!(
+            prep_cli::revise_cmd(&cfg, fake.clone(), id, &notes, false).await,
+            1
+        );
+        assert!(fake.requests().is_empty());
+    }
+
+    let base = stage_base(&cfg, &|p| p.connectors[0].line = TAINT.into());
+    let before = store(&cfg).list().unwrap().len();
+    let echo = Arc::new(EchoFence(FakePlanner::new("")));
+    let e = revise_with(&cfg, echo.as_ref(), &base.prep_id, &[], T0 + 60_000)
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, ErrorCode::Engine);
+    assert_eq!(e.detail.unwrap()["reason"], "fence_echo");
+    assert_eq!(
+        prep_cli::revise_cmd(&cfg, echo, &base.prep_id, &[], false).await,
+        1
+    );
+    assert_eq!(store(&cfg).list().unwrap().len(), before, "nothing staged");
+}
+
+#[tokio::test]
+async fn show_prints_the_lineage_and_revision_json_keeps_the_plan() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    let base = stage_base(&cfg, &|p| p.connectors[0].line = TAINT.into());
+    let fake = edit_plan(json!([
+        {"op": "rewrite", "target": "conn-01", "line": CLEAN, "why": "no links"},
+        {"op": "rewrite", "target": "prem-04", "lines": ["A brand new premise."], "why": "fresher"}
+    ]));
+    prep_cli::revise_cmd(&cfg, fake, &base.prep_id, &[], false).await;
+    let new = newest(&cfg);
+    let rev = revision_json(&cfg, &new.prep_id);
+    assert_eq!(rev["base"], base.prep_id.as_str());
+    assert!(rev["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f["at"] == "conn-01" && f["check"] == "urls"));
+    assert_eq!(rev["ops"].as_array().unwrap().len(), 1);
+    assert_eq!(rev["ops"][0]["target"], "conn-01");
+    assert_eq!(rev["refused_ops"].as_array().unwrap().len(), 1);
+
+    let stored = store(&cfg).revision(&new.prep_id).unwrap().unwrap();
+    let text = prep_cli::revision_text(&stored);
+    assert!(
+        text.contains(&format!("revised from {}: 1 ops", base.prep_id)),
+        "{text}"
+    );
+    assert!(text.contains("rewrite conn-01: no links"), "{text}");
+    assert!(
+        text.contains("refused rewrite prem-04: target not named"),
+        "{text}"
+    );
+    assert!(store(&cfg).revision(&base.prep_id).unwrap().is_none());
+    assert_eq!(
+        prep_cli::store_cmd(
+            &cfg,
+            PrepCommand::Show {
+                id: new.prep_id.clone(),
+                json: false
+            }
+        ),
+        0
+    );
+}
+
+/// Guard: a revised prep is gated like any other. A plan that leaves a link fails `urls`,
+/// exits 6 and cannot be approved; revise never approves.
+#[tokio::test]
+async fn a_revised_prep_goes_through_every_check_and_the_owner_still_approves() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    let base = stage_base(&cfg, &|p| p.connectors[0].line = TAINT.into());
+    let fake = edit_plan(json!([{
+        "op": "rewrite", "target": "conn-01",
+        "line": "Tribute now accepted at spire.gg instead.", "why": "a new link"
+    }]));
+    assert_eq!(
+        prep_cli::revise_cmd(&cfg, fake, &base.prep_id, &[], false).await,
+        EXIT_CHECK_FAILED
+    );
+    let new = newest(&cfg);
+    assert_eq!(new.checks.len(), 9);
+    assert_eq!(checks::failed(&new.checks), ["urls"]);
+    assert_eq!(new.approved_by, None);
+    let e = approve_in(&cfg, &new.prep_id, "owner", T0 + 1).unwrap_err();
+    assert_eq!(e.code, ErrorCode::Conflict);
+}
+
+#[test]
+fn the_cli_parses_revise_with_notes() {
+    use crate::cli::{Cli, Command};
+    let cli = Cli::try_parse_from([
+        "shadowrunr",
+        "prep",
+        "revise",
+        "prep-20261020-000000",
+        "--note",
+        "cb-02: too flat",
+        "--note",
+        "conn-01: warmer",
+        "--json",
+    ])
+    .unwrap();
+    match cli.command {
+        Command::Prep(PrepCommand::Revise { id, notes, json }) => {
+            assert_eq!(id, "prep-20261020-000000");
+            assert_eq!(notes, ["cb-02: too flat", "conn-01: warmer"]);
+            assert!(json);
+        }
+        other => panic!("{other:?}"),
+    }
+}

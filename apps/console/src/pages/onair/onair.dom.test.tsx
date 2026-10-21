@@ -89,6 +89,10 @@ describe("On Air layer 1", () => {
   it("holds its DOM count on a 100k-line transcript", async () => {
     mount(<Layer1 active />, daemon([runRow(0)], transcript(100_000)));
     await screen.findByText(/Replay 4×/, undefined, { timeout: 20_000 });
+    // The scrubber's moment ticks are binned: 10k mark_moment ops never become 10k nodes.
+    const bar = document.querySelector("[data-role='onair-progress']");
+    expect(bar?.getAttribute("role")).toBe("slider");
+    expect(bar?.querySelectorAll("[data-mark]").length).toBeGreaterThan(0);
     expect(nodes()).toBeLessThanOrEqual(PAGE_L1);
   }, 60_000);
 

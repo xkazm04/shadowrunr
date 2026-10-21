@@ -210,22 +210,6 @@ fn package_files(dir: &Path) -> Vec<PackageFile> {
     out
 }
 
-#[derive(Deserialize)]
-struct SituationsFile {
-    #[serde(default)]
-    situations: Vec<Situation>,
-}
-
-fn situations(dir: &Path) -> Result<Vec<Situation>, RpcError> {
-    let path = dir.join("situations.json");
-    if !path.is_file() {
-        return Ok(Vec::new());
-    }
-    let file: SituationsFile = serde_json::from_str(&read_text(&path)?)
-        .map_err(|e| RpcError::io(format!("{}: {e}", path.display())))?;
-    Ok(file.situations)
-}
-
 fn summary(cfg: &Config, id: &str) -> Result<CharacterSummary, RpcError> {
     let pkg = load(cfg, id)?;
     let tones = tone_ids(&pkg.dir);
@@ -304,7 +288,7 @@ pub fn character_get(cfg: &Config, id: &str) -> Result<CharacterDetail, RpcError
     let tone_list: Vec<String> = tones.iter().map(|t| t.id.clone()).collect();
     Ok(CharacterDetail {
         files: package_files(&pkg.dir),
-        situations: situations(&pkg.dir)?,
+        situations: pkg.situations.situations,
         tagline: tagline(&pkg.dir),
         active_tone: active_tone(cfg, &pkg.id, &pkg.default_tone, &tone_list),
         id: pkg.id,

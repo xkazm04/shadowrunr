@@ -18,6 +18,7 @@
 pub mod footage;
 pub mod gate;
 pub mod hook;
+pub mod job;
 pub mod render;
 pub mod scan;
 pub mod signals;

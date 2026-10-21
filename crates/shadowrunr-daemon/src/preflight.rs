@@ -900,6 +900,55 @@ mod tests {
         assert!(!tmp.path().join("fresh-runs").exists());
     }
 
+    /// A characters root holding a malakor copy whose `situations.json` went through `edit`.
+    fn characters_with_situations(
+        tmp: &Path,
+        edit: impl FnOnce(&mut Vec<serde_json::Value>),
+    ) -> std::path::PathBuf {
+        let root = tmp.join("characters");
+        let dir = root.join("malakor");
+        crate::e2e::copy_dir(&crate::e2e::repo().join("characters/malakor"), &dir);
+        let path = dir.join("situations.json");
+        let mut bank: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        edit(bank["situations"].as_array_mut().unwrap());
+        std::fs::write(&path, serde_json::to_string_pretty(&bank).unwrap()).unwrap();
+        root
+    }
+
+    #[test]
+    fn pf02_is_red_for_a_defective_situation_bank() {
+        type Edit = fn(&mut Vec<serde_json::Value>);
+        let cases: [(Edit, &str); 2] = [
+            (
+                |s| {
+                    let mut a = s[0].clone();
+                    a["id"] = "x".into();
+                    s.push(a.clone());
+                    s.push(a);
+                },
+                "duplicate id x",
+            ),
+            (
+                |s| s[0]["segments"] = serde_json::json!(["SEG-09"]),
+                "SEG-09",
+            ),
+        ];
+        for (edit, reason) in cases {
+            let tmp = tempfile::tempdir().unwrap();
+            let chars = characters_with_situations(tmp.path(), edit);
+            let cfg = crate::e2e::test_config(tmp.path(), chars);
+            let r = pf02_character(&cfg);
+            assert_eq!(r.state, HealthState::Red, "{}", r.detail);
+            assert!(r.detail.contains("situations.json"), "{}", r.detail);
+            assert!(r.detail.contains(reason), "{}", r.detail);
+        }
+        // The shipped bank stays green.
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = crate::e2e::test_config(tmp.path(), crate::e2e::repo().join("characters"));
+        assert_eq!(pf02_character(&cfg).state, HealthState::Green);
+    }
+
     #[test]
     fn media_is_amber() {
         let r = pf08_media();

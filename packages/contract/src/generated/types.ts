@@ -7,6 +7,13 @@
  */
 export type SegmentId = ("SEG-01" | "SEG-02A") | "SEG-02B-I" | "SEG-02B-II";
 /**
+ * How a situation is performed (`situations.json` `stimulus`).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Stimulus".
+ */
+export type Stimulus = "message" | "silence" | "vote" | "wave";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "CharacterListResult".
  */
@@ -1180,7 +1187,9 @@ export interface CharacterRuleInfo {
   title: string;
 }
 /**
- * One situation of `situations.json` (format in docs/spec/contract.md).
+ * One situation of `situations.json` (format in docs/spec/contract.md). The one parse type of
+ * the bank: the brain's package load parses into it and validates it, and the sim and
+ * `character.get` serve what that load returned. An unknown field is an error.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "Situation".
@@ -1197,11 +1206,11 @@ export interface Situation {
    * Segments the situation is scheduled in; every segment when absent.
    */
   segments?: SegmentId[];
-  silence_s?: number;
   /**
-   * `message`, `silence`, `vote` or `wave`; inferred by the sim when absent.
+   * Length of a `silence` situation in seconds; the sim's default (120) when absent.
    */
-  stimulus?: string;
+  silence_s?: number;
+  stimulus?: Stimulus;
 }
 /**
  * A tone variant (`tones/<id>.md`).

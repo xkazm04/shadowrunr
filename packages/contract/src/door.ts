@@ -1,8 +1,12 @@
 // The one door. Every byte the daemon sends enters the app here: `parseRpcResult` for a
 // `POST /rpc` reply body, `parseEvent` for a `/events` frame. These are the only places that
 // call `JSON.parse` or run a validator, and they never throw: they return a typed `Result`.
+//
+// `parseEvent` is synchronous on the eager ServerFrame validator. `parseRpcResult` is async: a
+// method's result validator is its own generated module, loaded on the method's first reply
+// (RESULT_LOADERS) and kept, so a reader pays only for the methods it calls.
 
-import { RESULT_VALIDATORS, type RpcMethod, type RpcResult } from "./generated/meta";
+import { RESULT_LOADERS, RPC_METHODS, type RpcMethod, type RpcResult } from "./generated/meta";
 import type { ErrorBody, ErrorCode, ServerFrame, StreamEvent } from "./generated/types";
 import { validateErrorEnvelope, validateServerFrame, type ValidateFn } from "./generated/validators.js";
 
@@ -21,6 +25,9 @@ export type DoorError =
   | { readonly kind: "invalid"; readonly message: string; readonly path: string; readonly issues: readonly Issue[] }
   /** The method is not in the contract. */
   | { readonly kind: "unknown_method"; readonly message: string; readonly method: string }
+  /** The method's validator module could not be loaded (e.g. a chunk fetch failed); a later
+   *  call retries the load. */
+  | { readonly kind: "unavailable_validator"; readonly message: string; readonly method: string }
   /** A well-formed error reply from the daemon. */
   | {
       readonly kind: "rpc";
@@ -67,7 +74,31 @@ const isRecord = (v: unknown): v is Readonly<Record<string, unknown>> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
 function isRpcMethod(method: string): method is RpcMethod {
-  return Object.hasOwn(RESULT_VALIDATORS, method);
+  return Object.hasOwn(RESULT_LOADERS, method);
+}
+
+/** Loaded (or loading) result validators by method. A failed load is forgotten, so the next
+ *  reply for that method tries again. */
+const loaded = new Map<RpcMethod, Promise<ValidateFn<unknown>>>();
+
+function loadValidator(method: RpcMethod): Promise<ValidateFn<unknown>> {
+  let p = loaded.get(method);
+  if (p === undefined) {
+    p = Promise.resolve()
+      .then(() => RESULT_LOADERS[method]() as Promise<ValidateFn<unknown>>)
+      .catch((e: unknown) => {
+        loaded.delete(method);
+        throw e;
+      });
+    loaded.set(method, p);
+  }
+  return p;
+}
+
+/** Loads result validators ahead of their first reply (every method's by default), e.g. for a
+ *  test harness that counts render rounds. Never rejects: a failed load is retried on use. */
+export async function preloadResultValidators(methods: readonly RpcMethod[] = RPC_METHODS): Promise<void> {
+  await Promise.all(methods.map((m) => loadValidator(m).catch(() => undefined)));
 }
 
 function rpcError(error: ErrorBody): DoorError {
@@ -77,13 +108,13 @@ function rpcError(error: ErrorBody): DoorError {
 
 /**
  * Decode and validate a `POST /rpc` reply body (`{"result"}` or `{"error"}`), given as text
- * or as an already-decoded value.
+ * or as an already-decoded value. Resolves, never rejects.
  */
 export function parseRpcResult<M extends string>(
   method: M,
   raw: unknown,
-): Result<M extends RpcMethod ? RpcResult<M> : never, DoorError>;
-export function parseRpcResult(method: string, raw: unknown): Result<unknown, DoorError> {
+): Promise<Result<M extends RpcMethod ? RpcResult<M> : never, DoorError>>;
+export async function parseRpcResult(method: string, raw: unknown): Promise<Result<unknown, DoorError>> {
   if (!isRpcMethod(method)) {
     return fail({ kind: "unknown_method", message: `unknown RPC method ${JSON.stringify(method)}`, method });
   }
@@ -103,7 +134,17 @@ export function parseRpcResult(method: string, raw: unknown): Result<unknown, Do
       issues: [{ path: "", message: 'must have property "result" or "error"' }],
     });
   }
-  const validate: ValidateFn<unknown> = RESULT_VALIDATORS[method];
+  let validate: ValidateFn<unknown>;
+  try {
+    validate = await loadValidator(method);
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    return fail({
+      kind: "unavailable_validator",
+      message: `${method}: the result validator could not be loaded (${why})`,
+      method,
+    });
+  }
   const result = body["result"];
   return validate(result) ? ok(result) : fail(invalid(validate, "/result", `${method} result`));
 }

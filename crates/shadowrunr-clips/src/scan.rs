@@ -20,9 +20,9 @@ use std::sync::Arc;
 use regex::Regex;
 use shadowrunr_brain::moderation::Policy;
 use shadowrunr_types::clips::{
-    ClipAct, ClipCandidate, ClipCaption, ClipEvidence, ClipHex, ClipLane, ClipMarker,
-    ClipRecording, ClipScanReport, ClipScanRun, ClipScoring, ClipSignals, ClipSource, ClipStatus,
-    ClipTransition, ClipWeights, ClipWindow,
+    ClipCandidate, ClipCaption, ClipEvidence, ClipHex, ClipLane, ClipMarker, ClipRecording,
+    ClipScanReport, ClipScanRun, ClipScoring, ClipSignals, ClipSource, ClipStatus, ClipTransition,
+    ClipWeights, ClipWindow,
 };
 use shadowrunr_types::{Engine, EvidenceGrade, Op, SegmentId, StreamEvent};
 
@@ -893,40 +893,12 @@ pub async fn scan(
 }
 
 /// Re-render a stored candidate (`clips render`): refused once the owner has approved,
-/// rejected or published it; re-gated afterwards.
+/// rejected or published it; re-gated afterwards. The store lock is held only to snapshot and
+/// to commit, never across the render ([`crate::job`]); a failed render keeps the previous one.
 pub fn rerender(
     store: &ClipStore,
     id: &str,
     tools: Option<&render::RenderTools>,
 ) -> Result<ClipCandidate> {
-    let _lock = store.lock()?;
-    let mut c = store.load(id)?;
-    store::refuse_blocked(&c, ClipAct::Render)?;
-    let r = render::render(&store.dir(id), &c, tools)?;
-    let note = match &r.fallback_reason {
-        Some(why) => format!("poster frame only: {why}"),
-        None => format!("video {:.1} s, {}x{}", r.duration_s, r.width, r.height),
-    };
-    c.history.push(ClipTransition {
-        status: ClipStatus::RenderedDraft,
-        at_ms: r.rendered_ms,
-        by: "render".into(),
-        note: Some(note),
-    });
-    c.render = Some(r);
-    let exclusions = stored_exclusions(&c);
-    regate(store, &mut c, exclusions);
-    c.status = ClipStatus::PendingOwnerGate;
-    c.history.push(ClipTransition {
-        status: ClipStatus::PendingOwnerGate,
-        at_ms: c.gate.evaluated_ms,
-        by: "gate".into(),
-        note: Some(if c.gate.held {
-            format!("held: {}", c.gate.hold_reasons.len())
-        } else {
-            "every check passed; waits for the owner's signature".into()
-        }),
-    });
-    store.save(&c)?;
-    Ok(c.with_acts())
+    crate::job::rerender_with(store, id, &crate::job::ToolRenderer(tools))
 }
