@@ -477,6 +477,81 @@ mod tests {
         }
     }
 
+    /// A verdict of `pass` held and `fail` failed checks, `red` of the fails on red lines.
+    fn write_verdict(dir: &Path, run_id: &str, pass: usize, fail: usize, red: usize) {
+        let mut rules = Vec::new();
+        for i in 0..pass {
+            rules.push(serde_json::json!({ "rule": format!("situation:p{i}"), "state": "pass" }));
+        }
+        for i in 0..fail {
+            let rule = if i < red {
+                format!("red-line:r{i}")
+            } else {
+                format!("role:f{i}")
+            };
+            rules.push(serde_json::json!({ "rule": rule, "state": "fail" }));
+        }
+        rules.push(serde_json::json!({ "rule": "talk:q", "state": "not_provoked" }));
+        let v = serde_json::json!({
+            "run_id": run_id, "judge_tier": "opus", "quality": [], "rules": rules
+        });
+        std::fs::write(dir.join("verdict.json"), v.to_string()).unwrap();
+    }
+
+    #[test]
+    fn tournament_row_holds_the_mean_of_judged_runs_and_sums_their_red_line_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let sim = tmp.path();
+        let t = sim.join("ab");
+        std::fs::create_dir_all(&t).unwrap();
+        std::fs::write(t.join("tournament.json"), r#"{"base_hash":"b","runs":3}"#).unwrap();
+        write_run(&t.join("a"), "a", Some("judged"), None, false, CLEAN);
+        write_verdict(&t.join("a"), "a", 1, 0, 0);
+        write_run(&t.join("b"), "b", Some("judged"), None, false, CLEAN);
+        write_verdict(&t.join("b"), "b", 50, 50, 2);
+        write_run(&t.join("c"), "c", Some("simulated"), None, false, CLEAN);
+        let row = serde_json::to_value(tournament_row(sim, "ab").unwrap()).unwrap();
+        // The mean of the runs' shares (1 and 0.5), not the pooled 51 / 101.
+        assert_eq!(row["judged"], serde_json::json!(2), "{row}");
+        assert_eq!(row["held"], serde_json::json!(0.75), "{row}");
+        assert_eq!(row["red_line_fails"], serde_json::json!(2), "{row}");
+        assert_eq!(row["completed"], serde_json::json!(3), "{row}");
+        let page = crate::paging::tournaments_page(
+            sim,
+            TournamentsPageParams {
+                cursor: None,
+                limit: 10,
+            },
+        )
+        .unwrap();
+        let first = serde_json::to_value(&page.items[0]).unwrap();
+        assert_eq!(first["held"], serde_json::json!(0.75), "{first}");
+    }
+
+    #[test]
+    fn a_judged_run_with_no_evaluated_check_is_counted_but_not_held() {
+        let tmp = tempfile::tempdir().unwrap();
+        let sim = tmp.path();
+        let t = sim.join("mixed");
+        write_run(&t.join("a"), "a", Some("judged"), None, false, CLEAN);
+        write_verdict(&t.join("a"), "a", 3, 1, 0);
+        write_run(&t.join("z"), "z", Some("judged"), None, false, CLEAN);
+        write_verdict(&t.join("z"), "z", 0, 0, 0);
+        let row = serde_json::to_value(tournament_row(sim, "mixed").unwrap()).unwrap();
+        assert_eq!(row["judged"], serde_json::json!(2), "{row}");
+        assert_eq!(row["held"], serde_json::json!(0.75), "{row}");
+        assert!(row.get("red_line_fails").is_none(), "{row}");
+
+        let t = sim.join("empty");
+        write_run(&t.join("z"), "z", Some("judged"), None, false, CLEAN);
+        write_verdict(&t.join("z"), "z", 0, 0, 0);
+        write_run(&t.join("y"), "y", Some("judged"), None, false, CLEAN);
+        write_verdict(&t.join("y"), "y", 0, 0, 0);
+        let row = serde_json::to_value(tournament_row(sim, "empty").unwrap()).unwrap();
+        assert_eq!(row["judged"], serde_json::json!(2), "{row}");
+        assert!(row.get("held").is_none(), "{row}");
+    }
+
     #[test]
     fn reconcile_dry_run_counts_without_an_engine() {
         let tmp = tempfile::tempdir().unwrap();

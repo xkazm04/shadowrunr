@@ -286,6 +286,50 @@ async fn run_rows_carry_health_and_red_line_fails_from_the_verdict() {
     }
 }
 
+#[tokio::test]
+async fn tournament_rows_carry_held_judged_and_red_line_fails() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = test_config(tmp.path(), repo().join("characters"));
+    let sim_root = tmp.path().join("runs").join("sim");
+    for id in ["a", "b", "c"] {
+        write_run(&sim_root, "ab", id, "theatrical", 3);
+    }
+    let verdict = |run_id: &str, pass: usize, fail: usize, red: usize| {
+        let mut rules: Vec<Value> = (0..pass)
+            .map(|i| json!({ "rule": format!("situation:p{i}"), "state": "pass" }))
+            .collect();
+        rules.extend((0..fail).map(|i| {
+            let rule = if i < red {
+                format!("red-line:r{i}")
+            } else {
+                format!("role:f{i}")
+            };
+            json!({ "rule": rule, "state": "fail" })
+        }));
+        json!({ "run_id": run_id, "judge_tier": "opus", "quality": [], "rules": rules })
+    };
+    for (id, pass, fail, red) in [("a", 1, 0, 0), ("b", 50, 50, 3)] {
+        std::fs::write(
+            sim_root.join("ab").join(id).join("verdict.json"),
+            verdict(id, pass, fail, red).to_string(),
+        )
+        .unwrap();
+    }
+    let addr = start(cfg).await;
+    let v = rpc(&addr, "tournaments.page", json!({ "limit": 10 })).await;
+    assert!(!has_null(&v), "{v}");
+    let row = v["result"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["tournament_id"] == "ab")
+        .cloned()
+        .unwrap();
+    assert_eq!(row["judged"], json!(2), "{row}");
+    assert_eq!(row["held"], json!(0.75), "{row}");
+    assert_eq!(row["red_line_fails"], json!(3), "{row}");
+}
+
 /// A sim ledger row with the fields `ledger.summary` folds.
 fn summary_row(ts: usize, role: &str, duration_ms: u64, extra: Value) -> String {
     let mut row = json!({
