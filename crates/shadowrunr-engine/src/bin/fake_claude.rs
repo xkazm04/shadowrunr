@@ -45,7 +45,9 @@ fn main() {
             .append(true)
             .open(d.join("calls.jsonl"))
         {
-            let _ = writeln!(f, "{rec}");
+            // One write per record: `writeln!` may split it, and a test reading the file while
+            // a sibling fake is still writing would see half a line.
+            let _ = f.write_all(format!("{rec}\n").as_bytes());
         }
     }
 

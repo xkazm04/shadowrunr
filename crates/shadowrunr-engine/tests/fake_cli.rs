@@ -62,10 +62,12 @@ impl World {
 }
 
 fn calls(dir: &Path) -> Vec<Value> {
+    // Only whole lines: a fake that is still writing has not ended its record yet.
     std::fs::read_to_string(dir.join("calls.jsonl"))
         .unwrap_or_default()
-        .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
+        .split_inclusive('\n')
+        .filter(|l| l.ends_with('\n'))
+        .map(|l| serde_json::from_str(l.trim_end()).unwrap())
         .collect()
 }
 
