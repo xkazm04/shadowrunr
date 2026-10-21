@@ -2276,6 +2276,45 @@ body {
   pointer-events: none;
 }
 
+.ctl-outside {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(135deg, #0b0f0e 0 6px, #161d1a 6px 12px);
+  pointer-events: none;
+}
+
+.ctl-dvr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.ctl-behind {
+  font-family: var(--mono);
+  color: var(--bronze);
+}
+
+.ctl-golive {
+  font: inherit;
+  color: var(--bone);
+  background: #2a1714;
+  border: 1px solid var(--blood);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.ctl-golive.on,
+.ctl-golive:disabled {
+  background: none;
+  border-color: #33423c;
+  color: var(--verdigris);
+  cursor: default;
+}
+
 .ctl-marker {
   position: absolute;
   top: 2px;

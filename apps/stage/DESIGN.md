@@ -105,7 +105,8 @@ session's stage URL is `?run=live&broadcast=1`; `shadowrunr stream sandbox --min
   run.
 - **Bounded store.** The scene is reduced one event at a time as frames arrive and covers the
   whole stream. The events themselves live in a ring of the last 2,000, which only the
-  controls' debug views read (copied once per change, never in the broadcast view). A 30-minute
+  controls' debug views and the preview's DVR window (below) read (copied once per change, never
+  in the broadcast view). A 30-minute
   session therefore costs the same per event at minute 29 as at minute 1.
 - **Acks.** Every 5 s, and as soon as `stream_end` is applied, the stage sends
   `{"ack": {"seq", "gaps", "stalled_ms"}}`: the highest contiguous seq applied, the gaps found in
@@ -116,6 +117,21 @@ session's stage URL is `?run=live&broadcast=1`; `shadowrunr stream sandbox --min
   arrived (at most 120 s). Sandbox timestamps are wall ms since the start, so it runs in real
   time, and the top bar shows the stream's elapsed time (mm:ss, from `stream_start`, frozen at
   `stream_end`).
+- **DVR window (operator preview only).** The live preview can look back over the events the
+  ring still holds (`src/dvr.ts` on `LiveStore.sceneAt`). The store keeps the scene after every
+  100th applied event as a keyframe (a retained reference: `reduce` shares structure). Keyframes
+  leave with the ring and are cleared on a new run or `stream_start`, so about 20 are held. A seek
+  restores the newest keyframe at or before `t` and folds at most 100 ring events. At or past the
+  head it returns the live scene itself and folds nothing. A time before the window clamps to the
+  earliest reachable scene, which is marked hatched on the track. The transport is
+  `follow | behind{t, playing}`. Following, the preview is the head. A seek, a clip marker, the
+  arrow keys or a pause put it behind. Play advances at the controls' speed (so 2x catches up) and
+  returns to follow at the head, and GO LIVE returns at once. The controls show "N s behind
+  live". Behind, captions use the estimated word timing, not the voice's audio clock, because
+  the voice is live audio. Limits: only the held window (the last 2,000 events) is reachable, and
+  the voice is not replayed. The broadcast view (`?broadcast=1`, which OBS and the sandbox use)
+  builds no DVR state and always draws the head. Scrubbing never touches the seqs or the acks,
+  so the sandbox's `stage_ack` gate reads the same frames either way.
 
 **Feed slates.** They sit on the 1920x1080 canvas, so OBS shows them with `?broadcast=1`; the
 controls keep the debug detail (socket status, error frames, frames that failed validation).

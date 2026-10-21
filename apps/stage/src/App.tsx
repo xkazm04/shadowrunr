@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import demoCaseJson from "../fixtures/demo-case.json";
 import demoTranscript from "../fixtures/demo.jsonl?raw";
@@ -15,7 +15,8 @@ import {
   sidecarCaseUrl,
   type CaseSource,
 } from "./source";
-import { LiveSession } from "./live";
+import { LiveSession, type LiveStore } from "./live";
+import { FOLLOW, dvrFor, dvrReduce, liveView, type DvrAction, type DvrWindow } from "./dvr";
 import type { FaceSource } from "./avatar/types";
 import { rigBaseUrl, voiceUrl } from "./voice/urls";
 import { pageStorage, readVoiceOn, voiceBlocked, writeVoiceOn } from "./voice/toggle";
@@ -36,6 +37,13 @@ interface Loaded {
   errors: ParseIssue[];
   warnings: ParseIssue[];
   label: string;
+}
+
+/** The live store's DVR window: its earliest reachable moment and the head (null before any event). */
+function windowOf(store: LiveStore | undefined): DvrWindow | null {
+  const start = store?.windowStart() ?? null;
+  const head = store?.scene.lastTs ?? null;
+  return start === null || head === null ? null : { start, head };
 }
 
 function loadText(text: string, label: string): Loaded {
@@ -62,6 +70,9 @@ export function App() {
   const [playing, setPlaying] = useState(true);
   const [now, setNow] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [dvrState, dispatchDvr] = useReducer(dvrReduce, FOLLOW);
+  // the operator preview of a live run looks back; the broadcast view has no DVR at all
+  const dvr = dvrFor({ live, broadcast: params.broadcast }) === null ? null : dvrState;
   const fit = useViewport();
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -97,6 +108,7 @@ export function App() {
   const firstTimeline = useRef<Timeline | null>(null);
   const playingRef = useRef(playing);
   const speedRef = useRef(speed);
+  const liveRef = useRef<LiveSession | null>(null);
   playingRef.current = playing;
   speedRef.current = speed;
 
@@ -141,15 +153,24 @@ export function App() {
 
   const seek = useCallback(
     (t: number) => {
+      if (live) {
+        const win = windowOf(liveRef.current?.store);
+        if (win) dispatchDvr({ type: "seek", t, win });
+        return;
+      }
       if (!timeline) return;
       clock.current = Math.max(timeline.start, Math.min(t, timeline.end + END_HOLD_MS));
       setNow(clock.current);
     },
-    [timeline],
+    [timeline, live],
   );
 
   // ── Live (daemon WebSocket) ──────────────────────────────────────────────────
-  const liveRef = useRef<LiveSession | null>(null);
+  /** The DVR's play/pause and relative steps: the window is read when the action happens. */
+  const dvrAct = useCallback((act: (win: DvrWindow) => DvrAction) => {
+    const win = windowOf(liveRef.current?.store);
+    if (win) dispatchDvr(act(win));
+  }, []);
   const [, bump] = useState(0);
   useEffect(() => {
     if (!live || !params.run) return;
@@ -164,11 +185,16 @@ export function App() {
     });
     liveRef.current = session;
     session.start();
+    // the operator preview's DVR clock runs here too; the broadcast view has none to run
+    const dvrOn = dvrFor({ live, broadcast: params.broadcast }) !== null;
     let raf = 0;
     let lastPaint = 0;
     const loop = (t: number) => {
       if (t - lastPaint >= 32) {
+        const dt = lastPaint === 0 ? 0 : Math.min(250, t - lastPaint);
         lastPaint = t;
+        const win = dvrOn ? windowOf(session.store) : null;
+        if (win) dispatchDvr({ type: "tick", dt, speed: speedRef.current, win });
         const ll = session.store.lastEvent;
         if (ll) setNow(ll.ts + Math.min(120_000, (t - ll.wall) * params.speed));
         bump((x) => x + 1);
@@ -220,18 +246,22 @@ export function App() {
       if (e.target instanceof HTMLInputElement) return;
       if (e.code === "Space") {
         e.preventDefault();
-        setPlaying((p) => !p);
-      } else if (e.key === "ArrowRight") seek(clock.current + 5000);
-      else if (e.key === "ArrowLeft") seek(clock.current - 5000);
-      else if (e.key === "]" || e.key === "[") {
+        if (live) dvrAct((win) => ({ type: "toggle", win }));
+        else setPlaying((p) => !p);
+      } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        const by = e.key === "ArrowRight" ? 5000 : -5000;
+        if (live) dvrAct((win) => ({ type: "step", by, win }));
+        else seek(clock.current + by);
+      } else if (e.key === "]" || e.key === "[") {
         const i = SPEEDS.indexOf(speedRef.current as (typeof SPEEDS)[number]);
         const next = SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, (i === -1 ? 2 : i) + (e.key === "]" ? 1 : -1)))]!;
         setSpeed(next);
       }
     },
-    [seek],
+    [seek, live, dvrAct],
   );
-  usePlaybackKeys(!params.broadcast && !live, onPlaybackKey);
+  // live, the keys drive the preview's DVR; the broadcast view has no keys
+  usePlaybackKeys(!params.broadcast, onPlaybackKey);
 
   // ── Drag and drop ────────────────────────────────────────────────────────────
   const onFile = useCallback(async (f: File) => {
@@ -282,7 +312,11 @@ export function App() {
   const events = useMemo(() => loaded?.events ?? [], [loaded]);
   const liveEvents = store && !params.broadcast ? store.events() : NO_EVENTS;
   const shown = live ? liveEvents : events;
-  const scene = live ? (store?.scene ?? EMPTY_SCENE) : timeline ? timeline.advanceTo(now) : EMPTY_SCENE;
+  // Live: the head, or the DVR's past moment in the operator preview (`dvr` is null in broadcast).
+  const view = live && store ? liveView(store, dvr, now) : null;
+  const head = store?.scene ?? EMPTY_SCENE;
+  const scene = live ? (view?.scene ?? EMPTY_SCENE) : timeline ? timeline.advanceTo(now) : EMPTY_SCENE;
+  const at = view?.now ?? now;
   const revealKey = scene.revealOrder.join(",");
   const resolved = useMemo(
     () => resolveCase(explicitCase, shown, BUILTIN_CASE, scene.caseFile, live ? (revealKey ? revealKey.split(",") : []) : undefined),
@@ -291,12 +325,14 @@ export function App() {
   const map = useMemo(() => buildMap(resolved.case, revealKey ? revealKey.split(",") : []), [resolved.case, revealKey]);
   useOverflowAudit(params.debug, rootRef);
   if (params.debug) {
-    window.__stage = { now, applied: scene.applied, card: scene.card };
+    window.__stage = { now: at, applied: scene.applied, card: scene.card };
   }
   const watch = store ? store.watch(performance.now()) : null;
-  // with the voice sounding, captions follow its audio clock (voice/captions.ts)
-  const voiceCaption = voice.followsAudio && store?.runId ? voice.caption(store.runId, store.said, now) : undefined;
-  const elapsed = live ? streamElapsed(scene, now) : null;
+  // with the voice sounding, captions follow its audio clock (voice/captions.ts); a past moment in
+  // the DVR shows the estimated timing, since the voice is live audio
+  const followsVoice = view?.followsVoice ?? true;
+  const voiceCaption = followsVoice && voice.followsAudio && store?.runId ? voice.caption(store.runId, store.said, now) : undefined;
+  const elapsed = live ? streamElapsed(scene, at) : null;
   const overlay = watch && (
     <>
       {watch.disconnected && <SignalLostSlate />}
@@ -310,8 +346,11 @@ export function App() {
     return `?${p.toString()}`;
   }, []);
 
-  const start = timeline?.start ?? (live ? (scene.meta?.at ?? scene.t0 ?? 0) : (events[0]?.ts_ms ?? 0));
-  const end = timeline?.end ?? (live ? (scene.lastTs ?? 0) : (events[events.length - 1]?.ts_ms ?? 0));
+  // live, the track spans the whole stream so far (the head's), and the DVR reaches back to windowStart
+  const start = timeline?.start ?? (live ? (head.meta?.at ?? head.t0 ?? 0) : (events[0]?.ts_ms ?? 0));
+  const end = timeline?.end ?? (live ? (head.lastTs ?? 0) : (events[events.length - 1]?.ts_ms ?? 0));
+  const windowStart = dvr && store ? store.windowStart() : null;
+  const dvrPlaying = dvr === null || dvr.mode === "follow" || dvr.playing;
   const caseSource: CaseSource = resolved.source;
 
   return (
@@ -323,7 +362,7 @@ export function App() {
         <StageErrorBoundary voice={voiceShown}>
           <Stage
             scene={scene}
-            now={now}
+            now={at}
             map={map}
             caseFile={resolved.case}
             sourceTag={live ? "LIVE" : "REPLAY"}
@@ -346,8 +385,8 @@ export function App() {
           events={shown}
           start={start}
           end={end}
-          now={now}
-          playing={playing}
+          now={at}
+          playing={live ? dvrPlaying : playing}
           speed={speed}
           live={live}
           sourceLabel={loaded.label}
@@ -355,7 +394,7 @@ export function App() {
           errors={loaded.errors}
           warnings={loaded.warnings}
           status={status}
-          onPlay={setPlaying}
+          onPlay={live ? (p) => dvrAct((win) => ({ type: p ? "play" : "pause", win })) : setPlaying}
           onSeek={seek}
           onSpeed={setSpeed}
           onFile={(f) => void onFile(f)}
@@ -363,6 +402,7 @@ export function App() {
           voiceOn={voiceOn}
           voiceStatus={voice.status}
           onVoice={toggleVoice}
+          dvr={dvr === null ? null : { windowStart, behind: dvr.mode === "behind", behindMs: view?.behindMs ?? 0, onGoLive: () => dispatchDvr({ type: "goLive" }) }}
         />
       )}
       {dragging && !params.broadcast && (
