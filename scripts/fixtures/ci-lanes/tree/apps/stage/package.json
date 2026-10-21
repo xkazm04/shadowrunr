@@ -1,0 +1,5 @@
+{
+  "name": "fixture-stage",
+  "private": true,
+  "scripts": { "dev": "vite", "typecheck": "tsc", "test": "vitest run", "build": "vite build" }
+}

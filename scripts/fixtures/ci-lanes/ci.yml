@@ -1,0 +1,41 @@
+# Fixture for scripts/ci-lanes.test.mjs: covers every lane of ./tree exactly once.
+name: ci
+on: [push]
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v0 # fixture, never run
+      - name: cargo test
+        run: cargo test --workspace
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+      - name: lanes
+        run: node scripts/ci-lanes.mjs --check
+      - name: stage-kit typecheck
+        run: pnpm -C packages/stage-kit typecheck
+      - name: stage-kit test
+        run: pnpm -C packages/stage-kit test
+      - name: stage-kit lint
+        run: pnpm -C packages/stage-kit lint
+      - name: stage gates
+        run: |
+          pnpm -C apps/stage typecheck
+          pnpm -C apps/stage test
+          pnpm -C apps/stage build
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - name: deps
+        run: python -m pip install numpy pillow
+      - name: py
+        working-directory: tools/py
+        run: python -m unittest discover -t . -s tests
+      - name: flat
+        working-directory: tools/flat
+        run: python -m unittest test_a test_b
