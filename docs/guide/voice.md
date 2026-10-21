@@ -480,6 +480,62 @@ the ground line, so its robe never meets the edge of the slot.
 
 `tools/rig/README.md` covers the spec format and the tests.
 
+### The depth map
+
+The depth face (`?avatar=depth`) displaces the rig's layers by a depth map that sits beside
+`layers.json`: `depth.png` (16-bit grayscale, near is bright) and `depth.json` (how to read it
+back, the method, a plane depth per crown shard, and the sha256 of every input). With no depth
+map the stage draws the glow face. The map is cut from the portrait too, so it stays under
+`data/` and is never committed. `tools/avatar/depth_map.py` makes it; the same inputs give the
+same bytes. It needs numpy and Pillow. There are two methods:
+
+- **`analytic-v1`** (the default) builds the depth from the rig's geometry: an ellipsoid head
+  carved where the skull is dark, the jaw a little forward, the shards on a ring, and a torso slab.
+
+  ```
+  python tools/avatar/depth_map.py <data>/avatar/rig
+  ```
+
+- **`learned-v1`** runs a monocular depth model, Depth-Anything-V2-Small, over the recomposed
+  portrait. The head takes the model's depth, calibrated so the head ellipsoid's centre and
+  rim keep their `analytic-v1` depths (so a turn keeps its size), with the model's forward lean
+  taken off. The torso is the same slab, carved with the model's relief (the folds, the collar
+  and the clasp). The shards keep their planes. `depth.json` adds the model's id, revision and
+  sha256, and the calibration.
+
+The model runs in a Python that has onnxruntime (the voice venv has it). Nothing downloads
+the model. Use the Small model only: it is Apache-2.0, while Base, Large and Giant are
+CC-BY-NC. Fetch `onnx/model.onnx` from `onnx-community/depth-anything-v2-small` at revision
+`4472b7362082ad9968fee890ca0f1e5aca36b93d` (99,060,839 bytes, sha256
+`afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c`). Put it at
+`~/.shadowrunr/models/depth-anything-v2-small/model.onnx`, or point `--model` or
+`SHADOWRUNR_DEPTH_MODEL` at it. A file with another sha256 is refused. Never put the model in
+the repo.
+
+```
+python tools/avatar/depth_map.py <data>/avatar/rig --method learned-v1 --model-python <voice venv python>
+```
+
+That one command runs three steps. You can also run them by hand, without `--model-python`:
+
+1. `depth_map.py --method learned-v1` writes the model's input beside the rig. This is
+   `learned.in.npy`: the portrait at 518x518, normalised. The command stops with exit 2.
+2. `<voice venv python> tools/avatar/learned_depth.py <data>/avatar/rig` runs the model on CPU
+   with its threads pinned. It writes `learned.out.npy` and `learned.json` (the model and the
+   input it read).
+3. Run `depth_map.py --method learned-v1` again. It checks that the output was made from the
+   current input, then writes the map.
+
+`SHADOWRUNR_DEPTH_PYTHON` stands in for `--model-python`. If the rig changes, step 1 writes a
+new input and waits for the model again. The `learned.*` files are cut from the portrait too,
+so they stay beside the rig.
+
+On the M8 rig, `analytic-v1` takes about 2 s. `learned-v1` takes about 6 s in all, of which
+the model step is about 1 s.
+
+To compare two maps on the same frames, use the lab in `apps/stage/lab/` (`depth.html`,
+`record.mjs`). It is a development harness and is not shipped.
+
 ## The stage
 
 The stage draws Malakor's face in its avatar slot: above his caption in the improv layouts, and
