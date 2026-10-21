@@ -7,15 +7,17 @@
 // rest matte, which is made once from the solids' coverage when the renderer is built.
 //
 // No allocation per frame. A lost context is waited out and rebuilt from the decoded pictures, the
-// way the glow renderer does it.
+// way the glow renderer does it. The per-layer rules every face shares: ../layer-frame.ts (the
+// cut-out's gaze and follow are its row in that table); the GL plumbing: ../gl-kit.ts.
 
 import type { Pose } from "../driver";
-import { CONTEXT_ATTRIBUTES, gapCentre, gapHalf, gridMesh, rigColors } from "../glow-geom";
+import { compileProgram, contextLossGuard, uploadLayerTextures } from "../gl-kit";
+import { CONTEXT_ATTRIBUTES, gridMesh, rigColors } from "../glow-geom";
 import type { GlowRenderer } from "../glow";
+import { apertureLift, CUT_MAPPING, describeLayer, layerFrame, newLayerFrame, type FaceRig, type LayerDraw } from "../layer-frame";
 import type { LoadedForm } from "../layers";
-import { breathe, figureTarget, MATTE, matteTexture, program, restMatte } from "./gpu";
+import { figureTarget, MATTE, matteTexture, restMatte } from "./gpu";
 import { wholeMatte } from "./matte";
-import { EYE_PX } from "./look";
 import { artBox, cutLayout, lightRig, newLightRig, planCut, type PlannedLayer } from "./plan";
 import { CFS, CVS, FS, KIND, VS } from "./shaders";
 
@@ -24,22 +26,14 @@ export interface CutRenderer extends GlowRenderer {
   finish(): void;
 }
 
-interface DrawLayer {
+interface DrawLayer extends LayerDraw {
   plan: PlannedLayer;
-  kind: number;
   bbox: [number, number, number, number];
   tex: WebGLTexture | null;
   vao: WebGLVertexArrayObject;
   count: number;
-  float?: { amp: [number, number]; freq: number; rot: number; pivot: [number, number]; phase: number; phase2: number };
-  eyeC?: [number, number];
-  right?: boolean;
 }
 
-const smooth01 = (x: number) => {
-  const y = Math.min(1, Math.max(0, x));
-  return y * y * (3 - 2 * y);
-};
 const DEG = Math.PI / 180;
 /** Gaps in the solids narrower than about twice this (matte px, 4 art px each) are sealed. */
 const MATTE_CLOSE = 6;
@@ -63,7 +57,6 @@ export async function createCutRenderer(canvas: HTMLCanvasElement, form: LoadedF
   const union = restMatte(plan.matte, images, W, H);
   const matteBytes = union && wholeMatte(union, MATTE, MATTE_CLOSE);
 
-  let lost = false;
   let disposed = false;
   let prog: WebGLProgram | null = null;
   let comp: WebGLProgram | null = null;
@@ -76,6 +69,8 @@ export async function createCutRenderer(canvas: HTMLCanvasElement, form: LoadedF
   const view = new Float32Array(4);
   let box = artBox(cutLayout(1, 1, W, H), W, H);
   const rig = newLightRig();
+  const frame = newLayerFrame();
+  const face: FaceRig = { aperture: R.aperture, upperLip, lift: 0 };
 
   const fresh = () => ({ textures: [] as WebGLTexture[], buffers: [] as WebGLBuffer[], vaos: [] as WebGLVertexArrayObject[], shaders: [] as WebGLShader[] });
   let owned = fresh();
@@ -104,31 +99,14 @@ export async function createCutRenderer(canvas: HTMLCanvasElement, form: LoadedF
   };
 
   async function build() {
-    prog = await program(gl, VS, FS, owned.shaders);
-    comp = await program(gl, CVS, CFS, owned.shaders);
+    prog = await compileProgram(gl, VS, FS, owned.shaders);
+    comp = await compileProgram(gl, CVS, CFS, owned.shaders);
     U = {};
     C = {};
     gl.useProgram(prog);
     const aSrc = gl.getAttribLocation(prog, "a_src");
 
-    const textures = new Map<string, WebGLTexture>();
-    for (const [file, img] of images) {
-      const t = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, t);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      if (t) {
-        textures.set(file, t);
-        owned.textures.push(t);
-      }
-      await breathe();
-    }
+    const textures = await uploadLayerTextures(gl, images, owned.textures);
 
     // the rest matte (empty when there was no 2D canvas to make it with: the backplate is then
     // dropped below, never drawn as a square)
@@ -164,24 +142,16 @@ export async function createCutRenderer(canvas: HTMLCanvasElement, form: LoadedF
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
       gl.bindVertexArray(null);
-      const d: DrawLayer = { plan: pl, kind: KIND[l.kind] ?? 2, bbox: bb, tex: l.file ? (textures.get(l.file) ?? null) : null, vao, count: idx.length };
-      if (l.kind === "float") {
-        const f = l.float ?? {};
-        d.float = {
-          amp: f.amp ?? [1, 3],
-          freq: f.freq ?? 0.15,
-          rot: ((f.rot_deg ?? 0) * Math.PI) / 180,
-          pivot: f.pivot ?? [bb[0] + bb[2] / 2, bb[1] + bb[3] / 2],
-          phase: 1.7 * fi + 0.4,
-          phase2: 2.3 * fi + 1.1,
-        };
-        fi++;
-      }
-      if (l.kind === "eye") {
-        d.eyeC = l.meta?.center ?? [bb[0] + bb[2] / 2, bb[1] + bb[3] / 2];
-        d.right = !l.name.endsWith("_l");
-      }
-      draws.push(d);
+      draws.push({
+        ...describeLayer(l, KIND[l.kind] ?? 2, bb, fi),
+        follow: pl.follow,
+        plan: pl,
+        bbox: bb,
+        tex: l.file ? (textures.get(l.file) ?? null) : null,
+        vao,
+        count: idx.length,
+      });
+      if (l.kind === "float") fi++;
     }
     gl.uniform1i(loc("u_tex"), 0);
     gl.uniform1i(loc("u_matte"), 1);
@@ -211,28 +181,19 @@ export async function createCutRenderer(canvas: HTMLCanvasElement, form: LoadedF
     }
   }
 
-  const onLost = (e: Event) => {
-    e.preventDefault();
-    lost = true;
-  };
-  const onRestore = () => {
-    if (disposed) return;
-    owned = fresh();
-    prog = null;
-    comp = null;
-    fig = null;
-    fbo = null;
-    build().then(
-      () => {
-        if (disposed) return;
-        lost = false;
-        onRestored();
-      },
-      (error: unknown) => console.warn(`[stage] the face could not be rebuilt after the GPU reset: ${error instanceof Error ? error.message : String(error)}`),
-    );
-  };
-  canvas.addEventListener("webglcontextlost", onLost);
-  canvas.addEventListener("webglcontextrestored", onRestore);
+  const guard = contextLossGuard(
+    canvas,
+    () => {
+      // the old handles died with the context; drop them, do not delete them
+      owned = fresh();
+      prog = null;
+      comp = null;
+      fig = null;
+      fbo = null;
+      return build();
+    },
+    onRestored,
+  );
 
   await build();
 
@@ -269,7 +230,7 @@ export async function createCutRenderer(canvas: HTMLCanvasElement, form: LoadedF
       gl.uniform4f(loc("u_glintP"), Math.cos(ang), Math.sin(ang), at * span - span * 0.2, gp.width_px);
       gl.uniform1f(loc("u_glintGain"), gp.gain);
     }
-    const lift = ap ? pose.open * (ap.open_frac ?? 0.15) * (ap.bottom - ap.top) * (0.75 + 0.35 * Math.min(1, voice)) : 0;
+    face.lift = apertureLift(ap, pose);
     if (ap) gl.uniform2f(loc("u_aperX"), ap.x0, ap.x1);
     gl.uniform2f(loc("u_size"), W, H);
     gl.uniform2f(loc("u_fade"), plan.fade[0], plan.fade[1]);
@@ -283,49 +244,27 @@ export async function createCutRenderer(canvas: HTMLCanvasElement, form: LoadedF
     for (const d of draws) {
       const l = d.plan.spec;
       const kind = d.kind;
-      if (kind === 8 && lift < 0.2) continue;
-      if (ap && kind >= 6 && kind <= 8) {
-        const lit = kind === 8;
-        gl.uniform4f(loc("u_aper"), ap.top, lit ? gapCentre(ap.seam_y, lift, upperLip) : ap.seam_y, ap.bottom, lit ? gapHalf(lift, upperLip) : lift);
-      }
+      const f = layerFrame(d, pose, face, CUT_MAPPING, frame);
+      if (f.skip) continue;
+      if (f.hasAper) gl.uniform4f(loc("u_aper"), f.aper[0], f.aper[1], f.aper[2], f.aper[3]);
       gl.uniform1i(loc("u_kind"), kind);
       gl.uniform1f(loc("u_depth"), d.plan.depth);
-      gl.uniform1f(loc("u_follow"), d.plan.follow);
+      gl.uniform1f(loc("u_follow"), f.follow);
       gl.uniform1f(loc("u_erode"), kind === 3 ? 1 : 0);
       const isLight = kind === 0 || l.mode === "light" || kind === 8 || kind === 9;
       gl.uniform1f(loc("u_occl"), isLight ? 0 : (l.occl ?? 1));
-      let gain = l.gain ?? 1;
-      if (kind === 5) gain *= 0.9 + (l.voice_gain ?? 2) * Math.max(voice * 0.8, pose.open) * 0.6;
-      if (kind === 10) gain *= 1 + act * (l.pulse?.amp ?? 0.15) * Math.sin(2 * Math.PI * (l.pulse?.freq ?? 0.2) * t) + (l.voice_gain ?? 0) * voice;
-      if (kind === 4 && d.eyeC) {
-        const blink = d.right ? pose.blinkR : pose.blinkL;
-        if (l.blink === "iris") {
-          gl.uniform4f(loc("u_eye"), d.eyeC[0], d.eyeC[1], 0.92 * Math.pow(blink, 0.8), 0);
-          gl.uniform4f(loc("u_eyeP"), blink, d.eyeC[0], d.eyeC[1], l.meta?.core_r ?? 12);
-          gain *= 1 - 0.6 * blink;
-        } else {
-          gl.uniform4f(loc("u_eye"), d.eyeC[0], d.eyeC[1], 0.35 * blink, 0);
-          gl.uniform4f(loc("u_eyeP"), 0, 0, 0, 1);
-          gain *= 1 - smooth01((blink - 0.25) / 0.4);
-        }
-        gl.uniform2f(loc("u_gaze"), pose.gazeX * EYE_PX[0], pose.gazeY * EYE_PX[1]);
-        gain *= 1 + (l.voice_gain ?? 0.12) * voice;
+      if (f.hasEye) {
+        gl.uniform4f(loc("u_eye"), f.eye[0], f.eye[1], f.eye[2], f.eye[3]);
+        gl.uniform4f(loc("u_eyeP"), f.eyeP[0], f.eyeP[1], f.eyeP[2], f.eyeP[3]);
+        gl.uniform2f(loc("u_gaze"), f.gaze[0], f.gaze[1]);
       }
-      gl.uniform1f(loc("u_gain"), gain);
+      gl.uniform1f(loc("u_gain"), f.gain);
       gl.uniform1f(loc("u_bloom"), l.bloom ?? 0);
       gl.uniform1i(loc("u_shimmer"), l.shimmer && shim ? 1 : 0);
       gl.uniform1i(loc("u_glint"), l.glint && gp ? 1 : 0);
-      if (kind === 3 && d.float) {
-        const f = d.float;
-        const w = 2 * Math.PI * f.freq;
-        gl.uniform4f(
-          loc("u_float"),
-          act * f.amp[0] * Math.sin(w * 0.77 * t + f.phase2),
-          act * -f.amp[1] * Math.sin(w * t + f.phase),
-          act * f.rot * Math.sin(w * 0.6 * t + f.phase + 0.8),
-          0,
-        );
-        gl.uniform2f(loc("u_floatPivot"), f.pivot[0], f.pivot[1]);
+      if (f.hasFloat && d.float) {
+        gl.uniform4f(loc("u_float"), f.float[0], f.float[1], f.float[2], f.float[3]);
+        gl.uniform2f(loc("u_floatPivot"), d.float.pivot[0], d.float.pivot[1]);
       }
       if (d.tex) {
         gl.bindTexture(gl.TEXTURE_2D, d.tex);
@@ -346,7 +285,7 @@ export async function createCutRenderer(canvas: HTMLCanvasElement, form: LoadedF
   }
 
   function render(pose: Pose) {
-    if (lost || disposed || gl.isContextLost() || !prog || !comp) return;
+    if (guard.lost || disposed || gl.isContextLost() || !prog || !comp) return;
     target();
     gl.enable(gl.BLEND);
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -384,12 +323,11 @@ export async function createCutRenderer(canvas: HTMLCanvasElement, form: LoadedF
     resize: layout,
     finish: () => gl.finish(),
     get lost() {
-      return lost || gl.isContextLost();
+      return guard.lost || gl.isContextLost();
     },
     dispose() {
       disposed = true;
-      canvas.removeEventListener("webglcontextlost", onLost);
-      canvas.removeEventListener("webglcontextrestored", onRestore);
+      guard.dispose();
       if (!gl.isContextLost()) free();
     },
   };

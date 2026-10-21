@@ -251,6 +251,26 @@ mod tests {
     }
 
     #[test]
+    fn check_ids_cross_the_contract_as_enums() {
+        let s = contract_schema();
+        for (owner, vocab) in [
+            ("SandboxCheck", "SandboxCheckId"),
+            ("GateCheck", "GateCheckId"),
+        ] {
+            let id = &s["$defs"][owner]["properties"]["id"];
+            assert_eq!(
+                id["$ref"].as_str(),
+                Some(format!("#/$defs/{vocab}").as_str()),
+                "{owner}.id = {id}"
+            );
+            let members = s["$defs"][vocab]["enum"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{vocab} is not a plain enum: {}", s["$defs"][vocab]));
+            assert_eq!(members.len(), 10, "{vocab}");
+        }
+    }
+
+    #[test]
     fn defaulted_fields_are_not_required() {
         let s = contract_schema();
         let req = s["$defs"]["Viewer"]["required"].to_string();

@@ -40,6 +40,24 @@ export type EvidenceGrade = "DOC" | "REP" | "CLM" | "SPC";
 export type ClipFeedbackTag =
   "landed" | "flat" | "voice_off_sync" | "face_wrong" | "caption_wrong" | "cut_too_early" | "cut_too_late" | "boring";
 /**
+ * A clip publish-gate check, as it crosses the wire. The serde names are the ids
+ * `candidate.json` has always carried.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "GateCheckId".
+ */
+export type GateCheckId =
+  | "care_state"
+  | "personal_data"
+  | "brigade_call"
+  | "blocked_term"
+  | "injection_reply"
+  | "ai_disclosure"
+  | "handles_in_picture"
+  | "evidence_badge_burnt"
+  | "source_citation"
+  | "no_open_correction";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "GateState".
  */
@@ -513,6 +531,15 @@ export type EndReason = "scheduled" | "fleet_lost" | "operator" | "sim_complete"
  * via the `definition` "SandboxChaos".
  */
 export type SandboxChaos = "outage" | "lost";
+/**
+ * A sandbox session's gate check, as it crosses the wire. The variants are in report order
+ * ([`SandboxCheckId::ALL`]); the serde names are the ids `session.json` has always carried.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxCheckId".
+ */
+export type SandboxCheckId =
+  "say_gap" | "core_errors" | "sign_off" | "chaos" | "stage_ack" | "judge" | "voiced" | "face" | "av_sync" | "dead_air";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "SandboxCheckState".
@@ -1372,12 +1399,7 @@ export interface ClipGate {
  */
 export interface GateCheck {
   detail: string;
-  /**
-   * `care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,
-   * `ai_disclosure`, `handles_in_picture`, `evidence_badge_burnt`, `source_citation`,
-   * `no_open_correction`.
-   */
-  id: string;
+  id: GateCheckId;
   /**
    * Part of the SEG-02A / linked-case checklist.
    */
@@ -2987,10 +3009,7 @@ export interface ReviewSessionRow {
  */
 export interface SandboxCheck {
   detail: string;
-  /**
-   * One of [`SANDBOX_CHECKS`].
-   */
-  id: string;
+  id: SandboxCheckId;
   state: SandboxCheckState;
 }
 /**
@@ -3216,7 +3235,7 @@ export interface SandboxStartParams {
   minutes: number;
   /**
    * The session is recorded (`stream sandbox --record`), so the watched checks
-   * ([`SANDBOX_WATCHED_CHECKS`]) gate it. Default false.
+   * ([`SandboxCheckId::is_watched`]) gate it. Default false.
    */
   record?: boolean;
   seed?: number;
@@ -3291,7 +3310,7 @@ export interface SandboxReport {
   max_say_gap_s: number;
   /**
    * Every check that gates the session passed (an unmeasured check is not a pass; the
-   * watched checks gate only a recorded session, see [`SANDBOX_WATCHED_CHECKS`]).
+   * watched checks gate only a recorded session, see [`SandboxCheckId::is_watched`]).
    */
   pass: boolean;
   say_gap_p95_s: number;

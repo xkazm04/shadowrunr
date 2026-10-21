@@ -86,7 +86,7 @@ async fn until_ended(addr: &str, session_id: &str, secs: u64) -> SandboxStatus {
 fn check(st: &SandboxStatus, id: &str) -> SandboxCheckState {
     st.report
         .as_ref()
-        .and_then(|r| r.checks.iter().find(|c| c.id == id))
+        .and_then(|r| r.checks.iter().find(|c| c.id.as_str() == id))
         .map(|c| c.state)
         .unwrap_or_else(|| panic!("no {id} check: {st:?}"))
 }

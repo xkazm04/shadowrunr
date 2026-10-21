@@ -1208,7 +1208,11 @@ speaking JSON lines on stdio:
   loaded before `hello`; without sherpa-onnx in the sidecar's Python it is the per-sentence
   binary (`--engine auto|warm|process`, default `auto`). The hello has no field for it: its
   `reason` ends with `engine: warm (N workers loaded in S s)` or `engine: process` and why, after
-  any missing-mouth-shapes reason. Either engine sends the same audio and mouth shapes.
+  any missing-mouth-shapes reason. Either engine sends the same audio and mouth shapes. The warm
+  engine starts with the workers that load (`engine: warm (N of M workers loaded in S s)` when
+  some did not) and falls back only when none does; a dead worker is respawned in the background,
+  never by the sentence that next needs one, and a slot whose loads keep failing is quarantined.
+  With every slot quarantined a sentence's `error` reason is `the warm engine is not running`.
 - Out, per sentence: `{"type":"audio","id","part","last","text","sample_rate","pcm","visemes"?:[[v,start_ms,end_ms]]}`.
   `visemes` is omitted when the voice has no mouth shapes. `id` is a string, echoed as sent.
   The daemon computes `duration_ms` from the PCM.

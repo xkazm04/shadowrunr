@@ -22,7 +22,8 @@ sentences still rendering are killed.
 process per slot keeps Kokoro loaded, so a sentence costs its render, not a model load. Without
 sherpa_onnx and numpy in this interpreter, or without Kokoro's files, it is the per-sentence
 binary (:mod:`.engine`). A warm render cannot be killed: a cancelled one finishes unheard, and
-its slot is free when it ends.
+its slot is free when it ends. The warm pool supervises its workers: it starts with those that
+load, respawns a dead one in the background, and quarantines one whose loads keep failing.
 """
 
 from __future__ import annotations
@@ -188,7 +189,7 @@ def open_warm(
         print(f"voice: the warm engine would not load: {exc}", file=sys.stderr, flush=True)
         return None, f"it would not load: {exc}"
     print(
-        f"voice: warm engine, {len(pool.workers)} workers loaded in {load_ms} ms",
+        f"voice: warm engine, {pool.loaded} of {len(pool.workers)} workers loaded in {load_ms} ms",
         file=sys.stderr,
         flush=True,
     )
@@ -202,7 +203,8 @@ def hello(
     face when the visemes are on, and the warm pool when it is the engine.
 
     ``reason`` names what the voice lacks (mouth shapes), then the engine in use: ``engine:
-    warm (N workers loaded in S s)`` or ``engine: process`` with why the warm one is not. The
+    warm (N workers loaded in S s)`` (``N of M workers`` when some would not load and are being
+    respawned) or ``engine: process`` with why the warm one is not. The
     hello has no field of its own for it."""
     paths = paths_for(settings.engine_dir)
     message: dict[str, Any] = {
@@ -229,7 +231,11 @@ def hello(
         message["reason"] = dead
         return message, dead, None, None
     if warm is not None:
-        engine = f"engine: warm ({len(warm.workers)} workers loaded in {warm.load_ms / 1000:.1f} s)"
+        took = f"{warm.load_ms / 1000:.1f} s"
+        if warm.loaded < len(warm.workers):
+            engine = f"engine: warm ({warm.loaded} of {len(warm.workers)} workers loaded in {took})"
+        else:
+            engine = f"engine: warm ({len(warm.workers)} workers loaded in {took})"
     elif not_warm is not None:
         engine = f"engine: process (the warm engine is off: {not_warm})"
     else:

@@ -45,12 +45,11 @@ export function Runs() {
   const runs = usePaged("runs.page", { limit: PAGE }, pages);
   const items = runs.query.data;
   const facets = useMemo<Facets<RunRow, string>>(() => {
-    const tiers = new Map<string, number>();
-    for (const r of items ?? []) tiers.set(r.spec.core_tier, (tiers.get(r.spec.core_tier) ?? 0) + 1);
+    const tiers = new Set((items ?? []).map((r) => r.spec.core_tier));
     return {
       label: "Filter by core tier",
       initial: "all",
-      options: [{ id: "all", label: "all", count: items?.length ?? 0 }, ...[...tiers].map(([id, count]) => ({ id, label: id, count }))],
+      options: [{ id: "all", label: "all" }, ...[...tiers].map((id) => ({ id, label: id }))],
       predicate: (r, f) => f === "all" || r.spec.core_tier === f,
     };
   }, [items]);

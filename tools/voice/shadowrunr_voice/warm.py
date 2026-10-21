@@ -20,8 +20,16 @@ uncut audio when they are on, which :func:`.engine.scale_silence` then cuts exac
 binary does. It exits when its stdin closes.
 
 **A render cannot be stopped mid-sentence.** A cancelled sentence's result is thrown away and
-its worker returns to the pool when it finishes; a sentence past its timeout kills the worker,
-and the next sentence that needs it starts a new one.
+its worker returns to the pool when it finishes; a sentence past its timeout kills the worker.
+
+**The pool supervises its workers.** It starts with every worker that loads (one is enough), and
+a worker that dies or is killed is respawned by a thread of the pool's own the moment it is
+dead and back from its render, never by the sentence that next needs a worker:
+:meth:`WarmPool.acquire` lends only live workers and never loads a model, so a render's timeout
+never includes a load.
+A slot whose loads fail ``CRASH_BUDGET`` times within ``CRASH_WINDOW_S`` is quarantined: logged
+once with its last output and never loaded again, so the pool carries on smaller. With every
+slot quarantined a sentence fails at once with ``the warm engine is not running``.
 """
 
 from __future__ import annotations
@@ -71,6 +79,13 @@ ENGINES = ("auto", "warm", "process")
 MARK = b"@@warm "
 #: From a worker's start to its ready line: the model load and one warm-up sentence.
 LOAD_TIMEOUT_S = 90.0
+#: Failed loads of one slot within ``CRASH_WINDOW_S`` that quarantine it.
+CRASH_BUDGET = 3
+CRASH_WINDOW_S = 60.0
+#: The wait before each further respawn of a slot whose load failed; the last one repeats.
+RESPAWN_BACKOFF_S: tuple[float, ...] = (1.0, 2.0, 5.0)
+#: How long :meth:`WarmPool.close` waits for a respawn thread to notice it.
+JOIN_S = 5.0
 #: Lines of a worker's other output kept for the log when it fails.
 TAIL = 6
 #: The sentence a worker renders before it is ready, so the first real one is not slow.
@@ -112,9 +127,16 @@ def worker_argv(engine_dir: Path, sid: int, threads: int, faced: bool) -> list[s
 class Worker:
     """One warm worker process: its pipe read on a thread of its own, one sentence at a time."""
 
-    def __init__(self, argv: Sequence[str], name: str) -> None:
+    def __init__(
+        self,
+        argv: Sequence[str],
+        name: str,
+        on_exit: Callable[[Worker, subprocess.Popen[bytes]], None] | None = None,
+    ) -> None:
         self.argv = list(argv)
         self.name = name
+        #: Called on the reader's thread once a process's output ends (it died or was killed).
+        self.on_exit = on_exit
         self.proc: subprocess.Popen[bytes] | None = None
         self._lines: queue.Queue[bytes | None] = queue.Queue()
         self._tail: deque[str] = deque(maxlen=TAIL)
@@ -147,7 +169,10 @@ class Worker:
             self.proc = None
             raise EngineError(f"the warm engine would not start ({type(exc).__name__})") from None
         threading.Thread(
-            target=self._read, args=(self.proc, self._lines), name=f"voice-{self.name}", daemon=True
+            target=self._read,
+            args=(self.proc, self._lines, self.on_exit, self),
+            name=f"voice-{self.name}",
+            daemon=True,
         ).start()
 
     def ready(self, timeout_s: float = LOAD_TIMEOUT_S) -> int:
@@ -226,7 +251,12 @@ class Worker:
     # -- the pipe --------------------------------------------------------------------------------
 
     @staticmethod
-    def _read(proc: subprocess.Popen[bytes], lines: queue.Queue[bytes | None]) -> None:
+    def _read(
+        proc: subprocess.Popen[bytes],
+        lines: queue.Queue[bytes | None],
+        on_exit: Callable[[Worker, subprocess.Popen[bytes]], None] | None,
+        worker: Worker,
+    ) -> None:
         assert proc.stdout is not None
         try:
             for raw in proc.stdout:
@@ -234,6 +264,15 @@ class Worker:
         except (OSError, ValueError):
             pass
         lines.put(None)
+        if on_exit is not None:
+            try:
+                on_exit(worker, proc)
+            except Exception as exc:  # the pool's bookkeeping must not kill the reader quietly
+                print(f"voice: after warm {worker.name}: {exc!r}", file=sys.stderr, flush=True)
+
+    def tail(self) -> str:
+        """The worker's last lines of other output, for the log."""
+        return " | ".join(self._tail)
 
     def _drain(self) -> None:
         """Anything printed between sentences belongs to none of them."""
@@ -297,67 +336,201 @@ class Worker:
 
 
 class WarmPool:
-    """The workers, each lent to one render at a time."""
+    """The workers, each lent to one render at a time, and their supervisor.
+
+    A slot is ``loading`` (starting, or respawning on a thread of the pool's own), ``live`` (in
+    the pool, idle or lent to a render) or ``quarantined`` (its loads kept failing; never
+    started again). Only a live worker is ever lent, so no render waits for a model load."""
 
     def __init__(self, argv: Sequence[str], workers: int) -> None:
-        self.workers = [Worker(argv, f"worker-{i}") for i in range(max(workers, 1))]
+        self.workers = [
+            Worker(argv, f"worker-{i}", on_exit=self._exited) for i in range(max(workers, 1))
+        ]
         self._idle: list[Worker] = list(self.workers)
+        self._state: dict[str, str] = {w.name: "loading" for w in self.workers}
+        #: Each slot's failed loads within the crash window, oldest first.
+        self._fails: dict[str, deque[float]] = {w.name: deque() for w in self.workers}
+        self._supervisors: list[threading.Thread] = []
         self._cond = threading.Condition()
+        self._stop = threading.Event()
         self._closed = False
         #: Wall time from the first spawn to the last ready line.
         self.load_ms = 0
+        #: How many workers loaded at :meth:`start`.
+        self.loaded = 0
 
     def start(self, timeout_s: float = LOAD_TIMEOUT_S) -> int:
-        """Every worker loaded, together; the wall time it took. Raises :class:`EngineError`
-        (and stops them all) when one does not load."""
+        """Every worker loading at once; the wall time until the last that loads is ready. A
+        worker that does not load is respawned in the background and the pool runs without it
+        meanwhile. Raises :class:`EngineError` (and stops them all) only when none loads."""
         began = time.monotonic()
-        try:
-            for worker in self.workers:
+        failed: dict[str, EngineError] = {}
+        for worker in self.workers:
+            try:
                 worker.start()
-            for worker in self.workers:
+            except EngineError as exc:
+                failed[worker.name] = exc
+        for worker in self.workers:
+            if worker.name in failed:
+                continue
+            try:
                 worker.ready(max(timeout_s - (time.monotonic() - began), 0.1))
-        except EngineError:
+            except EngineError as exc:
+                failed[worker.name] = exc
+        if len(failed) == len(self.workers):
             self.close()
-            raise
+            raise failed[self.workers[0].name]
         self.load_ms = round((time.monotonic() - began) * 1000)
+        self.loaded = len(self.workers) - len(failed)
+        for name, why in failed.items():
+            print(f"voice: warm {name} would not load: {why}", file=sys.stderr, flush=True)
+        with self._cond:
+            for worker in self.workers:
+                if worker.name in failed:
+                    self._idle.remove(worker)
+                    self._fails[worker.name].append(time.monotonic())
+                    self._supervise(worker, RESPAWN_BACKOFF_S[0])
+                else:
+                    self._state[worker.name] = "live"
+                    self._respawn_if_dead(worker)
         return self.load_ms
 
-    def acquire(self) -> Worker:
-        """An idle worker, a running one first; a stopped one is started again here."""
+    def states(self) -> dict[str, str]:
+        """Each slot's state by worker name: ``live``, ``loading`` or ``quarantined``."""
         with self._cond:
-            while not self._idle and not self._closed:
+            return dict(self._state)
+
+    def acquire(self) -> Worker:
+        """An idle live worker, waiting for one; never loads a model. Raises
+        :class:`EngineError` at once when every slot is quarantined."""
+        with self._cond:
+            while True:
+                if self._closed:
+                    raise EngineError("the voice is stopping")
+                for worker in list(self._idle):
+                    if worker.alive:
+                        self._idle.remove(worker)
+                        return worker
+                    self._respawn_if_dead(worker)
+                if all(state == "quarantined" for state in self._state.values()):
+                    raise EngineError("the warm engine is not running")
                 self._cond.wait()
-            if self._closed:
-                raise EngineError("the voice is stopping")
-            live = [w for w in self._idle if w.alive]
-            worker = live[0] if live else self._idle[0]
-            self._idle.remove(worker)
-        if not worker.alive:
+
+    def release(self, worker: Worker) -> None:
+        """A worker back from its render; a dead one goes to be respawned instead."""
+        with self._cond:
+            self._idle.append(worker)
+            self._respawn_if_dead(worker)
+            self._cond.notify_all()
+
+    def close(self) -> None:
+        """Stops the respawns, then kills and reaps every worker, one mid-load too."""
+        with self._cond:
+            self._closed = True
+            self._cond.notify_all()
+            supervisors = list(self._supervisors)
+        self._stop.set()
+        for worker in self.workers:
+            worker.kill()
+        for thread in supervisors:
+            thread.join(JOIN_S)
+
+    # -- supervision -----------------------------------------------------------------------------
+
+    def _exited(self, worker: Worker, proc: subprocess.Popen[bytes]) -> None:
+        """A worker's reader thread: that process's output ended."""
+        if worker.proc is not proc:
+            return
+        try:
+            proc.wait(timeout=JOIN_S)
+        except subprocess.TimeoutExpired:
+            proc.kill()  # its pipe is gone, so it can render nothing: make it dead
             try:
-                worker.kill()
-                worker.start()
-                worker.ready()
+                proc.wait(timeout=JOIN_S)
+            except subprocess.TimeoutExpired:
+                pass
+        with self._cond:
+            if worker.proc is proc:
+                self._respawn_if_dead(worker)
+
+    def _respawn_if_dead(self, worker: Worker) -> None:
+        """Holding ``_cond``: a dead live worker that is back in the pool starts respawning now.
+        One lent to a render waits until it is released, so its reader is never swapped under
+        the render."""
+        if self._closed or self._state[worker.name] != "live" or worker not in self._idle:
+            return
+        if worker.alive:
+            return
+        self._idle.remove(worker)
+        self._state[worker.name] = "loading"
+        self._supervise(worker, 0.0)
+
+    def _supervise(self, worker: Worker, delay_s: float) -> None:
+        """Holding ``_cond``: a thread that respawns ``worker``."""
+        thread = threading.Thread(
+            target=self._respawn,
+            args=(worker, delay_s),
+            name=f"voice-respawn-{worker.name}",
+            daemon=True,
+        )
+        self._supervisors = [t for t in self._supervisors if t.is_alive()]
+        self._supervisors.append(thread)
+        thread.start()
+
+    def _respawn(self, worker: Worker, delay_s: float) -> None:
+        """Start and load ``worker`` again, with a backoff between failed loads, until it is
+        live, its crash budget is spent (quarantined) or the pool closes."""
+        fails = self._fails[worker.name]
+        while True:
+            if delay_s > 0 and self._stop.wait(delay_s):
+                return
+            worker.kill()  # reaps the dead process
+            error: EngineError | None = None
+            with self._cond:
+                if self._closed:
+                    return
+                try:
+                    worker.start()
+                except EngineError as exc:
+                    error = exc
+            if error is None:
+                try:
+                    worker.ready()
+                except EngineError as exc:
+                    error = exc
+            if error is None:
+                with self._cond:
+                    if self._closed:
+                        return
+                    self._state[worker.name] = "live"
+                    self._idle.append(worker)
+                    self._respawn_if_dead(worker)
+                    self._cond.notify_all()
                 print(
                     f"voice: warm {worker.name} restarted in {worker.load_ms} ms",
                     file=sys.stderr,
                     flush=True,
                 )
-            except EngineError:
-                self.release(worker)
-                raise
-        return worker
-
-    def release(self, worker: Worker) -> None:
-        with self._cond:
-            self._idle.append(worker)
-            self._cond.notify_all()
-
-    def close(self) -> None:
-        with self._cond:
-            self._closed = True
-            self._cond.notify_all()
-        for worker in self.workers:
-            worker.kill()
+                return
+            if self._closed:
+                return
+            now = time.monotonic()
+            fails.append(now)
+            while fails and now - fails[0] > CRASH_WINDOW_S:
+                fails.popleft()
+            if len(fails) >= CRASH_BUDGET:
+                worker.kill()
+                with self._cond:
+                    self._state[worker.name] = "quarantined"
+                    self._cond.notify_all()
+                print(
+                    f"voice: warm {worker.name} quarantined after {len(fails)} failed loads in "
+                    f"{CRASH_WINDOW_S:.0f} s: {error}; last output: {worker.tail()}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return
+            delay_s = RESPAWN_BACKOFF_S[min(len(fails) - 1, len(RESPAWN_BACKOFF_S) - 1)]
 
 
 @dataclass

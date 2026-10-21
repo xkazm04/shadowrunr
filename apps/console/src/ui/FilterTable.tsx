@@ -3,7 +3,7 @@
 import { observeElementRect, useVirtualizer } from "@tanstack/react-virtual";
 import { useDeferredValue, useMemo, useRef, useState, type ReactNode } from "react";
 import { cx } from "./cx";
-import { filterRows, nextSort, type SortState } from "./filterRows";
+import { facetCounts, filterRows, nextSort, type SortState } from "./filterRows";
 import styles from "./FilterTable.module.css";
 import { PillGroup, type PillOption } from "./PillGroup";
 import { remPx } from "./remPx";
@@ -23,6 +23,12 @@ export interface Facets<R, F extends string> {
   readonly options: readonly PillOption<F>[];
   readonly initial: F;
   readonly predicate: (row: R, facet: F) => boolean;
+  /**
+   * `derived` (default): FilterTable counts each option with `predicate` over the rows the query
+   * leaves, so a pill's number is what pressing it would show. `given`: the options' own counts are
+   * printed verbatim - only for totals over rows the client does not hold (a list the daemon cut).
+   */
+  readonly counts?: "derived" | "given";
 }
 
 export interface FilterTableProps<R, F extends string> {
@@ -39,6 +45,8 @@ export interface FilterTableProps<R, F extends string> {
   readonly initialSort?: SortState;
 }
 
+const int = (n: number) => n.toLocaleString("en-US");
+
 function alignClass(a: "start" | "end" | "center" | undefined): string | undefined {
   return a === "end" ? styles.end : a === "center" ? styles.center : undefined;
 }
@@ -50,15 +58,24 @@ export function FilterTable<R, F extends string = string>(props: FilterTableProp
   const [sort, setSort] = useState<SortState | null>(props.initialSort ?? null);
   const deferred = useDeferredValue(query);
 
+  // The text filter runs once per deferred query; the facet pills and the sort read its result,
+  // so a pill's count and the "N of M" line answer the same predicate.
+  const matched = useMemo(() => filterRows(rows, { haystack, query: deferred }), [rows, haystack, deferred]);
+  const options = useMemo(() => {
+    if (!facets || facets.counts === "given") return facets?.options;
+    const n = facetCounts(matched, { ...facets, haystack, query: "" });
+    return facets.options.map((o) => ({ ...o, count: n[o.id] }));
+  }, [facets, matched, haystack]);
+
   const shown = useMemo(() => {
-    const col = sort ? columns.find((c) => c.id === sort.column) : undefined;
-    return filterRows(rows, {
+    const col = columns.find((c) => c.id === sort?.column);
+    return filterRows(matched, {
       haystack,
-      query: deferred,
+      query: "",
       ...(facets && facet !== undefined ? { predicate: (r: R) => facets.predicate(r, facet) } : {}),
       ...(col?.sortValue ? { sortValue: col.sortValue, dir: sort?.dir ?? "asc" } : {}),
     });
-  }, [rows, columns, haystack, facets, facet, deferred, sort]);
+  }, [matched, columns, haystack, facets, facet, sort]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowPx = (props.estimateRem ?? 2.4) * remPx();
@@ -79,13 +96,22 @@ export function FilterTable<R, F extends string = string>(props: FilterTableProp
       }),
   });
   const items = v.getVirtualItems();
-  const filtered = deferred.trim() !== "" || (facets !== undefined && facet !== facets.initial);
+  const q = deferred.trim();
+  const faceted = facets !== undefined && facet !== facets.initial;
+  const filtered = q !== "" || faceted;
   const clear = () => {
     setQuery("");
     setFacet(facets?.initial);
   };
   const top = items[0]?.start ?? 0;
   const bottom = v.getTotalSize() - (items[items.length - 1]?.end ?? 0);
+  const total = int(rows.length);
+  const spacer = (height: number) =>
+    height > 0 && (
+      <tr className={styles.spacer} aria-hidden="true">
+        <td colSpan={columns.length} style={{ height }} />
+      </tr>
+    );
 
   return (
     <div className={styles.root}>
@@ -98,11 +124,11 @@ export function FilterTable<R, F extends string = string>(props: FilterTableProp
           aria-label={`Filter ${props.label}`}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {facets && facet !== undefined && (
-          <PillGroup label={facets.label} options={facets.options} value={facet} onChange={setFacet} />
+        {facets && options && facet !== undefined && (
+          <PillGroup label={facets.label} options={options} value={facet} onChange={setFacet} />
         )}
         <span className={styles.count} aria-live="polite">
-          {shown.length.toLocaleString("en-US")} of {rows.length.toLocaleString("en-US")}
+          {int(shown.length)} of {total}
         </span>
       </div>
       <div ref={scrollRef} className={styles.scroll}>
@@ -127,11 +153,7 @@ export function FilterTable<R, F extends string = string>(props: FilterTableProp
             </tr>
           </thead>
           <tbody>
-            {top > 0 && (
-              <tr className={styles.spacer} aria-hidden="true">
-                <td colSpan={columns.length} style={{ height: top }} />
-              </tr>
-            )}
+            {spacer(top)}
             {items.map((item) => {
               const row = shown[item.index];
               if (row === undefined) return null;
@@ -162,11 +184,7 @@ export function FilterTable<R, F extends string = string>(props: FilterTableProp
                 </tr>
               );
             })}
-            {bottom > 0 && (
-              <tr className={styles.spacer} aria-hidden="true">
-                <td colSpan={columns.length} style={{ height: bottom }} />
-              </tr>
-            )}
+            {spacer(bottom)}
             {shown.length === 0 && rows.length > 0 && (
               <tr data-role="filter-table-empty">
                 <td colSpan={columns.length} className={styles.emptyCell}>
@@ -174,9 +192,7 @@ export function FilterTable<R, F extends string = string>(props: FilterTableProp
                     state="empty"
                     title="No matches"
                     hint={
-                      deferred.trim() === ""
-                        ? `None of the ${rows.length.toLocaleString("en-US")} rows is in this view.`
-                        : `None of the ${rows.length.toLocaleString("en-US")} rows matches “${deferred.trim()}”${facets && facet !== facets.initial ? " in this view" : ""}.`
+                      `None of the ${total} rows ${q === "" ? "is in this view" : `matches “${q}”${faceted ? " in this view" : ""}`}.`
                     }
                     {...(filtered ? { action: { label: "Clear filter", onClick: clear } } : {})}
                   />

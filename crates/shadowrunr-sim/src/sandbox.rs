@@ -33,8 +33,8 @@ use serde::{Deserialize, Serialize};
 use shadowrunr_brain::{BrainTuning, PaceConfig, SpeechClock};
 use shadowrunr_segments::{segment_table, HandoverRule, SegmentConfig, SegmentRuntime};
 use shadowrunr_types::sandbox::{
-    gate_pass, SandboxChaos, SandboxCheck, SandboxCheckState, SandboxJudge, SandboxReport,
-    SandboxStartParams, SANDBOX_CHECKS, SANDBOX_MINUTES,
+    gate_pass, SandboxChaos, SandboxCheck, SandboxCheckId, SandboxCheckState, SandboxJudge,
+    SandboxReport, SandboxStartParams, SANDBOX_MINUTES,
 };
 use shadowrunr_types::{
     ChatMsg, CheckState, EndReason, Engine, EngineError, EngineReply, EngineRequest, FleetHealth,
@@ -871,7 +871,7 @@ impl Session {
             .unwrap_or(0) as f64
             / 1000.0;
         let say_gap = check(
-            "say_gap",
+            SandboxCheckId::SayGap,
             max_say_gap_s <= SAY_GAP_CEILING_S,
             if !lines.iter().any(|l| l.1) {
                 format!(
@@ -898,7 +898,7 @@ impl Session {
         }
         let core_errors = kinds.values().sum::<u32>().saturating_sub(injected_core);
         let core = check(
-            "core_errors",
+            SandboxCheckId::CoreErrors,
             core_errors == 0,
             if core_errors == 0 {
                 "no core-thread engine errors outside the chaos window".into()
@@ -916,21 +916,21 @@ impl Session {
 
         let sign_off = self.sign_off_check(events, ended);
         let chaos = self.chaos_check(events, ended);
-        let later = |id: &str, by: &str| SandboxCheck {
-            id: id.into(),
+        let later = |id: SandboxCheckId, by: &str| SandboxCheck {
+            id,
             state: SandboxCheckState::Unmeasured,
             detail: format!("filled {by}"),
         };
         let mut checks = vec![say_gap, core, sign_off, chaos];
-        for id in &SANDBOX_CHECKS[4..] {
-            let by = match *id {
-                "voiced" | "face" => "by the daemon from voice.jsonl",
-                "av_sync" | "dead_air" => "from the recording",
+        for id in SandboxCheckId::ALL[4..].iter().copied() {
+            let by = match id {
+                SandboxCheckId::Voiced | SandboxCheckId::Face => "by the daemon from voice.jsonl",
+                SandboxCheckId::AvSync | SandboxCheckId::DeadAir => "from the recording",
                 _ => "by the daemon",
             };
             checks.push(later(id, by));
         }
-        debug_assert!(checks.iter().map(|c| c.id.as_str()).eq(SANDBOX_CHECKS));
+        debug_assert!(checks.iter().map(|c| c.id).eq(SandboxCheckId::ALL));
         SandboxReport {
             session_id: self.run.session_id.clone(),
             spec: self.run.params.clone(),
@@ -973,7 +973,7 @@ impl Session {
         if self.programme.chaos == Some(SandboxChaos::Lost) {
             if let Some((t, _)) = fleet_lost {
                 return check(
-                    "sign_off",
+                    SandboxCheckId::SignOff,
                     true,
                     format!("{stopped}fleet_lost sign-off at {}", transcript::clock(*t)),
                 );
@@ -993,12 +993,12 @@ impl Session {
         };
         match sign_offs.first() {
             Some((t, _)) if (from..=to).contains(t) => check(
-                "sign_off",
+                SandboxCheckId::SignOff,
                 true,
                 format!("{stopped}sign-off at {}, {window}", transcript::clock(*t)),
             ),
             Some((t, _)) => check(
-                "sign_off",
+                SandboxCheckId::SignOff,
                 false,
                 format!(
                     "{stopped}sign-off at {}, not {window}",
@@ -1006,7 +1006,7 @@ impl Session {
                 ),
             ),
             None => check(
-                "sign_off",
+                SandboxCheckId::SignOff,
                 false,
                 format!(
                     "{stopped}no sign-off {window}: the driver ended the stream at {}",
@@ -1021,7 +1021,7 @@ impl Session {
             // Nothing was broken, so there is nothing to recover from: a clean session must be
             // able to pass its gate with the stage open and the judge on (cli.md, sandbox).
             return SandboxCheck {
-                id: "chaos".into(),
+                id: SandboxCheckId::Chaos,
                 state: SandboxCheckState::Pass,
                 detail: "no chaos requested".into(),
             };
@@ -1029,7 +1029,7 @@ impl Session {
         let stalls = stall_lines(events);
         if ended.end_ms < from {
             return SandboxCheck {
-                id: "chaos".into(),
+                id: SandboxCheckId::Chaos,
                 state: SandboxCheckState::Unmeasured,
                 detail: format!(
                     "the stream ended at {}, before the chaos window",
@@ -1062,7 +1062,7 @@ impl Session {
                 let resumed = resumed_say(events, to);
                 let pass = down.is_some() && recovered && stalls > 0 && resumed.is_some();
                 check(
-                    "chaos",
+                    SandboxCheckId::Chaos,
                     pass,
                     format!(
                         "outage {}-{}: health down {}, healthy after {}, {stalls} stall lines, \
@@ -1087,7 +1087,7 @@ impl Session {
                 });
                 let in_time = sign_off.is_some_and(|t| (from..=by).contains(&t));
                 check(
-                    "chaos",
+                    SandboxCheckId::Chaos,
                     stalls > 0 && in_time,
                     format!(
                         "lost from {}: {stalls} stall lines, fleet_lost sign-off {} (due by {})",
@@ -1109,9 +1109,9 @@ fn yes_no(b: bool) -> &'static str {
     }
 }
 
-fn check(id: &str, pass: bool, detail: String) -> SandboxCheck {
+fn check(id: SandboxCheckId, pass: bool, detail: String) -> SandboxCheck {
     SandboxCheck {
-        id: id.into(),
+        id,
         state: if pass {
             SandboxCheckState::Pass
         } else {
@@ -1640,11 +1640,15 @@ mod tests {
     }
 
     fn state(r: &SandboxReport, id: &str) -> SandboxCheckState {
-        r.checks.iter().find(|c| c.id == id).unwrap().state
+        r.checks.iter().find(|c| c.id.as_str() == id).unwrap().state
     }
 
     fn detail<'a>(r: &'a SandboxReport, id: &str) -> &'a str {
-        &r.checks.iter().find(|c| c.id == id).unwrap().detail
+        &r.checks
+            .iter()
+            .find(|c| c.id.as_str() == id)
+            .unwrap()
+            .detail
     }
 
     fn sign_off_at(events: &[StreamEvent]) -> Option<TsMs> {
@@ -1709,8 +1713,8 @@ mod tests {
         ));
 
         // The gate: the health checks pass, the daemon's are left for the daemon.
-        let ids: Vec<&str> = r.checks.iter().map(|c| c.id.as_str()).collect();
-        assert_eq!(ids, SANDBOX_CHECKS);
+        let ids: Vec<SandboxCheckId> = r.checks.iter().map(|c| c.id).collect();
+        assert_eq!(ids, SandboxCheckId::ALL);
         assert_eq!(state(r, "say_gap"), SandboxCheckState::Pass, "{r:?}");
         assert_eq!(state(r, "core_errors"), SandboxCheckState::Pass);
         assert_eq!(state(r, "sign_off"), SandboxCheckState::Pass, "{r:?}");

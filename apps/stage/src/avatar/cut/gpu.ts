@@ -1,12 +1,11 @@
-// The cut-out renderer's WebGL plumbing that holds no state: the program builder, the rest
-// matte (drawn with the 2D canvas, then its texture) and the figure's render target.
+// The cut-out renderer's WebGL plumbing that holds no state and is its own: the rest matte (drawn
+// with the 2D canvas, then its texture) and the figure's render target. The program builder every
+// face shares is ../gl-kit.ts.
 
 import type { LayerImage, LayerSpec } from "../layers";
 
 /** The rest matte's size, px a side. */
 export const MATTE = 256;
-
-export const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /**
  * The figure's rest matte: the union of the solids' coverage, `MATTE` px a side, as one byte a
@@ -38,30 +37,6 @@ export function restMatte(layers: LayerSpec[], images: Map<string, LayerImage>, 
   const out = new Uint8Array(MATTE * MATTE);
   for (let i = 0; i < out.length; i++) out[i] = data[i * 4 + 3] ?? 0;
   return out;
-}
-
-/** Build the program from two sources, compiling in parallel where the driver offers it. */
-export async function program(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string, shaders: WebGLShader[]): Promise<WebGLProgram> {
-  const p = gl.createProgram();
-  const vs = gl.createShader(gl.VERTEX_SHADER);
-  const fs = gl.createShader(gl.FRAGMENT_SHADER);
-  if (!p || !vs || !fs) throw new Error("WebGL2 could not make a program");
-  shaders.push(vs, fs);
-  gl.shaderSource(vs, vsSrc);
-  gl.shaderSource(fs, fsSrc);
-  gl.compileShader(vs);
-  gl.compileShader(fs);
-  gl.attachShader(p, vs);
-  gl.attachShader(p, fs);
-  gl.linkProgram(p);
-  const parallel = gl.getExtension("KHR_parallel_shader_compile") as { COMPLETION_STATUS_KHR: number } | null;
-  if (parallel) {
-    for (let i = 0; i < 400 && !gl.getProgramParameter(p, parallel.COMPLETION_STATUS_KHR); i++) await breathe();
-  }
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-    throw new Error(gl.getShaderInfoLog(vs) || gl.getShaderInfoLog(fs) || gl.getProgramInfoLog(p) || "program did not link");
-  }
-  return p;
 }
 
 /** The figure's texture (with room for its mips) and the framebuffer that draws into it. */

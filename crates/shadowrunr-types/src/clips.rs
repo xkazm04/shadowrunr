@@ -229,14 +229,68 @@ pub enum GateState {
     NotApplicable,
 }
 
+/// A clip publish-gate check, as it crosses the wire. The serde names are the ids
+/// `candidate.json` has always carried.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum GateCheckId {
+    CareState,
+    PersonalData,
+    BrigadeCall,
+    BlockedTerm,
+    InjectionReply,
+    AiDisclosure,
+    HandlesInPicture,
+    EvidenceBadgeBurnt,
+    SourceCitation,
+    NoOpenCorrection,
+}
+
+impl GateCheckId {
+    /// Every check: the exclusions, then the render and evidence checklist.
+    pub const ALL: [Self; 10] = [
+        Self::CareState,
+        Self::PersonalData,
+        Self::BrigadeCall,
+        Self::BlockedTerm,
+        Self::InjectionReply,
+        Self::AiDisclosure,
+        Self::HandlesInPicture,
+        Self::EvidenceBadgeBurnt,
+        Self::SourceCitation,
+        Self::NoOpenCorrection,
+    ];
+
+    /// The wire name.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::CareState => "care_state",
+            Self::PersonalData => "personal_data",
+            Self::BrigadeCall => "brigade_call",
+            Self::BlockedTerm => "blocked_term",
+            Self::InjectionReply => "injection_reply",
+            Self::AiDisclosure => "ai_disclosure",
+            Self::HandlesInPicture => "handles_in_picture",
+            Self::EvidenceBadgeBurnt => "evidence_badge_burnt",
+            Self::SourceCitation => "source_citation",
+            Self::NoOpenCorrection => "no_open_correction",
+        }
+    }
+}
+
+impl std::fmt::Display for GateCheckId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad(self.as_str())
+    }
+}
+
 /// One gate check. Exclusions run on every clip; the mandatory checklist runs when the clip
 /// is from SEG-02A or links a case.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct GateCheck {
-    /// `care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,
-    /// `ai_disclosure`, `handles_in_picture`, `evidence_badge_burnt`, `source_citation`,
-    /// `no_open_correction`.
-    pub id: String,
+    pub id: GateCheckId,
     pub state: GateState,
     pub detail: String,
     /// Part of the SEG-02A / linked-case checklist.
@@ -635,4 +689,37 @@ pub struct ClipPublishReport {
     pub id: String,
     pub dry_run: bool,
     pub requests: Vec<ClipDryRun>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gate_check_ids_round_trip_under_their_wire_names() {
+        let wire = [
+            "care_state",
+            "personal_data",
+            "brigade_call",
+            "blocked_term",
+            "injection_reply",
+            "ai_disclosure",
+            "handles_in_picture",
+            "evidence_badge_burnt",
+            "source_citation",
+            "no_open_correction",
+        ];
+        assert_eq!(GateCheckId::ALL.len(), wire.len());
+        for (id, name) in GateCheckId::ALL.iter().zip(wire) {
+            let s = serde_json::to_string(id).unwrap();
+            assert_eq!(s, format!("\"{name}\""));
+            assert_eq!(serde_json::from_str::<GateCheckId>(&s).unwrap(), *id);
+            assert_eq!(id.as_str(), name);
+            assert_eq!(id.to_string(), name);
+        }
+        let e =
+            serde_json::from_str::<GateCheck>(r#"{"id":"care-state","state":"pass","detail":""}"#)
+                .expect_err("a typo must not parse as a new check");
+        assert!(e.to_string().contains("unknown variant"), "{e}");
+    }
 }
