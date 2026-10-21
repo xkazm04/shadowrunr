@@ -21,6 +21,7 @@ inpainter is passed in, so tests run it with a stand-in and no model.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -48,6 +49,10 @@ class Lifted:
     el: dict
     rgba: np.ndarray | None
     meta: dict = field(default_factory=dict)
+    #: where each of its pixels came from when it was lifted: the index (in the spec's element
+    #: list) of the element whose fill last wrote it there, or -1 for the portrait's own pixel.
+    #: Bookkeeping for the review; never written to layers.json.
+    source: np.ndarray | None = None
 
 
 @dataclass
@@ -57,6 +62,11 @@ class Split:
     lifted: list[Lifted]
     #: per element name, the coverage it was lifted with (for the debug overlay)
     coverage: dict[str, np.ndarray]
+    #: per element name, the pixels of the working copy its fill (or ground, or interior)
+    #: replaced: what the rig shows there was invented, not seen
+    filled: dict[str, np.ndarray] = field(default_factory=dict)
+    #: the background's pixels' provenance, as :attr:`Lifted.source`
+    source: np.ndarray | None = None
 
 
 def _polys(shape, reg: dict, key: str) -> np.ndarray:
@@ -139,11 +149,16 @@ def split(portrait: np.ndarray, spec: dict, fill: Fill) -> Split:
     }
     lifted: list[Lifted] = []
     coverage: dict[str, np.ndarray] = {}
-    for el in spec["elements"]:
+    filled_by: dict[str, np.ndarray] = {}
+    source = np.full((h, w), -1, np.int16)  # who last wrote each pixel of the working copy
+    covered_by = np.full((h, w), -1, np.int16)  # which solid always covers it
+    for i, el in enumerate(spec["elements"]):
         mode = el["mode"]
         if mode == "none":
             lifted.append(Lifted(el, None))
             continue
+        before = work
+        lifted_source = source.copy()
         cov, meta = region_coverage(el["region"], work, orig, state)
         coverage[el["name"]] = cov
         hard = cov > 0.02
@@ -191,11 +206,26 @@ def split(portrait: np.ndarray, spec: dict, fill: Fill) -> Split:
                 state["covered"] |= solid & _shift_down(solid, int(el["uncover"]))
             elif el.get("covers"):
                 state["covered"] |= solid
-        lifted.append(Lifted(el, rgba, meta))
+            covered_by[state["covered"] & (covered_by < 0)] = i
+        changed = _changed(before, work)
+        filled_by[el["name"]] = changed
+        source[changed] = i
+        lifted.append(Lifted(el, rgba, meta, lifted_source))
     # what a solid always covers is never seen, so the background holds only the ground there
     s = mk.soften(state["covered"], 2, 1.0)[..., None]
+    before = work
     work = work * (1 - s) + ground * s
-    return Split(background=work, lifted=lifted, coverage=coverage)
+    grounded = _changed(before, work)
+    for i, el in enumerate(spec["elements"]):
+        mine = grounded & mk.dilate(covered_by == i, 3)
+        if mine.any():
+            filled_by[el["name"]] = filled_by[el["name"]] | mine
+            source[mine] = i
+    return Split(background=work, lifted=lifted, coverage=coverage, filled=filled_by, source=source)
+
+
+def _changed(before: np.ndarray, after: np.ndarray) -> np.ndarray:
+    return np.abs(after - before).max(axis=2) > 0.5
 
 
 def _crop(rgba: np.ndarray, light: bool) -> tuple[np.ndarray, tuple[int, int, int, int]] | None:
@@ -249,10 +279,18 @@ def assemble(spec: dict, result: Split, portrait_id: str) -> tuple[dict, dict[st
     return fs, pictures
 
 
+def element_colour(name: str) -> tuple[int, int, int]:
+    """An element's colour in the region overlay, from its name alone: the same name has the
+    same colour in every run and every spec, whatever else the spec lists."""
+    d = hashlib.sha256(name.encode("utf-8")).digest()
+    return tuple(int(40 + d[i] * 160 // 255) for i in range(3))  # type: ignore[return-value]
+
+
 def debug_overlay(result: Split) -> np.ndarray:
-    """Each element's coverage in its own colour over the dimmed portrait's background: uint8 RGB."""
-    rng = np.random.default_rng(3)
+    """Each element's coverage in its own colour (:func:`element_colour`) over the dimmed
+    background: uint8 RGB. ``review.regions`` adds the legend strip that names the colours."""
     acc = result.background.astype(np.float32) * 0.25
-    for cov in result.coverage.values():
-        acc += rng.uniform(40, 200, 3).astype(np.float32)[None, None, :] * cov[..., None] * 0.6
+    for name in sorted(result.coverage):  # by name, so the sum never depends on the spec's order
+        colour = np.asarray(element_colour(name), np.float32)
+        acc += colour[None, None, :] * result.coverage[name][..., None] * 0.6
     return np.clip(acc, 0, 255).astype(np.uint8)

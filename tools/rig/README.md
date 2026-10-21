@@ -48,6 +48,43 @@ The run prints how closely the rest frame recomposes the portrait (mean, p99 and
 the depth prep shows its depth model. M8 recomposes at mean 0.14 and
 p99 2.8. Reload the stage to see the new rig: `/avatar/` responses are not cached.
 
+## Judge a rig before the stage shows it
+
+The folder you pass as `--out` is the live rig. While tuning the spec, stage the new rig beside it
+instead, judge it, then move it in:
+
+```
+python -m shadowrunr_rig --portrait ... --spec ... --out <data>/avatar/rig --candidate
+python -m shadowrunr_rig promote --out <data>/avatar/rig            # refuses a regression
+python -m shadowrunr_rig promote --out <data>/avatar/rig --accept   # takes it anyway
+python -m shadowrunr_rig promote --out <data>/avatar/rig --revert   # the previous rig, back
+```
+
+- `--candidate` writes the rig into `<out>.next` and leaves `<out>` untouched.
+- Every run writes two files beside its rig. The stage ignores them: it reads only what
+  `layers.json` names.
+  - `report.json` has one row per element: its bbox, `coverage_px`, `filled_px` (pixels its fill
+    invented) and the rest-frame error on the pixels it owns.
+  - `extremes.png` shows the rest frame, the jaw dropped by its `uncover`, and the floats at
+    `+amp`, side by side. These are the pixels a viewer sees when the rig moves.
+- A pixel's owner is the frontmost solid drawn there. When what that solid shows was painted in
+  by another element's fill, the owner is that element instead. So a polygon pushed off its
+  feature shows up as that element's p99, not the head's.
+- The run prints the table, worst first. A candidate run also prints each element against the
+  live `report.json`.
+- The rest frame cannot see everything. A misplaced light, or a cut whose fill leaks nothing,
+  still recomposes the portrait exactly. For those, look at `extremes.png`.
+- `promote` refuses, and changes nothing, when an element's p99 rose by more than `--tol`
+  (default 4) against the live report. It names each such element as `worse`, with before -> after.
+- When `promote` goes through:
+  - the live rig, its depth pair and its report are kept in `<out>.prev`, written whole before the
+    live folder is touched;
+  - the candidate's files move in byte for byte through `rigdir.publish_files`, `layers.json` last.
+- `promote --revert` makes the live folder byte-identical to what it was before the promote. It
+  refuses if the live rig has changed since then, because reverting would lose that rig.
+- `--debug`'s `regions.png` colours each element by its name, so the same name gets the same
+  colour in every run. A legend strip under the overlay names every colour.
+
 ## How it splits
 
 The spec lists the portrait's elements front to back. Each element is lifted off a working copy

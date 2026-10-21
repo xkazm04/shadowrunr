@@ -243,13 +243,48 @@ def publish(out: Path, fs: dict, pictures: dict[str, np.ndarray]) -> PublishRepo
     Checked first (nothing is touched if the rig would not load back); the depth pair is removed,
     both files, when the new rig is not byte for byte the one it was made from; the files only the
     old ``layers.json`` named are cleared; the pictures are written, and ``layers.json`` last."""
-    out = Path(out)
     fsm.check_formspec(fs)
     check_pictures(fs, pictures)
     named = owned_files(fs) - {LAYERS}
     new: dict[str, bytes] = {file: _encode(pictures[file]) for file in sorted(named)}
     new[LAYERS] = (json.dumps(fs, indent=1) + "\n").encode("utf-8")
+    return _publish(Path(out), new)
 
+
+def publish_files(
+    out: Path, files: dict[str, bytes], depth: tuple[bytes, bytes] | None = None
+) -> PublishReport:
+    """:func:`publish` from a rig's files as they are, byte for byte (a staged candidate moved
+    live, or a kept rig put back): `files` is ``layers.json`` and every file it names, as
+    :attr:`LoadedRig.files` holds them. `depth`, when given, is the ``(depth.png, depth.json)``
+    pair that belongs with this rig: it is written back after ``layers.json``, both files."""
+    if LAYERS not in files:
+        raise fsm.SpecError(f"no {LAYERS}")
+    try:
+        fs = json.loads(files[LAYERS])
+    except ValueError as e:
+        raise fsm.SpecError(f"{LAYERS}: {e}") from e
+    fsm.check_formspec(fs)
+    named = owned_files(fs)
+    missing = sorted(named - set(files))
+    if missing:
+        raise fsm.SpecError(f"{LAYERS} names {', '.join(missing)}, which is not given")
+    check_pictures(fs, {f: _decode(files[f]) for f in named - {LAYERS}})
+    report = _publish(Path(out), {f: files[f] for f in named})
+    if depth is not None:
+        png, meta = depth
+        _write(Path(out) / DEPTH_PNG, png)
+        _write(Path(out) / DEPTH_JSON, meta)
+        status = depth_status(out)
+        report.depth = status.state
+        fresh = status.state == "fresh"
+        report.notes = [] if fresh else [f"depth map is stale: run {DEPTH_TOOL} {out}"]
+    return report
+
+
+def _publish(out: Path, new: dict[str, bytes]) -> PublishReport:
+    """Write a checked rig's encoded files into `out` (see :func:`publish`)."""
+    named = set(new) - {LAYERS}
     out.mkdir(parents=True, exist_ok=True)
     notes: list[str] = []
     removed: list[str] = []

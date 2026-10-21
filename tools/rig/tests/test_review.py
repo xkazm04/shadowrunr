@@ -151,14 +151,16 @@ class Runs(unittest.TestCase):
         real = os.replace
 
         def spy(src, dst):
-            writes.append(Path(dst).name)
+            if Path(dst).parent == self.live:
+                writes.append(Path(dst).name)
             return real(src, dst)
 
         with mock.patch.object(rigdir.os, "replace", spy):
             self.promote("--accept")
-        rig_files = [n for n in writes if n.endswith(".png") or n == "layers.json"]
-        live_writes = [n for n in rig_files if n in staged and n != "extremes.png"]
-        self.assertEqual(live_writes[-1], "layers.json")
+        owned = rigdir.owned_files(json.loads(staged["layers.json"]))
+        rig_writes = [n for n in writes if n in owned]
+        self.assertEqual(sorted(rig_writes), sorted(owned))  # every rig file, through rigdir
+        self.assertEqual(rig_writes[-1], "layers.json")  # and layers.json last
         self.assertEqual((self.live / "layers.json").read_bytes(), staged["layers.json"])
         for name in rigdir.owned_files(rigdir.load(self.live).fs):
             self.assertEqual((self.live / name).read_bytes(), staged[name], name)
