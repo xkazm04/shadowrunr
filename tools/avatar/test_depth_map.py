@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
 import tempfile
 import unittest
@@ -172,6 +174,94 @@ class PushFill(unittest.TestCase):
         self.assertAlmostEqual(float(out[16, 2]), 10.0, places=4)
         self.assertLess(float(out[16, 10]), 20.0)
         self.assertGreater(float(out[16, 22]), 40.0)
+
+
+def small_rig(folder: Path, front: dict, front_px: np.ndarray, bg_rgb: int = 0) -> None:
+    """A 32 px rig: a flat backplate and one front layer over it at [8, 8, 8, 8]. Drawn here."""
+    _png(folder / "background.png", np.full((32, 32, 4), [bg_rgb, bg_rgb, bg_rgb, 255]))
+    _png(folder / "front.png", front_px)
+    spec = {
+        "version": 1,
+        "width": 32,
+        "height": 32,
+        "rig_type": "glow",
+        "rig": {"head": {"center": [16, 16], "radius": [8, 8], "chin_y": 24}},
+        "layers": [
+            {"name": "background", "kind": "static", "file": "background.png", "bbox": [0, 0, 32, 32]},
+            {"name": "front", "file": "front.png", "bbox": [8, 8, 8, 8], **front},
+        ],
+    }
+    (folder / "layers.json").write_text(json.dumps(spec), encoding="utf-8")
+
+
+class OneOwner(unittest.TestCase):
+    """The depth prep reads the rig through the rig package: its checks, its compositor (the one
+    the stage's glow shader agrees with), and its freshness rule."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.dir = self.root / "rig"
+        self.dir.mkdir()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def model_input_at(self, y: int, x: int) -> np.ndarray:
+        rgb, _ = dm.portrait(dm.load_rig(self.dir))
+        return rgb[y, x] * 255.0
+
+    def test_a_light_is_added_at_gain_not_multiplied_by_its_alpha(self):
+        small_rig(self.dir, {"kind": "eye", "mode": "light"}, np.full((8, 8, 4), [100, 100, 100, 128]))
+        np.testing.assert_allclose(self.model_input_at(12, 12), [100, 100, 100], atol=0.5)
+
+    def test_a_cut_honours_its_gain_and_occl(self):
+        small_rig(
+            self.dir,
+            {"kind": "head", "mode": "cut", "gain": 0.5, "occl": 0.5},
+            np.full((8, 8, 4), [200, 200, 200, 255]),
+            bg_rgb=40,
+        )
+        # the backplate kept by 1 - a * occl, the cut added at gain * a (a = 1)
+        np.testing.assert_allclose(self.model_input_at(12, 12), [120, 120, 120], atol=0.5)
+
+    def test_the_model_input_is_the_rig_packages_rest_frame(self):
+        make_rig(self.dir)
+        rgb, _ = dm.portrait(dm.load_rig(self.dir))
+        loaded = dm.rigdir.load(self.dir)
+        np.testing.assert_allclose(rgb * 255.0, dm.rigdir.compose_rest(loaded.fs, loaded.pictures), atol=1e-3)
+
+    def test_refuses_a_file_outside_the_folder_and_a_picture_off_its_bbox(self):
+        make_rig(self.dir)
+        _png(self.root / "escape.png", np.full((16, 16, 4), [40, 220, 200, 255]))
+        spec = json.loads((self.dir / "layers.json").read_text(encoding="utf-8"))
+        spec["layers"][-1]["file"] = "../escape.png"
+        (self.dir / "layers.json").write_text(json.dumps(spec), encoding="utf-8")
+        with self.assertRaises(ValueError):
+            dm.make(self.dir)
+        spec["layers"][-1]["file"] = "eye_l.png"
+        spec["layers"][-1]["bbox"] = [102, 84, 17, 16]
+        (self.dir / "layers.json").write_text(json.dumps(spec), encoding="utf-8")
+        with self.assertRaises(ValueError):
+            dm.make(self.dir)
+        self.assertFalse((self.dir / "depth.png").exists())
+
+    def test_check_names_a_stale_input_and_writes_nothing_on_a_fresh_one(self):
+        make_rig(self.dir)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(dm.main([str(self.dir), "--check"]), 2)  # no depth map yet
+        self.assertFalse((self.dir / "depth.png").exists())
+        dm.make(self.dir)
+        before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in self.dir.iterdir()}
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(dm.main([str(self.dir), "--check"]), 0)
+        self.assertEqual({p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in self.dir.iterdir()}, before)
+        _png(self.dir / "jaw.png", np.full((20, 50, 4), [10, 190, 170, 255]))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(err):
+            self.assertEqual(dm.main([str(self.dir), "--check"]), 3)
+        self.assertIn("jaw.png", err.getvalue())
 
 
 if __name__ == "__main__":

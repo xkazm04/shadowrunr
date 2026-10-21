@@ -2,8 +2,11 @@
 """Malakor's depth map, made offline from the face rig (streamer-screen prototype B).
 
     python tools/avatar/depth_map.py <rig dir> [--method analytic-v1 | learned-v1] [--model-python <py>]
+    python tools/avatar/depth_map.py <rig dir> --check
 
-Reads the rig's `layers.json` and its PNGs and writes, into the same folder:
+Reads the rig's `layers.json` and its PNGs through the rig package (`tools/rig`,
+`shadowrunr_rig.rigdir`: the stage's checks, and the one rest-frame compositor) and writes, into
+the same folder:
 
 - `depth.png`: 16-bit grayscale at the rig's size, the visible surface's depth. Near is bright.
 - `depth.json`: how to read it back (`near`/`far` in source px toward the viewer, `scale` px per
@@ -11,6 +14,11 @@ Reads the rig's `layers.json` and its PNGs and writes, into the same folder:
 
 The depth renderer (`apps/stage/src/avatar/depth/`) displaces its meshes by this map. With no
 `depth.png` next to `layers.json`, the stage draws the glow face instead.
+
+**Fresh or stale.** `--check` compares `depth.json`'s `inputs` with the rig's files as they are
+and writes nothing: exit 0 fresh, 3 stale (naming each changed input), 2 no depth map. A re-split
+(`python -m shadowrunr_rig`) removes `depth.png` and `depth.json` together when the new rig is not
+the one they were made from.
 
 **Reproducible.** Same inputs, same bytes: no clock, no randomness, sorted keys. The rig is cut
 from the owner's portrait, so the map is the owner's file too: it lives beside the rig under
@@ -49,6 +57,12 @@ from typing import Callable
 import numpy as np
 from PIL import Image
 
+try:
+    from shadowrunr_rig import rigdir
+except ImportError:  # the rig package is not installed: use it from the tree beside this tool
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "rig"))
+    from shadowrunr_rig import rigdir
+
 VERSION = 1
 LEVELS = 65535
 
@@ -56,7 +70,8 @@ LEVELS = 65535
 @dataclass
 class Rig:
     """The parts of a rig the depth methods read: its spec, and each layer's coverage and light
-    as full-canvas float arrays (0..1)."""
+    as full-canvas float arrays (0..1). `files` are the figure's files (`layers.json` and every
+    layer but the backplate), `loaded` the rig as `rigdir.load` read it."""
 
     spec: dict
     width: int
@@ -65,6 +80,7 @@ class Rig:
     luma: dict[str, np.ndarray] = field(default_factory=dict)
     files: dict[str, bytes] = field(default_factory=dict)
     folder: Path | None = None
+    loaded: rigdir.LoadedRig | None = None
 
 
 @dataclass
@@ -81,27 +97,24 @@ class Surface:
 
 
 def load_rig(folder: Path) -> Rig:
-    raw = (folder / "layers.json").read_bytes()
-    spec = json.loads(raw)
-    if spec.get("rig_type") != "glow":
-        raise ValueError(f"layers.json is a {spec.get('rig_type')} rig, not a glow rig")
+    """The rig in `folder`, read and checked by `rigdir.load` (a `ValueError` if the stage would
+    refuse it, or a picture is not its bbox)."""
+    loaded = rigdir.load(folder)
+    spec = loaded.fs
     w, h = int(spec["width"]), int(spec["height"])
-    rig = Rig(spec=spec, width=w, height=h, folder=folder)
-    rig.files["layers.json"] = raw
+    rig = Rig(spec=spec, width=w, height=h, folder=folder, loaded=loaded)
+    rig.files[rigdir.LAYERS] = loaded.files[rigdir.LAYERS]
     for layer in spec["layers"]:
         name, file = layer["name"], layer.get("file")
         if not file or layer.get("kind") == "static":
             continue  # the backplate is the page, not the figure
-        data = (folder / file).read_bytes()
-        rig.files[file] = data
+        rig.files[file] = loaded.files[file]
         x, y, bw, bh = (int(round(v)) for v in layer.get("bbox", [0, 0, w, h]))
-        with Image.open(folder / file) as im:
-            px = np.asarray(im.convert("RGBA"), dtype=np.float32) / 255.0
+        px = loaded.pictures[file].astype(np.float32) / 255.0
         alpha = np.zeros((h, w), np.float32)
         luma = np.zeros((h, w), np.float32)
-        ph, pw = px.shape[:2]
         # the layer's picture, placed at its bbox and clipped to the canvas
-        x0, y0, x1, y1 = max(0, x), max(0, y), min(w, x + pw), min(h, y + ph)
+        x0, y0, x1, y1 = max(0, x), max(0, y), min(w, x + bw), min(h, y + bh)
         if x1 > x0 and y1 > y0:
             sub = px[y0 - y : y1 - y, x0 - x : x1 - x]
             alpha[y0:y1, x0:x1] = sub[..., 3]
@@ -315,35 +328,14 @@ class LearnedPending(Exception):
 
 
 def portrait(rig: Rig) -> tuple[np.ndarray, dict[str, bytes]]:
-    """The rig recomposed at rest, backplate included (what the model is shown): the cut layers
-    over each other, the light layers added. Returns the RGB (0..1) and the files it read beyond
-    `rig.files`."""
-    assert rig.folder is not None
-    w, h = rig.width, rig.height
-    rgb = np.zeros((h, w, 3), np.float32)
-    extra: dict[str, bytes] = {}
-    for layer in rig.spec["layers"]:
-        file = layer.get("file")
-        if not file:
-            continue
-        data = rig.files.get(file)
-        if data is None:
-            data = (rig.folder / file).read_bytes()
-            extra[file] = data
-        with Image.open(BytesIO(data)) as im:
-            px = np.asarray(im.convert("RGBA"), dtype=np.float32) / 255.0
-        x, y, _, _ = (int(round(v)) for v in layer.get("bbox", [0, 0, w, h]))
-        ph, pw = px.shape[:2]
-        x0, y0, x1, y1 = max(0, x), max(0, y), min(w, x + pw), min(h, y + ph)
-        if x1 <= x0 or y1 <= y0:
-            continue
-        sub = px[y0 - y : y1 - y, x0 - x : x1 - x]
-        a = sub[..., 3:4]
-        if layer.get("mode") == "light":
-            rgb[y0:y1, x0:x1] += sub[..., :3] * a
-        else:
-            rgb[y0:y1, x0:x1] = rgb[y0:y1, x0:x1] * (1.0 - a) + sub[..., :3] * a
-    return np.clip(rgb, 0.0, 1.0), extra
+    """The rig recomposed at rest, backplate included (what the model is shown): the frame the
+    stage draws, by the rig package's one compositor (`rigdir.compose_rest`: lights added at
+    gain, solids occluding by alpha x occl at gain). Returns the RGB (0..1) and the files it read
+    beyond `rig.files` (the backplate)."""
+    loaded = rig.loaded if rig.loaded is not None else rigdir.load(rig.folder)
+    extra = {name: data for name, data in loaded.files.items() if name not in rig.files}
+    rgb = rigdir.compose_rest(loaded.fs, loaded.pictures) / 255.0
+    return np.clip(rgb, 0.0, 1.0).astype(np.float32), extra
 
 
 def model_input(rgb: np.ndarray) -> bytes:
@@ -538,6 +530,19 @@ def run_model_step(folder: Path, python: Path, model: Path | None = None) -> Non
         raise ValueError(f"the model step failed (exit {done.returncode})")
 
 
+def check(folder: Path) -> int:
+    """`--check`: is the depth map beside the rig made from the rig as it is? Writes nothing."""
+    status = rigdir.depth_status(folder)
+    if status.state == "fresh":
+        print(f"depth_map: {folder / 'depth.png'} is fresh")
+        return 0
+    if status.state == "stale":
+        print(f"depth_map: stale, {status.reason}: run {Path(__file__).name} {folder}", file=sys.stderr)
+        return 3
+    print(f"depth_map: {status.reason} in {folder}: run {Path(__file__).name} {folder}", file=sys.stderr)
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Write depth.png and depth.json beside a face rig's layers.json.")
     ap.add_argument("rig", type=Path, help="the rig folder (holds layers.json)")
@@ -549,7 +554,14 @@ def main(argv: list[str] | None = None) -> int:
         help="learned-v1: a python with onnxruntime to run the model step with (else it is run by hand)",
     )
     ap.add_argument("--model", type=Path, default=None, help="learned-v1: the model file, passed to the model step")
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="write nothing; exit 0 if the depth map is the rig's as it is, 3 if stale, 2 if there is none",
+    )
     args = ap.parse_args(argv)
+    if args.check:
+        return check(args.rig)
     started = time.perf_counter()
     try:
         try:
