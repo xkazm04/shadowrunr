@@ -5,8 +5,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mountPage, nodes } from "../../kit/testing";
 import { pageRoute, type RouterStore } from "../../router";
 import { page } from "./index";
+import { tableView } from "../../ui/tableView";
 import { Layer2 } from "./Layer2";
-import { daemon, VERDICT_RUN, world, type World } from "./testgen";
+import { abWorld, daemon, VERDICT_RUN, world, type World } from "./testgen";
 
 let router: RouterStore | undefined;
 
@@ -30,6 +31,51 @@ describe("simulator layer 2", () => {
     await settle(() => expect(within(table).getByText("t003")).toBeTruthy());
     fireEvent.click(within(table).getByText("t002"));
     await settle(() => expect(router?.getRoute()).toEqual(pageRoute("simulator", "tournaments", "t002")));
+  });
+
+  it("prints the list's Held as the tile's figure: the mean over judged runs, 75%, not the pooled 50%", async () => {
+    mount(abWorld(), ["tournaments"]);
+    const table = await screen.findByRole("table", { name: "Tournaments" });
+    await settle(() => expect(within(table).getByText("t001")).toBeTruthy());
+    const row = within(table).getByText("t001").closest("tr") as HTMLElement;
+    expect(row.textContent).toContain("75%");
+    expect(row.textContent).not.toContain("50%");
+  });
+
+  it("shows Held for every tournament from its row, with no tournament.results read", async () => {
+    const s = mount(world(45, 24), ["tournaments"]);
+    const table = await screen.findByRole("table", { name: "Tournaments" });
+    await settle(() => expect(within(table).getByText("t001")).toBeTruthy());
+    const row = within(table).getByText("t001").closest("tr") as HTMLElement;
+    expect(row.textContent).toMatch(/\d+%/);
+    expect(row.textContent).not.toContain("open to read");
+    expect(s.calls.filter((m) => m === "tournament.results")).toHaveLength(0);
+  });
+
+  it("sorts the list by Held ascending, unjudged tournaments last", async () => {
+    const w = world(4, 24);
+    const t002 = w.tournaments[1];
+    if (t002) {
+      const unjudged = { ...t002, judged: 0 };
+      delete unjudged.held;
+      w.tournaments[1] = unjudged;
+    }
+    mount(w, ["tournaments"]);
+    const table = await screen.findByRole("table", { name: "Tournaments" });
+    await settle(() => expect(within(table).getByText("t004")).toBeTruthy());
+    fireEvent.click(within(table).getByRole("button", { name: "Held" }));
+    const ids = () => within(table).getAllByRole("row").slice(1).map((r) => /t\d{3}/.exec(r.textContent ?? "")?.[0]);
+    const held = new Map(w.tournaments.map((t) => [t.tournament_id, t.held ?? 2]));
+    await settle(() => expect(ids()).toEqual([...w.tournaments].sort((a, b) => (held.get(a.tournament_id) ?? 2) - (held.get(b.tournament_id) ?? 2)).map((t) => t.tournament_id)));
+    expect(ids()[3]).toBe("t002");
+    tableView.reset();
+  });
+
+  it("prints the summary's Held from the same row the list reads", async () => {
+    mount(abWorld(), ["tournaments", "t001"]);
+    await settle(() => expect(screen.getByText("Held")).toBeTruthy());
+    const dd = screen.getByText("Held").nextElementSibling;
+    await settle(() => expect(dd?.textContent).toContain("75%"));
   });
 
   it("shows a tournament's figures and its runs worst first", async () => {

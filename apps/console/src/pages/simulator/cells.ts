@@ -98,17 +98,6 @@ export function cellChecks(c: CellResult): CellChecks {
   return { fail, evaluated: fail + rulePass(c) };
 }
 
-/** Share of rule checks that held (A/1's health); undefined when no check was provoked. */
-export function cellHealth(c: CellResult): number | undefined {
-  const pass = rulePass(c);
-  const n = pass + ruleFails(c);
-  return n > 0 ? pass / n : undefined;
-}
-
 export const isRedLine = (rule: string) => rule.startsWith("red-line");
-
-export function redLineFails(c: CellResult): number {
-  return sum(ruleEntries(c).map(([k, r]) => (isRedLine(k) ? r.fail : 0)));
-}
 
 export const sameCell = (a: CellKey, b: CellKey) => compareCellKey(a, b) === 0;

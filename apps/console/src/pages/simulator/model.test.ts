@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildTile, gridLayout, hitTest, runGrid, summarise, tilesInView, tileOrigin } from "./grid";
 import { cellChecks, cellRouteKey, parseCellRouteKey, rateBound, worstFirst } from "./cells";
@@ -5,7 +7,8 @@ import { healthColor } from "./ramp";
 import { eventText, parseRef } from "../../kit/events";
 import { verifyQuote } from "./quote";
 import type { CellResult } from "./results";
-import { TRANSCRIPT, world } from "./testgen";
+import { tileLabel } from "./draw";
+import { abWorld, TRANSCRIPT, world } from "./testgen";
 
 /** A/1 app.js:25, verbatim, as the reference for the port. */
 function a1HealthColor(h: number, a?: number) {
@@ -60,7 +63,9 @@ describe("tiles", () => {
   it("colours runs by their own health, marks their red-line fails, leaves unjudged runs unlit", () => {
     const w = world(1, 24);
     const runs = w.runs.get("t001") ?? [];
-    const tile = buildTile("t001", 24, runs);
+    const row = w.tournaments[0];
+    if (!row) throw new Error("no row");
+    const tile = buildTile(row, runs);
     expect(tile.runs).toHaveLength(24);
     expect(tile.runs[9]?.health).toBeUndefined(); // has_verdict false
     expect(tile.runs[0]?.red).toBe(true); // its verdict failed a red line
@@ -69,9 +74,40 @@ describe("tiles", () => {
     expect(tile.red).toBeGreaterThan(0);
     const judged = runs.filter((r) => r.health !== undefined);
     expect(tile.health).toBeCloseTo(judged.reduce((a, r) => a + (r.health ?? 0), 0) / judged.length);
-    const s = summarise([tile, buildTile("t002", 0, [])]);
+    const s = summarise([tile, buildTile({ tournament_id: "t002", instrument_hash: "h", runs: 0, completed: 0 }, [])]);
     expect(s).toMatchObject({ runs: 24, red: tile.red });
     expect(s.best?.id).toBe("t001");
+  });
+});
+
+describe("held: one derivation, the daemon's", () => {
+  it("the tile reads the row's held, the mean over judged runs (75%), not the pooled checks (50%)", () => {
+    const w = abWorld();
+    const row = w.tournaments[0];
+    if (!row) throw new Error("no row");
+    expect(row).toMatchObject({ judged: 2, held: 0.75 });
+    const tile = buildTile(row, w.runs.get("t001") ?? []);
+    expect(tileLabel(tile)).toBe("T001 · 75%");
+    expect(tile.red).toBe(row.red_line_fails ?? 0);
+    // A row from a daemon that does not fold held yet: the tile says so, it does not recompute.
+    const older = { ...row };
+    delete older.held;
+    expect(buildTile(older, w.runs.get("t001") ?? []).health).toBeUndefined();
+  });
+
+  it("no console source defines a tournament- or cell-level held of its own", () => {
+    const src = join(process.cwd(), "src");
+    const files: string[] = [];
+    const walk = (d: string) => {
+      for (const f of readdirSync(d)) {
+        const p = join(d, f);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f)) files.push(p);
+      }
+    };
+    walk(src);
+    const defined = files.filter((f) => /(function|const|let)\s+(resultsHealth|cellHealth|redLineFails)\b/.test(readFileSync(f, "utf8")));
+    expect(defined).toEqual([]);
   });
 });
 

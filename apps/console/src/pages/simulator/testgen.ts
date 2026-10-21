@@ -23,7 +23,6 @@ export function world(t: number, perT: number): World {
   const results = new Map<string, TournamentResults>();
   for (let i = 0; i < t; i++) {
     const tid = `t${String(i + 1).padStart(3, "0")}`;
-    tournaments.push({ tournament_id: tid, instrument_hash: "a3f9c2e17b44d0e5", runs: perT, completed: perT });
     const list: RunRow[] = [];
     const cells = new Map<string, { tone: string; tier: string; seg: string; aud: number; ids: string[] }>();
     for (let k = 0; k < perT; k++) {
@@ -49,6 +48,7 @@ export function world(t: number, perT: number): World {
         spec: { run_id, character: "malakor", tone_variant: tone, core_tier: tier, core_effort: "low", segment: seg, audience_size: aud, seed: k, duration_s: 300, population: "growing" },
       });
     }
+    tournaments.push(rowOf(tid, list));
     runs.set(tid, list);
     results.set(tid, {
       tournament_id: tid,
@@ -84,6 +84,75 @@ export function world(t: number, perT: number): World {
     });
   }
   return { fictional: true, tournaments, runs, results };
+}
+
+/**
+ * A tournament row as the daemon folds it from its runs: `held` is the mean of the judged runs'
+ * shares (runs are the observations, not checks), `red_line_fails` their sum.
+ */
+export function rowOf(tid: string, list: readonly RunRow[]): TournamentRow {
+  let sum = 0;
+  let held = 0;
+  let red = 0;
+  let judged = 0;
+  for (const r of list) {
+    if (r.has_verdict) judged += 1;
+    red += r.red_line_fails ?? 0;
+    if (r.health !== undefined) {
+      sum += r.health;
+      held += 1;
+    }
+  }
+  return {
+    tournament_id: tid,
+    instrument_hash: "a3f9c2e17b44d0e5",
+    runs: list.length,
+    completed: list.length,
+    judged,
+    ...(held > 0 ? { held: sum / held } : {}),
+    ...(red > 0 ? { red_line_fails: red } : {}),
+  };
+}
+
+/**
+ * The metric-identity fixture: t001 holds run A (1 pass, 0 fail), run B (50 pass, 50 fail)
+ * and an unjudged run C. Mean over judged runs: 75%. Pooled over checks: 51 / 101 = 50%.
+ */
+export function abWorld(): World {
+  const spec = (run_id: string, tone: string): RunRow["spec"] => ({ run_id, character: "malakor", tone_variant: tone, core_tier: "haiku", core_effort: "low", segment: "SEG-01", audience_size: 3, seed: 1, duration_s: 300, population: "growing" });
+  const list: RunRow[] = [
+    { run_id: "t001-a", tournament_id: "t001", has_verdict: true, health: 1, spec: spec("t001-a", "theatrical") },
+    { run_id: "t001-b", tournament_id: "t001", has_verdict: true, health: 0.5, spec: spec("t001-b", "weary-middle-manager") },
+    { run_id: "t001-c", tournament_id: "t001", has_verdict: false, spec: spec("t001-c", "weary-middle-manager") },
+  ];
+  const usage = { calls: 1, errors: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, cost_usd: 0.01 };
+  const cell = (tone: string, runs: number, judged: number, pass: number, fail: number) => ({
+    cell: { instrument_hash: "a3f9c2e17b44d0e5", tone, core_tier: "haiku", segment: "SEG-01", audience_size: 3 },
+    runs,
+    judged,
+    void: 0,
+    failed: 0,
+    judge_tiers: ["opus"],
+    rules: { "situation:a": { pass, fail, not_provoked: 0, not_evaluable: 0, n: judged } },
+    quality: {},
+    core_latency: { n: 0 },
+    usage,
+    usage_by_role: {},
+  });
+  const results: TournamentResults = {
+    tournament_id: "t001",
+    instrument_hashes: ["a3f9c2e17b44d0e5"],
+    calibration: [],
+    runs: 3,
+    judged: 2,
+    void: 0,
+    failed: 0,
+    cells: [cell("theatrical", 1, 1, 1, 0), cell("weary-middle-manager", 2, 1, 50, 50)],
+    latency_by_tier: {},
+    usage_total: usage,
+    usage_by_role: {},
+  };
+  return { fictional: true, tournaments: [rowOf("t001", list)], runs: new Map([["t001", list]]), results: new Map([["t001", results]]) };
 }
 
 /** One judge verdict and transcript, for the quote checks. */

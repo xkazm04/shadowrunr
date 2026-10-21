@@ -2,29 +2,11 @@
 // of `data/paged`, folded into what the grid and the tournament pages read.
 import { useMemo } from "react";
 import type { TournamentRow } from "@shadowrunr/contract";
-import { usePaged, usePagedMany, useRpcMany, useSameList, type Paged } from "../../data";
+import { usePaged, usePagedMany, useSameList, type Paged } from "../../data";
 import { buildTile, tilesInView, type Tile } from "./grid";
-import type { SimResults } from "./results";
 
 /** The daemon caps a page at 500 rows. */
 export const PAGE_LIMIT = 500;
-
-/** Tournament results by id, for the ids whose reply has arrived. */
-export function useResults(ids: readonly string[]): ReadonlyMap<string, SimResults> {
-  const idsKey = ids.join("\n");
-  // `idsKey` carries `ids` by value.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const list = useMemo(() => ids.map((tournament_id) => ({ tournament_id })), [idsKey]);
-  const many = useRpcMany("tournament.results", list);
-  return useMemo(() => {
-    const out = new Map<string, SimResults>();
-    many.data.forEach((r, i) => {
-      const id = list[i]?.tournament_id;
-      if (id !== undefined && r !== undefined) out.set(id, r);
-    });
-    return out;
-  }, [many.data, list]);
-}
 
 export interface SimGrid {
   /** The tournaments page chain: drives the page states. */
@@ -35,9 +17,16 @@ export interface SimGrid {
   readonly complete: boolean;
 }
 
+/** The tournament rows, by id: the list and the detail read one tournament's held from here. */
+export function useTournamentRow(id: string): TournamentRow | undefined {
+  const paged = usePaged("tournaments.page", { limit: PAGE_LIMIT });
+  return useMemo(() => paged.query.data?.find((t) => t.tournament_id === id), [paged.query.data, id]);
+}
+
 /**
- * Layer 1's data: the latest 40 tournaments and all their runs. Each run row carries its own
- * health and red-line fails (from its verdict), so the grid needs no `tournament.results`.
+ * Layer 1's data: the latest 40 tournaments and all their runs. A tile's held and red-line fails
+ * are its row's; each run row carries its own (from its verdict), so the grid needs no
+ * `tournament.results`.
  */
 export function useSimGrid(): SimGrid {
   const tournaments = usePaged("tournaments.page", { limit: PAGE_LIMIT });
@@ -47,7 +36,7 @@ export function useSimGrid(): SimGrid {
   const runs = usePagedMany("runs.page", runBases);
   // Keyed on the replies, not the chains: a refresh flag flipping must not redraw the grid.
   const runData = useSameList(runs.map((r) => r.query.data));
-  const tiles = useMemo(() => inView.map((t, i) => buildTile(t.tournament_id, t.runs, runData[i] ?? [])), [inView, runData]);
+  const tiles = useMemo(() => inView.map((t, i) => buildTile(t, runData[i] ?? [])), [inView, runData]);
   const complete = tournaments.done && runs.every((r) => r.done);
   return { tournaments, tiles, complete };
 }

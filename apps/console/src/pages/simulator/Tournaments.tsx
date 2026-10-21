@@ -10,8 +10,8 @@ import { FilterTable, type Column } from "../../ui/FilterTable";
 import { Head, Section } from "../../ui/Section";
 import { StatBand } from "../../ui/StatBand";
 import { usePaged } from "../../data";
-import { PAGE_LIMIT, useResults } from "./data";
-import { buildTile, resultsHealth, tilesInView, type RunCell } from "./grid";
+import { PAGE_LIMIT, useTournamentRow } from "./data";
+import { runCells, type RunCell } from "./grid";
 import type { SimResults } from "./results";
 import { int, usd } from "../../kit/events";
 import { Health, Note, shortHash, Found } from "./common";
@@ -20,24 +20,15 @@ import styles from "./l2.module.css";
 export function TournamentList() {
   const router = useRouter();
   const paged = usePaged("tournaments.page", { limit: PAGE_LIMIT });
-  // Health is read for the tournaments layer 1 shows (already cached), not all of them.
-  const recent = useMemo(() => tilesInView(paged.query.data ?? []).map((t) => t.tournament_id), [paged.query.data]);
-  const results = useResults(recent);
   const columns: readonly Column<TournamentRow>[] = useMemo(
     () => [
       { id: "id", header: "Tournament", cell: (t) => <b>{t.tournament_id}</b>, sortValue: (t) => t.tournament_id },
       { id: "hash", header: "Instrument", cell: (t) => <code className={styles.code}>{shortHash(t.instrument_hash)}</code> },
       { id: "done", header: "Runs done", cell: (t) => `${int(t.completed)} / ${int(t.runs)}`, sortValue: (t) => t.runs, align: "end" },
-      {
-        id: "held",
-        header: "Held",
-        cell: (t) => {
-          const r = results.get(t.tournament_id);
-          return r === undefined ? <span className={styles.dim}>open to read</span> : <Health value={resultsHealth(r)} />;
-        },
-      },
+      // The row's held, the same figure as the tile: the mean over judged runs. Unjudged last.
+      { id: "held", header: "Held", cell: (t) => <Health value={t.held} />, sortValue: (t) => t.held ?? 2, align: "end" },
     ],
-    [results],
+    [],
   );
   return (
     <>
@@ -79,18 +70,19 @@ const runColumns: readonly Column<RunLine>[] = [
 export function TournamentDetail({ id }: { id: string }) {
   const router = useRouter();
   const res = useRpc("tournament.results", { tournament_id: id });
+  const row = useTournamentRow(id);
   const runs = usePaged("runs.page", { tournament_id: id, limit: PAGE_LIMIT });
   const lines = useMemo(() => {
     const rows = runs.query.data ?? [];
-    const tile = buildTile(id, rows.length, rows);
-    const lines: RunLine[] = rows.map((row, i) => ({ row, cell: tile.runs[i] }));
+    const cells = runCells(rows);
+    const lines: RunLine[] = rows.map((row, i) => ({ row, cell: cells[i] }));
     return lines.sort((a, b) => (a.cell?.health ?? 2) - (b.cell?.health ?? 2));
-  }, [id, runs.query.data]);
+  }, [runs.query.data]);
   return (
     <>
       <Head kicker="Simulator · tournament" title={id} />
       <Found query={res} emptyTitle="No results for this tournament yet" emptyHint="results.json is written when the tournament is summarised.">
-        {(r) => <ResultsSummary r={r} />}
+        {(r) => <ResultsSummary r={r} held={row?.held} />}
       </Found>
       <Section title="Runs · worst first" right={`${int(lines.length)} runs${runs.done ? "" : " · loading"}`}>
         <QueryView query={runs.query} isEmpty={(r) => r.length === 0} emptyTitle="No runs recorded for this tournament">
@@ -111,7 +103,7 @@ export function TournamentDetail({ id }: { id: string }) {
   );
 }
 
-function ResultsSummary({ r }: { r: SimResults }) {
+function ResultsSummary({ r, held }: { r: SimResults; held: number | undefined }) {
   return (
     <>
       <StatBand
@@ -126,7 +118,7 @@ function ResultsSummary({ r }: { r: SimResults }) {
       <dl className={styles.kv}>
         <dt>Held</dt>
         <dd>
-          <Health value={resultsHealth(r)} />
+          <Health value={held} />
         </dd>
         <dt>Instrument</dt>
         <dd>

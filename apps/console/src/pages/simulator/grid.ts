@@ -1,10 +1,8 @@
 // The simulator grid model (A/1 app.js:446-475): one tile per tournament, one cell per run.
-// Pure: built from `tournaments.page` and `runs.page` (each row carries its verdict's health),
-// aggregated once, then drawn. Geometry and hit-testing are A/1's, kept exact at 40 tiles x 120 runs and
+// Pure: built from `tournaments.page` (each row carries the tournament's held, folded by the
+// daemon) and `runs.page` (each row carries its verdict's health), then drawn. Geometry and hit-testing are A/1's, kept exact at 40 tiles x 120 runs and
 // generalised past it so the 10x scale (48k runs) still draws one rect per run.
-import type { RunRow } from "@shadowrunr/contract";
-import { rulePass, ruleFails } from "./cells";
-import type { SimResults } from "./results";
+import type { RunRow, TournamentRow } from "@shadowrunr/contract";
 
 export interface RunCell {
   readonly runId: string;
@@ -16,9 +14,9 @@ export interface RunCell {
 
 export interface Tile {
   readonly id: string;
-  /** Mean share of rule checks held over its judged runs; undefined before any verdict. */
+  /** The row's held: the mean over judged runs, folded by the daemon; undefined before any verdict. */
   readonly health: number | undefined;
-  /** Red-line fails across the tournament. */
+  /** Red-line fails across the tournament (the row's). */
   readonly red: number;
   /** Runs the daemon reports for the tournament. */
   readonly declared: number;
@@ -35,36 +33,18 @@ export const RUN_ROWS = 10;
 /** The label band at the top of a tile (A/1: 16 CSS px). */
 export const LABEL_BAND = 16;
 
-/** Share of rule checks held across a tournament's cells (pooled); undefined before any verdict. */
-export function resultsHealth(results: SimResults | undefined): number | undefined {
-  let pass = 0;
-  let fail = 0;
-  for (const c of results?.cells ?? []) {
-    pass += rulePass(c);
-    fail += ruleFails(c);
-  }
-  return pass + fail > 0 ? pass / (pass + fail) : undefined;
+/** A tournament's runs as grid cells: each run's health and red-line fails from its own verdict. */
+export function runCells(runs: readonly RunRow[]): RunCell[] {
+  return runs.map((r) => ({ runId: r.run_id, health: r.health, red: (r.red_line_fails ?? 0) > 0 }));
 }
 
 /**
- * One tournament as a tile, from its run rows: each run's health and red-line fails come from
- * its own verdict (the daemon reads them). The tile's health is the mean over judged runs.
- * `declared` is the run count the daemon reports for the tournament.
+ * One tournament as a tile. Its health and red-line fails are the row's: the daemon is the one
+ * author of a tournament's held (the mean over judged runs), and the console never recomputes
+ * it. The run cells come from `runs.page`, for drawing. `declared` is the row's run count.
  */
-export function buildTile(id: string, declared: number, runs: readonly RunRow[]): Tile {
-  let red = 0;
-  let sum = 0;
-  let judged = 0;
-  const cells: RunCell[] = runs.map((r) => {
-    const fails = r.red_line_fails ?? 0;
-    red += fails;
-    if (r.health !== undefined) {
-      sum += r.health;
-      judged += 1;
-    }
-    return { runId: r.run_id, health: r.health, red: fails > 0 };
-  });
-  return { id, health: judged > 0 ? sum / judged : undefined, red, declared, runs: cells };
+export function buildTile(row: TournamentRow, runs: readonly RunRow[]): Tile {
+  return { id: row.tournament_id, health: row.held, red: row.red_line_fails ?? 0, declared: row.runs, runs: runCells(runs) };
 }
 
 /** The tiles in view: the last `MAX_TILES` tournaments of the daemon's order. */
