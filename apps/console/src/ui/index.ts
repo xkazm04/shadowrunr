@@ -3,6 +3,7 @@ export * from "./Chip";
 export * from "./Section";
 export * from "./VirtualList";
 export * from "./FilterTable";
+export * from "./tableView";
 export * from "./filterRows";
 export * from "./StatBand";
 export * from "./RateBar";
