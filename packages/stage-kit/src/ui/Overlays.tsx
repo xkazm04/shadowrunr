@@ -1,19 +1,12 @@
 import type { Case } from "@shadowrunr/contract";
 import { SEGMENT_TITLE, disclosureText } from "../lore";
-import type { SceneState } from "../sceneModel";
+import { isContentScreen, type SceneState } from "../sceneModel";
 
 export const TRANSITION_MS = 1900;
 export const INTRO_MS = 4600;
 export const MOMENT_FLASH_MS = 900;
 export const MOMENT_CHIP_MS = 3600;
 export const SEAL_MS = 4200;
-
-const LAYOUT_TITLE = {
-  boot: "The Spire wakes",
-  improv: SEGMENT_TITLE["SEG-01"],
-  hexmap: SEGMENT_TITLE["SEG-02A"],
-  descoped: "A descoped segment",
-} as const;
 
 /** Always on screen, above everything (contract with the audience, not a decoration).
  * `voice` is true only once a synthetic voice is configured; until then it reads "text only". */
@@ -42,7 +35,7 @@ export function TopBar({
   onAir?: boolean;
 }) {
   const seg = scene.segment;
-  const hexmap = scene.layout === "hexmap";
+  const caseShown = scene.segment === "SEG-02A" || isContentScreen(scene.layout);
   return (
     <div className="topbar">
       <div className="brand">
@@ -55,7 +48,7 @@ export function TopBar({
           <div className="brand-seg">{seg ? (onAir ? SEGMENT_TITLE[seg] : `${seg} · ${SEGMENT_TITLE[seg]}`) : "awaiting the first segment"}</div>
         </div>
       </div>
-      {hexmap && (
+      {caseShown && (
         <div className="case-title">
           <span className="case-kicker">CASE FILE</span>
           <span className="case-name">{caseFile ? caseFile.title : "Unlabelled case (no case file loaded)"}</span>
@@ -76,14 +69,15 @@ export function TopBar({
 
 export function TransitionWipe({ scene, now }: { scene: SceneState; now: number }) {
   const t = scene.transition;
-  if (!t || t.from === "boot") return null;
+  // A screen switch inside a segment moves the regions; only a segment change gets the wipe.
+  if (!t || t.from === "boot" || t.cause === "screen" || t.segment === undefined) return null;
   const age = now - t.at;
   if (age < 0 || age > TRANSITION_MS) return null;
   return (
     <div className="wipe" key={t.id}>
       <div className="wipe-band">
         <div className="wipe-kicker">{t.cause === "handover" ? "HANDOVER" : "NEW SEGMENT"}</div>
-        <div className="wipe-title">{LAYOUT_TITLE[t.to]}</div>
+        <div className="wipe-title">{SEGMENT_TITLE[t.segment]}</div>
         {t.reason && <div className="wipe-reason">{t.reason}</div>}
       </div>
     </div>

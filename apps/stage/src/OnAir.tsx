@@ -12,7 +12,8 @@
 
 import { useMemo } from "react";
 
-import { SEGMENT_TITLE, wordTimings, type LayoutId, type Redaction, type SceneState } from "@shadowrunr/stage-kit";
+import type { SegmentId } from "@shadowrunr/contract";
+import { SEGMENT_TITLE, wordTimings, type Redaction, type SceneState } from "@shadowrunr/stage-kit";
 import { CARD_MS, REDACTION_MS, captionSize, jobPhase } from "@shadowrunr/stage-kit/ui";
 import type { VoiceCaptionView } from "./voice/captions";
 
@@ -45,17 +46,21 @@ const VOTE: CommandRow = { cmd: "!vote", args: "<option>", what: "Vote in the op
 const HINT: CommandRow = { cmd: "!hint", args: "<hex> <text>", what: "Nominate a lead on the hexmap." };
 const GRADE: CommandRow = { cmd: "!grade", args: "<hex> <DOC|REP|CLM|SPC>", what: "Grade a hex. Jury advice, never proof." };
 
-/** The commands the room can use, per layout (none on the boot or a descoped segment); `!vote` joins while a poll is open. */
-export const STANDING_COMMANDS: Record<LayoutId, CommandRow[]> = {
-  boot: [],
-  descoped: [],
-  improv: [PROPOSE, SUMMON],
-  hexmap: [HINT, GRADE],
-};
+/** The commands the room can use, per segment (none in a descoped one); `!vote` joins while a poll is open. */
+export function standingCommands(segment: SegmentId | null): CommandRow[] {
+  switch (segment) {
+    case "SEG-01":
+      return [PROPOSE, SUMMON];
+    case "SEG-02A":
+      return [HINT, GRADE];
+    default:
+      return [];
+  }
+}
 
 /** The card slot between explainer cards: the segment and what the room can do in it now. */
 export function StandingCard({ scene, poll }: { scene: SceneState; poll: boolean }) {
-  const base = STANDING_COMMANDS[scene.layout];
+  const base = scene.layout === "boot" ? [] : standingCommands(scene.segment);
   const rows = base.length && poll ? [...base, VOTE] : base;
   if (!scene.segment || rows.length === 0) return null;
   return (

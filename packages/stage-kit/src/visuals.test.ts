@@ -112,9 +112,9 @@ describe("playback", () => {
   it("advances incrementally and rebuilds on a backward seek", () => {
     const t = new Timeline(evs);
     expect(t.duration).toBe(4000);
-    expect(t.advanceTo(1500).layout).toBe("improv");
+    expect(t.advanceTo(1500).layout).toBe("host");
     expect(t.advanceTo(3500).layout).toBe("hexmap");
-    expect(t.advanceTo(2500).layout).toBe("improv");
+    expect(t.advanceTo(2500).layout).toBe("host");
     expect(t.scene.applied).toBe(2);
     expect(t.finished).toBe(false);
     t.advanceTo(9999);

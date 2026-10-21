@@ -89,7 +89,7 @@ body {
   transition: opacity 1s;
 }
 
-.layout-hexmap .backdrop-glow {
+.layout-corner .backdrop-glow {
   background:
     radial-gradient(ellipse 1000px 700px at 34% 48%, rgba(47, 143, 120, 0.14), transparent 70%),
     radial-gradient(ellipse 600px 500px at 85% 20%, rgba(201, 164, 90, 0.06), transparent 70%);
@@ -347,12 +347,21 @@ body {
 }
 
 /* Malakor's face (src/avatar): drawn over the silhouette, which stays as the fallback until the
-   face is ready (no WebGL2, or the form did not load, keeps the silhouette). */
-.avatar-face {
+   face is ready (no WebGL2, or the form did not load, keeps the silhouette). The stand is the
+   face at its full size (FACE_PX), centred and scaled to the region by Stage.tsx; the scale
+   transitions with the region, so a handover glides him into the corner. */
+.avatar-stand {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform-origin: center;
+  transition: transform 0.95s var(--move);
+  pointer-events: none;
+}
+
+.avatar-face {
+  position: absolute;
+  inset: 0;
   pointer-events: none;
 }
 
@@ -384,16 +393,12 @@ body {
   white-space: nowrap;
 }
 
-.layout-hexmap .voice-label {
-  bottom: -6px;
-  font-size: 10px;
-  padding: 1px 6px;
-}
-
-.layout-hexmap .avatar-slot {
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(47, 143, 120, 0.25), rgba(6, 8, 7, 0.9) 70%);
-  border: 1px solid var(--panel-edge-hi);
+/* In the corner he stands cut out over the content: no badge, no backplate; the label sits low
+   on his robe, where it reads against the dark. */
+.layout-corner .voice-label {
+  bottom: 14px;
+  font-size: 12px;
+  padding: 2px 8px;
 }
 
 .sil-crown .shard {
@@ -684,10 +689,10 @@ body {
   margin-top: 4px;
 }
 
-.layout-hexmap .chat-body {
+.layout-corner .chat-body {
   font-size: 16px;
 }
-.layout-hexmap .chat-row {
+.layout-corner .chat-row {
   padding: 4px 6px;
 }
 
@@ -800,14 +805,14 @@ body {
   overflow: hidden;
 }
 
-.layout-hexmap .decree {
+.layout-corner .decree {
   height: 150px;
   padding: 12px 16px;
 }
-.layout-hexmap .decree-quote {
+.layout-corner .decree-quote {
   font-size: 19px;
 }
-.layout-hexmap .decree-main .sigil {
+.layout-corner .decree-main .sigil {
   width: 50px;
   height: 50px;
 }
@@ -899,21 +904,21 @@ body {
   transition: flex-grow 0.7s var(--move);
 }
 
-.layout-hexmap .vote-question {
+.layout-corner .vote-question {
   -webkit-line-clamp: 1;
   font-size: 19px;
 }
 
-.layout-hexmap .vote-label {
+.layout-corner .vote-label {
   font-size: 16px;
   margin-bottom: 2px;
 }
 
-.layout-hexmap .vote-track {
+.layout-corner .vote-track {
   height: 12px;
 }
 
-.layout-hexmap .vote-bars {
+.layout-corner .vote-bars {
   gap: 4px;
 }
 
@@ -1098,7 +1103,7 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  width: calc(100% - 556px); /* HEX_SIDE_W in layouts.ts */
+  width: calc(100% - 556px); /* an unfitted map keeps a lane on its right */
   height: calc(100% - 46px);
   padding: 16px 20px 0;
 }
@@ -1681,19 +1686,19 @@ body {
   color: var(--text);
 }
 
-.layout-hexmap .standing {
+.layout-corner .standing {
   padding: 16px 18px;
 }
-.layout-hexmap .standing-title {
+.layout-corner .standing-title {
   font-size: 22px;
 }
-.layout-hexmap .standing-rows {
+.layout-corner .standing-rows {
   gap: 12px;
 }
-.layout-hexmap .standing-cmd {
+.layout-corner .standing-cmd {
   font-size: 17px;
 }
-.layout-hexmap .standing-what {
+.layout-corner .standing-what {
   font-size: 15px;
 }
 
@@ -2659,7 +2664,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .region {
+  .region,
+  .avatar-stand {
     transition-duration: 0.01s;
   }
 }

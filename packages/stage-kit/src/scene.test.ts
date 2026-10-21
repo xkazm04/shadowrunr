@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import type { Case, ChatMsg, Command, Rank, StreamEvent } from "@shadowrunr/contract";
+import type { Case, ChatMsg, Command, Rank, ShownRecord, StreamEvent } from "@shadowrunr/contract";
 import { captionAt, enqueueCaption, foldEvents, matchOption, reduce } from "./scene";
 import {
+  BROWSER_TABS_MAX,
   CAPTION_QUEUE_MAX,
   CHAT_EVICT_SLACK,
   CHAT_MEMORY_MAX,
   DECREE_MAX,
   LANE_MAX,
   QUEUED_HOLD_MS,
+  RECORD_MAX,
+  defaultScreen,
   initialScene,
-  layoutFor,
+  isContentScreen,
+  type LayoutId,
 } from "./sceneModel";
 import { wordTimings } from "./timing";
 import { gradeTallies, pollBars } from "./tallies";
@@ -29,10 +33,12 @@ const chat = (ts: number, m: ChatMsg): StreamEvent => ({ type: "chat", ts_ms: ts
 const op = (ts: number, o: Extract<StreamEvent, { type: "op" }>["op"]): StreamEvent => ({ type: "op", ts_ms: ts, op: o });
 
 describe("layouts and segments", () => {
-  it("maps segments to named layouts", () => {
-    expect(layoutFor("SEG-01")).toBe("improv");
-    expect(layoutFor("SEG-02A")).toBe("hexmap");
-    expect(layoutFor("SEG-02B-I")).toBe("descoped");
+  it("opens each segment on its default screen", () => {
+    expect(defaultScreen("SEG-01")).toBe("host");
+    expect(defaultScreen("SEG-02A")).toBe("hexmap");
+    expect(defaultScreen("SEG-02B-I")).toBe("host");
+    const all: LayoutId[] = ["boot", "host", "hexmap", "browser", "desk"];
+    expect(all.filter(isContentScreen)).toEqual(["hexmap", "browser", "desk"]);
   });
 
   it("starts in boot, switches on segment_start, and animates a handover", () => {
@@ -41,8 +47,9 @@ describe("layouts and segments", () => {
     s = reduce(s, { type: "stream_start", ts_ms: 0, stream_id: "s", character: "malakor", tone_variant: "theatrical", core_tier: "haiku", audience_size: 3 });
     expect(s.meta?.audienceSize).toBe(3);
     s = reduce(s, { type: "segment_start", ts_ms: 100, segment: "SEG-01" });
-    expect(s.layout).toBe("improv");
-    expect(s.transition).toMatchObject({ from: "boot", to: "improv", cause: "segment_start", at: 100 });
+    expect(s.layout).toBe("host");
+    expect(s.screen).toBe("host");
+    expect(s.transition).toMatchObject({ from: "boot", to: "host", cause: "segment_start", segment: "SEG-01", at: 100 });
     s = reduce(s, op(200, { op: "switch_segment", to: "SEG-02A" }));
     expect(s.pendingSwitch).toEqual({ to: "SEG-02A", at: 200 });
     s = reduce(s, { type: "segment_end", ts_ms: 300, segment: "SEG-01", ses: 0.5 });
@@ -52,7 +59,7 @@ describe("layouts and segments", () => {
     expect(s.segment).toBe("SEG-02A");
     expect(s.pendingSwitch).toBeNull();
     const handoverTransition = s.transition;
-    expect(handoverTransition).toMatchObject({ from: "improv", to: "hexmap", cause: "handover", reason: "dare" });
+    expect(handoverTransition).toMatchObject({ from: "host", to: "hexmap", cause: "handover", segment: "SEG-02A", reason: "dare" });
     // The segment_start that follows a handover does not trigger a second transition.
     s = reduce(s, { type: "segment_start", ts_ms: 500, segment: "SEG-02A" });
     expect(s.transition).toBe(handoverTransition);
@@ -63,6 +70,112 @@ describe("layouts and segments", () => {
     expect(s.outro).toEqual({ reason: "sealed", at: 1 });
     s = reduce(s, { type: "stream_end", ts_ms: 2, reason: "sim_complete" });
     expect(s.ended).toEqual({ reason: "sim_complete", at: 2 });
+  });
+});
+
+describe("screens", () => {
+  const rec = (id: string, hex = "HEX-01"): ShownRecord => ({
+    id,
+    hex,
+    grade: "REP",
+    title: `Record ${id}`,
+    source: `https://records.example/${id}`,
+    summary: "a fictional record",
+    fictional: true,
+  });
+  const shown = (ts: number, r: ShownRecord): StreamEvent => ({ type: "record_shown", ts_ms: ts, record: r });
+  const screen = (ts: number, sc: "host" | "hexmap" | "browser" | "desk", record_id?: string): StreamEvent =>
+    op(ts, record_id === undefined ? { op: "show_screen", screen: sc } : { op: "show_screen", screen: sc, record_id });
+  const seg02a: StreamEvent[] = [
+    { type: "segment_start", ts_ms: 0, segment: "SEG-01" },
+    { type: "handover", ts_ms: 10, from: "SEG-01", to: "SEG-02A", reason: "dare" },
+    { type: "segment_start", ts_ms: 11, segment: "SEG-02A" },
+  ];
+
+  it("keeps boot before the first segment and opens each segment on its default screen", () => {
+    expect(initialScene()).toMatchObject({ layout: "boot", screen: "host", records: {}, tabs: [], activeRecord: null, pendingScreen: null });
+    expect(foldEvents(seg02a, 0)).toMatchObject({ layout: "host", screen: "host" });
+    expect(foldEvents(seg02a)).toMatchObject({ layout: "hexmap", screen: "hexmap" });
+    // A transcript that starts in SEG-02A (no handover) still gets the hexmap.
+    expect(foldEvents([{ type: "segment_start", ts_ms: 0, segment: "SEG-02A" }]).layout).toBe("hexmap");
+  });
+
+  it("opens a record in the browser when record_shown comes first, and moves it to the desk", () => {
+    let s = foldEvents([...seg02a, shown(20, rec("REP-01")), screen(21, "browser", "REP-01")]);
+    expect(s).toMatchObject({ layout: "browser", screen: "browser", tabs: ["REP-01"], activeRecord: "REP-01", pendingScreen: null });
+    expect(s.records["REP-01"]?.title).toBe("Record REP-01");
+    expect(s.transition).toMatchObject({ from: "hexmap", to: "browser", cause: "screen", at: 21 });
+    expect(s.transition?.segment).toBeUndefined();
+    s = reduce(s, screen(22, "desk"));
+    expect(s).toMatchObject({ layout: "desk", activeRecord: "REP-01" });
+    s = reduce(s, screen(23, "hexmap"));
+    expect(s).toMatchObject({ layout: "hexmap", tabs: ["REP-01"], activeRecord: "REP-01" });
+    s = reduce(s, screen(24, "host"));
+    expect(s.layout).toBe("host");
+  });
+
+  it("waits on hexmap for a record named before it arrives (the opposite order)", () => {
+    let s = foldEvents([...seg02a, screen(20, "browser", "REP-02")]);
+    expect(s).toMatchObject({ layout: "hexmap", screen: "hexmap", pendingScreen: { screen: "browser", recordId: "REP-02", at: 20 } });
+    s = reduce(s, shown(21, rec("REP-01")));
+    expect(s.layout).toBe("hexmap");
+    expect(s.tabs).toEqual([]);
+    s = reduce(s, shown(25, rec("REP-02")));
+    expect(s).toMatchObject({ layout: "browser", tabs: ["REP-02"], activeRecord: "REP-02", pendingScreen: null });
+    expect(s.transition).toMatchObject({ to: "browser", cause: "screen", at: 25 });
+  });
+
+  it("opens the latest record for a browser or desk without a record_id, or waits for the next one", () => {
+    let s = foldEvents([...seg02a, screen(20, "desk")]);
+    expect(s).toMatchObject({ layout: "hexmap", pendingScreen: { screen: "desk", at: 20 } });
+    expect(s.pendingScreen?.recordId).toBeUndefined();
+    s = reduce(s, shown(21, rec("REP-01")));
+    expect(s).toMatchObject({ layout: "desk", activeRecord: "REP-01" });
+    s = reduce(s, shown(22, rec("REP-02")));
+    s = reduce(s, screen(23, "hexmap"));
+    s = reduce(s, screen(24, "browser"));
+    // The active record stays the one the window had open.
+    expect(s).toMatchObject({ layout: "browser", activeRecord: "REP-01", tabs: ["REP-01"] });
+    // With nothing open yet, the latest record received.
+    const fresh = foldEvents([...seg02a, shown(20, rec("REP-01")), shown(21, rec("REP-02")), screen(22, "browser")]);
+    expect(fresh).toMatchObject({ layout: "browser", activeRecord: "REP-02" });
+  });
+
+  it("a host or hexmap switch drops a waiting screen, and so does a handover", () => {
+    let s = foldEvents([...seg02a, screen(20, "browser", "REP-09"), screen(21, "host")]);
+    expect(s).toMatchObject({ layout: "host", pendingScreen: null });
+    s = reduce(s, shown(22, rec("REP-09")));
+    expect(s.layout).toBe("host");
+    s = reduce(s, screen(23, "browser", "REP-10"));
+    expect(s.pendingScreen).not.toBeNull();
+    s = reduce(s, { type: "handover", ts_ms: 30, from: "SEG-02A", to: "SEG-01", reason: "back" });
+    expect(s).toMatchObject({ layout: "host", pendingScreen: null });
+  });
+
+  it("keeps at most BROWSER_TABS_MAX tabs, most recent first, and re-opening moves a tab to the front", () => {
+    let s = foldEvents(seg02a);
+    for (let i = 1; i <= BROWSER_TABS_MAX + 2; i++) {
+      s = reduce(s, shown(20 + i, rec(`REP-0${i}`)));
+      s = reduce(s, screen(20 + i, "browser", `REP-0${i}`));
+    }
+    expect(s.tabs).toEqual(["REP-06", "REP-05", "REP-04", "REP-03"]);
+    s = reduce(s, screen(40, "browser", "REP-04"));
+    expect(s.tabs).toEqual(["REP-04", "REP-06", "REP-05", "REP-03"]);
+    expect(s.activeRecord).toBe("REP-04");
+  });
+
+  it("remembers at most RECORD_MAX records and never forgets an open tab", () => {
+    let s = foldEvents([...seg02a, shown(12, rec("KEEP")), screen(13, "browser", "KEEP")]);
+    for (let i = 0; i < RECORD_MAX + 10; i++) s = reduce(s, shown(20 + i, rec(`R${i}`)));
+    expect(Object.keys(s.records)).toHaveLength(RECORD_MAX);
+    expect(s.records.KEEP).toBeDefined();
+    expect(s.records[`R${RECORD_MAX + 9}`]).toBeDefined();
+    expect(s.records.R0).toBeUndefined();
+  });
+
+  it("a record_shown alone opens nothing", () => {
+    const s = foldEvents([...seg02a, shown(20, rec("REP-01"))]);
+    expect(s).toMatchObject({ layout: "hexmap", tabs: [], activeRecord: null });
   });
 });
 
@@ -270,7 +383,7 @@ describe("foldEvents", () => {
       { type: "segment_start", ts_ms: 0, segment: "SEG-01" },
       { type: "handover", ts_ms: 10, from: "SEG-01", to: "SEG-02A", reason: "r" },
     ];
-    expect(foldEvents(evs, 5).layout).toBe("improv");
+    expect(foldEvents(evs, 5).layout).toBe("host");
     expect(foldEvents(evs).layout).toBe("hexmap");
     expect(foldEvents(evs).applied).toBe(2);
   });

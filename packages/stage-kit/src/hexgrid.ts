@@ -104,3 +104,115 @@ export function hexPointsAt(cx: number, cy: number, size: number, digits = 1): s
   }
   return pts.join(" ");
 }
+
+/** An axis-aligned box in pixels. */
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * A panel the map is fitted into, in its own pixels: its size, what stands over it (`avoid`:
+ * Malakor's corner, a window in front; no hex goes under these) and what it should keep clear
+ * when that is cheap (`prefer`: the overlay lane).
+ */
+export interface HexFrame {
+  w: number;
+  h: number;
+  avoid?: Box[];
+  prefer?: Box[];
+}
+
+/** Where a fitted map sits: a hex's panel position is `axialToPixel(q, r, size) * scale + (x, y)`. */
+export interface MapFit {
+  scale: number;
+  x: number;
+  y: number;
+}
+
+function overlaps(a: Box, b: Box): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/** Each hex's box (centre ± its half extents) under `fit`. */
+export function hexBoxes(hexes: readonly Hex[], size: number, fit: MapFit): Box[] {
+  const hw = ((size * SQRT3) / 2) * fit.scale;
+  const hh = size * fit.scale;
+  return hexes.map((h) => {
+    const p = axialToPixel(h.q, h.r, size);
+    return { x: p.x * fit.scale + fit.x - hw, y: p.y * fit.scale + fit.y - hh, w: 2 * hw, h: 2 * hh };
+  });
+}
+
+const ALIGN = [0.5, 1, 0] as const;
+
+/** The parts of `area` beside each box (left, right, above, below), and `area` itself first. */
+function subAreas(area: Box, boxes: readonly Box[]): Box[] {
+  const out: Box[] = [area];
+  const right = area.x + area.w;
+  const bottom = area.y + area.h;
+  for (const a of boxes) {
+    out.push({ ...area, w: Math.min(right, a.x) - area.x });
+    out.push({ ...area, x: Math.max(area.x, a.x + a.w), w: right - Math.max(area.x, a.x + a.w) });
+    out.push({ ...area, h: Math.min(bottom, a.y) - area.y });
+    out.push({ ...area, y: Math.max(area.y, a.y + a.h), h: bottom - Math.max(area.y, a.y + a.h) });
+  }
+  return out.filter((b) => b.w > 0 && b.h > 0);
+}
+
+function fitIn(hexes: readonly Hex[], size: number, area: Box, avoid: readonly Box[], maxScale: number): MapFit | null {
+  const b = mapBounds(hexes, size);
+  const bw = b.maxX - b.minX;
+  const bh = b.maxY - b.minY;
+  const top = Math.min(maxScale, area.w / bw, area.h / bh);
+  for (let scale = top; scale >= top * 0.35; scale *= 0.97) {
+    for (const ay of ALIGN) {
+      for (const ax of ALIGN) {
+        const fit = { scale, x: area.x + ax * (area.w - bw * scale) - b.minX * scale, y: area.y + ay * (area.h - bh * scale) - b.minY * scale };
+        if (hexBoxes(hexes, size, fit).every((h) => avoid.every((a) => !overlaps(h, a)))) return fit;
+      }
+    }
+  }
+  return null;
+}
+
+/** The largest fit over the whole area and the parts beside each box (centred in its part). */
+function bestFit(hexes: readonly Hex[], size: number, area: Box, avoid: readonly Box[], maxScale: number): MapFit | null {
+  let best: MapFit | null = null;
+  for (const part of subAreas(area, avoid)) {
+    const f = fitIn(hexes, size, part, avoid, maxScale);
+    if (f && (!best || f.scale > best.scale * 1.001)) best = f;
+  }
+  return best;
+}
+
+/**
+ * Fit the map into `area` as large as it goes (at most `maxScale`) with no hex's box touching any
+ * `avoid` box (what stands over the map: Malakor's corner, a window in front). `prefer` boxes (an
+ * overlay lane) are kept clear too while that costs less than a fifth of the scale. With nothing
+ * that fits, the map is centred at the smallest scale tried.
+ */
+export function fitMap(
+  hexes: readonly Hex[],
+  size: number,
+  area: Box,
+  avoid: readonly Box[] = [],
+  prefer: readonly Box[] = [],
+  maxScale = 1,
+): MapFit {
+  const hard = bestFit(hexes, size, area, avoid, maxScale);
+  if (prefer.length > 0) {
+    const soft = bestFit(hexes, size, area, [...avoid, ...prefer], maxScale);
+    if (soft && (!hard || soft.scale >= hard.scale * 0.8)) return soft;
+  }
+  if (hard) return hard;
+  const b = mapBounds(hexes, size);
+  const scale = Math.min(maxScale, area.w / (b.maxX - b.minX), area.h / (b.maxY - b.minY)) * 0.35;
+  return {
+    scale,
+    x: area.x + (area.w - (b.maxX - b.minX) * scale) / 2 - b.minX * scale,
+    y: area.y + (area.h - (b.maxY - b.minY) * scale) / 2 - b.minY * scale,
+  };
+}

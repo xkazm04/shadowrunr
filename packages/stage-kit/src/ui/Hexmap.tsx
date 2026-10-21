@@ -1,12 +1,30 @@
 import { useMemo } from "react";
 
 import type { Case, EvidenceGrade, Hex, HexKind } from "@shadowrunr/contract";
-import { axialToPixel, hexPoints, mapBounds, type MapModel } from "../hexgrid";
+import { axialToPixel, fitMap, hexPoints, mapBounds, type Box, type HexFrame, type MapModel } from "../hexgrid";
 import { GRADE, isAlleged } from "../lore";
 import type { SceneState } from "../sceneModel";
 
 export const REVEAL_MS = 1700;
-const SIZE = 74;
+/** The hexes' circumradius in map units (a fitted map scales it). */
+export const HEX_SIZE = 74;
+const SIZE = HEX_SIZE;
+/** The legend band under the hexes, and the padding around them, in panel pixels. */
+export const HEX_LEGEND_H = 46;
+export const HEX_PAD = { x: 20, y: 16 } as const;
+
+/** The box a framed panel fits its hexes into: inside the padding, above the legend. */
+export function hexArea(frame: HexFrame): Box {
+  return { x: HEX_PAD.x, y: HEX_PAD.y, w: frame.w - 2 * HEX_PAD.x, h: frame.h - HEX_PAD.y - HEX_LEGEND_H };
+}
+
+/** Where the legend starts: right of anything that stands over the legend band. */
+function legendLeft(frame: HexFrame): number {
+  const band = frame.h - HEX_LEGEND_H;
+  let left: number = HEX_PAD.x;
+  for (const a of frame.avoid ?? []) if (a.y + a.h > band && a.x < frame.w / 2) left = Math.max(left, a.x + a.w + 16);
+  return left;
+}
 
 const KIND_GLYPH: Record<HexKind, string> = {
   entity: "M-9 6 L-9 -4 L0 -10 L9 -4 L9 6 Z M-5 6 L-5 0 M0 6 L0 0 M5 6 L5 0",
@@ -68,19 +86,32 @@ export function Hexmap({
   scene,
   now,
   caseFile,
+  frame,
+  highlight = null,
 }: {
   map: MapModel;
   scene: SceneState;
   now: number;
   caseFile: Case | null;
+  /** Fit the hexes into this panel around what stands over it (absent: centred in the CSS box). */
+  frame?: HexFrame;
+  /** A hex to mark as the open record's (the desk screen). */
+  highlight?: string | null;
 }) {
-  const { pos, viewBox } = useMemo(() => {
+  const frameKey = frame ? JSON.stringify(frame) : "";
+  const { pos, viewBox, fit } = useMemo(() => {
     const pos = new Map<string, { x: number; y: number }>();
     for (const h of map.hexes) pos.set(h.id, axialToPixel(h.q, h.r, SIZE));
+    if (frame) {
+      const f = fitMap(map.hexes, SIZE, hexArea(frame), frame.avoid, frame.prefer);
+      return { pos, viewBox: `0 0 ${frame.w} ${frame.h}`, fit: f };
+    }
     const b = mapBounds(map.hexes, SIZE);
     const pad = 30;
-    return { pos, viewBox: `${b.minX - pad} ${b.minY - pad} ${b.maxX - b.minX + 2 * pad} ${b.maxY - b.minY + 2 * pad}` };
-  }, [map]);
+    return { pos, viewBox: `${b.minX - pad} ${b.minY - pad} ${b.maxX - b.minX + 2 * pad} ${b.maxY - b.minY + 2 * pad}`, fit: null };
+    // frameKey stands for `frame` (a new object each render with the same numbers)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, frameKey]);
   const points = useMemo(() => hexPoints(SIZE - 3), []);
   const inner = useMemo(() => hexPoints(SIZE - 12), []);
   const focus = scene.revealOrder[scene.revealOrder.length - 1] ?? null;
@@ -97,7 +128,7 @@ export function Hexmap({
   return (
     <div className="panel hexmap">
       {caseFile?.fictional && <div className="fiction-ribbon">FICTIONAL CASE</div>}
-      <svg className="hex-svg" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
+      <svg className={`hex-svg${fit ? " fitted" : ""}`} viewBox={viewBox} preserveAspectRatio={fit ? "xMinYMin meet" : "xMidYMid meet"}>
         <defs>
           <radialGradient id="fog-grad" cx="50%" cy="40%" r="70%">
             <stop offset="0%" stopColor="#2b3431" />
@@ -117,14 +148,15 @@ export function Hexmap({
           </filter>
         </defs>
 
-        <g className="hex-links">
-          {map.links.map(([a, b]) => {
-            const pa = pos.get(a);
-            const pb = pos.get(b);
-            if (!pa || !pb) return null;
-            const lit = !!(stateOf(map.hexes.find((h) => h.id === a)!) && stateOf(map.hexes.find((h) => h.id === b)!));
-            return <line key={`${a}-${b}`} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} className={lit ? "link lit" : "link"} />;
-          })}
+        <g transform={fit ? `translate(${fit.x.toFixed(1)} ${fit.y.toFixed(1)}) scale(${fit.scale.toFixed(4)})` : undefined}>
+          <g className="hex-links">
+            {map.links.map(([a, b]) => {
+              const pa = pos.get(a);
+              const pb = pos.get(b);
+              if (!pa || !pb) return null;
+              const lit = !!(stateOf(map.hexes.find((h) => h.id === a)!) && stateOf(map.hexes.find((h) => h.id === b)!));
+              return <line key={`${a}-${b}`} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} className={lit ? "link lit" : "link"} />;
+            })}
         </g>
 
         {map.hexes.map((h) => {
@@ -139,7 +171,7 @@ export function Hexmap({
             <g
               key={h.id}
               transform={`translate(${p.x} ${p.y})`}
-              className={`hex${st ? " revealed" : " fogged"}${revealing ? " revealing" : ""}${h.id === focus ? " focus" : ""}${hinted ? " hinted" : ""}${st && isAlleged(st.grade) ? " alleged" : ""}`}
+              className={`hex${st ? " revealed" : " fogged"}${revealing ? " revealing" : ""}${h.id === focus ? " focus" : ""}${hinted ? " hinted" : ""}${st && isAlleged(st.grade) ? " alleged" : ""}${h.id === highlight ? " on-record" : ""}`}
               style={{ ["--grade" as string]: color }}
             >
               <g className="hex-body">
@@ -185,8 +217,9 @@ export function Hexmap({
             </g>
           );
         })}
+        </g>
       </svg>
-      <div className="hex-legend">
+      <div className="hex-legend" style={frame ? { left: legendLeft(frame) } : undefined}>
         {(Object.keys(GRADE) as EvidenceGrade[]).map((g) => (
           <span key={g} className="legend-item">
             <span className="legend-swatch" style={{ borderColor: GRADE[g].color, color: GRADE[g].color }}>

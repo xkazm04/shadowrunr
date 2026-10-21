@@ -1,21 +1,27 @@
 // The scene model: what the stage shows at a moment, as plain data. `reduce` (scene.ts) builds it
 // from StreamEvents; nothing here reads a clock.
 
-import type { Case, EndReason, EvidenceGrade, ModelTier, Rank, SegmentId, VoteTally } from "@shadowrunr/contract";
+import type { Case, EndReason, EvidenceGrade, ModelTier, Rank, ScreenId, SegmentId, ShownRecord, VoteTally } from "@shadowrunr/contract";
 import { ChatMemory } from "./chatMemory";
 import type { TsMs } from "./vocab";
 
-export type LayoutId = "boot" | "improv" | "hexmap" | "descoped";
+/** What the canvas draws: `boot` before the first segment, then the main screen (contract
+ * `ScreenId`): `host` (the big-avatar room), `hexmap`, `browser` (a staged record in a browser
+ * window) or `desk` (the browser window in front of the hexmap window). */
+export type LayoutId = "boot" | ScreenId;
 
-export function layoutFor(segment: SegmentId): LayoutId {
-  switch (segment) {
-    case "SEG-01":
-      return "improv";
-    case "SEG-02A":
-      return "hexmap";
-    default:
-      return "descoped";
-  }
+/** The screens with content behind Malakor: he stands cut out in the bottom-left corner. */
+export const CONTENT_SCREENS = ["hexmap", "browser", "desk"] as const satisfies readonly ScreenId[];
+export type ContentScreen = (typeof CONTENT_SCREENS)[number];
+
+export function isContentScreen(layout: LayoutId): layout is ContentScreen {
+  return (CONTENT_SCREENS as readonly string[]).includes(layout);
+}
+
+/** The screen a segment opens on. The runtime sends its own `show_screen` too; this default keeps
+ * transcripts without one drawable. */
+export function defaultScreen(segment: SegmentId): ScreenId {
+  return segment === "SEG-02A" ? "hexmap" : "host";
 }
 
 export interface Transition {
@@ -23,9 +29,20 @@ export interface Transition {
   from: LayoutId;
   to: LayoutId;
   at: TsMs;
-  /** What triggered it: a handover (with Malakor's reason) or a plain segment start. */
-  cause: "handover" | "segment_start";
+  /** What triggered it: a handover (with Malakor's reason), a plain segment start, or a
+   * `show_screen` (or the record it waited for) inside a segment. */
+  cause: "handover" | "segment_start" | "screen";
+  /** The segment it opens (handover and segment_start). */
+  segment?: SegmentId;
   reason?: string;
+}
+
+/** A `show_screen browser|desk` whose record has not arrived: the screen waits on hexmap. */
+export interface PendingScreen {
+  screen: "browser" | "desk";
+  /** The record it names; absent: the next record that arrives. */
+  recordId?: string;
+  at: TsMs;
 }
 
 export interface Caption {
@@ -138,7 +155,18 @@ export interface SceneState {
   segment: SegmentId | null;
   /** The SEG-02A case from the latest `case_open` (null for transcripts without one). */
   caseFile: Case | null;
+  /** What the canvas draws (see LayoutId). */
   layout: LayoutId;
+  /** The main screen the segment is on (`host` before the first segment, drawn as `boot`). */
+  screen: ScreenId;
+  /** A browser or desk screen waiting for its record (contract: the stage tolerates either order). */
+  pendingScreen: PendingScreen | null;
+  /** Staged records received (`record_shown`), by id; at most RECORD_MAX, the open tabs kept. */
+  records: Record<string, ShownRecord>;
+  /** The browser window's tabs: record ids, most recent first (at most BROWSER_TABS_MAX). */
+  tabs: string[];
+  /** The record the browser window shows (the first tab once one is open). */
+  activeRecord: string | null;
   transition: Transition | null;
   pendingSwitch: { to: SegmentId; at: TsMs } | null;
   caption: Caption | null;
@@ -180,6 +208,10 @@ export const DECREE_MAX = 3;
 export const JOB_MAX = 12;
 export const MOMENT_MAX = 200;
 export const REDACTION_MAX = 20;
+/** Tabs the browser window keeps open. */
+export const BROWSER_TABS_MAX = 4;
+/** Staged records the scene remembers. */
+export const RECORD_MAX = 32;
 /** Captions that may wait behind the one on screen; a burst beyond this skips the oldest waiting. */
 export const CAPTION_QUEUE_MAX = 3;
 /** How long a revealed caption holds when another is waiting behind it. */
@@ -194,6 +226,11 @@ export function initialScene(): SceneState {
     segment: null,
     caseFile: null,
     layout: "boot",
+    screen: "host",
+    pendingScreen: null,
+    records: {},
+    tabs: [],
+    activeRecord: null,
     transition: null,
     pendingSwitch: null,
     caption: null,

@@ -256,6 +256,8 @@ push({ type: "handover", ts_ms: 130500, from: "SEG-01", to: "SEG-02A", reason: "
 // ─────────────────────────── SEG-02A: Hexmap Investigation ───────────────────────────
 push({ type: "segment_start", ts_ms: 131000, segment: "SEG-02A" });
 push({ type: "case_open", ts_ms: 131000, case: demoCase });
+// The segment runtime opens SEG-02A on its default screen.
+op(131000, { op: "show_screen", screen: "hexmap" });
 filler(133500, 262000, FILLER_02, 5600);
 
 say(133000, "Behold the Glimmerquay Lunar Staking Affair. Invented from crown to toe, and still more honest than the Disruptor.");
@@ -289,6 +291,9 @@ push({
     fictional: true,
   },
 });
+// The research job came back: the runtime opens its record in the browser window.
+op(162600, { op: "show_screen", screen: "browser", record_id: "REP-01" });
+push({ type: "say", ts_ms: 163200, speaker: "malakor", text: "The archive remembers what Glimmerquay would rather forget. Four percent a week, in their own words. REPORTED, minions, so ALLEGED.", first_text_ms: 1100 });
 op(164500, { op: "reveal_hex", hex: "HEX-02", grade: "REP" });
 push({ type: "picked", ts_ms: 166000, msg_ids: [h1], reason: "hint matches a fogged hex" });
 say(166500, "ashen_quill wants the wallet. Patience, Acolyte. The fog lifts by vote, not by whining.", [h1]);
@@ -318,6 +323,9 @@ const nextHex = runPoll({
   ],
 });
 say(173000, "Acolytes and above may vote. Thralls may watch, and learn what influence costs.");
+// The desk: the record in front, its hex lit on the map behind; then back to the map for the vote.
+op(178000, { op: "show_screen", screen: "desk" });
+op(192000, { op: "show_screen", screen: "hexmap" });
 op(202000, { op: "reveal_hex", hex: nextHex, grade: "SPC" });
 say(203000, "HEX-04, the treasury wallet. I SUSPECT it. I do not know it. Violet seal: speculation.");
 chat(204500, V.quill, "!grade HEX-04 CLM", { cmd: "grade", hex: "HEX-04", grade: "CLM" });
