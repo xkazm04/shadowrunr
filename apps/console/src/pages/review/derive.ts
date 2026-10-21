@@ -27,6 +27,14 @@ export interface Derived {
   /** Malakor lines per shown kind (kinds with no line omitted). */
   readonly mix: Readonly<Partial<Record<ShownKind, number>>>;
   readonly lengthS: number;
+  /**
+   * Per answering line, stream seconds from the earliest chat message it answers to the line.
+   * A sandbox session runs on the wall clock and stamps each event when it happens, so this is the
+   * response clock to the line reaching the stage: the beat's wait plus the whole core call, since
+   * the brain airs a reply once the call returns. Synthesis and the broadcast delay come after; the
+   * engine's `first_text_ms` is one stage of it.
+   */
+  readonly replyWaitS: readonly number[];
 }
 
 export const lineOf = (ref: string): number | undefined => {
@@ -69,7 +77,11 @@ export function derive(rs: ReviewSession): Derived {
   for (const q of rs.verdict?.quality ?? []) { const l = lineOf(q.turn_ref); if (l) facts.set(l, [...(facts.get(l) ?? []), [q.dimension, q.value]]); }
   const mix: Partial<Record<ShownKind, number>> = {};
   for (const s of says) mix[s.kind] = (mix[s.kind] ?? 0) + 1;
-  return { says, sayByLine: new Map(says.map((s) => [s.line, s])), chatById, failLines, facts, mix, lengthS: last };
+  const replyWaitS = says.flatMap((s) => {
+    const asked = s.replyingTo.flatMap((id) => { const c = chatById.get(id); return c ? [c.t] : []; });
+    return asked.length ? [s.t - Math.min(...asked)] : [];
+  });
+  return { says, sayByLine: new Map(says.map((s) => [s.line, s])), chatById, failLines, facts, mix, lengthS: last, replyWaitS };
 }
 
 /** Feedback by line, folded (the reply is already folded; local optimistic rows override it). */

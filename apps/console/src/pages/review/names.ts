@@ -46,6 +46,12 @@ export const WALL_ORDER: readonly (readonly [WallOrder, string])[] = [["oldest",
 /** A silence longer than this, in seconds, reads as a failure (the wall's facts, layer 2's figures). */
 export const SILENCE_LIMIT_S = 15;
 
+/**
+ * A reply whose p95 wait from the viewer's line exceeds this, in seconds, reads as a failure: the top
+ * of the research's 2-4 s budget to the first spoken word (docs/research/03-llm-orchestration.md).
+ */
+export const REPLY_LIMIT_S = 4;
+
 /** The timeline's row sizes, in seconds. */
 export const ROW_SIZES: readonly (readonly [number, string])[] = [[10, "10 s"], [30, "30 s"], [60, "1 min"], [120, "2 min"]];
 export const RANK_NAME: Readonly<Record<string, string>> = { thrall: "Thrall", acolyte: "Acolyte", cultist: "Cultist", warlock: "Warlock", lich: "Lich", dread_council: "Dread Council" };

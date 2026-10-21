@@ -21,6 +21,11 @@ describe("derive", () => {
     expect(d.lengthS).toBe(290);
   });
 
+  it("measures each answering line's wait from the earliest message it answers", () => {
+    // welcome answers c1 (2 s -> 4 s), care answers c3 (205 s -> 207 s); unanswered lines carry none.
+    expect(d.replyWaitS).toEqual([2, 2]);
+  });
+
   it("marks the line before an engine stall as a stall line, whatever its tag", () => {
     expect(d.sayByLine.get(lines.stall)?.kind).toBe("stall");
     expect(d.sayByLine.get(lines.stall)?.tag?.kind).toBe("other");

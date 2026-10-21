@@ -44,8 +44,9 @@ function Backdrop() {
 }
 
 /**
- * First words on air: the newest Reconcile report's `say` latency (the reconciler already
- * computed it over every run it read), else the sample transcripts the brain loaded.
+ * The core engine's first text: the newest Reconcile report's `say` latency (the reconciler already
+ * computed it over every run it read), else the sample transcripts the brain loaded. It is one stage
+ * of a reply, the call; the viewer's wait from their line is longer (Session review's reply wait).
  */
 export function useFirstWords(sampled: Latency): Latency & { readonly source: "report" | "sample" } {
   const list = useRpc("reconcile.list", {});
@@ -85,7 +86,7 @@ function Scene({ model }: { model: BrainModel }) {
           ))}
         </span>
       </RouteLink>
-      <RouteLink to={ENGINE} className={`${styles.panel} ${styles.gaugePanel}`} data-role="brain-latency" aria-label="Latency: core first words p50 and p95. Open the engine">
+      <RouteLink to={ENGINE} className={`${styles.panel} ${styles.gaugePanel}`} data-role="brain-latency" aria-label="Latency: core engine first text p50 and p95, one stage of the reply. Open the engine">
         <Gauge latency={latency} />
         <span className={styles.gaugeText}>
           <span className={`${styles.big} ${styles.bigGauge}`}>
@@ -93,7 +94,7 @@ function Scene({ model }: { model: BrainModel }) {
             <small>s p50</small>
           </span>
           <span className={styles.hudtxt}>
-            first words · p95 {sec(latency.p95)} s · n={latency.n}
+            engine first text · p95 {sec(latency.p95)} s · n={latency.n}
             {latency.source === "report" ? " · newest report" : ""}
           </span>
         </span>

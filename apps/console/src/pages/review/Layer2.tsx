@@ -17,7 +17,8 @@ import { useDerived, useFeedback, useSession } from "./hooks";
 import { Judge } from "./Judge";
 import styles from "./Layer2.module.css";
 import { Moderation } from "./Moderation";
-import { CHECK_NAME, CHECK_STATE_NAME, fmtClock, human, KIND_NAME, sessionTitle, SILENCE_LIMIT_S, type ShownKind } from "./names";
+import { CHECK_NAME, CHECK_STATE_NAME, fmtClock, human, KIND_NAME, REPLY_LIMIT_S, sessionTitle, SILENCE_LIMIT_S, type ShownKind } from "./names";
+import { pct } from "./tabkit";
 import { Player } from "./Player";
 import { ReviewByType } from "./ReviewByType";
 import type { TabId, TabProps } from "./tab";
@@ -84,6 +85,7 @@ function Session({ rs, tab, arg }: { rs: ReviewSession; tab: TabId; arg: string 
   const tabName = items.find((t) => t.id === tab)?.label ?? "Timeline";
   const marked = d.says.filter((s) => feedback.byLine.has(s.line)).length;
   const fails = rs.row.rule_fails;
+  const replyP95 = pct(d.replyWaitS, 0.95);
   return (
     <>
       <Tabs items={items} value={tab} label="Session review" onSelect={(t) => router.navigate(pageRoute("review", id, ...(t === "player" && kind ? ["player", kind] : [t])))} />
@@ -108,6 +110,7 @@ function Session({ rs, tab, arg }: { rs: ReviewSession; tab: TabId; arg: string 
               { label: "Rule fails", value: fails ?? "–", ...(fails ? { tone: "fail" as const } : {}) },
               { label: "You marked", value: marked.toLocaleString("en-US") },
               { label: "Longest silence", value: `${rs.row.max_say_gap_s.toFixed(1)} s`, ...(rs.row.max_say_gap_s > SILENCE_LIMIT_S ? { tone: "fail" as const } : {}) },
+              { label: "Reply wait p95", value: replyP95 === undefined ? "–" : `${replyP95.toFixed(1)} s`, ...(replyP95 !== undefined && replyP95 > REPLY_LIMIT_S ? { tone: "fail" as const } : {}) },
             ]}
           />
           {!rs.row.tagged && (
