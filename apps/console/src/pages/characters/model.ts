@@ -1,8 +1,9 @@
 // Pure helpers for the Characters page: the roster window, display names, the generic avatar's
 // deterministic spec (the winner's sr-kit `avatarSpec`, kept exactly), and the situation
-// verdict tallies read out of a tournament's results.json.
+// verdict tallies and per-tone records read out of a tournament's results.json.
 import type { CharacterSummary, FoilInfo, TournamentResults, TournamentRow } from "@shadowrunr/contract";
 import { refRun } from "../../kit/events";
+import { cellChecks, isRedLine, ruleEntries, THIN_N } from "../../kit/cellCounts";
 
 /** The roster switches to the dense "billing block" (two rows of ten) above this many. */
 export const ROSTER_MANY = 6;
@@ -215,3 +216,39 @@ export function failingRuns(t: SituationTally | undefined): string[] {
   if (!t) return [];
   return [...new Set(t.failRefs.map(refRun))];
 }
+
+// ---- each tone's measured record out of results.json ----
+
+/**
+ * One tone's record in a tournament: its cells' counts summed, each cell counted by the
+ * simulator's one home of per-cell figures (simulator/cells.ts), never a rate. A tone with no
+ * cell has no record: it is unmeasured there, not zero.
+ */
+export interface ToneRecord {
+  readonly tone: string;
+  readonly cells: number;
+  /** Judged runs across the tone's cells. */
+  readonly judged: number;
+  /** Rule fails of the evaluated checks (cellChecks). */
+  readonly fail: number;
+  readonly evaluated: number;
+  /** Fails of red-line rules (isRedLine), also counted in `fail`. */
+  readonly redLine: number;
+}
+
+/** The tournament's cells folded by `cell.tone` (instrument hashes summed: counts only). */
+export function toneEvidence(results: TournamentResults): Map<string, ToneRecord> {
+  const out = new Map<string, ToneRecord>();
+  for (const c of results.cells) {
+    const tone = c.cell.tone;
+    const a = out.get(tone) ?? { tone, cells: 0, judged: 0, fail: 0, evaluated: 0, redLine: 0 };
+    const checks = cellChecks(c);
+    let red = 0;
+    for (const [rule, t] of ruleEntries(c)) if (isRedLine(rule)) red += t.fail;
+    out.set(tone, { tone, cells: a.cells + 1, judged: a.judged + c.judged, fail: a.fail + checks.fail, evaluated: a.evaluated + checks.evaluated, redLine: a.redLine + red });
+  }
+  return out;
+}
+
+/** Fewer judged runs than the simulator's THIN_N: a hint, not a verdict. */
+export const thinTone = (r: ToneRecord): boolean => r.judged < THIN_N;

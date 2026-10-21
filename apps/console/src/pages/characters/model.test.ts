@@ -16,10 +16,11 @@ import {
   shortName,
   situationTallies,
   stepIndex,
+  toneEvidence,
   toneLabel,
 } from "./model";
 import { crumbLabel, readSub } from "./routes";
-import { genResults, genRoster, malakorDetail, malakorSummary } from "./testgen";
+import { genResults, genRoster, genToneResults, malakorDetail, malakorSummary } from "./testgen";
 import { parseRef, refRun } from "../../kit/events";
 
 describe("the roster", () => {
@@ -195,5 +196,23 @@ describe("the default tournament for situation verdicts", () => {
     expect(pickTournament([unknown, other], "malakor")).toBeUndefined();
     expect(offeredTournaments([unknown, other, own], "malakor").map((r) => r.tournament_id)).toEqual(["malakor-old", "adhoc"]);
     expect(pickTournament([], "malakor")).toBeUndefined();
+  });
+});
+
+describe("each tone's measured record (toneEvidence)", () => {
+  it("folds cells by tone with the simulator's per-cell counts and keeps tones apart", () => {
+    const results = genToneResults("t1", {
+      "gleeful-chaos": [
+        { judged: 2, fail: 1, redLine: 1 },
+        { judged: 4, fail: 2 },
+      ],
+      theatrical: [{ judged: 1 }],
+    });
+    const ev = toneEvidence(results);
+    // Every rule is checked once per judged run: two rules, 6 runs -> 12 evaluated checks; the
+    // red-line fail is also a rule fail (1 voice + 2 voice + 1 red line = 4).
+    expect(ev.get("gleeful-chaos")).toEqual({ tone: "gleeful-chaos", cells: 2, judged: 6, fail: 4, evaluated: 12, redLine: 1 });
+    expect(ev.get("theatrical")).toEqual({ tone: "theatrical", cells: 1, judged: 1, fail: 0, evaluated: 2, redLine: 0 });
+    expect(ev.has("weary-middle-manager")).toBe(false);
   });
 });

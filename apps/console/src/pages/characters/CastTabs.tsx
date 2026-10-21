@@ -1,10 +1,12 @@
 // The package's voices: tones (the tournament axis, the active one as the hero; any other can be
 // made active, an operator choice kept in <data> by character.tone.set) and foils (the SEG-01
-// guests, drawn by stage-kit's one FoilArt).
+// guests, drawn by stage-kit's one FoilArt). Each tone carries its measured record from the
+// package's one evidence source (useCharacterEvidence, the tournament Situations reads), and
+// Make active previews the switch, current beside candidate, before it sends: the active tone is
+// what stream prep and sandbox sessions perform. A red-line fail warns; it never blocks.
 import { FoilArt, hasFoilArt } from "@shadowrunr/stage-kit/ui";
 import { useMemo, useState } from "react";
 import type { CharacterDetail } from "@shadowrunr/contract";
-import { useMutation, viewOfError } from "../../data";
 import { pageRoute, RouteLink } from "../../router";
 import { Button } from "../../ui/Button";
 import { Chip } from "../../ui/Chip";
@@ -13,7 +15,9 @@ import { EmptyState } from "../../ui/States";
 import { readFoil, readTone, type ToneDoc } from "./packageDocs";
 import styles from "./Layer2.module.css";
 import { Inline } from "../../ui/Markdown";
+import { useCharacterEvidence, type CharacterEvidence } from "./evidence";
 import { foilName, toneLabel } from "./model";
+import { ToneEvidence, TonePreview } from "./TonePreview";
 
 const KICKER = "Characters · the package";
 
@@ -34,37 +38,17 @@ function Kv({ rows }: { rows: readonly (readonly [string, string | undefined])[]
   );
 }
 
-/** Makes a tone the character's active one; the data layer refetches the package after. */
-function MakeActive({ character, tone }: { character: string; tone: string }) {
-  const set = useMutation("character.tone.set");
-  const [error, setError] = useState<string | undefined>(undefined);
-  return (
-    <>
-      <Button
-        size="compact"
-        className={styles.toneSet}
-        disabled={set.pending}
-        data-role="characters-tone-set"
-        onClick={() =>
-          void set.run({ id: character, tone }).then((r) => setError(r.ok ? undefined : `${viewOfError(r.error).title}: ${r.error.message}`))
-        }
-      >
-        Make active
-      </Button>
-      {error !== undefined && <small className={styles.toneSetError}>{error}</small>}
-    </>
-  );
-}
-
 export function TonesTab({ d }: { d: CharacterDetail }) {
   const tones = useMemo(() => d.tones.map((t) => readTone(t.id, t.text)), [d.tones]);
+  const ev = useCharacterEvidence(d);
+  const [candidate, setCandidate] = useState<string | undefined>(undefined);
   const hero = tones.find((t) => t.id === d.active_tone) ?? tones.find((t) => t.id === d.default_tone);
   const others = tones.filter((t) => t !== hero);
   return (
     <>
       <Head kicker={KICKER} title="Tones" lede="One file per tone variant. The tone is the tournament axis: the same character, performed several ways, judged blind." />
       {tones.length === 0 && <EmptyState title="No tones yet" hint="Add tones/<id>.md to the package." />}
-      {hero && <ToneHero t={hero} isDefault={hero.id === d.default_tone} defaultTone={d.default_tone} />}
+      {hero && <ToneHero t={hero} isDefault={hero.id === d.default_tone} defaultTone={d.default_tone} ev={ev} />}
       {others.length > 0 && (
         <Section title={hero ? `The other ${others.length}` : "Tones"}>
           <div className={styles.toneGrid}>
@@ -73,8 +57,14 @@ export function TonesTab({ d }: { d: CharacterDetail }) {
                 <header>
                   <h3>{toneLabel(t.title)}</h3>
                   {t.baseline && <Chip tone="ok">baseline</Chip>}
-                  <MakeActive character={d.id} tone={t.id} />
+                  {candidate !== t.id && (
+                    <Button size="compact" className={styles.toneSet} data-role="characters-tone-set" onClick={() => setCandidate(t.id)}>
+                      Make active
+                    </Button>
+                  )}
                 </header>
+                <ToneEvidence ev={ev} tone={t.id} />
+                {candidate === t.id && <TonePreview character={d.id} ev={ev} current={hero} candidate={t} onClose={() => setCandidate(undefined)} />}
                 {t.desc !== undefined && (
                   <p>
                     <Inline text={t.desc} />
@@ -95,7 +85,7 @@ export function TonesTab({ d }: { d: CharacterDetail }) {
   );
 }
 
-function ToneHero({ t, isDefault, defaultTone }: { t: ToneDoc; isDefault: boolean; defaultTone: string }) {
+function ToneHero({ t, isDefault, defaultTone, ev }: { t: ToneDoc; isDefault: boolean; defaultTone: string; ev: CharacterEvidence }) {
   return (
     <section className={styles.toneHero} data-role="characters-tone-hero">
       <div>
@@ -107,9 +97,10 @@ function ToneHero({ t, isDefault, defaultTone }: { t: ToneDoc; isDefault: boolea
           </p>
         )}
         <Kv rows={[["Ratio", t.ratio], ["Edge", t.edge]]} />
+        <ToneEvidence ev={ev} tone={t.id} />
         <p className={styles.heroNote}>
           {isDefault ? "The package default" : `The operator's choice (the package default is ${toneLabel(defaultTone)})`}
-          {t.baseline ? " and the measured baseline" : ""}. Its cells and every other tone&apos;s are in <RouteLink to={pageRoute("simulator", "heatmap")}>the trials</RouteLink>.
+          {t.baseline ? " and the measured baseline" : ""}. Each tone&apos;s record is counted from its cells, which are in <RouteLink to={pageRoute("simulator", "heatmap")}>the trials</RouteLink>.
         </p>
       </div>
       <div>

@@ -2,25 +2,19 @@
 // desk was deleted at cutover C2. `worstFirst` mirrors
 // crates/shadowrunr-sim/src/summary.rs `worst_first`, so the console and heatmap.md agree:
 // any rule fail, then not_evaluable, then not_provoked (all descending), then mean quality
-// ascending (cells without quality last among equals), then the cell key.
-import type { Bound, CellKey, CellResult, QualityTally, RuleTally } from "./results";
+// ascending (cells without quality last among equals), then the cell key. The counting core
+// (rule fails, passes, evaluated checks, red lines, THIN_N) lives in kit/cellCounts.ts so the
+// Characters page counts a cell the same way; it is re-exported here unchanged.
+import { notEvaluable, notProvoked, ruleFails, THIN_N } from "../../kit/cellCounts";
+import type { Bound, CellKey, CellResult, QualityTally } from "./results";
+
+export { cellChecks, isRedLine, notEvaluable, notProvoked, ruleEntries, ruleFails, rulePass, THIN_N, type CellChecks } from "../../kit/cellCounts";
 
 export { cellLabel, cellRouteKey, parseCellRouteKey, type ParsedCellKey } from "./routeKey";
 
-/** Fewer judged runs than this: a rate is a hint, not a fact (summary.rs THIN_N). */
-export const THIN_N = 5;
-
 const sum = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0);
-/** The cell's rule tallies by rule id (the contract types map values as possibly absent). */
-export const ruleEntries = (c: CellResult): [string, RuleTally][] => Object.entries(c.rules).filter((e): e is [string, RuleTally] => e[1] !== undefined);
 /** The cell's quality tallies by dimension. */
 export const qualityEntries = (c: CellResult): [string, QualityTally][] => Object.entries(c.quality).filter((e): e is [string, QualityTally] => e[1] !== undefined);
-const tallies = (c: CellResult) => ruleEntries(c).map(([, t]) => t);
-
-export const ruleFails = (c: CellResult) => sum(tallies(c).map((r) => r.fail));
-export const notEvaluable = (c: CellResult) => sum(tallies(c).map((r) => r.not_evaluable));
-export const notProvoked = (c: CellResult) => sum(tallies(c).map((r) => r.not_provoked));
-export const rulePass = (c: CellResult) => sum(tallies(c).map((r) => r.pass));
 
 /** Mean of the dimension rates that have n > 0; undefined when there are none. */
 export function meanQuality(c: CellResult): number | undefined {
@@ -79,25 +73,5 @@ export function rateBound(k: number, n: number): Bound | undefined {
   const [lo, hi] = wilson(k, n);
   return { lo, hi, method: "wilson" };
 }
-
-/**
- * The cell's rule checks, counted and never bounded. Every rule is judged once per run, so the
- * checks inside one run share its host, seed and room and are not independent: a cell of two
- * judged runs and 95 checks is two observations, not 95, and a bound over the pooled checks
- * would claim the precision of 95. heatmap.md prints the same counts and no cell bound; the
- * bound that holds is each rule's own `fail_bound`, whose n is that rule's evaluated runs.
- */
-export interface CellChecks {
-  readonly fail: number;
-  /** Evaluated checks (pass + fail); not provoked and not evaluable are never passes. */
-  readonly evaluated: number;
-}
-
-export function cellChecks(c: CellResult): CellChecks {
-  const fail = ruleFails(c);
-  return { fail, evaluated: fail + rulePass(c) };
-}
-
-export const isRedLine = (rule: string) => rule.startsWith("red-line");
 
 export const sameCell = (a: CellKey, b: CellKey) => compareCellKey(a, b) === 0;

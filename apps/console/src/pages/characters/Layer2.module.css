@@ -135,3 +135,5 @@
 
 .toneSet { margin-left: auto; font-size: var(--sr-size-caption); }
 .toneSetError { flex-basis: 100%; color: var(--sr-color-fail); }
+.toneEv { margin: var(--sr-space-tight) 0; font-size: var(--sr-size-small); font-variant-numeric: tabular-nums; }
+.toneEv[data-measured="false"] { opacity: .75; }

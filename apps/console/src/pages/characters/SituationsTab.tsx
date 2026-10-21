@@ -1,11 +1,10 @@
 // Situations: the sim's situation bank as a virtualised table. Each situation is judged as the
 // rule `situation:<id>`; its verdict results come from a tournament's results.json (every cell's
 // tally summed), and its failing evidence links to the run's verdict and the transcript line.
-// Only this character's tournaments are read (pickTournament): situation ids are generic, so
-// another package's verdicts would read as this one's.
-import { useMemo, useState } from "react";
+// Only this character's tournaments are read (useCharacterEvidence, shared with the Tones tab):
+// situation ids are generic, so another package's verdicts would read as this one's.
+import { useMemo } from "react";
 import type { CharacterDetail, Situation } from "@shadowrunr/contract";
-import { useRpc } from "../../data";
 import { pageRoute, RouteLink, useRouter } from "../../router";
 import { transcriptRoute } from "../../router/brain";
 import { Chip, ChipRow, State } from "../../ui/Chip";
@@ -17,7 +16,8 @@ import { StatePanel } from "../../ui/States";
 import styles from "./Layer2.module.css";
 import { Inline } from "../../ui/Markdown";
 import { int, parseRef } from "../../kit/events";
-import { failingRuns, judged, offeredTournaments, pickTournament, SITUATION_PREFIX, situationTallies, type SituationTally } from "./model";
+import { useCharacterEvidence } from "./evidence";
+import { failingRuns, judged, SITUATION_PREFIX, situationTallies, type SituationTally } from "./model";
 import { pkgRoute } from "./routes";
 
 const ALL = "all";
@@ -41,13 +41,10 @@ export function Outcomes({ t, none }: { readonly t: SituationTally | undefined; 
 
 export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: string | undefined }) {
   const router = useRouter();
-  const tournaments = useRpc("tournament.list", {});
-  const [picked, setPicked] = useState<string | undefined>(undefined);
-  const offered = useMemo(() => offeredTournaments(tournaments.data ?? [], d.id), [tournaments.data, d.id]);
+  const ev = useCharacterEvidence(d);
+  const { offered, tid } = ev;
   const tids = offered.map((t) => t.tournament_id);
-  const tid = picked !== undefined && tids.includes(picked) ? picked : pickTournament(offered, d.id)?.tournament_id;
-  const results = useRpc("tournament.results", tid === undefined ? null : { tournament_id: tid });
-  const tallies = useMemo(() => (results.data ? situationTallies(results.data) : undefined), [results.data]);
+  const tallies = useMemo(() => (ev.results ? situationTallies(ev.results) : undefined), [ev.results]);
 
   const facets = useMemo((): Facets<Situation, string> => {
     const archetypes = new Set(d.situations.map((s) => s.archetype));
@@ -91,7 +88,7 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
       <div className={styles.toolsRow} data-role="characters-situation-results">
         <label className={styles.fld}>
           <span>Verdicts from</span>
-          <select value={tid ?? ""} disabled={tids.length === 0} onChange={(e) => setPicked(e.target.value)}>
+          <select value={tid ?? ""} disabled={tids.length === 0} onChange={(e) => ev.pick(e.target.value)}>
             {tid === undefined && <option value="">{tids.length === 0 ? "no tournament yet" : "pick a tournament"}</option>}
             {offered.map((t) => (
               <option key={t.tournament_id} value={t.tournament_id}>
@@ -101,10 +98,10 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
           </select>
         </label>
         <ResultsState
-          tournaments={tournaments.data?.length}
+          tournaments={ev.listed}
           name={tid === undefined ? d.name : undefined}
-          listError={tournaments.errorView?.title}
-          resultsError={results.errorView?.title}
+          listError={ev.listError}
+          resultsError={ev.resultsError}
         />
         <RouteLink to={pageRoute("simulator", "heatmap")} className={buttonClass("secondary", "compact")}>
           The trials heatmap

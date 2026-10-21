@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import DOM_BUDGETS from "../../../budgets/dom.json";
 import { fail, mountPage, nodes, ok, role, roles, settle, type Script } from "../../kit/testing";
+import { tournamentPick } from "./evidence";
 import { Layer2 } from "./Layer2";
 import { genResults, genRoster, malakorDetail, malakorParams, malakorRules, malakorSummary } from "./testgen";
 
@@ -11,6 +12,7 @@ let dispose: (() => void) | undefined;
 afterEach(() => {
   cleanup();
   dispose?.();
+  tournamentPick.reset();
 });
 
 interface Daemon {
@@ -187,6 +189,10 @@ describe("tones", () => {
     const card = roles("characters-tone-card").find((c) => c.textContent?.includes("Weary middle manager"));
     await act(async () => {
       card?.querySelector<HTMLButtonElement>("[data-role='characters-tone-set']")?.click();
+    });
+    await settle();
+    await act(async () => {
+      role("characters-tone-preview")?.querySelector<HTMLButtonElement>("[data-role='characters-tone-confirm']")?.click();
     });
     await settle();
     expect(m.fetch.calls).toContain("character.tone.set");

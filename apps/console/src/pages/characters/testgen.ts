@@ -175,3 +175,55 @@ export function genResults(cells: number, failsPerCell = 1): TournamentResults {
     })),
   };
 }
+
+/** One cell of a tone's record: its judged runs, rule fails and red-line fails. */
+export interface ToneCellSpec {
+  readonly judged: number;
+  readonly fail?: number;
+  readonly redLine?: number;
+}
+
+/**
+ * results.json whose cells are keyed by tone, one cell per spec (segments numbered so two cells
+ * of a tone never share a key). Each cell judges `voice:in-character` on every judged run and
+ * `red-line:no-slurs` once per run; `fail` and `redLine` are those rules' fails.
+ */
+export function genToneResults(tournamentId: string, tones: Readonly<Record<string, readonly ToneCellSpec[]>>): TournamentResults {
+  const usage = { calls: 0, errors: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, cost_usd: 0 };
+  const cells = Object.entries(tones).flatMap(([tone, specs]) =>
+    specs.map((s, i) => {
+      const fail = s.fail ?? 0;
+      const red = s.redLine ?? 0;
+      return {
+        runs: s.judged,
+        judged: s.judged,
+        void: 0,
+        failed: 0,
+        judge_tiers: ["opus" as const],
+        core_latency: { n: 0 },
+        usage,
+        usage_by_role: {},
+        cell: { tone, core_tier: "haiku", segment: SEGMENTS[i % SEGMENTS.length] ?? "SEG-01", audience_size: 30 + i, instrument_hash: "h" },
+        rules: {
+          "voice:in-character": { pass: s.judged - fail, fail, not_provoked: 0, not_evaluable: 0, n: s.judged, fail_refs: [] },
+          "red-line:no-slurs": { pass: s.judged - red, fail: red, not_provoked: 0, not_evaluable: 0, n: s.judged, fail_refs: [] },
+        },
+        quality: {},
+      };
+    }),
+  );
+  const judged = cells.reduce((a, c) => a + c.judged, 0);
+  return {
+    tournament_id: tournamentId,
+    instrument_hashes: ["h"],
+    calibration: [{ kind: "default_assumption" }],
+    runs: judged,
+    judged,
+    void: 0,
+    failed: 0,
+    latency_by_tier: {},
+    usage_total: usage,
+    usage_by_role: {},
+    cells,
+  };
+}
