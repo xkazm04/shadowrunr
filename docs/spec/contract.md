@@ -464,13 +464,19 @@ the event envelope and the error envelope now live in `crates/shadowrunr-types` 
   `null` there fails validation. A field with a serde default may be absent, because stored
   transcripts are replayed verbatim.
 - `pnpm -C packages/contract generate` re-exports the schema and regenerates
-  `src/generated/{types.ts, validators.js, validators.d.ts, meta.ts}`
-  (json-schema-to-typescript plus ajv standalone validators).
+  `src/generated/`: `types.ts`, `meta.ts`, `validators.{js,d.ts}` (the eager `ServerFrame` and
+  `ErrorEnvelope` validators) and `results/<Def>.{js,d.ts}`, one ajv standalone module per
+  method result def, compiled from that def's closure alone (json-schema-to-typescript plus ajv
+  standalone validators).
 - `src/door.ts` is the only place that calls `JSON.parse` or a validator.
-  `parseRpcResult(method, body)` and `parseEvent(frame)` return a typed `Result<T, DoorError>`,
-  where the error is `parse`, `invalid` (with the first violation's path), `unknown_method`, or
-  `rpc` (with the daemon's code).
-- Drift gates: `pnpm -C packages/contract check` (re-export, regenerate, diff) and the
+  `parseEvent(frame)` returns a typed `Result<T, DoorError>`; `parseRpcResult(method, body)`
+  resolves to one (never rejects), loading the method's result module on its first reply
+  through `meta.ts`'s `RESULT_LOADERS`. The error is `parse`, `invalid` (with the first
+  violation's path), `unknown_method`, `unavailable_validator` (the module failed to load; the
+  next reply retries), or `rpc` (with the daemon's code). `preloadResultValidators()` loads
+  them ahead of use.
+- Drift gates: `pnpm -C packages/contract check` (re-export, regenerate, and diff the schema plus
+  the WHOLE `src/generated/` tree, so a changed, missing or stray file fails it) and the
   `shadowrunr-types` test `committed_schema_matches_the_rust_types`.
 - `tournament.results` returns `TournamentResults` (see the WPI appendix).
 

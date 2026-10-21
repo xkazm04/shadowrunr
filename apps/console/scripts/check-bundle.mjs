@@ -5,7 +5,10 @@
 // From dist/.vite/manifest.json:
 //   entry          the index.html chunk plus everything it imports statically (first load)
 //   <page>.l1/.l2  each page layer's lazy chunk plus what it imports beyond the entry
-//   door           @shadowrunr/contract's validators; other lazy chunks are named in OTHER_ROUTES
+//   door           @shadowrunr/contract's door with its eager validators (ServerFrame + ErrorEnvelope),
+//                  loaded in parallel with the first paint; other lazy chunks are named in OTHER_ROUTES
+//   door.result    each method result validator chunk (generated/results/<Def>.js), loaded on that
+//                  method's first reply; its line is a PER-CHUNK max, so the largest one is gated
 // Budgets live in budgets/bundle.json. A route without a budget, or a budget without a route,
 // fails too, so a new page has to declare its budget.
 import { existsSync, readFileSync } from "node:fs";
@@ -27,7 +30,10 @@ const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
 /** Lazy chunks that are not page layers. */
 const OTHER_ROUTES = [
   [/^src\/data\/contractDoor\.ts$/, "door"],
+  [/(^|\/)contract\/src\/generated\/results\/\w+\.js$/, "door.result"],
 ];
+/** Routes made of many chunks, each held to the line on its own: the largest one is reported. */
+const PER_CHUNK = new Set(["door.result"]);
 
 const size = (file) => readFileSync(join(DIST, file)).length;
 const gz = (file) => gzipSync(readFileSync(join(DIST, file)), { level: 9 }).length;
@@ -72,7 +78,14 @@ for (const [key, chunk] of Object.entries(manifest)) {
     console.error(`check-bundle: dynamic chunk ${key} is not a known route; name it in check-bundle.mjs`);
     process.exit(1);
   }
-  measured[name] = measure(closure(key), entryKeys);
+  const m = measure(closure(key), entryKeys);
+  if (!PER_CHUNK.has(name)) {
+    measured[name] = m;
+  } else {
+    const prev = measured[name];
+    const count = (prev?.count ?? 0) + 1;
+    measured[name] = !prev || m.js > prev.js ? { ...m, count, largest: key } : { ...prev, count };
+  }
 }
 
 const failures = [];
@@ -84,8 +97,9 @@ for (const [name, m] of Object.entries(measured)) {
     failures.push(`${name}: no budget in budgets/bundle.json`);
     continue;
   }
-  console.log(name.padEnd(16), kb(m.js).padStart(11), kb(budget.js).padStart(11), kb(m.css).padStart(10), kb(m.gzip).padStart(10));
-  if (m.js > budget.js) failures.push(`${name}: js ${m.js} B > budget ${budget.js} B`);
+  const of = m.largest ? `  largest of ${m.count}: ${m.largest.split("/").pop()}` : "";
+  console.log(name.padEnd(16), kb(m.js).padStart(11), kb(budget.js).padStart(11), kb(m.css).padStart(10), kb(m.gzip).padStart(10) + of);
+  if (m.js > budget.js) failures.push(`${name}: js ${m.js} B > budget ${budget.js} B${m.largest ? ` (${m.largest})` : ""}`);
   if (budget.css !== undefined && m.css > budget.css) failures.push(`${name}: css ${m.css} B > budget ${budget.css} B`);
 }
 for (const name of Object.keys(BUDGETS.routes)) {
