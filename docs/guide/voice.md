@@ -157,6 +157,18 @@ audio in the 248 s and drops about 65 lines; three workers make 290 to 365 s and
 No render speed fixes that: the stage can play at most the show's own length, so most of what is
 said can never be heard. Pacing the brain to the voice is the cure, not more workers.
 
+### The brain paces itself to the voice
+
+The brain keeps a speech clock: every line it puts on air advances it by the line's characters
+at 18 a second (Kokoro `af_heart` measured about 18.3) plus a 250 ms pause. While more than
+1.5 s of speech is still queued, a beat holds (`beat_plan` `hold`, reason `speaking: N.N s
+queued`) and makes no model call; a safety beat and the closing beat never wait. Each beat asks
+for at most about 2 sentences and 260 characters (about 14 s of speech), and lines past that are
+dropped whole, the last first (`moderation {output, pace_budget, trimmed}`). These are
+`BrainTuning.pace` values; the rate is measured, the pause, the lead and the budget are
+assumptions to tune against voiced sandbox runs. The sandbox's `say_gap` counts nobody speaking on
+the same clock, so a long line followed by its drain is not a silence.
+
 Tests: `python -m unittest` from `tools/voice` (standard library only; no engine, no models).
 The real-engine smoke test runs only when `SHADOWRUNR_VOICE_ENGINE_DIR` names the engine dir, and
 it checks the mouth shapes too when `SHADOWRUNR_VOICE_DURATIONS` names the durations subgraph and
@@ -408,8 +420,9 @@ source's audio in OBS as usual.
 - The mouth follows the audio's own clock. The shape is read at the playback position (35 ms
   ahead) and the loudness from the output. When a sentence has no mouth shapes, the mouth follows
   loudness alone.
-- When the stage falls more than 6 s behind, it drops the oldest sentence that has not started.
-  It never talks later and later.
+- When the stage falls more than 6 s behind, it drops the oldest line that has not started, all
+  of its sentences. It never cuts a line it has started, and it keeps the newest line. It never
+  talks later and later.
 - A headless browser (the clip recorder, any automation) is never voiced. Clips stay silent.
 
 ### Looking at the face without a voice (dev builds)

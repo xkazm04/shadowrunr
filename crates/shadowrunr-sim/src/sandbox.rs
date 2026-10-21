@@ -22,7 +22,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use shadowrunr_brain::BrainTuning;
+use shadowrunr_brain::{BrainTuning, PaceConfig, SpeechClock};
 use shadowrunr_segments::{segment_table, HandoverRule, SegmentConfig, SegmentRuntime};
 use shadowrunr_types::sandbox::{
     SandboxChaos, SandboxCheck, SandboxCheckState, SandboxJudge, SandboxReport, SandboxStartParams,
@@ -83,7 +83,8 @@ pub const CLOSING_S: u32 = 60;
 pub const SIGN_OFF_WINDOW_S: u32 = 90;
 /// After a stop request, the host has this long to sign off.
 pub const STOP_SIGN_OFF_S: u32 = 10;
-/// The say-gap ceiling (`say-gap-ceiling`): the longest silence a session may hold.
+/// The say-gap ceiling (`say-gap-ceiling`): the longest silence a session may hold, measured
+/// speech-aware (from when the speech before his line ends, see `say_gaps`).
 pub const SAY_GAP_CEILING_S: f64 = 15.0;
 /// Length of the `outage` chaos window.
 pub const OUTAGE_S: u32 = 90;
@@ -426,7 +427,10 @@ struct Log {
     sink: EventSink,
     shared: Arc<Mutex<Shared>>,
     last_ts: TsMs,
-    last_say: TsMs,
+    /// When the speech on air so far ends (every line, at the brain's speech rate).
+    speech: SpeechClock,
+    pace: PaceConfig,
+    /// The longest speech-aware silence before one of his lines so far.
     max_gap_ms: TsMs,
     segment: SegmentId,
 }
@@ -440,12 +444,12 @@ impl Log {
         let ts = ts.max(self.last_ts);
         self.last_ts = ts;
         match &ev {
-            StreamEvent::Say {
-                speaker: Speaker::Malakor,
-                ..
-            } => {
-                self.max_gap_ms = self.max_gap_ms.max(ts - self.last_say);
-                self.last_say = ts;
+            StreamEvent::Say { speaker, text, .. } => {
+                if *speaker == Speaker::Malakor {
+                    let free = self.speech.until().unwrap_or(0);
+                    self.max_gap_ms = self.max_gap_ms.max((ts - free).max(0));
+                }
+                self.speech.say(ts, text, &self.pace);
             }
             StreamEvent::SegmentStart { segment, .. } => self.segment = *segment,
             _ => {}
@@ -794,8 +798,8 @@ impl Session {
 
     fn report(&self, ended: &Ended) -> SandboxReport {
         let events = self.log.events();
-        let says = malakor_says(events);
-        let gaps = say_gaps(&says, ended.end_ms);
+        let lines = on_air(events);
+        let gaps = say_gaps(&lines, ended.end_ms, Some(&self.log.pace));
         let (max_gap, max_at) = gaps
             .iter()
             .copied()
@@ -803,17 +807,26 @@ impl Session {
             .unwrap_or((0, 0));
         let gap_ms: Vec<u64> = gaps.iter().map(|(g, _)| *g as u64).collect();
         let max_say_gap_s = max_gap as f64 / 1000.0;
+        // The old say-to-say measure, beside it: a long line followed by a drain reads as a
+        // silence there.
+        let raw_s = say_gaps(&lines, ended.end_ms, None)
+            .iter()
+            .map(|(g, _)| *g)
+            .max()
+            .unwrap_or(0) as f64
+            / 1000.0;
         let say_gap = check(
             "say_gap",
             max_say_gap_s <= SAY_GAP_CEILING_S,
-            if says.is_empty() {
+            if !lines.iter().any(|l| l.1) {
                 format!(
                     "Malakor never spoke in {} s (ceiling {SAY_GAP_CEILING_S} s)",
                     ended.end_ms / 1000
                 )
             } else {
                 format!(
-                    "max {max_say_gap_s:.1} s, from {} to {} (ceiling {SAY_GAP_CEILING_S} s)",
+                    "max {max_say_gap_s:.1} s of nobody speaking, from {} to {} (say to say \
+                     {raw_s:.1} s; ceiling {SAY_GAP_CEILING_S} s)",
                     transcript::clock(max_at - max_gap),
                     transcript::clock(max_at)
                 )
@@ -1052,36 +1065,54 @@ fn check(id: &str, pass: bool, detail: String) -> SandboxCheck {
     }
 }
 
-fn malakor_says(events: &[StreamEvent]) -> Vec<TsMs> {
+/// Every line put on air, in order: when, whether Malakor said it (else a foil), and its text.
+fn on_air(events: &[StreamEvent]) -> Vec<(TsMs, bool, &str)> {
     events
         .iter()
-        .filter(|e| {
-            matches!(
-                e,
-                StreamEvent::Say {
-                    speaker: Speaker::Malakor,
-                    ..
-                }
-            )
+        .filter_map(|e| match e {
+            StreamEvent::Say {
+                ts_ms,
+                speaker,
+                text,
+                ..
+            } => Some((*ts_ms, *speaker == Speaker::Malakor, text.as_str())),
+            _ => None,
         })
-        .map(transcript::ts)
         .collect()
 }
 
-/// Every silence as `(length_ms, ended_at_ms)`: session start to the first say, then between
-/// consecutive says. With no say at all, the whole session.
-fn say_gaps(says: &[TsMs], end_ms: TsMs) -> Vec<(TsMs, TsMs)> {
-    if says.is_empty() {
+/// Every silence before one of Malakor's lines, as `(length_ms, ended_at_ms)`, from the
+/// session start. With `pace`, speech-aware: a silence is `say ts − when the speech before it
+/// ends` on the brain's speech clock (every line, foil lines too, at `speech_cps`, back to
+/// back), floored at 0, so a long line followed by a drain is not silence. Without it, say to
+/// say (the measure before pacing). With no line of his at all, the whole session.
+fn say_gaps(
+    lines: &[(TsMs, bool, &str)],
+    end_ms: TsMs,
+    pace: Option<&PaceConfig>,
+) -> Vec<(TsMs, TsMs)> {
+    if !lines.iter().any(|l| l.1) {
         return vec![(end_ms, end_ms)];
     }
+    let mut clock = SpeechClock::default();
     let mut prev = 0;
-    says.iter()
-        .map(|&t| {
-            let g = (t - prev, t);
-            prev = t;
-            g
-        })
-        .collect()
+    let mut gaps = Vec::new();
+    for &(t, malakor, text) in lines {
+        match pace {
+            Some(p) => {
+                if malakor {
+                    gaps.push(((t - clock.until().unwrap_or(0)).max(0), t));
+                }
+                clock.say(t, text, p);
+            }
+            None if malakor => {
+                gaps.push((t - prev, t));
+                prev = t;
+            }
+            None => {}
+        }
+    }
+    gaps
 }
 
 fn is_stall(e: &StreamEvent) -> bool {
@@ -1191,6 +1222,7 @@ pub async fn run_sandbox(
             ..runner::brain_tuning(&run_opts)
         };
         let fleet_grace_s = tuning.fleet_grace_s;
+        let pace = tuning.pace.clone();
         let mut brain =
             runner::build_brain(&prep, &run_opts, &memory_dir, brain_engine, &stage, tuning)
                 .await?;
@@ -1235,7 +1267,8 @@ pub async fn run_sandbox(
             sink,
             shared: shared.clone(),
             last_ts: 0,
-            last_say: 0,
+            speech: SpeechClock::default(),
+            pace: pace.clone(),
             max_gap_ms: 0,
             segment: spec.segment,
         };
@@ -1634,8 +1667,15 @@ mod tests {
         }
         assert!(!r.pass, "an unmeasured check is not a pass");
         // The cold open speaks a line and holds a beat: a line every 10 s, under the 15 s gate.
-        assert_eq!(r.max_say_gap_s, 10.0);
-        assert_eq!(r.say_gap_p95_s, 10.0);
+        // Speech-aware, each line's 2.25 s on air (36 characters at 18 a second, plus the
+        // pause) is not silence: 7.75 s of nobody speaking between them.
+        assert_eq!(r.max_say_gap_s, 7.75);
+        assert_eq!(r.say_gap_p95_s, 7.75);
+        assert!(
+            detail(r, "say_gap").contains("(say to say 10.0 s;"),
+            "{}",
+            detail(r, "say_gap")
+        );
         assert_eq!(r.core_errors, 0);
         assert_eq!((r.stall_lines, r.health_transitions), (0, 0));
         assert_eq!(r.ended_ms - r.started_ms, 55_000);
@@ -1702,6 +1742,37 @@ mod tests {
         assert_eq!(covered.len(), 1, "{covered:?}");
         assert!((35_000..47_000).contains(&covered[0]), "{covered:?}");
         assert!(r.beat_ms_p95 >= 12_000, "{}", r.beat_ms_p95);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_slow_first_call_is_covered_counting_the_quiet_from_the_stream_start() {
+        // The first beat (5 s) calls the model for 14 s. Nobody has spoken since 0 s, so the
+        // cover goes out 12 s into the stream, not 12 s into the call (17 s).
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = opts(tmp.path());
+        let engine = Arc::new(HostEngine {
+            slow_core: Some((0, Duration::from_secs(14))),
+            ..HostEngine::new()
+        });
+        let (_stop_tx, stop) = watch::channel(false);
+        let out = session(
+            sandbox_run(tmp.path(), 5, 60),
+            engine,
+            &opts,
+            no_sink(),
+            stop,
+        )
+        .await;
+        let first = out.events.iter().find_map(|e| match e {
+            StreamEvent::Say {
+                ts_ms,
+                speaker: Speaker::Malakor,
+                ..
+            } => Some(*ts_ms),
+            _ => None,
+        });
+        assert_eq!(first, Some(12_000), "{:?}", out.report);
+        assert_eq!(state(&out.report, "say_gap"), SandboxCheckState::Pass);
     }
 
     #[tokio::test(start_paused = true)]
@@ -1980,6 +2051,33 @@ mod tests {
         );
         // A failed beat stalls one beat early, so the outage never nears the ceiling.
         assert!(r.max_say_gap_s <= 12.0, "{}", detail(r, "say_gap"));
+    }
+
+    #[test]
+    fn the_say_gap_counts_nobody_speaking_not_say_to_say() {
+        let pace = PaceConfig::default();
+        let max = |lines: &[(TsMs, bool, &str)], pace: Option<&PaceConfig>| {
+            say_gaps(lines, 60_000, pace)
+                .iter()
+                .map(|g| g.0)
+                .max()
+                .unwrap()
+        };
+        // A 252-character line at 2 s airs until 16.25 s; the next line comes at 20 s after the
+        // drain: 3.75 s of nobody speaking, though 18 s say to say.
+        let long = "x".repeat(252);
+        let drained = [(2_000, true, long.as_str()), (20_000, true, "Next.")];
+        assert_eq!(max(&drained, Some(&pace)), 3_750);
+        assert_eq!(max(&drained, None), 18_000);
+        // A short line, then 16 s of nobody speaking: still a fail.
+        let silent = [(2_000, true, "Hm."), (2_000 + 417 + 16_000, true, "Next.")];
+        let g = max(&silent, Some(&pace));
+        assert_eq!(g, 16_000);
+        assert!(g as f64 / 1000.0 > SAY_GAP_CEILING_S);
+        // A foil's line on stage is speech too; the silence before his first line counts from 0.
+        let foil = [(1_000, false, long.as_str()), (17_000, true, "Mine now.")];
+        assert_eq!(say_gaps(&foil, 60_000, Some(&pace)), vec![(1_750, 17_000)]);
+        assert_eq!(say_gaps(&[], 30_000, Some(&pace)), vec![(30_000, 30_000)]);
     }
 
     #[test]

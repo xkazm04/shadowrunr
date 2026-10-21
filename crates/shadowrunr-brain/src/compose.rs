@@ -396,6 +396,9 @@ pub struct TurnInputs<'a> {
     /// The room events this beat announces (a closed vote, a handover due): they open the
     /// chat section, chat or no chat, after the care note.
     pub room_note: Option<&'a str>,
+    /// The beat's speech budget in characters ([`crate::pace`]); the gate drops whole lines
+    /// past it.
+    pub budget_chars: usize,
 }
 
 /// The optional rule a self-harm disclosure invokes when the operator has it enabled.
@@ -654,9 +657,14 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
     section(&mut s, "Chat", &chat);
 
     // 7. Output format.
-    let mut fmt = String::from(
-        "Speak as yourself. 1 to 3 short lines meant to be spoken aloud, one per line, plain \
-         text, no stage directions, no speaker labels.\n",
+    let mut fmt = format!(
+        "Speak as yourself. 1 or 2 short lines meant to be spoken aloud, one per line, plain \
+         text, no stage directions, no speaker labels. Your voice is heard in real time: at most \
+         about 2 sentences and {} characters in all this beat (about {} words). Put what \
+         matters most first: lines past that are cut. Tell longer material over several \
+         beats.\n",
+        t.budget_chars,
+        t.budget_chars / 6
     );
     let ops: Vec<&str> = t
         .ctx
@@ -763,7 +771,12 @@ mod tests {
             material: None,
             beat_note: None,
             room_note: None,
+            budget_chars: 260,
         });
+        assert!(
+            turn.contains("at most about 2 sentences and 260 characters in all this beat"),
+            "the budget is stated: {turn}"
+        );
         let open = format!("<memory_{nonce:016x}>");
         let close = format!("</memory_{nonce:016x}>");
         let (a, b) = (

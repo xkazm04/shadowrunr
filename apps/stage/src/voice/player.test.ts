@@ -152,6 +152,46 @@ describe("scheduling", () => {
     expect(audio.live().map((s) => s.at)).toEqual(kept.map((k) => k.start));
   });
 
+  it("past the cap whole lines go, the oldest unstarted first, never part of a started line", () => {
+    const { audio, player } = rig();
+    // Line 1 starts playing; its later parts arrive while it plays.
+    player.accept(utt(1, 0, 1000));
+    audio.currentTime = 10.5;
+    player.accept(utt(1, 1, 2000));
+    player.accept(utt(1, 2, 2000));
+    // Line 2 (three parts) and line 3 (two parts) queue behind it: 12.5 s ahead in all.
+    player.accept(utt(2, 0, 1500));
+    player.accept(utt(2, 1, 1500));
+    player.accept(utt(2, 2, 1500));
+    player.accept(utt(3, 0, 1500));
+    player.accept(utt(3, 1, 1500));
+    // Line 2 went whole; line 1 (started) is intact and line 3 (the newest) is kept whole.
+    expect(player.scheduled().map((e) => [e.seq, e.part])).toEqual([
+      [1, 0],
+      [1, 1],
+      [1, 2],
+      [3, 0],
+      [3, 1],
+    ]);
+    expect(player.droppedLines).toBe(1);
+    expect(player.dropped).toBe(3);
+    const kept = player.scheduled();
+    for (let i = 1; i < kept.length; i++) expect(kept[i]!.start).toBeCloseTo(kept[i - 1]!.end, 9);
+    expect(audio.live().map((s) => s.at)).toEqual(kept.map((k) => k.start));
+    // A part of the dropped line arriving late is behind what was accepted.
+    expect(player.accept(utt(2, 3, 500))).toBe("behind");
+  });
+
+  it("a started line over the cap is kept whole, even alone", () => {
+    const { audio, player } = rig();
+    player.accept(utt(7, 0, 1000));
+    audio.currentTime = 10.5;
+    for (let p = 1; p <= 5; p++) player.accept(utt(7, p, 2000));
+    expect(player.ahead).toBeGreaterThan(MAX_AHEAD_S);
+    expect(player.scheduled()).toHaveLength(6);
+    expect(player.droppedLines).toBe(0);
+  });
+
   it("an empty or undecodable utterance is refused", () => {
     const { player } = rig();
     expect(player.accept(utt(1, 0, 0))).toBe("bad");

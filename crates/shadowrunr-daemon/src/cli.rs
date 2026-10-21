@@ -111,7 +111,8 @@ pub enum Command {
     /// for the owner's approval.
     #[command(subcommand)]
     Prep(crate::prep::cli::PrepCommand),
-    /// Malakor's local voice: probe the [voice] setup, speak one line through the sidecar.
+    /// Malakor's local voice: probe the [voice] setup, speak one line through the sidecar, or
+    /// replay a recorded run through it.
     #[command(subcommand)]
     Voice(crate::voice::cli::VoiceCommand),
 }

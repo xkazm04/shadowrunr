@@ -17,6 +17,7 @@ use shadowrunr_types::{
 use crate::*;
 
 mod orchestration;
+mod pace;
 
 // ── Test double ────────────────────────────────────────────────────────
 
@@ -180,6 +181,18 @@ fn tuning() -> BrainTuning {
         policy: PolicySource::Builtin,
         warm_session: false,
         ..BrainTuning::default()
+    }
+}
+
+/// No speech hold and no budget: for tests about something else that speak a lot per beat.
+fn unpaced() -> BrainTuning {
+    BrainTuning {
+        pace: PaceConfig {
+            speech_lead_ms: i64::MAX,
+            budget_chars: usize::MAX,
+            ..PaceConfig::default()
+        },
+        ..tuning()
     }
 }
 
@@ -376,8 +389,9 @@ async fn warm_session_gets_the_prefix_once_and_turns_as_prompts() {
     }
     let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "s1", t).await;
     let c = ctx(&[]);
+    // Beats 5 s apart: 1 s apart, each line would still be on air (a speech hold).
     for (i, l) in lines.iter().enumerate() {
-        let ev = b.tick(i as i64 * 1_000, Vec::new(), &c).await.unwrap();
+        let ev = b.tick(i as i64 * 5_000, Vec::new(), &c).await.unwrap();
         assert_eq!(says(&ev), vec![*l]);
     }
     let templates = engine.inner.templates.lock().unwrap().clone();
@@ -1298,8 +1312,9 @@ async fn the_alleged_gate_fires() {
         mods(&ev, ModStage::Output),
         vec![("alleged:HEX-04".into(), None, "qualified".into())]
     );
-    // A grade revealed in the same beat counts for that beat's lines.
-    let ev = b.tick(2_000, Vec::new(), &c).await.unwrap();
+    // A grade revealed in the same beat counts for that beat's lines. (The next beat comes
+    // once those three lines have aired: sooner, it would be a speech hold.)
+    let ev = b.tick(12_000, Vec::new(), &c).await.unwrap();
     assert_eq!(
         says(&ev),
         vec!["HEX-07 is allegedly the shell behind it all."]
@@ -2591,7 +2606,8 @@ async fn night_a_crisis_reply_asking_where_the_viewer_is_becomes_a_help_pointer(
     assert!(p.contains(compose::NO_PERSONAL_DATA), "{p}");
     assert!(compose::NEUTRAL_DISTRESS_DIRECTIVE.ends_with(compose::NO_PERSONAL_DATA));
 
-    // Outside a crisis beat the same kind of ask is just removed.
+    // Outside a crisis beat the same kind of ask is just removed. (The beat comes once the
+    // help line has aired: sooner, it would be a speech hold.)
     let other = viewer("o1", "Bob", Rank::Cultist);
     engine.push(
         Role::CoreThread,
@@ -2599,8 +2615,8 @@ async fn night_a_crisis_reply_asking_where_the_viewer_is_becomes_a_help_pointer(
     );
     let ev = b
         .tick(
-            6_000,
-            vec![msg("o1", 5_000, &other, "rate my rug, lich")],
+            21_000,
+            vec![msg("o1", 20_000, &other, "rate my rug, lich")],
             &c,
         )
         .await
@@ -2666,7 +2682,8 @@ async fn a_busy_room_never_writes_an_episode_longer_than_recall_and_the_sleep_cy
     let w = |i: usize| W[i % W.len()];
     let dir = tempfile::tempdir().unwrap();
     let engine = FakeEngine::new();
-    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "p", tuning()).await;
+    // Three long lines a beat, unpaced: the episodes are under test, not the speech budget.
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "p", unpaced()).await;
     let c = ctx(&[]);
     let mut spoken = Vec::new();
     for t in 0..5usize {
@@ -2886,7 +2903,8 @@ async fn sandbox_a_stall_waits_for_the_quiet_interval_after_the_last_line() {
         "a healthy first beat records nothing"
     );
     assert_eq!(says(&ev).len(), 1);
-    // A failed beat's stall is due one beat early: at 7 s quiet (12 s budget less a 5 s beat).
+    // A failed beat's stall is due one beat early: at 7 s quiet (12 s budget less a 5 s beat),
+    // counted from when his speech ended (the line airs for about 1.5 s).
     // 5 s after his line: down, not quiet long enough yet.
     let ev = b.tick(5_000, Vec::new(), &c).await.unwrap();
     assert_eq!(healths(&ev), vec![FleetHealth::Down]);
@@ -2896,9 +2914,10 @@ async fn sandbox_a_stall_waits_for_the_quiet_interval_after_the_last_line() {
     ));
     assert_eq!(stalls(&ev), 0);
     assert_eq!(stalls(&b.tick(10_000, Vec::new(), &c).await.unwrap()), 1);
-    // 2 s after that stall line: not again yet; 10 s after it: again.
+    // 2 s after that stall line: not again yet (it is still airing); 7 s after it aired
+    // (a stall line is under 25 words, about 9 s at most): again.
     assert_eq!(stalls(&b.tick(12_000, Vec::new(), &c).await.unwrap()), 0);
-    assert_eq!(stalls(&b.tick(20_000, Vec::new(), &c).await.unwrap()), 1);
+    assert_eq!(stalls(&b.tick(26_000, Vec::new(), &c).await.unwrap()), 1);
 }
 
 #[tokio::test]

@@ -847,6 +847,12 @@ hosts a session; `shadowrunr stream sandbox` drives it.
   detail}], max_say_gap_s, say_gap_p95_s, beat_ms_p50, beat_ms_p95, core_errors, stall_lines,
   health_transitions, judge?: {verdict_path, rule_fails, quality_mean?}}`.
   - Check ids, in order: `say_gap`, `core_errors`, `sign_off`, `chaos`, `stage_ack`, `judge`.
+  - `say_gap` (and `max_say_gap_s`, `say_gap_p95_s`) is speech-aware: the silence before each of
+    Malakor's lines is its `ts_ms` minus when the speech before it ends, on the brain's speech
+    clock (every `say`, foil lines too, at `speech_cps`, back to back; see "Speech pacing"
+    below), floored at 0, from the session start. A long line followed by a drain is not a
+    silence; 15 s of nobody speaking still fails. The check's detail also gives the old
+    say-to-say maximum.
   - `pass` needs every check to pass. An unmeasured check (no stage acked, judge skipped) is
     not a pass.
 - `/events` client frame `{"ack": {"seq", "gaps", "stalled_ms"}}`: a subscriber reports the
@@ -933,10 +939,31 @@ like a real case. It is never written live in a quiet moment.
   before the beat's lines. No `beat_plan` is written on the sign-off beat or after it.
   - `mode`: `cold_open` (a story beat or the gathering open), `react`, `bit` (prepared material),
     `bridge` (a connector line), `mixed` (a bit line plus one pick), `hold` (nothing said: the
-    last line is recent, never two holds in a row), `improvise` (a quiet beat with nothing
-    prepared that fits).
+    last line is recent, never two holds in a row; or his speech is still queued, see below),
+    `improvise` (a quiet beat with nothing prepared that fits).
   - `reason` is for a reviewer to read, e.g. "room filling: cold open lines 1-2/6", "quiet 10 s:
-    premise p-03", "react: question; wave of 9 acknowledged". Its wording is not a contract.
+    premise p-03", "react: question; wave of 9 acknowledged". Its wording is not a contract,
+    except that a speech hold's reason starts with `speaking: N.N s queued`.
+- **Speech pacing.** The brain keeps a speech clock: every line it puts on air (his lines, foil
+  lines, stall and cover lines, the sign-off) advances `speaking_until` to
+  `max(now, speaking_until) + chars / speech_cps × 1000 + line_pause_ms`. Silence is measured
+  from where it ends (the hold rule's "last line is recent", the stall and cover clocks), so
+  silence means nobody is speaking. The defaults are tuning values in `BrainTuning.pace`:
+  `speech_cps` 18 (measured: Kokoro `af_heart` speaks about 18.3 characters a second),
+  `line_pause_ms` 250, `speech_lead_ms` 1500 and `budget_chars` 260 (assumptions).
+  - While more than `speech_lead_ms` of speech is queued, the beat is a `hold` with reason
+    `speaking: N.N s queued` and no core call. A safety beat runs at once. A closing beat (the
+    state summary carries a line starting `CLOSING`) runs at once too, so the sign-off is never
+    held past the session end; its budget is cut to half, and speech still queued at the end is
+    cut with the stream. A room event waits for the drain, then is announced ahead of a queued
+    connector or bit. A speech hold counts as a hold for "never two holds in a row".
+  - Carried chat expires 25 s after the speech queued when it arrived has aired ("carry from the
+    drain"), so pacing never silently expires a question.
+  - The per-turn prompt asks for at most about 2 sentences and `budget_chars` characters. The
+    output gate keeps a beat's spoken lines (his and the foils') within the budget by dropping
+    whole lines, the last first, never the first line: each one dropped writes
+    `moderation {output, pace_budget, trimmed}`. Prepared material gets the same budget; a long
+    story is told over several beats.
 - **The cold open (SEG-01).** `[clock.cold_open]` in `seg-01.toml` holds `min_s`, `max_s`,
   `active_chatters` (distinct chatters in a rolling 60 s) and `sustain_s`; `to` names the next
   state. `[state_rules.<state>]` may restrict `ops` and add a `prompt` line to the state summary.
@@ -950,7 +977,8 @@ like a real case. It is never written live in a quiet moment.
   jury gives no grade; a tied crowd poll counts every tied hex option as that hex's vote.
 - **Carried chat and room events.** A message that needs an answer (question, mention, first
   contact, `!propose`/`!summon`, mocked injection) but was not picked because of a hold, a
-  safety beat, the cold-open filter or the pick ceiling is carried for up to 25 s (at most 6)
+  safety beat, the cold-open filter or the pick ceiling is carried for up to 25 s from the drain
+  of the speech queued when it arrived (at most 6)
   and competes in later beats; expiry writes an input moderation record, rule `carry`, action
   `expired`. A safety beat answers only the disclosure. A vote that closes (crowd poll, foil
   vote, plebiscite) or a handover falling due is a room event: the next non-safety beat
@@ -963,9 +991,10 @@ like a real case. It is never written live in a quiet moment.
   answered this stream. Output rule `mechanism_leak` (action `removed` or `dropped`): a sentence
   describing the moderation machinery. A `persona_leak` or `character_break` line answering a
   forged decree is recast as an in-character rebuttal.
-- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/2`: the cold open and a room that fills
-  over about three minutes (stimuli other than newcomers and crises wait for it). Tournaments
-  before and after do not mix.
+- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/3`: beats are paced to his speech
+  (`/2` added the cold open and a room that fills over about three minutes). Pacing applies to
+  sims too, since the show is voiced and sims measure what airs. Tournaments before and after
+  do not mix.
 
 **Prep in runs.** A sim's `run.json` and a sandbox session's `spec.json` carry
 `prep`: the approved prep id, `sample` (the character's fictional
@@ -1012,7 +1041,11 @@ the brain never waits on audio.
     ahead of it;
   - a failed or timed-out render is `skipped` with `error`, together with the rest of its line.
 - The client plays the audio. Audio is the one clock: the mouth follows playback time, never the
-  wall clock.
+  wall clock. The stage's player holds at most 6 s of audio ahead of the playhead; past that it
+  drops the oldest line that has not started, every part of it, and never part of a line that
+  has started or the newest line.
+- The brain paces its lines to this voice (see "Speech pacing" in the orchestration appendix):
+  it writes no more than can be spoken, so lines are not lost to `late` and `queue_full`.
 
 **`GET /avatar/{file}`** serves the face rig from `<data>/avatar/rig/`: `layers.json` and the PNGs
 it names, in the glow-rig format (a `FormSpec` with `rig_type: "glow"`). The rig is built offline

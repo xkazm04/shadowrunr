@@ -8,8 +8,9 @@
 //
 // **Bounded and in order.** Parts play gaplessly in (seq, part) order. A frame at or behind what
 // was already accepted is dropped. When more than `MAX_AHEAD_S` of audio is waiting, the oldest
-// utterance that has not started is dropped and the rest close up behind what is playing, so a
-// stage that fell behind catches up instead of talking ever later. A new run starts afresh.
+// line that has not started is dropped whole (every part of that seq) and the rest close up
+// behind what is playing, so a stage that fell behind catches up instead of talking ever later.
+// A line that has started is never cut, and the newest line is kept. A new run starts afresh.
 
 import { RESTING, type FaceSignal, type FaceSource } from "../avatar/types";
 import type { Clock } from "../avatar/motion";
@@ -71,8 +72,10 @@ export class VoicePlayer implements FaceSource {
   private listeners = new Set<(s: FaceSignal) => void>();
   private stopTick: (() => void) | null = null;
   private lastSignal: FaceSignal = RESTING;
-  /** Utterances dropped for falling behind (since the last run change). */
+  /** Utterances dropped for falling behind (since the last run change), whole lines at a time. */
   dropped = 0;
+  /** Lines dropped for falling behind (since the last run change). */
+  droppedLines = 0;
 
   constructor(
     private readonly audio: AudioLike,
@@ -130,6 +133,7 @@ export class VoicePlayer implements FaceSource {
     this.last = null;
     this.runId = null;
     this.dropped = 0;
+    this.droppedLines = 0;
   }
 
   dispose(): void {
@@ -183,16 +187,27 @@ export class VoicePlayer implements FaceSource {
     while (this.queue.length && this.queue[0]!.start + this.queue[0]!.buffer.duration <= now) this.queue.shift();
   }
 
-  /** Over the cap: drop the oldest unstarted utterance and close the gap; keep the newest one. */
+  /**
+   * Over the cap: drop the oldest line none of whose parts has started, all of its parts, and
+   * close the gap. A started line is never cut; the newest line is kept.
+   */
   private bound() {
     const now = this.audio.currentTime;
     let changed = false;
     while (this.ahead > MAX_AHEAD_S) {
-      const i = this.queue.findIndex((e) => e.start > now);
-      if (i < 0 || i === this.queue.length - 1) break;
-      this.silence(this.queue[i]!);
-      this.queue.splice(i, 1);
-      this.dropped++;
+      const started = new Set(this.queue.filter((e) => e.start <= now).map((e) => e.seq));
+      const newest = this.queue[this.queue.length - 1]!.seq;
+      const i = this.queue.findIndex((e) => !started.has(e.seq) && e.seq !== newest);
+      if (i < 0) break;
+      const seq = this.queue[i]!.seq;
+      let n = 0;
+      while (this.queue[i]?.seq === seq) {
+        this.silence(this.queue[i]!);
+        this.queue.splice(i, 1);
+        n++;
+      }
+      this.dropped += n;
+      this.droppedLines++;
       changed = true;
       // everything after it moves up behind what precedes it (a source starts once: remake them)
       let at = i > 0 ? this.queue[i - 1]!.start + this.queue[i - 1]!.buffer.duration : now + START_LEAD_S;

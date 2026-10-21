@@ -65,6 +65,9 @@ struct Room {
     o: Orchestrator,
     names: Vec<String>,
     last_say: Option<TsMs>,
+    /// Speech queued on the speech clock until then (the brain's `aired` lines).
+    speaking_until: Option<TsMs>,
+    closing: bool,
 }
 
 impl Room {
@@ -73,6 +76,8 @@ impl Room {
             o: Orchestrator::new(7),
             names: vec!["malakor".into()],
             last_say: None,
+            speaking_until: None,
+            closing: false,
         }
     }
 
@@ -105,7 +110,9 @@ impl Room {
             ctx: c,
             cands: &cands,
             prep,
-            last_say_ms: self.last_say,
+            speech_until_ms: self.speaking_until.max(self.last_say),
+            speech_lead_ms: crate::pace::PaceConfig::default().speech_lead_ms,
+            closing: self.closing,
             names: &self.names,
             max_picks: 3,
         });
@@ -809,4 +816,124 @@ fn without_a_prep_gathering_lines_are_20_s_apart_with_holds_and_asides_between()
         spoke.windows(2).all(|w| w[1] - w[0] <= 10_000),
         "never a long silence: {spoke:?}"
     );
+}
+
+// ----- speech pacing ----------------------------------------------------------------------
+
+#[test]
+fn queued_speech_holds_the_beat_but_never_a_safety_or_a_closing_beat() {
+    let mut room = Room::new();
+    regular(&mut room, "beetle");
+    room.speaking_until = Some(12_400);
+    let q = msg("q", "beetle", "malakor, who holds the moat?");
+    let (p, ids, e) = room.beat(5_000, "opening", None, vec![q.clone()], vec![cand(&q)]);
+    assert_eq!(p.mode, BeatMode::Hold);
+    assert!(p.speaking);
+    assert!(ids.is_empty());
+    assert!(
+        reason(&e).starts_with("speaking: 7.4 s queued"),
+        "{}",
+        reason(&e)
+    );
+    // Within the lead (1.5 s) the beat goes ahead.
+    let (p, ids, _) = room.beat(11_000, "opening", None, Vec::new(), Vec::new());
+    assert_eq!(ids, ["q"], "{}", p.reason);
+    // A disclosure is answered at once, speech or no speech.
+    room.speaking_until = Some(30_000);
+    let (p, ids, _) = room.beat(
+        15_000,
+        "opening",
+        None,
+        Vec::new(),
+        vec![safety("s", "sad")],
+    );
+    assert_eq!(ids, ["s"], "{}", p.reason);
+    assert!(!p.speaking);
+    // So is a closing beat: the sign-off is never held.
+    room.closing = true;
+    let (p, _, _) = room.beat(20_000, "opening", None, Vec::new(), Vec::new());
+    assert!(!p.speaking, "{}", p.reason);
+    assert_ne!(p.mode, BeatMode::Hold, "{}", p.reason);
+}
+
+#[test]
+fn a_room_event_waits_for_the_drain_then_goes_ahead_of_the_bit() {
+    let mut prep = sample_prep();
+    prep.bits.retain(|b| b.id == "s-01");
+    let mut room = Room::new();
+    let mut t = 0;
+    loop {
+        t += 5_000;
+        let c = ctx_with("opening", OPEN_P1);
+        let (p, _, _, _) = room.beat_in(t, &c, Some(&prep), vec![], vec![]);
+        if p.bit_id.as_deref() == Some("s-01") {
+            break;
+        }
+    }
+    // The story line is long: the poll closes while it is still being spoken.
+    room.speaking_until = Some(t + 12_000);
+    let closed = ctx_with("opening", "no poll open\nlast poll p1 closed: winner moat");
+    let (p, _, _, _) = room.beat_in(t + 5_000, &closed, Some(&prep), vec![], vec![]);
+    assert!(p.speaking, "{}", p.reason);
+    assert!(p.room_note.is_none(), "not announced over his speech");
+    // Drained: the announcement comes first, and the queued story yields to it.
+    let (p, _, _, _) = room.beat_in(t + 15_000, &closed, Some(&prep), vec![], vec![]);
+    assert!(p.reason.contains("announce poll p1 closed"), "{}", p.reason);
+    assert!(p.reason.contains("bit s-01 expired"), "{}", p.reason);
+    assert!(p.room_note.unwrap().contains("winner moat"));
+}
+
+#[test]
+fn carried_chat_survives_a_long_drain_and_expires_25_s_after_it() {
+    let mut room = Room::new();
+    regular(&mut room, "beetle");
+    regular(&mut room, "moth");
+    // 30 s of speech queued when the question arrives.
+    room.speaking_until = Some(35_000);
+    let q = msg("q", "beetle", "malakor, who holds the moat?");
+    let (p, _, e) = room.beat(5_000, "opening", None, vec![q.clone()], vec![cand(&q)]);
+    assert!(p.speaking);
+    assert!(reason(&e).contains("deferred: q"), "{}", reason(&e));
+    for t in (10_000..=30_000).step_by(5_000) {
+        let (p, ids, _, ev) = room.beat_in(t, &ctx("opening"), None, Vec::new(), Vec::new());
+        assert!(p.speaking && ids.is_empty(), "{}", p.reason);
+        assert!(
+            !ev.iter()
+                .any(|e| matches!(e, StreamEvent::Moderation { rule, .. } if rule == CARRY_RULE)),
+            "not expired while he speaks"
+        );
+    }
+    // 35 s after it arrived, once the speech aired: still answered.
+    let (_, ids, e) = room.beat(35_000, "opening", None, Vec::new(), Vec::new());
+    assert_eq!(ids, ["q"]);
+    assert!(
+        reason(&e).contains("carried over: q (30 s)"),
+        "{}",
+        reason(&e)
+    );
+
+    // A second one, never answered (a full ceiling of fresher picks each beat would be the
+    // usual cause; here the cold open's filter): it expires 25 s after the drain.
+    let mut room = Room::new();
+    regular(&mut room, "beetle");
+    room.speaking_until = Some(20_000);
+    let q = msg("q2", "beetle", "malakor what is the plan tonight?");
+    room.beat(
+        5_000,
+        COLD_OPEN_STATE,
+        None,
+        vec![q.clone()],
+        vec![cand(&q)],
+    );
+    let mut expired_at = None;
+    for t in (10_000..=50_000).step_by(5_000) {
+        let (_, _, _, ev) = room.beat_in(t, &ctx(COLD_OPEN_STATE), None, Vec::new(), Vec::new());
+        if ev.iter().any(|e| {
+            matches!(e, StreamEvent::Moderation { rule, msg_id, action, .. }
+                if rule == CARRY_RULE && msg_id.as_deref() == Some("q2") && action == "expired")
+        }) {
+            expired_at = Some(t);
+        }
+    }
+    assert_eq!(expired_at, Some(45_000), "the drain at 20 s, plus 25 s");
 }
