@@ -1,0 +1,179 @@
+{
+ "schema": "conform-run/1",
+ "worker": "e76cc439-98be-40c3-91d1-edd797c29b60",
+ "subject": "talking-avatar",
+ "evaluatedAt": "2026-10-21T21:59:13.931609+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "stage-avatar-renderer",
+   "subject": "talking-avatar",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/avatar/driver.ts:239 The procedural head drift uses summed sine waves, contrary to the technique's requirement for layered low-frequency noise.",
+   "techniques": [
+    {
+     "technique": "face-signal-across-surfaces",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/avatar/variants.ts:41 Drawing-side obligations are implemented: lazy renderer loading, the shared frame clock, settling, visibility handling, capability fallback and disposal."
+    },
+    {
+     "technique": "neural-motion-retargeting",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/driver.ts:14 The driver has no learned motion to retarget."
+    },
+    {
+     "technique": "procedural-presence-motion",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/avatar/driver.ts:239 Head drift is a stack of sines; the standard explicitly requires low-frequency noise instead."
+    },
+    {
+     "technique": "rig-parameter-contract",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/avatar/driver.ts:265 With a viseme present, the driver ignores signal.open and derives opening from shape, violating opening's required authority."
+    },
+    {
+     "technique": "viseme-drive",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/avatar/visemes.ts:39 The renderer maps timed shapes to loudness-scaled opening, preserves closure dips and falls back to level-driven opening without a viseme."
+    }
+   ]
+  },
+  {
+   "context": "daemon-voice-service",
+   "subject": "talking-avatar",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:85 The daemon removes individual invalid shapes and forwards surviving spans without checking timeline ordering or its audio endpoint, allowing malformed timelines instead of discarding them whole.",
+   "techniques": [
+    {
+     "technique": "per-sentence-face-sidecar",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:85 The filter_map drops only an invalid span; the remaining timeline is forwarded without order or final-sample validation, contrary to whole-timeline fallback."
+    },
+    {
+     "technique": "single-image-layer-decomposition",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/voice/avatar.rs:48 The avatar endpoint serves prepared rig files; portrait decomposition happens outside this context."
+    }
+   ]
+  },
+  {
+   "context": "voice-sidecar",
+   "subject": "talking-avatar",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "tools/voice/shadowrunr_voice/sidecar.py:472 Mouth-shape inference runs synchronously before audio is sent, without a separate bounded face wait that releases the already-rendered sentence.",
+   "techniques": [
+    {
+     "technique": "per-sentence-face-sidecar",
+     "verdict": "deviation",
+     "evidence": "tools/voice/shadowrunr_voice/sidecar.py:472 The sender calls face inference directly before sending PCM; exception handling does not provide a deadline for stalled inference."
+    },
+    {
+     "technique": "viseme-drive",
+     "verdict": "deviation",
+     "evidence": "tools/voice/shadowrunr_voice/visemes.py:278 Unknown phones silently become E without being counted; the standard requires a counted neutral fallback."
+    }
+   ]
+  },
+  {
+   "context": "stage-voice-client",
+   "subject": "talking-avatar",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/voice/frame.ts:60 Malformed optional visemes reject the entire utterance and prevent its PCM from playing, contrary to discarding the face timeline while preserving audio.",
+   "techniques": [
+    {
+     "technique": "face-signal-across-surfaces",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/voice/player.ts:196 The local producer derives speaking and timeline selection from the scheduled audio interval, retains the timeline until playback ends and supplies its latest signal to subscribers."
+    },
+    {
+     "technique": "per-sentence-face-sidecar",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/voice/frame.ts:60 An invalid optional timeline rejects otherwise valid audio; the required fallback preserves the sentence and removes its timeline."
+    },
+    {
+     "technique": "viseme-drive",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/voice/player.ts:198 The lookup adds a fixed 35 ms lead but never incorporates device output latency, which the technique explicitly requires."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "talking-avatar",
+   "context": "avatar-rig-tools",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-21T21:59:13.931609+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "talking-avatar"
+   ],
+   "techniques": [
+    "face-signal-across-surfaces",
+    "neural-motion-retargeting",
+    "procedural-presence-motion",
+    "rig-parameter-contract",
+    "viseme-drive"
+   ],
+   "deviations": 1,
+   "context": "stage-avatar-renderer",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-21T21:59:13.931609+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "talking-avatar"
+   ],
+   "techniques": [
+    "per-sentence-face-sidecar",
+    "single-image-layer-decomposition"
+   ],
+   "deviations": 1,
+   "context": "daemon-voice-service",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-21T21:59:13.931609+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "talking-avatar"
+   ],
+   "techniques": [
+    "per-sentence-face-sidecar",
+    "viseme-drive"
+   ],
+   "deviations": 1,
+   "context": "voice-sidecar",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-21T21:59:13.931609+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "talking-avatar"
+   ],
+   "techniques": [
+    "face-signal-across-surfaces",
+    "per-sentence-face-sidecar",
+    "viseme-drive"
+   ],
+   "deviations": 1,
+   "context": "stage-voice-client",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

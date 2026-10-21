@@ -5001,7 +5001,11 @@
           "revision": 3,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/avatar/driver.ts:239 The procedural head drift uses summed sine waves, contrary to the technique's requirement for layered low-frequency noise.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:f96c1d7ea0398677",
+          "evaluatedRevision": 3
         },
         {
           "subject": "video-assembly",
@@ -5203,7 +5207,11 @@
           "revision": 3,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/voice/frame.ts:60 Malformed optional visemes reject the entire utterance and prevent its PCM from playing, contrary to discarding the face timeline while preserving audio.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:f96c1d7ea0398677",
+          "evaluatedRevision": 3
         },
         {
           "subject": "prompt-assembly",
@@ -5569,7 +5577,11 @@
           "revision": 3,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:85 The daemon removes individual invalid shapes and forwards surviving spans without checking timeline ordering or its audio endpoint, allowing malformed timelines instead of discarding them whole.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:f96c1d7ea0398677",
+          "evaluatedRevision": 3
         },
         {
           "subject": "agent-instruction-files",
@@ -5654,7 +5666,11 @@
           "revision": 3,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:472 Mouth-shape inference runs synchronously before audio is sent, without a separate bounded face wait that releases the already-rendered sentence.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:f96c1d7ea0398677",
+          "evaluatedRevision": 3
         },
         {
           "subject": "mcp-tools",
