@@ -12,6 +12,7 @@
     "lint": "eslint src --max-warnings 0 && stylelint \"src/**/*.css\" && node scripts/check-size.mjs && node scripts/check-token-refs.mjs",
     "budget:bundle": "node scripts/check-bundle.mjs",
     "fidelity": "tsc -p fidelity && node fidelity/run.mjs",
+    "fidelity:exceptions": "vitest run fidelity/exceptions.test.mjs",
     "perf": "vitest run src/perf --mode perf --silent=false",
     "tauri": "tauri"
   },

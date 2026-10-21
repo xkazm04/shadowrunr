@@ -1,0 +1,65 @@
+{
+  "$comment": "Owner exceptions to the captured fidelity contracts (fidelity/exceptions.mjs). Each entry is one sanctioned difference between the port and the winner: target names contract.<target>.json, key and prop the captured value, winner the value it overrides and port the value the port holds instead. run.mjs applies them to a copy of the contract at check time, so a recapture never erases one; an entry whose winner moved, that matches nothing, repeats another or lacks its why/decided fails the gate. Never edit a captured contract to make the port pass: add an entry here.",
+  "exceptions": [
+    {
+      "target": "texture",
+      "key": "characters.halftoneA",
+      "prop": "opacity",
+      "winner": "0.55",
+      "port": "0",
+      "why": "The halftone dots sit under layer-1 body text on the open characters and segments posters: off there for readability (UI-3)",
+      "decided": "2026-10-20",
+      "ref": "UI-3; packages/tokens/REJECTED.md"
+    },
+    {
+      "target": "texture",
+      "key": "characters.halftoneB",
+      "prop": "opacity",
+      "winner": "0.35",
+      "port": "0",
+      "why": "The halftone dots sit under layer-1 body text on the open characters and segments posters: off there for readability (UI-3)",
+      "decided": "2026-10-20",
+      "ref": "UI-3; packages/tokens/REJECTED.md"
+    },
+    {
+      "target": "texture",
+      "key": "characters.grain",
+      "prop": "opacity",
+      "winner": "0.4",
+      "port": "0",
+      "why": "Grain hurts readability on light palettes: no print grain on the light posters (characters on paper, segments on ochre)",
+      "decided": "2026-10-20",
+      "ref": "packages/tokens/REJECTED.md"
+    },
+    {
+      "target": "texture",
+      "key": "segments.halftoneA",
+      "prop": "opacity",
+      "winner": "0.55",
+      "port": "0",
+      "why": "The halftone dots sit under layer-1 body text on the open characters and segments posters: off there for readability (UI-3)",
+      "decided": "2026-10-20",
+      "ref": "UI-3; packages/tokens/REJECTED.md"
+    },
+    {
+      "target": "texture",
+      "key": "segments.halftoneB",
+      "prop": "opacity",
+      "winner": "0.35",
+      "port": "0",
+      "why": "The halftone dots sit under layer-1 body text on the open characters and segments posters: off there for readability (UI-3)",
+      "decided": "2026-10-20",
+      "ref": "UI-3; packages/tokens/REJECTED.md"
+    },
+    {
+      "target": "texture",
+      "key": "segments.grain",
+      "prop": "opacity",
+      "winner": "0.4",
+      "port": "0",
+      "why": "Grain hurts readability on light palettes: no print grain on the light posters (characters on paper, segments on ochre)",
+      "decided": "2026-10-20",
+      "ref": "packages/tokens/REJECTED.md"
+    }
+  ]
+}
