@@ -1,14 +1,14 @@
 // The shell: the wall, the poster in front (layer 1), the spine and spread (layer 2), the mixer
 // bus, the chrome and the intro. It owns no page content: pages plug in through `PageRegistry`.
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { emitKeyCommand } from "../kit/keyCommands";
 import { KEYMAP, installKeymap } from "../keys";
 import { StatePanel } from "../ui/States";
-import { WALL, crumbs, encodeRoute, layerOf, pageRoute, up, useRoute, useRouter, type PageId } from "../router";
+import { WALL, crumbs, encodeRoute, layerOf, pageRoute, up, useRoute, useRouter, type PageId, type Route } from "../router";
 import { matchSub } from "../router/schema";
 import { Chrome } from "./Chrome";
 import { INTRO, Intro } from "./Intro";
-import { effectOf, modeOf, type KeyContext } from "./keyActions";
+import { effectOf, modeOf, nextRecents, type KeyContext } from "./keyActions";
 import { BUS_REM, MixerBus } from "./MixerBus";
 import { pageLabeller, riseKey } from "./rise";
 import styles from "./Shell.module.css";
@@ -24,6 +24,8 @@ export interface ShellProps {
 }
 
 const ON_AIR: PageId = "onair";
+// Go to anything (Ctrl+K): loaded on first open, so the first paint does not carry it.
+const GoTo = lazy(() => import("./GoToPalette"));
 
 export function Shell(props: ShellProps) {
   const router = useRouter();
@@ -36,6 +38,11 @@ export function Shell(props: ShellProps) {
   const hitRefs = useRef<(HTMLButtonElement | null)[]>([]);
   // Adjusting state from the route while rendering (React's documented pattern, no ref write).
   if (route.view === "page" && route.page !== lastPage) setLastPage(route.page);
+  // The places visited this session, for Go to: in memory only, never persisted.
+  const here = encodeRoute(route);
+  const [recents, setRecents] = useState<{ at: string; list: readonly Route[] }>({ at: "", list: [] });
+  if (recents.at !== here) setRecents({ at: here, list: nextRecents(recents.list, route) });
+  const [goto, setGoto] = useState(false);
 
   const layer = layerOf(route);
   const active: PageId = route.view === "page" ? route.page : lastPage;
@@ -82,6 +89,7 @@ export function Shell(props: ShellProps) {
           } else if (fx.kind === "skip-intro") finishIntro();
           else if (fx.kind === "blur" && document.activeElement instanceof HTMLElement) document.activeElement.blur();
           else if (fx.kind === "command") emitKeyCommand(fx.command);
+          else if (fx.kind === "open-goto") setGoto(true);
         },
       }),
     [router, finishIntro],
@@ -134,7 +142,7 @@ export function Shell(props: ShellProps) {
       />
       <Spread
         open={layer === "l2"}
-        pageKey={encodeRoute(route)}
+        pageKey={here}
         takeOrigin={router.takeOrigin}
         narrow={viewport.narrow}
         busOffset={showBus ? `${busRem}rem` : "0rem"}
@@ -147,7 +155,12 @@ export function Shell(props: ShellProps) {
         )}
       </Spread>
       {showBus && <MixerBus pages={props.pages} onAir={active} compact={layer === "l2"} narrow={viewport.narrow} />}
-      {!intro && <Chrome onWall={route.view === "wall"} narrow={viewport.narrow} onToggleWall={toggleWall} />}
+      {!intro && <Chrome onWall={route.view === "wall"} narrow={viewport.narrow} onToggleWall={toggleWall} onGoTo={() => setGoto(true)} />}
+      {goto && (
+        <Suspense fallback={null}>
+          <GoTo recents={recents.list} current={route} labelOf={labelOf} onClose={() => setGoto(false)} />
+        </Suspense>
+      )}
       {intro && <Intro narrow={viewport.narrow} onSkip={finishIntro} />}
     </div>
   );

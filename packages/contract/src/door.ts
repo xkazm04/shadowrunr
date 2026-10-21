@@ -2,13 +2,21 @@
 // `POST /rpc` reply body, `parseEvent` for a `/events` frame. These are the only places that
 // call `JSON.parse` or run a validator, and they never throw: they return a typed `Result`.
 //
-// `parseEvent` is synchronous on the eager ServerFrame validator. `parseRpcResult` is async: a
+// `parseEvent` is synchronous on the eager frame validators, routed by the frame's shape. `parseRpcResult` is async: a
 // method's result validator is its own generated module, loaded on the method's first reply
 // (RESULT_LOADERS) and kept, so a reader pays only for the methods it calls.
 
 import { RESULT_LOADERS, RPC_METHODS, type RpcMethod, type RpcResult } from "./generated/meta";
+import type { ErrorObject } from "ajv";
+
 import type { ErrorBody, ErrorCode, ServerFrame, StreamEvent } from "./generated/types";
-import { validateErrorEnvelope, validateServerFrame, type ValidateFn } from "./generated/validators.js";
+import {
+  validateErrorEnvelope,
+  validateEventFrame,
+  validateServerFrame,
+  validateStreamEvent,
+  type ValidateFn,
+} from "./generated/validators.js";
 
 export type Result<T, E> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: E };
 
@@ -56,11 +64,21 @@ function decode(raw: unknown): Result<unknown, DoorError> {
   }
 }
 
+/** One ajv error as an issue. Tagged unions are validated by their tag (ajv `discriminator`),
+ *  so a bad tag is reported at the tag itself rather than at the object holding it. */
+function issue(e: ErrorObject, prefix: string): Issue {
+  if (e.keyword === "discriminator") {
+    const { error, tag, tagValue } = e.params as { error?: string; tag?: string; tagValue?: unknown };
+    const path = `${prefix}${e.instancePath}/${tag ?? ""}`;
+    return error === "mapping"
+      ? { path, message: `${JSON.stringify(tagValue)} is not one of the union's "${tag}" values` }
+      : { path, message: `must be a string naming the variant (the union's "${tag}" tag)` };
+  }
+  return { path: `${prefix}${e.instancePath}`, message: e.message ?? e.keyword };
+}
+
 function invalid<V>(validate: ValidateFn<V>, prefix: string, what: string): DoorError {
-  const issues: Issue[] = (validate.errors ?? []).slice(0, MAX_ISSUES).map((e) => ({
-    path: `${prefix}${e.instancePath}`,
-    message: e.message ?? e.keyword,
-  }));
+  const issues: Issue[] = (validate.errors ?? []).slice(0, MAX_ISSUES).map((e) => issue(e, prefix));
   const first = issues[0] ?? { path: prefix, message: "does not match the contract" };
   return {
     kind: "invalid",
@@ -174,12 +192,23 @@ function legacyFrame(frame: unknown): unknown {
   return hostSpeaker(frame);
 }
 
-/** Decode and validate one `/events` frame, given as text or as an already-decoded value. */
+/** The one arm of ServerFrame a frame claims by its shape: an error frame carries `error`, an
+ *  enveloped event `seq`, anything else is a bare event. */
+function frameArm(frame: unknown): ValidateFn<ServerFrame> {
+  if (isRecord(frame) && "error" in frame) return validateErrorEnvelope;
+  if (isRecord(frame) && "seq" in frame) return validateEventFrame;
+  return validateStreamEvent;
+}
+
+/** Decode and validate one `/events` frame, given as text or as an already-decoded value.
+ *  The frame is validated against the arm its shape names, so a violation is reported from that
+ *  arm alone (a bare event is never also tried, and reported, as an envelope). The whole
+ *  ServerFrame union is the fallback, so a frame is accepted exactly when the contract says. */
 export function parseEvent(raw: unknown): Result<EventMessage, DoorError> {
   const decoded = decode(raw);
   if (!decoded.ok) return decoded;
   const frame = legacyFrame(decoded.value);
-  return validateServerFrame(frame)
-    ? ok(eventMessage(frame))
-    : fail(invalid(validateServerFrame, "", "event frame"));
+  const arm = frameArm(frame);
+  if (arm(frame) || validateServerFrame(frame)) return ok(eventMessage(frame));
+  return fail(invalid(arm, "", "event frame"));
 }

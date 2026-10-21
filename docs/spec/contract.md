@@ -582,6 +582,7 @@ being written is not served.
 | `runs.page` | `{ "tournament_id"?, "filter"?, "cursor"?, "limit" }` | `{ items: RunRow[], next_cursor? }`, ordered by `(tournament_id, run_id)` |
 | `tournaments.page` | `{ "cursor"?, "limit" }` | `{ items: TournamentRow[], next_cursor? }`, ordered by id |
 | `ledger.page` | `{ "run_id"?, "tournament_id"?, "cursor"?, "limit" }` | `{ items: LedgerEntry[], next_cursor? }` |
+| `ledger.summary` | `{ "run_id"?, "tournament_id"? }` | `LedgerSummary`: every complete row of the source folded once (no cursor) |
 
 ```
 CharacterSummary { id, name, default_tone, tones: [string], foils: [string], rules_enabled, rules_total }
@@ -603,10 +604,17 @@ RankTableInfo    { character, propose_min_rank, ranks: [{rank, title, weight, mi
 RunFilter        { tone_variant?, core_tier?, segment?, audience_size?, has_verdict?, text? }
 LedgerEntry      { ts_ms, role, tier?, effort?, engine?, account?, model?, first_text_ms?, duration_ms,
                    usage, cost_usd?, fallback_reason?, correlation_id?, error_kind?, warm?, run_id?, tournament_id? }
+LedgerSummary    { calls, errors, fallbacks, cost_usd, uncosted_calls, cache_read_tokens, unrouted,
+                   routes: [{role, calls, errors, fallbacks, tiers, efforts, engines, models,
+                             duration_p50_ms?, duration_p95_ms?, first_text_p50_ms?}],
+                   accounts: [{engine, account, calls, errors, models: [{model, calls}], last_ts_ms, last_error?}] }
+                   // cost_usd sums the costed rows; uncosted_calls counts the rest (unknown, never $0);
+                   // durations leave failed calls out; percentiles are nearest-rank
 ```
 
 `ledger.page` reads one run's `ledger.jsonl` (`run_id`), a tournament's runs in run order
-(`tournament_id` alone), or the daemon's engine ledger (neither). `character.rules` and
+(`tournament_id` alone), or the daemon's engine ledger (neither). `ledger.summary` reads the same source with the
+same complete-lines rule and answers its totals, per-role routes and per-account rows. `character.rules` and
 `character.rules.set` are unchanged, and the existing methods keep their params and results.
 
 **Event resume.** A subscribe message may carry `"since": <seq>`. With `"live"` it must also

@@ -10,4 +10,6 @@ export interface ValidateFn<V> {
 }
 
 export declare const validateServerFrame: ValidateFn<T.ServerFrame>;
+export declare const validateEventFrame: ValidateFn<T.EventFrame>;
+export declare const validateStreamEvent: ValidateFn<T.StreamEvent>;
 export declare const validateErrorEnvelope: ValidateFn<T.ErrorEnvelope>;

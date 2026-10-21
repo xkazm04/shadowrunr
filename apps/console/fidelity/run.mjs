@@ -6,9 +6,13 @@
 //
 // It starts the harness (fidelity/serve.mjs: the console's own Vite dev server rendering the real
 // Layer1 components on the contest's real data), runs style-contract.py per page and texture.py,
-// and exits non-zero on any deviation. A local gate: it needs Python with Playwright, the linked
-// contest skill and the git-ignored contest data, so CI does not run it. A missing prerequisite
-// prints "skipped: <reason>" and exits 0, unless FIDELITY_REQUIRED=1.
+// and exits non-zero on any deviation. In check mode each contract is first merged with the owner's
+// exceptions (fidelity/exceptions.json, exceptions.mjs) into a copy in the run's tmp dir, and the
+// summary names every exception it honoured; an exception that no longer matches its contract
+// fails the run, offline, before any prerequisite is probed. Capture mode writes the winner as
+// captured and then reports any exception whose winner value moved under it. A local gate: it needs
+// Python with Playwright, the linked contest skill and the git-ignored contest data, so CI does not
+// run it. A missing prerequisite prints "skipped: <reason>" and exits 0, unless FIDELITY_REQUIRED=1.
 //
 // Environment: SHADOWRUNR_CONTEST_DATA (required: the contest's shadowrunr-data.js; the prototypes
 // are found beside it), CONTEST_SKILL_DIR (default <repo>/.claude/skills/contest), PYTHON
@@ -19,6 +23,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { contractFile, describeApplied, loadExceptions } from "./exceptions.mjs";
 import { contestDataPath, startHarness } from "./serve.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -37,13 +42,25 @@ function skip(reason) {
   process.exit(required ? 1 : 0);
 }
 
+/** Fails the run on any exception problem: an owner exception is applied or reported, never dropped. */
+function reportProblems(problems) {
+  if (problems.length === 0) return false;
+  console.log(`fidelity: ${problems.length} owner exception problem(s) (fidelity/exceptions.json):\n  ${problems.join("\n  ")}`);
+  return true;
+}
+
+const pageIds = Object.keys(spec.pages).filter((id) => only === undefined || id === only || id === `${only}-a1`);
+const runTargets = only === undefined ? [...pageIds, "texture"] : pageIds;
+const overlay = mode === "check" ? loadExceptions(here, runTargets) : null;
+if (overlay && reportProblems(overlay.problems)) process.exit(1);
+
 const data = contestDataPath();
 if (data.error) skip(data.error);
 if (!existsSync(tool)) skip(`style-contract.py not found at ${tool} (link the contest skill or set CONTEST_SKILL_DIR)`);
 const probe = spawnSync(python, ["-c", "import playwright.sync_api"], { encoding: "utf8" });
 if (probe.status !== 0) skip(`${python} cannot import playwright (pip install playwright && playwright install chromium)`);
 
-const pages = Object.entries(spec.pages).filter(([id]) => only === undefined || id === only || id === `${only}-a1`);
+const pages = Object.entries(spec.pages).filter(([id]) => pageIds.includes(id));
 if (pages.length === 0) skip(`no page named ${only}`);
 
 /** Serves the contest arena (the folder two levels above the data file) for the prototypes. */
@@ -72,6 +89,15 @@ function run(cmd, argv) {
 }
 
 const tmp = mkdtempSync(join(tmpdir(), "sr-fidelity-"));
+/** The contract a check holds the port to: the captured file, or its merge with the exceptions. */
+function contractFor(target) {
+  const captured = join(here, contractFile(target));
+  const merged = overlay?.merged.get(target);
+  if (merged === undefined) return captured;
+  const copy = join(tmp, contractFile(target));
+  writeFileSync(copy, JSON.stringify(merged, null, 2) + "\n");
+  return copy;
+}
 const summary = [];
 let failed = false;
 const harness = await startHarness();
@@ -81,7 +107,7 @@ try {
     const roles = Object.fromEntries(Object.entries(spec.roles).filter(([k]) => k.startsWith(`${id}.`)));
     const rolesFile = join(tmp, `roles.${id}.json`);
     writeFileSync(rolesFile, JSON.stringify({ roles }));
-    const contract = join(here, `contract.${id}.json`);
+    const contract = contractFor(id);
     const drive = (mode === "capture" ? page.winnerDrive : page.portDrive) ?? [];
     const width = mode === "capture" ? page.viewport : (page.portViewport ?? page.viewport);
     const target =
@@ -95,13 +121,15 @@ try {
     if (!r.ok) failed = true;
   }
   if (only === undefined) {
-    const texture = join(here, "contract.texture.json");
+    const texture = contractFor("texture");
     const target = mode === "capture" ? `http://127.0.0.1:${arena.port}/${spec.sources.winner}` : harness.url;
     const r = await run(python, [join(here, "texture.py"), mode, target, join(here, "roles.json"), texture, "--width", spec.pages.characters.viewport]);
     process.stdout.write(`\n== texture\n${r.out.trim()}\n`);
     summary.push(`texture: ${r.out.trim().split("\n").filter(Boolean).at(-1) ?? ""}`);
     if (!r.ok) failed = true;
   }
+  if (overlay) summary.push(describeApplied(overlay.applied));
+  if (mode === "capture" && reportProblems(loadExceptions(here, runTargets).problems)) failed = true;
 } finally {
   await harness.close();
   arena?.close();

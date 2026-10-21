@@ -312,6 +312,7 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
             ok(catalog::rank_table(cfg, p.character.as_deref())?)
         }
         "ledger.page" => ok(paging::ledger_page(cfg, params(req.params)?)?),
+        "ledger.summary" => ok(paging::ledger_summary(cfg, params(req.params)?)?),
         "runs.page" => ok(paging::runs_page(&sim_root, params(req.params)?)?),
         "tournaments.page" => ok(paging::tournaments_page(&sim_root, params(req.params)?)?),
         "engine.status" => {

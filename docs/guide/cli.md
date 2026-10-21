@@ -321,6 +321,17 @@ The clip factory (contract appendix "Clips"). It reads transcripts, never writes
   `shadowrunr.toml` names them), about 3 s of wall time per second of clip, and the manifest
   says "re-drawn (no recording)". With a tool missing it writes the poster frame and caption
   tracks and says which tool is missing; it never fakes a video.
+- `clips recut <id> [--open <+-n>] [--close <+-n>] [--json]`: fix a cut instead of rejecting
+  it. The window's edges move by whole transcript lines (`--open -1` opens one line earlier,
+  `--close +1` closes one later; a viewer's question travels with the line that answers it)
+  and the result is a **new** candidate: the run's transcript (and voice log) is read again,
+  the captions are redacted afresh, and the gate runs from the first check against the whole
+  stream (care state, moderation, injections), never copied from the original. The original
+  is left exactly as it was; rejecting it is a separate act. Refused, nothing written, when
+  the window would run over its segment's band (the error gives the figure), drop the payoff
+  or the setup line it answers, or match lines another candidate already holds. The hook read
+  and the loudness are the original's, carried with a note in the scoring provenance. Its
+  first history entry names the original, and a rescan keeps it like an approved clip.
 - `clips approve <id> --signature <name> [--override <reason>] [--note <text>]`: the owner's
   act. Refused when a check failed (exclusions hold whatever the score); an unmeasured check
   needs `--override`, recorded beside the hold reasons it overrides.
@@ -332,6 +343,7 @@ The clip factory (contract appendix "Clips"). It reads transcripts, never writes
 ```
 $ shadowrunr clips scan --tournament <tournament_id>
 $ shadowrunr clips show <id>
+$ shadowrunr clips recut <id> --open -1
 $ shadowrunr clips render <id>
 $ shadowrunr clips approve <id> --signature owner --override "corrections log not built yet; fictional demo case"
 $ shadowrunr clips publish <id>

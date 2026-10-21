@@ -197,6 +197,56 @@ pub fn recording(cfg: &Config, session_id: &str) -> Result<ClipRunRecording, Rpc
     })
 }
 
+/// The run a stored candidate was cut from: its transcript label under the runs root, else
+/// its run id under `<runs>/sim/`.
+fn run_dir(cfg: &Config, c: &ClipCandidate) -> Result<PathBuf, RpcError> {
+    let label = Path::new(&c.source.transcript);
+    let inside = label
+        .components()
+        .all(|k| matches!(k, std::path::Component::Normal(_)));
+    if inside && label.components().count() > 1 {
+        let t = cfg.paths.runs.join(label);
+        if t.is_file() {
+            if let Some(dir) = t.parent() {
+                return Ok(dir.to_path_buf());
+            }
+        }
+    }
+    let e = runs::find_run(
+        &cfg.paths.sim_runs(),
+        &c.source.run_id,
+        c.source.tournament_id.as_deref(),
+    )
+    .map_err(|e| {
+        RpcError::not_found(format!(
+            "clip {}: its run is not under {} ({}); a recut reads the run's transcript again",
+            c.id,
+            cfg.paths.runs.display(),
+            e.message
+        ))
+    })?;
+    Ok(e.dir)
+}
+
+/// `shadowrunr clips recut` (CLI only): move a candidate's edges by whole lines into a NEW
+/// candidate, re-cut from the run's transcript and gated again from the first check; the
+/// parent is left as it was.
+pub fn recut(cfg: &Config, id: &str, open: i32, close: i32) -> Result<ClipCandidate, RpcError> {
+    let store = cfg.clip_store();
+    let c = store.load(id)?;
+    let dir = run_dir(cfg, &c)?;
+    let run = input(
+        cfg,
+        c.source.tournament_id.clone(),
+        c.source.run_id.clone(),
+        dir,
+    );
+    let opts = options(cfg, false)?;
+    Ok(shadowrunr_clips::scan::recut(
+        &store, &run, id, open, close, &opts,
+    )?)
+}
+
 /// `clips.render`: records the stage when the tools exist; blocking, minutes for a video. The
 /// store lock is held only to snapshot and to commit, so the owner's other acts never wait on
 /// it; a second render of the same clip is a conflict, and a failed one keeps the last video.
