@@ -7,6 +7,7 @@ use shadowrunr_segments::{
     demo_case, requires_alleged, HandoverRule, SegmentConfig, SegmentError, SegmentRuntime,
     StreamKind,
 };
+use shadowrunr_types::character::{CharacterManifest, Persona};
 use shadowrunr_types::{
     ChatMsg, Command, EvidenceGrade, Hex, HexKind, ModStage, Op, Platform, Rank, ScreenId,
     SegmentId, StreamEvent, Viewer,
@@ -26,11 +27,21 @@ fn no_cold_open() -> ColdOpenRule {
     }
 }
 
+/// Malakor's persona, read from his package: these tests pin his prompt wording.
+fn malakor() -> Persona {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../characters/malakor/character.toml");
+    let text = std::fs::read_to_string(path).unwrap();
+    let m: CharacterManifest = toml::from_str(&text).unwrap();
+    Persona::from_manifest(&m)
+}
+
 /// The test config. SEG-01 starts past its cold open (the cold-open tests use [`seg01_cold`]).
 fn cfg() -> SegmentConfig {
     SegmentConfig {
         foils: FOILS.iter().map(|s| s.to_string()).collect(),
         cold_open: Some(no_cold_open()),
+        persona: malakor(),
         ..Default::default()
     }
 }

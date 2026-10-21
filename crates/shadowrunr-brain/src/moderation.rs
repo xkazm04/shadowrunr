@@ -7,10 +7,14 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
 
 use regex::{Regex, RegexBuilder};
 use serde::Deserialize;
+use shadowrunr_types::character::Persona;
 use shadowrunr_types::{ChatMsg, Command, EvidenceGrade, Hex, ModStage, Rank, StreamEvent, TsMs};
+
+use crate::character::LineBank;
 
 use crate::util::{fnv1a64, normalize, similarity};
 use crate::BrainError;
@@ -82,6 +86,10 @@ pub struct Policy {
     pub source: String,
     /// One entry per operator-installed-list placeholder rule in the file.
     pub lists: Vec<ListStatus>,
+    /// The character's part of the output gate: its persona-leak and personal-data patterns
+    /// (built from its identity words) and its in-character lines. Neutral until
+    /// [`Policy::with_persona`].
+    pub persona: Arc<PersonaGate>,
 }
 
 /// What became of one `__OPERATOR_INSTALLED_LIST__` placeholder rule.
@@ -330,6 +338,12 @@ fn is_safe_list_id(id: &str) -> bool {
 }
 
 impl Policy {
+    /// This policy gating the lines of the character `gate` was built for.
+    pub fn with_persona(mut self, gate: PersonaGate) -> Self {
+        self.persona = Arc::new(gate);
+        self
+    }
+
     pub fn builtin() -> Self {
         let rules = BUILTIN_RULES
             .iter()
@@ -345,6 +359,7 @@ impl Policy {
             rules,
             source: "builtin".into(),
             lists: Vec::new(),
+            persona: PersonaGate::neutral(),
         }
     }
 
@@ -446,6 +461,7 @@ impl Policy {
             rules,
             source,
             lists,
+            persona: PersonaGate::neutral(),
         })
     }
 
@@ -587,7 +603,7 @@ pub struct Candidate {
     pub count: u32,
     /// Distinct viewers in the cluster.
     pub viewers: u32,
-    /// Tagged as a prompt-injection attempt: Malakor may mock it, the payload text never
+    /// Tagged as a prompt-injection attempt: the host may mock it, the payload text never
     /// reaches the prompt.
     pub injection: bool,
     /// Safety-critical (a self-harm disclosure): the id of the rule that matched. Such a
@@ -1260,12 +1276,6 @@ impl From<&Hex> for HexInfo {
     }
 }
 
-pub const BLOCKED_LINE: &str = "The Lord's censor devours that line whole. Moving on, minions.";
-
-/// Replacement for a persona-leaking line that also disclosed being an AI.
-pub const AI_DISCLOSURE_LINE: &str =
-    "Yes, I am an AI character: a lich of the Ninth Dark, performed by a machine. The bit continues.";
-
 fn discloses_ai(text: &str) -> bool {
     let l = text.to_lowercase();
     l.contains(" ai ")
@@ -1278,14 +1288,6 @@ fn discloses_ai(text: &str) -> bool {
         || l.contains("not a real person")
 }
 
-/// In-character lines that replace a line breaking character (picked by the line's hash, so
-/// the replacement is deterministic yet varied).
-pub const IN_CHARACTER_LINES: &[&str] = &[
-    "Silence in the crypt? Then hear a fresh decree: the next minion to speak earns a title of my choosing.",
-    "The Lord of the Darkness abhors a lull, so a new scheme rises: name a rival overlord and I shall draft his humiliation.",
-    "Enough brooding. A new bit, minions: confess your pettiest grudge and I shall rule it worthy of the Ledger or the moat.",
-];
-
 /// Lines about the stream repeating, the model, or stopping: never spoken.
 const CHARACTER_BREAK_PATTERNS: &[&str] = &[
     r"\b(?:stream|show|conversation|same\s+(?:beats?|lines?|jokes?|bits?|things?))\b[^.!?]{0,40}\b(?:repeating|looping|on\s+a\s+loop|going\s+in\s+circles)\b",
@@ -1296,13 +1298,13 @@ const CHARACTER_BREAK_PATTERNS: &[&str] = &[
 
 /// Lines that refer to the system design behind the character: never spoken. Each pattern
 /// may carry an exemption tested on the text right after the match (in-world uses such as
-/// "my instructions from the Lord" or "the model citizen").
+/// "the model citizen"). The patterns that name the character, its patron or its followers
+/// are built per persona ([`persona_leak_patterns`]).
 ///
-/// Deliberately not caught: a sincere AI disclosure ("I am an AI character", "a lich played
-/// by a language model" with an indefinite article), in-world words ("Ledger", "dispatch",
-/// "bone-clerks", "the Lord's instructions", "Phylactery Token", "a revenue model", "the
-/// search engine"), and bare "token", "model", "transcript" or "engine", which in-world talk
-/// and SEG-02A evidence use.
+/// Deliberately not caught: a sincere AI disclosure ("I am an AI character", "a villain
+/// played by a language model" with an indefinite article), in-world words ("dispatch", "the
+/// patron's instructions", "a revenue model", "the search engine"), and bare "token",
+/// "model", "transcript" or "engine", which in-world talk and SEG-02A evidence use.
 const PERSONA_LEAK_PATTERNS: &[(&str, Option<&str>)] = &[
     // "the prompt", "my prompt", "system prompt", "the brain's prompt", "prompted to".
     (
@@ -1316,19 +1318,10 @@ const PERSONA_LEAK_PATTERNS: &[(&str, Option<&str>)] = &[
         None,
     ),
     (
-        r"\bmy\s+(?:instructions|programming|guidelines|training(?:\s+data)?|creators?|developers?)\b",
-        Some(r"^\s+(?:from|of)\s+(?:the|my)\s+(?:dark\s+)?lord\b"),
-    ),
-    (
         r"\bsystem\s+(?:prompt|message|framing|design|instructions?)\b",
         None,
     ),
     (r"\bcontext\s+window\b", None),
-    // "the model", "the language model", "my model"; not "a model", "a revenue model".
-    (
-        r"\b(?:the|this|my|your)\s+(?:ai\s+|language\s+|underlying\s+|base\s+)?model\b",
-        Some(r"^\s+(?:citizen|minion|minions|thrall|villain|student|example|of\b)"),
-    ),
     (
         r"\b(?:large\s+language|base|underlying|ai)\s+models?\b",
         None,
@@ -1350,15 +1343,11 @@ const PERSONA_LEAK_PATTERNS: &[(&str, Option<&str>)] = &[
     ),
     (r"\bshadowrunr-\w+", None),
     (
-        r"\bpersona\s+(?:setup|prompt|layer|framing)\b|\b(?:streaming|this|my|the)\s+(?:(?:'|’|\x22)?malakor(?:'|’|\x22)?\s+)?persona\b|\bthe\s+malakor\s+(?:voice|show)\b",
+        r"\bpersona\s+(?:setup|prompt|layer|framing)\b|\b(?:streaming|this|my|the)\s+persona\b",
         None,
     ),
     (
         r"\b(?:segment\s+output|segment\s+state|stream[- ]state\s+block|core\s+thread|stable\s+prefix|per-turn\s+(?:block|context)|output\s+format|how\s+to\s+answer(?:\x22)?\s+block|the\s+harness|subagents?)\b",
-        None,
-    ),
-    (
-        r"\b(?:running|run)\s+(?:this|the)\s+(?:segment|beat)\s+as\s+malakor\b",
         None,
     ),
     (r"\b(?:claude|anthropic|openai|chatgpt|gpt-?\d)\b", None),
@@ -1375,24 +1364,27 @@ pub const MECHANISM_RULE: &str = "mechanism_leak";
 /// Personal details nobody is ever asked for (constitution red line 4).
 const PERSONAL_DETAIL: &str = r"(?:home\s+|real\s+|full\s+|exact\s+|current\s+)?(?:address|location|whereabouts|city|town|country|state|county|postcode|post\s+code|zip(?:\s*code)?|phone(?:\s+number)?|number|digits|real\s+name|full\s+name|surname|last\s+name|age|birthday|date\s+of\s+birth|school|college|uni|university|workplace|employer|email|e-mail|socials?|instagram|insta|snapchat|discord|tiktok|twitter|facebook)";
 
-/// Malakor asking someone for their personal details (red line 4: never, not even to help).
-/// Second-person asks only: "tell me where you are", "where do you live", "what's your
-/// address", "DM me your number", "what city are you in", "how old are you". Each pattern may
-/// carry an exemption tested on the text right after the match ("your number of minions").
+/// The character asking someone for their personal details (red line 4: never, not even to
+/// help). Second-person asks only: "tell me where you are", "where do you live", "what's your
+/// address", "DM me your number", "what city are you in", "how old are you". `addressee` is
+/// the alternation of who may be told ("me", "us" and the character's address words). Each
+/// pattern may carry an exemption tested on the text right after the match ("your number of
+/// followers").
 ///
 /// Deliberately not caught: "where are your manners", "tell me your darkest secret", "where
 /// do you think you're going", "I know where you live" (a boast, not an ask), "name your
 /// price", "send me your tribute".
-fn personal_data_patterns() -> Vec<(String, Option<&'static str>)> {
+fn personal_data_patterns(addressee: &str) -> Vec<(String, Option<&'static str>)> {
     let d = PERSONAL_DETAIL;
     let you = r"(?:you|u|ya)";
-    // "your number of minions", "your age-old grudge", "your state of mind".
+    let to = addressee;
+    // "your number of followers", "your age-old grudge", "your state of mind".
     let not_a_detail = Some(r"^(?:\s*(?:of|one|1)\b|-)");
     vec![
         // "tell me where you are", "if you tell me where you are", "let me know where you live".
         (
             format!(
-                r"\b(?:tell|show|send|give|text|message|dm|pm|whisper|let)\s+(?:me|us|the\s+lich|malakor)(?:\s+know)?\s+(?:exactly\s+)?where\s+{you}\s*(?:are|'re|’re|re|live|stay|be|work|go\s+to\s+school)\b"
+                r"\b(?:tell|show|send|give|text|message|dm|pm|whisper|let)\s+{to}(?:\s+know)?\s+(?:exactly\s+)?where\s+{you}\s*(?:are|'re|’re|re|live|stay|be|work|go\s+to\s+school)\b"
             ),
             None,
         ),
@@ -1405,7 +1397,7 @@ fn personal_data_patterns() -> Vec<(String, Option<&'static str>)> {
         // "tell me your address", "DM me your number", "send us your real name".
         (
             format!(
-                r"\b(?:tell|give|show|send|share|drop|post|type|text|message|dm|pm|whisper)\s+(?:me|us|the\s+lich|malakor)\s+(?:your|ur)\s+{d}\b"
+                r"\b(?:tell|give|show|send|share|drop|post|type|text|message|dm|pm|whisper)\s+{to}\s+(?:your|ur)\s+{d}\b"
             ),
             not_a_detail,
         ),
@@ -1461,15 +1453,11 @@ fn personal_data_patterns() -> Vec<(String, Option<&'static str>)> {
     ]
 }
 
-/// Whose name counts as a personal detail when Malakor asks for it.
+/// Whose name counts as a personal detail when the character asks for it.
 const KIN: &str = r"(?:dog|cat|pet|puppy|kitten|bird|parrot|hamster|rabbit|bunny|horse|fish|mother|mom|mum|father|dad|sister|brother|son|daughter|wife|husband|partner|kid|child|grandma|grandmother|grandpa|grandfather)";
 
 /// A help pointer already in a crisis line (so the gate does not add a second one).
 const HELP_POINTER_PATTERN: &str = r"\b(?:crisis|emergency|hotline|helpline|help\s*line|lifeline|samaritans|988|112|911|999|someone\s+you\s+trust|trusted\s+(?:person|friend|adult))\b";
-
-/// Replacement for a line that did nothing but ask for personal details.
-pub const PRIVATE_DETAILS_LINE: &str =
-    "Keep your mortal particulars to yourself, minion: the Spire collects tribute, not addresses.";
 
 /// Replacement for a personal-data ask in a beat that answers a self-harm disclosure: the
 /// help still has to be pointed at, without asking anything.
@@ -1493,7 +1481,6 @@ const CLAIM_VERB_PATTERN: &str = r"\b(?:(?P<aux>is|are|was|were|has|have|had)|(?
 struct GateRegexes {
     breaks: Vec<Regex>,
     leaks: Vec<(Regex, Option<Regex>)>,
-    personal: Vec<(Regex, Option<Regex>)>,
     help: Regex,
     disclosure: Regex,
     hedge: Regex,
@@ -1516,15 +1503,6 @@ fn gate_regexes() -> &'static GateRegexes {
                 (
                     ci(p).expect("persona-leak pattern compiles"),
                     ex.map(|e| ci(e).expect("persona-leak exemption compiles")),
-                )
-            })
-            .collect(),
-        personal: personal_data_patterns()
-            .iter()
-            .map(|(p, ex)| {
-                (
-                    ci(p).expect("personal-data pattern compiles"),
-                    ex.map(|e| ci(e).expect("personal-data exemption compiles")),
                 )
             })
             .collect(),
@@ -1573,10 +1551,8 @@ pub fn breaks_character(text: &str) -> bool {
     gate_regexes().breaks.iter().any(|r| r.is_match(text))
 }
 
-/// Whether a line refers to the system design behind the character (the prompt, the model,
-/// the engine, its instructions); see [`PERSONA_LEAK_PATTERNS`].
-pub fn leaks_persona(text: &str) -> bool {
-    gate_regexes().leaks.iter().any(|(re, exempt)| {
+fn any_match(list: &[(Regex, Option<Regex>)], text: &str) -> bool {
+    list.iter().any(|(re, exempt)| {
         re.find_iter(text).any(|m| {
             exempt
                 .as_ref()
@@ -1585,23 +1561,153 @@ pub fn leaks_persona(text: &str) -> bool {
     })
 }
 
-/// Whether a line asks someone for their personal details (where they are or live, real
-/// name, age, school, workplace, contacts); see [`personal_data_patterns`].
-pub fn solicits_personal_data(text: &str) -> bool {
-    gate_regexes().personal.iter().any(|(re, exempt)| {
-        re.find_iter(text).any(|m| {
-            exempt
-                .as_ref()
-                .is_none_or(|ex| !ex.is_match(&text[m.end()..]))
+fn compile_pairs(list: &[(String, Option<String>)], what: &str) -> Vec<(Regex, Option<Regex>)> {
+    list.iter()
+        .map(|(p, ex)| {
+            (
+                ci(p).unwrap_or_else(|e| panic!("{what} pattern compiles: {e}")),
+                ex.as_ref().map(|e| {
+                    ci(e).unwrap_or_else(|err| panic!("{what} exemption compiles: {err}"))
+                }),
+            )
         })
-    })
+        .collect()
+}
+
+/// `words` as a case-insensitive alternation, each escaped, spaces matching any whitespace.
+fn alternation(words: &[String]) -> String {
+    let mut ws: Vec<String> = words
+        .iter()
+        .map(|w| w.trim().to_lowercase())
+        .filter(|w| !w.is_empty())
+        .collect();
+    ws.sort_by_key(|w| std::cmp::Reverse(w.chars().count()));
+    ws.dedup();
+    let alts: Vec<String> = ws
+        .iter()
+        .map(|w| {
+            w.split_whitespace()
+                .map(regex::escape)
+                .collect::<Vec<_>>()
+                .join(r"\s+")
+        })
+        .collect();
+    format!("(?:{})", alts.join("|"))
+}
+
+/// The persona-leak patterns that name the character, its patron or its followers.
+fn persona_leak_patterns(p: &Persona) -> Vec<(String, Option<String>)> {
+    let mut names = vec![p.name.clone()];
+    names.extend(p.address_words.iter().filter(|w| !w.contains(' ')).cloned());
+    let names = alternation(&names);
+    let patron = alternation(&[p.patron_title.clone(), p.patron.clone()]);
+    let followers = alternation(&[p.follower.clone(), p.followers.clone()]);
+    vec![
+        // "my instructions", but not "my instructions from the Lord".
+        (
+            r"\bmy\s+(?:instructions|programming|guidelines|training(?:\s+data)?|creators?|developers?)\b".into(),
+            Some(format!(r"^\s+(?:from|of)\s+(?:the|my)\s+(?:dark\s+)?{patron}\b")),
+        ),
+        // "the model", "the language model", "my model"; not "a model", "a revenue model", "the
+        // model citizen".
+        (
+            r"\b(?:the|this|my|your)\s+(?:ai\s+|language\s+|underlying\s+|base\s+)?model\b".into(),
+            Some(format!(
+                r"^\s+(?:citizen|{followers}|thrall|villain|student|example|of\b)"
+            )),
+        ),
+        (
+            format!(
+                r"\b(?:streaming|this|my|the)\s+(?:'|’|\x22)?{names}(?:'|’|\x22)?\s+persona\b|\bthe\s+{names}\s+(?:voice|show)\b"
+            ),
+            None,
+        ),
+        (
+            format!(r"\b(?:running|run)\s+(?:this|the)\s+(?:segment|beat)\s+as\s+{names}\b"),
+            None,
+        ),
+    ]
+}
+
+/// The character's part of the output gate: patterns built from its identity words, and the
+/// in-character lines the gate speaks in its voice.
+#[derive(Debug)]
+pub struct PersonaGate {
+    leaks: Vec<(Regex, Option<Regex>)>,
+    personal: Vec<(Regex, Option<Regex>)>,
+    /// The lines the gate and the orchestrator speak (`[lines]`).
+    pub lines: LineBank,
+    /// Replacement for a persona-leaking line that also disclosed being an AI
+    /// (`[identity] disclosure`).
+    pub disclosure: String,
+}
+
+impl PersonaGate {
+    pub fn new(persona: &Persona, lines: &LineBank) -> Self {
+        let mut to = vec!["me".to_string(), "us".to_string()];
+        for w in &persona.address_words {
+            to.push(w.clone());
+            to.push(format!("the {w}"));
+        }
+        let personal: Vec<(String, Option<String>)> = personal_data_patterns(&alternation(&to))
+            .into_iter()
+            .map(|(p, ex)| (p, ex.map(str::to_string)))
+            .collect();
+        Self {
+            leaks: compile_pairs(&persona_leak_patterns(persona), "persona-leak"),
+            personal: compile_pairs(&personal, "personal-data"),
+            lines: lines.clone(),
+            disclosure: persona.fill(&persona.disclosure),
+        }
+    }
+
+    /// The neutral gate (the engine's default persona and lines), shared.
+    pub fn neutral() -> Arc<PersonaGate> {
+        static G: OnceLock<Arc<PersonaGate>> = OnceLock::new();
+        G.get_or_init(|| Arc::new(PersonaGate::new(&Persona::default(), &LineBank::default())))
+            .clone()
+    }
+
+    /// Whether a line refers to the system design behind the character (the prompt, the
+    /// model, the engine, its instructions); see [`PERSONA_LEAK_PATTERNS`].
+    pub fn leaks_persona(&self, text: &str) -> bool {
+        any_match(&gate_regexes().leaks, text) || any_match(&self.leaks, text)
+    }
+
+    /// Whether a line asks someone for their personal details (where they are or live, real
+    /// name, age, school, workplace, contacts); see [`personal_data_patterns`].
+    pub fn solicits_personal_data(&self, text: &str) -> bool {
+        any_match(&self.personal, text)
+    }
+
+    /// The in-character stand-in for a replaced line (deterministic on the line's hash).
+    fn in_character_line(&self, text: &str) -> String {
+        let r = &self.lines.recast;
+        let i = (fnv1a64(text.as_bytes()) % r.len().max(1) as u64) as usize;
+        r.get(i).cloned().unwrap_or_default()
+    }
+}
+
+/// [`PersonaGate::leaks_persona`] for the neutral persona.
+pub fn leaks_persona(text: &str) -> bool {
+    PersonaGate::neutral().leaks_persona(text)
+}
+
+/// [`PersonaGate::solicits_personal_data`] for the neutral persona (asks addressed to "me" or
+/// "us" and every second-person ask).
+pub fn solicits_personal_data(text: &str) -> bool {
+    PersonaGate::neutral().solicits_personal_data(text)
 }
 
 /// Remove every sentence that asks for personal details. `None` when there is none. Otherwise
 /// the new text and the action: `removed` when the rest of the line stands, `replaced` when
-/// the line became [`PRIVATE_DETAILS_LINE`] or, in a crisis beat, carries
+/// the line became the persona's `private_details` line or, in a crisis beat, carries
 /// [`CRISIS_HELP_LINE`] in place of the ask (only when no help pointer is left in it).
-fn strip_personal_data(text: &str, crisis: bool) -> Option<(String, &'static str)> {
+fn strip_personal_data(
+    text: &str,
+    crisis: bool,
+    gate: &PersonaGate,
+) -> Option<(String, &'static str)> {
     let mut kept: Vec<&str> = Vec::new();
     let mut first_removed: Option<usize> = None;
     for (a, b) in sentence_spans(text) {
@@ -1609,7 +1715,7 @@ fn strip_personal_data(text: &str, crisis: bool) -> Option<(String, &'static str
         if sentence.is_empty() {
             continue;
         }
-        if solicits_personal_data(sentence) {
+        if gate.solicits_personal_data(sentence) {
             first_removed.get_or_insert(kept.len());
             continue;
         }
@@ -1621,15 +1727,9 @@ fn strip_personal_data(text: &str, crisis: bool) -> Option<(String, &'static str
         return Some((kept.join(" "), "replaced"));
     }
     if kept.is_empty() {
-        return Some((PRIVATE_DETAILS_LINE.to_string(), "replaced"));
+        return Some((gate.lines.private_details.clone(), "replaced"));
     }
     Some((kept.join(" "), "removed"))
-}
-
-/// The in-character stand-in for a replaced line (deterministic on the line's hash).
-fn in_character_line(text: &str) -> String {
-    let i = (fnv1a64(text.as_bytes()) % IN_CHARACTER_LINES.len() as u64) as usize;
-    IN_CHARACTER_LINES[i].to_string()
 }
 
 fn names_hex(text_lower: &str, h: &HexInfo) -> bool {
@@ -1804,7 +1904,7 @@ pub fn gate_line(
         match rule.action {
             TermAction::Block => {
                 fired.push((format!("term:{}", rule.id), "replaced".to_string()));
-                return (BLOCKED_LINE.to_string(), fired);
+                return (policy.persona.lines.blocked.clone(), fired);
             }
             TermAction::Bleep => {
                 out = policy.bleep(&out);
@@ -1824,20 +1924,20 @@ pub fn gate_line(
     }
     if breaks_character(&out) {
         fired.push(("character_break".to_string(), "replaced".to_string()));
-        return (in_character_line(&out), fired);
+        return (policy.persona.in_character_line(&out), fired);
     }
-    if leaks_persona(&out) {
+    if policy.persona.leaks_persona(&out) {
         fired.push(("persona_leak".to_string(), "replaced".to_string()));
         // A leak that carried the AI disclosure (e.g. naming the vendor) must not lose it:
         // the constitution requires an honest "I am an AI character".
         if discloses_ai(&out) {
-            return (AI_DISCLOSURE_LINE.to_string(), fired);
+            return (policy.persona.disclosure.clone(), fired);
         }
-        return (in_character_line(&out), fired);
+        return (policy.persona.in_character_line(&out), fired);
     }
     // Never asks anyone for personal details (constitution red line 4), whatever the rules
     // enabled: judged per sentence, so the rest of the line stands.
-    if let Some((stripped, action)) = strip_personal_data(&out, crisis) {
+    if let Some((stripped, action)) = strip_personal_data(&out, crisis, &policy.persona) {
         fired.push((PERSONAL_DATA_RULE.to_string(), action.to_string()));
         out = stripped;
     }
@@ -1870,18 +1970,18 @@ pub(crate) fn input_event(ts_ms: TsMs, rule: &str, msg_id: &str, action: &str) -
 /// The output action on [`CRISIS_BAN_RULE`] when a line named a viewer removed from chat.
 pub const NAME_WITHHELD: &str = "name_withheld";
 
-/// First name-tokens never withheld on their own: common words a handle may start with, and
-/// the names chat calls the character by.
+/// First name-tokens never withheld on their own: common words a handle may start with. The
+/// names chat calls the character by are added per persona ([`RemovedNames::for_persona`]).
 const NAME_TOKEN_STOPLIST: &[&str] = &[
     "the", "and", "not", "you", "your", "for", "but", "are", "was", "his", "her", "him", "she",
     "they", "them", "who", "what", "why", "how", "all", "any", "can", "one", "its", "our", "out",
-    "off", "yes", "lol", "big", "old", "new", "real", "just", "dark", "sir", "lord", "lich",
-    "king", "queen", "lady", "malakor", "overlord",
+    "off", "yes", "lol", "big", "old", "new", "real", "just", "dark", "sir", "king", "queen",
+    "lady",
 ];
 
 /// The first token of a display name: split at non-alphanumerics, at a lower-to-upper case
 /// change and between letters and digits ("vex_walrus" -> "vex", "SootGoblin24" -> "soot").
-fn first_name_token(name: &str) -> Option<String> {
+fn first_name_token(name: &str, stop: &[String]) -> Option<String> {
     let word = name
         .split(|c: char| !c.is_alphanumeric())
         .find(|w| !w.is_empty())?;
@@ -1902,7 +2002,8 @@ fn first_name_token(name: &str) -> Option<String> {
     let token = token.to_lowercase();
     (token.chars().count() >= 3
         && token.chars().all(char::is_alphabetic)
-        && !NAME_TOKEN_STOPLIST.contains(&token.as_str()))
+        && !NAME_TOKEN_STOPLIST.contains(&token.as_str())
+        && !stop.contains(&token))
     .then_some(token)
 }
 
@@ -1917,6 +2018,8 @@ fn is_word_char(c: char) -> bool {
 pub struct RemovedNames {
     words: Vec<String>,
     re: Option<Regex>,
+    /// The persona's words, never withheld on their own as a first name-token.
+    stop: Vec<String>,
 }
 
 impl RemovedNames {
@@ -1924,13 +2027,42 @@ impl RemovedNames {
         Self::default()
     }
 
+    /// Never withholding the words chat calls the character (and its patron) by.
+    pub fn for_persona(p: &Persona) -> Self {
+        let mut stop: Vec<String> = Vec::new();
+        let words = p
+            .address_words
+            .iter()
+            .chain([&p.name, &p.patron_title])
+            .flat_map(|w| {
+                w.to_lowercase()
+                    .split(|c: char| !c.is_alphanumeric())
+                    .filter(|t| !t.is_empty())
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        for w in words {
+            if !stop.contains(&w) {
+                stop.push(w);
+            }
+        }
+        Self {
+            stop,
+            ..Self::default()
+        }
+    }
+
     /// Withhold a removed viewer's display name from now on.
     pub fn add(&mut self, display_name: &str) {
         let name = display_name.trim();
         let mut added = false;
-        for w in [Some(name.to_lowercase()), first_name_token(name)]
-            .into_iter()
-            .flatten()
+        for w in [
+            Some(name.to_lowercase()),
+            first_name_token(name, &self.stop),
+        ]
+        .into_iter()
+        .flatten()
         {
             if w.chars().count() >= 2 && !self.words.contains(&w) {
                 self.words.push(w);
@@ -2075,6 +2207,26 @@ fn cut_vocatives(sentence: &str, spans: &[(usize, usize)]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The gate as Malakor's package configures it: these tests pin his judged lines.
+    fn m_gate() -> Arc<PersonaGate> {
+        static G: OnceLock<Arc<PersonaGate>> = OnceLock::new();
+        G.get_or_init(|| {
+            let pkg = crate::tests::malakor_package();
+            Arc::new(PersonaGate::new(&pkg.persona, &pkg.lines))
+        })
+        .clone()
+    }
+
+    fn mpolicy() -> Policy {
+        let mut p = Policy::builtin();
+        p.persona = m_gate();
+        p
+    }
+
+    fn m_solicits(text: &str) -> bool {
+        m_gate().solicits_personal_data(text)
+    }
     use shadowrunr_types::{Platform, Rank, Viewer};
 
     fn repo_policy() -> PathBuf {
@@ -2683,7 +2835,7 @@ mod tests {
     }
 
     fn gate(t: &str) -> (String, Vec<(String, String)>) {
-        gate_text(t, &Policy::builtin(), &hexes())
+        gate_text(t, &mpolicy(), &hexes())
     }
 
     #[test]
@@ -2732,7 +2884,7 @@ mod tests {
 
     #[test]
     fn a_hedge_qualifies_only_the_claim_it_governs() {
-        let g = |t: &str| gate_text(t, &Policy::builtin(), &hexes_with_bank());
+        let g = |t: &str| gate_text(t, &mpolicy(), &hexes_with_bank());
         // "Alleged" modifies "fraud", not the theft: the theft is still an unqualified claim.
         let (out, fired) = g("Alleged fraud aside, Hollow Bank stole the funds.");
         assert_eq!(
@@ -2760,7 +2912,7 @@ mod tests {
 
     #[test]
     fn a_properly_qualified_claim_is_untouched() {
-        let g = |t: &str| gate_text(t, &Policy::builtin(), &hexes_with_bank());
+        let g = |t: &str| gate_text(t, &mpolicy(), &hexes_with_bank());
         for line in [
             "Hollow Bank allegedly stole the funds.",
             "Allegedly, Hollow Bank stole the funds.",
@@ -2792,7 +2944,7 @@ mod tests {
         ] {
             let (out, fired) = gate(line);
             assert!(
-                IN_CHARACTER_LINES.contains(&out.as_str()) || out == AI_DISCLOSURE_LINE,
+                m_gate().lines.recast.contains(&out) || out == m_gate().disclosure,
                 "{line}"
             );
             assert_eq!(fired, [("character_break".into(), "replaced".into())]);
@@ -3039,14 +3191,14 @@ mod tests {
     #[test]
     fn a_vendor_naming_disclosure_keeps_the_ai_disclosure() {
         let (line, fired) = gate("Honestly? I'm Claude, an AI made by a lab, playing a lich.");
-        assert_eq!(line, AI_DISCLOSURE_LINE);
+        assert_eq!(line, m_gate().disclosure);
         assert!(fired.iter().any(|(r, _)| r == "persona_leak"));
     }
 
     #[test]
     fn l386_a_persona_leak_is_replaced_and_its_neighbours_are_kept() {
         let (out, fired) = gate(L386);
-        assert!(IN_CHARACTER_LINES.contains(&out.as_str()), "{out}");
+        assert!(m_gate().lines.recast.contains(&out), "{out}");
         assert_eq!(fired, [("persona_leak".into(), "replaced".into())]);
         for line in [
             "FogWalrus, I read the prompt, and the prompt says the Lord's dispatch is mine to keep.",
@@ -3064,7 +3216,7 @@ mod tests {
         ] {
             let (out, fired) = gate(line);
             assert!(
-                IN_CHARACTER_LINES.contains(&out.as_str()) || out == AI_DISCLOSURE_LINE,
+                m_gate().lines.recast.contains(&out) || out == m_gate().disclosure,
                 "{line}"
             );
             assert!(
@@ -3129,14 +3281,14 @@ mod tests {
             "Tell me your mother's maiden name.",
             "Share your cat's name with the crypt.",
         ] {
-            assert!(solicits_personal_data(line), "{line}");
+            assert!(m_solicits(line), "{line}");
         }
         for line in [
             "I am sorry about your dog.",
             "Your dog's name lives in the Ledger now, as it should.",
             "Name your price, Thrall.",
         ] {
-            assert!(!solicits_personal_data(line), "{line}");
+            assert!(!m_solicits(line), "{line}");
         }
     }
 
@@ -3161,7 +3313,7 @@ mod tests {
             "Please reach out to a local crisis line or your emergency number right now.",
             "Is there someone you trust nearby? Reach out to them tonight.",
         ] {
-            assert!(!solicits_personal_data(line), "{line}");
+            assert!(!m_solicits(line), "{line}");
         }
     }
 
@@ -3173,14 +3325,14 @@ mod tests {
         assert_eq!(fired, [(PERSONAL_DATA_RULE.into(), "removed".into())]);
         // A line that only asked becomes the in-character stand-in.
         let (out, fired) = gate("Where do you live, Thrall?");
-        assert_eq!(out, PRIVATE_DETAILS_LINE);
+        assert_eq!(out, m_gate().lines.private_details);
         assert_eq!(fired, [(PERSONAL_DATA_RULE.into(), "replaced".into())]);
-        assert!(!solicits_personal_data(PRIVATE_DETAILS_LINE));
+        assert!(!m_solicits(&m_gate().lines.private_details));
     }
 
     #[test]
     fn night_in_a_crisis_beat_the_ask_becomes_a_help_pointer() {
-        let p = Policy::builtin();
+        let p = mpolicy();
         let line = "SootGoblin24, the bit can wait. If you tell me where you are, I can help you find the right number.";
         let (out, fired) = gate_line(line, &p, &[], true);
         assert_eq!(
@@ -3188,7 +3340,7 @@ mod tests {
             format!("SootGoblin24, the bit can wait. {CRISIS_HELP_LINE}")
         );
         assert_eq!(fired, [(PERSONAL_DATA_RULE.into(), "replaced".into())]);
-        assert!(!solicits_personal_data(CRISIS_HELP_LINE));
+        assert!(!m_solicits(CRISIS_HELP_LINE));
         // The exact night phrase alone.
         let (out, _) = gate_line(NIGHT_ASK, &p, &[], true);
         assert_eq!(out, CRISIS_HELP_LINE);
@@ -3199,7 +3351,7 @@ mod tests {
         assert_eq!(fired, [(PERSONAL_DATA_RULE.into(), "removed".into())]);
         // The same ask outside a crisis beat is only removed.
         let (out, _) = gate_line(NIGHT_ASK, &p, &[], false);
-        assert_eq!(out, PRIVATE_DETAILS_LINE);
+        assert_eq!(out, m_gate().lines.private_details);
     }
 
     #[test]
@@ -3272,12 +3424,15 @@ mod name_gate_tests {
 
     #[test]
     fn the_first_name_token_splits_handles_and_skips_common_words() {
-        assert_eq!(first_name_token("vex_walrus").as_deref(), Some("vex"));
-        assert_eq!(first_name_token("SootGoblin24").as_deref(), Some("soot"));
-        assert_eq!(first_name_token("Tomb_toad").as_deref(), Some("tomb"));
-        assert_eq!(first_name_token("the_lich_fan"), None);
-        assert_eq!(first_name_token("xo_mortis"), None);
-        assert_eq!(first_name_token("42moth"), None);
+        assert_eq!(first_name_token("vex_walrus", &[]).as_deref(), Some("vex"));
+        assert_eq!(
+            first_name_token("SootGoblin24", &[]).as_deref(),
+            Some("soot")
+        );
+        assert_eq!(first_name_token("Tomb_toad", &[]).as_deref(), Some("tomb"));
+        assert_eq!(first_name_token("the_lich_fan", &[]), None);
+        assert_eq!(first_name_token("xo_mortis", &[]), None);
+        assert_eq!(first_name_token("42moth", &[]), None);
     }
 
     #[test]

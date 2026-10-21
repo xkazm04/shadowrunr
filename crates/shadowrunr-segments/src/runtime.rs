@@ -5,6 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 
 use serde::Serialize;
+use shadowrunr_types::character::{Persona, SegmentFlavour, Tuning};
 use shadowrunr_types::{
     Case, ChatMsg, Command, EvidenceGrade, HexKind, ModStage, Op, Rank, ScreenId, SegmentContext,
     SegmentId, ShownRecord, StreamEvent, TsMs, VoteTally,
@@ -30,17 +31,19 @@ const REFUSED_SHOWN_MS: TsMs = 60_000;
 
 /// A screen default the runtime picks itself (a research job came back) never overrides a
 /// `show_screen` the model made this recently. ASSUMPTION: about two beats, so his choice holds
-/// while he talks about it; uncalibrated.
-pub const SCREEN_HOLD_MS: TsMs = 8_000;
+/// while he talks about it; uncalibrated. The engine default of `[tuning] screen_hold_ms`.
+pub const SCREEN_HOLD_MS: TsMs = Tuning::DEFAULT.screen_hold_ms;
 
 /// After this long on `browser`, the runtime moves to `desk`: the record stays up and the map
 /// beside it shows the record's hex. ASSUMPTION: a record read aloud takes about half a minute,
-/// and the 2026-10-21 10-minute show sat on one record for over five; uncalibrated.
-pub const BROWSER_DWELL_MS: TsMs = 40_000;
+/// and the 2026-10-21 10-minute show sat on one record for over five; uncalibrated. The engine
+/// default of `[tuning] browser_dwell_ms`.
+pub const BROWSER_DWELL_MS: TsMs = Tuning::DEFAULT.browser_dwell_ms;
 
 /// After this long on `desk`, the runtime pulls back to the `hexmap` overview to choose the
-/// next fog. ASSUMPTION: uncalibrated, like [`BROWSER_DWELL_MS`].
-pub const DESK_DWELL_MS: TsMs = 30_000;
+/// next fog. ASSUMPTION: uncalibrated, like [`BROWSER_DWELL_MS`]. The engine default of
+/// `[tuning] desk_dwell_ms`.
+pub const DESK_DWELL_MS: TsMs = Tuning::DEFAULT.desk_dwell_ms;
 
 /// Records on file the state summary's screen line names, newest first.
 const SCREEN_RECORDS_SHOWN: usize = 4;
@@ -76,6 +79,14 @@ pub struct SegmentConfig {
     pub cold_open: Option<ColdOpenRule>,
     /// Segment start time. `None`: the first `now_ms` the runtime sees.
     pub start_ms: Option<TsMs>,
+    /// The character's words: the segment prompts and poll questions are filled from them
+    /// (the engine's neutral persona by default).
+    pub persona: Persona,
+    /// The tuning view the runtime reads (`screen_hold_ms`, `browser_dwell_ms`,
+    /// `desk_dwell_ms`); the engine defaults unless the package overrides them.
+    pub tuning: Tuning,
+    /// The package's per-segment flavour (`[segments."SEG-01"]`), appended to the prompts.
+    pub flavour: BTreeMap<SegmentId, SegmentFlavour>,
 }
 
 impl SegmentConfig {
@@ -1275,7 +1286,7 @@ impl SegmentRuntime {
             }
         };
         let secs = self.table.clock.foil_vote_secs;
-        let question = "Which foil shall the Arch-Lich summon?".to_string();
+        let question = format!("Which foil shall the {} summon?", self.host_title());
         let options = self.config.foils.clone();
         self.foil_tie = None;
         self.open_poll(Poll {
@@ -1379,8 +1390,10 @@ impl SegmentRuntime {
         let clock = &self.table.clock;
         let secs = clock.plebiscite_secs;
         let question = format!(
-            "The bone-clerks have searched {hex} {} times. What is the Arch-Lich's next move?",
-            clock.max_searches_per_hex
+            "{} have searched {hex} {} times. What is the {}'s next move?",
+            self.fill("The {researchers}"),
+            clock.max_searches_per_hex,
+            self.host_title()
         );
         let options = self.plebiscite_options(&hex);
         self.open_poll(Poll {
@@ -1847,7 +1860,7 @@ impl SegmentRuntime {
     fn screen_dwell(&mut self, now_ms: TsMs) -> Option<StreamEvent> {
         let up = now_ms - self.screen_since;
         match self.screen {
-            ScreenId::Browser if up >= BROWSER_DWELL_MS => {
+            ScreenId::Browser if up >= self.config.tuning.browser_dwell_ms => {
                 let record = self.screen_record.clone();
                 let hex = record.as_deref().and_then(|id| self.record_hex(id));
                 if record.is_some() && self.table.allows_screen_in(&self.state, ScreenId::Desk) {
@@ -1856,7 +1869,7 @@ impl SegmentRuntime {
                     self.screen_default(now_ms, ScreenId::Hexmap, None, None)
                 }
             }
-            ScreenId::Desk if up >= DESK_DWELL_MS => {
+            ScreenId::Desk if up >= self.config.tuning.desk_dwell_ms => {
                 self.screen_default(now_ms, ScreenId::Hexmap, None, None)
             }
             _ => None,
@@ -1884,7 +1897,7 @@ impl SegmentRuntime {
     /// The model chose a screen within the last [`SCREEN_HOLD_MS`].
     fn screen_held(&self, now_ms: TsMs) -> bool {
         self.llm_screen_ms
-            .is_some_and(|t| now_ms - t < SCREEN_HOLD_MS)
+            .is_some_and(|t| now_ms - t < self.config.tuning.screen_hold_ms)
     }
 
     /// A research job came back (the brain's `job` event with status `done`). When its
@@ -2079,9 +2092,41 @@ impl SegmentRuntime {
         }
     }
 
+    /// The character's words this runtime fills its prompts from.
+    pub fn persona(&self) -> &Persona {
+        &self.config.persona
+    }
+
+    /// A persona template filled with the character's words.
+    fn fill(&self, template: &str) -> String {
+        self.config.persona.fill(template)
+    }
+
+    /// How a poll question names the host: the title ("the Arch-Lich"), else the name.
+    fn host_title(&self) -> &str {
+        let p = &self.config.persona;
+        if p.title.is_empty() {
+            &p.name
+        } else {
+            &p.title
+        }
+    }
+
+    /// The package's flavour for this segment, if any.
+    fn flavour(&self) -> Option<&SegmentFlavour> {
+        self.config.flavour.get(&self.table.id)
+    }
+
     fn rules_prompt(&self) -> String {
         let t = self.table;
-        let mut p = t.rules_prompt.trim_end().to_string();
+        let mut p = self.fill(t.rules_prompt.trim_end());
+        if let Some(extra) = self.flavour().and_then(|f| f.rules_prompt.as_deref()) {
+            let extra = self.fill(extra.trim());
+            if !extra.is_empty() {
+                p.push('\n');
+                p.push_str(&extra);
+            }
+        }
         if t.allows_op("summon_foil") || t.allows_command("summon") {
             if self.config.foils.is_empty() {
                 p.push_str("\nNo foils are available tonight.");
@@ -2132,7 +2177,7 @@ impl SegmentRuntime {
                 p.push_str(&format!(
                     "\nArc: this investigation runs {} minutes in {} acts: {}. Hexes staged for \
                      a later act stay locked (no reveal, no research) until their act opens. \
-                     When an act's map is done early, deepen it: jury polls, the minions' \
+                     When an act's map is done early, deepen it: jury polls, the {}' \
                      leads, the records on file, a recap for newcomers. The last {} minutes are \
                      the seal window: recap the dossier (every revealed hex with its grade, \
                      alleged below DOC), then sign_off. sign_off is refused before it, and the \
@@ -2140,6 +2185,7 @@ impl SegmentRuntime {
                     minutes(arc.planned_ms),
                     arc.acts.len(),
                     acts.join("; "),
+                    self.config.persona.followers,
                     minutes(arc.planned_ms - arc.seal_ms)
                 ));
                 if arc.pacing {
@@ -2162,11 +2208,11 @@ impl SegmentRuntime {
                     ));
                 }
                 if arc.needs_work {
-                    p.push_str(
-                        " A hex is revealed only after a beat of work on it: a bone-clerk search \
+                    p.push_str(&self.fill(
+                        " A hex is revealed only after a beat of work on it: a {researcher} search \
                          (dispatch_research naming it) or a closed crowd poll whose winning option \
                          names it (reveal_needs_work).",
-                    );
+                    ));
                 }
                 if arc.pacing {
                     p.push_str(
@@ -2187,22 +2233,22 @@ impl SegmentRuntime {
         if t.allows_op("dispatch_research") {
             p.push_str(&format!(
                 "\nResearch: name exactly one hex in every dispatch_research brief (\"HEX-04: \
-                 trace the treasury wallet\"). The bone-clerks search a hex at most {} times \
+                 trace the treasury wallet\"). The {} search a hex at most {} times \
                  per stream; after that its next move goes to the Plebiscite, which opens by \
                  itself. Never re-dispatch a spent hex: annex it with the evidence you hold, \
                  or let the vote decide.",
-                t.clock.max_searches_per_hex
+                self.config.persona.researchers, t.clock.max_searches_per_hex
             ));
             match &self.case_file {
                 Some(f) if f.fictional => p.push_str(
                     " The case file holds planted FICTIONAL demo records: quote them as the \
                      demo's records, never as real findings.",
                 ),
-                Some(_) => p.push_str(
-                    " The bone-clerks read the case's public records, staged off-stream from \
+                Some(_) => p.push_str(&self.fill(
+                    " The {researchers} read the case's public records, staged off-stream from \
                      regulator and court sites: quote a record at its grade and never as more \
                      than it says. A hex with nothing on file stays unproven.",
-                ),
+                )),
                 None => {}
             }
         }
@@ -2226,7 +2272,11 @@ impl SegmentRuntime {
                 format!("{h} {n}/{cap}{spent}")
             })
             .collect();
-        lines.push(format!("bone-clerk searches: {}", counts.join(", ")));
+        lines.push(format!(
+            "{} searches: {}",
+            self.config.persona.researcher,
+            counts.join(", ")
+        ));
         if let Some(file) = &self.case_file {
             let found: Vec<String> = self
                 .filed
@@ -2351,18 +2401,18 @@ impl SegmentRuntime {
                 };
                 lines.push(format!(
                     "Act {} map is complete: until act {} opens, deepen it (a jury poll on a \
-                     disputed hex, the minions' leads, the records on file, {recap}). Do not \
+                     disputed hex, the {}' leads, the records on file, {recap}). Do not \
                      stall and do not sign off.",
                     act + 1,
-                    act + 2
+                    act + 2,
+                    self.config.persona.followers
                 ));
             }
         } else if arc.sealing(elapsed) {
-            lines.push(
+            lines.push(self.fill(
                 "SEAL WINDOW: recap the dossier now (every revealed hex with its grade, alleged \
-                 below DOC), thank the minions, then sign_off."
-                    .into(),
-            );
+                 below DOC), thank the {followers}, then sign_off.",
+            ));
         } else {
             lines.push(format!(
                 "Final act: the seal window opens at minute {}; sign_off is refused before it.",
@@ -2416,8 +2466,9 @@ impl SegmentRuntime {
             }
             if !unworked.is_empty() {
                 lines.push(format!(
-                    "needs a beat of work before its reveal (a bone-clerk search on it, or a \
+                    "needs a beat of work before its reveal (a {} search on it, or a \
                      closed crowd poll that picks it): {}",
+                    self.config.persona.researcher,
                     unworked.join(", ")
                 ));
             }
@@ -2454,7 +2505,17 @@ impl SegmentRuntime {
             self.state
         )];
         if let Some(line) = self.table.state_prompt(&self.state) {
-            lines.push(line.to_string());
+            let mut line = self.fill(line);
+            if let Some(extra) = self.flavour().and_then(|f| f.states.get(&self.state)) {
+                let extra = self.fill(extra.trim());
+                if !extra.is_empty() {
+                    line.push(' ');
+                    line.push_str(&extra);
+                }
+            }
+            lines.push(line);
+        } else if let Some(extra) = self.flavour().and_then(|f| f.states.get(&self.state)) {
+            lines.push(self.fill(extra.trim()));
         }
         if self.signed_off {
             lines.push("signed off: the show is over".into());
@@ -2572,7 +2633,11 @@ impl SegmentRuntime {
                     .take(5)
                     .map(|(n, h)| format!("{h} x{n}"))
                     .collect();
-                lines.push(format!("minion leads: {}", top.join(", ")));
+                lines.push(format!(
+                    "{} leads: {}",
+                    self.config.persona.follower,
+                    top.join(", ")
+                ));
             }
             if !self.jobs.is_empty() {
                 lines.push(format!("research jobs dispatched: {}", self.jobs.len()));

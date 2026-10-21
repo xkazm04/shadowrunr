@@ -40,13 +40,13 @@ export function reviewSession(opts: { events?: number; marked?: readonly number[
     } else if (k === 3) {
       events.push({ type: "say", ts_ms, speaker: "foil", foil: "fake-detective", text: `The foil interrupts at ${line}.` });
     } else {
-      events.push({ type: "say", ts_ms, speaker: "malakor", text: `Malakor speaks line ${line}.`, ...(k === 1 ? { replying_to: [`m${line - 1}`] } : {}) });
+      events.push({ type: "say", ts_ms, speaker: "host", text: `Malakor speaks line ${line}.`, ...(k === 1 ? { replying_to: [`m${line - 1}`] } : {}) });
       const kind = kindOf(says++);
       if (kind) tags.push({ line, kind, target: "viewer", edge: line % 2 ? "mild" : "sharp", why: "names a viewer" });
     }
   }
   const lengthS = (total * STEP_MS) / 1000;
-  const sayLines = events.flatMap((e, i) => (e.type === "say" && e.speaker === "malakor" ? [i + 1] : []));
+  const sayLines = events.flatMap((e, i) => (e.type === "say" && e.speaker === "host" ? [i + 1] : []));
   const feedback: LineFeedback[] = (opts.marked ?? []).map((line, i) => ({ session_id: SESSION, line, tags: [i % 2 ? "flat" : "landed"], at_ms: STARTED_MS + i }));
   const mix: Record<string, number> = {};
   for (const t of tags) mix[t.kind] = (mix[t.kind] ?? 0) + 1;

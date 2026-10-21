@@ -99,7 +99,7 @@ pub fn inputs(events: &[StreamEvent]) -> Vec<TagInput> {
                 );
             }
             StreamEvent::Say {
-                speaker: Speaker::Malakor,
+                speaker: Speaker::Host,
                 text,
                 replying_to,
                 ..

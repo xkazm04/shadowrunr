@@ -28,7 +28,7 @@ export function Script(props: { rs: ReviewSession; d: Derived; line: number; con
   const answered = [...new Set(beat.flatMap((b) => b.e.replying_to ?? []))].map((id) => d.chatById.get(id)).filter((c) => c !== undefined);
   const gates = ev.slice(Math.max(0, i - 10), i + 3).filter((e): e is Extract<StreamEvent, { type: "moderation" }> => e.type === "moderation" && e.stage === "output" && e.rule !== "engine_stall");
   const who = (e: Extract<StreamEvent, { type: "say" }>) =>
-    e.speaker === "malakor" ? <span className={`${styles.who} ${styles.mal}`}>Malakor</span> : <span className={styles.who}>{human(e.foil ?? "foil")}<span className={styles.rank}>foil</span></span>;
+    e.speaker === "host" ? <span className={`${styles.who} ${styles.mal}`}>Malakor</span> : <span className={styles.who}>{human(e.foil ?? "foil")}<span className={styles.rank}>foil</span></span>;
   return (
     <div className={`${styles.script} ${props.compact ? styles.compact : ""}`} data-role="review-script">
       {before.map(({ line: l, e }) => (

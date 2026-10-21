@@ -65,13 +65,13 @@ export function transcript(n: number, runId = "gen.run"): StreamEvent[] {
         out.push({ type: "picked", ts_ms, msg_ids: [`m${i - 2}`], reason: "generated pick" });
         break;
       case 4:
-        out.push({ type: "say", ts_ms, speaker: "malakor", text: `generated reply ${i}`, replying_to: [`m${i - 3}`], first_text_ms: 1000 + ((i * 97) % 3000) });
+        out.push({ type: "say", ts_ms, speaker: "host", text: `generated reply ${i}`, replying_to: [`m${i - 3}`], first_text_ms: 1000 + ((i * 97) % 3000) });
         break;
       case 5:
         out.push({ type: "op", ts_ms, op: { op: "mark_moment", label: `moment ${i}` } });
         break;
       default:
-        out.push({ type: "say", ts_ms, speaker: "malakor", text: `Memory candidates: line ${i}` });
+        out.push({ type: "say", ts_ms, speaker: "host", text: `Memory candidates: line ${i}` });
     }
   }
   return out;

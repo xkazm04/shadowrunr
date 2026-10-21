@@ -60,7 +60,7 @@ describe("fixtures/demo.jsonl", () => {
       const types = new Set(evs.map((e) => e.type));
       for (const t of [...inSegmentTypes, "segment_start", "segment_end"]) expect(types, t).toContain(t);
       const speakers = new Set(evs.flatMap((e) => (e.type === "say" ? [e.speaker] : [])));
-      expect([...speakers].sort()).toEqual(["foil", "malakor"]);
+      expect([...speakers].sort()).toEqual(["foil", "host"]);
       const stages = new Set(evs.flatMap((e) => (e.type === "moderation" ? [e.stage] : [])));
       expect([...stages].sort()).toEqual(["input", "output"]);
     });

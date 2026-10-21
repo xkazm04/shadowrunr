@@ -96,6 +96,17 @@ describe("parseEvent", () => {
     }
   });
 
+  it("reads the v1 say speaker `malakor` as `host`, bare or enveloped", () => {
+    const say = { type: "say", ts_ms: 1, speaker: "malakor", text: "Rise." };
+    const host = { ...say, speaker: "host" };
+    expect(parseEvent(JSON.stringify(say))).toEqual({ ok: true, value: { kind: "event", event: host } });
+    expect(parseEvent({ seq: 2, run_id: "r1", event: say })).toEqual({
+      ok: true,
+      value: { kind: "event", event: host, seq: 2, runId: "r1" },
+    });
+    expect(parseEvent({ ...say, speaker: "narrator" }).ok).toBe(false);
+  });
+
   it("unwraps an enveloped frame with its seq and run id", () => {
     const r = parseEvent(JSON.stringify({ seq: 7, run_id: "r1", event: start }));
     expect(r).toEqual({ ok: true, value: { kind: "event", event: start, seq: 7, runId: "r1" } });

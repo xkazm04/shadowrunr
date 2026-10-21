@@ -53,7 +53,7 @@ function render(events: StreamEvent[], now: number, broadcast = true, extra: Rec
 }
 
 describe("the caption panel", () => {
-  const say: StreamEvent = { type: "say", ts_ms: 1000, speaker: "malakor", text: "Kneel, mortal. The ledger is sealed." };
+  const say: StreamEvent = { type: "say", ts_ms: 1000, speaker: "host", text: "Kneel, mortal. The ledger is sealed." };
   const revealed = (html: string) => (html.match(/class="w in/g) ?? []).length;
 
   it("with the voice off it reveals on the estimate, as before", () => {

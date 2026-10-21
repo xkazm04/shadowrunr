@@ -172,7 +172,7 @@ export function transcriptStats(transcripts: readonly (readonly StreamEvent[])[]
       } else if (e.type === "picked") for (const id of e.msg_ids) pickedIds.add(id);
       else if (e.type === "say") {
         for (const id of e.replying_to ?? []) answeredIds.add(id);
-        if (e.speaker === "malakor" && e.first_text_ms !== undefined) first.push(e.first_text_ms);
+        if (e.speaker === "host" && e.first_text_ms !== undefined) first.push(e.first_text_ms);
       }
     }
     picked += pickedIds.size;

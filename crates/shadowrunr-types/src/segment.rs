@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::chat::EvidenceGrade;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 pub enum SegmentId {
     #[serde(rename = "SEG-01")]
     Seg01ImprovisedRoom,

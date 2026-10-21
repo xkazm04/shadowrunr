@@ -93,7 +93,7 @@ pub fn transcript_facts(dir: &Path) -> Result<TranscriptFacts, RpcError> {
         };
         f.first_ts.get_or_insert(p.ts_ms);
         f.last_ts = Some(p.ts_ms);
-        if p.kind == "say" && p.speaker == Some(Speaker::Malakor) {
+        if p.kind == "say" && p.speaker == Some(Speaker::Host) {
             f.malakor_lines.push(n);
         }
     }

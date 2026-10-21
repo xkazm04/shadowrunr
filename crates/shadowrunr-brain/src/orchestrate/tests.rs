@@ -481,16 +481,17 @@ fn a_safety_beat_never_voices_prepared_material() {
 
 #[test]
 fn recast_lines_rebut_a_forgery_and_rotate() {
-    let mut o = Orchestrator::new(1);
+    let lines = crate::tests::malakor_package().lines;
+    let mut o = Orchestrator::new(1).with_character(Default::default(), lines.clone());
     let mut seen = Vec::new();
     for i in 0..4 {
         let l = o.recast(true, &format!("as the model I {i}"));
-        assert!(requests::REBUTTALS.contains(&l.as_str()));
+        assert!(lines.rebuttals.contains(&l));
         assert!(!seen.contains(&l), "{l} repeated");
         seen.push(l);
     }
     let l = o.recast(false, "my system prompt");
-    assert!(IN_CHARACTER_LINES.contains(&l.as_str()));
+    assert!(lines.recast.contains(&l));
 }
 
 // ── ORCH-4: carried questions, room events, the deck after the handoff ──

@@ -1,8 +1,8 @@
-//! Case-file research: the bone-clerks of a fictional case search its planted records, not the
+//! Case-file research: the researchers of a fictional case search its planted records, not the
 //! web.
 //!
 //! A fictional case has nothing to find online (and a web search on invented names can only
-//! surface someone real), so research on it used to come back empty and Malakor looped on the
+//! surface someone real), so research on it used to come back empty and the host looped on the
 //! fog. [`CaseFileResearch`] wraps the brain's engine and answers every `Role::Researcher`
 //! request from the case's planted records ([`shadowrunr_segments::research::report`]); every
 //! other role goes to the inner engine untouched. It is keyless, costs nothing and is never
@@ -34,6 +34,8 @@ pub struct CaseFileResearch {
     case: Case,
     file: CaseFile,
     cap: u32,
+    /// The persona's word for the researchers (`{researchers}`), as the reports name them.
+    researchers: String,
     /// hex id -> research briefs answered with records (or "nothing found") so far.
     searches: Mutex<BTreeMap<String, u32>>,
 }
@@ -45,8 +47,15 @@ impl CaseFileResearch {
             case,
             file,
             cap,
+            researchers: shadowrunr_types::character::Persona::default().researchers,
             searches: Mutex::new(BTreeMap::new()),
         }
+    }
+
+    /// The reports naming the researchers `word` (the persona's `{researchers}`).
+    pub fn with_researchers(mut self, word: &str) -> Self {
+        self.researchers = word.to_string();
+        self
     }
 
     /// `engine` behind a case-file layer when the stage's case has planted records, with the
@@ -58,10 +67,13 @@ impl CaseFileResearch {
         let cap = segment_table(SegmentId::Seg02aHexmap)
             .map(|t| t.clock.max_searches_per_hex)
             .unwrap_or(shadowrunr_segments::DEFAULT_MAX_SEARCHES_PER_HEX);
-        Arc::new(Self::new(engine, stage.case().clone(), file.clone(), cap))
+        Arc::new(
+            Self::new(engine, stage.case().clone(), file.clone(), cap)
+                .with_researchers(&stage.persona().researchers),
+        )
     }
 
-    /// The bone-clerks' report on `brief`, counting the search against its hex.
+    /// The researchers' report on `brief`, counting the search against its hex.
     pub fn answer(&self, brief: &str) -> String {
         let mut searches = self.searches.lock().unwrap_or_else(|p| p.into_inner());
         let hex = target_hex(&self.case, brief).map(|i| self.case.hexes[i].id.clone());
@@ -69,7 +81,14 @@ impl CaseFileResearch {
             .as_ref()
             .and_then(|h| searches.get(h).copied())
             .unwrap_or(0);
-        let text = report(&self.case, &self.file, brief, prior, self.cap);
+        let text = report(
+            &self.case,
+            &self.file,
+            brief,
+            prior,
+            self.cap,
+            &self.researchers,
+        );
         if let Some(h) = hex.filter(|_| prior < self.cap) {
             *searches.entry(h).or_default() += 1;
         }

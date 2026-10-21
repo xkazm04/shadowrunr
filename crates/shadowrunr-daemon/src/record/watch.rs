@@ -105,7 +105,7 @@ impl Show {
             match serde_json::from_str::<StreamEvent>(line) {
                 Ok(StreamEvent::Say {
                     ts_ms,
-                    speaker: Speaker::Malakor,
+                    speaker: Speaker::Host,
                     ..
                 }) => show.says.push((i as u64 + 1, ts_ms)),
                 Ok(StreamEvent::Op {

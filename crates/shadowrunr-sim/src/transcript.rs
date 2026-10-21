@@ -178,7 +178,7 @@ pub fn body(ev: &StreamEvent) -> String {
         StreamEvent::Say {
             speaker, foil, text, ..
         } => match speaker {
-            Speaker::Malakor => format!("say malakor: {text}"),
+            Speaker::Host => format!("say host: {text}"),
             Speaker::Foil => format!("say foil {}: {text}", foil.as_deref().unwrap_or("?")),
         },
         StreamEvent::Op { op, .. } => {
@@ -329,7 +329,7 @@ mod tests {
     fn say(ts: TsMs, text: &str) -> StreamEvent {
         StreamEvent::Say {
             ts_ms: ts,
-            speaker: Speaker::Malakor,
+            speaker: Speaker::Host,
             foil: None,
             text: text.into(),
             replying_to: vec![],
@@ -386,7 +386,7 @@ mod tests {
         w.flush().unwrap();
         let back = read(&p).unwrap();
         assert_eq!(back.len(), 2);
-        assert!(render_line(2, &back[1]).starts_with("L2 [00:05] say malakor: hello minion"));
+        assert!(render_line(2, &back[1]).starts_with("L2 [00:05] say host: hello minion"));
     }
 
     #[test]

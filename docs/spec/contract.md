@@ -23,7 +23,8 @@ One `StreamEvent` per line, tagged `"type"`:
 - `case_open` (SEG-02A, the Case being audited, emitted once right after its `segment_start`)
 - `chat`
 - `picked`
-- `say` (with `speaker: malakor|foil`)
+- `say` (with `speaker: host|foil`; `host` is the character `stream_start.character` names.
+  Readers also accept the v1 value `malakor` as `host`, so old transcripts still load)
 - `op`
 - `vote`
 - `moderation` (with `stage: input|output`)
@@ -84,13 +85,87 @@ Chat commands:
 ## Character package (`characters/<id>/`)
 
 ```
-character.toml      id, name, default_tone, rank titles, foil ids
+character.toml      the manifest (v2, below): id, name, default tone, foils, identity words,
+                    voice, avatar, ranks, rules, line bank, tuning, segment flavour
 constitution.md     IMMUTABLE: identity, awareness, red lines (the brain never edits it)
 bible.md            lore, want, long arc, running jokes
 tones/<variant>.md  one file per tone variant (tournament axis)
 foils/<foil>.md     SEG-01 guest foils: original parody archetypes, never real people
+rules/<rule>.md     optional constitution rules, listed under [rules]
+stalls.toml         model-free stall lines for an engine outage (`lines = [...]`)
 situations.json     sim situation bank (format below)
 ```
+
+The engine is character-neutral: every word that makes a character itself (its name, its
+patron, what it calls the viewers, its in-character lines) comes from the package. Its JSON
+Schema is `character_manifest_schema()` in `shadowrunr-types` (`CharacterManifest`, also a
+`$def` of the contract), and `character validate` (`shadowrunr_brain::validate_character`)
+loads the whole package and lists every problem as `file: key: reason`.
+
+`character.toml` v2. Only `id`, `name` and `default_tone` are required. Every v2 table is
+optional, and an absent table or key is the engine's neutral default. Unknown keys are errors.
+
+```toml
+id = "malakor"                      # [A-Za-z0-9_-], the directory name
+name = "Arch-Lich Malakor"          # display name ({full_name})
+tagline = "..."                     # optional
+default_tone = "unhinged-roastmaster"
+foils = ["the-disruptor"]           # summonable foils, each with foils/<id>.md
+
+[identity]                          # when present, name, patron, follower, sign_off and
+name = "Malakor"                    # disclosure are required ({name})
+title = "Arch-Lich"                 # optional ({title})
+address_words = ["malakor", "lich"] # optional: what chat calls him (default: the name's words)
+reply_prefixes = ["Malakor:"]       # optional: speaker labels stripped from a reply
+patron = { name = "Lord of the Darkness", title = "Lord" }   # {patron}, {patron_title}
+follower = { one = "minion", many = "minions" }              # {follower}, {followers}
+researcher = { one = "bone-clerk", many = "bone-clerks" }    # optional; {researcher(s)}
+sign_off = "..."                    # the fleet-loss line
+disclosure = "Yes, I am an AI character: ..."               # the honest AI disclosure
+
+[voice]                             # schema only today: voice, sid, speed
+[avatar]                            # schema only today: rig (package-relative), face
+
+[ranks]                             # titles by wire name, lowest first
+thrall = "Thrall"
+lich = "Lesser Lich"
+propose_min_rank = "warlock"        # optional overrides of segments/data/ranks.toml
+weights = { warlock = 2.0 }
+thresholds = { acolyte = { min_gifted = 1, tiers = [{ tier = 1, min_months = 0 }] } }
+
+[rules]                             # optional rules, on or off by default
+crisis-handoff = true
+
+[lines]                             # model-free lines; absent ones are neutral defaults
+blocked = "..."                     # replaces a line a block term rule caught
+private_details = "..."             # replaces a line that only asked for personal details
+recast = ["..."]                    # stand-ins for a character break or persona leak
+rebuttals = ["..."]                 # answers to a forged decree (never name the patron)
+
+[tuning]                            # lesson-tuned constants, each with its provenance
+carry_ms = { value = 25000, provenance = "assumption", source = "..." }
+
+[segments."SEG-01"]                 # flavour appended to the segment's prompts
+rules_prompt = "..."
+states = { cold_open = "..." }
+```
+
+Placeholders. Engine prompt text, the segment tables' prompts and the package's `[identity]`,
+`[lines]` and `[segments]` texts are templates. `{key}` is replaced by the persona's value;
+`{Key}` (first letter upper case) also upper-cases the value's first letter. The keys are
+`name`, `title`, `full_name`, `patron`, `patron_title`, `follower`, `followers`, `researcher`
+and `researchers`. Any other `{word}` is an error at load (a segment table fails to load, a
+package fails validation); a `{` not followed by `word}` is plain text, so JSON in a prompt
+needs no escaping.
+
+Tuning keys (`TUNING_DEFAULTS` in `shadowrunr-types` holds each key's engine default and the
+default's provenance): `max_picks`, `carry_ms`, `carry_max`, `hold_gap_ms`, `quiet_bit_ms`,
+`bit_spacing_ms`, `stall_every_s`, `failed_beat_slack_s`, `min_cover_ms`,
+`request_answer_ms`, `request_lead_ms`, `request_max_ms`, `render_lag_ms`,
+`lookahead_max_ms`, `lag_ceiling_ms`, `screen_hold_ms`, `browser_dwell_ms`, `desk_dwell_ms`,
+`closing_s`, `closing_now_s`, `goodbye_drain_max_s`, `sign_off_window_s`, `stop_sign_off_s`.
+A value is a positive whole number in the key's unit (`_ms`, `_s`, else a count);
+`provenance` is `measured` or `assumption`; `source` (optional) names the run or lesson.
 
 `situations.json`:
 
@@ -1218,7 +1293,7 @@ the brain never waits on audio.
 
 **`GET /voice`** (WebSocket, same origin rule as `/events`):
 - `status` is sent on connect and on every state change.
-- For the followed **live** run, each `say` with `speaker: malakor` is rendered a sentence at a
+- For the followed **live** run, each `say` with `speaker: host` is rendered a sentence at a
   time. Each sentence is sent as one `utterance`, in order: `part` counts from 0, and `last` marks
   the final sentence.
 - Foil lines and replays are not voiced in v1. Nothing is voiced until a client sends its

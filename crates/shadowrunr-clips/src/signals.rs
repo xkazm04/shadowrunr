@@ -122,7 +122,7 @@ pub fn markers(stream: &Stream) -> Vec<ClipMarker> {
                     .filter_map(|(_, e)| match e {
                         StreamEvent::Say {
                             ts_ms: t,
-                            speaker: shadowrunr_types::Speaker::Malakor,
+                            speaker: shadowrunr_types::Speaker::Host,
                             ..
                         } => Some(*t),
                         _ => None,

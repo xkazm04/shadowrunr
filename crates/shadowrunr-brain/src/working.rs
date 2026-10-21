@@ -139,9 +139,9 @@ impl WorkingSet {
         }
     }
 
-    /// Render the working-set block. Marks fresh results as seen and a newly opened poll as
-    /// announced.
-    pub fn render(&mut self, foil_text: Option<&str>) -> String {
+    /// Render the working-set block (`followers`: the persona's word for who runs the
+    /// research). Marks fresh results as seen and a newly opened poll as announced.
+    pub fn render(&mut self, foil_text: Option<&str>, followers: &str) -> String {
         let mut s = String::new();
         let open: Vec<&JobEntry> = self
             .jobs
@@ -149,7 +149,7 @@ impl WorkingSet {
             .filter(|j| matches!(j.status.as_str(), "queued" | "running" | "progress"))
             .collect();
         if !open.is_empty() {
-            s.push_str("Research minions still working:\n");
+            s.push_str(&format!("Research {followers} still working:\n"));
             for j in open {
                 s.push_str(&format!(
                     "- {} ({}): {}\n",
@@ -361,9 +361,9 @@ mod tests {
             };
             ws.apply_job(&u, i64::from(k) * 1_000);
         }
-        let first = ws.render(None);
+        let first = ws.render(None, "minions");
         assert!(first.contains("Results just in"), "{first}");
-        let s = ws.render(None);
+        let s = ws.render(None, "minions");
         assert!(s.contains("(12 older results omitted)"), "{s}");
         assert!(s.contains("job-19") && s.contains("job-12"), "{s}");
         assert!(!s.contains("job-11:"), "{s}");

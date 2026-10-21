@@ -195,7 +195,7 @@ describe("a new stream resets the scene", () => {
 
 describe("Malakor's lines and their seqs (for the captions that follow the voice)", () => {
   const say = (ts: number, text: string, foil?: string): StreamEvent =>
-    foil ? { type: "say", ts_ms: ts, speaker: "foil", foil, text } : { type: "say", ts_ms: ts, speaker: "malakor", text };
+    foil ? { type: "say", ts_ms: ts, speaker: "foil", foil, text } : { type: "say", ts_ms: ts, speaker: "host", text };
 
   it("keeps each of his lines with the say event's seq, not a foil's, and resets with the run", () => {
     const store = new LiveStore(0);

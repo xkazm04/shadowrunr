@@ -27,6 +27,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 use serde::Deserialize;
+use shadowrunr_types::character::{unknown_placeholders, PLACEHOLDERS};
 use shadowrunr_types::{Op, ScreenId, SegmentId, SegmentStatus};
 
 use crate::SegmentError;
@@ -437,6 +438,21 @@ impl SegmentTable {
             .find(|o| !OP_TAGS.contains(&o.as_str()))
         {
             return Err(bad(format!("unknown op {op:?}")));
+        }
+        // Prompt text is a persona template: every placeholder must be a known one.
+        let prompts = std::iter::once(("rules_prompt".to_string(), self.rules_prompt.as_str()))
+            .chain(self.state_rules.iter().filter_map(|(s, r)| {
+                r.prompt
+                    .as_deref()
+                    .map(|p| (format!("state_rules.{s}.prompt"), p))
+            }));
+        for (key, text) in prompts {
+            if let Some(p) = unknown_placeholders(text).first() {
+                return Err(bad(format!(
+                    "{key}: unknown placeholder {{{p}}} (known: {})",
+                    PLACEHOLDERS.join(", ")
+                )));
+            }
         }
         let screens: BTreeSet<&str> = self.screens.iter().map(String::as_str).collect();
         if self.screens.is_empty()

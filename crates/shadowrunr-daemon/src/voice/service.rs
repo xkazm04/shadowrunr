@@ -363,7 +363,7 @@ pub(crate) fn malakor_say(frame: &Frame) -> Option<String> {
     }
     match serde_json::from_str::<StreamEvent>(frame).ok()? {
         StreamEvent::Say {
-            speaker: Speaker::Malakor,
+            speaker: Speaker::Host,
             text,
             ..
         } if !text.trim().is_empty() => Some(text),
