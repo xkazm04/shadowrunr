@@ -40,12 +40,13 @@ export function StatePanel(props: StatePanelProps) {
   );
 }
 
-export function OfflineState(props: { onRetry?: () => void; detail?: string }) {
+/** `hint` is the remedy for the daemon in use (data/errors.ts unavailableHint): ui knows no port. */
+export function OfflineState(props: { hint: string; onRetry?: () => void; detail?: string }) {
   return (
     <StatePanel
       state="offline"
       title="The daemon is not reachable"
-      hint="Start it with `shadowrunr daemon --port 7717`; the console reconnects on its own."
+      hint={props.hint}
       {...(props.detail === undefined ? {} : { detail: props.detail })}
       {...(props.onRetry ? { action: { label: "Retry now", onClick: props.onRetry } } : {})}
     />

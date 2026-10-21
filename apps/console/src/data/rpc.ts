@@ -2,9 +2,9 @@
 // `DataError` from the one taxonomy. Each call has a timeout; the reply text goes to the door.
 import type { DoorSource } from "./door";
 import { dataError, type DataError } from "./errors";
+import { DEFAULT_DAEMON_URL } from "./config";
 import { err, type Result } from "./result";
 
-export const DEFAULT_DAEMON_URL = "http://127.0.0.1:7717";
 export const DEFAULT_TIMEOUT_MS = 15_000;
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Pick<Response, "ok" | "status" | "text">>;

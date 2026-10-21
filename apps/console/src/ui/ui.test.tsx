@@ -10,6 +10,7 @@ import { Markdown } from "./Markdown";
 import { parseBlocks } from "./doc";
 import { Switch } from "./Switch";
 import { VirtualList } from "./VirtualList";
+import { OfflineState } from "./States";
 
 afterEach(cleanup);
 
@@ -290,5 +291,13 @@ describe("facet counts", () => {
       expect(src, f).not.toMatch(/\bcount\b\s*[:,}]/);
     }
     expect(readFileSync(join(process.cwd(), "src/pages/reconcile/Incidents.tsx"), "utf8")).toMatch(/counts: "given"/);
+  });
+});
+
+describe("OfflineState", () => {
+  it("renders the remedy it is given, so the port is the daemon in use", () => {
+    render(<OfflineState hint="Start it with `shadowrunr daemon --port 9000`; the console reconnects on its own." />);
+    expect(screen.getByText(/--port 9000/)).toBeTruthy();
+    expect(screen.queryByText(/7717/)).toBeNull();
   });
 });

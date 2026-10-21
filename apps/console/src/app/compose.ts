@@ -1,5 +1,5 @@
 // The composition root: real browser dependencies are chosen here and nowhere else.
-import { createDataLayer, readDataConfig, type DataLayer, type SocketFactory, type Timers } from "../data";
+import { createDataLayer, readDataConfig, shellDaemonUrl, type DataLayer, type SocketFactory, type Timers } from "../data";
 import { createHashRouter, decodeRoute, type RouterStore } from "../router";
 
 const browserTimers: Timers = {
@@ -11,7 +11,8 @@ const browserSocket: SocketFactory = (url) => new WebSocket(url);
 
 export function composeDataLayer(): DataLayer {
   const env: Readonly<Record<string, string | undefined>> = import.meta.env;
-  const config = readDataConfig(window.location.search, env);
+  // The desktop shell's daemon wins (its window CSP admits no other); a browser uses ?daemon=.
+  const config = readDataConfig(window.location.search, env, shellDaemonUrl());
   // The door's compiled validators load in parallel with the first paint (their own chunk).
   const door = import("../data/contractDoor").then((m) => m.contractDoor);
   return createDataLayer({ baseUrl: config.daemonUrl, door, socket: browserSocket, timers: browserTimers });

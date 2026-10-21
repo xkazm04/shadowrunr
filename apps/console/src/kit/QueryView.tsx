@@ -2,7 +2,7 @@
 // Pages use it so every surface has its offline, empty and degraded states by construction,
 // and its age stated whenever the live feed cannot vouch for it (freshness.ts).
 import type { ReactNode } from "react";
-import { useConnection, useDataLayer, type Query } from "../data";
+import { currentDaemonUrl, unavailableHint, useConnection, useDataLayer, type Query } from "../data";
 import { OfflineState, StatePanel } from "../ui/States";
 import { FreshnessLine } from "./FreshnessLine";
 import { freshnessOf, timeOf } from "./freshness";
@@ -42,7 +42,7 @@ export function QueryView<T>(props: {
   if (query.errorView) {
     const v = query.errorView;
     return v.state === "offline" ? (
-      <OfflineState onRetry={query.reload} detail={v.message} />
+      <OfflineState hint={v.hint} onRetry={query.reload} detail={v.message} />
     ) : (
       <StatePanel state={v.state} title={v.title} hint={v.hint} detail={`${v.code}: ${v.message}`} action={{ label: "Retry", onClick: query.reload }} />
     );
@@ -53,7 +53,7 @@ export function QueryView<T>(props: {
 /** The connection as a page state, for surfaces that have no query yet. */
 export function ConnectionState({ children }: { children: ReactNode }) {
   const c = useConnection();
-  if (c.summary === "offline") return <OfflineState />;
+  if (c.summary === "offline") return <OfflineState hint={unavailableHint(currentDaemonUrl())} />;
   if (c.summary === "degraded") {
     return <StatePanel state="degraded" title="The daemon answers, the live feed does not" hint="Live updates resume when the event stream reconnects." />;
   }

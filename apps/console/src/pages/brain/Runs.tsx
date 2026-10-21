@@ -57,7 +57,7 @@ export function Runs() {
   if (items === undefined) {
     const v = runs.query.errorView;
     if (!v) return <StatePanel state="loading" title="Loading the runs" />;
-    return v.state === "offline" ? <OfflineState onRetry={runs.query.reload} detail={v.message} /> : <StatePanel state={v.state} title={v.title} hint={v.hint} action={{ label: "Retry", onClick: runs.query.reload }} />;
+    return v.state === "offline" ? <OfflineState hint={v.hint} onRetry={runs.query.reload} detail={v.message} /> : <StatePanel state={v.state} title={v.title} hint={v.hint} action={{ label: "Retry", onClick: runs.query.reload }} />;
   }
   if (items.length === 0) return <StatePanel state="empty" title="No runs yet" hint="Simulated streams appear here once a tournament has run." />;
   return (

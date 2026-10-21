@@ -1,6 +1,7 @@
 // The one error taxonomy (F2 mirrors it from shadowrunr-types) and how each code shows in the UI.
 // Transport failures are folded into the same codes: an unreachable daemon or a timeout is
 // `unavailable`, a payload the door rejects is `internal`. `detail.reason` says which.
+import { currentDaemonUrl, daemonPort } from "./config";
 
 export const ERROR_CODES = [
   "invalid_params",
@@ -73,7 +74,8 @@ const TITLES: Readonly<Record<ErrorCode, string>> = {
 };
 
 const HINTS: Readonly<Record<ErrorCode, string>> = {
-  unavailable: "Start it with `shadowrunr daemon --port 7717`; the console reconnects on its own.",
+  // Formatted from the daemon in use: see unavailableHint.
+  unavailable: "",
   busy: "Try again in a moment.",
   engine: "The run is kept; open the ledger for the failing call.",
   io: "Check the data directory and its permissions.",
@@ -93,12 +95,18 @@ export interface ErrorView {
   readonly message: string;
 }
 
-export function viewOfError(e: DataError): ErrorView {
+/** The offline remedy for the daemon the console is pointed at, so its port is reachable. */
+export function unavailableHint(daemonUrl: string): string {
+  return `Start it with \`shadowrunr daemon --port ${daemonPort(daemonUrl)}\`; the console reconnects on its own.`;
+}
+
+/** `daemonUrl` defaults to the daemon this console resolved (config.ts currentDaemonUrl). */
+export function viewOfError(e: DataError, daemonUrl?: string): ErrorView {
   const timedOut = e.code === "unavailable" && e.detail?.reason === "timeout";
   return {
     state: timedOut ? "degraded" : UI_STATE[e.code],
     title: timedOut ? "The daemon did not answer in time" : TITLES[e.code],
-    hint: HINTS[e.code],
+    hint: e.code === "unavailable" ? unavailableHint(daemonUrl ?? currentDaemonUrl()) : HINTS[e.code],
     code: e.code,
     message: e.message,
   };
