@@ -348,6 +348,38 @@ stage's player (sentences played back to back, at most 6 s queued ahead): the se
 drops, the audio heard, and the time from a `say` to its first sound. Run it on a quiet machine;
 the engine shares the CPU with whatever else runs.
 
+With no compare flag that one row is all it prints. To choose between configs, compare them in
+one invocation instead of assembling rows by hand:
+
+```
+shadowrunr voice replay <transcript.jsonl> --arms "workers=2,3 flight=1,3" --repeat 3 [--baseline workers=3,flight=3] [--json]
+```
+
+- `--arms` is a grid: `key=v1,v2` over `workers`, `flight` (lines in flight) and `threads`, every
+  value at least 1. The example is four configs.
+- `--baseline` is the config the arms are measured against, one value per key. By default it is
+  `[voice]` with the flags above.
+- `--repeat N` replays every config N times. The repeats are interleaved: each round runs every
+  config once before the next round starts, so a change in machine load falls on all of them, not
+  on whichever config ran last.
+
+Each figure prints as its median with its range and n, for example `1.9 s (1.6-5.3, n=3)`.
+Latencies count only the repeats where a line spoke. Under the table, each arm's lines are diffed
+against the baseline's. A line's outcome is its majority across the repeats; ties go to the
+outcome seen first. Each changed line is listed with its seq, both outcomes and its text (cut to
+60 characters), in one of three groups:
+
+- **saved**: the baseline did not speak it, this arm did.
+- **lost**: the baseline spoke it, this arm did not.
+- **changed**: neither spoke it, for different reasons (`late`, `queue_full`, `error`, `partial`,
+  `unresolved`).
+
+These are the lines an audience would gain or miss. A difference in the totals alone can come
+from load. `--json` prints `{"baseline": {...}, "arms": [...]}`: each config's spreads, its
+`outcomes` by seq, and for an arm its `saved`, `lost` and `changed`. The plain `--json` report
+also carries each line's outcome, as `outcomes`. A malformed `--arms`, `--baseline` or
+`--repeat 0` is a usage error (exit 2), reported before anything runs.
+
 | Exit | `voice replay` |
 | --- | --- |
 | 0 | the replay ran (whatever it measured) |

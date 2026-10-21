@@ -3,14 +3,17 @@
 //! It measures what a show would have sounded like with this `[voice]`: lines spoken and
 //! skipped, the audio made, the first-audio latency, and a model of the stage's player (back to
 //! back playback, at most [`STAGE_AHEAD_S`] queued) for what an audience would have heard.
-//! Nothing calls a model: the lines are the transcript's.
+//! Nothing calls a model: the lines are the transcript's. [`replay_with`] is the same replay
+//! over any [`Renderer`] (a fake in tests); [`compare`] runs a grid of configs against a baseline.
+
+pub mod compare;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shadowrunr_types::voice::{VoiceFrame, VoiceSkip};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::watch;
@@ -29,6 +32,34 @@ pub const STAGE_AHEAD_S: f64 = 6.0;
 const STAGE_LEAD_S: f64 = 0.06;
 /// How long the replay waits, after the last event, for the lines still in the service.
 const DRAIN: Duration = Duration::from_secs(180);
+
+/// What became of one Malakor line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    /// Every sentence arrived.
+    Spoken,
+    /// Some sentences, then a failure.
+    Partial,
+    Late,
+    QueueFull,
+    Error,
+    /// Not resolved before the drain ended.
+    Unresolved,
+}
+
+impl Outcome {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Spoken => "spoken",
+            Self::Partial => "partial",
+            Self::Late => "late",
+            Self::QueueFull => "queue_full",
+            Self::Error => "error",
+            Self::Unresolved => "unresolved",
+        }
+    }
+}
 
 /// One replay's figures.
 #[derive(Debug, Default, Serialize)]
@@ -56,6 +87,12 @@ pub struct Report {
     pub stage_dropped: usize,
     pub heard_s: f64,
     pub say_to_sound_ms: Percentiles,
+    /// Each Malakor line's fate, by its seq in the replayed run (the same seq in every replay
+    /// of one transcript, so two configs' lines line up).
+    pub outcomes: BTreeMap<u64, Outcome>,
+    /// Each Malakor line's text, by seq: for the line diff, not the JSON.
+    #[serde(skip)]
+    pub texts: BTreeMap<u64, String>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -171,14 +208,10 @@ pub async fn replay(
         enabled: true,
         ..voice
     };
-    let (stop_tx, stop_rx) = watch::channel(false);
-    let stop = move || {
-        let mut rx = stop_rx.clone();
-        async move {
-            let _ = rx.wait_for(|d| *d).await;
-        }
-    };
-    let (renderer, task) = SidecarRenderer::start(voice.clone(), stop());
+    let (stop_tx, mut stop_rx) = watch::channel(false);
+    let (renderer, task) = SidecarRenderer::start(voice.clone(), async move {
+        let _ = stop_rx.wait_for(|d| *d).await;
+    });
     let ready = renderer
         .state()
         .wait_for(|s| !matches!(s, RendererState::Starting))
@@ -189,8 +222,28 @@ pub async fn replay(
         Ok(RendererState::Degraded(why)) => return Err(why),
         _ => return Err("the voice sidecar did not start".into()),
     }
+    let report = replay_with(voice, renderer, events, speed, progress).await;
+    stop_tx.send_replace(true);
+    let _ = tokio::time::timeout(STOP_GRACE * 2, task).await;
+    Ok(report)
+}
+
+/// Replay `events` at `speed` through a fresh hub speaking with `renderer`, which is already
+/// ready. The caller owns the renderer's lifetime.
+pub async fn replay_with(
+    voice: VoiceConfig,
+    renderer: Arc<dyn Renderer>,
+    events: Vec<(u64, Frame)>,
+    speed: f64,
+    progress: bool,
+) -> Report {
+    let voice = VoiceConfig {
+        enabled: true,
+        ..voice
+    };
     let hub = VoiceHub::new(voice.clone());
-    hub.attach(renderer.clone(), stop());
+    // The hub's tasks end with `hub.stop()` below.
+    hub.attach(renderer, std::future::pending());
     let run = Arc::new(LiveRun::new("replay".into()));
     let mut following = hub.follow(&run, true);
 
@@ -202,24 +255,25 @@ pub async fn replay(
         .filter(|(_, f)| malakor_say(f).is_some())
         .count();
     // The pusher: each event at its time; Malakor's lines are remembered by seq.
-    let (said_tx, mut said_rx) = tokio::sync::mpsc::unbounded_channel::<(u64, Instant)>();
+    let (said_tx, mut said_rx) = tokio::sync::mpsc::unbounded_channel::<(u64, Instant, String)>();
     let pusher = {
         let run = run.clone();
         tokio::spawn(async move {
             for (ts, f) in events {
                 let at = t0 + Duration::from_secs_f64(ts as f64 / 1000.0 / speed);
                 tokio::time::sleep_until(at).await;
-                let say = malakor_say(&f).is_some();
+                let say = malakor_say(&f);
                 let seq = run.push(f);
-                if say {
-                    let _ = said_tx.send((seq, Instant::now()));
+                if let Some(text) = say {
+                    let _ = said_tx.send((seq, Instant::now(), text));
                 }
             }
         })
     };
 
     let mut said: BTreeMap<u64, Instant> = BTreeMap::new();
-    let mut resolved: HashMap<u64, &'static str> = HashMap::new();
+    let mut texts: BTreeMap<u64, String> = BTreeMap::new();
+    let mut resolved: HashMap<u64, Outcome> = HashMap::new();
     let mut first: HashMap<u64, Instant> = HashMap::new();
     let mut stage = Stage::default();
     let mut report = Report {
@@ -231,8 +285,9 @@ pub async fn replay(
     };
     let mut drain_by: Option<Instant> = None;
     loop {
-        while let Ok((seq, at)) = said_rx.try_recv() {
+        while let Ok((seq, at, text)) = said_rx.try_recv() {
             said.insert(seq, at);
+            texts.insert(seq, text);
         }
         if pusher.is_finished() && drain_by.is_none() {
             drain_by = Some(Instant::now() + DRAIN);
@@ -268,7 +323,7 @@ pub async fn replay(
                 first.entry(*seq).or_insert(now);
                 stage.accept(at_s, *seq, *part, dur);
                 if *last {
-                    resolved.insert(*seq, "spoken");
+                    resolved.insert(*seq, Outcome::Spoken);
                 }
                 if progress {
                     eprintln!("{at_s:>7.1}s  utt {seq}.{part}  {dur:>4.1}s  {text}");
@@ -278,14 +333,14 @@ pub async fn replay(
                 seq, part, reason, ..
             } => {
                 let why = match reason {
-                    VoiceSkip::Late => "late",
-                    VoiceSkip::QueueFull => "queue_full",
-                    VoiceSkip::Error if *part > 0 => "partial",
-                    VoiceSkip::Error => "error",
+                    VoiceSkip::Late => Outcome::Late,
+                    VoiceSkip::QueueFull => Outcome::QueueFull,
+                    VoiceSkip::Error if *part > 0 => Outcome::Partial,
+                    VoiceSkip::Error => Outcome::Error,
                 };
                 resolved.insert(*seq, why);
                 if progress {
-                    eprintln!("{at_s:>7.1}s  skipped {seq}.{part}  {why}");
+                    eprintln!("{at_s:>7.1}s  skipped {seq}.{part}  {}", why.as_str());
                 }
             }
             VoiceFrame::Status { .. } => {}
@@ -294,19 +349,32 @@ pub async fn replay(
     let _ = pusher.await;
     drop(following);
     hub.stop();
-    stop_tx.send_replace(true);
-    let _ = tokio::time::timeout(STOP_GRACE * 2, task).await;
+    while let Ok((seq, at, text)) = said_rx.try_recv() {
+        said.insert(seq, at);
+        texts.insert(seq, text);
+    }
 
     for why in resolved.values() {
         match *why {
-            "spoken" => report.spoken += 1,
-            "partial" => report.partial += 1,
-            "late" => report.late += 1,
-            "queue_full" => report.queue_full += 1,
-            _ => report.error += 1,
+            Outcome::Spoken => report.spoken += 1,
+            Outcome::Partial => report.partial += 1,
+            Outcome::Late => report.late += 1,
+            Outcome::QueueFull => report.queue_full += 1,
+            Outcome::Error | Outcome::Unresolved => report.error += 1,
         }
     }
     report.unresolved = lines.saturating_sub(resolved.len());
+    report.outcomes = said
+        .keys()
+        .chain(resolved.keys())
+        .map(|seq| {
+            (
+                *seq,
+                resolved.get(seq).copied().unwrap_or(Outcome::Unresolved),
+            )
+        })
+        .collect();
+    report.texts = texts;
     let ms = |d: Duration| u64::try_from(d.as_millis()).unwrap_or(u64::MAX);
     report.first_audio_ms = Percentiles::of(
         first
@@ -326,7 +394,7 @@ pub async fn replay(
     );
     report.stage_dropped = stage.dropped;
     report.heard_s = stage.accepted_s - stage.dropped_s;
-    Ok(report)
+    report
 }
 
 /// One report as a table row (see [`HEADER`]).
@@ -395,5 +463,90 @@ mod tests {
         assert_eq!(malakor_say(&ev[1].1).as_deref(), Some("Kneel."));
         std::fs::write(&path, "not json\n").unwrap();
         assert!(read_transcript(&path).is_err());
+    }
+
+    fn say_at(ts: u64, text: &str) -> (u64, Frame) {
+        let raw = serde_json::json!({"type":"say","ts_ms":ts,"speaker":"malakor","text":text})
+            .to_string();
+        (ts, Frame::from(raw.as_str()))
+    }
+
+    #[tokio::test]
+    async fn replay_with_a_fake_keeps_each_lines_fate() {
+        use crate::voice::renderer::fake::{FakeRenderer, Script};
+        let fake = Arc::new(FakeRenderer::new());
+        fake.script("Second, and it hangs.", Script::Hang);
+        let voice = VoiceConfig {
+            max_lag_ms: 60,
+            ..VoiceConfig::default()
+        };
+        let events = vec![
+            say_at(0, "First, kneel."),
+            say_at(10, "Second, and it hangs."),
+            say_at(300, "Third, rise."),
+        ];
+        let r = tokio::time::timeout(
+            Duration::from_secs(10),
+            replay_with(voice, fake, events, 1.0, false),
+        )
+        .await
+        .expect("the replay drains");
+        let want: BTreeMap<u64, Outcome> = [
+            (1, Outcome::Spoken),
+            (2, Outcome::Late),
+            (3, Outcome::Spoken),
+        ]
+        .into();
+        assert_eq!(r.outcomes, want);
+        assert_eq!((r.lines, r.spoken, r.late, r.unresolved), (3, 2, 1, 0));
+        assert_eq!(
+            r.texts.get(&2).map(String::as_str),
+            Some("Second, and it hangs.")
+        );
+        let json = serde_json::to_value(&r).unwrap();
+        assert_eq!(json["outcomes"]["2"], "late");
+        assert!(json.get("texts").is_none());
+    }
+
+    /// GUARD: the plain `voice replay` prints exactly this, byte for byte, as before arms.
+    #[test]
+    fn the_plain_report_prints_the_same_header_and_row() {
+        let r = Report {
+            workers: 3,
+            lines_in_flight: 3,
+            lines: 24,
+            show_s: 300.0,
+            spoken: 21,
+            partial: 1,
+            late: 1,
+            queue_full: 0,
+            error: 1,
+            unresolved: 1,
+            utterances: 60,
+            audio_s: 151.04,
+            first_audio_ms: Percentiles {
+                n: 22,
+                p50: 1600,
+                p90: 2000,
+                max: 2400,
+            },
+            stage_dropped: 2,
+            heard_s: 140.96,
+            say_to_sound_ms: Percentiles {
+                n: 21,
+                p50: 1700,
+                p90: 2100,
+                max: 2500,
+            },
+            ..Report::default()
+        };
+        let out = format!("{}\n{}\n", HEADER, row(&r));
+        assert_eq!(
+            out,
+            "workers flight lines spoken partial late qfull error audio_s  show_s \
+             first_p50 first_p90 stage_x heard_s sound_p50\n      \
+             3      3    24     21       1    1     0     2   151.0   300.0      \
+             1600      2000       2   141.0      1700\n"
+        );
     }
 }

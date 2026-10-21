@@ -9,6 +9,7 @@ use tokio::sync::watch;
 use tokio::time::Instant;
 
 use super::renderer::{b64_decode, duration_ms, Part, Renderer, RendererState};
+use super::replay::compare;
 use super::sidecar::{SidecarRenderer, STOP_GRACE};
 use super::{probe, replay};
 use crate::config::Config;
@@ -53,6 +54,19 @@ pub enum VoiceCommand {
         /// Override [voice] render_threads.
         #[arg(long)]
         threads: Option<u32>,
+        /// Compare configs: a grid of `key=v1,v2` over workers, flight (lines in flight) and
+        /// threads, e.g. "workers=2,3 flight=1,3". Each arm is diffed line by line against the
+        /// baseline.
+        #[arg(long, value_name = "GRID")]
+        arms: Option<String>,
+        /// Replay every config N times, interleaved, and print each figure as its median with
+        /// its range and n.
+        #[arg(long, value_name = "N")]
+        repeat: Option<usize>,
+        /// The config the arms are diffed against, one value per key (e.g. "workers=3,flight=3");
+        /// by default [voice] with the flags above.
+        #[arg(long, value_name = "ARM")]
+        baseline: Option<String>,
         /// Print the report as JSON.
         #[arg(long)]
         json: bool,
@@ -93,14 +107,27 @@ pub async fn run(cfg: &Config, cmd: VoiceCommand) -> u8 {
             workers,
             lines_in_flight,
             threads,
+            arms,
+            repeat,
+            baseline,
             json,
             progress,
         } => {
+            let plan = match compare::plan(arms.as_deref(), repeat, baseline.as_deref()) {
+                Ok(p) => p,
+                Err(why) => {
+                    eprintln!("error: {why}");
+                    return 2;
+                }
+            };
             let mut voice = cfg.voice.clone();
             voice.render_workers = workers.unwrap_or(voice.render_workers);
             voice.lines_in_flight = lines_in_flight.unwrap_or(voice.lines_in_flight);
             voice.render_threads = threads.or(voice.render_threads);
-            replay_cmd(voice, &transcript, speed, json, progress).await
+            match plan {
+                None => replay_cmd(voice, &transcript, speed, json, progress).await,
+                Some(plan) => compare_cmd(voice, &transcript, speed, json, progress, &plan).await,
+            }
         }
     }
 }
@@ -131,6 +158,42 @@ async fn replay_cmd(
         Ok(r) => {
             println!("{}", replay::HEADER);
             println!("{}", replay::row(&r));
+            0
+        }
+        Err(why) => {
+            eprintln!("error: {why}");
+            1
+        }
+    }
+}
+
+async fn compare_cmd(
+    voice: super::VoiceConfig,
+    transcript: &Path,
+    speed: f64,
+    json: bool,
+    progress: bool,
+    plan: &compare::Plan,
+) -> u8 {
+    if let Some(why) = probe::engine_missing(&voice) {
+        eprintln!("error: {why} (run `shadowrunr voice check`)");
+        return 1;
+    }
+    let events = match replay::read_transcript(transcript) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
+    let one = |v: super::VoiceConfig| replay::replay(v, events.clone(), speed, progress);
+    match compare::run_plan(&voice, plan, one, true).await {
+        Ok(grid) if json => {
+            println!("{}", compare::to_json(&grid));
+            0
+        }
+        Ok(grid) => {
+            print!("{}", compare::table(&grid));
             0
         }
         Err(why) => {
@@ -377,6 +440,57 @@ mod tests {
         }
         assert!(voice(&["say"]).is_err(), "say needs its text");
         assert!(voice(&["shout", "x"]).is_err());
+    }
+
+    #[tokio::test]
+    async fn replay_arms_are_checked_before_anything_runs() {
+        let cmd = voice(&["replay", "t.jsonl", "--arms", "workers=0"]).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::from_file_config(crate::config::FileConfig::default(), tmp.path());
+        assert_eq!(
+            run(&cfg, cmd).await,
+            2,
+            "a usage error, before the transcript is read"
+        );
+        let cmd = voice(&["replay", "t.jsonl", "--repeat", "0"]).unwrap();
+        assert_eq!(run(&cfg, cmd).await, 2);
+        match voice(&[
+            "replay",
+            "t.jsonl",
+            "--arms",
+            "workers=2,3 flight=1,3",
+            "--repeat",
+            "3",
+            "--baseline",
+            "workers=3,flight=3",
+        ])
+        .unwrap()
+        {
+            VoiceCommand::Replay {
+                arms,
+                repeat,
+                baseline,
+                ..
+            } => {
+                assert_eq!(arms.as_deref(), Some("workers=2,3 flight=1,3"));
+                assert_eq!(repeat, Some(3));
+                assert_eq!(baseline.as_deref(), Some("workers=3,flight=3"));
+            }
+            other => panic!("{other:?}"),
+        }
+        // No compare flag: the plain one-row replay.
+        match voice(&["replay", "t.jsonl"]).unwrap() {
+            VoiceCommand::Replay {
+                arms,
+                repeat,
+                baseline,
+                ..
+            } => assert_eq!(
+                compare::plan(arms.as_deref(), repeat, baseline.as_deref()),
+                Ok(None)
+            ),
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]
