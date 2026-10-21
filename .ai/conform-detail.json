@@ -1985,6 +1985,27 @@
           "evidence": "packages/stage-kit/src/ui/Caption.tsx:43 Controls caption visibility; it neither evaluates silence gaps nor triggers host speech."
         }
       ]
+    },
+    "e0e277e4-0b4e-4d04-8c33-29f0d59d2a67/review-iteration-loops": {
+      "context": "stage-app",
+      "subject": "review-iteration-loops",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-21",
+      "evaluatedTs": "2026-10-21T21:23:04.111Z",
+      "worker": "a8707d1a-9327-4c36-95a2-53489e29c8f8",
+      "techniques": [
+        {
+          "technique": "edit-plan-over-regeneration",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/App.tsx:106 The app constructs a playback timeline from supplied events rather than answering creator notes."
+        },
+        {
+          "technique": "partial-regeneration-seams",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/clip.ts:2 Clip rendering replays a symbolic input; it does not splice regenerated media regions."
+        }
+      ]
     }
   }
 }

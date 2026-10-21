@@ -3592,7 +3592,11 @@
           "revision": 11,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/stage/package.json:5 The app plays supplied events and clip inputs, and searches found no revision, critique or feedback terms under apps/stage while locating those mechanisms elsewhere in the repository.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:a3bbc2c5b531b8d5",
+          "evaluatedRevision": 11
         },
         {
           "subject": "live-response-latency-budgeting",
