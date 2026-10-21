@@ -1231,7 +1231,7 @@ export interface CharacterRulesParams {
   character: string;
 }
 /**
- * An optional constitution rule with its effective state (`character.rules`).
+ * A package rule with its effective state (`character.rules`).
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "RuleState".
@@ -1243,6 +1243,11 @@ export interface RuleState {
   default: boolean;
   enabled: boolean;
   id: string;
+  /**
+   * A rail (`character.toml` `rails`): always on; the operator override cannot reach it and
+   * `character.rules.set` refuses it. Absent (an older daemon): false.
+   */
+  locked?: boolean;
   title: string;
 }
 /**
@@ -4117,6 +4122,11 @@ export interface CharacterManifest {
    * Display name, e.g. "Arch-Lich Malakor".
    */
   name: string;
+  /**
+   * Rails: rules the operator override cannot switch off. Each needs `rules/<id>.md` and
+   * `<id> = true` under `[rules]`; `character.rules.set` refuses it.
+   */
+  rails?: string[];
   ranks?: CharacterRanks;
   /**
    * Optional constitution rules (`rules/<id>.md`), on or off by default.

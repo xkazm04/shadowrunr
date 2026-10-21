@@ -75,7 +75,7 @@ pub struct Situation {
     pub segments: Vec<SegmentId>,
 }
 
-/// An optional constitution rule with its effective state (`character.rules`).
+/// A package rule with its effective state (`character.rules`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RuleState {
     pub id: String,
@@ -83,6 +83,10 @@ pub struct RuleState {
     pub enabled: bool,
     /// The package default from `character.toml` `[rules]`.
     pub default: bool,
+    /// A rail (`character.toml` `rails`): always on; the operator override cannot reach it and
+    /// `character.rules.set` refuses it. Absent (an older daemon): false.
+    #[serde(default)]
+    pub locked: bool,
 }
 
 /// An optional rule with its text (`character.get`).

@@ -53,6 +53,10 @@ pub struct CharacterManifest {
     /// Optional constitution rules (`rules/<id>.md`), on or off by default.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub rules: BTreeMap<String, bool>,
+    /// Rails: rules the operator override cannot switch off. Each needs `rules/<id>.md` and
+    /// `<id> = true` under `[rules]`; `character.rules.set` refuses it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rails: Vec<String>,
     /// Model-free in-character lines the output gate and the orchestrator speak. Absent lines
     /// use the engine's neutral defaults.
     #[serde(default, skip_serializing_if = "Option::is_none")]

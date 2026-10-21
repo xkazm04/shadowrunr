@@ -8209,7 +8209,7 @@ validate672.evaluated = {"items":true,"dynamicProps":false,"dynamicItems":false}
 
 export const validateCharacterRulesResult = validate674;
 const schema32 = {"items":{"$ref":"#/$defs/RuleState"},"type":"array"};
-const schema33 = {"description":"An optional constitution rule with its effective state (`character.rules`).","properties":{"default":{"description":"The package default from `character.toml` `[rules]`.","type":"boolean"},"enabled":{"type":"boolean"},"id":{"type":"string"},"title":{"type":"string"}},"required":["id","title","enabled","default"],"type":"object"};
+const schema33 = {"description":"A package rule with its effective state (`character.rules`).","properties":{"default":{"description":"The package default from `character.toml` `[rules]`.","type":"boolean"},"enabled":{"type":"boolean"},"id":{"type":"string"},"locked":{"default":false,"description":"A rail (`character.toml` `rails`): always on; the operator override cannot reach it and\n`character.rules.set` refuses it. Absent (an older daemon): false.","type":"boolean"},"title":{"type":"string"}},"required":["id","title","enabled","default"],"type":"object"};
 
 function validate78(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -8265,16 +8265,29 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.title !== undefined){
+if(data.locked !== undefined){
 const _errs7 = errors;
-if(typeof data.title !== "string"){
-validate78.errors = [{instancePath:instancePath+"/title",schemaPath:"#/properties/title/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(typeof data.locked !== "boolean"){
+validate78.errors = [{instancePath:instancePath+"/locked",schemaPath:"#/properties/locked/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
 }
 var valid0 = _errs7 === errors;
 }
 else {
 var valid0 = true;
+}
+if(valid0){
+if(data.title !== undefined){
+const _errs9 = errors;
+if(typeof data.title !== "string"){
+validate78.errors = [{instancePath:instancePath+"/title",schemaPath:"#/properties/title/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid0 = _errs9 === errors;
+}
+else {
+var valid0 = true;
+}
 }
 }
 }
@@ -8289,7 +8302,7 @@ return false;
 validate78.errors = vErrors;
 return errors === 0;
 }
-validate78.evaluated = {"props":{"default":true,"enabled":true,"id":true,"title":true},"dynamicProps":false,"dynamicItems":false};
+validate78.evaluated = {"props":{"default":true,"enabled":true,"id":true,"locked":true,"title":true},"dynamicProps":false,"dynamicItems":false};
 
 
 function validate674(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){

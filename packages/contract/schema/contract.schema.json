@@ -651,6 +651,13 @@
           "description": "Display name, e.g. \"Arch-Lich Malakor\".",
           "type": "string"
         },
+        "rails": {
+          "description": "Rails: rules the operator override cannot switch off. Each needs `rules/<id>.md` and\n`<id> = true` under `[rules]`; `character.rules.set` refuses it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "ranks": {
           "$ref": "#/$defs/CharacterRanks",
           "description": "Rank titles, and overrides of the engine's rank ladder (`segments/data/ranks.toml`)."
@@ -6107,7 +6114,7 @@
       "type": "object"
     },
     "RuleState": {
-      "description": "An optional constitution rule with its effective state (`character.rules`).",
+      "description": "A package rule with its effective state (`character.rules`).",
       "properties": {
         "default": {
           "description": "The package default from `character.toml` `[rules]`.",
@@ -6118,6 +6125,11 @@
         },
         "id": {
           "type": "string"
+        },
+        "locked": {
+          "default": false,
+          "description": "A rail (`character.toml` `rails`): always on; the operator override cannot reach it and\n`character.rules.set` refuses it. Absent (an older daemon): false.",
+          "type": "boolean"
         },
         "title": {
           "type": "string"
