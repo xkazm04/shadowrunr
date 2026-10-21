@@ -31,7 +31,10 @@ import {
 import { Avatar } from "./avatar/Avatar";
 import type { FaceSource } from "./avatar/types";
 import { layoutRects, type Rect, type Region } from "./layouts";
+import { LastHeard, StandingCard, VoiceCaptionPanel, cardShowing, tickerActive } from "./OnAir";
+import type { VoiceCaptionView } from "./voice/captions";
 import { SYNTHETIC_VOICE } from "./voice/names";
+import type { FaceState } from "./voice/report";
 
 function RegionBox({ name, rect, children }: { name: Region; rect: Rect; children: ReactNode }) {
   const style: CSSProperties = { left: rect.x, top: rect.y, width: rect.w, height: rect.h };
@@ -62,6 +65,8 @@ export function Stage({
   face,
   rigBase = null,
   onCaptionSpeaking,
+  voiceCaption,
+  onFace,
 }: {
   scene: SceneState;
   now: number;
@@ -83,13 +88,18 @@ export function Stage({
   rigBase?: string | null;
   /** Hears whether a `say` caption is on screen (the face's level-less speaking phase). */
   onCaptionSpeaking?: (speaking: boolean) => void;
+  /** Captions follow the voice's audio: the caption it gives now (absent: the estimated timing). */
+  voiceCaption?: VoiceCaptionView | null;
+  /** Hears which face the avatar slot draws. */
+  onFace?: (state: FaceState) => void;
 }) {
   const poll = visiblePoll(scene, now);
   const rects = layoutRects(scene.layout, { poll: poll !== null, foil: scene.foil !== null });
+  if (!tickerActive(scene, now)) rects.ticker = { ...rects.ticker, hidden: true };
   const hexmap = scene.layout === "hexmap";
   // Captions queue under a burst: the one showing now, not simply the latest line said.
   const caption = captionAt(scene, now);
-  const speaking = isSpeaking(caption, now);
+  const speaking = voiceCaption === undefined ? isSpeaking(caption, now) : (voiceCaption?.speaking ?? false);
   useEffect(() => onCaptionSpeaking?.(speaking), [speaking, onCaptionSpeaking]);
   const faceSize = Math.round(Math.min(rects.avatar.w, rects.avatar.h));
 
@@ -101,7 +111,7 @@ export function Stage({
       </div>
 
       <RegionBox name="topbar" rect={rects.topbar}>
-        <TopBar scene={scene} caseFile={caseFile} sourceTag={sourceTag} {...(clock === undefined ? {} : { clock })} />
+        <TopBar scene={scene} caseFile={caseFile} sourceTag={sourceTag} onAir={broadcast} {...(clock === undefined ? {} : { clock })} />
       </RegionBox>
 
       <RegionBox name="hexmap" rect={rects.hexmap}>
@@ -111,14 +121,18 @@ export function Stage({
       <RegionBox name="avatar" rect={rects.avatar}>
         <div className="avatar-slot">
           <Silhouette speaking={speaking} small={hexmap} />
-          {face && <Avatar className="avatar-face" rigBase={rigBase} size={faceSize} source={face} />}
+          {face && <Avatar className="avatar-face" rigBase={rigBase} size={faceSize} source={face} {...(onFace ? { onFace } : {})} />}
           {voice && <div className="voice-label">{SYNTHETIC_VOICE}</div>}
           {!hexmap && !broadcast && <div className="avatar-note">avatar slot · face rig or procedural placeholder</div>}
         </div>
       </RegionBox>
 
       <RegionBox name="caption" rect={rects.caption}>
-        <CaptionPanel caption={caption} redactions={scene.redactions} now={now} compact={hexmap} />
+        {voiceCaption === undefined ? (
+          <CaptionPanel caption={caption} redactions={scene.redactions} now={now} compact={hexmap} onAir={broadcast} />
+        ) : (
+          <VoiceCaptionPanel view={voiceCaption} redactions={scene.redactions} now={now} compact={hexmap} onAir={broadcast} />
+        )}
       </RegionBox>
 
       <RegionBox name="foil" rect={rects.foil}>
@@ -146,21 +160,22 @@ export function Stage({
       </RegionBox>
 
       <RegionBox name="card" rect={rects.card}>
-        <ExplainerCard card={scene.card} now={now} />
+        {cardShowing(scene, now) ? <ExplainerCard card={scene.card} now={now} /> : <StandingCard scene={scene} poll={poll !== null && poll.closedAt === undefined} />}
       </RegionBox>
 
       <RegionBox name="decrees" rect={rects.decrees}>
-        <Decrees scene={scene} now={now} />
+        <Decrees scene={scene} now={now} onAir={broadcast} />
+        <LastHeard scene={scene} now={now} />
       </RegionBox>
 
       <RegionBox name="ticker" rect={rects.ticker}>
-        <JobTicker scene={scene} now={now} />
+        <JobTicker scene={scene} now={now} onAir={broadcast} />
       </RegionBox>
 
       <MomentMarks scene={scene} now={now} />
-      <SealToast scene={scene} now={now} />
+      <SealToast scene={scene} now={now} onAir={broadcast} />
       <TransitionWipe scene={scene} now={now} />
-      <Intro scene={scene} now={now} />
+      <Intro scene={scene} now={now} onAir={broadcast} />
       <Outro scene={scene} now={now} />
       <EndCard scene={scene} now={now} />
       {overlay}

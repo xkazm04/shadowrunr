@@ -32,11 +32,14 @@ export function CaptionPanel({
   redactions,
   now,
   compact,
+  onAir = false,
 }: {
   caption: CaptionT | null;
   redactions: Redaction[];
   now: number;
   compact: boolean;
+  /** The broadcast view: a redaction says that it happened, not which rule fired. */
+  onAir?: boolean;
 }) {
   const line = useMemo(() => (caption ? wordTimings(caption.text) : null), [caption]);
   const elapsed = caption ? now - caption.at : 0;
@@ -62,7 +65,7 @@ export function CaptionPanel({
         <div className="redaction" key={redaction.key}>
           <div className="redaction-bar">
             <span className="redaction-title">REDACTED BY THE LORD</span>
-            <span className="redaction-rule">{redaction.rule}</span>
+            {!onAir && <span className="redaction-rule">{redaction.rule}</span>}
           </div>
         </div>
       )}

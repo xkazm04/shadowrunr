@@ -31,12 +31,15 @@ export function TopBar({
   caseFile,
   sourceTag,
   clock,
+  onAir = false,
 }: {
   scene: SceneState;
   caseFile: Case | null;
   sourceTag: string;
   /** The stream's elapsed time (mm:ss), shown beside the source tag when given. */
   clock?: string;
+  /** The broadcast view: the segment's title without its id. */
+  onAir?: boolean;
 }) {
   const seg = scene.segment;
   const hexmap = scene.layout === "hexmap";
@@ -49,7 +52,7 @@ export function TopBar({
         </svg>
         <div>
           <div className="brand-name">THE OBSIDIAN SPIRE</div>
-          <div className="brand-seg">{seg ? `${seg} · ${SEGMENT_TITLE[seg]}` : "awaiting the first segment"}</div>
+          <div className="brand-seg">{seg ? (onAir ? SEGMENT_TITLE[seg] : `${seg} · ${SEGMENT_TITLE[seg]}`) : "awaiting the first segment"}</div>
         </div>
       </div>
       {hexmap && (
@@ -87,7 +90,7 @@ export function TransitionWipe({ scene, now }: { scene: SceneState; now: number 
   );
 }
 
-export function Intro({ scene, now }: { scene: SceneState; now: number }) {
+export function Intro({ scene, now, onAir = false }: { scene: SceneState; now: number; onAir?: boolean }) {
   const m = scene.meta;
   if (!m) return null;
   const age = now - m.at;
@@ -98,7 +101,8 @@ export function Intro({ scene, now }: { scene: SceneState; now: number }) {
         <div className="intro-kicker">NOW BROADCASTING FROM</div>
         <div className="intro-title">THE OBSIDIAN SPIRE</div>
         <div className="intro-sub">
-          {m.character === "malakor" ? "Arch-Lich Malakor" : m.character} · tone: {m.toneVariant}
+          {m.character === "malakor" ? "Arch-Lich Malakor" : m.character}
+          {!onAir && ` · tone: ${m.toneVariant}`}
         </div>
       </div>
     </div>
@@ -120,15 +124,16 @@ export function MomentMarks({ scene, now }: { scene: SceneState; now: number }) 
   );
 }
 
-export function SealToast({ scene, now }: { scene: SceneState; now: number }) {
+/** A segment sealed. On air it names the segment by its title and leaves out the evaluator's score. */
+export function SealToast({ scene, now, onAir = false }: { scene: SceneState; now: number; onAir?: boolean }) {
   const s = scene.seals[scene.seals.length - 1];
   if (!s) return null;
   const age = now - s.at;
   if (age < 0 || age > SEAL_MS) return null;
   return (
     <div className="seal-toast" key={s.at}>
-      <span className="seal-seg">{s.segment}</span> sealed
-      {s.ses !== undefined && (
+      <span className="seal-seg">{onAir ? SEGMENT_TITLE[s.segment] : s.segment}</span> sealed
+      {!onAir && s.ses !== undefined && (
         <span className="seal-ses">
           SES {s.ses >= 0 ? "+" : ""}
           {s.ses.toFixed(2)}

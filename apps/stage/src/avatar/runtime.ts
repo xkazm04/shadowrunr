@@ -12,7 +12,7 @@
 
 import { createDriver, type Driver, type Pose } from "./driver";
 import { createGlowRenderer, type GlowRenderer } from "./glow";
-import { loadForm } from "./layers";
+import { loadForm, type LoadedForm } from "./layers";
 import { frames, systemPrefersReduced, type Clock } from "./motion";
 import { buildPlaceholder } from "./placeholder";
 import type { FaceSource } from "./types";
@@ -147,6 +147,8 @@ export function startFace(opts: {
   source: FaceSource;
   size: number;
   clock?: Clock;
+  /** Hears which form is drawn once the face is ready, and `null` when it is unavailable. */
+  onDrawn?: (form: LoadedForm["form"] | null) => void;
 }): FaceHandle {
   const { root, canvas, source } = opts;
   let disposed = false;
@@ -159,6 +161,7 @@ export function startFace(opts: {
     root.setAttribute("data-face", "unavailable");
     canvas.style.visibility = "hidden";
     warnOnce(why);
+    opts.onDrawn?.(null);
   };
 
   const size = (s: number) => {
@@ -176,6 +179,7 @@ export function startFace(opts: {
   }
 
   const driver = createDriver({ seed: 7 });
+  let drawnForm: LoadedForm["form"] = "placeholder";
   let last: Pose = driver.rest();
   const draw = (pose: Pose) => {
     last = pose;
@@ -186,6 +190,7 @@ export function startFace(opts: {
     .then(async (form) => {
       if (disposed) return null;
       root.setAttribute("data-form", form.form);
+      drawnForm = form.form;
       try {
         return await createGlowRenderer(canvas, form, () => renderer?.render(last));
       } catch (error) {
@@ -214,6 +219,7 @@ export function startFace(opts: {
         draw(driver.rest());
         canvas.style.visibility = "visible";
         root.setAttribute("data-face", "ready");
+        opts.onDrawn?.(drawnForm);
 
         cleanups.push(
           source.subscribe((signal) => {

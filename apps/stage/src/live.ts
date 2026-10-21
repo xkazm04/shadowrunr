@@ -6,6 +6,7 @@ import type { AckFrame, StreamEvent } from "@shadowrunr/contract";
 import { initialScene, reduce, type SceneState } from "@shadowrunr/stage-kit";
 import type { EventsFrame } from "@shadowrunr/stage-kit/parse";
 import { connectDaemon, type DaemonLink, type SocketLike, type WsStatus } from "./source";
+import type { SaidLine } from "./voice/captions";
 
 /** Events kept for the debug views; the scene itself covers the whole stream. */
 export const RING_MAX = 2000;
@@ -14,6 +15,8 @@ export const ACK_EVERY_MS = 5000;
 export const DISCONNECTED_SLATE_MS = 3000;
 /** The stalled mark shows when the socket is open but no event has arrived for this long. */
 export const STALLED_MS = 20_000;
+/** Malakor's latest lines kept with their seqs, for the captions that follow the voice. */
+export const SAID_MAX = 32;
 
 /** A fixed-capacity ring: push is O(1), and the oldest entry goes once it is full. */
 export class EventRing<T> {
@@ -73,6 +76,8 @@ export class LiveStore {
   version = 0;
   /** The last applied event's timestamp and the wall time it arrived (drives the live clock). */
   lastEvent: { ts: number; wall: number } | null = null;
+  /** Malakor's latest lines with their `say` seqs, oldest first (at most SAID_MAX). */
+  said: SaidLine[] = [];
   /** Waiting for `lastSeq + 1` after a resubscribe: later seqs are held back, not counted again. */
   private resyncing = false;
   private lastArrival: number | null = null;
@@ -106,7 +111,12 @@ export class LiveStore {
       this.resyncing = false;
     }
     if (f.event.type === "stream_start") this.reset();
+    const caption = this.scene.caption;
     this.scene = reduce(this.scene, f.event);
+    const c = this.scene.caption;
+    if (f.event.type === "say" && f.seq !== undefined && c && c !== caption) {
+      this.said = [...this.said, { id: c.id, seq: f.seq, text: c.text, at: c.at, replyingTo: c.replyingTo }].slice(-SAID_MAX);
+    }
     this.ring.push(f.event);
     this.lastEvent = { ts: f.event.ts_ms, wall };
     this.version++;
@@ -158,6 +168,7 @@ export class LiveStore {
   private reset(): void {
     this.scene = initialScene();
     this.ring.clear();
+    this.said = [];
     this.lastEvent = null;
     this.version++;
   }

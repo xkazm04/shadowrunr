@@ -16,8 +16,8 @@ function text(j: Job): string {
   return j.brief ?? j.summary ?? j.status;
 }
 
-/** The minion-dispatch ticker: background research and memory jobs, newest first. */
-export function JobTicker({ scene, now }: { scene: SceneState; now: number }) {
+/** The minion-dispatch ticker: background research and memory jobs, newest first. On air the job ids are left out. */
+export function JobTicker({ scene, now, onAir = false }: { scene: SceneState; now: number; onAir?: boolean }) {
   const jobs = [...scene.jobs].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
   return (
     <div className="ticker">
@@ -32,7 +32,7 @@ export function JobTicker({ scene, now }: { scene: SceneState; now: number }) {
           return (
             <div key={j.id} className={`job job-${phase}${now - j.updatedAt < 1200 ? " pulse" : ""}`}>
               <span className="job-icon">{ICON[phase]}</span>
-              <span className="job-id">{j.id}</span>
+              {!onAir && <span className="job-id">{j.id}</span>}
               <span className="job-text">{text(j)}</span>
             </div>
           );

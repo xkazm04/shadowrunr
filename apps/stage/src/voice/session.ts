@@ -3,13 +3,18 @@
 // {"run_id"}}`, re-sent when that run changes) and reconnects with backoff until stopped. The
 // stage never waits on it: a dead socket or a silent sidecar is a `degraded` state with a reason,
 // and the stream and the face carry on.
+//
+// The same socket carries the stage's reports (`report.ts`): each part's start, each line the
+// stage's cap dropped, and the face drawn. A report made while the socket is down is not kept,
+// except the face, which is sent again on every open: the daemon only ever reads them.
 
 import type { VoiceState } from "@shadowrunr/contract";
 
 import { frames, type Clock } from "../avatar/motion";
 import type { SocketLike } from "../source";
 import { parseVoiceFrame } from "./frame";
-import { VoicePlayer, type AudioLike } from "./player";
+import { VoicePlayer, type AudioLike, type PlayerEvents } from "./player";
+import { faceFrame, playedFrame, stageDroppedFrame, type FaceState, type VoiceClientFrame } from "./report";
 
 export interface VoiceStatus {
   state: VoiceState;
@@ -30,6 +35,14 @@ export interface VoiceSessionOptions {
   clock?: Clock;
   onStatus: (s: VoiceStatus) => void;
   onBadFrame?: (message: string) => void;
+  /** An utterance arrived for the followed run (the broadcast view resumes its audio on each). */
+  onUtterance?: () => void;
+  /** The daemon skipped a line: it will not sound. */
+  onSkipped?: (runId: string, seq: number) => void;
+  /** Hears the player's parts as they are scheduled, start and are dropped. */
+  events?: PlayerEvents;
+  /** The wall clock in epoch ms (default `Date.now`), for the reports' `at_wall_ms`. */
+  wall?: () => number;
   socket?: (url: string) => SocketLike;
 }
 
@@ -40,9 +53,31 @@ export class VoiceSession {
   private retry = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private runId: string | null = null;
+  /** The run the last utterance belonged to (what `follow(null)` turned out to follow). */
+  private heardRun: string | null = null;
+  private faceNow: { state: FaceState; at: number } | null = null;
+  private faceSent = "";
 
   constructor(private readonly o: VoiceSessionOptions) {
-    this.player = new VoicePlayer(o.audio, o.clock ?? frames());
+    const ev = o.events ?? {};
+    this.player = new VoicePlayer(o.audio, o.clock ?? frames(), {
+      scheduled: (p) => ev.scheduled?.(p),
+      started: (p, lateS) => {
+        this.report(playedFrame(p.runId, p.seq, p.part, this.wall() - lateS * 1000));
+        ev.started?.(p, lateS);
+      },
+      dropped: (runId, seq) => {
+        this.report(stageDroppedFrame(runId, seq));
+        ev.dropped?.(runId, seq);
+      },
+    });
+  }
+
+  /** The face drawn now: reported on the first call and on every change. */
+  face(state: FaceState): void {
+    if (this.faceNow?.state === state) return;
+    this.faceNow = { state, at: this.wall() };
+    this.sendFace();
   }
 
   start(): void {
@@ -54,6 +89,7 @@ export class VoiceSession {
     if (runId === this.runId) return;
     this.runId = runId;
     this.send();
+    this.sendFace();
   }
 
   stop(): void {
@@ -64,8 +100,31 @@ export class VoiceSession {
     this.player.dispose();
   }
 
+  private wall(): number {
+    return (this.o.wall ?? Date.now)();
+  }
+
+  private isOpen(): boolean {
+    return this.ws !== null && this.ws.readyState === OPEN;
+  }
+
   private send() {
-    if (this.ws && this.ws.readyState === OPEN) this.ws.send(followFrame(this.runId));
+    if (this.isOpen()) this.ws!.send(followFrame(this.runId));
+  }
+
+  private report(f: VoiceClientFrame) {
+    if (this.isOpen()) this.ws!.send(JSON.stringify(f));
+  }
+
+  /** The face, once per (run, change) while the socket is open and the run is known. */
+  private sendFace() {
+    const run = this.runId ?? this.heardRun;
+    const f = this.faceNow;
+    if (!f || !run || !this.isOpen()) return;
+    const key = `${run}|${f.state}|${f.at}`;
+    if (key === this.faceSent) return;
+    this.faceSent = key;
+    this.report(faceFrame(run, f.state, f.at));
   }
 
   private open() {
@@ -74,7 +133,9 @@ export class VoiceSession {
     this.ws = s;
     s.onopen = () => {
       this.retry = 0;
+      this.faceSent = "";
       this.send();
+      this.sendFace();
     };
     s.onmessage = (m) => {
       if (typeof m.data !== "string") return;
@@ -91,9 +152,16 @@ export class VoiceSession {
         this.o.onStatus(st);
         if (v.state !== "ready") this.player.reset();
       } else if (v.type === "utterance") {
-        if (this.runId === null || v.run_id === this.runId) this.player.accept(v);
+        if (this.runId === null || v.run_id === this.runId) {
+          this.heardRun = v.run_id;
+          this.o.onUtterance?.();
+          this.player.accept(v);
+          this.sendFace();
+        }
+      } else if (this.runId === null || v.run_id === this.runId) {
+        // a skipped line never arrives as audio; only its caption needs to know
+        this.o.onSkipped?.(v.run_id, v.seq);
       }
-      // `skipped` lines simply never arrive as audio; nothing is queued for them here.
     };
     s.onerror = () => {};
     s.onclose = () => {
