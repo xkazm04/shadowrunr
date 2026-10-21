@@ -343,3 +343,210 @@ async fn global_semaphore_caps_live_processes() {
     // With one permit the two 400 ms processes cannot overlap.
     assert!(started.elapsed() >= Duration::from_millis(800));
 }
+
+// ---- One failure ladder for one-shot and warm turns ----
+
+/// A loopback Messages API responder: answers every POST with one canned reply and keeps
+/// the request bodies. Nothing leaves the machine.
+struct ApiStub {
+    base_url: String,
+    bodies: std::sync::Arc<std::sync::Mutex<Vec<Value>>>,
+}
+
+async fn api_stub() -> ApiStub {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let bodies = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen = bodies.clone();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut sock, _)) = listener.accept().await else {
+                return;
+            };
+            let seen = seen.clone();
+            tokio::spawn(async move {
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 4096];
+                let (head_end, len) = loop {
+                    let n = sock.read(&mut chunk).await.unwrap_or(0);
+                    if n == 0 {
+                        return;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                    if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let head = String::from_utf8_lossy(&buf[..i]).to_ascii_lowercase();
+                        let len = head
+                            .lines()
+                            .find_map(|l| l.strip_prefix("content-length:"))
+                            .and_then(|v| v.trim().parse::<usize>().ok())
+                            .unwrap_or(0);
+                        break (i + 4, len);
+                    }
+                };
+                while buf.len() < head_end + len {
+                    let n = sock.read(&mut chunk).await.unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                }
+                let end = (head_end + len).min(buf.len());
+                let body: Value =
+                    serde_json::from_slice(&buf[head_end..end]).unwrap_or(Value::Null);
+                seen.lock().unwrap().push(body);
+                let reply = json!({
+                    "content": [{"type": "text", "text": "Kneel, minion."}],
+                    "stop_reason": "end_turn",
+                    "usage": {"input_tokens": 12, "output_tokens": 4}
+                })
+                .to_string();
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{reply}",
+                    reply.len()
+                );
+                let _ = sock.write_all(resp.as_bytes()).await;
+                let _ = sock.shutdown().await;
+            });
+        }
+    });
+    ApiStub { base_url, bodies }
+}
+
+fn set_fake(dir: &Path, fake: Value) {
+    std::fs::write(dir.join("fake.json"), fake.to_string()).unwrap();
+}
+
+#[tokio::test]
+async fn warm_turn_overloaded_rotates_to_healthy_account() {
+    let mut w = World::new();
+    w.account(
+        "a",
+        json!({"fixture": fixture("claude_overloaded_reconstructed.jsonl")}),
+    );
+    w.account("b", json!({"fixture": fixture("claude_success.jsonl")}));
+    let fleet = Fleet::new(&w.cfg);
+    let mut s = fleet.open_session(req(20_000)).await.unwrap();
+    let r = s.send("hello".into()).await.expect("b serves the turn");
+    assert_eq!(r.account.as_deref(), Some("b"));
+    assert_eq!(r.engine, EngineKind::ClaudeCli);
+    let reason = r.fallback_reason.expect("fallback_reason set");
+    assert!(reason.contains("account a"), "{reason}");
+    // An overload is no reason to cool the seat.
+    assert_eq!(fleet.accounts()[0].cooling_until_ms, None);
+    let rows = w.ledger();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows[0].account.as_deref(), Some("a"));
+    assert_eq!(rows[0].error_kind.as_deref(), Some("transient"));
+    assert!(rows[0].warm);
+    assert_eq!(rows[1].account.as_deref(), Some("b"));
+    assert_eq!(rows[1].error_kind, None);
+    assert!(rows[1].warm);
+}
+
+#[tokio::test]
+async fn warm_turn_not_logged_in_cools_and_rotates() {
+    let mut w = World::new();
+    w.account(
+        "a",
+        json!({"fixture": fixture("claude_not_logged_in_reconstructed.jsonl")}),
+    );
+    w.account("b", json!({"fixture": fixture("claude_success.jsonl")}));
+    let fleet = Fleet::new(&w.cfg);
+    let mut s = fleet.open_session(req(20_000)).await.unwrap();
+    let r = s.send("hello".into()).await.expect("b serves the turn");
+    assert_eq!(r.account.as_deref(), Some("b"));
+    assert!(fleet.accounts()[0].cooling_until_ms.is_some());
+    assert_eq!(fleet.accounts()[1].cooling_until_ms, None);
+}
+
+#[tokio::test]
+async fn warm_session_out_of_accounts_degrades_in_place_to_api_with_its_turns() {
+    std::env::set_var("SHADOWRUNR_TEST_KEY_WARM_LADDER", "test-not-a-key");
+    let stub = api_stub().await;
+    let mut w = World::new();
+    w.cfg.idle_timeout_ms = Some(60);
+    w.cfg.api_key_env = Some("SHADOWRUNR_TEST_KEY_WARM_LADDER".into());
+    w.cfg.api_base_url = Some(stub.base_url.clone());
+    let dir_a = w.account("a", json!({"fixture": fixture("claude_success.jsonl")}));
+    let dir_b = w.account("b", json!({"fixture": fixture("claude_success.jsonl")}));
+    let fleet = Fleet::new(&w.cfg);
+    let mut s = fleet.open_session(req(20_000)).await.unwrap();
+    let first = s.send("first words".into()).await.unwrap();
+    assert_eq!(first.engine, EngineKind::ClaudeCli);
+    // Let the idle reaper end the process, then every account hits its limit.
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let limited = json!({"fixture": fixture("claude_rate_limit_reconstructed.jsonl")});
+    set_fake(&dir_a, limited.clone());
+    set_fake(&dir_b, limited);
+    let r = s
+        .send("second words".into())
+        .await
+        .expect("the api rung serves");
+    assert_eq!(r.engine, EngineKind::AnthropicApi);
+    assert_eq!(r.text, "Kneel, minion.");
+    let reason = r.fallback_reason.expect("fallback_reason set");
+    assert!(
+        reason.contains("account a") && reason.contains("account b"),
+        "{reason}"
+    );
+    assert_eq!(fleet.fleet_state().mode, FleetMode::Degraded);
+    let bodies = stub.bodies.lock().unwrap().clone();
+    assert_eq!(bodies.len(), 1);
+    let msgs = bodies[0]["messages"].as_array().unwrap().clone();
+    assert_eq!(msgs.len(), 3, "{msgs:?}");
+    assert_eq!(msgs[0]["role"], "user");
+    assert_eq!(msgs[0]["content"], "first words");
+    assert_eq!(msgs[1]["role"], "assistant");
+    assert_eq!(msgs[1]["content"], "ok");
+    assert_eq!(msgs[2]["role"], "user");
+    assert_eq!(msgs[2]["content"], "second words");
+    let rows = w.ledger();
+    let last = rows.last().unwrap();
+    assert_eq!(last.engine, EngineKind::AnthropicApi);
+    assert!(last.warm);
+}
+
+#[tokio::test]
+async fn a_warm_cli_turn_moves_the_fleet_back_to_primary() {
+    std::env::set_var("SHADOWRUNR_TEST_KEY_WARM_MODE", "test-not-a-key");
+    let stub = api_stub().await;
+    let mut w = World::new();
+    w.cfg.api_key_env = Some("SHADOWRUNR_TEST_KEY_WARM_MODE".into());
+    w.cfg.api_base_url = Some(stub.base_url.clone());
+    let dir = w.account("a", json!({"fixture": fixture("claude_success.jsonl")}));
+    let fleet = Fleet::new(&w.cfg);
+    // The warm process reads its behaviour at start-up (one turn proves it is up), so it
+    // stays healthy after the account's config changes.
+    let mut s = fleet.open_session(req(20_000)).await.unwrap();
+    s.send("warm up".into()).await.unwrap();
+    // A one-shot finds the seat overloaded and is served by the API.
+    set_fake(
+        &dir,
+        json!({"fixture": fixture("claude_overloaded_reconstructed.jsonl")}),
+    );
+    let one = fleet.complete(req(20_000)).await.unwrap();
+    assert_eq!(one.engine, EngineKind::AnthropicApi);
+    assert_eq!(fleet.fleet_state().mode, FleetMode::Degraded);
+    let r = s.send("hello".into()).await.unwrap();
+    assert_eq!(r.engine, EngineKind::ClaudeCli);
+    assert_eq!(fleet.fleet_state().mode, FleetMode::Primary);
+}
+
+/// Guard: a request-side failure still never rotates.
+#[tokio::test]
+async fn warm_turn_model_not_found_is_returned_not_rotated() {
+    let mut w = World::new();
+    w.account(
+        "a",
+        json!({"fixture": fixture("claude_error_model_not_found.jsonl")}),
+    );
+    let dir_b = w.account("b", json!({"fixture": fixture("claude_success.jsonl")}));
+    let fleet = Fleet::new(&w.cfg);
+    let mut s = fleet.open_session(req(20_000)).await.unwrap();
+    match s.send("hello".into()).await {
+        Err(EngineError::Unavailable { reason }) => assert!(reason.contains("404"), "{reason}"),
+        other => panic!("{other:?}"),
+    }
+    assert!(calls(&dir_b).is_empty());
+}

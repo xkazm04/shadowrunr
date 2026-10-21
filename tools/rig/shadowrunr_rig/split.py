@@ -31,6 +31,9 @@ from . import formspec as fsm
 from . import masks as mk
 from .lama import fill_crop
 
+# the one compositor lives with the rig folder; split re-exports it for its callers
+from .rigdir import compose_rest  # noqa: F401
+
 Fill = Callable[[np.ndarray, np.ndarray], np.ndarray]
 
 #: A light layer fades out over the outer 12 % of its box in the renderer: pad it past that.
@@ -244,29 +247,6 @@ def assemble(spec: dict, result: Split, portrait_id: str) -> tuple[dict, dict[st
     fs = fsm.formspec(spec, portrait_id, entries)
     fsm.check_formspec(fs)
     return fs, pictures
-
-
-def compose_rest(fs: dict, pictures: dict[str, np.ndarray]) -> np.ndarray:
-    """The rig's rest frame as the renderer draws it (no bloom, no motion): solids cover what is
-    behind them by their alpha, lights add. (H, W, 3) float 0..255, to compare with the portrait."""
-    h, w = int(fs["height"]), int(fs["width"])
-    out = np.zeros((h, w, 3), np.float32)
-    for layer in fs["layers"]:
-        file = layer.get("file")
-        if not file:
-            continue
-        x, y, bw, bh = layer["bbox"]
-        pic = pictures[file].astype(np.float32)
-        rgb, a = pic[..., :3], pic[..., 3:] / 255.0
-        gain = float(layer.get("gain", 1.0))
-        dst = out[y : y + bh, x : x + bw]
-        if layer.get("mode") == "light" or layer["kind"] == "static":
-            dst += rgb * gain
-        else:
-            occl = a * float(layer.get("occl", 1.0))
-            dst *= 1 - occl
-            dst += rgb * gain * a
-    return np.clip(out, 0, 255)
 
 
 def debug_overlay(result: Split) -> np.ndarray:

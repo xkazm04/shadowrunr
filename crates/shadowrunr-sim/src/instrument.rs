@@ -13,12 +13,21 @@
 //! A staged real case joins the base hash as `case/<id>` with its content hash, so runs on
 //! different cases (or on a case whose records changed) never mix. The fictional demo case
 //! is already hashed with the segment data, so a run without a case adds nothing.
+//!
+//! What else a run reads joins too (challenge-2026-10-21): the platform rules the brain
+//! blocks and bleeps with (`policy/platform-rules.json`, always: its sha or `absent`), the
+//! stream prep the brain voices (`prep.json`, only when there is one), the harness knobs
+//! (`harness/<knob>`) and, per run beside the tone, the judge tier (`judge/<tier>`). So
+//! editing a rule, approving a new prep, changing the cadence or judging with another model
+//! starts a new series instead of merging silently.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use shadowrunr_types::prep::StreamPrep;
 use shadowrunr_types::reconcile::StreamBrief;
+use shadowrunr_types::ModelTier;
 
 use crate::SimError;
 
@@ -108,6 +117,23 @@ pub fn brief_digest(b: &StreamBrief) -> String {
 /// Logical path of the brief entry in the instrument's file list.
 pub const BRIEF_ENTRY: &str = "brief.json";
 
+/// Logical path of the platform rules entry (the file `PolicySource::Auto` reads).
+pub const PLATFORM_RULES_ENTRY: &str = "policy/platform-rules.json";
+
+/// Logical path of the stream prep entry.
+pub const PREP_ENTRY: &str = "prep.json";
+
+/// Logical path prefix of a harness knob entry (`harness/tick_s`).
+pub const HARNESS_PREFIX: &str = "harness/";
+
+/// Logical path prefix of the judge tier entry (`judge/opus`), part of the per-run hash.
+pub const JUDGE_PREFIX: &str = "judge/";
+
+/// sha256 of the prep's canonical JSON (serde's field order, compact), as [`brief_digest`].
+pub fn prep_digest(p: &StreamPrep) -> String {
+    sha_hex(&serde_json::to_vec(p).unwrap_or_default())
+}
+
 /// Logical path prefix of an experiment entry (`experiment/rate_cap_exemptions`).
 pub const EXPERIMENT_PREFIX: &str = "experiment/";
 
@@ -139,6 +165,14 @@ pub struct InstrumentInputs<'a> {
     pub experiments: &'a [&'a str],
     /// The staged real case the run audits: `(case_id, content_sha256)`.
     pub case: Option<(&'a str, &'a str)>,
+    /// The stream prep the brain voices, when it has one: joins the base hash as `prep.json`.
+    pub prep: Option<&'a StreamPrep>,
+    /// Harness knobs that shape the run, `(name, value)`: each joins the base hash as
+    /// `harness/<name>`.
+    pub harness: &'a [(&'a str, String)],
+    /// The judge tier the run is judged by, when judged: joins the per-run hash beside the
+    /// tone as `judge/<tier>`, so it never moves the tournament directory.
+    pub judge_tier: Option<ModelTier>,
 }
 
 /// Logical path prefix of a staged real case's entry (`case/<id>`).
@@ -187,6 +221,16 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
             files.push(file_entry(format!("policy/local/{rel}"), &p)?);
         }
     }
+    // The platform rules the brain reads by the same convention (`PolicySource::Auto`): its
+    // term rules block, bleep and warn what the host says. Always present, `absent` when the
+    // brain falls back to its built-in rules.
+    files.push(file_entry(
+        PLATFORM_RULES_ENTRY.into(),
+        &cd.join("..")
+            .join("..")
+            .join("policy")
+            .join("platform-rules.json"),
+    )?);
     let mut seg = Vec::new();
     walk(inp.segments_dir, "", &mut seg)?;
     for (rel, p) in seg {
@@ -215,10 +259,22 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
             sha256: sha.to_string(),
         });
     }
+    if let Some(p) = inp.prep {
+        files.push(InstrumentFile {
+            path: PREP_ENTRY.into(),
+            sha256: prep_digest(p),
+        });
+    }
+    for (name, value) in inp.harness {
+        files.push(InstrumentFile {
+            path: format!("{HARNESS_PREFIX}{name}"),
+            sha256: sha_hex(value.as_bytes()),
+        });
+    }
     let base_hash = combine(&files, SIM_LOGIC_VERSION);
 
     // The tone and its line bank: the exemplars a run shows are part of the tone it plays.
-    let tone = [
+    let mut tone = vec![
         file_entry(
             format!("tone/{}.md", inp.tone),
             &cd.join("tones").join(format!("{}.md", inp.tone)),
@@ -228,6 +284,13 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
             &cd.join("lines").join(format!("{}.toml", inp.tone)),
         )?,
     ];
+    if let Some(t) = inp.judge_tier {
+        let name = crate::wire(&t);
+        tone.push(InstrumentFile {
+            path: format!("{JUDGE_PREFIX}{name}"),
+            sha256: sha_hex(name.as_bytes()),
+        });
+    }
     let instrument_hash = combine(&tone, &base_hash);
     files.extend(tone);
     Ok(Instrument {
@@ -267,6 +330,9 @@ mod tests {
             brief: None,
             experiments: &[],
             case: None,
+            prep: None,
+            harness: &[],
+            judge_tier: None,
         })
         .unwrap()
     }
@@ -329,6 +395,9 @@ mod tests {
                 brief: None,
                 experiments: &[],
                 case: None,
+                prep: None,
+                harness: &[],
+                judge_tier: None,
             })
             .unwrap()
             .instrument_hash
@@ -369,6 +438,9 @@ mod tests {
             brief: None,
             experiments: &[],
             case: None,
+            prep: None,
+            harness: &[],
+            judge_tier: None,
         })
         .unwrap();
         assert!(i.files.iter().any(|f| f.path == "policy/local/fixture.txt"));
@@ -406,12 +478,17 @@ mod tests {
             brief: b,
             experiments: &[],
             case: None,
+            prep: None,
+            harness: &[],
+            judge_tier: None,
         })
         .unwrap()
     }
 
     /// `fixture` hashed with no brief and no experiment: the golden that both entries must
-    /// leave untouched when absent. It moves only with `SIM_LOGIC_VERSION` (`/11`: the
+    /// leave untouched when absent. It moves with `SIM_LOGIC_VERSION` and with the entries
+    /// every run carries (challenge-2026-10-21: `policy/platform-rules.json`, here `absent`,
+    /// moved it once without a logic bump) (`/11`: the
     /// tone's line bank and the owner's directions in the prompt and the hash, the narrowed
     /// character-break and persona-leak rails, the judge's scaled comic-craft scores over 24
     /// sampled turns and the tic check, after `/10`: the evidence board (SEG-02A's default
@@ -424,7 +501,7 @@ mod tests {
     /// shows it, after `/6`: the screens, runtime screen defaults and a returning research job
     /// opening its record, after `/5`: carried bait picked first, after `/4`: two picks a beat,
     /// gifts and the cold open carried, the speech-aware say gap, a full-length session).
-    const PRE_BRIEF_HASH: &str = "8d743e412a599191906cac058e200e697386e784c01d772dbf0d019e78828bba";
+    const PRE_BRIEF_HASH: &str = "73361248d52fde8fea97be7972a37f259c8da4aa4370d9a0adf56fd4dc02d10a";
 
     #[test]
     fn a_brief_joins_the_hash_only_when_present() {
@@ -461,6 +538,71 @@ mod tests {
         );
     }
 
+    /// The platform rules the brain reads (`PolicySource::Auto`, `<repo>/policy/platform-rules.json`).
+    const RULES_ENTRY: &str = "policy/platform-rules.json";
+
+    fn rules_sha(i: &Instrument) -> Option<String> {
+        i.files
+            .iter()
+            .find(|f| f.path == RULES_ENTRY)
+            .map(|f| f.sha256.clone())
+    }
+
+    #[test]
+    fn an_edited_platform_rule_changes_the_base_hash() {
+        let d = tempfile::tempdir().unwrap();
+        let repo = d.path().join("repo");
+        let root = repo.join("characters");
+        fixture(&root);
+        let policy = repo.join("policy");
+        std::fs::create_dir_all(&policy).unwrap();
+        let rules = policy.join("platform-rules.json");
+        std::fs::write(
+            &rules,
+            r#"{"term_rules":[{"id":"a","pattern":"(?i)zorb"}]}"#,
+        )
+        .unwrap();
+        let before = inst_with(&root, None);
+        assert_eq!(
+            rules_sha(&before).as_deref(),
+            Some(sha_hex(br#"{"term_rules":[{"id":"a","pattern":"(?i)zorb"}]}"#).as_str())
+        );
+        std::fs::write(
+            &rules,
+            r#"{"term_rules":[{"id":"a","pattern":"(?i)zorbl"}]}"#,
+        )
+        .unwrap();
+        let after = inst_with(&root, None);
+        assert_ne!(
+            after.base_hash, before.base_hash,
+            "a rules edit is a new tournament"
+        );
+        assert_eq!(
+            rules_sha(&after).as_deref(),
+            Some(sha_hex(br#"{"term_rules":[{"id":"a","pattern":"(?i)zorbl"}]}"#).as_str())
+        );
+    }
+
+    #[test]
+    fn absent_platform_rules_hash_as_absent_and_crlf_like_lf() {
+        let d = tempfile::tempdir().unwrap();
+        let repo = d.path().join("repo");
+        let root = repo.join("characters");
+        fixture(&root);
+        let a = inst_with(&root, None);
+        assert_eq!(rules_sha(&a).as_deref(), Some("absent"));
+        assert_eq!(inst_with(&root, None).base_hash, a.base_hash, "stable");
+
+        let policy = repo.join("policy");
+        std::fs::create_dir_all(&policy).unwrap();
+        std::fs::write(policy.join("platform-rules.json"), "{\n\"v\": 1\n}\n").unwrap();
+        let lf = inst_with(&root, None);
+        std::fs::write(policy.join("platform-rules.json"), "{\r\n\"v\": 1\r\n}\r\n").unwrap();
+        let crlf = inst_with(&root, None);
+        assert_eq!(crlf.base_hash, lf.base_hash, "CRLF hashes like LF");
+        assert_ne!(lf.base_hash, a.base_hash);
+    }
+
     #[test]
     fn an_experiment_joins_the_hash_only_when_on() {
         let d = tempfile::tempdir().unwrap();
@@ -477,6 +619,9 @@ mod tests {
             brief: None,
             experiments: &["rate_cap_exemptions"],
             case: None,
+            prep: None,
+            harness: &[],
+            judge_tier: None,
         })
         .unwrap();
         assert_ne!(

@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { Case, ChatMsg, Command, Rank, ShownRecord, StreamEvent } from "@shadowrunr/contract";
-import { matchOption } from "./ballots";
+import { matchOption, observedTally } from "./ballots";
+import { parseTranscript } from "./parse";
 import { captionAt, enqueueCaption, foldEvents, reduce, shownLane } from "./scene";
 import {
   BROWSER_TABS_MAX,
@@ -377,15 +380,16 @@ describe("polls", () => {
     expect(matchOption(o, " ")).toBeNull();
     let s = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "p", question: "?", options: o, min_rank: "thrall", secs: 30 }));
     s = reduce(s, chat(2, msg("a", "warlock", { cmd: "vote", option: "the-d" })));
-    expect(s.polls.p!.ballots).toEqual({});
+    expect(s.polls.p!.ballots.size).toBe(0);
   });
 
   it("counts !summon only in a foil vote: a crowd poll ignores it", () => {
     let s = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "p", question: "?", options: ["the-disruptor", "the-inspector"], min_rank: "thrall", secs: 30 }));
     s = reduce(s, chat(2, msg("a", "warlock", { cmd: "summon", foil: "the-disruptor" })));
-    expect(s.polls.p!.ballots).toEqual({});
+    expect(s.polls.p!.ballots.size).toBe(0);
     s = reduce(s, chat(3, msg("b", "warlock", { cmd: "vote", option: "the-disruptor" })));
-    expect(Object.keys(s.polls.p!.ballots)).toEqual(["v-b"]);
+    expect(s.polls.p!.ballots.size).toBe(1);
+    expect(s.polls.p!.ballots.get("v-b")).toEqual({ option: "the-disruptor", rank: "warlock" });
   });
 });
 
@@ -599,3 +603,127 @@ describe("caption queue", () => {
     expect(q.map((c) => c.id)).toEqual([2, 3]);
   });
 });
+
+// Guards for the ballot and grade books (stage-kit-scene-engine B): whatever structure holds a
+// poll's ballots and a hex's grades, every derived view a page renders must stay exactly what the
+// Record-based books produced, and every retained scene must stay valid after later folds.
+describe("ballot and grade books", () => {
+  const RANK_CYCLE: readonly Rank[] = ["thrall", "cultist", "acolyte", "warlock", "lich", "dread_council"];
+  const GRADES = ["DOC", "REP", "CLM", "SPC"] as const;
+  const voteLine = (ts: number, viewer: string, rank: Rank, option: string): StreamEvent =>
+    chat(ts, msg(`m${ts}`, rank, { cmd: "vote", option }, viewer));
+  const gradeLine = (ts: number, viewer: string, hex: string, grade: (typeof GRADES)[number]): StreamEvent =>
+    chat(ts, msg(`m${ts}`, "thrall", { cmd: "grade", hex, grade }, viewer));
+
+  /** A seeded show: two polls with re-votes, an under-rank and an unknown option, a mid-poll
+   * tally, a foil vote opened by `!summon`, grades on three hexes with re-grades and a jury. */
+  function syntheticShow(): StreamEvent[] {
+    let seed = 0x5eed;
+    const rnd = (n: number) => {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return (seed >>> 8) % n;
+    };
+    const evs: StreamEvent[] = [];
+    let t = 1;
+    evs.push(op(t++, { op: "start_poll", poll_id: "p1", question: "?", options: ["HEX-01", "HEX-02", "HEX-03"], min_rank: "cultist", secs: 60 }));
+    for (let i = 0; i < 400; i++) {
+      const v = rnd(150);
+      const opt = ["HEX-01", "HEX-02", "hex-03", "2", "HEX-09", " HEX-01 "][rnd(6)]!;
+      evs.push(voteLine(t++, `v${v}`, RANK_CYCLE[v % 6]!, opt));
+      if (i === 200) evs.push({ type: "vote", ts_ms: t++, poll_id: "p1", tallies: [{ option: "HEX-01", voters: 9, weight: 12.5 }, { option: "HEX-02", voters: 4, weight: 6 }, { option: "HEX-03", voters: 0, weight: 0 }], closed: false });
+      const hex = ["HEX-01", "HEX-02", "HEX-05"][rnd(3)]!;
+      evs.push(gradeLine(t++, `g${rnd(120)}`, hex, GRADES[rnd(4)]!));
+    }
+    evs.push(op(t++, { op: "close_poll", poll_id: "p1" }));
+    evs.push(op(t++, { op: "reveal_hex", hex: "HEX-01", grade: "REP" }));
+    evs.push(op(t++, { op: "reveal_hex", hex: "HEX-05", grade: "CLM" }));
+    evs.push({ type: "vote", ts_ms: t++, poll_id: "grade:HEX-02", closed: false, tallies: [{ option: "DOC", voters: 3, weight: 3 }, { option: "REP", voters: 0, weight: 0 }, { option: "CLM", voters: 3, weight: 3 }, { option: "SPC", voters: 1, weight: 1 }] });
+    evs.push(chat(t++, msg(`m${t}`, "warlock", { cmd: "summon", foil: "the-inspector" }, "f0")));
+    evs.push(op(t++, { op: "start_poll", poll_id: "foil-vote-1", question: "Which foil?", options: ["the-disruptor", "the-inspector"], min_rank: "thrall", secs: 30 }));
+    for (let i = 0; i < 300; i++) {
+      const v = rnd(90);
+      const cmd: Command = rnd(2) === 0 ? { cmd: "summon", foil: ["the-disruptor", "the-inspector", "1"][rnd(3)]! } : { cmd: "vote", option: ["the-disruptor", "THE-INSPECTOR", "3"][rnd(3)]! };
+      evs.push(chat(t++, msg(`m${t}`, RANK_CYCLE[v % 6]!, cmd, `f${v}`)));
+    }
+    return evs;
+  }
+
+  function views(s: ReturnType<typeof initialScene>) {
+    return {
+      polls: Object.fromEntries(Object.entries(s.polls).map(([id, p]) => [id, { bars: pollBars(p), observed: observedTally(p) }])),
+      grades: gradeTallies(s),
+    };
+  }
+
+  /** FNV-1a over a string: one number standing for every intermediate view of a fold. */
+  function fnv(text: string, h = 0x811c9dc5): number {
+    for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+    return h;
+  }
+
+  /** Every intermediate scene's views hashed in order, then the final views. */
+  function trace(events: readonly StreamEvent[]) {
+    let s = initialScene();
+    let h = 0x811c9dc5;
+    for (const ev of events) {
+      s = reduce(s, ev);
+      h = fnv(JSON.stringify(views(s)), h);
+    }
+    return { hash: h, final: views(s) };
+  }
+
+  it("persistence: a retained scene's bars and grades never change when later ballots fold over it", () => {
+    let s1 = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "p", question: "?", options: ["A", "B", "C"], min_rank: "thrall", secs: 30 }));
+    for (let i = 0; i < 100; i++) {
+      s1 = reduce(s1, voteLine(2 + i, `v${i}`, RANK_CYCLE[i % 6]!, ["A", "B", "C"][i % 3]!));
+      s1 = reduce(s1, gradeLine(200 + i, `g${i}`, "HEX-04", GRADES[i % 4]!));
+    }
+    const bars = structuredClone(pollBars(s1.polls.p!));
+    const grades = structuredClone(gradeTallies(s1));
+    const observed = structuredClone(observedTally(s1.polls.p!));
+    let s2 = s1;
+    for (let i = 0; i < 100; i++) {
+      // Half re-votes by s1's voters (moving them), half new voters.
+      const viewer = i % 2 === 0 ? `v${i}` : `w${i}`;
+      s2 = reduce(s2, voteLine(400 + i, viewer, RANK_CYCLE[i % 6]!, ["C", "A", "B"][i % 3]!));
+      s2 = reduce(s2, gradeLine(600 + i, i % 2 === 0 ? `g${i}` : `h${i}`, "HEX-04", GRADES[(i + 1) % 4]!));
+    }
+    expect(observedTally(s2.polls.p!)).not.toEqual(observed);
+    expect(pollBars(s1.polls.p!)).toEqual(bars);
+    expect(gradeTallies(s1)).toEqual(grades);
+    expect(observedTally(s1.polls.p!)).toEqual(observed);
+  });
+
+  it("a re-vote after many other ballots moves the voter's weight rather than doubling it", () => {
+    let s = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "p", question: "?", options: ["A", "B"], min_rank: "thrall", secs: 30 }));
+    s = reduce(s, voteLine(2, "v1", "warlock", "A"));
+    for (let i = 0; i < 70; i++) s = reduce(s, voteLine(3 + i, `o${i}`, "thrall", "A"));
+    const before = observedTally(s.polls.p!);
+    expect(before).toEqual([
+      { option: "A", voters: 71, weight: 70 + 2 },
+      { option: "B", voters: 0, weight: 0 },
+    ]);
+    s = reduce(s, voteLine(100, "v1", "warlock", "B"));
+    const after = observedTally(s.polls.p!);
+    expect(after[0]).toMatchObject({ option: "A", voters: 70 });
+    expect(after[0]!.weight).toBeCloseTo(70, 9);
+    expect(after[1]).toMatchObject({ option: "B", voters: 1 });
+    expect(after[1]!.weight).toBeCloseTo(2, 9);
+    expect(after[0]!.weight + after[1]!.weight).toBeCloseTo(before[0]!.weight, 9);
+    // A grade re-cast after many others moves, too.
+    for (let i = 0; i < 70; i++) s = reduce(s, gradeLine(200 + i, i === 0 ? "j" : `k${i}`, "HEX-02", "DOC"));
+    s = reduce(s, gradeLine(300, "j", "HEX-02", "SPC"));
+    expect(gradeTallies(s)[0]).toMatchObject({ hex: "HEX-02", counts: { DOC: 69, REP: 0, CLM: 0, SPC: 1 }, total: 70 });
+  });
+
+  it("equivalence: the demo transcript and a seeded show fold to the views the Record books produced", () => {
+    const demo = parseTranscript(readFileSync(join(__dirname, "..", "..", "..", "apps", "stage", "fixtures", "demo.jsonl"), "utf8"));
+    expect(demo.errors).toEqual([]);
+    const got = { demo: trace(demo.events), synthetic: trace(syntheticShow()) };
+    expect(got).toEqual(BOOK_VIEWS);
+  });
+});
+
+/** Captured from the Record-based books at 829eb0a, before the ViewerBook change. */
+
+const BOOK_VIEWS: unknown = {"demo":{"hash":1123063819,"final":{"polls":{"poll-foil-1":{"bars":[{"option":"the-disruptor","weight":10.1,"voters":6,"bands":[{"rank":"unattributed","share":1}],"length":1,"pct":0.4999999999999999,"leading":true,"tied":false},{"option":"the-inspector","weight":5.7,"voters":3,"bands":[{"rank":"unattributed","share":1}],"length":0.5643564356435644,"pct":0.28217821782178215,"leading":false,"tied":false},{"option":"the-life-coach","weight":4.4,"voters":4,"bands":[{"rank":"unattributed","share":1}],"length":0.4356435643564357,"pct":0.21782178217821782,"leading":false,"tied":false}],"observed":[{"option":"the-disruptor","voters":0,"weight":0},{"option":"the-inspector","voters":0,"weight":0},{"option":"the-life-coach","voters":0,"weight":0}]},"poll-next-hex":{"bars":[{"option":"HEX-04","weight":7.4,"voters":4,"bands":[{"rank":"acolyte","share":0.37837837837837834},{"rank":"lich","share":0.2972972972972973},{"rank":"dread_council","share":0.3243243243243243}],"length":1,"pct":0.45679012345679004,"leading":true,"tied":false},{"option":"HEX-03","weight":5.7,"voters":3,"bands":[{"rank":"cultist","share":0.2982456140350877},{"rank":"warlock","share":0.7017543859649122}],"length":0.7702702702702703,"pct":0.3518518518518518,"leading":false,"tied":false},{"option":"HEX-07","weight":3.1,"voters":2,"bands":[{"rank":"acolyte","share":0.4516129032258065},{"rank":"cultist","share":0.5483870967741936}],"length":0.4189189189189189,"pct":0.191358024691358,"leading":false,"tied":false}],"observed":[{"option":"HEX-04","voters":4,"weight":7.4},{"option":"HEX-03","voters":3,"weight":5.7},{"option":"HEX-07","voters":2,"weight":3.0999999999999996}]}},"grades":[{"hex":"HEX-05","counts":{"DOC":0,"REP":0,"CLM":3,"SPC":1},"total":4,"majority":"CLM","official":"CLM","disputed":false},{"hex":"HEX-04","counts":{"DOC":0,"REP":0,"CLM":4,"SPC":0},"total":4,"majority":"CLM","official":"SPC","disputed":true},{"hex":"HEX-01","counts":{"DOC":0,"REP":0,"CLM":0,"SPC":0},"total":0,"majority":null,"official":"DOC","disputed":false},{"hex":"HEX-06","counts":{"DOC":0,"REP":0,"CLM":0,"SPC":0},"total":0,"majority":null,"official":"REP","disputed":false},{"hex":"HEX-09","counts":{"DOC":0,"REP":0,"CLM":0,"SPC":0},"total":0,"majority":null,"official":"REP","disputed":false},{"hex":"HEX-13","counts":{"DOC":0,"REP":0,"CLM":0,"SPC":0},"total":0,"majority":null,"official":"DOC","disputed":false},{"hex":"HEX-03","counts":{"DOC":0,"REP":0,"CLM":0,"SPC":0},"total":0,"majority":null,"official":"REP","disputed":false},{"hex":"HEX-02","counts":{"DOC":0,"REP":0,"CLM":0,"SPC":0},"total":0,"majority":null,"official":"CLM","disputed":false},{"hex":"HEX-08","counts":{"DOC":0,"REP":0,"CLM":0,"SPC":0},"total":0,"majority":null,"official":"DOC","disputed":false},{"hex":"HEX-07","counts":{"DOC":0,"REP":0,"CLM":0,"SPC":0},"total":0,"majority":null,"official":"CLM","disputed":false}]}},"synthetic":{"hash":295384440,"final":{"polls":{"p1":{"bars":[{"option":"HEX-01","weight":12.5,"voters":9,"bands":[{"rank":"cultist","share":0.07203389830508475},{"rank":"warlock","share":0.16949152542372886},{"rank":"lich","share":0.6059322033898306},{"rank":"dread_council","share":0.15254237288135594}],"length":1,"pct":0.6756756756756757,"leading":true,"tied":false},{"option":"HEX-02","weight":6,"voters":4,"bands":[{"rank":"cultist","share":0.367965367965368},{"rank":"warlock","share":0.43290043290043295},{"rank":"lich","share":0.09523809523809526},{"rank":"dread_council","share":0.1038961038961039}],"length":0.48,"pct":0.32432432432432434,"leading":false,"tied":false},{"option":"HEX-03","weight":0,"voters":0,"bands":[{"rank":"cultist","share":0.07906976744186048},{"rank":"lich","share":0.9209302325581395}],"length":0,"pct":0,"leading":false,"tied":false}],"observed":[{"option":"HEX-01","voters":22,"weight":47.19999999999999},{"option":"HEX-02","voters":12,"weight":23.099999999999998},{"option":"HEX-03","voters":10,"weight":21.499999999999996}]},"foil-vote-1":{"bars":[{"option":"the-disruptor","weight":59.9,"voters":36,"bands":[{"rank":"thrall","share":0.16694490818030053},{"rank":"acolyte","share":0.18697829716193656},{"rank":"cultist","share":0.08514190317195326},{"rank":"warlock","share":0.06677796327212021},{"rank":"lich","share":0.2938230383973289},{"rank":"dread_council","share":0.20033388981636063}],"length":1,"pct":0.5960199004975124,"leading":true,"tied":false},{"option":"the-inspector","weight":40.6,"voters":24,"bands":[{"rank":"thrall","share":0.12315270935960591},{"rank":"acolyte","share":0.2413793103448276},{"rank":"warlock","share":0.19704433497536944},{"rank":"lich","share":0.37931034482758613},{"rank":"dread_council","share":0.059113300492610835}],"length":0.6777963272120201,"pct":0.4039800995024876,"leading":false,"tied":false}],"observed":[{"option":"the-disruptor","voters":36,"weight":59.89999999999999},{"option":"the-inspector","voters":24,"weight":40.6}]}},"grades":[{"hex":"HEX-02","counts":{"DOC":3,"REP":0,"CLM":3,"SPC":1},"total":7,"majority":null,"official":null,"disputed":false},{"hex":"HEX-01","counts":{"DOC":32,"REP":2,"CLM":13,"SPC":5},"total":52,"majority":"DOC","official":"REP","disputed":true},{"hex":"HEX-05","counts":{"DOC":33,"REP":1,"CLM":18,"SPC":2},"total":54,"majority":"DOC","official":"CLM","disputed":true}]}}};

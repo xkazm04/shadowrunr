@@ -8,10 +8,10 @@ import { schemaLabel } from "../../router/schema";
 import { BRAIN_ROUTES } from "../../router/brain";
 import { page } from "./index";
 import { Layer2, lineOf } from "./Layer2";
-import { daemon, ledgerSummary, season, transcript } from "./testgen";
+import { daemon, ledgerRows, ledgerSummary, runRow, season, transcript, type Season } from "./testgen";
 import { invalidatedByEvent } from "../../data/invalidation";
 import { msText, usd } from "../../kit/events";
-import { mountPage as mount, nodes, ok, settle } from "../../kit/testing";
+import { mountPage as mount, nodes, ok, page as pageOf, param, settle } from "../../kit/testing";
 
 const L2_BUDGET: number = DOM_BUDGETS.routes["wall+l2"];
 
@@ -95,7 +95,7 @@ describe("brain/engine", () => {
     expect(routes?.querySelectorAll("tbody tr").length).toBe(4);
     expect(document.querySelector("[data-role='brain-accounts']")?.textContent).toContain("spare");
     expect(screen.getByText("Fallbacks", { selector: "h2 *, h2" })).toBeTruthy();
-    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("gen-t0002");
+    expect((screen.getByLabelText("Ledger") as HTMLSelectElement).value).toBe("gen-t0002");
     expect(nodes()).toBeLessThan(L2_BUDGET);
   });
 
@@ -172,6 +172,63 @@ describe("brain/engine", () => {
     for (const e of ["stream_end", "segment_end", "job"]) {
       expect(invalidatedByEvent(e), e).toEqual(expect.arrayContaining(["ledger.page", "ledger.summary"]));
     }
+  });
+
+  // The baseline: gen-t0001 holds its own rows (2 runs x 60), gen-t0002 the season's ledger.
+  const paired = (baseRows = 60): Season => {
+    const s = season({ tournaments: 3, runs: 6, rowsPerRun: 60, transcriptLines: 10 });
+    const base = [0, 1].flatMap((i) => ledgerRows(runRow(i, "gen-t0001"), baseRows));
+    return { ...s, ledgers: new Map([["gen-t0001", base]]) };
+  };
+  const compare = () => document.querySelector("[data-role='brain-compare']");
+
+  it("compares the source with the previous tournament by default, both sides named", async () => {
+    mount(<Layer2 sub={["engine"]} />, daemon(paired()), "#/brain/engine");
+    await settle(30);
+    expect((screen.getByLabelText("Compare with") as HTMLSelectElement).value).toBe("gen-t0001");
+    const c = compare();
+    expect(c).not.toBeNull();
+    expect(c?.textContent).toContain("baseline gen-t0001");
+    expect(c?.textContent).toContain("candidate gen-t0002");
+    expect(c?.querySelectorAll("tbody tr").length).toBeGreaterThanOrEqual(4);
+    expect(c?.getAttribute("data-partial")).toBe("false");
+    expect(nodes()).toBeLessThan(L2_BUDGET);
+  });
+
+  it("says the baseline is a window and the comparison partial when its summary fails", async () => {
+    const base = daemon(paired(4_500));
+    const script = (m: string, sent: string) => (m === "ledger.summary" && param(sent, "tournament_id") === "gen-t0001" ? { status: 500, body: { error: { code: "internal", message: "boom" } } } : base(m, sent));
+    mount(<Layer2 sub={["engine"]} />, script, "#/brain/engine");
+    await settle(40);
+    const c = compare();
+    expect(c?.textContent).toContain("baseline: first 5,000 calls");
+    expect(c?.getAttribute("data-partial")).toBe("true");
+    expect(c?.querySelectorAll("tbody tr").length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("cautions when the two tournaments ran on different instruments", async () => {
+    const s = paired();
+    const tournaments = s.tournaments.map((t) => (t.tournament_id === "gen-t0002" ? { ...t, instrument_hash: "gen-other" } : t));
+    mount(<Layer2 sub={["engine"]} />, daemon({ ...s, tournaments }), "#/brain/engine");
+    await settle(30);
+    expect(compare()?.textContent).toMatch(/instruments differ/);
+  });
+
+  it("compares nothing for the daemon ledger until a baseline is picked", async () => {
+    const s = paired();
+    const base = daemon(s);
+    const own = (m: string, sent: string) =>
+      param(sent, "tournament_id") === undefined && m === "ledger.page" ? pageOf(s.ledger, sent) : param(sent, "tournament_id") === undefined && m === "ledger.summary" ? ok(ledgerSummary(s.ledger)) : base(m, sent);
+    mount(<Layer2 sub={["engine"]} />, own, "#/brain/engine");
+    await settle(30);
+    await act(async () => fireEvent.change(screen.getByLabelText("Ledger"), { target: { value: "__daemon__" } }));
+    await settle(30);
+    expect((screen.getByLabelText("Compare with") as HTMLSelectElement).value).toBe("");
+    expect(compare()).toBeNull();
+    await act(async () => fireEvent.change(screen.getByLabelText("Compare with"), { target: { value: "gen-t0001" } }));
+    await settle(30);
+    expect(compare()?.textContent).toContain("baseline gen-t0001");
+    expect(compare()?.textContent).toContain("candidate the daemon's engine ledger");
   });
 
   it("names an unknown floor instead of rendering blank", async () => {

@@ -186,7 +186,10 @@ pub struct SimOptions {
     pub case: Option<String>,
     /// The stream prep the run's brain voices (`Brain::set_prep`), as the host resolved it: the
     /// newest approved prep, or the fictional sample. The run records which one it used as
-    /// `prep` ([`runner::prep_label`]).
+    /// `prep` ([`runner::prep_label`]), and its canonical digest joins the instrument's base
+    /// hash as `prep.json`, so approving a new prep starts a new tournament. `tick_s`,
+    /// `featured_every_ticks`, `max_featured` and `platforms` join it as `harness/<knob>`, and
+    /// the judge tier resolved for a run joins its per-run hash as `judge/<tier>`.
     pub stream_prep: Option<StreamPrep>,
     /// Observes the run's transcript as it is written: each event with its 1-based line, at
     /// push time (a live `sim.start` publishes through it). `None` by default; it observes

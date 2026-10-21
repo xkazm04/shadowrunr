@@ -63,7 +63,7 @@ export function pollBars(poll: Poll): PollBar[] {
     const weight = authoritative ? (tally?.weight ?? 0) : Math.round(obsTotal * 100) / 100;
     const voters = authoritative
       ? (tally?.voters ?? 0)
-      : Object.values(poll.ballots).filter((b) => b.option === option).length;
+      : (poll.observedVoters[option] ?? 0);
     const bands: RankBand[] =
       obsTotal > 0
         ? RANKS.filter((r) => (obs[r] ?? 0) > 0).map((r) => ({ rank: r, share: (obs[r] ?? 0) / obsTotal }))
@@ -114,7 +114,7 @@ export function gradeTallies(s: SceneState): GradeTally[] {
         return { option: g, weight: t?.weight ?? 0, voters: t?.voters ?? 0 };
       });
     } else {
-      for (const g of Object.values(s.gradeVotes[hex] ?? {})) counts[g] += 1;
+      Object.assign(counts, s.gradeVotes[hex]?.counts);
       rows = GRADE_ORDER.map((g) => ({ option: g, weight: counts[g], voters: counts[g] }));
     }
     for (const r of rows) counts[r.option as EvidenceGrade] = r.voters;

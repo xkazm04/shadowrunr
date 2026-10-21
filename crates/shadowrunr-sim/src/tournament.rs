@@ -1,10 +1,12 @@
 //! Tournaments: run a matrix with a concurrency limit, resumably, paced on quota.
 //!
 //! Layout: `<out_root>/<matrix_id>-<base_hash[..10]>/<run_id>/`. The base hash covers
-//! everything but the tone, so editing the rubric, the segment tables, the calibration or the
-//! character package starts a new tournament directory instead of mixing instruments. Inside
-//! a tournament, a run whose tone file changed since it ran is moved aside
-//! (`<run_id>.stale-<hash8>`) and run again.
+//! everything but the tone and the judge tier, so editing the rubric, the segment tables, the
+//! calibration, the character package, the platform rules, the stream prep or a harness knob
+//! (tick, featured cadence and cap, platforms) starts a new tournament directory instead of
+//! mixing instruments; the old directory is left as it was. Inside a tournament, a run whose
+//! tone file or judge tier changed since it ran is moved aside (`<run_id>.stale-<hash8>`) and
+//! run again.
 //!
 //! WP13: an engine failure is not a result ([`crate::outcome`]). Resume re-runs
 //! `engine_failed` runs (the old directory moved aside as `<run_id>.engine-failed`) and
@@ -165,13 +167,21 @@ pub fn plan(
 ) -> Result<TournamentPlan, SimError> {
     let (_, _, cal_text) = calibration::load(&opts.sim_root)?;
     let first_tone = &matrix.axes.tones[0];
-    let base = instrument_for(opts, &matrix.character, first_tone, &cal_text)?.base_hash;
+    let first_core = matrix.axes.core_tiers[0];
+    let base =
+        instrument_for(opts, &matrix.character, first_tone, first_core, &cal_text)?.base_hash;
     let tournament_id = format!("{}-{}", matrix.id, &base[..10]);
     let dir = out_root.join(&tournament_id);
     let mut runs = Vec::new();
     for spec in matrix.specs() {
-        let hash =
-            instrument_for(opts, &spec.character, &spec.tone_variant, &cal_text)?.instrument_hash;
+        let hash = instrument_for(
+            opts,
+            &spec.character,
+            &spec.tone_variant,
+            spec.core_tier,
+            &cal_text,
+        )?
+        .instrument_hash;
         let run_dir = dir.join(&spec.run_id);
         let existing: Option<String> = read_json::<Instrument>(&run_dir.join("instrument.json"))
             .ok()
@@ -781,7 +791,8 @@ seeds = [1, 2]
         let p1 = plan(&matrix, &root, &sim).unwrap();
         run_with_fakes(&p1, &sim, &AtomicUsize::new(0)).await;
         let r1 = crate::summary::summarize(&p1.dir).unwrap();
-        assert_eq!(r1.instrument_hashes.len(), 1);
+        // One hash per judge: haiku cores are judged by sonnet, sonnet cores by opus.
+        assert_eq!(r1.instrument_hashes.len(), 2);
 
         // Tone edit: same tournament (base hash unchanged), the stale runs are redone and
         // the old ones moved aside; results hold only the new hash.
@@ -797,7 +808,7 @@ seeds = [1, 2]
             && r.stale_hash.is_some()));
         run_with_fakes(&p2, &sim, &AtomicUsize::new(0)).await;
         let r2 = crate::summary::summarize(&p2.dir).unwrap();
-        assert_eq!(r2.instrument_hashes.len(), 1);
+        assert_eq!(r2.instrument_hashes.len(), 2);
         assert_ne!(r2.instrument_hashes, r1.instrument_hashes);
         assert_eq!(r2.runs, 4, "stale copies are not counted");
         assert!(std::fs::read_dir(&p2.dir).unwrap().any(|e| e
@@ -817,6 +828,63 @@ seeds = [1, 2]
         let p3 = plan(&matrix, &root, &sim).unwrap();
         assert_ne!(p3.tournament_id, p1.tournament_id);
         assert_eq!(p3.count(RunAction::Run), 4);
+    }
+
+    /// Every file under `dir`, path -> bytes, to prove a directory was left alone.
+    fn snapshot(dir: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+        let mut out = std::collections::BTreeMap::new();
+        let mut stack = vec![dir.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).unwrap() {
+                let p = e.unwrap().path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else {
+                    out.insert(p.clone(), std::fs::read(&p).unwrap());
+                }
+            }
+        }
+        out
+    }
+
+    #[tokio::test]
+    async fn a_platform_rules_edit_starts_a_new_tournament_and_leaves_the_old_one() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = private_opts(tmp.path());
+        // The brain reads `<characters>/../policy/platform-rules.json`: give the private
+        // package its own copy of the shipped rules.
+        std::fs::create_dir_all(tmp.path().join("policy")).unwrap();
+        let rules = tmp.path().join("policy/platform-rules.json");
+        std::fs::copy(repo().join("policy/platform-rules.json"), &rules).unwrap();
+        let matrix = Matrix::parse(MATRIX).unwrap();
+        let sim = effective_options(&matrix, &base);
+        let root = tmp.path().join("runs");
+        let p1 = plan(&matrix, &root, &sim).unwrap();
+        run_with_fakes(&p1, &sim, &AtomicUsize::new(0)).await;
+        assert_eq!(
+            plan(&matrix, &root, &sim).unwrap().count(RunAction::Skip),
+            4
+        );
+        let old = snapshot(&p1.dir);
+        assert!(old.keys().any(|p| p.ends_with("instrument.json")));
+
+        // One regex edited.
+        let text = std::fs::read_to_string(&rules).unwrap();
+        let edited = text.replacen("\"(?i)", "\"(?i)\\\\bzz\\\\b|", 1);
+        assert_ne!(edited, text, "the shipped rules carry a (?i) pattern");
+        std::fs::write(&rules, edited).unwrap();
+
+        let p2 = plan(&matrix, &root, &sim).unwrap();
+        assert_ne!(
+            p2.tournament_id, p1.tournament_id,
+            "two rule sets never share a tournament"
+        );
+        assert_eq!(p2.count_reason(PlanReason::New), p2.runs.len());
+        assert_eq!(
+            snapshot(&p1.dir),
+            old,
+            "the old tournament is byte-unchanged"
+        );
     }
 
     #[tokio::test]
