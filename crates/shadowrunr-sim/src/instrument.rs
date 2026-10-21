@@ -24,7 +24,7 @@ use crate::SimError;
 
 /// Bump when the simulator's or the judge's logic changes in a way that changes verdicts
 /// (prompt templates, verification rules, scheduling).
-pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/9";
+pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/10";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstrumentFile {
@@ -403,7 +403,9 @@ mod tests {
     }
 
     /// `fixture` hashed with no brief and no experiment: the golden that both entries must
-    /// leave untouched when absent. It moves only with `SIM_LOGIC_VERSION` (`/9`: the
+    /// leave untouched when absent. It moves only with `SIM_LOGIC_VERSION` (`/10`: the
+    /// evidence board (SEG-02A's default screen, `pin_link` and its `link_pinned`, a record's
+    /// summary in the judged transcript, the strings rule), after `/9`: the
     /// character-neutral engine, every Malakor word read from the package (`say host` in the
     /// judged transcript, the owner's brief in the judge prompt), after `/8`: owned
     /// situational requests, the through-line agenda and the lag ceiling, after `/7`: the map
@@ -411,7 +413,7 @@ mod tests {
     /// shows it, after `/6`: the screens, runtime screen defaults and a returning research job
     /// opening its record, after `/5`: carried bait picked first, after `/4`: two picks a beat,
     /// gifts and the cold open carried, the speech-aware say gap, a full-length session).
-    const PRE_BRIEF_HASH: &str = "7166993e9483ff302ca2ac8064074aab5474355fc81be41f18881bede7c8320f";
+    const PRE_BRIEF_HASH: &str = "b3061f275e5bdd7fee122e5368ea54bc04a2214a94d8f2c929648612d57f797b";
 
     #[test]
     fn a_brief_joins_the_hash_only_when_present() {

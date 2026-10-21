@@ -293,8 +293,8 @@ fn evidence(stream: &Stream, cut: &Cut, anchor_ts: i64) -> Option<ClipEvidence> 
 }
 
 /// The scene events of the cut on the clip clock: the state before it (case, segment,
-/// revealed hexes, the foil on stage, the screen up and the records shown) at 0, then the
-/// window's ops and votes. Never chat or
+/// revealed hexes, the foil on stage, the screen up, the records shown and the strings pinned)
+/// at 0, then the window's ops, strings and votes. Never chat or
 /// lines: captions carry the lines, and handles stay in the room.
 fn clip_events(stream: &Stream, cut: &Cut, re: Option<&Regex>) -> Vec<StreamEvent> {
     let first_ev = stream.lines[cut.first].event;
@@ -311,12 +311,14 @@ fn clip_events(stream: &Stream, cut: &Cut, re: Option<&Regex>) -> Vec<StreamEven
             (stream.spoken_at[i] - cut.spoken_start).clamp(0, cut.duration_ms())
         };
         let keep = match ev {
-            // The screen up when the cut starts, and every record it may open (records are
-            // staged case data, never chat, so they are not redacted).
+            // The screen up when the cut starts, every record it may open (records are staged
+            // case data, never chat, so they are not redacted), and the board's strings: the
+            // ones pinned before the cut stand at 0, the cut's own are drawn in.
             StreamEvent::SegmentStart { .. }
             | StreamEvent::Handover { .. }
             | StreamEvent::CaseOpen { .. }
-            | StreamEvent::RecordShown { .. } => true,
+            | StreamEvent::RecordShown { .. }
+            | StreamEvent::LinkPinned { .. } => true,
             StreamEvent::Op { op, .. } => match op {
                 Op::RevealHex { .. }
                 | Op::SummonFoil { .. }

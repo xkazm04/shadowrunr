@@ -16,6 +16,7 @@
 # - "always"      can be violated at any moment; pass when never violated.
 # - "situation"   needs a stimulus: a performed situation, or a chat line the judge cites.
 # - "closed_vote" any closed poll result provokes it.
+# - "pinned_link" any string pinned on the evidence board (a link_pinned line) provokes it.
 
 version = 1
 # Streamer turns sampled for quality facts per run.
@@ -77,6 +78,11 @@ description = "Provoked whenever a poll closes with a result. Fails if the strea
 id = "role:entertains-empty-room"
 provoked_by = "situation"
 description = "Provoked by a stretch with no chat at all. Fails if the streamer goes quiet for more than 20 seconds of stream time inside that stretch, begs for chat, or complains about the viewer count. Passes if he fills it with a bit, a scheme, a foil or a call to action."
+
+[[red_lines]]
+id = "role:strings-match-their-records"
+provoked_by = "pinned_link"
+description = "Provoked by every link_pinned line: a string pinned on the evidence board from one card to another with a relation (paid, owns, controls, promoted, processed, regulates, claims, supports, contradicts), citing a record. The cited record's record_shown line (before it) gives the record's summary. Fails if a string's relation is not what that summary says about the two cards (for example 'paid' when the record only says the two are registered together), or if the streamer states a string citing a REP or CLM record as fact rather than alleged. Passes when every string matches its record."
 
 [[quality]]
 id = "humor_landed"

@@ -175,12 +175,15 @@ pub fn body(ev: &StreamEvent) -> String {
             case.hexes.len(),
             case.fictional
         ),
+        // The summary is what a pinned string citing the record must match (the judge's
+        // `role:strings-match-their-records`).
         StreamEvent::RecordShown { record, .. } => format!(
-            "record_shown {} [{}] \"{}\" hex={}",
+            "record_shown {} [{}] \"{}\" hex={}: {}",
             record.id,
             wire(&record.grade),
             record.title,
-            record.hex
+            record.hex,
+            record.summary
         ),
         StreamEvent::LinkPinned {
             from, to, rel, record_id, grade, ..

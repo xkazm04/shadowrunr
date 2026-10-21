@@ -382,8 +382,8 @@ pub struct SegmentTable {
     pub initial: String,
     pub states: Vec<String>,
     pub allowed_ops: Vec<String>,
-    /// Screens `show_screen` may put up (appendix (screens)); the first is the default the
-    /// runtime shows at `segment_start`.
+    /// Screens `show_screen` may put up (appendix (screens and board)); the first is the
+    /// default the runtime shows at `segment_start`.
     pub screens: Vec<String>,
     pub commands: Vec<String>,
     /// Segments `switch_segment` may move to.
@@ -470,11 +470,15 @@ impl SegmentTable {
         if self.allows_op("show_screen") && self.screens.len() < 2 {
             return Err(bad("show_screen needs two or more screens".into()));
         }
+        // Strings are pinned on the board: no board, no pin_link.
+        if self.allows_op("pin_link") && !screens.contains("board") {
+            return Err(bad("pin_link needs the board among the screens".into()));
+        }
         // A default goes up with no record named, so it is never the browser window.
         let shows_no_record = |list: &[String]| {
             list.first()
                 .and_then(|n| screen_id(n))
-                .is_some_and(|s| matches!(s, ScreenId::Host | ScreenId::Hexmap))
+                .is_some_and(|s| matches!(s, ScreenId::Host | ScreenId::Hexmap | ScreenId::Board))
         };
         if !shows_no_record(&self.screens)
             || self
@@ -484,7 +488,7 @@ impl SegmentTable {
                 .any(|l| !shows_no_record(l))
         {
             return Err(bad(
-                "screens: a default (the first entry) is host or hexmap".into(),
+                "screens: a default (the first entry) is host, hexmap or board".into(),
             ));
         }
         if let Some(c) = self
@@ -822,6 +826,7 @@ mod tests {
         want.insert("reveal_hex");
         want.insert("dispatch_research");
         want.insert("show_screen");
+        want.insert("pin_link");
         let got: BTreeSet<&str> = two.allowed_ops.iter().map(String::as_str).collect();
         assert_eq!(got, want);
     }
@@ -834,8 +839,10 @@ mod tests {
         assert_eq!(one.screens_in(COLD_OPEN_STATE), ["host"]);
         assert!(!one.allows_op_in(COLD_OPEN_STATE, "show_screen"));
         let two = segment_table(SegmentId::Seg02aHexmap).unwrap();
-        assert_eq!(two.screens, ["hexmap", "browser", "desk", "host"]);
-        assert_eq!(two.default_screen(&two.initial), ScreenId::Hexmap);
+        // The evidence board replaced the hexmap as SEG-02A's main screen.
+        assert_eq!(two.screens, ["board", "browser", "desk", "host"]);
+        assert_eq!(two.default_screen(&two.initial), ScreenId::Board);
+        assert!(two.allows_op("pin_link"));
         assert!(two.allows_op("show_screen"));
         for s in &two.states {
             assert!(two.allows_screen_in(s, ScreenId::Browser), "{s}");
@@ -848,6 +855,8 @@ mod tests {
             "the screen is yours to direct",
             "with its focus",
             "pull back to the overview",
+            "pin_link",
+            "contradicts",
         ] {
             assert!(p.contains(want), "{want}: {p}");
         }
@@ -857,16 +866,18 @@ mod tests {
     fn invalid_screens_rejected() {
         let one = SEGMENT_TABLE_SOURCES[0].1;
         let two = SEGMENT_TABLE_SOURCES[1].1;
-        let list = "screens = [\"hexmap\", \"browser\", \"desk\", \"host\"]";
+        let list = "screens = [\"board\", \"browser\", \"desk\", \"host\"]";
         assert!(two.contains(list));
         for bad in [
             "screens = []",
-            "screens = [\"hexmap\", \"cinema\"]",
-            "screens = [\"hexmap\", \"hexmap\"]",
+            "screens = [\"board\", \"cinema\"]",
+            "screens = [\"board\", \"board\"]",
             // A default goes up with no record: never the browser window.
-            "screens = [\"browser\", \"hexmap\"]",
+            "screens = [\"browser\", \"board\"]",
             // show_screen with one screen has nothing to switch to.
-            "screens = [\"hexmap\"]",
+            "screens = [\"board\"]",
+            // pin_link draws on the board: a segment that allows it shows the board.
+            "screens = [\"hexmap\", \"browser\", \"desk\", \"host\"]",
         ] {
             let t = two.replace(list, bad);
             assert!(SegmentTable::from_toml_str("x", &t).is_err(), "{bad}");

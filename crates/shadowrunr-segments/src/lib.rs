@@ -26,7 +26,7 @@ pub use evidence::{requires_alleged, ResearchAllowlist, SourceAllowlist};
 pub use portfolio::{next_status, PortfolioEntry};
 pub use ranks::RankTable;
 pub use research::{target_hex, CaseFile, CaseRecord};
-pub use runtime::{Lead, Proposal, SegmentConfig, SegmentRuntime};
+pub use runtime::{Lead, PinnedLink, Proposal, SegmentConfig, SegmentRuntime};
 pub use table::{
     active_segments, descoped_segments, segment_is_descoped, segment_name, segment_table,
     HandoverRule, SegmentTable, DEFAULT_MAX_SEARCHES_PER_HEX,
