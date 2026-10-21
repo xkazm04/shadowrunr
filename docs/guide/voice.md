@@ -90,6 +90,9 @@ sid = 3
 max_queue = 6
 max_lag_ms = 8000
 render_timeout_ms = 30000
+lines_in_flight = 3
+render_workers = 3
+# render_threads = 2
 ```
 
 | Key | Default | Meaning |
@@ -103,11 +106,14 @@ render_timeout_ms = 30000
 | `max_queue` | `6` | Lines waiting to render. Past this, the oldest is skipped (`queue_full`). |
 | `max_lag_ms` | `8000` | A line whose first audio cannot start this soon after its `say` is skipped (`late`). |
 | `render_timeout_ms` | `30000` | One sentence's render, at most. Past it, the line is skipped (`error`). |
+| `lines_in_flight` | `3` | Lines handed to the sidecar at once, so it can render ahead into the next line. Their audio still goes out in order. |
+| `render_workers` | `3` | Engine runs the sidecar renders at once (`--workers`). |
+| `render_threads` | none | Each engine run's threads (`--threads`). Absent: 2. Keep `render_workers` x threads within the physical cores (6 of 8 leaves room for the brain and the stage). |
 
 ## The sidecar
 
 ```
-python -m shadowrunr_voice --engine-dir <dir> [--durations <onnx>] --sid 3 --voice af_heart [--render-timeout-ms N]
+python -m shadowrunr_voice --engine-dir <dir> [--durations <onnx>] --sid 3 --voice af_heart [--render-timeout-ms N] [--workers N] [--threads N]
 ```
 
 The package is found from the `sidecar` directory (as the working directory, or on
@@ -116,11 +122,22 @@ The package is found from the `sidecar` directory (as the working directory, or 
 - First, `hello`: the protocol version, the voice, the sample rate (24000), whether mouth shapes
   are on, and a `reason` when something is missing.
 - For each `say`, the line is cut into sentences. A first sentence over about 120 characters is
-  cut at a comma, so the first audio starts early. Each sentence is one engine run. The next
-  sentence starts rendering as soon as the current one's audio is in, and each sentence goes out
-  as one `audio` message: mono PCM16 in base64, plus its mouth shapes in milliseconds.
+  cut at a comma, so the first audio starts early. Each sentence is one engine run, and each
+  sentence goes out as one `audio` message: mono PCM16 in base64, plus its mouth shapes in
+  milliseconds.
+- **The render pool.** Up to `--workers` engine runs (default 3) render at once, each with
+  `--threads` threads (default 2). Sentences start in the order they arrived, across lines: every
+  sentence of a line before the next line's first, so the next line starts rendering while the
+  current one's last sentence still is. The output stays in order (lines as they arrived, each
+  line's sentences in order): a sentence that finishes early waits for its turn.
+- **Head of line first.** The sentence about to be sent next always takes the first free
+  worker, and it runs at normal priority. A look-ahead run (any later sentence) starts at below
+  normal priority on Windows and is raised to normal once it is the one being waited for, so
+  rendering ahead never takes CPU from the sentence the audience is waiting to hear. (Elsewhere
+  every run has the same priority.)
 - A failed or timed-out render is an `error` for that sentence, and the rest of the line is
-  dropped. `cancel` kills a line's render in flight and drops the queued lines it names.
+  dropped (its later sentences still rendering are killed). `cancel` kills the named lines'
+  renders in flight and drops their sentences that have not started.
 - It exits when its stdin closes. stdout carries the protocol only; its log goes to stderr.
 
 The text reaches the engine as one argument in an argument list, never through a shell. On
@@ -131,6 +148,14 @@ Measured on the development machine (16 logical cores, CPU only, October 2026, n
 three sentences each): the first audio arrives 2.0 to 2.2 s after the `say`. Each sentence takes
 2.0 to 2.3 s to render for 2.0 to 2.5 s of audio, about half a second of which is the model
 load that every engine run pays, so the engine only just keeps ahead of playback. Mouth shapes add 20 to 50 ms per sentence.
+
+The pool's defaults (3 workers x 2 threads) come from replays of a 5-minute sandbox show
+(`shadowrunr voice replay`, below; 8 physical cores, October 2026, n = 1 to 2 replays per point,
+under a shared machine's background load, so treat them as provisional). Malakor's 91 lines in
+that show are about 630 s of speech for 248 s of show. One worker makes about 170 to 190 s of
+audio in the 248 s and drops about 65 lines; three workers make 290 to 365 s and drop about 40.
+No render speed fixes that: the stage can play at most the show's own length, so most of what is
+said can never be heard. Pacing the brain to the voice is the cure, not more workers.
 
 Tests: `python -m unittest` from `tools/voice` (standard library only; no engine, no models).
 The real-engine smoke test runs only when `SHADOWRUNR_VOICE_ENGINE_DIR` names the engine dir, and
@@ -207,6 +232,27 @@ writes to PATH.
 | 1 | the sidecar did not start, or a sentence failed or timed out |
 | 2 | usage error |
 
+### Measure with a replay
+
+```
+shadowrunr voice replay runs/sandbox/<run>/transcript.jsonl [--workers N] [--lines-in-flight N] [--threads N] [--speed X] [--json] [--progress]
+```
+
+This pushes a recorded run's events again, at their recorded `ts_ms` (scaled by `--speed`),
+into a live run that the voice service follows, through the real sidecar with this `[voice]`
+(the flags override its keys). No model is called: the lines are the transcript's. It prints
+one row: the lines spoken, `late`, `queue_full` and failed, the audio made, the first-audio
+latency (from a `say` to its first sentence at the follower, p50 and p90), and a model of the
+stage's player (sentences played back to back, at most 6 s queued ahead): the sentences it
+drops, the audio heard, and the time from a `say` to its first sound. Run it on a quiet machine;
+the engine shares the CPU with whatever else runs.
+
+| Exit | `voice replay` |
+| --- | --- |
+| 0 | the replay ran (whatever it measured) |
+| 1 | the transcript could not be read, or the sidecar did not start |
+| 2 | usage error |
+
 ### What the daemon does with a line
 
 - **Only followed live runs are voiced.** That includes sandbox sessions. Replays and foil
@@ -215,10 +261,17 @@ writes to PATH.
   frames with the ids `<run_id>:<seq>:<part>`.
 - **`max_queue`** (default 6): lines waiting to render. When a new line arrives past it, the
   oldest waiting line is `skipped` with `queue_full`.
+- **`lines_in_flight`** (default 3): lines with the sidecar at once, beyond the queue. The
+  sidecar renders ahead into them while the first is still going out. Each line's frames wait
+  for the line before it, so a run's utterances stay in seq order.
 - **`max_lag_ms`** (default 8000): the clock starts when the `say` reaches the daemon. A line
-  whose first sentence has not rendered by then is cancelled and `skipped` with `late`. A line
+  whose first sentence has not reached the daemon by then is cancelled and `skipped` with
+  `late`, even while it is still waiting its turn behind another line in flight (its skip goes
+  out in its turn). The sidecar sends lines in order, so a line's first sentence arrives only
+  after every line ahead of it is done: the time those lines take counts against it. A line
   already that old when it leaves the queue is skipped without rendering.
-- **`render_timeout_ms`** (default 30000): one sentence, at most. A sentence that fails or
+- **`render_timeout_ms`** (default 30000): one sentence, at most, counted from the sentence
+  before it or from the line's turn, whichever is later. A sentence that fails or
   times out skips the rest of its line with `error`, from that part on. Three failed lines in a
   row turn the status `degraded` ("renders failing: ..."), and the next spoken line clears it.
 - **The stream never waits.** The service reads each run's event broadcast. It never holds up

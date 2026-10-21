@@ -2,15 +2,18 @@
 """A stand-in for ``sherpa-onnx-offline-tts``: reads the same flags, writes a WAV.
 
 The text decides what it does: ``FAIL`` exits 3, ``SLOW`` sleeps 30 s first (a render to cancel or
-time out). Otherwise it writes ``0.1 s`` of a tone per word at 24 kHz and, with ``--debug=1``,
-prints one token line. Every run appends its text to the file named by ``FAKE_ENGINE_LOG``, so a
-test can see which sentences were started.
+time out), ``PAUSE<n>`` sleeps ``n`` tenths of a second. Otherwise it writes ``0.1 s`` of a tone
+per word at 24 kHz and, with ``--debug=1``, prints one token line. Every run appends its text to
+the file named by ``FAKE_ENGINE_LOG``, so a test can see which sentences were started; with
+``FAKE_ENGINE_SPANS`` it also appends ``start <text>`` and ``end <text>`` around its work there,
+so a test can see which runs overlapped.
 """
 
 from __future__ import annotations
 
 import math
 import os
+import re
 import sys
 import time
 import wave
@@ -23,11 +26,18 @@ def main(argv: list[str]) -> int:
     if log:
         with open(log, "a", encoding="utf-8") as f:
             f.write(text.strip() + "\n")
+    spans = os.environ.get("FAKE_ENGINE_SPANS")
+    if spans:
+        with open(spans, "a", encoding="utf-8") as f:
+            f.write(f"start {text.strip()}\n")
     if "FAIL" in text:
         print("fake engine: told to fail", file=sys.stderr)
         return 3
     if "SLOW" in text:
         time.sleep(30)
+    pause = re.search(r"PAUSE(\d+)", text)
+    if pause:
+        time.sleep(int(pause.group(1)) / 10)
     words = max(len(text.split()), 1)
     n = 2400 * words
     frames = b"".join(
@@ -41,6 +51,9 @@ def main(argv: list[str]) -> int:
         wav.writeframes(frames)
     if flags.get("--debug") == "1":
         print("0 50 " + " ".join("16" for _ in range(words)) + " 0")
+    if spans:
+        with open(spans, "a", encoding="utf-8") as f:
+            f.write(f"end {text.strip()}\n")
     return 0
 
 

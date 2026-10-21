@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """``python -m shadowrunr_voice --engine-dir <dir> [--durations <onnx>] --sid 3 --voice af_heart
-[--render-timeout-ms N]``: the voice sidecar, JSON lines on stdio (see :mod:`.sidecar`).
+[--render-timeout-ms N] [--workers N] [--threads N]``: the voice sidecar, JSON lines on stdio (see :mod:`.sidecar`).
 
 The protocol owns the process's real stdout. Anything else that prints, onnxruntime's native
 logger included, goes to stderr at the file-descriptor level, so a library's chatter cannot
@@ -17,7 +17,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import IO
 
-from .sidecar import Out, Settings, Sidecar, hello
+from .sidecar import DEFAULT_THREADS, DEFAULT_WORKERS, Out, Settings, Sidecar, hello
 
 
 def _protocol_stream() -> IO[str]:
@@ -46,6 +46,12 @@ def parse(argv: Sequence[str] | None = None) -> Settings:
     parser.add_argument("--sid", type=int, default=3, help="the voice's verified speaker id")
     parser.add_argument("--voice", default="af_heart")
     parser.add_argument("--render-timeout-ms", type=int, default=30_000)
+    parser.add_argument(
+        "--workers", type=int, default=DEFAULT_WORKERS, help="engine runs at once (the pool)"
+    )
+    parser.add_argument(
+        "--threads", type=int, default=DEFAULT_THREADS, help="--num-threads per engine run"
+    )
     args = parser.parse_args(argv)
     return Settings(
         engine_dir=Path(args.engine_dir),
@@ -53,6 +59,8 @@ def parse(argv: Sequence[str] | None = None) -> Settings:
         voice=args.voice,
         timeout_s=max(args.render_timeout_ms, 1) / 1000,
         durations=Path(args.durations) if args.durations else None,
+        workers=max(args.workers, 1),
+        threads=max(args.threads, 1),
     )
 
 

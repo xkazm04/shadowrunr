@@ -8,9 +8,9 @@ use clap::Subcommand;
 use tokio::sync::watch;
 use tokio::time::Instant;
 
-use super::probe;
 use super::renderer::{b64_decode, duration_ms, Part, Renderer, RendererState};
 use super::sidecar::{SidecarRenderer, STOP_GRACE};
+use super::{probe, replay};
 use crate::config::Config;
 use crate::runs;
 
@@ -34,7 +34,39 @@ pub enum VoiceCommand {
         #[arg(long, value_name = "PATH", num_args = 0..=1)]
         out: Option<Option<PathBuf>>,
     },
+    /// Replay a recorded run (its transcript.jsonl) at its recorded times through the sidecar
+    /// and the voice service, and print the lines spoken and skipped, the audio, the first-audio
+    /// latency and what the stage's player would have played. No model is called.
+    #[command(after_help = VOICE_REPLAY_EXIT_CODES)]
+    Replay {
+        /// A run's transcript.jsonl.
+        transcript: PathBuf,
+        /// Time scale: 2 replays twice as fast.
+        #[arg(long, default_value_t = 1.0)]
+        speed: f64,
+        /// Override [voice] render_workers.
+        #[arg(long)]
+        workers: Option<usize>,
+        /// Override [voice] lines_in_flight.
+        #[arg(long)]
+        lines_in_flight: Option<usize>,
+        /// Override [voice] render_threads.
+        #[arg(long)]
+        threads: Option<u32>,
+        /// Print the report as JSON.
+        #[arg(long)]
+        json: bool,
+        /// Print each frame to stderr as it arrives.
+        #[arg(long)]
+        progress: bool,
+    },
 }
+
+/// `shadowrunr voice replay` exit codes (also in docs/guide/voice.md).
+pub const VOICE_REPLAY_EXIT_CODES: &str = "Exit codes:
+  0  the replay ran (whatever it measured)
+  1  the transcript could not be read, or the sidecar did not start
+  2  usage error";
 
 /// `shadowrunr voice check` exit codes (also in docs/guide/voice.md).
 pub const VOICE_CHECK_EXIT_CODES: &str = "Exit codes:
@@ -54,6 +86,56 @@ pub async fn run(cfg: &Config, cmd: VoiceCommand) -> u8 {
         VoiceCommand::Say { text, out } => {
             let out = out.map(|o| o.unwrap_or_else(|| default_wav(&cfg.paths.data)));
             say_cmd(cfg, &text, out).await
+        }
+        VoiceCommand::Replay {
+            transcript,
+            speed,
+            workers,
+            lines_in_flight,
+            threads,
+            json,
+            progress,
+        } => {
+            let mut voice = cfg.voice.clone();
+            voice.render_workers = workers.unwrap_or(voice.render_workers);
+            voice.lines_in_flight = lines_in_flight.unwrap_or(voice.lines_in_flight);
+            voice.render_threads = threads.or(voice.render_threads);
+            replay_cmd(voice, &transcript, speed, json, progress).await
+        }
+    }
+}
+
+async fn replay_cmd(
+    voice: super::VoiceConfig,
+    transcript: &Path,
+    speed: f64,
+    json: bool,
+    progress: bool,
+) -> u8 {
+    if let Some(why) = probe::engine_missing(&voice) {
+        eprintln!("error: {why} (run `shadowrunr voice check`)");
+        return 1;
+    }
+    let events = match replay::read_transcript(transcript) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
+    match replay::replay(voice, events, speed, progress).await {
+        Ok(r) if json => {
+            println!("{}", serde_json::to_string(&r).unwrap_or_default());
+            0
+        }
+        Ok(r) => {
+            println!("{}", replay::HEADER);
+            println!("{}", replay::row(&r));
+            0
+        }
+        Err(why) => {
+            eprintln!("error: {why}");
+            1
         }
     }
 }

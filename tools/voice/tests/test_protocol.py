@@ -67,8 +67,12 @@ class Protocol(unittest.TestCase):
         del os.environ["FAKE_ENGINE_LOG"]
         self.tmp.cleanup()
 
-    def sidecar(self, *, timeout_s: float = 20.0, faces: Faces | None = None) -> Sidecar:
-        settings = Settings(engine_dir=self.root, timeout_s=timeout_s, command=FAKE)
+    def sidecar(
+        self, *, timeout_s: float = 20.0, faces: Faces | None = None, workers: int = 3
+    ) -> Sidecar:
+        settings = Settings(
+            engine_dir=self.root, timeout_s=timeout_s, command=FAKE, workers=workers
+        )
         sidecar = Sidecar(settings, self.sink.send, faces=faces)
         self.sidecars.append(sidecar)
         return sidecar
@@ -123,8 +127,9 @@ class Protocol(unittest.TestCase):
             self.assertGreater(len(pcm), 0)
             self.assertEqual(len(pcm) % 2, 0)
             self.assertNotIn("visemes", m)  # omitted, never null
+        # The pool starts them together; which process logs first is the OS's choice.
         self.assertEqual(
-            self.log.read_text(encoding="utf-8").splitlines(),
+            sorted(self.log.read_text(encoding="utf-8").splitlines()),
             ["I am Malakor.", "Kneel before the crypt.", "Your souls are mine."],
         )
 
@@ -154,7 +159,7 @@ class Protocol(unittest.TestCase):
         self.assertIn("timed out after 500 ms", got[0]["reason"])
 
     def test_cancel_kills_the_render_and_skips_queued_lines(self) -> None:
-        sidecar = self.sidecar()
+        sidecar = self.sidecar(workers=1)  # one slot: "queued" really waits
         self.say(sidecar, "slow", "This is SLOW to say. And more after it.")
         self.say(sidecar, "queued", "Never spoken.")
         time.sleep(0.5)  # the slow render is running

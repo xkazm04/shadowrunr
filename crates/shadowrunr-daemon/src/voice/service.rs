@@ -7,11 +7,16 @@
 //!   brain never waits on the voice. When the run's last follower leaves, its feeder stops.
 //! - **The queue.** At most `max_queue` lines wait; a new line past that pushes out the oldest,
 //!   which is `skipped` with `queue_full`.
-//! - **The worker.** One line at a time goes to the [`Renderer`]. A line whose first audio has
-//!   not arrived within `max_lag_ms` of its `say` reaching the daemon is cancelled and
-//!   `skipped` with `late` (also when it is already that old as it leaves the queue). A part
-//!   that fails, or does not arrive within `render_timeout_ms`, skips the rest of the line with
-//!   `error`. Three failed lines in a row turn the status `degraded` until a line speaks again.
+//! - **The worker.** Up to `lines_in_flight` lines are with the [`Renderer`] at once, so it can
+//!   render ahead into the next line while the current one is still going out. Each line's
+//!   frames still go out in turn: a line's frames wait until the line before it is done, so a
+//!   run's utterances stay in seq order. A line whose first audio has not reached the daemon
+//!   within `max_lag_ms` of its `say` reaching the daemon is cancelled and `skipped` with `late`
+//!   (also when it is already that old as it leaves the queue), whether or not its turn has
+//!   come; the sidecar sends lines in order, so a waiting line's clock includes the time the
+//!   lines ahead of it take. A part that fails, or does not arrive within `render_timeout_ms` of
+//!   the part before (or of the line's turn), skips the rest of the line with `error`. Three
+//!   failed lines in a row turn the status `degraded` until a line speaks again.
 //! - **Fan-out.** Frames go out on a broadcast per run; the status is one watch, so a new client
 //!   gets the current status first.
 
@@ -23,8 +28,8 @@ use shadowrunr_types::event::Speaker;
 use shadowrunr_types::voice::{VoiceFrame, VoiceSkip, VoiceState};
 use shadowrunr_types::StreamEvent;
 use tokio::sync::broadcast::error::RecvError;
-use tokio::sync::{broadcast, watch, Notify};
-use tokio::task::JoinHandle;
+use tokio::sync::{broadcast, oneshot, watch, Notify, OwnedSemaphorePermit, Semaphore};
+use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::Instant;
 
 use super::renderer::{duration_ms, Part, Renderer, RendererState};
@@ -342,7 +347,7 @@ async fn watch_renderer(hub: Weak<VoiceHub>, mut rx: watch::Receiver<RendererSta
 }
 
 /// Malakor's `say` text, when the frame is one.
-fn malakor_say(frame: &Frame) -> Option<String> {
+pub(crate) fn malakor_say(frame: &Frame) -> Option<String> {
     if !frame.contains("\"say\"") {
         return None;
     }
@@ -401,51 +406,140 @@ async fn feed(hub: Weak<VoiceHub>, run: Arc<LiveRun>, since: u64) {
     }
 }
 
-/// Speak queued lines one at a time, within the bounds, until `shutdown`.
+/// Hand queued lines to the renderer, up to `lines_in_flight` at once, until `shutdown`. Each
+/// line in flight is its own task, so the renderer can work ahead; their frames still go out one
+/// line after another, in the order the lines left the queue.
 async fn worker(
     hub: Arc<VoiceHub>,
     renderer: Arc<dyn Renderer>,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) {
     tokio::pin!(shutdown);
+    let slots = Arc::new(Semaphore::new(hub.cfg.lines_in_flight.max(1)));
+    // Dropped on return: every line still in flight stops with the worker.
+    let mut flights = JoinSet::new();
+    let mut prev: Option<oneshot::Receiver<()>> = None;
     loop {
+        let slot = tokio::select! {
+            s = slots.clone().acquire_owned() => match s {
+                Ok(s) => s,
+                Err(_) => return,
+            },
+            () = &mut shutdown => return,
+        };
         let line = tokio::select! {
             l = hub.next_line() => l,
             () = &mut shutdown => return,
         };
-        tokio::select! {
-            () = speak(&hub, renderer.as_ref(), &line) => {}
-            () = &mut shutdown => return,
-        }
+        while flights.try_join_next().is_some() {}
+        let (done, next) = oneshot::channel();
+        let order = Order {
+            prev: prev.replace(next),
+            since: None,
+            held: Vec::new(),
+        };
+        flights.spawn(fly(hub.clone(), renderer.clone(), line, slot, order, done));
     }
 }
 
-async fn speak(hub: &VoiceHub, renderer: &dyn Renderer, line: &Line) {
+/// One line's place in the output: its frames wait until the line before it is done.
+struct Order {
+    /// Resolves when the line before is done; `None` once it is (or there was none).
+    prev: Option<oneshot::Receiver<()>>,
+    /// When this line's turn came.
+    since: Option<Instant>,
+    /// Frames made before the turn came.
+    held: Vec<VoiceFrame>,
+}
+
+impl Order {
+    fn emit(&mut self, hub: &VoiceHub, run_id: &str, frame: VoiceFrame) {
+        if self.prev.is_some() {
+            self.held.push(frame);
+        } else {
+            hub.send(run_id, frame);
+        }
+    }
+
+    /// The line before is done (or gone): send what was held, and send directly from now on.
+    fn take_turn(&mut self, hub: &VoiceHub, run_id: &str) {
+        self.prev = None;
+        self.since.get_or_insert_with(Instant::now);
+        for f in self.held.drain(..) {
+            hub.send(run_id, f);
+        }
+    }
+
+    async fn wait_turn(&mut self, hub: &VoiceHub, run_id: &str) {
+        if let Some(p) = self.prev.as_mut() {
+            let _ = p.await;
+        }
+        self.take_turn(hub, run_id);
+    }
+}
+
+/// A line in flight: render it within the bounds, give its slot back as soon as the renderer is
+/// done with it, then send its frames in its turn.
+async fn fly(
+    hub: Arc<VoiceHub>,
+    renderer: Arc<dyn Renderer>,
+    line: Line,
+    slot: OwnedSemaphorePermit,
+    mut order: Order,
+    done: oneshot::Sender<()>,
+) {
+    if order.prev.is_none() {
+        order.take_turn(&hub, &line.run_id);
+    }
+    speak(&hub, renderer.as_ref(), &line, &mut order).await;
+    drop(slot);
+    order.wait_turn(&hub, &line.run_id).await;
+    let _ = done.send(());
+}
+
+async fn speak(hub: &VoiceHub, renderer: &dyn Renderer, line: &Line, order: &mut Order) {
     if !hub.followed(&line.run_id) {
         return;
     }
     let lag_by = line.arrived + Duration::from_millis(hub.cfg.max_lag_ms);
     if Instant::now() >= lag_by {
-        hub.skip(line, 0, VoiceSkip::Late);
+        order.emit(hub, &line.run_id, skipped(line, 0, VoiceSkip::Late));
         return;
     }
     let render = Duration::from_millis(hub.cfg.render_timeout_ms.max(1));
     let id = format!("{}:{}", line.run_id, line.seq);
     let mut parts = renderer.say(&id, &line.text);
     let mut next = 0u32;
+    let mut last_at = Instant::now();
     loop {
-        let render_by = Instant::now() + render;
-        // The first part races the lag bound as well as the render timeout.
-        let (by, late) = if next == 0 && lag_by < render_by {
-            (lag_by, true)
-        } else {
-            (render_by, false)
+        // The render clock runs from the later of the last part and the line's turn. A line
+        // still waiting for its turn has only the lag bound on its first part: the renderer
+        // sends lines in order, so its first part cannot come before the line ahead is done.
+        let render_by = match order.since {
+            Some(t) => Some(t.max(last_at) + render),
+            None if next > 0 => Some(last_at + render),
+            None => None,
         };
-        match tokio::time::timeout_at(by, parts.recv()).await {
+        // The first part races the lag bound as well as the render timeout.
+        let (by, late) = match render_by {
+            Some(r) if next > 0 || r <= lag_by => (r, false),
+            _ => (lag_by, true),
+        };
+        let got = tokio::select! {
+            biased;
+            _ = async { order.prev.as_mut().expect("guarded").await }, if order.prev.is_some() => {
+                order.take_turn(hub, &line.run_id);
+                continue;
+            }
+            got = tokio::time::timeout_at(by, parts.recv()) => got,
+        };
+        match got {
             Ok(Some(Part::Audio(r))) => {
                 next = r.part + 1;
+                last_at = Instant::now();
                 let last = r.last;
-                hub.send(
+                order.emit(
+                    hub,
                     &line.run_id,
                     VoiceFrame::Utterance {
                         id: format!("{id}:{}", r.part),
@@ -466,21 +560,21 @@ async fn speak(hub: &VoiceHub, renderer: &dyn Renderer, line: &Line) {
                 }
             }
             Ok(Some(Part::Error { part, reason })) => {
-                hub.skip(line, part, VoiceSkip::Error);
+                order.emit(hub, &line.run_id, skipped(line, part, VoiceSkip::Error));
                 hub.line_failed(&reason);
                 return;
             }
             Ok(None) => {
-                hub.skip(line, next, VoiceSkip::Error);
+                order.emit(hub, &line.run_id, skipped(line, next, VoiceSkip::Error));
                 hub.line_failed("the renderer dropped the line");
                 return;
             }
             Err(_) => {
                 renderer.cancel(&id);
                 if late {
-                    hub.skip(line, 0, VoiceSkip::Late);
+                    order.emit(hub, &line.run_id, skipped(line, 0, VoiceSkip::Late));
                 } else {
-                    hub.skip(line, next, VoiceSkip::Error);
+                    order.emit(hub, &line.run_id, skipped(line, next, VoiceSkip::Error));
                     hub.line_failed(&format!(
                         "a sentence took longer than {} ms",
                         hub.cfg.render_timeout_ms
@@ -489,6 +583,15 @@ async fn speak(hub: &VoiceHub, renderer: &dyn Renderer, line: &Line) {
                 return;
             }
         }
+    }
+}
+
+fn skipped(line: &Line, part: u32, reason: VoiceSkip) -> VoiceFrame {
+    VoiceFrame::Skipped {
+        run_id: line.run_id.clone(),
+        seq: line.seq,
+        part,
+        reason,
     }
 }
 

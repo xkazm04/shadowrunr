@@ -1004,8 +1004,12 @@ the brain never waits on audio.
   with `visemes: false`.
 - **Bounded:**
   - at most `max_queue` lines wait to render; past that, the oldest is `skipped` with `queue_full`;
+  - at most `lines_in_flight` lines are with the sidecar at once. Their frames still go out one
+    line after another, in seq order: a line's frames wait until the line before it is done;
   - a line whose first sentence has not reached the daemon within `max_lag_ms` of its `say` is
-    `skipped` with `late` (measured at the daemon, not at playback);
+    `skipped` with `late` (measured at the daemon, not at playback). This holds for a line still
+    waiting its turn too, and the sidecar sends lines in order, so its clock includes the lines
+    ahead of it;
   - a failed or timed-out render is `skipped` with `error`, together with the rest of its line.
 - The client plays the audio. Audio is the one clock: the mouth follows playback time, never the
   wall clock.
@@ -1025,6 +1029,9 @@ speaking JSON lines on stdio:
   `visemes` is omitted when the voice has no mouth shapes. `id` is a string, echoed as sent.
   The daemon computes `duration_ms` from the PCM.
 - Out, on failure: `{"type":"error","id","part","reason"}`.
+- Order: lines go out in the order their `say`s arrived, and each line's parts in order, however
+  many sentences render at once (`--workers`). A sentence may render while an earlier line is
+  still going out; it waits for its turn.
 - It exits when its stdin closes.
 - Text goes to sherpa as one argument in an argument list, never through a shell.
 - The espeak-ng data and the engine binary are the operator's install. Neither is bundled.

@@ -147,6 +147,7 @@ async fn malakor_lines_are_spoken_as_ordered_utterances() {
 async fn past_max_queue_the_oldest_line_is_skipped() {
     let (hub, fake) = hub_with(VoiceConfig {
         max_queue: 2,
+        lines_in_flight: 1,
         ..cfg()
     });
     fake.script("busy", Script::Hang);
@@ -166,6 +167,7 @@ async fn past_max_queue_the_oldest_line_is_skipped() {
 async fn a_line_without_audio_within_max_lag_is_late() {
     let (hub, fake) = hub_with(VoiceConfig {
         max_lag_ms: 60,
+        lines_in_flight: 1,
         ..cfg()
     });
     fake.script("slow", Script::Hang);
@@ -319,4 +321,112 @@ async fn the_feeder_stops_with_its_last_follower() {
         next(&mut f.rx).await,
         VoiceFrame::Utterance { seq: 1, .. }
     ));
+}
+
+#[tokio::test]
+async fn lines_in_flight_render_ahead_and_still_go_out_in_seq_order() {
+    let (hub, fake) = hub_with(cfg());
+    fake.script(
+        "slow pair",
+        Script::Speak(vec!["a1".into(), "a2".into()], Duration::from_millis(40)),
+    );
+    let run = Arc::new(LiveRun::new("r".into()));
+    let mut f = hub.follow(&run, false);
+    run.push(say("slow pair"));
+    run.push(say("quick"));
+    // Both lines are with the renderer at once; the second is rendered first.
+    wait_said(&fake, 2).await;
+    let mut got = Vec::new();
+    for _ in 0..3 {
+        match next(&mut f.rx).await {
+            VoiceFrame::Utterance {
+                seq, part, text, ..
+            } => got.push((seq, part, text)),
+            other => panic!("{other:?}"),
+        }
+    }
+    assert_eq!(
+        got,
+        [
+            (1, 0, "a1".to_string()),
+            (1, 1, "a2".to_string()),
+            (2, 0, "quick".to_string())
+        ]
+    );
+}
+
+#[tokio::test]
+async fn at_most_lines_in_flight_lines_are_with_the_renderer() {
+    let (hub, fake) = hub_with(VoiceConfig {
+        lines_in_flight: 2,
+        ..cfg()
+    });
+    for t in ["h1", "h2", "h3"] {
+        fake.script(t, Script::Hang);
+    }
+    let run = Arc::new(LiveRun::new("r".into()));
+    let _f = hub.follow(&run, false);
+    for t in ["h1", "h2", "h3"] {
+        run.push(say(t));
+    }
+    wait_said(&fake, 2).await;
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    assert_eq!(*fake.said.lock().unwrap(), ["r:1", "r:2"]);
+    assert_eq!(hub.queued(), 1, "the third line waits in the queue");
+}
+
+#[tokio::test]
+async fn a_waiting_line_whose_audio_came_in_time_speaks_after_a_late_one() {
+    let (hub, fake) = hub_with(VoiceConfig {
+        max_lag_ms: 60,
+        ..cfg()
+    });
+    fake.script("slow", Script::Hang);
+    let run = Arc::new(LiveRun::new("r".into()));
+    let mut f = hub.follow(&run, false);
+    run.push(say("slow"));
+    run.push(say("ready"));
+    assert_eq!(next(&mut f.rx).await, skipped(1, 0, VoiceSkip::Late));
+    assert!(matches!(
+        next(&mut f.rx).await,
+        VoiceFrame::Utterance {
+            seq: 2,
+            last: true,
+            ..
+        }
+    ));
+    assert_eq!(fake.cancelled.lock().unwrap().front().unwrap(), "r:1");
+}
+
+#[tokio::test]
+async fn a_waiting_line_with_no_audio_is_late_but_keeps_its_place() {
+    let (hub, fake) = hub_with(VoiceConfig {
+        max_lag_ms: 100,
+        ..cfg()
+    });
+    fake.script(
+        "long",
+        Script::Speak(vec!["x1".into(), "x2".into()], Duration::from_millis(80)),
+    );
+    fake.script("stuck", Script::Hang);
+    let run = Arc::new(LiveRun::new("r".into()));
+    let mut f = hub.follow(&run, false);
+    run.push(say("long"));
+    run.push(say("stuck"));
+    // The second line is cancelled on its own clock, before the first is done...
+    for _ in 0..200 {
+        if !fake.cancelled.lock().unwrap().is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+    assert_eq!(*fake.cancelled.lock().unwrap(), ["r:2"]);
+    // ...and its skip still goes out after the first line's audio.
+    for part in 0..2 {
+        assert!(matches!(
+            next(&mut f.rx).await,
+            VoiceFrame::Utterance { seq: 1, part: p, .. } if p == part
+        ));
+    }
+    assert_eq!(next(&mut f.rx).await, skipped(2, 0, VoiceSkip::Late));
 }
