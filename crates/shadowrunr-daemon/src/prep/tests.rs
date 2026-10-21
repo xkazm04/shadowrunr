@@ -719,3 +719,56 @@ fn a_reply_with_one_array_per_kind_parses_every_kind() {
     }
     assert_eq!(schema["properties"]["stories"]["minItems"], 3);
 }
+
+/// The sample prep's checks under the default context (no operator real-names list).
+fn sample_checks(edit: &dyn Fn(&mut StreamPrep)) -> Vec<shadowrunr_types::prep::PrepCheck> {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    let mut p = sample_prep();
+    edit(&mut p);
+    check(&cfg, &p, &Dropped::default()).unwrap()
+}
+
+fn only_failure(checks: &[shadowrunr_types::prep::PrepCheck]) -> (&str, &str) {
+    let failed: Vec<_> = checks
+        .iter()
+        .filter(|c| c.state == PrepCheckState::Fail)
+        .collect();
+    assert_eq!(failed.len(), 1, "{checks:?}");
+    (failed[0].id.as_str(), failed[0].detail.as_str())
+}
+
+#[test]
+fn a_callback_longer_than_the_planner_was_told_fails_shape() {
+    let checks = sample_checks(&|p| {
+        let cb = p.bits.iter_mut().find(|b| b.id == "cb-01").unwrap();
+        cb.lines = vec![
+            "The fog filed a grievance.".into(),
+            "The grievance filed a counter-grievance.".into(),
+            "The clerk stamped both in triplicate.".into(),
+            "Now the fog owns a small office.".into(),
+        ];
+    });
+    let (id, detail) = only_failure(&checks);
+    assert_eq!(id, "shape");
+    assert!(detail.contains("cb-01"), "{detail}");
+}
+
+#[test]
+fn a_premise_without_a_payoff_fails_shape() {
+    let checks = sample_checks(&|p| {
+        let b = p.bits.iter_mut().find(|b| b.id == "prem-01").unwrap();
+        b.payoff = None;
+    });
+    let (id, detail) = only_failure(&checks);
+    assert_eq!(id, "shape");
+    assert!(detail.contains("prem-01"), "{detail}");
+}
+
+/// Guard: the tightened gate keeps the shipped sample green on all nine checks.
+#[test]
+fn the_shipped_sample_still_passes_all_nine_checks() {
+    let checks = sample_checks(&|_| {});
+    assert_eq!(checks.len(), 9);
+    assert!(checks::failed(&checks).is_empty(), "{checks:?}");
+}
