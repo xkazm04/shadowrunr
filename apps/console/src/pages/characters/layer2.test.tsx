@@ -257,7 +257,7 @@ describe("situations link to their verdicts", () => {
     const detail = role("characters-situation");
     expect(detail?.textContent).toContain("Judged in 8 runs of t-scale: 2 failed");
     const links = [...(role("characters-situation-evidence")?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href"));
-    expect(links).toEqual(["#/simulator/verdicts/run-0", "#/brain/transcripts/run-0/10", "#/simulator/verdicts/run-1", "#/brain/transcripts/run-1/10"]);
+    expect(links).toEqual(["#/simulator/verdicts/run-0", "#/brain/transcripts/t-scale%2Frun-0/10", "#/simulator/verdicts/run-1", "#/brain/transcripts/t-scale%2Frun-1/10"]);
   });
 
   it("selects a situation by route from the table", async () => {

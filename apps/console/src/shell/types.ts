@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { LabelOf, PageId } from "../router";
+import type { RouteSchema } from "../router/schema";
 
 /**
  * What a page folder (`src/pages/<id>/`) plugs into the shell. The page builders own these
@@ -16,6 +17,13 @@ export interface PageModule {
   readonly Motif?: ComponentType;
   /** Glance chips on the hovered wall poster. */
   readonly Glance?: ComponentType;
+  /**
+   * The page's URL grammar below its id, declared once. When present the shell derives the
+   * breadcrumb labels and the rise key from it, and replaces a sub it rejects with the deepest
+   * prefix it accepts; `label` and the RISE_DEPTH hand-list are the fallback for pages that
+   * have not declared one yet.
+   */
+  readonly routes?: RouteSchema;
   /** Breadcrumb labels for this page's sub-segments; ids are humanised otherwise. */
   readonly label?: LabelOf;
 }

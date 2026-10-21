@@ -9,6 +9,7 @@ import { useMemo, type CSSProperties } from "react";
 import { useConnection, useRpc } from "../../data";
 import { PosterFrame } from "../../kit/PosterFrame";
 import { RouteLink, pageRoute } from "../../router";
+import { floorRoute, transcriptRoute } from "../../router/brain";
 import { LIVE, runSource, sourceKey, useOnAirFeed, type OnAirFeed } from "./feed";
 import styles from "./Layer1.module.css";
 import type { Feed, FeedSnapshot } from "./player";
@@ -156,7 +157,7 @@ function Scrubber({ snap, feed, events }: { snap: FeedSnapshot; feed: Feed | nul
 
 /** The one preflight query's params (Brain's board reads the same cache entry). */
 const PREFLIGHT_PARAMS = {} as const;
-const PREFLIGHT_BOARD = pageRoute("brain", "preflight");
+const PREFLIGHT_BOARD = floorRoute("preflight");
 
 /** The red checks of the latest pre-flight, by id; empty when none is red or none has run. */
 export function redChecks(reports: PreflightRunResult | undefined): string[] {
@@ -225,7 +226,7 @@ export function Layer1({ active }: { readonly active: boolean }) {
   const { pills, descoped } = pillsOf(tables.data);
   const state = screenState(feed, conn.summary === "offline");
   const run = feed.source?.kind === "run" ? feed.source : null;
-  const chatRoute = run ? pageRoute("brain", "transcripts", run.runId) : pageRoute("brain", "transcripts");
+  const chatRoute = run ? transcriptRoute(run) : floorRoute("transcripts");
   if (!active) return null;
   return (
     <PosterFrame

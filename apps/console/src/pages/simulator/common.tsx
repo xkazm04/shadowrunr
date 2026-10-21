@@ -6,6 +6,7 @@ import { QueryView } from "../../kit";
 import { pageRoute, RouteLink } from "../../router";
 import { EmptyState } from "../../ui/States";
 import { parseRef, pct } from "../../kit/events";
+import { transcriptRoute } from "../../router/brain";
 import { healthColor } from "./ramp";
 import styles from "./l2.module.css";
 
@@ -24,7 +25,7 @@ export function RefLink({ refStr }: { refStr: string }) {
   const r = parseRef(refStr);
   if (!r) return <code className={styles.code}>{refStr}</code>;
   return (
-    <RouteLink to={pageRoute("brain", "transcripts", r.runId, String(r.line))} className={styles.ref} title={refStr}>
+    <RouteLink to={transcriptRoute(r, r.line)} className={styles.ref} title={refStr}>
       L{r.line}
     </RouteLink>
   );
