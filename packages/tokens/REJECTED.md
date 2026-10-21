@@ -19,8 +19,9 @@ palettes." The grain is off the light posters (Characters on paper, Segments on 
 straw), on their face and their layer-1 content, and off the layer-2 spread, which is bone paper
 on every page. The dark posters (On Air, Brain, Simulator, Reconcile) keep it on their face, under
 their layer-1 content. `grain-opacity-spread` (`.32`) is retired with the spread grain. The
-fidelity contract records the exception: `contract.texture.json` holds grain opacity `0` for
-Characters and Segments.
+fidelity contract records the exception: `apps/console/fidelity/exceptions.json` holds grain
+opacity `0` for Characters and Segments as owner exceptions, applied over the captured
+`contract.texture.json` so a recapture cannot erase them.
 
 Sources read: `poster.css`, `l1.css`, `l2.css`, `app.js` (`PAGES`, `SA`) and `sr-kit.js`
 (`RANK_COLORS`, `GRADE_COLORS`).
