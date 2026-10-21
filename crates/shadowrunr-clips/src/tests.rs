@@ -1556,3 +1556,257 @@ async fn the_clip_dir_holds_only_complete_files_while_rendering() {
         .collect();
     assert_eq!(after, want);
 }
+
+// ----- re-cut a candidate by whole lines (challenge-2026-10-21, clips-pipeline B) -----------
+
+fn recut_opts() -> ScanOptions {
+    ScanOptions {
+        hook: false,
+        policy: policy(),
+        care_window_ms: 1_800_000,
+        ffmpeg: None,
+    }
+}
+
+/// The marked moment's candidate (the 300 s "Inspector" beat) of a fresh scan of `run`.
+async fn scanned_moment(store: &ClipStore, run: &RunInput) -> ClipCandidate {
+    let report = scan::scan(store, std::slice::from_ref(run), None, &recut_opts())
+        .await
+        .unwrap();
+    let id = report
+        .top
+        .iter()
+        .find(|s| s.title == "Inspector's case collapses")
+        .expect("the marked moment is a candidate")
+        .id
+        .clone();
+    store.load(&id).unwrap()
+}
+
+/// Every file under a clip dir with its bytes.
+fn snapshot(dir: &Path) -> Vec<(String, Vec<u8>)> {
+    let mut v: Vec<(String, Vec<u8>)> = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_file())
+        .map(|e| {
+            (
+                e.file_name().to_string_lossy().into_owned(),
+                std::fs::read(e.path()).unwrap(),
+            )
+        })
+        .collect();
+    v.sort();
+    v
+}
+
+fn clip_dirs(store: &ClipStore) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(store.root())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    v.sort();
+    v
+}
+
+#[tokio::test]
+async fn a_recut_opening_one_line_earlier_is_a_new_regated_sibling() {
+    let tmp = tempfile::tempdir().unwrap();
+    let run = write_run(tmp.path(), Vec::new());
+    let store = ClipStore::new(&tmp.path().join("data"));
+    let x = scanned_moment(&store, &run).await;
+    let x_files = snapshot(&store.dir(&x.id));
+
+    let y = scan::recut(&store, &run, &x.id, -1, 0, &recut_opts()).unwrap();
+
+    assert_ne!(y.id, x.id, "a recut is a new candidate");
+    let s = Stream::build(
+        "r1",
+        transcript::read_events(&run.dir.join("transcript.jsonl")).unwrap(),
+        &policy(),
+        1_800_000,
+    );
+    let x_first = s
+        .lines
+        .iter()
+        .position(|l| l.line_no == x.source.line_from)
+        .unwrap();
+    let prev = (0..x_first)
+        .rev()
+        .find(|&i| matches!(s.lines[i].who, Who::Host))
+        .unwrap();
+    assert_eq!(y.source.line_from, s.lines[prev].line_no);
+    assert_eq!(y.source.line_to, x.source.line_to);
+    assert_eq!(y.window.spoken_start_ms, window::edge_start(&s, prev));
+    assert_eq!(y.status, ClipStatus::PendingOwnerGate);
+    let first = y.history.first().unwrap();
+    assert!(
+        first.note.as_deref().unwrap_or("").contains(&x.id),
+        "{first:?}"
+    );
+    assert!(scan::is_recut(&y));
+    // The parent is untouched: candidate.json and every draft file byte for byte.
+    assert_eq!(snapshot(&store.dir(&x.id)), x_files);
+    let x_after = store.load(&x.id).unwrap();
+    assert_eq!(
+        serde_json::to_value(&x_after).unwrap(),
+        serde_json::to_value(&x).unwrap()
+    );
+}
+
+#[tokio::test]
+async fn a_recut_over_the_band_is_refused_with_the_figure() {
+    let tmp = tempfile::tempdir().unwrap();
+    let run = write_run(tmp.path(), Vec::new());
+    let store = ClipStore::new(&tmp.path().join("data"));
+    let x = scanned_moment(&store, &run).await;
+    let before = clip_dirs(&store);
+    let err = scan::recut(&store, &run, &x.id, 0, 3, &recut_opts()).unwrap_err();
+    assert!(matches!(err, crate::ClipError::Invalid(_)), "{err}");
+    let msg = err.to_string();
+    assert!(msg.contains("would run "), "{msg}");
+    assert!(msg.contains(" s, over the 35 s band"), "{msg}");
+    let secs: f64 = msg
+        .split("would run ")
+        .nth(1)
+        .and_then(|t| t.split(' ').next())
+        .and_then(|t| t.parse().ok())
+        .expect("the figure");
+    assert!(secs > 35.0, "{msg}");
+    assert_eq!(clip_dirs(&store), before, "no candidate is written");
+}
+
+#[tokio::test]
+async fn a_recut_that_drops_the_setup_is_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let run = write_run(tmp.path(), Vec::new());
+    let store = ClipStore::new(&tmp.path().join("data"));
+    let x = scanned_moment(&store, &run).await;
+    let s = Stream::build(
+        "r1",
+        transcript::read_events(&run.dir.join("transcript.jsonl")).unwrap(),
+        &policy(),
+        1_800_000,
+    );
+    // The payoff is the "Inspector" line; its setup is the line before it.
+    let payoff = s
+        .lines
+        .iter()
+        .position(|l| l.text.contains("Inspector"))
+        .unwrap();
+    let setup = window::setup_line(&s, payoff);
+    let first = s
+        .lines
+        .iter()
+        .position(|l| l.line_no == x.source.line_from)
+        .unwrap();
+    // Open one line past the setup.
+    let k = (setup - first + 1) as i32;
+    let before = clip_dirs(&store);
+    let err = scan::recut(&store, &run, &x.id, k, 0, &recut_opts()).unwrap_err();
+    assert!(matches!(err, crate::ClipError::Invalid(_)), "{err}");
+    assert!(err.to_string().contains("setup"), "{err}");
+    assert_eq!(clip_dirs(&store), before, "nothing written");
+    // One line short of that keeps the setup and lands.
+    if k > 1 {
+        scan::recut(&store, &run, &x.id, k - 1, 0, &recut_opts()).unwrap();
+    }
+}
+
+/// A run where a viewer in care (`grim_8`) is addressed by name on the host line just before
+/// the marked moment's cut: the parent never holds that line, a recut opening one line
+/// earlier does. The renamed line says exactly as long as the line it replaces, so the cut is
+/// the same one.
+async fn care_run(tmp: &Path) -> (ClipStore, RunInput, ClipCandidate) {
+    // Where the marked moment's cut opens, from a plain scan.
+    let probe = tempfile::tempdir().unwrap();
+    let plain = write_run(probe.path(), Vec::new());
+    let probe_store = ClipStore::new(&probe.path().join("data"));
+    let opens = scanned_moment(&probe_store, &plain).await.window.start_ms;
+    let named = LINE.replace("The Spire", "The grim_8");
+    assert_eq!(spoken_ms(&named), spoken_ms(LINE));
+
+    let run = write_run(
+        tmp,
+        vec![
+            chat(20_000, "d1", "grim_8", "honestly i want to end it all"),
+            moderation(20_000, "care_state", Some("d1"), "started"),
+        ],
+    );
+    let path = run.dir.join("transcript.jsonl");
+    let text: String = std::fs::read_to_string(&path)
+        .unwrap()
+        .lines()
+        .map(|l| {
+            let mut v: Value = serde_json::from_str(l).unwrap();
+            if v["type"] == "say" && v["ts_ms"] == json!(opens - 5_000) {
+                v["text"] = json!(named);
+            }
+            v.to_string() + "\n"
+        })
+        .collect();
+    std::fs::write(&path, text).unwrap();
+    let store = ClipStore::new(&tmp.join("data"));
+    let x = scanned_moment(&store, &run).await;
+    assert_eq!(x.window.start_ms, opens, "the same cut as the plain run");
+    (store, run, x)
+}
+
+#[tokio::test]
+async fn a_recut_recomputes_care_state_from_the_whole_stream() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, run, x) = care_run(tmp.path()).await;
+    let state = |c: &ClipCandidate| {
+        c.gate
+            .checks
+            .iter()
+            .find(|k| k.id.as_str() == "care_state")
+            .unwrap()
+            .state
+    };
+    assert_eq!(
+        state(&x),
+        GateState::Pass,
+        "the parent never addresses them"
+    );
+    let y = scan::recut(&store, &run, &x.id, -1, 0, &recut_opts()).unwrap();
+    assert_eq!(state(&y), GateState::Fail);
+    assert!(y.gate.held);
+}
+
+#[tokio::test]
+async fn a_recut_redacts_a_chatter_it_pulls_in() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, run, x) = care_run(tmp.path()).await;
+    let y = scan::recut(&store, &run, &x.id, -1, 0, &recut_opts()).unwrap();
+    assert!(
+        y.captions
+            .iter()
+            .any(|c| c.text.contains("The [viewer] records")),
+        "{:?}",
+        y.captions
+    );
+    assert!(y.captions.iter().all(|c| !c.text.contains("grim_8")));
+    for f in ["clip.json", "captions.srt", "candidate.json"] {
+        let t = std::fs::read_to_string(store.dir(&y.id).join(f)).unwrap();
+        assert!(!t.contains("grim_8"), "{f} carries the handle");
+    }
+}
+
+#[tokio::test]
+async fn a_rescan_keeps_the_owner_s_recut() {
+    let tmp = tempfile::tempdir().unwrap();
+    let run = write_run(tmp.path(), Vec::new());
+    let store = ClipStore::new(&tmp.path().join("data"));
+    let x = scanned_moment(&store, &run).await;
+    let y = scan::recut(&store, &run, &x.id, -1, 0, &recut_opts()).unwrap();
+    let report = scan::scan(&store, std::slice::from_ref(&run), None, &recut_opts())
+        .await
+        .unwrap();
+    assert_eq!(report.kept, 1, "the recut is kept");
+    let again = store.load(&y.id).unwrap();
+    assert_eq!(again.source.line_from, y.source.line_from);
+    assert_eq!(again.history, y.history, "untouched by the rescan");
+}

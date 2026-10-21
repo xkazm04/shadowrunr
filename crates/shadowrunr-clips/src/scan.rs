@@ -11,7 +11,8 @@
 //! A run with a `voice.jsonl` is cut on the voice's real timing ([`Stream::apply_voice`]).
 //!
 //! A rescan replaces the run's untouched candidates and keeps every one the owner has
-//! already approved or rejected; watched feedback carries over to the same cut.
+//! already approved or rejected, and every recut the owner made ([`recut`]); watched feedback
+//! carries over to the same cut.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -844,6 +845,7 @@ pub async fn scan(
         let owner_acted = |c: &ClipCandidate| {
             c.approval.is_some()
                 || c.rejection.is_some()
+                || is_recut(c)
                 || !matches!(
                     c.status,
                     ClipStatus::RenderedDraft | ClipStatus::PendingOwnerGate
@@ -870,33 +872,14 @@ pub async fn scan(
                 continue;
             }
             c.feedback = feedback.get(c.id.as_str()).map(|f| (*f).clone());
-            let dir = store.dir(&c.id);
-            let pending = if c.recording.is_some() {
-                "not cut yet: `shadowrunr clips render <id>` cuts the recording"
-            } else {
-                "not recorded yet: `shadowrunr clips render <id>` records the stage when the tools exist"
-            };
-            let r = render::write_draft(&dir, &c, &input_json, pending)?;
-            c.history.push(ClipTransition {
-                status: ClipStatus::RenderedDraft,
-                at_ms: r.rendered_ms,
-                by: "render".into(),
-                note: Some("poster frame, caption tracks and stage input".into()),
-            });
-            c.render = Some(r);
-            regate(store, &mut c, exclusions);
-            c.status = ClipStatus::PendingOwnerGate;
-            c.history.push(ClipTransition {
-                status: ClipStatus::PendingOwnerGate,
-                at_ms: c.gate.evaluated_ms,
-                by: "gate".into(),
-                note: Some(if c.gate.held {
-                    format!("held: {}", c.gate.hold_reasons.len())
-                } else {
-                    "every check passed; waits for the owner's signature".into()
-                }),
-            });
-            store.save(&c)?;
+            draft(
+                store,
+                &mut c,
+                &input_json,
+                exclusions,
+                "render",
+                "poster frame, caption tracks and stage input".into(),
+            )?;
             report.written += 1;
             fresh.push(c);
         }
@@ -905,6 +888,208 @@ pub async fn scan(
     fresh.sort_by(|a, b| b.score.total_cmp(&a.score));
     report.top = fresh.iter().take(10).map(store::summary).collect();
     Ok(report)
+}
+
+/// Write a drafted candidate: its draft files, the gate over `exclusions` plus the render
+/// checks, and its first two history entries (the draft, by `by` with `note`, then the gate).
+/// The caller holds the store lock.
+fn draft(
+    store: &ClipStore,
+    c: &mut ClipCandidate,
+    input_json: &ClipInput,
+    exclusions: Vec<shadowrunr_types::clips::GateCheck>,
+    by: &str,
+    note: String,
+) -> Result<()> {
+    let dir = store.dir(&c.id);
+    let pending = if c.recording.is_some() {
+        "not cut yet: `shadowrunr clips render <id>` cuts the recording"
+    } else {
+        "not recorded yet: `shadowrunr clips render <id>` records the stage when the tools exist"
+    };
+    let r = render::write_draft(&dir, c, input_json, pending)?;
+    c.history.push(ClipTransition {
+        status: ClipStatus::RenderedDraft,
+        at_ms: r.rendered_ms,
+        by: by.into(),
+        note: Some(note),
+    });
+    c.render = Some(r);
+    regate(store, c, exclusions);
+    c.status = ClipStatus::PendingOwnerGate;
+    c.history.push(ClipTransition {
+        status: ClipStatus::PendingOwnerGate,
+        at_ms: c.gate.evaluated_ms,
+        by: "gate".into(),
+        note: Some(if c.gate.held {
+            format!("held: {}", c.gate.hold_reasons.len())
+        } else {
+            "every check passed; waits for the owner's signature".into()
+        }),
+    });
+    store.save(c)
+}
+
+/// Who a recut's first history entry is by: the mark a rescan keeps it by.
+pub const RECUT_BY: &str = "recut";
+
+/// The owner made this candidate with `clips recut`: a rescan keeps it.
+pub fn is_recut(c: &ClipCandidate) -> bool {
+    c.history.first().is_some_and(|h| h.by == RECUT_BY)
+}
+
+/// Re-cut candidate `id` by whole lines (`clips recut`): its first line moves `open` lines
+/// (negative is earlier) and its last line `close` lines, a viewer's question travelling with
+/// the line that answers it. The result is a NEW candidate under its own id, built from the
+/// run's transcript (and voice log) read again: fresh captions and redaction, fresh evidence,
+/// and the exclusions recomputed over the whole stream, then gated from the first check at
+/// `pending_owner_gate`. Its first history entry names the parent, which is left untouched.
+/// The hook read and the loudness are the parent's, carried with a note (they were measured
+/// on the parent's window). Refused, nothing written, when the window would drop the payoff
+/// or its setup or run over its segment's band ([`window::cut_lines`]), or when another
+/// candidate already holds those lines.
+pub fn recut(
+    store: &ClipStore,
+    input: &RunInput,
+    id: &str,
+    open: i32,
+    close: i32,
+    opts: &ScanOptions,
+) -> Result<ClipCandidate> {
+    use crate::ClipError;
+    let parent = store.load(id)?;
+    if parent.source.run_id != input.run_id || parent.source.tournament_id != input.tournament_id {
+        return Err(ClipError::Invalid(format!(
+            "clip {id} was cut from run {}, not {}",
+            parent.source.run_id, input.run_id
+        )));
+    }
+    if open == 0 && close == 0 {
+        return Err(ClipError::Invalid(
+            "the recut moves no edge: give --open and/or --close as +-lines".into(),
+        ));
+    }
+    let events = transcript::read_events(&input.dir.join("transcript.jsonl"))?;
+    let mut stream = Stream::build(&input.run_id, events, &opts.policy, opts.care_window_ms);
+    if let Some(timing) = voice::read(&input.dir)? {
+        stream.apply_voice(&timing);
+    }
+    // Whole lines: one transcript line each, a viewer's question with its answer.
+    let mut units: Vec<(u32, usize, usize)> = Vec::new();
+    for (i, l) in stream.lines.iter().enumerate() {
+        match units.last_mut() {
+            Some(u) if u.0 == l.line_no => u.2 = i,
+            _ => units.push((l.line_no, i, i)),
+        }
+    }
+    let unit_of = |line_no: u32| {
+        units.iter().position(|u| u.0 == line_no).ok_or_else(|| {
+            ClipError::Invalid(format!(
+                "run {}'s transcript no longer holds line {line_no}",
+                input.run_id
+            ))
+        })
+    };
+    let (ua, ub) = (
+        unit_of(parent.source.line_from)?,
+        unit_of(parent.source.line_to)?,
+    );
+    let moved = |u: usize, by: i32, edge: &str| -> Result<usize> {
+        let to = u as i64 + by as i64;
+        if to < 0 || to >= units.len() as i64 {
+            return Err(ClipError::Invalid(format!(
+                "the {edge} edge would move {by:+} lines, past the run's {} spoken line(s)",
+                units.len()
+            )));
+        }
+        Ok(to as usize)
+    };
+    let (na, nb) = (moved(ua, open, "opening")?, moved(ub, close, "closing")?);
+    if na > nb {
+        return Err(ClipError::Invalid("the recut would hold no line".into()));
+    }
+
+    let beat = stream
+        .beats
+        .iter()
+        .position(|b| b.ts_ms == parent.window.anchor_ms)
+        .ok_or_else(|| {
+            ClipError::Invalid(format!(
+                "run {}'s transcript no longer holds the beat at {}",
+                input.run_id,
+                clock(parent.window.anchor_ms)
+            ))
+        })?;
+    let markers = signals::markers(&stream);
+    let crowd = signals::crowd(&stream);
+    let marker = signals::beat_marker(&stream, beat, &markers);
+    let payoff = window::payoff_line(
+        &stream,
+        beat,
+        marker.map(|i| (&markers[i].kind, markers[i].label.as_str())),
+    );
+    let segment = stream.segment_at(stream.beats[beat].ts_ms);
+    let cut = window::cut_lines(&stream, units[na].1, units[nb].2, payoff, band_for(segment))
+        .map_err(|why| ClipError::Invalid(format!("recut of {id}: {why}")))?;
+
+    // The parent's measured reads, carried: they were taken on its window.
+    let s = &parent.signals;
+    let p = Pre {
+        beat,
+        payoff,
+        marker,
+        crowd: crowd[beat],
+        segment,
+        cut,
+        hook: s.hook.map(|h| (h, s.hook_why.clone().unwrap_or_default())),
+        audio: match (s.audio, s.audio_db) {
+            (Some(a), Some(db)) => Ok((a, db)),
+            _ => Err(s
+                .unmeasured
+                .get("audio")
+                .cloned()
+                .unwrap_or_else(|| format!("unmeasured on {id}"))),
+        },
+        score: parent.score,
+    };
+    let recording = footage::read_recording(&input.dir);
+    let run = RunCtx {
+        input,
+        recording: recording.as_ref(),
+        stream_db: s.audio_stream_db,
+    };
+    let re = redactor(&stream.viewer_names);
+    let now = now_ms();
+    let (mut c, input_json) = candidate(
+        &stream,
+        &run,
+        &p,
+        parent.rank,
+        &markers,
+        &opts.policy,
+        re.as_ref(),
+        now,
+    );
+    if p.hook.is_some() || p.audio.is_ok() {
+        c.scoring.provenance.push_str(&format!(
+            "; hook and audio carried from {id}'s window, not re-measured on this cut"
+        ));
+    }
+    let exclusions = gate::exclusions(&stream, &p.cut, &opts.policy);
+    let note = format!(
+        "recut of {id} (open {open:+}, close {close:+}): lines {}-{} -> {}-{}; poster frame, caption tracks and stage input",
+        parent.source.line_from, parent.source.line_to, c.source.line_from, c.source.line_to
+    );
+
+    let _lock = store.lock()?;
+    if c.id == parent.id || store.exists(&c.id) {
+        return Err(ClipError::Conflict(format!(
+            "clip {} already holds lines {}-{}",
+            c.id, c.source.line_from, c.source.line_to
+        )));
+    }
+    draft(store, &mut c, &input_json, exclusions, RECUT_BY, note)?;
+    store.load(&c.id)
 }
 
 /// Re-render a stored candidate (`clips render`): refused once the owner has approved,

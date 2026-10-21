@@ -162,18 +162,22 @@ pub fn payoff_line(stream: &Stream, beat: usize, marker: Option<(&MarkerKind, &s
     }
 }
 
+/// The setup the payoff cannot lose: its question when the beat opens on one, else the line
+/// before it.
+pub fn setup_line(stream: &Stream, payoff: usize) -> usize {
+    if matches!(stream.lines[payoff].who, Who::Viewer { .. }) || payoff == 0 {
+        payoff
+    } else {
+        payoff - 1
+    }
+}
+
 /// The cut around the payoff line `payoff` (an index into `stream.lines`).
 pub fn cut(stream: &Stream, payoff: usize, band: Band) -> Cut {
     let lines = &stream.lines;
     let (pf, pl) = (payoff, payoff);
     let payoff_start = lines[pf].spoken_start;
-    // The setup the payoff cannot lose: its question when the beat opens on one, else the
-    // line before it.
-    let min_first = if matches!(lines[pf].who, Who::Viewer { .. }) || pf == 0 {
-        pf
-    } else {
-        pf - 1
-    };
+    let min_first = setup_line(stream, pf);
     let target = payoff_start - PREROLL_MS;
     // The last line that starts at or before the target: the edge only ever moves earlier.
     // A scan, not a bisection: on real timing an unheard line keeps its stream-clock time, so
@@ -235,4 +239,61 @@ pub fn cut(stream: &Stream, payoff: usize, band: Band) -> Cut {
         needs_reauthoring,
         note,
     }
+}
+
+/// An owner's cut over exactly lines `first..=last` around the payoff line `payoff`, with the
+/// same edge snapping as [`cut`]. Refused, with the figure, when it would drop the payoff or
+/// its setup ([`setup_line`]) or run over the band: the setup is never cut to meet the band,
+/// and a recut is never longer than the band allows. Under the band's minimum it is held on
+/// the last line, as [`cut`] holds it.
+pub fn cut_lines(
+    stream: &Stream,
+    first: usize,
+    last: usize,
+    payoff: usize,
+    band: Band,
+) -> Result<Cut, String> {
+    let lines = &stream.lines;
+    if first > last || last >= lines.len() {
+        return Err("the window would hold no line".into());
+    }
+    if last < payoff {
+        return Err(format!(
+            "the window would close on line {}, before the payoff (line {})",
+            lines[last].line_no, lines[payoff].line_no
+        ));
+    }
+    let min_first = setup_line(stream, payoff);
+    if first > min_first {
+        return Err(format!(
+            "the window would open on line {}, after the payoff's setup (line {}): the setup is never cut",
+            lines[first].line_no, lines[min_first].line_no
+        ));
+    }
+    let start = edge_start(stream, first);
+    let mut end = edge_end(stream, last);
+    if end - start > band.max_ms {
+        return Err(format!(
+            "the window would run {:.1} s, over the {} s band",
+            (end - start) as f64 / 1000.0,
+            band.max_ms / 1000
+        ));
+    }
+    let mut note = None;
+    if end - start < band.min_ms {
+        end = start + band.min_ms;
+        note = Some(format!(
+            "held on the last line to the band's {} s minimum",
+            band.min_ms / 1000
+        ));
+    }
+    Ok(Cut {
+        first,
+        last,
+        spoken_start: start,
+        spoken_end: end,
+        preroll_ms: lines[payoff].spoken_start - start,
+        needs_reauthoring: false,
+        note,
+    })
 }
