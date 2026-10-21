@@ -6,7 +6,10 @@ time out), ``PAUSE<n>`` sleeps ``n`` tenths of a second. Otherwise it writes ``0
 per word at 24 kHz and, with ``--debug=1``, prints one token line. Every run appends its text to
 the file named by ``FAKE_ENGINE_LOG``, so a test can see which sentences were started; with
 ``FAKE_ENGINE_SPANS`` it also appends ``start <text>`` and ``end <text>`` around its work there,
-so a test can see which runs overlapped.
+so a test can see which runs overlapped. ``HOLD<NAME>`` (capital letters) holds the run after its
+``start`` line until a file ``<NAME>`` exists in the folder named by ``FAKE_ENGINE_GATES`` - an event
+the test controls, so which runs overlap and which ends first never rests on the clock. A gate that
+never opens fails the run after ``GATE_WAIT_S``.
 """
 
 from __future__ import annotations
@@ -17,6 +20,58 @@ import re
 import sys
 import time
 import wave
+from pathlib import Path
+
+GATE_WAIT_S = 15.0
+# A byte far past any log's end: locking it serialises the appends without blocking the test's reads.
+LOCK_AT = 1 << 30
+
+
+def note(path: str, line: str) -> None:
+    """Append one line. Runs released together append together. POSIX makes each O_APPEND write
+    atomic; Windows seeks, then writes, so two runs can land on the same offset and one line is
+    lost. There the append goes under a byte-range lock, which the OS drops if a run is killed."""
+    data = (line + "\n").encode("utf-8")
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0))
+    try:
+        if os.name != "nt":
+            os.write(fd, data)
+            return
+        import msvcrt
+
+        os.lseek(fd, LOCK_AT, os.SEEK_SET)
+        while True:
+            try:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                break
+            except OSError:  # held by another run (LK_LOCK would retry only once a second)
+                time.sleep(0.002)
+        try:
+            os.write(fd, data)
+        finally:
+            os.lseek(fd, LOCK_AT, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    finally:
+        os.close(fd)
+
+
+def hold(text: str) -> bool:
+    """Wait for this run's gate, when it names one. False when the gate never opened."""
+    gate = re.search(r"HOLD([A-Z]+)", text)
+    if not gate:
+        return True
+    folder = os.environ.get("FAKE_ENGINE_GATES")
+    if not folder:
+        print("fake engine: HOLD without FAKE_ENGINE_GATES", file=sys.stderr)
+        return False
+    path = Path(folder) / gate.group(1)
+    deadline = time.monotonic() + GATE_WAIT_S
+    while not path.exists():
+        if time.monotonic() > deadline:
+            print(f"fake engine: gate {gate.group(1)} never opened", file=sys.stderr)
+            return False
+        time.sleep(0.01)
+    return True
 
 
 def main(argv: list[str]) -> int:
@@ -24,12 +79,12 @@ def main(argv: list[str]) -> int:
     text = argv[-1]
     log = os.environ.get("FAKE_ENGINE_LOG")
     if log:
-        with open(log, "a", encoding="utf-8") as f:
-            f.write(text.strip() + "\n")
+        note(log, text.strip())
     spans = os.environ.get("FAKE_ENGINE_SPANS")
     if spans:
-        with open(spans, "a", encoding="utf-8") as f:
-            f.write(f"start {text.strip()}\n")
+        note(spans, f"start {text.strip()}")
+    if not hold(text):
+        return 4
     if "FAIL" in text:
         print("fake engine: told to fail", file=sys.stderr)
         return 3
@@ -52,8 +107,7 @@ def main(argv: list[str]) -> int:
     if flags.get("--debug") == "1":
         print("0 50 " + " ".join("16" for _ in range(words)) + " 0")
     if spans:
-        with open(spans, "a", encoding="utf-8") as f:
-            f.write(f"end {text.strip()}\n")
+        note(spans, f"end {text.strip()}")
     return 0
 
 
