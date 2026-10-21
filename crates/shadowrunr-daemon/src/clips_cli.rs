@@ -8,7 +8,7 @@ use shadowrunr_types::clips::{
     ClipCandidate, ClipPlatform, ClipScanSource, ClipStatus, ClipSummary, ClipsListParams,
 };
 
-use crate::clips::{input_from_dir, inputs, options, render};
+use crate::clips::{input_from_dir, inputs, options, recut, render};
 use crate::config::Config;
 use crate::rpc::RpcError;
 
@@ -62,6 +62,20 @@ pub enum ClipsCommand {
     /// a headless Chromium are available, else a poster frame plus caption tracks.
     Render {
         id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Re-cut a candidate by whole lines into a NEW candidate, gated again from the first
+    /// check against the whole stream (the original is left as it was). The window stays in
+    /// its segment's band and never drops the payoff's setup line.
+    Recut {
+        id: String,
+        /// Move the opening edge by whole lines: -1 opens one line earlier, +1 one later.
+        #[arg(long, default_value_t = 0, allow_hyphen_values = true)]
+        open: i32,
+        /// Move the closing edge by whole lines: +1 closes one line later, -1 one earlier.
+        #[arg(long, default_value_t = 0, allow_hyphen_values = true)]
+        close: i32,
         #[arg(long)]
         json: bool,
     },
@@ -431,6 +445,49 @@ pub async fn run(cfg: &Config, cmd: ClipsCommand) -> Result<ExitCode, String> {
             } else {
                 show(&c);
                 println!("files: {}", store.dir(&c.id).display());
+            }
+        }
+        ClipsCommand::Recut {
+            id,
+            open,
+            close,
+            json,
+        } => {
+            let c = recut(cfg, &id, open, close).map_err(msg)?;
+            if json {
+                print_json(&c);
+            } else {
+                let w = &c.window;
+                println!(
+                    "{}  recut of {id} (open {open:+}, close {close:+})  {}",
+                    c.id,
+                    wire(&c.status)
+                );
+                println!(
+                    "window: lines {}-{}, stream {}-{}, {:.1} s, pre-roll {:.1} s, band {}-{} s ({}){}",
+                    c.source.line_from,
+                    c.source.line_to,
+                    clock(w.start_ms),
+                    clock(w.end_ms),
+                    w.duration_s,
+                    w.preroll_ms as f64 / 1000.0,
+                    w.band_s[0],
+                    w.band_s[1],
+                    w.style,
+                    w.note
+                        .as_deref()
+                        .map(|n| format!("; {n}"))
+                        .unwrap_or_default()
+                );
+                println!(
+                    "gate: {}",
+                    if c.gate.held {
+                        format!("HELD ({})", c.gate.hold_reasons.join("; "))
+                    } else {
+                        "clear; waits for the owner's signature".to_string()
+                    }
+                );
+                println!("next: shadowrunr clips show {}", c.id);
             }
         }
         ClipsCommand::Approve {

@@ -554,3 +554,124 @@ fn preflight_fix_is_idempotent() {
     assert!(text.contains("nothing to fix"), "{text}");
     assert!(!row(&text, "PF-03").contains("fixed"), "{text}");
 }
+
+/// A five-minute SEG-01 run under `<tmp>/runs/sim/fixture-t/recut-run`: a host line every 5 s
+/// and one marked moment at 150 s.
+fn write_recut_run(tmp: &Path) -> PathBuf {
+    let dir = tmp.join("runs/sim/fixture-t/recut-run");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut lines = vec![
+        serde_json::json!({"type": "stream_start", "ts_ms": 0, "stream_id": "recut-run",
+            "character": "malakor", "tone_variant": "theatrical", "core_tier": "haiku",
+            "audience_size": 3}),
+        serde_json::json!({"type": "segment_start", "ts_ms": 0, "segment": "SEG-01"}),
+    ];
+    for k in 1..=60 {
+        let ts = k * 5_000;
+        let text = if ts == 150_000 {
+            "And so the Inspector's case collapses like a rented throne.".to_string()
+        } else {
+            format!("Line {k}: the Spire records every deficit, minion, and the ledger glows.")
+        };
+        lines.push(
+            serde_json::json!({"type": "say", "ts_ms": ts, "speaker": "malakor", "text": text}),
+        );
+        if ts == 150_000 {
+            lines.push(serde_json::json!({"type": "op", "ts_ms": ts,
+                "op": {"op": "mark_moment", "label": "Inspector's case collapses"}}));
+        }
+    }
+    lines.push(
+        serde_json::json!({"type": "stream_end", "ts_ms": 300_001, "reason": "sim_complete"}),
+    );
+    let text: String = lines.iter().map(|v| v.to_string() + "\n").collect();
+    std::fs::write(dir.join("transcript.jsonl"), text).unwrap();
+    dir
+}
+
+#[test]
+fn clips_recut_cli_prints_the_new_candidate_and_its_gate() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_config(tmp.path(), &repo().join("characters"));
+    write_recut_run(tmp.path());
+    let scan = shadowrunr(
+        tmp.path(),
+        &[
+            "clips",
+            "scan",
+            "--run",
+            "runs/sim/fixture-t/recut-run",
+            "--no-hook",
+            "--scripted",
+            "--json",
+        ],
+    );
+    let report: serde_json::Value = serde_json::from_slice(&scan.stdout).unwrap_or_else(|e| {
+        panic!(
+            "{e}\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&scan.stdout),
+            String::from_utf8_lossy(&scan.stderr)
+        )
+    });
+    let x = report["top"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["title"] == "Inspector's case collapses")
+        .unwrap_or_else(|| panic!("{report}"))["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let out = shadowrunr(tmp.path(), &["clips", "recut", &x, "--open", "-1"]);
+    let text = stdout(&out);
+    assert!(
+        out.status.success(),
+        "{text}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let first = text.lines().next().unwrap_or("");
+    let y = first.split_whitespace().next().unwrap_or("").to_string();
+    assert!(y.starts_with("clip-") && y != x, "{text}");
+    assert!(first.contains(&format!("recut of {x}")), "{text}");
+    assert!(text.contains("window: lines "), "{text}");
+    assert!(text.contains("band 25-35 s"), "{text}");
+    assert!(text.lines().any(|l| l.starts_with("gate: ")), "{text}");
+
+    // --json prints the ClipCandidate (other lines, so a new id again).
+    let out = shadowrunr(
+        tmp.path(),
+        &[
+            "clips", "recut", &x, "--open", "-1", "--close", "-1", "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}
+stderr: {}",
+        stdout(&out),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let c: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(c["status"], "pending_owner_gate", "{c}");
+    assert!(c["gate"]["checks"].as_array().is_some(), "{c}");
+    assert!(c["window"]["spoken_start_ms"].as_i64().is_some(), "{c}");
+    assert!(c["history"][0]["note"]
+        .as_str()
+        .unwrap()
+        .contains(&format!("recut of {x}")));
+    // Past the band: refused with the figure, non-zero, nothing printed on stdout.
+    let out = shadowrunr(tmp.path(), &["clips", "recut", &x, "--open", "-2"]);
+    assert!(!out.status.success());
+    assert!(out.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("over the 35 s band"));
+    // The parent is still there, untouched by all of them.
+    let show = shadowrunr(tmp.path(), &["clips", "show", &x, "--json"]);
+    let parent: serde_json::Value = serde_json::from_slice(&show.stdout).unwrap();
+    assert_eq!(parent["id"], x.as_str());
+    assert!(parent["history"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|h| h["by"] != "recut"));
+}
