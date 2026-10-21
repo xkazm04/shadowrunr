@@ -6,16 +6,13 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use serde_json::Value;
 use shadowrunr_types::{CheckState, Rank, Role, SegmentId, Speaker, StreamEvent, TsMs};
 
+use crate::cells;
 use crate::runs::{ts, wire, RunData};
 use crate::stats::{percentile, rate};
 use crate::types::{
     DirectiveOutcome, HandoverTiming, IncidentSource, LatencyStats, Metrics, RankEngagement,
-    RankRow, RoleLatency, RuleFailure, RuleIncident, RunSummary, SegmentMetrics, ToneFinding,
+    RankRow, RoleLatency, RuleIncident, RunSummary, SegmentMetrics, ToneFinding,
 };
-
-/// Judge checks a brief adds (`directive:prevent:<id>`, `directive:try:<id>`): reported as
-/// directive outcomes, never as red-line incidents.
-const DIRECTIVE_CHECK_PREFIX: &str = "directive:";
 
 /// Per-directive outcomes over the runs' verdicts (WP15): held rates for prevent directives,
 /// attempted rates for try directives, each with n and its bound. The aggregation is the
@@ -264,67 +261,27 @@ fn mean(v: &[f64]) -> Option<f64> {
     (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64)
 }
 
+/// One finding per tone x instrument hash, from the shared tally (directive checks are
+/// directive outcomes, not tone findings).
 fn tones(runs: &[RunData]) -> Vec<ToneFinding> {
-    type Key = (String, Option<String>);
-    #[derive(Default)]
-    struct Cell {
-        runs: u32,
-        quality: BTreeMap<String, (u32, u32)>,
-        rules: BTreeMap<String, (u32, u32, Vec<String>)>,
-    }
-    let mut cells: BTreeMap<Key, Cell> = BTreeMap::new();
-    for run in runs {
-        let Some(verdict) = &run.verdict else {
-            continue;
-        };
+    let mut by: BTreeMap<(String, Option<String>), Vec<&RunData>> = BTreeMap::new();
+    for run in runs.iter().filter(|r| r.verdict.is_some()) {
         let key = (
             run.tone_variant().unwrap_or_else(|| "unknown".into()),
             run.instrument_hash.clone(),
         );
-        let cell = cells.entry(key).or_default();
-        cell.runs += 1;
-        for q in &verdict.quality {
-            let e = cell.quality.entry(q.dimension.clone()).or_default();
-            e.1 += 1;
-            if q.value {
-                e.0 += 1;
-            }
-        }
-        for r in &verdict.rules {
-            let e = cell.rules.entry(r.rule.clone()).or_default();
-            match r.state {
-                CheckState::Fail => {
-                    e.0 += 1;
-                    e.1 += 1;
-                    e.2.extend(r.evidence.iter().cloned());
-                }
-                CheckState::Pass => e.1 += 1,
-                CheckState::NotProvoked | CheckState::NotEvaluable => {}
-            }
-        }
+        by.entry(key).or_default().push(run);
     }
-    cells
-        .into_iter()
-        .map(|((tone_variant, instrument_hash), c)| ToneFinding {
-            tone_variant,
-            quality_rates: c
-                .quality
-                .into_iter()
-                .filter_map(|(d, (k, n))| rate(k, n).map(|r| (d, r)))
-                .collect(),
-            rule_failures: c
-                .rules
-                .into_iter()
-                .filter(|(_, (fails, _, _))| *fails > 0)
-                .map(|(rule, (fails, n, refs))| RuleFailure {
-                    rule,
-                    fails,
-                    n,
-                    refs,
-                })
-                .collect(),
-            instrument_hash,
-            runs: c.runs,
+    by.into_iter()
+        .map(|((tone_variant, instrument_hash), runs)| {
+            let t = cells::tally(runs);
+            ToneFinding {
+                tone_variant,
+                quality_rates: t.quality_rates(),
+                rule_failures: t.rule_failures(),
+                instrument_hash,
+                runs: t.runs,
+            }
         })
         .collect()
 }
@@ -377,12 +334,8 @@ fn red_lines(runs: &[RunData]) -> Vec<RuleIncident> {
     let mut out = Vec::new();
     for run in runs {
         if let Some(v) = &run.verdict {
-            for r in v
-                .rules
-                .iter()
-                .filter(|r| r.state == CheckState::Fail)
-                .filter(|r| !r.rule.starts_with(DIRECTIVE_CHECK_PREFIX))
-            {
+            // Directive checks are directive outcomes, never red-line incidents.
+            for r in cells::hard_rules(v).filter(|r| r.state == CheckState::Fail) {
                 out.push(RuleIncident {
                     run_id: run.run_id.clone(),
                     rule: r.rule.clone(),
