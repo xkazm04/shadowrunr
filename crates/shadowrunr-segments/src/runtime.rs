@@ -1554,16 +1554,58 @@ impl SegmentRuntime {
         }
     }
 
-    fn apply_op(&mut self, now_ms: TsMs, op: &Op) -> Result<Vec<StreamEvent>, &'static str> {
+    /// Whether the op `tag` may be applied now, whatever its arguments: the gate's
+    /// tag-level rules, in the order [`Self::apply_op`] checks them. The op menu
+    /// ([`Self::context`]) is this rule's view, and the state summary's `not now:` line names
+    /// each withheld tag with its `Err`. Argument checks (`unknown_hex`, `reveal_not_due`,
+    /// `invalid_poll_options`...) stay in `apply_op`, so an op on the menu may still be
+    /// refused for what it names.
+    fn availability(&self, tag: &str) -> Result<(), &'static str> {
         if self.signed_off {
             return Err("signed_off");
         }
-        if !self.table.allows_op(op_tag(op)) {
+        if !self.table.allows_op(tag) {
             return Err("op_not_allowed");
         }
         // The state narrows the segment's ops (the cold open holds polls and foils back).
-        if !self.table.allows_op_in(&self.state, op_tag(op)) {
+        if !self.table.allows_op_in(&self.state, tag) {
             return Err("not_in_state");
+        }
+        match tag {
+            "start_poll" => {
+                if self.poll.is_some() {
+                    return Err("poll_already_open");
+                }
+                self.require_state(Trigger::PollOpened)
+            }
+            "close_poll" if self.poll.is_none() => Err("no_such_poll"),
+            "summon_foil" => self.require_state(Trigger::FoilSummoned),
+            "dismiss_foil" => {
+                if self.active_foil.is_none() {
+                    return Err("no_active_foil");
+                }
+                self.require_state(Trigger::FoilDismissed)
+            }
+            "reveal_hex" => self.require_state(Trigger::HexRevealed),
+            // Research is the audience's move while a Plebiscite waits or runs.
+            "dispatch_research" if self.research_withheld() => Err("plebiscite_pending"),
+            "pin_link" if !self.table.allows_screen_in(&self.state, ScreenId::Board) => {
+                Err("screen_not_allowed")
+            }
+            // An arc is the whole planned segment: it is not handed over midway.
+            "switch_segment" if self.arc.is_some() => Err("arc_in_progress"),
+            "sign_off" if self.sign_off_withheld() => Err("dossier_not_sealed"),
+            _ => Ok(()),
+        }
+    }
+
+    fn apply_op(&mut self, now_ms: TsMs, op: &Op) -> Result<Vec<StreamEvent>, &'static str> {
+        // A fleet-loss sign-off never waits for the seal.
+        let fleet_lost = matches!(op, Op::SignOff { reason } if reason.starts_with("fleet_lost"));
+        match self.availability(op_tag(op)) {
+            Err("dossier_not_sealed") if fleet_lost => {}
+            Err(rule) => return Err(rule),
+            Ok(()) => {}
         }
         match op {
             Op::Highlight { msg_id } => {
@@ -1578,10 +1620,6 @@ impl SegmentRuntime {
                 min_rank,
                 secs,
             } => {
-                if self.poll.is_some() {
-                    return Err("poll_already_open");
-                }
-                self.require_state(Trigger::PollOpened)?;
                 if poll_id.trim().is_empty() {
                     return Err("duplicate_poll_id");
                 }
@@ -1635,7 +1673,6 @@ impl SegmentRuntime {
                 if !self.config.foils.contains(foil) {
                     return Err("unknown_foil");
                 }
-                self.require_state(Trigger::FoilSummoned)?;
                 if self.active_foil.as_deref() == Some(foil) {
                     return Err("foil_already_active");
                 }
@@ -1644,10 +1681,6 @@ impl SegmentRuntime {
                 self.fire(Trigger::FoilSummoned);
             }
             Op::DismissFoil => {
-                if self.active_foil.is_none() {
-                    return Err("no_active_foil");
-                }
-                self.require_state(Trigger::FoilDismissed)?;
                 self.active_foil = None;
                 self.fire(Trigger::FoilDismissed);
             }
@@ -1658,7 +1691,6 @@ impl SegmentRuntime {
                 if self.hex_locked(i) {
                     return Err("act_locked");
                 }
-                self.require_state(Trigger::HexRevealed)?;
                 let h = &self.case.hexes[i];
                 if !h.fog && h.grade == Some(*grade) {
                     return Err("already_revealed");
@@ -1702,9 +1734,6 @@ impl SegmentRuntime {
                 }
                 if self.jobs.contains(job_id) {
                     return Err("duplicate_job_id");
-                }
-                if self.research_withheld() {
-                    return Err("plebiscite_pending");
                 }
                 // A brief that names no single hex is not counted against any hex.
                 let target = target_hex(&self.case, brief);
@@ -1807,10 +1836,6 @@ impl SegmentRuntime {
                 if *to == self.table.id {
                     return Err("already_in_segment");
                 }
-                // An arc is the whole planned segment: it is not handed over midway.
-                if self.arc.is_some() {
-                    return Err("arc_in_progress");
-                }
                 if !self.table.switch_to.contains(to) {
                     return Err("switch_not_allowed");
                 }
@@ -1832,10 +1857,7 @@ impl SegmentRuntime {
                 );
                 return Ok(events);
             }
-            Op::SignOff { reason } => {
-                if self.sign_off_withheld() && !reason.starts_with("fleet_lost") {
-                    return Err("dossier_not_sealed");
-                }
+            Op::SignOff { .. } => {
                 let events = self.close_poll(now_ms, false);
                 self.signed_off = true;
                 return Ok(events);
@@ -1856,9 +1878,6 @@ impl SegmentRuntime {
         rel: LinkRel,
         record_id: &str,
     ) -> Result<Vec<StreamEvent>, &'static str> {
-        if !self.table.allows_screen_in(&self.state, ScreenId::Board) {
-            return Err("screen_not_allowed");
-        }
         let (Some(a), Some(b)) = (self.find_hex(from), self.find_hex(to)) else {
             return Err("unknown_hex");
         };
@@ -2259,30 +2278,22 @@ impl SegmentRuntime {
     /// What the brain sees this tick. `rules_prompt` is stable within a segment (table text
     /// plus config facts); `state_summary` carries the live state. Untrusted chat text
     /// (leads, proposals) is summarised as counts only, and the current state's table line
-    /// (`[state_rules.<state>] prompt`) leads the summary. `allowed_ops` is narrowed to the
-    /// state's own list when it has one (the cold open), and while a Plebiscite waits or runs,
-    /// `dispatch_research` is withheld from it.
+    /// (`[state_rules.<state>] prompt`) leads the summary. `allowed_ops` is the gate's view:
+    /// the table's ops that [`Self::availability`] admits now (none once signed off); each
+    /// withheld op is named with its reason on the summary's `not now:` line.
     pub fn context(&self, ccv: u32, elapsed_s: u32) -> SegmentContext {
         SegmentContext {
             segment: self.table.id,
             rules_prompt: self.rules_prompt(),
             state_summary: self.state_summary(),
             state: self.state.clone(),
-            allowed_ops: if self.signed_off {
-                Vec::new()
-            } else {
-                let withheld = self.research_withheld();
-                let unsealed = self.sign_off_withheld();
-                self.table
-                    .allowed_ops
-                    .iter()
-                    .filter(|o| self.table.allows_op_in(&self.state, o))
-                    .filter(|o| !(withheld && o.as_str() == "dispatch_research"))
-                    .filter(|o| !(unsealed && o.as_str() == "sign_off"))
-                    .filter(|o| !(self.arc.is_some() && o.as_str() == "switch_segment"))
-                    .cloned()
-                    .collect()
-            },
+            allowed_ops: self
+                .table
+                .allowed_ops
+                .iter()
+                .filter(|o| self.availability(o).is_ok())
+                .cloned()
+                .collect(),
             ccv,
             elapsed_s,
             hexes: if self.table.id == SegmentId::Seg02aHexmap {
@@ -2775,6 +2786,19 @@ impl SegmentRuntime {
                 "REFUSED lately, so these did NOT happen (never tell chat they did): {}",
                 refused.join("; ")
             ));
+        }
+        // The ops withheld from the menu, with the gate's reason: the brain drops an op off
+        // its menu itself, so the refusal is named here instead.
+        if !self.signed_off {
+            let not_now: Vec<String> = self
+                .table
+                .allowed_ops
+                .iter()
+                .filter_map(|o| self.availability(o).err().map(|r| format!("{o} ({r})")))
+                .collect();
+            if !not_now.is_empty() {
+                lines.push(format!("not now: {}", not_now.join(", ")));
+            }
         }
         if self.handover_pending_since.is_some() {
             if let Some(rule) = self.handover_rule() {
