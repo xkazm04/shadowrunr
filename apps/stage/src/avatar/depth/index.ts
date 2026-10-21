@@ -11,10 +11,10 @@ import { createDriver, type Driver, type Pose } from "../driver";
 import { loadForm, type LoadedForm } from "../layers";
 import { frames } from "../motion";
 import { buildPlaceholder } from "../placeholder";
-import { calmNow, createFaceLoop, startFace as startGlow, type FaceHandle, type FaceLoop } from "../runtime";
+import { calmNow, createFaceLoop, onLookChange, startFace as startGlow, type FaceHandle, type FaceLoop } from "../runtime";
 import type { Look, StartFaceOptions } from "../variants";
 import { checkDepthMeta, depthField, type DepthField, type DepthMeta } from "./geom";
-import { createLookFollower, lookMoved, type LookFollower, type LookPose } from "./look";
+import { createLookFollower, type LookFollower, type LookPose } from "./look";
 import { decodeGrayPng } from "./png16";
 import { createDepthRenderer, type DepthRenderer } from "./renderer";
 
@@ -138,18 +138,8 @@ export function startFace(opts: StartFaceOptions): FaceHandle {
     opts.onDrawn?.(form.form);
 
     cleanups.push(source.subscribe((signal) => driver.setSignal(signal) && l.wake()));
-    if (opts.look) {
-      // a still face does not run its loop, so it asks where to look a few times a second
-      let seen = lookNow();
-      const poll = setInterval(() => {
-        const now = lookNow();
-        if (lookMoved(now, seen)) {
-          seen = { x: now.x, y: now.y };
-          l.wake();
-        }
-      }, 100);
-      cleanups.push(() => clearInterval(poll));
-    }
+    // a still face runs no loop: a change of the look wakes it, and it reads the look per frame
+    cleanups.push(onLookChange(opts.look, () => l.wake()));
     if (typeof IntersectionObserver !== "undefined") {
       const io = new IntersectionObserver((entries) => {
         const e = entries[entries.length - 1];
