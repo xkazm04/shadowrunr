@@ -3,9 +3,10 @@
 // summarising element is a lit link into the character package. Data: character.list for the
 // roster, character.get for the selected character's foil names.
 import { FoilArt, MalakorArt } from "@shadowrunr/stage-kit/ui";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CharacterSummary } from "@shadowrunr/contract";
 import { useConnection, useRpc } from "../../data";
+import { useKeyScope } from "../../kit/keyCommands";
 import { PosterFrame } from "../../kit/PosterFrame";
 import { pageRoute, RouteLink } from "../../router";
 import { cx } from "../../ui/cx";
@@ -124,7 +125,10 @@ function CastPoster() {
   );
 }
 
-/** The roster selector: arrow keys step through every character, the window follows. */
+/**
+ * The roster selector: arrow keys step through every character, the window follows. The arrows are
+ * the `characters.roster` scope in the one keymap, shadowing the layer-1 page step inside it.
+ */
 function Roster({ rows, at, onPick }: { rows: readonly CharacterSummary[]; at: number; onPick: (id: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [focusId, setFocusId] = useState<string | undefined>(undefined);
@@ -137,18 +141,17 @@ function Roster({ rows, at, onPick }: { rows: readonly CharacterSummary[]; at: n
     el?.focus();
   }, [focusId]);
 
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-    // The roster owns its arrows; the keymap leaves a handled key alone.
-    e.preventDefault();
-    const next = rows[stepIndex(at, e.key === "ArrowRight" ? 1 : -1, rows.length)];
-    if (!next) return;
-    onPick(next.id);
-    setFocusId(next.id);
-  };
+  useKeyScope("characters.roster", {
+    step: (delta) => {
+      const next = rows[stepIndex(at, delta, rows.length)];
+      if (!next) return;
+      onPick(next.id);
+      setFocusId(next.id);
+    },
+  });
 
   return (
-    <div ref={ref} className={cx(styles.roster, many && styles.many)} role="listbox" aria-label="Character selector" onKeyDown={onKeyDown} data-role="characters-roster">
+    <div ref={ref} className={cx(styles.roster, many && styles.many)} role="listbox" aria-label="Character selector" data-key-scope="characters.roster" data-role="characters-roster">
       {rows.slice(w.start, w.end).map((c, k) => {
         const selected = w.start + k === at;
         return (

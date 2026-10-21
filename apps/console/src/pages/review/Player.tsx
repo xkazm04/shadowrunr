@@ -1,8 +1,11 @@
 // The player: every line of one kind in transcript order, one at a time, until each has the
-// operator's mark, with the session's recording seeked to the line on request (WatchPane). Keys bind on the player's own container (focused on mount and on every step)
-// and are consumed there, so the shell's bare 1-7 page jumps never see them; outside the player,
-// and in the note, the shell keymap keeps its meaning.
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+// operator's mark, with the session's recording seeked to the line on request (WatchPane). The
+// player's keys are the `review.player` scope in the one keymap (keys/keymap.ts): they hold while
+// focus is inside the player (focused on mount and on every step), shadowing the shell's bare 1-7
+// page jumps there, as the conflict report lists; outside the player the keymap keeps its meaning,
+// and in the note only Ctrl+Enter (save) fires.
+import { useEffect, useRef, useState } from "react";
+import { useKeyScope } from "../../kit/keyCommands";
 import { pageRoute, useRouter } from "../../router";
 import { Button } from "../../ui/Button";
 import { RateBar } from "../../ui/RateBar";
@@ -33,13 +36,6 @@ function seek(n: number, from: number, ok: (i: number) => boolean, wrap: boolean
     if (ok(j % n)) return j % n;
   }
   return -1;
-}
-
-/** A text field or the video the player's keys must leave alone (a checkbox or a switch is not one). */
-function typing(t: EventTarget | null): boolean {
-  if (!(t instanceof HTMLElement)) return false;
-  if (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.tagName === "VIDEO") return true;
-  return t instanceof HTMLInputElement && t.type !== "checkbox" && t.type !== "radio";
 }
 
 export function Player(props: TabProps) {
@@ -90,23 +86,12 @@ function Walk(props: TabProps & { kind: ShownKind }) {
   const skipOn = () => go(n === 0 ? -1 : seek(n, cur + 1, (j) => !skip || !marked(j) || j === cur, true));
   const back = () => setAt({ i: Math.max(0, cur - 1), hold: true, done: false });
 
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.defaultPrevented || !line) return;
-    const ctrl = e.ctrlKey || e.metaKey;
-    if (e.key === "Enter" && ctrl && !e.altKey) {
-      e.preventDefault();
-      panel.current?.save();
-      return;
-    }
-    if (typing(e.target) || ctrl || e.altKey) return;
-    if (/^[1-8]$/.test(e.key)) panel.current?.toggle(Number(e.key) - 1);
-    else if (e.key === "Enter") panel.current?.save();
-    else if (e.key === "ArrowRight") skipOn();
-    else if (e.key === "ArrowLeft") back();
-    else return;
-    // Consumed: the shell's keymap (bare 1-7 jump pages) skips a prevented event.
-    e.preventDefault();
-  };
+  useKeyScope("review.player", {
+    toggle: (i) => panel.current?.toggle(i),
+    save: () => panel.current?.save(),
+    skip: skipOn,
+    back,
+  });
 
   if (!line) {
     return (
@@ -126,7 +111,7 @@ function Walk(props: TabProps & { kind: ShownKind }) {
     );
   }
   return (
-    <div ref={root} className={styles.player} tabIndex={-1} onKeyDown={onKeyDown} data-role="review-player" data-line={line.line}>
+    <div ref={root} className={styles.player} tabIndex={-1} data-key-scope="review.player" data-role="review-player" data-line={line.line}>
       <section className={styles.stage}>
         <div className={styles.count}>
           <div>

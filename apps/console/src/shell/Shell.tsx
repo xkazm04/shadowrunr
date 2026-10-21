@@ -1,14 +1,14 @@
 // The shell: the wall, the poster in front (layer 1), the spine and spread (layer 2), the mixer
 // bus, the chrome and the intro. It owns no page content: pages plug in through `PageRegistry`.
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { emitKeyCommand } from "../kit/keyCommands";
-import { KEYMAP, installKeymap } from "../keys";
+import { emitKeyCommand, emitScoped, ownsKeyAction } from "../kit/keyCommands";
+import { installKeymap } from "../keys";
 import { StatePanel } from "../ui/States";
 import { WALL, crumbs, encodeRoute, layerOf, pageRoute, up, useRoute, useRouter, type PageId, type Route } from "../router";
 import { matchSub } from "../router/schema";
 import { Chrome } from "./Chrome";
 import { INTRO, Intro } from "./Intro";
-import { effectOf, modeOf, nextRecents, type KeyContext } from "./keyActions";
+import { effectOf, KEYMAP, modeOf, nextRecents, type KeyContext } from "./keyActions";
 import { BUS_REM, MixerBus } from "./MixerBus";
 import { pageLabeller, riseKey } from "./rise";
 import styles from "./Shell.module.css";
@@ -80,6 +80,8 @@ export function Shell(props: ShellProps) {
       installKeymap(window, {
         keymap: KEYMAP,
         getMode: () => modeOf(ctx.current),
+        // An unowned page command or scope resolves to nothing, so its key is left un-prevented.
+        owns: ownsKeyAction,
         dispatch: (action) => {
           const fx = effectOf(action, ctx.current);
           if (fx.kind === "navigate") router.navigate(fx.route);
@@ -89,6 +91,7 @@ export function Shell(props: ShellProps) {
           } else if (fx.kind === "skip-intro") finishIntro();
           else if (fx.kind === "blur" && document.activeElement instanceof HTMLElement) document.activeElement.blur();
           else if (fx.kind === "command") emitKeyCommand(fx.command);
+          else if (fx.kind === "scoped") emitScoped(fx.action);
           else if (fx.kind === "open-goto") setGoto(true);
         },
       }),

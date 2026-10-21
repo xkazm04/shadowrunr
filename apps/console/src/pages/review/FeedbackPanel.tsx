@@ -1,5 +1,6 @@
 // Quick feedback on one line: toggle marks (pills), an optional note, save (the ink button). The player variant shows key
-// numbers and lets its caller bind keys through the returned handle.
+// numbers and lets its caller bind keys through the returned handle; there the note's Ctrl+Enter is
+// the player scope's binding in the one keymap, so the panel binds it only on its own.
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from "react";
 import type { FeedbackTag } from "@shadowrunr/contract";
 import { Button } from "../../ui/Button";
@@ -67,7 +68,7 @@ export const FeedbackPanel = forwardRef<FeedbackHandle, {
         maxLength={600}
         placeholder="What should he have said instead?"
         onChange={(e) => setNote(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } }}
+        onKeyDown={props.keys ? undefined : (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } }}
       />
       <div className={styles.actions}>
         {props.before}

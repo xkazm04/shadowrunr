@@ -1,6 +1,7 @@
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import DOM_BUDGETS from "../../../budgets/dom.json";
+import { emitScoped } from "../../kit/keyCommands";
 import { fail, mountPage, nodes, ok, role, roles, settle, type Script } from "../../kit/testing";
 import { Layer1 } from "./Layer1";
 import { Glance, Motif } from "./Poster";
@@ -85,7 +86,14 @@ describe("layer 1: the cast poster", () => {
     expect(nodes()).toBeLessThan(BUDGET);
     const box = role("characters-roster");
     if (!box) throw new Error("no roster");
-    for (let i = 0; i < 12; i++) fireEvent.keyDown(box, { key: "ArrowLeft" });
+    // The roster's arrows are the `characters.roster` scope of the one keymap: run its command as
+    // ArrowLeft does through the shell (the key itself is pinned in app/pagekeys.dom.test.tsx).
+    expect(box.getAttribute("data-key-scope")).toBe("characters.roster");
+    for (let i = 0; i < 12; i++) {
+      await act(async () => {
+        emitScoped({ type: "scoped", scope: "characters.roster", command: "step", arg: -1 });
+      });
+    }
     await settle(1);
     expect(role("characters-nameplate")?.textContent).toContain("1,989 of 2,000");
     const sel = roles("characters-roster-item").filter((b) => b.getAttribute("aria-selected") === "true");

@@ -1,7 +1,13 @@
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { conflictReport } from "./conflicts";
-import { KEYMAP, chordOf, resolve, type Binding, type KeyLike } from "./keymap";
-import { installKeymap, type KeyTarget } from "./listener";
+import { chordOf, keymapFor, resolve, type Binding, type KeyAction, type KeyLike } from "./keymap";
+import { installKeymap, isTypingTarget, type KeyTarget } from "./listener";
+
+/** Seven pages, as the router has today (the shell's live keymap is pinned in shell/keyActions.test.ts). */
+const PAGES = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
+const KEYMAP = keymapFor(PAGES);
 
 const key = (k: string, mods: Partial<KeyLike> = {}): KeyLike => ({ key: k, ctrlKey: false, metaKey: false, altKey: false, ...mods });
 
@@ -119,3 +125,109 @@ describe("the one listener", () => {
     expect(h.installed()).toBe(false);
   });
 });
+
+// Card "Page keys bypass the one keymap: scoped bindings the conflict report sees"
+// (challenge-2026-10-21, console-app-bootstrap A): page keys are scoped registry entries.
+describe("scoped bindings", () => {
+  const scoped = (scope: string) => KEYMAP.filter((b) => b.scope === scope);
+
+  it("reports every scope shadow of a global binding, and nothing else", () => {
+    const shadows = conflictReport(KEYMAP).shadows.map((s) => `${s.scope} ${s.mode} ${s.chord}: ${s.scoped} over ${s.global}`);
+    expect(shadows.sort()).toEqual(
+      [
+        ...[1, 2, 3, 4, 5, 6, 7].map((n) => `review.player l2 ${n}: Toggle mark ${n} over Jump to page ${n}`),
+        "characters.roster l1 ArrowLeft: Previous character over Previous page",
+        "characters.roster l1 ArrowRight: Next character over Next page",
+      ].sort(),
+    );
+    expect(conflictReport(KEYMAP).conflicts).toEqual([]);
+  });
+
+  it("catches a seeded duplicate inside a scope", () => {
+    const seeded: Binding[] = [...KEYMAP, { chord: "1", modes: ["l2"], scope: "review.player", action: { type: "scoped", scope: "review.player", command: "save" }, label: "Seeded" }];
+    expect(conflictReport(seeded).conflicts).toEqual([expect.objectContaining({ scope: "review.player", mode: "l2", chord: "1" })]);
+  });
+
+  it("declares the note's Ctrl+Enter in the player scope, typing only", () => {
+    const save = scoped("review.player").filter((b) => b.chord === "Ctrl+Enter");
+    expect(save.map((b) => b.typing ?? "never").sort()).toEqual(["never", "only"]);
+  });
+
+  it("derives the page jumps from the page list", () => {
+    const eight = keymapFor([...PAGES, "x"]);
+    expect(resolve(eight, "l1", "8", false)?.action).toEqual({ type: "page", index: 7 });
+    expect(resolve(KEYMAP, "l1", "8", false)).toBeUndefined();
+    expect(readFileSync(join(process.cwd(), "src/keys/keymap.ts"), "utf8")).not.toContain("PAGE_COUNT = 7");
+  });
+});
+
+describe("one typing rule", () => {
+  const el = (tag: string, type?: string) => {
+    const e = document.createElement(tag);
+    if (type) e.setAttribute("type", type);
+    return e;
+  };
+
+  it("counts text fields and the video, never a checkbox or a radio", () => {
+    expect(isTypingTarget(el("input"))).toBe(true);
+    expect(isTypingTarget(el("input", "text"))).toBe(true);
+    expect(isTypingTarget(el("textarea"))).toBe(true);
+    expect(isTypingTarget(el("video"))).toBe(true);
+    expect(isTypingTarget(el("input", "checkbox"))).toBe(false);
+    expect(isTypingTarget(el("input", "radio"))).toBe(false);
+    expect(isTypingTarget(el("div"))).toBe(false);
+  });
+
+  it("is the only one: no page keeps a typing rule or a keydown handler of its own for the moved keys", () => {
+    const pages = join(process.cwd(), "src/pages");
+    const typingRules = sources(pages).filter((f) => /function typing\b/.test(readFileSync(f, "utf8")));
+    expect(typingRules).toEqual([]);
+    for (const f of ["review/Player.tsx", "characters/Layer1.tsx"]) expect(readFileSync(join(pages, f), "utf8")).not.toContain("onKeyDown");
+  });
+});
+
+describe("the listener with owners", () => {
+  function fireAt(mode: "l1" | "l2", key: string, owns: (a: KeyAction) => boolean, target?: EventTarget) {
+    const held: { listener?: (e: KeyboardEvent) => void } = {};
+    const t: KeyTarget = { addEventListener: (_t, l) => (held.listener = l), removeEventListener: () => delete held.listener };
+    const dispatch = vi.fn();
+    installKeymap(t, { keymap: KEYMAP, getMode: () => mode, dispatch, owns });
+    const e = new KeyboardEvent("keydown", { key, cancelable: true });
+    if (target) Object.defineProperty(e, "target", { value: target });
+    held.listener?.(e);
+    return { e, dispatch };
+  }
+
+  it("leaves 'r' alone when no page owns the re-run", () => {
+    const { e, dispatch } = fireAt("l2", "r", (a) => a.type !== "command");
+    expect(e.defaultPrevented).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+    const owned = fireAt("l2", "r", () => true);
+    expect(owned.e.defaultPrevented).toBe(true);
+    expect(owned.dispatch).toHaveBeenCalledWith({ type: "command", command: "rerun" }, owned.e);
+  });
+
+  it("resolves the innermost scope first, the global binding outside it", () => {
+    const box = document.createElement("div");
+    box.setAttribute("data-key-scope", "review.player");
+    const inner = document.createElement("button");
+    box.append(inner);
+    document.body.append(box);
+    try {
+      expect(fireAt("l2", "3", () => true, inner).dispatch).toHaveBeenCalledWith({ type: "scoped", scope: "review.player", command: "toggle", arg: 2 }, expect.anything());
+      expect(fireAt("l2", "3", () => true, document.body).dispatch).toHaveBeenCalledWith({ type: "page", index: 2 }, expect.anything());
+      // A scope with no owner mounted falls through to the global binding.
+      expect(fireAt("l2", "3", (a) => a.type !== "scoped", inner).dispatch).toHaveBeenCalledWith({ type: "page", index: 2 }, expect.anything());
+    } finally {
+      box.remove();
+    }
+  });
+});
+
+function sources(dir: string): string[] {
+  return readdirSync(dir).flatMap((f) => {
+    const p = join(dir, f);
+    if (statSync(p).isDirectory()) return sources(p);
+    return /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f) ? [p] : [];
+  });
+}

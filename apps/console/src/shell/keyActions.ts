@@ -1,6 +1,16 @@
 // What each keymap action does to the shell, as a pure function of the current state.
-import type { KeyAction, KeyCommand, Mode } from "../keys";
+import { keymapFor, type Binding, type KeyAction, type KeyCommand, type Mode, type ScopeCommands, type ScopedAction } from "../keys";
+import type * as Owners from "../kit/keyCommands";
 import { PAGE_IDS, WALL, encodeRoute, layerOf, pageRoute, up, type PageId, type Route } from "../router";
+
+/** The live keymap: one bare digit per page in PAGE_IDS, so an eighth page is one router line. */
+export const KEYMAP: readonly Binding[] = keymapFor(PAGE_IDS);
+
+// keys (the chord registry) and kit/keyCommands.ts (the owners) cannot import each other, so each
+// declares the command vocabulary; the shell sees both and fails to compile if they drift.
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const VOCABULARY_TIED: Same<KeyCommand, Owners.KeyCommand> & Same<ScopeCommands, Owners.ScopeCommands> & Same<ScopedAction, Owners.ScopedAction> = true;
+void VOCABULARY_TIED;
 
 export interface KeyContext {
   readonly route: Route;
@@ -17,6 +27,8 @@ export type Effect =
   | { readonly kind: "blur" }
   | { readonly kind: "open-goto" }
   | { readonly kind: "command"; readonly command: KeyCommand }
+  /** A focus scope's command, run by the scope's owner (kit/keyCommands.ts emitScoped). */
+  | { readonly kind: "scoped"; readonly action: ScopedAction }
   | { readonly kind: "none" };
 
 const NONE: Effect = { kind: "none" };
@@ -56,6 +68,8 @@ export function effectOf(action: KeyAction, ctx: KeyContext): Effect {
       return { kind: "open-goto" };
     case "command":
       return { kind: "command", command: action.command };
+    case "scoped":
+      return { kind: "scoped", action };
   }
 }
 

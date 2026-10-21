@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { WALL, pageRoute } from "../router";
-import { effectOf, modeOf, type KeyContext } from "./keyActions";
+import { conflictReport, keymapFor, resolve } from "../keys";
+import { PAGE_IDS, WALL, pageRoute } from "../router";
+import { effectOf, KEYMAP, modeOf, type KeyContext } from "./keyActions";
 
 const ctx = (over: Partial<KeyContext> = {}): KeyContext => ({
   route: pageRoute("brain"),
@@ -46,5 +47,27 @@ describe("key actions", () => {
   it("opens the go-to palette on its key", () => {
     expect(effectOf({ type: "goto" }, ctx({ route: pageRoute("brain", "transcripts") }))).toEqual({ kind: "open-goto" });
     expect(effectOf({ type: "goto" }, ctx({ route: WALL }))).toEqual({ kind: "open-goto" });
+  });
+});
+
+// Card "Page keys bypass the one keymap" (challenge-2026-10-21): the live keymap.
+describe("the live keymap", () => {
+  it("derives a page jump per page in PAGE_IDS: an eighth page is one router line", () => {
+    expect(KEYMAP).toEqual(keymapFor(PAGE_IDS));
+    expect(resolve(keymapFor([...PAGE_IDS, "x"]), "l1", "8", false)?.action).toEqual({ type: "page", index: 7 });
+    expect(resolve(KEYMAP, "l1", String(PAGE_IDS.length + 1), false)).toBeUndefined();
+  });
+
+  it("has no conflict, and lists the page scopes' shadows of the global keys", () => {
+    const report = conflictReport(KEYMAP);
+    expect(report.conflicts).toEqual([]);
+    expect(report.shadows.map((s) => `${s.scope} ${s.mode} ${s.chord}`).sort()).toEqual(
+      [...[1, 2, 3, 4, 5, 6, 7].map((n) => `review.player l2 ${n}`), "characters.roster l1 ArrowLeft", "characters.roster l1 ArrowRight"].sort(),
+    );
+  });
+
+  it("hands a scoped action to its scope's owner", () => {
+    const action = { type: "scoped", scope: "review.player", command: "toggle", arg: 2 } as const;
+    expect(effectOf(action, ctx())).toEqual({ kind: "scoped", action });
   });
 });
