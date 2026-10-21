@@ -398,12 +398,27 @@ Every command works on the store directly; no daemon is needed.
   reports, so they reach the planner fenced as untrusted data; a reply that echoes the fence
   token is refused and nothing is staged. Prints the title, the cold-open lines, the bits per
   segment and any failed check. It spends one engine call.
+- `prep revise <id> [--note '<line>: <text>']... [--json]`: one `planner` call that answers a
+  staged prep's failed checks, and the owner's notes, with an edit plan instead of a whole new
+  prep. The planner is given the base material fenced as untrusted data, every finding of the
+  checks by target, untruncated (`conn-01`, `prem-03`, `cold_open.beats[2]`; a count shortfall
+  is an insert slot such as `insert:connector:into_poll`), and each note; a note
+  (`--note 'cb-02: too flat'`, repeatable) makes that line a target even when it passes. The
+  plan's operations are `rewrite` and `cut` on a named target and `insert` into a slot with
+  room; any other operation is refused and recorded. Every line no applied operation names
+  stays byte-identical. The result is staged as a new prep, checked against every rule like any
+  other and approved only by the owner; `<data>/prep/<new>/revision.json` keeps the base id,
+  the findings, the notes, the applied and the refused operations. The base is never changed
+  and stays staged. Refused (exit 1) unless the base is staged, or when the reply echoes the
+  fence token (nothing staged); a usage error (exit 2) when a note names no line of the base or
+  there is nothing to revise.
 - `prep list [--json]`: newest first, with status, bit count and failed checks.
-- `prep show <id> [--json]`: the whole material and every check.
+- `prep show <id> [--json]`: the whole material and every check; a revised prep also prints
+  `revised from <base>: N ops` with each operation's target and why, and each refusal.
 - `prep approve <id> --signature <name> [--json]`: staged becomes approved, with `approved_by`
   and `approved_ms`. Refused while any check fails, with no override: a failed prep is kept
-  staged so the owner sees why, and the fix is a new `prep generate`. Approval re-runs the
-  checks over the stored material, so a hand edit that breaks one is caught.
+  staged so the owner sees why, and the fix is `prep revise` or a new `prep generate`. Approval
+  re-runs the checks over the stored material, so a hand edit that breaks one is caught.
 - `prep retire <id> [--json]`: no stream uses it again.
 
 The checks (each `pass` or `fail`, with a detail naming the line):
@@ -430,11 +445,12 @@ Which prep a run uses:
 
 Exit codes:
 
-- 0: done (`generate`: staged, every check passed).
+- 0: done (`generate`, `revise`: staged, every check passed).
 - 1: refused or failed (a failed check holds the approval, a prep in the wrong state, the
   engine or the store failed, the prep does not exist).
-- 2: usage error (a malformed id, an empty signature).
-- 6: `generate` staged a prep with a failed check (shown; it cannot be approved).
+- 2: usage error (a malformed id, an empty signature, a note naming no line, nothing to
+  revise).
+- 6: `generate` or `revise` staged a prep with a failed check (shown; it cannot be approved).
 
 ```
 $ shadowrunr prep generate
@@ -448,7 +464,14 @@ SEG-02A: 4 premises, 2 stories, 2 callbacks
 connectors: 15
 checks: all 9 passed
 $ shadowrunr prep show prep-20261020-180000
-$ shadowrunr prep approve prep-20261020-180000 --signature owner
+$ shadowrunr prep revise prep-20261020-180000 --note 'cb-02: too flat'
+prep-20261020-181500  staged  malakor
+...
+checks: all 9 passed
+revised from prep-20261020-180000: 1 ops
+  note cb-02: too flat
+  rewrite cb-02: sharper turn, same running gag
+$ shadowrunr prep approve prep-20261020-181500 --signature owner
 ```
 
 ## `shadowrunr daemon [--port 7717] [--scripted]`

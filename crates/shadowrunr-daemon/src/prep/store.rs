@@ -11,6 +11,7 @@ use shadowrunr_types::prep::{PrepCheck, PrepStatus, PrepSummary, StreamPrep};
 use shadowrunr_types::{ErrorCode, TsMs};
 
 use super::checks;
+use super::revise::{Revision, REVISION_FILE};
 use crate::rpc::RpcError;
 
 pub const PREP_FILE: &str = "prep.json";
@@ -91,7 +92,7 @@ pub fn summary(p: &StreamPrep) -> PrepSummary {
     }
 }
 
-fn write_json(path: &Path, v: &StreamPrep) -> Result<(), RpcError> {
+fn write_json<T: serde::Serialize>(path: &Path, v: &T) -> Result<(), RpcError> {
     use std::io::Write;
     let io = |e: std::io::Error| RpcError::io(format!("{}: {e}", path.display()));
     if let Some(dir) = path.parent() {
@@ -189,7 +190,21 @@ impl PrepStore {
 
     /// Store a freshly written prep as `staged` under a new id from its `created_ms`
     /// (`-2`, `-3` ... when that second is taken).
-    pub fn stage(&self, mut p: StreamPrep) -> Result<StreamPrep, RpcError> {
+    pub fn stage(&self, p: StreamPrep) -> Result<StreamPrep, RpcError> {
+        self.stage_with(p, None)
+    }
+
+    /// Stage a revised prep with its `revision.json` beside it (written first, so a listed
+    /// revised prep always has its lineage). The base is not touched.
+    pub fn stage_revision(&self, p: StreamPrep, rev: &Revision) -> Result<StreamPrep, RpcError> {
+        self.stage_with(p, Some(rev))
+    }
+
+    fn stage_with(
+        &self,
+        mut p: StreamPrep,
+        rev: Option<&Revision>,
+    ) -> Result<StreamPrep, RpcError> {
         let _lock = self.lock()?;
         let base = id_for(p.created_ms);
         let mut id = base.clone();
@@ -202,14 +217,29 @@ impl PrepStore {
         p.status = PrepStatus::Staged;
         p.approved_by = None;
         p.approved_ms = None;
+        if let Some(rev) = rev {
+            write_json(&self.root.join(&p.prep_id).join(REVISION_FILE), rev)?;
+        }
         self.save(&p)?;
         Ok(p)
+    }
+
+    /// `revision.json` of `id`: `None` for a prep that was not revised from another.
+    pub fn revision(&self, id: &str) -> Result<Option<Revision>, RpcError> {
+        check_id(id)?;
+        let path = self.root.join(id).join(REVISION_FILE);
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return Ok(None);
+        };
+        serde_json::from_str(&text)
+            .map(Some)
+            .map_err(|e| RpcError::io(format!("{}: {e}", path.display())))
     }
 
     /// The owner approves a staged prep. Refused (`conflict`) when it is not staged, when a
     /// check failed at generation, or when re-running the checks over the material as it is
     /// stored now fails one (the new results are kept, so the owner sees why). A failed check
-    /// has no override: generate a new prep.
+    /// has no override: revise the prep (a new staged prep, checked again) or generate one.
     pub fn approve(
         &self,
         id: &str,
@@ -235,7 +265,7 @@ impl PrepStore {
             .collect();
         if !failed.is_empty() {
             return Err(conflict(format!(
-                "prep {id} failed {}: a failed check holds and no override applies; generate a new prep",
+                "prep {id} failed {}: a failed check holds and no override applies; revise it (`prep revise`) or generate a new prep",
                 failed.join(", ")
             ))
             .with_detail(serde_json::json!({ "failed": failed })));

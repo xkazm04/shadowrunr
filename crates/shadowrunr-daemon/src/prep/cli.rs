@@ -7,6 +7,7 @@ use shadowrunr_reconcile::{ReconcileConfig, Reconciler};
 use shadowrunr_types::prep::{BitKind, PrepCheckState, StreamPrep};
 use shadowrunr_types::{Engine, ErrorCode};
 
+use super::revise::Revision;
 use super::store::status_name;
 use crate::config::Config;
 use crate::engine::EngineHandle;
@@ -15,11 +16,12 @@ use crate::runs;
 
 /// `shadowrunr prep` exit codes (also in docs/guide/cli.md).
 pub const PREP_EXIT_CODES: &str = "Exit codes:
-  0  done (generate: staged, every check passed)
+  0  done (generate, revise: staged, every check passed)
   1  refused or failed (a failed check holds the approval, a prep in the wrong state, the
      engine or the store failed, the prep does not exist)
-  2  usage error (a malformed id, an empty signature)
-  6  generate staged a prep with a failed check (shown; it cannot be approved)";
+  2  usage error (a malformed id, an empty signature, a note naming no line, nothing to
+     revise)
+  6  generate or revise staged a prep with a failed check (shown; it cannot be approved)";
 
 /// Exit code: a staged prep failed a check.
 pub const EXIT_CHECK_FAILED: u8 = 6;
@@ -33,6 +35,19 @@ pub enum PrepCommand {
         /// Write from this Reconcile report's chosen plan instead of the current plan.
         #[arg(long = "report", value_name = "REPORT_ID")]
         report: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Answer a staged prep's failed checks, and your notes, with an edit plan (one engine
+    /// call): only the lines a finding or a note names change, the result is staged as a new
+    /// prep and checked again. The base is never changed.
+    #[command(after_help = PREP_EXIT_CODES)]
+    Revise {
+        id: String,
+        /// `<line>: <what to change>`, e.g. `cb-02: too flat`; makes that line a target even
+        /// when it passes. Repeatable.
+        #[arg(long = "note", value_name = "NOTE")]
+        notes: Vec<String>,
         #[arg(long)]
         json: bool,
     },
@@ -171,9 +186,35 @@ pub fn summary_text(p: &StreamPrep) -> String {
     s
 }
 
+/// A revised prep's lineage: the base, each applied operation and each refused one.
+pub fn revision_text(r: &Revision) -> String {
+    let mut s = format!("revised from {}: {} ops\n", r.base, r.ops.len());
+    for n in &r.notes {
+        s.push_str(&format!("  note {}: {}\n", n.target, n.text));
+    }
+    for o in &r.ops {
+        s.push_str(&format!("  {} {}: {}\n", o.op, o.target, o.why));
+    }
+    for x in &r.refused_ops {
+        s.push_str(&format!(
+            "  refused {} {}: {}\n",
+            x.op.op, x.op.target, x.reason
+        ));
+    }
+    s
+}
+
 /// `prep show`: the whole material and every check.
 pub fn show_text(p: &StreamPrep) -> String {
+    show_text_with(p, None)
+}
+
+/// `prep show`, with the lineage of a revised prep under its header.
+pub fn show_text_with(p: &StreamPrep, rev: Option<&Revision>) -> String {
     let mut s = header(p);
+    if let Some(r) = rev {
+        s.push_str(&revision_text(r));
+    }
     s.push_str(&format!("\ncold open: {}\n", p.cold_open.title));
     for (i, b) in p.cold_open.beats.iter().enumerate() {
         s.push_str(&format!("  {}. {b}\n", i + 1));
@@ -259,13 +300,44 @@ pub async fn generate_cmd(
     }
 }
 
-/// Every command but `generate`, on the store.
+/// `prep revise` on `engine` (the live fleet from [`run`]; a fake in tests).
+pub async fn revise_cmd(
+    cfg: &Config,
+    engine: std::sync::Arc<dyn Engine>,
+    id: &str,
+    notes: &[String],
+    json: bool,
+) -> u8 {
+    match super::revise_with(cfg, engine.as_ref(), id, notes, runs::now_ms()).await {
+        Ok((p, rev)) => {
+            if json {
+                print_json(&serde_json::json!({ "prep": p, "revision": rev }));
+            } else {
+                print!("{}{}", summary_text(&p), revision_text(&rev));
+            }
+            if super::checks::failed(&p.checks).is_empty() {
+                0
+            } else {
+                EXIT_CHECK_FAILED
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            exit_for(&e)
+        }
+    }
+}
+
+/// Every command but `generate` and `revise`, on the store.
 pub fn store_cmd(cfg: &Config, cmd: PrepCommand) -> u8 {
     let store = super::store(cfg);
     let res: Result<(), RpcError> = (|| {
         match cmd {
             PrepCommand::Generate { .. } => {
                 return Err(RpcError::internal("generate runs through generate_cmd"))
+            }
+            PrepCommand::Revise { .. } => {
+                return Err(RpcError::internal("revise runs through revise_cmd"))
             }
             PrepCommand::List { json } => {
                 let rows = store.list()?;
@@ -295,7 +367,8 @@ pub fn store_cmd(cfg: &Config, cmd: PrepCommand) -> u8 {
                 if json {
                     print_json(&p);
                 } else {
-                    print!("{}", show_text(&p));
+                    let rev = store.revision(&id)?;
+                    print!("{}", show_text_with(&p, rev.as_ref()));
                 }
             }
             PrepCommand::Approve {
@@ -335,6 +408,10 @@ pub async fn run(cfg: &Config, cmd: PrepCommand) -> ExitCode {
         PrepCommand::Generate { report, json } => {
             let engine = EngineHandle::build(cfg, false);
             generate_cmd(cfg, engine.engine, report.as_deref(), json).await
+        }
+        PrepCommand::Revise { id, notes, json } => {
+            let engine = EngineHandle::build(cfg, false);
+            revise_cmd(cfg, engine.engine, &id, &notes, json).await
         }
         other => store_cmd(cfg, other),
     };
