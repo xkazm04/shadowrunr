@@ -1661,7 +1661,11 @@
           "revision": 19,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/onair/ClipFeedback.tsx:22 Visual clip feedback saves only tags and prose, leaving an editor to rediscover the reviewed moment and screen location.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:6bb352204d334af5",
+          "evaluatedRevision": 19
         },
         {
           "subject": "evidence-bound-visuals",
@@ -5029,7 +5033,11 @@
           "revision": 19,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/avatar/cut/renderer.ts:127 A requested layer with no uploaded texture is silently omitted, allowing a partial avatar to render without a named layer error.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:6bb352204d334af5",
+          "evaluatedRevision": 19
         },
         {
           "subject": "prompt-assembly",
@@ -5404,7 +5412,11 @@
           "revision": 19,
           "changedAt": "2026-10-14",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/render.rs:127 Poster wrapping counts characters instead of measuring rendered width, allowing an unbroken transcript token to overflow without an error or coded finding.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:6bb352204d334af5",
+          "evaluatedRevision": 19
         },
         {
           "subject": "stream-moment-capture",

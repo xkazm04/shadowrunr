@@ -1,0 +1,157 @@
+{
+ "schema": "conform-run/1",
+ "worker": "c55c6ae8-112e-4999-8eca-be47694565a3",
+ "subject": "video-assembly",
+ "evaluatedAt": "2026-10-21T22:56:14.127611+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "clips-pipeline",
+   "subject": "video-assembly",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-clips/src/render.rs:127 Poster wrapping counts characters instead of measuring rendered width, allowing an unbroken transcript token to overflow without an error or coded finding.",
+   "techniques": [
+    {
+     "technique": "alignment-names-its-text",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/render.rs:37 This timing path explicitly uses a caption estimate rather than a synthesiser-returned text alignment."
+    },
+    {
+     "technique": "cut-compiled-from-source",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/render.rs:389 The persisted ClipInput contains timed captions, scene events, styling and headers; rendering consumes that source."
+    },
+    {
+     "technique": "derived-turn-markers",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/window.rs:53 Cut entrances derive from the selected line's spoken start and the preceding heard line's end."
+    },
+    {
+     "technique": "gap-and-refusal-honesty",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/render.rs:893 A failed recording cut becomes a poster draft carrying the failure reason rather than a claimed successful video."
+    },
+    {
+     "technique": "pinned-frame-notes",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-clips/src/store.rs:357 Watched feedback persists tags, prose and a save timestamp, without a media moment, spatial pin, marked frame, completion flag or render revision."
+    },
+    {
+     "technique": "silent-defects-get-a-code-or-an-error",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-clips/src/render.rs:127 Character-based wrapping leaves an oversized single word intact; the fixed-size SVG text is not measured or shrunk to fit."
+    },
+    {
+     "technique": "verify-cheapest-artifact-first",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-clips/src/render.rs:899 After checking tool availability, the redraw path starts the full export without a preceding visual preflight; the recorder captures its poster during encoding."
+    }
+   ]
+  },
+  {
+   "context": "stage-avatar-renderer",
+   "subject": "video-assembly",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "apps/stage/src/avatar/cut/renderer.ts:127 A requested layer with no uploaded texture is silently omitted, allowing a partial avatar to render without a named layer error.",
+   "techniques": [
+    {
+     "technique": "seek-stable-composition-authoring",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/driver.ts:203 This driver deliberately advances a live trajectory from prior state, which the technique explicitly distinguishes from a seekable composition."
+    },
+    {
+     "technique": "silent-defects-get-a-code-or-an-error",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/avatar/cut/renderer.ts:127 uploadLayerTextures omits entries when createTexture returns null; this consumer silently skips the corresponding requested layer."
+    }
+   ]
+  },
+  {
+   "context": "console-onair-page",
+   "subject": "video-assembly",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/onair/ClipFeedback.tsx:22 Visual clip feedback saves only tags and prose, leaving an editor to rediscover the reviewed moment and screen location.",
+   "techniques": [
+    {
+     "technique": "derived-turn-markers",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/pages/onair/Layer1.tsx:97 Segment bands derive from current transcript events; the inspected helper uses segment starts and handovers rather than typed timeline positions."
+    },
+    {
+     "technique": "gap-and-refusal-honesty",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:48 The player explicitly displays missing video and its recorded fallback reason."
+    },
+    {
+     "technique": "pinned-frame-notes",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/onair/ClipFeedback.tsx:22 Feedback includes visual defects such as face and caption errors, but captures no frame/time, normalized position, marked image, completion flag or render revision."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "video-assembly",
+   "context": "console-review-page",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-21T22:56:14.127611+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "video-assembly"
+   ],
+   "techniques": [
+    "alignment-names-its-text",
+    "cut-compiled-from-source",
+    "derived-turn-markers",
+    "gap-and-refusal-honesty",
+    "pinned-frame-notes",
+    "silent-defects-get-a-code-or-an-error",
+    "verify-cheapest-artifact-first"
+   ],
+   "deviations": 1,
+   "context": "clips-pipeline",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-21T22:56:14.127611+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "video-assembly"
+   ],
+   "techniques": [
+    "seek-stable-composition-authoring",
+    "silent-defects-get-a-code-or-an-error"
+   ],
+   "deviations": 1,
+   "context": "stage-avatar-renderer",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-21T22:56:14.127611+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "video-assembly"
+   ],
+   "techniques": [
+    "derived-turn-markers",
+    "gap-and-refusal-honesty",
+    "pinned-frame-notes"
+   ],
+   "deviations": 1,
+   "context": "console-onair-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}
