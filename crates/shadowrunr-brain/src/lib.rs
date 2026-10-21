@@ -11,15 +11,18 @@
 //! 4. orchestrate and pick: [`orchestrate`] drops repeats of answered waves, decides the beat's
 //!    mode (cold open, react, bit, bridge, mixed, hold) and writes its `beat_plan`; the picker
 //!    then passes at most the plan's ceiling (safety-critical first; deterministic, or
-//!    `Role::ChatPicker` above a volume threshold). A hold ends the beat there;
+//!    `Role::ChatPicker` above a volume threshold). A hold ends the beat there, and so does
+//!    speech still queued on the speech clock ([`pace`]: a `speaking` hold);
 //! 5. recall and compose (stable prefix, with the Lord's brief when the stream has one, +
-//!    per-turn block, with the beat's prepared material when it voices some);
+//!    per-turn block, with the beat's prepared material when it voices some and its speech
+//!    budget);
 //! 6. call the core thread (warm session when available, else `complete`); a fleet-class
-//!    failure speaks a model-free stall line instead once Malakor was quiet long enough
+//!    failure speaks a model-free stall line instead once nobody has spoken long enough
 //!    ([`stall`]);
-//! 7. parse spoken lines, `OP:` and `NOTE:`; gate output; dispatch research jobs; once a
-//!    crisis line went out, remove that viewer from chat when `crisis-chat-ban` is enabled
-//!    (their name is withheld from his lines for the rest of the stream).
+//! 7. parse spoken lines, `OP:` and `NOTE:`; drop whole lines past the beat's speech budget;
+//!    gate output; dispatch research jobs; once a crisis line went out, remove that viewer from
+//!    chat when `crisis-chat-ban` is enabled (their name is withheld from his lines for the
+//!    rest of the stream). Every line put on air advances the speech clock.
 
 pub mod care;
 pub mod character;
@@ -29,6 +32,7 @@ pub mod grammar;
 pub mod memory;
 pub mod moderation;
 pub mod orchestrate;
+pub mod pace;
 pub mod picker;
 pub mod pool;
 pub mod rules;
@@ -59,6 +63,7 @@ pub use memory::{
     StoredFact,
 };
 pub use moderation::{FilterConfig, HexInfo, PolicySource};
+pub use pace::{PaceConfig, SpeechClock};
 pub use picker::PickerConfig;
 pub use pool::{Job, JobCtx, JobRunner, JobStatus, JobUpdate, ResearchRunner, WorkerPool};
 pub use rules::{CharacterRule, RuleState, RulesOverride};
@@ -137,8 +142,10 @@ pub struct BrainTuning {
     /// about them; see [`care`]). A new disclosure restarts it.
     pub care_window_s: u64,
     /// While the fleet fails, a beat with no line from the model speaks a stall line once
-    /// Malakor has been quiet this many seconds (see [`stall`]).
+    /// nobody has spoken for this many seconds (see [`stall`]).
     pub stall_every_s: u64,
+    /// The speech clock and the per-beat speech budget (see [`pace`]).
+    pub pace: PaceConfig,
 }
 
 impl Default for BrainTuning {
@@ -156,6 +163,7 @@ impl Default for BrainTuning {
             consolidate_at_end: true,
             care_window_s: care::DEFAULT_CARE_WINDOW_S,
             stall_every_s: stall::DEFAULT_STALL_EVERY_S,
+            pace: PaceConfig::default(),
         }
     }
 }
@@ -232,8 +240,9 @@ pub struct Brain {
     /// The fleet mode last recorded with a `health` event (healthy before the first one).
     health: FleetMode,
     stall: Staller,
-    /// When Malakor last spoke (model line, stall line or sign-off), on the `now_ms` clock.
-    last_say_ms: Option<TsMs>,
+    /// When the speech put on air ends (model, foil, stall and cover lines, the sign-off), on
+    /// the `now_ms` clock ([`pace`]).
+    speech: SpeechClock,
     session: Option<Box<dyn WarmSession>>,
     session_turns: u32,
     /// No warm open before this beat: the last one failed. Engines report "no sessions" and
@@ -303,7 +312,7 @@ impl Brain {
             engine_down: false,
             health: FleetMode::Healthy,
             stall: Staller::new(),
-            last_say_ms: None,
+            speech: SpeechClock::default(),
             session: None,
             session_turns: 0,
             session_retry_tick: 0,
@@ -437,6 +446,16 @@ impl Brain {
         now_ms.saturating_add(ms)
     }
 
+    /// When the speech already put on air ends, on the `now_ms` clock ([`pace`]).
+    pub fn speech_until(&self) -> Option<TsMs> {
+        self.speech.until()
+    }
+
+    /// A line goes on air at `at`: the speech clock moves past it.
+    fn aired(&mut self, at: TsMs, text: &str) {
+        self.speech.say(at, text, &self.tuning.pace);
+    }
+
     /// Up to [`stall::COVER_LINES`] gated stall lines for a covered core call, taken from a copy
     /// of the rotation (the real one advances only by the lines spoken).
     fn cover_plan(&self, now_ms: TsMs) -> Option<stall::CoverPlan> {
@@ -464,14 +483,21 @@ impl Brain {
             return None;
         }
         let every_ms = self.tuning.stall_every_s.saturating_mul(1_000);
-        let quiet_ms = self.last_say_ms.map_or(0, |t| {
-            u64::try_from(self.on_air_ms(now_ms).saturating_sub(t)).unwrap_or(0)
-        });
+        // The quiet so far, negative while speech is still queued: the cover waits for it to
+        // air first. Before his first line the quiet runs from the stream's start (measured:
+        // counted as none, a 12 s first call left 17.2 s of silence, sbx-20261021-003254-5m).
+        let on_air = self.on_air_ms(now_ms);
+        let quiet_ms = on_air.saturating_sub(self.speech.until().unwrap_or(0));
+        let first_ms = i64::try_from(every_ms)
+            .unwrap_or(i64::MAX)
+            .saturating_sub(quiet_ms);
         Some(stall::CoverPlan {
             tx,
             lines,
             first_after: std::time::Duration::from_millis(
-                every_ms.saturating_sub(quiet_ms).max(stall::MIN_COVER_MS),
+                u64::try_from(first_ms)
+                    .unwrap_or(0)
+                    .max(stall::MIN_COVER_MS),
             ),
             every: std::time::Duration::from_millis(every_ms.max(stall::MIN_COVER_MS)),
         })
@@ -664,7 +690,7 @@ impl Brain {
         // (sbx-20261020-155928-10m: 15.03 s inside its outage, over the 15 s ceiling).
         let due = stall_due(
             self.fleet_mode(),
-            self.last_say_ms,
+            self.speech.until(),
             self.on_air_ms(now_ms),
             self.tuning
                 .stall_every_s
@@ -678,6 +704,7 @@ impl Brain {
         };
         let (text, fired) = gate_text(line, &self.policy, &self.hexes);
         ev.extend(output_events(now_ms, &fired));
+        self.aired(self.on_air_ms(now_ms), &text);
         ev.push(StreamEvent::Say {
             ts_ms: now_ms,
             speaker: Speaker::Malakor,
@@ -687,7 +714,6 @@ impl Brain {
             first_text_ms: None,
         });
         ev.push(moderation::output_event(now_ms, STALL_RULE, "spoke"));
-        self.last_say_ms = Some(now_ms);
     }
 
     fn sign_off_events(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
@@ -696,6 +722,7 @@ impl Brain {
         let line = self.cfg.character.stalls.sign_off.clone();
         let (text, fired) = gate_text(&line, &self.policy, &self.hexes);
         let mut ev = output_events(now_ms, &fired);
+        self.aired(self.on_air_ms(now_ms), &text);
         ev.push(StreamEvent::Say {
             ts_ms: now_ms,
             speaker: Speaker::Malakor,
@@ -710,7 +737,6 @@ impl Brain {
                 reason: format!("fleet_lost: engine degraded or down for {grace}s"),
             },
         });
-        self.last_say_ms = Some(now_ms);
         ev
     }
 
@@ -777,12 +803,15 @@ impl Brain {
             ev.push(care_event(now_ms, &c.msg.id, how.as_str()));
         }
         let cands = self.orch.screen(now_ms, cands, &mut ev);
+        let closing = pace::is_closing(&ctx.state_summary);
         let mut plan = self.orch.plan(&BeatInputs {
             now_ms,
             ctx,
             cands: &cands,
             prep: self.prep.as_ref(),
-            last_say_ms: self.last_say_ms,
+            speech_until_ms: self.speech.until(),
+            speech_lead_ms: self.tuning.pace.speech_lead_ms,
+            closing,
             names: &self.names,
             max_picks: self.picker.config().max_picks,
         });
@@ -930,6 +959,11 @@ impl Brain {
         .into_iter()
         .flatten()
         .reduce(|a, b| format!("{a}\n{b}"));
+        let budget = if closing {
+            pace::closing_budget(self.tuning.pace.budget_chars)
+        } else {
+            self.tuning.pace.budget_chars
+        };
         let prompt = compose_turn(&TurnInputs {
             ctx,
             briefing: &briefing,
@@ -947,6 +981,7 @@ impl Brain {
             material: plan.material.as_deref(),
             beat_note: plan.note.as_deref(),
             room_note: plan.room_note.as_deref(),
+            budget_chars: budget,
         });
         self.last_prompt = Some(prompt.clone());
 
@@ -980,13 +1015,24 @@ impl Brain {
 
         // Core thread, covered in character when it runs long on a live host.
         let plan = self.cover_plan(now_ms);
+        let cover_texts: Vec<String> = plan
+            .iter()
+            .flat_map(|p| p.lines.iter().flatten())
+            .filter_map(|e| match e {
+                StreamEvent::Say { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .collect();
         let (result, covered) = stall::cover_call(self.call_core(prompt), plan).await;
         if let Some((spoken, at)) = covered {
             for _ in 0..spoken {
                 self.stall.next(&self.cfg.character.stalls, self.salt);
             }
+            // The cover lines aired by the last one's time at the latest.
             let at_ms = i64::try_from(at.as_millis()).unwrap_or(i64::MAX);
-            self.last_say_ms = Some(now_ms.saturating_add(at_ms));
+            for text in cover_texts.iter().take(spoken) {
+                self.aired(now_ms.saturating_add(at_ms), text);
+            }
         }
         let reply = match result {
             Ok(r) => {
@@ -1008,7 +1054,34 @@ impl Brain {
             }
             Err(e) => return Err(e.into()),
         };
-        let lines = parse_reply(&reply.text, &ctx.allowed_ops, active_foil.as_deref());
+        let mut lines = parse_reply(&reply.text, &ctx.allowed_ops, active_foil.as_deref());
+        // The beat's speech budget: spoken lines past it go whole, the last first.
+        let spoken_at: Vec<usize> = lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| matches!(l, Line::Say(_) | Line::Foil { .. }))
+            .map(|(i, _)| i)
+            .collect();
+        let lens: Vec<usize> = spoken_at
+            .iter()
+            .map(|&i| match &lines[i] {
+                Line::Say(t) | Line::Foil { text: t, .. } => t.chars().count(),
+                _ => 0,
+            })
+            .collect();
+        let mut over: Vec<usize> = pace::over_budget(&lens, budget)
+            .into_iter()
+            .map(|k| spoken_at[k])
+            .collect();
+        over.sort_unstable();
+        for &i in over.iter().rev() {
+            lines.remove(i);
+            ev.push(moderation::output_event(
+                now_ms,
+                pace::PACE_RULE,
+                pace::TRIMMED,
+            ));
+        }
         let first_text_ms = reply.first_text_ms;
         // The keyless ScriptedEngine echoes a constant line by design (harness plumbing);
         // guarding it would silence every scripted run.
@@ -1074,7 +1147,7 @@ impl Brain {
                     }
                     self.working.remember_line(&out);
                     turn.push(format!("Malakor: {out}"));
-                    self.last_say_ms = Some(self.on_air_ms(now_ms));
+                    self.aired(self.on_air_ms(now_ms), &out);
                     say_idx.push(ev.len());
                     ev.push(StreamEvent::Say {
                         ts_ms: now_ms,
@@ -1092,6 +1165,8 @@ impl Brain {
                         continue;
                     }
                     turn.push(format!("{foil}: {out}"));
+                    // The stage shows a foil's line: it takes reading time.
+                    self.aired(self.on_air_ms(now_ms), &out);
                     ev.push(StreamEvent::Say {
                         ts_ms: now_ms,
                         speaker: Speaker::Foil,
