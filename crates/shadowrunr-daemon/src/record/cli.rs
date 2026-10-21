@@ -124,7 +124,7 @@ pub fn pending_dir(cfg: &Config) -> PathBuf {
 pub async fn arm(cfg: &Config, daemon_port: u16) -> Result<Armed, String> {
     let rc = cfg.record.clone();
     check_stage_base(&rc.stage_url)?;
-    let url = stage_url(&rc.stage_url, daemon_port);
+    let url = stage_url(&rc.stage_url, daemon_port, cfg.stage.avatar);
     let mut obs = connect(&rc)
         .await
         .map_err(|e| format!("{e}\n{}", hint(&e)))?;
