@@ -28,6 +28,9 @@ when tools/voice changed:
 when a change touches the brain's beat or the opening (orchestrator, picker, segment states):
 - a real sandbox session with the stage held open and the judge on, read beat by beat from `beat_plan` reasons, not only from the gate. Promoted 2026-10-21: the gate passed the first orchestration run while the transcript showed 4 repeated gathering lines; the judge then caught a dropped question and an unannounced poll that unit tests had not modelled.
 
+when a change is judged by voice timing (lines voiced, late, first-audio latency):
+- compare runs with `shadowrunr voice replay` over each transcript, back to back under the same load, and run any live voiced check alone (no parallel builders). Promoted 2026-10-21: VOICE-P's first result and PACE's live run were both swamped by shared CPU (99%); only the replay pair gave a fair comparison.
+
 builder:
 - the same three cargo commands, scoped with `-p <crate>` while iterating, then workspace-wide before reporting
 
@@ -65,3 +68,4 @@ builder:
 - 2026-10-21: the sandbox gate could never pass without --chaos (chaos `unmeasured` = never a pass), invisible until a run had every other check green. When a gate composes checks, test the all-green path end to end, not only each check's failure.
 - 2026-10-21: a sandbox run from a worktree build reads the main checkout's config, so files new on the branch (prep.sample.json) are missing; point a scratch config's `characters`/`segments` at the branch for branch smoke runs.
 - 2026-10-21: the local voice renders at about real time; a talkative host outruns it (smoke: 20 sentences spoken, 73 late, 8 queue_full in 5 min). Voice throughput or speech-paced beats is the next avatar step, not a bound to loosen.
+- 2026-10-21 (pace): the brain wrote 2.5x more speech than wall time, so no voice speed could fix it; measure total output against the playback clock before tuning throughput. Speech-paced beats took replay from 59% to 95-100% voiced.
