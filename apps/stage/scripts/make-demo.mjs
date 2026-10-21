@@ -1,5 +1,5 @@
 // Generates fixtures/demo.jsonl: a ~4.5 minute fictional stream that exercises every StreamEvent
-// type in both segments (SEG-01 Improvised Room, SEG-02A Hexmap Investigation) and every op
+// type in both segments (SEG-01 Improvised Room, SEG-02A on the evidence board) and every op
 // each segment allows. Deterministic: re-running produces identical bytes.
 //
 //   node scripts/make-demo.mjs
@@ -15,6 +15,27 @@ const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "..", "fixtures", "demo.jsonl");
 // Byte copy of crates/shadowrunr-segments/data/demo-case.json (fictional: true).
 const demoCase = JSON.parse(readFileSync(join(here, "..", "fixtures", "demo-case.json"), "utf8"));
+// The planted fictional records the research jobs return (crates/shadowrunr-segments/data).
+const RECORDS = new Map(
+  JSON.parse(readFileSync(join(here, "..", "..", "..", "crates", "shadowrunr-segments", "data", "demo-case-records.json"), "utf8")).records.map((r) => [r.id, r]),
+);
+// When each record's event happened, for a records file that does not carry `date` yet (the
+// board's timeline strip reads it); a record's own `date` wins.
+const RECORD_DATES = {
+  "DOC-01": "2026-04-20",
+  "REP-01": "2026-03-24",
+  "CLM-01": "2026-01-10",
+  "DOC-02": "2025-03-11",
+  "DOC-03": "2026-03-06",
+  "CLM-02": "2026-03-03",
+  "REP-02": "2025-07-08",
+  "REP-03": "2025-07-15",
+  "CLM-03": "2026-03-04",
+  "CLM-04": "2026-03-04",
+  "CLM-05": "2026-03-09",
+  "DOC-04": "2026-04-15",
+  "REP-04": "2026-03-12",
+};
 
 // Vote weights: crates/shadowrunr-segments/data/ranks.toml.
 const WEIGHT = { thrall: 1.0, acolyte: 1.4, cultist: 1.7, warlock: 2.0, lich: 2.2, dread_council: 2.4 };
@@ -89,6 +110,39 @@ function foilSay(ts, foil, text) {
 }
 function op(ts, o) {
   push({ type: "op", ts_ms: ts, op: o });
+}
+// The board's honesty rules (appendix (screens and board)), checked here so the demo never shows
+// a string the runtime would refuse: both cards face up, the record returned and filed under one
+// of its ends, no duplicate.
+const faceUp = new Set();
+const returned = new Set();
+const pinned = new Set();
+function reveal(ts, hex, grade) {
+  op(ts, { op: "reveal_hex", hex, grade });
+  faceUp.add(hex);
+}
+/** A returned record, as the runtime shows it (`record_shown`), from the planted records file. */
+function shown(ts, id) {
+  const r = RECORDS.get(id);
+  if (!r) throw new Error(`no planted record ${id}`);
+  const record = { id: r.id, hex: r.hex, grade: r.grade, title: r.title, source: r.source, summary: r.summary };
+  const date = r.date ?? RECORD_DATES[id];
+  if (date) record.date = date;
+  record.fictional = true;
+  push({ type: "record_shown", ts_ms: ts, record });
+  returned.add(id);
+}
+/** `pin_link` and the runtime's `link_pinned` that accepts it. */
+function pin(ts, from, to, rel, record_id) {
+  const r = RECORDS.get(record_id);
+  const key = `${from}>${to}>${rel}`;
+  if (!faceUp.has(from) || !faceUp.has(to)) throw new Error(`${key}: hex_not_revealed`);
+  if (!returned.has(record_id)) throw new Error(`${key}: record_not_returned`);
+  if (r.hex !== from && r.hex !== to) throw new Error(`${key}: record_not_on_link`);
+  if (pinned.has(key)) throw new Error(`${key}: duplicate_link`);
+  pinned.add(key);
+  op(ts, { op: "pin_link", from, to, rel, record_id });
+  push({ type: "link_pinned", ts_ms: ts, from, to, rel, record_id, grade: r.grade });
 }
 function job(ts, job_id, status, summary) {
   const ev = { type: "job", ts_ms: ts, job_id, status };
@@ -247,35 +301,35 @@ const mA = chat(117500, V.paper, "the inspector has a point, show us a case");
 const mB = chat(118200, V.kat, "CASE CASE CASE");
 push({ type: "picked", ts_ms: 119500, msg_ids: [mA, mB], reason: "chat demands a case: a handover cue" });
 foilSay(121500, "the-inspector", "Prove one real case, bone-clerk. Just one.");
-say(124500, "Very well, Inspector. To the Hexmap. And it is a fictional demo case, so do try to keep up.", [mA, mB]);
+say(124500, "Very well, Inspector. To the board. And it is a fictional demo case, so do try to keep up.", [mA, mB]);
 op(127500, { op: "switch_segment", to: "SEG-02A" });
 op(128200, { op: "mark_moment", label: "The Inspector dares Malakor" });
 push({ type: "segment_end", ts_ms: 130000, segment: "SEG-01", ses: 0.42 });
 push({ type: "handover", ts_ms: 130500, from: "SEG-01", to: "SEG-02A", reason: "the Inspector dared Malakor to prove one case" });
 
-// ─────────────────────────── SEG-02A: Hexmap Investigation ───────────────────────────
+// ─────────────────────────── SEG-02A: the evidence board ───────────────────────────
 push({ type: "segment_start", ts_ms: 131000, segment: "SEG-02A" });
 push({ type: "case_open", ts_ms: 131000, case: demoCase });
-// The segment runtime opens SEG-02A on its default screen.
-op(131000, { op: "show_screen", screen: "hexmap" });
+// The segment runtime opens SEG-02A on its default screen: the board, every card face down.
+op(131000, { op: "show_screen", screen: "board" });
 filler(133500, 262000, FILLER_02, 5600);
 
-say(133000, "Behold the Glimmerquay Lunar Staking Affair. Invented from crown to toe, and still more honest than the Disruptor.");
-op(137500, { op: "reveal_hex", hex: "HEX-01", grade: "DOC" });
-// The runtime zooms the map to each reveal and to where each dispatch sends the minions.
-const focus = (ts, hex) => op(ts, { op: "show_screen", screen: "hexmap", focus: hex });
+say(133000, "Behold the Glimmerquay Lunar Staking Affair. Invented from crown to toe, and still more honest than the Disruptor. Every card starts face down.");
+reveal(137500, "HEX-01", "DOC");
+// The runtime zooms the board to each flip and to where each dispatch sends the minions.
+const focus = (ts, hex) => op(ts, { op: "show_screen", screen: "board", focus: hex });
 focus(137500, "HEX-01");
 say(138500, "HEX-01, the Glimmerquay Yield Syndicate. A regulator order is on file. That one is DOCUMENTED.");
 op(143000, { op: "dispatch_research", job_id: "r-01", brief: "Trace the hops out of treasury wallet demo-0001" });
 focus(143000, "HEX-04");
 job(143400, "r-01", "running");
-op(144500, { op: "dispatch_research", job_id: "r-02", brief: "Archive snapshot of glimmerquay-yield.example" });
-focus(144500, "HEX-02");
+op(144500, { op: "dispatch_research", job_id: "r-02", brief: "Press on the 4% promise and the lunar summits" });
+focus(144500, "HEX-05");
 job(145000, "r-02", "running");
 const h1 = chat(146500, V.quill, "!hint HEX-04 follow the wallet", { cmd: "hint", hex: "HEX-04", text: "follow the wallet" });
 chat(147800, V.bone, "!hint HEX-05 the 4% thing", { cmd: "hint", hex: "HEX-05", text: "the 4% thing" });
 chat(149000, V.grim, "!hint HEX-04 wallet wallet wallet", { cmd: "hint", hex: "HEX-04", text: "wallet wallet wallet" });
-op(151500, { op: "reveal_hex", hex: "HEX-05", grade: "CLM" });
+reveal(151500, "HEX-05", "CLM");
 focus(151500, "HEX-05");
 say(152500, "HEX-05. They promised four percent a week. That is a claim, minions, so it wears the amber seal and the word ALLEGED.");
 op(157500, { op: "show_card", card_id: "card-yield", title: "Promised vs paid (alleged)", body: "Promised weekly yield: 4%; Paid out after week 3: 0%" });
@@ -283,32 +337,25 @@ chat(158200, V.kat, "!grade HEX-05 CLM", { cmd: "grade", hex: "HEX-05", grade: "
 chat(159000, V.wyrm, "!grade HEX-05 CLM", { cmd: "grade", hex: "HEX-05", grade: "CLM" });
 chat(160300, V.dusk, "!grade HEX-05 SPC", { cmd: "grade", hex: "HEX-05", grade: "SPC" });
 chat(161200, V.obol, "!grade HEX-05 CLM", { cmd: "grade", hex: "HEX-05", grade: "CLM" });
-job(162000, "r-02", "done", "Snapshot shows the 4% promise on the landing page (fictional archive)");
-push({
-  type: "record_shown",
-  ts_ms: 162100,
-  record: {
-    id: "REP-01",
-    hex: "HEX-03",
-    grade: "REP",
-    title: "Glimmerquay landing page promises 4% a week (fictional)",
-    source: "https://records.example/glimmerquay/landing",
-    summary: "An archived landing page promising 4% a week to depositors (fictional archive).",
-    fictional: true,
-  },
-});
-// A string pinned on the evidence board (drawn once the board package lands).
-push({ type: "link_pinned", ts_ms: 162200, from: "HEX-01", to: "HEX-05", rel: "claims", record_id: "REP-01", grade: "REP" });
+job(162000, "r-02", "done", "Two press reports: the 4% promise and the lunar summits (fictional)");
+shown(162100, "REP-02");
+shown(162150, "REP-03");
 // The research job came back: the runtime opens its record in the browser window.
-op(162600, { op: "show_screen", screen: "browser", record_id: "REP-01" });
-push({ type: "say", ts_ms: 163200, speaker: "malakor", text: "The archive remembers what Glimmerquay would rather forget. Four percent a week, in their own words. REPORTED, minions, so ALLEGED.", first_text_ms: 1100 });
-op(164500, { op: "reveal_hex", hex: "HEX-02", grade: "REP" });
-push({ type: "picked", ts_ms: 166000, msg_ids: [h1], reason: "hint matches a fogged hex" });
-say(166500, "ashen_quill wants the wallet. Patience, Acolyte. The fog lifts by vote, not by whining.", [h1]);
+op(162600, { op: "show_screen", screen: "browser", record_id: "REP-02" });
+say(163200, "The press remembers what Glimmerquay would rather forget. Four percent a week, in their own words. REPORTED, minions, so ALLEGED.");
+// Back to the board, and the first strings: each cites the record it rests on.
+focus(165000, "HEX-01");
+pin(165500, "HEX-01", "HEX-05", "claims", "REP-02");
+say(166000, "First string. The Syndicate claims the four percent, and the string cites its record. No record, no string.");
+reveal(167500, "HEX-06", "REP");
+focus(167500, "HEX-06");
+pin(168500, "HEX-06", "HEX-01", "promoted", "REP-03");
+push({ type: "picked", ts_ms: 169000, msg_ids: [h1], reason: "hint matches a face-down card" });
+say(169500, "ashen_quill wants the wallet. Patience, Acolyte. Cards turn by vote, not by whining.", [h1]);
 
 const nextHex = runPoll({
   id: "poll-next-hex",
-  question: "Which fog shall I burn next?",
+  question: "Which card shall I turn next?",
   options: ["HEX-04", "HEX-03", "HEX-07"],
   minRank: "acolyte",
   secs: 30,
@@ -331,47 +378,65 @@ const nextHex = runPoll({
   ],
 });
 say(173000, "Acolytes and above may vote. Thralls may watch, and learn what influence costs.");
-// The desk: the record in front, its hex lit on the map behind; then back to the map for the vote.
-op(178000, { op: "show_screen", screen: "desk" });
-op(192000, { op: "show_screen", screen: "hexmap" });
-op(202000, { op: "reveal_hex", hex: nextHex, grade: "SPC" });
+// The desk: the record in front, its card lit on the board behind; then the overview for the vote.
+op(178000, { op: "show_screen", screen: "desk", record_id: "REP-03" });
+op(192000, { op: "show_screen", screen: "board" });
+reveal(202000, nextHex, "SPC");
 focus(202000, nextHex);
 say(203000, "HEX-04, the treasury wallet. I SUSPECT it. I do not know it. Violet seal: speculation.");
 chat(204500, V.quill, "!grade HEX-04 CLM", { cmd: "grade", hex: "HEX-04", grade: "CLM" });
 chat(205200, V.grim, "!grade HEX-04 CLM", { cmd: "grade", hex: "HEX-04", grade: "CLM" });
 chat(206100, V.paper, "!grade HEX-04 CLM", { cmd: "grade", hex: "HEX-04", grade: "CLM" });
 chat(207000, V.salty, "!grade HEX-04 CLM", { cmd: "grade", hex: "HEX-04", grade: "CLM" });
-job(209000, "r-01", "done", "Two hops to mixer wallet demo-0002 (fictional chain)");
-op(210000, { op: "reveal_hex", hex: "HEX-09", grade: "REP" });
-focus(210000, "HEX-09");
+job(209000, "r-01", "done", "A freeze notice and a forum trace on treasury wallet demo-0001 (fictional)");
+shown(209100, "DOC-03");
+shown(209150, "CLM-02");
+reveal(210000, "HEX-09", "REP");
+focus(210000, "HEX-04");
+pin(210600, "HEX-01", "HEX-04", "controls", "DOC-03");
+pin(211600, "HEX-04", "HEX-09", "paid", "CLM-02");
 foilSay(212000, "the-inspector", "Case closed! The wallet did it.");
-say(215500, "Wallets do not do things, Inspector. People do. Allegedly.");
-op(219000, { op: "mark_moment", label: "Wallet trail revealed" });
+say(215500, "Wallets do not do things, Inspector. People do. And that second string is a community claim: ALLEGED.");
+op(219000, { op: "mark_moment", label: "The money path is strung" });
 push({ type: "moderation", ts_ms: 221000, stage: "output", rule: "alleged-qualifier-missing", action: "line held: grade below DOC stated as fact" });
 say(222500, "My Lord has struck that line. Let me rephrase: it is ALLEGED. Let the deficit be recorded.");
-op(227000, { op: "reveal_hex", hex: "HEX-13", grade: "DOC" });
+op(224000, { op: "dispatch_research", job_id: "r-03", brief: "Registry extract for Ashpetal Holdings, and the regulator's warning list" });
+focus(224000, "HEX-03");
+job(224400, "r-03", "running");
+reveal(227000, "HEX-13", "DOC");
 focus(227000, "HEX-13");
-op(228500, { op: "reveal_hex", hex: "HEX-03", grade: "REP" });
+reveal(228500, "HEX-03", "REP");
 focus(228500, "HEX-03");
 const h2 = chat(229500, V.vex, "!hint HEX-07 the moon maintenance freeze", { cmd: "hint", hex: "HEX-07", text: "the moon maintenance freeze" });
 op(231000, { op: "highlight", msg_id: h2 });
+job(232000, "r-03", "done", "A registry extract and the regulator's warning list (fictional)");
+shown(232100, "DOC-02");
+shown(232150, "DOC-04");
+reveal(232500, "HEX-02", "CLM");
 op(233000, { op: "show_card", card_id: "card-money-path", title: "The money path (alleged)", body: "Glimmerquay Yield -> Treasury wallet -> Mixer hop -> Exchange deposit" });
 say(234000, "Follow the coins, minions. Syndicate, treasury, a mixer, an exchange. Every hop past the first is ALLEGED.");
-// He pulls back to the overview to show the whole path, then sends the clerks to Ashpetal.
-op(236000, { op: "show_screen", screen: "hexmap" });
-op(239000, { op: "dispatch_research", job_id: "r-03", brief: "Registry extract for Ashpetal Holdings" });
-focus(239000, "HEX-03");
-job(239600, "r-03", "running");
+// The contradiction: the regulator's list against the site's own guarantee.
+focus(235000, "HEX-13");
+pin(235500, "HEX-13", "HEX-02", "contradicts", "DOC-04");
+say(236500, "And the regulator's own warning list says the site was never authorised. A DOCUMENT against the site's guarantee. A dashed string, minions: that is what a lie looks like on cork.");
+reveal(238500, "HEX-08", "DOC");
+focus(238500, "HEX-08");
+pin(239500, "HEX-08", "HEX-03", "owns", "DOC-02");
 const mBrigade = chat(241000, V.grin, "everyone go spam their forum!!");
 push({ type: "moderation", ts_ms: 241100, stage: "input", rule: "anti-brigade", msg_id: mBrigade, action: "message withheld: zero crowd action" });
 say(242500, "No raids. We audit, we do not swarm. The Warden agrees with me, which is rare.");
-op(246000, { op: "reveal_hex", hex: "HEX-07", grade: "CLM" });
+op(244000, { op: "dispatch_research", job_id: "r-04", brief: "Trace exchange deposit wallet demo-0003" });
+job(244400, "r-04", "running");
+reveal(246000, "HEX-07", "CLM");
 focus(246000, "HEX-07");
 op(247000, { op: "show_card", card_id: "card-moon", title: "Moon maintenance", body: "Withdrawals frozen while promoters service the moon. A classic stall tactic, says the ledger." });
-job(250000, "r-03", "failed", "Registry mirror unreachable; retry off-stream");
+// The desk once more: the registry extract in front, Ashpetal's card lit behind; then the overview.
+op(248000, { op: "show_screen", screen: "desk", record_id: "DOC-02" });
+job(250000, "r-04", "failed", "Chain mirror unreachable; retry off-stream");
+op(250500, { op: "show_screen", screen: "board" });
 const mBye = chat(251000, V.paper, "best audit yet, Lord Malakor");
 push({ type: "picked", ts_ms: 252000, msg_ids: [mBye], reason: "a Dread Council farewell" });
-say(252500, "ThePaperSkull, the Council is pleased. Minions, the ledger is sealed for tonight. Let the deficit be recorded.", [mBye]);
+say(252500, "ThePaperSkull, the Council is pleased. Minions, the board stays pinned for tonight. Let the deficit be recorded.", [mBye]);
 op(257000, { op: "sign_off", reason: "Season 0 rehearsal complete. The ledger is sealed for tonight." });
 push({ type: "segment_end", ts_ms: 262000, segment: "SEG-02A", ses: 0.71 });
 push({ type: "stream_end", ts_ms: 264000, reason: "sim_complete" });

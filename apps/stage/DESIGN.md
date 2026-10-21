@@ -18,7 +18,7 @@ node apps/stage/scripts/make-demo.mjs   # regenerates fixtures/demo.jsonl
 |---|---|
 | (none) | plays `fixtures/demo.jsonl` (bundled) |
 | `?file=<url>` | fetches a transcript; also tries the sidecar `<name>.case.json` |
-| `?case=<url>` | the SEG-02A `Case` to draw the hexmap with |
+| `?case=<url>` | the SEG-02A `Case` to draw the evidence board (and the hexmap) with |
 | `?run=<run_id>` or `?run=live` | daemon WebSocket instead of a file (live mode, below); sends `{"subscribe": run, "speed": speed, "since", "run_id"}` |
 | `?ws=<url>` | WebSocket URL (default `ws://127.0.0.1:7717/events`) |
 | `?broadcast=1` | hides every control (the OBS view) |
@@ -45,7 +45,7 @@ The scene model and its components are shared with the console's On Air page, so
   grades, foils) and the wire vocabulary lists. Wire types come from `@shadowrunr/contract`,
   generated from `crates/shadowrunr-types`; there is no hand-copied contract here any more.
 - `@shadowrunr/stage-kit/ui`: the stage components (caption, chat lane, decrees, vote panel,
-  foil card, hexmap and its panels, job ticker, explainer card, overlays) and the art (rank
+  foil card, evidence board, hexmap and its panels, job ticker, explainer card, overlays) and the art (rank
   sigils, the silhouette).
 - `@shadowrunr/stage-kit/parse`: the transcript parser. Every line goes through the contract's
   one door (`parseEvent`), so the stage validates exactly what the console validates.
@@ -154,7 +154,7 @@ line said, as the console reads it.
 ## Screens and layouts
 
 The canvas draws `scene.layout`: `boot` before the first segment, then the main screen
-(contract `ScreenId`). A segment opens on its default screen (SEG-02A: `hexmap`; every other:
+(contract `ScreenId`). A segment opens on its default screen (SEG-02A: `board`; every other:
 `host`) on `segment_start` and `handover`, so a transcript without `show_screen` still renders;
 the runtime sends its own `show_screen` too. Inside a segment `show_screen` switches screens.
 
@@ -162,20 +162,65 @@ the runtime sends its own `show_screen` too. Inside a segment `show_screen` swit
 |---|---|---|
 | `boot` | before the first `segment_start` | the intro seal |
 | `host` | SEG-01 (and the descoped segments), or `show_screen host` | the big-avatar room: Malakor's slot and a large kinetic caption; right column: foil card, vote panel, chat lane |
-| `hexmap` | SEG-02A's default, or `show_screen hexmap [focus]` | the hexmap fills the content area: the overview, or zoomed to the `focus` hex |
+| `board` | SEG-02A's default, or `show_screen board [focus]` | the evidence board fills the content area: the overview, or zoomed to the `focus` card and the cards strung to it |
+| `hexmap` | `show_screen hexmap [focus]` (older transcripts) | the hexmap fills the content area: the overview, or zoomed to the `focus` hex |
 | `browser` | `show_screen browser [record_id]` | a staged record in a browser window filling the content area |
-| `desk` | `show_screen desk [record_id] [focus]` | the hexmap window behind (top-left, smaller, dimmed) and the browser window in front; the record's hex is lit on the map, which zooms to the `focus` or, without one, to the record's hex |
+| `desk` | `show_screen desk [record_id] [focus]` | the map window behind (top-left, smaller, dimmed: the board, or the hexmap when that was the last map shown) and the browser window in front; the record's card (or hex) is lit, and the map zooms to the `focus` or, without one, to the record's card |
 
-**The streamer layout** (`hexmap`, `browser`, `desk`; `layout-corner` on the canvas): the content
+**The streamer layout** (`board`, `hexmap`, `browser`, `desk`; `layout-corner` on the canvas): the content
 area is everything left of the right column. Malakor stands cut out over its bottom-left corner
 in a 448 px box whose bottom is the canvas's bottom edge (no badge, no backplate; the rig's torso
 is cut off at its box's bottom, like a streamer's cut-out, and so is the silhouette fallback's
 robe). The caption is a lower third from his right edge to the content's right edge. The foil
 badge, decrees and explainer cards float in the content's top-right. The right column is the
 chat lane, plus the vote while a poll is open; the hex inspector and the minion jury show on
-`hexmap` and `desk` only, and the minion ticker closes the column, so it never sits under him.
-The standing card (the segment's commands) shows between explainer cards on `host` and `hexmap`,
+`board`, `hexmap` and `desk` only, and the minion ticker closes the column, so it never sits
+under him. The standing card (the segment's commands) shows between explainer cards on `host`,
+`board` and `hexmap`,
 not over a browser page.
+
+**The evidence board** (`EvidenceBoard`, stage-kit ui; geometry in `board.ts` and
+`boardStrings.ts`, names in `boardNames.ts`; skin in `board.css` and `board-strings.css`).
+SEG-02A's main screen is the case on cork:
+
+- **Cards.** Every hex of the case is a card. Face down it is the fog: the id and a `?`. Face
+  up (`reveal_hex`, or a case hex that ships revealed) it is a paper index card: the role glyph
+  and the role's name (`ROLE_LABEL`; a hex without a role is named by its kind), the id, the
+  label, the date, the grade badge, and ALLEGED beside the grade below DOC. It flips over in
+  1.4 s. A role or relation id is never drawn.
+- **Acts as regions.** The case's `acts` are columns left to right, each named with its numeral
+  (a case without acts is grouped by kind; hexes no act names go to "Loose ends"). The act of
+  the focused card (else the latest string's or reveal's) is lit. A card's place comes from its
+  act and its index in it, never from what is face up, so cards keep their places as the board
+  fills in, and the board screen, the desk's window and a clip all use the one layout
+  (`BOARD_LAYOUT_FRAME`, the board screen's frame). No card and no act name sits under
+  Malakor's corner or under the observer badge's place at the top of the overlay lane (kept
+  whether a foil is in or not, so nothing moves when one arrives); `stage.test.ts` checks the
+  demo case: no card under him, none overlapping, every act inside the content area.
+- **Strings** (`link_pinned`, never the bare `pin_link` op, which the runtime may refuse). A
+  string runs from the `from` card's edge to the `to` card's edge, sagging like string on cork
+  (more strings between one pair sag further), with an arrowhead on the `to` card and a label:
+  what it says (`REL_LABEL`) over the record it cites, plus "alleged" below DOC. It is coloured
+  by its record's grade and drawn thinner below DOC; a `contradicts` string is dashed with a
+  signal-edged label. The label rides the curve where it covers no card (and no label placed
+  before it) when the curve allows. A new string draws in over 1.6 s (a mask runs along it;
+  the head and the label land after).
+- **Focus and zoom** (`show_screen board focus`, and the desk's record). The board zooms to the
+  card and the cards strung to it, at most 1.8x, clear of Malakor and, as a rule, of the
+  overlay lane; a zoom only ever closes in, so a ring spread wider than the window stays at the
+  overview with the ring lit. The rest dims, and a card the zoom would put under Malakor (or,
+  on the desk, under the browser window) is not drawn. The move is the map zoom's 0.9 s curve.
+- **The thesis** (`case.thesis`, else the title) heads the board in a band with a FICTIONAL CASE
+  chip for a fictional case, and the count of cards face up and strings pinned.
+- **The timeline strip** runs along the board's bottom from Malakor's right edge, above the lower
+  third: a dot per face-up card with a date and a diamond per record received with one, on an
+  axis spanning every date in the case and the records (so marks never move as cards flip; a
+  face-down card's date is never drawn). Labels take one of two rows, else the mark stands bare.
+- Under reduced motion the flips, the draw-in and the zoom are instant.
+
+The board fills exactly the content rect, the rect the clip factory's 9:16 reframe crops
+(`CONTENT_SCREEN` in crates/shadowrunr-clips `footage.rs`; `stage.test.ts` reads it from there),
+so a SEG-02A cut frames the board the way it framed the hexmap.
 
 **No hex under him.** On `hexmap` and `desk` the map is fitted (`fitMap`, stage-kit) into its panel
 so that no hex's box touches Malakor's box or, on the desk, the browser window in front; on
@@ -202,8 +247,9 @@ summary (clamped) and the hex as a chip with its label. Nothing touches the netw
 
 **Records.** `record_shown` stores a record (at most 32, never an open tab). `show_screen browser`
 or `desk` opens the record named, else the one already open, else the latest received. A record
-that has not arrived yet is waited for: the screen shows the hexmap, and its `record_shown`
-completes the switch (the contract allows either order). `host`, `hexmap` or a handover drop
+that has not arrived yet is waited for: the screen shows the map (the board, or the hexmap when
+that was the last map shown), and its `record_shown` completes the switch (the contract allows
+either order). `host`, `board`, `hexmap` or a handover drop
 the wait.
 
 **Moves.** A screen switch moves the same regions to new rects on the 0.95 s curve, with no wipe
@@ -231,7 +277,8 @@ silhouette" note is a production note, so `?broadcast=1` drops it.
 | `stream_start` | intro seal "Now broadcasting from the Obsidian Spire" (4.6 s); the audience size goes to the top bar |
 | `segment_start` | switches to the segment's default screen (regions glide to new rects) |
 | `handover` | the same screen switch plus a skewed obsidian wipe with the new segment's title and Malakor's reason |
-| `record_shown` | stores the record for the browser window; completes a `show_screen` that waits for it |
+| `record_shown` | stores the record for the browser window and the board's timeline strip; completes a `show_screen` that waits for it |
+| `link_pinned` | a labelled string draws in between two cards on the evidence board, coloured by its record's grade (a repeat of one already pinned is ignored) |
 | `segment_end` | toast "SEG-xx sealed · SES +0.42" |
 | `chat` | a row in the chat lane: rank sigil, name in rank colour, command chip (`!summon`, `!hint`, `!grade`, `!propose`, `!vote`); the row waits until the input filter's beat that judged it has closed (`shownLane`), so a line the filter drops never shows its text, not even for the seconds before the beat |
 | `chat` `!vote` / `!summon` | a rank-weighted ballot in the open poll (feeds the rank colour bands) |
@@ -251,21 +298,23 @@ silhouette" note is a production note, so `?broadcast=1` drops it.
 | `highlight` | the message lifts out of the lane into a "Decree of the Lich" card with the viewer's rank sigil (9 s) |
 | `start_poll` / `close_poll` | the vote panel opens in the right column / seals |
 | `summon_foil` / `dismiss_foil` | foil card materialises with its emblem, name and tagline (SEG-01); in SEG-02A it shrinks to the Skeptical Observer badge / it leaves |
-| `reveal_hex` | the hex burns through its fog (rotate, scale and flash), the grade badge drops in, the ALLEGED stamp lands on anything below DOC, links between revealed hexes light up, and the inspector shows the hex |
+| `reveal_hex` | on the board the card flips face up (and lands on the timeline strip when dated); on the hexmap the hex burns through its fog (rotate, scale and flash), the grade badge drops in, the ALLEGED stamp lands on anything below DOC, links between revealed hexes light up, and the inspector shows the hex |
 | `dispatch_research` | a queued job in the ticker with its brief; later `job` events update the same entry |
 | `show_card` | explainer card with an animated diagram picked from the text: `A -> B -> C` becomes a flow, two or more `label: number` pairs become comparison bars, a single percentage becomes a ring gauge, anything else becomes a keyword constellation |
 | `mark_moment` | a subtle verdigris flash, a "✦ Clip marked" chip, and a marker on the scrubber timeline (click to jump 3 s before it) |
 | `switch_segment` | "⟶ next segment" chip in the top bar until the handover |
 | `sign_off` | the outro card: "The ledger is sealed", the reason, minions, hexes, clips, redactions, and "Let the deficit be recorded." |
-| `show_screen` | switches the main screen (above); `browser`/`desk` open the record in the browser window; a `focus` zooms the map (a new focus on the same screen only moves the map) |
+| `show_screen` | switches the main screen (above); `browser`/`desk` open the record in the browser window; a `focus` zooms the board or the map (a new focus on the same screen only moves it) |
+| `pin_link` | nothing by itself: the board draws the runtime's `link_pinned` that accepts it |
 
 ## SEG-02A specifics
 
 - **Grades:** DOC verdigris `#86d3bb`, REP stone `#cdbf9f`, CLM amber `#e8913f`, SPC flare `#ff5a2a`
   (`--sr-grade-*` from `@shadowrunr/tokens`, the Poster Wall's fidelity palette). Every hex graded below
-  DOC carries an ALLEGED stamp, in the map and in the inspector.
-- **Case title** in the top bar with a striped **FICTIONAL** tag, and a FICTIONAL CASE corner
-  ribbon on the map, whenever `case.fictional` is true.
+  DOC carries an ALLEGED stamp, on its card, in the map and in the inspector, and every string
+  pinned on a record below DOC says "alleged".
+- **Case title** in the top bar with a striped **FICTIONAL** tag, and a FICTIONAL CASE chip in the
+  board's thesis band (a corner ribbon on the map), whenever `case.fictional` is true.
 - **Minion jury:** the community `!grade` counts per hex against Malakor's grade. A hex is
   DISPUTED when at least 3 minions graded it and their majority differs from his grade (a
   simplified form of the digest's "confidence vs jury" divergence).
@@ -360,7 +409,8 @@ intentional clamps. It was run over 30+ moments of the demo, at 1920x1080 and at
 draws it on a 1080x1920 canvas instead of the broadcast (`src/ClipStage.tsx`, `src/clip.ts`,
 `src/clip.css`). Top to bottom: the header (ALLEGED, the grade badge, the case title and a
 FICTIONAL DEMO CASE chip for SEG-02A or case-linked clips; otherwise the segment title and
-foil), the hexmap or the avatar with the foil card, the exact transcript captions word-timed
+foil), the evidence board (the hexmap for a transcript that shows it) or the avatar with the
+foil card, the exact transcript captions word-timed
 by stage-kit's caption model, the citation strip, and the AI disclosure with the clip's
 provenance. Chat never appears: handles stay in the room.
 

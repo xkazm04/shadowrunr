@@ -1,5 +1,5 @@
 //! SegmentRuntime behaviour: the cold open, handover, polls and their ties, foils, ranks, the
-//! DOC rule, descoped segments.
+//! DOC rule, descoped segments, the screens and the evidence board.
 
 use shadowrunr_segments::runtime::PollOutcome;
 use shadowrunr_segments::table::ColdOpenRule;
@@ -9,7 +9,7 @@ use shadowrunr_segments::{
 };
 use shadowrunr_types::character::{CharacterManifest, Persona};
 use shadowrunr_types::{
-    ChatMsg, Command, EvidenceGrade, Hex, HexKind, ModStage, Op, Platform, Rank, ScreenId,
+    ChatMsg, Command, EvidenceGrade, Hex, HexKind, LinkRel, ModStage, Op, Platform, Rank, ScreenId,
     SegmentId, StreamEvent, Viewer,
 };
 
@@ -276,7 +276,7 @@ fn clock_completes_the_switch_after_grace() {
             StreamEvent::CaseOpen { .. },
             StreamEvent::Op {
                 op: Op::ShowScreen {
-                    screen: ScreenId::Hexmap,
+                    screen: ScreenId::Board,
                     record_id: None,
                     focus: None
                 },
@@ -304,7 +304,7 @@ fn brain_switch_during_pending_handover_does_not_repeat_it() {
     assert!(handovers(&evs).is_empty());
     // The switch, and the new segment's default screen.
     assert_eq!(accepted_ops(&evs), 1);
-    assert_eq!(screens(&evs), [(ScreenId::Hexmap, None)]);
+    assert_eq!(screens(&evs), [(ScreenId::Board, None)]);
     assert_eq!(rt.segment(), SegmentId::Seg02aHexmap);
 }
 
@@ -696,7 +696,7 @@ fn start_in_seg02a_opens_the_fictional_demo_case() {
         ts_ms: 1_000,
         op:
             Op::ShowScreen {
-                screen: ScreenId::Hexmap,
+                screen: ScreenId::Board,
                 record_id: None,
                 focus: None,
             },
@@ -1519,13 +1519,16 @@ fn a_fleet_loss_sign_off_is_never_held_for_the_seal() {
 
 #[test]
 fn a_staged_arc_from_the_case_file_wins_over_kind_order() {
+    // The case's own acts would place every hex: this case has none.
+    let mut case = demo_case();
+    case.acts.clear();
     let mut file = shadowrunr_segments::CaseFile::demo();
     // Act III holds only HEX-01; the rest are dealt by kind.
     file.arc = vec![Vec::new(), Vec::new(), vec!["HEX-01".into()]];
     let rt = SegmentRuntime::with_config(
         SegmentId::Seg02aHexmap,
         SegmentConfig {
-            case: Some(demo_case()),
+            case: Some(case),
             case_file: Some(file),
             planned_s: Some(10_800),
             ..cfg()
@@ -2126,7 +2129,7 @@ fn a_tied_crowd_poll_on_hexes_works_every_tied_hex() {
     );
 }
 
-// ----- screens (appendix (screens)) -------------------------------------------------------
+// ----- screens (appendix (screens and board)) ---------------------------------------------
 
 fn screen(screen: ScreenId, record_id: Option<&str>) -> Op {
     Op::ShowScreen {
@@ -2170,7 +2173,7 @@ fn seg01_has_one_screen_and_the_cold_open_stays_on_host() {
     let mut rt = seg01_cold();
     assert!(rt.in_cold_open());
     assert_eq!(rt.screen(), ScreenId::Host);
-    let evs = rt.apply_ops(1_000, &[screen(ScreenId::Hexmap, None)]);
+    let evs = rt.apply_ops(1_000, &[screen(ScreenId::Board, None)]);
     assert_eq!(rejections(&evs)[0].1, "op_not_allowed");
     assert_eq!(rt.screen(), ScreenId::Host);
     // The cold open ends on its ceiling: still the big-avatar room, nothing to switch.
@@ -2194,7 +2197,7 @@ fn browser_needs_a_record() {
     assert_eq!(rejections(&evs)[0].1, "no_record");
     let evs = rt.apply_ops(1_000, &[screen(ScreenId::Desk, None)]);
     assert_eq!(rejections(&evs)[0].1, "no_record");
-    assert_eq!(rt.screen(), ScreenId::Hexmap);
+    assert_eq!(rt.screen(), ScreenId::Board);
     // The refusal is named in the state, like every other.
     let summary = rt.context(0, 1).state_summary;
     assert!(summary.contains("show_screen: no_record"), "{summary}");
@@ -2265,11 +2268,14 @@ fn record_shown_goes_out_once_and_before_the_op_that_names_it() {
         (&filed.source, &filed.summary, &filed.retrieved, &filed.via)
     );
     assert!(record.fictional);
+    // The record's date rides along for the board's timeline.
+    assert_eq!(record.date, filed.date);
+    assert_eq!(record.date.as_deref(), Some("2026-03-09"));
     // Absent provenance is omitted on the wire, never null.
     let line = serde_json::to_string(&evs[0]).unwrap();
     assert!(!line.contains("null"), "{line}");
     // Named again: no second record_shown.
-    let evs = rt.apply_ops(2_000, &[screen(ScreenId::Hexmap, None)]);
+    let evs = rt.apply_ops(2_000, &[screen(ScreenId::Board, None)]);
     assert_eq!(tags(&evs), ["op:show_screen"]);
     let evs = rt.apply_ops(3_000, &[screen(ScreenId::Browser, Some("CLM-02"))]);
     assert_eq!(tags(&evs), ["op:show_screen"]);
@@ -2287,8 +2293,8 @@ fn browser_and_desk_reopen_the_record_already_open() {
     let evs = rt.apply_ops(
         2_000,
         &[
-            // A record_id on the map is ignored: the map shows no record.
-            screen(ScreenId::Hexmap, Some("NOPE-01")),
+            // A record_id on the board is ignored: the board shows no record.
+            screen(ScreenId::Board, Some("NOPE-01")),
             screen(ScreenId::Desk, None),
         ],
     );
@@ -2298,7 +2304,7 @@ fn browser_and_desk_reopen_the_record_already_open() {
     let summary = rt.context(0, 2).state_summary;
     assert!(
         summary.contains(
-            "Screen: desk on DOC-03, map focused on HEX-04. Records on file, newest first: \
+            "Screen: desk on DOC-03, board focused on HEX-04. Records on file, newest first: \
              CLM-02, DOC-03"
         ),
         "{summary}"
@@ -2344,10 +2350,10 @@ fn a_default_never_overrides_the_models_screen_within_the_hold() {
             research("r2", "HEX-01: the syndicate's licence"),
         ],
     );
-    rt.apply_ops(10_000, &[screen(ScreenId::Hexmap, None)]);
+    rt.apply_ops(10_000, &[screen(ScreenId::Board, None)]);
     // Inside the hold: suppressed, and the job's default is spent.
     assert!(rt.job_done("r1", 10_000 + SCREEN_HOLD_MS - 1).is_empty());
-    assert_eq!(rt.screen(), ScreenId::Hexmap);
+    assert_eq!(rt.screen(), ScreenId::Board);
     assert!(rt.job_done("r1", 30_000).is_empty());
     // At the end of the hold the next job's default goes up.
     let evs = rt.job_done("r2", 10_000 + SCREEN_HOLD_MS);
@@ -2369,7 +2375,7 @@ fn no_screen_defaults_after_the_sign_off() {
     );
     assert!(rt.is_signed_off());
     assert!(rt.job_done("r1", 20_000).is_empty());
-    let evs = rt.apply_ops(21_000, &[screen(ScreenId::Hexmap, None)]);
+    let evs = rt.apply_ops(21_000, &[screen(ScreenId::Board, None)]);
     assert_eq!(rejections(&evs)[0].1, "signed_off");
 }
 
@@ -2378,7 +2384,7 @@ fn the_screen_line_is_short_and_capped() {
     let mut rt = seg02a();
     let summary = rt.context(0, 0).state_summary;
     assert!(
-        summary.contains("Screen: hexmap. Records on file: none yet (browser and desk need one)"),
+        summary.contains("Screen: board. Records on file: none yet (browser and desk need one)"),
         "{summary}"
     );
     rt.apply_ops(
@@ -2397,10 +2403,10 @@ fn the_screen_line_is_short_and_capped() {
             .unwrap()
             .to_string()
     };
-    // Filed, but no job is back yet: nothing to offer. The map follows the last dispatch.
+    // Filed, but no job is back yet: nothing to offer. The board follows the last dispatch.
     assert_eq!(
         line(&rt),
-        "Screen: hexmap focused on HEX-05. Records on file: none yet (browser and desk need one)"
+        "Screen: board focused on HEX-05. Records on file: none yet (browser and desk need one)"
     );
     rt.job_done("r1", 10_000);
     rt.job_done("r2", 20_000);
@@ -2416,7 +2422,7 @@ fn the_screen_line_is_short_and_capped() {
     );
 }
 
-// ----- map focus and the investigation's screen defaults ----------------------------------
+// ----- board focus and the investigation's screen defaults --------------------------------
 
 fn focus(screen: ScreenId, record_id: Option<&str>, focus: Option<&str>) -> Op {
     Op::ShowScreen {
@@ -2455,21 +2461,21 @@ fn on(
 #[test]
 fn a_focus_must_be_a_case_hex() {
     let mut rt = seg02a();
-    let evs = rt.apply_ops(1_000, &[focus(ScreenId::Hexmap, None, Some("HEX-99"))]);
+    let evs = rt.apply_ops(1_000, &[focus(ScreenId::Board, None, Some("HEX-99"))]);
     assert_eq!(rejections(&evs)[0].1, "unknown_hex");
     assert!(rt
         .context(0, 1)
         .state_summary
         .contains("show_screen: unknown_hex"));
     // A loose spelling is the case's id.
-    let evs = rt.apply_ops(2_000, &[focus(ScreenId::Hexmap, None, Some("hex3"))]);
+    let evs = rt.apply_ops(2_000, &[focus(ScreenId::Board, None, Some("hex3"))]);
     assert!(rejections(&evs).is_empty(), "{evs:?}");
     let summary = rt.context(0, 2).state_summary;
     assert!(
-        summary.contains("Screen: hexmap focused on HEX-03."),
+        summary.contains("Screen: board focused on HEX-03."),
         "{summary}"
     );
-    // A focus on host or browser is ignored, like a record_id on the map.
+    // A focus on host or browser is ignored, like a record_id on the board.
     let evs = rt.apply_ops(3_000, &[focus(ScreenId::Host, None, Some("HEX-99"))]);
     assert!(rejections(&evs).is_empty(), "{evs:?}");
     assert!(rt.context(0, 3).state_summary.contains("Screen: host."));
@@ -2491,28 +2497,28 @@ fn a_focus_must_be_a_case_hex() {
     assert!(rejections(&evs).is_empty(), "{evs:?}");
     let summary = rt.context(0, 7).state_summary;
     assert!(
-        summary.contains("Screen: desk on DOC-03, map focused on HEX-01."),
+        summary.contains("Screen: desk on DOC-03, board focused on HEX-01."),
         "{summary}"
     );
     // On the wire an absent focus is omitted, never null.
-    let line = serde_json::to_string(&focus(ScreenId::Hexmap, None, None)).unwrap();
-    assert_eq!(line, r#"{"op":"show_screen","screen":"hexmap"}"#);
+    let line = serde_json::to_string(&focus(ScreenId::Board, None, None)).unwrap();
+    assert_eq!(line, r#"{"op":"show_screen","screen":"board"}"#);
 }
 
 #[test]
-fn a_dispatch_and_a_reveal_zoom_the_map_to_their_hex() {
+fn a_dispatch_and_a_reveal_zoom_the_board_to_their_card() {
     let mut rt = seg02a();
     let evs = rt.apply_ops(
         1_000,
         &[research("r1", "HEX-04: trace the treasury wallet")],
     );
     assert_eq!(tags(&evs), ["op:dispatch_research", "op:show_screen"]);
-    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, Some("HEX-04"))]);
+    assert_eq!(focused(&evs), [on(ScreenId::Board, None, Some("HEX-04"))]);
     // A brief that names no single hex moves nothing.
     let evs = rt.apply_ops(2_000, &[research("r2", "dig through the old archives")]);
     assert!(focused(&evs).is_empty(), "{evs:?}");
     let evs = rt.apply_ops(3_000, &[reveal("HEX-16", EvidenceGrade::Clm)]);
-    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, Some("HEX-16"))]);
+    assert_eq!(focused(&evs), [on(ScreenId::Board, None, Some("HEX-16"))]);
     // The same view already up is not sent again.
     let evs = rt.apply_ops(4_000, &[reveal("HEX-16", EvidenceGrade::Spc)]);
     assert!(focused(&evs).is_empty(), "{evs:?}");
@@ -2533,7 +2539,7 @@ fn a_poll_opens_on_the_overview() {
         &[poll("next", &["HEX-01", "HEX-02"], Rank::Thrall, 30)],
     );
     assert_eq!(tags(&evs), ["op:start_poll", "op:show_screen"]);
-    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, None)]);
+    assert_eq!(focused(&evs), [on(ScreenId::Board, None, None)]);
     rt.apply_ops(
         40_000,
         &[Op::ClosePoll {
@@ -2548,7 +2554,7 @@ fn a_poll_opens_on_the_overview() {
         ["moderation", "op:start_poll", "op:show_screen"],
         "{evs:?}"
     );
-    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, None)]);
+    assert_eq!(focused(&evs), [on(ScreenId::Board, None, None)]);
 }
 
 #[test]
@@ -2563,7 +2569,7 @@ fn the_browser_gives_way_to_the_desk_then_the_overview() {
         [on(ScreenId::Browser, Some("DOC-03"), None)]
     );
     assert!(focused(&rt.tick(back + BROWSER_DWELL_MS - 1, 0)).is_empty());
-    // The record stays up, and the map beside it shows the record's hex.
+    // The record stays up, and the board behind it shows the record's card.
     let evs = rt.tick(back + BROWSER_DWELL_MS, 0);
     assert_eq!(
         focused(&evs),
@@ -2572,7 +2578,7 @@ fn the_browser_gives_way_to_the_desk_then_the_overview() {
     let desk = back + BROWSER_DWELL_MS;
     assert!(focused(&rt.tick(desk + DESK_DWELL_MS - 1, 0)).is_empty());
     let evs = rt.tick(desk + DESK_DWELL_MS, 0);
-    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, None)]);
+    assert_eq!(focused(&evs), [on(ScreenId::Board, None, None)]);
     // The overview stays.
     assert!(focused(&rt.tick(desk + 10 * DESK_DWELL_MS, 0)).is_empty());
 }
@@ -2617,7 +2623,7 @@ fn the_hold_protects_the_models_screen_from_every_default() {
     // A default suppressed by the hold is spent: nothing fires when the hold ends.
     assert!(focused(&rt.tick(10_000 + SCREEN_HOLD_MS, 0)).is_empty());
     assert_eq!(rt.screen(), ScreenId::Host);
-    // Past the hold the next dispatch moves the map again.
+    // Past the hold the next dispatch moves the board again.
     rt.apply_ops(
         50_000,
         &[Op::ClosePoll {
@@ -2625,7 +2631,7 @@ fn the_hold_protects_the_models_screen_from_every_default() {
         }],
     );
     let evs = rt.apply_ops(51_000, &[research("r2", "HEX-01: the syndicate's licence")]);
-    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, Some("HEX-01"))]);
+    assert_eq!(focused(&evs), [on(ScreenId::Board, None, Some("HEX-01"))]);
     // The model's own browser holds against the dwell's first step too.
     rt.job_done("r1", 52_000);
     let evs = rt.apply_ops(53_000, &[screen(ScreenId::Browser, Some("DOC-03"))]);
@@ -2633,4 +2639,254 @@ fn the_hold_protects_the_models_screen_from_every_default() {
     let evs = rt.apply_ops(54_000, &[research("r3", "HEX-05: the weekly promise")]);
     assert!(focused(&evs).is_empty(), "inside the hold: {evs:?}");
     assert_eq!(rt.screen(), ScreenId::Browser);
+}
+
+// ----- the evidence board: pin_link and link_pinned ----------------------------------------
+
+fn pin(from: &str, to: &str, rel: LinkRel, record_id: &str) -> Op {
+    Op::PinLink {
+        from: from.into(),
+        to: to.into(),
+        rel,
+        record_id: record_id.into(),
+    }
+}
+
+/// SEG-02A with HEX-04's records back (DOC-03, CLM-02; DOC-03 opened by the runtime) and
+/// HEX-04 and HEX-09 face up, the screen back on the board's overview past the hold.
+fn board() -> SegmentRuntime {
+    let mut rt = seg02a();
+    rt.apply_ops(0, &[research("r1", "HEX-04: trace the treasury wallet")]);
+    rt.job_done("r1", 500);
+    rt.apply_ops(
+        1_000,
+        &[
+            reveal("HEX-04", EvidenceGrade::Doc),
+            reveal("HEX-09", EvidenceGrade::Clm),
+        ],
+    );
+    rt.apply_ops(1_000, &[screen(ScreenId::Board, None)]);
+    rt
+}
+
+#[test]
+fn a_pinned_string_cites_its_record_and_goes_out_as_link_pinned() {
+    let mut rt = board();
+    // CLM-02 came back with HEX-04's job but was never shown: it goes out before the op.
+    let evs = rt.apply_ops(30_000, &[pin("hex4", "HEX-09", LinkRel::Paid, "CLM-02")]);
+    assert_eq!(tags(&evs), ["record_shown", "op:pin_link", "link_pinned"]);
+    let StreamEvent::LinkPinned {
+        ts_ms,
+        from,
+        to,
+        rel,
+        record_id,
+        grade,
+    } = &evs[2]
+    else {
+        unreachable!()
+    };
+    // The ends are the case's ids, whatever spelling the model used; the grade is the
+    // record's, so the stage draws a CLM string as alleged.
+    assert_eq!(
+        (
+            *ts_ms,
+            from.as_str(),
+            to.as_str(),
+            *rel,
+            record_id.as_str(),
+            *grade
+        ),
+        (
+            30_000,
+            "HEX-04",
+            "HEX-09",
+            LinkRel::Paid,
+            "CLM-02",
+            EvidenceGrade::Clm
+        )
+    );
+    let line = serde_json::to_string(&evs[2]).unwrap();
+    assert_eq!(
+        line,
+        r#"{"type":"link_pinned","ts_ms":30000,"from":"HEX-04","to":"HEX-09","rel":"paid","record_id":"CLM-02","grade":"CLM"}"#
+    );
+    assert_eq!(rt.links().len(), 1);
+    assert_eq!(rt.links()[0].record_id, "CLM-02");
+    // A record already shown is not sent again: DOC-03 went up when the job came back.
+    let evs = rt.apply_ops(
+        31_000,
+        &[pin("HEX-04", "HEX-09", LinkRel::Supports, "DOC-03")],
+    );
+    assert_eq!(tags(&evs), ["op:pin_link", "link_pinned"]);
+}
+
+#[test]
+fn every_pin_link_rule_has_its_refusal() {
+    let mut rt = board();
+    let rule = |rt: &mut SegmentRuntime, op: Op| -> String {
+        let evs = rt.apply_ops(30_000, &[op]);
+        assert!(
+            !evs.iter().any(|e| matches!(
+                e,
+                StreamEvent::LinkPinned { .. } | StreamEvent::RecordShown { .. }
+            )),
+            "a refused pin sends nothing: {evs:?}"
+        );
+        rejections(&evs)
+            .first()
+            .map(|r| r.1.clone())
+            .unwrap_or_default()
+    };
+    // Both ends are cards of the case, and two different ones.
+    assert_eq!(
+        rule(&mut rt, pin("HEX-99", "HEX-09", LinkRel::Paid, "CLM-02")),
+        "unknown_hex"
+    );
+    assert_eq!(
+        rule(&mut rt, pin("HEX-04", "hex-4", LinkRel::Paid, "CLM-02")),
+        "same_hex"
+    );
+    // Both ends face up: HEX-10 is still face down.
+    assert_eq!(
+        rule(&mut rt, pin("HEX-09", "HEX-10", LinkRel::Paid, "CLM-02")),
+        "hex_not_revealed"
+    );
+    // Only returned records: never filed, then filed with its job still out.
+    assert_eq!(
+        rule(&mut rt, pin("HEX-04", "HEX-09", LinkRel::Paid, "CLM-04")),
+        "record_not_returned"
+    );
+    rt.apply_ops(30_000, &[research("r2", "HEX-09: the mixer hop")]);
+    assert_eq!(
+        rule(&mut rt, pin("HEX-04", "HEX-09", LinkRel::Paid, "CLM-04")),
+        "record_not_returned"
+    );
+    assert_eq!(
+        rule(&mut rt, pin("HEX-04", "HEX-09", LinkRel::Paid, "NOPE-01")),
+        "record_not_returned"
+    );
+    // The record is filed under one of the two cards: DOC-01 is about HEX-01.
+    rt.apply_ops(30_000, &[research("r3", "HEX-01: the syndicate's licence")]);
+    rt.job_done("r3", 30_000);
+    assert_eq!(
+        rule(&mut rt, pin("HEX-04", "HEX-09", LinkRel::Paid, "DOC-01")),
+        "record_not_on_link"
+    );
+    // The same ends and rel twice. The other way round, or another rel, is another string.
+    assert!(
+        rejections(&rt.apply_ops(30_000, &[pin("HEX-04", "HEX-09", LinkRel::Paid, "CLM-02")]))
+            .is_empty()
+    );
+    assert_eq!(
+        rule(&mut rt, pin("HEX-04", "HEX-09", LinkRel::Paid, "CLM-02")),
+        "duplicate_link"
+    );
+    assert!(
+        rejections(&rt.apply_ops(30_000, &[pin("HEX-09", "HEX-04", LinkRel::Paid, "CLM-02")]))
+            .is_empty()
+    );
+    assert_eq!(rt.links().len(), 2);
+    // Refusals are named in the state, like every other.
+    let summary = rt.context(0, 30).state_summary;
+    assert!(summary.contains("pin_link: duplicate_link"), "{summary}");
+}
+
+#[test]
+fn pin_link_is_seg02a_only() {
+    let mut rt = seg01();
+    let evs = rt.apply_ops(1_000, &[pin("HEX-04", "HEX-09", LinkRel::Paid, "CLM-02")]);
+    assert_eq!(rejections(&evs)[0].1, "op_not_allowed");
+    assert!(!rt.context(0, 1).allowed_ops.iter().any(|o| o == "pin_link"));
+    assert!(seg02a()
+        .context(0, 1)
+        .allowed_ops
+        .iter()
+        .any(|o| o == "pin_link"));
+}
+
+#[test]
+fn a_string_pinned_out_of_view_brings_up_the_board_on_its_card() {
+    let mut rt = board();
+    // The runtime's own browser (a returning job) is up: the string is pinned out of view.
+    rt.apply_ops(40_000, &[research("r2", "HEX-09: the mixer hop")]);
+    rt.job_done("r2", 41_000);
+    assert_eq!(rt.screen(), ScreenId::Browser);
+    let evs = rt.apply_ops(42_000, &[pin("HEX-04", "HEX-09", LinkRel::Paid, "CLM-04")]);
+    assert_eq!(
+        focused(&evs),
+        [on(ScreenId::Board, None, Some("HEX-09"))],
+        "{evs:?}"
+    );
+    // On the desk the board is in view already: the record stays up.
+    rt.apply_ops(43_000, &[screen(ScreenId::Desk, Some("CLM-04"))]);
+    let evs = rt.apply_ops(60_000, &[pin("HEX-04", "HEX-09", LinkRel::Paid, "CLM-02")]);
+    assert!(focused(&evs).is_empty(), "{evs:?}");
+    assert_eq!(rt.screen(), ScreenId::Desk);
+}
+
+#[test]
+fn the_board_line_counts_cards_and_strings_and_names_open_leads() {
+    let summary = seg02a().context(0, 0).state_summary;
+    assert!(
+        summary.contains("Board: 0 cards face up, 0 strings."),
+        "{summary}"
+    );
+    assert!(!summary.contains("Open leads"), "{summary}");
+    let mut rt = board();
+    let summary = rt.context(0, 1).state_summary;
+    assert!(
+        summary.contains(
+            "Board: 2 cards face up, 0 strings. Open leads: HEX-04 (wallet) has a returned \
+             record and no string."
+        ),
+        "{summary}"
+    );
+    rt.apply_ops(30_000, &[pin("HEX-04", "HEX-09", LinkRel::Paid, "CLM-02")]);
+    let summary = rt.context(0, 30).state_summary;
+    assert!(
+        summary.contains("Board: 2 cards face up, 1 string.\n")
+            || summary.ends_with("Board: 2 cards face up, 1 string."),
+        "{summary}"
+    );
+    assert!(!summary.contains("Open leads"), "{summary}");
+    // Nothing of the board goes into the stable rules prompt but the one rule on strings.
+    let rules = rt.context(0, 30).rules_prompt;
+    assert!(!rules.contains("Board:"), "{rules}");
+    assert!(rules.contains("`pin_link`"), "{rules}");
+}
+
+#[test]
+fn the_cases_acts_name_the_arc_and_stage_its_cards() {
+    let mut rt = SegmentRuntime::with_config(
+        SegmentId::Seg02aHexmap,
+        SegmentConfig {
+            planned_s: Some(10_800),
+            ..cfg()
+        },
+    )
+    .unwrap();
+    let case = demo_case();
+    assert_eq!(case.acts.len(), 3);
+    for (k, act) in case.acts.iter().enumerate() {
+        for id in &act.hexes {
+            assert_eq!(rt.hex_act(id), Some(k), "{id}");
+        }
+    }
+    let titles: Vec<String> = rt
+        .start(0)
+        .iter()
+        .filter_map(|e| match e {
+            StreamEvent::Op {
+                op: Op::ShowCard { title, .. },
+                ..
+            } => Some(title.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(titles, ["ACT I: The 4% promise"]);
+    assert!(rt
+        .context(0, 0)
+        .rules_prompt
+        .contains("Act II Frozen withdrawals and the money trail"));
 }

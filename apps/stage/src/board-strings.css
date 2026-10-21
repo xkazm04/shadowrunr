@@ -1,0 +1,283 @@
+/* The evidence board's strings, thesis band and timeline strip (stage-kit `EvidenceBoard`).
+   Colours are the token variables only; sizes are canvas pixels. */
+
+.board-strings {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.board-string {
+  transition: opacity 0.9s var(--move);
+}
+
+.string-line {
+  fill: none;
+  stroke: var(--grade);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--sr-color-mask-ink) 70%, transparent));
+}
+
+.string-head {
+  fill: var(--grade);
+}
+
+/* Below DOC: a thinner string, and its label says alleged. */
+.board-string.alleged .string-line {
+  stroke-width: 2.5;
+}
+
+/* A contradiction reads apart from every other string: dashed, with a signal-edged label. */
+.board-string.rel-contradicts .string-line {
+  stroke-dasharray: 11 7;
+  stroke-linecap: butt;
+}
+
+.string-label rect {
+  fill: color-mix(in srgb, var(--sr-color-scrim) 92%, transparent);
+  stroke: var(--grade);
+  stroke-width: 1.5;
+}
+
+.string-rel {
+  font-family: var(--ui);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  fill: var(--sr-color-text-on-dark);
+}
+
+.string-cite {
+  font-family: var(--mono);
+  font-size: 11px;
+  fill: var(--sr-color-text-mute-on-dark);
+}
+
+.board-string.rel-contradicts .string-label rect {
+  fill: color-mix(in srgb, var(--sr-color-signal-deep) 45%, var(--sr-color-scrim));
+  stroke: var(--sr-color-signal);
+  stroke-width: 2.5;
+}
+
+.board-string.dimmed {
+  opacity: 0.22;
+}
+
+/* Drawing in: a mask stroke runs along the curve; the head and the label land after it. */
+.string-reveal {
+  fill: none;
+  stroke: var(--sr-color-text-on-signal);
+  stroke-width: 18;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  animation: string-draw 1.1s var(--move) forwards;
+}
+
+.board-string.drawing .string-head,
+.board-string.drawing .string-label {
+  animation: string-land 0.4s 1s ease-out both;
+}
+
+@keyframes string-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes string-land {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ─── The thesis band ───────────────────────────────────────────────────────────────────────── */
+
+.board-thesis {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 64px;
+  padding: 0 16px 0 20px;
+  background: linear-gradient(var(--sr-color-scrim), color-mix(in srgb, var(--sr-color-scrim) 70%, transparent));
+  border-bottom: 1px solid color-mix(in srgb, var(--sr-color-foil) 25%, transparent);
+}
+
+.board-question {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.board-kicker {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sr-color-foil);
+}
+
+.board-thesis-text {
+  display: -webkit-box;
+  flex: none;
+  overflow: hidden;
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--sr-color-text-on-dark);
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.board-fiction {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(-45deg, var(--sr-color-surface-caution) 0 8px, color-mix(in srgb, var(--sr-color-caution-edge) 35%, var(--sr-color-surface-caution)) 8px 16px);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--sr-color-text-on-caution);
+}
+
+.board-count {
+  margin-left: 14px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--sr-color-text-mute-on-dark);
+}
+
+/* ─── The timeline strip ────────────────────────────────────────────────────────────────────── */
+
+.board-strip {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid color-mix(in srgb, var(--sr-color-text-mute-on-dark) 18%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--sr-color-scrim) 90%, transparent);
+}
+
+/* The axis runs between the two end dates (stage-kit STRIP_INSET leaves them room). */
+.strip-axis {
+  position: absolute;
+  left: 78px;
+  right: 78px;
+  top: 50%;
+  height: 1px;
+  background: color-mix(in srgb, var(--sr-color-text-mute-on-dark) 35%, transparent);
+}
+
+.strip-end {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: color-mix(in srgb, var(--sr-color-text-mute-on-dark) 60%, transparent);
+}
+
+.strip-end.start {
+  left: 8px;
+}
+
+.strip-end.end {
+  right: 8px;
+}
+
+.strip-mark {
+  position: absolute;
+  top: 50%;
+  width: 0;
+  height: 0;
+  animation: string-land 0.6s ease-out both;
+}
+
+.strip-mark i {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--grade);
+}
+
+.strip-mark.record i {
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  background: none;
+  border: 2px solid var(--grade);
+  transform: rotate(45deg);
+}
+
+.strip-label {
+  position: absolute;
+  overflow: hidden;
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--sr-color-text-mute-on-dark);
+  transform: translateX(-50%);
+}
+
+.strip-label.row-0 {
+  bottom: 7px;
+}
+
+.strip-label.row-1 {
+  top: 7px;
+}
+
+.strip-mark.record .strip-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.strip-mark.hot .strip-label {
+  color: var(--sr-color-foil);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-zoom,
+  .board-card,
+  .board-act,
+  .board-string {
+    transition: none;
+  }
+
+  .card-fog,
+  .board-card.on-record .card-face,
+  .board-card.flipping .card-back,
+  .board-card.flipping .card-face,
+  .board-card.flipping .card-alleged,
+  .board-string.drawing .string-head,
+  .board-string.drawing .string-label,
+  .strip-mark {
+    animation: none;
+  }
+
+  .board-card.flipping .card-back {
+    opacity: 0;
+  }
+
+  .string-reveal {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

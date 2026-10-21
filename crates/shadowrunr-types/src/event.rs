@@ -53,17 +53,18 @@ pub enum Op {
     SignOff {
         reason: String,
     },
-    /// Switch the broadcast's main screen (appendix (screens)). Only the screens the current
-    /// segment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.
-    /// `focus` names a case hex the map zooms to on `hexmap`/`desk` (absent: the overview).
     /// Pin a labelled string between two face-up cards on the evidence board, citing the
-    /// returned record that shows it (appendix (screens and board)).
+    /// returned record that shows it, filed under one of them (appendix (screens and board)).
     PinLink {
         from: String,
         to: String,
         rel: crate::segment::LinkRel,
         record_id: String,
     },
+    /// Switch the broadcast's main screen (appendix (screens and board)). Only the screens the
+    /// current segment (and state) allows; `record_id` names a staged case record for
+    /// `browser`/`desk`. `focus` names a case hex the map or board zooms to on
+    /// `hexmap`/`board`/`desk` (absent: the overview).
     ShowScreen {
         screen: ScreenId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -80,7 +81,7 @@ pub enum Op {
 pub enum ScreenId {
     /// The big-avatar room (the cold open, the improvised room).
     Host,
-    /// The case hexmap full-size.
+    /// The case hexmap full-size. No segment shows it now; kept for older transcripts.
     Hexmap,
     /// A browser-styled window on one staged case record.
     Browser,

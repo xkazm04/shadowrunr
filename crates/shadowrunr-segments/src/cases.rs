@@ -590,6 +590,7 @@ pub(crate) mod tests {
             retrieved: Some("2026-10-19".into()),
             content_hash: Some(HASH.into()),
             via: None,
+            date: None,
         }
     }
 

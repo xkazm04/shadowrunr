@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use serde::Serialize;
 use shadowrunr_types::character::{Persona, SegmentFlavour, Tuning};
 use shadowrunr_types::{
-    Case, ChatMsg, Command, EvidenceGrade, HexKind, ModStage, Op, Rank, ScreenId, SegmentContext,
-    SegmentId, ShownRecord, StreamEvent, TsMs, VoteTally,
+    Case, ChatMsg, Command, EvidenceGrade, Hex, HexKind, HexRole, LinkRel, ModStage, Op, Rank,
+    ScreenId, SegmentContext, SegmentId, ShownRecord, StreamEvent, TsMs, VoteTally,
 };
 
 use crate::case::{demo_case, validate_case};
@@ -34,19 +34,22 @@ const REFUSED_SHOWN_MS: TsMs = 60_000;
 /// while he talks about it; uncalibrated. The engine default of `[tuning] screen_hold_ms`.
 pub const SCREEN_HOLD_MS: TsMs = Tuning::DEFAULT.screen_hold_ms;
 
-/// After this long on `browser`, the runtime moves to `desk`: the record stays up and the map
-/// beside it shows the record's hex. ASSUMPTION: a record read aloud takes about half a minute,
+/// After this long on `browser`, the runtime moves to `desk`: the record stays up and the board
+/// behind it shows the record's card. ASSUMPTION: a record read aloud takes about half a minute,
 /// and the 2026-10-21 10-minute show sat on one record for over five; uncalibrated. The engine
 /// default of `[tuning] browser_dwell_ms`.
 pub const BROWSER_DWELL_MS: TsMs = Tuning::DEFAULT.browser_dwell_ms;
 
-/// After this long on `desk`, the runtime pulls back to the `hexmap` overview to choose the
-/// next fog. ASSUMPTION: uncalibrated, like [`BROWSER_DWELL_MS`]. The engine default of
+/// After this long on `desk`, the runtime pulls back to the board's overview to choose the
+/// next card. ASSUMPTION: uncalibrated, like [`BROWSER_DWELL_MS`]. The engine default of
 /// `[tuning] desk_dwell_ms`.
 pub const DESK_DWELL_MS: TsMs = Tuning::DEFAULT.desk_dwell_ms;
 
 /// Records on file the state summary's screen line names, newest first.
 const SCREEN_RECORDS_SHOWN: usize = 4;
+
+/// Open leads the state summary's board line names, newest record first.
+const BOARD_LEADS_SHOWN: usize = 3;
 
 /// Runtime configuration. Every field has a working default.
 #[derive(Debug, Clone, Default)]
@@ -125,23 +128,31 @@ struct ArcPlan {
 }
 
 impl ArcPlan {
-    /// The arc for `case`, when the table has one and the plan is long enough. Acts come from
-    /// the case file's `arc` (research staged them); a hex it does not name, or every hex of a
-    /// case without one, is dealt into the acts in kind order (entities and claims first,
-    /// then domains, shells and wallets), an even share each.
+    /// The arc for `case`, when the table has one and the plan is long enough. The table sets
+    /// the number of acts and their timing. Acts come from the case's own `acts` (the evidence
+    /// board's regions, which also name the acts), then from the case file's `arc` (research
+    /// staged them); a hex neither names, or every hex of a case without them, is dealt into
+    /// the acts in kind order (entities and claims first, then domains, shells and wallets),
+    /// an even share each. An act past the table's last joins the last.
     fn new(rules: &ArcRules, planned_s: u32, case: &Case, file: Option<&CaseFile>) -> Option<Self> {
         if planned_s < rules.min_planned_s || rules.acts.len() < 2 {
             return None;
         }
         let n = rules.acts.len();
         let mut act_of: Vec<Option<usize>> = vec![None; case.hexes.len()];
+        let mut place = |ids: &[String], k: usize| {
+            for id in ids {
+                if let Some(i) = case.hexes.iter().position(|h| &h.id == id) {
+                    act_of[i].get_or_insert(k.min(n - 1));
+                }
+            }
+        };
+        for (k, act) in case.acts.iter().enumerate() {
+            place(&act.hexes, k);
+        }
         if let Some(f) = file {
             for (k, ids) in f.arc.iter().enumerate() {
-                for id in ids {
-                    if let Some(i) = case.hexes.iter().position(|h| &h.id == id) {
-                        act_of[i] = Some(k.min(n - 1));
-                    }
-                }
+                place(ids, k);
             }
         }
         let kind_rank = |k: HexKind| match k {
@@ -164,8 +175,16 @@ impl ArcPlan {
         for &k in &act_of {
             staged[k] += 1;
         }
+        // The case's own act names its board region; a table act it does not reach keeps the
+        // table's name.
+        let acts = rules
+            .acts
+            .iter()
+            .enumerate()
+            .map(|(k, name)| case.acts.get(k).map_or(name, |a| &a.name).clone())
+            .collect();
         Some(Self {
-            acts: rules.acts.clone(),
+            acts,
             act_of,
             planned_ms: i64::from(planned_s) * 1000,
             seal_ms: i64::from(planned_s.saturating_sub(rules.seal_s)) * 1000,
@@ -239,6 +258,17 @@ pub struct Lead {
     pub viewer_id: String,
     pub text: String,
     pub ts_ms: TsMs,
+}
+
+/// A string pinned on the evidence board: an accepted `pin_link`, with its record's grade
+/// (appendix (screens and board)).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PinnedLink {
+    pub from: String,
+    pub to: String,
+    pub rel: LinkRel,
+    pub record_id: String,
+    pub grade: EvidenceGrade,
 }
 
 /// An accepted `!propose`. Untrusted chat text, like [`Lead`].
@@ -424,6 +454,27 @@ fn op_label(op: &Op) -> String {
     }
 }
 
+/// What a card is, as the board line names it: its role, else its kind.
+fn card_kind(h: &Hex) -> &'static str {
+    match (h.role, h.kind) {
+        (Some(HexRole::Victim), _) => "victim",
+        (Some(HexRole::Promoter), _) => "promoter",
+        (Some(HexRole::Shell), _) => "shell",
+        (Some(HexRole::Processor), _) => "processor",
+        (Some(HexRole::Regulator), _) => "regulator",
+        (Some(HexRole::Claim), _) => "claim",
+        (Some(HexRole::Wallet), _) => "wallet",
+        (Some(HexRole::Exchange), _) => "exchange",
+        (Some(HexRole::Person), _) => "person",
+        (Some(HexRole::Company), _) => "company",
+        (None, HexKind::Entity) => "entity",
+        (None, HexKind::Wallet) => "wallet",
+        (None, HexKind::Domain) => "domain",
+        (None, HexKind::ShellCompany) => "shell company",
+        (None, HexKind::Claim) => "claim",
+    }
+}
+
 fn grade_name(g: EvidenceGrade) -> &'static str {
     match g {
         EvidenceGrade::Doc => "DOC",
@@ -495,8 +546,8 @@ pub struct SegmentRuntime {
     /// The record last opened in the browser window: `browser`/`desk` without a `record_id`
     /// reopen it.
     screen_record: Option<String>,
-    /// The hex the map is zoomed to on `hexmap`/`desk` (`None`: the overview). On `desk`
-    /// without a `focus` it is the record's hex, as the stage draws it.
+    /// The hex the map or board is zoomed to on `hexmap`/`board`/`desk` (`None`: the
+    /// overview). On `desk` without a `focus` it is the record's hex, as the stage draws it.
     screen_focus: Option<String>,
     /// When the screen up was last put up, by anyone (the dwell defaults).
     screen_since: TsMs,
@@ -512,6 +563,8 @@ pub struct SegmentRuntime {
     returned: Vec<String>,
     /// `record_shown` events an accepted op emits before its own echo.
     pre_echo: Vec<StreamEvent>,
+    /// The strings pinned on the evidence board, in pinning order.
+    links: Vec<PinnedLink>,
 }
 
 impl SegmentRuntime {
@@ -585,6 +638,7 @@ impl SegmentRuntime {
             job_filed: BTreeMap::new(),
             returned: Vec::new(),
             pre_echo: Vec::new(),
+            links: Vec::new(),
             started_ms: config.start_ms,
             config,
             table,
@@ -778,6 +832,11 @@ impl SegmentRuntime {
         self.screen_record.as_deref()
     }
 
+    /// The strings pinned on the evidence board, in pinning order.
+    pub fn links(&self) -> &[PinnedLink] {
+        &self.links
+    }
+
     /// The running act (0-based) and the number of acts, when the stream runs an arc.
     pub fn arc_act(&self) -> Option<(usize, usize)> {
         self.arc
@@ -844,6 +903,16 @@ impl SegmentRuntime {
     // ----- internals -------------------------------------------------------------------
 
     /// Milliseconds since the segment started, at the latest time seen.
+    /// The screen the investigation's defaults put up and focus: the evidence board when the
+    /// segment shows it, else the hexmap.
+    fn map_screen(&self) -> ScreenId {
+        if self.table.screens.iter().any(|n| n == "board") {
+            ScreenId::Board
+        } else {
+            ScreenId::Hexmap
+        }
+    }
+
     fn elapsed_ms(&self) -> TsMs {
         self.last_now_ms - self.started_ms.unwrap_or(self.last_now_ms)
     }
@@ -1620,9 +1689,10 @@ impl SegmentRuntime {
                     self.reveals.push(self.elapsed_ms());
                 }
                 self.fire(Trigger::HexRevealed);
-                // The map zooms to the hex just revealed.
+                // The board zooms to the card just flipped.
+                let screen = self.map_screen();
                 return Ok(self
-                    .screen_default(now_ms, ScreenId::Hexmap, None, Some(id))
+                    .screen_default(now_ms, screen, None, Some(id))
                     .into_iter()
                     .collect());
             }
@@ -1656,9 +1726,10 @@ impl SegmentRuntime {
                         self.job_filed.insert(job_id.clone(), filed);
                     }
                     self.jobs.insert(job_id.clone());
-                    // The minions set off: the map zooms to where they are going.
+                    // The minions set off: the board zooms to where they are going.
+                    let screen = self.map_screen();
                     return Ok(self
-                        .screen_default(now_ms, ScreenId::Hexmap, None, Some(hex))
+                        .screen_default(now_ms, screen, None, Some(hex))
                         .into_iter()
                         .collect());
                 }
@@ -1669,12 +1740,18 @@ impl SegmentRuntime {
                     return Err("invalid_card");
                 }
             }
-            // Appendix (screens): the state's allow-list, then a record on file for the
-            // browser window, then a case hex to focus. A `record_id` on `host` or `hexmap`
-            // and a `focus` on `host` or `browser` are ignored.
-            // No segment allows it yet (appendix (screens and board)): the board package
-            // brings its validation.
-            Op::PinLink { .. } => return Err("screen_not_allowed"),
+            // Appendix (screens and board): the board in the state's allow-list, two distinct
+            // case cards, both face up, a returned record filed under one of them, and no
+            // string with the same ends and rel.
+            Op::PinLink {
+                from,
+                to,
+                rel,
+                record_id,
+            } => return self.pin_link(now_ms, from, to, *rel, record_id),
+            // Appendix (screens and board): the state's allow-list, then a record on file for
+            // the browser window, then a case hex to focus. A `record_id` on `host`, `hexmap` or
+            // `board` and a `focus` on `host` or `browser` are ignored.
             Op::ShowScreen {
                 screen,
                 record_id,
@@ -1701,13 +1778,13 @@ impl SegmentRuntime {
                     ScreenId::Host | ScreenId::Hexmap | ScreenId::Board => None,
                 };
                 let focus = match (screen, focus) {
-                    (ScreenId::Hexmap | ScreenId::Desk, Some(raw)) => {
+                    (ScreenId::Hexmap | ScreenId::Board | ScreenId::Desk, Some(raw)) => {
                         let Some(i) = self.find_hex(raw) else {
                             return Err("unknown_hex");
                         };
                         Some(self.case.hexes[i].id.clone())
                     }
-                    // The desk's map shows the record's hex unless told otherwise.
+                    // The desk's board shows the record's card unless told otherwise.
                     (ScreenId::Desk, None) => record.as_deref().and_then(|id| self.record_hex(id)),
                     _ => None,
                 };
@@ -1767,6 +1844,74 @@ impl SegmentRuntime {
         Ok(Vec::new())
     }
 
+    /// Validate and pin one string (`pin_link`): its `link_pinned`, then the board's focus on
+    /// the record's card when neither the board nor the desk is up. A record pinned for the
+    /// first time goes out as `record_shown` before the op, so the stage and the transcript
+    /// hold what the string cites.
+    fn pin_link(
+        &mut self,
+        now_ms: TsMs,
+        from: &str,
+        to: &str,
+        rel: LinkRel,
+        record_id: &str,
+    ) -> Result<Vec<StreamEvent>, &'static str> {
+        if !self.table.allows_screen_in(&self.state, ScreenId::Board) {
+            return Err("screen_not_allowed");
+        }
+        let (Some(a), Some(b)) = (self.find_hex(from), self.find_hex(to)) else {
+            return Err("unknown_hex");
+        };
+        if a == b {
+            return Err("same_hex");
+        }
+        if self.case.hexes[a].fog || self.case.hexes[b].fog {
+            return Err("hex_not_revealed");
+        }
+        let record = self
+            .case_file
+            .as_ref()
+            .and_then(|f| f.records.iter().find(|r| r.id == record_id))
+            .filter(|r| self.returned.contains(&r.id));
+        let Some(record) = record else {
+            return Err("record_not_returned");
+        };
+        let (from, to) = (self.case.hexes[a].id.clone(), self.case.hexes[b].id.clone());
+        if record.hex != from && record.hex != to {
+            return Err("record_not_on_link");
+        }
+        let (grade, card) = (record.grade, record.hex.clone());
+        if self
+            .links
+            .iter()
+            .any(|l| l.from == from && l.to == to && l.rel == rel)
+        {
+            return Err("duplicate_link");
+        }
+        let shown = self.record_shown(now_ms, record_id);
+        self.pre_echo.extend(shown);
+        self.links.push(PinnedLink {
+            from: from.clone(),
+            to: to.clone(),
+            rel,
+            record_id: record_id.to_string(),
+            grade,
+        });
+        let mut events = vec![StreamEvent::LinkPinned {
+            ts_ms: now_ms,
+            from,
+            to,
+            rel,
+            record_id: record_id.to_string(),
+            grade,
+        }];
+        // A string pinned out of view: the board comes up on the card its record is about.
+        if !matches!(self.screen, ScreenId::Board | ScreenId::Desk) {
+            events.extend(self.screen_default(now_ms, ScreenId::Board, None, Some(card)));
+        }
+        Ok(events)
+    }
+
     // ----- screens ---------------------------------------------------------------------
 
     /// The `record_shown` of a filed record, the first time it is named this session. The
@@ -1787,7 +1932,7 @@ impl SegmentRuntime {
             retrieved: r.retrieved.clone(),
             via: r.via.clone(),
             fictional: file.fictional,
-            date: None,
+            date: r.date.clone(),
         };
         self.shown.insert(id.to_string());
         Some(StreamEvent::RecordShown {
@@ -1853,16 +1998,19 @@ impl SegmentRuntime {
         Some(self.runtime_screen(now_ms, screen, record_id, focus))
     }
 
-    /// A poll opened: the map's overview, to choose the next fog.
+    /// A poll opened: the board's overview, to choose the next card.
     fn poll_screen(&mut self, now_ms: TsMs) -> Option<StreamEvent> {
-        self.screen_default(now_ms, ScreenId::Hexmap, None, None)
+        let screen = self.map_screen();
+        self.screen_default(now_ms, screen, None, None)
     }
 
     /// The dwell defaults: [`BROWSER_DWELL_MS`] on `browser` moves to `desk` (the record, and
-    /// its hex on the map; the overview when the desk is not allowed), and [`DESK_DWELL_MS`]
-    /// on `desk` pulls back to the `hexmap` overview. Any `show_screen` restarts the clock.
+    /// its card on the board; the overview when the desk is not allowed), and
+    /// [`DESK_DWELL_MS`] on `desk` pulls back to the board's overview. Any `show_screen`
+    /// restarts the clock.
     fn screen_dwell(&mut self, now_ms: TsMs) -> Option<StreamEvent> {
         let up = now_ms - self.screen_since;
+        let map = self.map_screen();
         match self.screen {
             ScreenId::Browser if up >= self.config.tuning.browser_dwell_ms => {
                 let record = self.screen_record.clone();
@@ -1870,11 +2018,11 @@ impl SegmentRuntime {
                 if record.is_some() && self.table.allows_screen_in(&self.state, ScreenId::Desk) {
                     self.screen_default(now_ms, ScreenId::Desk, record, hex)
                 } else {
-                    self.screen_default(now_ms, ScreenId::Hexmap, None, None)
+                    self.screen_default(now_ms, map, None, None)
                 }
             }
             ScreenId::Desk if up >= self.config.tuning.desk_dwell_ms => {
-                self.screen_default(now_ms, ScreenId::Hexmap, None, None)
+                self.screen_default(now_ms, map, None, None)
             }
             _ => None,
         }
@@ -1939,8 +2087,17 @@ impl SegmentRuntime {
             line.push_str(&format!(" on {id}"));
         }
         match (self.screen, &self.screen_focus) {
-            (ScreenId::Hexmap, Some(hex)) => line.push_str(&format!(" focused on {hex}")),
-            (ScreenId::Desk, Some(hex)) => line.push_str(&format!(", map focused on {hex}")),
+            (ScreenId::Hexmap | ScreenId::Board, Some(hex)) => {
+                line.push_str(&format!(" focused on {hex}"))
+            }
+            (ScreenId::Desk, Some(hex)) => line.push_str(&format!(
+                ", {} focused on {hex}",
+                if self.map_screen() == ScreenId::Board {
+                    "board"
+                } else {
+                    "map"
+                }
+            )),
             _ => {}
         }
         let now = self.table.screens_in(&self.state);
@@ -1967,6 +2124,46 @@ impl SegmentRuntime {
             if more > 0 {
                 line.push_str(&format!(" +{more} older"));
             }
+        }
+        line
+    }
+
+    /// The state summary's board line: cards face up, strings pinned, and the open leads (a
+    /// face-up card with a returned record filed under it and no string yet), newest record
+    /// first, at most [`BOARD_LEADS_SHOWN`].
+    fn board_line(&self) -> String {
+        let up = self.case.hexes.iter().filter(|h| !h.fog).count();
+        let mut line = format!(
+            "Board: {up} card{} face up, {} string{}.",
+            if up == 1 { "" } else { "s" },
+            self.links.len(),
+            if self.links.len() == 1 { "" } else { "s" }
+        );
+        let strung = |id: &str| self.links.iter().any(|l| l.from == id || l.to == id);
+        let mut leads: Vec<&Hex> = Vec::new();
+        let file = self.case_file.as_ref();
+        for rid in self.returned.iter().rev() {
+            let Some(hex) = file
+                .and_then(|f| f.records.iter().find(|r| &r.id == rid))
+                .and_then(|r| self.case.hexes.iter().find(|h| h.id == r.hex))
+            else {
+                continue;
+            };
+            if !hex.fog && !strung(&hex.id) && !leads.iter().any(|h| h.id == hex.id) {
+                leads.push(hex);
+            }
+        }
+        if !leads.is_empty() {
+            let named: Vec<String> = leads
+                .iter()
+                .take(BOARD_LEADS_SHOWN)
+                .map(|h| format!("{} ({})", h.id, card_kind(h)))
+                .collect();
+            line.push_str(&format!(
+                " Open leads: {} {} a returned record and no string.",
+                named.join(", "),
+                if named.len() == 1 { "has" } else { "have" }
+            ));
         }
         line
     }
@@ -2653,6 +2850,9 @@ impl SegmentRuntime {
         if self.table.allows_op("show_screen") && !self.signed_off {
             lines.push(self.screen_line());
         }
+        if self.table.allows_op("pin_link") && !self.signed_off {
+            lines.push(self.board_line());
+        }
         if !self.proposals.is_empty() {
             lines.push(format!("proposals waiting: {}", self.proposals.len()));
         }
@@ -2665,11 +2865,16 @@ mod tests {
     use super::*;
     use crate::table::SEGMENT_TABLE_SOURCES;
 
-    /// SEG-02A with its jury poll narrowed to the map and the room: no table ships a state
+    /// SEG-02A with its jury poll narrowed to the board and the room: no table ships a state
     /// that excludes a screen the segment allows, so the test leaks one.
     fn narrowed() -> SegmentRuntime {
+        narrowed_to("[\"board\", \"host\"]")
+    }
+
+    /// SEG-02A whose jury poll shows only the screens `list` (a TOML array) names.
+    fn narrowed_to(list: &str) -> SegmentRuntime {
         let src = format!(
-            "{}\n[state_rules.jury_poll]\nscreens = [\"hexmap\", \"host\"]\n",
+            "{}\n[state_rules.jury_poll]\nscreens = {list}\n",
             SEGMENT_TABLE_SOURCES[1].1
         );
         let table = SegmentTable::from_toml_str("narrowed", &src).unwrap();
@@ -2720,7 +2925,7 @@ mod tests {
         assert!(!rt.job_done("r1", 500).is_empty());
         rt.apply_ops(1_000, &[screen(ScreenId::Browser, Some("DOC-03"))]);
         assert_eq!(rt.screen(), ScreenId::Browser);
-        // The poll moves the segment into jury_poll, which has no browser: the map goes up
+        // The poll moves the segment into jury_poll, which has no browser: the board goes up
         // right after the op, inside the model's hold (an allow-list is a rule).
         let evs = rt.apply_ops(2_000, &[poll()]);
         let last = evs.last().unwrap();
@@ -2729,7 +2934,7 @@ mod tests {
                 last,
                 StreamEvent::Op {
                     op: Op::ShowScreen {
-                        screen: ScreenId::Hexmap,
+                        screen: ScreenId::Board,
                         record_id: None,
                         focus: None
                     },
@@ -2739,11 +2944,11 @@ mod tests {
             "{evs:?}"
         );
         assert_eq!(rt.state(), "jury_poll");
-        assert_eq!(rt.screen(), ScreenId::Hexmap);
+        assert_eq!(rt.screen(), ScreenId::Board);
         assert!(rt
             .context(0, 2)
             .state_summary
-            .contains("Screen: hexmap (only hexmap, host now)"));
+            .contains("Screen: board (only board, host now)"));
     }
 
     #[test]
@@ -2766,5 +2971,47 @@ mod tests {
         // The job comes back while the browser is not allowed: no default.
         assert!(rt.job_done("r1", 30_000).is_empty());
         assert_eq!(rt.screen(), ScreenId::Host);
+    }
+
+    #[test]
+    fn a_pin_while_the_board_is_not_allowed_is_refused() {
+        let mut rt = narrowed_to("[\"host\", \"browser\"]");
+        rt.apply_ops(
+            0,
+            &[Op::DispatchResearch {
+                job_id: "r1".into(),
+                brief: "HEX-04: trace the treasury wallet".into(),
+            }],
+        );
+        rt.job_done("r1", 500);
+        for hex in ["HEX-04", "HEX-09"] {
+            rt.apply_ops(
+                1_000,
+                &[Op::RevealHex {
+                    hex: hex.into(),
+                    grade: EvidenceGrade::Clm,
+                }],
+            );
+        }
+        let pin = Op::PinLink {
+            from: "HEX-04".into(),
+            to: "HEX-09".into(),
+            rel: LinkRel::Paid,
+            record_id: "CLM-02".into(),
+        };
+        rt.apply_ops(2_000, &[poll()]);
+        assert_eq!(rt.state(), "jury_poll");
+        let evs = rt.apply_ops(3_000, std::slice::from_ref(&pin));
+        assert_eq!(refused(&evs), ["screen_not_allowed"]);
+        assert!(rt.links().is_empty());
+        // The poll closes: the board is allowed again, and so is the same string.
+        rt.apply_ops(
+            4_000,
+            &[Op::ClosePoll {
+                poll_id: "p1".into(),
+            }],
+        );
+        assert!(refused(&rt.apply_ops(5_000, &[pin])).is_empty());
+        assert_eq!(rt.links().len(), 1);
     }
 }

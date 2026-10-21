@@ -13,6 +13,8 @@ import {
   BrowserWindow,
   CaptionPanel,
   ChatLane,
+  EvidenceBoard,
+  boardLayoutFor,
   Decrees,
   DisclosureBadge,
   EndCard,
@@ -37,7 +39,7 @@ import { Avatar } from "./avatar/Avatar";
 import { lookBox, lookFor } from "./avatar/look";
 import type { FaceSource } from "./avatar/types";
 import { DEFAULT_FACE, type FaceVariant } from "./avatar/variants";
-import { FACE_PX, hexFrame, layoutRects, type Rect, type Region } from "./layouts";
+import { BOARD_LAYOUT_FRAME, FACE_PX, boardFrame, hexFrame, layoutRects, type Rect, type Region } from "./layouts";
 import { StandingCard, VoiceCaptionPanel, cardShowing, tickerActive } from "./OnAir";
 import type { VoiceCaptionView } from "./voice/captions";
 import { SYNTHETIC_VOICE } from "./voice/names";
@@ -104,7 +106,7 @@ export function Stage({
   onFace?: (state: FaceState) => void;
 }) {
   const poll = visiblePoll(scene, now);
-  const rects = layoutRects(scene.layout, { poll: poll !== null, foil: scene.foil !== null });
+  const rects = layoutRects(scene.layout, { poll: poll !== null, foil: scene.foil !== null, back: scene.mapScreen });
   if (!tickerActive(scene, now)) rects.ticker = { ...rects.ticker, hidden: true };
   // The streamer layout: Malakor cut out in the corner, the content behind him.
   const corner = isContentScreen(scene.layout);
@@ -117,6 +119,8 @@ export function Stage({
   const gaze = lookFor(scene.layout, speaking && caption ? caption.replyingTo : null);
   useEffect(() => look.set(gaze), [look, gaze]);
   const frame = hexFrame(scene.layout, rects);
+  const board = boardFrame(scene.layout, rects);
+  const boardLayout = useMemo(() => boardLayoutFor(map, caseFile, BOARD_LAYOUT_FRAME), [map, caseFile]);
   const record = scene.activeRecord === null ? undefined : scene.records[scene.activeRecord];
   const content = scene.layout === "browser" || scene.layout === "desk";
   const host = scene.meta?.hostName ?? "Host";
@@ -141,6 +145,20 @@ export function Stage({
           {...(frame ? { frame } : {})}
           highlight={scene.layout === "desk" && record ? record.hex : null}
           focus={mapFocusOf(scene)}
+        />
+      </RegionBox>
+
+      <RegionBox name="board" rect={rects.board}>
+        <EvidenceBoard
+          map={map}
+          scene={scene}
+          now={now}
+          caseFile={caseFile}
+          layout={boardLayout}
+          frame={board ?? BOARD_LAYOUT_FRAME}
+          focus={mapFocusOf(scene)}
+          highlight={scene.layout === "desk" && record ? record.hex : null}
+          strip={scene.layout !== "desk"}
         />
       </RegionBox>
 

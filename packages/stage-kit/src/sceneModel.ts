@@ -1,27 +1,33 @@
 // The scene model: what the stage shows at a moment, as plain data. `reduce` (scene.ts) builds it
 // from StreamEvents; nothing here reads a clock.
 
-import type { Case, EndReason, EvidenceGrade, ModelTier, Rank, ScreenId, SegmentId, ShownRecord, VoteTally } from "@shadowrunr/contract";
+import type { Case, EndReason, EvidenceGrade, LinkRel, ModelTier, Rank, ScreenId, SegmentId, ShownRecord, VoteTally } from "@shadowrunr/contract";
 import { ChatMemory } from "./chatMemory";
 import type { TsMs } from "./vocab";
 
 /** What the canvas draws: `boot` before the first segment, then the main screen (contract
- * `ScreenId`): `host` (the big-avatar room), `hexmap`, `browser` (a staged record in a browser
- * window) or `desk` (the browser window in front of the hexmap window). */
+ * `ScreenId`): `host` (the big-avatar room), `board` (the evidence board), `hexmap`, `browser` (a
+ * staged record in a browser window) or `desk` (the browser window in front of the board, or of
+ * the hexmap when that was the last map shown). */
 export type LayoutId = "boot" | ScreenId;
 
 /** The screens with content behind Malakor: he stands cut out in the bottom-left corner. */
-export const CONTENT_SCREENS = ["hexmap", "browser", "desk"] as const satisfies readonly ScreenId[];
+export const CONTENT_SCREENS = ["board", "hexmap", "browser", "desk"] as const satisfies readonly ScreenId[];
+
+/** The map a segment works on: the evidence board, or the hexmap of older transcripts. The desk
+ * shows it behind the browser window, and a screen waiting for its record shows it meanwhile. */
+export type MapScreen = "board" | "hexmap";
 export type ContentScreen = (typeof CONTENT_SCREENS)[number];
 
 export function isContentScreen(layout: LayoutId): layout is ContentScreen {
   return (CONTENT_SCREENS as readonly string[]).includes(layout);
 }
 
-/** The hex the map window zooms to now: the `focus` on `hexmap`; on `desk` the `focus`, else the
- * open record's hex (the desk's map shows where the record points). Null: the overview. */
+/** The hex (or card) the map window zooms to now: the `focus` on `hexmap` and `board`; on `desk`
+ * the `focus`, else the open record's hex (the desk's map shows where the record points). Null:
+ * the overview. */
 export function mapFocusOf(s: Pick<SceneState, "layout" | "mapFocus" | "activeRecord" | "records">): string | null {
-  if (s.layout === "hexmap") return s.mapFocus;
+  if (s.layout === "hexmap" || s.layout === "board") return s.mapFocus;
   if (s.layout !== "desk") return null;
   if (s.mapFocus !== null) return s.mapFocus;
   return s.activeRecord === null ? null : (s.records[s.activeRecord]?.hex ?? null);
@@ -30,7 +36,7 @@ export function mapFocusOf(s: Pick<SceneState, "layout" | "mapFocus" | "activeRe
 /** The screen a segment opens on. The runtime sends its own `show_screen` too; this default keeps
  * transcripts without one drawable. */
 export function defaultScreen(segment: SegmentId): ScreenId {
-  return segment === "SEG-02A" ? "hexmap" : "host";
+  return segment === "SEG-02A" ? "board" : "host";
 }
 
 export interface Transition {
@@ -46,7 +52,7 @@ export interface Transition {
   reason?: string;
 }
 
-/** A `show_screen browser|desk` whose record has not arrived: the screen waits on hexmap. */
+/** A `show_screen browser|desk` whose record has not arrived: the screen waits on the map. */
 export interface PendingScreen {
   screen: "browser" | "desk";
   /** The record it names; absent: the next record that arrives. */
@@ -121,6 +127,19 @@ export interface Job {
   updatedAt: TsMs;
 }
 
+/** A string on the evidence board (`link_pinned`): accepted by the runtime, citing its record. */
+export interface PinnedLink {
+  /** `from>to>rel`: the runtime refuses a duplicate, so this names one string. */
+  key: string;
+  from: string;
+  to: string;
+  rel: LinkRel;
+  recordId: string;
+  /** The record's grade: below DOC the string is drawn as alleged. */
+  grade: EvidenceGrade;
+  at: TsMs;
+}
+
 export interface Card {
   id: string;
   title: string;
@@ -170,6 +189,9 @@ export interface SceneState {
   layout: LayoutId;
   /** The main screen the segment is on (`host` before the first segment, drawn as `boot`). */
   screen: ScreenId;
+  /** The map the segment works on (the last of `board` and `hexmap` shown; a segment opens on its
+   * default). The desk shows it behind the browser window. */
+  mapScreen: MapScreen;
   /** A browser or desk screen waiting for its record (contract: the stage tolerates either order). */
   pendingScreen: PendingScreen | null;
   /** Staged records received (`record_shown`), by id; at most RECORD_MAX, the open tabs kept. */
@@ -178,8 +200,8 @@ export interface SceneState {
   tabs: string[];
   /** The record the browser window shows (the first tab once one is open). */
   activeRecord: string | null;
-  /** The hex the map is zoomed to, from `show_screen`'s `focus` on `hexmap` or `desk` (null: the
-   * overview). `mapFocusOf` resolves what the map draws. */
+  /** The hex the map is zoomed to, from `show_screen`'s `focus` on `board`, `hexmap` or `desk`
+   * (null: the overview). `mapFocusOf` resolves what the map draws. */
   mapFocus: string | null;
   transition: Transition | null;
   pendingSwitch: { to: SegmentId; at: TsMs } | null;
@@ -208,6 +230,8 @@ export interface SceneState {
   activePoll: string | null;
   hexes: Record<string, HexState>;
   revealOrder: string[];
+  /** The evidence board's strings, in the order pinned (at most LINK_MAX). */
+  links: PinnedLink[];
   hints: Record<string, Hint>;
   /** Community `!grade` ballots per hex, viewer id → grade, so a repeated grade moves rather than adds. */
   gradeVotes: Record<string, Record<string, EvidenceGrade>>;
@@ -235,6 +259,8 @@ export const REDACTION_MAX = 20;
 export const BROWSER_TABS_MAX = 4;
 /** Staged records the scene remembers. */
 export const RECORD_MAX = 32;
+/** Strings the board keeps; past this the oldest leaves. */
+export const LINK_MAX = 64;
 /** Captions that may wait behind the one on screen; a burst beyond this skips the oldest waiting. */
 export const CAPTION_QUEUE_MAX = 3;
 /** How long a revealed caption holds when another is waiting behind it. */
@@ -250,6 +276,7 @@ export function initialScene(): SceneState {
     caseFile: null,
     layout: "boot",
     screen: "host",
+    mapScreen: "board",
     pendingScreen: null,
     records: {},
     tabs: [],
@@ -271,6 +298,7 @@ export function initialScene(): SceneState {
     activePoll: null,
     hexes: {},
     revealOrder: [],
+    links: [],
     hints: {},
     gradeVotes: {},
     jury: {},

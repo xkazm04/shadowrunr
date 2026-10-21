@@ -190,7 +190,7 @@ pub fn op_example(tag: &str) -> Option<&'static str> {
         "sign_off" => r#"{"op":"sign_off","reason":"..."}"#,
         "show_screen" => r#"{"op":"show_screen","screen":"browser","record_id":"DOC-01"}"#,
         "pin_link" => {
-            r#"{"op":"pin_link","from":"HEX-04","to":"HEX-09","rel":"paid","record_id":"DOC-01"}"#
+            r#"{"op":"pin_link","from":"HEX-04","to":"HEX-09","rel":"paid","record_id":"CLM-02"}"#
         }
         _ => return None,
     })
@@ -305,7 +305,7 @@ mod tests {
                 from: s("HEX-04"),
                 to: s("HEX-09"),
                 rel: LinkRel::Paid,
-                record_id: s("DOC-01"),
+                record_id: s("CLM-02"),
             },
         ];
         let slots: Vec<usize> = ops.iter().map(slot).collect();
