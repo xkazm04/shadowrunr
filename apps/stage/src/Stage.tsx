@@ -31,7 +31,7 @@ import {
 import { Avatar } from "./avatar/Avatar";
 import type { FaceSource } from "./avatar/types";
 import { layoutRects, type Rect, type Region } from "./layouts";
-import { LastHeard, StandingCard, VoiceCaptionPanel, cardShowing, tickerActive } from "./OnAir";
+import { StandingCard, VoiceCaptionPanel, cardShowing, tickerActive } from "./OnAir";
 import type { VoiceCaptionView } from "./voice/captions";
 import { SYNTHETIC_VOICE } from "./voice/names";
 import type { FaceState } from "./voice/report";
@@ -165,7 +165,6 @@ export function Stage({
 
       <RegionBox name="decrees" rect={rects.decrees}>
         <Decrees scene={scene} now={now} onAir={broadcast} />
-        <LastHeard scene={scene} now={now} />
       </RegionBox>
 
       <RegionBox name="ticker" rect={rects.ticker}>

@@ -5,15 +5,15 @@
 //   segment's standing card: the segment's name and the chat commands the room can use in it (the
 //   daemon's command table, `shadowrunr-segments` COMMAND_SPECS, copied: the stage has no RPC).
 //   `!vote` is listed only while a poll is open.
-// - The decree slot shows a picked line while it is fresh; between picks it keeps the last one,
-//   quieter, as "last heard".
+// - The decree slot is stage-kit's `Decrees`: one card at a time, and the last line heard held
+//   quietly between picks (styled here, `.decree-held`).
 // - The minion ticker shows while a job is out, and for TICKER_LINGER_MS after the last one came
 //   back; otherwise there is nothing abroad to show and it hides.
 
 import { useMemo } from "react";
 
-import { RANK_COLOR, RANK_TITLE, SEGMENT_TITLE, wordTimings, type LayoutId, type Redaction, type SceneState } from "@shadowrunr/stage-kit";
-import { CARD_MS, DECREE_MS, REDACTION_MS, Sigil, captionSize, jobPhase } from "@shadowrunr/stage-kit/ui";
+import { SEGMENT_TITLE, wordTimings, type LayoutId, type Redaction, type SceneState } from "@shadowrunr/stage-kit";
+import { CARD_MS, REDACTION_MS, captionSize, jobPhase } from "@shadowrunr/stage-kit/ui";
 import type { VoiceCaptionView } from "./voice/captions";
 
 /** The ticker stays this long after the last job came back (its summary is news). */
@@ -71,35 +71,6 @@ export function StandingCard({ scene, poll }: { scene: SceneState; poll: boolean
             <span className="standing-what">{r.what}</span>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-/** The decree slot between picks: the last line he heard, held quietly until the next. */
-export function LastHeard({ scene, now }: { scene: SceneState; now: number }) {
-  const fresh = scene.decrees.some((d) => now >= d.at && now - d.at < DECREE_MS[d.kind]);
-  if (fresh) return null;
-  const last = [...scene.decrees].reverse().find((d) => d.at <= now && scene.chats.get(d.msgId));
-  const m = last ? scene.chats.get(last.msgId) : undefined;
-  if (!last || !m) return null;
-  const color = RANK_COLOR[m.viewer.rank];
-  return (
-    <div className="decrees decrees-held">
-      <div className="decree decree-held" key={last.key} style={{ ["--rank" as string]: color }}>
-        <div className="decree-head">
-          <span className="decree-label">LAST HEARD BY THE LICH</span>
-        </div>
-        <div className="decree-main">
-          <Sigil rank={m.viewer.rank} size={64} />
-          <div className="decree-text">
-            <div className="decree-who">
-              <span style={{ color }}>{m.viewer.name}</span>
-              <span className="decree-rank">{RANK_TITLE[m.viewer.rank]}</span>
-            </div>
-            <div className="decree-quote">“{m.text}”</div>
-          </div>
-        </div>
       </div>
     </div>
   );

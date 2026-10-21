@@ -13,3 +13,4 @@ export * from "./timing";
 export * from "./lore";
 export * from "./diagram";
 export * from "./chatMemory";
+export * from "./decrees";
