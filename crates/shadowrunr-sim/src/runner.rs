@@ -596,7 +596,8 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         },
     );
     let transcript_path = prep.run_dir.join("transcript.jsonl");
-    let mut w = TranscriptWriter::create(&transcript_path)?;
+    let mut w = TranscriptWriter::create(&transcript_path)?
+        .with_sink(opts.live_sink.as_ref().map(|s| s.0.clone()));
     w.push(StreamEvent::StreamStart {
         ts_ms: 0,
         stream_id: spec.run_id.clone(),
@@ -1637,6 +1638,49 @@ pub(crate) mod tests {
         );
         assert!(out.join("smoke/run.json").is_file());
         assert!(out.join("smoke/ledger.jsonl").is_file());
+    }
+
+    /// A live sink observes the run and changes nothing in it: the same spec and seed write
+    /// the same transcript bytes and the same instrument with or without one, and the sink
+    /// hears every transcript line once, numbered by line.
+    #[tokio::test]
+    async fn a_live_sink_changes_neither_the_transcript_nor_the_instrument() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut plain = test_opts(&tmp.path().join("sim"));
+        plain.hooks = Hooks::default();
+        plain.judge = false;
+        assert!(plain.live_sink.is_none(), "no sink by default");
+        let heard: Arc<Mutex<Vec<u64>>> = Arc::default();
+        let mut live = plain.clone();
+        live.live_sink = Some(crate::LiveSink({
+            let heard = heard.clone();
+            Arc::new(move |seq, _ev: &StreamEvent| heard.lock().unwrap().push(seq))
+        }));
+        assert!(format!("{live:?}").contains("live_sink: Some"));
+
+        let mut runs = Vec::new();
+        for (name, opts) in [("plain", &plain), ("live", &live)] {
+            let out = tmp.path().join(name);
+            let res = run_one_with(
+                spec("golden", ModelTier::Haiku, 30, 300),
+                out.clone(),
+                Arc::new(shadowrunr_engine::ScriptedEngine),
+                opts,
+            )
+            .await
+            .expect("run completes");
+            let bytes = std::fs::read(&res.transcript).unwrap();
+            let inst: Instrument = read_json(&out.join("golden/instrument.json")).unwrap();
+            runs.push((bytes, inst));
+        }
+        let (plain_bytes, plain_inst) = &runs[0];
+        let (live_bytes, live_inst) = &runs[1];
+        assert!(plain_bytes == live_bytes, "transcript bytes differ");
+        assert_eq!(plain_inst.base_hash, live_inst.base_hash);
+        assert_eq!(plain_inst.instrument_hash, live_inst.instrument_hash);
+        let lines = plain_bytes.iter().filter(|b| **b == b'\n').count() as u64;
+        assert!(lines > 3, "a real run");
+        assert_eq!(*heard.lock().unwrap(), (1..=lines).collect::<Vec<_>>());
     }
 
     // ---- WP13: an engine failure is not a result ---------------------------------------
