@@ -16,6 +16,9 @@
 .beat b { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .04em; text-transform: uppercase; }
 .beat[data-op] b { color: var(--sr-page-accent-text, var(--sr-color-signal-deep)); }
 .num { font-family: var(--sr-font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+/* A beat's time is its "Play from here": the moment goes on screen. */
+button.num { padding: 0; border: 0; background: none; color: inherit; font-size: inherit; cursor: pointer; text-decoration: underline dotted; }
+button.num:hover { color: var(--sr-page-accent-text, var(--sr-color-signal-deep)); }
 .detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ref { font-family: var(--sr-font-mono); text-align: right; }
 
@@ -25,9 +28,10 @@
 
 /* The run's segment spans: the winner's timeline bar, SEG-01 in teal, SEG-02A in ember. */
 .tlBar { display: flex; gap: var(--sr-stroke-rule); height: 2.2rem; margin-top: var(--sr-space-base); }
-.tlBar i { display: flex; flex-basis: 0; align-items: center; min-width: var(--sr-space-section); padding: 0 var(--sr-space-compact); background: var(--sr-color-text-mute); color: var(--sr-color-surface-paper); font-style: normal; }
-.tlBar i[data-seg="SEG-01"] { background: var(--sr-page-overprint, var(--sr-color-ok)); }
-.tlBar i[data-seg="SEG-02A"] { background: var(--sr-color-signal); color: var(--sr-color-surface-void); }
+.tlBar button { display: flex; flex-basis: 0; align-items: center; min-width: var(--sr-space-section); padding: 0 var(--sr-space-compact); border: 0; background: var(--sr-color-text-mute); color: var(--sr-color-surface-paper); font: inherit; cursor: pointer; }
+.tlBar button[data-seg="SEG-01"] { background: var(--sr-page-overprint, var(--sr-color-ok)); }
+.tlBar button[data-seg="SEG-02A"] { background: var(--sr-color-signal); color: var(--sr-color-surface-void); }
+.tlBar button:focus-visible { outline: var(--sr-stroke-rule) solid var(--sr-color-text-ink); outline-offset: var(--sr-stroke-rule); }
 .tlBar b { font-family: var(--sr-font-display); font-size: var(--sr-size-body); letter-spacing: .06em; }
 
 /* Segment and option cards */

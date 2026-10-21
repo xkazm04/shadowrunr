@@ -858,7 +858,9 @@ fn cut_from_recording(
 }
 
 /// Re-render a stored draft: always the poster set, plus the cuts from the recording when the
-/// run has one, else the stage's re-drawn video when the tools allow.
+/// run has one, else the stage's re-drawn video when the tools allow. `clips render` points
+/// `dir` at a staging dir holding a copy of `clip.json` ([`crate::job`]), never the live clip
+/// dir, so the deletions below only ever clear its own staging.
 pub fn render(dir: &Path, c: &ClipCandidate, t: Option<&RenderTools>) -> Result<ClipRender> {
     let text = std::fs::read_to_string(dir.join("clip.json"))
         .map_err(|e| ClipError::Io(format!("{}: {e}", dir.join("clip.json").display())))?;

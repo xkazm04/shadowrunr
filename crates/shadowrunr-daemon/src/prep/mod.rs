@@ -10,6 +10,8 @@
 //!   staged prep and holds its approval, with no override.
 //! - [`rules`]: the prep rules (counts, lines per kind, payoffs, connector kinds), held once;
 //!   the prompt, the reply schema, the checks and the guide's check table render from them.
+//! - [`revise`]: `prep revise`, a staged prep's findings and the owner's notes answered with
+//!   an edit plan (one planner call), staged as a new prep and checked again.
 //! - [`store`]: the durable, locked store and the owner's transitions.
 //! - [`cli`]: `shadowrunr prep ...`.
 //!
@@ -20,6 +22,7 @@
 pub mod checks;
 pub mod cli;
 pub mod planner;
+pub mod revise;
 pub mod rules;
 pub mod store;
 
@@ -186,6 +189,95 @@ pub async fn generate_with(
     };
     prep.checks = check(cfg, &prep, &material.dropped)?;
     store(cfg).stage(prep)
+}
+
+/// Revise the staged prep `id`: its findings and the owner's `notes` (`<line>: <text>`) go to
+/// the planner (one call) as the only legal edit targets, the edit plan is applied, and the
+/// result is checked and staged as a new prep with `revision.json`. The base is never changed.
+/// Refused (`conflict`) unless the base is staged; a usage error when there is nothing to
+/// revise or a note names no line of the base.
+pub async fn revise_with(
+    cfg: &Config,
+    engine: &dyn Engine,
+    id: &str,
+    notes: &[String],
+    now: TsMs,
+) -> Result<(StreamPrep, revise::Revision), RpcError> {
+    let st = store(cfg);
+    let base = st.load(id)?;
+    if base.status != PrepStatus::Staged {
+        return Err(RpcError::new(
+            ErrorCode::Conflict,
+            format!(
+                "prep {id} is {}, not staged: only a staged prep is revised",
+                store::status_name(base.status)
+            ),
+        ));
+    }
+    let notes = notes
+        .iter()
+        .map(|n| revise::parse_note(n, &base))
+        .collect::<Result<Vec<_>, _>>()?;
+    let policy = crate::clips::policy(cfg)?;
+    let real_names = checks::load_real_names(&cfg.paths.policy);
+    let findings = checks::findings(
+        &base,
+        &checks::CheckContext {
+            policy: &policy,
+            real_names: &real_names,
+        },
+    );
+    if findings.is_empty() && notes.is_empty() {
+        return Err(RpcError::invalid(format!(
+            "prep {id} passes every check and no --note names a line: nothing to revise"
+        )));
+    }
+    let input = planner_input(cfg, &base.character, None)?;
+    let (prompt, fence) =
+        revise::prompt(&input, &base, &findings, &notes).map_err(RpcError::internal)?;
+    let (tier, effort, timeout_ms) = cfg.engine.route(Role::Planner);
+    let reply = engine
+        .complete(EngineRequest {
+            role: Role::Planner,
+            tier,
+            effort,
+            system: planner::system(&input),
+            prompt,
+            allowed_tools: Vec::new(),
+            timeout_ms,
+            json_schema: Some(revise::schema(&input.segments, &findings, &notes)),
+            correlation_id: Some("prep.revise".into()),
+        })
+        .await
+        .map_err(|e| RpcError::new(ErrorCode::Engine, format!("planner: {e}")))?;
+    if fence.appears_in(&reply.text) {
+        return Err(RpcError::new(
+            ErrorCode::Engine,
+            "planner: the reply echoed the untrusted-data fence token (boundary event); nothing staged",
+        )
+        .with_detail(serde_json::json!({ "reason": "fence_echo" })));
+    }
+    let ops = revise::parse(&reply.text).ok_or_else(|| {
+        RpcError::new(
+            ErrorCode::Engine,
+            "planner: the reply was not an edit plan (a JSON object with `ops`); nothing staged",
+        )
+        .with_detail(serde_json::json!({ "reason": "planner_output" }))
+    })?;
+    let (mut prep, applied, refused) = revise::apply(&base, &findings, &notes, ops);
+    prep.prep_id = String::new();
+    prep.created_ms = now;
+    prep.fictional = false;
+    prep.checks = check(cfg, &prep, &checks::Dropped::default())?;
+    let rev = revise::Revision {
+        base: base.prep_id.clone(),
+        findings,
+        notes,
+        ops: applied,
+        refused_ops: refused,
+    };
+    let prep = st.stage_revision(prep, &rev)?;
+    Ok((prep, rev))
 }
 
 /// `prep.generate`.

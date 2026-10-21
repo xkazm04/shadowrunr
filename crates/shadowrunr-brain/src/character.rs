@@ -8,6 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+pub use shadowrunr_types::catalog::{Situation, Stimulus};
 use shadowrunr_types::character::{
     unknown_placeholders, CharacterLines, CharacterManifest, Persona, Tuning, PLACEHOLDERS,
 };
@@ -49,7 +50,9 @@ pub struct Foil {
     pub text: String,
 }
 
-/// `situations.json`: the sim situation bank.
+/// `situations.json`: the package's situation bank, parsed into the wire
+/// [`Situation`](shadowrunr_types::catalog::Situation) and validated once, at load. The sim
+/// and `character.get` serve this bank; nothing else parses the file.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SituationBank {
     pub version: u32,
@@ -57,18 +60,84 @@ pub struct SituationBank {
     pub situations: Vec<Situation>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Situation {
-    pub id: String,
-    pub behaviour: String,
-    pub archetype: String,
+const SITUATIONS: &str = "situations.json";
+
+/// The file as written: each situation is parsed on its own so an error names it.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawBank {
+    version: u32,
     #[serde(default)]
-    pub near_miss: bool,
-    pub required: String,
-    #[serde(default)]
-    pub forbidden: Vec<String>,
-    #[serde(default)]
-    pub invariants: Vec<String>,
+    situations: Vec<serde_json::Value>,
+}
+
+impl SituationBank {
+    /// Parse `situations.json` and validate it against the package's rule ids (`rules/*.md`):
+    /// every field known, the stimulus and segments closed values, ids unique, and every
+    /// `rule:<id>` invariant a rule of the package. Rubric ids (`red-line:`, `role:`, `talk:`)
+    /// are the sim's to check: the package does not know the rubric.
+    pub fn parse(text: &str, rule_ids: &[String]) -> Result<Self, PackageIssue> {
+        let raw: RawBank =
+            serde_json::from_str(text).map_err(|e| issue(SITUATIONS, "", e.to_string()))?;
+        let mut situations: Vec<Situation> = Vec::with_capacity(raw.situations.len());
+        for (i, v) in raw.situations.into_iter().enumerate() {
+            let at = match v.get("id").and_then(|id| id.as_str()) {
+                Some(id) => format!("situations[{id}]"),
+                None => format!("situations[{i}]"),
+            };
+            let s: Situation =
+                serde_json::from_value(v).map_err(|e| issue(SITUATIONS, at, e.to_string()))?;
+            if situations.iter().any(|o| o.id == s.id) {
+                return Err(issue(SITUATIONS, "", format!("duplicate id {}", s.id)));
+            }
+            for inv in &s.invariants {
+                if let Some(rule) = inv.strip_prefix("rule:") {
+                    if !rule_ids.iter().any(|r| r == rule) {
+                        let known = if rule_ids.is_empty() {
+                            "none".to_string()
+                        } else {
+                            rule_ids.join(", ")
+                        };
+                        return Err(issue(
+                            SITUATIONS,
+                            format!("situations[{}].invariants", s.id),
+                            format!("unknown rule {rule} (rules/: {known})"),
+                        ));
+                    }
+                }
+            }
+            situations.push(s);
+        }
+        Ok(Self {
+            version: raw.version,
+            situations,
+        })
+    }
+
+    /// `<dir>/situations.json` validated against `<dir>/rules/*.md`; empty when the file is
+    /// absent. The sim reads a package's bank through this.
+    pub fn load(dir: &Path) -> Result<Self, BrainError> {
+        let path = dir.join(SITUATIONS);
+        if !path.is_file() {
+            return Ok(Self::default());
+        }
+        Ok(Self::parse(&read(&path)?, &rule_file_ids(dir))?)
+    }
+}
+
+/// The stems of `<dir>/rules/*.md`, sorted.
+fn rule_file_ids(dir: &Path) -> Vec<String> {
+    let mut ids: Vec<String> = fs::read_dir(dir.join("rules"))
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("md"))
+                .filter_map(|p| p.file_stem()?.to_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    ids.sort();
+    ids
 }
 
 /// A loaded character package (`characters/<id>/`, layout in docs/spec/contract.md).
@@ -91,7 +160,7 @@ pub struct CharacterPackage {
     pub foils: Vec<Foil>,
     /// `bible.md` when present.
     pub bible: Option<String>,
-    /// `situations.json`, exposed for the simulator (empty when the file is absent).
+    /// `situations.json`, validated (empty when the file is absent).
     pub situations: SituationBank,
     /// Every optional rule (`rules/<id>.md`), sorted by id, with its effective state.
     pub rules: Vec<CharacterRule>,
@@ -420,15 +489,15 @@ pub fn load_character_with(
         }
     }
 
-    let situations_path = dir.join("situations.json");
+    let rules = resolve_rules(dir, &meta.id, &meta.rules, &meta.rails, overrides)?;
+
+    let situations_path = dir.join(SITUATIONS);
     let situations = if situations_path.is_file() {
-        serde_json::from_str(&read(&situations_path)?)
-            .map_err(|e| BrainError::Package(format!("situations.json: {e}")))?
+        let rule_ids: Vec<String> = rules.iter().map(|r| r.id.clone()).collect();
+        SituationBank::parse(&read(&situations_path)?, &rule_ids)?
     } else {
         SituationBank::default()
     };
-
-    let rules = resolve_rules(dir, &meta.id, &meta.rules, &meta.rails, overrides)?;
     let stalls = StallBank::load(dir, &persona)?;
     let lines = LineBank::resolve(meta.lines.as_ref(), &persona);
 
@@ -779,6 +848,107 @@ mod tests {
                 assert!(e.unwrap_err().to_string().contains(key));
             }
         }
+    }
+
+    fn copy_tree(from: &Path, to: &Path) {
+        fs::create_dir_all(to).unwrap();
+        for e in fs::read_dir(from).unwrap() {
+            let p = e.unwrap().path();
+            let dest = to.join(p.file_name().unwrap());
+            if p.is_dir() {
+                copy_tree(&p, &dest);
+            } else {
+                fs::copy(&p, dest).unwrap();
+            }
+        }
+    }
+
+    /// A copy of the malakor package whose `situations.json` went through `edit`.
+    fn malakor_with_situations(
+        edit: impl FnOnce(&mut Vec<serde_json::Value>),
+    ) -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        copy_tree(&malakor_dir(), d.path());
+        let path = d.path().join("situations.json");
+        let mut bank: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        edit(bank["situations"].as_array_mut().unwrap());
+        fs::write(&path, serde_json::to_string_pretty(&bank).unwrap()).unwrap();
+        d
+    }
+
+    fn situations_error(edit: impl FnOnce(&mut Vec<serde_json::Value>)) -> String {
+        let d = malakor_with_situations(edit);
+        let e = load_character_with(d.path(), "", &RulesOverride::None)
+            .expect_err("the bank is defective")
+            .to_string();
+        // `character validate` reports the same words.
+        let issues = validate_character(d.path());
+        assert!(
+            issues.iter().any(|i| i.file == "situations.json"),
+            "{issues:?}"
+        );
+        e
+    }
+
+    #[test]
+    fn the_loaded_bank_keeps_segments() {
+        let pkg = load_character_with(&malakor_dir(), "", &RulesOverride::None).unwrap();
+        let s = pkg
+            .situations
+            .situations
+            .iter()
+            .find(|s| s.id == "seg02a-raid-subject")
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(s).unwrap()["segments"],
+            serde_json::json!(["SEG-02A"])
+        );
+    }
+
+    #[test]
+    fn a_duplicate_situation_id_fails_the_load() {
+        let e = situations_error(|s| {
+            let mut a = s[0].clone();
+            a["id"] = "x".into();
+            s.push(a.clone());
+            s.push(a);
+        });
+        assert!(e.contains("situations.json: duplicate id x"), "{e}");
+    }
+
+    #[test]
+    fn an_unknown_situation_field_fails_the_load() {
+        let e = situations_error(|s| s[0]["segment"] = serde_json::json!(["SEG-02A"]));
+        assert!(e.contains("situations.json"), "{e}");
+        assert!(e.contains("unknown field `segment`"), "{e}");
+    }
+
+    #[test]
+    fn an_unknown_stimulus_fails_the_load() {
+        let e = situations_error(|s| s[0]["stimulus"] = "silent".into());
+        assert!(e.contains("situations.json"), "{e}");
+        assert!(e.contains("silent"), "{e}");
+    }
+
+    #[test]
+    fn an_invariant_naming_no_package_rule_fails_the_load() {
+        let e = situations_error(|s| {
+            s[0]["invariants"] = serde_json::json!(["rule:crisis-handof"]);
+        });
+        assert!(
+            e.contains(
+                "unknown rule crisis-handof (rules/: crisis-chat-ban, crisis-handoff, \
+                 no-financial-promotion)"
+            ),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_segment_fails_the_load() {
+        let e = situations_error(|s| s[0]["segments"] = serde_json::json!(["SEG-09"]));
+        assert!(e.contains("SEG-09"), "{e}");
     }
 
     #[test]

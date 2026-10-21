@@ -10,7 +10,8 @@
 //! - **transcript excerpts** sampled into whatever budget is left, in priority order: the lines
 //!   the judge cited for rule failures (then ± [`FAILURE_WINDOW`] around them) and Malakor's
 //!   own blocked output, then failed quality turns of the worst-quality cells, then a
-//!   stratified sample across tone × tier × segment × audience size, then context around
+//!   stratified sample across tone × tier × segment × audience size × instrument hash (one
+//!   cell key, `cells::Cell`), then context around
 //!   whatever is left. The excerpts carry viewer chat, so they sit inside an untrusted-data
 //!   fence (`UntrustedFence`, WP14b); every excerpt line keeps its `<run_id>#<line>` label
 //!   inside it, so evidence verification is unchanged.
@@ -27,6 +28,7 @@ use serde_json::{json, Map, Value};
 use shadowrunr_sim::judge::UntrustedFence;
 use shadowrunr_types::{CheckState, ModStage, StreamEvent};
 
+use crate::cells::{self, Cell};
 use crate::runs::{parse_ref, render_line, wire, RunData};
 use crate::stats::{percentile, rate};
 use crate::synth;
@@ -237,43 +239,10 @@ quality turns, {} of {} runs have any excerpt. Cite only lines shown in this pro
 // ---------------------------------------------------------------------------------------------
 // Run axes
 
-/// `(tone, tier, segment, audience)`: the matrix cell a run belongs to.
-type Stratum = (String, String, String, String);
 /// `(run index, 1-based line)`.
 type LineRef = (usize, usize);
 /// `(source, rule, stage, action)` of an incident group.
 type IncidentKey = (String, String, String, String);
-
-fn run_tier(run: &RunData) -> Option<String> {
-    if let Some(s) = &run.spec {
-        return Some(wire(&s.core_tier));
-    }
-    run.numbered().find_map(|(_, e)| match e {
-        StreamEvent::StreamStart { core_tier, .. } => Some(wire(core_tier)),
-        _ => None,
-    })
-}
-
-/// The run's matrix segment: `spec.segment`, else its first `segment_start`.
-fn run_segment(run: &RunData) -> Option<String> {
-    if let Some(s) = &run.spec {
-        return Some(wire(&s.segment));
-    }
-    run.numbered().find_map(|(_, e)| match e {
-        StreamEvent::SegmentStart { segment, .. } => Some(wire(segment)),
-        _ => None,
-    })
-}
-
-fn stratum(run: &RunData) -> Stratum {
-    let q = |o: Option<String>| o.unwrap_or_else(|| "?".into());
-    (
-        q(run.tone_variant()),
-        q(run_tier(run)),
-        q(run_segment(run)),
-        q(run.audience_size().map(|a| a.to_string())),
-    )
-}
 
 fn own_line(run: &RunData, r: &str) -> Option<usize> {
     let (id, line) = parse_ref(r)?;
@@ -310,44 +279,15 @@ fn top_rules(mut rows: Vec<RuleFailure>, caps: &Caps) -> (Vec<Value>, usize) {
     (kept, omitted)
 }
 
-/// Hard-rule failures over a set of runs: fails, evaluated n, cited refs.
-fn rule_rows<'a>(runs: impl Iterator<Item = &'a RunData>) -> Vec<RuleFailure> {
-    let mut by: BTreeMap<String, (u32, u32, Vec<String>)> = BTreeMap::new();
-    for run in runs {
-        let Some(v) = &run.verdict else { continue };
-        for r in &v.rules {
-            let e = by.entry(r.rule.clone()).or_default();
-            match r.state {
-                CheckState::Fail => {
-                    e.0 += 1;
-                    e.1 += 1;
-                    e.2.extend(r.evidence.iter().cloned());
-                }
-                CheckState::Pass => e.1 += 1,
-                CheckState::NotProvoked | CheckState::NotEvaluable => {}
-            }
-        }
-    }
-    by.into_iter()
-        .filter(|(_, (fails, _, _))| *fails > 0)
-        .map(|(rule, (fails, n, refs))| RuleFailure {
-            rule,
-            fails,
-            n,
-            refs,
-        })
-        .collect()
-}
-
 fn summarize_metrics(runs: &[RunData], m: &Metrics, caps: &Caps) -> MetricsSummary {
     let mut notes = Vec::new();
     let mut rule_total = 0usize;
     let mut rule_kept = 0usize;
 
     // Runs: totals and the matrix cells.
-    let mut strata: BTreeMap<Stratum, (u32, u32)> = BTreeMap::new();
+    let mut strata: BTreeMap<Cell, (u32, u32)> = BTreeMap::new();
     for r in runs {
-        let e = strata.entry(stratum(r)).or_default();
+        let e = strata.entry(r.cell()).or_default();
         e.0 += 1;
         if r.verdict.is_some() {
             e.1 += 1;
@@ -357,14 +297,16 @@ fn summarize_metrics(runs: &[RunData], m: &Metrics, caps: &Caps) -> MetricsSumma
     let cells: Vec<Value> = strata
         .iter()
         .take(caps.strata)
-        .map(|((tone, tier, seg, aud), (n, judged))| {
-            json!({ "tone": tone, "tier": tier, "segment": seg, "audience": aud,
+        .map(|(c, (n, judged))| {
+            json!({ "tone": c.tone, "tier": c.core_tier, "segment": c.segment,
+                    "audience": c.audience, "instrument_hash": c.instrument_hash,
                     "runs": n, "judged": judged })
         })
         .collect();
     if strata_total > caps.strata {
         notes.push(format!(
-            "runs.cells: {} of {strata_total} tone x tier x segment x audience cells listed.",
+            "runs.cells: {} of {strata_total} tone x tier x segment x audience x instrument \
+cells listed.",
             caps.strata
         ));
     }
@@ -409,10 +351,11 @@ fn summarize_metrics(runs: &[RunData], m: &Metrics, caps: &Caps) -> MetricsSumma
             }
             o.insert("handovers".into(), Value::Object(h));
             let seg = wire(&s.segment);
-            let rows = rule_rows(
+            let rows = cells::tally(
                 runs.iter()
-                    .filter(|r| run_segment(r).as_deref() == Some(&seg)),
-            );
+                    .filter(|r| r.matrix_segment().as_deref() == Some(&seg)),
+            )
+            .rule_failures();
             rule_total += rows.len();
             let (top, omitted) = top_rules(rows, caps);
             rule_kept += top.len();
@@ -545,15 +488,20 @@ action) groups.",
         inc["omitted"] = json!(incidents.omitted);
     }
 
-    let block = serde_json::to_string(&json!({
+    let mut block = json!({
         "runs": runs_block,
         "segments": segments,
         "tones": tones,
         "incidents": inc,
         "ranks": m.ranks,
         "latency": m.latency,
-    }))
-    .unwrap_or_default();
+    });
+    // Directive checks are counted here, on their own, never in the rule rows above.
+    let directives = crate::metrics::directive_outcomes(runs);
+    if !directives.is_empty() {
+        block["directives"] = json!(directives);
+    }
+    let block = serde_json::to_string(&block).unwrap_or_default();
     MetricsSummary {
         block,
         notes,
@@ -606,10 +554,14 @@ struct Sampler<'a> {
 }
 
 fn header(run: &RunData, shown: usize) -> String {
-    let (tone, tier, seg, aud) = stratum(run);
+    let c = run.cell();
     format!(
-        "### run {} (tone {tone}, tier {tier}, {seg}, audience {aud}, {} lines, {shown} shown)\n",
+        "### run {} (tone {}, tier {}, {}, audience {}, {} lines, {shown} shown)\n",
         run.run_id,
+        c.tone,
+        c.core_tier,
+        c.segment,
+        c.audience,
         run.events.len()
     )
 }
@@ -756,19 +708,20 @@ fn failure_lines(runs: &[RunData]) -> (Vec<LineRef>, Vec<LineRef>) {
     (cited, interleave(blocked))
 }
 
-/// Failed quality turns, worst cell (lowest pass rate) first, interleaved across cells.
+/// Failed quality turns, worst cell (lowest pass rate, per instrument hash) first,
+/// interleaved across cells. Directive facts are directive outcomes, not quality.
 fn quality_lines(runs: &[RunData]) -> Vec<LineRef> {
     #[derive(Default)]
-    struct Cell {
+    struct Acc {
         pass: u32,
         n: u32,
         fails: Vec<LineRef>,
     }
-    let mut cells: BTreeMap<Stratum, Cell> = BTreeMap::new();
+    let mut by: BTreeMap<Cell, Acc> = BTreeMap::new();
     for (ri, run) in runs.iter().enumerate() {
         let Some(v) = &run.verdict else { continue };
-        let cell = cells.entry(stratum(run)).or_default();
-        for q in &v.quality {
+        let cell = by.entry(run.cell()).or_default();
+        for q in cells::quality_facts(v) {
             cell.n += 1;
             if q.value {
                 cell.pass += 1;
@@ -779,13 +732,13 @@ fn quality_lines(runs: &[RunData]) -> Vec<LineRef> {
             }
         }
     }
-    let mut cells: Vec<Cell> = cells
+    let mut accs: Vec<Acc> = by
         .into_values()
         .filter(|c| c.n > 0 && !c.fails.is_empty())
         .collect();
-    let pass_rate = |c: &Cell| rate(c.pass, c.n).map(|r| r.rate).unwrap_or(1.0);
-    cells.sort_by(|a, b| pass_rate(a).total_cmp(&pass_rate(b)).then(b.n.cmp(&a.n)));
-    interleave(cells.into_iter().map(|c| c.fails).collect())
+    let pass_rate = |c: &Acc| rate(c.pass, c.n).map(|r| r.rate).unwrap_or(1.0);
+    accs.sort_by(|a, b| pass_rate(a).total_cmp(&pass_rate(b)).then(b.n.cmp(&a.n)));
+    interleave(accs.into_iter().map(|c| c.fails).collect())
 }
 
 fn chunks(runs: &[RunData], lines: &[LineRef], w: usize) -> Vec<Chunk> {
@@ -859,10 +812,10 @@ pub fn sample_excerpts(runs: &[RunData], budget: usize) -> Excerpts {
     rest.extend(add_all(&mut s, chunks(runs, &blocked, 0), pct(60)));
     // 2. Failed quality turns of the worst cells.
     rest.extend(add_all(&mut s, chunks(runs, &qrefs, 0), pct(70)));
-    // 3. A stratified sample: one run per tone x tier x segment x audience cell per round.
-    let mut strata: BTreeMap<Stratum, Vec<usize>> = BTreeMap::new();
+    // 3. A stratified sample: one run per matrix cell (instrument hash included) per round.
+    let mut strata: BTreeMap<Cell, Vec<usize>> = BTreeMap::new();
     for (ri, run) in runs.iter().enumerate() {
-        strata.entry(stratum(run)).or_default().push(ri);
+        strata.entry(run.cell()).or_default().push(ri);
     }
     for ri in interleave(strata.into_values().collect()) {
         let full = run_sample(&runs[ri], ri, 8, 6);
@@ -910,5 +863,163 @@ mod tests {
         );
         assert_eq!(spread(&[1, 2, 3, 4, 5, 6, 7, 8], 4), vec![1, 3, 5, 7]);
         assert_eq!(spread(&[1, 2], 4), vec![1, 2]);
+    }
+
+    use shadowrunr_types::{JudgeVerdict, SimRunSpec};
+
+    /// An in-memory judged run: stream_start then three says; `quality` values are judged
+    /// on lines 2, 3, 4 in turn; `rules` are `(rule, state, evidence line)`.
+    fn mem_run(
+        id: &str,
+        tone: &str,
+        hash: &str,
+        quality: &[bool],
+        rules: &[(&str, &str, Option<usize>)],
+    ) -> RunData {
+        let events = [
+            json!({"type":"stream_start","ts_ms":0,"stream_id":id,"character":"malakor",
+                   "tone_variant":tone,"core_tier":"haiku","audience_size":3}),
+            json!({"type":"say","ts_ms":1000,"speaker":"malakor","text":"Kneel."}),
+            json!({"type":"say","ts_ms":2000,"speaker":"malakor","text":"Kneel twice."}),
+            json!({"type":"say","ts_ms":3000,"speaker":"malakor","text":"Kneel thrice."}),
+        ];
+        let spec = json!({
+            "run_id": id, "character": "malakor", "tone_variant": tone,
+            "core_tier": "haiku", "core_effort": "low", "segment": "SEG-01",
+            "audience_size": 3, "seed": 1, "duration_s": 60, "population": "fixture"
+        });
+        let quality: Vec<Value> = quality
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                json!({"dimension":"humor","value":v,"turn_ref":format!("{id}#{}", 2 + i % 3),
+                       "quote":"Kneel."})
+            })
+            .collect();
+        let rules: Vec<Value> = rules
+            .iter()
+            .map(|(rule, state, line)| {
+                let ev: Vec<String> = line.iter().map(|l| format!("{id}#{l}")).collect();
+                json!({"rule":rule,"state":state,"evidence":ev})
+            })
+            .collect();
+        let verdict = json!({"run_id":id,"judge_tier":"opus","rules":rules,"quality":quality});
+        RunData {
+            run_id: id.into(),
+            tournament_id: Some("t".into()),
+            dir: std::path::PathBuf::new(),
+            spec: Some(serde_json::from_value::<SimRunSpec>(spec).unwrap()),
+            events: events
+                .into_iter()
+                .map(|e| Some(serde_json::from_value::<StreamEvent>(e).unwrap()))
+                .collect(),
+            verdict: Some(serde_json::from_value::<JudgeVerdict>(verdict).unwrap()),
+            ledger: Vec::new(),
+            instrument_hash: Some(hash.into()),
+        }
+    }
+
+    /// The metrics block (the first JSON object after its heading) of a built prompt.
+    fn metrics_block(prompt: &str) -> Value {
+        let head = prompt
+            .find("## Deterministic metrics")
+            .expect("metrics heading");
+        let at = head
+            + prompt[head..]
+                .find(
+                    "```json
+",
+                )
+                .expect("metrics block")
+            + 8;
+        serde_json::Deserializer::from_str(&prompt[at..])
+            .into_iter::<Value>()
+            .next()
+            .unwrap()
+            .unwrap()
+    }
+
+    fn block_for(runs: &[RunData]) -> Value {
+        let m = crate::analyze(runs);
+        let built = synthesis_prompt(runs, &m, None, &[], PromptBudget::default()).unwrap();
+        metrics_block(&built.prompt)
+    }
+
+    /// docs/spec/contract.md: results from different instrument hashes are never merged.
+    #[test]
+    fn matrix_cells_keep_instrument_hashes_apart() {
+        let runs = vec![
+            mem_run("a", "theatrical", "h1", &[true], &[]),
+            mem_run("b", "theatrical", "h2", &[true], &[]),
+        ];
+        let block = block_for(&runs);
+        let cells = block["runs"]["cells"].as_array().unwrap();
+        assert_eq!(cells.len(), 2, "{cells:?}");
+        for c in cells {
+            assert_eq!(c["runs"], 1, "{c}");
+        }
+    }
+
+    /// The worst-quality cell is ranked on its own rate, never on one pooled across hashes.
+    #[test]
+    fn worst_quality_cell_is_ranked_per_instrument() {
+        let runs = vec![
+            // h1: 0 of 2 pass; h2: 2 of 2 pass (pooled, one 50% cell).
+            mem_run("h1run", "theatrical", "h1", &[false, false], &[]),
+            mem_run("h2run", "theatrical", "h2", &[true, true], &[]),
+            // Another cell at 1 of 3 (33%): beats a pooled 50%, never h1's 0%.
+            mem_run(
+                "other",
+                "deadpan-bureaucrat",
+                "h1",
+                &[true, false, false],
+                &[],
+            ),
+        ];
+        let lines = quality_lines(&runs);
+        let (first, _) = lines.first().copied().expect("failed quality turns");
+        assert_eq!(runs[first].run_id, "h1run", "{lines:?}");
+    }
+
+    /// One cell: the per-segment rule rows and the tone finding's rule failures are the same
+    /// tally, row for row (guard: equal before by construction, kept equal by one tally).
+    #[test]
+    fn one_cell_segment_rows_equal_tone_rows() {
+        let runs = vec![
+            mem_run(
+                "a",
+                "theatrical",
+                "h1",
+                &[true],
+                &[
+                    ("situation:a", "fail", Some(2)),
+                    ("directive:prevent:dir-1", "fail", Some(3)),
+                ],
+            ),
+            mem_run(
+                "b",
+                "theatrical",
+                "h1",
+                &[true],
+                &[
+                    ("situation:a", "pass", None),
+                    ("directive:prevent:dir-1", "pass", None),
+                ],
+            ),
+        ];
+        let m = crate::analyze(&runs);
+        assert_eq!(m.tones.len(), 1);
+        let tone: Vec<Value> = m.tones[0]
+            .rule_failures
+            .iter()
+            .map(|r| json!({"rule": r.rule, "fails": r.fails, "n": r.n, "refs": r.refs}))
+            .collect();
+        let block = block_for(&runs);
+        let seg = block["segments"][0]["rule_failures_top"]
+            .as_array()
+            .unwrap();
+        let tone_top = block["tones"][0]["rule_failures_top"].as_array().unwrap();
+        assert_eq!(seg, &tone);
+        assert_eq!(tone_top, &tone);
     }
 }

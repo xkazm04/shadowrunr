@@ -7,6 +7,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use shadowrunr_brain::moderation::{gate_text, Policy};
 use shadowrunr_types::prep::{PrepCheck, PrepCheckState, StreamPrep};
 
@@ -103,7 +104,7 @@ pub fn lines(p: &StreamPrep) -> Vec<(String, &str)> {
     out
 }
 
-fn check(id: &str, problems: Vec<String>, pass_detail: String) -> PrepCheck {
+fn check(id: &str, problems: &[Problem], pass_detail: String) -> PrepCheck {
     if problems.is_empty() {
         PrepCheck {
             id: id.to_string(),
@@ -112,7 +113,12 @@ fn check(id: &str, problems: Vec<String>, pass_detail: String) -> PrepCheck {
         }
     } else {
         let n = problems.len();
-        let mut detail = problems.into_iter().take(8).collect::<Vec<_>>().join("; ");
+        let mut detail = problems
+            .iter()
+            .take(8)
+            .map(|x| x.msg.as_str())
+            .collect::<Vec<_>>()
+            .join("; ");
         if n > 8 {
             detail.push_str(&format!("; and {} more", n - 8));
         }
@@ -165,22 +171,106 @@ fn names_real(line: &str, real_names: &[String]) -> Option<String> {
     None
 }
 
-/// Run every check over `p`. `dropped` lists what generation could not keep (a bit naming no
-/// segment, an unknown kind); it fails `shape` or `segments`.
-pub fn run(p: &StreamPrep, ctx: &CheckContext, dropped: &Dropped) -> Vec<PrepCheck> {
+/// Room a count shortfall leaves: `missing` more items of `kind` (a connector kind's wire
+/// name, a bit kind's singular, or `beat`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Slot {
+    pub kind: String,
+    pub missing: usize,
+}
+
+/// One thing a check caught, located: `at` is the edit target (`conn-01`, `prem-03`,
+/// `cold_open.beats[2]`) or, for a count shortfall, the insert slot
+/// (`insert:connector:into_poll`, `insert:premise`, `insert:cold_open.beat`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Finding {
+    pub check: String,
+    pub at: String,
+    pub why: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slot: Option<Slot>,
+}
+
+/// One problem as a check reports it (`msg`), with the targets it names and, for a shortfall,
+/// the slot it leaves. [`run`] prints the messages; [`findings`] keeps the targets.
+struct Problem {
+    msg: String,
+    targets: Vec<String>,
+    slot: Option<(String, Slot)>,
+}
+
+impl Problem {
+    /// A problem on one line: the target is the line's item (`prem-03 line 1` -> `prem-03`).
+    fn at(locator: &str, msg: String) -> Self {
+        Self {
+            msg,
+            targets: vec![target_of(locator)],
+            slot: None,
+        }
+    }
+
+    /// A problem in nothing the material holds (an item generation dropped).
+    fn bare(msg: String) -> Self {
+        Self {
+            msg,
+            targets: Vec::new(),
+            slot: None,
+        }
+    }
+
+    fn slot(msg: String, at: String, kind: &str, missing: usize) -> Self {
+        Self {
+            msg,
+            targets: Vec::new(),
+            slot: Some((
+                at,
+                Slot {
+                    kind: kind.to_string(),
+                    missing,
+                },
+            )),
+        }
+    }
+}
+
+/// The edit target a line locator sits in: `prem-03 line 1` and `prem-03 payoff` are
+/// `prem-03`; `conn-01` and `cold_open.beats[2]` are themselves.
+pub fn target_of(locator: &str) -> String {
+    locator.split(' ').next().unwrap_or(locator).to_string()
+}
+
+/// Every edit target `p` holds: the cold open's title, beats and handoff, each bit, each
+/// connector.
+pub fn targets(p: &StreamPrep) -> Vec<String> {
+    let mut out = vec!["cold_open.title".to_string()];
+    for i in 0..p.cold_open.beats.len() {
+        out.push(format!("cold_open.beats[{}]", i + 1));
+    }
+    out.push("cold_open.handoff".into());
+    out.extend(p.bits.iter().map(|b| b.id.clone()));
+    out.extend(p.connectors.iter().map(|c| c.id.clone()));
+    out
+}
+
+/// Every check's problems, in check order, with the check's pass detail.
+fn assess(
+    p: &StreamPrep,
+    ctx: &CheckContext,
+    dropped: &Dropped,
+) -> Vec<(&'static str, Vec<Problem>, String)> {
     let all = lines(p);
 
-    let long: Vec<String> = all
+    let long: Vec<Problem> = all
         .iter()
         .filter_map(|(at, l)| {
             let n = l.chars().count();
-            (n > MAX_LINE_CHARS).then(|| format!("{at} is {n} characters"))
+            (n > MAX_LINE_CHARS).then(|| Problem::at(at, format!("{at} is {n} characters")))
         })
         .collect();
-    let empty: Vec<String> = all
+    let empty: Vec<Problem> = all
         .iter()
         .filter(|(_, l)| l.trim().is_empty())
-        .map(|(at, _)| format!("{at} is empty"))
+        .map(|(at, _)| Problem::at(at, format!("{at} is empty")))
         .collect();
 
     let bit_counts: Vec<(&BitRule, usize)> = BITS.iter().map(|r| (r, count_kind(p, r))).collect();
@@ -196,20 +286,59 @@ pub fn run(p: &StreamPrep, ctx: &CheckContext, dropped: &Dropped) -> Vec<PrepChe
         .collect();
     let mut counts = Vec::new();
     if !(COLD_OPEN_BEATS.0..=COLD_OPEN_BEATS.1).contains(&beats) {
-        counts.push(format!(
+        let msg = format!(
             "cold open has {beats} beats ({}-{})",
             COLD_OPEN_BEATS.0, COLD_OPEN_BEATS.1
-        ));
+        );
+        counts.push(if beats < COLD_OPEN_BEATS.0 {
+            Problem::slot(
+                msg,
+                "insert:cold_open.beat".into(),
+                "beat",
+                COLD_OPEN_BEATS.0 - beats,
+            )
+        } else {
+            Problem {
+                msg,
+                targets: (1..=beats)
+                    .map(|i| format!("cold_open.beats[{i}]"))
+                    .collect(),
+                slot: None,
+            }
+        });
     }
     for (r, n) in &bit_counts {
-        if !r.count_ok(*n) {
-            counts.push(format!("{n} {} ({})", r.plural, r.count_text()));
+        if r.count_ok(*n) {
+            continue;
         }
+        let msg = format!("{n} {} ({})", r.plural, r.count_text());
+        counts.push(if *n < r.count.0 {
+            Problem::slot(
+                msg,
+                format!("insert:{}", r.singular),
+                r.singular,
+                r.count.0 - n,
+            )
+        } else {
+            Problem {
+                msg,
+                targets: p
+                    .bits
+                    .iter()
+                    .filter(|b| b.kind == r.kind)
+                    .map(|b| b.id.clone())
+                    .collect(),
+                slot: None,
+            }
+        });
     }
     for (k, n) in &per_kind {
         if *n < MIN_CONNECTORS_PER_KIND {
-            counts.push(format!(
-                "{n} {k} connectors (at least {MIN_CONNECTORS_PER_KIND})"
+            counts.push(Problem::slot(
+                format!("{n} {k} connectors (at least {MIN_CONNECTORS_PER_KIND})"),
+                format!("insert:connector:{k}"),
+                k,
+                MIN_CONNECTORS_PER_KIND - n,
             ));
         }
     }
@@ -227,54 +356,68 @@ pub fn run(p: &StreamPrep, ctx: &CheckContext, dropped: &Dropped) -> Vec<PrepChe
             .join(", ")
     );
 
-    let mut shape = dropped.shape.clone();
+    let mut shape: Vec<Problem> = dropped.shape.iter().cloned().map(Problem::bare).collect();
     shape.extend(empty);
     for b in &p.bits {
         let r = super::rules::rule(b.kind);
         let n = b.lines.len();
         if !r.lines_ok(n) {
-            shape.push(format!(
-                "{} is a {} with {n} lines ({})",
-                b.id,
-                r.singular,
-                r.lines_text()
+            shape.push(Problem::at(
+                &b.id,
+                format!(
+                    "{} is a {} with {n} lines ({})",
+                    b.id,
+                    r.singular,
+                    r.lines_text()
+                ),
             ));
         }
         if r.payoff_required && b.payoff.as_deref().is_none_or(|x| x.trim().is_empty()) {
-            shape.push(format!("{} is a {} without a payoff", b.id, r.singular));
+            shape.push(Problem::at(
+                &b.id,
+                format!("{} is a {} without a payoff", b.id, r.singular),
+            ));
         }
     }
 
-    let real: Vec<String> = all
+    let real: Vec<Problem> = all
         .iter()
-        .filter_map(|(at, l)| names_real(l, ctx.real_names).map(|w| format!("{at} names {w}")))
+        .filter_map(|(at, l)| {
+            names_real(l, ctx.real_names).map(|w| Problem::at(at, format!("{at} names {w}")))
+        })
         .collect();
-    let urls: Vec<String> = all
+    let urls: Vec<Problem> = all
         .iter()
         .filter_map(|(at, l)| {
             patterns()
                 .url
                 .find(l)
-                .map(|m| format!("{at} has {:?}", m.as_str()))
+                .map(|m| Problem::at(at, format!("{at} has {:?}", m.as_str())))
         })
         .collect();
-    let prior: Vec<String> = all
+    let prior: Vec<Problem> = all
         .iter()
         .filter_map(|(at, l)| {
-            patterns()
-                .prior
-                .find(l)
-                .map(|m| format!("{at} leans on an earlier stream ({:?})", m.as_str()))
+            patterns().prior.find(l).map(|m| {
+                Problem::at(
+                    at,
+                    format!("{at} leans on an earlier stream ({:?})", m.as_str()),
+                )
+            })
         })
         .collect();
 
-    let mut segments = dropped.segments.clone();
+    let mut segments: Vec<Problem> = dropped
+        .segments
+        .iter()
+        .cloned()
+        .map(Problem::bare)
+        .collect();
     for b in &p.bits {
         if shadowrunr_segments::segment_is_descoped(b.segment) {
-            segments.push(format!(
-                "{} is for {}, which is descoped",
-                b.id,
-                wire(&b.segment)
+            segments.push(Problem::at(
+                &b.id,
+                format!("{} is for {}, which is descoped", b.id, wire(&b.segment)),
             ));
         }
     }
@@ -287,7 +430,7 @@ pub fn run(p: &StreamPrep, ctx: &CheckContext, dropped: &Dropped) -> Vec<PrepChe
             continue;
         }
         if let Some(first) = seen.get(&key) {
-            dupes.push(format!("{at} repeats {first}"));
+            dupes.push(Problem::at(at, format!("{at} repeats {first}")));
         } else {
             seen.insert(key, at.as_str());
         }
@@ -308,56 +451,94 @@ pub fn run(p: &StreamPrep, ctx: &CheckContext, dropped: &Dropped) -> Vec<PrepChe
     dupes.extend(
         repeated
             .into_iter()
-            .map(|id| format!("id {id} is used twice")),
+            .map(|id| Problem::at(id, format!("id {id} is used twice"))),
     );
 
-    let gated: Vec<String> = all
+    let gated: Vec<Problem> = all
         .iter()
         .filter_map(|(at, l)| {
             let (_, fired) = gate_text(l, ctx.policy, &[]);
             (!fired.is_empty()).then(|| {
                 let rules: Vec<String> = fired.iter().map(|(r, a)| format!("{r} {a}")).collect();
-                format!("{at}: {}", rules.join(", "))
+                Problem::at(at, format!("{at}: {}", rules.join(", ")))
             })
         })
         .collect();
 
     let n = all.len();
     vec![
-        check(
+        (
             "line_length",
             long,
             format!("{n} lines, each at most {MAX_LINE_CHARS} characters"),
         ),
-        check("counts", counts, counts_detail),
-        check(
+        ("counts", counts, counts_detail),
+        (
             "shape",
             shape,
             "every bit has the lines its kind needs".into(),
         ),
-        check(
+        (
             "real_names",
             real,
             "no real person, handle or channel".into(),
         ),
-        check("urls", urls, "no links".into()),
-        check(
+        ("urls", urls, "no links".into()),
+        (
             "prior_streams",
             prior,
             "nothing leans on a stream a newcomer missed".into(),
         ),
-        check(
+        (
             "segments",
             segments,
             "every bit is for an active segment".into(),
         ),
-        check("duplicates", dupes, "no line or id repeats".into()),
-        check(
+        ("duplicates", dupes, "no line or id repeats".into()),
+        (
             "output_gate",
             gated,
             format!("{n} lines pass the brain's output gate unchanged"),
         ),
     ]
+}
+
+/// Run every check over `p`. `dropped` lists what generation could not keep (a bit naming no
+/// segment, an unknown kind); it fails `shape` or `segments`. A failed check's detail is
+/// prose for the owner, at most eight problems; [`findings`] has every one.
+pub fn run(p: &StreamPrep, ctx: &CheckContext, dropped: &Dropped) -> Vec<PrepCheck> {
+    assess(p, ctx, dropped)
+        .into_iter()
+        .map(|(id, problems, pass)| check(id, &problems, pass))
+        .collect()
+}
+
+/// What the checks catch in `p`, located and untruncated: the predicates [`run`] uses, one
+/// finding per target a problem names and one insert slot per count shortfall (what
+/// `prep revise` may edit).
+pub fn findings(p: &StreamPrep, ctx: &CheckContext) -> Vec<Finding> {
+    let mut out = Vec::new();
+    for (id, problems, _) in assess(p, ctx, &Dropped::default()) {
+        for x in problems {
+            if let Some((at, slot)) = x.slot {
+                out.push(Finding {
+                    check: id.into(),
+                    at,
+                    why: x.msg.clone(),
+                    slot: Some(slot),
+                });
+            }
+            for at in x.targets {
+                out.push(Finding {
+                    check: id.into(),
+                    at,
+                    why: x.msg.clone(),
+                    slot: None,
+                });
+            }
+        }
+    }
+    out
 }
 
 /// What generation dropped from the planner's reply, kept so the checks show it.

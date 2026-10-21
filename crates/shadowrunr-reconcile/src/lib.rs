@@ -15,6 +15,7 @@
 //! Types and RPC names: docs/spec/contract.md § Daemon protocol.
 
 pub mod budget;
+pub mod cells;
 pub mod directives;
 pub mod metrics;
 pub mod runs;
