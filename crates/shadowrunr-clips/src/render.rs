@@ -9,26 +9,36 @@
 //!   AI disclosure the video carries;
 //! - `manifest.json`: what was rendered, from what, and what is burnt in.
 //!
+//! A run with a show recording is cut from it (`footage`: `cut-16x9.mp4` and the vertical
+//! `cut-9x16.mp4`, plus a `poster.png` frame of the vertical). A run without one is re-drawn:
 //! `render_video` adds `draft.mp4` (and a `poster.png` frame) by recording the stage in a
 //! headless Chromium through the DevTools protocol and encoding the frames with ffmpeg
-//! (`apps/stage/scripts/record-clip.mjs`). When a tool is missing the draft stays a poster
-//! frame plus caption tracks, and the manifest says which tool and why. A video is never
-//! faked: the file is checked with ffprobe before it counts.
+//! (`apps/stage/scripts/record-clip.mjs`), and the manifest labels it "re-drawn (no
+//! recording)". When a tool is missing the draft stays a poster frame plus caption tracks, and
+//! the manifest says which tool and why. A video is never faked: every file is checked with
+//! ffprobe before it counts.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
 use shadowrunr_types::clips::{
-    ClipCandidate, ClipCaption, ClipEvidence, ClipFile, ClipOverlay, ClipRender,
+    ClipCandidate, ClipCaption, ClipEvidence, ClipFile, ClipFootage, ClipOverlay, ClipRecording,
+    ClipRender,
 };
 use shadowrunr_types::{Case, EvidenceGrade, StreamEvent};
 
+use crate::footage;
 use crate::store::{write_bytes, write_json};
 use crate::{clock, now_ms, ClipError, Result, HEIGHT, WIDTH};
 
 pub const DISCLOSURE: &str = "AI character · synthetic media";
 pub const CAPTION_SOURCE: &str = "transcript text (viewer handles redacted), timed by the stage caption model (~150 wpm); no TTS alignment in the media-less phase";
+/// The captions of a cut from the recording.
+pub const CAPTION_SOURCE_VOICE: &str = "transcript text (viewer handles redacted), timed by the voice's real playback (voice.jsonl); the 16:9 cut shows the stage's own captions, the 9:16 burns these in";
+/// The manifest's label for each footage.
+pub const FOOTAGE_RECORDING: &str = "cut from the recording";
+pub const FOOTAGE_REDRAWN: &str = "re-drawn (no recording)";
 const FPS: u32 = 30;
 
 /// The header a SEG-02A or case-linked cut carries.
@@ -368,6 +378,7 @@ pub fn write_draft(
         end_ms: input.duration_ms,
         speaker: "malakor".into(),
         text: c.title.clone(),
+        unvoiced: false,
     };
     write_json(&dir.join("clip.json"), input)?;
     write_bytes(&dir.join("captions.srt"), srt(&input.captions).as_bytes())?;
@@ -378,6 +389,11 @@ pub fn write_draft(
     )?;
     let render = ClipRender {
         kind: "poster".into(),
+        footage: Some(if c.recording.is_some() {
+            ClipFootage::Recording
+        } else {
+            ClipFootage::Redrawn
+        }),
         width: WIDTH,
         height: HEIGHT,
         duration_s: input.duration_ms as f64 / 1000.0,
@@ -408,21 +424,66 @@ fn payoff_caption(captions: &[ClipCaption]) -> Option<&ClipCaption> {
 #[derive(Serialize)]
 struct Manifest<'a> {
     id: &'a str,
+    /// "cut from the recording" or "re-drawn (no recording)".
+    footage: &'static str,
     render: &'a ClipRender,
     window: &'a shadowrunr_types::clips::ClipWindow,
     source: &'a shadowrunr_types::clips::ClipSource,
     stream_clock: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recording: Option<&'a ClipRecording>,
+    /// Where the cut sits in the recording.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_span: Option<FileSpan>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    av_offset_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    av_offset_provenance: Option<&'static str>,
+}
+
+#[derive(Serialize)]
+struct FileSpan {
+    in_ms: i64,
+    dur_ms: i64,
+    #[serde(skip_serializing_if = "is_zero")]
+    shift_ms: i64,
+}
+
+fn is_zero(v: &i64) -> bool {
+    *v == 0
 }
 
 fn write_manifest(dir: &Path, c: &ClipCandidate, r: &ClipRender) -> Result<()> {
+    write_manifest_with(dir, c, r, None)
+}
+
+fn write_manifest_with(
+    dir: &Path,
+    c: &ClipCandidate,
+    r: &ClipRender,
+    cut: Option<(&ClipRecording, footage::Span)>,
+) -> Result<()> {
     write_json(
         &dir.join("manifest.json"),
         &Manifest {
             id: &c.id,
+            footage: if r.footage == Some(ClipFootage::Recording) {
+                FOOTAGE_RECORDING
+            } else {
+                FOOTAGE_REDRAWN
+            },
             render: r,
             window: &c.window,
             source: &c.source,
             stream_clock: format!("{}-{}", clock(c.window.start_ms), clock(c.window.end_ms)),
+            recording: cut.map(|(rec, _)| rec),
+            file_span: cut.map(|(_, s)| FileSpan {
+                in_ms: s.in_ms,
+                dur_ms: s.dur_ms,
+                shift_ms: s.shift_ms,
+            }),
+            av_offset_ms: cut.map(|(rec, _)| rec.av_offset_ms),
+            av_offset_provenance: cut.map(|_| footage::AV_OFFSET_PROVENANCE),
         },
     )
 }
@@ -453,7 +514,7 @@ impl ToolProbe {
     }
 }
 
-fn quiet(cmd: &mut Command) -> &mut Command {
+pub(crate) fn quiet(cmd: &mut Command) -> &mut Command {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -686,7 +747,105 @@ pub fn render_video(
     Ok((dur, codec))
 }
 
-/// Re-render a stored draft: always the poster set, plus the video when the tools allow.
+/// Cut both pictures from the show's recording and verify them. `Err` carries the reason
+/// the draft stays a poster.
+fn cut_from_recording(
+    dir: &Path,
+    c: &ClipCandidate,
+    t: &RenderTools,
+    rec: &ClipRecording,
+) -> std::result::Result<(ClipRender, footage::Span), String> {
+    for (tool, arg) in [(&t.ffmpeg, "-version"), (&t.ffprobe, "-version")] {
+        if !runs(tool, arg) {
+            return Err(format!("{tool} is missing: the recording cannot be cut"));
+        }
+    }
+    if !Path::new(&rec.file).is_file() {
+        return Err(format!("the recording {} is gone", rec.file));
+    }
+    let span = footage::span(rec, &c.window);
+    let header = header_for(c.evidence.as_ref());
+    for f in ["cut-16x9.mp4", "cut-9x16.mp4", "poster.png", "cut-16x9.ass"] {
+        let _ = std::fs::remove_file(dir.join(f));
+    }
+    let io = |e: ClipError| e.to_string();
+    let land_ass = match &header {
+        Some(h) => {
+            let a = footage::landscape_ass(rec.width, rec.height, span.dur_ms, h);
+            write_bytes(&dir.join("cut-16x9.ass"), a.as_bytes()).map_err(io)?;
+            Some("cut-16x9.ass")
+        }
+        None => None,
+    };
+    footage::cut_landscape(&t.ffmpeg, dir, rec, span, land_ass)?;
+    let rf = footage::reframe_for(c.segment);
+    let vass = footage::vertical_ass(
+        &c.captions,
+        &rf,
+        span.shift_ms,
+        span.dur_ms,
+        header.as_ref(),
+    );
+    write_bytes(&dir.join("captions-9x16.ass"), vass.as_bytes()).map_err(io)?;
+    footage::cut_vertical(&t.ffmpeg, dir, rec, span, &rf, "captions-9x16.ass")?;
+    let want = span.dur_ms as f64 / 1000.0;
+    let mut durations = Vec::new();
+    for (file, w, h) in [
+        ("cut-16x9.mp4", rec.width, rec.height),
+        ("cut-9x16.mp4", footage::V_WIDTH, footage::V_HEIGHT),
+    ] {
+        let (pw, ph, codec, dur) = ffprobe(&t.ffprobe, &dir.join(file))?;
+        if (pw, ph) != (w, h) || codec != "h264" {
+            return Err(format!("{file} is {pw}x{ph} {codec}, not {w}x{h} h264"));
+        }
+        if (dur - want).abs() > 0.5 {
+            return Err(format!("{file} runs {dur:.2} s, not {want:.2} s"));
+        }
+        durations.push(dur);
+    }
+    // A still of the vertical cut at its middle, for lists and the poster slot.
+    let _ = quiet(&mut Command::new(&t.ffmpeg))
+        .current_dir(dir)
+        .args(["-y", "-v", "error", "-ss"])
+        .arg(format!("{:.3}", want / 2.0))
+        .args(["-i", "cut-9x16.mp4", "-frames:v", "1", "poster.png"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    let mut files = vec![
+        file_entry(dir, "cut-9x16.mp4", "cut_9x16"),
+        file_entry(dir, "cut-16x9.mp4", "cut_16x9"),
+    ];
+    if dir.join("poster.png").is_file() {
+        files.push(file_entry(dir, "poster.png", "poster"));
+    }
+    files.push(file_entry(dir, "captions-9x16.ass", "captions_ass"));
+    let overlay = ClipOverlay {
+        captions: if c.window.voice_timed {
+            CAPTION_SOURCE_VOICE.to_string()
+        } else {
+            format!("{CAPTION_SOURCE}; the 16:9 cut shows the stage's own captions")
+        },
+        ..overlay_for(header.as_ref())
+    };
+    Ok((
+        ClipRender {
+            kind: "video".into(),
+            footage: Some(ClipFootage::Recording),
+            width: footage::V_WIDTH,
+            height: footage::V_HEIGHT,
+            duration_s: (durations[1] * 100.0).round() / 100.0,
+            files,
+            overlay,
+            fallback_reason: None,
+            rendered_ms: now_ms(),
+        },
+        span,
+    ))
+}
+
+/// Re-render a stored draft: always the poster set, plus the cuts from the recording when the
+/// run has one, else the stage's re-drawn video when the tools allow.
 pub fn render(dir: &Path, c: &ClipCandidate, t: Option<&RenderTools>) -> Result<ClipRender> {
     let text = std::fs::read_to_string(dir.join("clip.json"))
         .map_err(|e| ClipError::Io(format!("{}: {e}", dir.join("clip.json").display())))?;
@@ -695,11 +854,38 @@ pub fn render(dir: &Path, c: &ClipCandidate, t: Option<&RenderTools>) -> Result<
     let Some(tools) = t else {
         return write_draft(dir, c, &input, "no recording tools configured");
     };
+    if let Some(rec) = &c.recording {
+        let poster = write_draft(dir, c, &input, "")?;
+        return match cut_from_recording(dir, c, tools, rec) {
+            Ok((mut r, span)) => {
+                let keep = ["captions_srt", "captions_ass", "stage_input"];
+                r.files.extend(
+                    poster.files.into_iter().filter(|f| {
+                        keep.contains(&f.kind.as_str()) && f.path != "captions-9x16.ass"
+                    }),
+                );
+                write_manifest_with(dir, c, &r, Some((rec, span)))?;
+                Ok(r)
+            }
+            Err(reason) => {
+                for f in ["cut-16x9.mp4", "cut-9x16.mp4"] {
+                    let _ = std::fs::remove_file(dir.join(f));
+                }
+                write_draft(
+                    dir,
+                    c,
+                    &input,
+                    &format!("cutting the recording failed: {reason}"),
+                )
+            }
+        };
+    }
     let probe = probe_tools(tools);
     match render_video(dir, tools, &probe, input.duration_ms) {
         Ok((dur, codec)) => {
             let mut r = write_draft(dir, c, &input, "")?;
             r.kind = "video".into();
+            r.footage = Some(ClipFootage::Redrawn);
             r.duration_s = (dur * 100.0).round() / 100.0;
             r.fallback_reason = None;
             r.files.insert(0, file_entry(dir, "draft.mp4", "video"));

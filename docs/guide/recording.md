@@ -180,6 +180,45 @@ starts that follow a pause show as onsets. In the sessions measured so far, spee
 200 ms after its `played` time, at the head and the tail alike (no drift); about 70 ms of that is
 the silence at the start of each Kokoro sentence.
 
+## Clips from the recording
+
+`shadowrunr clips scan --run <session dir>` reads the session's `voice.jsonl` and
+`recording.json` (cli.md, `clips`), and `shadowrunr clips render <id>` cuts the recording:
+
+- **Timing.** The window is on the voice's real timing: a line runs from its first `played`
+  to its last part's `played` plus that part's duration. The cut opens up to 0.4 s before its
+  first line, never into the line heard before it, and its 1.5 s reaction beat stops where the
+  next heard line starts.
+- **The A/V offset.** Speech starts about 200 ms after `played` (measured on
+  `sbx-20261021-085027-5m`, within 25 ms, no drift). It is recorded in each candidate and
+  manifest as `av_offset_ms`, with that provenance, and cuts are **not** shifted by it: the cut
+  opens before `played`, so the first syllable is always inside it.
+- **`cut-16x9.mp4`.** The recording from `window start - stream_offset_ms` for the window's
+  length, re-encoded H.264/AAC (input seek plus re-encode, so the cut is frame-accurate),
+  1920x1080 at the recording's frame rate. Nothing is burnt in: the stage's captions and its
+  AI badge are in the picture. A SEG-02A cut is the exception: its ALLEGED header, grade badge
+  and citation strip are burnt in, as the gate requires.
+- **`cut-9x16.mp4`.** 1080x1920 at the same frame rate, on a dark ground:
+
+  | Region | From the 1920x1080 stage (`apps/stage/src/layouts.ts`) | In the 9:16 frame |
+  | --- | --- | --- |
+  | The AI badge | the disclosure, x 1584-1904, y 30-82 | 480 px wide, centred, y 60 |
+  | Improv (SEG-01 and the rest) | `avatar`, x 64-624, y 112-724 | full width, y 170-1350 |
+  | Hexmap (SEG-02A) | the map's hexes, x 32-728, y 104-848; `avatar` x 40-164, y 864-988 | hexes full width from y 170; the face 300x300 bottom right of them |
+
+  Below the picture the lines are burnt in from `captions-9x16.ass`: the speaker in the
+  stage's verdigris, the line in capitals in its bone colour (the caption face's own Georgia
+  fallback; Cinzel is a web font), one line at a time, on the cut's clock. A line the voice
+  never said is set dim and italic.
+- **Checks.** Both files are probed (`h264`, the right size, the window's duration within
+  0.5 s); a failure leaves the poster frame and says why. The gate adds `handles_in_picture`
+  (unmeasured) to a cut from the recording: the 16:9 picture is the broadcast, chat column
+  included, so a person confirms the handles may be shown before approving.
+
+The console plays both cuts on the clip's page (On Air, Clips) and the session's recording in
+the Review player's watch pane, from the daemon's `GET /media/clips/<id>/<file>` and
+`GET /media/runs/sandbox/<session>/recording.mp4` (byte ranges, so the player seeks).
+
 ## Troubleshooting
 
 | Symptom | Cause |

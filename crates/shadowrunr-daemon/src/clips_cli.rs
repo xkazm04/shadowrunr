@@ -56,8 +56,10 @@ pub enum ClipsCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Re-render a draft: a 1080x1920 MP4 recorded from the stage when node, ffmpeg and a
-    /// headless Chromium are available, else a poster frame plus caption tracks.
+    /// Re-render a draft. A recorded run is cut from its recording with ffmpeg: a 16:9 trim
+    /// (cut-16x9.mp4) and a 9:16 reframe around the face with the lines burnt in
+    /// (cut-9x16.mp4). Otherwise the stage re-draws it: a 1080x1920 MP4 when node, ffmpeg and
+    /// a headless Chromium are available, else a poster frame plus caption tracks.
     Render {
         id: String,
         #[arg(long)]
@@ -153,12 +155,17 @@ fn show(c: &ClipCandidate) {
         c.source.run_id, c.source.line_from, c.source.line_to, c.source.transcript
     );
     println!(
-        "window: stream {}-{} (anchor {}, {}-driven), {:.1} s spoken, pre-roll {:.1} s, band {}-{} s ({}){}",
+        "window: stream {}-{} (anchor {}, {}-driven), {:.1} s {}, pre-roll {:.1} s, band {}-{} s ({}){}",
         clock(w.start_ms),
         clock(w.end_ms),
         clock(w.anchor_ms),
         w.driver,
         w.duration_s,
+        if w.voice_timed {
+            "on the voice's real timing"
+        } else {
+            "spoken (estimated)"
+        },
         w.preroll_ms as f64 / 1000.0,
         w.band_s[0],
         w.band_s[1],
@@ -175,6 +182,12 @@ fn show(c: &ClipCandidate) {
         unmeasured_or(s.audio),
         unmeasured_or(s.hook)
     );
+    if let (Some(w), Some(st)) = (s.audio_db, s.audio_stream_db) {
+        println!("audio: window {w:.1} dBFS RMS against the recording's {st:.1} dBFS");
+    }
+    for (k, why) in &s.unmeasured {
+        println!("{k} unmeasured: {why}");
+    }
     if let Some(why) = &s.hook_why {
         println!("hook read: {why}");
     }
@@ -234,9 +247,21 @@ fn show(c: &ClipCandidate) {
     for k in &c.gate.checks {
         println!("  {:<14} {:<20} {}", wire(&k.state), k.id, k.detail);
     }
+    if let Some(rec) = &c.recording {
+        println!(
+            "recording: {} (stream offset {} ms, {}x{} {} fps, av offset +{} ms)",
+            rec.file, rec.stream_offset_ms, rec.width, rec.height, rec.fps, rec.av_offset_ms
+        );
+    }
     if let Some(r) = &c.render {
         println!(
-            "render: {} {}x{} {:.1} s{}",
+            "render: {} {} {}x{} {:.1} s{}",
+            match r.footage {
+                Some(shadowrunr_types::clips::ClipFootage::Recording) => {
+                    shadowrunr_clips::render::FOOTAGE_RECORDING
+                }
+                _ => shadowrunr_clips::render::FOOTAGE_REDRAWN,
+            },
             r.kind,
             r.width,
             r.height,
@@ -247,13 +272,29 @@ fn show(c: &ClipCandidate) {
                 .unwrap_or_default()
         );
     }
+    if let Some(f) = &c.feedback {
+        let tags: Vec<String> = f.tags.iter().map(wire).collect();
+        println!(
+            "watched: {}{}",
+            if tags.is_empty() {
+                "-".to_string()
+            } else {
+                tags.join(", ")
+            },
+            f.note
+                .as_deref()
+                .map(|n| format!(" ({n})"))
+                .unwrap_or_default()
+        );
+    }
     println!("captions:");
     for cap in &c.captions {
         println!(
-            "  [{:>5.1}s] {}: {}",
+            "  [{:>5.1}s] {}: {}{}",
             cap.start_ms as f64 / 1000.0,
             cap.speaker,
-            cap.text
+            cap.text,
+            if cap.unvoiced { "  [never heard]" } else { "" }
         );
     }
 }

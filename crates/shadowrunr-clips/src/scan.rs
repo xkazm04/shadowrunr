@@ -3,12 +3,15 @@
 //!
 //! 1. Every beat is pre-scored from its admitted marker and its crowd reaction.
 //! 2. The best [`PRE_CANDIDATES`] beats, at least [`MIN_SPACING_MS`] apart, are cut.
-//! 3. One hook read rates those cuts (one engine call per run, cheapest tier).
+//! 3. One hook read rates those cuts (one engine call per run, cheapest tier); when the run
+//!    has a recording, each cut's programme loudness is measured too (the audio signal).
 //! 4. The fused score ranks them; overlapping cuts merge when the merge fits the band;
 //!    the top [`crate::TOP_PER_STREAM`] are drafted and gated.
 //!
+//! A run with a `voice.jsonl` is cut on the voice's real timing ([`Stream::apply_voice`]).
+//!
 //! A rescan replaces the run's untouched candidates and keeps every one the owner has
-//! already approved or rejected.
+//! already approved or rejected; watched feedback carries over to the same cut.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -17,17 +20,19 @@ use std::sync::Arc;
 use regex::Regex;
 use shadowrunr_brain::moderation::Policy;
 use shadowrunr_types::clips::{
-    ClipCandidate, ClipCaption, ClipEvidence, ClipHex, ClipLane, ClipMarker, ClipScanReport,
-    ClipScanRun, ClipScoring, ClipSignals, ClipSource, ClipStatus, ClipTransition, ClipWeights,
-    ClipWindow,
+    ClipCandidate, ClipCaption, ClipEvidence, ClipHex, ClipLane, ClipMarker, ClipRecording,
+    ClipScanReport, ClipScanRun, ClipScoring, ClipSignals, ClipSource, ClipStatus, ClipTransition,
+    ClipWeights, ClipWindow,
 };
 use shadowrunr_types::{Engine, EvidenceGrade, Op, SegmentId, StreamEvent};
 
+use crate::footage;
 use crate::hook::{self, HookWindow};
 use crate::render::{self, header_for, ClipInput, DISCLOSURE};
 use crate::signals::{self, kind_weight, Crowd};
 use crate::store::{self, ClipStore};
 use crate::transcript::{self, Stream};
+use crate::voice;
 use crate::window::{self, band_for, Cut};
 use crate::{
     clock, gate, now_ms, Result, NOMINAL_WEIGHTS, TOP_PER_STREAM, WEIGHTS_NOTE, WEIGHTS_PROVENANCE,
@@ -60,6 +65,8 @@ pub struct ScanOptions {
     pub policy: Arc<Policy>,
     /// The brain's care window.
     pub care_window_ms: i64,
+    /// ffmpeg, for the audio signal of a recorded run; `None` leaves audio unmeasured.
+    pub ffmpeg: Option<String>,
 }
 
 /// One cut being scored.
@@ -73,17 +80,20 @@ struct Pre {
     segment: Option<SegmentId>,
     cut: Cut,
     hook: Option<(f64, String)>,
+    /// `Ok((value, window dBFS))`, or why the loudness is unmeasured.
+    audio: std::result::Result<(f64, f64), String>,
     score: f64,
 }
 
-fn weights_for(chat: bool, hook: bool) -> ClipWeights {
+fn weights_for(chat: bool, audio: bool, hook: bool) -> ClipWeights {
     let w = NOMINAL_WEIGHTS;
-    let denom = w.marker + if chat { w.chat } else { 0.0 } + if hook { w.hook } else { 0.0 };
+    let on = |b: bool, x: f64| if b { x } else { 0.0 };
+    let denom = w.marker + on(chat, w.chat) + on(audio, w.audio) + on(hook, w.hook);
     ClipWeights {
         marker: w.marker / denom,
-        chat: if chat { w.chat / denom } else { 0.0 },
-        audio: 0.0,
-        hook: if hook { w.hook / denom } else { 0.0 },
+        chat: on(chat, w.chat) / denom,
+        audio: on(audio, w.audio) / denom,
+        hook: on(hook, w.hook) / denom,
     }
 }
 
@@ -98,10 +108,52 @@ fn crowd_value(c: Crowd) -> Option<f64> {
     }
 }
 
-fn fuse(marker: f64, chat: Option<f64>, hook: Option<f64>) -> (f64, ClipWeights) {
-    let w = weights_for(chat.is_some(), hook.is_some());
-    let s = w.marker * marker + w.chat * chat.unwrap_or(0.0) + w.hook * hook.unwrap_or(0.0);
+fn fuse(
+    marker: f64,
+    chat: Option<f64>,
+    audio: Option<f64>,
+    hook: Option<f64>,
+) -> (f64, ClipWeights) {
+    let w = weights_for(chat.is_some(), audio.is_some(), hook.is_some());
+    let s = w.marker * marker
+        + w.chat * chat.unwrap_or(0.0)
+        + w.audio * audio.unwrap_or(0.0)
+        + w.hook * hook.unwrap_or(0.0);
     ((s * 1000.0).round() / 1000.0, w)
+}
+
+/// The recorded run's level context: the recording, its ffmpeg and the whole programme's RMS
+/// level, or why audio is unmeasured for the run.
+struct Audio<'a> {
+    rec: &'a ClipRecording,
+    ffmpeg: &'a str,
+    stream_db: f64,
+}
+
+fn audio_context<'a>(
+    rec: Option<&'a ClipRecording>,
+    ffmpeg: Option<&'a str>,
+) -> std::result::Result<Audio<'a>, String> {
+    let rec = rec.ok_or("the run has no recording (recording.json)")?;
+    let ffmpeg = ffmpeg.ok_or("no ffmpeg configured for the loudness read")?;
+    let stream_db = footage::rms_db(ffmpeg, std::path::Path::new(&rec.file), None)
+        .map_err(|e| format!("the recording's level could not be read: {e}"))?;
+    Ok(Audio {
+        rec,
+        ffmpeg,
+        stream_db,
+    })
+}
+
+/// One cut's RMS level against the stream's.
+fn audio_of(a: &Audio, cut: &Cut) -> std::result::Result<(f64, f64), String> {
+    let from = cut.spoken_start - a.rec.stream_offset_ms;
+    let db = footage::rms_db(
+        a.ffmpeg,
+        std::path::Path::new(&a.rec.file),
+        Some((from, cut.duration_ms())),
+    )?;
+    Ok((footage::audio_value(db, a.stream_db), db))
 }
 
 /// Handles of everyone who chatted, as one case-insensitive whole-word pattern.
@@ -136,15 +188,18 @@ fn captions(stream: &Stream, cut: &Cut, policy: &Policy, re: Option<&Regex>) -> 
         .enumerate()
         .map(|(k, l)| {
             let next = lines.get(k + 1).map_or(cut.spoken_end, |n| n.spoken_start);
+            let start = l.spoken_start.max(cut.spoken_start);
             let end = (l.spoken_end + 1_200)
                 .min(next)
                 .min(cut.spoken_end)
-                .max(l.spoken_end.min(cut.spoken_end));
+                .max(l.spoken_end.min(cut.spoken_end))
+                .max(start);
             ClipCaption {
-                start_ms: l.spoken_start - cut.spoken_start,
+                start_ms: start - cut.spoken_start,
                 end_ms: end - cut.spoken_start,
                 speaker: l.who.label(),
                 text: policy.bleep(&redact(re, &l.text)),
+                unvoiced: l.unvoiced,
             }
         })
         .collect()
@@ -322,6 +377,7 @@ async fn rank(
     engine: Option<&dyn Engine>,
     opts: &ScanOptions,
     re: Option<&Regex>,
+    audio: &std::result::Result<Audio<'_>, String>,
 ) -> (Vec<Pre>, Vec<ClipMarker>, String) {
     let markers = signals::markers(stream);
     let crowd = signals::crowd(stream);
@@ -334,7 +390,12 @@ async fn rank(
             continue;
         }
         let marker = signals::beat_marker(stream, b, &markers);
-        let (pre, _) = fuse(marker_value(&markers, marker), crowd_value(crowd[b]), None);
+        let (pre, _) = fuse(
+            marker_value(&markers, marker),
+            crowd_value(crowd[b]),
+            None,
+            None,
+        );
         if pre <= 0.0 {
             continue;
         }
@@ -352,6 +413,7 @@ async fn rank(
             segment,
             cut: window::cut(stream, payoff, band_for(segment)),
             hook: None,
+            audio: Err(String::new()),
             score: pre,
         });
     }
@@ -401,9 +463,14 @@ async fn rank(
     };
 
     for p in &mut picked {
+        p.audio = match audio {
+            Ok(a) => audio_of(a, &p.cut).map_err(|e| format!("the window's level: {e}")),
+            Err(why) => Err(why.clone()),
+        };
         let (s, _) = fuse(
             marker_value(&markers, p.marker),
             crowd_value(p.crowd),
+            p.audio.as_ref().ok().map(|a| a.0),
             p.hook.as_ref().map(|h| h.0),
         );
         p.score = s;
@@ -417,7 +484,7 @@ async fn rank(
             let band = band_for(k.segment);
             let first = k.cut.first.min(p.cut.first);
             let last = k.cut.last.max(p.cut.last);
-            let start = stream.lines[first].spoken_start;
+            let start = window::edge_start(stream, first);
             let end = k.cut.spoken_end.max(p.cut.spoken_end);
             if k.segment == p.segment && end - start <= band.max_ms {
                 let payoff = stream.lines[k.payoff].spoken_start;
@@ -441,10 +508,17 @@ async fn rank(
     (kept, markers, hook_state)
 }
 
+/// One scanned run's context for its candidates.
+struct RunCtx<'a> {
+    input: &'a RunInput,
+    recording: Option<&'a ClipRecording>,
+    stream_db: Option<f64>,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn candidate(
     stream: &Stream,
-    input: &RunInput,
+    run: &RunCtx,
     p: &Pre,
     rank: u32,
     markers: &[ClipMarker],
@@ -452,6 +526,7 @@ fn candidate(
     re: Option<&Regex>,
     now: i64,
 ) -> (ClipCandidate, ClipInput) {
+    let input = run.input;
     let lines = &stream.lines[p.cut.first..=p.cut.last];
     let beat = &stream.beats[p.beat];
     let band = band_for(p.segment);
@@ -469,7 +544,14 @@ fn candidate(
         marker: marker_value(markers, p.marker),
         chat: crowd_value(p.crowd).map(|v| (v * 1000.0).round() / 1000.0),
         chat_z: crowd_z,
-        audio: None,
+        audio: p.audio.as_ref().ok().map(|a| a.0),
+        audio_db: p.audio.as_ref().ok().map(|a| (a.1 * 10.0).round() / 10.0),
+        audio_stream_db: p
+            .audio
+            .as_ref()
+            .ok()
+            .and(run.stream_db)
+            .map(|l| (l * 10.0).round() / 10.0),
         hook: p.hook.as_ref().map(|h| (h.0 * 1000.0).round() / 1000.0),
         hook_why: p
             .hook
@@ -478,10 +560,9 @@ fn candidate(
             .filter(|w| !w.is_empty()),
         unmeasured: Default::default(),
     };
-    signals.unmeasured.insert(
-        "audio".into(),
-        "no programme audio in the media-less phase".into(),
-    );
+    if let Err(why) = &p.audio {
+        signals.unmeasured.insert("audio".into(), why.clone());
+    }
     if p.crowd == Crowd::Wave {
         signals.unmeasured.insert(
             "chat".into(),
@@ -493,7 +574,7 @@ fn candidate(
             .unmeasured
             .insert("hook".into(), "no hook read for this window".into());
     }
-    let (_, effective) = fuse(signals.marker, signals.chat, signals.hook);
+    let (_, effective) = fuse(signals.marker, signals.chat, signals.audio, signals.hook);
     let mut agreeing = Vec::new();
     if signals.marker >= MARKER_FIRES {
         agreeing.push("marker".to_string());
@@ -557,6 +638,7 @@ fn candidate(
         style: band.style.into(),
         needs_reauthoring: p.cut.needs_reauthoring,
         note: p.cut.note.clone(),
+        voice_timed: stream.voice_timed,
     };
     let input_json = ClipInput {
         version: 1,
@@ -606,7 +688,11 @@ fn candidate(
         scoring: ClipScoring {
             nominal: NOMINAL_WEIGHTS,
             effective,
-            provenance: WEIGHTS_PROVENANCE.into(),
+            provenance: if p.audio.is_ok() {
+                format!("{WEIGHTS_PROVENANCE}; audio: {}", footage::AUDIO_ASSUMPTION)
+            } else {
+                WEIGHTS_PROVENANCE.into()
+            },
             agreeing,
         },
         linked_case_id: evidence.as_ref().map(|e| e.case_id.clone()),
@@ -618,6 +704,8 @@ fn candidate(
         rejection: None,
         history: Vec::new(),
         dry_runs: Vec::new(),
+        recording: run.recording.cloned(),
+        feedback: None,
     };
     (c, input_json)
 }
@@ -647,8 +735,9 @@ pub fn regate(
 /// The exclusion checks stored on a candidate (they come from the transcript and do not
 /// change with a re-render).
 pub fn stored_exclusions(c: &ClipCandidate) -> Vec<shadowrunr_types::clips::GateCheck> {
-    const RENDER: [&str; 4] = [
+    const RENDER: [&str; 5] = [
         "ai_disclosure",
+        "handles_in_picture",
         "evidence_badge_burnt",
         "source_citation",
         "no_open_correction",
@@ -679,16 +768,26 @@ pub async fn scan(
     let mut fresh: Vec<ClipCandidate> = Vec::new();
     for input in runs {
         let events = transcript::read_events(&input.dir.join("transcript.jsonl"))?;
-        let stream = Stream::build(&input.run_id, events, &opts.policy, opts.care_window_ms);
+        let mut stream = Stream::build(&input.run_id, events, &opts.policy, opts.care_window_ms);
+        if let Some(timing) = voice::read(&input.dir)? {
+            stream.apply_voice(&timing);
+        }
+        let recording = footage::read_recording(&input.dir);
+        let audio = audio_context(recording.as_ref(), opts.ffmpeg.as_deref());
         let re = redactor(&stream.viewer_names);
         let (kept, markers, hook_state) =
-            rank(&stream, &input.run_id, engine, opts, re.as_ref()).await;
+            rank(&stream, &input.run_id, engine, opts, re.as_ref(), &audio).await;
+        let run = RunCtx {
+            input,
+            recording: recording.as_ref(),
+            stream_db: audio.as_ref().ok().map(|a| a.stream_db),
+        };
         let now = now_ms();
         let mut drafted = Vec::new();
         for (k, p) in kept.iter().enumerate() {
             let (c, input_json) = candidate(
                 &stream,
-                input,
+                &run,
                 p,
                 k as u32 + 1,
                 &markers,
@@ -728,6 +827,11 @@ pub async fn scan(
             .filter(|c| owner_acted(c))
             .map(|c| c.id.clone())
             .collect();
+        let feedback: std::collections::HashMap<&str, &shadowrunr_types::clips::ClipFeedback> =
+            previous
+                .iter()
+                .filter_map(|c| c.feedback.as_ref().map(|f| (c.id.as_str(), f)))
+                .collect();
         for old in previous.iter().filter(|c| !owner_acted(c)) {
             let dir = store.dir(&old.id);
             std::fs::remove_dir_all(&dir)
@@ -738,8 +842,14 @@ pub async fn scan(
             if keep_ids.contains(&c.id) {
                 continue;
             }
+            c.feedback = feedback.get(c.id.as_str()).map(|f| (*f).clone());
             let dir = store.dir(&c.id);
-            let r = render::write_draft(&dir, &c, &input_json, "not recorded yet: `shadowrunr clips render <id>` records the stage when the tools exist")?;
+            let pending = if c.recording.is_some() {
+                "not cut yet: `shadowrunr clips render <id>` cuts the recording"
+            } else {
+                "not recorded yet: `shadowrunr clips render <id>` records the stage when the tools exist"
+            };
+            let r = render::write_draft(&dir, &c, &input_json, pending)?;
             c.history.push(ClipTransition {
                 status: ClipStatus::RenderedDraft,
                 at_ms: r.rendered_ms,

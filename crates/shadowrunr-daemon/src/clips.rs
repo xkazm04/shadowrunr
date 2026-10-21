@@ -7,7 +7,9 @@ use std::sync::Arc;
 use shadowrunr_brain::moderation::{Policy, PolicySource};
 use shadowrunr_clips::{ClipError, RunInput, ScanOptions};
 use shadowrunr_sim::{classify, RunClass};
-use shadowrunr_types::clips::{ClipCandidate, ClipScanReport, ClipScanSource, ClipsScanParams};
+use shadowrunr_types::clips::{
+    ClipCandidate, ClipHeardLine, ClipRunRecording, ClipScanReport, ClipScanSource, ClipsScanParams,
+};
 use shadowrunr_types::{Engine, ErrorCode};
 
 use crate::config::Config;
@@ -126,6 +128,7 @@ pub fn options(cfg: &Config, hook: bool) -> Result<ScanOptions, RpcError> {
         hook,
         policy: policy(cfg)?,
         care_window_ms: shadowrunr_brain::care::DEFAULT_CARE_WINDOW_S as i64 * 1000,
+        ffmpeg: Some(cfg.clips.ffmpeg.clone()),
     })
 }
 
@@ -139,6 +142,41 @@ pub async fn scan(
     let hook = p.hook.unwrap_or(true);
     let opts = options(cfg, hook)?;
     Ok(shadowrunr_clips::scan(&cfg.clip_store(), &runs, Some(engine.as_ref()), &opts).await?)
+}
+
+/// `clips.recording`: a sandbox session's `recording.mp4` (the one file the media route
+/// serves; a session recorded to another container is not playable in the console) and its
+/// heard lines.
+pub fn recording(cfg: &Config, session_id: &str) -> Result<ClipRunRecording, RpcError> {
+    crate::review::check_session_id(session_id)?;
+    let dir = cfg.paths.sandbox_runs().join(session_id);
+    let rec = shadowrunr_clips::footage::read_recording(&dir)
+        .filter(|r| Path::new(&r.file) == dir.join("recording.mp4"))
+        .ok_or_else(|| RpcError::not_found(format!("session {session_id} has no recording.mp4")))?;
+    let mut heard: Vec<ClipHeardLine> = shadowrunr_clips::voice::read(&dir)?
+        .map(|t| {
+            t.lines()
+                .filter_map(|(seq, h)| {
+                    Some(ClipHeardLine {
+                        line: u32::try_from(seq).ok()?,
+                        start_ms: h.start_ms,
+                        end_ms: h.end_ms,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    heard.sort_by_key(|h| h.line);
+    Ok(ClipRunRecording {
+        session_id: session_id.to_string(),
+        media_path: format!("/media/runs/sandbox/{session_id}/recording.mp4"),
+        stream_offset_ms: rec.stream_offset_ms,
+        width: rec.width,
+        height: rec.height,
+        fps: rec.fps,
+        av_offset_ms: rec.av_offset_ms,
+        heard,
+    })
 }
 
 /// `clips.render`: records the stage when the tools exist; blocking, minutes for a video.

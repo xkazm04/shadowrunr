@@ -660,6 +660,10 @@
         "evidence": {
           "$ref": "#/$defs/ClipEvidence"
         },
+        "feedback": {
+          "$ref": "#/$defs/ClipFeedback",
+          "description": "Watched feedback (`clips.feedback`); kept across a rescan of the same cut."
+        },
         "gate": {
           "$ref": "#/$defs/ClipGate"
         },
@@ -690,6 +694,10 @@
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "recording": {
+          "$ref": "#/$defs/ClipRecording",
+          "description": "The run's show recording, when it has one: a render cuts it instead of re-drawing."
         },
         "rejection": {
           "$ref": "#/$defs/ClipRejection"
@@ -761,6 +769,10 @@
         },
         "text": {
           "type": "string"
+        },
+        "unvoiced": {
+          "description": "On a voice-timed cut: the line was never heard (the voice skipped it, the stage dropped\nit, or it is a foil's), so it keeps its stream-clock time.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -848,6 +860,43 @@
       ],
       "type": "object"
     },
+    "ClipFeedback": {
+      "description": "Watched feedback on a cut. It never changes the candidate's state.",
+      "properties": {
+        "at_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "note": {
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "$ref": "#/$defs/ClipFeedbackTag"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tags",
+        "at_ms"
+      ],
+      "type": "object"
+    },
+    "ClipFeedbackTag": {
+      "description": "What a person watching the cut saw.",
+      "enum": [
+        "landed",
+        "flat",
+        "voice_off_sync",
+        "face_wrong",
+        "caption_wrong",
+        "cut_too_early",
+        "cut_too_late",
+        "boring"
+      ],
+      "type": "string"
+    },
     "ClipFile": {
       "description": "One file of a render, relative to the candidate's directory.",
       "properties": {
@@ -857,7 +906,7 @@
           "type": "integer"
         },
         "kind": {
-          "description": "`video`, `poster`, `captions_srt`, `captions_ass`, `stage_input`, `manifest`.",
+          "description": "`video`, `cut_16x9`, `cut_9x16`, `poster`, `captions_srt`, `captions_ass`,\n`stage_input`, `manifest`.",
           "type": "string"
         },
         "path": {
@@ -870,6 +919,21 @@
         "bytes"
       ],
       "type": "object"
+    },
+    "ClipFootage": {
+      "description": "Where a render's picture comes from.",
+      "oneOf": [
+        {
+          "const": "recording",
+          "description": "Trimmed from the show's own recording (`recording.json`): `cut-16x9.mp4` and the\nvertical reframe `cut-9x16.mp4`.",
+          "type": "string"
+        },
+        {
+          "const": "redrawn",
+          "description": "Re-drawn by the stage from the transcript (no recording): `draft.mp4` or a poster.",
+          "type": "string"
+        }
+      ]
     },
     "ClipGate": {
       "properties": {
@@ -904,6 +968,31 @@
         "checks",
         "held",
         "evaluated_ms"
+      ],
+      "type": "object"
+    },
+    "ClipHeardLine": {
+      "description": "One line the voice was heard saying, on the stream clock (from `voice.jsonl`).",
+      "properties": {
+        "end_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "line": {
+          "description": "The `say` event's transcript line (its seq).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "start_ms": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "line",
+        "start_ms",
+        "end_ms"
       ],
       "type": "object"
     },
@@ -1050,6 +1139,49 @@
       ],
       "type": "object"
     },
+    "ClipRecording": {
+      "description": "The show recording a candidate is cut from: the run's `recording.json`, read at scan time.",
+      "properties": {
+        "av_offset_ms": {
+          "description": "Speech starts this long after its `played` time, constant, with no drift (measured on\nthe recorded sessions: +200 ms, within 25 ms). A tolerance the cuts' pre-roll absorbs:\ncut points are not shifted by it.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "file": {
+          "description": "The recording file (the run directory's `recording.<ext>`), as found at scan time.",
+          "type": "string"
+        },
+        "fps": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stream_offset_ms": {
+          "description": "The stream-clock time of the file's first frame: a stream time `t` sits at\n`t - stream_offset_ms` in the file.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "file",
+        "stream_offset_ms",
+        "width",
+        "height",
+        "fps",
+        "av_offset_ms"
+      ],
+      "type": "object"
+    },
     "ClipRejection": {
       "properties": {
         "at_ms": {
@@ -1086,13 +1218,17 @@
           },
           "type": "array"
         },
+        "footage": {
+          "$ref": "#/$defs/ClipFootage",
+          "description": "Absent on renders made before cuts from the recording existed: re-drawn."
+        },
         "height": {
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
         },
         "kind": {
-          "description": "`video` (an MP4 was recorded from the stage) or `poster` (a still poster frame plus\ncaption tracks, when recording tooling is missing).",
+          "description": "`video` (an MP4 was cut from the recording or recorded from the stage) or `poster` (a\nstill poster frame plus caption tracks, when the tools are missing).",
           "type": "string"
         },
         "overlay": {
@@ -1116,6 +1252,59 @@
         "files",
         "overlay",
         "rendered_ms"
+      ],
+      "type": "object"
+    },
+    "ClipRunRecording": {
+      "description": "A session's recording as the console plays it: a stream time `t` is at\n`t - stream_offset_ms` in the file.",
+      "properties": {
+        "av_offset_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "fps": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "heard": {
+          "description": "Every heard line's real timing, by transcript line; empty without a voice log.",
+          "items": {
+            "$ref": "#/$defs/ClipHeardLine"
+          },
+          "type": "array"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "media_path": {
+          "description": "The file on the daemon: `/media/runs/sandbox/<session_id>/recording.mp4`.",
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "stream_offset_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id",
+        "media_path",
+        "stream_offset_ms",
+        "width",
+        "height",
+        "fps",
+        "av_offset_ms",
+        "heard"
       ],
       "type": "object"
     },
@@ -1265,7 +1454,17 @@
       "description": "The fused signals of one candidate, each 0..=1. An absent value is unmeasured for this\nwindow (never scored as zero).",
       "properties": {
         "audio": {
-          "description": "Programme audio energy: always unmeasured in the media-less phase.",
+          "description": "Programme level: the window's RMS level against the whole recording's,\n`clamp((window - stream + 6 dB) / 12 dB, 0, 1)`. Unmeasured without a recording.",
+          "format": "double",
+          "type": "number"
+        },
+        "audio_db": {
+          "description": "The window's RMS level behind `audio` (dBFS, ffmpeg `astats`, ungated: pauses count).",
+          "format": "double",
+          "type": "number"
+        },
+        "audio_stream_db": {
+          "description": "The whole recording's RMS level `audio` is read against (dBFS).",
           "format": "double",
           "type": "number"
         },
@@ -1538,6 +1737,10 @@
         "style": {
           "description": "`seg01-split-stage` (25-35 s), `seg02a-alleged` (45-60 s) or `default` (15-60 s).",
           "type": "string"
+        },
+        "voice_timed": {
+          "description": "The spoken clock is the voice's real timing from the run's `voice.jsonl` (each voiced\nline from its first `played` to its last part's `played` plus its duration), on the\nstream clock. Absent: the caption model's estimate.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -1575,6 +1778,28 @@
       "required": [
         "id",
         "signature"
+      ],
+      "type": "object"
+    },
+    "ClipsFeedbackParams": {
+      "description": "`clips.feedback`: replaces the candidate's watched feedback (any state; it changes none).",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "$ref": "#/$defs/ClipFeedbackTag"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "tags"
       ],
       "type": "object"
     },
@@ -1661,6 +1886,18 @@
       },
       "required": [
         "id"
+      ],
+      "type": "object"
+    },
+    "ClipsRecordingParams": {
+      "description": "`clips.recording`: a sandbox session's show recording, for the Review player's watch pane.",
+      "properties": {
+        "session_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
       ],
       "type": "object"
     },
@@ -2894,7 +3131,7 @@
           "type": "string"
         },
         "id": {
-          "description": "`care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,\n`ai_disclosure`, `evidence_badge_burnt`, `source_citation`, `no_open_correction`.",
+          "description": "`care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,\n`ai_disclosure`, `handles_in_picture`, `evidence_badge_burnt`, `source_citation`,\n`no_open_correction`.",
           "type": "string"
         },
         "mandatory": {
@@ -7624,6 +7861,22 @@
       ],
       "type": "object"
     },
+    "clips.feedback": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ClipsFeedbackParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ClipCandidate"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
     "clips.get": {
       "additionalProperties": false,
       "properties": {
@@ -7664,6 +7917,22 @@
         },
         "result": {
           "$ref": "#/$defs/ClipPublishReport"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "clips.recording": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ClipsRecordingParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ClipRunRecording"
         }
       },
       "required": [
@@ -8320,9 +8589,11 @@
     "character.rules.set",
     "character.tone.set",
     "clips.approve",
+    "clips.feedback",
     "clips.get",
     "clips.list",
     "clips.publish",
+    "clips.recording",
     "clips.reject",
     "clips.render",
     "clips.scan",

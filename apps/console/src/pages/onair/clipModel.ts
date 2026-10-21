@@ -1,6 +1,6 @@
 // The clip factory's view model: status order and labels, chip tones, the owner's act rules
 // and the window bar's geometry. Pure, so the views stay thin and the rules are testable.
-import type { ClipCandidate, ClipStatus, ClipWeights, GateState } from "@shadowrunr/contract";
+import type { ClipCandidate, ClipFeedbackTag, ClipFootage, ClipStatus, ClipWeights, GateState } from "@shadowrunr/contract";
 import type { Tone } from "../../ui/Chip";
 
 /** The gate funnel, in publish order; `rejected` is the side exit. */
@@ -76,4 +76,65 @@ export function windowBar(c: ClipCandidate): { preroll: number; payoff: number; 
     min: clamp((w.band_s[0] * 1000) / maxMs),
     over: total > maxMs,
   };
+}
+
+/** The watched-feedback tags, in the order the form shows them. */
+export const FEEDBACK_TAGS: readonly (readonly [ClipFeedbackTag, string])[] = [
+  ["landed", "Landed"],
+  ["flat", "Flat"],
+  ["voice_off_sync", "Voice off sync"],
+  ["face_wrong", "Face wrong"],
+  ["caption_wrong", "Caption wrong"],
+  ["cut_too_early", "Cut too early"],
+  ["cut_too_late", "Cut too late"],
+  ["boring", "Boring"],
+];
+
+export const FOOTAGE_LABEL: Readonly<Record<ClipFootage, string>> = {
+  recording: "Cut from the recording",
+  redrawn: "Re-drawn (no recording)",
+};
+
+/** A render without a footage field predates the recorded cuts: it was re-drawn. */
+export const footageOf = (c: ClipCandidate): ClipFootage => c.render?.footage ?? "redrawn";
+
+export type Aspect = "16x9" | "9x16";
+export const ASPECT_LABEL: Readonly<Record<Aspect, string>> = { "16x9": "16:9 broadcast", "9x16": "9:16 short" };
+
+/** The video file for an aspect: a recorded cut, or the re-drawn vertical draft. */
+export function cutFile(c: ClipCandidate, aspect: Aspect): string | undefined {
+  const files = c.render?.files ?? [];
+  const kind = aspect === "16x9" ? "cut_16x9" : "cut_9x16";
+  return (files.find((f) => f.kind === kind) ?? (aspect === "9x16" ? files.find((f) => f.kind === "video") : undefined))?.path;
+}
+
+/** The aspects this clip has a video for. */
+export const aspects = (c: ClipCandidate): Aspect[] => (["9x16", "16x9"] as const).filter((a) => cutFile(c, a) !== undefined);
+
+export interface TimedLine {
+  /** Seconds into the cut. */
+  readonly at: number;
+  /** Stream-clock ms. */
+  readonly streamMs: number;
+  readonly speaker: string;
+  readonly text: string;
+  readonly unheard: boolean;
+}
+
+/** The cut's lines on its own clock and the stream's (the voice's real timing when it has one). */
+export function timedLines(c: ClipCandidate): TimedLine[] {
+  return [...c.captions]
+    .sort((a, b) => a.start_ms - b.start_ms)
+    .map((l) => ({ at: l.start_ms / 1000, streamMs: c.window.spoken_start_ms + l.start_ms, speaker: l.speaker, text: l.text, unheard: l.unvoiced === true }));
+}
+
+/** A clip file on the daemon. */
+export const clipMediaUrl = (daemonUrl: string, id: string, file: string): string => `${daemonUrl.replace(/\/+$/, "")}/media/clips/${encodeURIComponent(id)}/${encodeURIComponent(file)}`;
+
+/** A caption's speaker as the page names it (the stage's own titles). */
+export function speakerName(speaker: string): string {
+  if (speaker === "malakor") return "Malakor";
+  if (speaker === "viewer") return "A minion asks";
+  const s = speaker.replace(/^the-/, "").replace(/-/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

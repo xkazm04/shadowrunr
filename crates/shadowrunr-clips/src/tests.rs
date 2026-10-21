@@ -420,6 +420,7 @@ fn caption_tracks_are_well_formed() {
         end_ms: 3_725,
         speaker: "malakor".into(),
         text: "Bow.".into(),
+        unvoiced: false,
     }];
     assert_eq!(
         render::srt(&caps),
@@ -494,6 +495,7 @@ async fn scan_gate_approve_and_dry_run_publish() {
         hook: true,
         policy: policy(),
         care_window_ms: 1_800_000,
+        ffmpeg: None,
     };
     let engine = StubEngine {
         calls: Mutex::new(Vec::new()),
@@ -658,6 +660,7 @@ async fn a_failed_check_holds_whatever_the_override() {
         hook: false,
         policy: policy(),
         care_window_ms: 1_800_000,
+        ffmpeg: None,
     };
     let report = scan::scan(&store, &[run], None, &opts).await.unwrap();
     assert_eq!(report.runs[0].hook, "off");
@@ -698,4 +701,295 @@ fn the_crate_has_no_network_client() {
             "{c} would let an adapter make a network call"
         );
     }
+}
+
+// ----- real timing, the audio signal and watched feedback ---------------------------------
+
+/// A voice log: each `(seq, played_at, duration)` rendered and played as one part.
+fn voice_log(lines: &[(u32, i64, u64)]) -> String {
+    let mut out = String::new();
+    for (seq, at, dur) in lines {
+        out.push_str(
+            &json!({"ts_ms": at - 50, "seq": seq, "event": "rendered", "part": 0, "duration_ms": dur})
+                .to_string(),
+        );
+        out.push('\n');
+        out.push_str(&json!({"ts_ms": at, "seq": seq, "event": "played", "part": 0}).to_string());
+        out.push('\n');
+    }
+    out
+}
+
+#[test]
+fn real_timing_replaces_the_estimate_and_unheard_lines_keep_the_stream_clock() {
+    let mut s = Stream::build(
+        "s",
+        vec![
+            (1, chat(1_000, "q1", "moth_pickle", "is malakor an ai?")),
+            (2, reply(5_000, "I am an AI character, moth_pickle.", "q1")),
+            (3, say(5_000, "Bow, minions.")),
+            (4, say(10_000, "Never heard.")),
+        ],
+        &policy(),
+        1_800_000,
+    );
+    let before: Vec<(i64, i64)> = s
+        .lines
+        .iter()
+        .map(|l| (l.spoken_start, l.spoken_end))
+        .collect();
+    let timing = crate::voice::parse(&voice_log(&[(2, 7_200, 2_100), (3, 9_600, 900)]));
+    s.apply_voice(&timing);
+    assert!(s.voice_timed);
+    let l = &s.lines;
+    // Heard lines run from their played time for their rendered duration.
+    assert_eq!((l[1].spoken_start, l[1].spoken_end), (7_200, 9_300));
+    assert_eq!((l[2].spoken_start, l[2].spoken_end), (9_600, 10_500));
+    assert!(!l[1].unvoiced && !l[2].unvoiced);
+    // The question moves with its answer.
+    let shift = 7_200 - before[1].0;
+    assert_eq!(
+        (l[0].spoken_start, l[0].spoken_end),
+        (before[0].0 + shift, before[0].1 + shift)
+    );
+    assert!(!l[0].unvoiced);
+    // A line the voice never played keeps its stream-clock time and is flagged.
+    assert_eq!(l[3].spoken_start, 10_000);
+    assert_eq!(l[3].spoken_end, 10_000 + spoken_ms("Never heard."));
+    assert!(l[3].unvoiced);
+    // Events follow the new clock (the reply's event shows its question first).
+    assert_eq!(s.spoken_at[1], l[0].spoken_start);
+    assert_eq!(s.spoken_at[2], 9_600);
+}
+
+/// A mono 16-bit 8 kHz WAV of a 440 Hz tone: `quiet` amplitude until `switch_s`, then `loud`.
+fn tone_wav(path: &Path, secs: u32, switch_s: u32, quiet: f64, loud: f64) {
+    let rate = 8_000u32;
+    let n = secs * rate;
+    let mut b: Vec<u8> = Vec::new();
+    b.extend(b"RIFF");
+    b.extend((36 + n * 2).to_le_bytes());
+    b.extend(b"WAVEfmt ");
+    b.extend(16u32.to_le_bytes());
+    b.extend(1u16.to_le_bytes());
+    b.extend(1u16.to_le_bytes());
+    b.extend(rate.to_le_bytes());
+    b.extend((rate * 2).to_le_bytes());
+    b.extend(2u16.to_le_bytes());
+    b.extend(16u16.to_le_bytes());
+    b.extend(b"data");
+    b.extend((n * 2).to_le_bytes());
+    for i in 0..n {
+        let amp = if i / rate < switch_s { quiet } else { loud };
+        let t = i as f64 / rate as f64;
+        let v = (amp * (2.0 * std::f64::consts::PI * 440.0 * t).sin() * 32767.0) as i16;
+        b.extend(v.to_le_bytes());
+    }
+    std::fs::write(path, b).unwrap();
+}
+
+fn ffmpeg_on_path() -> bool {
+    std::process::Command::new("ffmpeg")
+        .arg("-version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+#[tokio::test]
+async fn a_voice_logged_recorded_run_is_cut_on_real_timing_with_its_loudness() {
+    let tmp = tempfile::tempdir().unwrap();
+    let run = write_run(tmp.path(), vec![]);
+    let text = std::fs::read_to_string(run.dir.join("transcript.jsonl")).unwrap();
+    let seq_of = |needle: &str, ts: i64| {
+        text.lines()
+            .position(|l| l.contains(needle) && l.contains(&format!("\"ts_ms\":{ts},")))
+            .map(|i| i as u32 + 1)
+            .unwrap()
+    };
+    // Every line from 250 s to 310 s heard 2.4 s late, except the 300 s beat's first line;
+    // the payoff is heard at 303.5 s.
+    let mut heard = Vec::new();
+    for k in 50..=62 {
+        let ts = k * 5_000;
+        if ts != 300_000 {
+            heard.push((seq_of("ledger glows", ts), ts + 2_400, 3_000u64));
+        }
+    }
+    heard.push((seq_of("rented throne", 300_000), 303_500, 3_200));
+    std::fs::write(run.dir.join("voice.jsonl"), voice_log(&heard)).unwrap();
+
+    let ffmpeg = ffmpeg_on_path();
+    if ffmpeg {
+        // A recording of stream 200-400 s, louder from 290 s on.
+        let wav = run.dir.join("programme.wav");
+        tone_wav(&wav, 200, 90, 0.05, 0.4);
+        std::fs::write(
+            run.dir.join("recording.json"),
+            json!({"tool": "obs", "file": wav.to_string_lossy(), "stream_offset_ms": 200_000,
+                   "width": 1920, "height": 1080, "fps": 30})
+            .to_string(),
+        )
+        .unwrap();
+    }
+    let store = ClipStore::new(&tmp.path().join("data"));
+    let opts = ScanOptions {
+        hook: false,
+        policy: policy(),
+        care_window_ms: 1_800_000,
+        ffmpeg: Some("ffmpeg".into()),
+    };
+    let report = scan::scan(&store, std::slice::from_ref(&run), None, &opts)
+        .await
+        .unwrap();
+    let best = store.load(&report.top[0].id).unwrap();
+    assert_eq!(best.title, "Inspector's case collapses");
+    let w = &best.window;
+    assert!(w.voice_timed);
+    // The window opens a breath before a heard line's played time (the lines are 2 s apart,
+    // so the whole lead fits) and closes a reaction beat after a heard line's real end.
+    let lead = crate::window::VOICE_LEAD_MS;
+    assert!(
+        heard.iter().any(|h| h.1 - lead == w.spoken_start_ms),
+        "{w:?}"
+    );
+    let tail = crate::window::REACTION_TAIL_MS;
+    assert!(
+        heard
+            .iter()
+            .any(|h| h.1 + h.2 as i64 + tail == w.spoken_end_ms)
+            || w.note.is_some(),
+        "{w:?}"
+    );
+    let payoff = best
+        .captions
+        .iter()
+        .find(|c| c.text.contains("rented throne"))
+        .unwrap();
+    assert_eq!(payoff.start_ms, 303_500 - w.spoken_start_ms);
+    assert!(!payoff.unvoiced);
+    // The 300 s beat's first line was never heard.
+    let unheard = best
+        .captions
+        .iter()
+        .find(|c| c.unvoiced)
+        .expect("an unheard line in the cut");
+    assert_eq!(unheard.start_ms, 300_000 - w.spoken_start_ms);
+    if ffmpeg {
+        let s = &best.signals;
+        let a = s.audio.expect("audio measured");
+        assert!(a > 0.5, "the loud stretch reads above the stream: {s:?}");
+        assert!(s.audio_db.unwrap() > s.audio_stream_db.unwrap());
+        assert!(!s.unmeasured.contains_key("audio"));
+        assert!(best.scoring.effective.audio > 0.0);
+        assert!(best
+            .scoring
+            .provenance
+            .contains(crate::footage::AUDIO_ASSUMPTION));
+        let e = best.scoring.effective;
+        assert!((e.marker + e.chat + e.audio + e.hook - 1.0).abs() < 1e-9);
+        let rec = best.recording.as_ref().unwrap();
+        assert_eq!(rec.av_offset_ms, crate::footage::AV_OFFSET_MS);
+        assert_eq!(rec.stream_offset_ms, 200_000);
+    } else {
+        eprintln!("ffmpeg is not on PATH: the loudness half of this test did not run");
+        assert!(best.signals.unmeasured.contains_key("audio"));
+    }
+
+    // Watched feedback is kept on the clip, changes nothing else, and survives a rescan.
+    use shadowrunr_types::clips::ClipFeedbackTag as T;
+    let c = store
+        .feedback(
+            &best.id,
+            &[T::CutTooEarly, T::Landed, T::CutTooEarly],
+            Some("  opens a breath early  "),
+        )
+        .unwrap();
+    let f = c.feedback.as_ref().unwrap();
+    assert_eq!(f.tags, vec![T::CutTooEarly, T::Landed]);
+    assert_eq!(f.note.as_deref(), Some("opens a breath early"));
+    assert_eq!((c.status, &c.gate), (best.status, &best.gate));
+    scan::scan(&store, std::slice::from_ref(&run), None, &opts)
+        .await
+        .unwrap();
+    assert_eq!(store.load(&best.id).unwrap().feedback, c.feedback);
+    let cleared = store.feedback(&best.id, &[], Some(" ")).unwrap();
+    assert_eq!(cleared.feedback, None);
+    assert!(store
+        .feedback(&best.id, &[], Some(&"x".repeat(2_001)))
+        .is_err());
+}
+
+#[tokio::test]
+async fn without_a_voice_log_or_a_recording_nothing_changes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let run = write_run(tmp.path(), vec![]);
+    let store = ClipStore::new(&tmp.path().join("data"));
+    let opts = ScanOptions {
+        hook: false,
+        policy: policy(),
+        care_window_ms: 1_800_000,
+        ffmpeg: Some("ffmpeg".into()),
+    };
+    let report = scan::scan(&store, &[run], None, &opts).await.unwrap();
+    let best = store.load(&report.top[0].id).unwrap();
+    assert!(!best.window.voice_timed);
+    assert!(best.captions.iter().all(|c| !c.unvoiced));
+    assert!(best.recording.is_none());
+    assert_eq!(
+        best.signals.unmeasured.get("audio").map(String::as_str),
+        Some("the run has no recording (recording.json)")
+    );
+    let v = serde_json::to_value(&best).unwrap();
+    assert!(v.get("recording").is_none() && v.get("feedback").is_none());
+    assert!(v["window"].get("voice_timed").is_none());
+    // The re-drawn path labels its footage.
+    let r = best.render.as_ref().unwrap();
+    assert_eq!(
+        r.footage,
+        Some(shadowrunr_types::clips::ClipFootage::Redrawn)
+    );
+    let manifest: Value = serde_json::from_str(
+        &std::fs::read_to_string(store.dir(&best.id).join("manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest["footage"], "re-drawn (no recording)");
+    assert!(manifest.get("av_offset_ms").is_none());
+}
+
+#[test]
+fn on_real_timing_the_edges_never_open_or_close_on_another_heard_line() {
+    let mut s = Stream::build(
+        "s",
+        vec![
+            (1, say(1_000, "First.")),
+            (2, say(5_000, "Second, straight after.")),
+            (3, say(9_000, "Third, after a pause.")),
+            (4, say(20_000, "Never heard.")),
+        ],
+        &policy(),
+        1_800_000,
+    );
+    // Without real timing the edges are the lines' own, plus the reaction beat.
+    assert_eq!(window::edge_start(&s, 1), s.lines[1].spoken_start);
+    assert_eq!(
+        window::edge_end(&s, 0),
+        s.lines[0].spoken_end + window::REACTION_TAIL_MS
+    );
+    let timing = crate::voice::parse(&voice_log(&[
+        (1, 2_000, 2_000),
+        (2, 4_000, 2_000),
+        (3, 6_300, 1_000),
+    ]));
+    s.apply_voice(&timing);
+    // Back to back: no lead into the line before, no tail into the line after.
+    assert_eq!(window::edge_start(&s, 1), 4_000);
+    assert_eq!(window::edge_end(&s, 0), 4_000);
+    // 300 ms of silence before the third line: the lead takes it all, not the full 400.
+    assert_eq!(window::edge_start(&s, 2), 6_000);
+    // Nothing heard before the first line: the full lead.
+    assert_eq!(window::edge_start(&s, 0), 2_000 - window::VOICE_LEAD_MS);
+    // An unheard line makes no sound: the third line's tail runs its full beat.
+    assert_eq!(window::edge_end(&s, 2), 7_300 + window::REACTION_TAIL_MS);
 }

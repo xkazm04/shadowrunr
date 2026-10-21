@@ -35,11 +35,6 @@
 .checks b { font-family: var(--sr-font-display); letter-spacing: .04em; text-transform: uppercase; }
 .checks span { flex-basis: 100%; color: var(--sr-color-text-mute); }
 
-.captions { display: grid; gap: var(--sr-space-tick); list-style: none; font-size: var(--sr-size-small); }
-.captions li { display: grid; grid-template-columns: 4rem 8rem 1fr; gap: var(--sr-space-near); }
-.captions small { font-family: var(--sr-font-mono); color: var(--sr-color-text-mute); text-align: right; }
-.captions b { font-family: var(--sr-font-display); text-transform: uppercase; letter-spacing: .04em; }
-
 /* Owner acts */
 .form { display: flex; flex-wrap: wrap; gap: var(--sr-space-near); align-items: flex-end; margin: var(--sr-space-base) 0; }
 .form > p { flex-basis: 100%; }

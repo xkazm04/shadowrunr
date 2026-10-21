@@ -12,6 +12,7 @@ pub mod engine;
 pub mod events;
 pub mod integrations;
 pub mod live;
+pub mod media;
 pub mod paging;
 pub mod policy_install;
 pub mod preflight;

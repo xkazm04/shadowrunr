@@ -252,23 +252,38 @@ The clip factory (contract appendix "Clips"). It reads transcripts, never writes
 
 - `clips scan --run <dir|run_id|tournament/run> | --tournament <id> [--no-hook] [--scripted] [--json]`
   scores every beat (moment markers within caps, the crowd's distinct-chatter z-score against
-  the stream's own baseline, audio always unmeasured), asks the `clipper` route (Haiku, low
-  effort) for one hook read per run, cuts around the line that carries the moment (12 s
-  pre-roll, snapped earlier to a whole line; SEG-01 25-35 s, SEG-02A 45-60 s) and keeps the
-  top 5 per run as drafts waiting at the owner gate. `--no-hook` skips the model and
+  the stream's own baseline, the programme level of a recorded run), asks the `clipper` route
+  (Haiku, low effort) for one hook read per run, cuts around the line that carries the moment
+  (12 s pre-roll, snapped earlier to a whole line; SEG-01 25-35 s, SEG-02A 45-60 s) and keeps
+  the top 5 per run as drafts waiting at the owner gate. `--no-hook` skips the model and
   redistributes its weight; with `--scripted` the hook is unmeasured (the scripted engine's
   echo is not a hook read). A rescan replaces a run's untouched drafts and keeps every one the
-  owner acted on. `engine_failed` runs are left out.
+  owner acted on (watched feedback carries over to the same cut). `engine_failed` runs are
+  left out.
+  - A run with a `voice.jsonl` (a sandbox session the voice followed) is cut on the voice's
+    real timing: each line from its first `played` to its last part's end, the window opening
+    up to 0.4 s before its first line (never into the line heard before) and its reaction beat
+    stopping where the next heard line starts. A line never heard keeps its transcript time
+    and shows as `[never heard]`.
+  - A run with `recording.json` and its recording: each window's RMS level (ffmpeg `astats`)
+    against the whole recording's is the audio signal (an assumption, labelled in the
+    provenance). Without a recording, audio stays unmeasured and its weight is redistributed.
 - `clips list [--status <s>] [--tournament <id>] [--run <id>] [--limit n] [--json]`: best first,
   with counts by status. Every ranking carries "weights unmeasured".
-- `clips show <id> [--json]`: window, signals, markers, evidence, the gate checklist,
-  captions and render.
-- `clips render <id> [--json]`: records `draft.mp4` (1080x1920) from the stage in a headless
-  Chromium and encodes it with ffmpeg, verified with ffprobe. Needs `apps/stage/dist` (build
-  it with `pnpm -C apps/stage build`), node, ffmpeg/ffprobe and Chrome, Edge or a Playwright
-  chromium build (`[clips]` in `shadowrunr.toml` names them). With a tool missing it writes the
-  poster frame and caption tracks and says which tool is missing; it never fakes a video.
-  About 3 s of wall time per second of clip.
+- `clips show <id> [--json]`: window (and which clock it is on), signals with the measured
+  level, markers, evidence, the gate checklist, the recording, the render, watched feedback
+  and captions.
+- `clips render <id> [--json]`: a recorded run is cut from its recording with ffmpeg (about
+  5 s per clip): `cut-16x9.mp4`, the window trimmed out of the broadcast picture with nothing
+  burnt in, and `cut-9x16.mp4`, 1080x1920, the stage's face region with its AI badge above it
+  and the lines burnt in below (see recording.md, "Clips from the recording"). Both are
+  verified with ffprobe. A run without a recording is re-drawn: it records `draft.mp4`
+  (1080x1920) from the stage in a headless Chromium and encodes it with ffmpeg, verified with
+  ffprobe. That needs `apps/stage/dist` (build it with `pnpm -C apps/stage build`), node,
+  ffmpeg/ffprobe and Chrome, Edge or a Playwright chromium build (`[clips]` in
+  `shadowrunr.toml` names them), about 3 s of wall time per second of clip, and the manifest
+  says "re-drawn (no recording)". With a tool missing it writes the poster frame and caption
+  tracks and says which tool is missing; it never fakes a video.
 - `clips approve <id> --signature <name> [--override <reason>] [--note <text>]`: the owner's
   act. Refused when a check failed (exclusions hold whatever the score); an unmeasured check
   needs `--override`, recorded beside the hold reasons it overrides.

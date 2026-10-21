@@ -1,0 +1,25 @@
+/* One clip's player (the cut beside its timed lines) and the watched-feedback form. */
+
+.watch { display: grid; grid-template-columns: minmax(0, auto) minmax(16rem, 1fr); gap: var(--sr-space-wide); align-items: start; }
+.screen { display: flex; flex-direction: column; gap: var(--sr-space-compact); }
+.video { display: block; max-width: 100%; background: var(--sr-color-text-ink); border: var(--sr-stroke-heavy) solid var(--sr-color-text-ink); }
+.video[data-aspect="9x16"] { height: min(70vh, 40rem); aspect-ratio: 9 / 16; }
+.video[data-aspect="16x9"] { width: min(100%, 48rem); aspect-ratio: 16 / 9; }
+.empty { padding: var(--sr-space-base); border: var(--sr-stroke-rule) dashed var(--sr-color-text-ink); color: var(--sr-color-text-mute); font-size: var(--sr-size-small); }
+.lines { display: grid; gap: var(--sr-space-tick); list-style: none; font-size: var(--sr-size-small); }
+.line { display: grid; grid-template-columns: 3.5rem 7rem 1fr auto; gap: var(--sr-space-compact); width: 100%; padding: var(--sr-space-snug) 0; border: 0; border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.line:hover:enabled { background: var(--sr-color-surface-card); }
+.line small { font-family: var(--sr-font-mono); color: var(--sr-color-text-mute); }
+.line b { font-family: var(--sr-font-display); text-transform: uppercase; letter-spacing: .04em; }
+[data-unheard] .line span { color: var(--sr-color-text-mute); font-style: italic; }
+.note { margin: var(--sr-space-compact) 0 0; color: var(--sr-color-text-mute); font-size: var(--sr-size-caption); }
+
+.fb { display: flex; flex-direction: column; gap: var(--sr-space-cozy); }
+.fb textarea { min-height: 3.6rem; resize: vertical; font: var(--sr-size-small)/1.45 var(--sr-font-sans); padding: var(--sr-space-snug) var(--sr-space-compact); background: var(--sr-color-surface-field); color: var(--sr-color-text-ink); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--sr-space-near); align-items: center; }
+.ok { color: var(--sr-color-ok); font-weight: var(--sr-weight-bold); }
+.err { color: var(--sr-color-fail); }
+
+@media (max-width: 60rem) {
+  .watch { grid-template-columns: minmax(0, 1fr); }
+}
