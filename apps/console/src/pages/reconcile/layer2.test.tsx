@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mountPage, nodes, ok, param, settle, type Script } from "../../kit/testing";
+import { fail, mountPage, nodes, ok, param, settle, type Script } from "../../kit/testing";
 import { Layer2 } from "./Layer2";
 import { session } from "./session";
 import { genDirectives, genPlan, genProposals, genReport, wireReport } from "./testgen";
@@ -26,6 +26,8 @@ const base =
   (method) => {
     if (method in over) return ok(over[method]);
     switch (method) {
+      case "plan.current":
+        return fail("not_found", "no plan chosen yet");
       case "reconcile.report":
         return ok(genReport());
       case "plan.proposals":
@@ -133,14 +135,19 @@ describe("reconcile/plan", () => {
   it("chooses options, seals them with plan.choose and shows the dispatch", async () => {
     session.showReport("rec-1792284840627");
     const sent: string[] = [];
+    // The daemon persists what plan.choose seals and serves it back as plan.current.
+    let stored: ReturnType<typeof genPlan> | undefined;
     const m = mount(["plan"], (method, body) => {
       if (method === "plan.choose") {
         sent.push(body);
-        return ok(genPlan(["opt-1", "opt-3"]));
+        stored = genPlan(["opt-1", "opt-3"]);
+        return ok(stored);
       }
+      if (method === "plan.current") return stored ? ok(stored) : fail("not_found", "no plan chosen yet");
       return base()(method, body);
     });
     await settle();
+    expect(role("reconcile-composer")?.textContent).toContain("No live plan yet");
     const boxes = screen.getAllByRole("checkbox");
     expect(boxes).toHaveLength(6);
     await act(async () => fireEvent.click(boxes[0] as HTMLElement));
@@ -150,6 +157,52 @@ describe("reconcile/plan", () => {
     expect(m.fetch.calls).toContain("plan.choose");
     expect(sent[0]).toContain('"option_ids":["opt-1","opt-3"]');
     expect(role("reconcile-sealed")?.textContent).toContain("Per my last decree");
+    // The sealed block came from the refetched plan.current, after plan.choose.
+    expect(m.fetch.calls.lastIndexOf("plan.current")).toBeGreaterThan(m.fetch.calls.indexOf("plan.choose"));
+    expect(screen.getByRole("button", { name: "This is the live plan" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  const checked = (id: string) => (document.querySelector(`[data-option='${id}'] input[type='checkbox']`) as HTMLInputElement | null)?.checked;
+
+  it("after a reload shows the daemon's live plan, seeds the choice from it and will not re-seal it", async () => {
+    session.showReport("rec-1792284840627");
+    mount(["plan"], base({ "plan.current": genPlan(["opt-1", "opt-3"]) }));
+    await settle();
+    expect(role("reconcile-sealed")?.textContent).toContain("Per my last decree");
+    expect(checked("opt-1")).toBe(true);
+    expect(checked("opt-3")).toBe(true);
+    expect(checked("opt-4")).toBe(false);
+    const btn = screen.getByRole("button", { name: "This is the live plan" });
+    expect(btn.hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Seal this plan" })).toBeNull();
+
+    // Untick opt-3: the composer names the difference and offers a replacement, never a silent seal.
+    await act(async () => fireEvent.click(document.querySelector("[data-option='opt-3'] input[type='checkbox']") as HTMLElement));
+    expect(checked("opt-3")).toBe(false);
+    expect(checked("opt-1")).toBe(true);
+    expect(role("reconcile-composer")?.textContent).toContain("Differs from the live plan: drops opt-3");
+    const replace = screen.getByRole("button", { name: "Replace the live plan" });
+    expect(replace.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("names the report a live plan was sealed from when it is another one", async () => {
+    session.showReport("rec-1792284840627");
+    mount(["plan"], base({ "plan.current": { ...genPlan(["opt-1"]), report_id: "rec-OTHER" } }));
+    await settle();
+    expect(role("reconcile-composer")?.textContent).toContain("The live plan was sealed from report rec-OTHER");
+    expect(screen.getAllByRole("checkbox").some((b) => (b as HTMLInputElement).checked)).toBe(false);
+    expect(screen.getByRole("button", { name: "Replace the live plan" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Seal this plan" })).toBeNull();
+  });
+
+  it("warns when the live plan cannot be read and still allows sealing", async () => {
+    session.showReport("rec-1792284840627");
+    mount(["plan"], (method, body) => (method === "plan.current" ? { status: 500, body: { error: { code: "engine", message: "disk on fire" } } } : base()(method, body)));
+    await settle();
+    const caution = role("reconcile-live-unknown");
+    expect(caution?.textContent).toContain("Could not read the live plan");
+    expect(caution?.textContent).toContain("The engine failed");
+    expect(screen.getByRole("button", { name: "Seal this plan" }).hasAttribute("disabled")).toBe(false);
   });
 
   it("flags a diff that touches the constitution and refuses the option", async () => {
