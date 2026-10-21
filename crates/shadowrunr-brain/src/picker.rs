@@ -5,10 +5,12 @@
 //! constraints apply afterwards: one pick per viewer per beat, at most one injection
 //! attempt, and an attention-share cap so a whale cannot monopolise the room.
 //!
-//! Two classes go ahead of the score order: safety-critical messages (every one, first), then
-//! **carried bait** (bait first): a prompt-injection attempt carried from an earlier beat takes
-//! the next slot, oldest first, so he mocks it before it expires. Fresh chat and ordinary
-//! carried chat follow in score order.
+//! Three classes go ahead of the score order: safety-critical messages (every one, first), then
+//! one **owed request** a beat (a situational ask the orchestrator owns, oldest first: it is
+//! answered before its viewer's other messages and before bait), then **carried bait** (bait
+//! first): a prompt-injection attempt carried from an earlier beat takes the next slot, oldest
+//! first, so he mocks it before it expires. Fresh chat and ordinary carried chat follow in score
+//! order.
 //!
 //! Picking is rank-aware: higher ranks get a moderate score boost, a gentler recency penalty
 //! and a slightly larger share of the window. The whale cap still bounds everyone: over the
@@ -80,7 +82,14 @@ pub struct PickContext {
     /// Messages an earlier beat could not answer, carried by the orchestrator, with how long
     /// they have waited (ms): a small age bonus so fresh chat does not starve them.
     pub carried: HashMap<String, i64>,
+    /// The orchestrator's owned requests among the candidates, oldest first
+    /// ([`crate::orchestrate::Orchestrator::owed`]): at most [`OWED_PER_BEAT`] a beat go first.
+    pub owed: Vec<String>,
 }
+
+/// Owed requests that go ahead of the score order in one beat: a "goes first" rule is capped
+/// so it cannot eat a voiced show's scarce answer slots (the carried-bait lesson, 2026-10-21).
+pub const OWED_PER_BEAT: usize = 1;
 
 /// The age bonus of a carried message: a base, plus a little per second waited, capped.
 const CARRIED_BONUS: f64 = 0.3;
@@ -359,6 +368,15 @@ impl Picker {
         v
     }
 
+    /// Owed requests: the candidates the orchestrator owns, in its order (oldest first).
+    fn owed(cands: &[Candidate], ctx: &PickContext) -> Vec<usize> {
+        ctx.owed
+            .iter()
+            .filter_map(|id| cands.iter().position(|c| &c.msg.id == id))
+            .filter(|&i| cands[i].safety.is_none() && !is_vote(&cands[i]))
+            .collect()
+    }
+
     /// Carried bait (bait first): candidates tagged as injection attempts that an earlier
     /// beat carried, oldest first.
     fn carried_bait(cands: &[Candidate], ctx: &PickContext) -> Vec<usize> {
@@ -380,6 +398,11 @@ impl Picker {
     /// penalties do not apply to them. They still use up slots of the beat. A vote is never
     /// chosen: the segment counts it.
     ///
+    /// Then at most [`OWED_PER_BEAT`] of `owed` (the orchestrator's owned requests) take the next
+    /// slots, whether or not `order` lists them, within the beat's cap, one injection per beat
+    /// and one pick per viewer, but past the share and whale caps: a request must not wait on
+    /// its viewer having been answered recently, and its viewer's other messages wait for it.
+    ///
     /// Then `bait` (carried bait, [`Picker::carried_bait`]) takes the next slot the same way,
     /// whether or not `order` lists it, but within the beat's cap, one injection per beat, one
     /// pick per viewer and the share and whale caps (a capped one waits for its score turn).
@@ -387,6 +410,7 @@ impl Picker {
         &self,
         cands: &[Candidate],
         order: &[usize],
+        owed: &[usize],
         bait: &[usize],
         max: usize,
     ) -> Vec<usize> {
@@ -401,6 +425,23 @@ impl Picker {
                 injection_taken |= c.injection;
                 chosen.push(i);
             }
+        }
+        let mut owed_taken = 0;
+        for &i in owed {
+            let c = &cands[i];
+            if chosen.len() >= max || owed_taken >= OWED_PER_BEAT {
+                break;
+            }
+            if chosen.contains(&i)
+                || viewers.contains(c.msg.viewer.id.as_str())
+                || (c.injection && injection_taken)
+            {
+                continue;
+            }
+            viewers.insert(c.msg.viewer.id.as_str());
+            injection_taken |= c.injection;
+            owed_taken += 1;
+            chosen.push(i);
         }
         for &i in bait {
             let c = &cands[i];
@@ -512,8 +553,9 @@ impl Picker {
     ) -> Pick {
         let ranked = self.ranked(cands, ctx);
         let order: Vec<usize> = ranked.iter().map(|r| r.0).collect();
+        let owed = Self::owed(cands, ctx);
         let bait = Self::carried_bait(cands, ctx);
-        let chosen_idx = self.constrain(cands, &order, &bait, max);
+        let chosen_idx = self.constrain(cands, &order, &owed, &bait, max);
         let reason = if chosen_idx.is_empty() {
             "deterministic: nothing to answer".to_string()
         } else {
@@ -526,7 +568,9 @@ impl Picker {
                     } else {
                         r.2.join("+")
                     };
-                    if bait.first() == Some(i) {
+                    if owed.contains(i) {
+                        why.push_str("+owed");
+                    } else if bait.first() == Some(i) {
                         why.push_str("+bait_first");
                     }
                     format!("{} {why} ({:.2})", cands[*i].msg.id, r.1)
@@ -672,8 +716,9 @@ impl Picker {
                 }
             }
         }
+        let owed = Self::owed(cands, ctx);
         let bait = Self::carried_bait(cands, ctx);
-        let chosen_idx = self.constrain(cands, &order, &bait, max);
+        let chosen_idx = self.constrain(cands, &order, &owed, &bait, max);
         for i in chosen_idx
             .iter()
             .filter(|i| bait.contains(i) && !order.contains(i))

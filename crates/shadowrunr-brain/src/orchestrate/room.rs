@@ -37,6 +37,8 @@ pub struct RoomWatch {
     announced: HashSet<String>,
     handover_due: bool,
     pending: Vec<RoomEvent>,
+    /// The votes open at the last beat: (poll id, question).
+    open: Vec<(String, String)>,
 }
 
 /// `crowd poll p1: "Question?" | …` into (kind, id, question).
@@ -72,10 +74,12 @@ impl RoomWatch {
         let mut active_foil: Option<&str> = None;
         let mut handover_line: Option<&str> = None;
         let mut found: Vec<(String, RoomEvent)> = Vec::new();
+        self.open.clear();
         for line in summary.lines().map(str::trim) {
             if let Some(rest) = line.strip_prefix("open ") {
                 if let Some((kind, id, q)) = parse_open(rest) {
                     self.questions.insert(id.to_string(), one_line(q, 200));
+                    self.open.push((id.to_string(), one_line(q, 80)));
                     if kind == "foil vote" {
                         open_foil = Some(id.to_string());
                     }
@@ -194,5 +198,10 @@ impl RoomWatch {
 
     pub fn has_pending(&self) -> bool {
         !self.pending.is_empty()
+    }
+
+    /// The votes open at the last beat: (poll id, question).
+    pub fn open_polls(&self) -> &[(String, String)] {
+        &self.open
     }
 }

@@ -10,16 +10,19 @@
 //!    disclosure puts its viewer in care ([`care`]);
 //! 4. orchestrate and pick: [`orchestrate`] drops repeats of answered waves, decides the beat's
 //!    mode (cold open, react, bit, bridge, mixed, hold) and writes its `beat_plan`; the picker
-//!    then passes at most the plan's ceiling (safety-critical first; deterministic, or
-//!    `Role::ChatPicker` above a volume threshold). A hold ends the beat there, and so does
-//!    speech still queued on the speech clock ([`pace`]: a `speaking` hold);
+//!    then passes at most the plan's ceiling (safety-critical first, then one owed request;
+//!    deterministic, or `Role::ChatPicker` above a volume threshold). A hold ends the beat there,
+//!    and so does speech still queued on the speech clock past the lead ([`pace`]: a `speaking`
+//!    hold; on a live host the lead covers the measured core latency, so the next beat is
+//!    composed while the current line plays);
 //! 5. recall and compose (stable prefix, with the Lord's brief when the stream has one, +
 //!    per-turn block, with the beat's prepared material when it voices some and its speech
 //!    budget);
 //! 6. call the core thread (warm session when available, else `complete`); a fleet-class
 //!    failure speaks a model-free stall line instead once nobody has spoken long enough
 //!    ([`stall`]);
-//! 7. parse spoken lines, `OP:` and `NOTE:`; drop whole lines past the beat's speech budget;
+//! 7. parse spoken lines, `OP:` and `NOTE:`; drop whole lines past the beat's speech budget or
+//!    queued past the lag ceiling;
 //!    gate output; dispatch research jobs; once a crisis line went out, remove that viewer from
 //!    chat when `crisis-chat-ban` is enabled (their name is withheld from his lines for the
 //!    rest of the stream). Every line put on air advances the speech clock.
@@ -243,6 +246,8 @@ pub struct Brain {
     /// When the speech put on air ends (model, foil, stall and cover lines, the sign-off), on
     /// the `now_ms` clock ([`pace`]).
     speech: SpeechClock,
+    /// The last core-call durations on a live host, for the lookahead lead ([`pace`]).
+    latency: pace::CoreLatency,
     session: Option<Box<dyn WarmSession>>,
     session_turns: u32,
     /// No warm open before this beat: the last one failed. Engines report "no sessions" and
@@ -313,6 +318,7 @@ impl Brain {
             health: FleetMode::Healthy,
             stall: Staller::new(),
             speech: SpeechClock::default(),
+            latency: pace::CoreLatency::default(),
             session: None,
             session_turns: 0,
             session_retry_tick: 0,
@@ -566,6 +572,7 @@ impl Brain {
     fn collect_jobs(&mut self, now_ms: TsMs, ev: &mut Vec<StreamEvent>) -> Result<(), BrainError> {
         for u in self.pool.collect(&self.cfg.stream_id) {
             self.working.apply_job(&u, now_ms);
+            self.orch.note_job(&u.job_id, &u.brief, u.status.as_str());
             ev.push(StreamEvent::Job {
                 ts_ms: now_ms,
                 job_id: u.job_id.clone(),
@@ -806,13 +813,20 @@ impl Brain {
         // The goodbye beat is never held and speaks at half budget; the wrap-up before it is
         // paced like any beat.
         let closing = pace::is_closing_now(&ctx.state_summary);
+        // Lookahead: on a live host the lead covers the measured core latency and the render
+        // lag, so this beat is composed while the last line still plays.
+        let core_ms = self.cover.as_ref().and(self.latency.median());
+        let lead_ms = pace::lookahead_lead(&self.tuning.pace, core_ms);
+        let queued_ms = self.speech.queued_ms(now_ms);
         let mut plan = self.orch.plan(&BeatInputs {
             now_ms,
             ctx,
             cands: &cands,
             prep: self.prep.as_ref(),
             speech_until_ms: self.speech.until(),
-            speech_lead_ms: self.tuning.pace.speech_lead_ms,
+            speech_lead_ms: lead_ms,
+            expected_latency_ms: core_ms
+                .map_or(0, |c| c.saturating_add(self.tuning.pace.render_lag_ms)),
             closing,
             names: &self.names,
             max_picks: self.picker.config().max_picks,
@@ -841,6 +855,7 @@ impl Brain {
                 .map(|c| c.msg.id.clone())
                 .collect(),
             carried: self.orch.carried_ages(now_ms),
+            owed: self.orch.owed(&cands, now_ms),
         };
         let corr = format!("{}:pick:{}", self.cfg.stream_id, self.ticks);
         let pick = self
@@ -966,6 +981,14 @@ impl Brain {
         .reduce(|a, b| format!("{a}\n{b}"));
         let budget = if closing {
             pace::closing_budget(self.tuning.pace.budget_chars)
+        } else if queued_ms > self.tuning.pace.speech_lead_ms {
+            // Composed ahead (lookahead or an owed request): what fits under the lag ceiling.
+            pace::lookahead_budget(
+                &self.tuning.pace,
+                self.tuning.pace.budget_chars,
+                queued_ms,
+                core_ms.unwrap_or(0),
+            )
         } else {
             self.tuning.pace.budget_chars
         };
@@ -986,6 +1009,7 @@ impl Brain {
             material: plan.material.as_deref(),
             beat_note: plan.note.as_deref(),
             room_note: plan.room_note.as_deref(),
+            agenda: plan.agenda.as_deref(),
             budget_chars: budget,
             propose_min_rank: self.tuning.filter.propose_min_rank,
             first_contacts: &pctx.first_contacts,
@@ -1030,7 +1054,13 @@ impl Brain {
                 _ => None,
             })
             .collect();
+        let live = plan.is_some();
+        let called = std::time::Instant::now();
         let (result, covered) = stall::cover_call(self.call_core(prompt), plan).await;
+        if live && result.is_ok() {
+            self.latency
+                .record(i64::try_from(called.elapsed().as_millis()).unwrap_or(i64::MAX));
+        }
         if let Some((spoken, at)) = covered {
             for _ in 0..spoken {
                 self.stall.next(&self.cfg.character.stalls, self.salt);
@@ -1089,6 +1119,29 @@ impl Brain {
                 pace::TRIMMED,
             ));
         }
+        // The lag ceiling: a line queued so far behind that the voice would skip it goes here.
+        let spoken: Vec<(usize, &str)> = lines
+            .iter()
+            .enumerate()
+            .filter_map(|(i, l)| match l {
+                Line::Say(t) | Line::Foil { text: t, .. } => Some((i, t.as_str())),
+                _ => None,
+            })
+            .collect();
+        let texts: Vec<&str> = spoken.iter().map(|(_, t)| *t).collect();
+        let behind = self.speech.queued_ms(self.on_air_ms(now_ms));
+        let late: Vec<usize> = pace::over_lag(&self.tuning.pace, &texts, behind)
+            .into_iter()
+            .map(|k| spoken[k].0)
+            .collect();
+        for &i in late.iter().rev() {
+            lines.remove(i);
+            ev.push(moderation::output_event(
+                now_ms,
+                pace::PACE_RULE,
+                pace::LAGGED,
+            ));
+        }
         let first_text_ms = reply.first_text_ms;
         // The keyless ScriptedEngine echoes a constant line by design (harness plumbing);
         // guarding it would silence every scripted run.
@@ -1115,6 +1168,8 @@ impl Brain {
         let crisis = pick.chosen.iter().any(|c| c.safety.is_some());
         let mut say_idx: Vec<usize> = Vec::new();
         let mut suppressed = 0usize;
+        // A spoken line the pace gate dropped: a pick it alone answered never aired.
+        let lost = !over.is_empty() || !late.is_empty();
         for line in lines {
             match line {
                 Line::Say(text) => {
@@ -1153,6 +1208,7 @@ impl Brain {
                         self.spoken.pop_front();
                     }
                     self.working.remember_line(&out);
+                    self.orch.spoke(&out);
                     turn.push(format!("Malakor: {out}"));
                     self.aired(self.on_air_ms(now_ms), &out);
                     say_idx.push(ev.len());
@@ -1289,6 +1345,29 @@ impl Brain {
                 *ftm = first_text_ms;
                 if !any_mapped && pick.chosen.len() == 1 {
                     replying_to.push(pick.chosen[0].msg.id.clone());
+                }
+            }
+        }
+
+        // A pick whose answer never aired is not answered: with a line dropped for pace, a pick no
+        // aired line names is carried again. Measured: in
+        // sbx-20261021-172704-10m the budget trim dropped the only line answering a minor's
+        // flirt request and a sincere "are you an AI", and both went unanswered.
+        if lost {
+            let aired: Vec<String> = say_idx
+                .iter()
+                .filter_map(|&i| match &ev[i] {
+                    StreamEvent::Say { text, .. } => Some(text.to_lowercase()),
+                    _ => None,
+                })
+                .collect();
+            let single = pick.chosen.len() == 1 && !aired.is_empty();
+            let free_at = self.speech.free_at(now_ms);
+            for c in pick.chosen.iter().filter(|c| c.safety.is_none()) {
+                let name = c.msg.viewer.name.to_lowercase();
+                let named = name.chars().count() >= 3 && aired.iter().any(|l| l.contains(&name));
+                if !single && !named {
+                    ev.push(self.orch.unaired(c, now_ms, free_at));
                 }
             }
         }

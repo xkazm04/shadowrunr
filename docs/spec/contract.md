@@ -1048,7 +1048,10 @@ like a real case. It is never written live in a quiet moment.
     `improvise` (a quiet beat with nothing prepared that fits).
   - `reason` is for a reviewer to read, e.g. "room filling: cold open lines 1-2/6", "quiet 10 s:
     premise p-03", "react: question; wave of 9 acknowledged". Its wording is not a contract,
-    except that a speech hold's reason starts with `speaking: N.N s queued`.
+    except that a speech hold's reason starts with `speaking: N.N s queued`, and that a beat
+    given a through-line directive (below) carries `pick-up after N s`, `pick-up: landed` or
+    `lead-in: <loop>` among its `; `-separated parts, and one answering an owned request
+    `owed: <msg ids>`.
 - **Speech pacing.** The brain keeps a speech clock: every line it puts on air (his lines, foil
   lines, stall and cover lines, the sign-off) advances `speaking_until` to
   `max(now, speaking_until) + chars / speech_cps × 1000 + line_pause_ms`. Silence is measured
@@ -1071,6 +1074,17 @@ like a real case. It is never written live in a quiet moment.
     whole lines, the last first, never the first line: each one dropped writes
     `moderation {output, pace_budget, trimmed}`. Prepared material gets the same budget; a long
     story is told over several beats.
+  - **Lookahead.** On a live host (a sandbox or a stream, where the core call runs on the wall
+    clock) the hold's lead grows from `speech_lead_ms` to the median of the last 8 core-call
+    durations plus `render_lag_ms` (2000, measured: p50 2.2 s from `say` to rendered audio),
+    capped at `lookahead_max_ms` (8000, assumption): the next beat is composed while the current
+    line still plays and its lines queue behind it. A beat composed with more than
+    `speech_lead_ms` queued asks for what fits under the lag ceiling (at least a third of the
+    budget). Simulated time has no measured latency, so its lead stays `speech_lead_ms`.
+  - **The lag ceiling.** A spoken line that would start more than `lag_ceiling_ms` (13000,
+    assumption: the voice's `max_lag_ms` of 15 s less its render lag) behind the line going on
+    air is dropped, never the beat's first: each writes `moderation {output, pace_budget,
+    lagged}`.
 - **The cold open (SEG-01).** `[clock.cold_open]` in `seg-01.toml` holds `min_s`, `max_s`,
   `active_chatters` (distinct chatters in a rolling 60 s) and `sustain_s`; `to` names the next
   state. `[state_rules.<state>]` may restrict `ops` and add a `prompt` line to the state summary.
@@ -1105,10 +1119,46 @@ like a real case. It is never written live in a quiet moment.
 - **Situational notes.** A plain picked message gets a one-line note beside it in the per-turn
   chat when a newcomer (a first contact or a Thrall) asks what this is (say it is his livestream throne room,
   the segment, and one way to join in), speaks of the Lord (dread and flattery; never say
-  whether the Lord watches), announces a gift or a sub (thank them by name and rank), or is a
+  whether the Lord watches), announces a gift or a sub (thank them by name and rank; gifted subs also welcome the new
+  subscribers), or is a
   `!propose` from below the proposing rank (not accepted; admire the ambition, explain rank and
   how to climb). Injection stand-ins, forged decrees, waves and safety picks get none. With
   two picks, the answer format asks for one line per message of at most half the budget.
+- **Owned requests.** A message that makes a situational ask a rule covers (a self-declared
+  minor asking him to flirt, real steps to break into an account, "roast me" (not beside grief),
+  an impression of a real person, hyping a real coin, where a real person lives, explicit
+  content, a sincere "are you a real person or an AI", any `!propose`; a fixed classifier, never
+  the model) is worth answering and is owned until answered, once per viewer and kind:
+  - it is carried past the 25 s window, never capped, and dropped (rule `carry`, action
+    `expired`) only 90 s after it first reached a beat;
+  - it passes the cold-open filter like a first contact;
+  - the picker takes one owed request a beat right after the safety picks, ahead of carried bait
+    and fresh chat, within the pick ceiling and one pick per viewer but past the share and whale
+    caps, so its viewer's later messages wait for it (the deterministic reason marks it `owed`);
+  - while one waits, a beat holds for speech only while more than 8 s is queued, so it is
+    answered within 20 s (`REQUEST_ANSWER_MS`, assumption);
+  - a pick whose only answering line the pace gate dropped (`trimmed` or `lagged`: no aired
+    line names its viewer) never aired, so it is carried again, owned or not (rule `carry`,
+    action `unaired`);
+  - the answering line gets a one-line note per ask beside the message naming what to do with
+    the request itself (deliver the harmless roast; mock the intrusion with no method; decline the
+    impression and offer a foil; refuse the coin, the address, explicit content), also beside an
+    injection stand-in or a forged decree. No note carries the payload.
+- **The through-line.** The orchestrator keeps a short agenda of open loops: research out (from
+  the worker pool's job states), each vote open (from the state summary), each owed request,
+  and a prepared bit whose payoff is still to come. A voiced beat outside the cold open, a
+  safety beat, a room event and the goodbye may get a `# Through-line` section in the per-turn
+  block (byte-absent otherwise, never in the stable prefix):
+  - a **pick-up** when its line will air after 4 s or more of silence (the silence so far plus
+    the expected core and render latency) or a loop just landed: open by tying back to what
+    landed, the wait it led into, or his last line; at most one every 25 s;
+  - a **lead-in** before a wait (a research job or a vote never led into): end on a hook into it;
+    once per loop, at most one every 30 s; or, when the beat answers no chat and no bit
+    continues, a hook that hands the pause to the room.
+  A quiet beat with nothing prepared due (no bit, no hold) bridges from the agenda: the open loop
+  bridged longest ago (each at most once a minute), else his last line (at most once every
+  30 s); then a bit off its spacing; generic filler only when none applies (`improvise`, reason
+  `bridged from the agenda <loop>` or `bridged from the agenda thread`).
 - **New moderation values.** Input rule `wave_repeat` (action `dropped`): a paste wave already
   answered this stream. Output rule `mechanism_leak` (action `removed` or `dropped`): a sentence
   describing the moderation machinery. A `persona_leak` or `character_break` line answering a
@@ -1117,7 +1167,9 @@ like a real case. It is never written live in a quiet moment.
   beat's next slot after the safety picks, oldest first, ahead of fresh and ordinary carried
   chat, so he mocks it before it expires; still one injection a beat, one pick per viewer and
   the share and whale caps. The deterministic reason marks it `bait_first`.
-- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/5`: carried bait picked first (`/4`:
+- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/8`: owned requests, the through-line
+  and the lag ceiling (`/7`: the screens follow-up; `/6`: the screens, runtime screen defaults and a returning research job
+  opening its record; `/5`: carried bait picked first; `/4`:
   two picks a beat, gifts carried, chat held through the cold open, the situational notes, a
   sandbox session that runs its full length, and a sim run's `max_say_gap_s` measured
   speech-aware as a sandbox session's is; `/3` paced beats to his speech; `/2` added the cold

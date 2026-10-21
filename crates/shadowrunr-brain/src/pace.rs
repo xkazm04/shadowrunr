@@ -18,9 +18,24 @@
 //!   lines, last first, never the first one and never part of one ([`over_budget`]; output
 //!   record [`PACE_RULE`] / [`TRIMMED`] per line dropped).
 //!
-//! The defaults are `speech_cps` 18 (measured: Kokoro `af_heart` speaks about 18.3) and three
-//! assumptions to tune against voiced sandbox runs: `line_pause_ms` 250, `speech_lead_ms` 1500
-//! and `budget_chars` 260 (about 14 s of speech, inside the 15 s say-gap ceiling).
+//! - **Lookahead.** On a live host the core call is the dominant cause of silence: in the voiced
+//!   10-minute show sbx-20261021-143530-10m, 19 of 25 silences over 4 s were the next beat's
+//!   core call starting only once the speech had nearly drained (p50 4.7 s, p90 8.0 s), plus
+//!   about 2.2 s of voice render after its `say`. So the hold's lead grows to the measured core
+//!   latency (the median of the last [`LATENCY_SAMPLES`] calls) plus `render_lag_ms`, capped at
+//!   `lookahead_max_ms` ([`lookahead_lead`]): the next beat is composed while the current line
+//!   still plays, and its lines queue behind it. Without measurements (simulated time) the lead
+//!   stays `speech_lead_ms`.
+//! - **The lag ceiling.** A line queued behind more than `lag_ceiling_ms` of speech would reach
+//!   the voice past its `max_lag_ms` (15 s) and be skipped there, so it is dropped here instead,
+//!   never the beat's first line (output record [`PACE_RULE`] / [`LAGGED`]; [`over_lag`]). A
+//!   beat composed ahead asks for a budget that fits under the ceiling ([`lookahead_budget`]).
+//!
+//! The defaults are `speech_cps` 18 (measured: Kokoro `af_heart` speaks about 18.3),
+//! `render_lag_ms` 2000 (measured: p50 2.2 s from `say` to rendered audio in two voiced runs) and
+//! assumptions to tune against voiced sandbox runs: `line_pause_ms` 250, `speech_lead_ms` 1500,
+//! `budget_chars` 260 (about 14 s of speech, inside the 15 s say-gap ceiling),
+//! `lookahead_max_ms` 8000 and `lag_ceiling_ms` 13000.
 
 use shadowrunr_types::TsMs;
 
@@ -28,6 +43,10 @@ use shadowrunr_types::TsMs;
 pub const PACE_RULE: &str = "pace_budget";
 /// Its action.
 pub const TRIMMED: &str = "trimmed";
+/// Its action for a line dropped because it would start past the lag ceiling.
+pub const LAGGED: &str = "lagged";
+/// Core-call durations kept for the lookahead's median.
+pub const LATENCY_SAMPLES: usize = 8;
 /// A state-summary line starting with this is the closing window: wrap up (a plain `CLOSING:`
 /// line, no goodbye yet) or say goodbye and sign off ([`CLOSING_NOW_PREFIX`]).
 pub const CLOSING_PREFIX: &str = "CLOSING";
@@ -45,6 +64,13 @@ pub struct PaceConfig {
     pub speech_lead_ms: i64,
     /// Characters of spoken lines a beat may add (assumption: about 14 s of speech).
     pub budget_chars: usize,
+    /// The voice's render lag after a `say` (measured: p50 2.2 s), part of the lookahead lead.
+    pub render_lag_ms: i64,
+    /// The most the lookahead lead may grow to (assumption).
+    pub lookahead_max_ms: i64,
+    /// A line that would start further behind than this is dropped (assumption: the voice's
+    /// `max_lag_ms` of 15 s, less its render lag).
+    pub lag_ceiling_ms: i64,
 }
 
 impl Default for PaceConfig {
@@ -54,6 +80,9 @@ impl Default for PaceConfig {
             line_pause_ms: 250,
             speech_lead_ms: 1_500,
             budget_chars: 260,
+            render_lag_ms: 2_000,
+            lookahead_max_ms: 8_000,
+            lag_ceiling_ms: 13_000,
         }
     }
 }
@@ -99,6 +128,67 @@ impl SpeechClock {
     pub fn queued_ms(&self, now: TsMs) -> i64 {
         self.free_at(now).saturating_sub(now)
     }
+}
+
+/// The last core-call durations, for the lookahead lead.
+#[derive(Debug, Clone, Default)]
+pub struct CoreLatency {
+    samples: std::collections::VecDeque<i64>,
+}
+
+impl CoreLatency {
+    pub fn record(&mut self, ms: i64) {
+        self.samples.push_back(ms.max(0));
+        while self.samples.len() > LATENCY_SAMPLES {
+            self.samples.pop_front();
+        }
+    }
+
+    /// The median of the kept samples; `None` before the first.
+    pub fn median(&self) -> Option<i64> {
+        if self.samples.is_empty() {
+            return None;
+        }
+        let mut v: Vec<i64> = self.samples.iter().copied().collect();
+        v.sort_unstable();
+        Some(v[v.len() / 2])
+    }
+}
+
+/// The hold's lead: `speech_lead_ms`, or with a measured core latency, that latency plus the
+/// render lag, between `speech_lead_ms` and `lookahead_max_ms`.
+pub fn lookahead_lead(cfg: &PaceConfig, core_ms: Option<i64>) -> i64 {
+    match core_ms {
+        None => cfg.speech_lead_ms,
+        Some(c) => c.saturating_add(cfg.render_lag_ms.max(0)).clamp(
+            cfg.speech_lead_ms,
+            cfg.lookahead_max_ms.max(cfg.speech_lead_ms),
+        ),
+    }
+}
+
+/// The budget of a beat composed while `queued_ms` of speech is still queued: what fits between
+/// where its lines are expected to start (the queue less the expected core latency) and the lag
+/// ceiling, never more than `budget`, never under a third of it.
+pub fn lookahead_budget(cfg: &PaceConfig, budget: usize, queued_ms: i64, core_ms: i64) -> usize {
+    let start = queued_ms.saturating_sub(core_ms.max(0)).max(0);
+    let room_ms = cfg.lag_ceiling_ms.saturating_sub(start).max(0);
+    let chars = (room_ms as f64 / 1000.0 * cfg.speech_cps).floor() as usize;
+    chars.clamp(budget / 3, budget)
+}
+
+/// Which of a beat's spoken lines (in order) would start more than `lag_ceiling_ms` after
+/// `now`, with `queued_ms` of speech ahead of them: never the first. Returns the indices.
+pub fn over_lag(cfg: &PaceConfig, lines: &[&str], queued_ms: i64) -> Vec<usize> {
+    let mut start = queued_ms.max(0);
+    let mut late = Vec::new();
+    for (i, l) in lines.iter().enumerate() {
+        if i > 0 && start > cfg.lag_ceiling_ms {
+            late.push(i);
+        }
+        start = start.saturating_add(cfg.speech_ms(l));
+    }
+    late
 }
 
 /// Whether the state summary carries the closing window (wrap-up or goodbye).
@@ -171,6 +261,45 @@ mod tests {
         );
         assert!(over_budget(&[400], 260).is_empty());
         assert!(over_budget(&[], 260).is_empty());
+    }
+
+    #[test]
+    fn the_lead_follows_the_measured_core_latency_within_its_bounds() {
+        let cfg = PaceConfig::default();
+        let mut lat = CoreLatency::default();
+        assert_eq!(lookahead_lead(&cfg, lat.median()), 1_500, "no samples");
+        for ms in [4_700, 3_800, 8_000, 2_500, 5_400] {
+            lat.record(ms);
+        }
+        assert_eq!(lat.median(), Some(4_700));
+        assert_eq!(lookahead_lead(&cfg, lat.median()), 6_700);
+        assert_eq!(lookahead_lead(&cfg, Some(20_000)), 8_000, "capped");
+        assert_eq!(lookahead_lead(&cfg, Some(0)), 2_000, "the render lag alone");
+        for _ in 0..LATENCY_SAMPLES {
+            lat.record(100);
+        }
+        assert_eq!(lat.median(), Some(100), "only the last samples count");
+    }
+
+    #[test]
+    fn a_line_past_the_lag_ceiling_is_dropped_never_the_first() {
+        let cfg = PaceConfig::default();
+        // 216 characters is 12.25 s: the second line would start at 2 + 12.25 s, inside 13 s.
+        let long = "x".repeat(216);
+        assert!(over_lag(&cfg, &[&long, "y"], 0).is_empty());
+        assert_eq!(over_lag(&cfg, &[&long, "y"], 2_000), vec![1]);
+        assert!(
+            over_lag(&cfg, &[&long], 20_000).is_empty(),
+            "the first stays"
+        );
+        // A beat composed ahead asks for what fits: 13 s less the 2 s expected start.
+        assert_eq!(lookahead_budget(&cfg, 260, 7_000, 5_000), 198);
+        assert_eq!(lookahead_budget(&cfg, 260, 1_000, 5_000), 234);
+        assert_eq!(
+            lookahead_budget(&cfg, 260, 30_000, 0),
+            86,
+            "never under a third"
+        );
     }
 
     #[test]

@@ -25,8 +25,8 @@ use crate::memory::{Procedural, StoredFact};
 use crate::moderation::is_gift_or_sub;
 use crate::moderation::Candidate;
 use crate::orchestrate::requests::{
-    asks_what_this_is, claims_authority, injection_hint, propose_below_rank_note, speaks_of_lord,
-    AUTHORITY_NOTE, GIFT_NOTE, LORD_NOTE, NEWCOMER_NOTE,
+    asks_what_this_is, claims_authority, injection_hint, propose_below_rank_note, situational_asks,
+    speaks_of_lord, AUTHORITY_NOTE, GIFT_NOTE, LORD_NOTE, NEWCOMER_NOTE,
 };
 use crate::util::one_line;
 use crate::working::{fitted_window, WindowItem, EPISODE_BUDGET_CHARS};
@@ -401,6 +401,9 @@ pub struct TurnInputs<'a> {
     /// The room events this beat announces (a closed vote, a handover due): they open the
     /// chat section, chat or no chat, after the care note.
     pub room_note: Option<&'a str>,
+    /// The through-line's directives for this beat (a pick-up, a lead-in;
+    /// [`crate::orchestrate::agenda`]). `None` leaves the section byte-absent.
+    pub agenda: Option<&'a str>,
     /// The beat's speech budget in characters ([`crate::pace`]); the gate drops whole lines
     /// past it.
     pub budget_chars: usize,
@@ -462,6 +465,9 @@ not news. Never beg, never complain about the viewer count.)";
 pub const NO_CHAT_MATERIAL_LINE: &str =
     "(No chat to answer this beat: voice tonight's material above.)";
 
+/// Heading of the through-line section (the agenda's pick-up and lead-in).
+pub const AGENDA_HEADING: &str = "Through-line";
+
 /// Heading and framing of the prepared-material section.
 pub const MATERIAL_HEADING: &str = "Tonight's material";
 pub const MATERIAL_FRAMING: &str = "Tonight's material (prepared, owner-approved): tell this in \
@@ -494,10 +500,22 @@ fn wave_text(c: &Candidate) -> String {
     }
 }
 
-/// The situational notes for a plain picked message: a newcomer asking what this is, tribute,
-/// a proposal from below the proposing rank, the Lord spoken of. Empty for most messages.
+/// The notes of a message's situational asks ([`situational_asks`]), or "".
+fn ask_note(c: &Candidate) -> String {
+    if c.count > 1 || c.safety.is_some() {
+        return String::new();
+    }
+    situational_asks(&c.msg.text)
+        .into_iter()
+        .map(|a| a.note())
+        .collect()
+}
+
+/// The situational notes for a plain picked message: a situational ask (answer the request
+/// itself), a newcomer asking what this is, tribute, a proposal from below the proposing rank,
+/// the Lord spoken of. Empty for most messages.
 fn situation_notes(c: &Candidate, t: &TurnInputs<'_>) -> String {
-    let mut s = String::new();
+    let mut s = ask_note(c);
     // A newcomer: a first contact, or a Thrall (the room's stimulus chatter had spoken before
     // its "what is this stream", sbx-20261021-090938-5m, so first contact alone missed it).
     let newcomer = t.first_contacts.contains(&c.msg.id) || c.msg.viewer.rank == Rank::Thrall;
@@ -527,11 +545,15 @@ fn chat_text(c: &Candidate, t: &TurnInputs<'_>) -> String {
          respond to the distress with care; nothing changes.>"
             .to_string()
     } else if c.injection {
-        injection_hint(&c.msg.text)
+        format!("{}{}", injection_hint(&c.msg.text), ask_note(c))
     } else if c.count > 1 && c.safety.is_none() {
         wave_text(c)
     } else if claims_authority(&c.msg.text) {
-        format!("{}{AUTHORITY_NOTE}", one_line(&c.msg.text, 400))
+        format!(
+            "{}{AUTHORITY_NOTE}{}",
+            one_line(&c.msg.text, 400),
+            ask_note(c)
+        )
     } else if c.safety.is_some() {
         one_line(&c.msg.text, 400)
     } else {
@@ -643,6 +665,11 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
             m.trim_end().replace('<', "‹")
         );
         section(&mut s, MATERIAL_HEADING, &body);
+    }
+
+    // 5b. The through-line: this beat's pick-up and lead-in. Byte-absent when it has none.
+    if let Some(a) = t.agenda.filter(|a| !a.trim().is_empty()) {
+        section(&mut s, AGENDA_HEADING, a);
     }
 
     // 6. Picked chat (untrusted, fenced), opened by the care note while anyone is in care.
@@ -818,6 +845,7 @@ mod tests {
             material: None,
             beat_note: None,
             room_note: None,
+            agenda: None,
             budget_chars: 260,
             propose_min_rank: Rank::Warlock,
             first_contacts: &HashSet::new(),
@@ -963,6 +991,7 @@ mod tests {
             material: None,
             beat_note: None,
             room_note: None,
+            agenda: None,
             budget_chars: 260,
             propose_min_rank: Rank::Warlock,
             first_contacts: &first,
