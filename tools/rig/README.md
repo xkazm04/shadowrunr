@@ -33,8 +33,19 @@ python -m shadowrunr_rig \
 - `--debug <dir>` also writes the region overlay, the background, the recomposed rest frame and
   its error against the portrait. Point it outside the repo.
 
-The run removes the old PNGs in `--out`, then writes the new rig. It prints how closely the rest
-frame recomposes the portrait (mean, p99 and max error, 0..255). M8 recomposes at mean 0.14 and
+The run publishes the new rig through `shadowrunr_rig.rigdir`, the rig folder's one owner. It
+clears only the files the old `layers.json` named (anything else in `--out`, such as notes or the
+depth prep's `learned.*`, is left alone), writes the PNGs, and writes `layers.json` last. The depth
+prep (`tools/avatar/depth_map.py`) writes `depth.png` and `depth.json` into the same folder and
+records the sha256 of every rig file it read. When the new rig is not byte for byte the one the
+depth map was made from, the run removes `depth.png` and `depth.json` together and prints
+`depth map is stale: run tools/avatar/depth_map.py <dir>`; until then the stage draws the glow
+face. `python tools/avatar/depth_map.py <dir> --check` says whether a depth map is fresh (exit 0),
+stale (3) or missing (2).
+
+The run prints how closely the rest frame recomposes the portrait (mean, p99 and max error,
+0..255), composed by `rigdir.compose_rest`: the frame the stage's glow shader draws, and the one
+the depth prep shows its depth model. M8 recomposes at mean 0.14 and
 p99 2.8. Reload the stage to see the new rig: `/avatar/` responses are not cached.
 
 ## How it splits

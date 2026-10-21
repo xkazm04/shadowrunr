@@ -4,8 +4,10 @@
     python -m shadowrunr_rig --portrait <portrait.png> --spec <spec.json> --out <rig dir>
         [--lama <big-lama.pt>] [--device cuda|cpu] [--debug <dir>] [--id <portrait id>]
 
-Writes ``layers.json`` and one PNG per layer into ``--out`` (its old PNGs are removed first) and
-prints how closely the rest frame recomposes the portrait. ``--lama`` (or ``SHADOWRUNR_LAMA``)
+Publishes ``layers.json`` and one PNG per layer into ``--out`` through :mod:`.rigdir` (only the
+files the old ``layers.json`` named are cleared; a depth map made from another rig is removed,
+``depth.png`` and ``depth.json`` together) and prints how closely the rest frame recomposes the
+portrait. ``--lama`` (or ``SHADOWRUNR_LAMA``)
 names the big-lama TorchScript file; it is needed only when an element is filled by inpainting.
 """
 
@@ -20,7 +22,8 @@ from pathlib import Path
 import numpy as np
 
 from . import formspec as fsm
-from .split import assemble, compose_rest, debug_overlay, split
+from . import rigdir
+from .split import assemble, debug_overlay, split
 
 
 def _save(arr: np.ndarray, path: Path) -> None:
@@ -78,15 +81,16 @@ def main(argv: list[str] | None = None) -> int:
     except fsm.SpecError as e:
         print(f"split: {e}", file=sys.stderr)
         return 1
-    a.out.mkdir(parents=True, exist_ok=True)
-    for old in a.out.glob("*.png"):
-        old.unlink()
-    for name, pic in pictures.items():
-        _save(pic, a.out / name)
-    path = fsm.write_layers_json(fs, a.out)
-    rest = compose_rest(fs, pictures)
+    try:
+        report = rigdir.publish(a.out, fs, pictures)
+    except fsm.SpecError as e:
+        print(f"publish: {e}", file=sys.stderr)
+        return 1
+    rest = rigdir.compose_rest(fs, pictures)
     err = np.abs(rest - img.astype(np.float32)).max(axis=2)
-    print(f"wrote {path} ({len(fs['layers'])} layers) in {time.time() - t0:.1f}s")
+    print(f"wrote {report.layers} ({len(fs['layers'])} layers) in {time.time() - t0:.1f}s")
+    for note in report.notes:
+        print(note)
     print(
         f"rest frame vs portrait: mean {err.mean():.2f}, p99 {np.percentile(err, 99):.1f}, max {err.max():.0f} (0..255)"
     )
