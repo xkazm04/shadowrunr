@@ -1,6 +1,7 @@
 // `reconcile/plan`: the reconciler proposes, the operator chooses. Options with their evidence
-// and diffs; the composer seals the choice with `plan.choose`, and shows the plan the daemon
-// composed (the Lord's dispatch, the running order, topics, the directives riding along).
+// and diffs; the composer seals the choice with `plan.choose`, and shows the daemon's live plan
+// (`plan.current`: the Lord's dispatch, the running order, topics, the directives riding along).
+// What the composer says and offers is derived in planState.ts.
 import type { NextStreamPlan, PlanOption } from "@shadowrunr/contract";
 import { useState } from "react";
 import { LLM_TIMEOUT_MS, useMutation, useRpc, viewOfError } from "../../data";
@@ -11,6 +12,7 @@ import { DiffView } from "./DiffView";
 import { useReport } from "./hooks";
 import styles from "./Layer2.module.css";
 import { evidenceRefs, OPTION_KIND_LABEL, parseDiff } from "./model";
+import { canSeal, composerState, draftOf, liveLine, liveRead, sealLabel, type ComposerState } from "./planState";
 import { RefLinks } from "./Refs";
 import { session, useSession } from "./session";
 import { Button } from "../../ui/Button";
@@ -35,15 +37,20 @@ const blocked = (o: PlanOption) => o.diff !== undefined && parseDiff(o.diff).tou
 
 function PlanGrid({ reportId, options }: { reportId: string; options: readonly PlanOption[] }) {
   const s = useSession();
-  const chosen = new Set(s.chosen[reportId] ?? []);
+  const current = useRpc("plan.current", {});
+  const live = liveRead(current);
+  const draft = draftOf(live, reportId, s.chosen[reportId]);
+  const chosen = new Set(draft);
+  const picked = options.filter((o) => chosen.has(o.option_id) && !blocked(o));
+  const state = composerState(live, reportId, picked.map((o) => o.option_id));
   return (
     <div className={styles.plangrid} data-rise>
       <div className={styles.opts} data-rise>
         {options.map((o) => (
-          <OptionCard key={o.option_id} option={o} on={chosen.has(o.option_id)} onToggle={() => session.toggleOption(reportId, o.option_id)} />
+          <OptionCard key={o.option_id} option={o} on={chosen.has(o.option_id)} onToggle={() => session.toggleOption(reportId, o.option_id, draft)} />
         ))}
       </div>
-      <Composer reportId={reportId} chosen={options.filter((o) => chosen.has(o.option_id) && !blocked(o))} sealed={s.sealed[reportId]} />
+      <Composer reportId={reportId} chosen={picked} state={state} />
     </div>
   );
 }
@@ -80,17 +87,19 @@ function OptionCard({ option: o, on, onToggle }: { option: PlanOption; on: boole
   );
 }
 
-function Composer({ reportId, chosen, sealed }: { reportId: string; chosen: readonly PlanOption[]; sealed: NextStreamPlan | undefined }) {
+function Composer({ reportId, chosen, state }: { reportId: string; chosen: readonly PlanOption[]; state: ComposerState }) {
   const directives = useRpc("directive.list", {});
   const choose = useMutation("plan.choose", { timeoutMs: LLM_TIMEOUT_MS });
   const [error, setError] = useState<string | undefined>();
   const active = (directives.data ?? []).filter((d) => d.active).length;
+  const line = liveLine(state);
 
   async function seal() {
     setError(undefined);
+    if (!canSeal(state)) return;
     const r = await choose.run({ report_id: reportId, option_ids: chosen.map((o) => o.option_id) });
-    if (r.ok) session.seal(reportId, r.value);
-    else setError(`${viewOfError(r.error).title}: ${r.error.message}`);
+    // On success plan.choose invalidates plan.current; the sealed block renders from the refetch.
+    if (!r.ok) setError(`${viewOfError(r.error).title}: ${r.error.message}`);
   }
 
   return (
@@ -106,10 +115,20 @@ function Composer({ reportId, chosen, sealed }: { reportId: string; chosen: read
           ))}
         </ul>
       )}
+      {line && (
+        <p className={styles.dim} data-role="reconcile-live">
+          {line}
+        </p>
+      )}
+      {state.kind === "unknown" && (
+        <p className={styles.formError} role="alert" data-role="reconcile-live-unknown">
+          Could not read the live plan: {state.reason}. Sealing replaces whatever the daemon holds.
+        </p>
+      )}
       <h3>Directives riding along</h3>
       <p className={styles.dim}>{directives.data ? `${active} active` : directives.errorView ? directives.errorView.title : "Loading"}</p>
-      <Button type="button" variant="primary" className={styles.seal} onClick={() => void seal()} disabled={choose.pending} data-role="reconcile-seal">
-        {choose.pending ? "Composing…" : sealed ? "Seal again" : "Seal this plan"}
+      <Button type="button" variant="primary" className={styles.seal} onClick={() => void seal()} disabled={choose.pending || !canSeal(state)} data-role="reconcile-seal">
+        {choose.pending ? "Composing…" : sealLabel(state)}
       </Button>
       {choose.pending && (
         <p className={styles.pending} role="status">
@@ -121,7 +140,7 @@ function Composer({ reportId, chosen, sealed }: { reportId: string; chosen: read
           {error}
         </p>
       )}
-      {sealed && <SealedPlan plan={sealed} />}
+      {(state.kind === "live-here" || state.kind === "live-elsewhere") && <SealedPlan plan={state.plan} />}
     </aside>
   );
 }
@@ -130,7 +149,13 @@ function SealedPlan({ plan }: { plan: NextStreamPlan }) {
   return (
     <div className={styles.sealed} data-role="reconcile-sealed">
       <h3>
-        Sealed <code>{plan.plan_id}</code>
+        Live plan <code>{plan.plan_id}</code>
+        {plan.report_id && (
+          <small>
+            {" "}
+            from <code>{plan.report_id}</code>
+          </small>
+        )}
       </h3>
       <h3>Lord’s dispatch</h3>
       <blockquote className={styles.voice}>{plan.lord_dispatch}</blockquote>
