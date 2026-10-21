@@ -94,7 +94,7 @@ function Spine(props: { copy: PosterCopy; num: string; module: PageModule; crumb
         </small>
         {props.copy.name}
       </div>
-      <p className={styles.spineNote}>v0.1 · media-less phase. Voice, avatar and broadcast come next.</p>
+      <p className={styles.spineNote}>v0.2 · voiced and recorded: the face, the voice and the broadcast are live.</p>
     </div>
   );
 }

@@ -15,7 +15,7 @@ export interface PosterCta {
   readonly role: string;
 }
 
-export const POSTER_NOTE = "v0.1 · media-less phase: voice, avatar and broadcast come next · stylised illustration";
+export const POSTER_NOTE = "v0.2 · voiced and recorded · stylised illustration";
 
 export interface PosterFrameProps {
   /** The page's root class: its layout and palette. */

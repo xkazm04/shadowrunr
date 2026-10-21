@@ -132,7 +132,7 @@ export function Layer1({ active }: { readonly active: boolean }) {
       role="onair-layer1"
       measure
       credit={tone === undefined ? "A broadcast of the Overlord pilot · " : `A broadcast of the Overlord pilot · next stream's tone: ${tone} · `}
-      note="v0.1 · media-less phase: voice, avatar and broadcast come next · stylised illustration"
+      note="v0.2 · voiced and recorded · stylised illustration"
       cta={{ to: pageRoute("onair", "rundown"), label: "Open the rundown", role: "push-in" }}
     >
       <div className={styles.hero}>

@@ -82,7 +82,7 @@ function Trials() {
       role="simulator-l1"
       heading="Layer 1 · The Trials"
       credit="Tournament of tone, tier, segment and audience · "
-      note="v0.1 · media-less phase: voice, avatar and broadcast come next"
+      note="v0.2 · voiced and recorded"
       cta={{ to: pageRoute("simulator", "tournaments"), label: "Open the trials", role: "push-in" }}
     >
       <div className={styles.hero}>

@@ -70,7 +70,7 @@ function Funnel({ page }: { page: ClipsPage }) {
         ]}
       />
       <p className={styles.note}>
-        Score = 0.35·marker + 0.25·chat + 0.15·audio + 0.25·hook, {WEIGHTS_LABEL}; audio is unmeasured in the media-less phase and its share is
+        Score = 0.35·marker + 0.25·chat + 0.15·audio + 0.25·hook, {WEIGHTS_LABEL}; audio is the window’s level against the show’s when the run was recorded; without a recording its share is
         redistributed. Nothing publishes without the owner’s signature, and uploads are dry runs.
       </p>
     </div>
