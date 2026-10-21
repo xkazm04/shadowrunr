@@ -213,6 +213,7 @@ function StateRules({ rules }: { rules: Readonly<Record<string, StateRulesInfo |
               <th>State</th>
               <th>Ops</th>
               <th>Screens</th>
+              <th>Commands</th>
               <th>Rules line</th>
             </tr>
           </thead>
@@ -222,6 +223,7 @@ function StateRules({ rules }: { rules: Readonly<Record<string, StateRulesInfo |
                 <td>{humanState(state)}</td>
                 <td>{list(r.allowed_ops)}</td>
                 <td>{list(r.screens)}</td>
+                <td>{list(r.commands)}</td>
                 <td>{r.prompt ?? ""}</td>
               </tr>,
             ]))}

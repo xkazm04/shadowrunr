@@ -136,6 +136,13 @@ export function modName(stage: string, rule: string, action: string): ModName {
   if (rule.startsWith("term:")) return R(stage === "input" ? "Chat filters" : "Persona", `${stage === "input" ? "Blocked term in chat" : "Blocked term in his line"} (${action})`, human(rule.slice(5)));
   if (rule === "propose_min_rank") return R("Show mechanics", "Proposal from too low a rank ignored");
   if (rule === "unknown_hex") return R("Show mechanics", "Command for a hex that does not exist ignored");
+  if (rule === "command_not_in_segment") return R("Show mechanics", "Chat command this segment does not take declined");
+  if (rule === "command_closed_in_state") return R("Show mechanics", "Chat command closed at this point of the segment declined");
+  if (rule === "no_open_poll") return R("Show mechanics", "Vote with no poll open declined");
+  if (rule === "unknown_option") return R("Show mechanics", "Vote for an option the poll does not have declined");
+  if (rule === "foil_vote_not_open") return R("Show mechanics", "Summon with no foil vote open declined");
+  if (rule === "unknown_foil") return R("Show mechanics", "Summon of a foil that does not exist declined");
+  if (rule === "poll_min_rank") return R("Show mechanics", "Vote from below the poll's rank ignored");
   if (action.startsWith("rejected")) {
     const op = action.split(":")[1];
     return R("Show mechanics", `His command to ${(op && OP_NAME[op]) || human(op ?? "act")} was refused`, REFUSAL_REASON[rule] ?? human(rule));

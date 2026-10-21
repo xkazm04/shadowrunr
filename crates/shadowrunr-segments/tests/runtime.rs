@@ -708,7 +708,10 @@ fn declines_are_counted_in_the_state_for_a_minute_without_chat_text() {
         ],
     );
     let s = rt.context(0, 3).state_summary;
-    assert!(s.contains("declined lately: !vote x3 (no poll open)"), "{s}");
+    assert!(
+        s.contains("declined lately: !vote x3 (no poll open)"),
+        "{s}"
+    );
     assert!(!s.contains("secret"), "{s}");
     rt.tick(62_000, 0);
     assert!(!rt.context(0, 62).state_summary.contains("declined lately"));

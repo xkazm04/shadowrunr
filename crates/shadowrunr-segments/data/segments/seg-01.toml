@@ -71,10 +71,12 @@ sustain_s = 20
 # Per-state rules: the ops a state narrows the segment's list to, and the line the state
 # summary carries while in it. States without an entry allow every segment op.
 [state_rules.cold_open]
-# Polls and foils wait for the room.
+# Polls and foils wait for the room: the host may not start them, and chat may only propose
+# (a `!summon` or `!vote` is declined as command_closed_in_state).
 allowed_ops = ["highlight", "show_card", "mark_moment", "sign_off"]
 # The cold open is the big-avatar room, whatever the segment's screens.
 screens = ["host"]
+commands = ["propose"]
 prompt = """
 The room is still filling: tell tonight's cold-open story; answer only newcomers' first hello \
 and anything about safety; no polls, no foils yet.

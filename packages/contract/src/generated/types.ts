@@ -4097,6 +4097,10 @@ export interface HandoverInfo {
 export interface StateRulesInfo {
   allowed_ops?: string[];
   /**
+   * Chat commands open in this state, a subset of the segment's; omitted when all are.
+   */
+  commands?: string[];
+  /**
    * The line the state summary carries while the segment is in this state.
    */
   prompt?: string;

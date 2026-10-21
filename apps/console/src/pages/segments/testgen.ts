@@ -19,7 +19,7 @@ const seg01: SegmentTableInfo = {
   switch_to: ["SEG-02A"],
   rules_prompt: "SEGMENT SEG-01: THE IMPROVISED ROOM.\nYou open the show and warm the room.",
   clock: { foil_vote_secs: 60, poll_min_secs: 10, poll_max_secs: 600, max_poll_options: 6, handover: { to: "SEG-02A", ccv_min: 15, sustain_s: 180, max_elapsed_s: 1500, grace_s: 60 }, cold_open: { to: "opening", min_s: 60, max_s: 180, active_chatters: 5, window_s: 60, sustain_s: 20 } },
-  state_rules: { cold_open: { allowed_ops: ["highlight", "show_card", "mark_moment", "sign_off"], prompt: "The room is still filling.", screens: ["host"] } },
+  state_rules: { cold_open: { allowed_ops: ["highlight", "show_card", "mark_moment", "sign_off"], prompt: "The room is still filling.", screens: ["host"], commands: ["propose"] } },
   transitions: [
     { from: "opening", on: "foil_vote_opened", to: "foil_vote" },
     { from: "foil_vote", on: "foil_vote_closed", guard: "foil_active", to: "foil_live" },

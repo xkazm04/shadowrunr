@@ -61,7 +61,8 @@ describe("segments/tables", () => {
     const ho = card?.querySelector("[data-role='segments-handover']");
     expect(ho?.textContent).toContain("when at least 15 viewers hold for 3:00 after the cold open, or at 25:00, whichever comes first. Either way the brain then has 1:00 to switch");
     expect(card?.querySelector("[data-role='segments-cold-open']")?.textContent).toContain("once 5 chatters (each wrote in the last 1:00) hold for 0:20, never before 1:00; at 3:00 it ends regardless.");
-    expect(card?.querySelector("[data-role='segments-state-rules'] tbody tr")?.textContent).toBe("cold openhighlightshow_cardmark_momentsign_offhostThe room is still filling.");
+    expect(card?.querySelector("[data-role='segments-state-rules'] tbody tr")?.textContent).toBe("cold openhighlightshow_cardmark_momentsign_offhostproposeThe room is still filling.");
+    expect([...(card?.querySelectorAll("[data-role='segments-state-rules'] th") ?? [])].map((th) => th.textContent)).toContain("Commands");
     const arc = all("segments-card")[1]?.querySelector("[data-role='segments-arc']");
     expect(arc?.textContent).toContain("planned for at least 60:00: Anomaly and filing map, then Shell and archive trail, then Dossier sealed. Sign-off waits for the last 10:00.");
     expect(all("segments-card")[1]?.textContent).toContain("2, then a 1:00 Plebiscite");

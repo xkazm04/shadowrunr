@@ -479,11 +479,13 @@ fn segment_table_info(t: &SegmentTable) -> SegmentTableInfo {
                     allowed_ops,
                     prompt,
                     screens,
+                    commands,
                 } = r;
                 let info = StateRulesInfo {
                     allowed_ops: allowed_ops.clone(),
                     prompt: prompt.clone(),
                     screens: screens.clone(),
+                    commands: commands.clone(),
                 };
                 (state.clone(), info)
             })

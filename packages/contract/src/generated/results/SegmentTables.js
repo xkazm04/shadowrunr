@@ -893,7 +893,7 @@ return errors === 0;
 }
 validate642.evaluated = {"props":{"cold_open":true,"foil_vote_secs":true,"handover":true,"max_poll_options":true,"max_searches_per_hex":true,"plebiscite_secs":true,"poll_max_secs":true,"poll_min_secs":true},"dynamicProps":false,"dynamicItems":false};
 
-const schema256 = {"description":"What one state narrows (`[state_rules.<state>]`); an absent list means the segment's.","properties":{"allowed_ops":{"items":{"type":"string"},"type":"array"},"prompt":{"description":"The line the state summary carries while the segment is in this state.","type":"string"},"screens":{"items":{"type":"string"},"type":"array"}},"type":"object"};
+const schema256 = {"description":"What one state narrows (`[state_rules.<state>]`); an absent list means the segment's.","properties":{"allowed_ops":{"items":{"type":"string"},"type":"array"},"commands":{"description":"Chat commands open in this state, a subset of the segment's; omitted when all are.","items":{"type":"string"},"type":"array"},"prompt":{"description":"The line the state summary carries while the segment is in this state.","type":"string"},"screens":{"items":{"type":"string"},"type":"array"}},"type":"object"};
 
 function validate650(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -937,11 +937,29 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.prompt !== undefined){
+if(data.commands !== undefined){
+let data2 = data.commands;
 const _errs5 = errors;
-if(typeof data.prompt !== "string"){
-validate650.errors = [{instancePath:instancePath+"/prompt",schemaPath:"#/properties/prompt/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(errors === _errs5){
+if(Array.isArray(data2)){
+var valid2 = true;
+const len1 = data2.length;
+for(let i1=0; i1<len1; i1++){
+const _errs7 = errors;
+if(typeof data2[i1] !== "string"){
+validate650.errors = [{instancePath:instancePath+"/commands/" + i1,schemaPath:"#/properties/commands/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
+}
+var valid2 = _errs7 === errors;
+if(!valid2){
+break;
+}
+}
+}
+else {
+validate650.errors = [{instancePath:instancePath+"/commands",schemaPath:"#/properties/commands/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+return false;
+}
 }
 var valid0 = _errs5 === errors;
 }
@@ -949,21 +967,33 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.screens !== undefined){
-let data3 = data.screens;
-const _errs7 = errors;
-if(errors === _errs7){
-if(Array.isArray(data3)){
-var valid2 = true;
-const len1 = data3.length;
-for(let i1=0; i1<len1; i1++){
+if(data.prompt !== undefined){
 const _errs9 = errors;
-if(typeof data3[i1] !== "string"){
-validate650.errors = [{instancePath:instancePath+"/screens/" + i1,schemaPath:"#/properties/screens/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(typeof data.prompt !== "string"){
+validate650.errors = [{instancePath:instancePath+"/prompt",schemaPath:"#/properties/prompt/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid2 = _errs9 === errors;
-if(!valid2){
+var valid0 = _errs9 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.screens !== undefined){
+let data5 = data.screens;
+const _errs11 = errors;
+if(errors === _errs11){
+if(Array.isArray(data5)){
+var valid3 = true;
+const len2 = data5.length;
+for(let i2=0; i2<len2; i2++){
+const _errs13 = errors;
+if(typeof data5[i2] !== "string"){
+validate650.errors = [{instancePath:instancePath+"/screens/" + i2,schemaPath:"#/properties/screens/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid3 = _errs13 === errors;
+if(!valid3){
 break;
 }
 }
@@ -973,10 +1003,11 @@ validate650.errors = [{instancePath:instancePath+"/screens",schemaPath:"#/proper
 return false;
 }
 }
-var valid0 = _errs7 === errors;
+var valid0 = _errs11 === errors;
 }
 else {
 var valid0 = true;
+}
 }
 }
 }
@@ -989,7 +1020,7 @@ return false;
 validate650.errors = vErrors;
 return errors === 0;
 }
-validate650.evaluated = {"props":{"allowed_ops":true,"prompt":true,"screens":true},"dynamicProps":false,"dynamicItems":false};
+validate650.evaluated = {"props":{"allowed_ops":true,"commands":true,"prompt":true,"screens":true},"dynamicProps":false,"dynamicItems":false};
 
 const schema257 = {"enum":["pilot","trial","regular","flagship","retired","descoped"],"type":"string"};
 

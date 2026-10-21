@@ -7913,6 +7913,13 @@
           },
           "type": "array"
         },
+        "commands": {
+          "description": "Chat commands open in this state, a subset of the segment's; omitted when all are.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "prompt": {
           "description": "The line the state summary carries while the segment is in this state.",
           "type": "string"

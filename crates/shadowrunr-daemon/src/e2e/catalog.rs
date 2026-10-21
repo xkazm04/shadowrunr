@@ -137,6 +137,11 @@ async fn segments_tables_and_ranks_table_are_the_running_data() {
     assert_eq!(seg01.initial, "cold_open");
     assert!(seg01.allowed_ops.contains(&"summon_foil".to_string()));
     assert_eq!(seg01.commands, ["summon", "propose", "vote"]);
+    // The cold open takes proposals only: the operator view shows the state's commands.
+    assert_eq!(
+        seg01.state_rules["cold_open"].commands.as_deref(),
+        Some(&["propose".to_string()][..])
+    );
     assert_eq!(seg01.clock.handover.as_ref().map(|h| h.ccv_min), Some(15));
     assert!(seg01
         .transitions

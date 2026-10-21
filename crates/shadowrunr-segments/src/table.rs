@@ -258,6 +258,11 @@ pub struct StateRules {
     /// state's default. Absent: the segment's list.
     #[serde(default)]
     pub screens: Option<Vec<String>>,
+    /// Chat commands open in this state, a subset of the segment's `commands`. Absent: all
+    /// of them. A closed command is declined by name (`command_closed_in_state`), never
+    /// dropped silently.
+    #[serde(default)]
+    pub commands: Option<Vec<String>>,
 }
 
 /// SEG-01's handover clock rule. All values are assumptions.
@@ -531,6 +536,16 @@ impl SegmentTable {
                     )));
                 }
             }
+            if let Some(c) = rules
+                .commands
+                .iter()
+                .flatten()
+                .find(|c| !self.allows_command(c))
+            {
+                return Err(bad(format!(
+                    "state_rules.{state}: command {c:?} is not in the segment's commands"
+                )));
+            }
         }
         if let Some(r) = &c.cold_open {
             if r.max_s == 0 {
@@ -616,6 +631,17 @@ impl SegmentTable {
 
     pub fn allows_command(&self, name: &str) -> bool {
         self.commands.iter().any(|c| c == name)
+    }
+
+    /// Whether chat command `name` is open in `state`: the segment takes it and the state's
+    /// rules, if they list commands, list it too.
+    pub fn allows_command_in(&self, state: &str, name: &str) -> bool {
+        self.allows_command(name)
+            && self
+                .state_rules
+                .get(state)
+                .and_then(|r| r.commands.as_ref())
+                .is_none_or(|cs| cs.iter().any(|c| c == name))
     }
 
     pub fn is_descoped(&self) -> bool {
@@ -814,6 +840,22 @@ mod tests {
         assert!(SegmentTable::from_toml_str("x", &foreign_op).is_err());
         let unknown_state = src.replace("[state_rules.cold_open]", "[state_rules.nowhere]");
         assert!(SegmentTable::from_toml_str("x", &unknown_state).is_err());
+        // A state opens only commands the segment takes.
+        let foreign_command = src.replace("commands = [\"propose\"]", "commands = [\"hint\"]");
+        assert_ne!(foreign_command, src);
+        assert!(SegmentTable::from_toml_str("x", &foreign_command).is_err());
+    }
+
+    #[test]
+    fn seg01_opens_only_proposals_in_the_cold_open() {
+        let t = segment_table(SegmentId::Seg01ImprovisedRoom).unwrap();
+        assert!(t.allows_command_in(COLD_OPEN_STATE, "propose"));
+        for c in ["summon", "vote"] {
+            assert!(t.allows_command(c));
+            assert!(!t.allows_command_in(COLD_OPEN_STATE, c), "{c}");
+            assert!(t.allows_command_in("opening", c), "{c}");
+        }
+        assert!(!t.allows_command_in("opening", "hint"));
     }
 
     #[test]

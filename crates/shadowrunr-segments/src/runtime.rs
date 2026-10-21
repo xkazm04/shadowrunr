@@ -426,6 +426,19 @@ fn moderation(
     }
 }
 
+/// How the state summary words a command-gate rule.
+fn decline_reason(rule: &str) -> &str {
+    match rule {
+        "command_not_in_segment" => "not in this segment",
+        "command_closed_in_state" => "closed for now",
+        "no_open_poll" => "no poll open",
+        "unknown_option" => "not an option",
+        "foil_vote_not_open" => "no foil vote open",
+        "unknown_foil" => "no such foil",
+        other => other,
+    }
+}
+
 fn command_name(c: &Command) -> &'static str {
     match c {
         Command::Summon { .. } => "summon",
@@ -508,6 +521,10 @@ pub struct SegmentRuntime {
     /// summary names them so the model never tells chat a refused op happened: the 3 h case
     /// run (2026-10-20) narrated polls as open after 16 refused start_polls.
     refused: Vec<(TsMs, String)>,
+    /// Chat commands the command gate declined lately, newest last: (when, command, rule).
+    /// Counts only, never chat text: the state summary tells the host what chat reached for
+    /// so the decline can be acknowledged in-world.
+    declined: Vec<(TsMs, &'static str, &'static str)>,
     foil_vote_seq: u32,
     active_foil: Option<String>,
     /// A foil carried over from a previous segment as a "skeptical observer".
@@ -653,6 +670,7 @@ impl SegmentRuntime {
             room_since: None,
             cold_open_ended: None,
             refused: Vec::new(),
+            declined: Vec::new(),
             foil_vote_seq: 0,
             active_foil: None,
             observer_foil: None,
@@ -1220,8 +1238,9 @@ impl SegmentRuntime {
     // ----- chat ------------------------------------------------------------------------
 
     /// Commands and votes from new chat. Returns `vote` events (one running tally per poll
-    /// or graded hex touched in this batch) and `moderation` events (stage `input`) for
-    /// under-ranked or invalid commands. Commands the segment does not take are ignored.
+    /// or graded hex touched in this batch) and `moderation` events (stage `input`, action
+    /// `ignored`) for every declined command: under-ranked, invalid, or refused by
+    /// [`Self::command_gate`]. No command is dropped without a named rule.
     pub fn ingest_chat(&mut self, now_ms: TsMs, msgs: &[ChatMsg]) -> Vec<StreamEvent> {
         self.observe(now_ms);
         let mut events = Vec::new();
@@ -1240,7 +1259,18 @@ impl SegmentRuntime {
             let Some(cmd) = msg.command.clone().or_else(|| parse_command(&msg.text)) else {
                 continue;
             };
-            if !self.table.allows_command(command_name(&cmd)) {
+            let gate = self.command_gate(&cmd);
+            if let Err(rule) = gate {
+                self.declined
+                    .retain(|(t, _, _)| now_ms - t < REFUSED_SHOWN_MS);
+                self.declined.push((now_ms, command_name(&cmd), rule));
+                events.push(moderation(
+                    now_ms,
+                    ModStage::Input,
+                    rule,
+                    Some(&msg.id),
+                    "ignored".into(),
+                ));
                 continue;
             }
             let rank = msg.viewer.rank;
@@ -1257,13 +1287,8 @@ impl SegmentRuntime {
             };
             match cmd {
                 Command::Summon { foil } => {
-                    if !self.config.foils.contains(&foil) {
-                        events.push(ignored("unknown_foil"));
-                        continue;
-                    }
-                    if self.poll.is_none()
-                        && self.table.accepts(&self.state, Trigger::FoilVoteOpened)
-                    {
+                    // The gate passed: a foil vote is open, or this summon opens one.
+                    if self.poll.is_none() {
                         let ev = self.open_foil_vote(now_ms);
                         events.push(ev);
                     }
@@ -1275,6 +1300,7 @@ impl SegmentRuntime {
                     }
                 }
                 Command::Vote { option } => {
+                    // The gate passed: a poll is open and `option` names one of its options.
                     let Some(p) = self.poll.as_mut() else {
                         continue;
                     };
@@ -1344,6 +1370,42 @@ impl SegmentRuntime {
             });
         }
         events
+    }
+
+    /// The chat command gate: whether `cmd` may act now, or the rule that declines it. The
+    /// segment and the state open commands (`commands`, `[state_rules.X] commands`); a vote
+    /// needs an open poll naming its option; a summon needs a foil vote open or a state that
+    /// opens one. Per-viewer checks (rank, a hex that does not exist) stay at the command.
+    fn command_gate(&self, cmd: &Command) -> Result<(), &'static str> {
+        let name = command_name(cmd);
+        if !self.table.allows_command(name) {
+            return Err("command_not_in_segment");
+        }
+        if !self.table.allows_command_in(&self.state, name) {
+            return Err("command_closed_in_state");
+        }
+        match cmd {
+            Command::Vote { option } => {
+                let p = self.poll.as_ref().ok_or("no_open_poll")?;
+                if p.option_index(option).is_none() {
+                    return Err("unknown_option");
+                }
+            }
+            Command::Summon { foil } => {
+                if !self.config.foils.contains(foil) {
+                    return Err("unknown_foil");
+                }
+                let open = match &self.poll {
+                    Some(p) => p.kind == PollKind::Foil,
+                    None => self.table.accepts(&self.state, Trigger::FoilVoteOpened),
+                };
+                if !open {
+                    return Err("foil_vote_not_open");
+                }
+            }
+            _ => {}
+        }
+        Ok(())
     }
 
     fn open_foil_vote(&mut self, now_ms: TsMs) -> StreamEvent {
@@ -2786,6 +2848,26 @@ impl SegmentRuntime {
                 "REFUSED lately, so these did NOT happen (never tell chat they did): {}",
                 refused.join("; ")
             ));
+        }
+        // Chat's declined commands, counted per command and rule (never the chat text), so
+        // the host can acknowledge in-world that a command is closed rather than broken.
+        let mut declined: Vec<((&str, &str), u32)> = Vec::new();
+        for (_, cmd, rule) in self
+            .declined
+            .iter()
+            .filter(|(t, _, _)| now - t < REFUSED_SHOWN_MS)
+        {
+            match declined.iter_mut().find(|(k, _)| *k == (*cmd, *rule)) {
+                Some((_, n)) => *n += 1,
+                None => declined.push(((*cmd, *rule), 1)),
+            }
+        }
+        if !declined.is_empty() && !self.signed_off {
+            let parts: Vec<String> = declined
+                .iter()
+                .map(|((cmd, rule), n)| format!("!{cmd} x{n} ({})", decline_reason(rule)))
+                .collect();
+            lines.push(format!("declined lately: {}", parts.join(", ")));
         }
         // The ops withheld from the menu, with the gate's reason: the brain drops an op off
         // its menu itself, so the refusal is named here instead.

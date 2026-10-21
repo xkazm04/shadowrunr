@@ -279,6 +279,9 @@ pub struct StateRulesInfo {
     pub prompt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub screens: Option<Vec<String>>,
+    /// Chat commands open in this state, a subset of the segment's; omitted when all are.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<Vec<String>>,
 }
 
 /// SEG-02A's multi-act arc for a long stream.
