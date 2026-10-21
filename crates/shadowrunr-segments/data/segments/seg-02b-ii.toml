@@ -7,6 +7,7 @@ status = "descoped"
 initial = "descoped"
 states = ["descoped"]
 allowed_ops = []
+screens = ["host"]
 commands = []
 switch_to = []
 rules_prompt = ""

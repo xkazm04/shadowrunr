@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 
 use serde::Serialize;
 use shadowrunr_types::{
-    Case, ChatMsg, Command, EvidenceGrade, HexKind, ModStage, Op, Rank, SegmentContext, SegmentId,
-    StreamEvent, TsMs, VoteTally,
+    Case, ChatMsg, Command, EvidenceGrade, HexKind, ModStage, Op, Rank, ScreenId, SegmentContext,
+    SegmentId, ShownRecord, StreamEvent, TsMs, VoteTally,
 };
 
 use crate::case::{demo_case, validate_case};
@@ -17,8 +17,8 @@ use crate::evidence::{ResearchAllowlist, SourceAllowlist};
 use crate::ranks::RankTable;
 use crate::research::{target_hex, CaseFile};
 use crate::table::{
-    op_tag, segment_name, segment_table, ArcRules, ColdOpenRule, GuardFacts, HandoverRule,
-    SegmentTable, Trigger, COLD_OPEN_STATE,
+    op_tag, screen_name, segment_name, segment_table, ArcRules, ColdOpenRule, GuardFacts,
+    HandoverRule, SegmentTable, Trigger, COLD_OPEN_STATE,
 };
 use crate::SegmentError;
 
@@ -27,6 +27,14 @@ const SEEN_MSG_CAP: usize = 10_000;
 
 /// How long a refused op stays named in the state summary.
 const REFUSED_SHOWN_MS: TsMs = 60_000;
+
+/// A screen default the runtime picks itself (a research job came back) never overrides a
+/// `show_screen` the model made this recently. ASSUMPTION: about two beats, so his choice holds
+/// while he talks about it; uncalibrated.
+pub const SCREEN_HOLD_MS: TsMs = 8_000;
+
+/// Records on file the state summary's screen line names, newest first.
+const SCREEN_RECORDS_SHOWN: usize = 4;
 
 /// Runtime configuration. Every field has a working default.
 #[derive(Debug, Clone, Default)]
@@ -462,6 +470,23 @@ pub struct SegmentRuntime {
     reveals: Vec<TsMs>,
     /// Hexes a closed crowd vote chose (a poll's winner naming it, or an "Annex" Plebiscite).
     voted: BTreeSet<String>,
+    /// What fills the broadcast's main screen now.
+    screen: ScreenId,
+    /// The record last opened in the browser window: `browser`/`desk` without a `record_id`
+    /// reopen it.
+    screen_record: Option<String>,
+    /// When the model's last accepted `show_screen` was made (the hold rule).
+    llm_screen_ms: Option<TsMs>,
+    /// Records already sent as `record_shown` this session.
+    shown: BTreeSet<String>,
+    /// Accepted research job id -> the records its dispatch filed, in filing order, until the
+    /// job comes back ([`SegmentRuntime::job_done`]).
+    job_filed: BTreeMap<String, Vec<String>>,
+    /// Filed records whose job has come back, in the order they came back: only these may
+    /// be shown.
+    returned: Vec<String>,
+    /// `record_shown` events an accepted op emits before its own echo.
+    pre_echo: Vec<StreamEvent>,
 }
 
 impl SegmentRuntime {
@@ -526,6 +551,13 @@ impl SegmentRuntime {
             _ => None,
         };
         let mut rt = Self {
+            screen: table.default_screen(&table.initial),
+            screen_record: None,
+            llm_screen_ms: None,
+            shown: BTreeSet::new(),
+            job_filed: BTreeMap::new(),
+            returned: Vec::new(),
+            pre_echo: Vec::new(),
             started_ms: config.start_ms,
             config,
             table,
@@ -571,6 +603,7 @@ impl SegmentRuntime {
         if let Some(rule) = self.cold_open_rule().filter(|r| r.max_s == 0) {
             if self.in_cold_open() {
                 self.state = rule.to;
+                self.screen = self.table.default_screen(&self.state);
             }
         }
     }
@@ -587,7 +620,8 @@ impl SegmentRuntime {
     }
 
     /// Mark the segment as started at `now_ms` and return its `segment_start` event, followed
-    /// in SEG-02A by `case_open` carrying the case being audited.
+    /// in SEG-02A by `case_open` carrying the case being audited, then the runtime's
+    /// `show_screen` of the segment's default screen.
     /// Optional: without it the start time is the first `now_ms` seen.
     pub fn start(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
         self.started_ms = Some(now_ms);
@@ -597,6 +631,7 @@ impl SegmentRuntime {
             segment: self.table.id,
         }];
         events.extend(self.case_open(now_ms, self.table.id));
+        events.push(self.screen_start(now_ms));
         if let Some(card) = self.arc_card(now_ms, 0) {
             events.push(card);
         }
@@ -704,6 +739,16 @@ impl SegmentRuntime {
 
     pub fn is_signed_off(&self) -> bool {
         self.signed_off
+    }
+
+    /// What fills the broadcast's main screen now.
+    pub fn screen(&self) -> ScreenId {
+        self.screen
+    }
+
+    /// The record last opened in the browser window, if any.
+    pub fn screen_record(&self) -> Option<&str> {
+        self.screen_record.as_deref()
     }
 
     /// The running act (0-based) and the number of acts, when the stream runs an arc.
@@ -1069,6 +1114,7 @@ impl SegmentRuntime {
         self.chatters.clear();
         self.room_since = None;
         self.skip_cold_open();
+        events.push(self.screen_start(now_ms));
         if let Some(foil) = self.active_foil.take() {
             self.observer_foil = Some(foil);
         }
@@ -1243,9 +1289,11 @@ impl SegmentRuntime {
 
     /// File the planted records of `hex` the bone-clerks have not brought back yet, and attach
     /// their sources to the hex so the DOC rule sees them.
-    fn file_findings(&mut self, hex_idx: usize) {
+    /// Returns the ids it filed, in filing order.
+    fn file_findings(&mut self, hex_idx: usize) -> Vec<String> {
+        let mut new = Vec::new();
         let Some(file) = &self.case_file else {
-            return;
+            return new;
         };
         let hex = &mut self.case.hexes[hex_idx];
         for r in file.records_for(&hex.id) {
@@ -1253,10 +1301,12 @@ impl SegmentRuntime {
                 continue;
             }
             self.filed.push(r.id.clone());
+            new.push(r.id.clone());
             if !hex.sources.contains(&r.source) {
                 hex.sources.push(r.source.clone());
             }
         }
+        new
     }
 
     /// The options of `hex`'s Plebiscite: annex it, leave it fogged, or send the bone-clerks
@@ -1346,7 +1396,9 @@ impl SegmentRuntime {
     // ----- ops -------------------------------------------------------------------------
 
     /// Validate and apply the brain's ops. An accepted op yields its `op` event followed by
-    /// any consequence (a closed `vote`, `segment_end`/`segment_start`...). A rejected op
+    /// any consequence (a closed `vote`, `segment_end`/`segment_start`...), then the new
+    /// state's default screen when that state excludes the screen up. A `show_screen` naming
+    /// a record for the first time is preceded by its `record_shown`. A rejected op
     /// yields one `moderation` event (stage `output`, action `rejected:<op>`) whose `rule`
     /// names the failed check. A `dispatch_research` refused at the re-search cap
     /// (`research_cap_reached`) is followed by the `start_poll` of that hex's Plebiscite as
@@ -1362,6 +1414,8 @@ impl SegmentRuntime {
         for op in ops {
             match self.apply_op(now_ms, op) {
                 Ok(consequences) => {
+                    // A record the op names goes out before the op that shows it.
+                    events.append(&mut self.pre_echo);
                     let mut op = op.clone();
                     // A re-minted poll id: the transcript records the id the poll has.
                     if let (Op::StartPoll { poll_id, .. }, Some(p)) = (&mut op, &self.poll) {
@@ -1369,8 +1423,10 @@ impl SegmentRuntime {
                     }
                     events.push(StreamEvent::Op { ts_ms: now_ms, op });
                     events.extend(consequences);
+                    events.extend(self.screen_fit(now_ms));
                 }
                 Err(rule) => {
+                    self.pre_echo.clear();
                     self.refused.retain(|(t, _)| now_ms - t < REFUSED_SHOWN_MS);
                     self.refused
                         .push((now_ms, format!("{}: {rule}", op_label(op))));
@@ -1555,7 +1611,10 @@ impl SegmentRuntime {
                         return Err("research_cap_reached");
                     }
                     *self.searches.entry(hex).or_default() += 1;
-                    self.file_findings(i);
+                    let filed = self.file_findings(i);
+                    if !filed.is_empty() {
+                        self.job_filed.insert(job_id.clone(), filed);
+                    }
                 }
                 self.jobs.insert(job_id.clone());
             }
@@ -1564,9 +1623,37 @@ impl SegmentRuntime {
                     return Err("invalid_card");
                 }
             }
-            // No segment allows it yet (appendix (screens)): the allow-list and the runtime
-            // defaults land with the screens package.
-            Op::ShowScreen { .. } => return Err("screen_not_allowed"),
+            // Appendix (screens): the state's allow-list, then a record on file for the
+            // browser window. A `record_id` on `host` or `hexmap` is ignored.
+            Op::ShowScreen { screen, record_id } => {
+                if !self.table.allows_screen_in(&self.state, *screen) {
+                    return Err("screen_not_allowed");
+                }
+                let record = match screen {
+                    ScreenId::Browser | ScreenId::Desk => {
+                        let Some(id) = record_id.clone().or_else(|| self.screen_record.clone())
+                        else {
+                            return Err("no_record");
+                        };
+                        if !self.filed.contains(&id) {
+                            return Err("record_not_filed");
+                        }
+                        // Filed at dispatch, shown only once the bone-clerks are back.
+                        if !self.returned.contains(&id) {
+                            return Err("record_not_returned");
+                        }
+                        Some(id)
+                    }
+                    ScreenId::Host | ScreenId::Hexmap => None,
+                };
+                if let Some(id) = record {
+                    let shown = self.record_shown(now_ms, &id);
+                    self.pre_echo.extend(shown);
+                    self.screen_record = Some(id);
+                }
+                self.screen = *screen;
+                self.llm_screen_ms = Some(now_ms);
+            }
             Op::MarkMoment { label } => {
                 if label.trim().is_empty() {
                     return Err("invalid_moment");
@@ -1613,6 +1700,137 @@ impl SegmentRuntime {
         Ok(Vec::new())
     }
 
+    // ----- screens ---------------------------------------------------------------------
+
+    /// The `record_shown` of a filed record, the first time it is named this session. The
+    /// fields are the case file's, copied (a real case's records are scrubbed when staged).
+    fn record_shown(&mut self, now_ms: TsMs, id: &str) -> Option<StreamEvent> {
+        if self.shown.contains(id) {
+            return None;
+        }
+        let file = self.case_file.as_ref()?;
+        let r = file.records.iter().find(|r| r.id == id)?;
+        let record = ShownRecord {
+            id: r.id.clone(),
+            hex: r.hex.clone(),
+            grade: r.grade,
+            title: r.title.clone(),
+            source: r.source.clone(),
+            summary: r.summary.clone(),
+            retrieved: r.retrieved.clone(),
+            via: r.via.clone(),
+            fictional: file.fictional,
+        };
+        self.shown.insert(id.to_string());
+        Some(StreamEvent::RecordShown {
+            ts_ms: now_ms,
+            record,
+        })
+    }
+
+    /// A `show_screen` the runtime emits itself.
+    fn runtime_screen(
+        &mut self,
+        now_ms: TsMs,
+        screen: ScreenId,
+        record_id: Option<String>,
+    ) -> StreamEvent {
+        self.screen = screen;
+        if record_id.is_some() {
+            self.screen_record.clone_from(&record_id);
+        }
+        StreamEvent::Op {
+            ts_ms: now_ms,
+            op: Op::ShowScreen { screen, record_id },
+        }
+    }
+
+    /// The default screen at `segment_start`, always sent: the new segment's allow-list is not
+    /// the old one's, and the model's choice in the old segment does not carry over.
+    fn screen_start(&mut self, now_ms: TsMs) -> StreamEvent {
+        self.llm_screen_ms = None;
+        let screen = self.table.default_screen(&self.state);
+        self.runtime_screen(now_ms, screen, None)
+    }
+
+    /// The state's default screen, when the state just entered excludes the screen up. An
+    /// allow-list is a rule, so the hold rule does not apply.
+    fn screen_fit(&mut self, now_ms: TsMs) -> Option<StreamEvent> {
+        if self.table.allows_screen_in(&self.state, self.screen) {
+            return None;
+        }
+        let screen = self.table.default_screen(&self.state);
+        Some(self.runtime_screen(now_ms, screen, None))
+    }
+
+    /// The model chose a screen within the last [`SCREEN_HOLD_MS`].
+    fn screen_held(&self, now_ms: TsMs) -> bool {
+        self.llm_screen_ms
+            .is_some_and(|t| now_ms - t < SCREEN_HOLD_MS)
+    }
+
+    /// A research job came back (the brain's `job` event with status `done`). When its
+    /// `dispatch_research` was accepted and filed records, those records count as returned
+    /// (only returned records may be shown), and when the browser is allowed now the runtime
+    /// opens the first of them: its `record_shown` (the first time it is named), then
+    /// `show_screen browser`. The screen stays put while the model's own `show_screen` holds
+    /// ([`SCREEN_HOLD_MS`]) and after a sign-off. A job the runtime did not accept does
+    /// nothing, and a job comes back at most once.
+    pub fn job_done(&mut self, job_id: &str, now_ms: TsMs) -> Vec<StreamEvent> {
+        self.observe(now_ms);
+        let Some(ids) = self.job_filed.remove(job_id) else {
+            return Vec::new();
+        };
+        let Some(id) = ids.first().cloned() else {
+            return Vec::new();
+        };
+        self.returned.extend(ids);
+        if self.signed_off
+            || !self.table.allows_screen_in(&self.state, ScreenId::Browser)
+            || self.screen_held(now_ms)
+        {
+            return Vec::new();
+        }
+        let mut events: Vec<StreamEvent> = self.record_shown(now_ms, &id).into_iter().collect();
+        events.push(self.runtime_screen(now_ms, ScreenId::Browser, Some(id)));
+        events
+    }
+
+    /// The state summary's screen line: what is up and the returned records the browser can
+    /// open, newest first.
+    fn screen_line(&self) -> String {
+        let mut line = format!("Screen: {}", screen_name(self.screen));
+        if let (ScreenId::Browser | ScreenId::Desk, Some(id)) = (self.screen, &self.screen_record) {
+            line.push_str(&format!(" on {id}"));
+        }
+        let now = self.table.screens_in(&self.state);
+        if now.len() < self.table.screens.len() {
+            line.push_str(&format!(" (only {} now)", now.join(", ")));
+        }
+        // Returned records only, ids only: the research block's case-file line already carries
+        // each record's hex, grade and title, and this line is paid for every beat.
+        let records: Vec<&str> = self
+            .returned
+            .iter()
+            .rev()
+            .take(SCREEN_RECORDS_SHOWN)
+            .map(String::as_str)
+            .collect();
+        if records.is_empty() {
+            line.push_str(". Records on file: none yet (browser and desk need one)");
+        } else {
+            line.push_str(&format!(
+                ". Records on file, newest first: {}",
+                records.join(", ")
+            ));
+            let more = self.returned.len() - records.len();
+            if more > 0 {
+                line.push_str(&format!(" +{more} older"));
+            }
+        }
+        line
+    }
+
     // ----- clock -----------------------------------------------------------------------
 
     /// Clock: poll timeouts (a closed `vote`; a foil vote also summons its winner), the cold
@@ -1623,7 +1841,16 @@ impl SegmentRuntime {
     /// emits `handover` and enters the `handover_pending` state; the brain is expected to emit
     /// `switch_segment`, and after the rule's grace period the clock switches by itself
     /// (`segment_end`, `segment_start`).
+    /// A state the clock moved into that excludes the screen up gets its default screen.
     pub fn tick(&mut self, now_ms: TsMs, ccv: u32) -> Vec<StreamEvent> {
+        let mut events = self.tick_clock(now_ms, ccv);
+        if !self.signed_off {
+            events.extend(self.screen_fit(now_ms));
+        }
+        events
+    }
+
+    fn tick_clock(&mut self, now_ms: TsMs, ccv: u32) -> Vec<StreamEvent> {
         self.observe(now_ms);
         let mut events = Vec::new();
         if self.signed_off {
@@ -2229,9 +2456,119 @@ impl SegmentRuntime {
                 lines.extend(self.research_lines());
             }
         }
+        if self.table.allows_op("show_screen") && !self.signed_off {
+            lines.push(self.screen_line());
+        }
         if !self.proposals.is_empty() {
             lines.push(format!("proposals waiting: {}", self.proposals.len()));
         }
         lines.join("\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::table::SEGMENT_TABLE_SOURCES;
+
+    /// SEG-02A with its jury poll narrowed to the map and the room: no table ships a state
+    /// that excludes a screen the segment allows, so the test leaks one.
+    fn narrowed() -> SegmentRuntime {
+        let src = format!(
+            "{}\n[state_rules.jury_poll]\nscreens = [\"hexmap\", \"host\"]\n",
+            SEGMENT_TABLE_SOURCES[1].1
+        );
+        let table = SegmentTable::from_toml_str("narrowed", &src).unwrap();
+        let mut rt = SegmentRuntime::new(SegmentId::Seg02aHexmap);
+        rt.table = Box::leak(Box::new(table));
+        rt.start(0);
+        rt
+    }
+
+    fn poll() -> Op {
+        Op::StartPoll {
+            poll_id: "p1".into(),
+            question: "Which hex next?".into(),
+            options: vec!["HEX-01".into(), "HEX-02".into()],
+            min_rank: Rank::Thrall,
+            secs: 60,
+        }
+    }
+
+    fn screen(screen: ScreenId, record_id: Option<&str>) -> Op {
+        Op::ShowScreen {
+            screen,
+            record_id: record_id.map(str::to_string),
+        }
+    }
+
+    fn refused(evs: &[StreamEvent]) -> Vec<&str> {
+        evs.iter()
+            .filter_map(|e| match e {
+                StreamEvent::Moderation { rule, .. } => Some(rule.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_state_that_excludes_the_screen_gets_its_default_despite_the_hold() {
+        let mut rt = narrowed();
+        rt.apply_ops(
+            0,
+            &[Op::DispatchResearch {
+                job_id: "r1".into(),
+                brief: "HEX-04: trace the treasury wallet".into(),
+            }],
+        );
+        // The job comes back: the runtime opens DOC-03, and the model shows it again.
+        assert!(!rt.job_done("r1", 500).is_empty());
+        rt.apply_ops(1_000, &[screen(ScreenId::Browser, Some("DOC-03"))]);
+        assert_eq!(rt.screen(), ScreenId::Browser);
+        // The poll moves the segment into jury_poll, which has no browser: the map goes up
+        // right after the op, inside the model's hold (an allow-list is a rule).
+        let evs = rt.apply_ops(2_000, &[poll()]);
+        let last = evs.last().unwrap();
+        assert!(
+            matches!(
+                last,
+                StreamEvent::Op {
+                    op: Op::ShowScreen {
+                        screen: ScreenId::Hexmap,
+                        record_id: None
+                    },
+                    ..
+                }
+            ),
+            "{evs:?}"
+        );
+        assert_eq!(rt.state(), "jury_poll");
+        assert_eq!(rt.screen(), ScreenId::Hexmap);
+        assert!(rt
+            .context(0, 2)
+            .state_summary
+            .contains("Screen: hexmap (only hexmap, host now)"));
+    }
+
+    #[test]
+    fn a_screen_outside_the_states_list_is_refused() {
+        let mut rt = narrowed();
+        rt.apply_ops(
+            0,
+            &[Op::DispatchResearch {
+                job_id: "r1".into(),
+                brief: "HEX-04: trace the treasury wallet".into(),
+            }],
+        );
+        rt.apply_ops(1_000, &[poll()]);
+        let evs = rt.apply_ops(2_000, &[screen(ScreenId::Desk, Some("DOC-03"))]);
+        assert_eq!(refused(&evs), ["screen_not_allowed"]);
+        assert!(!evs
+            .iter()
+            .any(|e| matches!(e, StreamEvent::RecordShown { .. })));
+        assert!(refused(&rt.apply_ops(2_000, &[screen(ScreenId::Host, None)])).is_empty());
+        // The job comes back while the browser is not allowed: no default.
+        assert!(rt.job_done("r1", 30_000).is_empty());
+        assert_eq!(rt.screen(), ScreenId::Host);
     }
 }

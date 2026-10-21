@@ -488,7 +488,16 @@ async fn scan_gate_approve_and_dry_run_publish() {
     let tmp = tempfile::tempdir().unwrap();
     let run = write_run(
         tmp.path(),
-        vec![chat(250_000, "h1", "moth_pickle", "hello moth")],
+        vec![
+            chat(250_000, "h1", "moth_pickle", "hello moth"),
+            // The screen up before the cut, and the record it shows.
+            ev(json!({"type": "record_shown", "ts_ms": 1_000, "record": {
+                "id": "DOC-01", "hex": "HEX-01", "grade": "DOC", "title": "Order 0001",
+                "source": "https://records.example/order-0001", "summary": "An order.",
+                "fictional": true}})),
+            ev(json!({"type": "op", "ts_ms": 1_000,
+                      "op": {"op": "show_screen", "screen": "browser", "record_id": "DOC-01"}})),
+        ],
     );
     let store = ClipStore::new(&tmp.path().join("data"));
     let opts = ScanOptions {
@@ -553,6 +562,24 @@ async fn scan_gate_approve_and_dry_run_publish() {
         .events
         .iter()
         .all(|e| !matches!(e, StreamEvent::Chat { .. })));
+    // A replay opens on the screen that was up, with its record.
+    let tags: Vec<String> = input
+        .events
+        .iter()
+        .map(|e| {
+            let v = serde_json::to_value(e).unwrap();
+            format!("{}{}", v["type"], v["op"]["op"])
+        })
+        .collect();
+    let shown = tags
+        .iter()
+        .position(|t| t == "\"record_shown\"null")
+        .unwrap();
+    let screen = tags
+        .iter()
+        .position(|t| t == "\"op\"\"show_screen\"")
+        .unwrap();
+    assert!(shown < screen, "{tags:?}");
     assert!(best.render.as_ref().unwrap().fallback_reason.is_some());
 
     // A rescan replaces the untouched drafts with the same ids.

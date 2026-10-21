@@ -2,7 +2,8 @@
 //! 1. generate chat (bulk + one batched featured-chatter call);
 //! 2. `segments.ingest_chat`;
 //! 3. `brain.tick(now, inbox, &segments.context(ccv, elapsed))`;
-//! 4. `segments.apply_ops(ops from the brain's events)`;
+//! 4. `segments.apply_ops(ops from the brain's events)`, then `segments.job_done` for each
+//!    research job the brain reports done (the runtime may open its record on screen);
 //! 5. `segments.tick`;
 //! 6. append everything to `transcript.jsonl`.
 //!
@@ -62,6 +63,11 @@ pub trait Stage: Send {
     fn context(&self, ccv: u32, elapsed_s: u32) -> SegmentContext;
     fn ingest_chat(&mut self, now_ms: TsMs, msgs: &[ChatMsg]) -> Vec<StreamEvent>;
     fn apply_ops(&mut self, now_ms: TsMs, ops: &[Op]) -> Vec<StreamEvent>;
+    /// A background job came back done (the brain's `job` event). The real runtime opens the
+    /// record a research job filed (`record_shown`, `show_screen browser`).
+    fn job_done(&mut self, _job_id: &str, _now_ms: TsMs) -> Vec<StreamEvent> {
+        Vec::new()
+    }
     fn tick(&mut self, now_ms: TsMs, ccv: u32) -> Vec<StreamEvent>;
     /// The authoritative open poll `(id, options)` when the stage can tell (`Some(None)` =
     /// no poll open); `None` when it cannot, and the room tracks polls from ops instead.
@@ -92,18 +98,36 @@ impl Mind for Brain {
 
 /// The brain's events already carry each op it issued, and `SegmentRuntime::apply_ops` echoes
 /// every op it accepts before its consequences. Drop that echo so each op is recorded once;
-/// rejections and ops the stage generates itself (a foil vote's `start_poll`) are kept.
+/// rejections and ops the stage generates itself (a foil vote's `start_poll`, a default
+/// `show_screen`) are kept. Each sent op drops one echo at most, so a runtime op equal to one
+/// the brain sent in the same batch survives.
 pub(crate) fn drop_op_echo(sent: &[Op], evs: Vec<StreamEvent>) -> Vec<StreamEvent> {
-    let sent: Vec<serde_json::Value> = sent
+    let mut sent: Vec<serde_json::Value> = sent
         .iter()
         .filter_map(|o| serde_json::to_value(o).ok())
         .collect();
     evs.into_iter()
         .filter(|e| match e {
             StreamEvent::Op { op, .. } => {
-                serde_json::to_value(op).map_or(true, |v| !sent.contains(&v))
+                serde_json::to_value(op).map_or(true, |v| match sent.iter().position(|s| *s == v) {
+                    Some(i) => {
+                        sent.swap_remove(i);
+                        false
+                    }
+                    None => true,
+                })
             }
             _ => true,
+        })
+        .collect()
+}
+
+/// The ids of the jobs the brain reports done in `evs`, in order.
+pub(crate) fn jobs_done(evs: &[StreamEvent]) -> Vec<String> {
+    evs.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Job { job_id, status, .. } if status == "done" => Some(job_id.clone()),
+            _ => None,
         })
         .collect()
 }
@@ -120,6 +144,9 @@ impl Stage for SegmentRuntime {
     }
     fn apply_ops(&mut self, now_ms: TsMs, ops: &[Op]) -> Vec<StreamEvent> {
         SegmentRuntime::apply_ops(self, now_ms, ops)
+    }
+    fn job_done(&mut self, job_id: &str, now_ms: TsMs) -> Vec<StreamEvent> {
+        SegmentRuntime::job_done(self, job_id, now_ms)
     }
     fn tick(&mut self, now_ms: TsMs, ccv: u32) -> Vec<StreamEvent> {
         SegmentRuntime::tick(self, now_ms, ccv)
@@ -583,6 +610,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                     })
                     .collect();
                 let sign_off = ops.iter().any(|o| matches!(o, Op::SignOff { .. }));
+                let done = jobs_done(&evs);
                 room.observe(t, &evs);
                 w.push_all(evs)?;
                 if !ops.is_empty() {
@@ -590,6 +618,12 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                     room.observe(t, &ev);
                     w.push_all(ev)?;
                     room.sync_poll(t, stage.open_poll());
+                }
+                // After this beat's ops, so the model's own show_screen holds against them.
+                for job in done {
+                    let ev = stage.job_done(&job, now);
+                    room.observe(t, &ev);
+                    w.push_all(ev)?;
                 }
                 // A sign-off ends the run once the stage took it (a long arc refuses one
                 // before its seal window; the refusal is in the transcript).
@@ -1314,7 +1348,14 @@ pub(crate) mod tests {
                     segment: SegmentId::Seg02aHexmap,
                     ..
                 },
-                StreamEvent::CaseOpen { case, .. }
+                StreamEvent::CaseOpen { case, .. },
+                StreamEvent::Op {
+                    op: Op::ShowScreen {
+                        screen: shadowrunr_types::ScreenId::Hexmap,
+                        record_id: None
+                    },
+                    ..
+                }
             ] if case.fictional
         ));
         let mut fake = FakeStage {
@@ -2501,5 +2542,182 @@ pub(crate) mod tests {
         .await;
         let record: RunRecord = read_json(&out.join("r-sample/run.json")).unwrap();
         assert_eq!(record.prep.as_deref(), Some("sample"));
+    }
+
+    // ---- the streamer screen (appendix (screens)) --------------------------------------
+
+    /// Plays a fixed script: at each listed time it returns those events, as the brain would
+    /// (its ops, and the `job` events its pool reports).
+    struct ScriptMind {
+        script: Vec<(TsMs, Vec<StreamEvent>)>,
+    }
+
+    #[async_trait]
+    impl Mind for ScriptMind {
+        async fn tick(
+            &mut self,
+            now_ms: TsMs,
+            _inbox: Vec<ChatMsg>,
+            _ctx: &SegmentContext,
+        ) -> Result<Vec<StreamEvent>, SimError> {
+            let mut ev: Vec<StreamEvent> = self
+                .script
+                .iter()
+                .filter(|(at, _)| *at == now_ms)
+                .flat_map(|(_, evs)| evs.clone())
+                .collect();
+            for e in &mut ev {
+                transcript::set_ts(e, now_ms);
+            }
+            Ok(ev)
+        }
+        async fn end_stream(&mut self, _now_ms: TsMs) -> Result<(), SimError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_returning_job_opens_the_browser_and_the_models_screen_holds() {
+        use shadowrunr_types::ScreenId;
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        opts.hooks = Hooks::default();
+        opts.judge = false;
+        opts.tick_s = 5;
+        let mut sp = spec("screens", ModelTier::Haiku, 3, 40);
+        sp.segment = SegmentId::Seg02aHexmap;
+        let out = tmp.path().join("out");
+        let prep = prepare(
+            &sp,
+            &out,
+            Arc::new(shadowrunr_engine::ScriptedEngine),
+            &opts,
+        )
+        .unwrap();
+        let stage = SegmentRuntime::with_config(
+            SegmentId::Seg02aHexmap,
+            SegmentConfig {
+                start_ms: Some(0),
+                ..SegmentConfig::default()
+            },
+        )
+        .unwrap();
+        let op = |op: Op| StreamEvent::Op { ts_ms: 0, op };
+        let research = |id: &str, brief: &str| {
+            op(Op::DispatchResearch {
+                job_id: id.into(),
+                brief: brief.into(),
+            })
+        };
+        let done = |id: &str| StreamEvent::Job {
+            ts_ms: 0,
+            job_id: id.into(),
+            status: "done".into(),
+            summary: Some("the bone-clerks are back".into()),
+        };
+        let mind = ScriptMind {
+            script: vec![
+                (
+                    5_000,
+                    vec![
+                        research("r1", "HEX-04: trace the treasury wallet"),
+                        research("r2", "HEX-01: the syndicate's licence"),
+                        research("r3", "HEX-05: the weekly promise"),
+                    ],
+                ),
+                // He names a record whose job is still out: refused, it is not back.
+                (
+                    10_000,
+                    vec![op(Op::ShowScreen {
+                        screen: ScreenId::Browser,
+                        record_id: Some("DOC-01".into()),
+                    })],
+                ),
+                // r1 comes back: the runtime opens its first filed record.
+                (15_000, vec![done("r1")]),
+                // He goes back to the map to choose the next hex.
+                (
+                    20_000,
+                    vec![op(Op::ShowScreen {
+                        screen: ScreenId::Hexmap,
+                        record_id: None,
+                    })],
+                ),
+                // r2 comes back 5 s later, inside his hold: no default.
+                (25_000, vec![done("r2")]),
+                // r3 comes back 10 s later, past the hold: the browser opens on it.
+                (30_000, vec![done("r3")]),
+            ],
+        };
+        let res = execute(prep, mind, stage, &opts).await.unwrap();
+        let events = transcript::read(&res.transcript).unwrap();
+        let screen: Vec<String> = events
+            .iter()
+            .filter_map(|e| match e {
+                StreamEvent::Op {
+                    ts_ms,
+                    op: Op::ShowScreen { screen, record_id },
+                } => Some(format!(
+                    "{ts_ms} show_screen {}{}",
+                    serde_json::to_value(screen).unwrap().as_str().unwrap(),
+                    record_id
+                        .as_deref()
+                        .map(|r| format!(" {r}"))
+                        .unwrap_or_default()
+                )),
+                StreamEvent::RecordShown { ts_ms, record } => {
+                    Some(format!("{ts_ms} record_shown {}", record.id))
+                }
+                StreamEvent::Job { ts_ms, job_id, .. } => Some(format!("{ts_ms} job {job_id}")),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            screen,
+            [
+                "0 show_screen hexmap",
+                "10000 show_screen browser DOC-01",
+                "15000 job r1",
+                "15000 record_shown DOC-03",
+                "15000 show_screen browser DOC-03",
+                "20000 show_screen hexmap",
+                "25000 job r2",
+                "30000 job r3",
+                "30000 record_shown REP-02",
+                "30000 show_screen browser REP-02",
+            ]
+        );
+        let refused: Vec<(TsMs, &str)> = events
+            .iter()
+            .filter_map(|e| match e {
+                StreamEvent::Moderation {
+                    ts_ms,
+                    rule,
+                    action,
+                    ..
+                } if action == "rejected:show_screen" => Some((*ts_ms, rule.as_str())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(refused, [(10_000, "record_not_returned")]);
+    }
+
+    #[test]
+    fn each_sent_op_drops_one_echo_so_a_runtime_default_survives() {
+        let hexmap = Op::ShowScreen {
+            screen: shadowrunr_types::ScreenId::Hexmap,
+            record_id: None,
+        };
+        let ev = |op: &Op| StreamEvent::Op {
+            ts_ms: 1,
+            op: op.clone(),
+        };
+        // The echo of the model's op, then the runtime's own identical default.
+        let kept = drop_op_echo(
+            std::slice::from_ref(&hexmap),
+            vec![ev(&hexmap), ev(&hexmap)],
+        );
+        assert_eq!(kept.len(), 1);
+        assert!(drop_op_echo(std::slice::from_ref(&hexmap), vec![ev(&hexmap)]).is_empty());
     }
 }
