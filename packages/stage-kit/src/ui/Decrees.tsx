@@ -1,7 +1,7 @@
 import { Sigil } from "../art/Sigil";
-import { DECREE_FADE_MS, decreeAt } from "../decrees";
 import { RANK_COLOR, RANK_TITLE } from "../lore";
 import type { SceneState } from "../sceneModel";
+import { decreeOn } from "./onScreen";
 
 export { DECREE_MS } from "../decrees";
 
@@ -11,13 +11,12 @@ export { DECREE_MS } from "../decrees";
  * quietly. On air the picker's reason (production detail) is left out.
  */
 export function Decrees({ scene, now, onAir = false }: { scene: SceneState; now: number; onAir?: boolean }) {
-  const at = decreeAt(scene.decrees, now);
-  const d = at?.turn.decree;
-  const m = d ? scene.chats.get(d.msgId) : undefined;
-  if (!at || !d || !m) return <div className="decrees" />;
-  const { turn, held } = at;
+  const shown = decreeOn(scene, now);
+  if (!shown) return <div className="decrees" />;
+  const { leaving } = shown;
+  const { turn, msg: m, held } = shown.value;
+  const d = turn.decree;
   const age = now - turn.start;
-  const leaving = !held && turn.end - now < DECREE_FADE_MS;
   const color = RANK_COLOR[m.viewer.rank];
   const label = held ? "LAST HEARD BY THE LICH" : d.kind === "highlight" ? "DECREE OF THE LICH" : "HEARD BY THE LICH";
   return (

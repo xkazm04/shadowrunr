@@ -3,16 +3,11 @@ import { RANKS } from "../vocab";
 import { RANK_COLOR, RANK_TITLE, foilInfo } from "../lore";
 import type { Poll, SceneState } from "../sceneModel";
 import { pollBars } from "../tallies";
-
-export const POLL_LINGER_MS = 9000;
+import { pollOn } from "./onScreen";
 
 /** The poll that should be on screen right now, if any. */
 export function visiblePoll(scene: SceneState, now: number): Poll | null {
-  const id = scene.activePoll;
-  const p = id ? scene.polls[id] : undefined;
-  if (!p) return null;
-  if (p.closedAt !== undefined && now - p.closedAt > POLL_LINGER_MS) return null;
-  return p;
+  return pollOn(scene, now)?.value ?? null;
 }
 
 function optionLabel(o: string): string {

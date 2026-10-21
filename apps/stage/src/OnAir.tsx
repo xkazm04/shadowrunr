@@ -14,25 +14,16 @@ import { useMemo } from "react";
 
 import type { SegmentId } from "@shadowrunr/contract";
 import { SEGMENT_TITLE, wordTimings, type Redaction, type SceneState } from "@shadowrunr/stage-kit";
-import { CARD_MS, REDACTION_MS, captionSize, jobPhase } from "@shadowrunr/stage-kit/ui";
+import { captionSize, cardOn, redactionAt, tickerOn } from "@shadowrunr/stage-kit/ui";
 import type { VoiceCaptionView } from "./voice/captions";
 
-/** The ticker stays this long after the last job came back (its summary is news). */
-export const TICKER_LINGER_MS = 30_000;
+export { TICKER_LINGER_MS } from "@shadowrunr/stage-kit/ui";
 
-/** Whether the minion ticker has anything to show at `now`. */
-export function tickerActive(scene: SceneState, now: number): boolean {
-  return scene.jobs.some((j) => {
-    const phase = jobPhase(j.status);
-    return phase === "queued" || phase === "running" || now - j.updatedAt < TICKER_LINGER_MS;
-  });
-}
+/** Whether the minion ticker has anything to show at `now` (stage-kit's on-screen schedule). */
+export const tickerActive = (scene: SceneState, now: number): boolean => tickerOn(scene, now) !== null;
 
-/** Whether an explainer card is on screen at `now` (see stage-kit ExplainerCard). */
-export function cardShowing(scene: SceneState, now: number): boolean {
-  const c = scene.card;
-  return c !== null && now - c.at >= 0 && now - c.at <= CARD_MS;
-}
+/** Whether an explainer card is on screen at `now` (stage-kit's on-screen schedule). */
+export const cardShowing = (scene: SceneState, now: number): boolean => cardOn(scene, now) !== null;
 
 interface CommandRow {
   cmd: string;
@@ -103,7 +94,7 @@ export function VoiceCaptionPanel({
 }) {
   const text = view?.caption.text;
   const line = useMemo(() => (text === undefined ? null : wordTimings(text)), [text]);
-  const redaction = [...redactions].reverse().find((r) => now >= r.at && now - r.at < REDACTION_MS);
+  const redaction = redactionAt(redactions, now)?.value;
   return (
     <div className={`caption-panel${compact ? " compact" : ""}`}>
       {view && line && view.opacity > 0 && (

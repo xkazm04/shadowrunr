@@ -1,12 +1,7 @@
 import type { Case } from "@shadowrunr/contract";
 import { SEGMENT_TITLE, disclosureText } from "../lore";
 import { isContentScreen, type SceneState } from "../sceneModel";
-
-export const TRANSITION_MS = 1900;
-export const INTRO_MS = 4600;
-export const MOMENT_FLASH_MS = 900;
-export const MOMENT_CHIP_MS = 3600;
-export const SEAL_MS = 4200;
+import { MOMENT_FLASH_MS, introOn, momentOn, sealOn, wipeOn } from "./onScreen";
 
 /** Always on screen, above everything (contract with the audience, not a decoration).
  * `voice` is true only once a synthetic voice is configured; until then it reads "text only". */
@@ -68,11 +63,10 @@ export function TopBar({
 }
 
 export function TransitionWipe({ scene, now }: { scene: SceneState; now: number }) {
-  const t = scene.transition;
   // A screen switch inside a segment moves the regions; only a segment change gets the wipe.
-  if (!t || t.from === "boot" || t.cause === "screen" || t.segment === undefined) return null;
-  const age = now - t.at;
-  if (age < 0 || age > TRANSITION_MS) return null;
+  const shown = wipeOn(scene, now);
+  const t = shown?.value;
+  if (!t || t.segment === undefined) return null;
   return (
     <div className="wipe" key={t.id}>
       <div className="wipe-band">
@@ -85,12 +79,11 @@ export function TransitionWipe({ scene, now }: { scene: SceneState; now: number 
 }
 
 export function Intro({ scene, now, onAir = false }: { scene: SceneState; now: number; onAir?: boolean }) {
-  const m = scene.meta;
-  if (!m) return null;
-  const age = now - m.at;
-  if (age < 0 || age > INTRO_MS) return null;
+  const shown = introOn(scene, now);
+  if (!shown) return null;
+  const m = shown.value;
   return (
-    <div className={`intro${INTRO_MS - age < 700 ? " leaving" : ""}`}>
+    <div className={`intro${shown.leaving ? " leaving" : ""}`}>
       <div className="intro-seal">
         <div className="intro-kicker">NOW BROADCASTING FROM</div>
         <div className="intro-title">THE OBSIDIAN SPIRE</div>
@@ -104,10 +97,10 @@ export function Intro({ scene, now, onAir = false }: { scene: SceneState; now: n
 }
 
 export function MomentMarks({ scene, now }: { scene: SceneState; now: number }) {
-  const last = scene.moments[scene.moments.length - 1];
-  if (!last) return null;
+  const shown = momentOn(scene, now);
+  if (!shown) return null;
+  const last = shown.value;
   const age = now - last.at;
-  if (age < 0 || age > MOMENT_CHIP_MS) return null;
   return (
     <>
       {age < MOMENT_FLASH_MS && <div className="moment-flash" key={`f${last.at}`} />}
@@ -120,10 +113,9 @@ export function MomentMarks({ scene, now }: { scene: SceneState; now: number }) 
 
 /** A segment sealed. On air it names the segment by its title and leaves out the evaluator's score. */
 export function SealToast({ scene, now, onAir = false }: { scene: SceneState; now: number; onAir?: boolean }) {
-  const s = scene.seals[scene.seals.length - 1];
-  if (!s) return null;
-  const age = now - s.at;
-  if (age < 0 || age > SEAL_MS) return null;
+  const shown = sealOn(scene, now);
+  if (!shown) return null;
+  const s = shown.value;
   return (
     <div className="seal-toast" key={s.at}>
       <span className="seal-seg">{onAir ? SEGMENT_TITLE[s.segment] : s.segment}</span> sealed

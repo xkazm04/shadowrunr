@@ -12,6 +12,7 @@ export * from "./Hexmap";
 export * from "./HexPanels";
 export * from "./JobTicker";
 export * from "./Overlays";
+export * from "./onScreen";
 export * from "./VotePanel";
 export * from "../art/Sigil";
 export * from "../art/Silhouette";

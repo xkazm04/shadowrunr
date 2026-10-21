@@ -2,8 +2,7 @@ import { useMemo } from "react";
 
 import { diagramFor, type Diagram } from "../diagram";
 import type { Card } from "../sceneModel";
-
-export const CARD_MS = 16000;
+import { cardWindow } from "./onScreen";
 
 function DiagramView({ d }: { d: Diagram }) {
   switch (d.kind) {
@@ -99,15 +98,14 @@ function DiagramView({ d }: { d: Diagram }) {
 /** `show_card`: an explainer card with an animated diagram picked from its text. */
 export function ExplainerCard({ card, now }: { card: Card | null; now: number }) {
   const d = useMemo(() => (card ? diagramFor(card.title, card.body) : null), [card]);
-  if (!card || !d) return null;
-  const age = now - card.at;
-  if (age < 0 || age > CARD_MS) return null;
-  const leaving = CARD_MS - age < 600;
+  const shown = cardWindow(card, now);
+  if (!shown || !d) return null;
+  const { value: c, leaving } = shown;
   return (
-    <div className={`explainer${age < 800 ? " entering" : ""}${leaving ? " leaving" : ""}`} key={card.id}>
+    <div className={`explainer${now - shown.since < 800 ? " entering" : ""}${leaving ? " leaving" : ""}`} key={c.id}>
       <div className="explainer-kicker">THE LICH EXPLAINS</div>
-      <div className="explainer-title">{card.title}</div>
-      <div className="explainer-body">{card.body}</div>
+      <div className="explainer-title">{c.title}</div>
+      <div className="explainer-body">{c.body}</div>
       <div className="explainer-diagram">
         <DiagramView d={d} />
       </div>

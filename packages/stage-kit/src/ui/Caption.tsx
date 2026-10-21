@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import type { Caption as CaptionT, Redaction } from "../sceneModel";
 import { captionOpacity, visibleWords, wordTimings } from "../timing";
+import { redactionAt } from "./onScreen";
 
 /** Words of a line, revealed on estimated timing. All words are laid out from the start (hidden
  * ones are invisible) so the text never reflows while it is being spoken. */
@@ -25,8 +26,6 @@ export function captionSize(text: string, compact: boolean): number {
   return n > 150 ? 31 : n > 110 ? 35 : n > 70 ? 40 : 46;
 }
 
-export const REDACTION_MS = 3800;
-
 export function CaptionPanel({
   caption,
   redactions,
@@ -47,7 +46,7 @@ export function CaptionPanel({
   const line = useMemo(() => (caption ? wordTimings(caption.text) : null), [caption]);
   const elapsed = caption ? now - caption.at : 0;
   const opacity = caption && line ? captionOpacity(line, elapsed) : 0;
-  const redaction = [...redactions].reverse().find((r) => now >= r.at && now - r.at < REDACTION_MS);
+  const redaction = redactionAt(redactions, now)?.value;
 
   return (
     <div className={`caption-panel${compact ? " compact" : ""}`}>
