@@ -1,6 +1,6 @@
 //! Live `sim.start` runs: the simulation runs on a blocking thread (its brain need not be
-//! `Send`), while a tailer follows its `transcript.jsonl` and fans each complete line out to
-//! `/events` subscribers. Subscribers that attach late get the run's history first, then the
+//! `Send`), and its transcript writer hands each event, as it writes the line, to a sink that
+//! fans it out to `/events` subscribers. Subscribers that attach late get the run's history first, then the
 //! new events, with nothing lost or duplicated.
 //!
 //! Every event carries `seq`, its 1-based index in the run's transcript, so a client resumes
@@ -9,16 +9,15 @@
 //! run or growing memory. The run is supervised: a panic in the sim (or in its watcher)
 //! becomes an `engine` (or `internal`) error frame and the daemon keeps serving.
 //!
-//! The sim writes its transcript through a buffered writer, so events reach subscribers in
-//! buffer-sized batches rather than one by one (see the WP5 report: an event sink in
-//! `SimOptions` would make this exact). A sandbox session (`sandbox`) has no tailer: its
-//! event sink pushes each event into its `LiveRun` as it happens.
+//! Both live publishers have one shape: a sim run's `SimOptions::live_sink` ([`publisher`])
+//! and a sandbox session's event sink (`sandbox`) push each event into the `LiveRun` the
+//! moment the transcript writer assigns its line, so a live seq is the transcript line by
+//! construction (a mismatch is logged, never silently skipped).
+//! The file write stays buffered: subscribers are served from the run's memory, never from
+//! the file.
 
 use std::collections::HashMap;
-use std::io::{Read, Seek, SeekFrom};
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::{ErrorCode, SimRunSpec, StreamEvent};
@@ -35,8 +34,6 @@ pub type Frame = Arc<str>;
 
 /// Events a subscriber may fall behind before it loses the overflow.
 pub const BROADCAST_CAPACITY: usize = 1024;
-
-const TAIL_EVERY: Duration = Duration::from_millis(100);
 
 /// What a live run broadcasts.
 #[derive(Debug, Clone)]
@@ -200,47 +197,20 @@ impl LiveRegistry {
     }
 }
 
-/// Follows a growing JSONL file, yielding only complete, parseable lines.
-struct Tail {
-    path: PathBuf,
-    offset: u64,
-    partial: Vec<u8>,
-}
-
-impl Tail {
-    fn new(path: PathBuf) -> Self {
-        Self {
-            path,
-            offset: 0,
-            partial: Vec::new(),
-        }
-    }
-
-    fn drain(&mut self, run: &LiveRun) {
-        let Ok(mut f) = std::fs::File::open(&self.path) else {
+/// The sink that publishes a sim run's transcript into `run` as each line is written.
+fn publisher(run: Arc<LiveRun>) -> shadowrunr_sim::LiveSink {
+    shadowrunr_sim::LiveSink(Arc::new(move |seq: u64, ev: &StreamEvent| {
+        let Ok(text) = serde_json::to_string(ev) else {
             return;
         };
-        if f.seek(SeekFrom::Start(self.offset)).is_err() {
-            return;
+        let pushed = run.push(Frame::from(text));
+        if pushed != seq {
+            eprintln!(
+                "sim.start {}: event seq {seq} broadcast as {pushed}",
+                run.run_id
+            );
         }
-        let mut buf = Vec::new();
-        let Ok(n) = f.read_to_end(&mut buf) else {
-            return;
-        };
-        self.offset += n as u64;
-        self.partial.extend_from_slice(&buf);
-        while let Some(pos) = self.partial.iter().position(|b| *b == b'\n') {
-            let line: Vec<u8> = self.partial.drain(..=pos).collect();
-            let text = String::from_utf8_lossy(&line);
-            let text = text.trim();
-            if text.is_empty() {
-                continue;
-            }
-            if serde_json::from_str::<StreamEvent>(text).is_ok() {
-                run.push(Arc::from(text));
-            }
-        }
-    }
+    }))
 }
 
 fn validate(spec: &mut SimRunSpec) -> Result<(), RpcError> {
@@ -345,12 +315,12 @@ pub async fn start_sim(
         Some(b) => shadowrunr_sim::BriefSource::Inline(Box::new(b)),
         None => shadowrunr_sim::BriefSource::None,
     };
+    opts.live_sink = Some(publisher(run.clone()));
     let handle = tokio::runtime::Handle::current();
     let sim = tokio::task::spawn_blocking(move || {
         handle.block_on(shadowrunr_sim::run_one_with(spec, out_dir, engine, &opts))
     });
-    let tail = Tail::new(run_dir.join("transcript.jsonl"));
-    let watcher = tokio::spawn(follow(sim, tail, run.clone()));
+    let watcher = tokio::spawn(async move { sim_outcome(sim.await) });
     let registry = state.clone();
     tokio::spawn(async move {
         let error = match watcher.await {
@@ -364,22 +334,6 @@ pub async fn start_sim(
         run.finish(error);
     });
     Ok(run_id)
-}
-
-/// Tail the transcript until the sim ends, then report how it ended.
-async fn follow<T, E: std::fmt::Display>(
-    mut sim: tokio::task::JoinHandle<Result<T, E>>,
-    mut tail: Tail,
-    run: Arc<LiveRun>,
-) -> Result<(), RpcError> {
-    let result = loop {
-        tokio::select! {
-            res = &mut sim => break res,
-            _ = tokio::time::sleep(TAIL_EVERY) => tail.drain(&run),
-        }
-    };
-    tail.drain(&run);
-    sim_outcome(result)
 }
 
 /// A sim error or a panicking sim is an `engine` error; the daemon is unaffected.
