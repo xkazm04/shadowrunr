@@ -147,6 +147,13 @@ export interface Season {
   readonly runs: RunRow[];
   readonly ledger: LedgerEntry[];
   readonly transcriptLines: number;
+  /** Per-tournament ledgers; a tournament not named here reads `ledger`. */
+  readonly ledgers?: ReadonlyMap<string, LedgerEntry[]>;
+}
+
+/** The ledger the scripted daemon answers for `tid` (`ledgers`, else the season's ledger). */
+export function ledgerOf(s: Season, tid: string): LedgerEntry[] {
+  return s.ledgers?.get(tid) ?? s.ledger;
 }
 
 /** `runs` runs in the last tournament, `rowsPerRun` ledger rows each. */
@@ -167,10 +174,14 @@ export function daemon(s: Season | null, transcripts = new Map<string, StreamEve
         return page(s.tournaments, sent);
       case "runs.page":
         return page(s.runs, sent);
-      case "ledger.page":
-        return page(param(sent, "tournament_id") === undefined ? [] : s.ledger, sent);
-      case "ledger.summary":
-        return ok(ledgerSummary(param(sent, "tournament_id") === undefined ? [] : s.ledger));
+      case "ledger.page": {
+        const tid = param(sent, "tournament_id");
+        return page(tid === undefined ? [] : ledgerOf(s, tid), sent);
+      }
+      case "ledger.summary": {
+        const tid = param(sent, "tournament_id");
+        return ok(ledgerSummary(tid === undefined ? [] : ledgerOf(s, tid)));
+      }
       case "run.transcript": {
         const id = param(sent, "run_id") ?? "";
         let tr = transcripts.get(id);

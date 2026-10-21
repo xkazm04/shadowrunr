@@ -174,3 +174,97 @@ export function costText(s: Pick<EngineSummary, "calls" | "cost" | "uncosted">, 
   if (s.uncosted >= s.calls) return "unknown";
   return `${usd(s.cost)} + ${s.uncosted.toLocaleString("en-US")} uncosted`;
 }
+
+// The compare (diff-comparison, pair-and-baseline-selection): a baseline ledger against the
+// candidate, role by role. A delta shows only where both sides carry `minN` calls; a role on
+// one side only is new or gone, never a delta against zero.
+
+export type Direction = "better" | "worse" | "same";
+/** both: a delta per column; new / gone: one side only; thin: under the minimum sample. */
+export type CompareState = "both" | "new" | "gone" | "thin";
+export const STATE_LABEL: Readonly<Record<CompareState, string>> = { both: "", new: "new", gone: "gone", thin: "too few calls" };
+
+/** One column of the compare: each side's value and, when the sample carries it, the change. */
+export interface DeltaCell {
+  readonly base: number | undefined;
+  readonly cand: number | undefined;
+  /** cand - base (ms, or percentage points for a rate); undefined where no delta is honest. */
+  readonly delta: number | undefined;
+  readonly direction: Direction | undefined;
+}
+
+export interface CompareRow {
+  readonly role: string;
+  readonly state: CompareState;
+  readonly baseCalls: number | undefined;
+  readonly candCalls: number | undefined;
+  /** Percent of calls that failed; the delta in percentage points. */
+  readonly errorRate: DeltaCell;
+  readonly fallbackRate: DeltaCell;
+  readonly p50: DeltaCell;
+  readonly p95: DeltaCell;
+  readonly firstText: DeltaCell;
+}
+
+export interface Comparison {
+  readonly rows: readonly CompareRow[];
+  readonly total: { readonly errorRate: DeltaCell; readonly fallbackRate: DeltaCell };
+  /** The known cost of each side; a side with uncosted calls makes the delta a lower bound. */
+  readonly cost: { readonly base: number; readonly cand: number; readonly delta: number; readonly lowerBound: boolean };
+}
+
+type Side = Pick<EngineSummary, "calls" | "errors" | "fallbacks" | "cost" | "uncosted" | "routes">;
+
+/** Lower is better for every compared column (latency, error and fallback rates). */
+function cell(base: number | undefined, cand: number | undefined, show: boolean): DeltaCell {
+  if (!show || base === undefined || cand === undefined) return { base, cand, delta: undefined, direction: undefined };
+  const delta = cand - base;
+  return { base, cand, delta, direction: delta > 0 ? "worse" : delta < 0 ? "better" : "same" };
+}
+
+const rate = (n: number, of: number) => (of === 0 ? undefined : (n / of) * 100);
+
+export function compareSummaries(base: Side, cand: Side, opts: { minN?: number } = {}): Comparison {
+  const minN = opts.minN ?? 20;
+  const b = new Map(base.routes.map((r) => [r.role, r]));
+  const c = new Map(cand.routes.map((r) => [r.role, r]));
+  const roles = [...new Set([...cand.routes.map((r) => r.role), ...base.routes.map((r) => r.role)])];
+  const rows = roles.map((role): CompareRow => {
+    const x = b.get(role);
+    const y = c.get(role);
+    const state: CompareState = x === undefined ? "new" : y === undefined ? "gone" : x.calls < minN || y.calls < minN ? "thin" : "both";
+    const show = state === "both";
+    return {
+      role,
+      state,
+      baseCalls: x?.calls,
+      candCalls: y?.calls,
+      errorRate: cell(x && rate(x.errors, x.calls), y && rate(y.errors, y.calls), show),
+      fallbackRate: cell(x && rate(x.fallbacks, x.calls), y && rate(y.fallbacks, y.calls), show),
+      p50: cell(x?.durationP50, y?.durationP50, show),
+      p95: cell(x?.durationP95, y?.durationP95, show),
+      firstText: cell(x?.firstTextP50, y?.firstTextP50, show),
+    };
+  });
+  const whole = base.calls >= minN && cand.calls >= minN;
+  return {
+    rows,
+    total: { errorRate: cell(rate(base.errors, base.calls), rate(cand.errors, cand.calls), whole), fallbackRate: cell(rate(base.fallbacks, base.calls), rate(cand.fallbacks, cand.calls), whole) },
+    cost: { base: base.cost, cand: cand.cost, delta: cand.cost - base.cost, lowerBound: base.uncosted > 0 || cand.uncosted > 0 },
+  };
+}
+
+const sign = (x: number) => (x > 0 ? "+" : x < 0 ? "−" : "±");
+
+/** A latency change: `+400 ms`, `−1.2 s`, `±0 ms`; `–` where there is no delta. */
+export function signedMs(d: number | undefined): string {
+  if (d === undefined) return "–";
+  const a = Math.abs(d);
+  return `${sign(d)}${a >= 10_000 ? `${(a / 1000).toFixed(1)} s` : `${Math.round(a)} ms`}`;
+}
+
+/** A rate change in percentage points: `+8.0 pp`; `–` where there is no delta. */
+export function signedPp(d: number | undefined): string {
+  if (d === undefined) return "–";
+  return `${sign(d)}${Math.abs(d).toFixed(1)} pp`;
+}
