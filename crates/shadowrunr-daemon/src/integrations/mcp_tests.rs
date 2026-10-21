@@ -1,12 +1,15 @@
 //! MCP over in-memory stdio: initialize -> tools/list -> tools/call, both framings, and the
 //! write gate. Scripted engine only.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use tokio::io::{duplex, BufReader, DuplexStream, ReadHalf, WriteHalf};
 
 use super::*;
 use crate::e2e::{repo, test_config};
+use crate::server::AppState;
+use shadowrunr_types::rpc::RpcRequest;
 
 struct Client {
     r: BufReader<ReadHalf<DuplexStream>>,
@@ -53,10 +56,28 @@ impl Client {
     }
 }
 
+/// A port nothing listens on: the MCP server finds no daemon there.
+fn closed_port() -> u16 {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    l.local_addr().unwrap().port()
+}
+
 fn start(allow_writes: bool, framing: Framing) -> (Client, tempfile::TempDir, Arc<McpServer>) {
     let tmp = tempfile::tempdir().unwrap();
-    let cfg = test_config(tmp.path(), repo().join("characters"));
+    let mut cfg = test_config(tmp.path(), repo().join("characters"));
+    // Never the developer's own daemon on the default port.
+    cfg.daemon.port = closed_port();
     let factory: EngineFactory = Arc::new(|_: &Config| EngineHandle::scripted());
+    let (client, server) = serve(cfg, allow_writes, framing, factory);
+    (client, tmp, server)
+}
+
+fn serve(
+    cfg: Config,
+    allow_writes: bool,
+    framing: Framing,
+    factory: EngineFactory,
+) -> (Client, Arc<McpServer>) {
     let server = Arc::new(McpServer::new(cfg, allow_writes, factory));
     let (client_end, server_end) = duplex(1 << 20);
     let (sr, sw) = tokio::io::split(server_end);
@@ -69,7 +90,7 @@ fn start(allow_writes: bool, framing: Framing) -> (Client, tempfile::TempDir, Ar
         framing,
         next_id: 0,
     };
-    (client, tmp, server)
+    (client, server)
 }
 
 fn has_ref(v: &Value) -> bool {
@@ -327,4 +348,244 @@ async fn the_read_only_preflight_tool_makes_no_writes() {
         assert_eq!(pf03["state"], "green", "{pf03}");
     }
     assert_eq!(tree(tmp.path()), before, "the preflight tool wrote to disk");
+}
+
+// ── one admission door: writes and preflight go through a running daemon ───────────────
+
+/// The `/rpc` error envelope of a failed tool call.
+async fn tool_error(c: &mut Client, name: &str, args: Value) -> Value {
+    let v = c
+        .request("tools/call", json!({ "name": name, "arguments": args }))
+        .await;
+    assert_eq!(v["result"]["isError"], true, "{v}");
+    serde_json::from_str(v["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
+}
+
+/// A factory that counts how many engines the MCP server built.
+fn counting_factory() -> (EngineFactory, Arc<AtomicUsize>) {
+    let n = Arc::new(AtomicUsize::new(0));
+    let k = n.clone();
+    let f: EngineFactory = Arc::new(move |_: &Config| {
+        k.fetch_add(1, Ordering::SeqCst);
+        EngineHandle::scripted()
+    });
+    (f, n)
+}
+
+struct Daemon {
+    state: Arc<AppState>,
+    client: Client,
+    server: Arc<McpServer>,
+    built: Arc<AtomicUsize>,
+    cfg: Config,
+    _tmp: tempfile::TempDir,
+}
+
+impl Daemon {
+    fn built(&self) -> usize {
+        self.built.load(Ordering::SeqCst)
+    }
+
+    /// The run the daemon's live registry registered last.
+    fn latest_run(&self) -> Option<String> {
+        self.state
+            .live
+            .latest()
+            .borrow()
+            .as_ref()
+            .map(|r| r.run_id.clone())
+    }
+}
+
+/// A daemon (`edit` adjusts its config, `live` gives it a live fleet) served on a free port,
+/// and an MCP server with writes allowed whose config points at it.
+async fn with_daemon(live: bool, edit: impl FnOnce(&mut Config)) -> Daemon {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut cfg = test_config(tmp.path(), repo().join("characters"));
+    edit(&mut cfg);
+    let engine = if live {
+        // A fleet is built, never called: the call is refused before any engine work.
+        let mut c = cfg.clone();
+        c.engine.scripted = false;
+        EngineHandle::build(&c, false)
+    } else {
+        EngineHandle::scripted()
+    };
+    assert_eq!(engine.is_scripted(), !live);
+    let state = AppState::new(cfg.clone(), engine);
+    let addr = crate::e2e::start_state(state.clone()).await;
+    cfg.daemon.port = addr.rsplit(':').next().unwrap().parse().unwrap();
+    let (factory, built) = counting_factory();
+    let (client, server) = serve(cfg.clone(), true, Framing::Lines, factory);
+    Daemon {
+        state,
+        client,
+        server,
+        built,
+        cfg,
+        _tmp: tmp,
+    }
+}
+
+#[tokio::test]
+async fn start_sim_beside_a_daemon_sandbox_session_is_refused() {
+    use crate::sandbox::tests::{fake_judge, fake_run, hosting, params};
+    let mut d = with_daemon(false, |_| {}).await;
+    let session = crate::sandbox::start_with(
+        d.state.clone(),
+        params(false),
+        hosting(
+            fake_run(2, Duration::from_secs(60), None, false),
+            fake_judge(Some(0)),
+        ),
+    )
+    .await
+    .unwrap()
+    .session_id;
+    assert_eq!(d.state.sandbox.running().as_deref(), Some(session.as_str()));
+    let env = tool_error(
+        &mut d.client,
+        "start_sim",
+        json!({ "spec": { "run_id": "m1", "audience_size": 3 } }),
+    )
+    .await;
+    assert_eq!(env["error"]["code"], "conflict", "{env}");
+    assert!(
+        d.server.tools().running().is_empty(),
+        "no run in the MCP process"
+    );
+    assert!(d.state.live.get("m1").is_none());
+}
+
+#[tokio::test]
+async fn start_sim_with_a_daemon_run_id_in_flight_is_refused_and_moves_nothing() {
+    let mut d = with_daemon(false, |_| {}).await;
+    let _x = d.state.live.register("x", 4).unwrap();
+    let run_dir = d.cfg.paths.sim_runs().join(&d.cfg.sim.adhoc_dir).join("x");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    std::fs::write(run_dir.join("transcript.jsonl"), "").unwrap();
+    let env = tool_error(
+        &mut d.client,
+        "start_sim",
+        json!({ "spec": { "run_id": "x", "audience_size": 3 } }),
+    )
+    .await;
+    assert_eq!(env["error"]["code"], "conflict", "{env}");
+    assert!(
+        run_dir.join("transcript.jsonl").is_file(),
+        "the daemon's run dir was moved aside"
+    );
+}
+
+#[tokio::test]
+async fn start_sim_obeys_the_daemons_max_live_runs() {
+    let mut d = with_daemon(false, |c| c.daemon.max_live_runs = 1).await;
+    let _other = d.state.live.register("other", 1).unwrap();
+    let env = tool_error(
+        &mut d.client,
+        "start_sim",
+        json!({ "spec": { "run_id": "m2", "audience_size": 3 } }),
+    )
+    .await;
+    assert_eq!(env["error"]["code"], "busy", "{env}");
+    assert!(d.server.tools().running().is_empty());
+}
+
+#[tokio::test]
+async fn start_sim_runs_in_the_daemon_when_one_answers() {
+    let mut d = with_daemon(false, |_| {}).await;
+    let started = d
+        .client
+        .tool(
+            "start_sim",
+            json!({ "spec": { "run_id": "d1", "audience_size": 3, "duration_s": 60 } }),
+        )
+        .await;
+    assert_eq!(started["run_id"], "d1", "{started}");
+    assert_eq!(started["host"], "daemon", "{started}");
+    assert_eq!(started["engine"], "scripted", "{started}");
+    // Registered in the daemon's live registry (a scripted run may already have finished).
+    assert!(
+        d.state.live.get("d1").is_some() || d.latest_run().as_deref() == Some("d1"),
+        "the daemon never saw run d1"
+    );
+    assert!(
+        d.server.tools().running().is_empty(),
+        "the MCP holds no run"
+    );
+    tokio::time::timeout(Duration::from_secs(1), d.server.tools().wait_idle())
+        .await
+        .expect("wait_idle returns at once");
+    assert_eq!(d.built(), 0);
+}
+
+#[tokio::test]
+async fn live_start_sim_against_a_scripted_daemon_is_an_engine_mismatch() {
+    let mut d = with_daemon(false, |_| {}).await;
+    let env = tool_error(
+        &mut d.client,
+        "start_sim",
+        json!({ "live": true, "spec": { "run_id": "l1", "audience_size": 3 } }),
+    )
+    .await;
+    assert_eq!(env["error"]["detail"]["reason"], "engine_mismatch", "{env}");
+    assert_eq!(d.built(), 0, "no second fleet");
+    assert!(d.latest_run().is_none(), "nothing registered in the daemon");
+    assert!(d.server.tools().running().is_empty());
+}
+
+#[tokio::test]
+async fn default_start_sim_against_a_live_daemon_is_an_engine_mismatch() {
+    let mut d = with_daemon(true, |_| {}).await;
+    let env = tool_error(
+        &mut d.client,
+        "start_sim",
+        json!({ "spec": { "run_id": "s1", "audience_size": 3 } }),
+    )
+    .await;
+    assert_eq!(env["error"]["detail"]["reason"], "engine_mismatch", "{env}");
+    assert!(d.latest_run().is_none(), "no run registered in the daemon");
+    assert!(!d.state.live.any_in_flight());
+    assert_eq!(d.built(), 0, "no engine built in the MCP process");
+    assert!(d.server.tools().running().is_empty());
+}
+
+#[tokio::test]
+async fn preflight_is_the_daemons_preflight() {
+    let mut d = with_daemon(false, |_| {}).await;
+    let pf = d.client.tool("preflight", json!({})).await;
+    let theirs = crate::rpc::dispatch(
+        &d.state,
+        RpcRequest {
+            method: "preflight.run".into(),
+            params: json!({}),
+        },
+    )
+    .await
+    .unwrap();
+    let checks = |v: &Value| -> Vec<(Value, Value)> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|r| (r["check"].clone(), r["state"].clone()))
+            .collect()
+    };
+    assert_eq!(checks(&pf), checks(&theirs), "{pf}");
+    assert_eq!(d.built(), 0, "no engine built in the MCP process");
+}
+
+#[tokio::test]
+async fn without_a_daemon_start_sim_runs_in_process() {
+    let (mut c, _tmp, server) = start(true, Framing::Lines);
+    let started = c
+        .tool(
+            "start_sim",
+            json!({ "spec": { "run_id": "solo", "audience_size": 3, "duration_s": 60 } }),
+        )
+        .await;
+    assert_eq!(started["host"], "mcp", "{started}");
+    assert_eq!(started["engine"], "scripted", "{started}");
+    tokio::time::timeout(Duration::from_secs(60), server.tools().wait_idle())
+        .await
+        .expect("the scripted run finishes");
 }
