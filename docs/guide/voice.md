@@ -88,7 +88,7 @@ durations_model = "<kokoro durations subgraph .onnx; absent = no mouth shapes>"
 voice = "af_heart"
 sid = 3
 max_queue = 6
-max_lag_ms = 8000
+max_lag_ms = 15000
 render_timeout_ms = 30000
 lines_in_flight = 3
 render_workers = 3
@@ -104,7 +104,7 @@ render_workers = 3
 | `durations_model` | none | Kokoro's durations subgraph. Without it there are no mouth shapes. |
 | `voice`, `sid` | `af_heart`, `3` | The voice and its verified speaker id. A wrong sid speaks as somebody else. |
 | `max_queue` | `6` | Lines waiting to render. Past this, the oldest is skipped (`queue_full`). |
-| `max_lag_ms` | `8000` | A line whose first audio cannot start this soon after its `say` is skipped (`late`). |
+| `max_lag_ms` | `15000` | A line whose first audio cannot start this soon after its `say` is skipped (`late`). |
 | `render_timeout_ms` | `30000` | One sentence's render, at most. Past it, the line is skipped (`error`). |
 | `lines_in_flight` | `3` | Lines handed to the sidecar at once, so it can render ahead into the next line. Their audio still goes out in order. |
 | `render_workers` | `3` | Engine runs the sidecar renders at once (`--workers`). |
@@ -276,7 +276,7 @@ the engine shares the CPU with whatever else runs.
 - **`lines_in_flight`** (default 3): lines with the sidecar at once, beyond the queue. The
   sidecar renders ahead into them while the first is still going out. Each line's frames wait
   for the line before it, so a run's utterances stay in seq order.
-- **`max_lag_ms`** (default 8000): the clock starts when the `say` reaches the daemon. A line
+- **`max_lag_ms`** (default 15000): the clock starts when the `say` reaches the daemon. A line
   whose first sentence has not reached the daemon by then is cancelled and `skipped` with
   `late`, even while it is still waiting its turn behind another line in flight (its skip goes
   out in its turn). The sidecar sends lines in order, so a line's first sentence arrives only

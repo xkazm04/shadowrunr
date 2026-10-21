@@ -87,7 +87,7 @@ impl Default for VoiceConfig {
             voice: "af_heart".into(),
             sid: 3,
             max_queue: 6,
-            max_lag_ms: 8_000,
+            max_lag_ms: 15_000,
             render_timeout_ms: 30_000,
             lines_in_flight: 3,
             render_workers: 3,
