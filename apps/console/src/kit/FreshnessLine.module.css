@@ -13,6 +13,22 @@
   pointer-events: auto;
 }
 
+/* Plain, so the strip pulls no button kit into every route that shows a query. */
+.refresh {
+  padding: 0 var(--sr-space-tight);
+  border: var(--sr-stroke-rule) solid currentcolor;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-family: var(--sr-font-display);
+  font-weight: var(--sr-weight-bold);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.refresh:disabled { cursor: progress; opacity: .6; }
+
 /* Read by assistive tech, never seen: the busy mark adds no box. */
 .busy {
   position: absolute;

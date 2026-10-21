@@ -1,6 +1,5 @@
 // The one-line freshness strip QueryView shows over held data when the live feed cannot vouch
 // for it, and the quiet busy mark while a refresh runs over it. The live path renders neither.
-import { Button } from "../ui/Button";
 import { feedDown, timeOf, type Freshness as Kind } from "./freshness";
 import type { ConnectionSnapshot } from "../data";
 import styles from "./FreshnessLine.module.css";
@@ -20,9 +19,9 @@ export function FreshnessLine(props: {
         <span>
           As of {timeOf(updatedAt)} · {why}
         </span>
-        <Button variant="ink" size="compact" onClick={props.onRefresh} disabled={refreshing}>
+        <button type="button" className={styles.refresh} onClick={props.onRefresh} disabled={refreshing}>
           {refreshing ? "Refreshing…" : "Refresh"}
-        </Button>
+        </button>
       </p>
     );
   }
