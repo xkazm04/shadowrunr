@@ -187,27 +187,28 @@ pub struct Reframe {
     pub caption_top: u32,
 }
 
-/// The improv layout's `avatar` region (layouts.ts: `{ x: 64, y: TOP + 8, w: 560, h: 612 }`,
-/// `TOP` 104): the face, its glow and the "synthetic voice" label.
+/// The host screen's `avatar` region (layouts.ts `HOST_AVATAR`: `{ x: 64, y: TOP + 8, w: FACE_PX,
+/// h: 612 }`, `TOP` 104, `FACE_PX` 560): the face, its glow and the "synthetic voice" label.
 pub const IMPROV_FACE: Rect = Rect {
     x: 64,
     y: 112,
     w: 560,
     h: 612,
 };
-/// The hexmap layout's map panel, its hex area (the panel less its 560 px side lane).
-pub const HEXMAP_HEXES: Rect = Rect {
+/// The content screens' main area (layouts.ts `CONTENT`: `{ x: GUTTER, y: TOP, w: RIGHT_X -
+/// GUTTER - 24, h: 804 }`): the hexmap, the browser window or the desk, whichever is up.
+pub const CONTENT_SCREEN: Rect = Rect {
     x: 32,
     y: 104,
-    w: 696,
-    h: 744,
+    w: 1256,
+    h: 804,
 };
-/// The hexmap layout's `avatar` region (`{ x: GUTTER + 8, y: 864, w: 124, h: 124 }`).
-pub const HEXMAP_FACE: Rect = Rect {
-    x: 40,
-    y: 864,
-    w: 124,
-    h: 124,
+/// The content screens' corner `avatar` region (layouts.ts `CORNER_AVATAR`).
+pub const CORNER_FACE: Rect = Rect {
+    x: 16,
+    y: 632,
+    w: 448,
+    h: 448,
 };
 /// The stage's disclosure badge (stage-kit `Overlays`, `.disclosure`: right 32, top 38), right
 /// aligned, with room for its longest text.
@@ -224,18 +225,19 @@ const BADGE_TOP: u32 = 60;
 const BADGE_SCALE_NUM: u32 = 3;
 const BADGE_SCALE_DEN: u32 = 2;
 
-/// The reframe for a segment's stage layout (stage-kit `layoutFor`: SEG-02A is the hexmap,
-/// everything else draws the improv face).
+/// The reframe for a segment's stage screens (SEG-02A shows the content screens with Malakor in
+/// the corner; everything else is the host screen's big face).
 pub fn reframe_for(segment: SegmentId) -> Reframe {
     let scaled_h = |r: Rect| r.h * V_WIDTH / r.w;
     match segment {
         SegmentId::Seg02aHexmap => {
-            let bottom = MAIN_TOP + scaled_h(HEXMAP_HEXES);
+            let bottom = MAIN_TOP + scaled_h(CONTENT_SCREEN);
             Reframe {
                 layout: "hexmap",
-                main: HEXMAP_HEXES,
-                inset: Some((HEXMAP_FACE, 300, V_WIDTH - 300 - 40, bottom - 300 - 24)),
-                caption_top: bottom + 40,
+                main: CONTENT_SCREEN,
+                // He stands under the screen, at the left, and the captions follow him.
+                inset: Some((CORNER_FACE, 420, 24, bottom + 16)),
+                caption_top: bottom + 16 + 420 + 40,
             }
         }
         _ => Reframe {
@@ -601,7 +603,7 @@ mod tests {
         assert_eq!(hex.layout, "hexmap");
         let g = vertical_filter(&hex, 30, 50_000, "c.ass");
         assert!(g.contains("split=3"), "{g}");
-        assert!(g.contains("crop=124:124:40:864,scale=300:300"), "{g}");
+        assert!(g.contains("crop=448:448:16:632,scale=420:420"), "{g}");
         assert!(hex.caption_top + 400 < V_HEIGHT);
     }
 
@@ -613,17 +615,17 @@ mod tests {
         .expect("apps/stage/src/layouts.ts");
         for want in [
             "const TOP = 104;",
-            "avatar: { x: 64, y: TOP + 8, w: 560, h: 612 }",
-            "avatar: { x: GUTTER + 8, y: 864, w: 124, h: 124 }",
+            "export const FACE_PX = 560;",
+            "const HOST_AVATAR: Rect = { x: 64, y: TOP + 8, w: FACE_PX, h: 612 };",
+            "export const CORNER_AVATAR: Rect = { x: 16, y: 1080 - 448, w: 448, h: 448 };",
             "export const GUTTER = 32;",
-            "export const HEX_SIDE_W = 560;",
-            "const map: Rect = { x: GUTTER, y: TOP, w: RIGHT_X - GUTTER - 24, h: 744 };",
+            "const CONTENT: Rect = { x: GUTTER, y: TOP, w: RIGHT_X - GUTTER - 24, h: 804 };",
             "const RIGHT_X = 1312;",
         ] {
             assert!(layouts.contains(want), "layouts.ts changed: {want}");
         }
-        // The hex area is the map panel less its side lane.
-        assert_eq!(HEXMAP_HEXES.w, 1312 - 32 - 24 - 560);
+        assert_eq!(CONTENT_SCREEN.w, 1312 - 32 - 24);
+        assert_eq!(CORNER_FACE.y, 1080 - 448);
     }
 
     #[test]
