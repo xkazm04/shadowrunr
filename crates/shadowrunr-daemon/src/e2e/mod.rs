@@ -469,3 +469,23 @@ async fn pf05_reports_placeholder_only_then_the_installed_list() {
         r.detail
     );
 }
+
+#[tokio::test]
+async fn preflight_red_carries_the_red_rows_with_their_remedy() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = test_config(tmp.path(), tmp.path().join("no-characters"));
+    let pf02 = crate::preflight::pf02_character(&cfg);
+    let addr = start(cfg).await;
+    let v = rpc(
+        &addr,
+        "sim.start",
+        json!({ "spec": spec("red-2"), "judge": false }),
+    )
+    .await;
+    assert_eq!(v["error"]["code"], "preflight_red", "{v}");
+    let red = &v["error"]["detail"]["red"];
+    assert_eq!(red[0]["check"], "PF-02", "{v}");
+    assert_eq!(red[0]["detail"], pf02.detail, "{v}");
+    assert!(red[0]["remedy"]["kind"].is_string(), "{v}");
+    assert!(!has_null(&v), "{v}");
+}
