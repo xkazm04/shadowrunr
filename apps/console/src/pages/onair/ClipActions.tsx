@@ -115,19 +115,27 @@ function Reject({ c }: { c: ClipCandidate }) {
 function RenderButton({ c }: { c: ClipCandidate }) {
   const render = useMutation("clips.render", { timeoutMs: RENDER_TIMEOUT_MS });
   const [error, setError] = useState<string | undefined>();
+  // The layer owns the call: this clip's render keeps showing while the operator visits others.
+  const rendering = render.pending || render.running.some((f) => (f.params as { id?: string }).id === c.id);
+  // This clip's render failure that landed while the button was not mounted shows until the next render.
+  const missed = render.settled?.params.id === c.id ? render.settled : undefined;
+  const shownError = error ?? (missed?.error && explain(missed.error));
   const block = blockOf(c, "render");
   return (
     <span className={styles.rowAction}>
       <Button
         type="button"
         variant="secondary"
-        disabled={block !== null || render.pending}
+        disabled={block !== null || rendering}
         title={block ?? "record the stage to a vertical MP4, or a poster frame when the tools are missing"}
-        onClick={() => void render.run({ id: c.id }).then((r) => setError(r.ok ? undefined : explain(r.error)))}
+        onClick={() => {
+          missed?.ack();
+          void render.run({ id: c.id }).then((r) => setError(r.ok ? undefined : explain(r.error)));
+        }}
       >
-        {render.pending ? "Rendering…" : "Render draft"}
+        {rendering ? "Rendering…" : "Render draft"}
       </Button>
-      {error && <small role="alert">{error}</small>}
+      {shownError && <small role="alert">{shownError}</small>}
     </span>
   );
 }

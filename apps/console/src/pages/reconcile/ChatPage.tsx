@@ -20,6 +20,9 @@ export const CHAT_WINDOW = 50;
 export function ChatPage({ reportId }: { reportId: string | undefined }) {
   const { chat } = useSession();
   const send = useMutation("lord.chat", { timeoutMs: LLM_TIMEOUT_MS });
+  // The layer owns the call: a message sent before a tab switch is still being considered. Its
+  // reply (or failure) lands in the session from the call that sent it, mounted or not.
+  const considering = send.pending || send.running.length > 0;
   const [text, setText] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -29,12 +32,12 @@ export function ChatPage({ reportId }: { reportId: string | undefined }) {
   useLayoutEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chat.length, send.pending]);
+  }, [chat.length, considering]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const message = text.trim();
-    if (!message || send.pending) return;
+    if (!message || considering) return;
     setText("");
     session.say({ who: "me", text: message });
     const r = await send.run({ message, ...(reportId === undefined ? {} : { report_id: reportId }) });
@@ -58,7 +61,7 @@ export function ChatPage({ reportId }: { reportId: string | undefined }) {
             {shown.map((t) => (
               <Turn key={t.id} turn={t} />
             ))}
-            {send.pending && (
+            {considering && (
               <p className={styles.dim} role="status">
                 The Lord is considering…
               </p>
@@ -76,7 +79,7 @@ export function ChatPage({ reportId }: { reportId: string | undefined }) {
                 placeholder="e.g. Never let him repeat the poll line in an empty room."
               />
             </label>
-            <Button type="submit" variant="primary" disabled={send.pending || text.trim().length === 0}>
+            <Button type="submit" variant="primary" disabled={considering || text.trim().length === 0}>
               Send
             </Button>
           </form>

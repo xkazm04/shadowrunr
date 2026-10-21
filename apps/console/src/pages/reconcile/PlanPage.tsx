@@ -91,12 +91,18 @@ function Composer({ reportId, chosen, state }: { reportId: string; chosen: reado
   const directives = useRpc("directive.list", {});
   const choose = useMutation("plan.choose", { timeoutMs: LLM_TIMEOUT_MS });
   const [error, setError] = useState<string | undefined>();
+  // The layer owns the call, so a seal started before a tab switch still shows, and still blocks.
+  const composing = choose.pending || choose.running.length > 0;
+  // A failure that landed while this page was not mounted shows until the next seal.
+  const missed = choose.settled?.error;
+  const shownError = error ?? (missed && `${viewOfError(missed).title}: ${missed.message}`);
   const active = (directives.data ?? []).filter((d) => d.active).length;
   const line = liveLine(state);
 
   async function seal() {
     setError(undefined);
-    if (!canSeal(state)) return;
+    if (!canSeal(state) || composing) return;
+    choose.settled?.ack();
     const r = await choose.run({ report_id: reportId, option_ids: chosen.map((o) => o.option_id) });
     // On success plan.choose invalidates plan.current; the sealed block renders from the refetch.
     if (!r.ok) setError(`${viewOfError(r.error).title}: ${r.error.message}`);
@@ -127,17 +133,17 @@ function Composer({ reportId, chosen, state }: { reportId: string; chosen: reado
       )}
       <h3>Directives riding along</h3>
       <p className={styles.dim}>{directives.data ? `${active} active` : directives.errorView ? directives.errorView.title : "Loading"}</p>
-      <Button type="button" variant="primary" className={styles.seal} onClick={() => void seal()} disabled={choose.pending || !canSeal(state)} data-role="reconcile-seal">
-        {choose.pending ? "Composing…" : sealLabel(state)}
+      <Button type="button" variant="primary" className={styles.seal} onClick={() => void seal()} disabled={composing || !canSeal(state)} data-role="reconcile-seal">
+        {composing ? "Composing…" : sealLabel(state)}
       </Button>
-      {choose.pending && (
+      {composing && (
         <p className={styles.pending} role="status">
           The planner is writing the Lord’s dispatch and the running order.
         </p>
       )}
-      {error && (
+      {shownError && (
         <p className={styles.formError} role="alert">
-          {error}
+          {shownError}
         </p>
       )}
       {(state.kind === "live-here" || state.kind === "live-elsewhere") && <SealedPlan plan={state.plan} />}
