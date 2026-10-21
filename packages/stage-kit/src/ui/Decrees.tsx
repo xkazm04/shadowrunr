@@ -4,8 +4,11 @@ import type { SceneState } from "../sceneModel";
 
 export const DECREE_MS = { highlight: 9000, picked: 6500 } as const;
 
-/** Highlighted and picked chat messages lift out of the lane into "decree" cards. */
-export function Decrees({ scene, now }: { scene: SceneState; now: number }) {
+/**
+ * Highlighted and picked chat messages lift out of the lane into "decree" cards. On air the
+ * picker's reason (production detail) is left out.
+ */
+export function Decrees({ scene, now, onAir = false }: { scene: SceneState; now: number; onAir?: boolean }) {
   const live = scene.decrees.filter((d) => now >= d.at && now - d.at < DECREE_MS[d.kind]);
   return (
     <div className="decrees">
@@ -29,7 +32,7 @@ export function Decrees({ scene, now }: { scene: SceneState; now: number }) {
           >
             <div className="decree-head">
               <span className="decree-label">{d.kind === "highlight" ? "DECREE OF THE LICH" : "HEARD BY THE LICH"}</span>
-              {d.reason && <span className="decree-reason">{d.reason}</span>}
+              {!onAir && d.reason && <span className="decree-reason">{d.reason}</span>}
             </div>
             <div className="decree-main">
               <Sigil rank={m.viewer.rank} size={64} />

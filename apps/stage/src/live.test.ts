@@ -11,6 +11,7 @@ import {
   LiveSession,
   LiveStore,
   RING_MAX,
+  SAID_MAX,
   STALLED_MS,
 } from "./live";
 import type { SocketLike } from "./source";
@@ -189,6 +190,33 @@ describe("a new stream resets the scene", () => {
     expect(store.gaps).toBe(0);
     expect(store.scene.applied).toBe(1);
     expect(hintCount(store)).toBe(1);
+  });
+});
+
+describe("Malakor's lines and their seqs (for the captions that follow the voice)", () => {
+  const say = (ts: number, text: string, foil?: string): StreamEvent =>
+    foil ? { type: "say", ts_ms: ts, speaker: "foil", foil, text } : { type: "say", ts_ms: ts, speaker: "malakor", text };
+
+  it("keeps each of his lines with the say event's seq, not a foil's, and resets with the run", () => {
+    const store = new LiveStore(0);
+    [start(0), say(100, "Kneel."), say(200, "Not me.", "the-inspector"), say(300, "Rise.")].forEach((e, i) =>
+      store.accept({ kind: "event", event: e, seq: i + 1, runId: "r" }, 0),
+    );
+    expect(store.said.map((l) => [l.seq, l.text, l.at])).toEqual([
+      [2, "Kneel.", 100],
+      [4, "Rise.", 300],
+    ]);
+    expect(store.said[1]!.id).toBe(store.scene.caption!.id);
+    store.accept({ kind: "event", event: start(9000, "s-2"), seq: 1, runId: "r2" }, 0);
+    expect(store.said).toEqual([]);
+  });
+
+  it("holds at most SAID_MAX lines", () => {
+    const store = new LiveStore(0);
+    store.accept({ kind: "event", event: start(0), seq: 1, runId: "r" }, 0);
+    for (let i = 0; i < SAID_MAX + 5; i++) store.accept({ kind: "event", event: say(i * 10 + 10, `Line ${i}.`), seq: i + 2, runId: "r" }, 0);
+    expect(store.said).toHaveLength(SAID_MAX);
+    expect(store.said[SAID_MAX - 1]!.text).toBe(`Line ${SAID_MAX + 4}.`);
   });
 });
 

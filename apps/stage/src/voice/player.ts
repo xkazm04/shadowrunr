@@ -11,13 +11,21 @@
 // line that has not started is dropped whole (every part of that seq) and the rest close up
 // behind what is playing, so a stage that fell behind catches up instead of talking ever later.
 // A line that has started is never cut, and the newest line is kept. A new run starts afresh.
+//
+// **Told as it happens.** `PlayerEvents` hears each part as it is scheduled (and rescheduled when
+// the cap closes a gap), as its audio starts, and each whole line the cap drops: the captions
+// follow the first, and the daemon is told the other two (`report.ts`).
 
 import { RESTING, type FaceSignal, type FaceSource } from "../avatar/types";
 import type { Clock } from "../avatar/motion";
 import { decodePcm16, visemeAt, type Utterance } from "./frame";
 
-/** Audio waiting ahead of the playhead, at most (seconds). */
-export const MAX_AHEAD_S = 6;
+/**
+ * Audio waiting ahead of the playhead, at most (seconds). The brain paces a beat to a 260-character
+ * speech budget (~14 s) plus a 1.5 s lead (`shadowrunr-brain` pace.rs), so one paced beat fits
+ * whole; only a stage that has fallen a whole beat behind drops a line.
+ */
+export const MAX_AHEAD_S = 16;
 /** The first utterance after silence starts this far ahead of now, so its start is not clipped. */
 export const START_LEAD_S = 0.06;
 /** The mouth leads the sound by this much. */
@@ -49,10 +57,37 @@ export interface AudioLike {
   level(): number;
 }
 
+/** One part as the player placed it on the audio clock (seconds). */
+export interface ScheduledPart {
+  runId: string;
+  seq: number;
+  part: number;
+  /** The part's sentence, as the daemon sent it. */
+  text: string;
+  /** The line's final part. */
+  last: boolean;
+  start: number;
+  duration: number;
+}
+
+/** What the player tells its owner as it happens. Every hook is optional. */
+export interface PlayerEvents {
+  /** A part was placed at `start`, or moved there when the cap closed a gap behind a dropped line. */
+  scheduled?(p: ScheduledPart): void;
+  /** A part's audio started; `lateS` is how far the audio clock had passed its start when seen. */
+  started?(p: ScheduledPart, lateS: number): void;
+  /** A whole line was dropped to keep the audio within MAX_AHEAD_S. */
+  dropped?(runId: string, seq: number): void;
+}
+
 interface Entry {
   runId: string;
   seq: number;
   part: number;
+  text: string;
+  last: boolean;
+  /** Its start has been told (`PlayerEvents.started`). */
+  told: boolean;
   generation: number;
   buffer: BufferLike;
   visemes: Utterance["visemes"];
@@ -80,6 +115,7 @@ export class VoicePlayer implements FaceSource {
   constructor(
     private readonly audio: AudioLike,
     private readonly clock: Clock,
+    private readonly events: PlayerEvents = {},
   ) {}
 
   /** Seconds of audio scheduled past the playhead. */
@@ -118,7 +154,19 @@ export class VoicePlayer implements FaceSource {
     buffer.getChannelData(0).set(samples);
     const now = this.audio.currentTime;
     const start = Math.max(this.end() ?? 0, now + START_LEAD_S);
-    const e: Entry = { runId: u.run_id, seq: u.seq, part: u.part, generation: ++this.generation, buffer, visemes: u.visemes, start, source: null };
+    const e: Entry = {
+      runId: u.run_id,
+      seq: u.seq,
+      part: u.part,
+      text: u.text,
+      last: u.last,
+      told: false,
+      generation: ++this.generation,
+      buffer,
+      visemes: u.visemes,
+      start,
+      source: null,
+    };
     this.play(e);
     this.queue.push(e);
     this.bound();
@@ -169,6 +217,17 @@ export class VoicePlayer implements FaceSource {
     s.connect(this.audio.output as never);
     s.start(e.start);
     e.source = s;
+    this.events.scheduled?.(part(e));
+  }
+
+  /** Tell each part whose start the audio clock has passed, once. */
+  private tell(now: number) {
+    for (const e of this.queue) {
+      if (e.start > now) break;
+      if (e.told) continue;
+      e.told = true;
+      this.events.started?.(part(e), now - e.start);
+    }
   }
 
   private silence(e: Entry) {
@@ -184,6 +243,7 @@ export class VoicePlayer implements FaceSource {
 
   private prune() {
     const now = this.audio.currentTime;
+    this.tell(now);
     while (this.queue.length && this.queue[0]!.start + this.queue[0]!.buffer.duration <= now) this.queue.shift();
   }
 
@@ -199,7 +259,7 @@ export class VoicePlayer implements FaceSource {
       const newest = this.queue[this.queue.length - 1]!.seq;
       const i = this.queue.findIndex((e) => !started.has(e.seq) && e.seq !== newest);
       if (i < 0) break;
-      const seq = this.queue[i]!.seq;
+      const { seq, runId } = this.queue[i]!;
       let n = 0;
       while (this.queue[i]?.seq === seq) {
         this.silence(this.queue[i]!);
@@ -208,6 +268,7 @@ export class VoicePlayer implements FaceSource {
       }
       this.dropped += n;
       this.droppedLines++;
+      this.events.dropped?.(runId, seq);
       changed = true;
       // everything after it moves up behind what precedes it (a source starts once: remake them)
       let at = i > 0 ? this.queue[i - 1]!.start + this.queue[i - 1]!.buffer.duration : now + START_LEAD_S;
@@ -243,4 +304,8 @@ export class VoicePlayer implements FaceSource {
     this.lastSignal = s;
     for (const l of this.listeners) l(s);
   }
+}
+
+function part(e: Entry): ScheduledPart {
+  return { runId: e.runId, seq: e.seq, part: e.part, text: e.text, last: e.last, start: e.start, duration: e.buffer.duration };
 }

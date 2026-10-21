@@ -159,12 +159,12 @@ describe("scheduling", () => {
     audio.currentTime = 10.5;
     player.accept(utt(1, 1, 2000));
     player.accept(utt(1, 2, 2000));
-    // Line 2 (three parts) and line 3 (two parts) queue behind it: 12.5 s ahead in all.
-    player.accept(utt(2, 0, 1500));
-    player.accept(utt(2, 1, 1500));
-    player.accept(utt(2, 2, 1500));
-    player.accept(utt(3, 0, 1500));
-    player.accept(utt(3, 1, 1500));
+    // Line 2 (three parts) and line 3 (two parts) queue behind it: 24.56 s ahead in all.
+    player.accept(utt(2, 0, 4000));
+    player.accept(utt(2, 1, 4000));
+    player.accept(utt(2, 2, 4000));
+    player.accept(utt(3, 0, 4000));
+    player.accept(utt(3, 1, 4000));
     // Line 2 went whole; line 1 (started) is intact and line 3 (the newest) is kept whole.
     expect(player.scheduled().map((e) => [e.seq, e.part])).toEqual([
       [1, 0],
@@ -186,16 +186,70 @@ describe("scheduling", () => {
     const { audio, player } = rig();
     player.accept(utt(7, 0, 1000));
     audio.currentTime = 10.5;
-    for (let p = 1; p <= 5; p++) player.accept(utt(7, p, 2000));
+    for (let p = 1; p <= 5; p++) player.accept(utt(7, p, 4000));
     expect(player.ahead).toBeGreaterThan(MAX_AHEAD_S);
     expect(player.scheduled()).toHaveLength(6);
     expect(player.droppedLines).toBe(0);
+  });
+
+  it("the cap holds one paced beat whole: a 260-character budget (~14 s) plus the 1.5 s lead", () => {
+    const { player } = rig();
+    expect(MAX_AHEAD_S).toBe(16);
+    // a beat's line in three parts, and the next beat's first line behind it
+    player.accept(utt(1, 0, 5000));
+    player.accept(utt(1, 1, 5000));
+    player.accept(utt(1, 2, 4000));
+    player.accept(utt(2, 0, 1500));
+    expect(player.droppedLines).toBe(0);
+    expect(player.scheduled()).toHaveLength(4);
+    // a stage a whole beat behind does drop
+    player.accept(utt(3, 0, 1500));
+    expect(player.droppedLines).toBe(1);
   });
 
   it("an empty or undecodable utterance is refused", () => {
     const { player } = rig();
     expect(player.accept(utt(1, 0, 0))).toBe("bad");
     expect(player.accept({ ...utt(2, 0, 10), pcm: "%%%" })).toBe("bad");
+  });
+});
+
+describe("the player tells what happens", () => {
+  function told() {
+    const audio = new FakeAudio();
+    const h = handClock();
+    const log: string[] = [];
+    const player = new VoicePlayer(audio, h.clock, {
+      scheduled: (p) => log.push(`scheduled ${p.seq}.${p.part} @${p.start.toFixed(2)} ${p.text}${p.last ? " last" : ""}`),
+      started: (p, late) => log.push(`started ${p.seq}.${p.part} late ${late.toFixed(2)}`),
+      dropped: (run, seq) => log.push(`dropped ${run}:${seq}`),
+    });
+    return { audio, h, player, log };
+  }
+
+  it("each part once as it is placed and once as its audio starts, with how late that was seen", () => {
+    const { audio, h, player, log } = told();
+    player.accept(utt(4, 0, 500, { text: "Kneel." }));
+    player.accept(utt(4, 1, 500, { text: "Now.", last: true }));
+    expect(log).toEqual(["scheduled 4.0 @10.06 Kneel.", "scheduled 4.1 @10.56 Now. last"]);
+    audio.currentTime = 10.1;
+    h.tick();
+    h.tick();
+    expect(log.slice(2)).toEqual(["started 4.0 late 0.04"]);
+    // a frame missed entirely (a stalled page) is still told once, before it is forgotten
+    audio.currentTime = 11.5;
+    h.tick();
+    expect(log.slice(3)).toEqual(["started 4.1 late 0.94"]);
+  });
+
+  it("a line the cap drops is told once, and the parts that close up are placed again", () => {
+    const { audio, player, log } = told();
+    player.accept(utt(1, 0, 9000));
+    audio.currentTime = 10.1;
+    player.accept(utt(2, 0, 9000));
+    log.length = 0;
+    player.accept(utt(3, 0, 9000));
+    expect(log).toEqual(["scheduled 3.0 @28.06 x", "dropped r:2", "scheduled 3.0 @19.06 x"]);
   });
 });
 

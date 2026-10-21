@@ -6,10 +6,13 @@
 // WebGL2 is not there, or the form cannot load, it stays empty and the runtime says why once in the
 // console, so the slot keeps its silhouette instead. The face never re-renders React: signals go
 // from `source` straight to the runtime. `data-face` on the box reads loading | ready |
-// unavailable, `data-face-loop` running | still, `data-form` rig | placeholder.
+// unavailable, `data-face-loop` running | still, `data-form` rig | placeholder. `onFace` hears
+// `silhouette` on mount and `rig` once WebGL draws the daemon's real layer rig; the procedural
+// placeholder stays `silhouette` (the report to the daemon means "Malakor's real face").
 
 import { useEffect, useRef } from "react";
 
+import { faceStateOf, type FaceState } from "../voice/report";
 import type { FaceSource } from "./types";
 
 export interface AvatarProps {
@@ -20,27 +23,36 @@ export interface AvatarProps {
   /** Where the face signal comes from. */
   source: FaceSource;
   className?: string;
+  /** Hears which face the slot shows: on mount, and on every change. */
+  onFace?: (state: FaceState) => void;
 }
 
 type Handle = { resize(size: number): void; dispose(): void };
 
-export function Avatar({ rigBase, size, source, className }: AvatarProps) {
+export function Avatar({ rigBase, size, source, className, onFace }: AvatarProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const handleRef = useRef<Handle | null>(null);
   const sizeRef = useRef(size);
+  const onFaceRef = useRef(onFace);
+  onFaceRef.current = onFace;
 
   useEffect(() => {
     const root = rootRef.current;
     const canvas = canvasRef.current;
     if (!root || !canvas) return;
     let cancelled = false;
+    const drawn = (form: "rig" | "placeholder" | null) => {
+      if (!cancelled) onFaceRef.current?.(faceStateOf(form));
+    };
+    drawn(null);
     import("./runtime").then(
       ({ startFace }) => {
         if (cancelled) return;
-        handleRef.current = startFace({ root, canvas, rigBase, source, size: sizeRef.current });
+        handleRef.current = startFace({ root, canvas, rigBase, source, size: sizeRef.current, onDrawn: drawn });
       },
       (error: unknown) => {
+        drawn(null);
         root.setAttribute("data-face", "unavailable");
         console.warn(`[stage] Malakor's face is not drawn here: the runtime did not load (${String(error)}).`);
       },
