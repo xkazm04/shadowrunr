@@ -5,14 +5,14 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { Case, StreamEvent } from "@shadowrunr/contract";
-import { CANVAS_H, CANVAS_W, fitMap, foldEvents, hexBoxes, zoomMap } from "@shadowrunr/stage-kit";
+import { boardArea, boardView, buildMap, CANVAS_H, CANVAS_W, fitBox, fitMap, foldEvents, hexBoxes, stripBox, zoomMap } from "@shadowrunr/stage-kit";
 import { parseCase } from "@shadowrunr/stage-kit/parse";
-import { HEX_SIZE, hexArea } from "@shadowrunr/stage-kit/ui";
+import { boardLayoutFor, HEX_SIZE, hexArea } from "@shadowrunr/stage-kit/ui";
 import { LOOK_CHAT, LOOK_CONTENT, LOOK_HOST, lookFor } from "./avatar/look";
-import { BROWSER_CHROME, CORNER_AVATAR, FACE_PX, hexFrame, layoutRects, REGIONS, type Rect } from "./layouts";
+import { BOARD_LAYOUT_FRAME, boardFrame, BROWSER_CHROME, CONTENT, CORNER_AVATAR, FACE_PX, hexFrame, layoutRects, REGIONS, type Rect } from "./layouts";
 import { readParams, resolveCase, sidecarCaseUrl } from "./source";
 
-const LAYOUTS = ["boot", "host", "hexmap", "browser", "desk"] as const;
+const LAYOUTS = ["boot", "host", "board", "hexmap", "browser", "desk"] as const;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 describe("layouts", () => {
@@ -36,7 +36,7 @@ describe("layouts", () => {
     }
   }
   it("stands Malakor in the bottom-left corner of every content screen, on the canvas's bottom edge", () => {
-    for (const layout of ["hexmap", "browser", "desk"] as const) {
+    for (const layout of ["board", "hexmap", "browser", "desk"] as const) {
       const r = layoutRects(layout, { poll: true, foil: true });
       expect(r.avatar).toEqual(CORNER_AVATAR);
       expect(r.avatar.w).toBeGreaterThanOrEqual(420);
@@ -62,14 +62,35 @@ describe("layouts", () => {
     expect(CORNER_AVATAR.w / FACE_PX).toBeCloseTo(0.8);
   });
 
-  it("puts the desk's browser window in front of a smaller hexmap window", () => {
-    const desk = layoutRects("desk", { poll: false, foil: false });
-    const map = layoutRects("hexmap", { poll: false, foil: false });
-    expect(desk.hexmap.w * desk.hexmap.h).toBeLessThan(map.hexmap.w * map.hexmap.h);
-    expect(overlaps(desk.hexmap, desk.browser)).toBe(true);
-    expect(desk.browser.hidden).toBeUndefined();
-    expect(map.browser.hidden).toBe(true);
+  it("puts the desk's browser window in front of a smaller map window: the board, or the hexmap when that was the last map", () => {
+    for (const back of ["board", "hexmap"] as const) {
+      const other = back === "board" ? "hexmap" : "board";
+      const desk = layoutRects("desk", { poll: false, foil: false, back });
+      const full = layoutRects(back, { poll: false, foil: false });
+      expect(desk[back].w * desk[back].h).toBeLessThan(full[back].w * full[back].h);
+      expect(overlaps(desk[back], desk.browser)).toBe(true);
+      expect(desk[other].hidden).toBe(true);
+      expect(desk.browser.hidden).toBeUndefined();
+      expect(full.browser.hidden).toBe(true);
+      expect(full[other].hidden).toBe(true);
+    }
+    expect(layoutRects("desk", { poll: false, foil: false }).board.hidden).toBeUndefined();
     expect(layoutRects("browser", { poll: false, foil: false }).hexmap.hidden).toBe(true);
+    expect(layoutRects("browser", { poll: false, foil: false }).board.hidden).toBe(true);
+  });
+
+  it("fills the content area with the board, the rect the clip factory's 9:16 reframe crops", () => {
+    const footage = readFileSync(join(__dirname, "..", "..", "..", "crates", "shadowrunr-clips", "src", "footage.rs"), "utf8");
+    const m = /pub const CONTENT_SCREEN: Rect = Rect \{\s*x: (\d+),\s*y: (\d+),\s*w: (\d+),\s*h: (\d+),\s*\}/.exec(footage);
+    expect(m).not.toBeNull();
+    const reframe = { x: Number(m![1]), y: Number(m![2]), w: Number(m![3]), h: Number(m![4]) };
+    for (const layout of ["board", "hexmap", "browser"] as const) {
+      const r = layoutRects(layout, { poll: true, foil: true });
+      expect(r[layout], layout).toEqual(CONTENT);
+    }
+    expect(CONTENT).toEqual(reframe);
+    // The board's layout frame is that rect, Malakor's corner in it.
+    expect([BOARD_LAYOUT_FRAME.w, BOARD_LAYOUT_FRAME.h]).toEqual([CONTENT.w, CONTENT.h]);
   });
 
   it("keeps every overlay off the browser window's chrome (tabs, URL bar, ribbon) on browser and desk", () => {
@@ -79,7 +100,7 @@ describe("layouts", () => {
           const r = layoutRects(layout, { poll, foil });
           const chrome: Rect = { x: r.browser.x, y: r.browser.y, w: r.browser.w, h: BROWSER_CHROME };
           for (const k of REGIONS) {
-            if (k === "browser" || k === "hexmap" || r[k].hidden) continue;
+            if (k === "browser" || k === "hexmap" || k === "board" || r[k].hidden) continue;
             expect(overlaps(r[k], chrome), `${layout} poll=${poll} foil=${foil}: ${k}`).toBe(false);
           }
           // the lane still ends above the lower third
@@ -93,10 +114,12 @@ describe("layouts", () => {
     expect(map.card).toMatchObject({ y: 510, h: 300 });
   });
 
-  it("gives the hexmap the dominant area in SEG-02A", () => {
-    const r = layoutRects("hexmap", { poll: true, foil: true });
-    const area = (k: (typeof REGIONS)[number]) => r[k].w * r[k].h;
-    for (const k of REGIONS) if (k !== "hexmap" && !r[k].hidden) expect(area("hexmap")).toBeGreaterThan(area(k) * 3);
+  it("gives the board (or the hexmap) the dominant area in SEG-02A", () => {
+    for (const main of ["board", "hexmap"] as const) {
+      const r = layoutRects(main, { poll: true, foil: true });
+      const area = (k: (typeof REGIONS)[number]) => r[k].w * r[k].h;
+      for (const k of REGIONS) if (k !== main && !r[k].hidden) expect(area(main), k).toBeGreaterThan(area(k) * 3);
+    }
   });
 });
 
@@ -105,7 +128,7 @@ describe("no hex under him", () => {
   for (const layout of ["hexmap", "desk"] as const) {
     for (const poll of [false, true]) {
       it(`${layout} poll=${poll}: no hex of the demo case lies under the avatar's box (or the desk's browser)`, () => {
-        const rects = layoutRects(layout, { poll, foil: true });
+        const rects = layoutRects(layout, { poll, foil: true, back: "hexmap" });
         const frame = hexFrame(layout, rects)!;
         expect(frame).not.toBeNull();
         const fit = fitMap(demo.hexes, HEX_SIZE, hexArea(frame), frame.avoid, frame.prefer);
@@ -128,7 +151,7 @@ describe("no hex under him", () => {
   }
   for (const layout of ["hexmap", "desk"] as const) {
     it(`${layout}: focused on any demo hex, no drawn hex lies under him (or the desk's browser), and the ring reads large`, () => {
-      const rects = layoutRects(layout, { poll: true, foil: true });
+      const rects = layoutRects(layout, { poll: true, foil: true, back: "hexmap" });
       const frame = hexFrame(layout, rects)!;
       const overview = fitMap(demo.hexes, HEX_SIZE, hexArea(frame), frame.avoid, frame.prefer);
       const map = rects.hexmap;
@@ -158,7 +181,70 @@ describe("no hex under him", () => {
     });
   }
   it("has no frame where the map is not shown", () => {
-    for (const layout of ["boot", "host", "browser"] as const) expect(hexFrame(layout, layoutRects(layout, { poll: false, foil: false }))).toBeNull();
+    for (const layout of ["boot", "host", "browser", "board"] as const) expect(hexFrame(layout, layoutRects(layout, { poll: false, foil: false }))).toBeNull();
+    expect(hexFrame("desk", layoutRects("desk", { poll: false, foil: false }))).toBeNull();
+  });
+});
+
+describe("no card under him", () => {
+  const demo = parseCase(readFileSync(join(__dirname, "..", "fixtures", "demo-case.json"), "utf8"));
+  const map = buildMap(demo, []);
+  const layout = boardLayoutFor(map, demo, BOARD_LAYOUT_FRAME);
+  const shift = (b: Rect, by: Rect): Rect => ({ x: b.x + by.x, y: b.y + by.y, w: b.w, h: b.h });
+
+  it("lays every demo card out in its act, none overlapping, none under him, every act inside the content area", () => {
+    const rects = layoutRects("board", { poll: true, foil: true });
+    const win = rects.board;
+    const cards = Object.entries(layout.cards);
+    expect(cards).toHaveLength(demo.hexes.length);
+    expect(layout.regions.map((r) => r.name)).toEqual(demo.acts!.map((a) => a.name));
+    expect(layout.scale).toBe(1);
+    cards.forEach(([id, b], i) => {
+      expect(overlaps(shift(b, win), rects.avatar), id).toBe(false);
+      cards.forEach(([other, o], j) => j > i && expect(overlaps(b, o), `${id} vs ${other}`).toBe(false));
+    });
+    for (const r of layout.regions) {
+      const box = shift(r.box, win);
+      expect(box.x >= win.x && box.y >= win.y && box.x + box.w <= win.x + win.w && box.y + box.h <= win.y + win.h, r.name).toBe(true);
+    }
+    // The timeline strip runs from his right edge, above the lower third.
+    const strip = shift(stripBox(boardFrame("board", rects)!), win);
+    expect(overlaps(strip, rects.avatar)).toBe(false);
+    expect(strip.y + strip.h).toBeLessThanOrEqual(rects.caption.y);
+  });
+
+  for (const layout_ of ["board", "desk"] as const) {
+    it(`${layout_}: focused on any demo card, no drawn card lies under him (or the desk's browser), and the card reads large`, () => {
+      const rects = layoutRects(layout_, { poll: true, foil: true });
+      const frame = boardFrame(layout_, rects)!;
+      expect(frame).not.toBeNull();
+      const win = rects.board;
+      const links = [
+        { from: "HEX-01", to: "HEX-05" },
+        { from: "HEX-06", to: "HEX-01" },
+        { from: "HEX-04", to: "HEX-09" },
+      ];
+      for (const focus of [null, ...demo.hexes.map((h) => h.id)]) {
+        const view = boardView(layout, frame, focus, links);
+        for (const [id, b] of Object.entries(layout.cards)) {
+          if (view.under.includes(id)) continue;
+          const at = shift(fitBox(b, view.fit), win);
+          expect(overlaps(at, rects.avatar), `${focus}: ${id}`).toBe(false);
+          if (layout_ === "desk") expect(overlaps(at, rects.browser), `${focus}: ${id}`).toBe(false);
+        }
+        if (focus === null) continue;
+        const card = shift(fitBox(layout.cards[focus]!, view.fit), win);
+        expect(card.w, focus).toBeGreaterThan(layout_ === "desk" ? 150 : 212);
+        // inside its window, under the thesis band
+        const area = shift(boardArea(frame), win);
+        expect(card.x >= area.x - 0.01 && card.y >= area.y - 0.01 && card.x + card.w <= area.x + area.w + 0.01 && card.y + card.h <= area.y + area.h + 0.01, focus).toBe(true);
+      }
+    });
+  }
+
+  it("has no board frame where the board is not shown", () => {
+    for (const layout_ of ["boot", "host", "browser", "hexmap"] as const) expect(boardFrame(layout_, layoutRects(layout_, { poll: false, foil: false }))).toBeNull();
+    expect(boardFrame("desk", layoutRects("desk", { poll: false, foil: false, back: "hexmap" }))).toBeNull();
   });
 });
 
@@ -166,7 +252,7 @@ describe("look", () => {
   it("looks at the viewer in the host room, at the content from the corner, at chat when answering", () => {
     expect(lookFor("host", [])).toBe(LOOK_HOST);
     expect(lookFor("boot", null)).toBe(LOOK_HOST);
-    for (const l of ["hexmap", "browser", "desk"] as const) expect(lookFor(l, null)).toBe(LOOK_CONTENT);
+    for (const l of ["board", "hexmap", "browser", "desk"] as const) expect(lookFor(l, null)).toBe(LOOK_CONTENT);
     expect(lookFor("host", ["ashen_quill"])).toBe(LOOK_CHAT);
     expect(lookFor("desk", ["ashen_quill"])).toBe(LOOK_CHAT);
     expect(LOOK_CONTENT).toEqual({ x: 0.6, y: -0.2 });

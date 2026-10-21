@@ -2,7 +2,8 @@
 //
 // The composition mirrors the clip factory's poster frame (crates/shadowrunr-clips render.rs):
 // a header band (ALLEGED + grade badge + case title for claim-bearing clips, else the segment
-// and its foil), the hexmap or the avatar in the middle, the exact transcript captions in the
+// and its foil), the evidence board (or the hexmap of an older transcript) or the avatar in the
+// middle, the exact transcript captions in the
 // lower third, the citation strip, and the AI disclosure with the clip's provenance.
 //
 // `&record=1` freezes the wall clock: `window.__clip.seek(ms)` sets the frame and resolves once
@@ -11,9 +12,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { buildMap, foilInfo, GRADE, Timeline } from "@shadowrunr/stage-kit";
-import { FoilCard, Hexmap, Silhouette } from "@shadowrunr/stage-kit/ui";
+import { buildMap, foilInfo, GRADE, mapFocusOf, Timeline } from "@shadowrunr/stage-kit";
+import { boardLayoutFor, EvidenceBoard, FoilCard, Hexmap, Silhouette } from "@shadowrunr/stage-kit/ui";
 import { captionAt, captionPage, PAGE_CHARS, VIEWER_PAGE_CHARS, CLIP_H, CLIP_W, headerModel, parseClip, readClipParams, shortSource, speakerLabel, type ClipGrade, type ClipInput } from "./clip";
+import { BOARD_LAYOUT_FRAME } from "./layouts";
 import { fetchText } from "./source";
 import "./clip.css";
 
@@ -29,6 +31,9 @@ declare global {
     __clip?: ClipHandle;
   }
 }
+
+/** The clip's middle band (clip.css `.clip-middle`), the board's window in a clip. */
+const CLIP_BOARD = { w: CLIP_W - 80, h: 820 };
 
 function gradeColor(g: ClipGrade): string {
   return g === "UNGRADED" ? "var(--dim)" : GRADE[g].color;
@@ -69,6 +74,7 @@ export function ClipStage({ clip, now }: { clip: ClipInput; now: number }) {
   const scene = timeline.advanceTo(now);
   const revealKey = scene.revealOrder.join(",");
   const map = useMemo(() => buildMap(clip.case, revealKey ? revealKey.split(",") : []), [clip.case, revealKey]);
+  const boardLayout = useMemo(() => boardLayoutFor(map, clip.case, BOARD_LAYOUT_FRAME), [map, clip.case]);
   const head = headerModel(clip, scene.foil?.id ?? null);
   const cap = captionAt(clip.captions, now);
   const speaking = cap !== null && cap.caption.speaker === "malakor" && cap.words < cap.total;
@@ -102,7 +108,9 @@ export function ClipStage({ clip, now }: { clip: ClipInput; now: number }) {
       </header>
 
       <section className={`clip-middle${hexmap ? " clip-middle-map" : ""}`}>
-        {hexmap ? (
+        {hexmap && scene.mapScreen === "board" ? (
+          <EvidenceBoard map={map} scene={scene} now={now} caseFile={clip.case} layout={boardLayout} frame={CLIP_BOARD} focus={mapFocusOf(scene)} />
+        ) : hexmap ? (
           <Hexmap map={map} scene={scene} now={now} caseFile={clip.case} />
         ) : (
           <div className="clip-avatar">

@@ -12,6 +12,7 @@ import {
   DECREE_MAX,
   JOB_MAX,
   LANE_MAX,
+  LINK_MAX,
   MOMENT_MAX,
   QUEUED_HOLD_MS,
   RECORD_MAX,
@@ -22,6 +23,7 @@ import {
   type Caption,
   type Hint,
   type Job,
+  type PinnedLink,
   type Poll,
   type Redaction,
   type SceneState,
@@ -70,22 +72,23 @@ function keepRecord(s: SceneState, record: ShownRecord): Record<string, ShownRec
 }
 
 /**
- * `show_screen`. `host` and `hexmap` switch at once. `browser` and `desk` need a record: the one
- * named, else the active one, else the latest received; until it has arrived the screen waits on
- * hexmap and the record's `record_shown` completes the switch. A `focus` zooms the map on `hexmap`
- * and `desk`, and is ignored elsewhere; without one the map is the overview.
+ * `show_screen`. `host`, `board` and `hexmap` switch at once; the last of `board` and `hexmap` is
+ * the map the desk shows. `browser` and `desk` need a record: the one named, else the active one,
+ * else the latest received; until it has arrived the screen waits on the map and the record's
+ * `record_shown` completes the switch. A `focus` zooms the map on `board`, `hexmap` and `desk`,
+ * and is ignored elsewhere; without one the map is the overview.
  */
-function showScreen(s: SceneState, wire: ScreenId, recordId: string | undefined, focus: string | undefined, at: TsMs): SceneState {
-  // Until the evidence board is drawn (appendix (screens and board)), the board shows as the map.
-  const screen = wire === "board" ? "hexmap" : wire;
-  s = { ...s, mapFocus: screen === "hexmap" || screen === "desk" ? (focus ?? null) : null };
-  if (screen === "host" || screen === "hexmap") return setScreen({ ...s, pendingScreen: null }, screen, at, "screen");
+function showScreen(s: SceneState, screen: ScreenId, recordId: string | undefined, focus: string | undefined, at: TsMs): SceneState {
+  const map = screen === "board" || screen === "hexmap";
+  s = { ...s, mapFocus: map || screen === "desk" ? (focus ?? null) : null };
+  if (map) s = { ...s, mapScreen: screen };
+  if (screen === "host" || map) return setScreen({ ...s, pendingScreen: null }, screen, at, "screen");
   const latest = Object.keys(s.records).pop();
   const id = recordId ?? s.activeRecord ?? latest;
   if (id !== undefined && s.records[id]) return setScreen(openRecord({ ...s, pendingScreen: null }, id), screen, at, "screen");
   const pendingScreen: SceneState["pendingScreen"] = { screen, at };
   if (recordId !== undefined) pendingScreen.recordId = recordId;
-  return setScreen({ ...s, pendingScreen }, "hexmap", at, "screen");
+  return setScreen({ ...s, pendingScreen }, s.mapScreen, at, "screen");
 }
 
 /** Match a chat vote to a poll option: exact (case-insensitive) text, or a 1-based index. */
@@ -303,7 +306,7 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
       const fresh = prev.segment !== ev.segment || prev.layout === "boot";
       s = { ...s, segment: ev.segment, pendingSwitch: null };
       if (!fresh) return s;
-      return setScreen({ ...s, pendingScreen: null, mapFocus: null }, defaultScreen(ev.segment), at, "segment_start", ev.segment);
+      return setScreen({ ...s, pendingScreen: null, mapFocus: null, mapScreen: "board" }, defaultScreen(ev.segment), at, "segment_start", ev.segment);
     }
     case "segment_end": {
       const seal: Seal = { segment: ev.segment, at };
@@ -312,9 +315,14 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     }
     case "case_open":
       return { ...s, caseFile: ev.case };
-    // The board's strings (appendix (screens and board)): drawn by the board package.
-    case "link_pinned":
-      return s;
+    // A string the runtime accepted onto the board. It refuses a duplicate, so a repeat (a
+    // replayed or resent event) keeps the string drawn when it was first pinned.
+    case "link_pinned": {
+      const key = `${ev.from}>${ev.to}>${ev.rel}`;
+      if (s.links.some((l) => l.key === key)) return s;
+      const link: PinnedLink = { key, from: ev.from, to: ev.to, rel: ev.rel, recordId: ev.record_id, grade: ev.grade, at };
+      return { ...s, links: [...s.links, link].slice(-LINK_MAX) };
+    }
     case "record_shown": {
       s = { ...s, records: keepRecord(s, ev.record) };
       const p = s.pendingScreen;
@@ -322,7 +330,7 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
       return setScreen(openRecord({ ...s, pendingScreen: null }, ev.record.id), p.screen, at, "screen");
     }
     case "handover":
-      s = { ...s, segment: ev.to, pendingSwitch: null, pendingScreen: null, mapFocus: null };
+      s = { ...s, segment: ev.to, pendingSwitch: null, pendingScreen: null, mapFocus: null, mapScreen: "board" };
       return setScreen(s, defaultScreen(ev.to), at, "handover", ev.to, ev.reason);
     case "chat":
       return applyChat(s, ev.msg, at);
@@ -467,6 +475,7 @@ function applyOp(s: SceneState, op: Extract<StreamEvent, { type: "op" }>["op"], 
       return { ...s, outro: { reason: op.reason, at } };
     case "show_screen":
       return showScreen(s, op.screen, op.record_id, op.focus, at);
+    // A request the runtime may refuse: the board draws the `link_pinned` that accepts it.
     case "pin_link":
       return s;
   }

@@ -132,7 +132,8 @@ export interface MapFit {
   y: number;
 }
 
-function overlaps(a: Box, b: Box): boolean {
+/** True when two boxes share any area (touching edges do not). */
+export function overlaps(a: Box, b: Box): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
@@ -149,7 +150,7 @@ export function hexBoxes(hexes: readonly Hex[], size: number, fit: MapFit): Box[
 const ALIGN = [0.5, 1, 0] as const;
 
 /** The parts of `area` beside each box (left, right, above, below), and `area` itself first. */
-function subAreas(area: Box, boxes: readonly Box[]): Box[] {
+export function subAreas(area: Box, boxes: readonly Box[]): Box[] {
   const out: Box[] = [area];
   const right = area.x + area.w;
   const bottom = area.y + area.h;
