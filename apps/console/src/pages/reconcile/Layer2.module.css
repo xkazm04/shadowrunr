@@ -192,3 +192,5 @@ button.inc[aria-pressed="true"] span { text-decoration: underline; text-decorati
 @media (prefers-reduced-motion: reduce) {
   .opt { transition: none; }
 }
+/* Directive outcomes, cell and report row: verdict chip, k of n with the bound, small sample, refs. */
+.outcome { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sr-space-tight); }

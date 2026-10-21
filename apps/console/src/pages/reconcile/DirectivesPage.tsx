@@ -3,21 +3,25 @@
 // Directives the Reconciler proposed in the Lord's chat (`active: false, proposed: true`,
 // WP14) show as Proposed with Keep and Drop, over the same RPCs as the chat's chips: Keep is
 // `directive.add` with the proposal's kind, text and scope; Drop is `directive.deactivate`.
-import type { Directive, DirectiveKind, SegmentId } from "@shadowrunr/contract";
-import { useState, type FormEvent } from "react";
+// Beside each row, what the report on show judged of it (`ReconcileReport.directives`, WP15),
+// and a Broken facet: the active directives the character broke, to deactivate in place.
+import type { Directive, DirectiveKind, DirectiveOutcome, SegmentId } from "@shadowrunr/contract";
+import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useRpc, viewOfError } from "../../data";
 import { QueryView } from "../../kit";
 import { Chip } from "../../ui/Chip";
 import { FilterTable, type Column } from "../../ui/FilterTable";
 import { Head } from "../../ui/Section";
 import styles from "./Layer2.module.css";
-import { dateTime } from "./model";
+import { OutcomeCell } from "./DirectiveOutcomes";
+import { useReportId } from "./hooks";
+import { dateTime, outcomeIndex, VERDICT_RANK } from "./model";
 import { Button } from "../../ui/Button";
 
 /** Segments a directive may be scoped to (SEG-02B is descoped). */
 const SCOPES: readonly SegmentId[] = ["SEG-01", "SEG-02A"];
 
-type Facet = "active" | "proposed" | "all" | "inactive";
+type Facet = "active" | "broken" | "proposed" | "all" | "inactive";
 
 const isProposed = (d: Directive) => d.proposed === true;
 /** Retired or dropped: neither live nor awaiting the owner. */
@@ -25,6 +29,11 @@ const isOff = (d: Directive) => !d.active && !isProposed(d);
 
 export function DirectivesPage() {
   const list = useRpc("directive.list", {});
+  // The report on show, as the other tabs read it; no report, or one that fails, judges nothing.
+  const { reportId } = useReportId();
+  const report = useRpc("reconcile.report", reportId === undefined ? null : { report_id: reportId });
+  const judgedBy = report.data === undefined ? undefined : reportId;
+  const outcomes = useMemo(() => outcomeIndex(report.data), [report.data]);
   return (
     <>
       <Head
@@ -34,7 +43,16 @@ export function DirectivesPage() {
       />
       <AddForm />
       <QueryView query={list} isEmpty={(d) => d.length === 0} emptyTitle="No directives yet" emptyHint="Add one above, or ask the Lord in the chat: an order there comes back as a proposal to keep or drop.">
-        {(rows) => <DirectiveTable rows={rows} />}
+        {(rows) => (
+          <>
+            {judgedBy !== undefined && (
+              <p className={styles.meta} data-role="reconcile-outcomes-source">
+                Outcomes as judged in report <code>{judgedBy}</code>, from its runs: {outcomes.size} {outcomes.size === 1 ? "directive" : "directives"} judged there.
+              </p>
+            )}
+            <DirectiveTable rows={rows} outcomes={outcomes} reportId={judgedBy} />
+          </>
+        )}
       </QueryView>
     </>
   );
@@ -151,15 +169,28 @@ function Deactivate({ d }: { d: Directive }) {
   );
 }
 
-const COLUMNS: readonly Column<Directive>[] = [
-  { id: "kind", header: "Kind", cell: (d) => <Chip tone={d.kind === "prevent" ? "fail" : "ok"}>{d.kind}</Chip>, sortValue: (d) => d.kind },
-  { id: "text", header: "Directive", cell: (d) => <span className={isOff(d) ? styles.struck : undefined}>{d.text}</span>, sortValue: (d) => d.text },
-  { id: "scope", header: "Scope", cell: (d) => d.scope ?? "all segments", sortValue: (d) => d.scope ?? "" },
-  { id: "created", header: "Added", cell: (d) => dateTime(d.created_ms), sortValue: (d) => d.created_ms },
-  { id: "state", header: "State", cell: (d) => (isProposed(d) ? <Proposal d={d} /> : <Deactivate d={d} />), sortValue: (d) => (isProposed(d) ? 0 : d.active ? 1 : 2), align: "end" },
-];
+function columns(outcomes: ReadonlyMap<string, DirectiveOutcome>, reportId: string | undefined): readonly Column<Directive>[] {
+  return [
+    { id: "kind", header: "Kind", cell: (d) => <Chip tone={d.kind === "prevent" ? "fail" : "ok"}>{d.kind}</Chip>, sortValue: (d) => d.kind },
+    { id: "text", header: "Directive", cell: (d) => <span className={isOff(d) ? styles.struck : undefined}>{d.text}</span>, sortValue: (d) => d.text },
+    { id: "scope", header: "Scope", cell: (d) => d.scope ?? "all segments", sortValue: (d) => d.scope ?? "" },
+    {
+      id: "outcome",
+      header: "Outcome",
+      cell: (d) => <OutcomeCell outcome={outcomes.get(d.id)} reportId={reportId} />,
+      sortValue: (d) => {
+        const o = outcomes.get(d.id);
+        return o ? VERDICT_RANK[o.verdict] : 9;
+      },
+    },
+    { id: "created", header: "Added", cell: (d) => dateTime(d.created_ms), sortValue: (d) => d.created_ms },
+    { id: "state", header: "State", cell: (d) => (isProposed(d) ? <Proposal d={d} /> : <Deactivate d={d} />), sortValue: (d) => (isProposed(d) ? 0 : d.active ? 1 : 2), align: "end" },
+  ];
+}
 
-function DirectiveTable({ rows }: { rows: readonly Directive[] }) {
+function DirectiveTable({ rows, outcomes, reportId }: { rows: readonly Directive[]; outcomes: ReadonlyMap<string, DirectiveOutcome>; reportId: string | undefined }) {
+  const cols = useMemo(() => columns(outcomes, reportId), [outcomes, reportId]);
+  const broken = (d: Directive) => d.active && outcomes.get(d.id)?.verdict === "broken";
   // Open on the proposals while any await the owner; fixed at mount so keeping the last one
   // does not move the view.
   const [initial] = useState<Facet>(() => (rows.some(isProposed) ? "proposed" : "active"));
@@ -167,7 +198,7 @@ function DirectiveTable({ rows }: { rows: readonly Directive[] }) {
     <div className={styles.tableBox} data-role="reconcile-directives">
       <FilterTable<Directive, Facet>
         rows={rows}
-        columns={COLUMNS}
+        columns={cols}
         getKey={(d) => d.id}
         haystack={(d) => `${d.kind} ${d.text} ${d.scope ?? ""}`}
         label="Directives"
@@ -178,11 +209,12 @@ function DirectiveTable({ rows }: { rows: readonly Directive[] }) {
           initial,
           options: [
             { id: "active", label: "Active" },
+            { id: "broken", label: "Broken" },
             { id: "proposed", label: "Proposed" },
             { id: "all", label: "All" },
             { id: "inactive", label: "Off" },
           ],
-          predicate: (d, f) => (f === "all" ? true : f === "active" ? d.active : f === "proposed" ? isProposed(d) : isOff(d)),
+          predicate: (d, f) => (f === "all" ? true : f === "active" ? d.active : f === "broken" ? broken(d) : f === "proposed" ? isProposed(d) : isOff(d)),
         }}
       />
     </div>

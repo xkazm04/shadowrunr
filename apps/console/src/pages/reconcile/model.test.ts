@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseRef, refLabel } from "../../kit/events";
-import { barCount, caution, incidentGroups, MAX_BARS, parseDiff, sourceLabel, triptych } from "./model";
-import { BIBLE_DIFF, CONSTITUTION_DIFF, genProposals, genReport } from "./testgen";
+import { barCount, caution, incidentGroups, MAX_BARS, outcomeCount, outcomeIndex, outcomeOrder, parseDiff, smallSample, sourceLabel, triptych, VERDICT_TONE } from "./model";
+import { BIBLE_DIFF, CONSTITUTION_DIFF, genOutcome, genProposals, genReport } from "./testgen";
 
 describe("the triptych", () => {
   it("counts held and failed evidence across segments, and the proposals", () => {
@@ -67,5 +67,42 @@ describe("diffs", () => {
   it("flags a diff that touches the constitution", () => {
     expect(parseDiff(CONSTITUTION_DIFF).touchesConstitution).toBe(true);
     expect(parseDiff("--- a/characters/malakor/constitution.md\n+++ b/characters/malakor/constitution.md\n").touchesConstitution).toBe(true);
+  });
+});
+
+describe("directive outcomes", () => {
+  it("indexes a report's outcomes by directive id, and nothing for a report without them", () => {
+    const o = genOutcome("dir-1", "broken", 2, 4, { refs: ["run-1#12"] });
+    const idx = outcomeIndex({ directives: [o] });
+    expect(idx.size).toBe(1);
+    expect(idx.get("dir-1")).toBe(o);
+    expect(outcomeIndex({}).size).toBe(0);
+    expect(outcomeIndex(undefined).size).toBe(0);
+  });
+
+  it("orders worst first: broken, ignored, unmeasured, attempted, held", () => {
+    const list = [
+      genOutcome("h", "held", 4, 4),
+      genOutcome("a", "attempted", 1, 3, { kind: "try" }),
+      genOutcome("u", "unmeasured", 0, 0),
+      genOutcome("i", "ignored", 0, 3, { kind: "try" }),
+      genOutcome("b", "broken", 2, 4),
+    ];
+    expect(outcomeOrder(list).map((o) => o.verdict)).toEqual(["broken", "ignored", "unmeasured", "attempted", "held"]);
+    expect(list[0]?.verdict).toBe("held");
+  });
+
+  it("counts k of n from the rate and marks a small sample with the caution rule", () => {
+    expect(outcomeCount(genOutcome("b", "broken", 2, 4))).toEqual({ k: 2, n: 4 });
+    expect(outcomeCount(genOutcome("u", "unmeasured", 0, 0))).toBeUndefined();
+    expect(smallSample(genOutcome("h", "held", 1, 1))).toBe(true);
+    expect(smallSample(genOutcome("h", "held", 30, 30))).toBe(false);
+    expect(smallSample(genOutcome("u", "unmeasured", 0, 0))).toBe(false);
+  });
+
+  it("tones a broken directive as a failure and a held one as ok", () => {
+    expect(VERDICT_TONE.broken).toBe("fail");
+    expect(VERDICT_TONE.held).toBe("ok");
+    expect(VERDICT_TONE.unmeasured).toBe("muted");
   });
 });

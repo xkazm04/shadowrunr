@@ -1,6 +1,7 @@
 // Pure derivations for Reconcile & Plan: the triptych counts, incident groups, the caution
 // slip, evidence refs, sources and diffs (ref parsing is kit/events). No React, no DOM, so every rule is unit-tested.
-import type { Evidence, PlanOption, ReconcileReport, Source } from "@shadowrunr/contract";
+import type { DirectiveOutcome, DirectiveVerdict, Evidence, PlanOption, ReconcileReport, Source } from "@shadowrunr/contract";
+import type { Tone } from "../../ui/Chip";
 
 export interface Triptych {
   readonly held: number;
@@ -137,3 +138,28 @@ export function dateTime(ms: number): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+
+/** Each directive's judged outcome in a report, by directive id; empty for a report without them. */
+export function outcomeIndex(report: Pick<ReconcileReport, "directives"> | undefined): ReadonlyMap<string, DirectiveOutcome> {
+  return new Map((report?.directives ?? []).map((o) => [o.id, o]));
+}
+
+/** Worst first: what the character broke, then ignored, never measured, attempted, held. */
+export const VERDICT_RANK: Readonly<Record<DirectiveVerdict, number>> = { broken: 0, ignored: 1, unmeasured: 2, attempted: 3, held: 4 };
+
+/** A sorted copy, worst first (stable within a verdict). */
+export function outcomeOrder(outcomes: readonly DirectiveOutcome[]): DirectiveOutcome[] {
+  return [...outcomes].sort((a, b) => VERDICT_RANK[a.verdict] - VERDICT_RANK[b.verdict]);
+}
+
+export const VERDICT_TONE: Readonly<Record<DirectiveVerdict, Tone>> = { broken: "fail", ignored: "caution", unmeasured: "muted", attempted: "signal", held: "ok" };
+
+export const VERDICT_LABEL: Readonly<Record<DirectiveVerdict, string>> = { broken: "Broken", ignored: "Ignored", unmeasured: "Unmeasured", attempted: "Attempted", held: "Held" };
+
+/** `k of n` judged runs that held (prevent) or attempted (try); undefined when none was judged. */
+export function outcomeCount(o: DirectiveOutcome): { k: number; n: number } | undefined {
+  return o.rate ? { k: Math.round(o.rate.rate * o.rate.n), n: o.rate.n } : undefined;
+}
+
+/** The same small-sample rule as the caution slip: a rate on fewer than SMALL_SAMPLE_N judged runs. */
+export const smallSample = (o: DirectiveOutcome): boolean => o.rate !== undefined && o.rate.n < SMALL_SAMPLE_N;

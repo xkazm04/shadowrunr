@@ -1,6 +1,7 @@
 // `reconcile/report[/held|failed]`: the report in its own words, what held and failed per
-// segment with evidence linked into Brain transcripts, red lines (Incidents), ranks, tone
-// quality and what the synthesis prompt carried (Synthesis).
+// segment with evidence linked into Brain transcripts, what came of the Lord's directives
+// (DirectiveOutcomes), red lines (Incidents), ranks, tone quality and what the synthesis
+// prompt carried (Synthesis).
 import type { Evidence, RankRow, ReconcileReport, SegmentFinding, ToneFinding } from "@shadowrunr/contract";
 import { useState } from "react";
 import { pageRoute, RouteLink } from "../../router";
@@ -12,6 +13,7 @@ import { StatBand } from "../../ui/StatBand";
 import { EmptyState } from "../../ui/States";
 import { useReport } from "./hooks";
 import styles from "./Layer2.module.css";
+import { ReportDirectives } from "./DirectiveOutcomes";
 import { incidentTotal, Incidents } from "./Incidents";
 import { dateTime, ruleLabel, sourceLabel, triptych } from "./model";
 import { RefLinks } from "./Refs";
@@ -59,6 +61,7 @@ function ReportBody({ report, filter, proposed }: { report: ReconcileReport; fil
       {report.segments.map((s) => (
         <SegmentSection key={s.segment} s={s} filter={filter} />
       ))}
+      <ReportDirectives report={report} />
       <Incidents report={report} />
       <Ranks rows={report.ranks.by_rank ?? []} />
       {report.tone.map((tone, i) => (

@@ -1,7 +1,7 @@
 // Test-only generators of contract-shaped Reconcile & Plan data (imported by *.test.tsx only,
 // never by the page, so nothing here reaches a bundle). `scale` multiplies the pilot's shape
 // toward the 10x fixture: more segments' evidence, more incidents, more directives.
-import type { Directive, NextStreamPlan, PlanOption, ReconcileReport, RuleIncident } from "@shadowrunr/contract";
+import type { Directive, DirectiveOutcome, DirectiveVerdict, NextStreamPlan, PlanOption, ReconcileReport, RuleIncident } from "@shadowrunr/contract";
 
 const bound = (lo: number, hi: number) => ({ lo, hi, method: "wilson" as const });
 
@@ -135,5 +135,22 @@ export function genPlan(optionIds: readonly string[]): NextStreamPlan {
     ],
     topics: ["quiet rooms"],
     directives: genDirectives(2),
+  };
+}
+
+/**
+ * One directive's judged outcome as the reconciler computes it (summary.rs directive_outcomes):
+ * `k` of `n` judged runs held (prevent) or attempted (try); no rate when nothing was judged.
+ */
+export function genOutcome(id: string, verdict: DirectiveVerdict, k: number, n: number, opts: { kind?: "prevent" | "try"; refs?: string[]; lo?: number; hi?: number } = {}): DirectiveOutcome {
+  const kind = opts.kind ?? "prevent";
+  return {
+    id,
+    kind,
+    check: `directive:${kind}:${id}`,
+    runs: n,
+    verdict,
+    ...(n > 0 ? { rate: { rate: k / n, n, bound: bound(opts.lo ?? 0.15, opts.hi ?? 0.85) } } : {}),
+    ...(opts.refs ? { refs: opts.refs } : {}),
   };
 }
