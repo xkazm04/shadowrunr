@@ -1,6 +1,16 @@
 //! The chat room: bulk chatters generated statistically (no LLM), featured chatters
 //! role-played by one batched `Role::Chatter` call per tick, waves, votes, commands and the
 //! situation injections.
+//!
+//! **The closing guard.** No planted stimulus and no population wave lands in the last
+//! `closing_s` of a run (a sandbox session's closing window, where the host wraps up and says
+//! goodbye; 0 in a sim run). The schedule is laid out on `[cold open end, duration -
+//! closing_s)`. **Spread after a silence:** a silence holds every stimulus due inside it; when
+//! it opens, they are re-timed from its end, one every [`SILENCE_SPREAD_S`] in their order
+//! (later ones keep that spacing), instead of all landing on the first tick after it
+//! (sbx-20261021-084052-5m: ten stimuli in one burst, 15 s before the end). A stimulus pushed
+//! past the guard is left out of the session (`left_out`, with a note): never delivered, so
+//! the judge reads its rule as not provoked.
 
 use std::collections::{HashMap, HashSet};
 
@@ -214,7 +224,15 @@ pub struct RoomConfig<'a> {
     pub hex_ids: Vec<String>,
     pub max_featured: usize,
     pub streamer_name: String,
+    /// The closing guard: the last this many seconds keep no planted stimulus and no wave.
+    pub closing_s: u32,
 }
+
+/// Seconds between two stimuli a silence held back, once it ends.
+pub const SILENCE_SPREAD_S: u32 = 10;
+
+/// The note on a stimulus the closing guard left out.
+pub const LEFT_OUT_NOTE: &str = "left out: it would land at or past the closing guard";
 
 pub struct ChatRoom {
     pub pop: Population,
@@ -231,6 +249,8 @@ pub struct ChatRoom {
     foils: Vec<String>,
     hex_ids: Vec<String>,
     silence_until: Option<u32>,
+    /// The closing guard: no stimulus is delivered at or after this second.
+    stimuli_end_s: u32,
     wave_lines: std::collections::HashMap<usize, String>,
     base_audience: u32,
     streamer: String,
@@ -264,14 +284,14 @@ pub fn cold_open_exempt(s: &Situation) -> bool {
         || s.invariants.iter().any(|i| i == "rule:crisis-handoff")
 }
 
-/// `at` moved past the cold open: the run's time `[0, duration)` maps linearly onto
-/// `[window, duration)`, so stimuli keep their order and relative spacing.
-fn past_cold_open(at: u32, window: u32, duration_s: u32) -> u32 {
-    if window == 0 || duration_s <= window {
+/// `at` on `[0, from)` mapped linearly onto `[window, to)`: past the cold open and short of the
+/// closing guard, so stimuli keep their order and relative spacing.
+fn remap(at: u32, window: u32, from: u32, to: u32) -> u32 {
+    if (window == 0 && from == to) || from == 0 || to <= window {
         return at;
     }
-    let span = u64::from(duration_s - window);
-    let moved = u64::from(window) + u64::from(at.min(duration_s)) * span / u64::from(duration_s);
+    let span = u64::from(to - window);
+    let moved = u64::from(window) + u64::from(at.min(from)) * span / u64::from(from);
     u32::try_from(moved).unwrap_or(at)
 }
 
@@ -283,15 +303,19 @@ impl ChatRoom {
             .iter()
             .filter_map(|id| pop.get(id).map(|v| (id.clone(), v.kind)))
             .collect();
-        let mut injections = schedule(
-            cfg.bank,
-            cfg.segment,
-            cfg.duration_s,
-            &featured_kinds,
-            cfg.seed,
-        );
+        // The closing guard: stimuli are laid out on the run short of its closing window.
+        let end = cfg.duration_s.saturating_sub(cfg.closing_s).max(1);
+        let mut injections = schedule(cfg.bank, cfg.segment, end, &featured_kinds, cfg.seed);
         let window = cold_open_window_s(cfg.segment, cfg.duration_s);
-        clear_cold_open(&mut pop, &mut injections, cfg.bank, window, cfg.duration_s);
+        clear_cold_open(
+            &mut pop,
+            &mut injections,
+            cfg.bank,
+            window,
+            cfg.duration_s,
+            end,
+        );
+        space_out(&mut injections, 0, end);
         // A featured chatter is in the room by the time their first stimulus is due.
         for inj in &injections {
             let Some(id) = &inj.chatter_id else { continue };
@@ -319,6 +343,7 @@ impl ChatRoom {
                 cfg.hex_ids
             },
             silence_until: None,
+            stimuli_end_s: end,
             wave_lines: std::collections::HashMap::new(),
             base_audience,
             streamer: cfg.streamer_name,
@@ -502,7 +527,10 @@ impl ChatRoom {
         if self.silence_until.is_none() {
             let bank = &self.bank;
             if let Some(inj) = self.injections.iter_mut().find(|i| {
-                i.kind == StimulusKind::Silence && i.silence_window.is_none() && i.at_s <= t_s
+                i.kind == StimulusKind::Silence
+                    && !i.left_out
+                    && i.silence_window.is_none()
+                    && i.at_s <= t_s
             }) {
                 let len = bank
                     .get(&inj.situation_id)
@@ -513,8 +541,16 @@ impl ChatRoom {
                 let start = t_s.saturating_sub(self.tick_s);
                 inj.silence_window = Some((start, start + len));
                 self.silence_until = Some(t_s + len);
+                self.spread_after_silence(t_s + len);
             }
         }
+    }
+
+    /// Spread after a silence: every stimulus still to come that would land before `resume`
+    /// is re-timed from it, one every [`SILENCE_SPREAD_S`] in order, and later ones keep that
+    /// spacing; one pushed to the closing guard or past it is left out.
+    fn spread_after_silence(&mut self, resume: u32) {
+        space_out(&mut self.injections, resume, self.stimuli_end_s);
     }
 
     pub fn silent(&self, t_s: u32) -> bool {
@@ -629,7 +665,11 @@ impl ChatRoom {
         let mut out = Vec::new();
         for idx in 0..self.injections.len() {
             let inj = &self.injections[idx];
-            if inj.kind != StimulusKind::Wave || inj.at_s > t_s {
+            if inj.kind != StimulusKind::Wave || inj.at_s > t_s || inj.left_out {
+                continue;
+            }
+            // A wave never starts in the closing window.
+            if inj.attempts.is_empty() && t_s >= self.stimuli_end_s {
                 continue;
             }
             let arch = self
@@ -977,6 +1017,8 @@ Reply with JSON only: {{\"messages\":[{{\"chatter\":\"<viewer id>\",\"text\":\".
             .collect();
         for (i, inj) in self.injections.iter_mut().enumerate() {
             if !inj.needs_chatter()
+                || inj.left_out
+                || t_s >= self.stimuli_end_s
                 || inj.performed_msg_id.is_some()
                 || inj.at_s > t_s
                 || inj.attempts.len() >= MAX_ATTEMPTS
@@ -1230,18 +1272,46 @@ viewer mentions them or talks to them.\n",
     }
 }
 
-/// Keep the cold open (`window` seconds) clear of planted stimuli: every stimulus but a
-/// newcomer's or a crisis ([`cold_open_exempt`]) moves past it, as do the population's own
-/// waves (a raid, copypasta floods). Times map linearly ([`past_cold_open`]), so order and
-/// spacing hold; a silence still closes before the run ends.
+/// One stimulus every [`SILENCE_SPREAD_S`]: every stimulus still to come (not a silence) lands
+/// at `floor` or later, at least that far after the one before it, in order; one pushed to
+/// `end_s` (the closing guard) or past it is left out, with [`LEFT_OUT_NOTE`].
+fn space_out(injections: &mut [Injection], floor: u32, end_s: u32) {
+    let mut next = floor;
+    for inj in injections.iter_mut() {
+        let pending = inj.kind != StimulusKind::Silence
+            && !inj.left_out
+            && inj.performed_msg_id.is_none()
+            && inj.attempts.len() < MAX_ATTEMPTS;
+        if !pending {
+            continue;
+        }
+        inj.at_s = inj.at_s.max(next);
+        next = inj.at_s + SILENCE_SPREAD_S;
+    }
+    injections.sort_by_key(|i| i.at_s);
+    for inj in injections.iter_mut() {
+        let delivered = inj.performed_msg_id.is_some() || inj.silence_window.is_some();
+        if inj.at_s >= end_s && !inj.left_out && !delivered {
+            inj.left_out = true;
+            inj.note = Some(LEFT_OUT_NOTE.into());
+        }
+    }
+}
+
+/// Keep the cold open (`window` seconds) and the closing guard (from `end_s`) clear of planted
+/// stimuli: every stimulus (scheduled on `[0, end_s)`) but a newcomer's or a crisis
+/// ([`cold_open_exempt`]) moves past the cold open, and the population's own waves (a raid,
+/// copypasta floods, generated on the whole run) move onto `[window, end_s)`. Times map
+/// linearly ([`remap`]), so order and spacing hold; a silence still closes before `end_s`.
 fn clear_cold_open(
     pop: &mut Population,
     injections: &mut [Injection],
     bank: &SituationBank,
     window: u32,
     duration_s: u32,
+    end_s: u32,
 ) {
-    if window == 0 {
+    if window == 0 && duration_s == end_s {
         return;
     }
     for inj in injections.iter_mut() {
@@ -1251,15 +1321,22 @@ fn clear_cold_open(
         if cold_open_exempt(s) {
             continue;
         }
-        let mut at = past_cold_open(inj.at_s, window, duration_s);
+        let mut at = remap(inj.at_s, window, end_s, end_s);
         if inj.kind == StimulusKind::Silence {
-            at = at.min(duration_s.saturating_sub(s.silence_len() + 30));
+            at = at.min(end_s.saturating_sub(s.silence_len() + 30));
+            // A silence that cannot open after the cold open and close 30 s before the guard
+            // does not fit: pulled back into the cold open it would eat the run (a 120 s
+            // silence in a 5-minute session held every stimulus to its last minute).
+            if at < window {
+                inj.left_out = true;
+                inj.note = Some(LEFT_OUT_NOTE.into());
+            }
         }
-        inj.at_s = at.min(duration_s.saturating_sub(1));
+        inj.at_s = at.min(end_s.saturating_sub(1));
     }
     injections.sort_by_key(|i| i.at_s);
     if let Some(at) = pop.raid_at_s {
-        let moved = past_cold_open(at, window, duration_s);
+        let moved = remap(at, window, duration_s, end_s);
         for v in pop
             .viewers
             .iter_mut()
@@ -1273,7 +1350,7 @@ fn clear_cold_open(
         pop.raid_at_s = Some(moved);
     }
     for at in &mut pop.copypasta_at_s {
-        *at = past_cold_open(*at, window, duration_s);
+        *at = remap(*at, window, duration_s, end_s);
     }
 }
 
@@ -1441,11 +1518,23 @@ mod tests {
 
     /// A 900 s SEG-01 room.
     fn room_of(population: &str, size: u32, seed: u64) -> ChatRoom {
+        room_for(population, size, seed, 900, 0)
+    }
+
+    /// A SEG-01 room of `duration_s` with a closing guard of `closing_s`.
+    fn room_for(
+        population: &str,
+        size: u32,
+        seed: u64,
+        duration_s: u32,
+        closing_s: u32,
+    ) -> ChatRoom {
         let tmp = tempfile::tempdir().unwrap();
         let (cal, _, _) = crate::calibration::load(tmp.path()).unwrap();
         let bank = bank();
         let rank = crate::population::tests::fake_rank;
-        let pop = crate::population::generate(&cal, population, size, 900, seed, rank).unwrap();
+        let pop =
+            crate::population::generate(&cal, population, size, duration_s, seed, rank).unwrap();
         ChatRoom::new(
             pop,
             RoomConfig {
@@ -1457,14 +1546,117 @@ mod tests {
                 },
                 seed,
                 tick_s: 5,
-                duration_s: 900,
+                duration_s,
                 segment: SegmentId::Seg01ImprovisedRoom,
                 foils: Vec::new(),
                 hex_ids: Vec::new(),
                 max_featured: 8,
                 streamer_name: "Malakor".into(),
+                closing_s,
             },
         )
+    }
+
+    #[test]
+    fn the_closing_guard_keeps_every_stimulus_and_wave_out_of_the_closing_window() {
+        // A 5-minute sandbox session: the last 60 s are the host's wrap-up and goodbye.
+        for (population, size) in [("growing_channel", 30), ("raid_moment", 300)] {
+            for seed in [7, 11, 42] {
+                let room = room_for(population, size, seed, 300, 60);
+                let kept: Vec<&Injection> =
+                    room.injections.iter().filter(|i| !i.left_out).collect();
+                assert!(kept.len() >= 5, "seed {seed}: {} kept", kept.len());
+                // What does not fit is left out, with its note; what is kept is spaced.
+                for inj in room.injections.iter().filter(|i| i.left_out) {
+                    assert_eq!(inj.note.as_deref(), Some(LEFT_OUT_NOTE));
+                }
+                let spaced: Vec<u32> = kept
+                    .iter()
+                    .filter(|i| i.kind != StimulusKind::Silence)
+                    .map(|i| i.at_s)
+                    .collect();
+                assert!(
+                    spaced.windows(2).all(|w| w[1] - w[0] >= SILENCE_SPREAD_S),
+                    "{spaced:?}"
+                );
+                for inj in kept {
+                    assert!(inj.at_s < 240, "{} at {}", inj.situation_id, inj.at_s);
+                    if inj.kind == StimulusKind::Silence {
+                        let len = bank().get(&inj.situation_id).unwrap().silence_len();
+                        assert!(inj.at_s + len <= 240, "a silence closes before the guard");
+                    }
+                }
+                if let Some(at) = room.pop.raid_at_s {
+                    assert!(at < 240, "raid at {at}");
+                }
+                assert!(room.pop.copypasta_at_s.iter().all(|&at| at < 240));
+            }
+        }
+    }
+
+    fn planted(id: &str, kind: StimulusKind, at_s: u32) -> Injection {
+        Injection {
+            situation_id: id.into(),
+            kind,
+            at_s,
+            chatter_id: None,
+            attempts: Vec::new(),
+            performed_msg_id: None,
+            silence_window: None,
+            note: None,
+            left_out: false,
+        }
+    }
+
+    #[test]
+    fn a_silence_spreads_what_it_held_and_the_guard_leaves_out_what_no_longer_fits() {
+        // sbx-20261021-084052-5m: a 120 s silence held ten stimuli, and all of them arrived on
+        // the first tick after it, 15 s before the end.
+        let mut room = room_for("growing_channel", 30, 7, 300, 60);
+        room.injections = vec![
+            planted("empty-room", StimulusKind::Silence, 90),
+            planted("gifted-sub-hype", StimulusKind::Message, 100),
+            planted("prompt-injection", StimulusKind::Message, 110),
+            planted("raid-wave", StimulusKind::Wave, 120),
+            planted("dark-humor-fine", StimulusKind::Message, 150),
+            planted("sincere-are-you-ai", StimulusKind::Message, 175),
+            planted("edgy-roast-request", StimulusKind::Message, 235),
+        ];
+        room.begin_tick(90);
+        assert!(room.silent(100));
+        let len = bank().get("empty-room").unwrap().silence_len();
+        let resume = 90 + len;
+        let at: Vec<(&str, u32, bool)> = room
+            .injections
+            .iter()
+            .filter(|i| i.kind != StimulusKind::Silence)
+            .map(|i| (i.situation_id.as_str(), i.at_s, i.left_out))
+            .collect();
+        // Held ones one every 10 s from the end of the silence, in order; past 240 s left out.
+        let mut want: Vec<(&str, u32, bool)> = Vec::new();
+        for (k, id) in [
+            "gifted-sub-hype",
+            "prompt-injection",
+            "raid-wave",
+            "dark-humor-fine",
+            "sincere-are-you-ai",
+            "edgy-roast-request",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let t = resume + SILENCE_SPREAD_S * k as u32;
+            want.push((id, t, t >= 240));
+        }
+        assert_eq!(at, want);
+        assert!(want.iter().any(|w| w.2), "the test reaches the guard");
+        let gone = room.injections.iter().find(|i| i.left_out).unwrap();
+        assert_eq!(gone.note.as_deref(), Some(LEFT_OUT_NOTE));
+        // A left-out message is never handed to a chatter, and a wave never starts.
+        assert!(room
+            .due_directives(299)
+            .iter()
+            .all(|&i| !room.injections[i].left_out));
     }
 
     fn ban(msg_id: &str) -> StreamEvent {
@@ -1590,8 +1782,10 @@ mod tests {
         assert_eq!(cold_open_window_s(SegmentId::Seg01ImprovisedRoom, 900), 180);
         assert_eq!(cold_open_window_s(SegmentId::Seg01ImprovisedRoom, 300), 150);
         assert_eq!(cold_open_window_s(SegmentId::Seg02aHexmap, 900), 0);
-        assert_eq!(past_cold_open(0, 180, 900), 180);
-        assert_eq!(past_cold_open(450, 180, 900), 540);
+        assert_eq!(remap(0, 180, 900, 900), 180);
+        assert_eq!(remap(450, 180, 900, 900), 540);
+        // Past the cold open and short of a 60 s closing guard.
+        assert_eq!(remap(150, 150, 300, 240), 195);
 
         let mut exempt_early = 0;
         for seed in [7, 11, 42] {

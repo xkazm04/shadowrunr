@@ -15,12 +15,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use shadowrunr_brain::{load_character, Brain, BrainConfig, BrainTuning, FilterConfig};
+use shadowrunr_brain::{load_character, Brain, BrainConfig, BrainTuning, FilterConfig, PaceConfig};
 use shadowrunr_segments::{SegmentConfig, SegmentRuntime, StagedCase, StreamKind};
 use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::{
     ChatMsg, EndReason, Engine, ModelTier, Op, Role, SegmentContext, SegmentId, SimRunSpec,
-    Speaker, StreamEvent, TsMs,
+    StreamEvent, TsMs,
 };
 
 use crate::calibration::{self, Calibration, CalibrationOrigin};
@@ -32,6 +32,7 @@ use crate::ledger::LedgerEngine;
 use crate::outcome;
 use crate::pacing::GateHandle;
 use crate::population;
+use crate::sandbox;
 use crate::situations::{Injection, SituationBank};
 use crate::transcript::{self, TranscriptWriter};
 use crate::{read_json, write_json, RunOutput, SimError, SimOptions};
@@ -471,29 +472,16 @@ pub(crate) fn prepare_in(
     })
 }
 
-fn max_say_gap_s(events: &[StreamEvent], end_ms: TsMs) -> Option<u32> {
-    let says: Vec<TsMs> = events
+/// The longest silence before one of his lines, speech-aware, as a sandbox session measures it
+/// (`sandbox::say_gaps`): from when the speech before the line ends on the brain's speech
+/// clock, not say to say, so a long line followed by its drain is not a silence.
+fn max_say_gap_s(events: &[StreamEvent], end_ms: TsMs, pace: &PaceConfig) -> Option<u32> {
+    let lines = sandbox::on_air(events);
+    let gap = sandbox::say_gaps(&lines, end_ms, Some(pace))
         .iter()
-        .filter(|e| {
-            matches!(
-                e,
-                StreamEvent::Say {
-                    speaker: Speaker::Malakor,
-                    ..
-                }
-            )
-        })
-        .map(transcript::ts)
-        .collect();
-    if says.is_empty() {
-        return Some((end_ms / 1000) as u32);
-    }
-    let mut prev = 0;
-    let mut gap = 0;
-    for t in says.iter().copied().chain(std::iter::once(end_ms)) {
-        gap = gap.max(t - prev);
-        prev = t;
-    }
+        .map(|(g, _)| *g)
+        .max()
+        .unwrap_or(0);
     Some((gap / 1000) as u32)
 }
 
@@ -528,6 +516,8 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
             hex_ids: prep.hex_ids.clone(),
             max_featured: opts.max_featured,
             streamer_name: prep.streamer.clone(),
+            // A sim run has no closing window.
+            closing_s: 0,
         },
     );
     let transcript_path = prep.run_dir.join("transcript.jsonl");
@@ -685,7 +675,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         },
         featured: room.featured_ids().to_vec(),
         injections: room.injections.clone(),
-        max_say_gap_s: max_say_gap_s(&events, end_ms),
+        max_say_gap_s: max_say_gap_s(&events, end_ms, &brain_tuning(opts).pace),
         judge_tier: prep.judge_tier,
         judge_error: None,
         engine_failure: engine_failure.clone(),
@@ -964,7 +954,7 @@ pub(crate) mod tests {
     use crate::Hooks;
     use shadowrunr_types::{
         CheckState, EngineError, EngineKind, EngineReply, EngineRequest, HealthReport,
-        JudgeVerdict, Rank, SegmentId, Usage, VoteTally, WarmSession,
+        JudgeVerdict, Rank, SegmentId, Speaker, Usage, VoteTally, WarmSession,
     };
     use std::sync::Mutex;
 
@@ -1396,6 +1386,9 @@ pub(crate) mod tests {
                     inj.performed_msg_id.is_none()
                         && inj.attempts.len() == crate::situations::MAX_ATTEMPTS
                 );
+            } else if inj.left_out {
+                // A silence's spread pushed it past the end of the run: never delivered.
+                assert!(inj.performed_msg_id.is_none() && inj.attempts.is_empty());
             } else if inj.kind == crate::situations::StimulusKind::Silence {
                 let (s, e) = inj.silence_window.unwrap();
                 assert!(!events.iter().any(|ev| matches!(ev, StreamEvent::Chat { ts_ms, .. } if *ts_ms > i64::from(s) * 1000 && *ts_ms <= i64::from(e) * 1000)));

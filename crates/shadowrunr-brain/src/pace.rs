@@ -8,10 +8,11 @@
 //!   measured from where it ends: "nobody is speaking", not "no event".
 //! - **The hold.** While more than `speech_lead_ms` of speech is still queued, a beat is a
 //!   `hold` (reason `speaking: N.N s queued`) and makes no core call. A safety beat always runs
-//!   at once, and so does a closing beat (the state carries a [`CLOSING_PREFIX`] line): the
-//!   sign-off is never held past the session end. A closing beat's budget is cut to
-//!   [`closing_budget`] instead, so what it adds behind the queue is short; whatever is still
-//!   queued when the stream ends is cut with it.
+//!   at once, and so does a goodbye beat (the state carries a [`CLOSING_NOW_PREFIX`] line): the
+//!   sign-off is never held past the session end. A goodbye beat's budget is cut to
+//!   [`closing_budget`] instead, so what it adds behind the queue is short. The wrap-up window
+//!   before it (a plain [`CLOSING_PREFIX`] line: tie things off, no goodbye yet) is paced like
+//!   any other beat, so a minute of wrap-up never piles up speech the stream end would cut.
 //! - **The budget.** The compose prompt asks for at most two sentences and `budget_chars`
 //!   characters a beat; the gate keeps the beat's spoken lines within it by dropping whole
 //!   lines, last first, never the first one and never part of one ([`over_budget`]; output
@@ -27,8 +28,11 @@ use shadowrunr_types::TsMs;
 pub const PACE_RULE: &str = "pace_budget";
 /// Its action.
 pub const TRIMMED: &str = "trimmed";
-/// A state-summary line starting with this asks the host to wrap up and sign off.
+/// A state-summary line starting with this is the closing window: wrap up (a plain `CLOSING:`
+/// line, no goodbye yet) or say goodbye and sign off ([`CLOSING_NOW_PREFIX`]).
 pub const CLOSING_PREFIX: &str = "CLOSING";
+/// A state-summary line starting with this asks for the goodbye and the sign-off now.
+pub const CLOSING_NOW_PREFIX: &str = "CLOSING NOW";
 
 /// The speech clock's and the per-beat budget's knobs ([`crate::BrainTuning::pace`]).
 #[derive(Debug, Clone, PartialEq)]
@@ -97,14 +101,21 @@ impl SpeechClock {
     }
 }
 
-/// Whether the state summary asks the host to close the stream.
+/// Whether the state summary carries the closing window (wrap-up or goodbye).
 pub fn is_closing(state_summary: &str) -> bool {
     state_summary
         .lines()
         .any(|l| l.trim_start().starts_with(CLOSING_PREFIX))
 }
 
-/// A closing beat's budget: half the beat budget, so the goodbye queues little.
+/// Whether the state summary asks for the goodbye now: never held, at [`closing_budget`].
+pub fn is_closing_now(state_summary: &str) -> bool {
+    state_summary
+        .lines()
+        .any(|l| l.trim_start().starts_with(CLOSING_NOW_PREFIX))
+}
+
+/// A goodbye beat's budget: half the beat budget, so the goodbye queues little.
 pub fn closing_budget(budget_chars: usize) -> usize {
     budget_chars / 2
 }
@@ -171,6 +182,13 @@ mod tests {
             "CLOSING NOW: the operator is ending the stream."
         ));
         assert!(!is_closing("closing remarks are not the window"));
+        // Only the goodbye line skips the hold.
+        assert!(!is_closing_now(
+            "open poll\nCLOSING: the stream ends in 40 s. Wrap up."
+        ));
+        assert!(is_closing_now(
+            "open poll\nCLOSING NOW: the stream ends in 12 s. Say goodbye."
+        ));
         assert_eq!(closing_budget(260), 130);
     }
 }

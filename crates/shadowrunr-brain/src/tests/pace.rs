@@ -144,8 +144,16 @@ async fn the_sign_off_is_never_held_for_queued_speech() {
     b.tick(240_000, Vec::new(), &c).await.unwrap();
     assert!(b.speech_until().unwrap() - 245_000 > 1_500, "speech queued");
 
+    // The wrap-up window is paced like any beat: a minute of unheld closing beats piled up
+    // speech the stream end would cut.
+    let mut wrap = c.clone();
+    wrap.state_summary
+        .push_str("\nCLOSING: the stream ends in 55 s. Wrap up; no goodbye yet.");
+    let ev = b.tick(242_000, Vec::new(), &wrap).await.unwrap();
+    assert_eq!(plan_of(&ev).0, BeatMode::Hold, "{}", plan_of(&ev).1);
+
     c.state_summary
-        .push_str("\nCLOSING: the stream ends in 55 s. Wrap up, then emit sign_off.");
+        .push_str("\nCLOSING NOW: the stream ends in 12 s. Say goodbye, then emit sign_off.");
     engine.push(
         Role::CoreThread,
         Ok("Farewell, minions.\nOP: {\"op\":\"sign_off\",\"reason\":\"scheduled\"}"),

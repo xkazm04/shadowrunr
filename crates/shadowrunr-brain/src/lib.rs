@@ -803,7 +803,9 @@ impl Brain {
             ev.push(care_event(now_ms, &c.msg.id, how.as_str()));
         }
         let cands = self.orch.screen(now_ms, cands, &mut ev);
-        let closing = pace::is_closing(&ctx.state_summary);
+        // The goodbye beat is never held and speaks at half budget; the wrap-up before it is
+        // paced like any beat.
+        let closing = pace::is_closing_now(&ctx.state_summary);
         let mut plan = self.orch.plan(&BeatInputs {
             now_ms,
             ctx,
@@ -854,7 +856,10 @@ impl Brain {
                 reason: pick.reason.clone(),
             });
         }
-        ev.push(self.orch.commit(&mut plan, &pick, now_ms));
+        let beat_plan = self.orch.commit(&mut plan, &pick, now_ms);
+        // Every message the carry cap dropped leaves a record.
+        ev.extend(self.orch.take_capped(now_ms));
+        ev.push(beat_plan);
         if plan.mode == BeatMode::Hold {
             if self
                 .ticks
@@ -982,6 +987,8 @@ impl Brain {
             beat_note: plan.note.as_deref(),
             room_note: plan.room_note.as_deref(),
             budget_chars: budget,
+            propose_min_rank: self.tuning.filter.propose_min_rank,
+            first_contacts: &pctx.first_contacts,
         });
         self.last_prompt = Some(prompt.clone());
 

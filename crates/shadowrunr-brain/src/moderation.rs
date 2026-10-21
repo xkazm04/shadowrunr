@@ -728,6 +728,14 @@ fn filter_regexes() -> &'static FilterRegexes {
 /// A gift or sub announcement in chat text ("gifted 5 subs", "just subscribed").
 const GIFT_PATTERN: &str = r"\b(?:gift(?:ed|ing|s)?\s+(?:\d{1,4}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|twenty|fifty|a\s+hundred)\s+(?:tier\s*[123]\s+)?sub(?:s|scriptions?)?\b|just\s+(?:re)?sub(?:bed|scribed)\b|(?:re)?subscribed\s+(?:for|with|at)\s+(?:tier|prime|\d)|resub(?:bed)?\b)";
 
+/// Whether a message announces a gift or a sub ([`GIFT_PATTERN`]): it is tribute, thanked by
+/// name and rank, and carried like a first contact when a beat cannot answer it.
+pub fn is_gift_or_sub(text: &str) -> bool {
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| ci(GIFT_PATTERN).expect("gift pattern compiles"))
+        .is_match(text)
+}
+
 /// Second-person words that make a question direct.
 const YOU_WORDS: &[&str] = &["you", "your", "yours", "yourself", "u", "ur", "youre", "ya"];
 

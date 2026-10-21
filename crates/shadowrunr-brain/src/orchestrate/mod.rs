@@ -23,18 +23,26 @@
 //! never voices prepared material and offers only the safety pick. Votes and lone emotes never
 //! fill a pick, and a wave once answered is not picked again this stream.
 //!
-//! A message that needs an answer (a question, a mention, a first contact, a proposal or a
-//! summons, a mockable injection) and that a beat could not answer (a hold, a safety beat, the
-//! cold-open filter, the pick ceiling) is carried into the next beats for [`CARRY_MS`], at most
-//! [`CARRY_MAX`] at once, competing with fresh chat with a small age bonus; once answered it is
-//! never offered again. Waves and votes are never carried.
+//! A message that needs an answer (a question, a mention, a first contact, a gift or a sub, a
+//! proposal or a summons, a mockable injection) and that a beat could not answer (a hold, a
+//! safety beat, the cold-open filter, the pick ceiling) is carried into the next beats for
+//! [`CARRY_MS`], at most [`CARRY_MAX`] at once, competing with fresh chat with a small age bonus;
+//! once answered it is never offered again. Waves and votes are never carried.
+//!
+//! **Carry through the cold open** ("carry until the room opens + `CARRY_MS`"). The cold-open
+//! filter passes only first contacts, so what it (or a hold in it) defers is held, not timed: a
+//! message carried during the cold open never expires there, and its [`CARRY_MS`] starts from
+//! the drain of the first beat after the room opens. While the room fills, the [`CARRY_MAX`] cap
+//! keeps first contacts first, the oldest first (the greeting owed longest), then the newest of
+//! the rest. The first beats after the room opens answer them alongside fresh chat.
 //!
 //! A vote that closed and a handover that fell due are room events ([`room`]): the next beat
 //! that is not a safety beat announces them, once, and expires the queued bit.
 //!
 //! **Speech pacing** ([`crate::pace`]): while more than `speech_lead_ms` of his speech is still
 //! queued, a beat is a `hold` with reason `speaking: N.N s queued`, before anything else is
-//! decided. A safety beat and a closing beat are never held. A room event waits for the drain
+//! decided. A safety beat and a goodbye beat (`CLOSING NOW`) are never held; the wrap-up window
+//! before the goodbye is paced like any other beat. A room event waits for the drain
 //! and is then announced first, ahead of a queued connector or bit. Carried chat waits in the
 //! carry queue, and its [`CARRY_MS`] counts from the drain ("carry from the drain"): a message
 //! expires [`CARRY_MS`] after the speech queued when it arrived has aired, so pacing never
@@ -95,8 +103,11 @@ const REMARK_MIN_WORDS: usize = 4;
 pub const CARRY_MS: i64 = 25_000;
 /// The most messages carried at once; the oldest go first.
 pub const CARRY_MAX: usize = 6;
-/// The `input` moderation rule that records a carried message dropped unanswered.
+/// The `input` moderation rule that records a carried message dropped unanswered: action
+/// `expired` (it waited [`CARRY_MS`]) or [`CAPPED`] (the [`CARRY_MAX`] cap dropped it).
 pub const CARRY_RULE: &str = "carry";
+/// The [`CARRY_RULE`] action for a message the carry cap dropped.
+pub const CAPPED: &str = "capped";
 /// Without a prep, at least this long between two gathering lines of the cold open
 /// (assumption); he holds in between.
 pub const GATHERING_SPACING_MS: i64 = 20_000;
@@ -125,7 +136,7 @@ pub struct BeatInputs<'a> {
     pub speech_until_ms: Option<TsMs>,
     /// A beat holds while more than this much speech is still queued.
     pub speech_lead_ms: i64,
-    /// The closing window (a `CLOSING` line in the state): never held for speech.
+    /// The goodbye beat (a `CLOSING NOW` line in the state): never held for speech.
     pub closing: bool,
     /// Lowercase names the character answers to.
     pub names: &'a [String],
@@ -189,6 +200,9 @@ struct Carried {
     first: bool,
     /// When it stops being carried: [`CARRY_MS`] after the speech queued at its arrival aired.
     expires: TsMs,
+    /// Carried through the cold open: it never expires there, and `expires` is set when the
+    /// room opens.
+    held: bool,
 }
 
 /// A multi-line bit being told across beats.
@@ -223,10 +237,12 @@ pub struct Orchestrator {
     last_gathering_ms: Option<TsMs>,
     /// Messages carried into the next beat.
     carried: Vec<Carried>,
-    /// Messages carried into this beat: id to (since, first contact, expires).
-    carried_in: HashMap<String, (TsMs, bool, TsMs)>,
+    /// Messages carried into this beat, by id.
+    carried_in: HashMap<String, Carried>,
     /// This beat's messages that are carried if no pick answers them.
     carry_next: Vec<Carried>,
+    /// Ids the carry cap dropped at the last commit, for their records.
+    capped: Vec<String>,
     /// Ids of messages picked this stream: never offered again.
     answered: HashSet<String>,
     room: RoomWatch,
@@ -253,7 +269,9 @@ fn worth(c: &Candidate, first: bool, names: &[String]) -> Option<&'static str> {
     if is_filler(c) {
         return None;
     }
-    if first {
+    if moderation::is_gift_or_sub(&c.msg.text) {
+        Some("gift")
+    } else if first {
         Some("first contact")
     } else if c.count > 1 {
         Some("wave")
@@ -284,7 +302,7 @@ fn carries(c: &Candidate, first: bool, names: &[String]) -> bool {
         return false;
     }
     match worth(c, first, names) {
-        Some("first contact" | "mention" | "question" | "mockable") => true,
+        Some("gift" | "first contact" | "mention" | "question" | "mockable") => true,
         Some("command") => matches!(
             c.msg.command,
             Some(Command::Propose { .. } | Command::Summon { .. })
@@ -359,7 +377,7 @@ impl Orchestrator {
     /// Whether a message was its viewer's first this stream (in this beat's inbox, or carried
     /// from an earlier one).
     pub fn is_first_contact(&self, msg_id: &str) -> bool {
-        self.first.contains(msg_id) || self.carried_in.get(msg_id).is_some_and(|c| c.1)
+        self.first.contains(msg_id) || self.carried_in.get(msg_id).is_some_and(|c| c.first)
     }
 
     /// How long each message carried into this beat has waited, by id (the picker's age
@@ -367,7 +385,7 @@ impl Orchestrator {
     pub fn carried_ages(&self, now_ms: TsMs) -> HashMap<String, i64> {
         self.carried_in
             .iter()
-            .map(|(id, (since, _, _))| (id.clone(), now_ms.saturating_sub(*since)))
+            .map(|(id, k)| (id.clone(), now_ms.saturating_sub(k.since)))
             .collect()
     }
 
@@ -379,7 +397,8 @@ impl Orchestrator {
     /// Drop repeats of a wave already answered (an `input` record, `wave_repeat` / `dropped`)
     /// and fold near-duplicate pastes into one candidate, so several pasters are never picked.
     /// Then add the messages carried from earlier beats, dropping those that waited
-    /// [`CARRY_MS`] from the drain (an `input` record, [`CARRY_RULE`] / `expired`).
+    /// [`CARRY_MS`] from the drain (an `input` record, [`CARRY_RULE`] / `expired`); one held
+    /// through the cold open never expires before the room opens.
     pub fn screen(
         &mut self,
         now_ms: TsMs,
@@ -429,12 +448,12 @@ impl Orchestrator {
             if self.answered.contains(&id) || out.iter().any(|c| c.msg.id == id) {
                 continue;
             }
-            if now_ms >= k.expires {
+            if !k.held && now_ms >= k.expires {
                 ev.push(moderation::input_event(now_ms, CARRY_RULE, &id, "expired"));
                 continue;
             }
-            self.carried_in.insert(id, (k.since, k.first, k.expires));
-            out.push(k.cand);
+            out.push(k.cand.clone());
+            self.carried_in.insert(id, k);
         }
         out
     }
@@ -608,21 +627,27 @@ impl Orchestrator {
 
         self.room.observe(&b.ctx.state, &b.ctx.state_summary);
         let free_at = b.speech_until_ms.map_or(now, |u| u.max(now));
+        // In the cold open what is carried is held; once the room opens, its clock starts from
+        // this beat's drain.
+        let cold = b.ctx.state == COLD_OPEN_STATE;
+        let from_drain = free_at.saturating_add(CARRY_MS);
         self.carry_next = b
             .cands
             .iter()
             .filter(|c| !self.answered.contains(&c.msg.id))
             .filter_map(|c| {
                 let first = self.is_first_contact(&c.msg.id);
-                let (since, expires) = self
-                    .carried_in
-                    .get(&c.msg.id)
-                    .map_or((now, free_at.saturating_add(CARRY_MS)), |k| (k.0, k.2));
+                let (since, expires) = match self.carried_in.get(&c.msg.id) {
+                    Some(k) if k.held && !cold => (k.since, from_drain),
+                    Some(k) => (k.since, k.expires),
+                    None => (now, from_drain),
+                };
                 carries(c, first, b.names).then(|| Carried {
                     cand: c.clone(),
                     since,
                     first,
                     expires,
+                    held: cold,
                 })
             })
             .collect();
@@ -636,8 +661,10 @@ impl Orchestrator {
         }
         let quiet_ms = now.saturating_sub(self.quiet_since.unwrap_or(now));
         let gap_ms = b.speech_until_ms.map(|t| now.saturating_sub(t).max(0));
-        let may_hold =
-            gap_ms.is_some_and(|g| g < HOLD_GAP_MS) && self.last_mode != Some(BeatMode::Hold);
+        // The goodbye beat always speaks: a quiet hold there would cost the sign-off.
+        let may_hold = gap_ms.is_some_and(|g| g < HOLD_GAP_MS)
+            && self.last_mode != Some(BeatMode::Hold)
+            && !b.closing;
 
         // Speech still queued: hold before anything is decided or consumed. A safety beat and
         // a closing beat run at once.
@@ -1091,17 +1118,18 @@ impl Orchestrator {
         }
 
         // What was answered is never offered again; what needed an answer and got none is
-        // carried, newest first, while it is young enough.
+        // carried, newest first, while it is young enough. While the room fills nothing
+        // expires, and the cap keeps first contacts first, the oldest first.
         let chosen: HashSet<&str> = pick.chosen.iter().map(|c| c.msg.id.as_str()).collect();
         let late: Vec<String> = pick
             .chosen
             .iter()
             .filter_map(|c| {
-                let (since, _, _) = self.carried_in.get(&c.msg.id)?;
+                let k = self.carried_in.get(&c.msg.id)?;
                 Some(format!(
                     "{} ({} s)",
                     c.msg.id,
-                    now_ms.saturating_sub(*since) / 1000
+                    now_ms.saturating_sub(k.since) / 1000
                 ))
             })
             .collect();
@@ -1112,9 +1140,18 @@ impl Orchestrator {
         self.answered.extend(chosen.iter().map(|s| s.to_string()));
         let mut carry: Vec<Carried> = std::mem::take(&mut self.carry_next)
             .into_iter()
-            .filter(|k| !chosen.contains(k.cand.msg.id.as_str()) && now_ms < k.expires)
+            .filter(|k| !chosen.contains(k.cand.msg.id.as_str()) && (k.held || now_ms < k.expires))
             .collect();
-        carry.sort_by_key(|k| std::cmp::Reverse(k.since));
+        if carry.iter().any(|k| k.held) {
+            carry.sort_by_key(|k| (!k.first, if k.first { k.since } else { -k.since }));
+        } else {
+            carry.sort_by_key(|k| std::cmp::Reverse(k.since));
+        }
+        self.capped = carry
+            .iter()
+            .skip(CARRY_MAX)
+            .map(|k| k.cand.msg.id.clone())
+            .collect();
         carry.truncate(CARRY_MAX);
         let fresh: Vec<&str> = carry
             .iter()
@@ -1145,6 +1182,15 @@ impl Orchestrator {
             picks: u32::try_from(pick.chosen.len()).unwrap_or(u32::MAX),
             reason: plan.reason.clone(),
         }
+    }
+
+    /// The `input` records of the messages the carry cap dropped at the last commit
+    /// ([`CARRY_RULE`] / [`CAPPED`]), taken once: every drop leaves a record.
+    pub fn take_capped(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
+        std::mem::take(&mut self.capped)
+            .iter()
+            .map(|id| moderation::input_event(now_ms, CARRY_RULE, id, CAPPED))
+            .collect()
     }
 
     /// The in-character stand-in for a line the output gate recast: a rebuttal of a forged

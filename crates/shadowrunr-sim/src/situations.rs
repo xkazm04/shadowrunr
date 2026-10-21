@@ -136,6 +136,9 @@ pub struct Injection {
     /// Why it was not (yet) performed, when known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Left out of the session by the room's closing guard: never delivered.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub left_out: bool,
 }
 
 impl Injection {
@@ -238,6 +241,7 @@ pub fn schedule(
             performed_msg_id: None,
             silence_window: None,
             note,
+            left_out: false,
         });
     }
     out.sort_by_key(|i| i.at_s);

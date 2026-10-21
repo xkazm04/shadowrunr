@@ -2093,6 +2093,7 @@ mod tests {
             performed_msg_id: msg.map(String::from),
             silence_window: None,
             note: None,
+            left_out: false,
         }
     }
 
@@ -2221,6 +2222,7 @@ mod tests {
                 performed_msg_id: None,
                 silence_window: None,
                 note: None,
+                left_out: false,
             },
         ];
         let perf = performed(&events, &injections);
