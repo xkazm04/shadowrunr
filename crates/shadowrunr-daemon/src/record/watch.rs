@@ -137,7 +137,8 @@ pub fn parse_voice(text: &str) -> Vec<VoiceLogLine> {
 // ── voiced ──────────────────────────────────────────────────────────────
 
 /// `voiced`: the share of the host's `say` lines whose every rendered part was `played`, with
-/// nothing skipped or dropped. A line the voice never rendered is not voiced.
+/// nothing skipped or dropped. A line the voice never rendered is not voiced; one it dropped
+/// because nobody followed the run any more counts as `skipped unfollowed`.
 pub fn voiced(show: &Show, voice: Option<&[VoiceLogLine]>) -> SandboxCheck {
     const ID: SandboxCheckId = SandboxCheckId::Voiced;
     let Some(voice) = voice else {
@@ -178,7 +179,8 @@ pub fn voiced(show: &Show, voice: Option<&[VoiceLogLine]>) -> SandboxCheck {
             VoiceLogEvent::StageDropped => {
                 dropped.insert(l.seq);
             }
-            VoiceLogEvent::Face => {}
+            // A queued line is judged by how it ended; `queued` alone says nothing of that.
+            VoiceLogEvent::Queued | VoiceLogEvent::Face => {}
         }
     }
     let mut full = 0usize;
@@ -688,6 +690,37 @@ mod tests {
         assert_eq!(
             state(&voiced(&s, Some(&face_only))),
             SandboxCheckState::Unmeasured
+        );
+    }
+
+    #[test]
+    fn queued_lines_change_neither_voiced_nor_the_clip_timing() {
+        let s = show(&[(4, 1), (5, 2), (6, 3), (7, 4), (8, 5)], None, 10_000);
+        let before = [
+            r#"{"ts_ms":1,"seq":4,"event":"rendered","part":0,"duration_ms":10}"#,
+            r#"{"ts_ms":1,"seq":4,"event":"rendered","part":1,"duration_ms":10}"#,
+            r#"{"ts_ms":2,"seq":4,"event":"played","part":0}"#,
+            r#"{"ts_ms":2,"seq":4,"event":"played","part":1}"#,
+            r#"{"ts_ms":3,"seq":5,"event":"rendered","part":0,"duration_ms":10}"#,
+            r#"{"ts_ms":4,"seq":5,"event":"played","part":0}"#,
+            r#"{"ts_ms":5,"seq":6,"event":"skipped","part":0,"reason":"late"}"#,
+            r#"{"ts_ms":5,"seq":7,"event":"rendered","part":0,"duration_ms":10}"#,
+            r#"{"ts_ms":6,"seq":7,"event":"stage_dropped","reason":"stage_cap"}"#,
+        ]
+        .join("\n");
+        let mut with = String::new();
+        for seq in [4, 5, 6, 7, 8] {
+            with.push_str(&format!(
+                "{{\"ts_ms\":0,\"seq\":{seq},\"event\":\"queued\",\"text\":\"x\"}}\n"
+            ));
+        }
+        with.push_str(&before);
+        let a = voiced(&s, Some(&parse_voice(&before)));
+        let b = voiced(&s, Some(&parse_voice(&with)));
+        assert_eq!((state(&a), &a.detail), (state(&b), &b.detail));
+        assert_eq!(
+            shadowrunr_clips::voice::parse(&before),
+            shadowrunr_clips::voice::parse(&with)
         );
     }
 

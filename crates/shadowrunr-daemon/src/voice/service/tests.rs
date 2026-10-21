@@ -430,3 +430,120 @@ async fn a_waiting_line_with_no_audio_is_late_but_keeps_its_place() {
     }
     assert_eq!(next(&mut f.rx).await, skipped(2, 0, VoiceSkip::Late));
 }
+
+// ── the ledger: every queued line in voice.jsonl ends in a known state ──
+
+/// The run's `voice.jsonl` so far, as (event, seq, reason) and the raw lines.
+fn ledger(hub: &VoiceHub, run_id: &str) -> Vec<(String, u64, Option<String>)> {
+    let log = hub.logs().get(run_id).expect("the run's log is open");
+    log.sync();
+    std::fs::read_to_string(&log.path)
+        .unwrap_or_default()
+        .lines()
+        .map(|l| {
+            let v: serde_json::Value = serde_json::from_str(l).unwrap();
+            (
+                v["event"].as_str().unwrap().to_string(),
+                v["seq"].as_u64().unwrap(),
+                v["reason"].as_str().map(String::from),
+            )
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_line_is_queued_in_the_log_before_it_renders() {
+    let d = tempfile::tempdir().unwrap();
+    let (hub, _fake) = hub_with(cfg());
+    hub.logs().open("r", d.path());
+    let run = Arc::new(LiveRun::new("r".into()));
+    let mut f = hub.follow(&run, false);
+    run.push(say("Rise."));
+    assert!(matches!(
+        next(&mut f.rx).await,
+        VoiceFrame::Utterance { seq: 1, .. }
+    ));
+    let l = ledger(&hub, "r");
+    assert_eq!(
+        l.first(),
+        Some(&("queued".to_string(), 1, None)),
+        "queued comes first: {l:?}"
+    );
+    let queued_at = l.iter().position(|e| e.0 == "queued").unwrap();
+    let rendered_at = l.iter().position(|e| e.0 == "rendered").unwrap();
+    assert!(queued_at < rendered_at, "{l:?}");
+    assert_eq!(l.iter().filter(|e| e.0 == "queued").count(), 1, "{l:?}");
+}
+
+#[tokio::test]
+async fn a_queued_line_whose_run_is_unfollowed_is_skipped_in_the_log() {
+    let d = tempfile::tempdir().unwrap();
+    let (hub, fake) = hub_with(VoiceConfig {
+        lines_in_flight: 1,
+        ..cfg()
+    });
+    fake.script("busy", Script::Hang);
+    hub.logs().open("r", d.path());
+    let run = Arc::new(LiveRun::new("r".into()));
+    let f = hub.follow(&run, false);
+    run.push(say("busy"));
+    wait_said(&fake, 1).await;
+    run.push(say("never taken"));
+    for _ in 0..500 {
+        if hub.queued() == 1 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+    assert_eq!(hub.queued(), 1, "the second line waits behind the hung one");
+    drop(f);
+    let l = ledger(&hub, "r");
+    assert!(l.contains(&("queued".into(), 2, None)), "{l:?}");
+    assert_eq!(
+        l.last(),
+        Some(&("skipped".to_string(), 2, Some("unfollowed".to_string()))),
+        "{l:?}"
+    );
+    assert_eq!(hub.queued(), 0, "an unfollowed run's lines leave the queue");
+}
+
+#[tokio::test]
+async fn a_feeder_that_falls_behind_reattaches_and_loses_no_line() {
+    let d = tempfile::tempdir().unwrap();
+    let (hub, _fake) = hub_with(cfg());
+    hub.logs().open("r", d.path());
+    let run = Arc::new(LiveRun::new("r".into()));
+    let mut f = hub.follow(&run, false);
+    // The feeder is on the run's broadcast before anything is pushed.
+    for _ in 0..500 {
+        if run.subscribers() >= 1 {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(run.subscribers(), 1);
+    // Without a yield the feeder cannot read: more than the broadcast holds goes past it, and
+    // the first line is among what it misses.
+    run.push(say("Lost in the flood."));
+    let filler = Frame::from(r#"{"type":"segment_start","ts_ms":0,"segment":"SEG-01"}"#);
+    for _ in 0..(crate::live::BROADCAST_CAPACITY + 50) {
+        run.push(filler.clone());
+    }
+    let tail = run.push(say("After the flood."));
+    let mut spoken = Vec::new();
+    while spoken.len() < 2 {
+        if let VoiceFrame::Utterance { seq, .. } = next(&mut f.rx).await {
+            spoken.push(seq);
+        }
+    }
+    assert_eq!(spoken, [1, tail], "the lagged line is voiced, in order");
+    let l = ledger(&hub, "r");
+    for seq in [1, tail] {
+        let queued = l.iter().filter(|e| e.0 == "queued" && e.1 == seq).count();
+        let terminal = l
+            .iter()
+            .filter(|e| (e.0 == "rendered" || e.0 == "skipped") && e.1 == seq)
+            .count();
+        assert_eq!((queued, terminal), (1, 1), "seq {seq}: {l:?}");
+    }
+}

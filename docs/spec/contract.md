@@ -1501,11 +1501,16 @@ speaking JSON lines on stdio:
 **Run-directory artifacts.** Absent values are omitted keys, never `null`.
 - `voice.jsonl`, written by the daemon for a sandbox session (the session opens it; events for a
   run without one are dropped). One `VoiceLogLine` per line, in the order events happen:
-  `{"ts_ms", "seq", "event", "part"?, "reason"?, "duration_ms"?, "text"?}`.
-  - `event`: `rendered` (an `utterance` went out: `part`, `duration_ms`, `text`), `skipped` (the
-    service's `skipped`: `part`, `reason` `late`|`queue_full`|`error`), `played` (stage: `part`),
+  `{"ts_ms", "seq", "event", "part"?, "last"?, "reason"?, "duration_ms"?, "text"?}`.
+  - `event`: `queued` (the line entered the voice's queue: `text`), `rendered` (an `utterance`
+    went out: `part`, `last`, `duration_ms`, `text`), `skipped` (the service's `skipped`: `part`,
+    `reason` `late`|`queue_full`|`error`, or `unfollowed`, logged with no frame, for a line whose
+    run nobody followed any more), `played` (stage: `part`),
     `stage_dropped` (stage: `reason` `stage_cap`), `face` (stage: `reason` `rig`|`silhouette`,
     `seq` 0).
+  - A ledger: every `queued` line ends in its `rendered` parts (the last with `last` true) or one
+    `skipped`; a queued line with neither is still owed. A `rendered` line with no `last` (a log
+    written before it existed) ends its line.
   - `ts_ms` is the session's stream clock: wall epoch ms minus the session's `started_ms`; a
     stage frame's `at_wall_ms` is converted the same way (`stage_dropped` carries no time and is
     stamped on arrival). While the session runs, `started_ms` is estimated as the smallest

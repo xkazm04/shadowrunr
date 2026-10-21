@@ -209,9 +209,13 @@ pub enum VoiceClientFrame {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum VoiceLogEvent {
-    /// An utterance frame went out (`part`, `duration_ms`, `text`).
+    /// The line entered the voice's queue (`text`). Every queued line later ends in its
+    /// `rendered` parts (the last with `last` true) or one `skipped`.
+    Queued,
+    /// An utterance frame went out (`part`, `last`, `duration_ms`, `text`).
     Rendered,
-    /// The service skipped the line from `part` (`reason`: `late`, `queue_full` or `error`).
+    /// The service skipped the line from `part` (`reason`: `late`, `queue_full`, `error`, or
+    /// `unfollowed` when nobody followed its run any more).
     Skipped,
     /// The stage started playing `part` (its `played` frame).
     Played,
@@ -232,6 +236,10 @@ pub struct VoiceLogLine {
     pub event: VoiceLogEvent,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part: Option<u32>,
+    /// On `rendered`: whether this is the line's last part. Absent in logs written before it
+    /// was recorded, where a rendered part is taken to end its line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -331,5 +339,17 @@ mod tests {
         );
         assert_eq!(f(r#"{"played":{"run_id":"r","seq":4}}"#), None);
         assert_eq!(f(r#"{"subscribe":"live"}"#), None);
+    }
+
+    #[test]
+    fn a_queued_log_line_reads_and_writes_its_text() {
+        let q = r#"{"ts_ms":5,"seq":3,"event":"queued","text":"Kneel."}"#;
+        let l: VoiceLogLine = serde_json::from_str(q).unwrap();
+        assert_eq!((l.event, l.last), (VoiceLogEvent::Queued, None));
+        assert_eq!(serde_json::to_string(&l).unwrap(), q);
+        let r = r#"{"ts_ms":6,"seq":3,"event":"rendered","part":0,"last":false,"duration_ms":9}"#;
+        let l: VoiceLogLine = serde_json::from_str(r).unwrap();
+        assert_eq!(l.last, Some(false));
+        assert_eq!(serde_json::to_string(&l).unwrap(), r);
     }
 }

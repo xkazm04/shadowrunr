@@ -1,8 +1,11 @@
 //! `<run dir>/voice.jsonl`: what the voice actually did, one [`VoiceLogLine`] per event, in the
 //! order the events happen (contract § run-directory artifacts).
 //!
-//! - `rendered` and `skipped` come from the voice service as its frames go out;
-//!   `played`, `stage_dropped` and `face` come from the stage's client frames on `/voice`.
+//! - `queued`, `rendered` and `skipped` come from the voice service: `queued` when a line enters
+//!   its queue, then the line's `rendered` parts or one `skipped` as its frames go out (for a
+//!   run nobody follows any more, `skipped` `unfollowed`, which no frame carries). So a reader
+//!   can tell what is still owed: a queued line with neither its last part nor a skip.
+//! - `played`, `stage_dropped` and `face` come from the stage's client frames on `/voice`.
 //! - Times are on the session's stream clock: wall epoch ms minus the session's `started_ms`.
 //!   The session's clock is only known exactly when it ends (its report), so while it runs the
 //!   log estimates it from the events the daemon sees ([`VoiceLog::observe`]: an event stamped
@@ -32,6 +35,9 @@ use crate::runs;
 
 /// The file in the run directory.
 pub const FILE: &str = "voice.jsonl";
+/// The `skipped` reason for a line whose run nobody follows any more. It is the log's only:
+/// no client follows the run, so no `skipped` frame carries it.
+pub const UNFOLLOWED: &str = "unfollowed";
 /// Lines waiting for the writer, at most; past it a line is dropped.
 pub const LOG_QUEUE: usize = 1024;
 /// Logs the book keeps open; opening another closes the oldest.
@@ -288,6 +294,7 @@ impl VoiceLogs {
                 run_id,
                 seq,
                 part,
+                last,
                 text,
                 duration_ms,
                 ..
@@ -298,6 +305,7 @@ impl VoiceLogs {
                     seq: *seq,
                     event: VoiceLogEvent::Rendered,
                     part: Some(*part),
+                    last: Some(*last),
                     reason: None,
                     duration_ms: Some(u64::from(*duration_ms)),
                     text: Some(text.clone()),
@@ -315,6 +323,7 @@ impl VoiceLogs {
                     seq: *seq,
                     event: VoiceLogEvent::Skipped,
                     part: Some(*part),
+                    last: None,
                     reason: Some(skip_reason(*reason).into()),
                     duration_ms: None,
                     text: None,
@@ -323,6 +332,44 @@ impl VoiceLogs {
             VoiceFrame::Status { .. } => return,
         };
         self.record(run_id, runs::now_ms(), line);
+    }
+
+    /// The service queued line `seq` of `run_id`: the start of its ledger entry. Every queued
+    /// line later gets its `rendered` parts or one `skipped`.
+    pub fn queued(&self, run_id: &str, seq: u64, text: &str) {
+        self.record(
+            run_id,
+            runs::now_ms(),
+            VoiceLogLine {
+                ts_ms: 0,
+                seq,
+                event: VoiceLogEvent::Queued,
+                part: None,
+                last: None,
+                reason: None,
+                duration_ms: None,
+                text: Some(text.to_string()),
+            },
+        );
+    }
+
+    /// The service dropped line `seq` of `run_id` without a frame, because nobody follows the
+    /// run any more: a `skipped` with `reason` `unfollowed`, so the queued line still ends.
+    pub fn unfollowed(&self, run_id: &str, seq: u64) {
+        self.record(
+            run_id,
+            runs::now_ms(),
+            VoiceLogLine {
+                ts_ms: 0,
+                seq,
+                event: VoiceLogEvent::Skipped,
+                part: Some(0),
+                last: None,
+                reason: Some(UNFOLLOWED.into()),
+                duration_ms: None,
+                text: None,
+            },
+        );
     }
 
     /// A stage report from `/voice`. `follow` frames are not reports and log nothing.
@@ -337,6 +384,7 @@ impl VoiceLogs {
                     seq: f.played.seq,
                     event: VoiceLogEvent::Played,
                     part: Some(f.played.part),
+                    last: None,
                     reason: None,
                     duration_ms: None,
                     text: None,
@@ -350,6 +398,7 @@ impl VoiceLogs {
                     seq: f.stage_dropped.seq,
                     event: VoiceLogEvent::StageDropped,
                     part: None,
+                    last: None,
                     reason: Some(wire(&f.stage_dropped.reason)),
                     duration_ms: None,
                     text: None,
@@ -363,6 +412,7 @@ impl VoiceLogs {
                     seq: 0,
                     event: VoiceLogEvent::Face,
                     part: None,
+                    last: None,
                     reason: Some(wire(&f.face.state)),
                     duration_ms: None,
                     text: None,
@@ -548,7 +598,22 @@ mod tests {
             seen += 1;
         }
         log.sync();
-        let v = read(&log.path);
+        let all = read(&log.path);
+        // Each line is queued first (its text), then ends in what follows.
+        for (seq, text) in [(1, "Kneel. Now."), (2, "Broken.")] {
+            let q = all
+                .iter()
+                .position(|l| l["event"] == "queued" && l["seq"] == seq)
+                .expect("queued");
+            assert_eq!(all[q]["text"], text);
+            let end = all
+                .iter()
+                .position(|l| l["event"] != "queued" && l["seq"] == seq)
+                .expect("an end");
+            assert!(q < end, "{all:?}");
+        }
+        let v: Vec<serde_json::Value> =
+            all.into_iter().filter(|l| l["event"] != "queued").collect();
         let events: Vec<(String, u64, u64)> = v
             .iter()
             .map(|l| {
@@ -568,6 +633,10 @@ mod tests {
             ]
         );
         assert_eq!(v[0]["text"], "Kneel.");
+        assert_eq!(
+            (&v[0]["last"], &v[1]["last"]),
+            (&false.into(), &true.into())
+        );
         assert!(v[0]["duration_ms"].is_u64());
         assert_eq!(v[2]["reason"], "error");
     }

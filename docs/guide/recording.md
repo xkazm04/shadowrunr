@@ -144,9 +144,11 @@ What happens:
    `<runs>/sandbox/.recording/`, and only then starts the session.
 4. When the session leaves the air (judging, or ended), the recorder waits for the voice to
    play out: the voice runs several seconds behind the events, so the sign-off is still being
-   spoken when the session ends. It reads the session's `voice.jsonl` until every rendered part
-   has played (or was dropped), the last one's audio is over, and nothing new has appeared for
-   2 s, for at most 45 s. Then the recording runs 3 s more, with the end card on screen, and
+   spoken when the session ends. It reads the session's `voice.jsonl` until nothing is owed
+   (every queued line has ended in its last rendered part or a skip, and every rendered part
+   has played or was dropped), the last one's audio is over, and nothing new has appeared for
+   2 s, for at most 45 s. A line still rendering holds the recording, however long its first
+   audio takes, up to that cap. Then the recording runs 3 s more, with the end card on screen, and
    stops.
 5. When the session has its report, the file moves into the session directory as
    `recording.<ext>` (OBS's own container: `mp4` with OBS's default hybrid MP4, else `mkv`),

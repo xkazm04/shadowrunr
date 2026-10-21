@@ -4,7 +4,12 @@
 //! - **Feeders.** The first client to follow a run starts a feeder on it: the same
 //!   `LiveRun::attach` that `/events` uses. Each `say` with `speaker: malakor` becomes a line
 //!   `<run_id>:<seq>`. A feeder reads the run's broadcast and never waits on anything, so the
-//!   brain never waits on the voice. When the run's last follower leaves, its feeder stops.
+//!   brain never waits on the voice. A feeder that falls behind the broadcast reads what it
+//!   missed from the run's history, so no line is lost. When the run's last follower leaves,
+//!   its feeder stops and its waiting lines leave the queue.
+//! - **The ledger.** Each line is logged `queued` in its run's `voice.jsonl` as it enters the
+//!   queue, and then ends there in its `rendered` parts or one `skipped` (`unfollowed` for a
+//!   line whose run nobody follows any more, which no frame carries).
 //! - **The queue.** At most `max_queue` lines wait; a new line past that pushes out the oldest,
 //!   which is `skipped` with `queue_full`.
 //! - **The worker.** Up to `lines_in_flight` lines are with the [`Renderer`] at once, so it can
@@ -269,6 +274,18 @@ impl VoiceHub {
                 f.abort();
             }
             runs.remove(run_id);
+            drop(runs);
+            // Its waiting lines leave the queue, each with its end in the log.
+            let gone = {
+                let mut q = lock(&self.queue);
+                let (gone, keep): (VecDeque<Line>, VecDeque<Line>) =
+                    q.drain(..).partition(|l| l.run_id == run_id);
+                *q = keep;
+                gone
+            };
+            for l in gone {
+                self.logs.unfollowed(&l.run_id, l.seq);
+            }
         }
     }
 
@@ -295,8 +312,10 @@ impl VoiceHub {
         );
     }
 
-    /// Queue a line; past `max_queue` the oldest waiting line is skipped (`queue_full`).
+    /// Queue a line (logged `queued`); past `max_queue` the oldest waiting line is skipped
+    /// (`queue_full`).
     pub fn enqueue(&self, line: Line) {
+        self.logs.queued(&line.run_id, line.seq, &line.text);
         let dropped = {
             let mut q = lock(&self.queue);
             q.push_back(line);
@@ -406,11 +425,20 @@ async fn feed(hub: Weak<VoiceHub>, run: Arc<LiveRun>, since: u64) {
                 }
             }
             Ok(LiveItem::End(_)) | Err(RecvError::Closed) => return,
-            Err(RecvError::Lagged(n)) => {
-                eprintln!(
-                    "voice: {} fell {n} events behind; those lines are not voiced",
-                    run.run_id
-                );
+            Err(RecvError::Lagged(_)) => {
+                // The broadcast went past the feeder, but the run keeps its whole history:
+                // read what was missed from it, then follow on from there.
+                let again = run.attach(last);
+                for (seq, f) in &again.history {
+                    last = *seq;
+                    if !push(*seq, f) {
+                        return;
+                    }
+                }
+                match again.rx {
+                    Some(r) => rx = r,
+                    None => return,
+                }
             }
         }
     }
@@ -509,6 +537,7 @@ async fn fly(
 
 async fn speak(hub: &VoiceHub, renderer: &dyn Renderer, line: &Line, order: &mut Order) {
     if !hub.followed(&line.run_id) {
+        hub.logs.unfollowed(&line.run_id, line.seq);
         return;
     }
     let lag_by = line.arrived + Duration::from_millis(hub.cfg.max_lag_ms);

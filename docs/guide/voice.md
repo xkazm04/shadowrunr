@@ -420,18 +420,28 @@ A sandbox session's directory holds `voice.jsonl`: one line per voice event, in 
 happen, on the session's stream clock (the transcript's `ts_ms` clock).
 
 ```
-{"ts_ms":13233,"seq":4,"event":"rendered","part":0,"duration_ms":4633,"text":"Before the minions arrive, ..."}
+{"ts_ms":11950,"seq":4,"event":"queued","text":"Before the minions arrive, ..."}
+{"ts_ms":13233,"seq":4,"event":"rendered","part":0,"last":true,"duration_ms":4633,"text":"Before the minions arrive, ..."}
 {"ts_ms":13325,"seq":4,"event":"played","part":0}
 {"ts_ms":41020,"seq":22,"event":"skipped","part":0,"reason":"late"}
 ```
 
 | `event` | Written when | Keys |
 | --- | --- | --- |
-| `rendered` | the daemon sent a sentence's `utterance` | `part`, `duration_ms`, `text` |
-| `skipped` | the daemon skipped the line from `part` | `part`, `reason` (`late`, `queue_full`, `error`) |
+| `queued` | the line entered the voice's queue | `text` |
+| `rendered` | the daemon sent a sentence's `utterance` | `part`, `last`, `duration_ms`, `text` |
+| `skipped` | the daemon skipped the line from `part` | `part`, `reason` (`late`, `queue_full`, `error`, `unfollowed`) |
 | `played` | the stage started playing a part | `part` |
 | `stage_dropped` | the stage dropped the whole line | `reason` (`stage_cap`) |
 | `face` | the stage changed the face it draws | `reason` (`rig`, `silhouette`); `seq` is 0 |
+
+The log is a ledger: every `queued` line ends in its `rendered` parts (the last one with
+`last: true`) or in one `skipped`. `unfollowed` is the log's own reason, for a line whose run
+nobody followed any more before it was spoken; no frame carries it. A line with no end yet is
+still owed, and the recorder waits for it (recording.md). A feeder that falls behind the run's
+events reads what it missed from the run's history, so no line goes unlogged. Logs written
+before `queued` and `last` existed read as before: a `rendered` part with no `last` ends its
+line.
 
 `seq` is the `say` event's seq. The stage's times are its own wall clock; the daemon converts
 them with the session's `started_ms`. While the session runs that clock is estimated from the

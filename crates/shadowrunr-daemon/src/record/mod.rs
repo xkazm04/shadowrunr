@@ -49,8 +49,8 @@ pub const STAGE_WARMUP: Duration = Duration::from_secs(4);
 pub const STATE_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long the recorder waits, at most, for the voice to finish after the session ends.
 pub const VOICE_DRAIN_MAX: Duration = Duration::from_secs(45);
-/// The voice is done once everything rendered has played out and nothing new has been
-/// rendered or played for this long.
+/// The voice is done once nothing is owed (every queued line has ended and everything rendered
+/// has played out) and nothing new has been logged for this long.
 pub const VOICE_QUIET: Duration = Duration::from_secs(2);
 const VOICE_POLL: Duration = Duration::from_millis(250);
 /// The recording's base name in the run dir (`recording.mkv`, `recording.mp4`, ...).
@@ -368,7 +368,8 @@ pub async fn stop(obs: &mut Obs) -> Result<(PathBuf, i64), ObsError> {
 /// Where the voice stands, from a `voice.jsonl`'s lines.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct VoiceProgress {
-    /// Rendered parts the stage has neither played nor dropped (nor the service skipped).
+    /// What is still owed: rendered parts the stage has neither played nor dropped (nor the
+    /// service skipped), plus queued lines that have not ended (no last part, no skip).
     pub unplayed: usize,
     /// Each played part, with its length.
     pub played: Vec<((u64, u32), u64)>,
@@ -380,6 +381,9 @@ pub fn voice_progress(text: &str) -> VoiceProgress {
     let mut played = Vec::new();
     let mut played_keys = HashSet::new();
     let mut gone: HashSet<u64> = HashSet::new();
+    let mut queued: HashSet<u64> = HashSet::new();
+    // Lines whose last part rendered: a part with no `last` (an older log) counts as last.
+    let mut ended: HashSet<u64> = HashSet::new();
     for line in text.lines() {
         let Ok(v) = serde_json::from_str::<Value>(line) else {
             continue;
@@ -387,9 +391,15 @@ pub fn voice_progress(text: &str) -> VoiceProgress {
         let seq = v["seq"].as_u64().unwrap_or(0);
         let part = v["part"].as_u64().and_then(|p| u32::try_from(p).ok());
         match v["event"].as_str() {
+            Some("queued") => {
+                queued.insert(seq);
+            }
             Some("rendered") => {
                 if let Some(p) = part {
                     rendered.insert((seq, p), v["duration_ms"].as_u64().unwrap_or(0));
+                }
+                if v["last"].as_bool() != Some(false) {
+                    ended.insert(seq);
                 }
             }
             Some("played") => {
@@ -405,11 +415,16 @@ pub fn voice_progress(text: &str) -> VoiceProgress {
             _ => {}
         }
     }
+    let owed = queued
+        .iter()
+        .filter(|s| !ended.contains(s) && !gone.contains(s))
+        .count();
     VoiceProgress {
-        unplayed: rendered
-            .keys()
-            .filter(|k| !played_keys.contains(k) && !gone.contains(&k.0))
-            .count(),
+        unplayed: owed
+            + rendered
+                .keys()
+                .filter(|k| !played_keys.contains(k) && !gone.contains(&k.0))
+                .count(),
         played: played
             .into_iter()
             .map(|k| (k, rendered.get(&k).copied().unwrap_or(0)))
@@ -417,10 +432,11 @@ pub fn voice_progress(text: &str) -> VoiceProgress {
     }
 }
 
-/// Wait until the voice in `dir`'s `voice.jsonl` has played out: every rendered part played
-/// (or dropped), the last one's audio over, and [`VOICE_QUIET`] with nothing new; at most
-/// [`VOICE_DRAIN_MAX`]. A run with no voice log returns at once. A part's audio is taken to
-/// end its length after its `played` line first appears here.
+/// Wait until the voice in `dir`'s `voice.jsonl` has played out: nothing owed (every queued
+/// line ended, every rendered part played or dropped), the last part's audio over, and
+/// [`VOICE_QUIET`] with nothing new; at most [`VOICE_DRAIN_MAX`]. A run with no voice log
+/// returns at once. A part's audio is taken to end its length after its `played` line first
+/// appears here.
 pub async fn wait_for_voice(dir: &Path) -> Duration {
     wait_for_voice_within(dir, VOICE_QUIET, VOICE_DRAIN_MAX).await
 }
@@ -428,31 +444,63 @@ pub async fn wait_for_voice(dir: &Path) -> Duration {
 async fn wait_for_voice_within(dir: &Path, quiet: Duration, max: Duration) -> Duration {
     let path = dir.join(crate::voice::log::FILE);
     let t0 = tokio::time::Instant::now();
-    let mut seen: HashMap<(u64, u32), tokio::time::Instant> = HashMap::new();
-    let mut last_text = String::new();
-    let mut changed_at = t0;
-    let mut speaking_until = t0;
-    let mut unplayed = 0;
+    let mut drain = Drain::new(t0, quiet, max);
     loop {
         let now = tokio::time::Instant::now();
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            return now - t0;
-        };
-        if text != last_text {
-            changed_at = now;
-            let p = voice_progress(&text);
-            for (key, ms) in &p.played {
-                let at = *seen.entry(*key).or_insert(now);
-                speaking_until = speaking_until.max(at + Duration::from_millis(*ms));
-            }
-            unplayed = p.unplayed;
-            last_text = text;
-        }
-        let done = unplayed == 0 && now >= speaking_until && now >= changed_at + quiet;
-        if done || now >= t0 + max {
+        let text = std::fs::read_to_string(&path).ok();
+        if drain.poll(now, text.as_deref()) {
             return now - t0;
         }
         tokio::time::sleep(VOICE_POLL).await;
+    }
+}
+
+/// [`wait_for_voice`]'s judgement, one poll of the log at a time, on a clock the caller gives.
+struct Drain {
+    t0: tokio::time::Instant,
+    quiet: Duration,
+    max: Duration,
+    /// When each played part was first seen.
+    seen: HashMap<(u64, u32), tokio::time::Instant>,
+    last_text: String,
+    changed_at: tokio::time::Instant,
+    speaking_until: tokio::time::Instant,
+    unplayed: usize,
+}
+
+impl Drain {
+    fn new(t0: tokio::time::Instant, quiet: Duration, max: Duration) -> Self {
+        Self {
+            t0,
+            quiet,
+            max,
+            seen: HashMap::new(),
+            last_text: String::new(),
+            changed_at: t0,
+            speaking_until: t0,
+            unplayed: 0,
+        }
+    }
+
+    /// The log reads `text` at `now` (`None`: there is no log). True once the voice is done,
+    /// or the cap is reached.
+    fn poll(&mut self, now: tokio::time::Instant, text: Option<&str>) -> bool {
+        let Some(text) = text else {
+            return true;
+        };
+        if text != self.last_text {
+            self.changed_at = now;
+            let p = voice_progress(text);
+            for (key, ms) in &p.played {
+                let at = *self.seen.entry(*key).or_insert(now);
+                self.speaking_until = self.speaking_until.max(at + Duration::from_millis(*ms));
+            }
+            self.unplayed = p.unplayed;
+            self.last_text = text.to_string();
+        }
+        let done =
+            self.unplayed == 0 && now >= self.speaking_until && now >= self.changed_at + self.quiet;
+        done || now >= self.t0 + self.max
     }
 }
 
@@ -609,6 +657,70 @@ mod tests {
         let p = voice_progress(&all);
         assert_eq!(p.unplayed, 0);
         assert_eq!(p.played, [((4, 0), 1500), ((4, 1), 900)]);
+    }
+
+    #[test]
+    fn a_queued_line_with_no_terminal_is_still_owed() {
+        let q = r#"{"ts_ms":1,"seq":5,"event":"queued","text":"Kneel."}"#;
+        assert_eq!(voice_progress(q).unplayed, 1, "queued, not yet rendered");
+        let late = format!(
+            "{q}\n{}",
+            r#"{"ts_ms":9,"seq":5,"event":"skipped","part":0,"reason":"late"}"#
+        );
+        assert_eq!(
+            voice_progress(&late).unplayed,
+            0,
+            "skipped late is a terminal"
+        );
+        let heard = [
+            q,
+            r#"{"ts_ms":2,"seq":5,"event":"rendered","part":0,"duration_ms":900,"text":"a"}"#,
+            r#"{"ts_ms":3,"seq":5,"event":"played","part":0}"#,
+        ]
+        .join("\n");
+        assert_eq!(voice_progress(&heard).unplayed, 0);
+        // A rendered part that says more parts follow leaves the line owed.
+        let more = [
+            q,
+            r#"{"ts_ms":2,"seq":5,"event":"rendered","part":0,"last":false,"duration_ms":900,"text":"a"}"#,
+            r#"{"ts_ms":3,"seq":5,"event":"played","part":0}"#,
+        ]
+        .join("\n");
+        assert_eq!(
+            voice_progress(&more).unplayed,
+            1,
+            "part 1 is still rendering"
+        );
+    }
+
+    #[test]
+    fn the_drain_waits_for_a_queued_line_past_the_quiet_window() {
+        let (quiet, max) = (Duration::from_millis(50), Duration::from_secs(2));
+        let queued = r#"{"ts_ms":1,"seq":5,"event":"queued","text":"Kneel."}"#.to_string();
+        let heard = format!(
+            "{queued}\n{}\n{}",
+            r#"{"ts_ms":2,"seq":5,"event":"rendered","part":0,"duration_ms":100,"text":"a"}"#,
+            r#"{"ts_ms":3,"seq":5,"event":"played","part":0}"#
+        );
+        let t0 = tokio::time::Instant::now();
+        let ms = |n: u64| t0 + Duration::from_millis(n);
+        // The line renders and plays at 300 ms; the file is polled every 10 ms.
+        let mut drain = Drain::new(t0, quiet, max);
+        let done_at = (0..=2_000u64)
+            .step_by(10)
+            .find(|&t| drain.poll(ms(t), Some(if t < 300 { &queued } else { &heard })))
+            .expect("done within the cap");
+        assert!(done_at >= 300 + 100, "returned at {done_at} ms");
+        assert!(done_at <= 300 + 100 + 50 + 10, "returned at {done_at} ms");
+        // A line that never renders holds the drain to the cap, and no longer.
+        let mut drain = Drain::new(t0, quiet, max);
+        let done_at = (0..=3_000u64)
+            .step_by(10)
+            .find(|&t| drain.poll(ms(t), Some(&queued)))
+            .unwrap();
+        assert_eq!(done_at, 2_000);
+        // No voice log: nothing to wait for.
+        assert!(Drain::new(t0, quiet, max).poll(t0, None));
     }
 
     #[tokio::test]
