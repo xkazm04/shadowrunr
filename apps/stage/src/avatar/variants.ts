@@ -14,8 +14,8 @@ export const DEFAULT_FACE: FaceVariant = "cut";
 
 /**
  * Where Malakor looks, relative to his own face box: `x` -1 (his box's left edge of the canvas
- * side) .. 1 (right), `y` -1 (up) .. 1 (down); `{x: 0, y: 0}` is straight at the viewer. Read every
- * frame; a renderer eases toward it and may ignore it.
+ * side) .. 1 (right), `y` -1 (up) .. 1 (down); `{x: 0, y: 0}` is straight at the viewer. A face
+ * wakes on `subscribe` and reads `get` on its own frames; a renderer eases toward it.
  */
 export interface Look {
   x: number;
@@ -24,9 +24,12 @@ export interface Look {
 
 export interface LookSource {
   get(): Look;
+  /** Hear each change of the look (none for an equal one). A source without it is read only on
+   *  the frames the face runs for other reasons: no face polls it. */
+  subscribe?(fn: (look: Look) => void): () => void;
 }
 
-export type StartFaceOptions = Parameters<typeof glowStartFace>[0] & { look?: LookSource };
+export type StartFaceOptions = Parameters<typeof glowStartFace>[0];
 export type StartFace = (opts: StartFaceOptions) => FaceHandle;
 
 /** The variant's `startFace`, loaded on first use. */

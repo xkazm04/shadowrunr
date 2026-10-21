@@ -3,7 +3,8 @@
 // A box of `size` CSS pixels holding one canvas. Everything that draws is in the chosen variant's
 // runtime (`variant`: `glow` is `./runtime`, see variants.ts), imported with `import()` when the face
 // mounts, so the stage pays nothing for it until then and pays after its first paint. `look` says
-// where he looks; the runtime reads it on its own frames. Until the form's layers are decoded the box is empty and transparent; when
+// where he looks; its change events reach the runtime (which wakes on them and reads the look on its
+// own frames), and a new `look` object is one more change, never a restart. Until the form's layers are decoded the box is empty and transparent; when
 // WebGL2 is not there, or the form cannot load, it stays empty and the runtime says why once in the
 // console, so the slot keeps its silhouette instead. The face never re-renders React: signals go
 // from `source` straight to the runtime. `data-face` on the box reads loading | ready |
@@ -15,7 +16,9 @@ import { useEffect, useRef } from "react";
 
 import { faceStateOf, type FaceState } from "../voice/report";
 import type { FaceSource } from "./types";
-import { DEFAULT_FACE, loadVariant, type FaceVariant, type LookSource } from "./variants";
+import { DEFAULT_FACE, loadVariant, type FaceVariant, type Look, type LookSource } from "./variants";
+
+const AHEAD: Look = Object.freeze({ x: 0, y: 0 });
 
 export interface AvatarProps {
   /** The daemon's `/avatar/` base URL (with a trailing slash), or `null` to draw the placeholder. */
@@ -29,7 +32,7 @@ export interface AvatarProps {
   onFace?: (state: FaceState) => void;
   /** Which renderer draws the face (`?avatar=`; default `cut`). */
   variant?: FaceVariant;
-  /** Where he looks (read every frame; a renderer may ignore it). */
+  /** Where he looks: a change wakes the face, which reads it on its own frames. */
   look?: LookSource;
 }
 
@@ -44,6 +47,17 @@ export function Avatar({ rigBase, size, source, className, onFace, variant = DEF
   onFaceRef.current = onFace;
   const lookRef = useRef(look);
   lookRef.current = look;
+  // the face's look listeners outlive any one look object: they are told by whichever is current
+  const lookListeners = useRef(new Set<(l: Look) => void>()).current;
+  const firstLook = useRef(true);
+  useEffect(() => {
+    const tell = (l: Look) => {
+      for (const fn of [...lookListeners]) fn(l);
+    };
+    if (firstLook.current) firstLook.current = false;
+    else tell(look?.get() ?? AHEAD);
+    return look?.subscribe?.(tell);
+  }, [look, lookListeners]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -55,7 +69,13 @@ export function Avatar({ rigBase, size, source, className, onFace, variant = DEF
     };
     drawn(null);
     // the look is read through the ref, so a new look object never restarts the face
-    const lookSource: LookSource = { get: () => lookRef.current?.get() ?? { x: 0, y: 0 } };
+    const lookSource: LookSource = {
+      get: () => lookRef.current?.get() ?? AHEAD,
+      subscribe(fn) {
+        lookListeners.add(fn);
+        return () => void lookListeners.delete(fn);
+      },
+    };
     loadVariant(variant).then(
       (startFace) => {
         if (cancelled) return;
@@ -72,7 +92,7 @@ export function Avatar({ rigBase, size, source, className, onFace, variant = DEF
       handleRef.current?.dispose();
       handleRef.current = null;
     };
-  }, [rigBase, source, variant]);
+  }, [rigBase, source, variant, lookListeners]);
 
   useEffect(() => {
     sizeRef.current = size;
