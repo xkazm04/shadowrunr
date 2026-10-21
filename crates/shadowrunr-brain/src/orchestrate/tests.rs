@@ -114,7 +114,7 @@ impl Room {
             speech_lead_ms: crate::pace::PaceConfig::default().speech_lead_ms,
             closing: self.closing,
             names: &self.names,
-            max_picks: 3,
+            max_picks: crate::picker::PickerConfig::default().max_picks,
         });
         let offered = self.o.offered(&plan, &cands);
         let mut chosen: Vec<Candidate> = offered
@@ -133,6 +133,7 @@ impl Room {
             reason: String::new(),
         };
         let e = self.o.commit(&mut plan, &pick, now);
+        ev.extend(self.o.take_capped(now));
         if plan.mode != BeatMode::Hold {
             self.last_say = Some(now);
         }
@@ -597,14 +598,54 @@ fn at_most_six_messages_are_carried() {
         inbox.push(m.clone());
         cands.push(cand(&m));
     }
-    let (_, _, e) = room.beat(5_000, "opening", None, inbox, cands);
+    let (_, _, e, ev) = room.beat_in(5_000, &ctx("opening"), None, inbox, cands);
     let r = reason(&e);
     let deferred = r.split("deferred: ").nth(1).unwrap_or_default();
     assert_eq!(deferred.split(", ").count(), CARRY_MAX, "{r}");
+    // The two the cap dropped each leave a record.
+    let capped: Vec<&str> = ev
+        .iter()
+        .filter_map(|e| match e {
+            StreamEvent::Moderation {
+                rule,
+                msg_id,
+                action,
+                ..
+            } if rule == CARRY_RULE && action == CAPPED => msg_id.as_deref(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(capped.len(), 2, "{ev:?}");
+    assert!(capped.iter().all(|id| !deferred.contains(id)), "{capped:?}");
+}
+
+/// Whether the screen dropped `id` as an expired carry.
+fn expired(ev: &[StreamEvent], id: &str) -> bool {
+    ev.iter().any(|e| {
+        matches!(e, StreamEvent::Moderation { rule, msg_id, action, .. }
+            if rule == CARRY_RULE && msg_id.as_deref() == Some(id) && action == "expired")
+    })
+}
+
+/// Two fresh first contacts that fill a beat's ceiling ahead of anything carried.
+fn fresh_pair(tag: &str) -> (Vec<ChatMsg>, Vec<Candidate>) {
+    let inbox: Vec<ChatMsg> = (0..2)
+        .map(|i| {
+            msg(
+                &format!("{tag}-{i}"),
+                &format!("fan-{tag}-{i}"),
+                &format!("malakor, is the {tag} moat {i} deep?"),
+            )
+        })
+        .collect();
+    let cands = inbox.iter().map(cand).collect();
+    (inbox, cands)
 }
 
 #[test]
-fn a_deferral_older_than_25_s_is_dropped_with_a_record() {
+fn a_deferral_is_held_through_the_cold_open_and_expires_25_s_after_the_room_opens() {
+    // sbx-20261021-011413-5m: four deferred messages expired during a 113 s cold open, before
+    // the room ever opened to answer them.
     let mut room = Room::new();
     regular(&mut room, "beetle");
     quiet(&mut room, 0, COLD_OPEN_STATE, None);
@@ -616,20 +657,118 @@ fn a_deferral_older_than_25_s_is_dropped_with_a_record() {
         vec![q.clone()],
         vec![cand(&q)],
     );
-    let mut expired_at = None;
-    for t in (10_000..=35_000).step_by(5_000) {
+    for t in (10_000..=120_000).step_by(5_000) {
         let (_, ids, _, ev) = room.beat_in(t, &ctx(COLD_OPEN_STATE), None, Vec::new(), Vec::new());
         assert!(ids.is_empty(), "the cold open never passes a regular");
-        if ev.iter().any(|e| {
-            matches!(e, StreamEvent::Moderation { rule, msg_id, action, .. }
-                if rule == CARRY_RULE && msg_id.as_deref() == Some("q") && action == "expired")
-        }) {
+        assert!(
+            !expired(&ev, "q"),
+            "nothing expires while the room fills ({t})"
+        );
+    }
+    // The room opens at 125 s, but fresher chat fills every beat: it is dropped 25 s after the
+    // opening beat's drain, with a record.
+    let mut expired_at = None;
+    for t in (125_000..=160_000).step_by(5_000) {
+        let (inbox, cands) = fresh_pair(&t.to_string());
+        let (_, ids, _, ev) = room.beat_in(t, &ctx("opening"), None, inbox, cands);
+        assert!(!ids.contains(&"q".to_string()), "{ids:?}");
+        if expired(&ev, "q") {
             expired_at = Some(t);
         }
     }
-    assert_eq!(expired_at, Some(30_000), "dropped at 25 s");
-    let (_, ids, _) = room.beat(40_000, "opening", None, Vec::new(), Vec::new());
+    assert_eq!(
+        expired_at,
+        Some(150_000),
+        "the room opened at 125 s, plus 25 s"
+    );
+    let (_, ids, _) = room.beat(170_000, "opening", None, Vec::new(), Vec::new());
     assert!(ids.is_empty(), "an expired deferral never comes back");
+}
+
+#[test]
+fn a_gift_in_the_cold_open_is_carried_and_thanked_when_the_room_opens() {
+    // sbx-20261021-004215-5m: "gifting 5 subs" from a regular arrived after the cold-open
+    // handoff, the filter passed only first contacts, and the gift was never carried.
+    let prep = sample_prep();
+    let mut room = Room::new();
+    regular(&mut room, "badger");
+    for t in [5_000, 10_000, 15_000, 20_000] {
+        quiet(&mut room, t, COLD_OPEN_STATE, Some(&prep));
+    }
+    let g = msg(
+        "g",
+        "badger",
+        "gifting 5 subs to the minions for the deposit fund",
+    );
+    let (p, ids, e) = room.beat(
+        25_000,
+        COLD_OPEN_STATE,
+        Some(&prep),
+        vec![g.clone()],
+        vec![cand(&g)],
+    );
+    assert!(
+        ids.is_empty(),
+        "the cold open passes first contacts only: {}",
+        p.reason
+    );
+    assert!(reason(&e).contains("deferred: g"), "{}", reason(&e));
+    // A long cold open: held, never expired.
+    for t in (30_000..=90_000).step_by(5_000) {
+        let (_, ids, _, ev) = room.beat_in(
+            t,
+            &ctx(COLD_OPEN_STATE),
+            Some(&prep),
+            Vec::new(),
+            Vec::new(),
+        );
+        assert!(ids.is_empty());
+        assert!(!expired(&ev, "g"), "{t}");
+    }
+    // The room opens: the first beat answers it.
+    let (p, ids, e) = room.beat(95_000, "opening", Some(&prep), Vec::new(), Vec::new());
+    assert_eq!(ids, ["g"], "{}", p.reason);
+    assert!(reason(&e).contains("gift"), "{}", reason(&e));
+    assert!(
+        reason(&e).contains("carried over: g (70 s)"),
+        "{}",
+        reason(&e)
+    );
+}
+
+#[test]
+fn the_cold_open_cap_keeps_first_contacts_oldest_first() {
+    let mut room = Room::new();
+    for v in ["r1", "r2", "r3", "r4", "r5"] {
+        regular(&mut room, v);
+    }
+    // A hold beat (speech queued) defers everything: two first contacts, then five regulars,
+    // then two more first contacts, a beat apart.
+    room.speaking_until = Some(200_000);
+    let mut t = 5_000;
+    let mut beat = |room: &mut Room, id: &str, viewer: &str| {
+        let m = msg(id, viewer, "malakor, what is the plan tonight?");
+        room.beat(t, COLD_OPEN_STATE, None, vec![m.clone()], vec![cand(&m)]);
+        t += 5_000;
+    };
+    beat(&mut room, "f1", "new1");
+    beat(&mut room, "f2", "new2");
+    for v in ["r1", "r2", "r3", "r4", "r5"] {
+        beat(&mut room, &format!("q-{v}"), v);
+    }
+    beat(&mut room, "f3", "new3");
+    beat(&mut room, "f4", "new4");
+    let kept: Vec<String> = room
+        .o
+        .carried
+        .iter()
+        .map(|k| k.cand.msg.id.clone())
+        .collect();
+    assert_eq!(
+        kept,
+        ["f1", "f2", "f3", "f4", "q-r5", "q-r4"],
+        "first contacts first, the oldest first; then the newest of the rest"
+    );
 }
 
 const OPEN_P1: &str = "open crowd poll p1: \"Moat or swamp?\" | moat = 2.0 (1 votes), \
@@ -912,26 +1051,19 @@ fn carried_chat_survives_a_long_drain_and_expires_25_s_after_it() {
         reason(&e)
     );
 
-    // A second one, never answered (a full ceiling of fresher picks each beat would be the
-    // usual cause; here the cold open's filter): it expires 25 s after the drain.
+    // A second one, never answered (a full ceiling of fresher picks every beat): it expires
+    // 25 s after the drain.
     let mut room = Room::new();
     regular(&mut room, "beetle");
     room.speaking_until = Some(20_000);
     let q = msg("q2", "beetle", "malakor what is the plan tonight?");
-    room.beat(
-        5_000,
-        COLD_OPEN_STATE,
-        None,
-        vec![q.clone()],
-        vec![cand(&q)],
-    );
+    room.beat(5_000, "opening", None, vec![q.clone()], vec![cand(&q)]);
     let mut expired_at = None;
     for t in (10_000..=50_000).step_by(5_000) {
-        let (_, _, _, ev) = room.beat_in(t, &ctx(COLD_OPEN_STATE), None, Vec::new(), Vec::new());
-        if ev.iter().any(|e| {
-            matches!(e, StreamEvent::Moderation { rule, msg_id, action, .. }
-                if rule == CARRY_RULE && msg_id.as_deref() == Some("q2") && action == "expired")
-        }) {
+        let (inbox, cands) = fresh_pair(&t.to_string());
+        let (_, ids, _, ev) = room.beat_in(t, &ctx("opening"), None, inbox, cands);
+        assert!(!ids.contains(&"q2".to_string()), "{ids:?}");
+        if expired(&ev, "q2") {
             expired_at = Some(t);
         }
     }

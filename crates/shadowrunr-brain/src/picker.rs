@@ -15,13 +15,15 @@ use serde_json::{json, Value};
 use shadowrunr_types::{Command, Engine, EngineRequest, Rank, Role};
 
 use crate::memory::consolidate::extract_json_object;
-use crate::moderation::Candidate;
+use crate::moderation::{is_gift_or_sub, Candidate};
 use crate::util::{normalize, one_line, similarity};
 
 #[derive(Debug, Clone)]
 pub struct PickerConfig {
     /// The most messages answered in one beat: the orchestrator's ceiling, not a quota (it
-    /// passes 0 to `max_picks` per beat, see [`Picker::pick_upto`]).
+    /// passes 0 to `max_picks` per beat, see [`Picker::pick_upto`]). Two: under the 260-character
+    /// beat budget a third answer was the one the gate trimmed (sbx-20261021-011413-5m: both
+    /// three-pick beats lost their last line, and with it a judged answer).
     pub max_picks: usize,
     /// Above this many candidates the LLM picker is used.
     pub llm_threshold: usize,
@@ -45,7 +47,7 @@ pub struct PickerConfig {
 impl Default for PickerConfig {
     fn default() -> Self {
         Self {
-            max_picks: 3,
+            max_picks: 2,
             llm_threshold: 40,
             llm_pool: 60,
             rank_weight_cap: 1.5,
@@ -284,6 +286,11 @@ impl Picker {
         if ctx.first_contacts.contains(&c.msg.id) {
             s += 1.2;
             why.push("first_contact");
+        }
+        if is_gift_or_sub(&c.msg.text) {
+            // Tribute is thanked by name, ahead of plain chatter.
+            s += 1.2;
+            why.push("gift");
         }
         if ctx.regulars.contains(&c.msg.viewer.id) {
             s += 0.6;
@@ -816,7 +823,8 @@ mod tests {
         cands.push(s);
         let pick = p.pick_deterministic(&cands, &ctx);
         assert_eq!(pick.chosen[0].msg.id, "crisis", "{}", pick.reason);
-        assert_eq!(pick.chosen.len(), 3);
+        // The safety pick uses one of the beat's two slots.
+        assert_eq!(pick.chosen.len(), 2);
         assert!(pick.reason.contains("crisis safety"), "{}", pick.reason);
     }
 

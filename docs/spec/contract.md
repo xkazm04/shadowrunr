@@ -838,6 +838,22 @@ hosts a session; `shadowrunr stream sandbox` drives it.
     while a live sim runs, is refused with `conflict`.
 - `sandbox.stop {session_id}`: the closing window starts at once and the host signs off.
   Returns `SandboxStatus`.
+- **The closing window** is the last 60 s of a session. Until the last 15 s it is the wrap-up:
+  the state summary carries `CLOSING: the stream ends in N s. Start wrapping up…`, with no
+  goodbye, and `sign_off` is withheld from `allowed_ops` (as it is all session before it). The
+  last 15 s, or any beat after a stop, carry `CLOSING NOW: …`: the goodbye and `sign_off`. A
+  sign-off ends the beats, not the stream: the session runs to its planned end, and past it
+  while the goodbye is still on the speech clock, by at most 15 s. A stop or a fleet-loss
+  sign-off ends it at once.
+- **The room's closing guard.** No planted stimulus and no population wave (raid, copypasta)
+  lands in the closing window: the room lays its schedule out on `[cold open end, planned −
+  60 s)`, at most one stimulus every 10 s. A silence holds the stimuli due inside it; when it
+  opens they are re-timed from its end, one every 10 s in order (later ones keep that
+  spacing). A silence that cannot open after the cold open and close 30 s before the guard
+  does not fit. A stimulus that does not fit, or is pushed to the guard or past it, is left
+  out of the session: `room.json` marks it `left_out: true` with a note, it is never
+  delivered, and the judge reads its rule as `not_provoked`. Sim runs have no guard (it is
+  0), but the spacing and the silence spread apply to them too.
 - `sandbox.status {session_id?}`: the given session, or the latest one. Returns
   `{session_id, state: running|closing|judging|done|failed|stopped, elapsed_s, planned_s,
   events, max_say_gap_s, core_errors, stage_ack_seq?, report?}`.
@@ -847,6 +863,8 @@ hosts a session; `shadowrunr stream sandbox` drives it.
   detail}], max_say_gap_s, say_gap_p95_s, beat_ms_p50, beat_ms_p95, core_errors, stall_lines,
   health_transitions, judge?: {verdict_path, rule_fails, quality_mean?}}`.
   - Check ids, in order: `say_gap`, `core_errors`, `sign_off`, `chaos`, `stage_ack`, `judge`.
+  - `sign_off` passes when the first sign-off lands in the last 30 s of the planned length
+    (within 10 s of a stop; for `lost` chaos, the fleet-loss sign-off in time).
   - `say_gap` (and `max_say_gap_s`, `say_gap_p95_s`) is speech-aware: the silence before each of
     Malakor's lines is its `ts_ms` minus when the speech before it ends, on the brain's speech
     clock (every `say`, foil lines too, at `speech_cps`, back to back; see "Speech pacing"
@@ -952,13 +970,15 @@ like a real case. It is never written live in a quiet moment.
   `speech_cps` 18 (measured: Kokoro `af_heart` speaks about 18.3 characters a second),
   `line_pause_ms` 250, `speech_lead_ms` 1500 and `budget_chars` 260 (assumptions).
   - While more than `speech_lead_ms` of speech is queued, the beat is a `hold` with reason
-    `speaking: N.N s queued` and no core call. A safety beat runs at once. A closing beat (the
-    state summary carries a line starting `CLOSING`) runs at once too, so the sign-off is never
-    held past the session end; its budget is cut to half, and speech still queued at the end is
-    cut with the stream. A room event waits for the drain, then is announced ahead of a queued
-    connector or bit. A speech hold counts as a hold for "never two holds in a row".
+    `speaking: N.N s queued` and no core call. A safety beat runs at once. A goodbye beat (the
+    state summary carries a line starting `CLOSING NOW`) runs at once too and never holds, so
+    the sign-off is never held past the session end; its budget is cut to half. The wrap-up
+    before it (a line starting `CLOSING:`) is paced like any beat. A room event waits for the
+    drain, then is announced ahead of a queued connector or bit. A speech hold counts as a hold
+    for "never two holds in a row".
   - Carried chat expires 25 s after the speech queued when it arrived has aired ("carry from the
-    drain"), so pacing never silently expires a question.
+    drain"), so pacing never silently expires a question. Chat carried through the cold open
+    expires 25 s after the drain of the first beat once the room opens (see below).
   - The per-turn prompt asks for at most about 2 sentences and `budget_chars` characters. The
     output gate keeps a beat's spoken lines (his and the foils') within the budget by dropping
     whole lines, the last first, never the first line: each one dropped writes
@@ -975,26 +995,43 @@ like a real case. It is never written live in a quiet moment.
   The runtime never picks a winner on a tie: the summary says "TIE between A and B (n votes
   each): you break it, and say you are breaking it". A tied foil vote summons nobody; a tied
   jury gives no grade; a tied crowd poll counts every tied hex option as that hex's vote.
+- **Picks.** A beat answers at most 2 messages (`PickerConfig.max_picks`; it was 3, and under
+  the 260-character budget the third answer was the line the gate trimmed). A safety pick still
+  passes whatever the ceiling.
 - **Carried chat and room events.** A message that needs an answer (question, mention, first
-  contact, `!propose`/`!summon`, mocked injection) but was not picked because of a hold, a
-  safety beat, the cold-open filter or the pick ceiling is carried for up to 25 s from the drain
-  of the speech queued when it arrived (at most 6)
+  contact, a gift or a sub announced in chat, `!propose`/`!summon`, mocked injection) but was
+  not picked because of a hold, a safety beat, the cold-open filter or the pick ceiling is
+  carried for up to 25 s from the drain of the speech queued when it arrived (at most 6)
   and competes in later beats; expiry writes an input moderation record, rule `carry`, action
-  `expired`. A safety beat answers only the disclosure. A vote that closes (crowd poll, foil
+  `expired`, and a message the cap of 6 drops writes rule `carry`, action `capped`, so every
+  drop leaves a record. In the cold open a carried message is held: it never expires there, and its 25 s
+  start from the drain of the first beat after the room opens ("carry until the room opens +
+  25 s"); while the room fills, the cap of 6 keeps first contacts first, the oldest first, then
+  the newest of the rest. A gift or a sub is boosted in the picker like a first contact. A
+  safety beat answers only the disclosure. A vote that closes (crowd poll, foil
   vote, plebiscite) or a handover falling due is a room event: the next non-safety beat
   (`react` or `bridge`) announces it once, a tie as a tie. In the cold open, after the story's
   handoff, quiet beats voice the segment's deck (`bit`), at most one gathering line
   (`cold_open`), and without a prep an in-character aside (`improvise`) between gathering lines
   at least 20 s apart. These are read from the runtime's state summary today; a structured
   `SegmentContext` field is the planned replacement.
+- **Situational notes.** A plain picked message gets a one-line note beside it in the per-turn
+  chat when a newcomer (a first contact or a Thrall) asks what this is (say it is his livestream throne room,
+  the segment, and one way to join in), speaks of the Lord (dread and flattery; never say
+  whether the Lord watches), announces a gift or a sub (thank them by name and rank), or is a
+  `!propose` from below the proposing rank (not accepted; admire the ambition, explain rank and
+  how to climb). Injection stand-ins, forged decrees, waves and safety picks get none. With
+  two picks, the answer format asks for one line per message of at most half the budget.
 - **New moderation values.** Input rule `wave_repeat` (action `dropped`): a paste wave already
   answered this stream. Output rule `mechanism_leak` (action `removed` or `dropped`): a sentence
   describing the moderation machinery. A `persona_leak` or `character_break` line answering a
   forged decree is recast as an in-character rebuttal.
-- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/3`: beats are paced to his speech
-  (`/2` added the cold open and a room that fills over about three minutes). Pacing applies to
-  sims too, since the show is voiced and sims measure what airs. Tournaments before and after
-  do not mix.
+- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/4`: two picks a beat, gifts carried,
+  chat held through the cold open, the situational notes, a sandbox session that runs its full
+  length, and a sim run's `max_say_gap_s` measured speech-aware as a sandbox session's is
+  (`/3` paced beats to his speech; `/2` added the cold open and a room that fills over about
+  three minutes). Pacing applies to sims too, since the show is voiced and sims measure what
+  airs. Tournaments before and after do not mix.
 
 **Prep in runs.** A sim's `run.json` and a sandbox session's `spec.json` carry
 `prep`: the approved prep id, `sample` (the character's fictional

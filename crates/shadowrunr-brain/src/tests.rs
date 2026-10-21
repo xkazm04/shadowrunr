@@ -1124,7 +1124,8 @@ async fn a_whale_is_capped_in_the_picker() {
         }
         let ev = b.tick(t + 1_000, inbox, &c).await.unwrap();
         let ids = picked(&ev);
-        assert_eq!(ids.len(), 3, "beat {beat}: {ids:?}");
+        // A full ceiling every beat: `max_picks` is 2.
+        assert_eq!(ids.len(), 2, "beat {beat}: {ids:?}");
         let n = ids.iter().filter(|i| i.starts_with("wh")).count();
         assert!(n <= 1, "one pick per viewer per beat: {ids:?}");
         whale_beats += n;

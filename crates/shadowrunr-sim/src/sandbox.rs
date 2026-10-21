@@ -10,8 +10,14 @@
 //!   call are made off the host's critical path and reach the brain through a channel it
 //!   drains every beat; the room reads the show back from a shared transcript tail.
 //! - Every event is appended to `transcript.jsonl`, flushed at once and handed to the sink.
-//! - The last [`CLOSING_S`] seconds (or the moment `stop` turns true) are the closing window:
-//!   the host is asked to sign off, and the driver ends the stream at the deadline anyway.
+//! - The last [`CLOSING_S`] seconds are the closing window. Until the last [`CLOSING_NOW_S`] it
+//!   is the wrap-up (`CLOSING:`): he ties things off, no goodbye yet, and `sign_off` is withheld
+//!   from his ops (it is withheld all session until then). The last [`CLOSING_NOW_S`] seconds,
+//!   or the moment `stop` turns true, are the goodbye (`CLOSING NOW`): he says goodbye and signs
+//!   off, and the driver ends the stream at the deadline anyway.
+//! - A sign-off ends the beats, not the stream: the stream runs to its planned end, and past it
+//!   while the goodbye is still being spoken, by at most [`GOODBYE_DRAIN_MAX_S`]. A stop and a
+//!   fleet-loss sign-off end it at once.
 //! - Chaos wraps the brain's engine only ([`ChaosEngine`]); the room keeps talking.
 
 use std::collections::{BTreeMap, VecDeque};
@@ -77,10 +83,20 @@ pub const SANDBOX_AUDIENCE: u32 = 30;
 pub const SANDBOX_CHARACTER: &str = "malakor";
 /// The calibration population mix of the room (as a 30-viewer tournament cell).
 pub const SANDBOX_POPULATION: &str = "growing_channel";
-/// The closing window: the last this many seconds of a session.
+/// The closing window: the last this many seconds of a session. Until [`CLOSING_NOW_S`] it is
+/// the wrap-up: `CLOSING:` asks him to tie things off, with no goodbye and no `sign_off` yet.
 pub const CLOSING_S: u32 = 60;
-/// A sign-off counts when it lands in the last this many seconds.
-pub const SIGN_OFF_WINDOW_S: u32 = 90;
+/// The goodbye: the last this many seconds, where `CLOSING NOW` asks for the goodbye and the
+/// `sign_off` op (a goodbye beat is never held, at half budget; see the brain's `pace`).
+/// sbx-20261021-011413-5m signed off at the first `CLOSING` line and ended a 5-minute session
+/// at 4:04.
+pub const CLOSING_NOW_S: u32 = 15;
+/// After a sign-off the stream holds to the planned end, and past it while the goodbye is still
+/// being spoken (on the speech clock), by at most this long.
+pub const GOODBYE_DRAIN_MAX_S: u32 = 15;
+/// A sign-off counts when it lands in the last this many seconds: twice the goodbye window,
+/// for a goodbye beat whose core call runs long.
+pub const SIGN_OFF_WINDOW_S: u32 = 30;
 /// After a stop request, the host has this long to sign off.
 pub const STOP_SIGN_OFF_S: u32 = 10;
 /// The say-gap ceiling (`say-gap-ceiling`): the longest silence a session may hold, measured
@@ -571,17 +587,29 @@ impl RoomTask {
 
 // ----- the session --------------------------------------------------------------------
 
-/// The closing request the host sees in its state summary.
+/// Whether a beat at `now` is the goodbye: the last [`CLOSING_NOW_S`] before the deadline, or
+/// any beat after a stop.
+fn goodbye(now: TsMs, deadline: TsMs, stopped: bool) -> bool {
+    stopped || deadline - now <= i64::from(CLOSING_NOW_S) * 1000
+}
+
+/// The closing request the host sees in its state summary: the wrap-up, then the goodbye.
 fn closing_line(now: TsMs, deadline: TsMs, stopped: bool) -> String {
+    let left = ((deadline - now).max(0) + 999) / 1000;
     if stopped {
         "CLOSING NOW: the operator is ending the stream. Say goodbye to the minions in \
          character and emit sign_off this turn."
             .into()
+    } else if goodbye(now, deadline, false) {
+        format!(
+            "CLOSING NOW: the stream ends in {left} s. Say goodbye to the minions in character \
+             and emit sign_off this turn."
+        )
     } else {
         format!(
-            "CLOSING: the stream ends in {} s. Wrap up, thank the minions in character, then \
-             emit sign_off.",
-            ((deadline - now).max(0) + 999) / 1000
+            "CLOSING: the stream ends in {left} s. Start wrapping up: tie off what is open and \
+             thank the minions in character. No goodbye and no sign_off yet: that comes in the \
+             last {CLOSING_NOW_S} s."
         )
     }
 }
@@ -703,6 +731,10 @@ impl Session {
                 ctx.state_summary
                     .push_str(&closing_line(now, deadline, stopped_ms.is_some()));
             }
+            // The session runs its planned length: no sign-off before the goodbye.
+            if !goodbye(now, deadline, stopped_ms.is_some()) {
+                ctx.allowed_ops.retain(|o| o != "sign_off");
+            }
             let mut done = now;
             let beat = {
                 let tick = mind.tick(now, msgs, &ctx);
@@ -756,6 +788,19 @@ impl Session {
             lock(&self.log.shared).open_poll = stage.open_poll();
             beat_ms.push(beat_start.elapsed().as_millis() as u64);
             self.progress(closing, self.log.events().len() as u64);
+            if signed_off && stopped_ms.is_none() && !fleet_lost {
+                // The goodbye ends the beats, not the stream: it runs to the planned end, and
+                // past it while the goodbye is still on air.
+                let drained = self.log.speech.until().unwrap_or(0);
+                let end =
+                    planned_ms.max(drained.min(planned_ms + i64::from(GOODBYE_DRAIN_MAX_S) * 1000));
+                let wait = (end - since_ms(self.start)).max(0) as u64;
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_millis(wait)) => {}
+                    _ = self.stop.changed(), if stop_open => {}
+                }
+                break;
+            }
             if signed_off || since_ms(self.start) >= deadline {
                 break;
             }
@@ -1066,7 +1111,7 @@ fn check(id: &str, pass: bool, detail: String) -> SandboxCheck {
 }
 
 /// Every line put on air, in order: when, whether Malakor said it (else a foil), and its text.
-fn on_air(events: &[StreamEvent]) -> Vec<(TsMs, bool, &str)> {
+pub(crate) fn on_air(events: &[StreamEvent]) -> Vec<(TsMs, bool, &str)> {
     events
         .iter()
         .filter_map(|e| match e {
@@ -1086,7 +1131,7 @@ fn on_air(events: &[StreamEvent]) -> Vec<(TsMs, bool, &str)> {
 /// ends` on the brain's speech clock (every line, foil lines too, at `speech_cps`, back to
 /// back), floored at 0, so a long line followed by a drain is not silence. Without it, say to
 /// say (the measure before pacing). With no line of his at all, the whole session.
-fn say_gaps(
+pub(crate) fn say_gaps(
     lines: &[(TsMs, bool, &str)],
     end_ms: TsMs,
     pace: Option<&PaceConfig>,
@@ -1252,6 +1297,7 @@ pub async fn run_sandbox(
                 hex_ids: prep.hex_ids.clone(),
                 max_featured: run_opts.max_featured,
                 streamer_name: prep.streamer.clone(),
+                closing_s: CLOSING_S,
             },
         );
         if let Some(window) = programme.chaos_ms {
@@ -1433,11 +1479,13 @@ mod tests {
     use crate::runner::tests::{reply, test_opts, FakeEngine};
 
     /// Plays the host for the real brain: a line every beat, the switch when the handover is
-    /// due, and a sign-off once the closing request says 5 s or less (or the stop). Chatter
-    /// and judge calls go to [`FakeEngine`].
+    /// due, and a sign-off once the goodbye is asked (`CLOSING NOW`: the last 15 s, or the
+    /// stop). Chatter and judge calls go to [`FakeEngine`].
     struct HostEngine {
         fake: FakeEngine,
         sign_off: bool,
+        /// Emits `sign_off` on every beat, goodbye or not (a host in a hurry).
+        eager: bool,
         /// The nth core call (0-based) takes this long.
         slow_core: Option<(usize, Duration)>,
         /// Every core call takes at least this long.
@@ -1452,6 +1500,7 @@ mod tests {
             Self {
                 fake: FakeEngine::new(""),
                 sign_off: true,
+                eager: false,
                 slow_core: None,
                 core_delay: Duration::ZERO,
                 chatter_delay: Duration::ZERO,
@@ -1465,13 +1514,7 @@ mod tests {
             if prompt.contains("HANDOVER DUE") {
                 t.push_str("\nOP: {\"op\":\"switch_segment\",\"to\":\"SEG-02A\"}");
             }
-            let ends_in = prompt
-                .split("CLOSING: the stream ends in ")
-                .nth(1)
-                .and_then(|r| r.split(' ').next())
-                .and_then(|n| n.parse::<u32>().ok());
-            if self.sign_off && (prompt.contains("CLOSING NOW") || ends_in.is_some_and(|s| s <= 5))
-            {
+            if self.sign_off && (self.eager || prompt.contains("CLOSING NOW")) {
                 t.push_str("\nOP: {\"op\":\"sign_off\",\"reason\":\"the hour is done\"}");
             }
             t
@@ -1626,15 +1669,16 @@ mod tests {
         let out = session(run, engine.clone(), &opts, sink, stop).await;
         let r = &out.report;
 
-        // Wall clock: a beat every 5 s from 5 s, until the sign-off at 55 s. The beats are
-        // counted by their `beat_plan`: a cold-open hold is a beat with no core call.
+        // Wall clock: a beat every 5 s from 5 s, until the goodbye at 45 s (the last 15 s), then
+        // no beat; the stream runs on to its planned end at 60 s. The beats are counted by
+        // their `beat_plan`: a cold-open hold is a beat with no core call.
         let plans = plan_times(&out.events);
         assert_eq!(plans.first(), Some(&5_000), "{plans:?}");
-        assert!(plans.len() >= 10, "{plans:?}");
+        assert_eq!(plans.last(), Some(&45_000), "{plans:?}");
         assert!(plans.windows(2).all(|w| w[1] - w[0] == 5_000), "{plans:?}");
         let gaps = engine.core_gaps();
         assert!(gaps.iter().all(|g| *g > 0 && *g % 5_000 == 0), "{gaps:?}");
-        assert_eq!(started.elapsed().as_secs(), 55);
+        assert_eq!(started.elapsed().as_secs(), 60);
 
         // The sink saw every line once, in order, on a clock that never runs backwards.
         let seen = seen.lock().unwrap().clone();
@@ -1648,7 +1692,7 @@ mod tests {
             out.events.last(),
             Some(StreamEvent::StreamEnd {
                 reason: EndReason::Scheduled,
-                ts_ms: 55_000
+                ts_ms: 60_000
             })
         ));
 
@@ -1658,7 +1702,7 @@ mod tests {
         assert_eq!(state(r, "say_gap"), SandboxCheckState::Pass, "{r:?}");
         assert_eq!(state(r, "core_errors"), SandboxCheckState::Pass);
         assert_eq!(state(r, "sign_off"), SandboxCheckState::Pass, "{r:?}");
-        assert_eq!(detail(r, "sign_off"), "sign-off at 00:55, in the last 90 s");
+        assert_eq!(detail(r, "sign_off"), "sign-off at 00:45, in the last 30 s");
         assert_eq!(state(r, "chaos"), SandboxCheckState::Pass);
         assert_eq!(detail(r, "chaos"), "no chaos requested");
         for id in ["stage_ack", "judge"] {
@@ -1678,7 +1722,7 @@ mod tests {
         );
         assert_eq!(r.core_errors, 0);
         assert_eq!((r.stall_lines, r.health_transitions), (0, 0));
-        assert_eq!(r.ended_ms - r.started_ms, 55_000);
+        assert_eq!(r.ended_ms - r.started_ms, 60_000);
 
         // The session dir.
         let stored: SandboxReport = read_json(&out.dir.join(SESSION_FILE)).unwrap();
@@ -1715,9 +1759,10 @@ mod tests {
         .await;
         // The cold open alternates a line and a hold, so core calls run at 5, 15, 25 and 35 s;
         // the fourth (35 s) takes 12 s. Its beat lands at 47 s and the next starts at once at
-        // 47 s, then every 5 s again: one late beat, never a burst of catch-up beats.
+        // 47 s, then every 5 s again: one late beat, never a burst of catch-up beats. The 47 s
+        // beat is the goodbye (the last 15 s), which never holds: its core call runs at once.
         let gaps = engine.core_gaps();
-        assert_eq!(&gaps[..4], &[10_000, 10_000, 10_000, 17_000], "{gaps:?}");
+        assert_eq!(&gaps[..4], &[10_000, 10_000, 10_000, 12_000], "{gaps:?}");
         let plans = plan_times(&out.events);
         assert!(plans.windows(2).all(|w| w[1] >= w[0]), "{plans:?}");
         let at_once = plans.windows(2).filter(|w| w[1] == w[0]).count();
@@ -1918,6 +1963,48 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
+    async fn a_sign_off_before_the_goodbye_is_not_offered_and_the_session_runs_its_length() {
+        // sbx-20261021-011413-5m: he signed off at the first CLOSING line and a 5-minute
+        // session ended at 4:04. Now `sign_off` is withheld until the last 15 s, and the
+        // stream runs to its planned end.
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = opts(tmp.path());
+        let engine = Arc::new(HostEngine {
+            eager: true,
+            ..HostEngine::new()
+        });
+        let (_stop_tx, stop) = watch::channel(false);
+        let out = session(
+            sandbox_run(tmp.path(), 5, 120),
+            engine,
+            &opts,
+            no_sink(),
+            stop,
+        )
+        .await;
+        let r = &out.report;
+        let at = sign_off_at(&out.events).expect("a sign-off");
+        assert!(at >= 105_000, "only in the last 15 s: {at}");
+        assert_eq!(state(r, "sign_off"), SandboxCheckState::Pass, "{r:?}");
+        assert!(matches!(
+            out.events.last(),
+            Some(StreamEvent::StreamEnd {
+                reason: EndReason::Scheduled,
+                ts_ms: 120_000
+            })
+        ));
+        // The wrap-up asks for no goodbye; the last 15 s ask for it.
+        assert_eq!(
+            closing_line(70_000, 120_000, false),
+            "CLOSING: the stream ends in 50 s. Start wrapping up: tie off what is open and thank \
+             the minions in character. No goodbye and no sign_off yet: that comes in the last \
+             15 s."
+        );
+        assert!(closing_line(106_000, 120_000, false)
+            .starts_with("CLOSING NOW: the stream ends in 14 s."));
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn the_planned_end_ends_an_unsigned_stream_and_fails_the_check() {
         let tmp = tempfile::tempdir().unwrap();
         let opts = opts(tmp.path());
@@ -1938,7 +2025,7 @@ mod tests {
         assert_eq!(state(r, "sign_off"), SandboxCheckState::Fail);
         assert_eq!(
             detail(r, "sign_off"),
-            "no sign-off in the last 90 s: the driver ended the stream at 01:00"
+            "no sign-off in the last 30 s: the driver ended the stream at 01:00"
         );
         assert!(matches!(
             out.events.last(),
@@ -2091,6 +2178,7 @@ mod tests {
             performed_msg_id: None,
             silence_window: None,
             note: None,
+            left_out: false,
         };
         // Outage 300..390 s of a 600 s session: 290 and 400 fall in the 15 s margin (285..405).
         let mut v = vec![
