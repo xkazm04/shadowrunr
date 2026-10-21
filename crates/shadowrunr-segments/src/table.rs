@@ -824,7 +824,13 @@ mod tests {
             assert_eq!(segment_table(id).unwrap().screens, ["host"]);
         }
         let p = two.rules_prompt.to_lowercase();
-        assert!(p.contains("go back to the hexmap"), "{p}");
+        for want in [
+            "the screen is yours to direct",
+            "with its focus",
+            "pull back to the overview",
+        ] {
+            assert!(p.contains(want), "{want}: {p}");
+        }
     }
 
     #[test]

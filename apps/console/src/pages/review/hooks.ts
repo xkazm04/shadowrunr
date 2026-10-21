@@ -1,10 +1,11 @@
-// Data hooks for the Review page. A session is one `review.session` read; feedback writes are
-// optimistic: the mark shows at once and rolls back if `review.feedback.set` fails, without
-// refetching the whole session.
-import { useCallback, useMemo, useState } from "react";
+// Data hooks for the Review page. A session is one `review.session` read; feedback writes go
+// through a per-line ledger (ledger.ts): the mark shows at once, a reply settles only its own
+// write, a failure stays on screen for retry, and a refetched session prunes what it confirms.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FeedbackTag, LineFeedback, ReviewSession } from "@shadowrunr/contract";
 import { useMutation, useRpc } from "../../data";
-import { derive, feedbackByLine, type Derived } from "./derive";
+import { derive, type Derived } from "./derive";
+import { EMPTY_LEDGER, failedMarks, pruneLedger, rejectWrite, sendWrite, settleWrite, statusOf, viewOf, type FailedMark, type Ledger, type MarkStatus } from "./ledger";
 
 const NONE = {} as const;
 
@@ -15,41 +16,57 @@ export const useSessions = () => useRpc("review.sessions", NONE);
 export const useSession = (sessionId: string | undefined) => useRpc("review.session", sessionId === undefined ? null : { session_id: sessionId });
 
 export interface Feedback {
-  /** The current mark per line (server state with local writes on top). */
+  /** The current mark per line (server state with this view's writes on top). */
   readonly byLine: ReadonlyMap<number, LineFeedback>;
-  /** Save a line's marks; empty tags and note clear it. Resolves to an error message, or undefined. */
-  readonly save: (line: number, tags: readonly FeedbackTag[], note: string) => Promise<string | undefined>;
-  readonly pending: boolean;
+  /** Send a line's marks (empty tags and note clear it). Returns the write's seq, or undefined when the line already has a write in flight. */
+  readonly save: (line: number, tags: readonly FeedbackTag[], note: string) => number | undefined;
+  /** Where the line's newest write stands. */
+  readonly statusOf: (line: number) => MarkStatus;
+  /** Writes the daemon did not take, with what to resend. */
+  readonly failed: readonly FailedMark[];
+  /** Resend a failed line's write as it was. */
+  readonly retry: (line: number) => void;
 }
 
-/** Feedback for one session: the reply's rows, overlaid by this view's own writes. */
+/** Feedback for one session: the reply's rows, overlaid by this view's write ledger. */
 export function useFeedback(rs: ReviewSession): Feedback {
-  const set = useMutation("review.feedback.set");
-  const [local, setLocal] = useState<ReadonlyMap<number, LineFeedback | null>>(new Map());
-  const base = useMemo(() => feedbackByLine(rs.feedback), [rs.feedback]);
-  const byLine = useMemo(() => {
-    const m = new Map(base);
-    for (const [line, f] of local) {
-      if (f === null) m.delete(line);
-      else m.set(line, f);
-    }
-    return m;
-  }, [base, local]);
+  const { run } = useMutation("review.feedback.set");
+  // The ref is the ledger's truth (two keypresses in one tick both see the first write); the state renders it.
+  const ledger = useRef<Ledger>(EMPTY_LEDGER);
+  const [shown, setShown] = useState<Ledger>(EMPTY_LEDGER);
+  const seq = useRef(0);
+  const apply = useCallback((f: (l: Ledger) => Ledger) => {
+    const next = f(ledger.current);
+    if (next === ledger.current) return;
+    ledger.current = next;
+    setShown(next);
+  }, []);
+  useEffect(() => apply((l) => pruneLedger(l, rs.feedback)), [apply, rs.feedback]);
+  const sessionId = rs.row.session_id;
   const save = useCallback(
-    async (line: number, tags: readonly FeedbackTag[], note: string) => {
-      const sessionId = rs.row.session_id;
+    (line: number, tags: readonly FeedbackTag[], note: string) => {
+      if (statusOf(ledger.current, line) === "sending") return undefined;
+      const s = ++seq.current;
       const trimmed = note.trim();
-      const before = local.has(line) ? local.get(line) : base.get(line) ?? null;
-      const next: LineFeedback | null = tags.length === 0 && trimmed === "" ? null : { session_id: sessionId, line, tags: [...tags], ...(trimmed ? { note: trimmed } : {}), at_ms: Date.now() };
-      setLocal((m) => new Map(m).set(line, next));
-      const r = await set.run({ session_id: sessionId, line, tags: [...tags], ...(trimmed ? { note: trimmed } : {}) });
-      if (r.ok) return undefined;
-      setLocal((m) => new Map(m).set(line, before ?? null));
-      return "Your mark was not saved. Check that the daemon is running, then try again.";
+      apply((l) => sendWrite(l, { session_id: sessionId, line, seq: s, tags: [...tags], note: trimmed, at_ms: Date.now() }));
+      void run({ session_id: sessionId, line, tags: [...tags], ...(trimmed ? { note: trimmed } : {}) }).then((r) =>
+        apply((l) => (r.ok ? settleWrite(l, line, s, r.value) : rejectWrite(l, line, s))),
+      );
+      return s;
     },
-    [rs.row.session_id, set, local, base],
+    [sessionId, run, apply],
   );
-  return { byLine, save, pending: set.pending };
+  const retry = useCallback(
+    (line: number) => {
+      const f = failedMarks(ledger.current).find((x) => x.line === line);
+      if (f) save(line, f.tags, f.note);
+    },
+    [save],
+  );
+  const byLine = useMemo(() => viewOf(shown, rs.feedback), [shown, rs.feedback]);
+  const failed = useMemo(() => failedMarks(shown), [shown]);
+  const status = useCallback((line: number) => statusOf(shown, line), [shown]);
+  return { byLine, save, statusOf: status, failed, retry };
 }
 
 /** The derived view of a loaded session (pure; memoised per reply). */

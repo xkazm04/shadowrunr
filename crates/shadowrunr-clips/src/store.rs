@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use fs2::FileExt;
 use serde::Serialize;
 use shadowrunr_types::clips::{
-    ClipApproval, ClipCandidate, ClipFeedback, ClipFeedbackTag, ClipRejection, ClipStatus,
+    ClipAct, ClipApproval, ClipCandidate, ClipFeedback, ClipFeedbackTag, ClipRejection, ClipStatus,
     ClipSummary, ClipTransition, ClipsListParams, ClipsPage, GateState,
 };
 
@@ -95,13 +95,16 @@ pub fn summary(c: &ClipCandidate) -> ClipSummary {
     }
 }
 
-pub fn status_name(s: ClipStatus) -> &'static str {
-    match s {
-        ClipStatus::RenderedDraft => "rendered_draft",
-        ClipStatus::PendingOwnerGate => "pending_owner_gate",
-        ClipStatus::ApprovedForUpload => "approved_for_upload",
-        ClipStatus::Published => "published",
-        ClipStatus::Rejected => "rejected",
+/// Refuse `act` on `c` when the contract's owner-act rule blocks it; the error text is the
+/// block's own refusal.
+pub fn refuse_blocked(c: &ClipCandidate, act: ClipAct) -> Result<()> {
+    match c.act_block(act) {
+        None => Ok(()),
+        Some(b) => Err(ClipError::Conflict(format!(
+            "clip {} {}",
+            c.id,
+            b.refusal(act)
+        ))),
     }
 }
 
@@ -146,17 +149,27 @@ impl ClipStore {
         self.dir(id).join("candidate.json").is_file()
     }
 
+    /// A stored candidate, with its `acts` derived from its present state.
     pub fn load(&self, id: &str) -> Result<ClipCandidate> {
         check_id(id)?;
         let path = self.dir(id).join("candidate.json");
         let text = std::fs::read_to_string(&path)
             .map_err(|_| ClipError::NotFound(format!("clip {id}")))?;
-        serde_json::from_str(&text).map_err(|e| ClipError::Io(format!("{}: {e}", path.display())))
+        serde_json::from_str::<ClipCandidate>(&text)
+            .map(ClipCandidate::with_acts)
+            .map_err(|e| ClipError::Io(format!("{}: {e}", path.display())))
     }
 
+    /// Writes the candidate without `acts` (derived on every read, never stored).
     pub fn save(&self, c: &ClipCandidate) -> Result<()> {
         check_id(&c.id)?;
-        write_json(&self.dir(&c.id).join("candidate.json"), c)
+        let path = self.dir(&c.id).join("candidate.json");
+        if c.acts.is_none() {
+            return write_json(&path, c);
+        }
+        let mut stored = c.clone();
+        stored.acts = None;
+        write_json(&path, &stored)
     }
 
     /// Every stored candidate. A malformed `candidate.json` is an error naming the file,
@@ -193,7 +206,7 @@ impl ClipStore {
         let all = self.all()?;
         let mut counts: BTreeMap<String, u32> = BTreeMap::new();
         for c in &all {
-            *counts.entry(status_name(c.status).to_string()).or_insert(0) += 1;
+            *counts.entry(c.status.as_str().to_string()).or_insert(0) += 1;
         }
         let rows: Vec<&ClipCandidate> = all
             .iter()
@@ -243,35 +256,7 @@ impl ClipStore {
         }
         let _lock = self.lock()?;
         let mut c = self.load(id)?;
-        if c.status != ClipStatus::PendingOwnerGate {
-            return Err(ClipError::Conflict(format!(
-                "clip {id} is {}, not pending_owner_gate",
-                status_name(c.status)
-            )));
-        }
-        if c.render.is_none() {
-            return Err(ClipError::Conflict(format!(
-                "clip {id} has no render to approve"
-            )));
-        }
-        if c.window.needs_reauthoring {
-            return Err(ClipError::Conflict(format!(
-                "clip {id} cannot hold its setup inside the band: re-author it, do not approve the cut"
-            )));
-        }
-        let failed: Vec<&str> = c
-            .gate
-            .checks
-            .iter()
-            .filter(|k| k.state == GateState::Fail)
-            .map(|k| k.id.as_str())
-            .collect();
-        if !failed.is_empty() {
-            return Err(ClipError::Conflict(format!(
-                "clip {id} is held by {}: a failed check holds whatever the score, and no override applies",
-                failed.join(", ")
-            )));
-        }
+        refuse_blocked(&c, ClipAct::Approve)?;
         let unmeasured: Vec<String> = c
             .gate
             .checks
@@ -309,7 +294,7 @@ impl ClipStore {
             note: Some("owner signed: the cut keeps its context and the captions claim no more than it shows".into()),
         });
         self.save(&c)?;
-        Ok(c)
+        Ok(c.with_acts())
     }
 
     /// The owner rejects: from any state before `published`, with a reason kept beside the
@@ -321,12 +306,7 @@ impl ClipStore {
         }
         let _lock = self.lock()?;
         let mut c = self.load(id)?;
-        if matches!(c.status, ClipStatus::Published | ClipStatus::Rejected) {
-            return Err(ClipError::Conflict(format!(
-                "clip {id} is already {}",
-                status_name(c.status)
-            )));
-        }
+        refuse_blocked(&c, ClipAct::Reject)?;
         let by = by
             .map(str::trim)
             .filter(|b| !b.is_empty())
@@ -346,7 +326,7 @@ impl ClipStore {
             note: Some(reason.to_string()),
         });
         self.save(&c)?;
-        Ok(c)
+        Ok(c.with_acts())
     }
 
     /// Watched feedback: replaces the clip's tags and note, in any state, and changes nothing

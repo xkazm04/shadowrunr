@@ -658,6 +658,125 @@
         }
       ]
     },
+    "ClipAct": {
+      "description": "An owner act on a candidate; [`ClipCandidate::act_block`] says when it is allowed.",
+      "enum": [
+        "render",
+        "approve",
+        "reject",
+        "publish"
+      ],
+      "type": "string"
+    },
+    "ClipActBlock": {
+      "description": "Why an act is refused: the daemon's error and the console's disabled control share it.",
+      "oneOf": [
+        {
+          "description": "The candidate's state does not allow the act.",
+          "properties": {
+            "kind": {
+              "const": "status",
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/ClipStatus"
+            }
+          },
+          "required": [
+            "kind",
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Approval needs a render to sign.",
+          "properties": {
+            "kind": {
+              "const": "no_render",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The setup and payoff cannot fit the band: re-author, do not approve the cut.",
+          "properties": {
+            "kind": {
+              "const": "needs_reauthoring",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "These checks failed: a failed check holds whatever the score, and no override applies.",
+          "properties": {
+            "checks": {
+              "items": {
+                "$ref": "#/$defs/GateCheckId"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "held_by",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "checks"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ClipActState": {
+      "description": "One act's verdict on one candidate.",
+      "properties": {
+        "blocked": {
+          "$ref": "#/$defs/ClipActBlock",
+          "description": "Absent: the act is allowed."
+        },
+        "override_needed": {
+          "description": "Unmeasured checks the act needs an override reason for.",
+          "items": {
+            "$ref": "#/$defs/GateCheckId"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "ClipActs": {
+      "description": "Every act's verdict, keyed by [`ClipAct`].",
+      "properties": {
+        "approve": {
+          "$ref": "#/$defs/ClipActState"
+        },
+        "publish": {
+          "$ref": "#/$defs/ClipActState"
+        },
+        "reject": {
+          "$ref": "#/$defs/ClipActState"
+        },
+        "render": {
+          "$ref": "#/$defs/ClipActState"
+        }
+      },
+      "required": [
+        "render",
+        "approve",
+        "reject",
+        "publish"
+      ],
+      "type": "object"
+    },
     "ClipApproval": {
       "description": "The owner's signature on `approved_for_upload`.",
       "properties": {
@@ -691,6 +810,10 @@
     "ClipCandidate": {
       "description": "A stored clip candidate.",
       "properties": {
+        "acts": {
+          "$ref": "#/$defs/ClipActs",
+          "description": "What may be done now: derived on every read, never stored."
+        },
         "approval": {
           "$ref": "#/$defs/ClipApproval"
         },
@@ -3243,8 +3366,7 @@
           "type": "string"
         },
         "id": {
-          "description": "`care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,\n`ai_disclosure`, `handles_in_picture`, `evidence_badge_burnt`, `source_citation`,\n`no_open_correction`.",
-          "type": "string"
+          "$ref": "#/$defs/GateCheckId"
         },
         "mandatory": {
           "description": "Part of the SEG-02A / linked-case checklist.",
@@ -3260,6 +3382,22 @@
         "detail"
       ],
       "type": "object"
+    },
+    "GateCheckId": {
+      "description": "A clip publish-gate check, as it crosses the wire. The serde names are the ids\n`candidate.json` has always carried.",
+      "enum": [
+        "care_state",
+        "personal_data",
+        "brigade_call",
+        "blocked_term",
+        "injection_reply",
+        "ai_disclosure",
+        "handles_in_picture",
+        "evidence_badge_burnt",
+        "source_citation",
+        "no_open_correction"
+      ],
+      "type": "string"
     },
     "GateState": {
       "oneOf": [
@@ -4215,8 +4353,11 @@
           "type": "object"
         },
         {
-          "description": "Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.",
+          "description": "Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.\n`focus` names a case hex the map zooms to on `hexmap`/`desk` (absent: the overview).",
           "properties": {
+            "focus": {
+              "type": "string"
+            },
             "op": {
               "const": "show_screen",
               "type": "string"
@@ -5559,8 +5700,7 @@
           "type": "string"
         },
         "id": {
-          "description": "One of [`SANDBOX_CHECKS`].",
-          "type": "string"
+          "$ref": "#/$defs/SandboxCheckId"
         },
         "state": {
           "$ref": "#/$defs/SandboxCheckState"
@@ -5572,6 +5712,22 @@
         "detail"
       ],
       "type": "object"
+    },
+    "SandboxCheckId": {
+      "description": "A sandbox session's gate check, as it crosses the wire. The variants are in report order\n([`SandboxCheckId::ALL`]); the serde names are the ids `session.json` has always carried.",
+      "enum": [
+        "say_gap",
+        "core_errors",
+        "sign_off",
+        "chaos",
+        "stage_ack",
+        "judge",
+        "voiced",
+        "face",
+        "av_sync",
+        "dead_air"
+      ],
+      "type": "string"
     },
     "SandboxCheckState": {
       "oneOf": [
@@ -5665,7 +5821,7 @@
           "type": "number"
         },
         "pass": {
-          "description": "Every check that gates the session passed (an unmeasured check is not a pass; the\nwatched checks gate only a recorded session, see [`SANDBOX_WATCHED_CHECKS`]).",
+          "description": "Every check that gates the session passed (an unmeasured check is not a pass; the\nwatched checks gate only a recorded session, see [`SandboxCheckId::is_watched`]).",
           "type": "boolean"
         },
         "say_gap_p95_s": {
@@ -5723,7 +5879,7 @@
           "type": "integer"
         },
         "record": {
-          "description": "The session is recorded (`stream sandbox --record`), so the watched checks\n([`SANDBOX_WATCHED_CHECKS`]) gate it. Default false.",
+          "description": "The session is recorded (`stream sandbox --record`), so the watched checks\n([`SandboxCheckId::is_watched`]) gate it. Default false.",
           "type": "boolean"
         },
         "seed": {

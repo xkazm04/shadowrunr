@@ -681,7 +681,7 @@ pub fn report_table(st: &SandboxStatus) -> String {
             SandboxCheckState::Fail => "FAIL",
             SandboxCheckState::Unmeasured => "unmeasured",
         };
-        let note = if check_gates(&r.spec, &c.id) {
+        let note = if check_gates(&r.spec, c.id) {
             ""
         } else {
             " (not gating: unrecorded)"
@@ -1595,7 +1595,7 @@ async fn daemon_cmd(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shadowrunr_types::sandbox::{SandboxCheck, SandboxReport};
+    use shadowrunr_types::sandbox::{SandboxCheck, SandboxCheckId, SandboxReport};
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
         Cli::try_parse_from(std::iter::once("shadowrunr").chain(args.iter().copied()))
@@ -1686,7 +1686,7 @@ mod tests {
                 ended_ms: 300_000,
                 pass,
                 checks: vec![SandboxCheck {
-                    id: "say_gap".into(),
+                    id: SandboxCheckId::SayGap,
                     state: if pass {
                         SandboxCheckState::Pass
                     } else {

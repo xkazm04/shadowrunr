@@ -11,11 +11,15 @@
 //   soft contact shadow under the figure.
 //
 // No allocation per frame. A lost context is waited out and rebuilt from the decoded pictures.
+// The per-layer rules every face shares: ../layer-frame.ts (the depth face's gaze adds its look
+// follower's eye slide; see the table there); the GL plumbing: ../gl-kit.ts.
 
 import type { Pose } from "../driver";
-import { gapCentre, gapHalf, rigColors } from "../glow-geom";
+import { compileProgram, contextLossGuard, uploadLayerTextures } from "../gl-kit";
+import { rigColors } from "../glow-geom";
 import { KIND } from "../glow-shaders";
-import type { LayerSpec, LoadedForm } from "../layers";
+import { apertureLift, DEPTH_MAPPING, describeLayer, layerFrame, newLayerFrame, type FaceRig, type LayerDraw } from "../layer-frame";
+import type { LoadedForm } from "../layers";
 import { cameraFor, displacedGrid, fitView, rigMeshes, STRIDE, type DepthField, type DepthMeta } from "./geom";
 import type { LookPose } from "./look";
 import { FS, SHADOW_KIND, VS } from "./shaders";
@@ -40,24 +44,14 @@ const YAW_LIMIT = 22;
 const PITCH_LIMIT = 12;
 const DEG = Math.PI / 180;
 
-interface Draw {
-  spec: LayerSpec;
-  kind: number;
+interface Draw extends LayerDraw {
   solid: boolean;
   tex: WebGLTexture | null;
   bbox: [number, number, number, number];
   mesh: number;
-  float?: { amp: [number, number]; freq: number; rot: number; pivot: [number, number]; phase: number; phase2: number };
-  eyeC?: [number, number];
-  right?: boolean;
 }
 
-const smooth01 = (x: number) => {
-  const y = Math.min(1, Math.max(0, x));
-  return y * y * (3 - 2 * y);
-};
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
-const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /** Make the renderer. Rejects when WebGL2 is not there or the program does not link. */
 export async function createDepthRenderer(
@@ -79,7 +73,6 @@ export async function createDepthRenderer(
   const { meshes, which } = rigMeshes(form, field, meta);
   const cam = cameraFor(W, H, R.head, meta.near - 0.8 * R.head.radius[0]);
 
-  let lost = false;
   let disposed = false;
   let prog: WebGLProgram | null = null;
   let U: Record<string, WebGLUniformLocation | null> = {};
@@ -88,6 +81,9 @@ export async function createDepthRenderer(
   let shadowVao: WebGLVertexArrayObject | null = null;
   let owned: { textures: WebGLTexture[]; buffers: WebGLBuffer[]; vaos: WebGLVertexArrayObject[]; shaders: WebGLShader[] } = { textures: [], buffers: [], vaos: [], shaders: [] };
   let view = fitView(canvas.width || 1, canvas.height || 1, W, H);
+  const frame = newLayerFrame();
+  const eyeSlide = { eyeX: 0, eyeY: 0 };
+  const face: FaceRig = { aperture: R.aperture, upperLip, lift: 0, look: eyeSlide };
 
   function free() {
     for (const t of owned.textures) gl.deleteTexture(t);
@@ -127,45 +123,12 @@ export async function createDepthRenderer(
   }
 
   async function build() {
-    const p = gl.createProgram();
-    const vs = gl.createShader(gl.VERTEX_SHADER);
-    const fs = gl.createShader(gl.FRAGMENT_SHADER);
-    if (!p || !vs || !fs) throw new Error("WebGL2 could not make a program");
-    owned.shaders.push(vs, fs);
-    gl.shaderSource(vs, VS);
-    gl.shaderSource(fs, FS);
-    gl.compileShader(vs);
-    gl.compileShader(fs);
-    gl.attachShader(p, vs);
-    gl.attachShader(p, fs);
-    gl.linkProgram(p);
-    const parallel = gl.getExtension("KHR_parallel_shader_compile") as { COMPLETION_STATUS_KHR: number } | null;
-    if (parallel) for (let i = 0; i < 400 && !gl.getProgramParameter(p, parallel.COMPLETION_STATUS_KHR); i++) await breathe();
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-      throw new Error(gl.getShaderInfoLog(vs) || gl.getShaderInfoLog(fs) || gl.getProgramInfoLog(p) || "program did not link");
-    }
+    const p = await compileProgram(gl, VS, FS, owned.shaders);
     prog = p;
     gl.useProgram(p);
     U = {};
 
-    const textures = new Map<string, WebGLTexture>();
-    for (const [file, img] of images) {
-      const t = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, t);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      if (t) {
-        textures.set(file, t);
-        owned.textures.push(t);
-      }
-      await breathe();
-    }
+    const textures = await uploadLayerTextures(gl, images, owned.textures);
 
     vaos = meshes.map((m) => ({ vao: upload(m.data, m.idx), count: m.idx.length, cell: m.cell }));
     // the contact shadow: one flat quad on the picture, never turned
@@ -181,33 +144,15 @@ export async function createDepthRenderer(
       if (l.file && !textures.has(l.file)) continue;
       const kind = KIND[l.kind] ?? 2;
       const light = l.mode === "light" || kind === 8 || kind === 9;
-      const d: Draw = {
-        spec: l,
-        kind,
+      const bb: [number, number, number, number] = l.bbox ?? [0, 0, W, H];
+      draws.push({
+        ...describeLayer(l, kind, bb, fi),
         solid: !light && Boolean(l.file),
         tex: l.file ? (textures.get(l.file) ?? null) : null,
-        bbox: l.bbox ?? [0, 0, W, H],
+        bbox: bb,
         mesh,
-      };
-      if (l.kind === "float") {
-        const f = l.float ?? {};
-        const bb = d.bbox;
-        d.float = {
-          amp: f.amp ?? [1, 3],
-          freq: f.freq ?? 0.15,
-          rot: ((f.rot_deg ?? 0) * Math.PI) / 180,
-          pivot: f.pivot ?? [bb[0] + bb[2] / 2, bb[1] + bb[3] / 2],
-          phase: 1.7 * fi + 0.4,
-          phase2: 2.3 * fi + 1.1,
-        };
-        fi++;
-      }
-      if (l.kind === "eye") {
-        const bb = d.bbox;
-        d.eyeC = l.meta?.center ?? [bb[0] + bb[2] / 2, bb[1] + bb[3] / 2];
-        d.right = !l.name.endsWith("_l");
-      }
-      draws.push(d);
+      });
+      if (l.kind === "float") fi++;
     }
     gl.uniform1i(loc("u_tex"), 0);
     layout();
@@ -222,30 +167,22 @@ export async function createDepthRenderer(
     view = fitView(canvas.width || 1, canvas.height || 1, W, H);
   }
 
-  const onLost = (e: Event) => {
-    e.preventDefault();
-    lost = true;
-  };
-  const onRestore = () => {
-    if (disposed) return;
-    owned = { textures: [], buffers: [], vaos: [], shaders: [] };
-    prog = null;
-    build().then(
-      () => {
-        if (disposed) return;
-        lost = false;
-        onRestored();
-      },
-      (error: unknown) => console.warn(`[stage] the depth face could not be rebuilt after the GPU reset: ${error instanceof Error ? error.message : String(error)}`),
-    );
-  };
-  canvas.addEventListener("webglcontextlost", onLost);
-  canvas.addEventListener("webglcontextrestored", onRestore);
+  const guard = contextLossGuard(
+    canvas,
+    () => {
+      // the old handles died with the context; drop them, do not delete them
+      owned = { textures: [], buffers: [], vaos: [], shaders: [] };
+      prog = null;
+      return build();
+    },
+    onRestored,
+    "the depth face",
+  );
 
   await build();
 
   function render(pose: Pose, look: LookPose) {
-    if (lost || disposed || gl.isContextLost() || !shadowVao) return;
+    if (guard.lost || disposed || gl.isContextLost() || !shadowVao) return;
     const t = pose.t;
     const act = pose.activity;
     const voice = pose.voice;
@@ -280,7 +217,9 @@ export async function createDepthRenderer(
     gl.uniform3fv(loc("u_rimACol"), colors.mouth);
     gl.uniform4f(loc("u_rimB"), -0.88 * side, -0.47, 0.16, 6);
     gl.uniform3fv(loc("u_rimBCol"), colors.lineCore);
-    const lift = ap ? pose.open * (ap.open_frac ?? 0.15) * (ap.bottom - ap.top) * (0.75 + 0.35 * Math.min(1, voice)) : 0;
+    face.lift = apertureLift(ap, pose);
+    eyeSlide.eyeX = look.eyeX;
+    eyeSlide.eyeY = look.eyeY;
     if (ap) gl.uniform2f(loc("u_aperX"), ap.x0, ap.x1);
 
     // the contact shadow first, flat on the picture under him
@@ -295,43 +234,27 @@ export async function createDepthRenderer(
     for (const d of draws) {
       const l = d.spec;
       const kind = d.kind;
-      if (kind === 8 && lift < 0.2) continue;
+      const f = layerFrame(d, pose, face, DEPTH_MAPPING, frame);
+      if (f.skip) continue;
       const mesh = vaos[d.mesh];
       if (!mesh) continue;
-      if (ap && kind >= 6 && kind <= 8) {
-        const lit = kind === 8;
-        gl.uniform4f(loc("u_aper"), ap.top, lit ? gapCentre(ap.seam_y, lift, upperLip) : ap.seam_y, ap.bottom, lit ? gapHalf(lift, upperLip) : lift);
-      }
+      if (f.hasAper) gl.uniform4f(loc("u_aper"), f.aper[0], f.aper[1], f.aper[2], f.aper[3]);
       gl.uniform1i(loc("u_kind"), kind);
       gl.uniform1i(loc("u_solid"), d.solid ? 1 : 0);
-      gl.uniform1f(loc("u_follow"), kind === 3 ? (l.follow ?? 1) : 1);
+      gl.uniform1f(loc("u_follow"), f.follow);
       gl.uniform1f(loc("u_cell"), mesh.cell);
       // the shards' cut edges are hard; a full rim would outline every one of them
       gl.uniform1f(loc("u_rimK"), kind === 3 ? 0.35 : 1);
-      let gain = l.gain ?? 1;
-      if (kind === 5) gain *= 0.9 + (l.voice_gain ?? 2) * Math.max(voice * 0.8, pose.open) * 0.6;
-      if (kind === 10) gain *= 1 + act * (l.pulse?.amp ?? 0.15) * Math.sin(2 * Math.PI * (l.pulse?.freq ?? 0.2) * t) + (l.voice_gain ?? 0) * voice;
-      if (kind === 4 && d.eyeC) {
-        const blink = d.right ? pose.blinkR : pose.blinkL;
-        if (l.blink === "iris") {
-          gl.uniform4f(loc("u_eye"), d.eyeC[0], d.eyeC[1], 0.92 * Math.pow(blink, 0.8), 0);
-          gl.uniform4f(loc("u_eyeP"), blink, d.eyeC[0], d.eyeC[1], l.meta?.core_r ?? 12);
-          gain *= 1 - 0.6 * blink;
-        } else {
-          gl.uniform4f(loc("u_eye"), d.eyeC[0], d.eyeC[1], 0.35 * blink, 0);
-          gl.uniform4f(loc("u_eyeP"), 0, 0, 0, 1);
-          gain *= 1 - smooth01((blink - 0.25) / 0.4);
-        }
-        gl.uniform2f(loc("u_gaze"), look.eyeX + pose.gazeX * 3.5, look.eyeY + pose.gazeY * 2.0);
-        gain *= 1 + (l.voice_gain ?? 0.12) * voice;
+      if (f.hasEye) {
+        gl.uniform4f(loc("u_eye"), f.eye[0], f.eye[1], f.eye[2], f.eye[3]);
+        gl.uniform4f(loc("u_eyeP"), f.eyeP[0], f.eyeP[1], f.eyeP[2], f.eyeP[3]);
+        gl.uniform2f(loc("u_gaze"), f.gaze[0], f.gaze[1]);
       }
-      gl.uniform1f(loc("u_gain"), gain);
+      gl.uniform1f(loc("u_gain"), f.gain);
       gl.uniform1f(loc("u_bloom"), l.bloom ?? 0);
-      if (kind === 3 && d.float) {
-        const f = d.float;
-        const w = 2 * Math.PI * f.freq;
-        gl.uniform4f(loc("u_float"), act * f.amp[0] * Math.sin(w * 0.77 * t + f.phase2), act * -f.amp[1] * Math.sin(w * t + f.phase), act * f.rot * Math.sin(w * 0.6 * t + f.phase + 0.8), 0);
-        gl.uniform2f(loc("u_floatPivot"), f.pivot[0], f.pivot[1]);
+      if (f.hasFloat && d.float) {
+        gl.uniform4f(loc("u_float"), f.float[0], f.float[1], f.float[2], f.float[3]);
+        gl.uniform2f(loc("u_floatPivot"), d.float.pivot[0], d.float.pivot[1]);
       }
       if (d.tex) {
         gl.activeTexture(gl.TEXTURE0);
@@ -358,12 +281,11 @@ export async function createDepthRenderer(
     render,
     resize: layout,
     get lost() {
-      return lost || gl.isContextLost();
+      return guard.lost || gl.isContextLost();
     },
     dispose() {
       disposed = true;
-      canvas.removeEventListener("webglcontextlost", onLost);
-      canvas.removeEventListener("webglcontextrestored", onRestore);
+      guard.dispose();
       if (!gl.isContextLost()) free();
     },
   };

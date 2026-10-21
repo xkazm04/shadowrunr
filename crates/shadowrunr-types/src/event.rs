@@ -55,10 +55,13 @@ pub enum Op {
     },
     /// Switch the broadcast's main screen (appendix (screens)). Only the screens the current
     /// segment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.
+    /// `focus` names a case hex the map zooms to on `hexmap`/`desk` (absent: the overview).
     ShowScreen {
         screen: ScreenId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         record_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        focus: Option<String>,
     },
 }
 

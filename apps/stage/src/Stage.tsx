@@ -8,7 +8,7 @@
 import { useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 
 import type { Case } from "@shadowrunr/contract";
-import { captionAt, isContentScreen, type MapModel, type SceneState } from "@shadowrunr/stage-kit";
+import { captionAt, isContentScreen, mapFocusOf, type MapModel, type SceneState } from "@shadowrunr/stage-kit";
 import {
   BrowserWindow,
   CaptionPanel,
@@ -36,7 +36,7 @@ import {
 import { Avatar } from "./avatar/Avatar";
 import { lookBox, lookFor } from "./avatar/look";
 import type { FaceSource } from "./avatar/types";
-import type { FaceVariant } from "./avatar/variants";
+import { DEFAULT_FACE, type FaceVariant } from "./avatar/variants";
 import { FACE_PX, hexFrame, layoutRects, type Rect, type Region } from "./layouts";
 import { StandingCard, VoiceCaptionPanel, cardShowing, tickerActive } from "./OnAir";
 import type { VoiceCaptionView } from "./voice/captions";
@@ -71,7 +71,7 @@ export function Stage({
   overlay,
   face,
   rigBase = null,
-  variant = "glow",
+  variant = DEFAULT_FACE,
   onCaptionSpeaking,
   voiceCaption,
   onFace,
@@ -139,6 +139,7 @@ export function Stage({
           caseFile={caseFile}
           {...(frame ? { frame } : {})}
           highlight={scene.layout === "desk" && record ? record.hex : null}
+          focus={mapFocusOf(scene)}
         />
       </RegionBox>
 

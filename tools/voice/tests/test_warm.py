@@ -1,7 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """The warm engine over a fake worker (``fake_warm.py``): chosen when it can run and fallen back
 from when it cannot, sentences in order with their mouth shapes, a cancel that throws a render
-away without killing its worker, and a worker that times out or dies replaced by a new one."""
+away without killing its worker, and a worker that times out or dies replaced by a new one.
+
+The pool supervises its workers: it starts with whatever loads, respawns a dead worker in the
+background from the moment it dies, quarantines a slot whose loads keep failing, and lends out
+only live workers. Those cases wait on events (a spawn file, a gate file the test opens, the
+pool's slot states), never on a clock."""
 
 from __future__ import annotations
 
@@ -10,6 +15,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -17,7 +23,8 @@ from typing import Any
 from unittest import mock
 
 from shadowrunr_voice.sidecar import Faces, Settings, Sidecar, hello
-from shadowrunr_voice.warm import WarmPool, worker_argv
+from shadowrunr_voice import warm as warm_module
+from shadowrunr_voice.warm import WarmPool, Worker, worker_argv
 
 from .test_engine import FAKE, engine_dir
 from .test_protocol import WAIT_S, FakeDurations, Sink
@@ -36,6 +43,9 @@ class Warm(unittest.TestCase):
             os.environ, {"FAKE_ENGINE_LOG": str(self.log), "FAKE_WARM_PIDS": str(self.pids)}
         )
         self.env.start()
+        # Respawn at once in tests: the backoff is a production pacing, not what is tested.
+        self.backoff = mock.patch.object(warm_module, "RESPAWN_BACKOFF_S", (0.0,), create=True)
+        self.backoff.start()
         self.sink = Sink()
         self.sidecars: list[Sidecar] = []
         self.pools: list[WarmPool] = []
@@ -45,6 +55,7 @@ class Warm(unittest.TestCase):
             sidecar.close()
         for pool in self.pools:
             pool.close()
+        self.backoff.stop()
         self.env.stop()
         self.tmp.cleanup()
 
@@ -68,6 +79,32 @@ class Warm(unittest.TestCase):
 
     def pid_lines(self) -> list[str]:
         return self.pids.read_text(encoding="utf-8").split() if self.pids.exists() else []
+
+    def wait_until(self, done: Any, what: str) -> None:
+        """Polls for an event; the deadline only bounds a failure, it is not what is asserted."""
+        deadline = time.monotonic() + WAIT_S
+        while not done():
+            self.assertLess(time.monotonic(), deadline, f"never happened: {what}")
+            time.sleep(0.02)
+
+    @staticmethod
+    def states(pool: WarmPool) -> dict[str, str]:
+        """Each slot's state (``live``, ``loading``, ``quarantined``); empty while the pool
+        cannot tell."""
+        states = getattr(pool, "states", None)
+        return states() if callable(states) else {}
+
+    def spawns(self, **knobs: str) -> Path:
+        """Numbered spawns for fake_warm, with its per-spawn knobs set."""
+        folder = Path(self.tmp.name) / "spawns"
+        folder.mkdir()
+        os.environ["FAKE_WARM_SPAWNS"] = str(folder)
+        os.environ.update(knobs)
+        return folder
+
+    @staticmethod
+    def spawned(folder: Path) -> int:
+        return len(list(folder.glob("*.txt")))
 
     # -- choosing the engine ---------------------------------------------------------------------
 
@@ -120,6 +157,22 @@ class Warm(unittest.TestCase):
         self.assertIsNone(warm)
         self.assertIn("the warm engine is not running", str(dead))
         self.assertEqual(message["reason"], dead)
+
+    def test_a_partial_start_keeps_the_warm_engine_and_names_its_workers(self) -> None:
+        self.spawns(FAKE_WARM_FAIL_SPAWNS="2")
+        settings = self.settings(workers=3, warm_command=FAKE_WARM, engine="warm")
+        message, dead, _, warm = hello(settings)
+        self.assertIsNotNone(warm, "one worker that would not load threw the pool away")
+        assert warm is not None
+        self.pools.append(warm)
+        self.assertIsNone(dead)
+        self.assertIn("engine: warm (", message["reason"])
+        self.assertIn("2 of 3 workers", message["reason"])
+        sidecar = Sidecar(settings, self.sink.send, warm=warm)
+        self.sidecars.append(sidecar)
+        self.say(sidecar, "a", "Two workers still speak.")
+        got = self.sink.wait_for(lambda m: len(m) == 1)
+        self.assertEqual([(m["type"], m["id"]) for m in got], [("audio", "a")])
 
     def test_a_worker_runs_this_interpreter_and_module_with_no_text(self) -> None:
         argv = worker_argv(Path("E"), 3, 0, True)
@@ -218,6 +271,126 @@ class Warm(unittest.TestCase):
         self.assertEqual(got[0]["reason"], "the warm engine stopped")
         pids = self.pid_lines()
         self.assertNotEqual(pids[0], pids[1])
+
+    # -- supervision -----------------------------------------------------------------------------
+
+    def test_a_dead_worker_is_respawned_at_its_death_not_at_the_next_demand(self) -> None:
+        gate = Path(self.tmp.name) / "gate"
+        folder = self.spawns(FAKE_WARM_SLOW_SPAWNS="3+", FAKE_WARM_LOAD_GATE=str(gate))
+        sidecar = self.sidecar(workers=2)
+        pool = self.pools[0]
+        self.say(sidecar, "x", "This one will DIE now.")
+        got = self.sink.wait_for(lambda m: len(m) == 1)
+        self.assertEqual((got[0]["type"], got[0]["reason"]), ("error", "the warm engine stopped"))
+        # Nothing more is asked for: the replacement starts loading on its own, at the death.
+        self.wait_until(lambda: (folder / "3.txt").exists(), "a respawn with no demand")
+        self.assertEqual(sorted(self.states(pool).values()), ["live", "loading"])
+        # While it loads (held until the gate opens), a sentence goes to the live worker and
+        # never waits for the load.
+        self.say(sidecar, "y", "The live worker speaks this.")
+        got = self.sink.wait_for(lambda m: len(m) == 2)
+        self.assertEqual((got[1]["type"], got[1]["id"]), ("audio", "y"))
+        self.assertFalse(gate.exists())
+        gate.touch()
+        self.wait_until(lambda: sorted(self.states(pool).values()) == ["live", "live"], "ready")
+        # Both workers are back: two sentences at once render on two processes, the new one too.
+        self.say(sidecar, "z", "The first one PAUSE10 waits here. The second one is spoken here.")
+        self.sink.wait_for(lambda m: len(m) == 4)
+        respawned = (folder / "3.txt").read_text(encoding="utf-8").strip()
+        self.assertIn(respawned, self.pid_lines()[-2:])
+        self.assertEqual(len(set(self.pid_lines()[-2:])), 2)
+
+    def test_a_crash_looping_slot_is_quarantined_and_the_burst_runs_on_the_live_one(self) -> None:
+        folder = self.spawns(FAKE_WARM_FAIL_SPAWNS="3+")
+        sidecar = self.sidecar(workers=2)
+        pool = self.pools[0]
+        self.say(sidecar, "x", "This one will DIE now.")
+        self.sink.wait_for(lambda m: len(m) == 1)
+        self.wait_until(
+            lambda: sorted(self.states(pool).values()) == ["live", "quarantined"], "quarantine"
+        )
+        # The crash budget's loads were tried, and then no more.
+        tried = self.spawned(folder)
+        self.assertEqual(tried, 2 + warm_module.CRASH_BUDGET)
+        words = ("one", "two", "three", "four", "five", "six")
+        self.say(sidecar, "b", " ".join(f"Sentence {word} is here." for word in words))
+        got = self.sink.wait_for(lambda m: len(m) == 7)
+        after = got[1:]
+        self.assertEqual([m["type"] for m in after], ["audio"] * 6)
+        self.assertEqual([m["part"] for m in after], list(range(6)))
+        self.assertEqual(len(set(self.pid_lines()[1:])), 1)
+        self.assertEqual(self.spawned(folder), tried, "a quarantined slot was loaded again")
+
+    def test_with_every_worker_quarantined_a_say_fails_at_once_without_a_reload(self) -> None:
+        folder = self.spawns(FAKE_WARM_FAIL_SPAWNS="2+")
+        sidecar = self.sidecar(workers=1)
+        pool = self.pools[0]
+        self.say(sidecar, "x", "This one will DIE now.")
+        self.sink.wait_for(lambda m: len(m) == 1)
+        self.wait_until(lambda: list(self.states(pool).values()) == ["quarantined"], "quarantine")
+        tried = self.spawned(folder)
+        self.say(sidecar, "y", "Is anyone there?")
+        got = self.sink.wait_for(lambda m: len(m) == 2)
+        self.assertEqual(
+            (got[1]["type"], got[1]["id"], got[1]["reason"]),
+            ("error", "y", "the warm engine is not running"),
+        )
+        self.assertEqual(self.spawned(folder), tried, "the say tried a reload")
+
+    def test_acquire_never_loads_a_worker_on_the_acquiring_thread(self) -> None:
+        pool = WarmPool(FAKE_WARM, 1)
+        self.pools.append(pool)
+        pool.start(timeout_s=WAIT_S)
+        callers: list[threading.Thread] = []
+        original = Worker.ready
+
+        def spy(worker: Worker, *args: Any, **kwargs: Any) -> int:
+            callers.append(threading.current_thread())
+            return original(worker, *args, **kwargs)
+
+        got: list[Any] = []
+
+        def acquire() -> None:
+            try:
+                got.append(pool.acquire())
+            except Exception as exc:  # recorded, asserted below
+                got.append(exc)
+
+        with mock.patch.object(Worker, "ready", spy):
+            proc = pool.workers[0].proc
+            assert proc is not None
+            proc.kill()
+            proc.wait(timeout=WAIT_S)
+            taker = threading.Thread(target=acquire, name="voice-test-acquire")
+            taker.start()
+            taker.join(WAIT_S)
+            self.assertFalse(taker.is_alive(), "acquire never got the respawned worker")
+        self.assertEqual(len(got), 1)
+        self.assertIsInstance(got[0], Worker)
+        self.assertTrue(got[0].alive)
+        pool.release(got[0])
+        self.assertTrue(callers, "the dead worker was never loaded again")
+        self.assertNotIn(taker, callers, "acquire loaded the model on the render's thread")
+
+    def test_close_kills_and_reaps_a_respawn_mid_load(self) -> None:
+        gate = Path(self.tmp.name) / "never"
+        folder = self.spawns(FAKE_WARM_SLOW_SPAWNS="2+", FAKE_WARM_LOAD_GATE=str(gate))
+        pool = WarmPool(FAKE_WARM, 1)
+        self.pools.append(pool)
+        pool.start(timeout_s=WAIT_S)
+        first = pool.workers[0].proc
+        assert first is not None
+        first.kill()
+        self.wait_until(lambda: (folder / "2.txt").exists(), "a respawn")
+        loading = pool.workers[0].proc
+        assert loading is not None
+        self.assertIsNot(loading, first)
+        self.assertEqual(str(loading.pid), (folder / "2.txt").read_text(encoding="utf-8"))
+        self.assertEqual(self.states(pool), {"worker-0": "loading"})
+        pool.close()
+        self.assertIsNotNone(loading.poll(), "the respawning worker outlived close()")
+        left = [t.name for t in threading.enumerate() if t.name.startswith("voice-respawn")]
+        self.assertEqual(left, [], "a respawn thread is still waiting for a load")
 
     def test_the_head_of_line_runs_urgent_and_look_ahead_is_promoted(self) -> None:
         priority = Path(self.tmp.name) / "priority"

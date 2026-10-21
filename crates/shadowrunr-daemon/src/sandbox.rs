@@ -24,9 +24,9 @@ use serde::Serialize;
 use shadowrunr_sim::sandbox::{judge_session, run_sandbox, EventSink, SandboxProgress, SandboxRun};
 use shadowrunr_sim::{SimError, SimOptions};
 use shadowrunr_types::sandbox::{
-    SandboxChaos, SandboxCheck, SandboxCheckState, SandboxIdParams, SandboxJudge, SandboxReport,
-    SandboxStartParams, SandboxStarted, SandboxState, SandboxStatus, SandboxStatusParams,
-    SANDBOX_MINUTES,
+    SandboxChaos, SandboxCheck, SandboxCheckId, SandboxCheckState, SandboxIdParams, SandboxJudge,
+    SandboxReport, SandboxStartParams, SandboxStarted, SandboxState, SandboxStatus,
+    SandboxStatusParams, SANDBOX_MINUTES,
 };
 use shadowrunr_types::{Engine, ErrorCode, StreamEvent};
 use tokio::sync::watch;
@@ -504,7 +504,7 @@ async fn host(state: Arc<AppState>, session: Arc<Session>, live_run: Arc<LiveRun
     let final_seq = live_run.len();
     wait_for_ack(&state.acks, &live_run, final_seq, h.hosting.ack_grace).await;
     let (ack_state, ack_detail) = stage_ack_check(&state.acks.for_run(&session.id), final_seq);
-    set_check(&mut report, "stage_ack", ack_state, ack_detail);
+    set_check(&mut report, SandboxCheckId::StageAck, ack_state, ack_detail);
     state.live.remove(&session.id);
     live_run.finish(None);
 
@@ -531,18 +531,23 @@ async fn host(state: Arc<AppState>, session: Arc<Session>, live_run: Arc<LiveRun
                 };
                 set_check(
                     &mut report,
-                    "judge",
+                    SandboxCheckId::Judge,
                     st,
                     format!("{} rule fails ({})", j.rule_fails, j.verdict_path),
                 );
                 report.judge = Some(j);
             }
-            Err(e) => set_check(&mut report, "judge", SandboxCheckState::Fail, e.to_string()),
+            Err(e) => set_check(
+                &mut report,
+                SandboxCheckId::Judge,
+                SandboxCheckState::Fail,
+                e.to_string(),
+            ),
         }
     } else {
         set_check(
             &mut report,
-            "judge",
+            SandboxCheckId::Judge,
             SandboxCheckState::Unmeasured,
             "skipped".into(),
         );
@@ -625,12 +630,13 @@ pub fn stage_ack_check(recs: &[AckRecord], final_seq: u64) -> (SandboxCheckState
 }
 
 /// Replace check `id` (or append it).
-fn set_check(report: &mut SandboxReport, id: &str, state: SandboxCheckState, detail: String) {
-    let c = SandboxCheck {
-        id: id.to_string(),
-        state,
-        detail,
-    };
+fn set_check(
+    report: &mut SandboxReport,
+    id: SandboxCheckId,
+    state: SandboxCheckState,
+    detail: String,
+) {
+    let c = SandboxCheck { id, state, detail };
     match report.checks.iter_mut().find(|c| c.id == id) {
         Some(slot) => *slot = c,
         None => report.checks.push(c),
@@ -743,7 +749,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::e2e::{repo, test_config};
     use crate::engine::EngineHandle;
-    use shadowrunr_types::sandbox::{StageAck, SANDBOX_CHECKS};
+    use shadowrunr_types::sandbox::StageAck;
 
     fn rec(seq: u64, gaps: u32) -> AckRecord {
         AckRecord {
@@ -766,11 +772,11 @@ pub(crate) mod tests {
     fn the_stage_url_names_the_daemon_only_off_the_default_port() {
         assert_eq!(
             stage_url(7717, FaceVariant::Glow),
-            "http://localhost:5178/?run=live&broadcast=1"
+            "http://localhost:5178/?run=live&broadcast=1&avatar=glow"
         );
         assert_eq!(
             stage_url(9000, FaceVariant::Glow),
-            "http://localhost:5178/?run=live&broadcast=1&ws=ws://127.0.0.1:9000/events"
+            "http://localhost:5178/?run=live&broadcast=1&ws=ws://127.0.0.1:9000/events&avatar=glow"
         );
         assert_eq!(
             stage_url(7717, FaceVariant::Cut),
@@ -837,12 +843,12 @@ pub(crate) mod tests {
     }
 
     fn sim_checks(spec: &SandboxStartParams) -> Vec<SandboxCheck> {
-        SANDBOX_CHECKS
+        SandboxCheckId::ALL
             .iter()
-            .map(|id| SandboxCheck {
-                id: id.to_string(),
-                state: if matches!(*id, "stage_ack" | "judge")
-                    || shadowrunr_types::sandbox::SANDBOX_WATCHED_CHECKS.contains(id)
+            .map(|&id| SandboxCheck {
+                id,
+                state: if matches!(id, SandboxCheckId::StageAck | SandboxCheckId::Judge)
+                    || id.is_watched()
                 {
                     SandboxCheckState::Unmeasured
                 } else {
@@ -976,15 +982,15 @@ pub(crate) mod tests {
         assert!(started.session_id.ends_with("-5m"));
         assert_eq!(
             started.stage_url,
-            "http://localhost:5178/?run=live&broadcast=1"
+            "http://localhost:5178/?run=live&broadcast=1&avatar=cut"
         );
         let end = until_ended(&st, &started.session_id).await;
         assert_eq!(end.state, SandboxState::Done);
         assert_eq!(end.stage_ack_seq, Some(5));
         let report = end.report.unwrap();
         assert!(report.pass, "{:?}", report.checks);
-        let ids: Vec<&str> = report.checks.iter().map(|c| c.id.as_str()).collect();
-        assert_eq!(ids, SANDBOX_CHECKS);
+        let ids: Vec<SandboxCheckId> = report.checks.iter().map(|c| c.id).collect();
+        assert_eq!(ids, SandboxCheckId::ALL);
         assert_eq!(report.judge.as_ref().unwrap().rule_fails, 0);
         assert_eq!(end.elapsed_s, 60);
 
@@ -1048,7 +1054,14 @@ pub(crate) mod tests {
         let started = start_with(st.clone(), p, h).await.unwrap();
         let end = until_ended(&st, &started.session_id).await;
         let report = end.report.clone().unwrap();
-        let check = |id: &str| report.checks.iter().find(|c| c.id == id).unwrap().clone();
+        let check = |id: &str| {
+            report
+                .checks
+                .iter()
+                .find(|c| c.id.as_str() == id)
+                .unwrap()
+                .clone()
+        };
         assert_eq!(
             check("voiced").state,
             SandboxCheckState::Pass,
@@ -1095,7 +1108,14 @@ pub(crate) mod tests {
         );
         let started = start_with(st.clone(), params(false), h).await.unwrap();
         let report = until_ended(&st, &started.session_id).await.report.unwrap();
-        let check = |id: &str| report.checks.iter().find(|c| c.id == id).unwrap().clone();
+        let check = |id: &str| {
+            report
+                .checks
+                .iter()
+                .find(|c| c.id.as_str() == id)
+                .unwrap()
+                .clone()
+        };
         assert_eq!(check("stage_ack").state, SandboxCheckState::Unmeasured);
         assert_eq!(check("judge").state, SandboxCheckState::Unmeasured);
         assert_eq!(check("judge").detail, "skipped");
@@ -1116,7 +1136,14 @@ pub(crate) mod tests {
             .unwrap()
             .session_id;
         let report = until_ended(&st, &id).await.report.unwrap();
-        let check = |id: &str| report.checks.iter().find(|c| c.id == id).unwrap().clone();
+        let check = |id: &str| {
+            report
+                .checks
+                .iter()
+                .find(|c| c.id.as_str() == id)
+                .unwrap()
+                .clone()
+        };
         assert_eq!(check("stage_ack").state, SandboxCheckState::Fail);
         assert_eq!(check("judge").state, SandboxCheckState::Fail);
         assert!(!report.pass);
@@ -1129,7 +1156,11 @@ pub(crate) mod tests {
             .unwrap()
             .session_id;
         let report = until_ended(&st, &id).await.report.unwrap();
-        let judge = report.checks.iter().find(|c| c.id == "judge").unwrap();
+        let judge = report
+            .checks
+            .iter()
+            .find(|c| c.id == SandboxCheckId::Judge)
+            .unwrap();
         assert_eq!(judge.state, SandboxCheckState::Fail);
         assert!(judge.detail.contains("judge timed out"), "{}", judge.detail);
     }

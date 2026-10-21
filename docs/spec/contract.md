@@ -44,10 +44,12 @@ The `op` payload is the action grammar, tagged `"op"`:
 - `mark_moment`
 - `switch_segment`
 - `sign_off`
-- `show_screen` (`screen`: `host` | `hexmap` | `browser` | `desk`, optional `record_id`): what
-  fills the broadcast's main screen. Only the screens the segment and its state allow; `browser`
-  and `desk` need a record whose research job has come back. The runtime also emits it itself (the segment's default
-  screen, a returning research job's record). See Appendix (screens).
+- `show_screen` (`screen`: `host` | `hexmap` | `browser` | `desk`, optional `record_id`,
+  optional `focus`): what fills the broadcast's main screen. Only the screens the segment and its
+  state allow; `browser` and `desk` need a record whose research job has come back; `focus` names
+  a case hex the map zooms to on `hexmap` and `desk` (absent: the overview). The runtime also
+  emits it itself (the segment's default screen, a returning research job's record, the
+  investigation's own moves). See Appendix (screens).
 
 A `record_shown {ts_ms, record}` event carries one staged case record (`ShownRecord`: `id`,
 `hex`, `grade`, `title`, `source`, `summary`, optional `retrieved` and `via`, `fictional`) for the
@@ -1168,7 +1170,7 @@ like a real case. It is never written live in a quiet moment.
   chat, so he mocks it before it expires; still one injection a beat, one pick per viewer and
   the share and whale caps. The deterministic reason marks it `bait_first`.
 - **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/8`: owned requests, the through-line
-  and the lag ceiling (`/7`: the screens follow-up; `/6`: the screens, runtime screen defaults and a returning research job
+  and the lag ceiling (`/7`: the map focus, the investigation's screen defaults and dwells, a record before the model's op that shows it; `/6`: the screens, runtime screen defaults and a returning research job
   opening its record; `/5`: carried bait picked first; `/4`:
   two picks a beat, gifts carried, chat held through the cold open, the situational notes, a
   sandbox session that runs its full length, and a sim run's `max_say_gap_s` measured
@@ -1258,7 +1260,11 @@ speaking JSON lines on stdio:
   loaded before `hello`; without sherpa-onnx in the sidecar's Python it is the per-sentence
   binary (`--engine auto|warm|process`, default `auto`). The hello has no field for it: its
   `reason` ends with `engine: warm (N workers loaded in S s)` or `engine: process` and why, after
-  any missing-mouth-shapes reason. Either engine sends the same audio and mouth shapes.
+  any missing-mouth-shapes reason. Either engine sends the same audio and mouth shapes. The warm
+  engine starts with the workers that load (`engine: warm (N of M workers loaded in S s)` when
+  some did not) and falls back only when none does; a dead worker is respawned in the background,
+  never by the sentence that next needs one, and a slot whose loads keep failing is quarantined.
+  With every slot quarantined a sentence's `error` reason is `the warm engine is not running`.
 - Out, per sentence: `{"type":"audio","id","part","last","text","sample_rate","pcm","visemes"?:[[v,start_ms,end_ms]]}`.
   `visemes` is omitted when the voice has no mouth shapes. `id` is a string, echoed as sent.
   The daemon computes `duration_ms` from the PCM.
@@ -1333,8 +1339,15 @@ screen never depends on the model remembering.
 4. `record_not_returned`: the record was filed, but its research job has not come back yet.
    Records are filed at dispatch (the case-file line and the DOC rule see them at once); the
    browser shows one only after `job_done` for its job.
+5. `unknown_hex`: a `focus` on `hexmap` or `desk` that names no hex of the case. Loose spellings
+   (`hex3`, `HEX-3`) are the case's id.
 
-A `record_id` on `host` or `hexmap` is ignored.
+A `record_id` on `host` or `hexmap` is ignored, and so is a `focus` on `host` or `browser`.
+
+**Focus (the map's zoom).** `focus` zooms the map to that hex and its ring of neighbours; absent,
+the map is the fitted overview. On `desk` without a `focus` the map shows the record's hex. The
+runtime keeps the focus as the screen's (the state summary names it) and replaces it with every
+`show_screen`.
 
 **`record_shown`.** The first time a record is named in a session, by the model's `show_screen`
 or by a runtime default, the runtime emits `record_shown`. It carries the case file's
@@ -1357,22 +1370,44 @@ drops at most one echo per op the model sent, so a default identical to the mode
   `show_screen browser` with the first record that dispatch filed. Each job opens a record at
   most once.
 
-**Hold rule.** The job default never overrides a `show_screen` the model made within
-`SCREEN_HOLD_MS` (8,000 ms; an assumption, uncalibrated). A default suppressed by the hold is
-spent: it does not fire later, though the job's records still count as returned. Nothing is emitted after a sign-off.
+**The investigation drives the screen.** More runtime defaults, each only when its screen is
+allowed in the state, and never when that very view is up already:
+- An accepted `dispatch_research` whose brief names a hex: `show_screen hexmap` focused on it,
+  after the dispatch's `op` (the minions set off, and viewers see where).
+- An accepted `reveal_hex`: `show_screen hexmap` focused on that hex, after the reveal.
+- A poll opens (the model's `start_poll`, or a Plebiscite the runtime opens): `show_screen
+  hexmap` with no focus, the overview, to choose the next fog.
+- Browser dwell: after `BROWSER_DWELL_MS` (40,000 ms; an assumption) on `browser`, the clock's
+  tick moves to `desk` with the same record, focused on its hex (the hexmap overview when the
+  state does not allow the desk). After `DESK_DWELL_MS` (30,000 ms; an assumption) on `desk`,
+  it pulls back to the `hexmap` overview. The dwell counts from the latest `show_screen` of any
+  source, so the model's own `show_screen` restarts it.
+
+**Hold rule.** No investigation default (the job's, the dispatch's, the reveal's, the poll's,
+the dwell's) overrides a `show_screen` the model made within `SCREEN_HOLD_MS` (8,000 ms; an
+assumption, uncalibrated). A default suppressed by the hold is spent: it does not fire later,
+though the job's records still count as returned. Nothing is emitted after a sign-off.
 
 **Event order**, in one call:
 - start: `segment_start`, `case_open` (SEG-02A), `show_screen` (default), then any arc card;
-- a model op: `record_shown` (if new), the `op` echo, its consequences, then any state default;
-- a returning job: `record_shown` (if new), then `show_screen browser`.
+- a model op: `record_shown` (if new), the `op` echo, its consequences (a dispatch's or a
+  reveal's focus, a poll's overview), then any state default;
+- a returning job: `record_shown` (if new), then `show_screen browser`;
+- the clock's tick: its own events, then any state default, then a dwell's `show_screen`.
+
+The written transcript keeps this order for the model's own ops too. The brain writes each op
+before the runtime has applied it, so the sim runner and the sandbox move a `record_shown` the
+runtime emitted for a record the model's `show_screen` names to just before that op.
 
 **What the model sees.**
-- SEG-02A's rules prompt has one sentence on when to switch: show the record he is talking
-  about, and go back to the hexmap to choose the next hex.
+- SEG-02A's rules prompt has one sentence on the screen, which is his to direct: put up the
+  record while he reads from it, focus the hex he is talking about, and pull back to the
+  overview to choose the next fog.
 - When the segment allows `show_screen`, the state summary carries one line:
-  `Screen: <screen>[ on <record>][ (only <list> now)]. Records on file, newest first: <ids>
-  [+N older]`, at most 4 ids, returned records only (newest = latest back). Before any job is
-  back it reads `Records on file: none yet (browser and desk need one)`.
+  `Screen: <screen>[ on <record>][ focused on <hex> | , map focused on <hex>][ (only <list>
+  now)]. Records on file, newest first: <ids> [+N older]`, at most 4 ids, returned records only
+  (newest = latest back). `focused on` is the hexmap's focus, `map focused on` the desk's.
+  Before any job is back it reads `Records on file: none yet (browser and desk need one)`.
 - The ids only: the research block's case-file line already gives each record's hex, grade and
   title.
 

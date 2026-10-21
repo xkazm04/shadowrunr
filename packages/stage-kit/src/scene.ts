@@ -72,9 +72,11 @@ function keepRecord(s: SceneState, record: ShownRecord): Record<string, ShownRec
 /**
  * `show_screen`. `host` and `hexmap` switch at once. `browser` and `desk` need a record: the one
  * named, else the active one, else the latest received; until it has arrived the screen waits on
- * hexmap and the record's `record_shown` completes the switch.
+ * hexmap and the record's `record_shown` completes the switch. A `focus` zooms the map on `hexmap`
+ * and `desk`, and is ignored elsewhere; without one the map is the overview.
  */
-function showScreen(s: SceneState, screen: ScreenId, recordId: string | undefined, at: TsMs): SceneState {
+function showScreen(s: SceneState, screen: ScreenId, recordId: string | undefined, focus: string | undefined, at: TsMs): SceneState {
+  s = { ...s, mapFocus: screen === "hexmap" || screen === "desk" ? (focus ?? null) : null };
   if (screen === "host" || screen === "hexmap") return setScreen({ ...s, pendingScreen: null }, screen, at, "screen");
   const latest = Object.keys(s.records).pop();
   const id = recordId ?? s.activeRecord ?? latest;
@@ -299,7 +301,7 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
       const fresh = prev.segment !== ev.segment || prev.layout === "boot";
       s = { ...s, segment: ev.segment, pendingSwitch: null };
       if (!fresh) return s;
-      return setScreen({ ...s, pendingScreen: null }, defaultScreen(ev.segment), at, "segment_start", ev.segment);
+      return setScreen({ ...s, pendingScreen: null, mapFocus: null }, defaultScreen(ev.segment), at, "segment_start", ev.segment);
     }
     case "segment_end": {
       const seal: Seal = { segment: ev.segment, at };
@@ -315,7 +317,7 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
       return setScreen(openRecord({ ...s, pendingScreen: null }, ev.record.id), p.screen, at, "screen");
     }
     case "handover":
-      s = { ...s, segment: ev.to, pendingSwitch: null, pendingScreen: null };
+      s = { ...s, segment: ev.to, pendingSwitch: null, pendingScreen: null, mapFocus: null };
       return setScreen(s, defaultScreen(ev.to), at, "handover", ev.to, ev.reason);
     case "chat":
       return applyChat(s, ev.msg, at);
@@ -459,7 +461,7 @@ function applyOp(s: SceneState, op: Extract<StreamEvent, { type: "op" }>["op"], 
     case "sign_off":
       return { ...s, outro: { reason: op.reason, at } };
     case "show_screen":
-      return showScreen(s, op.screen, op.record_id, at);
+      return showScreen(s, op.screen, op.record_id, op.focus, at);
   }
 }
 

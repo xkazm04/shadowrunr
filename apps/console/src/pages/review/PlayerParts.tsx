@@ -9,6 +9,7 @@ import type { Feedback } from "./hooks";
 import { KIND_INK } from "./ink";
 import { JudgeOn } from "./Moment";
 import { EDGE_NAME, FEEDBACK, fmtClock, KIND_NAME, SEGMENT_NAME, TARGET_NAME, type ShownKind } from "./names";
+import fb from "./FeedbackPanel.module.css";
 import styles from "./Player.module.css";
 import kit from "./tabkit.module.css";
 import { TickStrip } from "./tabkit";
@@ -63,6 +64,21 @@ export function PlayerSide(props: {
       </div>
       <Button onClick={() => props.openLine(x.line)}>Open on the timeline</Button>
     </aside>
+  );
+}
+
+/** Marks the daemon did not take, named by line, with one Retry that resends each as it was. */
+export function FailedMarks({ feedback }: { feedback: Feedback }) {
+  const n = feedback.failed.length;
+  if (n === 0) return null;
+  const lines = feedback.failed.map((f) => f.line);
+  return (
+    <p className={styles.tag} role="alert" data-role="review-failed-marks">
+      <span className={fb.err}>
+        {n} {n === 1 ? "mark" : "marks"} not saved · {n === 1 ? "line" : "lines"} {lines.join(", ")}
+      </span>
+      <Button onClick={() => lines.forEach((l) => feedback.retry(l))}>Retry</Button>
+    </p>
   );
 }
 

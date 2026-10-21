@@ -9,13 +9,39 @@
 // view or leaving reduced motion starts it again. Under reduced motion (`data-motion="calm"` on
 // the root, or with no attribute the OS preference) the face is one still frame at rest, eyes
 // open, and stays so. A signal never causes a React render: it goes straight to the driver.
+//
+// **Where he looks.** With a `look` (the stage's: at the viewer, the content, or the chat column he
+// is answering) the eyes lead and the head follows (`withLook`, in the glow's units below). The
+// look is an event: a change wakes the loop, which runs until the head has arrived and stops; under
+// reduced motion it is one still frame at the new look. Nothing polls it.
 
+import { withLook, type LookUnits } from "./cut/look";
 import { createDriver, type Driver, type Pose } from "./driver";
 import { createGlowRenderer, type GlowRenderer } from "./glow";
 import { loadForm, type LoadedForm } from "./layers";
 import { frames, systemPrefersReduced, type Clock } from "./motion";
 import { buildPlaceholder } from "./placeholder";
 import type { FaceSource } from "./types";
+import type { LookSource } from "./variants";
+
+/** Degrees the glow head turns at a full look. Its warp is a flat card turned in an orthographic
+ *  view, so it stays small: past about 8 degrees, driver and look together, the edges shear. */
+export const GLOW_LOOK_YAW = 6;
+/** The glow's look mapping: its eye light keeps its 3.5 x 2 px travel (glow.ts, GLOW_MAPPING) and
+ *  a full look slides it that far again; the head turns GLOW_LOOK_YAW, held inside 8 x 5 degrees. */
+export const GLOW_LOOK: LookUnits = Object.freeze({
+  eyePx: [3.5, 2] as const,
+  lookPx: [3.5, 2] as const,
+  lookYaw: GLOW_LOOK_YAW,
+  lookPitch: 2.5,
+  yawMax: 8,
+  pitchMax: 5,
+});
+
+/** Wake `wake` on each change of `look`; the returned function stops listening. */
+export function onLookChange(look: LookSource | undefined, wake: () => void): () => void {
+  return look?.subscribe?.(() => wake()) ?? (() => {});
+}
 
 /** Whether the face must hold still: the root's `data-motion`, else the OS preference. */
 export function calmNow(): boolean {
@@ -149,6 +175,8 @@ export function startFace(opts: {
   clock?: Clock;
   /** Hears which form is drawn once the face is ready, and `null` when it is unavailable. */
   onDrawn?: (form: LoadedForm["form"] | null) => void;
+  /** Where he looks; without it, straight out. */
+  look?: LookSource;
 }): FaceHandle {
   const { root, canvas, source } = opts;
   let disposed = false;
@@ -178,7 +206,8 @@ export function startFace(opts: {
     return { resize: () => {}, dispose: () => {} };
   }
 
-  const driver = createDriver({ seed: 7 });
+  // without a look the driver is drawn as it always was; with one, it looks on top
+  const driver: Driver = opts.look ? withLook(createDriver({ seed: 7 }), opts.look, GLOW_LOOK) : createDriver({ seed: 7 });
   let drawnForm: LoadedForm["form"] = "placeholder";
   let last: Pose = driver.rest();
   const draw = (pose: Pose) => {
@@ -226,6 +255,7 @@ export function startFace(opts: {
             if (driver.setSignal(signal)) l.wake();
           }),
         );
+        cleanups.push(onLookChange(opts.look, () => l.wake()));
 
         if (typeof IntersectionObserver !== "undefined") {
           const io = new IntersectionObserver((entries) => {

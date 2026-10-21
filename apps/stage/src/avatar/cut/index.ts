@@ -7,14 +7,14 @@
 // at its own depth in one shared field, a look the eyes lead and the head follows, rim lights in
 // the rig's own colours and a soft shadow on the page behind and beneath him (renderer.ts).
 //
-// The loop is the glow runtime's (`createFaceLoop`): one frame clock, no frames once settled. With
-// a `look` source, one light subscriber reads it every frame and wakes the face when it moves.
+// The loop is the glow runtime's (`createFaceLoop`): one frame clock, no frames once settled. A
+// change of the `look` wakes it (`onLookChange`); nothing reads the look between frames.
 
 import { createDriver, type Pose } from "../driver";
 import { loadForm, type LoadedForm } from "../layers";
 import { frames } from "../motion";
 import { buildPlaceholder } from "../placeholder";
-import { calmNow, createFaceLoop, type FaceHandle, type FaceLoop } from "../runtime";
+import { calmNow, createFaceLoop, onLookChange, type FaceHandle, type FaceLoop } from "../runtime";
 import type { StartFaceOptions } from "../variants";
 import { withLook } from "./look";
 import { createCutRenderer, type CutRenderer } from "./renderer";
@@ -46,7 +46,7 @@ export type CutFaceOptions = StartFaceOptions & { probe?: FrameProbe };
  * Start the cut-out face on `canvas`. As the glow's `startFace`: `data-face` loading | ready |
  * unavailable, `data-face-loop` running | still, `data-form` rig | placeholder; no WebGL2 or a form
  * that cannot be drawn leaves the face unavailable and the canvas hidden, so the slot keeps its
- * silhouette. `look` is read every frame; without it he looks straight out, as the glow does.
+ * silhouette. `look` wakes the face when it changes; without it he looks straight out.
  */
 export function startFace(opts: CutFaceOptions): FaceHandle {
   const { root, canvas, source } = opts;
@@ -130,14 +130,7 @@ export function startFace(opts: CutFaceOptions): FaceHandle {
           }),
         );
 
-        if (opts.look) {
-          // the look has no events: read it each frame, and wake the face when it moves
-          cleanups.push(
-            clock.subscribe(() => {
-              if (driver.poll()) l.wake();
-            }),
-          );
-        }
+        cleanups.push(onLookChange(opts.look, () => l.wake()));
 
         if (typeof IntersectionObserver !== "undefined") {
           const io = new IntersectionObserver((entries) => {

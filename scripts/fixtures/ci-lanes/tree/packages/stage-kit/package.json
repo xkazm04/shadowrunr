@@ -1,0 +1,5 @@
+{
+  "name": "fixture-stage-kit",
+  "private": true,
+  "scripts": { "typecheck": "tsc", "test": "vitest run", "lint": "eslint ." }
+}

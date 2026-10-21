@@ -10,11 +10,14 @@
 // exactly its rest frame.
 //
 // No allocation per frame. A lost context is waited out and rebuilt from the decoded pictures.
-// Shaders: glow-shaders.ts. Pure helpers (mesh, palette, ground line): glow-geom.ts.
+// Shaders: glow-shaders.ts. Pure helpers (mesh, palette, ground line): glow-geom.ts. The per-layer
+// rules every face shares: layer-frame.ts; the GL plumbing: gl-kit.ts.
 
 import type { Pose } from "./driver";
-import { BODY_COVER, CONTEXT_ATTRIBUTES, gapCentre, gapHalf, gridMesh, groundLine, rigColors } from "./glow-geom";
+import { compileProgram, contextLossGuard, uploadLayerTextures } from "./gl-kit";
+import { BODY_COVER, CONTEXT_ATTRIBUTES, gridMesh, groundLine, rigColors } from "./glow-geom";
 import { FS, KIND, VS } from "./glow-shaders";
+import { apertureLift, describeLayer, GLOW_MAPPING, layerFrame, newLayerFrame, type FaceRig, type LayerDraw } from "./layer-frame";
 import type { LayerSpec, LoadedForm } from "./layers";
 
 type Owned = { textures: WebGLTexture[]; buffers: WebGLBuffer[]; vaos: WebGLVertexArrayObject[]; shaders: WebGLShader[] };
@@ -29,26 +32,14 @@ export interface GlowRenderer {
   dispose(): void;
 }
 
-interface DrawLayer {
-  spec: LayerSpec;
-  kind: number;
+interface DrawLayer extends LayerDraw {
   bbox: [number, number, number, number];
   tex: WebGLTexture | null;
   vao: WebGLVertexArrayObject;
   count: number;
-  float?: { amp: [number, number]; freq: number; rot: number; pivot: [number, number]; phase: number; phase2: number };
-  eyeC?: [number, number];
-  right?: boolean;
 }
 
-const smooth01 = (x: number) => {
-  const y = Math.min(1, Math.max(0, x));
-  return y * y * (3 - 2 * y);
-};
 const DEG = Math.PI / 180;
-
-/** Hand the main thread back between pieces of setup, so no one piece is a long task. */
-const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /**
  * Make a renderer for `form` on `canvas`. Rejects when WebGL2 is not there (the caller shows
@@ -72,7 +63,6 @@ export async function createGlowRenderer(
   if (!first) throw new Error("WebGL2 unavailable");
   const gl: WebGL2RenderingContext = first;
 
-  let lost = false;
   let disposed = false;
   let prog: WebGLProgram | null = null;
   let U: Record<string, WebGLUniformLocation | null> = {};
@@ -86,6 +76,8 @@ export async function createGlowRenderer(
     shaders: [],
   };
   const view = new Float32Array(4);
+  const frame = newLayerFrame();
+  const face: FaceRig = { aperture: R.aperture, upperLip, lift: 0 };
 
   function free() {
     for (const t of owned.textures) gl.deleteTexture(t);
@@ -98,50 +90,12 @@ export async function createGlowRenderer(
   }
 
   async function build() {
-    const p = gl.createProgram();
-    if (!p) throw new Error("WebGL2 could not make a program");
-    const parallel = gl.getExtension("KHR_parallel_shader_compile") as { COMPLETION_STATUS_KHR: number } | null;
-    const vs = gl.createShader(gl.VERTEX_SHADER);
-    const fs = gl.createShader(gl.FRAGMENT_SHADER);
-    if (!vs || !fs) throw new Error("WebGL2 could not make a shader");
-    owned.shaders.push(vs, fs);
-    gl.shaderSource(vs, VS);
-    gl.shaderSource(fs, FS);
-    gl.compileShader(vs);
-    gl.compileShader(fs);
-    gl.attachShader(p, vs);
-    gl.attachShader(p, fs);
-    gl.linkProgram(p);
-    if (parallel) {
-      for (let i = 0; i < 400 && !gl.getProgramParameter(p, parallel.COMPLETION_STATUS_KHR); i++) await breathe();
-    }
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-      const why = gl.getShaderInfoLog(vs) || gl.getShaderInfoLog(fs) || gl.getProgramInfoLog(p) || "program did not link";
-      throw new Error(why);
-    }
-    prog = p;
+    prog = await compileProgram(gl, VS, FS, owned.shaders);
     gl.useProgram(prog);
     U = {};
     const aSrc = gl.getAttribLocation(prog, "a_src");
 
-    const textures = new Map<string, WebGLTexture>();
-    for (const [file, img] of images) {
-      const t = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, t);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      if (t) {
-        textures.set(file, t);
-        owned.textures.push(t);
-      }
-      await breathe();
-    }
+    const textures = await uploadLayerTextures(gl, images, owned.textures);
 
     const ap = R.aperture;
     draws = [];
@@ -177,31 +131,14 @@ export async function createGlowRenderer(
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
       gl.bindVertexArray(null);
-      const d: DrawLayer = {
-        spec: l,
-        kind: KIND[l.kind] ?? 2,
+      draws.push({
+        ...describeLayer(l, KIND[l.kind] ?? 2, bb, fi),
         bbox: bb,
         tex: l.file ? (textures.get(l.file) ?? null) : null,
         vao,
         count: idx.length,
-      };
-      if (l.kind === "float") {
-        const f = l.float ?? {};
-        d.float = {
-          amp: f.amp ?? [1, 3],
-          freq: f.freq ?? 0.15,
-          rot: ((f.rot_deg ?? 0) * Math.PI) / 180,
-          pivot: f.pivot ?? [bb[0] + bb[2] / 2, bb[1] + bb[3] / 2],
-          phase: 1.7 * fi + 0.4,
-          phase2: 2.3 * fi + 1.1,
-        };
-        fi++;
-      }
-      if (l.kind === "eye") {
-        d.eyeC = l.meta?.center ?? [bb[0] + bb[2] / 2, bb[1] + bb[3] / 2];
-        d.right = !l.name.endsWith("_l");
-      }
-      draws.push(d);
+      });
+      if (l.kind === "float") fi++;
     }
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -227,32 +164,21 @@ export async function createGlowRenderer(
     view[3] = 1 - (2 * oy) / ch;
   }
 
-  const onLost = (e: Event) => {
-    e.preventDefault(); // ask for it back
-    lost = true;
-  };
-  const onRestore = () => {
-    if (disposed) return;
-    // the old handles died with the context; drop them, do not delete them
-    owned = { textures: [], buffers: [], vaos: [], shaders: [] };
-    prog = null;
-    build().then(
-      () => {
-        if (disposed) return;
-        lost = false;
-        onRestored();
-      },
-      (error: unknown) =>
-        console.warn(`[stage] the face could not be rebuilt after the GPU reset: ${error instanceof Error ? error.message : String(error)}`),
-    );
-  };
-  canvas.addEventListener("webglcontextlost", onLost);
-  canvas.addEventListener("webglcontextrestored", onRestore);
+  const guard = contextLossGuard(
+    canvas,
+    () => {
+      // the old handles died with the context; drop them, do not delete them
+      owned = { textures: [], buffers: [], vaos: [], shaders: [] };
+      prog = null;
+      return build();
+    },
+    onRestored,
+  );
 
   await build();
 
   function render(pose: Pose) {
-    if (lost || disposed || gl.isContextLost()) return;
+    if (guard.lost || disposed || gl.isContextLost()) return;
     const t = pose.t;
     const act = pose.activity;
     const voice = pose.voice;
@@ -288,7 +214,7 @@ export async function createGlowRenderer(
       gl.uniform4f(loc("u_glintP"), Math.cos(ang), Math.sin(ang), at * span - span * 0.2, gp.width_px);
       gl.uniform1f(loc("u_glintGain"), gp.gain);
     }
-    const lift = ap ? pose.open * (ap.open_frac ?? 0.15) * (ap.bottom - ap.top) * (0.75 + 0.35 * Math.min(1, voice)) : 0;
+    face.lift = apertureLift(ap, pose);
     if (ap) gl.uniform2f(loc("u_aperX"), ap.x0, ap.x1);
     gl.uniform2f(loc("u_size"), W, H);
     gl.uniform1i(loc("u_pass"), 0);
@@ -308,57 +234,28 @@ export async function createGlowRenderer(
     for (const d of draws) {
       const l = d.spec;
       const kind = d.kind;
-      if (kind === 8 && lift < 0.2) continue;
-      if (ap && kind >= 6 && kind <= 8) {
-        // the hinged layers move by the lift; the light between them is centred in the gap they open
-        const lit = kind === 8;
-        gl.uniform4f(loc("u_aper"), ap.top, lit ? gapCentre(ap.seam_y, lift, upperLip) : ap.seam_y, ap.bottom, lit ? gapHalf(lift, upperLip) : lift);
-      }
+      const f = layerFrame(d, pose, face, GLOW_MAPPING, frame);
+      if (f.skip) continue;
+      if (f.hasAper) gl.uniform4f(loc("u_aper"), f.aper[0], f.aper[1], f.aper[2], f.aper[3]);
       gl.uniform1i(loc("u_kind"), kind);
       gl.uniform1f(loc("u_depth"), l.depth ?? 0);
-      gl.uniform1f(loc("u_follow"), l.follow ?? (kind === 0 || kind === 1 ? 0 : 1));
+      gl.uniform1f(loc("u_follow"), f.follow);
       // the backplate counts as light: its black is the page, not a box
       const isLight = l.mode === "light" || kind === 0 || kind === 8 || kind === 9 || kind === 11;
       gl.uniform1f(loc("u_occl"), isLight ? 0 : (l.occl ?? 1));
-      let gain = l.gain ?? 1;
-      if (kind === 11 && line) gain = line.gain;
-      if (kind === 5) gain *= 0.9 + (l.voice_gain ?? 2) * Math.max(voice * 0.8, pose.open) * 0.6;
-      if (kind === 10)
-        gain *=
-          1 +
-          act * (l.pulse?.amp ?? 0.15) * Math.sin(2 * Math.PI * (l.pulse?.freq ?? 0.2) * t) +
-          (l.voice_gain ?? 0) * voice;
-      if (kind === 9) gain *= 0.92 + act * 0.08 * Math.sin((2 * Math.PI * t) / 5.2) + 0.12 * voice;
-      if (kind === 4 && d.eyeC) {
-        const blink = d.right ? pose.blinkR : pose.blinkL;
-        if (l.blink === "iris") {
-          gl.uniform4f(loc("u_eye"), d.eyeC[0], d.eyeC[1], 0.92 * Math.pow(blink, 0.8), 0);
-          gl.uniform4f(loc("u_eyeP"), blink, d.eyeC[0], d.eyeC[1], l.meta?.core_r ?? 12);
-          gain *= 1 - 0.6 * blink;
-        } else {
-          gl.uniform4f(loc("u_eye"), d.eyeC[0], d.eyeC[1], 0.35 * blink, 0);
-          gl.uniform4f(loc("u_eyeP"), 0, 0, 0, 1);
-          // a facet: bright light to dark crystal in the middle of the blink
-          gain *= 1 - smooth01((blink - 0.25) / 0.4);
-        }
-        gl.uniform2f(loc("u_gaze"), pose.gazeX * 3.5, pose.gazeY * 2.0);
-        gain *= 1 + (l.voice_gain ?? 0.12) * voice; // the eyes warm while he speaks
+      if (f.hasEye) {
+        gl.uniform4f(loc("u_eye"), f.eye[0], f.eye[1], f.eye[2], f.eye[3]);
+        gl.uniform4f(loc("u_eyeP"), f.eyeP[0], f.eyeP[1], f.eyeP[2], f.eyeP[3]);
+        gl.uniform2f(loc("u_gaze"), f.gaze[0], f.gaze[1]);
       }
-      gl.uniform1f(loc("u_gain"), gain);
+      // the ground line's gain is its own: it brightens and fades with the line
+      gl.uniform1f(loc("u_gain"), kind === 11 && line ? line.gain : f.gain);
       gl.uniform1f(loc("u_bloom"), l.bloom ?? 0);
       gl.uniform1i(loc("u_shimmer"), l.shimmer && shim ? 1 : 0);
       gl.uniform1i(loc("u_glint"), l.glint && gp ? 1 : 0);
-      if (kind === 3 && d.float) {
-        const f = d.float;
-        const w = 2 * Math.PI * f.freq;
-        gl.uniform4f(
-          loc("u_float"),
-          act * f.amp[0] * Math.sin(w * 0.77 * t + f.phase2),
-          act * -f.amp[1] * Math.sin(w * t + f.phase),
-          act * f.rot * Math.sin(w * 0.6 * t + f.phase + 0.8),
-          0,
-        );
-        gl.uniform2f(loc("u_floatPivot"), f.pivot[0], f.pivot[1]);
+      if (f.hasFloat && d.float) {
+        gl.uniform4f(loc("u_float"), f.float[0], f.float[1], f.float[2], f.float[3]);
+        gl.uniform2f(loc("u_floatPivot"), d.float.pivot[0], d.float.pivot[1]);
       }
       if (kind === 9) {
         const m = l.meta ?? {};
@@ -391,12 +288,11 @@ export async function createGlowRenderer(
     render,
     resize: layout,
     get lost() {
-      return lost || gl.isContextLost();
+      return guard.lost || gl.isContextLost();
     },
     dispose() {
       disposed = true;
-      canvas.removeEventListener("webglcontextlost", onLost);
-      canvas.removeEventListener("webglcontextrestored", onRestore);
+      guard.dispose();
       if (!gl.isContextLost()) free();
     },
   };

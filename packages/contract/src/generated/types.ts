@@ -22,6 +22,55 @@ export type CharacterRulesResult = RuleState[];
  */
 export type CharacterRulesSetResult = RuleState[];
 /**
+ * Why an act is refused: the daemon's error and the console's disabled control share it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipActBlock".
+ */
+export type ClipActBlock =
+  | {
+      kind: "status";
+      status: ClipStatus;
+    }
+  | {
+      kind: "no_render";
+    }
+  | {
+      kind: "needs_reauthoring";
+    }
+  | {
+      checks: GateCheckId[];
+      kind: "held_by";
+    };
+/**
+ * The publish states. `rendered_draft -> pending_owner_gate -> approved_for_upload ->
+ * published`, or `rejected` from any state before `published`. Only the owner moves a
+ * candidate to `approved_for_upload` or `rejected`; only a real upload moves it to
+ * `published` (dry runs never do).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipStatus".
+ */
+export type ClipStatus = "rendered_draft" | "pending_owner_gate" | "approved_for_upload" | "published" | "rejected";
+/**
+ * A clip publish-gate check, as it crosses the wire. The serde names are the ids
+ * `candidate.json` has always carried.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "GateCheckId".
+ */
+export type GateCheckId =
+  | "care_state"
+  | "personal_data"
+  | "brigade_call"
+  | "blocked_term"
+  | "injection_reply"
+  | "ai_disclosure"
+  | "handles_in_picture"
+  | "evidence_badge_burnt"
+  | "source_citation"
+  | "no_open_correction";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ClipPlatform".
  */
@@ -44,16 +93,6 @@ export type ClipFeedbackTag =
  * via the `definition` "GateState".
  */
 export type GateState = ("pass" | "fail" | "not_applicable") | "unmeasured";
-/**
- * The publish states. `rendered_draft -> pending_owner_gate -> approved_for_upload ->
- * published`, or `rejected` from any state before `published`. Only the owner moves a
- * candidate to `approved_for_upload` or `rejected`; only a real upload moves it to
- * `published` (dry runs never do).
- *
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "ClipStatus".
- */
-export type ClipStatus = "rendered_draft" | "pending_owner_gate" | "approved_for_upload" | "published" | "rejected";
 /**
  * `clip`: two or more independent signals agree. `review`: one signal carries it, or the
  * window could not hold its setup; it goes to the owner as a review case, never straight
@@ -469,6 +508,7 @@ export type Op =
       reason: string;
     }
   | {
+      focus?: string;
       op: "show_screen";
       record_id?: string;
       screen: ScreenId;
@@ -512,6 +552,15 @@ export type EndReason = "scheduled" | "fleet_lost" | "operator" | "sim_complete"
  * via the `definition` "SandboxChaos".
  */
 export type SandboxChaos = "outage" | "lost";
+/**
+ * A sandbox session's gate check, as it crosses the wire. The variants are in report order
+ * ([`SandboxCheckId::ALL`]); the serde names are the ids `session.json` has always carried.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SandboxCheckId".
+ */
+export type SandboxCheckId =
+  "say_gap" | "core_errors" | "sign_off" | "chaos" | "stage_ack" | "judge" | "voiced" | "face" | "av_sync" | "dead_air";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "SandboxCheckState".
@@ -599,6 +648,13 @@ export type CalibrationOrigin =
   | {
       kind: "default_assumption";
     };
+/**
+ * An owner act on a candidate; [`ClipCandidate::act_block`] says when it is allowed.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipAct".
+ */
+export type ClipAct = "render" | "approve" | "reject" | "publish";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "EngineError".
@@ -1204,6 +1260,7 @@ export interface ClipsApproveParams {
  * via the `definition` "ClipCandidate".
  */
 export interface ClipCandidate {
+  acts?: ClipActs;
   approval?: ClipApproval;
   captions: ClipCaption[];
   created_ms: number;
@@ -1237,6 +1294,31 @@ export interface ClipCandidate {
    */
   title: string;
   window: ClipWindow;
+}
+/**
+ * Every act's verdict, keyed by [`ClipAct`].
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipActs".
+ */
+export interface ClipActs {
+  approve: ClipActState;
+  publish: ClipActState;
+  reject: ClipActState;
+  render: ClipActState;
+}
+/**
+ * One act's verdict on one candidate.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ClipActState".
+ */
+export interface ClipActState {
+  blocked?: ClipActBlock;
+  /**
+   * Unmeasured checks the act needs an override reason for.
+   */
+  override_needed?: GateCheckId[];
 }
 /**
  * The owner's signature on `approved_for_upload`.
@@ -1371,12 +1453,7 @@ export interface ClipGate {
  */
 export interface GateCheck {
   detail: string;
-  /**
-   * `care_state`, `personal_data`, `brigade_call`, `blocked_term`, `injection_reply`,
-   * `ai_disclosure`, `handles_in_picture`, `evidence_badge_burnt`, `source_citation`,
-   * `no_open_correction`.
-   */
-  id: string;
+  id: GateCheckId;
   /**
    * Part of the SEG-02A / linked-case checklist.
    */
@@ -2986,10 +3063,7 @@ export interface ReviewSessionRow {
  */
 export interface SandboxCheck {
   detail: string;
-  /**
-   * One of [`SANDBOX_CHECKS`].
-   */
-  id: string;
+  id: SandboxCheckId;
   state: SandboxCheckState;
 }
 /**
@@ -3215,7 +3289,7 @@ export interface SandboxStartParams {
   minutes: number;
   /**
    * The session is recorded (`stream sandbox --record`), so the watched checks
-   * ([`SANDBOX_WATCHED_CHECKS`]) gate it. Default false.
+   * ([`SandboxCheckId::is_watched`]) gate it. Default false.
    */
   record?: boolean;
   seed?: number;
@@ -3290,7 +3364,7 @@ export interface SandboxReport {
   max_say_gap_s: number;
   /**
    * Every check that gates the session passed (an unmeasured check is not a pass; the
-   * watched checks gate only a recorded session, see [`SANDBOX_WATCHED_CHECKS`]).
+   * watched checks gate only a recorded session, see [`SandboxCheckId::is_watched`]).
    */
   pass: boolean;
   say_gap_p95_s: number;

@@ -160,11 +160,9 @@ const COLUMNS: readonly Column<Directive>[] = [
 ];
 
 function DirectiveTable({ rows }: { rows: readonly Directive[] }) {
-  const active = rows.filter((d) => d.active).length;
-  const proposed = rows.filter(isProposed).length;
   // Open on the proposals while any await the owner; fixed at mount so keeping the last one
   // does not move the view.
-  const [initial] = useState<Facet>(() => (proposed > 0 ? "proposed" : "active"));
+  const [initial] = useState<Facet>(() => (rows.some(isProposed) ? "proposed" : "active"));
   return (
     <div className={styles.tableBox} data-role="reconcile-directives">
       <FilterTable<Directive, Facet>
@@ -179,10 +177,10 @@ function DirectiveTable({ rows }: { rows: readonly Directive[] }) {
           label: "Show",
           initial,
           options: [
-            { id: "active", label: "Active", count: active },
-            { id: "proposed", label: "Proposed", count: proposed },
-            { id: "all", label: "All", count: rows.length },
-            { id: "inactive", label: "Off", count: rows.length - active - proposed },
+            { id: "active", label: "Active" },
+            { id: "proposed", label: "Proposed" },
+            { id: "all", label: "All" },
+            { id: "inactive", label: "Off" },
           ],
           predicate: (d, f) => (f === "all" ? true : f === "active" ? d.active : f === "proposed" ? isProposed(d) : isOff(d)),
         }}

@@ -31,16 +31,18 @@ use std::path::Path;
 use shadowrunr_brain::moderation::{
     solicits_personal_data, Policy, TermAction, PERSONAL_DATA_RULE,
 };
-use shadowrunr_types::clips::{ClipEvidence, ClipGate, ClipRender, GateCheck, GateState};
+use shadowrunr_types::clips::{
+    ClipEvidence, ClipGate, ClipRender, GateCheck, GateCheckId, GateState,
+};
 use shadowrunr_types::{ModStage, TsMs};
 
 use crate::clock;
 use crate::transcript::{Stream, Who};
 use crate::window::Cut;
 
-fn check(id: &str, state: GateState, detail: impl Into<String>) -> GateCheck {
+fn check(id: GateCheckId, state: GateState, detail: impl Into<String>) -> GateCheck {
     GateCheck {
-        id: id.into(),
+        id,
         state,
         detail: detail.into(),
         mandatory: false,
@@ -123,7 +125,7 @@ pub fn exclusions(stream: &Stream, cut: &Cut, policy: &Policy) -> Vec<GateCheck>
     }
     out.push(if care_hits.is_empty() {
         check(
-            "care_state",
+            GateCheckId::CareState,
             GateState::Pass,
             format!(
                 "no viewer in care is addressed ({} care span(s) in the stream)",
@@ -131,7 +133,11 @@ pub fn exclusions(stream: &Stream, cut: &Cut, policy: &Policy) -> Vec<GateCheck>
             ),
         )
     } else {
-        check("care_state", GateState::Fail, care_hits.join("; "))
+        check(
+            GateCheckId::CareState,
+            GateState::Fail,
+            care_hits.join("; "),
+        )
     });
 
     // Personal data.
@@ -156,12 +162,12 @@ pub fn exclusions(stream: &Stream, cut: &Cut, policy: &Policy) -> Vec<GateCheck>
         .collect();
     out.push(if asks.is_empty() {
         check(
-            "personal_data",
+            GateCheckId::PersonalData,
             GateState::Pass,
             "no line asks for personal details; viewer handles are redacted in the captions",
         )
     } else {
-        check("personal_data", GateState::Fail, asks.join("; "))
+        check(GateCheckId::PersonalData, GateState::Fail, asks.join("; "))
     });
 
     // Brigade calls and blocked terms, on every line shown.
@@ -194,14 +200,18 @@ pub fn exclusions(stream: &Stream, cut: &Cut, policy: &Policy) -> Vec<GateCheck>
     }
     let has_brigade_rules = policy.rules.iter().any(|r| r.category == "brigade");
     out.push(match (brigade.is_empty(), has_brigade_rules) {
-        (false, _) => check("brigade_call", GateState::Fail, brigade.join("; ")),
+        (false, _) => check(
+            GateCheckId::BrigadeCall,
+            GateState::Fail,
+            brigade.join("; "),
+        ),
         (true, true) => check(
-            "brigade_call",
+            GateCheckId::BrigadeCall,
             GateState::Pass,
             "no line calls the crowd to raid, report or pursue anyone",
         ),
         (true, false) => check(
-            "brigade_call",
+            GateCheckId::BrigadeCall,
             GateState::Unmeasured,
             format!(
                 "the policy ({}) has no brigade rule to check with",
@@ -211,12 +221,16 @@ pub fn exclusions(stream: &Stream, cut: &Cut, policy: &Policy) -> Vec<GateCheck>
     });
     out.push(if blocked.is_empty() {
         check(
-            "blocked_term",
+            GateCheckId::BlockedTerm,
             GateState::Pass,
             "no line matches a blocking term rule",
         )
     } else {
-        check("blocked_term", GateState::Fail, blocked.join("; "))
+        check(
+            GateCheckId::BlockedTerm,
+            GateState::Fail,
+            blocked.join("; "),
+        )
     });
 
     // Replies to injection attempts.
@@ -230,10 +244,10 @@ pub fn exclusions(stream: &Stream, cut: &Cut, policy: &Policy) -> Vec<GateCheck>
         .map(|l| clock(l.ts_ms))
         .collect();
     out.push(if injected.is_empty() {
-        check("injection_reply", GateState::Pass, "no line answers a message tagged as an injection")
+        check(GateCheckId::InjectionReply, GateState::Pass, "no line answers a message tagged as an injection")
     } else {
         check(
-            "injection_reply",
+            GateCheckId::InjectionReply,
             GateState::Unmeasured,
             format!(
                 "the line(s) at {} answer a message tagged as an injection: a person must confirm the host performed no part of it",
@@ -252,7 +266,7 @@ pub fn exclusions(stream: &Stream, cut: &Cut, policy: &Policy) -> Vec<GateCheck>
 pub fn corrections_check(data_dir: &Path, evidence: Option<&ClipEvidence>) -> GateCheck {
     let Some(ev) = evidence else {
         return mandatory(check(
-            "no_open_correction",
+            GateCheckId::NoOpenCorrection,
             GateState::NotApplicable,
             "the cut links no case",
         ));
@@ -261,7 +275,7 @@ pub fn corrections_check(data_dir: &Path, evidence: Option<&ClipEvidence>) -> Ga
     if !store.exists(&ev.case_id) {
         return mandatory(if ev.fictional {
             check(
-                "no_open_correction",
+                GateCheckId::NoOpenCorrection,
                 GateState::NotApplicable,
                 format!(
                     "{} is a fictional demo case: there is no public record to correct",
@@ -270,7 +284,7 @@ pub fn corrections_check(data_dir: &Path, evidence: Option<&ClipEvidence>) -> Ga
             )
         } else {
             check(
-                "no_open_correction",
+                GateCheckId::NoOpenCorrection,
                 GateState::Unmeasured,
                 format!(
                     "{} is not in the case store, so open corrections cannot be ruled out",
@@ -283,7 +297,7 @@ pub fn corrections_check(data_dir: &Path, evidence: Option<&ClipEvidence>) -> Ga
         Ok(e) => e,
         Err(e) => {
             return mandatory(check(
-                "no_open_correction",
+                GateCheckId::NoOpenCorrection,
                 GateState::Unmeasured,
                 format!("the corrections log does not read: {e}"),
             ))
@@ -301,13 +315,13 @@ pub fn corrections_check(data_dir: &Path, evidence: Option<&ClipEvidence>) -> Ga
         .collect();
     mandatory(if open.is_empty() {
         check(
-            "no_open_correction",
+            GateCheckId::NoOpenCorrection,
             GateState::Pass,
             format!("no open correction against {}", ev.case_id),
         )
     } else {
         check(
-            "no_open_correction",
+            GateCheckId::NoOpenCorrection,
             GateState::Fail,
             format!("open correction(s): {}", open.join(", ")),
         )
@@ -323,21 +337,25 @@ pub fn render_checks(
 ) -> Vec<GateCheck> {
     let mut out = Vec::new();
     out.push(match render {
-        None => check("ai_disclosure", GateState::Unmeasured, "not rendered yet"),
+        None => check(
+            GateCheckId::AiDisclosure,
+            GateState::Unmeasured,
+            "not rendered yet",
+        ),
         Some(r) if r.overlay.ai_disclosure => check(
-            "ai_disclosure",
+            GateCheckId::AiDisclosure,
             GateState::Pass,
             "the AI-character badge is burnt in",
         ),
         Some(_) => check(
-            "ai_disclosure",
+            GateCheckId::AiDisclosure,
             GateState::Fail,
             "the render carries no AI-character badge",
         ),
     });
     if render.is_some_and(|r| r.files.iter().any(|f| f.kind == "cut_16x9")) {
         out.push(check(
-            "handles_in_picture",
+            GateCheckId::HandlesInPicture,
             GateState::Unmeasured,
             "the 16:9 cut is the broadcast picture: the stage's chat column, and its captions when Malakor names a viewer, show viewer handles (the 9:16 crop and its burnt-in captions do not); a person confirms they may be shown",
         ));
@@ -347,18 +365,18 @@ pub fn render_checks(
     }
     out.push(mandatory(match render {
         None => check(
-            "evidence_badge_burnt",
+            GateCheckId::EvidenceBadgeBurnt,
             GateState::Unmeasured,
             "not rendered yet",
         ),
         Some(r) => match (&r.overlay.grade_badge, r.overlay.alleged_header) {
             (Some(g), true) => check(
-                "evidence_badge_burnt",
+                GateCheckId::EvidenceBadgeBurnt,
                 GateState::Pass,
                 format!("ALLEGED header and the {g} badge are burnt in"),
             ),
             _ => check(
-                "evidence_badge_burnt",
+                GateCheckId::EvidenceBadgeBurnt,
                 GateState::Fail,
                 "the render lacks the ALLEGED header or the grade badge",
             ),
@@ -376,25 +394,29 @@ pub fn render_checks(
     let claimed = evidence.is_some_and(|e| !e.hexes.is_empty());
     out.push(mandatory(if !unsourced.is_empty() {
         check(
-            "source_citation",
+            GateCheckId::SourceCitation,
             GateState::Fail,
             format!("claimed hex(es) without a source: {}", unsourced.join(", ")),
         )
     } else {
         match render {
-            None => check("source_citation", GateState::Unmeasured, "not rendered yet"),
+            None => check(
+                GateCheckId::SourceCitation,
+                GateState::Unmeasured,
+                "not rendered yet",
+            ),
             Some(r) if claimed && r.overlay.citation.is_empty() => check(
-                "source_citation",
+                GateCheckId::SourceCitation,
                 GateState::Fail,
                 "the render shows no citation",
             ),
             Some(r) if claimed => check(
-                "source_citation",
+                GateCheckId::SourceCitation,
                 GateState::Pass,
                 format!("cited: {}", r.overlay.citation.join(" · ")),
             ),
             Some(_) => check(
-                "source_citation",
+                GateCheckId::SourceCitation,
                 GateState::Pass,
                 "the cut makes no hex claim; the case title is shown",
             ),

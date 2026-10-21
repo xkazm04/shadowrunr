@@ -12,7 +12,7 @@ import type { SayLine } from "./derive";
 import { FeedbackPanel, type FeedbackHandle } from "./FeedbackPanel";
 import { KIND_NAME, type ShownKind } from "./names";
 import styles from "./Player.module.css";
-import { PlayerDone, PlayerSide, TagLine } from "./PlayerParts";
+import { FailedMarks, PlayerDone, PlayerSide, TagLine } from "./PlayerParts";
 import { Script } from "./Script";
 import type { TabProps } from "./tab";
 import { WatchPane } from "./WatchPane";
@@ -57,8 +57,8 @@ function Walk(props: TabProps & { kind: ShownKind }) {
   const router = useRouter();
   const panel = useRef<FeedbackHandle>(null);
   const root = useRef<HTMLDivElement>(null);
-  // A save resolves after its optimistic write re-rendered, so `next` reads the newest marks
-  // through this ref. Were it a render behind, the render-time skip below still lands right.
+  // A save advances as soon as it is sent, before its optimistic write re-rendered: `next` reads
+  // the marks through this ref and takes the saved line's own state from the panel.
   const marks = useRef(feedback.byLine);
   useEffect(() => {
     marks.current = feedback.byLine;
@@ -81,10 +81,11 @@ function Walk(props: TabProps & { kind: ShownKind }) {
   }, [line?.line]);
 
   const go = (i: number) => setAt(i < 0 ? { i: 0, hold: false, done: true } : { i, hold: false, done: false });
-  /** After a save: the next line the filter accepts, else any unmarked line, else done. */
-  const next = () => {
-    const after = seek(n, cur + 1, (j) => !skip || !marked(j), false);
-    go(after >= 0 ? after : seek(n, 0, (j) => !marked(j), false));
+  /** After a save is sent: the next line the filter accepts, else any unmarked line, else done. */
+  const next = (savedMarked: boolean) => {
+    const m = (j: number) => (j === cur ? savedMarked : marked(j));
+    const after = seek(n, cur + 1, (j) => !skip || !m(j), false);
+    go(after >= 0 ? after : seek(n, 0, (j) => !m(j), false));
   };
   const skipOn = () => go(n === 0 ? -1 : seek(n, cur + 1, (j) => !skip || !marked(j) || j === cur, true));
   const back = () => setAt({ i: Math.max(0, cur - 1), hold: true, done: false });
@@ -109,16 +110,19 @@ function Walk(props: TabProps & { kind: ShownKind }) {
 
   if (!line) {
     return (
-      <PlayerDone
-        kind={kind}
-        list={list}
-        feedback={feedback}
-        onPick={() => router.navigate(pageRoute("review", rs.row.session_id, "types"))}
-        onAgain={() => {
-          setSkip(false);
-          go(0);
-        }}
-      />
+      <>
+        <FailedMarks feedback={feedback} />
+        <PlayerDone
+          kind={kind}
+          list={list}
+          feedback={feedback}
+          onPick={() => router.navigate(pageRoute("review", rs.row.session_id, "types"))}
+          onAgain={() => {
+            setSkip(false);
+            go(0);
+          }}
+        />
+      </>
     );
   }
   return (
@@ -135,6 +139,7 @@ function Walk(props: TabProps & { kind: ShownKind }) {
           </div>
           <Switch checked={skip} onChange={setSkip} label="Skip lines I already marked" />
         </div>
+        <FailedMarks feedback={feedback} />
         <RateBar rate={markedNow / Math.max(1, n)} n={n} label={`${markedNow} of ${n} marked`} />
         <WatchPane sessionId={rs.row.session_id} line={line.line} t={line.t} />
         <div key={line.line} className={styles.step} data-role="review-player-step">

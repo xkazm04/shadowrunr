@@ -16,6 +16,7 @@
       ],
       "file_paths": [
         "crates/shadowrunr-brain/Cargo.toml",
+        "crates/shadowrunr-brain/src/care.rs",
         "crates/shadowrunr-brain/src/character.rs",
         "crates/shadowrunr-brain/src/compose.rs",
         "crates/shadowrunr-brain/src/fleet.rs",
@@ -26,12 +27,21 @@
         "crates/shadowrunr-brain/src/memory/mod.rs",
         "crates/shadowrunr-brain/src/memory/store.rs",
         "crates/shadowrunr-brain/src/moderation.rs",
+        "crates/shadowrunr-brain/src/orchestrate/mod.rs",
+        "crates/shadowrunr-brain/src/orchestrate/requests.rs",
+        "crates/shadowrunr-brain/src/orchestrate/room.rs",
+        "crates/shadowrunr-brain/src/orchestrate/tests.rs",
+        "crates/shadowrunr-brain/src/pace.rs",
         "crates/shadowrunr-brain/src/picker.rs",
         "crates/shadowrunr-brain/src/pool.rs",
         "crates/shadowrunr-brain/src/rules.rs",
+        "crates/shadowrunr-brain/src/stall.rs",
         "crates/shadowrunr-brain/src/tests.rs",
+        "crates/shadowrunr-brain/src/tests/orchestration.rs",
+        "crates/shadowrunr-brain/src/tests/pace.rs",
         "crates/shadowrunr-brain/src/util.rs",
-        "crates/shadowrunr-brain/src/working.rs"
+        "crates/shadowrunr-brain/src/working.rs",
+        "crates/shadowrunr-brain/tests/fixtures/prep-sample.json"
       ],
       "group": "Character Brain",
       "group_id": "d44ba015-f3ec-4b46-b7d8-52874f886ba3",
@@ -46,7 +56,7 @@
         "picker",
         "persona"
       ],
-      "last_written_at": "2026-10-18T12:48:03.413204300+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "brain-composition-memory",
       "pinned": false,
       "tech_stack": [
@@ -90,12 +100,15 @@
         "apps/console/src/kit/PosterFrame.module.css",
         "apps/console/src/kit/PosterFrame.tsx",
         "apps/console/src/kit/QueryView.tsx",
+        "apps/console/src/kit/RankEngagement.module.css",
+        "apps/console/src/kit/RankEngagement.tsx",
         "apps/console/src/kit/events.ts",
         "apps/console/src/kit/index.ts",
         "apps/console/src/kit/keyCommands.ts",
         "apps/console/src/kit/openExternal.test.ts",
         "apps/console/src/kit/openExternal.ts",
-        "apps/console/src/kit/testing.tsx"
+        "apps/console/src/kit/testing.tsx",
+        "apps/console/src/kit/useNewestReport.ts"
       ],
       "group": "Console Platform",
       "group_id": "306107ad-9b00-48c4-9a6e-becaa877d6eb",
@@ -107,7 +120,7 @@
         "queryview",
         "format"
       ],
-      "last_written_at": "2026-10-18T12:47:49.650465100+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "console-app-bootstrap",
       "pinned": false,
       "tech_stack": [
@@ -360,6 +373,13 @@
         "apps/console/src/pages/onair/Layer1.tsx"
       ],
       "file_paths": [
+        "apps/console/src/pages/onair/ClipActions.tsx",
+        "apps/console/src/pages/onair/ClipDetail.tsx",
+        "apps/console/src/pages/onair/ClipFeedback.tsx",
+        "apps/console/src/pages/onair/ClipPlayer.module.css",
+        "apps/console/src/pages/onair/ClipPlayer.tsx",
+        "apps/console/src/pages/onair/Clips.module.css",
+        "apps/console/src/pages/onair/Clips.tsx",
         "apps/console/src/pages/onair/Dispatch.tsx",
         "apps/console/src/pages/onair/Layer1.module.css",
         "apps/console/src/pages/onair/Layer1.tsx",
@@ -375,6 +395,10 @@
         "apps/console/src/pages/onair/ScreenParts.tsx",
         "apps/console/src/pages/onair/SegmentCards.tsx",
         "apps/console/src/pages/onair/beats.ts",
+        "apps/console/src/pages/onair/clipModel.ts",
+        "apps/console/src/pages/onair/clips.buttons.test.tsx",
+        "apps/console/src/pages/onair/clips.dom.test.tsx",
+        "apps/console/src/pages/onair/clips.player.test.tsx",
         "apps/console/src/pages/onair/feed.ts",
         "apps/console/src/pages/onair/index.ts",
         "apps/console/src/pages/onair/onair.dom.test.tsx",
@@ -397,7 +421,7 @@
         "feed",
         "screen"
       ],
-      "last_written_at": "2026-10-18T12:47:49.646715500+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "console-onair-page",
       "pinned": false,
       "tech_stack": [
@@ -436,6 +460,7 @@
         "apps/console/src/pages/reconcile/Refs.tsx",
         "apps/console/src/pages/reconcile/ReportPage.tsx",
         "apps/console/src/pages/reconcile/Synthesis.tsx",
+        "apps/console/src/pages/reconcile/buttons.test.tsx",
         "apps/console/src/pages/reconcile/hooks.ts",
         "apps/console/src/pages/reconcile/index.ts",
         "apps/console/src/pages/reconcile/layer1.test.tsx",
@@ -456,7 +481,7 @@
         "diff",
         "chat"
       ],
-      "last_written_at": "2026-10-18T12:47:49.647428500+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "console-reconcile-page",
       "pinned": false,
       "tech_stack": [
@@ -559,7 +584,9 @@
         "apps/console/src/shell/keyActions.ts",
         "apps/console/src/shell/layout.test.ts",
         "apps/console/src/shell/layout.ts",
+        "apps/console/src/shell/motion.dom.test.tsx",
         "apps/console/src/shell/posters.ts",
+        "apps/console/src/shell/rise.ts",
         "apps/console/src/shell/types.ts",
         "apps/console/src/shell/useViewport.ts",
         "apps/console/tsconfig.json"
@@ -576,7 +603,7 @@
         "layout",
         "mixer"
       ],
-      "last_written_at": "2026-10-18T12:47:49.649982200+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "console-shell-router",
       "pinned": false,
       "tech_stack": [
@@ -660,14 +687,20 @@
         "apps/console/src/ui/index.ts"
       ],
       "file_paths": [
+        "apps/console/src/ui/Button.module.css",
+        "apps/console/src/ui/Button.tsx",
         "apps/console/src/ui/Chip.module.css",
         "apps/console/src/ui/Chip.tsx",
+        "apps/console/src/ui/Drawer.module.css",
+        "apps/console/src/ui/Drawer.tsx",
         "apps/console/src/ui/FilterTable.module.css",
         "apps/console/src/ui/FilterTable.tsx",
         "apps/console/src/ui/Markdown.module.css",
         "apps/console/src/ui/Markdown.tsx",
         "apps/console/src/ui/PillGroup.module.css",
         "apps/console/src/ui/PillGroup.tsx",
+        "apps/console/src/ui/PushIn.module.css",
+        "apps/console/src/ui/PushIn.tsx",
         "apps/console/src/ui/RateBar.module.css",
         "apps/console/src/ui/RateBar.tsx",
         "apps/console/src/ui/Section.module.css",
@@ -682,10 +715,14 @@
         "apps/console/src/ui/VirtualList.tsx",
         "apps/console/src/ui/VisuallyHidden.module.css",
         "apps/console/src/ui/VisuallyHidden.tsx",
+        "apps/console/src/ui/button.test.tsx",
         "apps/console/src/ui/cx.ts",
         "apps/console/src/ui/doc.ts",
+        "apps/console/src/ui/drawer.test.tsx",
         "apps/console/src/ui/filterRows.ts",
         "apps/console/src/ui/index.ts",
+        "apps/console/src/ui/push.test.tsx",
+        "apps/console/src/ui/push.ts",
         "apps/console/src/ui/remPx.ts",
         "apps/console/src/ui/ui.test.tsx"
       ],
@@ -700,7 +737,7 @@
         "stat band",
         "primitives"
       ],
-      "last_written_at": "2026-10-18T12:47:49.650851600+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "console-ui-primitives",
       "pinned": false,
       "tech_stack": [
@@ -999,19 +1036,23 @@
       ],
       "file_paths": [
         "crates/shadowrunr-segments/Cargo.toml",
+        "crates/shadowrunr-segments/data/demo-case-records.json",
         "crates/shadowrunr-segments/data/demo-case.json",
         "crates/shadowrunr-segments/data/primary-source-allowlist.toml",
         "crates/shadowrunr-segments/data/ranks.toml",
+        "crates/shadowrunr-segments/data/research-allowlist.toml",
         "crates/shadowrunr-segments/data/segments/seg-01.toml",
         "crates/shadowrunr-segments/data/segments/seg-02a.toml",
         "crates/shadowrunr-segments/data/segments/seg-02b-i.toml",
         "crates/shadowrunr-segments/data/segments/seg-02b-ii.toml",
         "crates/shadowrunr-segments/src/case.rs",
+        "crates/shadowrunr-segments/src/cases.rs",
         "crates/shadowrunr-segments/src/command.rs",
         "crates/shadowrunr-segments/src/evidence.rs",
         "crates/shadowrunr-segments/src/lib.rs",
         "crates/shadowrunr-segments/src/portfolio.rs",
         "crates/shadowrunr-segments/src/ranks.rs",
+        "crates/shadowrunr-segments/src/research.rs",
         "crates/shadowrunr-segments/src/runtime.rs",
         "crates/shadowrunr-segments/src/table.rs",
         "crates/shadowrunr-segments/tests/runtime.rs"
@@ -1028,7 +1069,7 @@
         "portfolio",
         "allowlist"
       ],
-      "last_written_at": "2026-10-18T12:47:49.641512600+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "segments-runtime",
       "pinned": false,
       "tech_stack": [
@@ -1057,6 +1098,7 @@
         "crates/shadowrunr-sim/data/default-calibration.json",
         "crates/shadowrunr-sim/examples/run_matrix.rs",
         "crates/shadowrunr-sim/src/calibration.rs",
+        "crates/shadowrunr-sim/src/casefile.rs",
         "crates/shadowrunr-sim/src/chat.rs",
         "crates/shadowrunr-sim/src/instrument.rs",
         "crates/shadowrunr-sim/src/judge.rs",
@@ -1068,6 +1110,7 @@
         "crates/shadowrunr-sim/src/population.rs",
         "crates/shadowrunr-sim/src/rng.rs",
         "crates/shadowrunr-sim/src/runner.rs",
+        "crates/shadowrunr-sim/src/sandbox.rs",
         "crates/shadowrunr-sim/src/situations.rs",
         "crates/shadowrunr-sim/src/stats.rs",
         "crates/shadowrunr-sim/src/summary.rs",
@@ -1087,7 +1130,7 @@
         "population",
         "transcript"
       ],
-      "last_written_at": "2026-10-18T12:47:49.643285500+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "sim-runner-judging",
       "pinned": false,
       "tech_stack": [
@@ -1114,15 +1157,29 @@
       ],
       "file_paths": [
         "apps/stage/DESIGN.md",
+        "apps/stage/fixtures/clip-demo.json",
         "apps/stage/fixtures/demo-case.json",
         "apps/stage/package.json",
         "apps/stage/scripts/make-demo.mjs",
+        "apps/stage/scripts/record-clip.mjs",
         "apps/stage/src/App.tsx",
+        "apps/stage/src/ClipStage.tsx",
         "apps/stage/src/Controls.tsx",
+        "apps/stage/src/OnAir.tsx",
+        "apps/stage/src/Slates.tsx",
         "apps/stage/src/Stage.tsx",
+        "apps/stage/src/clip.css",
+        "apps/stage/src/clip.test.ts",
+        "apps/stage/src/clip.ts",
         "apps/stage/src/fixture.test.ts",
         "apps/stage/src/layouts.ts",
+        "apps/stage/src/live.test.ts",
+        "apps/stage/src/live.ts",
         "apps/stage/src/main.tsx",
+        "apps/stage/src/onair.test.ts",
+        "apps/stage/src/overflowAudit.ts",
+        "apps/stage/src/screens.css",
+        "apps/stage/src/slates.test.ts",
         "apps/stage/src/source.ts",
         "apps/stage/src/stage.test.ts",
         "apps/stage/src/styles.css",
@@ -1143,7 +1200,7 @@
         "controls",
         "fixture"
       ],
-      "last_written_at": "2026-10-18T12:47:49.642704500+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "stage-app",
       "pinned": false,
       "tech_stack": [
@@ -1168,6 +1225,7 @@
         "packages/stage-kit/src/ui/Overlays.tsx"
       ],
       "file_paths": [
+        "packages/stage-kit/src/ui/Browser.tsx",
         "packages/stage-kit/src/ui/Caption.tsx",
         "packages/stage-kit/src/ui/ChatLane.tsx",
         "packages/stage-kit/src/ui/Decrees.tsx",
@@ -1192,7 +1250,7 @@
         "ticker",
         "decrees"
       ],
-      "last_written_at": "2026-10-18T12:47:49.642437800+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "stage-kit-overlays",
       "pinned": false,
       "tech_stack": [
@@ -1222,6 +1280,8 @@
         "packages/stage-kit/src/art/Sigil.tsx",
         "packages/stage-kit/src/art/Silhouette.tsx",
         "packages/stage-kit/src/chatMemory.ts",
+        "packages/stage-kit/src/decrees.test.ts",
+        "packages/stage-kit/src/decrees.ts",
         "packages/stage-kit/src/diagram.ts",
         "packages/stage-kit/src/hexgrid.ts",
         "packages/stage-kit/src/index.ts",
@@ -1233,6 +1293,7 @@
         "packages/stage-kit/src/scene.test.ts",
         "packages/stage-kit/src/scene.ts",
         "packages/stage-kit/src/sceneModel.ts",
+        "packages/stage-kit/src/screens.test.ts",
         "packages/stage-kit/src/tallies.ts",
         "packages/stage-kit/src/timing.ts",
         "packages/stage-kit/src/visuals.test.ts",
@@ -1252,7 +1313,7 @@
         "silhouette",
         "timing"
       ],
-      "last_written_at": "2026-10-18T12:47:49.641874900+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "stage-kit-scene-engine",
       "pinned": false,
       "tech_stack": [
@@ -1325,17 +1386,22 @@
         "crates/shadowrunr-types/examples/export-schema.rs",
         "crates/shadowrunr-types/src/catalog.rs",
         "crates/shadowrunr-types/src/chat.rs",
+        "crates/shadowrunr-types/src/clips.rs",
         "crates/shadowrunr-types/src/engine.rs",
         "crates/shadowrunr-types/src/error.rs",
         "crates/shadowrunr-types/src/event.rs",
         "crates/shadowrunr-types/src/lib.rs",
         "crates/shadowrunr-types/src/memory.rs",
+        "crates/shadowrunr-types/src/prep.rs",
         "crates/shadowrunr-types/src/reconcile.rs",
         "crates/shadowrunr-types/src/results.rs",
+        "crates/shadowrunr-types/src/review.rs",
         "crates/shadowrunr-types/src/rpc.rs",
+        "crates/shadowrunr-types/src/sandbox.rs",
         "crates/shadowrunr-types/src/schema.rs",
         "crates/shadowrunr-types/src/segment.rs",
         "crates/shadowrunr-types/src/sim.rs",
+        "crates/shadowrunr-types/src/voice.rs",
         "crates/shadowrunr-types/tests/schema_drift.rs"
       ],
       "group": "Shared Contract And Design Tokens",
@@ -1350,7 +1416,7 @@
         "serde",
         "schemars"
       ],
-      "last_written_at": "2026-10-18T12:47:49.655630100+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "types-crate",
       "pinned": false,
       "tech_stack": [
@@ -1377,6 +1443,7 @@
         "CLAUDE.md",
         "Cargo.toml",
         "README.md",
+        "context-map.json",
         "docs/design/obsidian-program-digest.md",
         "docs/guide/cli.md",
         "docs/guide/personas.md",
@@ -1400,7 +1467,7 @@
         "policy",
         "config"
       ],
-      "last_written_at": "2026-10-18T12:47:49.657330900+00:00",
+      "last_written_at": "2026-10-21T16:58:12.393Z",
       "name": "workspace-tooling-and-policy",
       "pinned": false,
       "tech_stack": [
@@ -1479,9 +1546,13 @@
         "characters/malakor/foils/the-has-been-hero.md",
         "characters/malakor/foils/the-inspector.md",
         "characters/malakor/foils/the-life-coach.md",
+        "characters/malakor/prep.sample.json",
+        "characters/malakor/rig/m8.spec.json",
+        "characters/malakor/rules/crisis-chat-ban.md",
         "characters/malakor/rules/crisis-handoff.md",
         "characters/malakor/rules/no-financial-promotion.md",
         "characters/malakor/situations.json",
+        "characters/malakor/stalls.toml",
         "characters/malakor/tones/deadpan-bureaucrat.md",
         "characters/malakor/tones/gleeful-chaos.md",
         "characters/malakor/tones/theatrical.md",
@@ -1500,7 +1571,7 @@
       ],
       "business_feature": "Defines who Malakor is and what he must never do",
       "pinned": false,
-      "last_written_at": "2026-10-18T18:12:43.547Z"
+      "last_written_at": "2026-10-21T16:58:12.393Z"
     },
     {
       "id": "d6365504-acc7-4901-b7cf-569781f6644c",
@@ -1512,10 +1583,14 @@
       "file_paths": [
         "policy/platform-rules.json",
         "sim/calibration.json",
+        "sim/matrices/case-3h.toml",
         "sim/matrices/heavy.toml",
         "sim/matrices/night-opus.toml",
         "sim/matrices/night.toml",
         "sim/matrices/pilot.toml",
+        "sim/matrices/rate-cap-exemptions-control.toml",
+        "sim/matrices/rate-cap-exemptions.toml",
+        "sim/matrices/roastmaster-vs-theatrical.toml",
         "sim/matrices/weary.toml",
         "sim/rubric.toml"
       ],
@@ -1530,10 +1605,478 @@
       ],
       "business_feature": "Sets how streams are tested before going live",
       "pinned": false,
-      "last_written_at": "2026-10-18T18:12:43.547Z"
+      "last_written_at": "2026-10-21T16:58:12.393Z"
+    },
+    {
+      "api_surface": "Calls the daemon review.* RPCs",
+      "business_feature": "Session Review",
+      "category": "ui",
+      "cross_refs": [
+        "daemon-show-prep-and-review",
+        "console-data-layer",
+        "console-ui-primitives"
+      ],
+      "db_tables": [],
+      "description": "Console Review page: the session wall (layer 1) and one session's tabs (layer 2): timeline, review by type, player, judge, moderation, engine calls, script and the operator feedback panel. Derives buckets and rows from the daemon's session record.",
+      "entry_points": [
+        "apps/console/src/pages/review/index.ts",
+        "apps/console/src/pages/review/Layer2.tsx"
+      ],
+      "file_paths": [
+        "apps/console/src/pages/review/EngineCalls.module.css",
+        "apps/console/src/pages/review/EngineCalls.tsx",
+        "apps/console/src/pages/review/Face.module.css",
+        "apps/console/src/pages/review/Face.tsx",
+        "apps/console/src/pages/review/FeedbackPanel.module.css",
+        "apps/console/src/pages/review/FeedbackPanel.tsx",
+        "apps/console/src/pages/review/Judge.module.css",
+        "apps/console/src/pages/review/Judge.tsx",
+        "apps/console/src/pages/review/Layer1.module.css",
+        "apps/console/src/pages/review/Layer1.tsx",
+        "apps/console/src/pages/review/Layer2.module.css",
+        "apps/console/src/pages/review/Layer2.tsx",
+        "apps/console/src/pages/review/MixBar.module.css",
+        "apps/console/src/pages/review/MixBar.tsx",
+        "apps/console/src/pages/review/Moderation.module.css",
+        "apps/console/src/pages/review/Moderation.tsx",
+        "apps/console/src/pages/review/Moment.module.css",
+        "apps/console/src/pages/review/Moment.tsx",
+        "apps/console/src/pages/review/Player.module.css",
+        "apps/console/src/pages/review/Player.tsx",
+        "apps/console/src/pages/review/PlayerParts.tsx",
+        "apps/console/src/pages/review/ReviewByType.module.css",
+        "apps/console/src/pages/review/ReviewByType.tsx",
+        "apps/console/src/pages/review/Script.module.css",
+        "apps/console/src/pages/review/Script.tsx",
+        "apps/console/src/pages/review/Timeline.module.css",
+        "apps/console/src/pages/review/Timeline.tsx",
+        "apps/console/src/pages/review/TimelineRows.tsx",
+        "apps/console/src/pages/review/WatchPane.module.css",
+        "apps/console/src/pages/review/WatchPane.tsx",
+        "apps/console/src/pages/review/buckets.ts",
+        "apps/console/src/pages/review/derive.test.ts",
+        "apps/console/src/pages/review/derive.ts",
+        "apps/console/src/pages/review/fixture.ts",
+        "apps/console/src/pages/review/hooks.ts",
+        "apps/console/src/pages/review/index.ts",
+        "apps/console/src/pages/review/ink.ts",
+        "apps/console/src/pages/review/layer1.test.tsx",
+        "apps/console/src/pages/review/names.ts",
+        "apps/console/src/pages/review/player.test.tsx",
+        "apps/console/src/pages/review/tab.ts",
+        "apps/console/src/pages/review/tabkit.module.css",
+        "apps/console/src/pages/review/tabkit.tsx",
+        "apps/console/src/pages/review/tabs.fixture.ts",
+        "apps/console/src/pages/review/tabs.test.tsx",
+        "apps/console/src/pages/review/timeline.test.tsx",
+        "apps/console/src/pages/review/watch.test.tsx",
+        "apps/console/src/pages/review/watch.ts"
+      ],
+      "group": "Operator Console Pages",
+      "group_id": "80632075-1266-4432-b387-031833872c9b",
+      "id": "4738011e-a676-4dff-baef-d4f35c4f5ef1",
+      "keywords": [
+        "review",
+        "session",
+        "timeline",
+        "player",
+        "judge",
+        "feedback"
+      ],
+      "last_written_at": "2026-10-21T16:58:12.393Z",
+      "name": "console-review-page",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "Draws the face rig served at GET /avatar/{file}",
+      "business_feature": "Live Stage App",
+      "category": "ui",
+      "cross_refs": [
+        "stage-app",
+        "stage-voice-client",
+        "avatar-rig-tools"
+      ],
+      "db_tables": [],
+      "description": "The stage's WebGL2 face: lazy runtime, pose driver, visemes, layered rig and depth/cut renderers with their shaders, glow, and the bundled placeholder. One shared frame clock; idles when nothing moves and honours reduced motion.",
+      "entry_points": [
+        "apps/stage/src/avatar/Avatar.tsx",
+        "apps/stage/src/avatar/runtime.ts"
+      ],
+      "file_paths": [
+        "apps/stage/src/avatar/Avatar.tsx",
+        "apps/stage/src/avatar/cut/gpu.ts",
+        "apps/stage/src/avatar/cut/index.ts",
+        "apps/stage/src/avatar/cut/look.test.ts",
+        "apps/stage/src/avatar/cut/look.ts",
+        "apps/stage/src/avatar/cut/matte.ts",
+        "apps/stage/src/avatar/cut/plan.test.ts",
+        "apps/stage/src/avatar/cut/plan.ts",
+        "apps/stage/src/avatar/cut/renderer.ts",
+        "apps/stage/src/avatar/cut/shaders.ts",
+        "apps/stage/src/avatar/demo.ts",
+        "apps/stage/src/avatar/depth/geom.test.ts",
+        "apps/stage/src/avatar/depth/geom.ts",
+        "apps/stage/src/avatar/depth/index.ts",
+        "apps/stage/src/avatar/depth/look.test.ts",
+        "apps/stage/src/avatar/depth/look.ts",
+        "apps/stage/src/avatar/depth/meshes.test.ts",
+        "apps/stage/src/avatar/depth/png16.test.ts",
+        "apps/stage/src/avatar/depth/png16.ts",
+        "apps/stage/src/avatar/depth/renderer.ts",
+        "apps/stage/src/avatar/depth/shaders.ts",
+        "apps/stage/src/avatar/driver.test.ts",
+        "apps/stage/src/avatar/driver.ts",
+        "apps/stage/src/avatar/glow-geom.ts",
+        "apps/stage/src/avatar/glow-shaders.ts",
+        "apps/stage/src/avatar/glow.ts",
+        "apps/stage/src/avatar/layers.test.ts",
+        "apps/stage/src/avatar/layers.ts",
+        "apps/stage/src/avatar/look.ts",
+        "apps/stage/src/avatar/motion.ts",
+        "apps/stage/src/avatar/placeholder.ts",
+        "apps/stage/src/avatar/runtime.test.ts",
+        "apps/stage/src/avatar/runtime.ts",
+        "apps/stage/src/avatar/types.ts",
+        "apps/stage/src/avatar/variants.ts",
+        "apps/stage/src/avatar/visemes.ts"
+      ],
+      "group": "Show Segments And Stage",
+      "group_id": "655343c0-db97-4d26-986a-fcd94d7f1e57",
+      "id": "7bbc93eb-a921-49ea-a5b3-128e66bd5e64",
+      "keywords": [
+        "avatar",
+        "webgl",
+        "face",
+        "visemes",
+        "rig",
+        "shader"
+      ],
+      "last_written_at": "2026-10-21T16:58:12.393Z",
+      "name": "stage-avatar-renderer",
+      "pinned": false,
+      "tech_stack": [
+        "React 19.3",
+        "WebGL2",
+        "TypeScript 6.0"
+      ]
+    },
+    {
+      "api_surface": "GET /voice WebSocket (VoiceFrame)",
+      "business_feature": "Live Stage App",
+      "category": "ui",
+      "cross_refs": [
+        "daemon-voice-service",
+        "stage-avatar-renderer",
+        "contract-package"
+      ],
+      "db_tables": [],
+      "description": "The stage's voice session: follows the live run over the /voice WebSocket, plays rendered utterances through WebAudio, draws captions, and reports parts, dropped lines and the drawn face back to the daemon. Degrades without blocking the stream.",
+      "entry_points": [
+        "apps/stage/src/voice/session.ts",
+        "apps/stage/src/voice/useVoice.ts"
+      ],
+      "file_paths": [
+        "apps/stage/src/voice/captions.test.ts",
+        "apps/stage/src/voice/captions.ts",
+        "apps/stage/src/voice/frame.test.ts",
+        "apps/stage/src/voice/frame.ts",
+        "apps/stage/src/voice/names.ts",
+        "apps/stage/src/voice/player.test.ts",
+        "apps/stage/src/voice/player.ts",
+        "apps/stage/src/voice/report.test.ts",
+        "apps/stage/src/voice/report.ts",
+        "apps/stage/src/voice/session.test.ts",
+        "apps/stage/src/voice/session.ts",
+        "apps/stage/src/voice/toggle.ts",
+        "apps/stage/src/voice/urls.ts",
+        "apps/stage/src/voice/useVoice.ts",
+        "apps/stage/src/voice/webaudio.ts"
+      ],
+      "group": "Show Segments And Stage",
+      "group_id": "655343c0-db97-4d26-986a-fcd94d7f1e57",
+      "id": "b2009d98-3f59-4c44-97e1-b3b93b65264c",
+      "keywords": [
+        "voice",
+        "websocket",
+        "audio",
+        "captions",
+        "report"
+      ],
+      "last_written_at": "2026-10-21T16:58:12.393Z",
+      "name": "stage-voice-client",
+      "pinned": false,
+      "tech_stack": [
+        "TypeScript 6.0",
+        "WebAudio"
+      ]
+    },
+    {
+      "api_surface": "Rust library plus daemon clips RPC/CLI",
+      "business_feature": "Clip Factory",
+      "category": "lib",
+      "cross_refs": [
+        "types-crate",
+        "engine-llm-sessions",
+        "console-onair-page"
+      ],
+      "db_tables": [],
+      "description": "The clip factory and its publish gate: scores transcript beats from marker, chat, audio and hook signals, cuts windows snapped to lines and segment bands, drafts the best five per stream, renders footage and gates uploads. Daemon glue exposes it over RPC and CLI.",
+      "entry_points": [
+        "crates/shadowrunr-clips/src/lib.rs",
+        "crates/shadowrunr-daemon/src/clips.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-clips/Cargo.toml",
+        "crates/shadowrunr-clips/src/footage.rs",
+        "crates/shadowrunr-clips/src/gate.rs",
+        "crates/shadowrunr-clips/src/hook.rs",
+        "crates/shadowrunr-clips/src/lib.rs",
+        "crates/shadowrunr-clips/src/render.rs",
+        "crates/shadowrunr-clips/src/scan.rs",
+        "crates/shadowrunr-clips/src/signals.rs",
+        "crates/shadowrunr-clips/src/store.rs",
+        "crates/shadowrunr-clips/src/tests.rs",
+        "crates/shadowrunr-clips/src/transcript.rs",
+        "crates/shadowrunr-clips/src/upload.rs",
+        "crates/shadowrunr-clips/src/voice.rs",
+        "crates/shadowrunr-clips/src/window.rs",
+        "crates/shadowrunr-daemon/src/clips.rs",
+        "crates/shadowrunr-daemon/src/clips_cli.rs"
+      ],
+      "group": "Voice And Media Production",
+      "group_id": "688185ab-3e5a-4ae9-bd3b-6fdd335066fb",
+      "id": "12e5be0b-9811-4c5b-a7ec-8a57e204d016",
+      "keywords": [
+        "clips",
+        "moments",
+        "scoring",
+        "render",
+        "upload",
+        "gate"
+      ],
+      "last_written_at": "2026-10-21T16:58:12.393Z",
+      "name": "clips-pipeline",
+      "pinned": false,
+      "tech_stack": [
+        "Rust"
+      ]
+    },
+    {
+      "api_surface": "GET /voice WebSocket, GET /avatar/{file}, voice CLI",
+      "business_feature": "Character Voice",
+      "category": "api",
+      "cross_refs": [
+        "voice-sidecar",
+        "stage-voice-client",
+        "daemon-core-rpc"
+      ],
+      "db_tables": [],
+      "description": "The daemon's voice hub: hands each followed live say to the Python voice sidecar behind a renderer seam, bounds the queue and lag, forwards rendered utterances as VoiceFrames, logs voice.jsonl, replays, and serves the avatar rig files.",
+      "entry_points": [
+        "crates/shadowrunr-daemon/src/voice/mod.rs",
+        "crates/shadowrunr-daemon/src/voice/service.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-daemon/src/voice/avatar.rs",
+        "crates/shadowrunr-daemon/src/voice/cli.rs",
+        "crates/shadowrunr-daemon/src/voice/log.rs",
+        "crates/shadowrunr-daemon/src/voice/mod.rs",
+        "crates/shadowrunr-daemon/src/voice/probe.rs",
+        "crates/shadowrunr-daemon/src/voice/renderer.rs",
+        "crates/shadowrunr-daemon/src/voice/replay.rs",
+        "crates/shadowrunr-daemon/src/voice/service.rs",
+        "crates/shadowrunr-daemon/src/voice/service/tests.rs",
+        "crates/shadowrunr-daemon/src/voice/sidecar.rs",
+        "crates/shadowrunr-daemon/src/voice/socket.rs"
+      ],
+      "group": "Voice And Media Production",
+      "group_id": "688185ab-3e5a-4ae9-bd3b-6fdd335066fb",
+      "id": "7496ad34-8f7b-4407-8b8a-a60c44c91d85",
+      "keywords": [
+        "voice",
+        "sidecar",
+        "websocket",
+        "queue",
+        "avatar"
+      ],
+      "last_written_at": "2026-10-21T16:58:12.393Z",
+      "name": "daemon-voice-service",
+      "pinned": false,
+      "tech_stack": [
+        "Rust",
+        "Tokio"
+      ]
+    },
+    {
+      "api_surface": "JSON lines on stdio (contract appendix voice)",
+      "business_feature": "Character Voice",
+      "category": "lib",
+      "cross_refs": [
+        "daemon-voice-service"
+      ],
+      "db_tables": [],
+      "description": "Python voice sidecar: Kokoro via the operator's sherpa-onnx install, one sentence at a time, with mouth shapes from Kokoro's durations, a warm worker pool and text normalisation. Started by the daemon.",
+      "entry_points": [
+        "tools/voice/shadowrunr_voice/__main__.py",
+        "tools/voice/shadowrunr_voice/sidecar.py"
+      ],
+      "file_paths": [
+        "tools/voice/pyproject.toml",
+        "tools/voice/shadowrunr_voice/__init__.py",
+        "tools/voice/shadowrunr_voice/__main__.py",
+        "tools/voice/shadowrunr_voice/engine.py",
+        "tools/voice/shadowrunr_voice/sidecar.py",
+        "tools/voice/shadowrunr_voice/text.py",
+        "tools/voice/shadowrunr_voice/visemes.py",
+        "tools/voice/shadowrunr_voice/warm.py",
+        "tools/voice/tests/__init__.py",
+        "tools/voice/tests/fake_engine.py",
+        "tools/voice/tests/fake_warm.py",
+        "tools/voice/tests/test_engine.py",
+        "tools/voice/tests/test_pool.py",
+        "tools/voice/tests/test_protocol.py",
+        "tools/voice/tests/test_smoke.py",
+        "tools/voice/tests/test_text.py",
+        "tools/voice/tests/test_visemes.py",
+        "tools/voice/tests/test_warm.py"
+      ],
+      "group": "Voice And Media Production",
+      "group_id": "688185ab-3e5a-4ae9-bd3b-6fdd335066fb",
+      "id": "68cf95a7-438b-4ed9-930d-c19201eb0610",
+      "keywords": [
+        "tts",
+        "kokoro",
+        "visemes",
+        "sidecar",
+        "python"
+      ],
+      "last_written_at": "2026-10-21T16:58:12.393Z",
+      "name": "voice-sidecar",
+      "pinned": false,
+      "tech_stack": [
+        "Python",
+        "sherpa-onnx"
+      ]
+    },
+    {
+      "api_surface": "Offline CLI producing layers.json and PNG layers",
+      "business_feature": "Character Voice",
+      "category": "lib",
+      "cross_refs": [
+        "stage-avatar-renderer",
+        "character-package"
+      ],
+      "db_tables": [],
+      "description": "Offline tools that split the owner's portrait into the face rig the stage draws (region spec, masks, LaMa inpainting) and compute depth maps for the depth renderer. Owner images stay out of git.",
+      "entry_points": [
+        "tools/rig/shadowrunr_rig/__main__.py",
+        "tools/avatar/depth_map.py"
+      ],
+      "file_paths": [
+        "tools/avatar/depth_map.py",
+        "tools/avatar/learned_depth.py",
+        "tools/avatar/test_depth_map.py",
+        "tools/avatar/test_learned_depth.py",
+        "tools/rig/README.md",
+        "tools/rig/pyproject.toml",
+        "tools/rig/shadowrunr_rig/__init__.py",
+        "tools/rig/shadowrunr_rig/__main__.py",
+        "tools/rig/shadowrunr_rig/formspec.py",
+        "tools/rig/shadowrunr_rig/lama.py",
+        "tools/rig/shadowrunr_rig/masks.py",
+        "tools/rig/shadowrunr_rig/split.py",
+        "tools/rig/tests/__init__.py",
+        "tools/rig/tests/test_formspec.py",
+        "tools/rig/tests/test_masks.py",
+        "tools/rig/tests/test_split.py"
+      ],
+      "group": "Voice And Media Production",
+      "group_id": "688185ab-3e5a-4ae9-bd3b-6fdd335066fb",
+      "id": "db707156-0bf7-4d53-8185-d054a78c0502",
+      "keywords": [
+        "rig",
+        "portrait",
+        "masks",
+        "inpainting",
+        "depth"
+      ],
+      "last_written_at": "2026-10-21T16:58:12.393Z",
+      "name": "avatar-rig-tools",
+      "pinned": false,
+      "tech_stack": [
+        "Python",
+        "numpy",
+        "Pillow",
+        "torch"
+      ]
+    },
+    {
+      "api_surface": "prep.*, review.*, record and sandbox RPC/CLI",
+      "business_feature": "Show Operations",
+      "category": "api",
+      "cross_refs": [
+        "daemon-core-rpc",
+        "console-review-page",
+        "types-crate"
+      ],
+      "db_tables": [],
+      "description": "Daemon services around a show: stream prep (planner, mechanical checks, approvals), session review (sessions, tagger, feedback log), the OBS recorder, media serving, the sandbox stream and casework, plus their end-to-end tests.",
+      "entry_points": [
+        "crates/shadowrunr-daemon/src/prep/mod.rs",
+        "crates/shadowrunr-daemon/src/review/mod.rs",
+        "crates/shadowrunr-daemon/src/record/mod.rs"
+      ],
+      "file_paths": [
+        "crates/shadowrunr-daemon/src/case_cli.rs",
+        "crates/shadowrunr-daemon/src/casework.rs",
+        "crates/shadowrunr-daemon/src/e2e/media.rs",
+        "crates/shadowrunr-daemon/src/e2e/prep.rs",
+        "crates/shadowrunr-daemon/src/e2e/review.rs",
+        "crates/shadowrunr-daemon/src/e2e/sandbox.rs",
+        "crates/shadowrunr-daemon/src/e2e/voice.rs",
+        "crates/shadowrunr-daemon/src/media.rs",
+        "crates/shadowrunr-daemon/src/prep/checks.rs",
+        "crates/shadowrunr-daemon/src/prep/cli.rs",
+        "crates/shadowrunr-daemon/src/prep/mod.rs",
+        "crates/shadowrunr-daemon/src/prep/planner.rs",
+        "crates/shadowrunr-daemon/src/prep/store.rs",
+        "crates/shadowrunr-daemon/src/prep/tests.rs",
+        "crates/shadowrunr-daemon/src/record/cli.rs",
+        "crates/shadowrunr-daemon/src/record/mod.rs",
+        "crates/shadowrunr-daemon/src/record/obs.rs",
+        "crates/shadowrunr-daemon/src/record/watch.rs",
+        "crates/shadowrunr-daemon/src/review/mod.rs",
+        "crates/shadowrunr-daemon/src/review/rows.rs",
+        "crates/shadowrunr-daemon/src/review/store.rs",
+        "crates/shadowrunr-daemon/src/review/tagger.rs",
+        "crates/shadowrunr-daemon/src/review/tests.rs",
+        "crates/shadowrunr-daemon/src/sandbox.rs"
+      ],
+      "group": "Engine And Daemon",
+      "group_id": "f6744bb5-6e0d-4edb-b2fb-ecb0f8a50aa8",
+      "id": "cba93863-0123-4867-be4e-770e6d0516b4",
+      "keywords": [
+        "prep",
+        "review",
+        "record",
+        "obs",
+        "sandbox",
+        "casework"
+      ],
+      "last_written_at": "2026-10-21T16:58:12.393Z",
+      "name": "daemon-show-prep-and-review",
+      "pinned": false,
+      "tech_stack": [
+        "Rust",
+        "Tokio"
+      ]
     }
   ],
-  "generated_at": "2026-10-18T12:48:43.257734700+00:00",
+  "generated_at": "2026-10-21T16:58:12.393Z",
   "generator": "personas-context-scan",
   "groups": [
     {
@@ -1545,14 +2088,14 @@
     },
     {
       "color": "blue",
-      "context_count": 3,
+      "context_count": 4,
       "domain": "infrastructure",
       "id": "f6744bb5-6e0d-4edb-b2fb-ecb0f8a50aa8",
       "name": "Engine And Daemon"
     },
     {
       "color": "amber",
-      "context_count": 4,
+      "context_count": 6,
       "domain": "feature",
       "id": "655343c0-db97-4d26-986a-fcd94d7f1e57",
       "name": "Show Segments And Stage"
@@ -1566,7 +2109,7 @@
     },
     {
       "color": "pink",
-      "context_count": 6,
+      "context_count": 7,
       "domain": "feature",
       "id": "80632075-1266-4432-b387-031833872c9b",
       "name": "Operator Console Pages"
@@ -1591,6 +2134,13 @@
       "domain": "infrastructure",
       "id": "fd5448c6-6dd1-4d64-a4b8-3e3af91da444",
       "name": "Docs And Repo Config"
+    },
+    {
+      "color": "amber",
+      "context_count": 4,
+      "domain": "feature",
+      "id": "688185ab-3e5a-4ae9-bd3b-6fdd335066fb",
+      "name": "Voice And Media Production"
     }
   ],
   "project": {
@@ -1599,13 +2149,13 @@
     "root": "."
   },
   "provenance": {
-    "git_commit": "9fea8a7dd4ecb65f08477970c0f25318ccdea31a",
-    "git_commit_count": 45
+    "git_commit": "3df99c988b175485e2e5586ebc3d73f7329af343",
+    "git_commit_count": 230
   },
   "stats": {
-    "contexts": 26,
-    "files": 435,
-    "groups": 8,
+    "contexts": 36,
+    "files": 806,
+    "groups": 9,
     "use_cases": 0
   },
   "taxonomy": {

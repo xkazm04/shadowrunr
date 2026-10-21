@@ -45,6 +45,15 @@ on each push to `main` and on every pull request, with no secrets:
   `pnpm -C packages/contract check` (TypeScript types and validators against the Rust schema).
 - Per package (`packages/*`, `apps/stage`, `apps/console`): `pnpm -C <pkg> typecheck`,
   `pnpm -C <pkg> test`, and `pnpm -C <pkg> lint` where the package has it.
+- Python: `python -m unittest discover -t . -s tests` in `tools/voice` and `tools/rig`, and
+  `python -m unittest test_depth_map test_learned_depth` in `tools/avatar` (numpy and pillow;
+  no model or engine binary).
+- Lanes: `node scripts/ci-lanes.mjs --check` derives the lane set from `pnpm-workspace.yaml`,
+  each package's gate scripts (`check`, `typecheck`, `test`, `lint`, `build`) and the `tools/*`
+  Python suites, and fails when a lane is missing from `ci.yml`, a step names something that no
+  longer exists, or a pnpm/python run line is in a form it cannot read. It prints its
+  denominator (today 20 lanes: 17 package scripts and 3 Python suites; the Rust job is not
+  counted). Adding a gate script to a package means adding its CI step.
 - Console: `lint` also runs stylelint (tokens only, no raw colour or px), the 400-line file
   cap and the token-reference check. `test` holds the DOM-count budgets
   (`apps/console/budgets/dom.json`), and `build` ends with the per-route bundle budget

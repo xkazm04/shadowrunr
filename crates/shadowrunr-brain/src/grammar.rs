@@ -283,6 +283,7 @@ mod tests {
             Op::ShowScreen {
                 screen: ScreenId::Browser,
                 record_id: Some(s("DOC-01")),
+                focus: None,
             },
         ];
         let slots: Vec<usize> = ops.iter().map(slot).collect();

@@ -93,6 +93,8 @@ fn wire_types(gen: &mut SchemaGenerator) {
     gen.subschema_for::<rpc::EventFrame>();
     gen.subschema_for::<crate::sandbox::AckFrame>();
     gen.subschema_for::<crate::review::SessionTags>();
+    // The keys of `ClipActs`: the owner-act vocabulary, named on its own.
+    gen.subschema_for::<crate::clips::ClipAct>();
     gen.subschema_for::<crate::prep::StreamPrep>();
     gen.subschema_for::<crate::voice::VoiceFrame>();
     gen.subschema_for::<crate::voice::VoiceFollowFrame>();
@@ -248,6 +250,26 @@ mod tests {
         // A required Option without skip_serializing_if stays nullable (it is written as null).
         let rl = s["$defs"]["EngineError"].to_string();
         assert!(rl.contains("null"), "{rl}");
+    }
+
+    #[test]
+    fn check_ids_cross_the_contract_as_enums() {
+        let s = contract_schema();
+        for (owner, vocab) in [
+            ("SandboxCheck", "SandboxCheckId"),
+            ("GateCheck", "GateCheckId"),
+        ] {
+            let id = &s["$defs"][owner]["properties"]["id"];
+            assert_eq!(
+                id["$ref"].as_str(),
+                Some(format!("#/$defs/{vocab}").as_str()),
+                "{owner}.id = {id}"
+            );
+            let members = s["$defs"][vocab]["enum"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{vocab} is not a plain enum: {}", s["$defs"][vocab]));
+            assert_eq!(members.len(), 10, "{vocab}");
+        }
     }
 
     #[test]

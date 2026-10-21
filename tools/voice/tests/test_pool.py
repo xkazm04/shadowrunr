@@ -26,6 +26,9 @@ class Pool(unittest.TestCase):
         self.spans = Path(self.tmp.name) / "engine-spans.txt"
         os.environ["FAKE_ENGINE_LOG"] = str(self.log)
         os.environ["FAKE_ENGINE_SPANS"] = str(self.spans)
+        self.gates = Path(self.tmp.name) / "gates"
+        self.gates.mkdir()
+        os.environ["FAKE_ENGINE_GATES"] = str(self.gates)
         self.sink = Sink()
         self.sidecars: list[Sidecar] = []
 
@@ -34,6 +37,7 @@ class Pool(unittest.TestCase):
             sidecar.close()
         del os.environ["FAKE_ENGINE_LOG"]
         del os.environ["FAKE_ENGINE_SPANS"]
+        del os.environ["FAKE_ENGINE_GATES"]
         self.tmp.cleanup()
 
     def sidecar(self, workers: int) -> Sidecar:
@@ -46,7 +50,23 @@ class Pool(unittest.TestCase):
         sidecar.feed(json.dumps({"type": "say", "id": ident, "text": text}))
 
     def events(self) -> list[str]:
+        if not self.spans.exists():
+            return []
         return self.spans.read_text(encoding="utf-8").splitlines()
+
+    def open_gate(self, name: str) -> None:
+        """Let every fake run holding on ``HOLD<name>`` finish: the test, not the clock, decides."""
+        (self.gates / name).touch()
+
+    def wait_events(self, done: Any) -> list[str]:
+        deadline = time.monotonic() + WAIT_S
+        while not done(self.events()):
+            self.assertLess(time.monotonic(), deadline, f"spans never got there: {self.events()}")
+            time.sleep(0.01)
+        return self.events()
+
+    def starts(self, events: list[str]) -> list[str]:
+        return [e[len("start ") :] for e in events if e.startswith("start ")]
 
     def idle(self, sidecar: Sidecar) -> None:
         deadline = time.monotonic() + WAIT_S
@@ -56,9 +76,18 @@ class Pool(unittest.TestCase):
 
     def test_lines_overlap_in_the_pool_and_go_out_in_order(self) -> None:
         sidecar = self.sidecar(workers=3)
-        # Line 1's first sentence is the slowest: everything else finishes before it.
-        self.say(sidecar, 1, "The first one PAUSE20 waits. The last one PAUSE10 of line one.")
-        self.say(sidecar, 2, "Line two PAUSE5 starts early.")
+        # Every run holds until the test opens its gate, so the order of the ends is the test's
+        # choice, never the machine's load: line 1's first sentence is made to finish last.
+        self.say(sidecar, 1, "The first one HOLDFIRST waits. The last one HOLDREST of line one.")
+        self.say(sidecar, 2, "Line two HOLDREST starts early.")
+        # All three run at once: three starts while nothing can have ended.
+        self.wait_events(lambda ev: len(self.starts(ev)) == 3)
+        self.open_gate("REST")
+        self.wait_events(lambda ev: sum(1 for e in ev if e.startswith("end ")) == 2)
+        # Line 1's last sentence and line 2 are rendered, but nothing goes out ahead of line 1's
+        # first sentence.
+        self.assertEqual(self.sink.messages, [])
+        self.open_gate("FIRST")
         got = self.sink.wait_for(lambda m: len(m) == 3)
         self.assertEqual(
             [(m["type"], m["id"], m["part"], m["last"]) for m in got],
@@ -67,17 +96,26 @@ class Pool(unittest.TestCase):
         events = self.events()
         # Line 2's first sentence started while line 1's last one was still rendering.
         self.assertLess(
-            events.index("start Line two PAUSE5 starts early."),
-            events.index("end The last one PAUSE10 of line one."),
+            events.index("start Line two HOLDREST starts early."),
+            events.index("end The last one HOLDREST of line one."),
         )
         # And all three ran at once: every start comes before the first end.
         first_end = next(i for i, e in enumerate(events) if e.startswith("end "))
         self.assertEqual(sum(1 for e in events[:first_end] if e.startswith("start ")), 3)
+        self.assertEqual(events[-1], "end The first one HOLDFIRST waits.")
 
     def test_the_pool_never_runs_more_than_its_workers(self) -> None:
         sidecar = self.sidecar(workers=2)
-        self.say(sidecar, "a", "One sentence PAUSE3 here. Two sentence PAUSE3 here.")
-        self.say(sidecar, "b", "Three sentence PAUSE3 here. Four sentence PAUSE3 here.")
+        # Line a's two sentences hold until the test opens their gate: both are running, and so
+        # must overlap, before either can end; line b's two must wait for a free slot.
+        self.say(sidecar, "a", "One sentence HOLDA here. Two sentence HOLDA here.")
+        self.say(sidecar, "b", "Three sentence PAUSE1 here. Four sentence PAUSE1 here.")
+        self.wait_events(lambda ev: len(self.starts(ev)) == 2)
+        # A pool that ignored its bound would start line b now; give it the chance to.
+        time.sleep(0.3)
+        self.assertEqual(sidecar._running, 2)
+        self.assertEqual(len(self.starts(self.events())), 2, "a third run started past the bound")
+        self.open_gate("A")
         got = self.sink.wait_for(lambda m: len(m) == 4)
         self.assertEqual(
             [(m["id"], m["part"]) for m in got], [("a", 0), ("a", 1), ("b", 0), ("b", 1)]
@@ -88,9 +126,9 @@ class Pool(unittest.TestCase):
             peak = max(peak, running)
         self.assertEqual(peak, 2)
         # Sentences start in arrival order: all of line a before line b.
-        starts = [e[len("start ") :] for e in self.events() if e.startswith("start ")]
+        starts = self.starts(self.events())
         self.assertEqual(
-            set(starts[:2]), {"One sentence PAUSE3 here.", "Two sentence PAUSE3 here."}
+            set(starts[:2]), {"One sentence HOLDA here.", "Two sentence HOLDA here."}
         )
 
     def test_cancel_mid_pool_kills_the_runs_and_frees_their_slots(self) -> None:

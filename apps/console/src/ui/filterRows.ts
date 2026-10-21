@@ -34,6 +34,25 @@ export function filterRows<R>(rows: readonly R[], spec: FilterSpec<R>): R[] {
   return out;
 }
 
+export interface FacetCountSpec<R, F extends string> {
+  readonly haystack: (row: R) => string;
+  readonly query: string;
+  readonly predicate: (row: R, facet: F) => boolean;
+  readonly options: readonly { readonly id: F }[];
+}
+
+/**
+ * How many rows each facet option would show under the query: the text filter runs once (the
+ * haystack is read once per row, and only when there is a query), then each option's own predicate
+ * over what it left. The count carries the applied predicate, so it agrees with the rows on screen.
+ */
+export function facetCounts<R, F extends string>(rows: readonly R[], spec: FacetCountSpec<R, F>): Record<F, number> {
+  const matched = filterRows(rows, { haystack: spec.haystack, query: spec.query });
+  const out = {} as Record<F, number>;
+  for (const o of spec.options) out[o.id] = matched.filter((r) => spec.predicate(r, o.id)).length;
+  return out;
+}
+
 function matchesAll(hay: string, terms: readonly string[]): boolean {
   const h = hay.toLowerCase();
   return terms.every((t) => h.includes(t));

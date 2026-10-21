@@ -8,6 +8,12 @@ import type { Feedback } from "./hooks";
 import { FEEDBACK } from "./names";
 import styles from "./FeedbackPanel.module.css";
 
+const STATUS_TEXT = {
+  sending: "Saving…",
+  saved: "Saved",
+  failed: "Your mark was not saved. Check that the daemon is running, then try again.",
+} as const;
+
 export interface FeedbackHandle {
   /** Toggle the n-th mark (0-based, in FEEDBACK order). */
   toggle: (index: number) => void;
@@ -21,30 +27,28 @@ export const FeedbackPanel = forwardRef<FeedbackHandle, {
   keys?: boolean;
   /** Label of the save button ("Save", "Save and next"). */
   saveLabel?: string;
-  /** Called after a successful save. */
-  onSaved?: () => void;
+  /** Called once a save is sent (not when the daemon answers): whether the line now carries a mark. */
+  onSaved?: (marked: boolean) => void;
   /** Buttons placed before the save button (the player's Previous / Skip). */
   before?: ReactNode;
 }>(function FeedbackPanel(props, ref) {
   const current = props.feedback.byLine.get(props.line);
   const [tags, setTags] = useState<FeedbackTag[]>(current?.tags ?? []);
   const [note, setNote] = useState(current?.note ?? "");
-  const [status, setStatus] = useState<string | undefined>();
   useEffect(() => {
     setTags(current?.tags ?? []);
     setNote(current?.note ?? "");
-    setStatus(undefined);
     // Reset only when the line changes, not on every optimistic write.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.line]);
   const toggle = (t: FeedbackTag) => setTags((xs) => (xs.includes(t) ? xs.filter((x) => x !== t) : [...xs, t]));
-  const save = async () => {
-    const err = await props.feedback.save(props.line, tags, note);
-    if (err) { setStatus(err); return; }
-    setStatus("Saved");
-    props.onSaved?.();
+  const status = props.feedback.statusOf(props.line);
+  // A line with a write in flight takes no second one (the hook refuses it too, for keys pressed in one tick).
+  const save = () => {
+    if (props.feedback.save(props.line, tags, note) === undefined) return;
+    props.onSaved?.(tags.length > 0 || note.trim() !== "");
   };
-  useImperativeHandle(ref, () => ({ toggle: (i) => { const t = FEEDBACK[i]; if (t) toggle(t[0]); }, save: () => void save() }));
+  useImperativeHandle(ref, () => ({ toggle: (i) => { const t = FEEDBACK[i]; if (t) toggle(t[0]); }, save }));
   return (
     <section className={styles.fb} data-role="review-feedback" aria-label="Your feedback">
       <h3 className={styles.kicker}>Your feedback</h3>
@@ -63,12 +67,12 @@ export const FeedbackPanel = forwardRef<FeedbackHandle, {
         maxLength={600}
         placeholder="What should he have said instead?"
         onChange={(e) => setNote(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void save(); } }}
+        onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } }}
       />
       <div className={styles.actions}>
         {props.before}
-        <Button variant="ink" disabled={props.feedback.pending} onClick={() => void save()}>{props.saveLabel ?? "Save"}</Button>
-        {status && <span className={status === "Saved" ? styles.ok : styles.err} role="status">{status}</span>}
+        <Button variant="ink" disabled={status === "sending"} onClick={save}>{props.saveLabel ?? "Save"}</Button>
+        {status !== "idle" && <span className={status === "failed" ? styles.err : styles.ok} role="status" data-status={status}>{STATUS_TEXT[status]}</span>}
       </div>
     </section>
   );

@@ -382,9 +382,51 @@
   font-size: 19px;
 }
 
+/* ─── The map's zoom (show_screen focus) ──────────────────────────────────────────────────────
+   The focused hex and its ring fill the panel; the rest dims, and any hex the zoom would put under
+   Malakor is not drawn. The move in and out is the stage's move curve. */
+
+.hex-zoom {
+  transition: transform 0.9s var(--move);
+}
+
+.hex {
+  transition: opacity 0.9s var(--move);
+}
+
+.link {
+  transition:
+    stroke 0.8s,
+    opacity 0.9s var(--move);
+}
+
+.hex.dimmed {
+  opacity: 0.22;
+}
+
+.hex.dimmed.under {
+  opacity: 0;
+}
+
+.hex-svg.zoomed .link {
+  opacity: 0.35;
+}
+
+.hex.in-focus .hex-shape {
+  stroke: var(--sr-color-foil);
+  stroke-width: 4;
+  filter: url(#hex-glow);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .browser-page,
   .hex.on-record .hex-body {
     animation: none;
+  }
+
+  .hex-zoom,
+  .hex,
+  .link {
+    transition: none;
   }
 }
