@@ -28,7 +28,7 @@ node apps/stage/scripts/make-demo.mjs   # regenerates fixtures/demo.jsonl
 | `?debug=1` | outlines regions and anything that overflows its box |
 | `?voice=1` | voice on without the toggle (the OBS view has no controls); live only |
 | `?face=demo`, `?face=rest`, `?face=aa` | dev builds only: drive the face from a scripted line, rest, or one held mouth shape |
-| `?avatar=glow`, `?avatar=cut`, `?avatar=depth` | which renderer draws the face (`src/avatar/variants.ts`); default and anything unknown: `glow` |
+| `?avatar=cut`, `?avatar=glow`, `?avatar=depth` | which renderer draws the face (`src/avatar/variants.ts`); default and anything unknown: `cut` (`DEFAULT_FACE`, the owner's pick) |
 | `?rig=<url>` | the face rig's base URL (http or https; default: the daemon's `/avatar/` beside `?ws=`), e.g. a static server over a local copy of the rig |
 
 A `.jsonl` dropped anywhere on the page replaces the transcript; a dropped `.json` that parses as
@@ -146,9 +146,9 @@ the runtime sends its own `show_screen` too. Inside a segment `show_screen` swit
 |---|---|---|
 | `boot` | before the first `segment_start` | the intro seal |
 | `host` | SEG-01 (and the descoped segments), or `show_screen host` | the big-avatar room: Malakor's slot and a large kinetic caption; right column: foil card, vote panel, chat lane |
-| `hexmap` | SEG-02A's default, or `show_screen hexmap` | the hexmap fills the content area |
+| `hexmap` | SEG-02A's default, or `show_screen hexmap [focus]` | the hexmap fills the content area: the overview, or zoomed to the `focus` hex |
 | `browser` | `show_screen browser [record_id]` | a staged record in a browser window filling the content area |
-| `desk` | `show_screen desk [record_id]` | the hexmap window behind (top-left, smaller, dimmed) and the browser window in front; the record's hex is lit on the map |
+| `desk` | `show_screen desk [record_id] [focus]` | the hexmap window behind (top-left, smaller, dimmed) and the browser window in front; the record's hex is lit on the map, which zooms to the `focus` or, without one, to the record's hex |
 
 **The streamer layout** (`hexmap`, `browser`, `desk`; `layout-corner` on the canvas): the content
 area is everything left of the right column. Malakor stands cut out over its bottom-left corner
@@ -165,6 +165,17 @@ not over a browser page.
 so that no hex's box touches Malakor's box or, on the desk, the browser window in front; on
 `hexmap` it also keeps the overlay lane clear while that costs less than a fifth of the scale.
 `hexFrame` (`layouts.ts`) says what stands over the panel; `stage.test.ts` checks the demo case.
+
+**The map's zoom** (`show_screen`'s `focus`; `scene.mapFocus`, read with `mapFocusOf`). The map
+zooms to the focused hex and its ring of neighbours (`zoomMap`, stage-kit): the fit is the one for
+the hex and all six cells around it, so every focus zooms alike, at most `MAP_ZOOM_MAX` (2.4).
+Unlike the overview, the zoom keeps the overlay lane clear as a rule, so no card stands over the
+hex he is talking about; with the demo case that is 1.38 against the overview's 0.885 on `hexmap`,
+and 1.22 against 0.81 on the desk. The rest of the map dims, and a dimmed hex the zoom would put
+under Malakor is not drawn at all, so the no-hex-under-him rule holds while zoomed
+(`stage.test.ts` checks every demo hex on both screens). The focused hex gets the foil-coloured
+outline. The move in and out is a CSS transition of the map's transform, 0.9 s on the stage's
+move curve; under reduced motion it is instant.
 
 **The browser window** (`BrowserWindow`, stage-kit ui) shows the active record: tabs (at most 4,
 most recent first: record id and a short title), a URL bar with the source's host and path and a
@@ -230,7 +241,7 @@ silhouette" note is a production note, so `?broadcast=1` drops it.
 | `mark_moment` | a subtle verdigris flash, a "✦ Clip marked" chip, and a marker on the scrubber timeline (click to jump 3 s before it) |
 | `switch_segment` | "⟶ next segment" chip in the top bar until the handover |
 | `sign_off` | the outro card: "The ledger is sealed", the reason, minions, hexes, clips, redactions, and "Let the deficit be recorded." |
-| `show_screen` | switches the main screen (above); `browser`/`desk` open the record in the browser window |
+| `show_screen` | switches the main screen (above); `browser`/`desk` open the record in the browser window; a `focus` zooms the map (a new focus on the same screen only moves the map) |
 
 ## SEG-02A specifics
 
@@ -284,7 +295,7 @@ be (no WebGL2, or the form did not load).
 ## The face and the voice
 
 Malakor's face lives in the `avatar` region, above his caption in the host room and cut out in
-the bottom-left corner of the content screens. `?avatar=` picks the renderer (`loadVariant`). `src/avatar/` is a glow-rig renderer (WebGL2, one draw per layer, premultiplied light
+the bottom-left corner of the content screens. `?avatar=` picks the renderer (`loadVariant`; the default is `cut`). `src/avatar/` is a glow-rig renderer (WebGL2, one draw per layer, premultiplied light
 on a transparent canvas): `Avatar.tsx` is the box, and `runtime.ts` (the renderer, the driver and
 the placeholder painter) is loaded with `import()` when the face mounts.
 

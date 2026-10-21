@@ -116,9 +116,14 @@ fn rejections(evs: &[StreamEvent]) -> Vec<(ModStage, String)> {
         .collect()
 }
 
+/// `op` events, not counting `show_screen`: a reveal or a dispatch is followed by the
+/// runtime's own screen default (the screen tests count those).
 fn accepted_ops(evs: &[StreamEvent]) -> usize {
     evs.iter()
-        .filter(|e| matches!(e, StreamEvent::Op { .. }))
+        .filter(|e| match e {
+            StreamEvent::Op { op, .. } => !matches!(op, Op::ShowScreen { .. }),
+            _ => false,
+        })
         .count()
 }
 
@@ -261,7 +266,8 @@ fn clock_completes_the_switch_after_grace() {
             StreamEvent::Op {
                 op: Op::ShowScreen {
                     screen: ScreenId::Hexmap,
-                    record_id: None
+                    record_id: None,
+                    focus: None
                 },
                 ..
             }
@@ -286,7 +292,8 @@ fn brain_switch_during_pending_handover_does_not_repeat_it() {
     );
     assert!(handovers(&evs).is_empty());
     // The switch, and the new segment's default screen.
-    assert_eq!(accepted_ops(&evs), 2);
+    assert_eq!(accepted_ops(&evs), 1);
+    assert_eq!(screens(&evs), [(ScreenId::Hexmap, None)]);
     assert_eq!(rt.segment(), SegmentId::Seg02aHexmap);
 }
 
@@ -680,6 +687,7 @@ fn start_in_seg02a_opens_the_fictional_demo_case() {
             Op::ShowScreen {
                 screen: ScreenId::Hexmap,
                 record_id: None,
+                focus: None,
             },
     }] = evs.as_slice()
     else {
@@ -709,7 +717,8 @@ fn start_outside_seg02a_has_no_case_open() {
             StreamEvent::Op {
                 op: Op::ShowScreen {
                     screen: ScreenId::Host,
-                    record_id: None
+                    record_id: None,
+                    focus: None
                 },
                 ..
             }
@@ -2110,6 +2119,7 @@ fn screen(screen: ScreenId, record_id: Option<&str>) -> Op {
     Op::ShowScreen {
         screen,
         record_id: record_id.map(str::to_string),
+        focus: None,
     }
 }
 
@@ -2118,7 +2128,9 @@ fn screens(evs: &[StreamEvent]) -> Vec<(ScreenId, Option<String>)> {
     evs.iter()
         .filter_map(|e| match e {
             StreamEvent::Op {
-                op: Op::ShowScreen { screen, record_id },
+                op: Op::ShowScreen {
+                    screen, record_id, ..
+                },
                 ..
             } => Some((*screen, record_id.clone())),
             _ => None,
@@ -2272,7 +2284,10 @@ fn browser_and_desk_reopen_the_record_already_open() {
     assert_eq!(rt.screen_record(), Some("DOC-03"));
     let summary = rt.context(0, 2).state_summary;
     assert!(
-        summary.contains("Screen: desk on DOC-03. Records on file, newest first: CLM-02, DOC-03"),
+        summary.contains(
+            "Screen: desk on DOC-03, map focused on HEX-04. Records on file, newest first: \
+             CLM-02, DOC-03"
+        ),
         "{summary}"
     );
 }
@@ -2369,10 +2384,10 @@ fn the_screen_line_is_short_and_capped() {
             .unwrap()
             .to_string()
     };
-    // Filed, but no job is back yet: nothing to offer.
+    // Filed, but no job is back yet: nothing to offer. The map follows the last dispatch.
     assert_eq!(
         line(&rt),
-        "Screen: hexmap. Records on file: none yet (browser and desk need one)"
+        "Screen: hexmap focused on HEX-05. Records on file: none yet (browser and desk need one)"
     );
     rt.job_done("r1", 10_000);
     rt.job_done("r2", 20_000);
@@ -2386,4 +2401,223 @@ fn the_screen_line_is_short_and_capped() {
         "Screen: browser on REP-02. Records on file, newest first: REP-02, CLM-02, DOC-03, REP-01 \
          +1 older"
     );
+}
+
+// ----- map focus and the investigation's screen defaults ----------------------------------
+
+fn focus(screen: ScreenId, record_id: Option<&str>, focus: Option<&str>) -> Op {
+    Op::ShowScreen {
+        screen,
+        record_id: record_id.map(str::to_string),
+        focus: focus.map(str::to_string),
+    }
+}
+
+/// The `show_screen` ops in `evs`, as (screen, record_id, focus).
+fn focused(evs: &[StreamEvent]) -> Vec<(ScreenId, Option<String>, Option<String>)> {
+    evs.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Op {
+                op:
+                    Op::ShowScreen {
+                        screen,
+                        record_id,
+                        focus,
+                    },
+                ..
+            } => Some((*screen, record_id.clone(), focus.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+fn on(
+    screen: ScreenId,
+    record: Option<&str>,
+    hex: Option<&str>,
+) -> (ScreenId, Option<String>, Option<String>) {
+    (screen, record.map(str::to_string), hex.map(str::to_string))
+}
+
+#[test]
+fn a_focus_must_be_a_case_hex() {
+    let mut rt = seg02a();
+    let evs = rt.apply_ops(1_000, &[focus(ScreenId::Hexmap, None, Some("HEX-99"))]);
+    assert_eq!(rejections(&evs)[0].1, "unknown_hex");
+    assert!(rt
+        .context(0, 1)
+        .state_summary
+        .contains("show_screen: unknown_hex"));
+    // A loose spelling is the case's id.
+    let evs = rt.apply_ops(2_000, &[focus(ScreenId::Hexmap, None, Some("hex3"))]);
+    assert!(rejections(&evs).is_empty(), "{evs:?}");
+    let summary = rt.context(0, 2).state_summary;
+    assert!(
+        summary.contains("Screen: hexmap focused on HEX-03."),
+        "{summary}"
+    );
+    // A focus on host or browser is ignored, like a record_id on the map.
+    let evs = rt.apply_ops(3_000, &[focus(ScreenId::Host, None, Some("HEX-99"))]);
+    assert!(rejections(&evs).is_empty(), "{evs:?}");
+    assert!(rt.context(0, 3).state_summary.contains("Screen: host."));
+    // The desk checks it too, after the record.
+    rt.apply_ops(
+        4_000,
+        &[research("r1", "HEX-04: trace the treasury wallet")],
+    );
+    rt.job_done("r1", 5_000);
+    let evs = rt.apply_ops(
+        6_000,
+        &[focus(ScreenId::Desk, Some("DOC-03"), Some("nowhere"))],
+    );
+    assert_eq!(rejections(&evs)[0].1, "unknown_hex");
+    let evs = rt.apply_ops(
+        7_000,
+        &[focus(ScreenId::Desk, Some("DOC-03"), Some("HEX-01"))],
+    );
+    assert!(rejections(&evs).is_empty(), "{evs:?}");
+    let summary = rt.context(0, 7).state_summary;
+    assert!(
+        summary.contains("Screen: desk on DOC-03, map focused on HEX-01."),
+        "{summary}"
+    );
+    // On the wire an absent focus is omitted, never null.
+    let line = serde_json::to_string(&focus(ScreenId::Hexmap, None, None)).unwrap();
+    assert_eq!(line, r#"{"op":"show_screen","screen":"hexmap"}"#);
+}
+
+#[test]
+fn a_dispatch_and_a_reveal_zoom_the_map_to_their_hex() {
+    let mut rt = seg02a();
+    let evs = rt.apply_ops(
+        1_000,
+        &[research("r1", "HEX-04: trace the treasury wallet")],
+    );
+    assert_eq!(tags(&evs), ["op:dispatch_research", "op:show_screen"]);
+    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, Some("HEX-04"))]);
+    // A brief that names no single hex moves nothing.
+    let evs = rt.apply_ops(2_000, &[research("r2", "dig through the old archives")]);
+    assert!(focused(&evs).is_empty(), "{evs:?}");
+    let evs = rt.apply_ops(3_000, &[reveal("HEX-16", EvidenceGrade::Clm)]);
+    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, Some("HEX-16"))]);
+    // The same view already up is not sent again.
+    let evs = rt.apply_ops(4_000, &[reveal("HEX-16", EvidenceGrade::Spc)]);
+    assert!(focused(&evs).is_empty(), "{evs:?}");
+    // A refused op moves nothing.
+    let evs = rt.apply_ops(5_000, &[reveal("HEX-99", EvidenceGrade::Clm)]);
+    assert!(focused(&evs).is_empty(), "{evs:?}");
+}
+
+#[test]
+fn a_poll_opens_on_the_overview() {
+    let mut rt = seg02a();
+    rt.apply_ops(
+        1_000,
+        &[research("r1", "HEX-07: the moon maintenance thread")],
+    );
+    let evs = rt.apply_ops(
+        2_000,
+        &[poll("next", &["HEX-01", "HEX-02"], Rank::Thrall, 30)],
+    );
+    assert_eq!(tags(&evs), ["op:start_poll", "op:show_screen"]);
+    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, None)]);
+    rt.apply_ops(
+        40_000,
+        &[Op::ClosePoll {
+            poll_id: "next".into(),
+        }],
+    );
+    // The Plebiscite is a poll too: its start_poll, then the overview.
+    rt.apply_ops(41_000, &[research("r2", "HEX-07: again")]);
+    let evs = rt.apply_ops(42_000, &[research("r3", "HEX-07: and again")]);
+    assert_eq!(
+        tags(&evs),
+        ["moderation", "op:start_poll", "op:show_screen"],
+        "{evs:?}"
+    );
+    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, None)]);
+}
+
+#[test]
+fn the_browser_gives_way_to_the_desk_then_the_overview() {
+    use shadowrunr_segments::runtime::{BROWSER_DWELL_MS, DESK_DWELL_MS};
+    assert_eq!((BROWSER_DWELL_MS, DESK_DWELL_MS), (40_000, 30_000));
+    let mut rt = seg02a();
+    rt.apply_ops(0, &[research("r1", "HEX-04: trace the treasury wallet")]);
+    let back = 1_000;
+    assert_eq!(
+        focused(&rt.job_done("r1", back)),
+        [on(ScreenId::Browser, Some("DOC-03"), None)]
+    );
+    assert!(focused(&rt.tick(back + BROWSER_DWELL_MS - 1, 0)).is_empty());
+    // The record stays up, and the map beside it shows the record's hex.
+    let evs = rt.tick(back + BROWSER_DWELL_MS, 0);
+    assert_eq!(
+        focused(&evs),
+        [on(ScreenId::Desk, Some("DOC-03"), Some("HEX-04"))]
+    );
+    let desk = back + BROWSER_DWELL_MS;
+    assert!(focused(&rt.tick(desk + DESK_DWELL_MS - 1, 0)).is_empty());
+    let evs = rt.tick(desk + DESK_DWELL_MS, 0);
+    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, None)]);
+    // The overview stays.
+    assert!(focused(&rt.tick(desk + 10 * DESK_DWELL_MS, 0)).is_empty());
+}
+
+#[test]
+fn the_models_show_screen_restarts_the_dwell() {
+    use shadowrunr_segments::runtime::BROWSER_DWELL_MS;
+    let mut rt = seg02a();
+    rt.apply_ops(0, &[research("r1", "HEX-04: trace the treasury wallet")]);
+    rt.job_done("r1", 1_000);
+    // He puts the same record up again 30 s in: the clock starts over from there.
+    rt.apply_ops(31_000, &[screen(ScreenId::Browser, Some("DOC-03"))]);
+    assert!(focused(&rt.tick(1_000 + BROWSER_DWELL_MS, 0)).is_empty());
+    assert!(focused(&rt.tick(31_000 + BROWSER_DWELL_MS - 1, 0)).is_empty());
+    assert_eq!(
+        focused(&rt.tick(31_000 + BROWSER_DWELL_MS, 0)),
+        [on(ScreenId::Desk, Some("DOC-03"), Some("HEX-04"))]
+    );
+}
+
+#[test]
+fn the_hold_protects_the_models_screen_from_every_default() {
+    use shadowrunr_segments::runtime::SCREEN_HOLD_MS;
+    let mut rt = seg02a();
+    // He chooses the room, then sends a bone-clerk in the same beat: his choice holds.
+    let evs = rt.apply_ops(
+        10_000,
+        &[
+            screen(ScreenId::Host, None),
+            research("r1", "HEX-04: trace the treasury wallet"),
+        ],
+    );
+    assert_eq!(focused(&evs), [on(ScreenId::Host, None, None)]);
+    let evs = rt.apply_ops(11_000, &[reveal("HEX-16", EvidenceGrade::Clm)]);
+    assert!(focused(&evs).is_empty(), "{evs:?}");
+    let evs = rt.apply_ops(
+        12_000,
+        &[poll("next", &["HEX-01", "HEX-02"], Rank::Thrall, 30)],
+    );
+    assert!(focused(&evs).is_empty(), "{evs:?}");
+    assert_eq!(rt.screen(), ScreenId::Host);
+    // A default suppressed by the hold is spent: nothing fires when the hold ends.
+    assert!(focused(&rt.tick(10_000 + SCREEN_HOLD_MS, 0)).is_empty());
+    assert_eq!(rt.screen(), ScreenId::Host);
+    // Past the hold the next dispatch moves the map again.
+    rt.apply_ops(
+        50_000,
+        &[Op::ClosePoll {
+            poll_id: "next".into(),
+        }],
+    );
+    let evs = rt.apply_ops(51_000, &[research("r2", "HEX-01: the syndicate's licence")]);
+    assert_eq!(focused(&evs), [on(ScreenId::Hexmap, None, Some("HEX-01"))]);
+    // The model's own browser holds against the dwell's first step too.
+    rt.job_done("r1", 52_000);
+    let evs = rt.apply_ops(53_000, &[screen(ScreenId::Browser, Some("DOC-03"))]);
+    assert!(rejections(&evs).is_empty(), "{evs:?}");
+    let evs = rt.apply_ops(54_000, &[research("r3", "HEX-05: the weekly promise")]);
+    assert!(focused(&evs).is_empty(), "inside the hold: {evs:?}");
+    assert_eq!(rt.screen(), ScreenId::Browser);
 }

@@ -51,20 +51,21 @@ pub struct StageConfig {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FaceVariant {
-    /// The glow rig, the stage's default.
-    #[default]
+    /// The glow rig.
     Glow,
-    /// The 2.5D cut-out.
+    /// The 2.5D cut-out, the stage's default (the owner's pick, 2026-10-21).
+    #[default]
     Cut,
     /// The depth-mesh head.
     Depth,
 }
 
 impl FaceVariant {
-    /// The query suffix a stage URL carries for this face: empty for the stage's default.
+    /// The query suffix a stage URL carries for this face. Always explicit, so a recorded URL
+    /// names its face whatever the default of the stage build that serves it.
     pub fn query(self) -> &'static str {
         match self {
-            FaceVariant::Glow => "",
+            FaceVariant::Glow => "&avatar=glow",
             FaceVariant::Cut => "&avatar=cut",
             FaceVariant::Depth => "&avatar=depth",
         }
@@ -453,11 +454,11 @@ mod tests {
     use shadowrunr_types::Role;
 
     #[test]
-    fn stage_avatar_defaults_to_glow_and_takes_the_three_faces() {
+    fn stage_avatar_defaults_to_cut_and_takes_the_three_faces() {
         let root = Path::new("/repo");
         assert_eq!(
             Config::from_toml("", root).unwrap().stage.avatar,
-            FaceVariant::Glow
+            FaceVariant::Cut
         );
         for (name, face) in [
             ("glow", FaceVariant::Glow),
@@ -468,7 +469,7 @@ mod tests {
             assert_eq!(cfg.stage.avatar, face);
         }
         assert!(Config::from_toml("[stage]\navatar = \"mesh\"\n", root).is_err());
-        assert_eq!(FaceVariant::Glow.query(), "");
+        assert_eq!(FaceVariant::Glow.query(), "&avatar=glow");
         assert_eq!(FaceVariant::Cut.query(), "&avatar=cut");
     }
 

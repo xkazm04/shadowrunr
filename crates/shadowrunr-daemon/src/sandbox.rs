@@ -772,11 +772,11 @@ pub(crate) mod tests {
     fn the_stage_url_names_the_daemon_only_off_the_default_port() {
         assert_eq!(
             stage_url(7717, FaceVariant::Glow),
-            "http://localhost:5178/?run=live&broadcast=1"
+            "http://localhost:5178/?run=live&broadcast=1&avatar=glow"
         );
         assert_eq!(
             stage_url(9000, FaceVariant::Glow),
-            "http://localhost:5178/?run=live&broadcast=1&ws=ws://127.0.0.1:9000/events"
+            "http://localhost:5178/?run=live&broadcast=1&ws=ws://127.0.0.1:9000/events&avatar=glow"
         );
         assert_eq!(
             stage_url(7717, FaceVariant::Cut),
@@ -982,7 +982,7 @@ pub(crate) mod tests {
         assert!(started.session_id.ends_with("-5m"));
         assert_eq!(
             started.stage_url,
-            "http://localhost:5178/?run=live&broadcast=1"
+            "http://localhost:5178/?run=live&broadcast=1&avatar=cut"
         );
         let end = until_ended(&st, &started.session_id).await;
         assert_eq!(end.state, SandboxState::Done);

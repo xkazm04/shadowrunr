@@ -14,6 +14,7 @@ import {
   defaultScreen,
   initialScene,
   isContentScreen,
+  mapFocusOf,
   type LayoutId,
 } from "./sceneModel";
 import { wordTimings } from "./timing";
@@ -176,6 +177,35 @@ describe("screens", () => {
   it("a record_shown alone opens nothing", () => {
     const s = foldEvents([...seg02a, shown(20, rec("REP-01"))]);
     expect(s).toMatchObject({ layout: "hexmap", tabs: [], activeRecord: null });
+  });
+
+  it("zooms the map to a focus on hexmap and desk, the desk to its record's hex, and back to the overview", () => {
+    const focus = (ts: number, sc: "host" | "hexmap" | "browser" | "desk", f: string, record_id?: string): StreamEvent =>
+      op(ts, record_id === undefined ? { op: "show_screen", screen: sc, focus: f } : { op: "show_screen", screen: sc, record_id, focus: f });
+    let s = foldEvents([...seg02a, focus(20, "hexmap", "HEX-04")]);
+    expect(s).toMatchObject({ layout: "hexmap", mapFocus: "HEX-04" });
+    expect(mapFocusOf(s)).toBe("HEX-04");
+    // A new focus on the same screen is no screen transition: the map just moves.
+    const before = s.transition;
+    s = reduce(s, focus(21, "hexmap", "HEX-01"));
+    expect(s.transition).toBe(before);
+    expect(mapFocusOf(s)).toBe("HEX-01");
+    // No focus: the overview.
+    s = reduce(s, screen(22, "hexmap"));
+    expect(mapFocusOf(s)).toBeNull();
+    // The desk shows its record's hex unless told otherwise; a focus on the browser is ignored.
+    s = reduce(s, shown(23, rec("DOC-03", "HEX-07")));
+    s = reduce(s, screen(24, "desk", "DOC-03"));
+    expect(mapFocusOf(s)).toBe("HEX-07");
+    s = reduce(s, focus(25, "desk", "HEX-02", "DOC-03"));
+    expect(mapFocusOf(s)).toBe("HEX-02");
+    s = reduce(s, focus(26, "browser", "HEX-05", "DOC-03"));
+    expect(s.mapFocus).toBeNull();
+    expect(mapFocusOf(s)).toBeNull();
+    // A handover drops it.
+    s = reduce(s, focus(27, "hexmap", "HEX-05"));
+    s = reduce(s, { type: "handover", ts_ms: 30, from: "SEG-02A", to: "SEG-01", reason: "back" });
+    expect(s.mapFocus).toBeNull();
   });
 });
 

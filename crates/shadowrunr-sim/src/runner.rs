@@ -122,6 +122,54 @@ pub(crate) fn drop_op_echo(sent: &[Op], evs: Vec<StreamEvent>) -> Vec<StreamEven
         .collect()
 }
 
+/// One beat in transcript order: the brain's events, then what the stage made of its ops
+/// (echoes dropped, [`drop_op_echo`]). The brain writes its ops before the stage has seen
+/// them, so a `record_shown` the stage emitted for a record the model's own `show_screen`
+/// names is moved to just before that op: the contract sends a record before the op that
+/// shows it.
+pub(crate) fn beat_events(brain: Vec<StreamEvent>, stage: Vec<StreamEvent>) -> Vec<StreamEvent> {
+    let named: Vec<&str> = brain
+        .iter()
+        .filter_map(|e| match e {
+            StreamEvent::Op {
+                op:
+                    Op::ShowScreen {
+                        record_id: Some(id),
+                        ..
+                    },
+                ..
+            } => Some(id.as_str()),
+            _ => None,
+        })
+        .collect();
+    let (mut early, rest): (Vec<StreamEvent>, Vec<StreamEvent>) =
+        stage.into_iter().partition(|e| {
+            matches!(e, StreamEvent::RecordShown { record, .. } if named.contains(&record.id.as_str()))
+        });
+    let mut out = Vec::with_capacity(brain.len() + early.len() + rest.len());
+    for e in brain {
+        if let StreamEvent::Op {
+            op:
+                Op::ShowScreen {
+                    record_id: Some(id),
+                    ..
+                },
+            ..
+        } = &e
+        {
+            if let Some(i) = early.iter().position(
+                |r| matches!(r, StreamEvent::RecordShown { record, .. } if &record.id == id),
+            ) {
+                out.push(early.remove(i));
+            }
+        }
+        out.push(e);
+    }
+    out.extend(early);
+    out.extend(rest);
+    out
+}
+
 /// The ids of the jobs the brain reports done in `evs`, in order.
 pub(crate) fn jobs_done(evs: &[StreamEvent]) -> Vec<String> {
     evs.iter()
@@ -611,12 +659,15 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                     .collect();
                 let sign_off = ops.iter().any(|o| matches!(o, Op::SignOff { .. }));
                 let done = jobs_done(&evs);
+                let staged = if ops.is_empty() {
+                    Vec::new()
+                } else {
+                    drop_op_echo(&ops, stage.apply_ops(now, &ops))
+                };
+                let evs = beat_events(evs, staged);
                 room.observe(t, &evs);
                 w.push_all(evs)?;
                 if !ops.is_empty() {
-                    let ev = drop_op_echo(&ops, stage.apply_ops(now, &ops));
-                    room.observe(t, &ev);
-                    w.push_all(ev)?;
                     room.sync_poll(t, stage.open_poll());
                 }
                 // After this beat's ops, so the model's own show_screen holds against them.
@@ -1352,7 +1403,8 @@ pub(crate) mod tests {
                 StreamEvent::Op {
                     op: Op::ShowScreen {
                         screen: shadowrunr_types::ScreenId::Hexmap,
-                        record_id: None
+                        record_id: None,
+                        focus: None
                     },
                     ..
                 }
@@ -2631,6 +2683,7 @@ pub(crate) mod tests {
                     vec![op(Op::ShowScreen {
                         screen: ScreenId::Browser,
                         record_id: Some("DOC-01".into()),
+                        focus: None,
                     })],
                 ),
                 // r1 comes back: the runtime opens its first filed record.
@@ -2641,12 +2694,23 @@ pub(crate) mod tests {
                     vec![op(Op::ShowScreen {
                         screen: ScreenId::Hexmap,
                         record_id: None,
+                        focus: None,
                     })],
                 ),
                 // r2 comes back 5 s later, inside his hold: no default.
                 (25_000, vec![done("r2")]),
                 // r3 comes back 10 s later, past the hold: the browser opens on it.
                 (30_000, vec![done("r3")]),
+                // He puts a record nobody has shown yet on the desk, its map on another hex:
+                // the record goes out before his op, though the brain wrote the op first.
+                (
+                    35_000,
+                    vec![op(Op::ShowScreen {
+                        screen: ScreenId::Desk,
+                        record_id: Some("DOC-01".into()),
+                        focus: Some("HEX-02".into()),
+                    })],
+                ),
             ],
         };
         let res = execute(prep, mind, stage, &opts).await.unwrap();
@@ -2656,13 +2720,22 @@ pub(crate) mod tests {
             .filter_map(|e| match e {
                 StreamEvent::Op {
                     ts_ms,
-                    op: Op::ShowScreen { screen, record_id },
+                    op:
+                        Op::ShowScreen {
+                            screen,
+                            record_id,
+                            focus,
+                        },
                 } => Some(format!(
-                    "{ts_ms} show_screen {}{}",
+                    "{ts_ms} show_screen {}{}{}",
                     serde_json::to_value(screen).unwrap().as_str().unwrap(),
                     record_id
                         .as_deref()
                         .map(|r| format!(" {r}"))
+                        .unwrap_or_default(),
+                    focus
+                        .as_deref()
+                        .map(|h| format!(" @{h}"))
                         .unwrap_or_default()
                 )),
                 StreamEvent::RecordShown { ts_ms, record } => {
@@ -2676,6 +2749,10 @@ pub(crate) mod tests {
             screen,
             [
                 "0 show_screen hexmap",
+                // Each dispatch zooms the map to where the minions are going.
+                "5000 show_screen hexmap @HEX-04",
+                "5000 show_screen hexmap @HEX-01",
+                "5000 show_screen hexmap @HEX-05",
                 "10000 show_screen browser DOC-01",
                 "15000 job r1",
                 "15000 record_shown DOC-03",
@@ -2685,6 +2762,8 @@ pub(crate) mod tests {
                 "30000 job r3",
                 "30000 record_shown REP-02",
                 "30000 show_screen browser REP-02",
+                "35000 record_shown DOC-01",
+                "35000 show_screen desk DOC-01 @HEX-02",
             ]
         );
         let refused: Vec<(TsMs, &str)> = events
@@ -2707,6 +2786,7 @@ pub(crate) mod tests {
         let hexmap = Op::ShowScreen {
             screen: shadowrunr_types::ScreenId::Hexmap,
             record_id: None,
+            focus: None,
         };
         let ev = |op: &Op| StreamEvent::Op {
             ts_ms: 1,

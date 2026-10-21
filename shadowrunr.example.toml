@@ -163,4 +163,4 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # The stage the daemon opens: the sandbox's stage URL and the OBS browser source
 # (docs/guide/recording.md). Optional.
 # [stage]
-# avatar = "glow"   # the face renderer, the stage's ?avatar=: "glow" (default), "cut" or "depth"
+# avatar = "cut"   # the face renderer, the stage's ?avatar=: "cut" (default), "glow" or "depth"

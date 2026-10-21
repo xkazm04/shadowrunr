@@ -18,6 +18,15 @@ export function isContentScreen(layout: LayoutId): layout is ContentScreen {
   return (CONTENT_SCREENS as readonly string[]).includes(layout);
 }
 
+/** The hex the map window zooms to now: the `focus` on `hexmap`; on `desk` the `focus`, else the
+ * open record's hex (the desk's map shows where the record points). Null: the overview. */
+export function mapFocusOf(s: Pick<SceneState, "layout" | "mapFocus" | "activeRecord" | "records">): string | null {
+  if (s.layout === "hexmap") return s.mapFocus;
+  if (s.layout !== "desk") return null;
+  if (s.mapFocus !== null) return s.mapFocus;
+  return s.activeRecord === null ? null : (s.records[s.activeRecord]?.hex ?? null);
+}
+
 /** The screen a segment opens on. The runtime sends its own `show_screen` too; this default keeps
  * transcripts without one drawable. */
 export function defaultScreen(segment: SegmentId): ScreenId {
@@ -167,6 +176,9 @@ export interface SceneState {
   tabs: string[];
   /** The record the browser window shows (the first tab once one is open). */
   activeRecord: string | null;
+  /** The hex the map is zoomed to, from `show_screen`'s `focus` on `hexmap` or `desk` (null: the
+   * overview). `mapFocusOf` resolves what the map draws. */
+  mapFocus: string | null;
   transition: Transition | null;
   pendingSwitch: { to: SegmentId; at: TsMs } | null;
   caption: Caption | null;
@@ -240,6 +252,7 @@ export function initialScene(): SceneState {
     records: {},
     tabs: [],
     activeRecord: null,
+    mapFocus: null,
     transition: null,
     pendingSwitch: null,
     caption: null,

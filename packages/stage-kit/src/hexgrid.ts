@@ -216,3 +216,55 @@ export function fitMap(
     y: area.y + (area.h - (b.maxY - b.minY) * scale) / 2 - b.minY * scale,
   };
 }
+
+/** Axial distance between two cells. */
+export function hexDistance(a: { q: number; r: number }, b: { q: number; r: number }): number {
+  const dq = a.q - b.q;
+  const dr = a.r - b.r;
+  return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+}
+
+/** How far a focused map may scale up: the focused hex's label and grade read large, not huge. */
+export const MAP_ZOOM_MAX = 2.4;
+
+/** A map zoomed to one hex (`show_screen` with a `focus`). */
+export interface MapZoom {
+  fit: MapFit;
+  /** The focused hex and the hexes of its ring of neighbours, drawn in full. */
+  ring: string[];
+  /** Hexes outside the ring that the zoom puts under what stands over the panel: not drawn. */
+  under: string[];
+}
+
+/**
+ * Zoom the map to `focus` and its ring of neighbours: the fit is the one for the focused cell and
+ * all six cells around it (whether the case has hexes there or not, so every focus zooms alike),
+ * up to `maxScale`. The ring keeps clear of `avoid` and, unlike the overview, of `prefer` too (the
+ * overlay lane): a zoom is about one hex, so no card stands over it. Only when no fit clears both
+ * does `prefer` go back to being soft. The hexes beyond the ring stay on the map, dimmed; any that
+ * would sit under an `avoid` box are listed in `under`, so no hex is ever drawn under Malakor.
+ * Null when `focus` is not on the map.
+ */
+export function zoomMap(
+  hexes: readonly Hex[],
+  size: number,
+  focus: string,
+  area: Box,
+  avoid: readonly Box[] = [],
+  prefer: readonly Box[] = [],
+  maxScale = MAP_ZOOM_MAX,
+): MapZoom | null {
+  const f = hexes.find((h) => h.id === focus);
+  if (!f) return null;
+  const cells: Hex[] = [f, ...DIRS.map(([dq, dr]) => ({ ...f, id: `${f.id}+${dq},${dr}`, q: f.q + dq, r: f.r + dr }))];
+  const clear = [...avoid, ...prefer];
+  const strict = fitMap(cells, size, area, clear, [], maxScale);
+  const clean = hexBoxes(cells, size, strict).every((b) => clear.every((a) => !overlaps(b, a)));
+  const fit = clean ? strict : fitMap(cells, size, area, avoid, prefer, maxScale);
+  const ring = hexes.filter((h) => hexDistance(h, f) <= 1).map((h) => h.id);
+  const boxes = hexBoxes(hexes, size, fit);
+  const under = hexes
+    .filter((h, i) => !ring.includes(h.id) && avoid.some((a) => overlaps(boxes[i]!, a)))
+    .map((h) => h.id);
+  return { fit, ring, under };
+}

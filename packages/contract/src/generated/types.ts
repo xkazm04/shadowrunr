@@ -487,6 +487,7 @@ export type Op =
       reason: string;
     }
   | {
+      focus?: string;
       op: "show_screen";
       record_id?: string;
       screen: ScreenId;

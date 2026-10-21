@@ -79,14 +79,15 @@ stage_url = "http://localhost:5178"   # where the built stage is served
 
 ```toml
 [stage]
-avatar = "cut"   # "glow" (default), "cut" or "depth"
+avatar = "cut"   # "cut" (default), "glow" or "depth"
 ```
 
 The stage draws the face with one of three renderers (`?avatar=`, `apps/stage/DESIGN.md`).
-`[stage] avatar` picks the one the daemon's stage URLs ask for: with `cut` or `depth`, both the
-OBS browser source's URL and the sandbox's `stage_url` end in `&avatar=cut` (or `depth`), and
-`recording.json`'s `stage_url` shows it. With `glow` (or no `[stage]`) the URLs carry no
-`avatar` and the stage draws its default. Any other value is a config error. The OBS URL comes
+`[stage] avatar` picks the one the daemon's stage URLs ask for: both the OBS browser source's URL
+and the sandbox's `stage_url` end in `&avatar=cut` (or `glow`, `depth`), and `recording.json`'s
+`stage_url` shows it. The default is `cut`, the owner's pick from the 2026-10-21 recorded show;
+the URL names it anyway, so a recording says which face it drew whatever the stage build's own
+default. Any other value is a config error. The OBS URL comes
 from the config `stream sandbox --record` loads, the sandbox's `stage_url` from the daemon's (read
 when it starts), so give both the same file. `stream sandbox --record` prints the URL OBS records.
 
@@ -169,7 +170,7 @@ If the session fails to start, the recording is stopped and deleted. Ctrl-C work
   "width": 1920,
   "height": 1080,
   "fps": 30,
-  "stage_url": "http://localhost:5178/?run=live&broadcast=1&voice=1&ws=ws://127.0.0.1:7717/events"
+  "stage_url": "http://localhost:5178/?run=live&broadcast=1&voice=1&ws=ws://127.0.0.1:7717/events&avatar=cut"
 }
 ```
 

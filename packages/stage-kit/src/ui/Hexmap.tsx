@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import type { Case, EvidenceGrade, Hex, HexKind } from "@shadowrunr/contract";
-import { axialToPixel, fitMap, hexPoints, mapBounds, type Box, type HexFrame, type MapModel } from "../hexgrid";
+import { axialToPixel, fitMap, hexPoints, mapBounds, zoomMap, type Box, type HexFrame, type MapFit, type MapModel } from "../hexgrid";
 import { GRADE, isAlleged } from "../lore";
 import type { SceneState } from "../sceneModel";
 
@@ -88,6 +88,7 @@ export function Hexmap({
   caseFile,
   frame,
   highlight = null,
+  focus = null,
 }: {
   map: MapModel;
   scene: SceneState;
@@ -97,6 +98,9 @@ export function Hexmap({
   frame?: HexFrame;
   /** A hex to mark as the open record's (the desk screen). */
   highlight?: string | null;
+  /** A hex to zoom to with its ring of neighbours (`show_screen` focus; needs `frame`). The rest
+   * of the map dims, and the move from the overview and back is a CSS transition. */
+  focus?: string | null;
 }) {
   const frameKey = frame ? JSON.stringify(frame) : "";
   const { pos, viewBox, fit } = useMemo(() => {
@@ -112,9 +116,22 @@ export function Hexmap({
     // frameKey stands for `frame` (a new object each render with the same numbers)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, frameKey]);
+  const zoom = useMemo(
+    () => (frame && focus ? zoomMap(map.hexes, SIZE, focus, hexArea(frame), frame.avoid, frame.prefer) : null),
+    // frameKey stands for `frame`, as above
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [map, frameKey, focus],
+  );
+  const view: MapFit | null = zoom?.fit ?? fit;
   const points = useMemo(() => hexPoints(SIZE - 3), []);
   const inner = useMemo(() => hexPoints(SIZE - 12), []);
-  const focus = scene.revealOrder[scene.revealOrder.length - 1] ?? null;
+  const latest = scene.revealOrder[scene.revealOrder.length - 1] ?? null;
+  const zoomClass = (id: string) => {
+    if (!zoom) return "";
+    if (id === focus) return " in-focus";
+    if (zoom.ring.includes(id)) return "";
+    return zoom.under.includes(id) ? " dimmed under" : " dimmed";
+  };
   const revealedCount = map.hexes.filter((h) => scene.hexes[h.id] || h.grade).length;
 
   const stateOf = (h: Hex) => {
@@ -128,7 +145,7 @@ export function Hexmap({
   return (
     <div className="panel hexmap">
       {caseFile?.fictional && <div className="fiction-ribbon">FICTIONAL CASE</div>}
-      <svg className={`hex-svg${fit ? " fitted" : ""}`} viewBox={viewBox} preserveAspectRatio={fit ? "xMinYMin meet" : "xMidYMid meet"}>
+      <svg className={`hex-svg${fit ? " fitted" : ""}${zoom ? " zoomed" : ""}`} viewBox={viewBox} preserveAspectRatio={fit ? "xMinYMin meet" : "xMidYMid meet"}>
         <defs>
           <radialGradient id="fog-grad" cx="50%" cy="40%" r="70%">
             <stop offset="0%" stopColor="#2b3431" />
@@ -148,7 +165,8 @@ export function Hexmap({
           </filter>
         </defs>
 
-        <g transform={fit ? `translate(${fit.x.toFixed(1)} ${fit.y.toFixed(1)}) scale(${fit.scale.toFixed(4)})` : undefined}>
+        {/* A CSS transform (not the attribute), so the zoom in and out is a transition. */}
+        <g className="hex-zoom" style={view ? { transform: `translate(${view.x.toFixed(1)}px, ${view.y.toFixed(1)}px) scale(${view.scale.toFixed(4)})` } : undefined}>
           <g className="hex-links">
             {map.links.map(([a, b]) => {
               const pa = pos.get(a);
@@ -171,7 +189,7 @@ export function Hexmap({
             <g
               key={h.id}
               transform={`translate(${p.x} ${p.y})`}
-              className={`hex${st ? " revealed" : " fogged"}${revealing ? " revealing" : ""}${h.id === focus ? " focus" : ""}${hinted ? " hinted" : ""}${st && isAlleged(st.grade) ? " alleged" : ""}${h.id === highlight ? " on-record" : ""}`}
+              className={`hex${st ? " revealed" : " fogged"}${revealing ? " revealing" : ""}${h.id === latest ? " focus" : ""}${hinted ? " hinted" : ""}${st && isAlleged(st.grade) ? " alleged" : ""}${h.id === highlight ? " on-record" : ""}${zoomClass(h.id)}`}
               style={{ ["--grade" as string]: color }}
             >
               <g className="hex-body">
