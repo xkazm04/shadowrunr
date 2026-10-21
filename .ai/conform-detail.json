@@ -2372,6 +2372,98 @@
           "evidence": "crates/shadowrunr-segments/data/demo-case-records.json:4 The declared fiction supplies investigation content for the show rather than a software demonstration film's environment."
         }
       ]
+    },
+    "68cf95a7-438b-4ed9-930d-c19201eb0610/creator-voice-and-tone": {
+      "context": "voice-sidecar",
+      "subject": "creator-voice-and-tone",
+      "bundle": "media-generation",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-21",
+      "evaluatedTs": "2026-10-21T23:42:23.972Z",
+      "techniques": [
+        {
+          "technique": "delivery-rate-budgeting",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:61 The input limit bounds sentence rendering; this context does not plan scripts against fixed duration slots."
+        },
+        {
+          "technique": "dial-vs-subject-property",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/__main__.py:48 The exposed identity control selects a synthetic speaker, rather than a factual script property."
+        },
+        {
+          "technique": "engine-tone-separation",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/text.py:85 Text processing groups existing fragments for synthesis; it does not render a tone profile against a factual beat chain."
+        },
+        {
+          "technique": "reference-world-and-bookends",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:481 Audio output carries the supplied sentence; this context does not choose analogies or compose signature openings and closings."
+        },
+        {
+          "technique": "spoken-delivery-direction",
+          "verdict": "deviation",
+          "evidence": "tools/voice/shadowrunr_voice/engine.py:68 The live path applies fixed silence compression and supplies no explicit per-line pause or emphasis controls; the audition bench does not repair this delivery gap."
+        },
+        {
+          "technique": "voice-profile-from-accepted-work",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:95 Voice identity is a configured synthesizer label, not a textual profile learned from accepted scripts."
+        }
+      ],
+      "withdrawn": {
+        "worker": "838a740e-4ace-4b2f-83e0-835338094594",
+        "state": "deviation",
+        "at": "2026-10-21T23:43:04.567473+00:00",
+        "reason": "reviewer (sonnet): engine.py:68 is only `SILENCE_SCALE = 0.2`, a replay of sherpa's default pause cut, and the same verdict's technique anchors say this context renders supplied sentences and doesn't author scripts, so the code shows no deviation from a delivery-direction standard."
+      }
+    },
+    "7496ad34-8f7b-4407-8b8a-a60c44c91d85/creator-voice-and-tone": {
+      "context": "daemon-voice-service",
+      "subject": "creator-voice-and-tone",
+      "bundle": "media-generation",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-21",
+      "evaluatedTs": "2026-10-21T23:42:23.972Z",
+      "techniques": [
+        {
+          "technique": "delivery-rate-budgeting",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/mod.rs:68 The timing bound limits first-audio latency, rather than budgeting script content into a fixed narration slot."
+        },
+        {
+          "technique": "dial-vs-subject-property",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/mod.rs:63 Configuration selects spoken identity, not hedging, numeric density, or causal language."
+        },
+        {
+          "technique": "engine-tone-separation",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:550 The service renders an existing live line rather than apply a textual tone profile to reviewed factual structure."
+        },
+        {
+          "technique": "reference-world-and-bookends",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/renderer.rs:47 The renderer consumes supplied text; analogy selection and bookend composition are outside its interface."
+        },
+        {
+          "technique": "spoken-delivery-direction",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:463 The live request forwards plain text without delivery controls or markup translation; PCM-derived duration measurement realizes only the measurement portion of this technique."
+        },
+        {
+          "technique": "voice-profile-from-accepted-work",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/mod.rs:64 The service holds configured speaker identity, not a learned profile sourced from accepted scripts."
+        }
+      ],
+      "withdrawn": {
+        "worker": "838a740e-4ace-4b2f-83e0-835338094594",
+        "state": "deviation",
+        "at": "2026-10-21T23:43:04.593533+00:00",
+        "reason": "reviewer (sonnet): sidecar.rs:463 is a plain `say` JSON passthrough of supplied text, and nothing I opened (no pause/emphasis/SSML code in the voice/*.rs files) shows this renderer is where explicit delivery direction belongs, so the deviation is a claim about script authoring, not this context's code."
+      }
     }
   }
 }

@@ -1,0 +1,66 @@
+{
+  "schema": "conform-run/1",
+  "worker": "838a740e-4ace-4b2f-83e0-835338094594",
+  "subject": "creator-voice-and-tone",
+  "evaluatedAt": "2026-10-21T23:42:23.972001+00:00",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "pairs": [],
+  "declined": [
+    {
+      "subject": "creator-voice-and-tone",
+      "context": "stage-voice-client",
+      "reason": "not-applicable without the 2+ search terms that prove the absence"
+    },
+    {
+      "subject": "creator-voice-and-tone",
+      "context": "voice-sidecar",
+      "reason": "withdrawn after review: reviewer (sonnet): engine.py:68 is only `SILENCE_SCALE = 0.2`, a replay of sherpa's default pause cut, and the same verdict's technique anchors say this context renders supplied sentences and doesn't author scripts, so the code shows no deviation from a delivery-direction standard."
+    },
+    {
+      "subject": "creator-voice-and-tone",
+      "context": "daemon-voice-service",
+      "reason": "withdrawn after review: reviewer (sonnet): sidecar.rs:463 is a plain `say` JSON passthrough of supplied text, and nothing I opened (no pause/emphasis/SSML code in the voice/*.rs files) shows this renderer is where explicit delivery direction belongs, so the deviation is a claim about script authoring, not this context's code."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-21T23:42:23.972001+00:00",
+      "bundle": "media-generation",
+      "subjects": [
+        "creator-voice-and-tone"
+      ],
+      "techniques": [
+        "delivery-rate-budgeting",
+        "dial-vs-subject-property",
+        "engine-tone-separation",
+        "reference-world-and-bookends",
+        "spoken-delivery-direction",
+        "voice-profile-from-accepted-work"
+      ],
+      "deviations": 1,
+      "context": "voice-sidecar",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "ts": "2026-10-21T23:42:23.972001+00:00",
+      "bundle": "media-generation",
+      "subjects": [
+        "creator-voice-and-tone"
+      ],
+      "techniques": [
+        "delivery-rate-budgeting",
+        "dial-vs-subject-property",
+        "engine-tone-separation",
+        "reference-world-and-bookends",
+        "spoken-delivery-direction",
+        "voice-profile-from-accepted-work"
+      ],
+      "deviations": 1,
+      "context": "daemon-voice-service",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}
