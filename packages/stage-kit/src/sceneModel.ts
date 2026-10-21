@@ -160,8 +160,10 @@ export interface SceneState {
   hexes: Record<string, HexState>;
   revealOrder: string[];
   hints: Record<string, Hint>;
-  /** Community `!grade` counts per hex. */
-  gradeVotes: Record<string, Partial<Record<EvidenceGrade, number>>>;
+  /** Community `!grade` ballots per hex, viewer id → grade, so a repeated grade moves rather than adds. */
+  gradeVotes: Record<string, Record<string, EvidenceGrade>>;
+  /** Authoritative jury tallies per hex, from the runtime's `grade:<hex>` vote events. */
+  jury: Record<string, VoteTally[]>;
   jobs: Job[];
   card: Card | null;
   moments: Moment[];
@@ -211,6 +213,7 @@ export function initialScene(): SceneState {
     revealOrder: [],
     hints: {},
     gradeVotes: {},
+    jury: {},
     jobs: [],
     card: null,
     moments: [],

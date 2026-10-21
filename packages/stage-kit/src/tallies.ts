@@ -20,7 +20,32 @@ export interface PollBar {
   /** Share of all weight, 0..1. */
   pct: number;
   bands: RankBand[];
+  /** Ahead by the runtime's rule: more weight, then more voters. Every level option leads. */
   leading: boolean;
+  /** Level with another option on weight and voters: a tie the host breaks, no winner. */
+  tied: boolean;
+}
+
+/**
+ * The options that lead a tally, by the runtime's rule (`outcome` in shadowrunr-segments):
+ * highest weight wins, equal weight goes to more voters, options level on both tie. Options
+ * nobody voted for never lead. The screen reads this rather than its own rule, so the bar it
+ * crowns is the result the host announces.
+ */
+export function leaders(rows: readonly { option: string; weight: number; voters: number }[]): string[] {
+  let top: { option: string; weight: number; voters: number }[] = [];
+  for (const t of rows) {
+    if (t.voters <= 0 && t.weight <= 0) continue;
+    const b = top[0];
+    if (!b) {
+      top = [t];
+      continue;
+    }
+    const level = Math.abs(t.weight - b.weight) <= 1e-9;
+    if (t.weight > b.weight + 1e-9 || (level && t.voters > b.voters)) top = [t];
+    else if (level && t.voters === b.voters) top.push(t);
+  }
+  return top.map((t) => t.option);
 }
 
 /**
@@ -46,11 +71,13 @@ export function pollBars(poll: Poll): PollBar[] {
   });
   const max = Math.max(0, ...rows.map((r) => r.weight));
   const total = rows.reduce((a, r) => a + r.weight, 0);
+  const lead = leaders(rows);
   return rows.map((r) => ({
     ...r,
     length: max > 0 ? r.weight / max : 0,
     pct: total > 0 ? r.weight / total : 0,
-    leading: max > 0 && r.weight === max,
+    leading: lead.includes(r.option),
+    tied: lead.length > 1 && lead.includes(r.option),
   }));
 }
 
@@ -58,7 +85,7 @@ export interface GradeTally {
   hex: string;
   counts: Record<EvidenceGrade, number>;
   total: number;
-  /** The community's most-voted grade (ties broken toward the stricter grade). */
+  /** The community's leading grade by the runtime's rule; null when the jury is level. */
   majority: EvidenceGrade | null;
   /** Malakor's grade for the hex, when revealed. */
   official: EvidenceGrade | null;
@@ -70,16 +97,29 @@ const GRADE_ORDER: readonly EvidenceGrade[] = EVIDENCE_GRADES;
 /**
  * The community-grade tally. A hex is DISPUTED when the community's majority grade differs from
  * Malakor's (the digest's "Malakor Confidence vs Minion Jury" divergence, simplified to grades).
+ * The runtime's jury tally decides once it arrives (one grade per viewer, rank-weighted, a level
+ * jury leads with nothing); until then the grades seen in chat stand in, one per viewer.
  */
 export function gradeTallies(s: SceneState): GradeTally[] {
-  const hexIds = new Set([...Object.keys(s.gradeVotes), ...s.revealOrder]);
+  const hexIds = new Set([...Object.keys(s.gradeVotes), ...Object.keys(s.jury), ...s.revealOrder]);
   const out: GradeTally[] = [];
   for (const hex of hexIds) {
-    const votes = s.gradeVotes[hex] ?? {};
-    const counts: Record<EvidenceGrade, number> = { DOC: votes.DOC ?? 0, REP: votes.REP ?? 0, CLM: votes.CLM ?? 0, SPC: votes.SPC ?? 0 };
+    const counts: Record<EvidenceGrade, number> = { DOC: 0, REP: 0, CLM: 0, SPC: 0 };
+    const tallies = s.jury[hex];
+    let rows: { option: string; weight: number; voters: number }[];
+    if (tallies) {
+      rows = GRADE_ORDER.map((g) => {
+        const t = tallies.find((x) => x.option === g);
+        return { option: g, weight: t?.weight ?? 0, voters: t?.voters ?? 0 };
+      });
+    } else {
+      for (const g of Object.values(s.gradeVotes[hex] ?? {})) counts[g] += 1;
+      rows = GRADE_ORDER.map((g) => ({ option: g, weight: counts[g], voters: counts[g] }));
+    }
+    for (const r of rows) counts[r.option as EvidenceGrade] = r.voters;
     const total = GRADE_ORDER.reduce((a, g) => a + counts[g], 0);
-    let majority: EvidenceGrade | null = null;
-    for (const g of GRADE_ORDER) if (counts[g] > 0 && (majority === null || counts[g] > counts[majority])) majority = g;
+    const lead = leaders(rows);
+    const majority = lead.length === 1 ? (lead[0] as EvidenceGrade) : null;
     const official = s.hexes[hex]?.grade ?? null;
     out.push({
       hex,

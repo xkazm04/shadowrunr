@@ -77,16 +77,8 @@ export function voteView(scene: SceneState, position: number, speed: number): Vo
   const weights = bars.map((b) => b.weight);
   // The winner's scale: the bars never hit 100% until one option holds most of the weight.
   const tot = Math.max(1, Math.max(0, ...weights), weights.reduce((a, w) => a + w, 0) * 0.55);
-  let win = -1;
-  if (poll.closedAt !== undefined) {
-    let best = -1;
-    weights.forEach((w, i) => {
-      if (w > best) {
-        best = w;
-        win = i;
-      }
-    });
-  }
+  // The runtime's result, not a rule of our own: a level tie crowns nobody.
+  const win = poll.closedAt === undefined ? -1 : bars.findIndex((b) => b.leading && !b.tied);
   return {
     key: poll.id,
     question: poll.question,

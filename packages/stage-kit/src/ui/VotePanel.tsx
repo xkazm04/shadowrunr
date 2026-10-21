@@ -38,7 +38,7 @@ export function VotePanel({ poll, now }: { poll: Poll; now: number }) {
       <div className="vote-question">{poll.question}</div>
       <div className="vote-bars">
         {bars.map((b) => (
-          <div key={b.option} className={`vote-row${b.leading ? " leading" : ""}${closed && b.leading ? " winner" : ""}`}>
+          <div key={b.option} className={`vote-row${b.leading ? " leading" : ""}${closed && b.leading && !b.tied ? " winner" : ""}`}>
             <div className="vote-label">
               <span className="vote-option">{optionLabel(b.option)}</span>
               <span className="vote-num">

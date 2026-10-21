@@ -144,8 +144,7 @@ function applyChat(s: SceneState, msg: ChatMsg, at: TsMs): SceneState {
       return { ...next, hints: { ...s.hints, [cmd.hex]: hint } };
     }
     case "grade": {
-      const prev = s.gradeVotes[cmd.hex] ?? {};
-      const votes = { ...prev, [cmd.grade]: (prev[cmd.grade] ?? 0) + 1 };
+      const votes = { ...s.gradeVotes[cmd.hex], [msg.viewer.id]: cmd.grade };
       return { ...next, gradeVotes: { ...s.gradeVotes, [cmd.hex]: votes } };
     }
     case "propose":
@@ -256,6 +255,10 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     case "op":
       return applyOp(s, ev.op, at);
     case "vote": {
+      // A jury tally is not a poll: it feeds the hex's grade tally and never takes the panel.
+      if (ev.poll_id.startsWith("grade:")) {
+        return { ...s, jury: { ...s.jury, [ev.poll_id.slice("grade:".length)]: ev.tallies } };
+      }
       const poll = s.polls[ev.poll_id];
       if (!poll) {
         // A tally for a poll we never saw open (a mid-stream join): show it with what we know.

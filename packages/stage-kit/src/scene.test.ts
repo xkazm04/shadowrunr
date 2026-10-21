@@ -210,6 +210,38 @@ describe("hexmap state", () => {
     const h1 = t.find((x) => x.hex === "HEX-01")!;
     expect(h1).toMatchObject({ majority: "DOC", official: "DOC", disputed: false });
   });
+
+  it("counts one grade per viewer and lets the runtime's jury tally decide", () => {
+    let s = initialScene();
+    s = reduce(s, op(1, { op: "start_poll", poll_id: "p", question: "Foil?", options: ["A", "B"], min_rank: "thrall", secs: 30 }));
+    s = reduce(s, chat(2, msg("a", "thrall", { cmd: "grade", hex: "HEX-03", grade: "DOC" })));
+    for (let i = 0; i < 3; i++) s = reduce(s, chat(3 + i, msg(`s${i}`, "thrall", { cmd: "grade", hex: "HEX-03", grade: "SPC" }, "spammer")));
+    // Before the jury tally: one ballot each, and a level jury leads with nothing.
+    expect(gradeTallies(s)[0]).toMatchObject({ counts: { DOC: 1, REP: 0, CLM: 0, SPC: 1 }, majority: null });
+    // The jury tally is rank-weighted and never takes the vote panel.
+    s = reduce(s, { type: "vote", ts_ms: 9, poll_id: "grade:HEX-03", closed: false, tallies: [{ option: "DOC", voters: 1, weight: 1 }, { option: "REP", voters: 0, weight: 0 }, { option: "CLM", voters: 1, weight: 2.4 }, { option: "SPC", voters: 1, weight: 1 }] });
+    expect(s.activePoll).toBe("p");
+    expect(s.polls["grade:HEX-03"]).toBeUndefined();
+    expect(gradeTallies(s)[0]).toMatchObject({ counts: { DOC: 1, REP: 0, CLM: 1, SPC: 1 }, total: 3, majority: "CLM" });
+  });
+});
+
+describe("poll outcome on screen", () => {
+  const closedWith = (tallies: { option: string; voters: number; weight: number }[]) => {
+    let s = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "p", question: "?", options: tallies.map((t) => t.option), min_rank: "thrall", secs: 30 }));
+    s = reduce(s, { type: "vote", ts_ms: 2, poll_id: "p", closed: true, tallies });
+    return pollBars(s.polls.p!);
+  };
+
+  it("breaks a weight tie toward more voters, as the runtime does", () => {
+    const bars = closedWith([{ option: "A", voters: 1, weight: 2.4 }, { option: "B", voters: 2, weight: 2.4 }]);
+    expect(bars.map((b) => [b.leading, b.tied])).toEqual([[false, false], [true, false]]);
+  });
+
+  it("marks options level on weight and voters as tied, with no winner", () => {
+    const bars = closedWith([{ option: "A", voters: 2, weight: 2.4 }, { option: "B", voters: 2, weight: 2.4 }, { option: "C", voters: 1, weight: 1 }]);
+    expect(bars.map((b) => [b.leading, b.tied])).toEqual([[true, true], [true, true], [false, false]]);
+  });
 });
 
 describe("case_open", () => {
