@@ -6,9 +6,9 @@
 import { useMemo, type CSSProperties } from "react";
 
 import type { Case, EvidenceGrade, Hex, HexRole } from "@shadowrunr/contract";
-import { boardRegions, boardView, CARD_H, CARD_W, layoutBoard, regionOf, stripBox, THESIS_H, type BoardFrame, type BoardLayout } from "../board";
+import { ACT_HEAD, boardClip, boardRegions, boardView, CARD_H, CARD_W, layoutBoard, regionOf, stripBox, thesisEnd, type BoardFrame, type BoardLayout } from "../board";
 import { KIND_NAME, KIND_ROLE, REL_LABEL, ROLE_LABEL } from "../boardNames";
-import { labelSpot, markLabelWidth, STRIP_INSET, stringGeom, stringLanes, timelineMarks, type Point, type StringGeom } from "../boardStrings";
+import { labelSpot, markLabelWidth, STRIP_INSET, stringGeom, stringLanes, timelineMarks, type LabelSpot, type StringGeom } from "../boardStrings";
 import type { Box } from "../hexgrid";
 import type { MapModel } from "../hexgrid";
 import { GRADE, isAlleged } from "../lore";
@@ -79,30 +79,43 @@ function CardFace({ h, grade }: { h: Hex; grade: EvidenceGrade }) {
 }
 
 /** A string label's two lines: what the string says, and the record it cites. */
-function labelText(link: PinnedLink): { rel: string; cite: string; w: number } {
+function labelText(link: Pick<PinnedLink, "rel" | "grade" | "recordId">): { rel: string; cite: string; w: number } {
   const rel = REL_LABEL[link.rel].toUpperCase();
   const cite = isAlleged(link.grade) ? `${link.recordId} · alleged` : link.recordId;
   return { rel, cite, w: Math.max(rel.length * 8.6, cite.length * 6.6) + 22 };
 }
 const LABEL_H = 38;
 
-/** Each drawn string's geometry and where its label rides, clear of the cards and of the labels
- * placed before it where the curve allows. */
-function placeStrings(links: readonly PinnedLink[], cards: Record<string, Box>, s: number): ({ geom: StringGeom; at: Point } | null)[] {
+/** A drawn string: its geometry, where its label goes and the label's box (layout pixels). */
+export interface PlacedString {
+  geom: StringGeom;
+  at: LabelSpot;
+  label: Box;
+}
+
+/** Each drawn string's geometry and where its label goes (`s`: the label's scale): on the curve
+ * clear of every card, act name, label placed before it and what stands over the board, inside
+ * the layout's area, else hung beside the curve on a leader. Null for a string with no room. */
+export function placeStrings(links: readonly Pick<PinnedLink, "from" | "to" | "rel" | "grade" | "recordId">[], layout: BoardLayout, s: number): (PlacedString | null)[] {
   const lanes = stringLanes(links);
-  const taken: Box[] = Object.values(cards);
+  const heads = layout.regions.map((r) => ({ x: r.box.x, y: r.box.y, w: r.box.w, h: ACT_HEAD * layout.scale }));
+  const taken: Box[] = [...Object.values(layout.cards), ...heads, ...layout.avoid];
   return links.map((l, i) => {
-    const a = cards[l.from];
-    const b = cards[l.to];
+    const a = layout.cards[l.from];
+    const b = layout.cards[l.to];
     const geom = a && b ? stringGeom(a, b, lanes[i]) : null;
     if (!geom) return null;
     const w = labelText(l).w * s;
     const h = LABEL_H * s;
-    const at = labelSpot(geom, w, h, taken);
-    taken.push({ x: at.x - w / 2, y: at.y - h / 2, w, h });
-    return { geom, at };
+    const at = labelSpot(geom, w, h, taken, layout.area);
+    const label = { x: at.x - w / 2, y: at.y - h / 2, w, h };
+    taken.push(label);
+    return { geom, at, label };
   });
 }
+
+/** A label that had to step off its string (it hangs on a leader). */
+const offCurve = (at: LabelSpot) => Math.hypot(at.x - at.anchor.x, at.y - at.anchor.y) > 1;
 
 function StringLabel({ link, s }: { link: PinnedLink; s: number }) {
   const { rel, cite, w } = labelText(link);
@@ -148,9 +161,13 @@ export function EvidenceBoard({
 }) {
   const frameKey = JSON.stringify(frame);
   const links = scene.links;
+  const s = layout.scale;
+  const labelScale = Math.max(0.75, s);
+  const strings = useMemo(() => placeStrings(links, layout, labelScale), [links, layout, labelScale]);
+  const labelBoxes = useMemo(() => strings.map((p) => p?.label ?? null), [strings]);
   // frameKey stands for `frame` (a new object each render with the same numbers)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const view = useMemo(() => boardView(layout, frame, focus, links), [layout, frameKey, focus, links]);
+  const view = useMemo(() => boardView(layout, frame, focus, links, labelBoxes), [layout, frameKey, focus, links, labelBoxes]);
   const hexById = useMemo(() => new Map(map.hexes.map((h) => [h.id, h])), [map]);
   const faces = new Map(map.hexes.map((h) => [h.id, faceOf(scene, h)]));
   const faceUp: Record<string, EvidenceGrade> = {};
@@ -158,99 +175,111 @@ export function EvidenceBoard({
   const latest = scene.revealOrder[scene.revealOrder.length - 1] ?? null;
   const lastLink = links[links.length - 1];
   const litAct = regionOf(layout, focus ?? highlight ?? lastLink?.to ?? latest ?? "")?.name ?? null;
-  const s = layout.scale;
-  const labelScale = Math.max(0.75, s);
-  const strings = useMemo(() => placeStrings(links, layout.cards, labelScale), [links, layout, labelScale]);
   const box = stripBox(frame);
   const records = Object.values(scene.records);
   const timeline = timelineMarks(map.hexes, faceUp, records, box.w, shortCardLabel);
   const dim = (id: string) => view.ring.length > 0 && !view.ring.includes(id);
   const under = (id: string) => view.under.includes(id);
+  const drawn = links.flatMap((l, i) => {
+    const placed = strings[i];
+    if (!placed || under(l.from) || under(l.to)) return [];
+    const drawing = now - l.at < DRAW_MS;
+    const faded = view.ring.length > 0 && !(view.ring.includes(l.from) || view.ring.includes(l.to));
+    const cls = ["board-string", `rel-${l.rel}`, isAlleged(l.grade) ? "alleged" : "", drawing ? "drawing" : "", faded ? "dimmed" : ""];
+    return [{ l, i, placed, cls: cls.filter(Boolean).join(" ") }];
+  });
   const thesis = caseFile?.thesis ?? caseFile?.title ?? "The case";
-  // The band ends left of anything that stands over it (the observer badge).
-  const bandEnd = Math.min(frame.w, ...(frame.avoid ?? []).filter((a) => a.y < THESIS_H && a.y + a.h > 0 && a.x > frame.w / 2).map((a) => a.x - 12));
+  // The band ends left of anything that stands over it (the overlay lane).
+  const bandEnd = thesisEnd(frame);
+  // Nothing of the board is drawn under the overlay lane, however far a zoom moves it.
+  const clip = boardClip(frame);
 
   return (
     <div className={`panel board${view.ring.length > 0 ? " zoomed" : ""}`} data-cards={Object.keys(layout.cards).length}>
-      <div className="board-zoom" style={{ width: layout.w, height: layout.h, transform: `translate(${view.fit.x.toFixed(1)}px, ${view.fit.y.toFixed(1)}px) scale(${view.fit.scale.toFixed(4)})` }}>
-        {layout.regions.map((r, i) => (
-          <div
-            key={r.name}
-            className={`board-act${r.name === litAct ? " lit" : ""}`}
-            style={{ left: r.box.x, top: r.box.y, width: r.box.w, height: r.box.h, ["--act-s" as string]: s }}
-          >
-            <span className="board-act-name">
-              <b>{["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][i] ?? i + 1}</b> {r.name}
-            </span>
-          </div>
-        ))}
-
-        {Object.entries(layout.cards).map(([id, b]) => {
-          const h = hexById.get(id);
-          if (!h) return null;
-          const f = faces.get(id) ?? null;
-          const flipping = f?.at != null && now - f.at < FLIP_MS;
-          const hint = scene.hints[id];
-          const hinted = !f && hint !== undefined && now - hint.lastAt < 60000;
-          const cls = [
-            "board-card",
-            f ? "face-up" : "face-down",
-            flipping ? "flipping" : "",
-            f && isAlleged(f.grade) ? "alleged" : "",
-            id === latest ? "latest" : "",
-            id === focus ? "in-focus" : "",
-            id === highlight ? "on-record" : "",
-            hinted ? "hinted" : "",
-            dim(id) ? "dimmed" : "",
-            under(id) ? "under" : "",
-          ].filter(Boolean);
-          return (
+      <div className="board-clip" style={clip.w < frame.w ? { clipPath: `inset(0 ${(frame.w - clip.w).toFixed(1)}px 0 0)` } : undefined}>
+        <div className="board-zoom" style={{ width: layout.w, height: layout.h, transform: `translate(${view.fit.x.toFixed(1)}px, ${view.fit.y.toFixed(1)}px) scale(${view.fit.scale.toFixed(4)})` }}>
+          {layout.regions.map((r, i) => (
             <div
-              key={id}
-              className={cls.join(" ")}
-              data-hex={id}
-              style={{ left: b.x, top: b.y, width: CARD_W, height: CARD_H, transform: `scale(${(b.w / CARD_W).toFixed(4)})`, ...(f ? gradeStyle(f.grade) : {}) }}
+              key={r.name}
+              className={`board-act${r.name === litAct ? " lit" : ""}`}
+              style={{ left: r.box.x, top: r.box.y, width: r.box.w, height: r.box.h, ["--act-s" as string]: s }}
             >
-              <i className="card-pin" aria-hidden="true" />
-              {(!f || flipping) && (
-                <div className="card-back">
-                  <span className="card-id">{id}</span>
-                  <span className="card-fog">?</span>
-                </div>
-              )}
-              {f && <CardFace h={h} grade={f.grade} />}
-              {hinted && <span className="card-hint">{hint.count}</span>}
+              <span className="board-act-name">
+                <b>{["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][i] ?? i + 1}</b> {r.name}
+              </span>
             </div>
-          );
-        })}
+          ))}
 
-        <svg className="board-strings" width={layout.w} height={layout.h} viewBox={`0 0 ${layout.w} ${layout.h}`} aria-hidden="true">
-          {links.map((l, i) => {
-            const placed = strings[i];
-            if (!placed || under(l.from) || under(l.to)) return null;
-            const g = placed.geom;
-            const drawing = now - l.at < DRAW_MS;
-            const faded = view.ring.length > 0 && !(view.ring.includes(l.from) || view.ring.includes(l.to));
-            const cls = ["board-string", `rel-${l.rel}`, isAlleged(l.grade) ? "alleged" : "", drawing ? "drawing" : "", faded ? "dimmed" : ""];
-            const mask = `string-draw-${i}`;
+          {Object.entries(layout.cards).map(([id, b]) => {
+            const h = hexById.get(id);
+            if (!h) return null;
+            const f = faces.get(id) ?? null;
+            const flipping = f?.at != null && now - f.at < FLIP_MS;
+            const hint = scene.hints[id];
+            const hinted = !f && hint !== undefined && now - hint.lastAt < 60000;
+            const cls = [
+              "board-card",
+              f ? "face-up" : "face-down",
+              flipping ? "flipping" : "",
+              f && isAlleged(f.grade) ? "alleged" : "",
+              id === latest ? "latest" : "",
+              id === focus ? "in-focus" : "",
+              id === highlight ? "on-record" : "",
+              hinted ? "hinted" : "",
+              dim(id) ? "dimmed" : "",
+              under(id) ? "under" : "",
+            ].filter(Boolean);
             return (
-              <g key={l.key} className={cls.filter(Boolean).join(" ")} style={gradeStyle(l.grade)} data-link={l.key}>
-                {drawing && (
-                  <mask id={mask} maskUnits="userSpaceOnUse" x={0} y={0} width={layout.w} height={layout.h}>
-                    <path d={g.d} className="string-reveal" pathLength={1} />
-                  </mask>
+              <div
+                key={id}
+                className={cls.join(" ")}
+                data-hex={id}
+                style={{ left: b.x, top: b.y, width: CARD_W, height: CARD_H, transform: `scale(${(b.w / CARD_W).toFixed(4)})`, ...(f ? gradeStyle(f.grade) : {}) }}
+              >
+                <i className="card-pin" aria-hidden="true" />
+                {(!f || flipping) && (
+                  <div className="card-back">
+                    <span className="card-id">{id}</span>
+                    <span className="card-fog">?</span>
+                  </div>
                 )}
-                <g mask={drawing ? `url(#${mask})` : undefined}>
-                  <path d={g.d} className="string-line" />
+                {f && <CardFace h={h} grade={f.grade} />}
+                {hinted && <span className="card-hint">{hint.count}</span>}
+              </div>
+            );
+          })}
+
+          <svg className="board-strings" width={layout.w} height={layout.h} viewBox={`0 0 ${layout.w} ${layout.h}`} aria-hidden="true">
+            {drawn.map(({ l, i, placed, cls }) => {
+              const g = placed.geom;
+              const mask = `string-draw-${i}`;
+              return (
+                <g key={l.key} className={cls} style={gradeStyle(l.grade)} data-link={l.key}>
+                  {cls.includes("drawing") && (
+                    <mask id={mask} maskUnits="userSpaceOnUse" x={0} y={0} width={layout.w} height={layout.h}>
+                      <path d={g.d} className="string-reveal" pathLength={1} />
+                    </mask>
+                  )}
+                  <g mask={cls.includes("drawing") ? `url(#${mask})` : undefined}>
+                    <path d={g.d} className="string-line" />
+                  </g>
+                  <polygon points={g.head} className="string-head" />
                 </g>
-                <polygon points={g.head} className="string-head" />
+              );
+            })}
+            {/* The labels over every string, so no later string runs across an earlier label. */}
+            {drawn.map(({ l, placed, cls }) => (
+              <g key={`${l.key}-label`} className={cls} style={gradeStyle(l.grade)}>
+                {offCurve(placed.at) && (
+                  <line className="string-leader" x1={placed.at.anchor.x.toFixed(1)} y1={placed.at.anchor.y.toFixed(1)} x2={placed.at.x.toFixed(1)} y2={placed.at.y.toFixed(1)} />
+                )}
                 <g transform={`translate(${placed.at.x.toFixed(1)} ${placed.at.y.toFixed(1)})`}>
                   <StringLabel link={l} s={labelScale} />
                 </g>
               </g>
-            );
-          })}
-        </svg>
+            ))}
+          </svg>
+        </div>
       </div>
 
       <div className="board-thesis" style={{ right: frame.w - bandEnd }}>

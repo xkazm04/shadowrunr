@@ -5,15 +5,17 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { Case, StreamEvent } from "@shadowrunr/contract";
-import { boardArea, boardView, buildMap, CANVAS_H, CANVAS_W, fitBox, fitMap, foldEvents, hexBoxes, stripBox, zoomMap } from "@shadowrunr/stage-kit";
-import { parseCase } from "@shadowrunr/stage-kit/parse";
-import { boardLayoutFor, HEX_SIZE, hexArea } from "@shadowrunr/stage-kit/ui";
+import { ACT_HEAD, boardArea, boardClip, boardView, buildMap, CANVAS_H, CANVAS_W, fitBox, fitMap, foldEvents, hexBoxes, stripBox, thesisEnd, zoomMap } from "@shadowrunr/stage-kit";
+import { parseCase, parseTranscript } from "@shadowrunr/stage-kit/parse";
+import { boardLayoutFor, HEX_SIZE, hexArea, placeStrings } from "@shadowrunr/stage-kit/ui";
 import { LOOK_CHAT, LOOK_CONTENT, LOOK_HOST, lookFor } from "./avatar/look";
 import { BOARD_LAYOUT_FRAME, boardFrame, BROWSER_CHROME, CONTENT, CORNER_AVATAR, FACE_PX, hexFrame, layoutRects, REGIONS, type Rect } from "./layouts";
 import { readParams, resolveCase, sidecarCaseUrl } from "./source";
 
 const LAYOUTS = ["boot", "host", "board", "hexmap", "browser", "desk"] as const;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+/** `b` (in a window's pixels) on the canvas. */
+const shift = (b: Rect, by: Rect): Rect => ({ x: b.x + by.x, y: b.y + by.y, w: b.w, h: b.h });
 
 describe("layouts", () => {
   for (const layout of LAYOUTS) {
@@ -190,7 +192,6 @@ describe("no card under him", () => {
   const demo = parseCase(readFileSync(join(__dirname, "..", "fixtures", "demo-case.json"), "utf8"));
   const map = buildMap(demo, []);
   const layout = boardLayoutFor(map, demo, BOARD_LAYOUT_FRAME);
-  const shift = (b: Rect, by: Rect): Rect => ({ x: b.x + by.x, y: b.y + by.y, w: b.w, h: b.h });
 
   it("lays every demo card out in its act, none overlapping, none under him, every act inside the content area", () => {
     const rects = layoutRects("board", { poll: true, foil: true });
@@ -198,7 +199,9 @@ describe("no card under him", () => {
     const cards = Object.entries(layout.cards);
     expect(cards).toHaveLength(demo.hexes.length);
     expect(layout.regions.map((r) => r.name)).toEqual(demo.acts!.map((a) => a.name));
-    expect(layout.scale).toBe(1);
+    // The acts end left of the overlay lane, so the demo's 16 cards draw smaller than full size
+    // in the overview (0.69 measured); a focus zooms them back up.
+    expect(layout.scale).toBeGreaterThan(0.65);
     cards.forEach(([id, b], i) => {
       expect(overlaps(shift(b, win), rects.avatar), id).toBe(false);
       cards.forEach(([other, o], j) => j > i && expect(overlaps(b, o), `${id} vs ${other}`).toBe(false));
@@ -243,8 +246,92 @@ describe("no card under him", () => {
   }
 
   it("has no board frame where the board is not shown", () => {
+    expect(BOARD_LAYOUT_FRAME.lane).toBeDefined();
     for (const layout_ of ["boot", "host", "browser", "hexmap"] as const) expect(boardFrame(layout_, layoutRects(layout_, { poll: false, foil: false }))).toBeNull();
     expect(boardFrame("desk", layoutRects("desk", { poll: false, foil: false, back: "hexmap" }))).toBeNull();
+  });
+});
+
+describe("no overlay over the board", () => {
+  const demo = parseCase(readFileSync(join(__dirname, "..", "fixtures", "demo-case.json"), "utf8"));
+  const map = buildMap(demo, []);
+  const layout = boardLayoutFor(map, demo, BOARD_LAYOUT_FRAME);
+  const clipTo = (b: Rect, o: Rect): Rect | null => {
+    const x = Math.max(b.x, o.x);
+    const y = Math.max(b.y, o.y);
+    const w = Math.min(b.x + b.w, o.x + o.w) - x;
+    const h = Math.min(b.y + b.h, o.y + o.h) - y;
+    return w > 0 && h > 0 ? { x, y, w, h } : null;
+  };
+  // The demo's six strings and where their labels go.
+  const links = foldEvents(parseTranscript(readFileSync(join(__dirname, "..", "fixtures", "demo.jsonl"), "utf8")).events).links;
+  const labels = placeStrings(links, layout, Math.max(0.75, layout.scale)).map((p) => p?.label ?? null);
+
+  for (const screen of ["board", "desk"] as const) {
+    for (const poll of [false, true]) {
+      for (const foil of [false, true]) {
+        it(`${screen} poll=${poll} foil=${foil}: no overlay (the observer badge, a decree, an explainer card) stands over any act, overview or zoomed`, () => {
+          const rects = layoutRects(screen, { poll, foil });
+          const win = rects.board;
+          const frame = boardFrame(screen, rects)!;
+          // The decree and the card regions are always laid out; the badge's place is kept even
+          // with no foil in, so every combination of them showing is these three rects.
+          const overlays = (["observer", "decrees", "card"] as const).map((k) => [k, rects[k]] as const);
+          // What a zoom moves toward the lane is cut off at its edge.
+          const drawn = shift(boardClip(frame), win);
+          for (const focus of [null, ...demo.hexes.map((h) => h.id)]) {
+            const view = boardView(layout, frame, focus, links, labels);
+            // On the board a focused card's string labels are in view, none cut off at the lane.
+            if (screen === "board" && focus !== null) {
+              links.forEach((l, i) => {
+                if (l.from !== focus && l.to !== focus) return;
+                const b = shift(fitBox(labels[i]!, view.fit), win);
+                expect(b.x >= drawn.x - 0.01 && b.y >= drawn.y - 0.01 && b.x + b.w <= drawn.x + drawn.w + 0.01 && b.y + b.h <= drawn.y + drawn.h + 0.01, `${focus}: ${l.key}`).toBe(true);
+              });
+            }
+            for (const r of layout.regions) {
+              const shown = clipTo(shift(fitBox(r.box, view.fit), win), drawn);
+              if (!shown) continue;
+              for (const [k, o] of overlays) expect(overlaps(shown, o), `${focus}: ${r.name} under ${k}`).toBe(false);
+            }
+          }
+          // The thesis band ends left of the lane.
+          for (const [k, o] of overlays) if (o.y < win.y + 64) expect(win.x + thesisEnd(frame), k).toBeLessThanOrEqual(o.x);
+        });
+      }
+    }
+  }
+
+  it("keeps the browser screen's lane where it was", () => {
+    const r = layoutRects("browser", { poll: false, foil: true });
+    expect([r.observer.x, r.observer.y, r.card.x]).toEqual([824, 250, 824]);
+  });
+});
+
+describe("string labels", () => {
+  const demo = parseCase(readFileSync(join(__dirname, "..", "fixtures", "demo-case.json"), "utf8"));
+  const layout = boardLayoutFor(buildMap(demo, []), demo, BOARD_LAYOUT_FRAME);
+  const transcript = parseTranscript(readFileSync(join(__dirname, "..", "fixtures", "demo.jsonl"), "utf8"));
+  const scene = foldEvents(transcript.events);
+
+  it("puts no label of the demo's six strings over a card, an act name, another label or him, and keeps each on the board", () => {
+    expect(scene.links).toHaveLength(6);
+    const placed = placeStrings(scene.links, layout, Math.max(0.75, layout.scale));
+    const cards = Object.entries(layout.cards);
+    const heads = layout.regions.map((r) => ({ x: r.box.x, y: r.box.y, w: r.box.w, h: ACT_HEAD * layout.scale }));
+    placed.forEach((p, i) => {
+      const key = scene.links[i]!.key;
+      expect(p, key).not.toBeNull();
+      const label = p!.label;
+      for (const [id, b] of cards) expect(overlaps(label, b), `${key} over ${id}`).toBe(false);
+      for (const h of heads) expect(overlaps(label, h), `${key} over an act name`).toBe(false);
+      for (const a of layout.avoid) expect(overlaps(label, a), `${key} under him`).toBe(false);
+      placed.forEach((q, j) => j > i && expect(overlaps(label, q!.label), `${key} vs ${scene.links[j]!.key}`).toBe(false));
+      const area = layout.area;
+      expect(label.x >= area.x && label.y >= area.y && label.x + label.w <= area.x + area.w && label.y + label.h <= area.y + area.h, key).toBe(true);
+      // A label off its string hangs close to it.
+      expect(Math.hypot(p!.at.x - p!.at.anchor.x, p!.at.y - p!.at.anchor.y), key).toBeLessThan(160);
+    });
   });
 });
 

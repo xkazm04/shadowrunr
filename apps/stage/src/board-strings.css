@@ -36,6 +36,14 @@
   stroke-linecap: butt;
 }
 
+/* A label with no room on its string hangs beside it on a short leader. */
+.string-leader {
+  stroke: var(--grade);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+  opacity: 0.8;
+}
+
 .string-label rect {
   fill: color-mix(in srgb, var(--sr-color-scrim) 92%, transparent);
   stroke: var(--grade);
@@ -77,6 +85,7 @@
 }
 
 .board-string.drawing .string-head,
+.board-string.drawing .string-leader,
 .board-string.drawing .string-label {
   animation: string-land 0.4s 1s ease-out both;
 }
@@ -267,6 +276,7 @@
   .board-card.flipping .card-face,
   .board-card.flipping .card-alleged,
   .board-string.drawing .string-head,
+  .board-string.drawing .string-leader,
   .board-string.drawing .string-label,
   .strip-mark {
     animation: none;

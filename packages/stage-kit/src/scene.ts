@@ -273,7 +273,8 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
           toneVariant: ev.tone_variant,
           coreTier: ev.core_tier,
           audienceSize: ev.audience_size,
-          ...(ev.host_name === undefined ? {} : { hostName: ev.host_name }),
+          // Older streams carry no host_name: the character id, capitalised, still names him.
+          hostName: ev.host_name ?? ev.character.charAt(0).toUpperCase() + ev.character.slice(1),
           at,
         },
       };

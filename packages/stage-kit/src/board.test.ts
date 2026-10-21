@@ -4,9 +4,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { Hex, ShownRecord, StreamEvent } from "@shadowrunr/contract";
-import { ACT_HEAD, BOARD_ZOOM_MAX, boardArea, boardRegions, boardView, fitBox, layoutBoard, regionOf, stripBox, type BoardFrame } from "./board";
+import { ACT_HEAD, BOARD_ZOOM_MAX, boardArea, boardClip, boardRegions, boardView, fitBox, layoutBoard, regionOf, stripBox, thesisEnd, type BoardFrame } from "./board";
 import { REL_LABEL, ROLE_LABEL } from "./boardNames";
-import { stringGeom, stringLanes, timelineMarks } from "./boardStrings";
+import { labelSpot, stringAt, stringGeom, stringLanes, timelineMarks } from "./boardStrings";
 import type { Box } from "./hexgrid";
 import { foldEvents, reduce } from "./scene";
 import { LINK_MAX, mapFocusOf } from "./sceneModel";
@@ -157,6 +157,39 @@ describe("layoutBoard", () => {
   });
 });
 
+describe("the overlay lane", () => {
+  const lane: Box = { x: 792, y: 0, w: 440, h: 706 };
+  const framed: BoardFrame = { ...FRAME, lane };
+  let n = 0;
+  const regions = [6, 5, 5].map((c, i) => ({ name: `Act ${i}`, hexes: Array.from({ length: c }, () => `H${n++}`) }));
+  const layout = layoutBoard(regions, framed);
+
+  it("lays every act out left of it, and the overview stays the identity", () => {
+    const area = boardArea(framed);
+    expect(area.x + area.w).toBeLessThanOrEqual(lane.x);
+    expect(layout.area).toEqual(area);
+    for (const r of layout.regions) expect(r.box.x + r.box.w, r.name).toBeLessThanOrEqual(lane.x);
+    for (const [id, b] of Object.entries(layout.cards)) expect(hits(b, lane), id).toBe(false);
+    expect(boardView(layout, framed, null, [])).toEqual({ fit: { scale: 1, x: 0, y: 0 }, ring: [], under: [] });
+  });
+
+  it("keeps every zoomed ring left of it, and cuts off the rest of the board at its edge", () => {
+    const clip = boardClip(framed);
+    expect(clip.x + clip.w).toBeLessThanOrEqual(lane.x);
+    expect(clip.x + clip.w).toBeGreaterThanOrEqual(boardArea(framed).x + boardArea(framed).w);
+    for (const focus of Object.keys(layout.cards)) {
+      const v = boardView(layout, framed, focus, [{ from: "H0", to: "H7" }]);
+      for (const id of v.ring) expect(hits(fitBox(layout.cards[id]!, v.fit), lane), `${focus}: ${id}`).toBe(false);
+    }
+    expect(boardClip(FRAME)).toEqual({ x: 0, y: 0, w: FRAME.w, h: FRAME.h });
+  });
+
+  it("ends the thesis band where it starts", () => {
+    expect(thesisEnd(framed)).toBeLessThanOrEqual(lane.x);
+    expect(thesisEnd(FRAME)).toBe(FRAME.w);
+  });
+});
+
 describe("boardView", () => {
   let n = 0;
   const regions = [5, 4, 4, 3].map((c, i) => ({ name: `Act ${i}`, hexes: Array.from({ length: c }, () => `H${n++}`) }));
@@ -229,6 +262,24 @@ describe("strings", () => {
   it("sags a second string between the same cards further, either way round", () => {
     expect(stringLanes([{ from: "A", to: "B" }, { from: "B", to: "A" }, { from: "A", to: "C" }])).toEqual([0, 1, 0]);
     expect(stringGeom(a, b, 1)!.mid.y).toBeGreaterThan(stringGeom(a, b, 0)!.mid.y + 10);
+  });
+
+  it("puts a label on the curve where it is free, else beside it on a leader, never over a card", () => {
+    const free = stringGeom(a, b)!;
+    const on = labelSpot(free, 100, 38, [a, b]);
+    expect(on.anchor).toEqual({ x: on.x, y: on.y });
+    // Two cards a few px apart: no room on the string, so the label steps off it.
+    const top: Box = { x: 0, y: 0, w: 200, h: 100 };
+    const under: Box = { x: 0, y: 120, w: 200, h: 100 };
+    const right: Box = { x: 230, y: 0, w: 200, h: 220 };
+    const g = stringGeom(top, under)!;
+    const bounds: Box = { x: -400, y: -400, w: 1200, h: 1200 };
+    const off = labelSpot(g, 100, 38, [top, under, right], bounds);
+    const box = { x: off.x - 50, y: off.y - 19, w: 100, h: 38 };
+    for (const c of [top, under, right]) expect(hits(box, c)).toBe(false);
+    expect(Math.hypot(off.x - off.anchor.x, off.y - off.anchor.y)).toBeGreaterThan(1);
+    // ... hanging from a point on its string.
+    expect([0.2, 0.34, 0.5, 0.66, 0.8].some((t) => Math.hypot(stringAt(g, t).x - off.anchor.x, stringAt(g, t).y - off.anchor.y) < 0.01)).toBe(true);
   });
 
   it("sags downward whichever way it runs, and is null between touching cards", () => {
