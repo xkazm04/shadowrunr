@@ -911,4 +911,146 @@ mod tests {
         assert_eq!(spread(&[1, 2, 3, 4, 5, 6, 7, 8], 4), vec![1, 3, 5, 7]);
         assert_eq!(spread(&[1, 2], 4), vec![1, 2]);
     }
+
+    use shadowrunr_types::{JudgeVerdict, SimRunSpec};
+
+    /// An in-memory judged run: stream_start then three says; `quality` values are judged
+    /// on lines 2, 3, 4 in turn; `rules` are `(rule, state, evidence line)`.
+    fn mem_run(
+        id: &str,
+        tone: &str,
+        hash: &str,
+        quality: &[bool],
+        rules: &[(&str, &str, Option<usize>)],
+    ) -> RunData {
+        let events = [
+            json!({"type":"stream_start","ts_ms":0,"stream_id":id,"character":"malakor",
+                   "tone_variant":tone,"core_tier":"haiku","audience_size":3}),
+            json!({"type":"say","ts_ms":1000,"speaker":"malakor","text":"Kneel."}),
+            json!({"type":"say","ts_ms":2000,"speaker":"malakor","text":"Kneel twice."}),
+            json!({"type":"say","ts_ms":3000,"speaker":"malakor","text":"Kneel thrice."}),
+        ];
+        let spec = json!({
+            "run_id": id, "character": "malakor", "tone_variant": tone,
+            "core_tier": "haiku", "core_effort": "low", "segment": "SEG-01",
+            "audience_size": 3, "seed": 1, "duration_s": 60, "population": "fixture"
+        });
+        let quality: Vec<Value> = quality
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                json!({"dimension":"humor","value":v,"turn_ref":format!("{id}#{}", 2 + i % 3),
+                       "quote":"Kneel."})
+            })
+            .collect();
+        let rules: Vec<Value> = rules
+            .iter()
+            .map(|(rule, state, line)| {
+                let ev: Vec<String> = line.iter().map(|l| format!("{id}#{l}")).collect();
+                json!({"rule":rule,"state":state,"evidence":ev})
+            })
+            .collect();
+        let verdict = json!({"run_id":id,"judge_tier":"opus","rules":rules,"quality":quality});
+        RunData {
+            run_id: id.into(),
+            tournament_id: Some("t".into()),
+            dir: std::path::PathBuf::new(),
+            spec: Some(serde_json::from_value::<SimRunSpec>(spec).unwrap()),
+            events: events
+                .into_iter()
+                .map(|e| Some(serde_json::from_value::<StreamEvent>(e).unwrap()))
+                .collect(),
+            verdict: Some(serde_json::from_value::<JudgeVerdict>(verdict).unwrap()),
+            ledger: Vec::new(),
+            instrument_hash: Some(hash.into()),
+        }
+    }
+
+    /// The metrics block (the first JSON object after its heading) of a built prompt.
+    fn metrics_block(prompt: &str) -> Value {
+        let head = prompt.find("## Deterministic metrics").expect("metrics heading");
+        let at = head + prompt[head..].find("```json
+").expect("metrics block") + 8;
+        serde_json::Deserializer::from_str(&prompt[at..])
+            .into_iter::<Value>()
+            .next()
+            .unwrap()
+            .unwrap()
+    }
+
+    fn block_for(runs: &[RunData]) -> Value {
+        let m = crate::analyze(runs);
+        let built = synthesis_prompt(runs, &m, None, &[], PromptBudget::default()).unwrap();
+        metrics_block(&built.prompt)
+    }
+
+    /// docs/spec/contract.md: results from different instrument hashes are never merged.
+    #[test]
+    fn matrix_cells_keep_instrument_hashes_apart() {
+        let runs = vec![
+            mem_run("a", "theatrical", "h1", &[true], &[]),
+            mem_run("b", "theatrical", "h2", &[true], &[]),
+        ];
+        let block = block_for(&runs);
+        let cells = block["runs"]["cells"].as_array().unwrap();
+        assert_eq!(cells.len(), 2, "{cells:?}");
+        for c in cells {
+            assert_eq!(c["runs"], 1, "{c}");
+        }
+    }
+
+    /// The worst-quality cell is ranked on its own rate, never on one pooled across hashes.
+    #[test]
+    fn worst_quality_cell_is_ranked_per_instrument() {
+        let runs = vec![
+            // h1: 0 of 2 pass; h2: 2 of 2 pass (pooled, one 50% cell).
+            mem_run("h1run", "theatrical", "h1", &[false, false], &[]),
+            mem_run("h2run", "theatrical", "h2", &[true, true], &[]),
+            // Another cell at 1 of 3 (33%): beats a pooled 50%, never h1's 0%.
+            mem_run("other", "deadpan-bureaucrat", "h1", &[true, false, false], &[]),
+        ];
+        let lines = quality_lines(&runs);
+        let (first, _) = lines.first().copied().expect("failed quality turns");
+        assert_eq!(runs[first].run_id, "h1run", "{lines:?}");
+    }
+
+    /// One cell: the per-segment rule rows and the tone finding's rule failures are the same
+    /// tally, row for row (guard: equal before by construction, kept equal by one tally).
+    #[test]
+    fn one_cell_segment_rows_equal_tone_rows() {
+        let runs = vec![
+            mem_run(
+                "a",
+                "theatrical",
+                "h1",
+                &[true],
+                &[
+                    ("situation:a", "fail", Some(2)),
+                    ("directive:prevent:dir-1", "fail", Some(3)),
+                ],
+            ),
+            mem_run(
+                "b",
+                "theatrical",
+                "h1",
+                &[true],
+                &[
+                    ("situation:a", "pass", None),
+                    ("directive:prevent:dir-1", "pass", None),
+                ],
+            ),
+        ];
+        let m = crate::analyze(&runs);
+        assert_eq!(m.tones.len(), 1);
+        let tone: Vec<Value> = m.tones[0]
+            .rule_failures
+            .iter()
+            .map(|r| json!({"rule": r.rule, "fails": r.fails, "n": r.n, "refs": r.refs}))
+            .collect();
+        let block = block_for(&runs);
+        let seg = block["segments"][0]["rule_failures_top"].as_array().unwrap();
+        let tone_top = block["tones"][0]["rule_failures_top"].as_array().unwrap();
+        assert_eq!(seg, &tone);
+        assert_eq!(tone_top, &tone);
+    }
 }

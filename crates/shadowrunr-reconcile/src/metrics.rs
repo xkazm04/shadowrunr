@@ -628,4 +628,48 @@ mod directive_tests {
         // Nothing about directives when no run carried one.
         assert_eq!(directive_summary(&[]), None);
     }
+
+    /// Co-published numbers reconcile: directive checks are directive outcomes, so they are
+    /// in neither the tone table's rule failures nor its quality rates (red lines already
+    /// excluded them).
+    #[test]
+    fn tone_findings_carry_no_directive_checks() {
+        let tmp = tempfile::tempdir().unwrap();
+        briefed_tournament(tmp.path());
+        let src = Source::Tournament {
+            tournament_id: "t-brief".into(),
+        };
+        let runs = load_source(tmp.path(), &src).unwrap();
+        let m = analyze(&runs);
+        assert!(!m.tones.is_empty());
+        for t in &m.tones {
+            for r in &t.rule_failures {
+                assert!(!r.rule.starts_with("directive:"), "{}", r.rule);
+            }
+            for k in t.quality_rates.keys() {
+                assert!(!k.starts_with("directive:"), "{k}");
+            }
+        }
+    }
+
+    /// The summary sentence's hard-rule failure count and the tone table agree.
+    #[test]
+    fn summary_hard_rule_count_matches_the_tone_table() {
+        let tmp = tempfile::tempdir().unwrap();
+        briefed_tournament(tmp.path());
+        let src = Source::Tournament {
+            tournament_id: "t-brief".into(),
+        };
+        let runs = load_source(tmp.path(), &src).unwrap();
+        let m = analyze(&runs);
+        let table: u32 = m
+            .tones
+            .iter()
+            .flat_map(|t| t.rule_failures.iter())
+            .map(|r| r.fails)
+            .sum();
+        let summary = crate::deterministic_summary(&m);
+        assert!(summary.contains("Hard-rule failures: 0;"), "{summary}");
+        assert_eq!(table, 0);
+    }
 }
