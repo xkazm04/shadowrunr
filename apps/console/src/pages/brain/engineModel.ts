@@ -1,7 +1,7 @@
-// The engine floor's tables, derived from ledger rows (A/1 engineFloor, app.js:580-591). The
-// daemon has no RPC for the configured routes or live account cooldowns yet (`engine.status` is
-// proposed), so these tables say what the ledger shows the engine did.
-import type { LedgerEntry } from "@shadowrunr/contract";
+// The engine floor's tables (A/1 engineFloor, app.js:580-591): what the ledger shows the engine
+// did. The whole source comes from the daemon's `ledger.summary` (fromLedgerSummary); when that
+// fails the floor folds the rows it paged in (summariseLedger), with the same definitions.
+import type { LedgerEntry, LedgerSummary } from "@shadowrunr/contract";
 import { percentile } from "./brainModel";
 
 export interface ObservedRoute {
@@ -34,7 +34,10 @@ export interface EngineSummary {
   readonly calls: number;
   readonly errors: number;
   readonly fallbacks: number;
+  /** The sum over the rows that carry a cost. */
   readonly cost: number;
+  /** Rows without a cost: unknown, never read as $0. */
+  readonly uncosted: number;
   readonly cacheRead: number;
   readonly unrouted: number;
   readonly routes: readonly ObservedRoute[];
@@ -49,6 +52,7 @@ export function summariseLedger(rows: readonly LedgerEntry[]): EngineSummary {
   let errors = 0;
   let fallbacks = 0;
   let cost = 0;
+  let uncosted = 0;
   let cacheRead = 0;
   let unrouted = 0;
   const roles = new Map<string, { calls: number; errors: number; fallbacks: number; tiers: Set<string>; efforts: Set<string>; engines: Set<string>; models: Set<string>; dur: number[]; first: number[] }>();
@@ -58,7 +62,8 @@ export function summariseLedger(rows: readonly LedgerEntry[]): EngineSummary {
     const failed = l.error_kind !== undefined;
     if (failed) errors++;
     if (l.fallback_reason !== undefined) fallbacks++;
-    cost += l.cost_usd ?? 0;
+    if (l.cost_usd === undefined) uncosted++;
+    else cost += l.cost_usd;
     cacheRead += l.usage.cache_read_tokens ?? 0;
     if (l.run_id !== undefined) {
       const t = runStart.get(l.run_id);
@@ -122,5 +127,50 @@ export function summariseLedger(rows: readonly LedgerEntry[]): EngineSummary {
     lastError: a.lastError,
   }));
   accountRows.sort((a, b) => b.calls - a.calls);
-  return { calls: rows.length, errors, fallbacks, cost, cacheRead, unrouted, routes, accounts: accountRows, runStart };
+  return { calls: rows.length, errors, fallbacks, cost, uncosted, cacheRead, unrouted, routes, accounts: accountRows, runStart };
+}
+
+/** The daemon's whole-source `ledger.summary` as the floor's summary; `runStart` comes from the
+ * rows the call ledger paged in (it only times those rows). */
+export function fromLedgerSummary(s: LedgerSummary, runStart: ReadonlyMap<string, number>): EngineSummary {
+  return {
+    calls: s.calls,
+    errors: s.errors,
+    fallbacks: s.fallbacks,
+    cost: s.cost_usd,
+    uncosted: s.uncosted_calls,
+    cacheRead: s.cache_read_tokens,
+    unrouted: s.unrouted,
+    routes: s.routes.map((r) => ({
+      role: r.role,
+      calls: r.calls,
+      errors: r.errors,
+      fallbacks: r.fallbacks,
+      tiers: r.tiers,
+      efforts: r.efforts,
+      engines: r.engines,
+      models: r.models,
+      durationP50: r.duration_p50_ms,
+      durationP95: r.duration_p95_ms,
+      firstTextP50: r.first_text_p50_ms,
+    })),
+    accounts: s.accounts.map((a) => ({
+      key: `${a.engine} · ${a.account}`,
+      engine: a.engine,
+      account: a.account,
+      calls: a.calls,
+      errors: a.errors,
+      models: a.models,
+      lastTs: a.last_ts_ms,
+      lastError: a.last_error,
+    })),
+    runStart,
+  };
+}
+
+/** Cost as known: `$x`, `$x + n uncosted`, or `unknown` when no row carries a cost. */
+export function costText(s: Pick<EngineSummary, "calls" | "cost" | "uncosted">, usd: (x: number) => string): string {
+  if (s.uncosted === 0) return usd(s.cost);
+  if (s.uncosted >= s.calls) return "unknown";
+  return `${usd(s.cost)} + ${s.uncosted.toLocaleString("en-US")} uncosted`;
 }

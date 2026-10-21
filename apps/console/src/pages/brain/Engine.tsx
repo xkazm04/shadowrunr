@@ -1,8 +1,10 @@
 // brain/engine: the engine floor (live routes and accounts, see EngineFloor), fallbacks, and
 // the virtualised call ledger with a role filter. Source: one tournament's ledgers (default: the newest), or the
-// daemon's own engine ledger.
+// daemon's own engine ledger. The totals and the per-role routes are the whole source's
+// (`ledger.summary`); the paged rows are the browsable table. If the summary fails the floor
+// folds the paged rows and says so ("first pages").
 import { useMemo, useState } from "react";
-import type { LedgerEntry, TournamentsPage } from "@shadowrunr/contract";
+import type { LedgerEntry, LedgerSummary, TournamentsPage } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { usePaged, useRpc } from "../../data";
 import { Button } from "../../ui/Button";
@@ -12,7 +14,7 @@ import { Section } from "../../ui/Section";
 import { StatBand } from "../../ui/StatBand";
 import { EmptyState, StatePanel } from "../../ui/States";
 import { latestTournament } from "./useBrain";
-import { summariseLedger, type EngineSummary } from "./engineModel";
+import { costText, fromLedgerSummary, summariseLedger, type EngineSummary } from "./engineModel";
 import { clock, int, msText, usd } from "../../kit/events";
 import { roleColor } from "./draw";
 import { EngineFloor } from "./EngineFloor";
@@ -52,7 +54,7 @@ function columns(s: EngineSummary): Column<Row>[] {
     { id: "ft", header: "First text", align: "end", cell: (r) => msText(r.l.first_text_ms), sortValue: (r) => r.l.first_text_ms ?? -1 },
     { id: "dur", header: "Duration", align: "end", cell: (r) => msText(r.l.duration_ms), sortValue: (r) => r.l.duration_ms },
     { id: "out", header: "Out tok", align: "end", cell: (r) => int(r.l.usage.output_tokens), sortValue: (r) => r.l.usage.output_tokens },
-    { id: "cost", header: "Cost", align: "end", cell: (r) => usd(r.l.cost_usd ?? 0), sortValue: (r) => r.l.cost_usd ?? 0 },
+    { id: "cost", header: "Cost", align: "end", cell: (r) => (r.l.cost_usd === undefined ? "–" : usd(r.l.cost_usd)), sortValue: (r) => r.l.cost_usd ?? -1 },
     {
       id: "note",
       header: "Note",
@@ -64,8 +66,10 @@ function columns(s: EngineSummary): Column<Row>[] {
 
 const haystack = (r: Row) => `${r.l.run_id ?? ""} ${r.l.role} ${r.l.tier ?? ""} ${r.l.engine ?? ""} ${r.l.account ?? ""} ${r.l.model ?? ""} ${r.l.error_kind ?? ""} ${r.l.fallback_reason ?? ""}`;
 
-function Tables({ rows, more, onMore }: { rows: readonly LedgerEntry[]; more: boolean; onMore: () => void }) {
-  const s = useMemo(() => summariseLedger(rows), [rows]);
+function Tables({ rows, more, onMore, whole }: { rows: readonly LedgerEntry[]; more: boolean; onMore: () => void; whole: LedgerSummary | undefined }) {
+  const paged = useMemo(() => summariseLedger(rows), [rows]);
+  const s = useMemo(() => (whole === undefined ? paged : fromLedgerSummary(whole, paged.runStart)), [whole, paged]);
+  const sampled = more && whole === undefined;
   const indexed = useMemo(() => rows.map((l, i) => ({ i, l })), [rows]);
   const fallbacks = useMemo(() => indexed.filter((r) => r.l.fallback_reason !== undefined), [indexed]);
   const cols = useMemo(() => columns(s), [s]);
@@ -82,10 +86,10 @@ function Tables({ rows, more, onMore }: { rows: readonly LedgerEntry[]; more: bo
     <>
       <StatBand
         stats={[
-          { label: more ? "Engine calls (first pages)" : "Engine calls", value: int(s.calls) },
+          { label: sampled ? "Engine calls (first pages)" : "Engine calls", value: int(s.calls) },
           { label: "Errors", value: int(s.errors), ...(s.errors > 0 ? { tone: "fail" as const } : {}) },
           { label: "Fallbacks", value: int(s.fallbacks) },
-          { label: "Cost", value: usd(s.cost) },
+          { label: "Cost", value: costText(s, usd) },
         ]}
       />
       <EngineFloor s={s} />
@@ -111,6 +115,7 @@ export function Engine() {
   const source = picked ?? latest ?? (tournaments.data ? DAEMON : null);
   const params = source === null ? null : source === DAEMON ? { limit: PAGE } : { tournament_id: source, limit: PAGE };
   const ledger = usePaged("ledger.page", params, pages);
+  const summary = useRpc("ledger.summary", source === null ? null : source === DAEMON ? {} : { tournament_id: source });
   return (
     <QueryView<TournamentsPage> query={tournaments}>
       {(t) => (
@@ -141,7 +146,7 @@ export function Engine() {
           ) : ledger.query.data.length === 0 ? (
             <StatePanel state="empty" title="This ledger has no calls yet" />
           ) : (
-            <Tables rows={ledger.query.data} more={ledger.more} onMore={() => setPages((p) => p + STEP)} />
+            <Tables rows={ledger.query.data} more={ledger.more} onMore={() => setPages((p) => p + STEP)} whole={summary.data} />
           )}
         </>
       )}

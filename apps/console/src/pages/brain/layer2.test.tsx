@@ -8,7 +8,9 @@ import { schemaLabel } from "../../router/schema";
 import { BRAIN_ROUTES } from "../../router/brain";
 import { page } from "./index";
 import { Layer2, lineOf } from "./Layer2";
-import { daemon, season, transcript } from "./testgen";
+import { daemon, ledgerSummary, season, transcript } from "./testgen";
+import { invalidatedByEvent } from "../../data/invalidation";
+import { msText, usd } from "../../kit/events";
 import { mountPage as mount, nodes, ok, settle } from "../../kit/testing";
 
 const L2_BUDGET: number = DOM_BUDGETS.routes["wall+l2"];
@@ -121,6 +123,55 @@ describe("brain/engine", () => {
     expect(accounts?.querySelector("[data-account='main']")?.textContent).toContain("in rotation");
     expect(accounts?.querySelector("[data-account='spare']")?.textContent).toContain("cooling until");
     expect(document.querySelector("[data-role='brain-fleet']")?.textContent).toContain("API key, codex");
+  });
+
+  // The newest tournament holds 3 x 3,000 = 9,000 rows: past the floor's 5,000-row window.
+  const big = () => season({ tournaments: 3, runs: 3, rowsPerRun: 3_000, transcriptLines: 10 });
+  const stat = (label: string) => [...document.querySelectorAll("b")].find((b) => b.nextElementSibling?.textContent === label)?.textContent;
+  const routeCell = (role: string, col: number) => {
+    const row = [...document.querySelectorAll("[data-role='brain-routes'] tbody tr")].find((tr) => tr.querySelector("td")?.textContent?.includes(role));
+    return row?.querySelectorAll("td")[col]?.textContent;
+  };
+
+  it("reads its totals and per-role routes from ledger.summary and still pages the call ledger", async () => {
+    const s = big();
+    const { calls } = mount(<Layer2 sub={["engine"]} />, daemon(s), "#/brain/engine");
+    await settle(30);
+    expect(calls).toContain("ledger.summary");
+    expect(stat("Engine calls")).toBe("9,000");
+    expect(screen.queryByText(/first pages/)).toBeNull();
+    const sum = ledgerSummary(s.ledger);
+    const core = sum.routes.find((r) => r.role === "core_thread");
+    // Observed routes columns: role, tier, effort, engine, models, calls, errors, p50, p95, first text p50
+    expect(routeCell("core_thread", 5)).toBe("3,600");
+    expect(routeCell("core_thread", 7)).toBe(msText(core?.duration_p50_ms));
+    expect(routeCell("core_thread", 8)).toBe(msText(core?.duration_p95_ms));
+    expect(screen.getByRole("button", { name: "Load 5000 more" })).toBeTruthy();
+  });
+
+  it("says how many calls carry no cost instead of folding them into $0", async () => {
+    const s = big();
+    const ledger = s.ledger.map((l, i) => (i % 3 === 0 ? { ...l, cost_usd: undefined } : l)).map((l) => {
+      const { cost_usd, ...rest } = l;
+      return cost_usd === undefined ? rest : l;
+    });
+    mount(<Layer2 sub={["engine"]} />, daemon({ ...s, ledger }), "#/brain/engine");
+    await settle(30);
+    expect(stat("Cost")).toBe(`${usd(0.0002 * 6_000)} + 3,000 uncosted`);
+  });
+
+  it("falls back to the window's fold with the '(first pages)' label when ledger.summary fails", async () => {
+    const base = daemon(big());
+    mount(<Layer2 sub={["engine"]} />, (m, sent) => (m === "ledger.summary" ? { status: 500, body: { error: { code: "internal", message: "boom" } } } : base(m, sent)), "#/brain/engine");
+    await settle(30);
+    expect(stat("Engine calls (first pages)")).toBe("5,000");
+    expect(document.querySelector("[data-role='brain-routes']")).not.toBeNull();
+  });
+
+  it("refetches ledger.summary with ledger.page when a stream ends", () => {
+    for (const e of ["stream_end", "segment_end", "job"]) {
+      expect(invalidatedByEvent(e), e).toEqual(expect.arrayContaining(["ledger.page", "ledger.summary"]));
+    }
   });
 
   it("names an unknown floor instead of rendering blank", async () => {

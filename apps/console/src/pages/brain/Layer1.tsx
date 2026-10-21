@@ -166,7 +166,7 @@ function Wall() {
       heading="Layer 1 · The Brain"
       topExtra={
         <>
-          {win.truncated && <span className={styles.flag}>Newest tournament · first pages only</span>}
+          {win.truncated && <span className={styles.flag}>{win.whole ? "Newest tournament · lanes drawn from the first pages only" : "Newest tournament · first pages only"}</span>}
           <PreflightLamp />
         </>
       }
