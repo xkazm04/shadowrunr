@@ -9284,9 +9284,27 @@
           "minimum": 0,
           "type": "integer"
         },
+        "held": {
+          "description": "The tournament's held share: the MEAN over judged runs of each run's\npass / (pass + fail) ([`RunRow::health`]). A run is the observation, not a check, so\nthis is never the pooled checks. A judged run with no evaluated check is left out of\nthe denominator; absent when no judged run has one.",
+          "format": "double",
+          "type": "number"
+        },
         "instrument_hash": {
           "description": "The tournament's base instrument hash; `mixed` or `unknown` for an ad-hoc directory.",
           "type": "string"
+        },
+        "judged": {
+          "default": 0,
+          "description": "Runs whose verdict parses. Omitted by a daemon older than the field.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "red_line_fails": {
+          "description": "Failed `red-line:*` checks summed over the judged runs; omitted when 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         },
         "runs": {
           "format": "uint",

@@ -227,6 +227,18 @@ pub struct TournamentRow {
     pub runs: usize,
     /// Runs that finished (simulated, or judged when judging was on).
     pub completed: usize,
+    /// Runs whose verdict parses. Omitted by a daemon older than the field.
+    #[serde(default)]
+    pub judged: usize,
+    /// The tournament's held share: the MEAN over judged runs of each run's
+    /// pass / (pass + fail) ([`RunRow::health`]). A run is the observation, not a check, so
+    /// this is never the pooled checks. A judged run with no evaluated check is left out of
+    /// the denominator; absent when no judged run has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<f64>,
+    /// Failed `red-line:*` checks summed over the judged runs; omitted when 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub red_line_fails: u32,
 }
 
 /// `runs.page` filter; every present field must match.

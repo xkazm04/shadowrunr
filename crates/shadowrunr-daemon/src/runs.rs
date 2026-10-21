@@ -196,10 +196,43 @@ fn finished(dir: &Path) -> bool {
     matches!(classify(dir), RunClass::Judged | RunClass::Simulated)
 }
 
+#[derive(Default)]
+struct RunsFold {
+    completed: usize,
+    judged: usize,
+    held_sum: f64,
+    held_n: usize,
+    red_line_fails: u32,
+}
+
+/// One verdict parse per run. `classify` says `judged` exactly when `verdict.json` parses, so a
+/// parsed verdict is a finished, judged run; any other run falls to [`finished`].
+fn fold_runs(runs: &[RunEntry]) -> RunsFold {
+    let mut f = RunsFold::default();
+    for r in runs {
+        match read_json::<JudgeVerdict>(&r.dir.join("verdict.json")) {
+            Some(v) => {
+                let (health, red) = verdict_health(&v);
+                f.completed += 1;
+                f.judged += 1;
+                f.red_line_fails = f.red_line_fails.saturating_add(red);
+                if let Some(h) = health {
+                    f.held_sum += h;
+                    f.held_n += 1;
+                }
+            }
+            None if finished(&r.dir) => f.completed += 1,
+            None => {}
+        }
+    }
+    f
+}
+
 /// One `tournament.list` row for `<sim_root>/<tournament_id>/`, or `None` when the directory
 /// is neither a tournament nor holds runs. The instrument hash is the base hash from
 /// `tournament.json`; a directory without one (the ad-hoc directory) reports the runs' common
-/// base hash, or `mixed`. `completed` counts runs that finished (see [`finished`]).
+/// base hash, or `mixed`. `completed` counts runs that finished (see [`finished`]); `judged`,
+/// `held` and `red_line_fails` fold the judged runs' verdicts (see [`fold_runs`]).
 pub(crate) fn tournament_row(sim_root: &Path, tid: &str) -> Option<TournamentRow> {
     let t = sim_root.join(tid);
     let runs = tournament_runs(sim_root, tid);
@@ -225,8 +258,12 @@ pub(crate) fn tournament_row(sim_root: &Path, tid: &str) -> Option<TournamentRow
             }
         }
     };
+    let fold = fold_runs(&runs);
     Some(TournamentRow {
-        completed: runs.iter().filter(|r| finished(&r.dir)).count(),
+        completed: fold.completed,
+        judged: fold.judged,
+        held: (fold.held_n > 0).then(|| fold.held_sum / fold.held_n as f64),
+        red_line_fails: fold.red_line_fails,
         runs: meta.and_then(|m| m.runs).unwrap_or(runs.len()),
         instrument_hash,
         tournament_id: tid.to_string(),

@@ -4366,9 +4366,24 @@ export interface TournamentRow {
    */
   completed: number;
   /**
+   * The tournament's held share: the MEAN over judged runs of each run's
+   * pass / (pass + fail) ([`RunRow::health`]). A run is the observation, not a check, so
+   * this is never the pooled checks. A judged run with no evaluated check is left out of
+   * the denominator; absent when no judged run has one.
+   */
+  held?: number;
+  /**
    * The tournament's base instrument hash; `mixed` or `unknown` for an ad-hoc directory.
    */
   instrument_hash: string;
+  /**
+   * Runs whose verdict parses. Omitted by a daemon older than the field.
+   */
+  judged?: number;
+  /**
+   * Failed `red-line:*` checks summed over the judged runs; omitted when 0.
+   */
+  red_line_fails?: number;
   runs: number;
   tournament_id: string;
 }

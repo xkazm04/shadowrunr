@@ -5,7 +5,7 @@
 "use strict";
 export const validate = validate937;
 const schema298 = {"description":"Tournaments ordered by `tournament_id`.","properties":{"items":{"items":{"$ref":"#/$defs/TournamentRow"},"type":"array"},"next_cursor":{"type":"string"}},"required":["items"],"type":"object"};
-const schema279 = {"description":"One row of `tournament.list` and `tournaments.page`.","properties":{"completed":{"description":"Runs that finished (simulated, or judged when judging was on).","format":"uint","minimum":0,"type":"integer"},"instrument_hash":{"description":"The tournament's base instrument hash; `mixed` or `unknown` for an ad-hoc directory.","type":"string"},"runs":{"format":"uint","minimum":0,"type":"integer"},"tournament_id":{"type":"string"}},"required":["tournament_id","instrument_hash","runs","completed"],"type":"object"};
+const schema279 = {"description":"One row of `tournament.list` and `tournaments.page`.","properties":{"completed":{"description":"Runs that finished (simulated, or judged when judging was on).","format":"uint","minimum":0,"type":"integer"},"held":{"description":"The tournament's held share: the MEAN over judged runs of each run's\npass / (pass + fail) ([`RunRow::health`]). A run is the observation, not a check, so\nthis is never the pooled checks. A judged run with no evaluated check is left out of\nthe denominator; absent when no judged run has one.","format":"double","type":"number"},"instrument_hash":{"description":"The tournament's base instrument hash; `mixed` or `unknown` for an ad-hoc directory.","type":"string"},"judged":{"default":0,"description":"Runs whose verdict parses. Omitted by a daemon older than the field.","format":"uint","minimum":0,"type":"integer"},"red_line_fails":{"description":"Failed `red-line:*` checks summed over the judged runs; omitted when 0.","format":"uint32","minimum":0,"type":"integer"},"runs":{"format":"uint","minimum":0,"type":"integer"},"tournament_id":{"type":"string"}},"required":["tournament_id","instrument_hash","runs","completed"],"type":"object"};
 
 function validate711(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -46,11 +46,14 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.instrument_hash !== undefined){
+if(data.held !== undefined){
+let data1 = data.held;
 const _errs3 = errors;
-if(typeof data.instrument_hash !== "string"){
-validate711.errors = [{instancePath:instancePath+"/instrument_hash",schemaPath:"#/properties/instrument_hash/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(errors === _errs3){
+if(!((typeof data1 == "number") && (isFinite(data1)))){
+validate711.errors = [{instancePath:instancePath+"/held",schemaPath:"#/properties/held/type",keyword:"type",params:{type: "number"},message:"must be number"}];
 return false;
+}
 }
 var valid0 = _errs3 === errors;
 }
@@ -58,20 +61,11 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.runs !== undefined){
-let data2 = data.runs;
+if(data.instrument_hash !== undefined){
 const _errs5 = errors;
-if(!(((typeof data2 == "number") && (!(data2 % 1) && !isNaN(data2))) && (isFinite(data2)))){
-validate711.errors = [{instancePath:instancePath+"/runs",schemaPath:"#/properties/runs/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+if(typeof data.instrument_hash !== "string"){
+validate711.errors = [{instancePath:instancePath+"/instrument_hash",schemaPath:"#/properties/instrument_hash/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
-}
-if(errors === _errs5){
-if((typeof data2 == "number") && (isFinite(data2))){
-if(data2 < 0 || isNaN(data2)){
-validate711.errors = [{instancePath:instancePath+"/runs",schemaPath:"#/properties/runs/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
-return false;
-}
-}
 }
 var valid0 = _errs5 === errors;
 }
@@ -79,16 +73,82 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.tournament_id !== undefined){
+if(data.judged !== undefined){
+let data3 = data.judged;
 const _errs7 = errors;
-if(typeof data.tournament_id !== "string"){
-validate711.errors = [{instancePath:instancePath+"/tournament_id",schemaPath:"#/properties/tournament_id/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(!(((typeof data3 == "number") && (!(data3 % 1) && !isNaN(data3))) && (isFinite(data3)))){
+validate711.errors = [{instancePath:instancePath+"/judged",schemaPath:"#/properties/judged/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
+}
+if(errors === _errs7){
+if((typeof data3 == "number") && (isFinite(data3))){
+if(data3 < 0 || isNaN(data3)){
+validate711.errors = [{instancePath:instancePath+"/judged",schemaPath:"#/properties/judged/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
 }
 var valid0 = _errs7 === errors;
 }
 else {
 var valid0 = true;
+}
+if(valid0){
+if(data.red_line_fails !== undefined){
+let data4 = data.red_line_fails;
+const _errs9 = errors;
+if(!(((typeof data4 == "number") && (!(data4 % 1) && !isNaN(data4))) && (isFinite(data4)))){
+validate711.errors = [{instancePath:instancePath+"/red_line_fails",schemaPath:"#/properties/red_line_fails/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+if(errors === _errs9){
+if((typeof data4 == "number") && (isFinite(data4))){
+if(data4 < 0 || isNaN(data4)){
+validate711.errors = [{instancePath:instancePath+"/red_line_fails",schemaPath:"#/properties/red_line_fails/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+var valid0 = _errs9 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.runs !== undefined){
+let data5 = data.runs;
+const _errs11 = errors;
+if(!(((typeof data5 == "number") && (!(data5 % 1) && !isNaN(data5))) && (isFinite(data5)))){
+validate711.errors = [{instancePath:instancePath+"/runs",schemaPath:"#/properties/runs/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+if(errors === _errs11){
+if((typeof data5 == "number") && (isFinite(data5))){
+if(data5 < 0 || isNaN(data5)){
+validate711.errors = [{instancePath:instancePath+"/runs",schemaPath:"#/properties/runs/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+var valid0 = _errs11 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.tournament_id !== undefined){
+const _errs13 = errors;
+if(typeof data.tournament_id !== "string"){
+validate711.errors = [{instancePath:instancePath+"/tournament_id",schemaPath:"#/properties/tournament_id/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid0 = _errs13 === errors;
+}
+else {
+var valid0 = true;
+}
+}
+}
 }
 }
 }
@@ -103,7 +163,7 @@ return false;
 validate711.errors = vErrors;
 return errors === 0;
 }
-validate711.evaluated = {"props":{"completed":true,"instrument_hash":true,"runs":true,"tournament_id":true},"dynamicProps":false,"dynamicItems":false};
+validate711.evaluated = {"props":{"completed":true,"held":true,"instrument_hash":true,"judged":true,"red_line_fails":true,"runs":true,"tournament_id":true},"dynamicProps":false,"dynamicItems":false};
 
 
 function validate937(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
