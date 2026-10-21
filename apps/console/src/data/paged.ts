@@ -30,6 +30,8 @@ interface Fold<T> {
   readonly ready: boolean;
   readonly error: DataError | undefined;
   readonly refreshing: boolean;
+  /** When the oldest of the folded replies landed: the list is as old as its oldest page. */
+  readonly updatedAt: number | undefined;
 }
 
 type Listener = () => void;
@@ -48,7 +50,7 @@ abstract class KeySet<T> {
   constructor(cache: QueryCache, method: string, empty: T) {
     this.cache = cache;
     this.method = method;
-    this.snap = { data: empty, ready: false, error: undefined, refreshing: false };
+    this.snap = { data: empty, ready: false, error: undefined, refreshing: false, updatedAt: undefined };
   }
 
   readonly subscribe = (l: Listener): (() => void) => {
@@ -105,17 +107,19 @@ abstract class KeySet<T> {
     }
     let error: DataError | undefined;
     let refreshing = false;
+    let updatedAt: number | undefined;
     for (const l of this.links) {
       const s = this.cache.getSnapshot(l.key);
       error ??= s.error;
       refreshing ||= s.refreshing;
+      if (s.updatedAt !== undefined) updatedAt = Math.min(updatedAt ?? s.updatedAt, s.updatedAt);
     }
     const sameData = out.datas.length === this.datas.length && out.datas.every((d, i) => d === this.datas[i]);
-    const same = sameData && error === this.snap.error && refreshing === this.snap.refreshing && out.ready === this.snap.ready;
+    const same = sameData && error === this.snap.error && refreshing === this.snap.refreshing && updatedAt === this.snap.updatedAt && out.ready === this.snap.ready;
     if (same) return;
     this.datas = out.datas;
     // Unchanged replies keep the folded object, so a refresh flag flipping redraws nothing downstream.
-    this.snap = { data: sameData ? this.snap.data : out.data, ready: out.ready, error, refreshing };
+    this.snap = { data: sameData ? this.snap.data : out.data, ready: out.ready, error, refreshing, updatedAt };
     for (const l of this.listeners) l();
   }
 }
@@ -230,6 +234,7 @@ function pagedOf<T>(f: Fold<ChainData>, reload: () => void, idle = false): Paged
       error: f.error,
       errorView: f.error ? viewOfError(f.error) : undefined,
       refreshing: f.refreshing,
+      updatedAt: f.updatedAt,
       reload,
     },
     pages,
@@ -238,7 +243,7 @@ function pagedOf<T>(f: Fold<ChainData>, reload: () => void, idle = false): Paged
   };
 }
 
-const IDLE_FOLD: Fold<ChainData> = { data: EMPTY_CHAIN, ready: false, error: undefined, refreshing: false };
+const IDLE_FOLD: Fold<ChainData> = { data: EMPTY_CHAIN, ready: false, error: undefined, refreshing: false, updatedAt: undefined };
 const NO_FOLDS: readonly Fold<ChainData>[] = [];
 const NO_GROUP = { subscribe: () => () => undefined, getSnapshot: () => NO_FOLDS };
 
@@ -282,7 +287,7 @@ export interface Many<T> {
 }
 
 const EMPTY_LIST: readonly never[] = [];
-const IDLE_MANY: Fold<readonly unknown[]> = { data: EMPTY_LIST, ready: false, error: undefined, refreshing: false };
+const IDLE_MANY: Fold<readonly unknown[]> = { data: EMPTY_LIST, ready: false, error: undefined, refreshing: false, updatedAt: undefined };
 
 /** One call of `method` per params entry, in order; an empty list reads nothing. */
 export function useRpcMany<M extends RpcMethod>(method: M, list: readonly RpcParams<M>[]): Many<RpcResult<M>> {

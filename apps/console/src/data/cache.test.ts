@@ -108,6 +108,32 @@ describe("data layer", () => {
     layer.stop();
   });
 
+  it("revalidates watched ready entries once when the stream reopens after a gap, never unwatched ones", async () => {
+    const sockets = fakeSockets();
+    const timers = manualTimers();
+    const fetch = scriptedFetch(valid);
+    let now = 1_000;
+    const layer = createDataLayer({ baseUrl: "http://x", door: contractDoor, fetch, socket: sockets.factory, timers, now: () => now });
+    layer.start();
+    layer.cache.watch("runs.page", { limit: 10 }, () => undefined);
+    const off = layer.cache.watch("directive.list", {}, () => undefined);
+    await flush();
+    sockets.last().open();
+    await flush();
+    off(); // directive.list is no longer on screen
+    expect(fetch.calls).toEqual(["runs.page", "directive.list"]);
+    expect(layer.reopenedAt()).toBeUndefined(); // the first open is not a reopen
+    sockets.last().drop(); // events missed from here on
+    now = 5_000;
+    timers.advance(30_000);
+    sockets.last().open();
+    await flush();
+    expect(layer.reopenedAt()).toBe(5_000);
+    expect(fetch.calls).toEqual(["runs.page", "directive.list", "runs.page"]);
+    expect(layer.cache.getSnapshot(queryKey("runs.page", { limit: 10 })).updatedAt).toBe(5_000);
+    layer.stop();
+  });
+
   it("refetches what a mutation invalidates", async () => {
     const fetch = scriptedFetch(valid);
     const layer = createDataLayer({ baseUrl: "http://x", door: contractDoor, fetch, socket: fakeSockets().factory, timers: manualTimers() });

@@ -113,6 +113,18 @@ export class QueryCache {
     }
   }
 
+  /**
+   * Refetches every watched entry, ready or failed: after the live feed was down, any reply on
+   * screen may have missed the events that would have invalidated it. Unwatched entries wait
+   * until they are watched again (they are marked stale so a re-mount fetches).
+   */
+  revalidateWatched(): void {
+    for (const [key, e] of this.entries) {
+      if (e.listeners.size === 0) e.stale = true;
+      else if (!e.inflight) void this.fetch(key, e);
+    }
+  }
+
   onEvent(type: string): void {
     this.invalidate(invalidatedByEvent(type));
   }

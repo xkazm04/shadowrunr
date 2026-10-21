@@ -18,6 +18,8 @@ export interface DataLayerOptions {
   readonly random?: () => number;
   readonly backstopMs?: number;
   readonly timeoutMs?: number;
+  /** The clock stamping replies and reopens; `Date.now` by default. */
+  readonly now?: () => number;
 }
 
 export interface DataLayer {
@@ -36,6 +38,11 @@ export interface DataLayer {
   openLive(onEvent: (env: EventEnvelope) => void, onIssue?: (issue: DataError) => void): EventStream;
   /** Replays one run's transcript as events, with the same reconnect and resume. */
   openReplay(runId: string, onEvent: (env: EventEnvelope) => void, speed?: number): EventStream;
+  /**
+   * When `/events` last reopened after a drop (undefined until the first reopen). A reply older
+   * than this may have missed events while the feed was down; the reopen revalidates it.
+   */
+  reopenedAt(): number | undefined;
   start(): void;
   stop(): void;
 }
@@ -49,13 +56,16 @@ export function createDataLayer(opts: DataLayerOptions): DataLayer {
     ...(opts.timeoutMs === undefined ? {} : { timeoutMs: opts.timeoutMs }),
     onReachability: (rpc) => connection.update({ rpc }),
   });
+  const now = opts.now ?? Date.now;
   const cache = new QueryCache(client, {
     timers: opts.timers,
+    now,
     ...(opts.backstopMs === undefined ? {} : { backstopMs: opts.backstopMs }),
   });
   const live = new Set<(env: EventEnvelope) => void>();
   let stream: EventStream | null = null;
   let everOpened = false;
+  let reopenedAt: number | undefined;
 
   const streamOpts = (target: string, onEvent: (env: EventEnvelope) => void, speed?: number) => ({
     url: wsUrl(opts.baseUrl),
@@ -87,6 +97,7 @@ export function createDataLayer(opts: DataLayerOptions): DataLayer {
     openReplay(runId, onEvent, speed) {
       return openEventStream(streamOpts(runId, onEvent, speed));
     },
+    reopenedAt: () => reopenedAt,
     start() {
       if (stream) return;
       cache.startBackstop();
@@ -96,9 +107,13 @@ export function createDataLayer(opts: DataLayerOptions): DataLayer {
           for (const l of live) l(env);
         }),
         onStatus: (status, info) => {
+          // Stamped before the connection changes, so a region re-rendering on it sees the reopen.
+          const reopened = status === "open" && everOpened;
+          if (reopened) reopenedAt = now();
           connection.update({ stream: status, retryInMs: info.delayMs, ...(status === "open" ? { issue: undefined } : {}) });
           if (status === "open") {
-            if (everOpened) cache.retryFailed();
+            // Events were missed during the gap: every reply on screen refetches, not only failed ones.
+            if (reopened) cache.revalidateWatched();
             everOpened = true;
           }
         },

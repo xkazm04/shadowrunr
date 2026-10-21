@@ -33,6 +33,8 @@ export interface Query<T> {
   /** How to show the error, when there is one. */
   readonly errorView: ErrorView | undefined;
   readonly refreshing: boolean;
+  /** When the reply in `data` landed (ms since the epoch); undefined before the first reply. */
+  readonly updatedAt: number | undefined;
   readonly reload: () => void;
 }
 
@@ -63,6 +65,7 @@ export function useRpc<M extends RpcMethod>(method: M, params: RpcParams<M> | nu
       error: snap.error,
       errorView: snap.error ? viewOfError(snap.error) : undefined,
       refreshing: snap.refreshing,
+      updatedAt: snap.updatedAt,
       reload,
     }),
     [snap, reload],
