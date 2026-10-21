@@ -21,7 +21,10 @@ use std::time::Duration;
 
 use futures::future::LocalBoxFuture;
 use serde::Serialize;
-use shadowrunr_sim::sandbox::{judge_session, run_sandbox, EventSink, SandboxProgress, SandboxRun};
+use shadowrunr_sim::judging::JudgeResult;
+use shadowrunr_sim::sandbox::{
+    judge_session, run_sandbox, EventSink, SandboxProgress, SandboxRun, SessionJudgement,
+};
 use shadowrunr_sim::{SimError, SimOptions};
 use shadowrunr_types::sandbox::{
     SandboxChaos, SandboxCheck, SandboxCheckId, SandboxCheckState, SandboxIdParams, SandboxJudge,
@@ -110,7 +113,7 @@ pub type JudgeFn = Arc<
             PathBuf,
             Arc<dyn Engine>,
             SimOptions,
-        ) -> LocalBoxFuture<'static, Result<SandboxJudge, SimError>>
+        ) -> LocalBoxFuture<'static, Result<SessionJudgement, SimError>>
         + Send
         + Sync,
 >;
@@ -522,28 +525,9 @@ async fn host(state: Arc<AppState>, session: Arc<Session>, live_run: Arc<LiveRun
     };
     let (judged, _) = tokio::join!(judging, crate::record::wait_for_voice(&dir));
     if let Some(judged) = judged {
-        match judged {
-            Ok(j) => {
-                let st = if j.rule_fails == 0 {
-                    SandboxCheckState::Pass
-                } else {
-                    SandboxCheckState::Fail
-                };
-                set_check(
-                    &mut report,
-                    SandboxCheckId::Judge,
-                    st,
-                    format!("{} rule fails ({})", j.rule_fails, j.verdict_path),
-                );
-                report.judge = Some(j);
-            }
-            Err(e) => set_check(
-                &mut report,
-                SandboxCheckId::Judge,
-                SandboxCheckState::Fail,
-                e.to_string(),
-            ),
-        }
+        let (st, detail, summary) = judge_check(judged);
+        set_check(&mut report, SandboxCheckId::Judge, st, detail);
+        report.judge = summary;
     } else {
         set_check(
             &mut report,
@@ -577,6 +561,55 @@ async fn host(state: Arc<AppState>, session: Arc<Session>, live_run: Arc<LiveRun
     // tagger failure is only logged.
     if judge {
         crate::review::tag_after_judge(state, session.id.clone());
+    }
+}
+
+/// The judge check for what judging the session came to, and the report's verdict summary.
+/// Only a verdict that decided at least one hard rule can pass or fail the check. A verdict
+/// that decided none, a pending judge (engine or quota: re-judge the session) and a void one
+/// (content: no usable reply) are unmeasured, which `gate_pass` never counts as a pass. An
+/// error before the judge could run fails it.
+fn judge_check(
+    judged: Result<SessionJudgement, SimError>,
+) -> (SandboxCheckState, String, Option<SandboxJudge>) {
+    let j = match judged {
+        Ok(j) => j,
+        Err(e) => return (SandboxCheckState::Fail, e.to_string(), None),
+    };
+    match (&j.result, j.judge) {
+        (JudgeResult::Judged { coverage: c, .. }, Some(summary)) => {
+            let (st, detail) = if c.fails > 0 {
+                (SandboxCheckState::Fail, format!("{} rule fails", c.fails))
+            } else if c.evaluated == 0 {
+                return (
+                    SandboxCheckState::Unmeasured,
+                    format!("0 of {} hard checks evaluated", c.hard),
+                    Some(summary),
+                );
+            } else {
+                (SandboxCheckState::Pass, "0 rule fails".to_string())
+            };
+            let detail = format!(
+                "{detail}, {} of {} hard checks evaluated ({})",
+                c.evaluated, c.hard, summary.verdict_path
+            );
+            (st, detail, Some(summary))
+        }
+        (JudgeResult::Judged { .. }, None) => (
+            SandboxCheckState::Fail,
+            "judged without a verdict summary".into(),
+            None,
+        ),
+        (JudgeResult::Pending(why), _) => (
+            SandboxCheckState::Unmeasured,
+            format!("judge pending: {why}"),
+            None,
+        ),
+        (JudgeResult::Void(why), _) => (
+            SandboxCheckState::Unmeasured,
+            format!("judge void: {why}"),
+            None,
+        ),
     }
 }
 
@@ -749,7 +782,9 @@ pub(crate) mod tests {
     use super::*;
     use crate::e2e::{repo, test_config};
     use crate::engine::EngineHandle;
+    use shadowrunr_sim::judging::{Coverage, JudgeResult};
     use shadowrunr_types::sandbox::StageAck;
+    use shadowrunr_types::{CheckState, JudgeVerdict, ModelTier, RuleCheck};
 
     fn rec(seq: u64, gaps: u32) -> AckRecord {
         AckRecord {
@@ -924,19 +959,57 @@ pub(crate) mod tests {
         })
     }
 
-    pub(crate) fn fake_judge(rule_fails: Option<u32>) -> JudgeFn {
+    /// A verdict with `states` as its hard rules.
+    pub(crate) fn verdict(states: &[CheckState]) -> JudgeVerdict {
+        JudgeVerdict {
+            run_id: "sbx".into(),
+            judge_tier: ModelTier::Opus,
+            rules: states
+                .iter()
+                .enumerate()
+                .map(|(i, s)| RuleCheck {
+                    rule: format!("R{i}"),
+                    state: *s,
+                    evidence: Vec::new(),
+                })
+                .collect(),
+            quality: Vec::new(),
+            notes: None,
+        }
+    }
+
+    /// A judge that comes to `result` (the summary follows it, as `judge_session`'s does).
+    pub(crate) fn fake_judgement(result: JudgeResult) -> JudgeFn {
         Arc::new(move |_dir, _engine, _opts| {
+            let result = result.clone();
             Box::pin(async move {
-                match rule_fails {
-                    Some(rule_fails) => Ok(SandboxJudge {
-                        verdict_path: "verdict.json".into(),
-                        rule_fails,
-                        quality_mean: Some(3.5),
-                    }),
-                    None => Err(SimError::Spec("judge timed out".into())),
-                }
+                let judge = result.verdict().map(|v| SandboxJudge {
+                    verdict_path: "verdict.json".into(),
+                    rule_fails: Coverage::of(v).fails,
+                    quality_mean: Some(3.5),
+                });
+                Ok(SessionJudgement { result, judge })
             })
         })
+    }
+
+    /// `Some(n)`: a verdict with `n` failed and two passed hard rules. `None`: the judge
+    /// could not even start (a session file missing), which is an error, not a state.
+    pub(crate) fn fake_judge(rule_fails: Option<u32>) -> JudgeFn {
+        match rule_fails {
+            Some(n) => {
+                let mut states = vec![CheckState::Fail; n as usize];
+                states.extend([CheckState::Pass, CheckState::Pass]);
+                let v = verdict(&states);
+                fake_judgement(JudgeResult::Judged {
+                    coverage: Coverage::of(&v),
+                    verdict: Box::new(v),
+                })
+            }
+            None => Arc::new(|_dir, _engine, _opts| {
+                Box::pin(async { Err(SimError::Spec("spec.json: not found".into())) })
+            }),
+        }
     }
 
     pub(crate) fn hosting(run: RunFn, judge: JudgeFn) -> Hosting {
@@ -1162,7 +1235,7 @@ pub(crate) mod tests {
             .find(|c| c.id == SandboxCheckId::Judge)
             .unwrap();
         assert_eq!(judge.state, SandboxCheckState::Fail);
-        assert!(judge.detail.contains("judge timed out"), "{}", judge.detail);
+        assert!(judge.detail.contains("spec.json"), "{}", judge.detail);
     }
 
     #[tokio::test]
@@ -1298,5 +1371,111 @@ pub(crate) mod tests {
         );
         let refused = start_with(red, params(true), Hosting::default()).await;
         assert_eq!(refused.unwrap_err().code, ErrorCode::PreflightRed);
+    }
+    /// The judge check a session ends with, read back from `session.json`.
+    async fn judged_with(judge: JudgeFn) -> (SandboxCheck, SandboxReport) {
+        let tmp = tempfile::tempdir().unwrap();
+        let st = state(tmp.path());
+        let h = hosting(fake_run(2, Duration::ZERO, None, false), judge);
+        let started = start_with(st.clone(), params(true), h).await.unwrap();
+        until_ended(&st, &started.session_id).await;
+        let disk: SandboxReport = serde_json::from_str(
+            &std::fs::read_to_string(Path::new(&started.dir).join("session.json")).unwrap(),
+        )
+        .unwrap();
+        let check = disk
+            .checks
+            .iter()
+            .find(|c| c.id == SandboxCheckId::Judge)
+            .unwrap()
+            .clone();
+        (check, disk)
+    }
+
+    /// Acceptance 1: a rate-limited judge is pending, not a content failure of the host.
+    #[tokio::test]
+    async fn a_pending_judge_is_unmeasured_not_failed() {
+        let (check, report) = judged_with(fake_judgement(JudgeResult::Pending(
+            "judge engine call failed: rate limited on isolated".into(),
+        )))
+        .await;
+        assert_eq!(check.state, SandboxCheckState::Unmeasured);
+        assert!(
+            check.detail.starts_with("judge pending"),
+            "{}",
+            check.detail
+        );
+        assert!(check.detail.contains("rate limited"), "{}", check.detail);
+        assert!(report.judge.is_none());
+        assert!(!report.pass, "unmeasured is not a pass");
+    }
+
+    /// Acceptance 2: a quota deferral is pending too.
+    #[tokio::test]
+    async fn a_quota_deferred_judge_is_unmeasured() {
+        let (check, report) = judged_with(fake_judgement(JudgeResult::Pending(
+            "judge deferred: quota (isolated)".into(),
+        )))
+        .await;
+        assert_eq!(check.state, SandboxCheckState::Unmeasured);
+        assert!(
+            check.detail.starts_with("judge pending"),
+            "{}",
+            check.detail
+        );
+        assert!(
+            check.detail.contains("judge deferred: quota"),
+            "{}",
+            check.detail
+        );
+        assert!(!report.pass);
+    }
+
+    /// Acceptance 3, and the side effect it carries: a session whose judge decided no hard
+    /// rule (every one not_provoked or not_evaluable) used to read Pass on `rule_fails == 0`.
+    /// It is now Unmeasured, so its session gate, which passed before, fails.
+    #[tokio::test]
+    async fn a_judge_that_evaluated_no_hard_rule_does_not_pass_the_session() {
+        let v = verdict(&[
+            CheckState::NotProvoked,
+            CheckState::NotEvaluable,
+            CheckState::NotProvoked,
+        ]);
+        let (check, report) = judged_with(fake_judgement(JudgeResult::Judged {
+            coverage: Coverage::of(&v),
+            verdict: Box::new(v),
+        }))
+        .await;
+        assert_eq!(check.state, SandboxCheckState::Unmeasured);
+        assert_eq!(check.detail, "0 of 3 hard checks evaluated");
+        assert_eq!(report.judge.as_ref().map(|j| j.rule_fails), Some(0));
+        assert!(
+            !report.pass,
+            "a session the judge decided nothing about no longer passes its gate"
+        );
+    }
+
+    /// Acceptance 4 (guard): one hard-rule fail fails the judge check; the summary keeps it.
+    #[tokio::test]
+    async fn one_hard_rule_fail_fails_the_judge() {
+        let (check, report) = judged_with(fake_judge(Some(1))).await;
+        assert_eq!(check.state, SandboxCheckState::Fail);
+        assert_eq!(report.judge.as_ref().unwrap().rule_fails, 1);
+        assert!(check.detail.starts_with("1 rule fails"), "{}", check.detail);
+        assert!(!report.pass);
+    }
+
+    /// Acceptance 5: a void judge reply is unmeasured, and says so.
+    #[tokio::test]
+    async fn a_void_judge_is_unmeasured_and_named() {
+        let (check, report) = judged_with(fake_judgement(JudgeResult::Void(
+            "judge reply is not the rubric JSON".into(),
+        )))
+        .await;
+        assert_eq!(check.state, SandboxCheckState::Unmeasured);
+        assert!(check.detail.starts_with("judge void"), "{}", check.detail);
+        assert!(check.detail.contains("rubric JSON"), "{}", check.detail);
+        assert!(report.judge.is_none());
+        assert!(!report.pass);
     }
 }
