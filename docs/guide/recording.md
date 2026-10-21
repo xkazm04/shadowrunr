@@ -75,6 +75,21 @@ stage_url = "http://localhost:5178"   # where the built stage is served
 `stage_url` must be `http://localhost:<port>`. The daemon only accepts browser origins on
 `http://localhost:*`, so `127.0.0.1` would load the page but never connect.
 
+## Which face is recorded: `[stage] avatar`
+
+```toml
+[stage]
+avatar = "cut"   # "glow" (default), "cut" or "depth"
+```
+
+The stage draws the face with one of three renderers (`?avatar=`, `apps/stage/DESIGN.md`).
+`[stage] avatar` picks the one the daemon's stage URLs ask for: with `cut` or `depth`, both the
+OBS browser source's URL and the sandbox's `stage_url` end in `&avatar=cut` (or `depth`), and
+`recording.json`'s `stage_url` shows it. With `glow` (or no `[stage]`) the URLs carry no
+`avatar` and the stage draws its default. Any other value is a config error. The OBS URL comes
+from the config `stream sandbox --record` loads, the sandbox's `stage_url` from the daemon's (read
+when it starts), so give both the same file. `stream sandbox --record` prints the URL OBS records.
+
 ## Check OBS: `shadowrunr record check`
 
 Probes OBS without recording anything:

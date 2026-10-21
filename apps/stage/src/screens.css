@@ -142,7 +142,7 @@
   opacity: 0.7;
 }
 
-/* The URL keeps its chips beside it, so the bar's right end (under the overlay lane) is empty. */
+/* The URL keeps its chips beside it; the overlay lane steps below the chrome (layouts.ts). */
 .browser-url {
   flex: 0 1 auto;
   min-width: 0;

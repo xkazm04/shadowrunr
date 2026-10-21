@@ -29,6 +29,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::config::FaceVariant;
 use crate::runs;
 use obs::{code, Obs, ObsError};
 
@@ -90,11 +91,13 @@ impl RecordConfig {
     }
 }
 
-/// The live stage in broadcast mode with the voice on, pointed at the daemon on `daemon_port`.
-pub fn stage_url(base: &str, daemon_port: u16) -> String {
+/// The live stage in broadcast mode with the voice on, pointed at the daemon on `daemon_port`,
+/// drawing the face with `avatar` (`[stage] avatar`).
+pub fn stage_url(base: &str, daemon_port: u16, avatar: FaceVariant) -> String {
     format!(
-        "{}/?run=live&broadcast=1&voice=1&ws=ws://127.0.0.1:{daemon_port}/events",
-        base.trim_end_matches('/')
+        "{}/?run=live&broadcast=1&voice=1&ws=ws://127.0.0.1:{daemon_port}/events{}",
+        base.trim_end_matches('/'),
+        avatar.query()
     )
 }
 
@@ -532,8 +535,15 @@ mod tests {
     #[test]
     fn the_stage_url_is_the_live_broadcast_with_voice() {
         assert_eq!(
-            stage_url("http://localhost:5178/", 7800),
+            stage_url("http://localhost:5178/", 7800, FaceVariant::Glow),
             "http://localhost:5178/?run=live&broadcast=1&voice=1&ws=ws://127.0.0.1:7800/events"
+        );
+        assert_eq!(
+            stage_url("http://localhost:5178", 7800, FaceVariant::Cut),
+            "http://localhost:5178/?run=live&broadcast=1&voice=1&ws=ws://127.0.0.1:7800/events&avatar=cut"
+        );
+        assert!(
+            stage_url("http://localhost:5178", 7800, FaceVariant::Depth).ends_with("&avatar=depth")
         );
         assert!(check_stage_base("http://localhost:5178").is_ok());
         assert!(check_stage_base("http://localhost:5178/").is_ok());

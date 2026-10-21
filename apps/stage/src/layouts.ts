@@ -72,6 +72,9 @@ const LANE_X = CONTENT_RIGHT - 24 - LANE_W;
 /** The desk: the hexmap window behind (top-left, smaller), the browser window in front. */
 const DESK_MAP: Rect = { x: GUTTER, y: TOP, w: 800, h: 540 };
 const DESK_BROWSER: Rect = { x: 520, y: 236, w: CONTENT_RIGHT - 520, h: CONTENT.y + CONTENT.h - 236 };
+/** The browser window's chrome (tab strip, URL bar and the FICTIONAL ribbon): no overlay covers it. */
+export const BROWSER_CHROME = 130;
+const LANE_GAP = 16;
 
 function hide(r: Rect): Rect {
   return { ...r, hidden: true };
@@ -97,17 +100,37 @@ function column(
   return out;
 }
 
+/**
+ * The overlay lane top-down (the foil badge, decrees, the explainer card), stepping below the
+ * browser window's chrome where a box would cover its tabs or URL bar. The card takes what is left
+ * above the lower third, at most its full height.
+ */
+function lane(browser: Rect | null): { observer: Rect; decrees: Rect; card: Rect } {
+  const band = browser ? { top: browser.y, bottom: browser.y + BROWSER_CHROME + LANE_GAP } : null;
+  let y = CONTENT.y + 20;
+  const place = (h: number, gap: number): Rect => {
+    if (band && y < band.bottom && y + h > band.top) y = band.bottom;
+    const r = { x: LANE_X, y, w: LANE_W, h: Math.min(h, CONTENT.y + CONTENT.h - y) };
+    y += r.h + gap;
+    return r;
+  };
+  const observer = place(96, 12);
+  const decrees = place(262, LANE_GAP);
+  return { observer, decrees, card: place(300, 0) };
+}
+
 function contentRects(layout: "hexmap" | "browser" | "desk", flags: LayoutFlags, topbar: Rect): Record<Region, Rect> {
-  const observer: Rect = { x: LANE_X, y: CONTENT.y + 20, w: LANE_W, h: 96 };
+  const browser = layout === "desk" ? DESK_BROWSER : layout === "browser" ? CONTENT : null;
+  const { observer, decrees, card } = lane(browser);
   // Inspector and tally belong to the map; the browser screen's column is chat (and the vote).
   const panels = layout !== "browser";
   return {
     topbar,
     hexmap: layout === "desk" ? DESK_MAP : layout === "hexmap" ? CONTENT : hide(CONTENT),
-    browser: layout === "desk" ? DESK_BROWSER : layout === "browser" ? CONTENT : hide(DESK_BROWSER),
+    browser: browser ?? hide(DESK_BROWSER),
     observer: flags.foil ? observer : hide(observer),
-    decrees: { x: LANE_X, y: CONTENT.y + 128, w: LANE_W, h: 262 },
-    card: { x: LANE_X, y: CONTENT.y + 406, w: LANE_W, h: 300 },
+    decrees,
+    card,
     avatar: CORNER_AVATAR,
     caption: LOWER_THIRD,
     foil: hide(observer),

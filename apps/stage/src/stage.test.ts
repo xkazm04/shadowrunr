@@ -9,7 +9,7 @@ import { CANVAS_H, CANVAS_W, fitMap, foldEvents, hexBoxes } from "@shadowrunr/st
 import { parseCase } from "@shadowrunr/stage-kit/parse";
 import { HEX_SIZE, hexArea } from "@shadowrunr/stage-kit/ui";
 import { LOOK_CHAT, LOOK_CONTENT, LOOK_HOST, lookFor } from "./avatar/look";
-import { CORNER_AVATAR, FACE_PX, hexFrame, layoutRects, REGIONS, type Rect } from "./layouts";
+import { BROWSER_CHROME, CORNER_AVATAR, FACE_PX, hexFrame, layoutRects, REGIONS, type Rect } from "./layouts";
 import { readParams, resolveCase, sidecarCaseUrl } from "./source";
 
 const LAYOUTS = ["boot", "host", "hexmap", "browser", "desk"] as const;
@@ -70,6 +70,27 @@ describe("layouts", () => {
     expect(desk.browser.hidden).toBeUndefined();
     expect(map.browser.hidden).toBe(true);
     expect(layoutRects("browser", { poll: false, foil: false }).hexmap.hidden).toBe(true);
+  });
+
+  it("keeps every overlay off the browser window's chrome (tabs, URL bar, ribbon) on browser and desk", () => {
+    for (const layout of ["browser", "desk"] as const) {
+      for (const poll of [false, true]) {
+        for (const foil of [false, true]) {
+          const r = layoutRects(layout, { poll, foil });
+          const chrome: Rect = { x: r.browser.x, y: r.browser.y, w: r.browser.w, h: BROWSER_CHROME };
+          for (const k of REGIONS) {
+            if (k === "browser" || k === "hexmap" || r[k].hidden) continue;
+            expect(overlaps(r[k], chrome), `${layout} poll=${poll} foil=${foil}: ${k}`).toBe(false);
+          }
+          // the lane still ends above the lower third
+          for (const k of ["observer", "decrees", "card"] as const) expect(r[k].y + r[k].h, k).toBeLessThanOrEqual(r.caption.y);
+        }
+      }
+    }
+    // the hexmap screen's lane is where it was
+    const map = layoutRects("hexmap", { poll: false, foil: true });
+    expect(map.observer.y).toBe(124);
+    expect(map.card).toMatchObject({ y: 510, h: 300 });
   });
 
   it("gives the hexmap the dominant area in SEG-02A", () => {

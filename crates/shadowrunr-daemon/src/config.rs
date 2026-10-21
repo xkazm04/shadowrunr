@@ -34,6 +34,41 @@ pub struct FileConfig {
     /// `[record]`: the OBS recorder (`stream sandbox --record`, `record check`).
     #[serde(default)]
     pub record: crate::record::RecordConfig,
+    /// `[stage]`: how the daemon opens the stage it hands out (sandbox and OBS URLs).
+    #[serde(default)]
+    pub stage: StageConfig,
+}
+
+/// `[stage]`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StageConfig {
+    /// Which renderer draws Malakor's face (the stage's `?avatar=`).
+    pub avatar: FaceVariant,
+}
+
+/// The stage's face renderers (`apps/stage/src/avatar/variants.ts`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FaceVariant {
+    /// The glow rig, the stage's default.
+    #[default]
+    Glow,
+    /// The 2.5D cut-out.
+    Cut,
+    /// The depth-mesh head.
+    Depth,
+}
+
+impl FaceVariant {
+    /// The query suffix a stage URL carries for this face: empty for the stage's default.
+    pub fn query(self) -> &'static str {
+        match self {
+            FaceVariant::Glow => "",
+            FaceVariant::Cut => "&avatar=cut",
+            FaceVariant::Depth => "&avatar=depth",
+        }
+    }
 }
 
 /// `[paths]`, as written in the file (relative to the file's directory unless absolute).
@@ -255,6 +290,8 @@ pub struct Config {
     pub voice: crate::voice::VoiceConfig,
     /// `[record]`.
     pub record: crate::record::RecordConfig,
+    /// `[stage]`.
+    pub stage: StageConfig,
 }
 
 #[derive(Debug)]
@@ -373,6 +410,7 @@ impl Config {
             research: fc.research,
             voice: fc.voice.resolved(root),
             record: fc.record,
+            stage: fc.stage,
         }
     }
 
@@ -413,6 +451,26 @@ impl Config {
 mod tests {
     use super::*;
     use shadowrunr_types::Role;
+
+    #[test]
+    fn stage_avatar_defaults_to_glow_and_takes_the_three_faces() {
+        let root = Path::new("/repo");
+        assert_eq!(
+            Config::from_toml("", root).unwrap().stage.avatar,
+            FaceVariant::Glow
+        );
+        for (name, face) in [
+            ("glow", FaceVariant::Glow),
+            ("cut", FaceVariant::Cut),
+            ("depth", FaceVariant::Depth),
+        ] {
+            let cfg = Config::from_toml(&format!("[stage]\navatar = \"{name}\"\n"), root).unwrap();
+            assert_eq!(cfg.stage.avatar, face);
+        }
+        assert!(Config::from_toml("[stage]\navatar = \"mesh\"\n", root).is_err());
+        assert_eq!(FaceVariant::Glow.query(), "");
+        assert_eq!(FaceVariant::Cut.query(), "&avatar=cut");
+    }
 
     #[test]
     fn example_config_parses() {

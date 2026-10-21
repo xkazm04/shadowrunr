@@ -159,3 +159,8 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # obs_port = 4455
 # obs_password_env = "SHADOWRUNR_OBS_PASSWORD"
 # stage_url = "http://localhost:5178"   # the built stage, served on localhost (not 127.0.0.1)
+
+# The stage the daemon opens: the sandbox's stage URL and the OBS browser source
+# (docs/guide/recording.md). Optional.
+# [stage]
+# avatar = "glow"   # the face renderer, the stage's ?avatar=: "glow" (default), "cut" or "depth"

@@ -31,7 +31,7 @@ use shadowrunr_types::sandbox::{
 use shadowrunr_types::{Engine, ErrorCode, StreamEvent};
 use tokio::sync::watch;
 
-use crate::config::Config;
+use crate::config::{Config, FaceVariant};
 use crate::events::{AckBook, AckRecord};
 use crate::live::{self, Frame, LiveRun};
 use crate::rpc::RpcError;
@@ -50,12 +50,14 @@ pub const ACK_GRACE: Duration = Duration::from_secs(6);
 
 const ACK_POLL: Duration = Duration::from_millis(100);
 
-/// The stage URL that follows the live session in broadcast mode, pointed at `daemon_port`.
-pub fn stage_url(daemon_port: u16) -> String {
+/// The stage URL that follows the live session in broadcast mode, pointed at `daemon_port`,
+/// drawing the face with `avatar` (`[stage] avatar`).
+pub fn stage_url(daemon_port: u16, avatar: FaceVariant) -> String {
     let mut url = format!("{STAGE_BASE_URL}?run=live&broadcast=1");
     if daemon_port != STAGE_DEFAULT_DAEMON_PORT {
         url.push_str(&format!("&ws=ws://127.0.0.1:{daemon_port}/events"));
     }
+    url.push_str(avatar.query());
     url
 }
 
@@ -449,7 +451,7 @@ pub async fn start_with(
     Ok(SandboxStarted {
         session_id,
         dir: dir.display().to_string(),
-        stage_url: stage_url(state.cfg.daemon.port),
+        stage_url: stage_url(state.cfg.daemon.port, state.cfg.stage.avatar),
     })
 }
 
@@ -763,14 +765,22 @@ pub(crate) mod tests {
     #[test]
     fn the_stage_url_names_the_daemon_only_off_the_default_port() {
         assert_eq!(
-            stage_url(7717),
+            stage_url(7717, FaceVariant::Glow),
             "http://localhost:5178/?run=live&broadcast=1"
         );
         assert_eq!(
-            stage_url(9000),
+            stage_url(9000, FaceVariant::Glow),
             "http://localhost:5178/?run=live&broadcast=1&ws=ws://127.0.0.1:9000/events"
         );
-        let url = stage_url(7717);
+        assert_eq!(
+            stage_url(7717, FaceVariant::Cut),
+            "http://localhost:5178/?run=live&broadcast=1&avatar=cut"
+        );
+        assert_eq!(
+            stage_url(9000, FaceVariant::Depth),
+            "http://localhost:5178/?run=live&broadcast=1&ws=ws://127.0.0.1:9000/events&avatar=depth"
+        );
+        let url = stage_url(7717, FaceVariant::Glow);
         let origin = url.trim_end_matches(|c| c != '/').trim_end_matches('/');
         assert!(crate::server::origin_allowed(origin, &[]), "{origin}");
     }
