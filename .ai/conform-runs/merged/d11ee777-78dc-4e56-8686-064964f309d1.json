@@ -1,0 +1,267 @@
+{
+ "schema": "conform-run/1",
+ "worker": "d11ee777-78dc-4e56-8686-064964f309d1",
+ "subject": "live-system-demo-film",
+ "evaluatedAt": "2026-10-21T23:20:34.634871+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "stage-app",
+   "subject": "live-system-demo-film",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/stage/package.json:5 Searches found no narration or narrator references in this context; the implementation replays a fictional broadcast and renders derivative clips rather than producing a film demonstrating software behavior.",
+   "techniques": [
+    {
+     "technique": "audio-first-beat-pacing",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/scripts/record-clip.mjs:94 This recorder captures silent clip pictures, not beats paced against synthesized demo narration."
+    },
+    {
+     "technique": "recorder-owned-overlay",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/OnAir.tsx:6 The explanatory card describes the broadcast product's commands; it is not chrome added for a software demonstration film."
+    },
+    {
+     "technique": "recording-that-asserts-its-claims",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/scripts/record-clip.mjs:2 The capture re-renders a clip candidate rather than driving software actions to substantiate a demo film's claims."
+    },
+    {
+     "technique": "retake-without-an-edit-session",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/DESIGN.md:424 This is a derivative clip renderer, not a narration-and-retake production pipeline."
+    },
+    {
+     "technique": "script-as-single-source",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/scripts/make-demo.mjs:1 The authored artifact is a fictional show transcript, not a script explaining software behavior."
+    },
+    {
+     "technique": "seeded-stage-with-a-declared-boundary",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/fixtures/demo-case.json:5 The fixture supplies the show's fictional investigation rather than an environment for a software demonstration film."
+    },
+    {
+     "technique": "summary-rendered-from-the-run",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/Stage.tsx:234 The outro belongs to the broadcast scene, not a recap of demo-film assertions."
+    }
+   ],
+   "absenceTerms": [
+    "narration",
+    "narrator"
+   ]
+  },
+  {
+   "context": "stage-voice-client",
+   "subject": "live-system-demo-film",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/stage/src/voice/toggle.ts:39 Searches found no narration or narrator references in this context; its live-only voice client plays the ongoing broadcast rather than building narrated software demonstration films.",
+   "techniques": [
+    {
+     "technique": "audio-first-beat-pacing",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:168 Utterances arrive during the live session; this client does not pace a captured demo against previously synthesized narration."
+    },
+    {
+     "technique": "recorder-owned-overlay",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/names.ts:13 This is the product's voice disclosure, not recorder-injected demo chrome."
+    },
+    {
+     "technique": "recording-that-asserts-its-claims",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:74 The session reports live playback timing rather than recording and asserting a demo film."
+    },
+    {
+     "technique": "retake-without-an-edit-session",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/webaudio.ts:19 This context owns browser playback, not narration synthesis, retakes or film assembly."
+    },
+    {
+     "technique": "script-as-single-source",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/captions.ts:22 Caption inputs are live feed lines rather than authored demo-film beats."
+    },
+    {
+     "technique": "seeded-stage-with-a-declared-boundary",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:27 The client follows a running broadcast; it does not choose or seed a demo-film environment."
+    },
+    {
+     "technique": "summary-rendered-from-the-run",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/report.ts:24 This produces playback telemetry, not a film recap or end plate."
+    }
+   ],
+   "absenceTerms": [
+    "narration",
+    "narrator"
+   ]
+  },
+  {
+   "context": "stage-avatar-renderer",
+   "subject": "live-system-demo-film",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/stage/src/avatar/Avatar.tsx:84 Searches found no narration or narrator references in this context; it starts a signal-driven face renderer rather than a software demonstration film pipeline.",
+   "techniques": [
+    {
+     "technique": "audio-first-beat-pacing",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/demo.ts:9 The development demo uses invented viseme timing, not synthesized narration for captured film beats."
+    },
+    {
+     "technique": "recorder-owned-overlay",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/Avatar.tsx:114 The canvas is the product's avatar surface, not explanatory chrome added by a recorder."
+    },
+    {
+     "technique": "recording-that-asserts-its-claims",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/Avatar.tsx:70 The callback reports the displayed face form; it is not a demo-film recorder asserting narrated behavior."
+    },
+    {
+     "technique": "retake-without-an-edit-session",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/cut/index.ts:105 The operation constructs an interactive renderer rather than rebuilding a captured film."
+    },
+    {
+     "technique": "script-as-single-source",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/demo.ts:49 The development script emits face signals, not narration, system actions, captions and film estimates."
+    },
+    {
+     "technique": "seeded-stage-with-a-declared-boundary",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/cut/index.ts:81 The seed controls procedural face motion rather than a demo film's system environment."
+    },
+    {
+     "technique": "summary-rendered-from-the-run",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/depth/index.ts:109 The renderer draws a pose and gaze rather than a recap of a captured demonstration."
+    }
+   ],
+   "absenceTerms": [
+    "narration",
+    "narrator"
+   ]
+  },
+  {
+   "context": "segments-runtime",
+   "subject": "live-system-demo-film",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-segments/Cargo.toml:3 Searches found no narration or narrator references in this context; the crate implements broadcast segment behavior and fictional case data rather than producing software demonstration films.",
+   "techniques": [
+    {
+     "technique": "audio-first-beat-pacing",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:60 The clock governs a live show's cold open and handover, not captured pictures paced to narration."
+    },
+    {
+     "technique": "recorder-owned-overlay",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:25 These are the product's permitted show screens, not recorder-owned explanatory surfaces."
+    },
+    {
+     "technique": "script-as-single-source",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:27 This is live host direction, not a machine-readable script for demonstrating software behavior."
+    },
+    {
+     "technique": "seeded-stage-with-a-declared-boundary",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/data/demo-case-records.json:4 The declared fiction supplies investigation content for the show rather than a software demonstration film's environment."
+    }
+   ],
+   "absenceTerms": [
+    "narration",
+    "narrator"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-21T23:20:34.634871+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "live-system-demo-film"
+   ],
+   "techniques": [
+    "audio-first-beat-pacing",
+    "recorder-owned-overlay",
+    "recording-that-asserts-its-claims",
+    "retake-without-an-edit-session",
+    "script-as-single-source",
+    "seeded-stage-with-a-declared-boundary",
+    "summary-rendered-from-the-run"
+   ],
+   "deviations": 0,
+   "context": "stage-app",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-21T23:20:34.634871+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "live-system-demo-film"
+   ],
+   "techniques": [
+    "audio-first-beat-pacing",
+    "recorder-owned-overlay",
+    "recording-that-asserts-its-claims",
+    "retake-without-an-edit-session",
+    "script-as-single-source",
+    "seeded-stage-with-a-declared-boundary",
+    "summary-rendered-from-the-run"
+   ],
+   "deviations": 0,
+   "context": "stage-voice-client",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-21T23:20:34.634871+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "live-system-demo-film"
+   ],
+   "techniques": [
+    "audio-first-beat-pacing",
+    "recorder-owned-overlay",
+    "recording-that-asserts-its-claims",
+    "retake-without-an-edit-session",
+    "script-as-single-source",
+    "seeded-stage-with-a-declared-boundary",
+    "summary-rendered-from-the-run"
+   ],
+   "deviations": 0,
+   "context": "stage-avatar-renderer",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-21T23:20:34.634871+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "live-system-demo-film"
+   ],
+   "techniques": [
+    "audio-first-beat-pacing",
+    "recorder-owned-overlay",
+    "script-as-single-source",
+    "seeded-stage-with-a-declared-boundary"
+   ],
+   "deviations": 0,
+   "context": "segments-runtime",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

@@ -3366,7 +3366,11 @@
           "revision": 2,
           "changedAt": "2026-09-28",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:3 Searches found no narration or narrator references in this context; the crate implements broadcast segment behavior and fictional case data rather than producing software demonstration films.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:ef4fc3b78116e73b",
+          "evaluatedRevision": 2
         },
         {
           "subject": "music-video-production",
@@ -3512,7 +3516,11 @@
           "revision": 2,
           "changedAt": "2026-09-28",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/stage/package.json:5 Searches found no narration or narrator references in this context; the implementation replays a fictional broadcast and renders derivative clips rather than producing a film demonstrating software behavior.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:ef4fc3b78116e73b",
+          "evaluatedRevision": 2
         },
         {
           "subject": "voice-io",
@@ -5070,7 +5078,11 @@
           "revision": 2,
           "changedAt": "2026-09-28",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/stage/src/avatar/Avatar.tsx:84 Searches found no narration or narrator references in this context; it starts a signal-driven face renderer rather than a software demonstration film pipeline.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:ef4fc3b78116e73b",
+          "evaluatedRevision": 2
         },
         {
           "subject": "voice-io",
@@ -5262,7 +5274,11 @@
           "revision": 2,
           "changedAt": "2026-09-28",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/stage/src/voice/toggle.ts:39 Searches found no narration or narrator references in this context; its live-only voice client plays the ongoing broadcast rather than building narrated software demonstration films.",
+          "evaluatedAt": "2026-10-21",
+          "evaluatedAgainst": "sha256-b2:ef4fc3b78116e73b",
+          "evaluatedRevision": 2
         },
         {
           "subject": "quality-gates",
