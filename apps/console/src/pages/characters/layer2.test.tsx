@@ -158,7 +158,7 @@ describe("optional rules are real switches", () => {
       },
     });
     await settle();
-    const rule = () => document.querySelector("[data-rule-id='crisis-handoff']");
+    const rule = () => document.querySelector("[data-rule-id='no-financial-promotion']");
     expect(rule()?.getAttribute("data-enabled")).toBe("true");
     expect(role("characters-instrument")?.textContent).toContain("These match the package defaults.");
     const sw = rule()?.querySelector("[role='switch']");
@@ -167,14 +167,29 @@ describe("optional rules are real switches", () => {
     });
     await settle();
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toContain('"params":{"character":"malakor","id":"crisis-handoff","enabled":false}');
+    expect(sent[0]).toContain('"params":{"character":"malakor","id":"no-financial-promotion","enabled":false}');
     expect(rule()?.getAttribute("data-enabled")).toBe("false");
     expect(rule()?.textContent).toContain("changed by the operator");
     expect(role("characters-instrument")?.textContent).toContain("1 of 2 rules differ from the package defaults.");
     // The data layer refetched what the switch changed (MUTATION_INVALIDATES), the page did not.
     expect(m.fetch.calls.filter((c) => c === "character.rules").length).toBeGreaterThanOrEqual(2);
     expect(m.fetch.calls.filter((c) => c === "character.get").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByRole("switch", { name: /Crisis handoff: enabled/ })).toBeTruthy();
+    expect(screen.getByRole("switch", { name: /No financial promotion: enabled/ })).toBeTruthy();
+  });
+
+  it("renders a rail locked, with no switch, and leaves it out of the differs count", async () => {
+    mount(["malakor", "package", "rules"]);
+    await settle();
+    const rail = document.querySelector("[data-rule-id='crisis-handoff']");
+    expect(rail?.getAttribute("data-locked")).toBe("true");
+    expect(rail?.getAttribute("data-enabled")).toBe("true");
+    expect(rail?.querySelector("[role='switch']")).toBeNull();
+    expect(rail?.textContent).toContain("always on");
+    expect(screen.queryByRole("switch", { name: /Crisis handoff/ })).toBeNull();
+    const optional = document.querySelector("[data-rule-id='no-financial-promotion']");
+    expect(optional?.getAttribute("data-locked")).toBe("false");
+    expect(optional?.querySelector("[role='switch']")).not.toBeNull();
+    expect(role("characters-instrument")?.textContent).toContain("These match the package defaults.");
   });
 
   it("keeps the switch and says why when the daemon refuses", async () => {

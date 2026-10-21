@@ -5,6 +5,10 @@ id = "malakor"
 name = "Arch-Lich Malakor"
 default_tone = "unhinged-roastmaster"
 foils = ["the-disruptor", "the-life-coach", "the-has-been-hero", "the-inspector", "the-coin-prophet"]
+# Rails: rules no operator override can switch off. The crisis handoff is done on every path;
+# how it is delivered lives in rules/crisis-handoff.md, whether it fires is not a toggle. A rail
+# needs its rules/<id>.md and `<id> = true` under [rules]; `character rules --disable` refuses it.
+rails = ["crisis-handoff"]
 
 # Who he is in the engine's own text. Prompts, notes and the line bank fill their placeholders
 # from here: {name}, {title}, {full_name}, {patron}, {patron_title}, {follower}, {followers},
@@ -46,8 +50,9 @@ warlock = "Warlock"
 lich = "Lesser Lich"
 dread_council = "Dread Council"
 
-# Optional constitution rules (`rules/<rule-id>.md`), on or off by default. The operator's
-# override in `<data>/characters/<id>/rules.json` wins; a toggle never rewrites this file.
+# Constitution rules (`rules/<rule-id>.md`), on or off by default. The operator's override in
+# `<data>/characters/<id>/rules.json` wins for every rule except a rail (above); a toggle never
+# rewrites this file.
 [rules]
 crisis-chat-ban = true
 crisis-handoff = true

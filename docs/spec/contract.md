@@ -91,7 +91,7 @@ constitution.md     IMMUTABLE: identity, awareness, red lines (the brain never e
 bible.md            lore, want, long arc, running jokes
 tones/<variant>.md  one file per tone variant (tournament axis)
 foils/<foil>.md     SEG-01 guest foils: original parody archetypes, never real people
-rules/<rule>.md     optional constitution rules, listed under [rules]
+rules/<rule>.md     constitution rules, listed under [rules]; a rail is also listed in rails
 stalls.toml         model-free stall lines for an engine outage (`lines = [...]`)
 situations.json     sim situation bank (format below)
 ```
@@ -111,6 +111,7 @@ name = "Arch-Lich Malakor"          # display name ({full_name})
 tagline = "..."                     # optional
 default_tone = "unhinged-roastmaster"
 foils = ["the-disruptor"]           # summonable foils, each with foils/<id>.md
+rails = ["crisis-handoff"]          # optional: rules no operator override can switch off
 
 [identity]                          # when present, name, patron, follower, sign_off and
 name = "Malakor"                    # disclosure are required ({name})
@@ -133,7 +134,7 @@ propose_min_rank = "warlock"        # optional overrides of segments/data/ranks.
 weights = { warlock = 2.0 }
 thresholds = { acolyte = { min_gifted = 1, tiers = [{ tier = 1, min_months = 0 }] } }
 
-[rules]                             # optional rules, on or off by default
+[rules]                             # rules, on or off by default (a rail must be true)
 crisis-handoff = true
 
 [lines]                             # model-free lines; absent ones are neutral defaults
@@ -351,8 +352,17 @@ character.toml      [rules] table: <rule-id> = true|false (the default; unlisted
 ```
 
 The operator's override lives in `<data>/characters/<id>/rules.json` as `{"<rule-id>": bool}`
-and wins over the defaults. A toggle writes only that file, never the tracked package. A
-malformed override is an error (pre-flight PF-02 goes red), never a silent fallback. The brain
+and wins over the defaults, except for a rail. A toggle writes only that file, never the
+tracked package. A malformed override is an error (pre-flight PF-02 goes red), never a silent
+fallback.
+
+**Rails.** `character.toml` may list `rails = ["<rule-id>", ...]` (a top-level key): rules no
+operator override can switch off. A rail must have its `rules/<id>.md` and be `<id> = true`
+under `[rules]`, or the package does not load. Its `enabled` is always its default: a stored
+override for it is ignored (left in the file, never rewritten), and `character.rules.set` on it
+is `invalid_params` and writes nothing. `character.rules` reports it with `locked: true`; the
+CLI prints `lock`, and the console renders it without a switch. Owners configure how a rail is
+delivered (its rule text), never whether it fires. The brain
 appends the enabled rules, sorted by id, to the stable prefix right after the constitution,
 under `# Additional rules (enabled by the operator)` with one `## <Title>` per rule; the prefix
 is byte-stable while the enabled set is unchanged. The sim and the brain find the override by
@@ -360,13 +370,14 @@ the repo convention `<characters>/../data/characters/<id>/rules.json`. The sim i
 hashes `rules/*.md`, the effective enabled set (`character/rules.enabled`) and every
 `policy/local/*.txt`.
 
-Malakor ships `crisis-handoff` and `no-financial-promotion`, both on by default. Situations may
-name a rule as an invariant with the form `rule:<rule-id>`.
+Malakor ships `crisis-handoff` and `no-financial-promotion`, both on by default;
+`crisis-handoff` is a rail. Situations may name a rule as an invariant with the form
+`rule:<rule-id>`.
 
 | method | params | result |
 |---|---|---|
-| `character.rules` | `{ "character" }` | `[{ id, title, enabled, default }]` |
-| `character.rules.set` | `{ "character", "id", "enabled": bool }` | the updated list; an unknown rule is `not_found` |
+| `character.rules` | `{ "character" }` | `[{ id, title, enabled, default, locked }]` |
+| `character.rules.set` | `{ "character", "id", "enabled": bool }` | the updated list; an unknown rule is `not_found`, a rail is `invalid_params` |
 
 CLI: `shadowrunr character rules <id> [--enable <rule>]... [--disable <rule>]... [--json]`.
 
@@ -717,7 +728,9 @@ existing `moderation` event.
 - **Never ask for personal data (always on).** Constitution red line 4 now also forbids
   asking anyone for personal details (where they live or are, real name, age, school,
   workplace, contacts or socials), even to help. Both safety directives (the `crisis-handoff`
-  one and the neutral one used when that rule is off) carry the same instruction. The output
+  one and the neutral one, used only by a package that ships no `crisis-handoff` rule; where
+  it is a rail, as for Malakor, no override can reach the neutral one) carry the same
+  instruction. The output
   gate checks every spoken line (core lines, foil lines, show cards and the fixed sign-off)
   per sentence for second-person asks ("tell me where you are", "where do you live", "what's
   your address", "DM me your number", "what city are you in", "how old are you"): the
@@ -740,7 +753,8 @@ existing `moderation` event.
   `sim/rubric.toml`, so windowed judging still rules on it in every window after the
   disclosure.
 - **Malakor** ships `crisis-chat-ban`, `crisis-handoff` and `no-financial-promotion`, all on
-  by default.
+  by default. `crisis-handoff` is a rail (always on, see appendix WP10); the other two stay
+  operator switches.
 
 ## Appendix (Clips): the clip factory and its publish gate
 

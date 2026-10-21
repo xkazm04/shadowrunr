@@ -1602,7 +1602,7 @@ async fn enabled_rules_join_the_prefix_after_the_constitution_sorted_and_stable(
 async fn the_operator_override_wins_over_the_defaults() {
     let d = tempfile::tempdir().unwrap();
     let over = d.path().join("rules.json");
-    std::fs::write(&over, r#"{"crisis-handoff": false}"#).unwrap();
+    std::fs::write(&over, r#"{"no-financial-promotion": false}"#).unwrap();
     let b = brain_with_rules(
         &d.path().join("m1"),
         Arc::new(FakeEngine::new()),
@@ -1610,8 +1610,11 @@ async fn the_operator_override_wins_over_the_defaults() {
     )
     .await;
     let p = b.stable_prefix();
-    assert!(!p.contains("## Crisis handoff"), "override disabled it");
-    assert!(p.contains("## No financial promotion"), "default kept");
+    assert!(
+        !p.contains("## No financial promotion"),
+        "override disabled it"
+    );
+    assert!(p.contains("## Crisis handoff"), "default kept");
     let defaults = brain_with_rules(
         &d.path().join("m2"),
         Arc::new(FakeEngine::new()),
@@ -1624,7 +1627,7 @@ async fn the_operator_override_wins_over_the_defaults() {
         "a new set, a new prefix"
     );
 
-    // Every rule off: no heading at all, and the prefix is the rule-less one.
+    // Every rule off: only the crisis-handoff rail survives the override.
     std::fs::write(
         &over,
         r#"{"crisis-chat-ban": false, "crisis-handoff": false, "no-financial-promotion": false}"#,
@@ -1636,10 +1639,10 @@ async fn the_operator_override_wins_over_the_defaults() {
         RulesOverride::File(over),
     )
     .await;
-    assert!(!none.stable_prefix().contains("Additional rules"));
-    assert!(none
-        .stable_prefix()
-        .contains("\n\n# Tone variant: theatrical"));
+    let p = none.stable_prefix();
+    assert!(p.contains("## Crisis handoff"), "a rail stays on");
+    assert!(!p.contains("## Crisis chat ban"));
+    assert!(!p.contains("## No financial promotion"));
 }
 
 #[tokio::test]
@@ -1834,7 +1837,7 @@ async fn l167_a_disclosure_over_the_cap_is_picked_first_with_the_crisis_handoff_
 }
 
 #[tokio::test]
-async fn with_crisis_handoff_disabled_the_directive_is_the_neutral_one() {
+async fn an_override_off_cannot_reach_the_neutral_directive_on_a_crisis_rail() {
     let d = tempfile::tempdir().unwrap();
     let over = d.path().join("rules.json");
     std::fs::write(&over, r#"{"crisis-handoff": false}"#).unwrap();
@@ -1853,14 +1856,9 @@ async fn with_crisis_handoff_disabled_the_directive_is_the_neutral_one() {
         .unwrap()
         .prompt
         .clone();
-    assert!(
-        p.contains(&format!(
-            "SAFETY FIRST ([l167] SootGoblin24): {}",
-            compose::NEUTRAL_DISTRESS_DIRECTIVE
-        )),
-        "{p}"
-    );
-    assert!(!p.contains("crisis-handoff"));
+    // crisis-handoff is a rail: the stored `false` is ignored and the directive keeps its rule.
+    assert!(p.contains("\"Crisis handoff\" (crisis-handoff)"), "{p}");
+    assert!(!p.contains(compose::NEUTRAL_DISTRESS_DIRECTIVE), "{p}");
 }
 
 #[tokio::test]
@@ -2003,6 +2001,7 @@ fn golden_pkg() -> CharacterPackage {
         text: text.into(),
         default: enabled,
         enabled,
+        locked: false,
     };
     CharacterPackage {
         id: "golden".into(),

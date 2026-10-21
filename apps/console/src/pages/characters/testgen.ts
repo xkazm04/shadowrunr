@@ -82,7 +82,8 @@ export function malakorDetail(): CharacterDetail {
 }
 
 export const malakorRules = (enabled: Readonly<Record<string, boolean>> = {}): RuleState[] => [
-  { id: "crisis-handoff", title: "Crisis handoff", default: true, enabled: enabled["crisis-handoff"] ?? true },
+  // A rail: the daemon ignores any override for it and refuses character.rules.set.
+  { id: "crisis-handoff", title: "Crisis handoff", default: true, enabled: true, locked: true },
   { id: "no-financial-promotion", title: "No financial promotion", default: true, enabled: enabled["no-financial-promotion"] ?? true },
 ];
 

@@ -1,8 +1,15 @@
-//! Optional constitution rules: `characters/<id>/rules/<rule-id>.md`, one rule per file, with
-//! defaults in `character.toml` `[rules]` and the operator's override in
-//! `<data>/characters/<id>/rules.json` (`{"<rule-id>": bool}`). The override wins; a toggle
-//! never rewrites the tracked package. Enabled rules join the stable prefix right after the
-//! constitution, sorted by id, so the prefix stays byte-stable while the set is unchanged.
+//! Package rules: `characters/<id>/rules/<rule-id>.md`, one rule per file, with defaults in
+//! `character.toml` `[rules]` and the operator's override in
+//! `<data>/characters/<id>/rules.json` (`{"<rule-id>": bool}`). Two kinds:
+//!
+//! - an optional rule: the override wins over the default; a toggle never rewrites the
+//!   tracked package.
+//! - a rail (`character.toml` `rails = [...]`): always on. It must have its file and a true
+//!   default; the override cannot reach it (a stored value is ignored, never rewritten) and
+//!   [`set_rule`] refuses it. Owners configure how a rail is delivered, never whether.
+//!
+//! Enabled rules join the stable prefix right after the constitution, sorted by id, so the
+//! prefix stays byte-stable while the set is unchanged.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -12,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::BrainError;
 
-/// One optional rule with its effective state.
+/// One package rule with its effective state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CharacterRule {
     pub id: String,
@@ -22,8 +29,10 @@ pub struct CharacterRule {
     pub text: String,
     /// `character.toml` `[rules]` value (false when the table does not list it).
     pub default: bool,
-    /// The operator's override when present, else the default.
+    /// The operator's override when present, else the default; always the default for a rail.
     pub enabled: bool,
+    /// A rail (`character.toml` `rails`): always on, out of the override's reach.
+    pub locked: bool,
 }
 
 /// The wire shape of `character.rules` / `character.rules.set`.
@@ -33,6 +42,7 @@ pub struct RuleState {
     pub title: String,
     pub enabled: bool,
     pub default: bool,
+    pub locked: bool,
 }
 
 impl From<&CharacterRule> for RuleState {
@@ -42,6 +52,7 @@ impl From<&CharacterRule> for RuleState {
             title: r.title.clone(),
             enabled: r.enabled,
             default: r.default,
+            locked: r.locked,
         }
     }
 }
@@ -122,11 +133,13 @@ fn parse_rule_file(id: &str, text: &str) -> Result<(String, String), BrainError>
     ))
 }
 
-/// Every rule in `<dir>/rules/`, sorted by id, with defaults and the override applied.
+/// Every rule in `<dir>/rules/`, sorted by id, with defaults and the override applied. A rail
+/// must have its file and a true default, and the override does not reach it.
 pub(crate) fn resolve_rules(
     dir: &Path,
     character_id: &str,
     defaults: &BTreeMap<String, bool>,
+    rails: &[String],
     overrides: &RulesOverride,
 ) -> Result<Vec<CharacterRule>, BrainError> {
     let mut files: BTreeMap<String, PathBuf> = BTreeMap::new();
@@ -155,6 +168,18 @@ pub(crate) fn resolve_rules(
             )));
         }
     }
+    for id in rails {
+        if !files.contains_key(id) {
+            return Err(pkg_err(format!(
+                "rail {id:?} is listed in character.toml rails but rules/{id}.md is missing"
+            )));
+        }
+        if defaults.get(id) != Some(&true) {
+            return Err(pkg_err(format!(
+                "rail {id:?} must be `{id} = true` in character.toml [rules]: a rail is always on"
+            )));
+        }
+    }
     let over = match overrides {
         RulesOverride::Auto => read_overrides(&auto_override_path(dir, character_id))?,
         RulesOverride::File(p) => read_overrides(p)?,
@@ -166,13 +191,20 @@ pub(crate) fn resolve_rules(
             fs::read_to_string(&path).map_err(|e| pkg_err(format!("{}: {e}", path.display())))?;
         let (title, text) = parse_rule_file(&id, &text)?;
         let default = defaults.get(&id).copied().unwrap_or(false);
-        let enabled = over.get(&id).copied().unwrap_or(default);
+        let locked = rails.contains(&id);
+        // A rail ignores the override: a stored `false` stays in the file, unread.
+        let enabled = if locked {
+            default
+        } else {
+            over.get(&id).copied().unwrap_or(default)
+        };
         out.push(CharacterRule {
             id,
             title,
             text,
             default,
             enabled,
+            locked,
         });
     }
     Ok(out)
@@ -183,6 +215,8 @@ struct RulesToml {
     id: String,
     #[serde(default)]
     rules: BTreeMap<String, bool>,
+    #[serde(default)]
+    rails: Vec<String>,
 }
 
 /// The rules of a package without loading the rest of it (the daemon and the sim instrument).
@@ -201,11 +235,12 @@ pub fn load_rules(
             meta.id
         )));
     }
-    resolve_rules(character_dir, &meta.id, &meta.rules, overrides)
+    resolve_rules(character_dir, &meta.id, &meta.rules, &meta.rails, overrides)
 }
 
 /// Set one rule in the operator's override file (`<data>/characters/<id>/rules.json`) and
-/// return the updated list. An unknown rule id is an error; the package is never written.
+/// return the updated list. An unknown rule id and a rail are [`BrainError::Rejected`] and write
+/// nothing; the package is never written.
 pub fn set_rule(
     character_dir: &Path,
     character_id: &str,
@@ -217,6 +252,12 @@ pub fn set_rule(
         character_dir,
         &RulesOverride::File(override_file.to_path_buf()),
     )?;
+    if rules.iter().any(|r| r.id == rule_id && r.locked) {
+        return Err(BrainError::Rejected(format!(
+            "{rule_id} is a rail of character {character_id}: always on, the operator override \
+             cannot switch it (character.toml rails)"
+        )));
+    }
     if !rules.iter().any(|r| r.id == rule_id) {
         let known: Vec<&str> = rules.iter().map(|r| r.id.as_str()).collect();
         return Err(BrainError::Rejected(format!(
@@ -333,5 +374,86 @@ mod tests {
         let bad = d.path().join("bad.json");
         fs::write(&bad, "{not json").unwrap();
         assert!(load_rules(&dir, &RulesOverride::File(bad)).is_err());
+    }
+
+    fn malakor() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("characters")
+            .join("malakor")
+    }
+
+    #[test]
+    fn set_rule_refuses_a_rail_and_writes_nothing() {
+        let d = tempfile::tempdir().unwrap();
+        let file = override_path(d.path(), "malakor");
+        let err = set_rule(&malakor(), "malakor", &file, "crisis-handoff", false)
+            .expect_err("a rail is not a switch");
+        assert!(matches!(err, BrainError::Rejected(_)), "{err:?}");
+        assert!(
+            err.to_string().contains("crisis-handoff is a rail"),
+            "{err}"
+        );
+        assert!(!file.exists(), "rules.json is not written for a rail");
+    }
+
+    /// GUARD: only rails lock; the optional rules stay operator switches.
+    #[test]
+    fn optional_rules_beside_a_rail_stay_switches() {
+        let d = tempfile::tempdir().unwrap();
+        let file = override_path(d.path(), "malakor");
+        let list = set_rule(
+            &malakor(),
+            "malakor",
+            &file,
+            "no-financial-promotion",
+            false,
+        )
+        .expect("an optional rule toggles");
+        let list2 = set_rule(&malakor(), "malakor", &file, "crisis-chat-ban", false)
+            .expect("an optional rule toggles");
+        assert!(
+            !list
+                .iter()
+                .find(|r| r.id == "no-financial-promotion")
+                .unwrap()
+                .enabled
+        );
+        assert!(
+            !list2
+                .iter()
+                .find(|r| r.id == "crisis-chat-ban")
+                .unwrap()
+                .enabled
+        );
+        let saved = read_overrides(&file).unwrap();
+        assert_eq!(saved.get("crisis-chat-ban"), Some(&false));
+        assert_eq!(saved.get("no-financial-promotion"), Some(&false));
+    }
+
+    #[test]
+    fn a_rail_must_have_its_file_and_a_true_default() {
+        // Listed under `rails` but `[rules]` sets it false.
+        let d = tempfile::tempdir().unwrap();
+        let dir = pkg(d.path());
+        fs::write(
+            dir.join("character.toml"),
+            "id = \"x\"\nrails = [\"beta\"]\n[rules]\nalpha = true\nbeta = false\n",
+        )
+        .unwrap();
+        let err = load_rules(&dir, &RulesOverride::None).expect_err("a rail defaulting off");
+        assert!(err.to_string().contains("beta"), "{err}");
+
+        // Listed under `rails` with no rules/<id>.md.
+        let d = tempfile::tempdir().unwrap();
+        let dir = pkg(d.path());
+        fs::write(
+            dir.join("character.toml"),
+            "id = \"x\"\nrails = [\"delta\"]\n[rules]\nalpha = true\n",
+        )
+        .unwrap();
+        let err = load_rules(&dir, &RulesOverride::None).expect_err("a rail with no file");
+        assert!(err.to_string().contains("delta"), "{err}");
     }
 }

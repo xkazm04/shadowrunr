@@ -37,6 +37,7 @@ fn rule_state(r: &rules::RuleState) -> RuleState {
         title: r.title.clone(),
         enabled: r.enabled,
         default: r.default,
+        locked: r.locked,
     }
 }
 
@@ -52,7 +53,8 @@ pub fn character_rules(cfg: &Config, character: &str) -> Result<Vec<RuleState>, 
         .collect())
 }
 
-/// `character.rules.set`: write one rule into `<data>/characters/<id>/rules.json`.
+/// `character.rules.set`: write one rule into `<data>/characters/<id>/rules.json`. A rail is
+/// `invalid_params` and writes nothing; an unknown rule is `not_found`.
 pub fn character_rules_set(
     cfg: &Config,
     character: &str,
@@ -61,7 +63,11 @@ pub fn character_rules_set(
 ) -> Result<Vec<RuleState>, RpcError> {
     let dir = character_dir(cfg, character)?;
     let over = rules::override_path(&cfg.paths.data, character);
+    let current = rules::load_rules(&dir, &RulesOverride::File(over.clone()))
+        .map_err(|e| RpcError::io(e.to_string()))?;
+    let rail = current.iter().any(|r| r.id == id && r.locked);
     let list = rules::set_rule(&dir, character, &over, id, enabled).map_err(|e| match e {
+        BrainError::Rejected(m) if rail => RpcError::invalid(m),
         BrainError::Rejected(m) => RpcError::not_found(m),
         other => RpcError::io(other.to_string()),
     })?;

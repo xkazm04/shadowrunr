@@ -715,8 +715,9 @@ sentence's timing. Setup, `[voice]` keys and the stage side: [voice.md](voice.md
 ## Character rules and moderation lists
 
 ```
-shadowrunr character rules malakor                          # list optional rules and their state
-shadowrunr character rules malakor --disable crisis-handoff  # operator override in <data>/characters/malakor/rules.json
+shadowrunr character rules malakor                           # list rules: on / off / lock (a rail)
+shadowrunr character rules malakor --disable crisis-chat-ban  # operator override in <data>/characters/malakor/rules.json
+shadowrunr character rules malakor --disable crisis-handoff   # refused: a rail is always on, nothing is written
 shadowrunr policy install-list awdev1-better-profane-words   # downloads into policy/local/ (git-ignored, GPL-3.0, never committed)
 ```
 

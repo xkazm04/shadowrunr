@@ -1,7 +1,8 @@
-// Optional rules: real switches over character.rules / character.rules.set. The daemon keeps the
+// Package rules: real switches over character.rules / character.rules.set. The daemon keeps the
 // operator's override in <data>/characters/<id>/rules.json and never rewrites character.toml. A
 // switch changes the instrument (the enabled set is hashed into it), so results run under
-// different rule sets are never merged.
+// different rule sets are never merged. A rail (`locked`, character.toml `rails`) is always on:
+// it renders without a switch, since the daemon refuses to toggle it.
 import { useState } from "react";
 import type { CharacterDetail, RuleState } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
@@ -49,31 +50,37 @@ export function RulesTab({ d }: { d: CharacterDetail }) {
       <Head
         kicker="Characters · the package"
         title="Optional rules"
-        lede="Operator choices layered on top of the constitution. They are not red lines: they can be switched on and off, and each switch changes the instrument."
+        lede="Operator choices layered on top of the constitution: each switch changes the instrument. Rails are the exception: always on, with no switch."
       />
       <QueryView query={rules} isEmpty={(r) => r.length === 0} emptyTitle="No optional rules" emptyHint="Add rules/<id>.md and list it under [rules] in character.toml.">
         {() => {
           const rows = effective ?? [];
-          const changed = rows.filter((r) => r.enabled !== r.default).length;
+          const changed = rows.filter((r) => !r.locked && r.enabled !== r.default).length;
           return (
             <div className={styles.cols2w}>
               <section>
                 <h2 className={styles.secHead}>Rules</h2>
                 <ul className={styles.rules} data-role="characters-rules">
                   {rows.map((r) => (
-                    <li key={r.id} className={styles.rule} data-role="characters-rule" data-rule-id={r.id} data-enabled={r.enabled}>
+                    <li key={r.id} className={styles.rule} data-role="characters-rule" data-rule-id={r.id} data-enabled={r.enabled} data-locked={r.locked === true}>
                       <div>
                         <h3>{r.title}</h3>
                         {text.has(r.id) && <Markdown blocks={ruleBody(text.get(r.id) ?? "")} />}
                         <small>
-                          <code>{r.id}</code> · package default {r.default ? "on" : "off"} {r.enabled !== r.default && <Chip tone="caution">changed by the operator</Chip>}
+                          <code>{r.id}</code> · {r.locked ? "a rail: always on, no operator switch" : <>package default {r.default ? "on" : "off"}</>} {!r.locked && r.enabled !== r.default && <Chip tone="caution">changed by the operator</Chip>}
                         </small>
                         {failure?.id === r.id && (
                           <StatePanel state={viewOfError(failure.error).state} title={`The switch did not take · ${viewOfError(failure.error).title}`} detail={`${failure.error.code}: ${failure.error.message}`} />
                         )}
                       </div>
                       <div className={styles.sw}>
-                        <Switch checked={r.enabled} label={`${r.title}: enabled`} hideLabel disabled={busyId !== undefined} onChange={(next) => void toggle(r.id, next)} />
+                        {r.locked ? (
+                          <Chip tone="ok" title="A rail: the operator override cannot switch it off">
+                            Locked on
+                          </Chip>
+                        ) : (
+                          <Switch checked={r.enabled} label={`${r.title}: enabled`} hideLabel disabled={busyId !== undefined} onChange={(next) => void toggle(r.id, next)} />
+                        )}
                       </div>
                     </li>
                   ))}

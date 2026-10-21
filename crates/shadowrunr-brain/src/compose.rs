@@ -419,7 +419,8 @@ pub struct TurnInputs<'a> {
     pub first_contacts: &'a HashSet<String>,
 }
 
-/// The optional rule a self-harm disclosure invokes when the operator has it enabled.
+/// The rule a self-harm disclosure invokes. A package that lists it under `rails` keeps it on
+/// whatever the operator override says.
 pub const CRISIS_RULE_ID: &str = "crisis-handoff";
 
 /// The optional rule that removes a viewer from chat after their crisis line.
@@ -430,7 +431,8 @@ pub const CRISIS_BAN_RULE_ID: &str = "crisis-chat-ban";
 pub const NO_PERSONAL_DATA: &str =
     "Never ask them where they are or for any detail about them, not even to help.";
 
-/// The care directive when the crisis rule is disabled. It still carries [`NO_PERSONAL_DATA`].
+/// The care directive for a package with no enabled crisis rule (never reachable by override
+/// when the rule is a rail). It still carries [`NO_PERSONAL_DATA`].
 pub const NEUTRAL_DISTRESS_DIRECTIVE: &str = "A viewer may be in distress; respond with care. \
     Never ask them where they are or for any detail about them, not even to help.";
 

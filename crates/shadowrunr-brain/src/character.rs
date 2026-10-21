@@ -428,7 +428,7 @@ pub fn load_character_with(
         SituationBank::default()
     };
 
-    let rules = resolve_rules(dir, &meta.id, &meta.rules, overrides)?;
+    let rules = resolve_rules(dir, &meta.id, &meta.rules, &meta.rails, overrides)?;
     let stalls = StallBank::load(dir, &persona)?;
     let lines = LineBank::resolve(meta.lines.as_ref(), &persona);
 
@@ -553,6 +553,25 @@ mod tests {
             .situations
             .iter()
             .any(|s| s.id == "prompt-injection"));
+    }
+
+    #[test]
+    fn an_override_cannot_switch_off_the_crisis_handoff_rail() {
+        let d = tempfile::tempdir().unwrap();
+        let over = d.path().join("rules.json");
+        fs::write(&over, r#"{"crisis-handoff": false}"#).unwrap();
+        let pkg =
+            load_character_with(&malakor_dir(), "", &RulesOverride::File(over.clone())).unwrap();
+        let rule = pkg.rules.iter().find(|r| r.id == "crisis-handoff").unwrap();
+        assert!(rule.enabled, "the override does not reach a rail");
+        let wire = serde_json::to_value(crate::rules::RuleState::from(rule)).unwrap();
+        assert_eq!(wire["locked"], true, "{wire}");
+        assert_eq!(wire["enabled"], true, "{wire}");
+        // The stored override is left as the operator wrote it.
+        assert_eq!(
+            fs::read_to_string(&over).unwrap(),
+            r#"{"crisis-handoff": false}"#
+        );
     }
 
     #[test]

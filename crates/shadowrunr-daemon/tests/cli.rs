@@ -171,14 +171,38 @@ fn character_rules_cli_toggles_the_override_and_lists() {
         .is_file());
     let out = shadowrunr(tmp.path(), &["character", "rules", "malakor"]);
     let text = String::from_utf8_lossy(&out.stdout);
-    assert!(text.contains("on   crisis-handoff"), "{text}");
-    assert!(text.contains("off  no-financial-promotion"), "{text}");
+    assert!(text.contains("lock  crisis-handoff"), "{text}");
+    assert!(text.contains("on    crisis-chat-ban"), "{text}");
+    assert!(text.contains("off   no-financial-promotion"), "{text}");
     assert!(text.contains("operator override; default on"), "{text}");
     let out = shadowrunr(
         tmp.path(),
         &["character", "rules", "malakor", "--enable", "nope"],
     );
     assert!(!out.status.success());
+}
+
+#[test]
+fn character_rules_cli_refuses_to_disable_a_rail() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_config(tmp.path(), &repo().join("characters"));
+    let out = shadowrunr(
+        tmp.path(),
+        &[
+            "character",
+            "rules",
+            "malakor",
+            "--disable",
+            "crisis-handoff",
+        ],
+    );
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("crisis-handoff is a rail"), "{err}");
+    assert!(!tmp
+        .path()
+        .join("data/characters/malakor/rules.json")
+        .exists());
 }
 
 #[test]

@@ -376,32 +376,63 @@ async fn character_rules_rpc_lists_and_toggles_into_the_data_override() {
     assert_eq!(
         v["result"],
         json!([
-            { "id": "crisis-chat-ban", "title": "Crisis chat ban", "enabled": true, "default": true },
-            { "id": "crisis-handoff", "title": "Crisis handoff", "enabled": true, "default": true },
-            { "id": "no-financial-promotion", "title": "No financial promotion", "enabled": true, "default": true }
+            { "id": "crisis-chat-ban", "title": "Crisis chat ban", "enabled": true, "default": true, "locked": false },
+            { "id": "crisis-handoff", "title": "Crisis handoff", "enabled": true, "default": true, "locked": true },
+            { "id": "no-financial-promotion", "title": "No financial promotion", "enabled": true, "default": true, "locked": false }
         ]),
         "{v}"
     );
 
+    // crisis-handoff is a rail: the toggle is refused and nothing is written.
     let v = rpc(
         &addr,
         "character.rules.set",
         json!({ "character": "malakor", "id": "crisis-handoff", "enabled": false }),
     )
     .await;
-    assert_eq!(v["result"][1]["id"], "crisis-handoff", "{v}");
-    assert_eq!(v["result"][1]["enabled"], false, "{v}");
-    assert_eq!(v["result"][1]["default"], true);
+    assert_eq!(v["error"]["code"], "invalid_params", "{v}");
+    assert!(
+        v["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("crisis-handoff is a rail"),
+        "{v}"
+    );
     let over = tmp.path().join("data/characters/malakor/rules.json");
+    assert!(!over.exists(), "a refused rail toggle writes no override");
+    let v = rpc(&addr, "character.rules", json!({ "character": "malakor" })).await;
+    assert_eq!(v["result"][1]["id"], "crisis-handoff", "{v}");
+    assert_eq!(v["result"][1]["enabled"], true, "{v}");
+    assert_eq!(v["result"][1]["locked"], true, "{v}");
+
+    // An optional rule is still the operator's switch.
+    let v = rpc(
+        &addr,
+        "character.rules.set",
+        json!({ "character": "malakor", "id": "crisis-chat-ban", "enabled": false }),
+    )
+    .await;
+    assert_eq!(v["result"][0]["id"], "crisis-chat-ban", "{v}");
+    assert_eq!(v["result"][0]["enabled"], false, "{v}");
+    assert_eq!(v["result"][0]["default"], true);
     let saved: Value = serde_json::from_str(&std::fs::read_to_string(&over).unwrap()).unwrap();
-    assert_eq!(saved, json!({ "crisis-handoff": false }));
+    assert_eq!(saved, json!({ "crisis-chat-ban": false }));
     assert_eq!(
         std::fs::read(chars.join("malakor/character.toml")).unwrap(),
         toml_before,
         "the tracked package is never rewritten by a toggle"
     );
     let v = rpc(&addr, "character.rules", json!({ "character": "malakor" })).await;
-    assert_eq!(v["result"][1]["enabled"], false, "the override wins");
+    assert_eq!(v["result"][0]["enabled"], false, "the override wins");
+
+    // A stale override naming the rail (written before it locked) is ignored, never rewritten.
+    std::fs::write(&over, r#"{"crisis-handoff": false}"#).unwrap();
+    let v = rpc(&addr, "character.rules", json!({ "character": "malakor" })).await;
+    assert_eq!(v["result"][1]["enabled"], true, "{v}");
+    assert_eq!(
+        std::fs::read_to_string(&over).unwrap(),
+        r#"{"crisis-handoff": false}"#
+    );
 
     let v = rpc(
         &addr,

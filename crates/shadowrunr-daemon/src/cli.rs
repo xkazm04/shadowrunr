@@ -1084,7 +1084,13 @@ fn character_rules_cmd(
         for r in &rules {
             println!(
                 "{}  {}  {}{}",
-                if r.enabled { "on " } else { "off" },
+                if r.locked {
+                    "lock"
+                } else if r.enabled {
+                    "on  "
+                } else {
+                    "off "
+                },
                 r.id,
                 r.title,
                 if r.enabled == r.default {
