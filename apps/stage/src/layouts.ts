@@ -7,7 +7,7 @@
 // screens (`board`, `hexmap`, `browser`, `desk`) are the streamer layout: the content fills
 // everything left of the right column, Malakor stands cut out over its bottom-left corner, the
 // caption is a lower third from his right edge to the content's, and decrees and cards float in
-// the content's top-right.
+// the content's top-right (on the board, in a lane the acts leave free).
 
 import { isContentScreen, type BoardFrame, type HexFrame, type LayoutId, type MapScreen } from "@shadowrunr/stage-kit";
 
@@ -71,15 +71,17 @@ const LOWER_THIRD: Rect = { x: CORNER_AVATAR.x + CORNER_AVATAR.w + 8, y: 924, w:
 LOWER_THIRD.w = CONTENT_RIGHT - LOWER_THIRD.x;
 /** On the content screens the ticker closes the right column, never under him. */
 const COLUMN_TICKER: Rect = { x: RIGHT_X, y: TICKER.y, w: RIGHT_W, h: TICKER.h };
-/** The overlay lane in the content's top-right: the foil badge, decrees, explainer cards. */
+/** The overlay lane in the content's top-right: the foil badge, decrees, explainer cards. On the
+ * board the acts end left of it, so no overlay ever stands over an act. */
 const LANE_W = 440;
 const LANE_X = CONTENT_RIGHT - 24 - LANE_W;
-/** The desk: the map window behind (top-left, smaller), the browser window in front. */
-const DESK_MAP: Rect = { x: GUTTER, y: TOP, w: 800, h: 540 };
+const LANE_GAP = 16;
+/** The desk: the map window behind (top-left, smaller, ending left of the overlay lane), the
+ * browser window in front. */
+const DESK_MAP: Rect = { x: GUTTER, y: TOP, w: LANE_X - LANE_GAP - GUTTER, h: 540 };
 const DESK_BROWSER: Rect = { x: 520, y: 236, w: CONTENT_RIGHT - 520, h: CONTENT.y + CONTENT.h - 236 };
 /** The browser window's chrome (tab strip, URL bar and the FICTIONAL ribbon): no overlay covers it. */
 export const BROWSER_CHROME = 130;
-const LANE_GAP = 16;
 
 function hide(r: Rect): Rect {
   return { ...r, hidden: true };
@@ -206,17 +208,18 @@ export function hexFrame(layout: LayoutId, rects: Record<Region, Rect>): HexFram
   return frame;
 }
 
-/** The overlay lane over a content window, in its coordinates: kept clear of a focused card. */
+/** The overlay lane over a content window, in its coordinates. */
 function laneIn(rects: Record<Region, Rect>, win: Rect) {
   return local({ x: LANE_X, y: CONTENT.y, w: LANE_W, h: rects.card.y + rects.card.h - CONTENT.y }, win);
 }
 
 /**
  * What stands over the board's window on a content screen: Malakor's corner and, on the desk, the
- * browser window in front; on the board screen also the observer badge's place at the top of the
- * overlay lane, kept whether a foil is in or not so no card moves when one arrives (no card and no
- * act name is drawn under any of these). On the board screen a focused card also keeps the rest
- * of the overlay lane clear. Null where the board is not shown.
+ * browser window in front (no card is drawn under these), and the overlay lane where it crosses
+ * the window (the board screen; the desk's map window ends left of it). The lane's place is kept
+ * whether a badge, decree or card is up or not, so no card moves when one arrives: the acts are
+ * laid out left of it, the overview and every zoom stay there, and the thesis band ends where it
+ * starts. Null where the board is not shown.
  */
 export function boardFrame(layout: LayoutId, rects: Record<Region, Rect>): BoardFrame | null {
   if ((layout !== "board" && layout !== "desk") || rects.board.hidden) return null;
@@ -224,10 +227,8 @@ export function boardFrame(layout: LayoutId, rects: Record<Region, Rect>): Board
   const avoid = [local(rects.avatar, win)];
   if (layout === "desk") avoid.push(local(rects.browser, win));
   const frame: BoardFrame = { w: win.w, h: win.h, avoid };
-  if (layout === "board") {
-    avoid.push(local(rects.observer, win));
-    frame.prefer = [laneIn(rects, win)];
-  }
+  const lane = laneIn(rects, win);
+  if (lane.x < win.w && lane.x + lane.w > 0 && lane.y < win.h && lane.y + lane.h > 0) frame.lane = lane;
   return frame;
 }
 

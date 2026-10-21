@@ -68,14 +68,14 @@ describe("the caption panel", () => {
     expect(waiting).not.toContain("Kneel");
   });
 
-  it("labels the line with the stream's host name, and HOST when stream_start names none", () => {
+  it("labels the line with the stream's host name, else its character id", () => {
     const speaker = (html: string) => html.match(/class="speaker">([^<]*)</)?.[1];
     const named: StreamEvent = { type: "stream_start", ts_ms: 0, stream_id: "s-1", character: "keeper", tone_variant: "calm", core_tier: "haiku", audience_size: 30, host_name: "Odile" };
     expect(speaker(render([named, seg, say], 1500))).toBe("ODILE");
-    expect(speaker(render([start, seg, say], 1500))).toBe("HOST");
+    expect(speaker(render([start, seg, say], 1500))).toBe("MALAKOR");
     const view = { caption: { id: 3, text: "Kneel.", replyingTo: [] }, shown: 1, opacity: 1, speaking: true, voiced: true };
     expect(speaker(render([named, seg, say], 9000, true, { voiceCaption: view }))).toBe("ODILE");
-    expect(speaker(render([start, seg, say], 9000, true, { voiceCaption: view }))).toBe("HOST");
+    expect(speaker(render([start, seg, say], 9000, true, { voiceCaption: view }))).toBe("MALAKOR");
   });
 });
 

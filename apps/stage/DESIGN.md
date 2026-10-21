@@ -172,7 +172,9 @@ area is everything left of the right column. Malakor stands cut out over its bot
 in a 448 px box whose bottom is the canvas's bottom edge (no badge, no backplate; the rig's torso
 is cut off at its box's bottom, like a streamer's cut-out, and so is the silhouette fallback's
 robe). The caption is a lower third from his right edge to the content's right edge. The foil
-badge, decrees and explainer cards float in the content's top-right. The right column is the
+badge, decrees and explainer cards float in the content's top-right, in a 440 px lane; on the
+board the acts end left of it, and the desk's map window ends left of it, so no overlay ever
+stands over an act (on `browser` they step below the window's chrome). The right column is the
 chat lane, plus the vote while a poll is open; the hex inspector and the minion jury show on
 `board`, `hexmap` and `desk` only, and the minion ticker closes the column, so it never sits
 under him. The standing card (the segment's commands) shows between explainer cards on `host`,
@@ -193,25 +195,32 @@ SEG-02A's main screen is the case on cork:
   the focused card (else the latest string's or reveal's) is lit. A card's place comes from its
   act and its index in it, never from what is face up, so cards keep their places as the board
   fills in, and the board screen, the desk's window and a clip all use the one layout
-  (`BOARD_LAYOUT_FRAME`, the board screen's frame). No card and no act name sits under
-  Malakor's corner or under the observer badge's place at the top of the overlay lane (kept
-  whether a foil is in or not, so nothing moves when one arrives); `stage.test.ts` checks the
-  demo case: no card under him, none overlapping, every act inside the content area.
+  (`BOARD_LAYOUT_FRAME`, the board screen's frame). No card sits under Malakor's corner, and
+  every act ends left of the overlay lane (`BoardFrame.lane`), whose place is kept whether a
+  badge, decree or explainer card is up or not, so nothing moves when one arrives. The price is
+  card size: the demo's 16 cards lay out at 0.69 of full size in the overview (a focus zooms them
+  back up). `stage.test.ts` checks the demo case: no card under him, none overlapping, every act
+  inside the content area, and no act under the badge, a decree or a card on `board` or the
+  desk, overview or zoomed, for every poll and foil combination.
 - **Strings** (`link_pinned`, never the bare `pin_link` op, which the runtime may refuse). A
   string runs from the `from` card's edge to the `to` card's edge, sagging like string on cork
   (more strings between one pair sag further), with an arrowhead on the `to` card and a label:
   what it says (`REL_LABEL`) over the record it cites, plus "alleged" below DOC. It is coloured
   by its record's grade and drawn thinner below DOC; a `contradicts` string is dashed with a
-  signal-edged label. The label rides the curve where it covers no card (and no label placed
-  before it) when the curve allows. A new string draws in over 1.6 s (a mask runs along it;
+  signal-edged label. The label rides the curve where it covers no card, act name or label
+  placed before it; where the string's free part is too short to hold it (two cards a gap
+  apart), it hangs beside the string on a short dashed leader instead, so a label never covers a
+  card face (`stage.test.ts` checks the demo's six strings). A new string draws in over 1.6 s (a mask runs along it;
   the head and the label land after).
 - **Focus and zoom** (`show_screen board focus`, and the desk's record). The board zooms to the
-  card and the cards strung to it, at most 1.8x, clear of Malakor and, as a rule, of the
-  overlay lane; a zoom only ever closes in, so a ring spread wider than the window stays at the
-  overview with the ring lit. The rest dims, and a card the zoom would put under Malakor (or,
-  on the desk, under the browser window) is not drawn. The move is the map zoom's 0.9 s curve.
+  card and the cards strung to it, at most 1.8x, clear of Malakor and inside the acts' area
+  (left of the overlay lane); a zoom only ever closes in, so a ring spread wider than the window
+  stays at the overview with the ring lit. The rest dims, a card the zoom would put under Malakor
+  (or, on the desk, under the browser window) is not drawn, and whatever the zoom moves toward
+  the lane is cut off at its edge. The move is the map zoom's 0.9 s curve.
 - **The thesis** (`case.thesis`, else the title) heads the board in a band with a FICTIONAL CASE
-  chip for a fictional case, and the count of cards face up and strings pinned.
+  chip for a fictional case, and the count of cards face up and strings pinned. It ends where the
+  overlay lane starts.
 - **The timeline strip** runs along the board's bottom from Malakor's right edge, above the lower
   third: a dot per face-up card with a date and a diamond per record received with one, on an
   axis spanning every date in the case and the records (so marks never move as cards flip; a

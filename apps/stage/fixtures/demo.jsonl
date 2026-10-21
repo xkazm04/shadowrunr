@@ -1,4 +1,4 @@
-{"type":"stream_start","ts_ms":0,"stream_id":"demo-stream-0001","character":"malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":30}
+{"type":"stream_start","ts_ms":0,"stream_id":"demo-stream-0001","character":"malakor","host_name":"Malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":30}
 {"type":"segment_start","ts_ms":600,"segment":"SEG-01"}
 {"type":"chat","ts_ms":1500,"msg":{"id":"m0001","ts_ms":1500,"viewer":{"id":"v-bone","name":"bonepicker42","platform":"sim","rank":"acolyte","sub_tier":1,"months":1,"gifted":0,"is_mod":false},"text":"my soul is in the ledger already, it's fine"}}
 {"type":"say","ts_ms":1600,"speaker":"malakor","text":"Rise, minions. The Obsidian Spire is broadcasting, and the Lord of the Darkness is watching the ledger.","first_text_ms":1089}

@@ -20,6 +20,13 @@
 
 /* ─── The zoomed layer: regions, cards and strings move together ───────────────────────────── */
 
+/* Clipped at the overlay lane's edge (an inline clip-path), so a zoom never slides a card under
+   a decree or an explainer card. */
+.board-clip {
+  position: absolute;
+  inset: 0;
+}
+
 .board-zoom {
   position: absolute;
   left: 0;

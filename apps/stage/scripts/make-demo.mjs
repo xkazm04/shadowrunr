@@ -226,6 +226,7 @@ push({
   ts_ms: 0,
   stream_id: "demo-stream-0001",
   character: "malakor",
+  host_name: "Malakor",
   tone_variant: "theatrical",
   core_tier: "haiku",
   audience_size: 30,

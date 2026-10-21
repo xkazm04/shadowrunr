@@ -36,13 +36,16 @@ export function boardRegions(acts: readonly CaseAct[] | undefined, hexes: readon
 }
 
 /** A window the board is drawn in, in its own pixels, and what stands over it (`avoid`: Malakor's
- * corner, a window in front; no card is drawn under these) or should stay clear when a card is
- * focused (`prefer`: the overlay lane). */
+ * corner, a window in front; no card is drawn under these), should stay clear when a card is
+ * focused (`prefer`), or is the overlay lane (`lane`: the observer badge, decrees and explainer
+ * cards; the acts end left of it, so no act, card or string label is ever under an overlay, and
+ * the thesis band ends where it starts). */
 export interface BoardFrame {
   w: number;
   h: number;
   avoid?: Box[];
   prefer?: Box[];
+  lane?: Box;
 }
 
 /** A card at full size, and the gaps, in board pixels. */
@@ -60,9 +63,30 @@ const REGION_GAP = 10;
 /** How far a focused board may scale up. */
 export const BOARD_ZOOM_MAX = 1.8;
 
-/** Where the regions and cards go in a window: between the thesis band and the timeline strip. */
-export function boardArea(frame: Pick<BoardFrame, "w" | "h">): Box {
-  return { x: BOARD_PAD, y: THESIS_H, w: frame.w - 2 * BOARD_PAD, h: frame.h - THESIS_H - STRIP_H - BOARD_PAD / 2 };
+/** Where the regions and cards go in a window: between the thesis band and the timeline strip,
+ * and left of the overlay lane where one stands over the window. */
+export function boardArea(frame: Pick<BoardFrame, "w" | "h" | "lane">): Box {
+  const area = { x: BOARD_PAD, y: THESIS_H, w: frame.w - 2 * BOARD_PAD, h: frame.h - THESIS_H - STRIP_H - BOARD_PAD / 2 };
+  const lane = frame.lane;
+  if (lane && lane.y < area.y + area.h && lane.y + lane.h > area.y && lane.x < area.x + area.w) {
+    area.w = Math.max(0, lane.x - BOARD_PAD - area.x);
+  }
+  return area;
+}
+
+/** The part of a window the cards and strings are drawn in: all of it, or left of the overlay lane
+ * (a zoom moves the board, and what it moves toward the lane is cut off at the lane's edge rather
+ * than drawn under an overlay). */
+export function boardClip(frame: Pick<BoardFrame, "w" | "h" | "lane">): Box {
+  const lane = frame.lane;
+  return { x: 0, y: 0, w: lane ? Math.min(frame.w, Math.max(0, lane.x - BOARD_PAD / 2)) : frame.w, h: frame.h };
+}
+
+/** Where the thesis band ends: the window's right edge, or left of an overlay (the lane, a badge)
+ * standing over the band's right half. */
+export function thesisEnd(frame: BoardFrame): number {
+  const over = [...(frame.avoid ?? []), ...(frame.lane ? [frame.lane] : [])];
+  return Math.min(frame.w, ...over.filter((a) => a.y < THESIS_H && a.y + a.h > 0 && a.x > frame.w / 2).map((a) => a.x - 12));
 }
 
 /** The timeline strip: along the window's bottom, right of anything that stands over that band. */
@@ -83,6 +107,9 @@ export interface BoardLayout {
   h: number;
   /** The card scale it took to fit (1: full size). */
   scale: number;
+  /** The area the regions were laid out in (`boardArea` of the frame), and what stood over it. */
+  area: Box;
+  avoid: Box[];
   regions: LaidRegion[];
   /** Each card's box, by hex id. */
   cards: Record<string, Box>;
@@ -174,14 +201,14 @@ export function layoutBoard(regions: readonly BoardRegion[], frame: BoardFrame):
     const extra = regions.length > 0 ? (area.w - first.used) / regions.length : 0;
     const spread = extra > 1 ? layAt(regions, area, avoid, s, extra, first.cols) : null;
     const pick = spread ?? first;
-    return { w: frame.w, h: frame.h, scale: s, regions: pick.laid, cards: pick.cards };
+    return { w: frame.w, h: frame.h, scale: s, area, avoid: [...avoid], regions: pick.laid, cards: pick.cards };
   }
   // Nothing fits (a case far larger than a board): every card in one row, small.
   const cards: Record<string, Box> = {};
   const all = regions.flatMap((r) => r.hexes);
   const w = area.w / Math.max(1, all.length);
   all.forEach((id, i) => (cards[id] = { x: area.x + i * w, y: area.y + ACT_HEAD, w: w * 0.9, h: w * 0.45 }));
-  return { w: frame.w, h: frame.h, scale: w / CARD_W, regions: regions.map((r) => ({ ...r, box: { ...area } })), cards };
+  return { w: frame.w, h: frame.h, scale: w / CARD_W, area, avoid: [...avoid], regions: regions.map((r) => ({ ...r, box: { ...area } })), cards };
 }
 
 /** The region a card is in, or null. */
@@ -238,29 +265,40 @@ export interface BoardView {
 const RING_MARGIN = 24;
 
 /**
- * The window's view of the layout. The overview fits the whole layout into the window's board
+ * The window's view of the layout. The overview fits the layout's area into the window's board
  * area (on the board screen, where the layout was made for the window, it is the identity). A
- * focus zooms to the card and the cards strung to it, as large as fits (at most
- * `BOARD_ZOOM_MAX`) clear of `avoid` and, as a rule, of `prefer` too (only when no fit clears
+ * focus zooms to the card and the cards strung to it (and those strings' `labels`, by link), as
+ * large as fits (at most `BOARD_ZOOM_MAX`) clear of `avoid` and, as a rule, of `prefer` too (only
+ * when no fit clears
  * both at least at the overview's scale does `prefer` give way, and when neither does the view
  * stays the overview). Either way a card this view would put under an `avoid` box is listed in
  * `under`, so no card is ever drawn under Malakor.
  */
-export function boardView(layout: BoardLayout, frame: BoardFrame, focus: string | null, links: readonly { from: string; to: string }[]): BoardView {
+export function boardView(
+  layout: BoardLayout,
+  frame: BoardFrame,
+  focus: string | null,
+  links: readonly { from: string; to: string }[],
+  labels: readonly (Box | null)[] = [],
+): BoardView {
   const area = boardArea(frame);
   const avoid = frame.avoid ?? [];
-  const home = boardArea(layout);
+  const home = layout.area;
   const s = Math.min(1, area.w / home.w, area.h / home.h);
   let fit: MapFit = { scale: s, x: area.x - home.x * s, y: area.y - home.y * s };
   let ring: string[] = [];
   const f = focus === null ? undefined : layout.cards[focus];
   if (focus !== null && f) {
     ring = [focus];
-    for (const l of links) {
+    const shown: Box[] = [];
+    links.forEach((l, i) => {
       const other = l.from === focus ? l.to : l.to === focus ? l.from : null;
-      if (other !== null && layout.cards[other] && !ring.includes(other)) ring.push(other);
-    }
-    const box = union(ring.map((id) => layout.cards[id]!));
+      if (other === null || !layout.cards[other]) return;
+      if (!ring.includes(other)) ring.push(other);
+      const label = labels[i];
+      if (label) shown.push(label);
+    });
+    const box = union([...ring.map((id) => layout.cards[id]!), ...shown]);
     const target = { x: box.x - RING_MARGIN, y: box.y - RING_MARGIN, w: box.w + 2 * RING_MARGIN, h: box.h + 2 * RING_MARGIN };
     // A zoom only ever closes in: a ring spread wider than the window stays at the overview,
     // with the ring lit and the rest dimmed.

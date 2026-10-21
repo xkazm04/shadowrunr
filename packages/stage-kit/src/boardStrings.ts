@@ -3,7 +3,8 @@
 // A string runs from the edge of its `from` card to the edge of its `to` card and sags a little
 // below the straight line, like string pinned on cork; more strings between the same two cards
 // sag further, so none hides another. The arrowhead sits on the `to` card's edge along the
-// curve's tangent, and the label rides the curve's middle.
+// curve's tangent, and the label rides the curve where it covers no card, or hangs beside it on a
+// short leader where the free part of the string is too short to hold it.
 
 import type { EvidenceGrade, Hex, ShownRecord } from "@shadowrunr/contract";
 import type { Box } from "./hexgrid";
@@ -90,7 +91,20 @@ export function stringAt(g: Pick<StringGeom, "start" | "control" | "end">, t: nu
 }
 
 /** Where along the curve a label tries to sit, in order: the middle first. */
-const LABEL_T = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74] as const;
+const LABEL_T = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82] as const;
+/** Where along the curve an offset label hangs from, in order. */
+const LEADER_T = [0.5, 0.34, 0.66, 0.2, 0.8] as const;
+/** The eight ways an offset label may step off the curve, the ones below it first (strings sag). */
+const STEP = [
+  [0, 1],
+  [0, -1],
+  [1, 0],
+  [-1, 0],
+  [0.71, 0.71],
+  [-0.71, 0.71],
+  [0.71, -0.71],
+  [-0.71, -0.71],
+] as const;
 
 function overlapArea(a: Box, b: Box): number {
   const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
@@ -98,21 +112,48 @@ function overlapArea(a: Box, b: Box): number {
   return w > 0 && h > 0 ? w * h : 0;
 }
 
-/** Where a `w` x `h` label rides the string: the first spot along the curve, from the middle out,
- * that covers none of `obstacles` (the cards, the labels already placed), else the one that
- * covers least. */
-export function labelSpot(g: Pick<StringGeom, "start" | "control" | "end">, w: number, h: number, obstacles: readonly Box[]): Point {
-  let best: Point = stringAt(g, 0.5);
+/** A label's place: its centre, and the point on the string it belongs to (the same point when
+ * it rides the curve; a short leader joins the two when it had to step off). */
+export interface LabelSpot extends Point {
+  anchor: Point;
+}
+
+/**
+ * Where a `w` x `h` label goes: on the string's free part, from the middle out, where it covers
+ * none of `obstacles` (the cards, the labels already placed) and stays inside `bounds`; else
+ * stepped off the curve, nearest first, to the first such spot (with a leader back to the
+ * string); else, when nothing is free, wherever it covers least.
+ */
+export function labelSpot(g: Pick<StringGeom, "start" | "control" | "end">, w: number, h: number, obstacles: readonly Box[], bounds?: Box): LabelSpot {
+  const cover = (c: Point) => {
+    const box = { x: c.x - w / 2, y: c.y - h / 2, w, h };
+    const out = bounds ? w * h - overlapArea(box, bounds) : 0;
+    return obstacles.reduce((sum, o) => sum + overlapArea(box, o), out);
+  };
+  let best: LabelSpot = { ...stringAt(g, 0.5), anchor: stringAt(g, 0.5) };
   let bestCover = Infinity;
+  const tryAt = (c: Point, anchor: Point): boolean => {
+    const k = cover(c);
+    if (k < bestCover - 0.5) {
+      best = { x: c.x, y: c.y, anchor };
+      bestCover = k;
+    }
+    return k === 0;
+  };
   for (const t of LABEL_T) {
     const p = stringAt(g, t);
-    const box = { x: p.x - w / 2, y: p.y - h / 2, w, h };
-    const cover = obstacles.reduce((sum, o) => sum + overlapArea(box, o), 0);
-    if (cover < bestCover - 0.5) {
-      best = p;
-      bestCover = cover;
+    if (tryAt(p, p)) return best;
+  }
+  const unit = Math.max(h, 24) * 0.6;
+  for (let k = 1; k <= 8; k++) {
+    for (const t of LEADER_T) {
+      const p = stringAt(g, t);
+      for (const [dx, dy] of STEP) {
+        // The label's edge touches the point, then steps a unit further each round.
+        const c = { x: p.x + dx * (w / 2 + (k - 1) * unit), y: p.y + dy * (h / 2 + (k - 1) * unit) };
+        if (tryAt(c, p)) return best;
+      }
     }
-    if (cover === 0) break;
   }
   return best;
 }

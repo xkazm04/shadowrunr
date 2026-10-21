@@ -51,7 +51,8 @@ describe("layouts and segments", () => {
     expect(s.layout).toBe("boot");
     s = reduce(s, { type: "stream_start", ts_ms: 0, stream_id: "s", character: "malakor", tone_variant: "theatrical", core_tier: "haiku", audience_size: 3 });
     expect(s.meta?.audienceSize).toBe(3);
-    expect(s.meta?.hostName).toBeUndefined();
+    // No host_name on an older stream: the character id, capitalised.
+    expect(s.meta?.hostName).toBe("Malakor");
     expect(reduce(initialScene(), { type: "stream_start", ts_ms: 0, stream_id: "s", character: "keeper", tone_variant: "calm", core_tier: "haiku", audience_size: 3, host_name: "Odile" }).meta?.hostName).toBe("Odile");
     s = reduce(s, { type: "segment_start", ts_ms: 100, segment: "SEG-01" });
     expect(s.layout).toBe("host");
