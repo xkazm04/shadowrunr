@@ -10,7 +10,7 @@ export default defineConfig({
   build: { target: "es2022", sourcemap: false, manifest: true },
   test: {
     environment: "jsdom",
-    include: ["src/**/*.test.{ts,tsx}", "fidelity/**/*.test.mjs"],
+    include: ["src/**/*.test.{ts,tsx}", "fidelity/**/*.test.mjs", "scripts/**/*.test.ts"],
     setupFiles: ["src/kit/testSetup.ts"],
   },
 });
