@@ -18,7 +18,9 @@ that crate change together. Optional fields are **omitted** from JSON, never wri
 
 One `StreamEvent` per line, tagged `"type"`:
 
-- `stream_start`
+- `stream_start` (with `character`, and `host_name?`: the character's short name, e.g.
+  "Malakor", which the stage labels the host's captions and face with; omitted by older
+  streams, where the stage says "Host")
 - `segment_start` / `segment_end`
 - `case_open` (SEG-02A, the Case being audited, emitted once right after its `segment_start`)
 - `chat`
@@ -141,8 +143,9 @@ researcher = { one = "bone-clerk", many = "bone-clerks" }    # optional; {resear
 sign_off = "..."                    # the fleet-loss line
 disclosure = "Yes, I am an AI character: ..."               # the honest AI disclosure
 
-[voice]                             # schema only today: voice, sid, speed
-[avatar]                            # schema only today: rig (package-relative), face
+[voice]                             # each field set overrides the daemon's [voice]: voice, sid
+                                    # (speed is read but not applied yet: the sidecar has no rate flag)
+[avatar]                            # face overrides [stage] avatar; rig names the package's rig spec
 
 [ranks]                             # titles by wire name, lowest first
 thrall = "Thrall"
@@ -175,6 +178,17 @@ Placeholders. Engine prompt text, the segment tables' prompts and the package's 
 and `researchers`. Any other `{word}` is an error at load (a segment table fails to load, a
 package fails validation); a `{` not followed by `word}` is plain text, so JSON in a prompt
 needs no escaping.
+
+The daemon applies the configured character's (`[sim] character`) `[voice]` and `[avatar] face`
+when it loads its config, and serves `/avatar/{file}` from
+`<data>/characters/<id>/avatar/rig/` for the character on air (the latest run in flight, else
+`[sim] character`), falling back to the shared `<data>/avatar/rig/`.
+
+`characters/_template/` is the scaffold `shadowrunr character new <id>` copies (every
+parameter with its question, options and default in comments; values to write are marked
+`FILL:`). Directories whose name starts with `_` are not characters: `character.list` leaves
+them out. `character validate` reports a value still holding `FILL:` as a warning, never an
+error (guide: docs/guide/characters.md).
 
 Tuning keys (`TUNING_DEFAULTS` in `shadowrunr-types` holds each key's engine default and the
 default's provenance): `max_picks`, `carry_ms`, `carry_max`, `hold_gap_ms`, `quiet_bit_ms`,
@@ -507,8 +521,9 @@ being written is not served.
 |---|---|---|
 | `character.list` | `{}` | `CharacterSummary[]` |
 | `character.get` | `{ "id" }` | `CharacterDetail` |
+| `character.validate` | `{ "id" }` | `CharacterIssue[]` (empty: valid; warnings alone still pass) |
 | `segments.tables` | `{}` | `SegmentTables` (the compiled-in tables the runtime interprets) |
-| `ranks.table` | `{ "character"? }` | `RankTableInfo` (`<segments>/ranks.toml`, titles from the character) |
+| `ranks.table` | `{ "character"? }` | `RankTableInfo` (`<segments>/ranks.toml` with the character's `[ranks]` overrides and titles) |
 | `runs.page` | `{ "tournament_id"?, "filter"?, "cursor"?, "limit" }` | `{ items: RunRow[], next_cursor? }`, ordered by `(tournament_id, run_id)` |
 | `tournaments.page` | `{ "cursor"?, "limit" }` | `{ items: TournamentRow[], next_cursor? }`, ordered by id |
 | `ledger.page` | `{ "run_id"?, "tournament_id"?, "cursor"?, "limit" }` | `{ items: LedgerEntry[], next_cursor? }` |
@@ -517,12 +532,19 @@ being written is not served.
 CharacterSummary { id, name, default_tone, tones: [string], foils: [string], rules_enabled, rules_total }
 CharacterDetail  { id, name, default_tone, files: [{path, bytes}], constitution, bible?,
                    tones: [{id, text}], foils: [{id, declared, text}], situations: [Situation],
-                   rules: [{id, title, enabled, default, text}], rank_titles: {rank: title} }
+                   rules: [{id, title, enabled, default, text}], rank_titles: {rank: title},
+                   identity?, voice?, avatar?: the v2 tables as written,
+                   rank_overrides?: {weights?, thresholds?, propose_min_rank?},
+                   tuning?: [TuningRow], segment_flavour?: {segment: {rules_prompt?, states?}} }
+TuningRow        { key, value, default, set, provenance: "measured"|"assumption", source?, doc }
+                   // every key in table order; value is the package's when set, else the default
+CharacterIssue   { file, key?, reason, severity: "error"|"warning" }
 SegmentTables    { segments: [SegmentTableInfo], op_tags: [string], command_names: [string] }
 SegmentTableInfo { id, title, status, initial, states, allowed_ops, commands, switch_to,
                    rules_prompt, design_notes?, transitions: [{from, on, guard?, to}],
                    clock: {foil_vote_secs, poll_min_secs, poll_max_secs, max_poll_options, handover?} }
 RankTableInfo    { character, propose_min_rank, ranks: [{rank, title, weight, min_gifted?, tiers: [{tier, min_months}]}] }
+                   // the ladder with the character's [ranks] overrides applied
 RunFilter        { tone_variant?, core_tier?, segment?, audience_size?, has_verdict?, text? }
 LedgerEntry      { ts_ms, role, tier?, effort?, engine?, account?, model?, first_text_ms?, duration_ms,
                    usage, cost_usd?, fallback_reason?, correlation_id?, error_kind?, warm?, run_id?, tournament_id? }
@@ -584,6 +606,11 @@ EngineFleet  { mode: "primary"|"degraded"|"down"|"scripted", since_ms }
   name nor its value is exposed.
 - With the scripted engine, `routes` is the default table (nothing overridden), `accounts` and
   `fallbacks` are empty, and `fleet` is `{ "mode": "scripted", "since_ms": 0 }`.
+
+**Host lines.** A report's per-segment metrics count the host's lines as `host_lines` and
+`host_lines_per_min?`; a stored report written with the v1 names `malakor_lines` and
+`malakor_lines_per_min` still reads. The Reconciler's prompts (synthesis, dispatch, owner chat)
+are written for the configured character's persona.
 
 **Reconcile synthesis budget.** The Reconciler's synthesis prompt is sized against a token
 budget (default 120k tokens, estimated as characters ÷ 3.5, 15% kept free). The metrics are

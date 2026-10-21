@@ -1,4 +1,6 @@
-//! `GET /avatar/{file}`: the face rig from `<data>/avatar/rig/`. The name must be one safe
+//! `GET /avatar/{file}`: the face rig of the character on air (the latest run in flight, else
+//! `[sim] character`): `<data>/characters/<id>/avatar/rig/`, else the shared
+//! `<data>/avatar/rig/` (`crate::character::rig_dir`). The name must be one safe
 //! path segment (`[A-Za-z0-9._-]+`, no `..`) with a known extension (`json`, `png`, `webp`);
 //! anything else, and any file that is not there, is 404, so the stage draws its placeholder.
 //! `cache-control: no-cache`: a re-split rig shows on the next load.
@@ -9,7 +11,6 @@ use axum::extract::{Path as UrlPath, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 
-use super::rig_dir;
 use crate::server::AppState;
 
 /// The content type for a safe rig file name; `None` refuses it.
@@ -39,7 +40,11 @@ pub async fn avatar_handler(
     let Some(ct) = rig_file_type(&file) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let path = rig_dir(&state.cfg.paths.data).join(&file);
+    let character = state
+        .live
+        .streaming_character()
+        .unwrap_or_else(|| state.cfg.sim.character.clone());
+    let path = crate::character::rig_dir(&state.cfg.paths.data, &character).join(&file);
     match tokio::fs::read(&path).await {
         Ok(bytes) => (
             [

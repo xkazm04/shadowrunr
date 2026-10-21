@@ -166,6 +166,11 @@ pub enum StreamEvent {
         /// Omitted when the stream had no brief.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         brief: Option<StreamBrief>,
+        /// The character's short name as the stage labels its lines and face, e.g. "Malakor"
+        /// (`[identity] name`, else the last word of the package name). Omitted by older
+        /// streams: the stage then says "Host".
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        host_name: Option<String>,
     },
     SegmentStart {
         ts_ms: TsMs,

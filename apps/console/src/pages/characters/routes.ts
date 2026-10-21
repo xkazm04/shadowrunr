@@ -11,6 +11,7 @@ export const PKG_TABS = [
   { id: "tones", label: "Tones" },
   { id: "foils", label: "Foils" },
   { id: "situations", label: "Situations" },
+  { id: "parameters", label: "Parameters" },
 ] as const;
 
 export type PkgTab = (typeof PKG_TABS)[number]["id"];

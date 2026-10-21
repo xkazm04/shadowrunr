@@ -1,7 +1,7 @@
 //! The per-beat signals: moment markers (admitted under caps) and the crowd's reaction.
 //!
 //! **Markers.** The host's `mark_moment` plus three structural beats read from the
-//! transcript: a foil line Malakor answers (FOIL_ROAST), a hex reveal (HEX_REVEAL) and a
+//! transcript: a foil line the host answers (FOIL_ROAST), a hex reveal (HEX_REVEAL) and a
 //! sealed verdict, i.e. a closed vote or a case's last hex annexed (the RELEASE_ANNEXED
 //! equivalent). The runtime validates only that a mark's label is non-empty, so a generated
 //! host may mark every line; the scorer therefore admits a marker only within caps: a label
@@ -116,7 +116,7 @@ pub fn markers(stream: &Stream) -> Vec<ClipMarker> {
                 foil,
                 ..
             } => {
-                // Answered by Malakor later in this beat or in the next one.
+                // Answered by the host later in this beat or in the next one.
                 let answered = stream.events[i + 1..]
                     .iter()
                     .filter_map(|(_, e)| match e {
@@ -131,7 +131,7 @@ pub fn markers(stream: &Stream) -> Vec<ClipMarker> {
                     .filter(|t| *t - *ts_ms <= 5_000);
                 if let Some(t) = answered {
                     let who = foil.clone().unwrap_or_else(|| "the foil".into());
-                    raw.push((t, MarkerKind::FoilRoast, format!("Malakor answers {who}")));
+                    raw.push((t, MarkerKind::FoilRoast, format!("the host answers {who}")));
                 }
             }
             _ => {}

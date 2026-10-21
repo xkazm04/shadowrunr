@@ -1,0 +1,28 @@
+/* Characters, the package's Parameters tab: character.toml v2 read-only (identity, voice and
+   face, rank overrides, the tuning table against the engine defaults, segment flavour); the
+   key-value list, notes and code come from Layer2.module.css. The page root carries
+   data-page="characters", so --sr-page-accent is the page's verdigris. */
+
+.quoteHead { margin: var(--sr-space-near) 0 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .1em; text-transform: uppercase; font-size: var(--sr-size-caption); color: var(--sr-color-text-mute); }
+.quote { margin: var(--sr-space-tick) 0 0; font-family: var(--sr-font-serif); font-style: italic; border-left: .35rem solid var(--sr-page-accent); padding-left: var(--sr-space-base); color: var(--sr-color-text-note); }
+
+.count { font-family: var(--sr-font-sans); font-size: var(--sr-size-small); font-weight: var(--sr-weight-regular); letter-spacing: 0; text-transform: none; color: var(--sr-color-text-mute); }
+
+.table { width: 100%; border-collapse: collapse; margin-top: var(--sr-space-cozy); font-size: var(--sr-size-small); }
+.table th,
+.table td { text-align: left; vertical-align: top; padding: var(--sr-space-snug) var(--sr-space-compact); border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); }
+.table thead th { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .1em; text-transform: uppercase; font-size: var(--sr-size-caption); color: var(--sr-color-text-mute); border-bottom: var(--sr-stroke-rule) solid var(--sr-color-text-ink); }
+.table tbody th { font-weight: var(--sr-weight-semibold); }
+
+.differs { background: color-mix(in srgb, var(--sr-page-accent) 12%, transparent); }
+.differs th { box-shadow: inset .3rem 0 0 var(--sr-page-accent); }
+.badge { margin-left: var(--sr-space-tight); padding: 0 var(--sr-space-tight); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-micro); letter-spacing: .12em; text-transform: uppercase; color: var(--sr-color-text-on-dark); background: var(--sr-page-accent); }
+
+.prov { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .06em; text-transform: uppercase; font-size: var(--sr-size-caption); }
+.prov[data-prov="measured"] { color: var(--sr-page-accent-text); }
+.prov[data-prov="assumption"] { color: var(--sr-color-text-mute); }
+.source { display: block; margin-top: var(--sr-space-hair); color: var(--sr-color-text-note); }
+
+.flavour { margin-top: var(--sr-space-near); }
+.flavour h3 { margin: 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-subhead); text-transform: uppercase; }
+

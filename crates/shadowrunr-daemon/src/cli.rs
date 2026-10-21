@@ -11,6 +11,7 @@ use shadowrunr_sim::{
     plan_matrix, run_one_with, run_tournament, summarize, wire, BriefSource, FleetQuota,
     PlanReason, RunAction, TournamentOptions,
 };
+use shadowrunr_types::catalog::{CharacterIssue, IssueSeverity};
 use shadowrunr_types::review::{ReviewSessionRow, ReviewTagParams, SessionTags};
 use shadowrunr_types::sandbox::{
     check_gates, SandboxChaos, SandboxCheckState, SandboxReport, SandboxStartParams,
@@ -79,7 +80,7 @@ pub enum Command {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Character packages: optional constitution rules.
+    /// Character packages: create one from a template, validate it, and its optional rules.
     #[command(subcommand)]
     Character(CharacterCommand),
     /// Moderation policy: operator-installed term lists.
@@ -275,6 +276,24 @@ pub enum CharacterCommand {
         /// Print the list as JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// Check a package: print each issue as `file: key: reason` (a template placeholder
+    /// still to fill is a warning). Exit 0 with no errors, 1 otherwise.
+    Validate {
+        /// A package directory, or a package id under <characters>.
+        target: String,
+        /// Print the issues as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Create <characters>/<id>/ from a template (default <characters>/_template), then
+    /// validate it. Never overwrites.
+    New {
+        /// The new package id ([A-Za-z0-9._-], not starting with `_`).
+        id: String,
+        /// The template directory to copy.
+        #[arg(long = "from", value_name = "DIR")]
+        from: Option<PathBuf>,
     },
 }
 
@@ -531,6 +550,12 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
             disable,
             json,
         }) => character_rules_cmd(&cfg, &id, &enable, &disable, json),
+        Command::Character(CharacterCommand::Validate { target, json }) => {
+            character_validate_cmd(&cfg, &target, json)
+        }
+        Command::Character(CharacterCommand::New { id, from }) => {
+            character_new_cmd(&cfg, &id, from.as_deref())
+        }
         Command::Policy(PolicyCommand::InstallList { list_id, source }) => {
             policy_install_cmd(&cfg, &list_id, source.as_deref()).await
         }
@@ -1058,6 +1083,56 @@ fn memory_reindex_cmd(cfg: &Config, json: bool) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// A package directory as given, else the id's directory under `<characters>`.
+fn package_dir(cfg: &Config, target: &str) -> Result<PathBuf, String> {
+    let as_path = from_cwd(Path::new(target));
+    if as_path.join("character.toml").is_file() {
+        return Ok(as_path);
+    }
+    crate::catalog::character_dir(cfg, target).map_err(|e| e.message)
+}
+
+fn print_issues(issues: &[CharacterIssue]) {
+    for i in issues {
+        println!("{}", crate::character::issue_line(i));
+    }
+    let errors = issues
+        .iter()
+        .filter(|i| i.severity == IssueSeverity::Error)
+        .count();
+    println!("{errors} error(s), {} warning(s)", issues.len() - errors);
+}
+
+fn character_validate_cmd(cfg: &Config, target: &str, json: bool) -> Result<ExitCode, String> {
+    let dir = package_dir(cfg, target)?;
+    let issues = crate::character::validate(&dir);
+    if json {
+        print_json(&issues);
+    } else {
+        print_issues(&issues);
+    }
+    Ok(if crate::character::has_errors(&issues) {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+fn character_new_cmd(cfg: &Config, id: &str, from: Option<&Path>) -> Result<ExitCode, String> {
+    let template = match from {
+        Some(p) => from_cwd(p),
+        None => cfg.paths.characters.join(crate::character::TEMPLATE_ID),
+    };
+    let (dir, issues) = crate::character::new_character(&cfg.paths.characters, id, &template)?;
+    println!("created {}", dir.display());
+    print_issues(&issues);
+    Ok(if crate::character::has_errors(&issues) {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
 fn character_rules_cmd(
     cfg: &Config,
     id: &str,
@@ -1566,6 +1641,7 @@ async fn reconcile_cmd(
             data_dir: cfg.paths.data.clone(),
             runs_root: cfg.paths.sim_runs(),
             characters_root: Some(cfg.paths.characters.clone()),
+            persona: crate::character::persona(cfg),
         },
         engine.engine,
     );

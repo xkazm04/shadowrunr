@@ -9,7 +9,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::catalog::{CharacterDetail, CharacterSummary, RankTableInfo, RuleState, SegmentTables};
+use crate::catalog::{
+    CharacterDetail, CharacterIssue, CharacterSummary, RankTableInfo, RuleState, SegmentTables,
+};
 use crate::clips::{
     ClipCandidate, ClipIdParams, ClipPublishReport, ClipRunRecording, ClipScanReport,
     ClipsApproveParams, ClipsFeedbackParams, ClipsListParams, ClipsPage, ClipsPublishParams,
@@ -144,6 +146,13 @@ pub struct LordChatParams {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CharacterGetParams {
+    pub id: String,
+}
+
+/// `character.validate`: check a package (`<characters>/<id>/`) the way `character validate`
+/// does.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CharacterValidateParams {
     pub id: String,
 }
 
@@ -444,6 +453,7 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<EmptyParams, Vec<CharacterSummary>>("character.list");
     v.method::<CharacterGetParams, CharacterDetail>("character.get");
     v.method::<CharacterToneSetParams, CharacterSummary>("character.tone.set");
+    v.method::<CharacterValidateParams, Vec<CharacterIssue>>("character.validate");
     v.method::<EmptyParams, SegmentTables>("segments.tables");
     v.method::<RanksTableParams, RankTableInfo>("ranks.table");
     v.method::<LedgerPageParams, LedgerPage>("ledger.page");

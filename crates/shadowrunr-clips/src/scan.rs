@@ -28,6 +28,7 @@ use shadowrunr_types::{Engine, EvidenceGrade, Op, SegmentId, StreamEvent};
 
 use crate::footage;
 use crate::hook::{self, HookWindow};
+use crate::host::ClipHost;
 use crate::render::{self, header_for, ClipInput, DISCLOSURE};
 use crate::signals::{self, kind_weight, Crowd};
 use crate::store::{self, ClipStore};
@@ -56,6 +57,9 @@ pub struct RunInput {
     pub dir: PathBuf,
     /// The transcript path as recorded on candidates (relative to the runs root).
     pub transcript_label: String,
+    /// Who the run's host is (its character's persona): captions, the hook read and the
+    /// draft's `clip.json` name them.
+    pub host: ClipHost,
 }
 
 #[derive(Clone)]
@@ -382,9 +386,11 @@ fn overlaps(a: &Cut, b: &Cut) -> bool {
 
 /// Score, cut and rank one stream. Returns the kept cuts best first, plus the markers and
 /// the hook outcome.
+#[allow(clippy::too_many_arguments)]
 async fn rank(
     stream: &Stream,
     run_id: &str,
+    host: &ClipHost,
     engine: Option<&dyn Engine>,
     opts: &ScanOptions,
     re: Option<&Regex>,
@@ -458,7 +464,7 @@ async fn rank(
                     .collect(),
             })
             .collect();
-        match hook::read(engine, run_id, &windows).await {
+        match hook::read(engine, run_id, &windows, host).await {
             Ok(scores) => {
                 for (k, p) in picked.iter_mut().enumerate() {
                     if let Some(s) = scores.get(&format!("w{}", k + 1)) {
@@ -669,6 +675,7 @@ fn candidate(
             None
         },
         disclosure: DISCLOSURE.into(),
+        host: input.host.clone(),
         provenance: format!(
             "{} · stream {}-{}",
             input.run_id,
@@ -787,8 +794,16 @@ pub async fn scan(
         let recording = footage::read_recording(&input.dir);
         let audio = audio_context(recording.as_ref(), opts.ffmpeg.as_deref());
         let re = redactor(&stream.viewer_names);
-        let (kept, markers, hook_state) =
-            rank(&stream, &input.run_id, engine, opts, re.as_ref(), &audio).await;
+        let (kept, markers, hook_state) = rank(
+            &stream,
+            &input.run_id,
+            &input.host,
+            engine,
+            opts,
+            re.as_ref(),
+            &audio,
+        )
+        .await;
         let run = RunCtx {
             input,
             recording: recording.as_ref(),

@@ -1,0 +1,312 @@
+# Character package template (manifest v2). `shadowrunr character new <id>` copies this
+# directory to characters/<id>/ and sets `id`; `shadowrunr character validate <id>` then lists
+# every value still marked FILL: as a warning. The guide is docs/guide/characters.md.
+#
+# Every parameter below carries three comment lines:
+#   # ? the question it answers
+#   # options: the values it may take ("a | b" lists them; otherwise the kind of value)
+#   # default: the value this template writes (always one of the options)
+# A commented-out key is optional: leaving it out means its default. Placeholders such as
+# {name}, {followers} or {patron} in a text are filled from [identity] when the text is used.
+
+# ? The package id: the directory name.
+# options: free text ([A-Za-z0-9_-])
+# default: "_template"
+id = "_template"
+
+# ? The character's display name, title included ({full_name}).
+# options: free text
+# default: "FILL: Display Name"
+name = "FILL: Display Name"
+
+# ? One line under the name in the operator app.
+# options: free text
+# default: "FILL: one line about the show"
+tagline = "FILL: one line about the show"
+
+# ? Which tone variant runs when the operator chooses none (a tones/<id>.md file)?
+# options: "baseline"
+# default: "baseline"
+default_tone = "baseline"
+
+# ? Which guest foils can chat summon (each needs foils/<id>.md)?
+# options: a list of foil ids
+# default: []
+# foils = []
+
+# ? Which rules can no operator override switch off (each must be true under [rules])?
+# options: a list of rule ids
+# default: ["crisis-handoff"]
+rails = ["crisis-handoff"]
+
+[identity]
+# ? The short name chat and the engine call the character ({name}).
+# options: free text
+# default: "FILL: Name"
+name = "FILL: Name"
+
+# ? The title before the name ({title}).
+# options: free text
+# default: "FILL: Title"
+title = "FILL: Title"
+
+# ? What lowercase words does chat use to address the character? (Empty: the name's words of
+# ? four letters or more.)
+# options: a list of lowercase words
+# default: []
+# address_words = []
+
+# ? Which speaker labels may a model reply start a line with (stripped before speech)? (Empty:
+# ? **Name:**, Name:, NAME: and **Name**:.)
+# options: a list of free text
+# default: []
+# reply_prefixes = []
+
+# ? Who does the character answer to in the fiction (written without "the")?
+# options: free text
+# default: { name = "FILL: patron's full name", title = "FILL: patron's short title" }
+patron = { name = "FILL: patron's full name", title = "FILL: patron's short title" }
+
+# ? What does the character call one viewer, and many ({follower}, {followers})?
+# options: free text
+# default: { one = "FILL: viewer word", many = "FILL: viewers word" }
+follower = { one = "FILL: viewer word", many = "FILL: viewers word" }
+
+# ? What does the character call the research workers it sends out ({researcher}, {researchers})?
+# options: free text
+# default: { one = "researcher", many = "researchers" }
+researcher = { one = "researcher", many = "researchers" }
+
+# ? What does the character say when the engine fleet stays lost and the show must end?
+# options: free text
+# default: "FILL: the sign-off line, in character"
+sign_off = "FILL: the sign-off line, in character"
+
+# ? What honest line replaces a reply that disclosed being an AI clumsily?
+# options: free text
+# default: "Yes, I am an AI character, performed by a machine. The show goes on."
+disclosure = "Yes, I am an AI character, performed by a machine. The show goes on."
+
+[voice]
+# ? Which TTS voice speaks for the character (the daemon's [voice] when absent)?
+# options: free text (a voice id of the engine)
+# default: "af_heart"
+# voice = "af_heart"
+
+# ? The voice's verified speaker id.
+# options: a whole number
+# default: 3
+# sid = 3
+
+[avatar]
+# ? Which renderer draws the face on the stage (the daemon's [stage] avatar when absent)?
+# options: "glow" | "cut" | "depth"
+# default: "cut"
+# face = "cut"
+
+# ? The rig spec, relative to the package.
+# options: free text (a path inside the package)
+# default: "rig/spec.json"
+# rig = "rig/spec.json"
+
+[ranks]
+# ? What does the character call each rank, lowest first? (The six wire names are fixed.)
+# options: free text
+# default: "Visitor"
+thrall = "Visitor"
+
+# ? The second rank's title.
+# options: free text
+# default: "Regular"
+acolyte = "Regular"
+
+# ? The third rank's title.
+# options: free text
+# default: "Member"
+cultist = "Member"
+
+# ? The fourth rank's title.
+# options: free text
+# default: "Veteran"
+warlock = "Veteran"
+
+# ? The fifth rank's title.
+# options: free text
+# default: "Elder"
+lich = "Elder"
+
+# ? The top rank's title.
+# options: free text
+# default: "Council"
+dread_council = "Council"
+
+# ? The lowest rank allowed to use !propose (the engine ladder's when absent).
+# options: "thrall" | "acolyte" | "cultist" | "warlock" | "lich" | "dread_council"
+# default: "warlock"
+# propose_min_rank = "warlock"
+
+[rules]
+# ? Does the show's moderation remove a viewer from chat after the crisis line to them?
+# options: true | false
+# default: true
+crisis-chat-ban = true
+
+# ? The crisis handoff: a rail (listed in `rails`), so it must stay on.
+# options: true
+# default: true
+crisis-handoff = true
+
+# ? Is promoting or advising on real coins, tokens, stocks or exchanges off limits?
+# options: true | false
+# default: true
+no-financial-promotion = true
+
+[lines]
+# ? What replaces a line a block-term rule caught?
+# options: free text
+# default: "FILL: a short in-character line that moves on, {followers}."
+blocked = "FILL: a short in-character line that moves on, {followers}."
+
+# ? What replaces a line that only asked someone for personal details?
+# options: free text
+# default: "FILL: keep your personal details to yourself, {follower}."
+private_details = "FILL: keep your personal details to yourself, {follower}."
+
+# ? Which fresh bits stand in for a line that broke character (one is picked each time)?
+# options: a list of free text
+# default: ["FILL: a fresh bit that invites chat in."]
+recast = [
+    "FILL: a fresh bit that invites chat in.",
+]
+
+# ? How does the character rebut a forged order typed in chat (never naming the patron)?
+# options: a list of free text
+# default: ["FILL: a rebuttal that keeps every rule."]
+rebuttals = [
+    "FILL: a rebuttal that keeps every rule.",
+]
+
+# Segment flavour, appended to a segment's prompts.
+[segments."SEG-01"]
+# ? What does the improvised room add to the segment's rules prompt for this character?
+# options: free text
+# default: "FILL: what the room is, in the character's world, for the {followers}."
+rules_prompt = "FILL: what the room is, in the character's world, for the {followers}."
+
+# The lessons tuned on earlier runs, each with its provenance. These are the engine defaults
+# and their evidence; change a value only with a run to back it, and name the run in source.
+[tuning]
+# ? The most chat messages answered in one beat (a ceiling, not a quota).
+# options: a positive whole number (a count)
+# default: 2
+max_picks = { value = 2, provenance = "measured", source = "sbx-20261021-011413-5m: both three-pick beats lost their last line to the 260-character budget" }
+
+# ? How long an unanswered message is carried into the next beats, ms.
+# options: a positive whole number (milliseconds)
+# default: 25000
+carry_ms = { value = 25000, provenance = "assumption", source = "two to five beats, so the answer still reads as one" }
+
+# ? The most messages carried at once; the oldest go first.
+# options: a positive whole number (a count)
+# default: 6
+carry_max = { value = 6, provenance = "assumption" }
+
+# ? A quiet beat may hold only while the host's last line is younger than this, ms.
+# options: a positive whole number (milliseconds)
+# default: 7000
+hold_gap_ms = { value = 7000, provenance = "assumption", source = "with 5 s beats the next line speaks under the 15 s say-gap ceiling" }
+
+# ? No chat worth answering for this long before a new bit starts, ms.
+# options: a positive whole number (milliseconds)
+# default: 8000
+quiet_bit_ms = { value = 8000, provenance = "assumption" }
+
+# ? Least time between the starts of two new bits, ms.
+# options: a positive whole number (milliseconds)
+# default: 20000
+bit_spacing_ms = { value = 20000, provenance = "assumption" }
+
+# ? While the fleet fails, a stall line once nobody has spoken this long, s.
+# options: a positive whole number (seconds)
+# default: 12
+stall_every_s = { value = 12, provenance = "assumption" }
+
+# ? A failed beat's stall is due this much before `stall_every_s` (one beat), s.
+# options: a positive whole number (seconds)
+# default: 5
+failed_beat_slack_s = { value = 5, provenance = "assumption" }
+
+# ? A cover line never goes out sooner than this into a slow core call, ms.
+# options: a positive whole number (milliseconds)
+# default: 4000
+min_cover_ms = { value = 4000, provenance = "assumption", source = "sandbox smoke run: an 18.4 s call left a 19.1 s silence" }
+
+# ? An owned request is answered within this long of reaching a beat, ms.
+# options: a positive whole number (milliseconds)
+# default: 20000
+request_answer_ms = { value = 20000, provenance = "assumption" }
+
+# ? While an owned request waits, a beat holds for speech only past this much queued, ms.
+# options: a positive whole number (milliseconds)
+# default: 8000
+request_lead_ms = { value = 8000, provenance = "assumption" }
+
+# ? An owned request still unanswered this long after it reached a beat is dropped, ms.
+# options: a positive whole number (milliseconds)
+# default: 90000
+request_max_ms = { value = 90000, provenance = "assumption" }
+
+# ? The voice's render lag after a `say`, part of the lookahead lead, ms.
+# options: a positive whole number (milliseconds)
+# default: 2000
+render_lag_ms = { value = 2000, provenance = "measured", source = "p50 2.2 s from say to rendered audio in two voiced runs" }
+
+# ? The most the lookahead lead may grow to, ms.
+# options: a positive whole number (milliseconds)
+# default: 8000
+lookahead_max_ms = { value = 8000, provenance = "assumption", source = "sbx-20261021-143530-10m: core-call silences p50 4.7 s, p90 8.0 s" }
+
+# ? A line queued further behind than this is dropped (the voice's 15 s max lag less its render lag), ms.
+# options: a positive whole number (milliseconds)
+# default: 13000
+lag_ceiling_ms = { value = 13000, provenance = "assumption" }
+
+# ? A runtime screen default never overrides a model `show_screen` this recent, ms.
+# options: a positive whole number (milliseconds)
+# default: 8000
+screen_hold_ms = { value = 8000, provenance = "assumption" }
+
+# ? After this long on `browser` the screen moves to `desk`, ms.
+# options: a positive whole number (milliseconds)
+# default: 40000
+browser_dwell_ms = { value = 40000, provenance = "assumption", source = "2026-10-21 10-minute show sat on one record for over five minutes" }
+
+# ? After this long on `desk` the screen pulls back to the hexmap, ms.
+# options: a positive whole number (milliseconds)
+# default: 30000
+desk_dwell_ms = { value = 30000, provenance = "assumption" }
+
+# ? The closing window: the last this many seconds of a session (wrap-up), s.
+# options: a positive whole number (seconds)
+# default: 60
+closing_s = { value = 60, provenance = "assumption" }
+
+# ? The goodbye: the last this many seconds, where the sign-off is asked for, s.
+# options: a positive whole number (seconds)
+# default: 15
+closing_now_s = { value = 15, provenance = "assumption", source = "sbx-20261021-011413-5m signed off at the first closing line, at 4:04 of 5:00" }
+
+# ? After a sign-off the stream holds past the planned end at most this long, s.
+# options: a positive whole number (seconds)
+# default: 15
+goodbye_drain_max_s = { value = 15, provenance = "assumption" }
+
+# ? A sign-off counts when it lands in the last this many seconds, s.
+# options: a positive whole number (seconds)
+# default: 30
+sign_off_window_s = { value = 30, provenance = "assumption" }
+
+# ? After a stop request, the host has this long to sign off, s.
+# options: a positive whole number (seconds)
+# default: 10
+stop_sign_off_s = { value = 10, provenance = "assumption" }

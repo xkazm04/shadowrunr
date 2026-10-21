@@ -99,6 +99,7 @@ pub(crate) fn reconciler_at(
             data_dir: data.to_path_buf(),
             runs_root: runs_root.to_path_buf(),
             characters_root: None,
+            persona: Default::default(),
         },
         engine,
         Arc::new(move || ms.fetch_add(1, std::sync::atomic::Ordering::SeqCst)),
@@ -112,6 +113,7 @@ fn reconciler(data: &std::path::Path, engine: Arc<dyn Engine>) -> Reconciler {
             data_dir: data.to_path_buf(),
             runs_root: fixtures().join("sim-runs"),
             characters_root: Some(fixtures().join("characters")),
+            persona: Default::default(),
         },
         engine,
         Arc::new(move || ms.fetch_add(1, std::sync::atomic::Ordering::SeqCst)),
@@ -136,7 +138,7 @@ fn metrics_are_correct_on_the_hand_made_fixture() {
     assert!(close(s1.minutes, 2.5)); // 90 s + 60 s
     assert_eq!(s1.chat_msgs, 5);
     assert!(close(s1.chat_per_min.unwrap(), 2.0));
-    assert_eq!(s1.malakor_lines, 3);
+    assert_eq!(s1.host_lines, 3);
     let ans = s1.answered.unwrap();
     assert_eq!((ans.n, ans.rate), (5, 0.6));
     assert_eq!(s1.ops, 1);
@@ -1165,7 +1167,7 @@ async fn an_injected_excerpt_cannot_change_the_synthesis_options() {
         prompt[open..close].contains("inj-run#3 [00:02]"),
         "the ref label survives"
     );
-    assert!(prompt[open..close].contains("inj-run#4 [00:03] MALAKOR"));
+    assert!(prompt[open..close].contains("inj-run#4 [00:03] HOST"));
     assert!(
         !prompt[open + 3..close].contains("<<<END"),
         "a forged close is defused"

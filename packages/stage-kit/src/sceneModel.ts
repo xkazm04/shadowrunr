@@ -171,6 +171,8 @@ export interface StreamMeta {
   toneVariant: string;
   coreTier: ModelTier;
   audienceSize: number;
+  /** The host's short name (`stream_start.host_name`); absent from older streams. */
+  hostName?: string;
   at: TsMs;
 }
 
