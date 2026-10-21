@@ -285,3 +285,124 @@ async fn run_rows_carry_health_and_red_line_fails_from_the_verdict() {
         );
     }
 }
+
+/// A sim ledger row with the fields `ledger.summary` folds.
+fn summary_row(ts: usize, role: &str, duration_ms: u64, extra: Value) -> String {
+    let mut row = json!({
+        "ts_unix_ms": ts, "role": role, "tier": "haiku", "effort": "low",
+        "engine": "claude_cli", "account": "main", "model": "claude-haiku",
+        "duration_ms": duration_ms, "usage": { "input_tokens": 1, "output_tokens": 2 }
+    });
+    for (k, v) in extra.as_object().unwrap() {
+        row[k] = v.clone();
+    }
+    row.to_string()
+}
+
+#[tokio::test]
+async fn ledger_summary_folds_every_row_of_a_tournament_past_both_console_windows() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = test_config(tmp.path(), repo().join("characters"));
+    let sim_root = cfg.paths.sim_runs();
+    let roles = ["core_thread", "chatter", "chat_picker"];
+    let mut with_error = 0;
+    for r in 0..3 {
+        let run = format!("s{r}");
+        write_run(&sim_root, "sum", &run, "theatrical", 3);
+        let rows: Vec<String> = (0..3_000)
+            .map(|i| {
+                let failed = i % 37 == 0;
+                with_error += usize::from(failed);
+                let extra = if failed {
+                    json!({ "error_kind": "timeout" })
+                } else {
+                    json!({})
+                };
+                summary_row(i, roles[i % 3], 5, extra)
+            })
+            .collect();
+        std::fs::write(
+            sim_root.join(format!("sum/{run}/ledger.jsonl")),
+            rows.join("\n") + "\n",
+        )
+        .unwrap();
+    }
+    let addr = start(cfg).await;
+    let v = rpc(&addr, "ledger.summary", json!({ "tournament_id": "sum" })).await;
+    let s = &v["result"];
+    assert_eq!(s["calls"], 9_000, "{v}");
+    let per_role: u64 = s["routes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["calls"].as_u64().unwrap())
+        .sum();
+    assert_eq!(per_role, 9_000);
+    assert_eq!(s["errors"], with_error);
+    assert!(
+        s.get("next_cursor").is_none() && s.get("cursor").is_none(),
+        "{v}"
+    );
+}
+
+#[tokio::test]
+async fn ledger_summary_percentiles_leave_failed_calls_out_and_count_unknown_cost() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = test_config(tmp.path(), repo().join("characters"));
+    let sim_root = cfg.paths.sim_runs();
+    write_run(&sim_root, "pct", "p1", "theatrical", 3);
+    let rows = [
+        summary_row(
+            1,
+            "core_thread",
+            800,
+            json!({ "first_text_ms": 300, "cost_usd": 0.004 }),
+        ),
+        summary_row(
+            2,
+            "core_thread",
+            1_200,
+            json!({ "first_text_ms": 500, "cost_usd": 0.006 }),
+        ),
+        summary_row(3, "core_thread", 1_000, json!({ "first_text_ms": 400 })),
+        summary_row(
+            4,
+            "core_thread",
+            9_000,
+            json!({ "error_kind": "timeout", "cost_usd": 0.0 }),
+        ),
+    ];
+    // A trailing row still being written is left out, as ledger.page leaves it out.
+    let text = rows.join("\n") + "\n{\"ts_unix_ms\": 9";
+    std::fs::write(sim_root.join("pct/p1/ledger.jsonl"), text).unwrap();
+    let addr = start(cfg).await;
+
+    let v = rpc(&addr, "ledger.summary", json!({ "run_id": "p1" })).await;
+    let s = &v["result"];
+    assert_eq!(s["calls"], 4, "{v}");
+    let core = &s["routes"][0];
+    assert_eq!(core["role"], "core_thread", "{v}");
+    assert_eq!(
+        core["duration_p50_ms"], 1_000,
+        "failed 9000 ms left out: {v}"
+    );
+    assert_eq!(core["duration_p95_ms"], 1_200, "{v}");
+    assert_eq!(
+        core["first_text_p50_ms"], 400,
+        "nearest rank of [300,400,500]: {v}"
+    );
+    let cost = s["cost_usd"].as_f64().unwrap();
+    assert!((cost - 0.01).abs() < 1e-12, "{v}");
+    assert_eq!(s["uncosted_calls"], 1, "row 3 carries no cost: {v}");
+
+    // An unknown run answers exactly what ledger.page answers.
+    let page = rpc(
+        &addr,
+        "ledger.page",
+        json!({ "run_id": "nope", "limit": 5 }),
+    )
+    .await;
+    let sum = rpc(&addr, "ledger.summary", json!({ "run_id": "nope" })).await;
+    assert!(page["error"].is_object(), "{page}");
+    assert_eq!(sum["error"], page["error"], "{sum}");
+}

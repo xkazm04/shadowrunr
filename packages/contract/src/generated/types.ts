@@ -993,6 +993,10 @@ export interface RpcMethods {
     params: LedgerPageParams;
     result: LedgerPage;
   };
+  "ledger.summary": {
+    params: LedgerSummaryParams;
+    result: LedgerSummary;
+  };
   "lord.chat": {
     params: LordChatParams;
     result: LordChatReply;
@@ -2477,6 +2481,100 @@ export interface Usage {
   cache_read_tokens?: number;
   input_tokens: number;
   output_tokens: number;
+}
+/**
+ * `ledger.summary` source: the same grammar as [`LedgerPageParams`] without the paging
+ * (one run, a tournament's runs, or the daemon's engine ledger).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "LedgerSummaryParams".
+ */
+export interface LedgerSummaryParams {
+  run_id?: string;
+  tournament_id?: string;
+}
+/**
+ * `ledger.summary`: every complete row of the source folded once (no cursor, no sample).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "LedgerSummary".
+ */
+export interface LedgerSummary {
+  /**
+   * Most calls first.
+   */
+  accounts: AccountSummary[];
+  cache_read_tokens: number;
+  calls: number;
+  /**
+   * The sum over the rows that carry a cost; see `uncosted_calls`.
+   */
+  cost_usd: number;
+  errors: number;
+  fallbacks: number;
+  /**
+   * Most calls first.
+   */
+  routes: RouteSummary[];
+  /**
+   * Rows without a cost: an unknown cost, never folded into `cost_usd` as zero.
+   */
+  uncosted_calls: number;
+  /**
+   * Rows without an engine or an account.
+   */
+  unrouted: number;
+}
+/**
+ * One engine account's calls in a [`LedgerSummary`] (the account by label only).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "AccountSummary".
+ */
+export interface AccountSummary {
+  account: string;
+  calls: number;
+  engine: EngineKind;
+  errors: number;
+  /**
+   * The error kind of the account's latest call, when it failed.
+   */
+  last_error?: string;
+  last_ts_ms: number;
+  /**
+   * Most calls first.
+   */
+  models: ModelCalls[];
+}
+/**
+ * Calls one model served for an account.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModelCalls".
+ */
+export interface ModelCalls {
+  calls: number;
+  model: string;
+}
+/**
+ * One role's calls in a [`LedgerSummary`]. Durations leave failed calls out; percentiles are
+ * nearest-rank; a role with no sample has no percentile.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "RouteSummary".
+ */
+export interface RouteSummary {
+  calls: number;
+  duration_p50_ms?: number;
+  duration_p95_ms?: number;
+  efforts: Effort[];
+  engines: EngineKind[];
+  errors: number;
+  fallbacks: number;
+  first_text_p50_ms?: number;
+  models: string[];
+  role: Role;
+  tiers: ModelTier[];
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema

@@ -338,6 +338,77 @@ pub struct LedgerPage {
     pub next_cursor: Option<String>,
 }
 
+/// `ledger.summary` source: the same grammar as [`LedgerPageParams`] without the paging
+/// (one run, a tournament's runs, or the daemon's engine ledger).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LedgerSummaryParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tournament_id: Option<String>,
+}
+
+/// One role's calls in a [`LedgerSummary`]. Durations leave failed calls out; percentiles are
+/// nearest-rank; a role with no sample has no percentile.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RouteSummary {
+    pub role: Role,
+    pub calls: u64,
+    pub errors: u64,
+    pub fallbacks: u64,
+    pub tiers: Vec<ModelTier>,
+    pub efforts: Vec<Effort>,
+    pub engines: Vec<EngineKind>,
+    pub models: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_p50_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_p95_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_text_p50_ms: Option<u64>,
+}
+
+/// Calls one model served for an account.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ModelCalls {
+    pub model: String,
+    pub calls: u64,
+}
+
+/// One engine account's calls in a [`LedgerSummary`] (the account by label only).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AccountSummary {
+    pub engine: EngineKind,
+    pub account: String,
+    pub calls: u64,
+    pub errors: u64,
+    /// Most calls first.
+    pub models: Vec<ModelCalls>,
+    pub last_ts_ms: TsMs,
+    /// The error kind of the account's latest call, when it failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+}
+
+/// `ledger.summary`: every complete row of the source folded once (no cursor, no sample).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LedgerSummary {
+    pub calls: u64,
+    pub errors: u64,
+    pub fallbacks: u64,
+    /// The sum over the rows that carry a cost; see `uncosted_calls`.
+    pub cost_usd: f64,
+    /// Rows without a cost: an unknown cost, never folded into `cost_usd` as zero.
+    pub uncosted_calls: u64,
+    pub cache_read_tokens: u64,
+    /// Rows without an engine or an account.
+    pub unrouted: u64,
+    /// Most calls first.
+    pub routes: Vec<RouteSummary>,
+    /// Most calls first.
+    pub accounts: Vec<AccountSummary>,
+}
+
 /// Client -> `/events`: choose the source. Each message replaces the current source.
 ///
 /// Sending `since` switches the session to enveloped frames ([`EventFrame`]) and resumes
@@ -457,6 +528,7 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<EmptyParams, SegmentTables>("segments.tables");
     v.method::<RanksTableParams, RankTableInfo>("ranks.table");
     v.method::<LedgerPageParams, LedgerPage>("ledger.page");
+    v.method::<LedgerSummaryParams, LedgerSummary>("ledger.summary");
     v.method::<RunsPageParams, RunsPage>("runs.page");
     v.method::<TournamentsPageParams, TournamentsPage>("tournaments.page");
     v.method::<EmptyParams, EngineStatus>("engine.status");

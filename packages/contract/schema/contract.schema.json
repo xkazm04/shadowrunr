@@ -1,5 +1,50 @@
 {
   "$defs": {
+    "AccountSummary": {
+      "description": "One engine account's calls in a [`LedgerSummary`] (the account by label only).",
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "calls": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "engine": {
+          "$ref": "#/$defs/EngineKind"
+        },
+        "errors": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "last_error": {
+          "description": "The error kind of the account's latest call, when it failed.",
+          "type": "string"
+        },
+        "last_ts_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "models": {
+          "description": "Most calls first.",
+          "items": {
+            "$ref": "#/$defs/ModelCalls"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "engine",
+        "account",
+        "calls",
+        "errors",
+        "models",
+        "last_ts_ms"
+      ],
+      "type": "object"
+    },
     "AckFrame": {
       "description": "The frame wrapping [`StageAck`]: `{\"ack\": {...}}`.",
       "properties": {
@@ -4532,6 +4577,86 @@
       ],
       "type": "object"
     },
+    "LedgerSummary": {
+      "description": "`ledger.summary`: every complete row of the source folded once (no cursor, no sample).",
+      "properties": {
+        "accounts": {
+          "description": "Most calls first.",
+          "items": {
+            "$ref": "#/$defs/AccountSummary"
+          },
+          "type": "array"
+        },
+        "cache_read_tokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "calls": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cost_usd": {
+          "description": "The sum over the rows that carry a cost; see `uncosted_calls`.",
+          "format": "double",
+          "type": "number"
+        },
+        "errors": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fallbacks": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "routes": {
+          "description": "Most calls first.",
+          "items": {
+            "$ref": "#/$defs/RouteSummary"
+          },
+          "type": "array"
+        },
+        "uncosted_calls": {
+          "description": "Rows without a cost: an unknown cost, never folded into `cost_usd` as zero.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unrouted": {
+          "description": "Rows without an engine or an account.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "calls",
+        "errors",
+        "fallbacks",
+        "cost_usd",
+        "uncosted_calls",
+        "cache_read_tokens",
+        "unrouted",
+        "routes",
+        "accounts"
+      ],
+      "type": "object"
+    },
+    "LedgerSummaryParams": {
+      "description": "`ledger.summary` source: the same grammar as [`LedgerPageParams`] without the paging\n(one run, a tournament's runs, or the daemon's engine ledger).",
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "tournament_id": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "LineEdge": {
       "description": "How cutting a line is.",
       "enum": [
@@ -4769,6 +4894,24 @@
           "type": "string"
         }
       ]
+    },
+    "ModelCalls": {
+      "description": "Calls one model served for an account.",
+      "properties": {
+        "calls": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "calls"
+      ],
+      "type": "object"
     },
     "ModelTier": {
       "enum": [
@@ -6229,6 +6372,79 @@
         "calls",
         "errors",
         "fallbacks"
+      ],
+      "type": "object"
+    },
+    "RouteSummary": {
+      "description": "One role's calls in a [`LedgerSummary`]. Durations leave failed calls out; percentiles are\nnearest-rank; a role with no sample has no percentile.",
+      "properties": {
+        "calls": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duration_p50_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duration_p95_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "efforts": {
+          "items": {
+            "$ref": "#/$defs/Effort"
+          },
+          "type": "array"
+        },
+        "engines": {
+          "items": {
+            "$ref": "#/$defs/EngineKind"
+          },
+          "type": "array"
+        },
+        "errors": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fallbacks": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "first_text_p50_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "tiers": {
+          "items": {
+            "$ref": "#/$defs/ModelTier"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "role",
+        "calls",
+        "errors",
+        "fallbacks",
+        "tiers",
+        "efforts",
+        "engines",
+        "models"
       ],
       "type": "object"
     },
@@ -9671,6 +9887,22 @@
       ],
       "type": "object"
     },
+    "ledger.summary": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/LedgerSummaryParams"
+        },
+        "result": {
+          "$ref": "#/$defs/LedgerSummary"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
     "lord.chat": {
       "additionalProperties": false,
       "properties": {
@@ -10205,6 +10437,7 @@
     "directive.list",
     "engine.status",
     "ledger.page",
+    "ledger.summary",
     "lord.chat",
     "plan.choose",
     "plan.current",

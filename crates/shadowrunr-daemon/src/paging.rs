@@ -1,13 +1,18 @@
-//! Cursor paging: `runs.page`, `tournaments.page` and `ledger.page`.
+//! Cursor paging: `runs.page`, `tournaments.page` and `ledger.page`; plus `ledger.summary`, the
+//! whole-source fold over `ledger.page`'s source grammar.
 //!
 //! Cursors are opaque to clients (hex of a versioned key). Runs and tournaments page by key
 //! (`(tournament_id, run_id)` / `tournament_id`), so a run added while a client pages is
 //! neither skipped nor repeated; ledgers are append-only and page by row offset. A page reads
 //! at most `limit + 1` entries past the cursor, skipping directories before loading them.
 
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
+use serde::Serialize;
+
 use shadowrunr_types::rpc::*;
+use shadowrunr_types::{Effort, EngineKind, ModelTier, Role};
 
 use crate::config::Config;
 use crate::rpc::RpcError;
@@ -160,20 +165,28 @@ pub fn tournaments_page(
     Ok(TournamentsPage { items, next_cursor })
 }
 
-/// One ledger file in a `ledger.page` source.
+/// One ledger file in a `ledger.page` / `ledger.summary` source.
 struct LedgerFile {
     path: PathBuf,
     run: Option<(String, String)>,
 }
 
-fn ledger_files(cfg: &Config, p: &LedgerPageParams) -> Result<Vec<LedgerFile>, RpcError> {
+fn ledger_files(
+    cfg: &Config,
+    run_id: Option<&String>,
+    tournament_id: Option<&String>,
+) -> Result<Vec<LedgerFile>, RpcError> {
     let sim_root = cfg.paths.sim_runs();
     let per_run = |e: RunEntry| LedgerFile {
         path: e.dir.join("ledger.jsonl"),
         run: Some((e.row.run_id, e.row.tournament_id)),
     };
-    Ok(match (&p.run_id, &p.tournament_id) {
-        (Some(r), t) => vec![per_run(runs::find_run(&sim_root, r, t.as_deref())?)],
+    Ok(match (run_id, tournament_id) {
+        (Some(r), t) => vec![per_run(runs::find_run(
+            &sim_root,
+            r,
+            t.map(String::as_str),
+        )?)],
         (None, Some(t)) => runs::list_runs(&sim_root, Some(t))?
             .into_iter()
             .map(per_run)
@@ -267,7 +280,7 @@ pub fn ledger_page(cfg: &Config, p: LedgerPageParams) -> Result<LedgerPage, RpcE
     };
     let mut skip = offset;
     let mut items = Vec::with_capacity(limit + 1);
-    'files: for file in ledger_files(cfg, &p)? {
+    'files: for file in ledger_files(cfg, p.run_id.as_ref(), p.tournament_id.as_ref())? {
         let lines = complete_lines(&file.path)?;
         if skip >= lines.len() as u64 {
             skip -= lines.len() as u64;
@@ -286,6 +299,150 @@ pub fn ledger_page(cfg: &Config, p: LedgerPageParams) -> Result<LedgerPage, RpcE
         encode_cursor(&[&(offset + limit as u64).to_string()])
     });
     Ok(LedgerPage { items, next_cursor })
+}
+
+/// A label's serde name (`claude_cli`), the order the console sorts labels in.
+fn label<T: Serialize>(t: &T) -> String {
+    serde_json::to_value(t)
+        .ok()
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_default()
+}
+
+/// Distinct values in label order.
+fn sorted_labels<T: Serialize + Copy>(set: &[T]) -> Vec<T> {
+    let mut by_label: Vec<(String, T)> = set.iter().map(|t| (label(t), *t)).collect();
+    by_label.sort_by(|a, b| a.0.cmp(&b.0));
+    by_label.dedup_by(|a, b| a.0 == b.0);
+    by_label.into_iter().map(|(_, t)| t).collect()
+}
+
+fn add_once<T: PartialEq>(set: &mut Vec<T>, v: Option<T>) {
+    if let Some(v) = v.filter(|v| !set.contains(v)) {
+        set.push(v);
+    }
+}
+
+#[derive(Default)]
+struct RoleFold {
+    calls: u64,
+    errors: u64,
+    fallbacks: u64,
+    tiers: Vec<ModelTier>,
+    efforts: Vec<Effort>,
+    engines: Vec<EngineKind>,
+    models: BTreeSet<String>,
+    dur: Vec<u64>,
+    first: Vec<u64>,
+}
+
+/// `ledger.summary`: every complete row of the source (the `ledger.page` grammar and its
+/// `complete_lines` rule) folded once into totals, per-role routes and per-account rows, with
+/// `summariseLedger`'s definitions (apps/console engineModel.ts): failed calls are left out of
+/// the duration percentiles, percentiles are nearest-rank (the reconciler's `stats::percentile`),
+/// and a row without a cost counts in `uncosted_calls` instead of as $0.
+pub fn ledger_summary(cfg: &Config, p: LedgerSummaryParams) -> Result<LedgerSummary, RpcError> {
+    use shadowrunr_reconcile::stats::percentile;
+    let mut s = LedgerSummary {
+        calls: 0,
+        errors: 0,
+        fallbacks: 0,
+        cost_usd: 0.0,
+        uncosted_calls: 0,
+        cache_read_tokens: 0,
+        unrouted: 0,
+        routes: Vec::new(),
+        accounts: Vec::new(),
+    };
+    let mut roles: Vec<(Role, RoleFold)> = Vec::new();
+    let mut role_at: HashMap<Role, usize> = HashMap::new();
+    let mut account_at: HashMap<(EngineKind, String), usize> = HashMap::new();
+    for file in ledger_files(cfg, p.run_id.as_ref(), p.tournament_id.as_ref())? {
+        for (i, line) in complete_lines(&file.path)?.iter().enumerate() {
+            let l = parse_entry(line, &file, i + 1)?;
+            let failed = l.error_kind.is_some();
+            let fell_back = l.fallback_reason.is_some();
+            s.calls += 1;
+            s.errors += u64::from(failed);
+            s.fallbacks += u64::from(fell_back);
+            match l.cost_usd {
+                Some(c) => s.cost_usd += c,
+                None => s.uncosted_calls += 1,
+            }
+            s.cache_read_tokens += l.usage.cache_read_tokens;
+            let k = *role_at.entry(l.role).or_insert_with(|| {
+                roles.push((l.role, RoleFold::default()));
+                roles.len() - 1
+            });
+            let r = &mut roles[k].1;
+            r.calls += 1;
+            r.errors += u64::from(failed);
+            r.fallbacks += u64::from(fell_back);
+            add_once(&mut r.tiers, l.tier);
+            add_once(&mut r.efforts, l.effort);
+            add_once(&mut r.engines, l.engine);
+            if let Some(m) = &l.model {
+                r.models.insert(m.clone());
+            }
+            if !failed {
+                r.dur.push(l.duration_ms);
+            }
+            r.first.extend(l.first_text_ms);
+            let (Some(engine), Some(account)) = (l.engine, l.account) else {
+                s.unrouted += 1;
+                continue;
+            };
+            let k = *account_at
+                .entry((engine, account.clone()))
+                .or_insert_with(|| {
+                    s.accounts.push(AccountSummary {
+                        engine,
+                        account,
+                        calls: 0,
+                        errors: 0,
+                        models: Vec::new(),
+                        last_ts_ms: 0,
+                        last_error: None,
+                    });
+                    s.accounts.len() - 1
+                });
+            let a = &mut s.accounts[k];
+            a.calls += 1;
+            a.errors += u64::from(failed);
+            if let Some(m) = l.model {
+                match a.models.iter_mut().find(|x| x.model == m) {
+                    Some(x) => x.calls += 1,
+                    None => a.models.push(ModelCalls { model: m, calls: 1 }),
+                }
+            }
+            if l.ts_ms >= a.last_ts_ms {
+                a.last_ts_ms = l.ts_ms;
+                a.last_error = l.error_kind;
+            }
+        }
+    }
+    s.routes = roles
+        .into_iter()
+        .map(|(role, r)| RouteSummary {
+            role,
+            calls: r.calls,
+            errors: r.errors,
+            fallbacks: r.fallbacks,
+            tiers: sorted_labels(&r.tiers),
+            efforts: sorted_labels(&r.efforts),
+            engines: sorted_labels(&r.engines),
+            models: r.models.into_iter().collect(),
+            duration_p50_ms: percentile(&r.dur, 50.0),
+            duration_p95_ms: percentile(&r.dur, 95.0),
+            first_text_p50_ms: percentile(&r.first, 50.0),
+        })
+        .collect();
+    s.routes.sort_by_key(|r| std::cmp::Reverse(r.calls));
+    for a in &mut s.accounts {
+        a.models.sort_by_key(|m| std::cmp::Reverse(m.calls));
+    }
+    s.accounts.sort_by_key(|a| std::cmp::Reverse(a.calls));
+    Ok(s)
 }
 
 #[cfg(test)]
