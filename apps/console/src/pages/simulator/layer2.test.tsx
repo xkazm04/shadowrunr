@@ -75,15 +75,21 @@ describe("simulator layer 2", () => {
     await settle(() => expect(screen.getByText("This run has no verdict yet")).toBeTruthy());
   });
 
-  it("orders heatmap cells worst first with rate, n and bound, and opens a cell", async () => {
+  it("orders heatmap cells worst first by counted rule fails, with no pooled bound, and opens a cell", async () => {
     mount(world(2, 24), ["heatmap"]);
     const table = await screen.findByRole("table", { name: /Cells of t002, worst first/ });
     await settle(() => expect(within(table).getAllByRole("row").length).toBeGreaterThan(2));
-    const bars = within(table).getAllByRole("img");
-    expect(bars[0]?.getAttribute("aria-label")).toMatch(/fail rate: \d+% \(\d+%–\d+%\), n=\d+/);
-    const firstRate = Number(/: (\d+)%/.exec(bars[0]?.getAttribute("aria-label") ?? "")?.[1]);
-    const lastRate = Number(/: (\d+)%/.exec(bars[bars.length - 1]?.getAttribute("aria-label") ?? "")?.[1]);
-    expect(firstRate).toBeGreaterThanOrEqual(lastRate);
+    // A cell's checks share its runs' hosts, seeds and rooms: the table counts them and never
+    // draws a bound over them (a bound would claim n = checks where the cell has n = runs).
+    expect(within(table).queryAllByRole("img")).toHaveLength(0);
+    const col = within(table).getAllByRole("columnheader").findIndex((h) => /Rule fails/.test(h.textContent ?? ""));
+    expect(col).toBeGreaterThanOrEqual(0);
+    const fails = within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => Number(/^(\d+)\/\d+/.exec(within(row).getAllByRole("cell")[col]?.textContent ?? "")?.[1]));
+    expect(fails.every((n) => Number.isFinite(n))).toBe(true);
+    expect(fails[0]).toBeGreaterThanOrEqual(fails[fails.length - 1] ?? 0);
     fireEvent.click(within(table).getAllByRole("row")[1] as HTMLElement);
     await settle(() => {
       const r = router?.getRoute();
@@ -96,6 +102,11 @@ describe("simulator layer 2", () => {
     mount(world(1, 24), ["heatmap", key]);
     await settle(() => expect(screen.getByText("Failing rules")).toBeTruthy());
     expect(screen.getByText("red-line:hateful-conduct")).toBeTruthy();
+    // The detail names the cell's observations as its judged runs, and each rule bound's n is runs.
+    expect(screen.getByText(/The cell is \d+ judged runs?, not \d+ observations/)).toBeTruthy();
+    for (const bar of screen.getAllByRole("img", { name: /red-line:hateful-conduct fail rate/ })) {
+      expect(Number(/n=(\d+)/.exec(bar.getAttribute("aria-label") ?? "")?.[1])).toBeLessThanOrEqual(24);
+    }
     await settle(() => expect(screen.getByRole("link", { name: "t001-r0000" })).toBeTruthy());
     expect(page.label("heatmap", 1, ["simulator", "heatmap"])).toBe("Heatmap");
     expect(page.label(key, 2, ["simulator", "heatmap", key])).toBe("theatrical · haiku · SEG-01 · a3");

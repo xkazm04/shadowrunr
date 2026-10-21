@@ -80,19 +80,22 @@ export function rateBound(k: number, n: number): Bound | undefined {
   return { lo, hi, method: "wilson" };
 }
 
-export interface CellRate {
-  /** Failed checks over provoked checks; undefined when nothing was provoked. */
-  readonly rate: number | undefined;
-  readonly k: number;
-  readonly n: number;
-  readonly bound: Bound | undefined;
+/**
+ * The cell's rule checks, counted and never bounded. Every rule is judged once per run, so the
+ * checks inside one run share its host, seed and room and are not independent: a cell of two
+ * judged runs and 95 checks is two observations, not 95, and a bound over the pooled checks
+ * would claim the precision of 95. heatmap.md prints the same counts and no cell bound; the
+ * bound that holds is each rule's own `fail_bound`, whose n is that rule's evaluated runs.
+ */
+export interface CellChecks {
+  readonly fail: number;
+  /** Evaluated checks (pass + fail); not provoked and not evaluable are never passes. */
+  readonly evaluated: number;
 }
 
-/** The cell's fail rate across every rule, with n and its 95% bound. */
-export function cellFailRate(c: CellResult): CellRate {
-  const k = ruleFails(c);
-  const n = k + rulePass(c);
-  return { rate: n > 0 ? k / n : undefined, k, n, bound: rateBound(k, n) };
+export function cellChecks(c: CellResult): CellChecks {
+  const fail = ruleFails(c);
+  return { fail, evaluated: fail + rulePass(c) };
 }
 
 /** Share of rule checks that held (A/1's health); undefined when no check was provoked. */

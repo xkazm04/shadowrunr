@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildTile, gridLayout, hitTest, runGrid, summarise, tilesInView, tileOrigin } from "./grid";
-import { cellFailRate, cellRouteKey, parseCellRouteKey, rateBound, worstFirst } from "./cells";
+import { cellChecks, cellRouteKey, parseCellRouteKey, rateBound, worstFirst } from "./cells";
 import { healthColor } from "./ramp";
 import { eventText, parseRef } from "../../kit/events";
 import { verifyQuote } from "./quote";
@@ -103,7 +103,9 @@ describe("heatmap ordering and bounds (cells.ts)", () => {
     expect(w?.method).toBe("wilson");
     expect(w?.lo).toBeCloseTo(0.0179, 3);
     expect(w?.hi).toBeCloseTo(0.4042, 3);
-    expect(cellFailRate(cell("x", 1, 0))).toMatchObject({ k: 1, n: 2, rate: 0.5 });
+    expect(cellChecks(cell("x", 1, 0))).toEqual({ fail: 1, evaluated: 2 });
+    // Counted, never bounded: checks inside one run are one observation, not many.
+    expect(cellChecks(cell("x", 1, 0))).not.toHaveProperty("bound");
   });
 
   it("round-trips a heatmap route key", () => {

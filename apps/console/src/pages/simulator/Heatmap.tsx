@@ -1,5 +1,6 @@
 // simulator/heatmap[/<key>]: one tournament's cells worst first (the summary.rs rule, in
-// ./cells.ts). Each cell shows its fail rate with n and its 95% bound; a cell opens its rules,
+// ./cells.ts). Each cell counts its rule fails, not provoked and not evaluable checks, as
+// heatmap.md does; the 95% bounds live on each rule, whose n is runs. A cell opens its rules,
 // quality rates and runs.
 import { useMemo, useState } from "react";
 import { QueryView } from "../../kit";
@@ -13,12 +14,13 @@ import { StatBand } from "../../ui/StatBand";
 import { EmptyState } from "../../ui/States";
 import { PAGE_LIMIT } from "./data";
 import {
-  cellFailRate,
+  cellChecks,
   cellLabel,
   cellRouteKey,
   isRedLine,
   isThin,
   meanQuality,
+  notEvaluable,
   notProvoked,
   parseCellRouteKey,
   qualityEntries,
@@ -53,15 +55,21 @@ const COLUMNS: readonly Column<CellResult>[] = [
       align: "end",
     },
     {
-      id: "rate",
-      header: "Fails / provoked",
+      id: "fails",
+      header: "Rule fails",
       cell: (c) => {
-        const r = cellFailRate(c);
-        return <RateBar rate={r.rate} n={r.n} label={`${cellLabel(c.cell)} fail rate`} {...bounded(r.bound)} />;
+        const k = cellChecks(c);
+        return (
+          <>
+            {int(k.fail)}/{int(k.evaluated)} {k.fail > 0 && <Chip tone="fail">fail</Chip>}
+          </>
+        );
       },
-      sortValue: (c) => cellFailRate(c).rate ?? -1,
+      sortValue: (c) => cellChecks(c).fail,
+      align: "end",
     },
     { id: "np", header: "Not provoked", cell: (c) => int(notProvoked(c)), sortValue: (c) => notProvoked(c), align: "end" },
+    { id: "ne", header: "Not evaluable", cell: (c) => int(notEvaluable(c)), sortValue: (c) => notEvaluable(c), align: "end" },
     { id: "q", header: "Mean quality", cell: (c) => pct(meanQuality(c)), sortValue: (c) => meanQuality(c) ?? -1, align: "end" },
 ];
 
@@ -82,7 +90,7 @@ export function HeatmapPage({ cellKey }: { cellKey: string | undefined }) {
       <Head
         kicker="Simulator · layer 2"
         title="Heatmap"
-        lede="Worst first. Every cell shows failures over provoked checks with its bound: the band is what the sample size lets us say, and at n = 1 that is very little."
+        lede="Worst first. A cell counts its rule fails over evaluated checks. The checks in one run share its host, seed and room, so a cell is as many observations as it has judged runs: the bounds are on each rule, where n is runs."
       />
       <QueryView query={tournaments.query} isEmpty={(t) => t.length === 0} emptyTitle="No tournaments yet">
         {(all) => (
@@ -147,21 +155,24 @@ function CellDetail({ tournamentId, c }: { tournamentId: string; c: CellResult }
   const failing = ruleEntries(c)
     .filter(([, t]) => t.fail > 0)
     .sort((a, b) => Number(isRedLine(b[0])) - Number(isRedLine(a[0])) || b[1].fail - a[1].fail);
-  const rate = cellFailRate(c);
+  const k = cellChecks(c);
   return (
     <Section title={cellLabel(c.cell)} right={`${tournamentId}`}>
       <StatBand
         stats={[
           { label: "runs", value: int(c.runs) },
           { label: "judged", value: int(c.judged) },
-          { label: "fails / provoked", value: `${int(rate.k)}/${int(rate.n)}`, ...(rate.k > 0 ? { tone: "fail" as const } : {}) },
+          { label: "void judge", value: int(c.void) },
+          { label: "failed", value: int(c.failed) },
+          { label: "rule fails / evaluated", value: `${int(k.fail)}/${int(k.evaluated)}`, ...(k.fail > 0 ? { tone: "fail" as const } : {}) },
           { label: "not provoked", value: int(notProvoked(c)) },
+          { label: "not evaluable", value: int(notEvaluable(c)) },
           { label: "max say gap", value: c.max_say_gap_s === undefined ? "–" : `${c.max_say_gap_s} s` },
         ]}
       />
       <p className={styles.dim}>
-        Bound on the fail rate: {rate.bound ? `${pct(rate.bound.lo, 1)} to ${pct(rate.bound.hi, 1)} (${rate.bound.method.replace(/_/g, " ")})` : "none, nothing was provoked"}.
-        Not provoked checks are left out of n.
+        The cell is {int(c.judged)} judged {c.judged === 1 ? "run" : "runs"}, not {int(k.evaluated)} observations: its checks share each run&apos;s host, seed and room, so the cell is
+        counted, not bounded. Each failing rule&apos;s bound has n = the runs that evaluated it. Not provoked and not evaluable checks are left out of n.
       </p>
       <h3>Failing rules</h3>
       {failing.length === 0 ? (
