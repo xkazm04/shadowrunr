@@ -5,6 +5,7 @@ import { ConnectionStore } from "./connection";
 import type { DoorSource, EventEnvelope } from "./door";
 import type { DataError } from "./errors";
 import { invalidatedByMutation } from "./invalidation";
+import { MutationStore } from "./mutations";
 import type { Result } from "./result";
 import { createRpcClient, type CallOptions, type FetchLike, type RpcClient } from "./rpc";
 import { openEventStream, wsUrl, type EventStream, type SocketFactory, type Timers } from "./socket";
@@ -26,7 +27,12 @@ export interface DataLayer {
   readonly client: RpcClient;
   readonly cache: QueryCache;
   readonly connection: ConnectionStore;
-  /** A mutating call: on success, refetches what it invalidates. */
+  /** Mutations in flight and recently settled, so a long call outlives the view that started it. */
+  readonly mutations: MutationStore;
+  /**
+   * A mutating call: on success, refetches what it invalidates. A call whose key
+   * (`queryKey(method, params)`) is already in flight joins that flight instead of sending again.
+   */
   mutate(method: string, params: unknown, opts?: CallOptions): Promise<Result<unknown, DataError>>;
   /** Live events (after the cache has seen them). */
   onLiveEvent(listener: (env: EventEnvelope) => void): () => void;
@@ -62,6 +68,7 @@ export function createDataLayer(opts: DataLayerOptions): DataLayer {
     now,
     ...(opts.backstopMs === undefined ? {} : { backstopMs: opts.backstopMs }),
   });
+  const mutations = new MutationStore(now);
   const live = new Set<(env: EventEnvelope) => void>();
   let stream: EventStream | null = null;
   let everOpened = false;
@@ -82,10 +89,13 @@ export function createDataLayer(opts: DataLayerOptions): DataLayer {
     client,
     cache,
     connection,
-    async mutate(method, params, callOpts) {
-      const r = await client.call(method, params, callOpts);
-      if (r.ok) cache.invalidate(invalidatedByMutation(method));
-      return r;
+    mutations,
+    mutate(method, params, callOpts) {
+      return mutations.run(method, params, async () => {
+        const r = await client.call(method, params, callOpts);
+        if (r.ok) cache.invalidate(invalidatedByMutation(method));
+        return r;
+      });
     },
     onLiveEvent(listener) {
       live.add(listener);

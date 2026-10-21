@@ -1,8 +1,9 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { contractDoor } from "./contractDoor";
 import { createDataLayer, type DataLayer } from "./layer";
-import { DataProvider, useConnection, useMutation, useRpc } from "./react";
+import { DataProvider, useConnection, useInflight, useMutation, useRpc } from "./react";
 import { fakeSockets, manualTimers, scriptedFetch, type FetchReply } from "./testing";
 
 const flush = () => act(async () => void (await new Promise((r) => setTimeout(r, 0))));
@@ -105,4 +106,57 @@ describe("typed hooks", () => {
     view.unmount();
     expect(h.sockets.last().closed).toEqual({ code: 1000, reason: "client closed" });
   });
+});
+
+describe("in-flight mutations outlive the view that started them", () => {
+  function RunButton() {
+    const m = useMutation("reconcile.run");
+    const inflight = useInflight("reconcile.run");
+    return (
+      <>
+        <button type="button" disabled={m.pending || m.running.length > 0} onClick={() => void m.run({ source: { tournament_id: "t1" } })}>
+          run
+        </button>
+        <ul>
+          {inflight.map((f) => (
+            <li key={f.key} data-started={f.startedAt}>
+              {(f.params as { source: { tournament_id: string } }).source.tournament_id}
+            </li>
+          ))}
+        </ul>
+      </>
+    );
+  }
+
+  it("a fresh instance after an unmount sees the run in flight and disables its button", async () => {
+    const h = layerWith(() => ({ hang: true }));
+    function Host() {
+      const [shown, setShown] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setShown((x) => !x)}>
+            toggle
+          </button>
+          {shown && <RunButton />}
+        </>
+      );
+    }
+    render(
+      <DataProvider layer={h.layer}>
+        <Host />
+      </DataProvider>,
+    );
+    await act(async () => screen.getByText("run").click());
+    await flush();
+    await act(async () => screen.getByText("toggle").click());
+    expect(screen.queryByText("run")).toBeNull();
+    await act(async () => screen.getByText("toggle").click());
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(1);
+    expect(items[0]?.textContent).toBe("t1");
+    expect(Number(items[0]?.getAttribute("data-started"))).toBeGreaterThan(0);
+    expect((screen.getByText("run") as HTMLButtonElement).disabled).toBe(true);
+    expect(h.fetch.calls.filter((m) => m === "reconcile.run")).toHaveLength(1);
+  });
+
 });

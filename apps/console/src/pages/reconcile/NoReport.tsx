@@ -17,11 +17,19 @@ export function NoReport() {
   const list = tournaments.data ?? [];
   // Newest last in the daemon's listing; default to it until the operator picks.
   const source = picked || list[list.length - 1]?.tournament_id || "";
+  // The layer owns the call, so a run started before a tab switch still shows (and still blocks).
+  const inflight = run.running[0];
+  const busy = run.pending || inflight !== undefined;
+  const reading = inflight ? (inflight.params as { source: { tournament_id: string } }).source.tournament_id : source;
+  // A failure that landed while this page was not mounted shows until the next run.
+  const missed = run.settled?.error;
+  const shownError = error ?? (missed && `${viewOfError(missed).title}: ${missed.message}`);
 
   async function onRun(e: FormEvent) {
     e.preventDefault();
-    if (!source) return;
+    if (!source || busy) return;
     setError(undefined);
+    run.settled?.ack();
     const r = await run.run({ source: { tournament_id: source } });
     if (r.ok) session.showReport(r.value.report_id);
     else setError(`${viewOfError(r.error).title}: ${r.error.message}`);
@@ -45,7 +53,7 @@ export function NoReport() {
         <form className={styles.form} onSubmit={(e) => void onRun(e)}>
           <label className={styles.field}>
             <span>Source tournament</span>
-            <select value={source} onChange={(e) => setPicked(e.target.value)} disabled={run.pending || list.length === 0}>
+            <select value={source} onChange={(e) => setPicked(e.target.value)} disabled={busy || list.length === 0}>
               {list.length === 0 && <option value="">{tournaments.errorView ? tournaments.errorView.title : "No tournaments yet"}</option>}
               {list.map((t) => (
                 <option key={t.tournament_id} value={t.tournament_id}>
@@ -54,18 +62,19 @@ export function NoReport() {
               ))}
             </select>
           </label>
-          <Button type="submit" variant="primary" disabled={run.pending || !source} data-role="reconcile-run">
-            {run.pending ? "Reconciling…" : "Run reconcile"}
+          <Button type="submit" variant="primary" disabled={busy || !source} data-role="reconcile-run">
+            {busy ? "Reconciling…" : "Run reconcile"}
           </Button>
         </form>
-        {run.pending && (
+        {busy && (
           <p className={styles.pending} role="status">
-            The reconciler is reading {source}. Keep this page open; the report opens here when it is written.
+            The reconciler is reading {reading}
+            {inflight && `, started ${new Date(inflight.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}. The report opens here when it is written.
           </p>
         )}
-        {error && (
+        {shownError && (
           <p className={styles.formError} role="alert">
-            {error}
+            {shownError}
           </p>
         )}
         <form className={styles.form} onSubmit={onOpen}>

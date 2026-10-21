@@ -8,6 +8,7 @@ export * from "./cache";
 export * from "./connection";
 export * from "./invalidation";
 export * from "./layer";
+export * from "./mutations";
 export * from "./config";
 export * from "./react";
 export * from "./paged";
