@@ -1,6 +1,7 @@
 // One run in the rundown: its segment spans as the winner's timeline bar, its counts, its beats
 // (virtualised: a 100k-line transcript can hold thousands), a button to replay it on screen and
-// one to open it on the broadcast stage.
+// one to open it on the broadcast stage. Every span and every beat puts that moment on screen:
+// On Air plays the run from there.
 import type { StreamEvent } from "@shadowrunr/contract";
 import { segmentSpans } from "@shadowrunr/stage-kit";
 import { useMemo } from "react";
@@ -24,6 +25,11 @@ function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent
   const beats = useMemo(() => beatsOf(events), [events]);
   const n = useMemo(() => countsOf(events), [events]);
   const total = Math.max(1, n.end - n.start);
+  /** On Air plays this run from transcript time `at`. */
+  const playFrom = (at: number) => {
+    selectSource(runSource({ run_id: runId, tournament_id: tournamentId }), { at });
+    router.navigate(pageRoute("onair"));
+  };
   return (
     <>
       <StatBand
@@ -35,11 +41,19 @@ function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent
           { label: "Picked", value: int(n.picked) },
         ]}
       />
-      <div className={styles.tlBar} role="img" aria-label={`Segments: ${spans.map((s) => `${s.segment} ${clock(s.from - n.start)} to ${clock(s.to - n.start)}`).join(", ")}`} data-role="onair-run-spans">
+      <div className={styles.tlBar} role="group" aria-label="Segments: play the run from one" data-role="onair-run-spans">
         {spans.map((s) => (
-          <i key={`${s.segment}@${s.from}`} data-seg={s.segment} style={{ flexGrow: Math.max(1, s.to - s.from) / total }} title={`${s.segment} ${clock(s.from - n.start)} to ${clock(s.to - n.start)}`}>
+          <button
+            type="button"
+            key={`${s.segment}@${s.from}`}
+            data-seg={s.segment}
+            style={{ flexGrow: Math.max(1, s.to - s.from) / total }}
+            title={`${s.segment} ${clock(s.from - n.start)} to ${clock(s.to - n.start)}`}
+            aria-label={`Play ${s.segment} from ${clock(s.from - n.start)} (to ${clock(s.to - n.start)})`}
+            onClick={() => playFrom(s.from)}
+          >
             <b>{s.segment.replace("SEG-", "")}</b>
-          </i>
+          </button>
         ))}
       </div>
       <div className={styles.actions}>
@@ -47,10 +61,7 @@ function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent
           type="button"
           variant="ink"
           size="compact"
-          onClick={() => {
-            selectSource(runSource({ run_id: runId, tournament_id: tournamentId }));
-            router.navigate(pageRoute("onair"));
-          }}
+          onClick={() => playFrom(n.start)}
         >
           Replay on screen
         </Button>
@@ -74,7 +85,9 @@ function Anatomy({ events, tournamentId, runId }: { events: readonly StreamEvent
             if (!b) return null;
             return (
               <div className={styles.beat} data-op={b.op || undefined}>
-                <span className={styles.num}>{clock(b.ts - n.start)}</span>
+                <button type="button" className={styles.num} aria-label={`Play from here, ${clock(b.ts - n.start)}`} title="Play from here" onClick={() => playFrom(b.ts)}>
+                  {clock(b.ts - n.start)}
+                </button>
                 <b>{b.kind}</b>
                 <span className={styles.detail}>{b.detail}</span>
                 <RouteLink to={pageRoute("brain", "transcripts", runId, String(b.line))} className={styles.ref}>

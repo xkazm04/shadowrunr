@@ -40,9 +40,18 @@
 .ctl { position: absolute; right: 0; width: var(--sw); }
 .screenSlot { bottom: 3.1rem; }
 
-.prog { bottom: 2.55rem; height: .28rem; background: color-mix(in srgb, var(--sr-color-surface-void) 25%, transparent); }
-.prog i { display: block; height: 100%; background: var(--sr-page-type); transform: scaleX(var(--from, 0)); transform-origin: left; }
-.prog i[data-run] { animation: progress var(--rest, 0ms) linear forwards; }
+/* The scrubber: a slider over the run. Its hit area reaches past the thin bar (a pseudo, not a
+   node); segment bands ride its top edge and marked moments stand as ticks above the fill. */
+.prog { bottom: 2.5rem; height: .45rem; background: color-mix(in srgb, var(--sr-color-surface-void) 25%, transparent); cursor: pointer; touch-action: none; }
+.prog::before { content: ""; position: absolute; inset: -.3rem 0; }
+.prog[aria-disabled] { cursor: default; }
+.prog:focus-visible { outline: var(--sr-stroke-rule) solid var(--sr-page-type); outline-offset: .2rem; }
+.fill { position: absolute; inset: 0; display: block; background: var(--sr-page-type); transform: scaleX(var(--from, 0)); transform-origin: left; pointer-events: none; }
+.fill[data-run] { animation: progress var(--rest, 0ms) linear forwards; }
+.band { position: absolute; top: 0; height: 40%; background: var(--sr-color-text-mute); pointer-events: none; z-index: 1; }
+.band[data-seg="SEG-01"] { background: var(--sr-page-overprint, var(--sr-color-ok)); }
+.band[data-seg="SEG-02A"] { background: var(--sr-color-signal); }
+.tick { position: absolute; top: -.25rem; bottom: -.25rem; width: var(--sr-stroke-rule); background: var(--sr-page-type); pointer-events: none; z-index: 2; }
 @keyframes progress { from { transform: scaleX(var(--from, 0)); } to { transform: scaleX(1); } }
 
 .ctl { bottom: 0; display: flex; align-items: center; gap: var(--sr-space-compact); height: 2.3rem; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-body); letter-spacing: .08em; text-transform: uppercase; }
@@ -75,5 +84,5 @@
 /* Reduced motion: the progress bar is a clock, not decoration, so it keeps its own duration
    against the poster's blanket .01s (it moves linearly, with no easing or travel). */
 @media (prefers-reduced-motion: reduce) {
-  .prog i[data-run] { animation-duration: var(--rest, 0ms) !important; }
+  .fill[data-run] { animation-duration: var(--rest, 0ms) !important; }
 }
