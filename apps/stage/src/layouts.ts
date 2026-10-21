@@ -4,12 +4,12 @@
 // instead of cutting.
 //
 // Two families: `host` (and `boot`, the same rects hidden) is the big-avatar room; the content
-// screens (`hexmap`, `browser`, `desk`) are the streamer layout: the content fills everything left
-// of the right column, Malakor stands cut out over its bottom-left corner, the caption is a lower
-// third from his right edge to the content's, and decrees and cards float in the content's
-// top-right.
+// screens (`board`, `hexmap`, `browser`, `desk`) are the streamer layout: the content fills
+// everything left of the right column, Malakor stands cut out over its bottom-left corner, the
+// caption is a lower third from his right edge to the content's, and decrees and cards float in
+// the content's top-right.
 
-import { isContentScreen, type HexFrame, type LayoutId } from "@shadowrunr/stage-kit";
+import { isContentScreen, type BoardFrame, type HexFrame, type LayoutId, type MapScreen } from "@shadowrunr/stage-kit";
 
 export interface Rect {
   x: number;
@@ -31,6 +31,7 @@ export const REGIONS = [
   "vote",
   "chat",
   "hexmap",
+  "board",
   "browser",
   "inspector",
   "tally",
@@ -41,6 +42,8 @@ export type Region = (typeof REGIONS)[number];
 export interface LayoutFlags {
   poll: boolean;
   foil: boolean;
+  /** The map the desk shows behind the browser window (absent: the board). */
+  back?: MapScreen;
 }
 
 export const GUTTER = 32;
@@ -58,8 +61,10 @@ const HOST_AVATAR: Rect = { x: 64, y: TOP + 8, w: FACE_PX, h: 612 };
 /** His corner on the content screens: bottom-left, the box's bottom on the canvas's bottom edge
  * (the rig's torso is cut off at its box's bottom, like a streamer's cut-out). */
 export const CORNER_AVATAR: Rect = { x: 16, y: 1080 - 448, w: 448, h: 448 };
-/** The content area: everything left of the right column, down to the lower third. */
-const CONTENT: Rect = { x: GUTTER, y: TOP, w: RIGHT_X - GUTTER - 24, h: 804 };
+/** The content area: everything left of the right column, down to the lower third. The board,
+ * the hexmap and the browser fill it exactly, so the clip factory's 9:16 reframe crops each the
+ * same way (`CONTENT_SCREEN` in crates/shadowrunr-clips footage.rs). */
+export const CONTENT: Rect = { x: GUTTER, y: TOP, w: RIGHT_X - GUTTER - 24, h: 804 };
 const CONTENT_RIGHT = CONTENT.x + CONTENT.w;
 /** The lower third: from his right edge to the content's right edge. */
 const LOWER_THIRD: Rect = { x: CORNER_AVATAR.x + CORNER_AVATAR.w + 8, y: 924, w: 0, h: 132 };
@@ -69,7 +74,7 @@ const COLUMN_TICKER: Rect = { x: RIGHT_X, y: TICKER.y, w: RIGHT_W, h: TICKER.h }
 /** The overlay lane in the content's top-right: the foil badge, decrees, explainer cards. */
 const LANE_W = 440;
 const LANE_X = CONTENT_RIGHT - 24 - LANE_W;
-/** The desk: the hexmap window behind (top-left, smaller), the browser window in front. */
+/** The desk: the map window behind (top-left, smaller), the browser window in front. */
 const DESK_MAP: Rect = { x: GUTTER, y: TOP, w: 800, h: 540 };
 const DESK_BROWSER: Rect = { x: 520, y: 236, w: CONTENT_RIGHT - 520, h: CONTENT.y + CONTENT.h - 236 };
 /** The browser window's chrome (tab strip, URL bar and the FICTIONAL ribbon): no overlay covers it. */
@@ -119,14 +124,16 @@ function lane(browser: Rect | null): { observer: Rect; decrees: Rect; card: Rect
   return { observer, decrees, card: place(300, 0) };
 }
 
-function contentRects(layout: "hexmap" | "browser" | "desk", flags: LayoutFlags, topbar: Rect): Record<Region, Rect> {
+function contentRects(layout: "board" | "hexmap" | "browser" | "desk", flags: LayoutFlags, topbar: Rect): Record<Region, Rect> {
   const browser = layout === "desk" ? DESK_BROWSER : layout === "browser" ? CONTENT : null;
   const { observer, decrees, card } = lane(browser);
   // Inspector and tally belong to the map; the browser screen's column is chat (and the vote).
   const panels = layout !== "browser";
+  const back = layout === "desk" ? (flags.back ?? "board") : null;
   return {
     topbar,
-    hexmap: layout === "desk" ? DESK_MAP : layout === "hexmap" ? CONTENT : hide(CONTENT),
+    board: layout === "board" ? CONTENT : back === "board" ? DESK_MAP : hide(CONTENT),
+    hexmap: layout === "hexmap" ? CONTENT : back === "hexmap" ? DESK_MAP : hide(CONTENT),
     browser: browser ?? hide(DESK_BROWSER),
     observer: flags.foil ? observer : hide(observer),
     decrees,
@@ -158,6 +165,7 @@ export function layoutRects(layout: LayoutId, flags: LayoutFlags): Record<Region
     decrees: { x: 652, y: TOP + 440, w: 632, h: 248 },
     caption: { x: 64, y: 756, w: 1220, h: 214 },
     hexmap: hide({ x: 360, y: 200, w: 900, h: 600 }),
+    board: hide({ x: 360, y: 200, w: 900, h: 600 }),
     browser: hide(DESK_BROWSER),
     inspector: hide({ x: RIGHT_X, y: TOP, w: RIGHT_W, h: 214 }),
     tally: hide({ x: RIGHT_X, y: TOP + 230, w: RIGHT_W, h: 214 }),
@@ -189,7 +197,7 @@ function local(r: Rect, inside: Rect): { x: number; y: number; w: number; h: num
  * the overlay lane clear when that is cheap. Null where the map is not shown.
  */
 export function hexFrame(layout: LayoutId, rects: Record<Region, Rect>): HexFrame | null {
-  if (layout !== "hexmap" && layout !== "desk") return null;
+  if ((layout !== "hexmap" && layout !== "desk") || rects.hexmap.hidden) return null;
   const map = rects.hexmap;
   const avoid = [local(rects.avatar, map)];
   if (layout === "desk") avoid.push(local(rects.browser, map));
@@ -197,3 +205,32 @@ export function hexFrame(layout: LayoutId, rects: Record<Region, Rect>): HexFram
   if (layout === "hexmap") frame.prefer = [local({ x: LANE_X, y: CONTENT.y, w: LANE_W, h: rects.card.y + rects.card.h - CONTENT.y }, map)];
   return frame;
 }
+
+/** The overlay lane over a content window, in its coordinates: kept clear of a focused card. */
+function laneIn(rects: Record<Region, Rect>, win: Rect) {
+  return local({ x: LANE_X, y: CONTENT.y, w: LANE_W, h: rects.card.y + rects.card.h - CONTENT.y }, win);
+}
+
+/**
+ * What stands over the board's window on a content screen: Malakor's corner and, on the desk, the
+ * browser window in front; on the board screen also the observer badge's place at the top of the
+ * overlay lane, kept whether a foil is in or not so no card moves when one arrives (no card and no
+ * act name is drawn under any of these). On the board screen a focused card also keeps the rest
+ * of the overlay lane clear. Null where the board is not shown.
+ */
+export function boardFrame(layout: LayoutId, rects: Record<Region, Rect>): BoardFrame | null {
+  if ((layout !== "board" && layout !== "desk") || rects.board.hidden) return null;
+  const win = rects.board;
+  const avoid = [local(rects.avatar, win)];
+  if (layout === "desk") avoid.push(local(rects.browser, win));
+  const frame: BoardFrame = { w: win.w, h: win.h, avoid };
+  if (layout === "board") {
+    avoid.push(local(rects.observer, win));
+    frame.prefer = [laneIn(rects, win)];
+  }
+  return frame;
+}
+
+/** The frame every board window places its cards in: the board screen's (stable positions on the
+ * board, behind the desk's browser and in a clip). */
+export const BOARD_LAYOUT_FRAME: BoardFrame = boardFrame("board", layoutRects("board", { poll: false, foil: false }))!;

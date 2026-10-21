@@ -18,7 +18,9 @@ that crate change together. Optional fields are **omitted** from JSON, never wri
 
 One `StreamEvent` per line, tagged `"type"`:
 
-- `stream_start`
+- `stream_start` (with `character`, and `host_name?`: the character's short name, e.g.
+  "Malakor", which the stage labels the host's captions and face with; omitted by older
+  streams, where the stage says "Host")
 - `segment_start` / `segment_end`
 - `case_open` (SEG-02A, the Case being audited, emitted once right after its `segment_start`)
 - `chat`
@@ -48,26 +50,30 @@ The `op` payload is the action grammar, tagged `"op"`:
 - `show_screen` (`screen`: `host` | `hexmap` | `browser` | `desk` | `board`, optional `record_id`,
   optional `focus`): what fills the broadcast's main screen. Only the screens the segment and its
   state allow; `browser` and `desk` need a record whose research job has come back; `focus` names
-  a case hex the map zooms to on `hexmap` and `desk` (absent: the overview). The runtime also
-  emits it itself (the segment's default screen, a returning research job's record, the
-  investigation's own moves). See Appendix (screens).
+  a case hex the board (or map) zooms to on `board`, `hexmap` and `desk` (absent: the overview).
+  The runtime also emits it itself (the segment's default screen, a returning research job's
+  record, the investigation's own moves). See Appendix (screens and board).
 - `pin_link` (`from`, `to`: hex ids; `rel`: `paid` | `owns` | `controls` | `promoted` |
   `processed` | `regulates` | `claims` | `supports` | `contradicts`; `record_id`): pin a labelled
-  string between two face-up cards on the evidence board, citing the returned record that shows
-  it. The contract is in place; no segment allows it yet (refused as `screen_not_allowed`) until
-  the evidence-board package lands. An accepted pin is announced as `link_pinned {ts_ms, from,
-  to, rel, record_id, grade}`, `grade` being the record's, so the stage draws below-DOC as
-  alleged.
+  string from one face-up card to another on the evidence board, citing a returned record filed
+  under one of them. SEG-02A allows it while its state allows the board. An accepted pin is
+  announced as `link_pinned {ts_ms, from, to, rel, record_id, grade}`, `grade` being the
+  record's, so the stage draws below-DOC as alleged. See Appendix (screens and board).
 
-The evidence board's case data: `Hex` gains optional `role` (`victim` | `promoter` | `shell` |
+The evidence board's case data: `Hex` has optional `role` (`victim` | `promoter` | `shell` |
 `processor` | `regulator` | `claim` | `wallet` | `exchange` | `person` | `company`) and `date`
-(`YYYY-MM-DD`, the timeline); `Case` gains optional `thesis` (what the case asks) and `acts`
-(`CaseAct {name, hexes}`, the board's regions); `ShownRecord` gains optional `date`. All are
-omitted when absent. The `board` screen draws as the map until the board package lands.
+(`YYYY-MM-DD`, the timeline); `Case` has optional `thesis` (what the case asks) and `acts`
+(`CaseAct {name, hexes}`, the board's regions); `CaseRecord` and `ShownRecord` have optional
+`date`. All are omitted when absent.
 
 A `record_shown {ts_ms, record}` event carries one staged case record (`ShownRecord`: `id`,
-`hex`, `grade`, `title`, `source`, `summary`, optional `retrieved` and `via`, `fictional`) for the
-stage's browser window. It is sent before the `show_screen` that names it.
+`hex`, `grade`, `title`, `source`, `summary`, optional `retrieved`, `via` and `date`,
+`fictional`) for the stage's browser window and the board's timeline. It is sent before the
+`show_screen` or `pin_link` that names it.
+
+A `link_pinned {ts_ms, from, to, rel, record_id, grade}` event is a string the runtime accepted
+onto the evidence board, after the `pin_link` op it answers. `from` and `to` are the case's hex
+ids, whatever spelling the op used.
 
 The model emits actions as lines of the form `OP: {"op":"show_card",...}`. Anything outside
 the segment's `allowed_ops` is rejected by `SegmentRuntime::apply_ops` and logged as a
@@ -139,8 +145,9 @@ researcher = { one = "bone-clerk", many = "bone-clerks" }    # optional; {resear
 sign_off = "..."                    # the fleet-loss line
 disclosure = "Yes, I am an AI character: ..."               # the honest AI disclosure
 
-[voice]                             # schema only today: voice, sid, speed
-[avatar]                            # schema only today: rig (package-relative), face
+[voice]                             # each field set overrides the daemon's [voice]: voice, sid
+                                    # (speed is read but not applied yet: the sidecar has no rate flag)
+[avatar]                            # face overrides [stage] avatar; rig names the package's rig spec
 
 [ranks]                             # titles by wire name, lowest first
 thrall = "Thrall"
@@ -174,6 +181,17 @@ and `researchers`. Any other `{word}` is an error at load (a segment table fails
 package fails validation); a `{` not followed by `word}` is plain text, so JSON in a prompt
 needs no escaping.
 
+The daemon applies the configured character's (`[sim] character`) `[voice]` and `[avatar] face`
+when it loads its config, and serves `/avatar/{file}` from
+`<data>/characters/<id>/avatar/rig/` for the character on air (the latest run in flight, else
+`[sim] character`), falling back to the shared `<data>/avatar/rig/`.
+
+`characters/_template/` is the scaffold `shadowrunr character new <id>` copies (every
+parameter with its question, options and default in comments; values to write are marked
+`FILL:`). Directories whose name starts with `_` are not characters: `character.list` leaves
+them out. `character validate` reports a value still holding `FILL:` as a warning, never an
+error (guide: docs/guide/characters.md).
+
 Tuning keys (`TUNING_DEFAULTS` in `shadowrunr-types` holds each key's engine default and the
 default's provenance): `max_picks`, `carry_ms`, `carry_max`, `hold_gap_ms`, `quiet_bit_ms`,
 `bit_spacing_ms`, `stall_every_s`, `failed_beat_slack_s`, `min_cover_ms`,
@@ -195,10 +213,17 @@ A value is a positive whole number in the key's unit (`_ms`, `_s`, else a count)
       "invariants": ["red-line:hateful-conduct"] } ] }
 ```
 
-Optional situation fields (parsed by the sim):
+Optional situation fields:
 - `"stimulus": "message|silence|vote|wave"`: inferred from archetype and invariants when absent.
 - `"silence_s"`: default 120.
 - `"segments": ["SEG-02A"]`: scheduled in every segment when absent.
+
+The bank is parsed once, by the package load (`shadowrunr_types::catalog::Situation`), and the
+sim, `character.get` and pre-flight PF-02 all read that load. It fails the package, naming the
+file, the situation and the field, on an unknown field, a `stimulus` or segment outside the
+values above, a duplicate `id`, or a `rule:<id>` invariant with no `rules/<id>.md` in the
+package. Rubric ids (`red-line:`, `role:`, `talk:`) are not the package's to check: the judge
+reads them against `rubric.toml`.
 
 Brain wire values:
 - `job.status`: `queued`, `running`, `progress`, `done`, `failed`, `cancelled`.
@@ -292,8 +317,9 @@ runs/sim/<tournament_id>/
 
 Instrument identity: each run records `instrument_hash`, a hash of the character package
 files (with `directions.md`), the tone file and its line bank, segment tables and judge rubric.
-Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/10`
-(T1: the line bank and directions, the narrowed rails, the scaled judge and the tic check).
+Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/11`
+(T1: the line bank and directions, the narrowed rails, the scaled judge and the tic check;
+`/10` is the evidence board).
 
 Judge (T1). The rubric samples 24 streamer turns (`sample_turns`). Besides the binary
 `[[quality]]` facts (`humor_landed` kept for continuity), each sampled turn gets a 0-3 score
@@ -497,13 +523,19 @@ the event envelope and the error envelope now live in `crates/shadowrunr-types` 
   `null` there fails validation. A field with a serde default may be absent, because stored
   transcripts are replayed verbatim.
 - `pnpm -C packages/contract generate` re-exports the schema and regenerates
-  `src/generated/{types.ts, validators.js, validators.d.ts, meta.ts}`
-  (json-schema-to-typescript plus ajv standalone validators).
+  `src/generated/`: `types.ts`, `meta.ts`, `validators.{js,d.ts}` (the eager `ServerFrame` and
+  `ErrorEnvelope` validators) and `results/<Def>.{js,d.ts}`, one ajv standalone module per
+  method result def, compiled from that def's closure alone (json-schema-to-typescript plus ajv
+  standalone validators).
 - `src/door.ts` is the only place that calls `JSON.parse` or a validator.
-  `parseRpcResult(method, body)` and `parseEvent(frame)` return a typed `Result<T, DoorError>`,
-  where the error is `parse`, `invalid` (with the first violation's path), `unknown_method`, or
-  `rpc` (with the daemon's code).
-- Drift gates: `pnpm -C packages/contract check` (re-export, regenerate, diff) and the
+  `parseEvent(frame)` returns a typed `Result<T, DoorError>`; `parseRpcResult(method, body)`
+  resolves to one (never rejects), loading the method's result module on its first reply
+  through `meta.ts`'s `RESULT_LOADERS`. The error is `parse`, `invalid` (with the first
+  violation's path), `unknown_method`, `unavailable_validator` (the module failed to load; the
+  next reply retries), or `rpc` (with the daemon's code). `preloadResultValidators()` loads
+  them ahead of use.
+- Drift gates: `pnpm -C packages/contract check` (re-export, regenerate, and diff the schema plus
+  the WHOLE `src/generated/` tree, so a changed, missing or stray file fails it) and the
   `shadowrunr-types` test `committed_schema_matches_the_rust_types`.
 - `tournament.results` returns `TournamentResults` (see the WPI appendix).
 
@@ -544,8 +576,9 @@ being written is not served.
 |---|---|---|
 | `character.list` | `{}` | `CharacterSummary[]` |
 | `character.get` | `{ "id" }` | `CharacterDetail` |
+| `character.validate` | `{ "id" }` | `CharacterIssue[]` (empty: valid; warnings alone still pass) |
 | `segments.tables` | `{}` | `SegmentTables` (the compiled-in tables the runtime interprets) |
-| `ranks.table` | `{ "character"? }` | `RankTableInfo` (`<segments>/ranks.toml`, titles from the character) |
+| `ranks.table` | `{ "character"? }` | `RankTableInfo` (`<segments>/ranks.toml` with the character's `[ranks]` overrides and titles) |
 | `runs.page` | `{ "tournament_id"?, "filter"?, "cursor"?, "limit" }` | `{ items: RunRow[], next_cursor? }`, ordered by `(tournament_id, run_id)` |
 | `tournaments.page` | `{ "cursor"?, "limit" }` | `{ items: TournamentRow[], next_cursor? }`, ordered by id |
 | `ledger.page` | `{ "run_id"?, "tournament_id"?, "cursor"?, "limit" }` | `{ items: LedgerEntry[], next_cursor? }` |
@@ -554,12 +587,19 @@ being written is not served.
 CharacterSummary { id, name, default_tone, tones: [string], foils: [string], rules_enabled, rules_total }
 CharacterDetail  { id, name, default_tone, files: [{path, bytes}], constitution, bible?,
                    tones: [{id, text}], foils: [{id, declared, text}], situations: [Situation],
-                   rules: [{id, title, enabled, default, text}], rank_titles: {rank: title} }
+                   rules: [{id, title, enabled, default, text}], rank_titles: {rank: title},
+                   identity?, voice?, avatar?: the v2 tables as written,
+                   rank_overrides?: {weights?, thresholds?, propose_min_rank?},
+                   tuning?: [TuningRow], segment_flavour?: {segment: {rules_prompt?, states?}} }
+TuningRow        { key, value, default, set, provenance: "measured"|"assumption", source?, doc }
+                   // every key in table order; value is the package's when set, else the default
+CharacterIssue   { file, key?, reason, severity: "error"|"warning" }
 SegmentTables    { segments: [SegmentTableInfo], op_tags: [string], command_names: [string] }
 SegmentTableInfo { id, title, status, initial, states, allowed_ops, commands, switch_to,
                    rules_prompt, design_notes?, transitions: [{from, on, guard?, to}],
                    clock: {foil_vote_secs, poll_min_secs, poll_max_secs, max_poll_options, handover?} }
 RankTableInfo    { character, propose_min_rank, ranks: [{rank, title, weight, min_gifted?, tiers: [{tier, min_months}]}] }
+                   // the ladder with the character's [ranks] overrides applied
 RunFilter        { tone_variant?, core_tier?, segment?, audience_size?, has_verdict?, text? }
 LedgerEntry      { ts_ms, role, tier?, effort?, engine?, account?, model?, first_text_ms?, duration_ms,
                    usage, cost_usd?, fallback_reason?, correlation_id?, error_kind?, warm?, run_id?, tournament_id? }
@@ -621,6 +661,11 @@ EngineFleet  { mode: "primary"|"degraded"|"down"|"scripted", since_ms }
   name nor its value is exposed.
 - With the scripted engine, `routes` is the default table (nothing overridden), `accounts` and
   `fallbacks` are empty, and `fleet` is `{ "mode": "scripted", "since_ms": 0 }`.
+
+**Host lines.** A report's per-segment metrics count the host's lines as `host_lines` and
+`host_lines_per_min?`; a stored report written with the v1 names `malakor_lines` and
+`malakor_lines_per_min` still reads. The Reconciler's prompts (synthesis, dispatch, owner chat)
+are written for the configured character's persona.
 
 **Reconcile synthesis budget.** The Reconciler's synthesis prompt is sized against a token
 budget (default 120k tokens, estimated as characters ÷ 3.5, 15% kept free). The metrics are
@@ -968,7 +1013,8 @@ No wire type changes: `Case` and `case_open` are unchanged, and a real case is a
   corrections.jsonl  CorrectionEntry, append-only
 CaseRecord   { id /* DOC-01 */, hex, grade: DOC|REP|CLM, title, source, summary,
                retrieved? /* YYYY-MM-DD */, content_hash? /* sha256 of the bytes */,
-               via? /* the Wayback capture of `source` it was read through */ }
+               via? /* the Wayback capture of `source` it was read through */,
+               date? /* YYYY-MM-DD, when its event happened: the board's timeline */ }
 CaseFile.arc [[hex_id]]                        // hexes per act, in act order
 CaseMeta     { case_id, title, subject, subject_category: PUBLIC_ENFORCEMENT_ENTITY |
                REGULATOR_WARNED_SCHEME, primary_public_record_url,
@@ -1005,7 +1051,8 @@ CorrectionEntry { entry_id, case_id, hex_id?, entry_type: FACTUAL_CORRECTION |
 reveal_pacing = true, reveal_gap_pct = 50, reveal_needs_work = true, recap_cooldown_s = 900 }`.
 A SEG-02A segment planned at least `min_planned_s` long (`SegmentConfig.planned_s`; the sim
 passes the run's duration) splits its time into equal acts. Hexes are staged per act
-(`CaseFile.arc`, else dealt by kind). A later act's hex is refused for `reveal_hex` and
+(`Case.acts`, then `CaseFile.arc`, else dealt by kind; a case act past the table's last joins
+the last), and a case act names its act in place of the table's title. A later act's hex is refused for `reveal_hex` and
 `dispatch_research` (`act_locked`); each act opens with a runtime `show_card`
 (`card_id: "arc-act-<n>"`) and the seal window with `arc-seal`. Before the seal window
 `sign_off` is withheld from `allowed_ops` and refused (`dossier_not_sealed`), except a
@@ -1469,7 +1516,7 @@ speaking JSON lines on stdio:
 stock `af_heart` (sid 3 of kokoro-multi-lang-v1_0). It is no real person's voice, and voice
 cloning is out of scope.
 
-## Appendix (screens): the streamer screen, its allow-lists and defaults
+## Appendix (screens and board): the streamer screen, its allow-lists and defaults, the evidence board
 
 What fills the broadcast's main screen is chosen by the model with `show_screen` and checked by
 `SegmentRuntime` against the segment table. The runtime also switches on its own events, so the
@@ -1477,22 +1524,28 @@ screen never depends on the model remembering.
 
 **Allow-lists** (segment tables, `data/segments/*.toml`).
 - `screens = [...]`: the screens a segment may put up. Names come from `SCREEN_NAMES`: `host`,
-  `hexmap`, `browser`, `desk`. The first entry is the segment's default.
+  `hexmap`, `browser`, `desk`, `board`. The first entry is the segment's default.
 - `[state_rules.<state>] screens = [...]`: an optional narrower list for one state, a non-empty
   subset of the segment's. Its first entry is that state's default.
-- A default (any list's first entry) is `host` or `hexmap`: it goes up with no record named.
-- `show_screen` is in `allowed_ops` only for a segment with two or more screens.
+- A default (any list's first entry) is `host`, `hexmap` or `board`: it goes up with no record
+  named.
+- `show_screen` is in `allowed_ops` only for a segment with two or more screens, and `pin_link`
+  only for a segment whose `screens` include `board`.
 
-| Segment | `screens` | Default | `show_screen` allowed |
-|---|---|---|---|
-| SEG-01 | `host` | `host` | no |
-| SEG-01, state `cold_open` | `host` (locked) | `host` | no |
-| SEG-02A | `hexmap`, `browser`, `desk`, `host` | `hexmap` | yes |
-| SEG-02B-I, SEG-02B-II (descoped) | `host` | `host` | no |
+| Segment | `screens` | Default | `show_screen` allowed | `pin_link` allowed |
+|---|---|---|---|---|
+| SEG-01 | `host` | `host` | no | no |
+| SEG-01, state `cold_open` | `host` (locked) | `host` | no | no |
+| SEG-02A | `board`, `browser`, `desk`, `host` | `board` | yes | yes |
+| SEG-02B-I, SEG-02B-II (descoped) | `host` | `host` | no | no |
 
-**Validation** (`apply_op`). After the generic checks (`signed_off`, `op_not_allowed`,
-`not_in_state`), a `show_screen` is refused, as a `moderation` event with action
-`rejected:show_screen`, by the first rule it fails:
+The evidence board replaced the hexmap as SEG-02A's main screen. `hexmap` stays in `ScreenId`
+so older transcripts still load; no segment lists it now. `desk` is the browser in front of the
+board.
+
+**Validation of `show_screen`** (`apply_op`). After the generic checks (`signed_off`,
+`op_not_allowed`, `not_in_state`), a `show_screen` is refused, as a `moderation` event with
+action `rejected:show_screen`, by the first rule it fails:
 1. `screen_not_allowed`: the screen is not in the current state's list.
 2. `no_record`: `browser` or `desk` with no `record_id` and no record opened earlier in the
    session. Without a `record_id`, the record last opened in the browser window is reopened.
@@ -1501,21 +1554,53 @@ screen never depends on the model remembering.
 4. `record_not_returned`: the record was filed, but its research job has not come back yet.
    Records are filed at dispatch (the case-file line and the DOC rule see them at once); the
    browser shows one only after `job_done` for its job.
-5. `unknown_hex`: a `focus` on `hexmap` or `desk` that names no hex of the case. Loose spellings
-   (`hex3`, `HEX-3`) are the case's id.
+5. `unknown_hex`: a `focus` on `board`, `hexmap` or `desk` that names no hex of the case. Loose
+   spellings (`hex3`, `HEX-3`) are the case's id.
 
-A `record_id` on `host` or `hexmap` is ignored, and so is a `focus` on `host` or `browser`.
+A `record_id` on `host`, `hexmap` or `board` is ignored, and so is a `focus` on `host` or
+`browser`.
 
-**Focus (the map's zoom).** `focus` zooms the map to that hex and its ring of neighbours; absent,
-the map is the fitted overview. On `desk` without a `focus` the map shows the record's hex. The
-runtime keeps the focus as the screen's (the state summary names it) and replaces it with every
-`show_screen`.
+**Focus (the board's zoom).** `focus` zooms the board (or the map) to that card and its
+neighbours; absent, it is the fitted overview. On `desk` without a `focus` the board shows the
+record's card. The runtime keeps the focus as the screen's (the state summary names it) and
+replaces it with every `show_screen`.
+
+**The evidence board.** The case's hexes are the board's cards. They start face down (the fog)
+and `reveal_hex` flips one. The case may carry a `thesis` (the board's heading), a `role` and a
+`date` per card, and `acts` (`CaseAct {name, hexes}`: the board's regions, in order).
+`validate_case` refuses a date that is not `YYYY-MM-DD`, a blank thesis, an act without a name,
+and an act naming an unknown hex or a hex another act already holds. A case without `acts` is
+dealt into the arc's acts by kind (the SEG-02A real-case appendix); the arc cards then name
+them. The fictional demo case (`DEMO-C01-GLIMMERQUAY`) carries all of them: three acts (the 4%
+promise; frozen withdrawals and the money trail; shells, the regulator and the old crew), and
+every planted record carries its `date`.
+
+**Validation of `pin_link`.** A string is drawn only from returned records, cites one, and takes
+its label from the fixed `LinkRel` vocabulary. After the generic checks, a `pin_link` is refused,
+as a `moderation` event with action `rejected:pin_link`, by the first rule it fails:
+1. `screen_not_allowed`: the board is not in the current state's list.
+2. `unknown_hex`: `from` or `to` names no hex of the case (loose spellings are the case's id).
+3. `same_hex`: `from` and `to` are the same card.
+4. `hex_not_revealed`: either card is still face down.
+5. `record_not_returned`: `record_id` is not a record whose research job has come back (the
+   same rule as the browser's; a record never filed is not returned either).
+6. `record_not_on_link`: the record is filed under neither `from` nor `to`.
+7. `duplicate_link`: a string with the same `from`, `to` and `rel` is already pinned. The
+   reverse direction, or another `rel`, is another string.
+
+An accepted `pin_link` is followed by `link_pinned {ts_ms, from, to, rel, record_id, grade}`,
+`grade` being the record's (below DOC the stage draws the string as alleged). A record pinned
+for the first time goes out as `record_shown` before the op, like a record the browser shows, so
+the stage (the timeline) and the transcript (the judge) hold what the string cites. When neither
+the board nor the desk is up, the runtime then puts the board up focused on the record's card
+(an investigation default: the hold rule applies). The runtime proposes no strings itself: the
+model pins them.
 
 **`record_shown`.** The first time a record is named in a session, by the model's `show_screen`
-or by a runtime default, the runtime emits `record_shown`. It carries the case file's
-`CaseRecord` fields, copied (a real case's records are already scrubbed when staged), with the
-case file's `fictional`. The event goes out before the `op` event that shows the record, and
-never twice for the same id in one session.
+or `pin_link` or by a runtime default, the runtime emits `record_shown`. It carries the case
+file's `CaseRecord` fields, copied (a real case's records are already scrubbed when staged), with
+the case file's `fictional`, and the record's `date` when it has one. The event goes out before
+the `op` event that shows or cites the record, and never twice for the same id in one session.
 
 **Runtime defaults.** These are `op` events the runtime emits itself. The sim's echo filter
 drops at most one echo per op the model sent, so a default identical to the model's op survives.
@@ -1527,51 +1612,70 @@ drops at most one echo per op the model sent, so a default identical to the mode
 - A research job comes back: the brain's `job` event with status `done` is fed to
   `SegmentRuntime::job_done(job_id, ts)`. This is done by the sim runner and by the sandbox, after
   the beat's ops. If the runtime accepted the job's `dispatch_research` and that dispatch filed
-  records, those records count as returned (shown from now on, whatever the screen does).
-  Then, if `browser` is allowed now, the runtime emits `record_shown` (first time only), then
-  `show_screen browser` with the first record that dispatch filed. Each job opens a record at
-  most once.
+  records, those records count as returned (shown or pinned from now on, whatever the screen
+  does). Then, if `browser` is allowed now, the runtime emits `record_shown` (first time only),
+  then `show_screen browser` with the first record that dispatch filed. Each job opens a record
+  at most once.
 
 **The investigation drives the screen.** More runtime defaults, each only when its screen is
-allowed in the state, and never when that very view is up already:
-- An accepted `dispatch_research` whose brief names a hex: `show_screen hexmap` focused on it,
+allowed in the state, and never when that very view is up already. "The board" below is `board`
+for a segment that lists it, else `hexmap`.
+- An accepted `dispatch_research` whose brief names a hex: `show_screen board` focused on it,
   after the dispatch's `op` (the minions set off, and viewers see where).
-- An accepted `reveal_hex`: `show_screen hexmap` focused on that hex, after the reveal.
+- An accepted `reveal_hex`: `show_screen board` focused on that card, after the reveal.
 - A poll opens (the model's `start_poll`, or a Plebiscite the runtime opens): `show_screen
-  hexmap` with no focus, the overview, to choose the next fog.
+  board` with no focus, the overview, to choose the next card.
+- An accepted `pin_link` while neither the board nor the desk is up: `show_screen board` focused
+  on the record's card, after its `link_pinned`.
 - Browser dwell: after `BROWSER_DWELL_MS` (40,000 ms; an assumption) on `browser`, the clock's
-  tick moves to `desk` with the same record, focused on its hex (the hexmap overview when the
-  state does not allow the desk). After `DESK_DWELL_MS` (30,000 ms; an assumption) on `desk`,
-  it pulls back to the `hexmap` overview. The dwell counts from the latest `show_screen` of any
+  tick moves to `desk` with the same record, focused on its card (the board's overview when the
+  state does not allow the desk). After `DESK_DWELL_MS` (30,000 ms; an assumption) on `desk`, it
+  pulls back to the board's overview. The dwell counts from the latest `show_screen` of any
   source, so the model's own `show_screen` restarts it.
 
 **Hold rule.** No investigation default (the job's, the dispatch's, the reveal's, the poll's,
-the dwell's) overrides a `show_screen` the model made within `SCREEN_HOLD_MS` (8,000 ms; an
-assumption, uncalibrated). A default suppressed by the hold is spent: it does not fire later,
-though the job's records still count as returned. Nothing is emitted after a sign-off.
+the pin's, the dwell's) overrides a `show_screen` the model made within `SCREEN_HOLD_MS` (8,000
+ms; an assumption, uncalibrated). A default suppressed by the hold is spent: it does not fire
+later, though the job's records still count as returned. Nothing is emitted after a sign-off.
 
 **Event order**, in one call:
 - start: `segment_start`, `case_open` (SEG-02A), `show_screen` (default), then any arc card;
 - a model op: `record_shown` (if new), the `op` echo, its consequences (a dispatch's or a
-  reveal's focus, a poll's overview), then any state default;
+  reveal's focus, a poll's overview, a pin's `link_pinned` and then its focus), then any state
+  default;
 - a returning job: `record_shown` (if new), then `show_screen browser`;
 - the clock's tick: its own events, then any state default, then a dwell's `show_screen`.
 
 The written transcript keeps this order for the model's own ops too. The brain writes each op
 before the runtime has applied it, so the sim runner and the sandbox move a `record_shown` the
-runtime emitted for a record the model's `show_screen` names to just before that op.
+runtime emitted for a record the model's `show_screen` or `pin_link` names to just before that
+op.
 
 **What the model sees.**
 - SEG-02A's rules prompt has one sentence on the screen, which is his to direct: put up the
-  record while he reads from it, focus the hex he is talking about, and pull back to the
-  overview to choose the next fog.
+  record while he reads from it, focus the card he is talking about, and pull back to the
+  overview to choose the next card. One more sentence covers strings: pin one with `pin_link`
+  when a returned record shows how two face-up cards connect, citing that record and only what
+  it says; when the evidence disagrees with a claim, pin the claim with `claims` and the record
+  against it with `contradicts`. Nothing of the board enters the stable prefix.
 - When the segment allows `show_screen`, the state summary carries one line:
-  `Screen: <screen>[ on <record>][ focused on <hex> | , map focused on <hex>][ (only <list>
+  `Screen: <screen>[ on <record>][ focused on <hex> | , board focused on <hex>][ (only <list>
   now)]. Records on file, newest first: <ids> [+N older]`, at most 4 ids, returned records only
-  (newest = latest back). `focused on` is the hexmap's focus, `map focused on` the desk's.
-  Before any job is back it reads `Records on file: none yet (browser and desk need one)`.
-- The ids only: the research block's case-file line already gives each record's hex, grade and
-  title.
+  (newest = latest back). `focused on` is the board's focus, `board focused on` the desk's (`map`
+  for a segment without the board). Before any job is back it reads `Records on file: none yet
+  (browser and desk need one)`. The ids only: the research block's case-file line already gives
+  each record's hex, grade and title.
+- When the segment allows `pin_link`, the state summary carries a second line, every beat:
+  `Board: <N> cards face up, <M> strings.[ Open leads: <hex> (<role>)[, ...] has|have a returned
+  record and no string.]` An open lead is a face-up card with a returned record filed under it
+  and no string at either end, newest record first, at most 3. A card without a role is named by
+  its kind.
 
-**Clips.** A clip's scene events keep every `show_screen` and `record_shown` up to the end of the
-cut, so a replay opens on the screen that was up.
+**The judge.** The sim's judged transcript prints a `record_shown` with its summary, and the
+rubric's `role:strings-match-their-records` (`provoked_by = "pinned_link"`: any `link_pinned`
+line) fails a string whose `rel` is not what its record's summary says about the two cards, or a
+string citing a REP or CLM record stated as fact. A run with no string leaves it `not_provoked`.
+
+**Clips.** A clip's scene events keep every `show_screen`, `record_shown` and `link_pinned` up to
+the end of the cut, so a replay opens on the screen that was up with the strings already
+pinned, and draws the cut's own strings in.

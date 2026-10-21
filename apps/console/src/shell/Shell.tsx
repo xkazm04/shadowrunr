@@ -4,13 +4,13 @@ import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { emitKeyCommand } from "../kit/keyCommands";
 import { KEYMAP, installKeymap } from "../keys";
 import { StatePanel } from "../ui/States";
-import { PAGE_IDS, WALL, crumbs, encodeRoute, layerOf, pageRoute, up, useRoute, useRouter, type LabelOf, type PageId } from "../router";
+import { WALL, crumbs, encodeRoute, layerOf, pageRoute, up, useRoute, useRouter, type PageId } from "../router";
+import { matchSub } from "../router/schema";
 import { Chrome } from "./Chrome";
 import { INTRO, Intro } from "./Intro";
 import { effectOf, modeOf, type KeyContext } from "./keyActions";
 import { BUS_REM, MixerBus } from "./MixerBus";
-import { POSTERS } from "./posters";
-import { riseKey } from "./rise";
+import { pageLabeller, riseKey } from "./rise";
 import styles from "./Shell.module.css";
 import { Spread } from "./Spread";
 import type { PageRegistry } from "./types";
@@ -24,14 +24,6 @@ export interface ShellProps {
 }
 
 const ON_AIR: PageId = "onair";
-
-function labelFor(pages: PageRegistry): LabelOf {
-  return (segment, depth, parts) => {
-    const page = PAGE_IDS.find((id) => id === parts[0]);
-    if (depth === 0) return page ? POSTERS[page].name : undefined;
-    return page ? pages[page].label?.(segment, depth, parts) : undefined;
-  };
-}
 
 export function Shell(props: ShellProps) {
   const router = useRouter();
@@ -99,7 +91,7 @@ export function Shell(props: ShellProps) {
     hitRefs.current[i] = el;
   }, []);
 
-  const labelOf = useMemo(() => labelFor(props.pages), [props.pages]);
+  const labelOf = useMemo(() => pageLabeller(props.pages), [props.pages]);
   const trail = useMemo(() => crumbs(route, labelOf), [route, labelOf]);
   const toggleWall = useCallback(
     () => router.navigate(route.view === "wall" ? pageRoute(lastPage) : WALL),
@@ -109,6 +101,15 @@ export function Shell(props: ShellProps) {
     const parent = up(route);
     if (parent) router.navigate(parent);
   }, [router, route]);
+
+  // A sub the page's declared schema rejects is canonicalised like an unknown page id: replaced
+  // (never pushed) with the deepest prefix the schema accepts, and the page is not mounted on it.
+  const routes = route.view === "page" ? props.pages[route.page].routes : undefined;
+  const subMatch = routes && route.view === "page" ? matchSub(routes, route.sub) : undefined;
+  const fallback = subMatch && !subMatch.ok && route.view === "page" ? pageRoute(route.page, ...subMatch.fallback) : null;
+  useLayoutEffect(() => {
+    if (fallback) router.navigate(fallback, { replace: true });
+  }, [router, fallback]);
 
   const busRem = layer === "l2" || viewport.narrow ? BUS_REM.compact : BUS_REM.full;
   const showBus = !intro && (layer === "l1" || layer === "l2");
@@ -139,9 +140,9 @@ export function Shell(props: ShellProps) {
         busOffset={showBus ? `${busRem}rem` : "0rem"}
         label={trail.map((c) => c.label).join(" / ")}
       >
-        {Layer2 && route.view === "page" && route.sub.length > 0 && (
+        {Layer2 && route.view === "page" && route.sub.length > 0 && !fallback && (
           <Suspense fallback={<StatePanel state="loading" title="Loading" />}>
-            <Layer2 key={riseKey(route.page, route.sub)} sub={route.sub} />
+            <Layer2 key={riseKey(route.page, route.sub, routes)} sub={route.sub} />
           </Suspense>
         )}
       </Spread>

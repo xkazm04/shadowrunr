@@ -113,7 +113,7 @@ describe("playback", () => {
     const t = new Timeline(evs);
     expect(t.duration).toBe(4000);
     expect(t.advanceTo(1500).layout).toBe("host");
-    expect(t.advanceTo(3500).layout).toBe("hexmap");
+    expect(t.advanceTo(3500).layout).toBe("board");
     expect(t.advanceTo(2500).layout).toBe("host");
     expect(t.scene.applied).toBe(2);
     expect(t.finished).toBe(false);

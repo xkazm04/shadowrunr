@@ -1,5 +1,5 @@
 // characters/<id>/package/<tab>: one character's package, read once with character.get, under
-// the winner's six tabs.
+// the winner's six tabs and the v2 parameters.
 import type { CharacterDetail } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { useRpc } from "../../data";
@@ -10,6 +10,7 @@ import { EmptyState } from "../../ui/States";
 import { FoilsTab, TonesTab } from "./CastTabs";
 import { BibleTab, ConstitutionTab } from "./DocTabs";
 import styles from "./Layer2.module.css";
+import { ParamsTab } from "./ParamsTab";
 import { allRoute, PKG_TABS, pkgRoute, type PkgTab } from "./routes";
 import { RulesTab } from "./RulesTab";
 import { SituationsTab } from "./SituationsTab";
@@ -48,5 +49,7 @@ function Body({ d, tab, situation }: { d: CharacterDetail; tab: PkgTab; situatio
       return <FoilsTab d={d} />;
     case "situations":
       return <SituationsTab d={d} selected={situation} />;
+    case "parameters":
+      return <ParamsTab d={d} />;
   }
 }

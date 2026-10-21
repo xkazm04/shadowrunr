@@ -73,6 +73,9 @@ pub struct CaseRecord {
     /// publisher's site refused the fetch. Its original URL is `source`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub via: Option<String>,
+    /// When the record's event happened, `YYYY-MM-DD`: the evidence board's timeline strip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
 }
 
 impl CaseRecord {
@@ -131,7 +134,8 @@ impl CaseFile {
     /// existing rule). A fictional file's sources sit on reserved `*.example` domains. A real
     /// file's records each carry their retrieval day and content hash, were fetched from the
     /// research allowlist (`via` must be a Wayback capture of `source`), and carry no email
-    /// address or phone number. The arc, when present, names each hex at most once.
+    /// address or phone number. A record's `date` is a `YYYY-MM-DD` day. The arc, when present,
+    /// names each hex at most once.
     pub fn validate(&self, case: &Case, allowlist: &SourceAllowlist) -> Result<(), SegmentError> {
         self.validate_with(case, allowlist, ResearchAllowlist::builtin())
     }
@@ -173,6 +177,9 @@ impl CaseFile {
             }
             if r.title.trim().is_empty() || r.summary.trim().is_empty() {
                 return Err(bad(format!("{}: empty title or summary", r.id)));
+            }
+            if r.date.as_deref().is_some_and(|d| !is_day(d)) {
+                return Err(bad(format!("{}: date must be YYYY-MM-DD", r.id)));
             }
             if self.fictional {
                 if !url_host(&r.source).is_some_and(|h| h.ends_with(".example")) {
@@ -228,18 +235,7 @@ fn real_record_ok(r: &CaseRecord, research: &ResearchAllowlist) -> Result<(), St
             r.fetched_from()
         ));
     }
-    let day_ok = r.retrieved.as_deref().is_some_and(|d| {
-        let b = d.as_bytes();
-        b.len() == 10
-            && b.iter().enumerate().all(|(i, c)| {
-                if i == 4 || i == 7 {
-                    *c == b'-'
-                } else {
-                    c.is_ascii_digit()
-                }
-            })
-    });
-    if !day_ok {
+    if !r.retrieved.as_deref().is_some_and(is_day) {
         return Err("a real record needs its retrieval day (YYYY-MM-DD)".into());
     }
     if !r
@@ -255,6 +251,19 @@ fn real_record_ok(r: &CaseRecord, research: &ResearchAllowlist) -> Result<(), St
         }
     }
     Ok(())
+}
+
+/// A day written `YYYY-MM-DD` (the shape only).
+pub(crate) fn is_day(d: &str) -> bool {
+    let b = d.as_bytes();
+    b.len() == 10
+        && b.iter().enumerate().all(|(i, c)| {
+            if i == 4 || i == 7 {
+                *c == b'-'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
 }
 
 /// The first contact detail in `text`: an email address, or a phone number (digits in 3-3-4
@@ -469,6 +478,8 @@ mod tests {
         assert!(file.records.len() >= 10, "{}", file.records.len());
         for r in &file.records {
             assert!(r.title.contains("(fictional)"), "{}", r.id);
+            // Every planted record is dated, for the board's timeline.
+            assert!(r.date.is_some(), "{}", r.id);
         }
         // Some hexes stay empty so "nothing found" still happens.
         let empty: Vec<&str> = case
@@ -506,6 +517,8 @@ mod tests {
             "https://records.example/morrowgate-fco/warning-list-2026",
             "https://news.example/warning-list",
         ));
+        // A record's date is a day.
+        reject(DEMO_RECORDS_JSON.replace("\"date\": \"2026-03-15\"", "\"date\": \"March 2026\""));
         // A real case never takes planted records.
         let mut real = demo_case();
         real.fictional = false;

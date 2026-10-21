@@ -29,7 +29,8 @@ sign_off = "The Spire's runes have gone dark, and the Lord of the Darkness recal
 # Replaces a persona leak that disclosed being an AI: the constitution requires the honest line.
 disclosure = "Yes, I am an AI character: a lich of the Ninth Dark, performed by a machine. The bit continues."
 
-# Schema only for now: the daemon's `[voice]` and rig path still apply (P2 wires these).
+# Present fields override the daemon's `[voice]` field by field; the rig is served from
+# `<data>/characters/<id>/avatar/rig/`, else the shared `<data>/avatar/rig/`.
 [voice]
 voice = "af_heart"
 sid = 3

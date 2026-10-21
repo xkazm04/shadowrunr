@@ -70,7 +70,10 @@ describe("fixtures/demo.jsonl", () => {
     });
 
     it(`${seg}: uses every op in ${table} allowed_ops, and no op outside it`, () => {
-      const allowed = allowedOps(table);
+      // `pin_link` is the board's op (appendix (screens and board)); until BOARD-WIRE's table
+      // allows it, the demo uses it ahead of the table.
+      const listed = allowedOps(table);
+      const allowed = seg === "SEG-02A" && !listed.includes("pin_link") ? [...listed, "pin_link"] : listed;
       expect(allowed.length).toBeGreaterThan(5);
       const used = new Set((segs.get(seg) ?? []).flatMap((e) => (e.type === "op" ? [e.op.op] : [])));
       for (const op of used) expect(allowed, op).toContain(op);
@@ -82,7 +85,7 @@ describe("fixtures/demo.jsonl", () => {
 
   it("hands over from SEG-01 to SEG-02A and ends on the outro", () => {
     const s = foldEvents(parsed.events);
-    expect(s.layout).toBe("hexmap");
+    expect(s.layout).toBe("board");
     expect(s.outro).not.toBeNull();
     expect(s.ended?.reason).toBe("sim_complete");
     expect(s.seals.map((x) => x.segment)).toEqual(["SEG-01", "SEG-02A"]);
@@ -119,9 +122,70 @@ describe("fixtures/demo.jsonl", () => {
 });
 
 describe("fixtures/demo-case.json", () => {
-  it("is a byte copy of the segments demo case", () => {
+  it("is a byte copy of the segments demo case (until that case has its board: the case plus the board)", () => {
     const a = readFileSync(join(repo, "crates", "shadowrunr-segments", "data", "demo-case.json"), "utf8");
     const b = readFileSync(join(root, "fixtures", "demo-case.json"), "utf8");
-    expect(b.replace(/\r\n/g, "\n")).toBe(a.replace(/\r\n/g, "\n"));
+    const segments = parseCase(a);
+    if (segments.acts !== undefined) {
+      expect(b.replace(/\r\n/g, "\n")).toBe(a.replace(/\r\n/g, "\n"));
+      return;
+    }
+    // BOARD-WIRE gives the segments case its roles, dates, thesis and acts; until then the
+    // fixture is that case with exactly those fields added.
+    const fixture = parseCase(b);
+    delete fixture.thesis;
+    delete fixture.acts;
+    for (const h of fixture.hexes) {
+      delete h.role;
+      delete h.date;
+    }
+    expect(fixture).toEqual(segments);
+  });
+
+  it("tells the story on the board: roles, dates, a thesis and acts that hold every card once", () => {
+    const c = parseCase(readFileSync(join(root, "fixtures", "demo-case.json"), "utf8"));
+    expect(c.thesis).toMatch(/\?$/);
+    const inActs = (c.acts ?? []).flatMap((a) => a.hexes);
+    expect(inActs.sort()).toEqual(c.hexes.map((h) => h.id).sort());
+    for (const h of c.hexes) expect(h.date, h.id).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(c.hexes.filter((h) => h.role !== undefined).length).toBeGreaterThanOrEqual(12);
+  });
+});
+
+describe("the board in the demo", () => {
+  const planted = readJson(readFileSync(join(repo, "crates", "shadowrunr-segments", "data", "demo-case-records.json"), "utf8")) as {
+    records: { id: string; hex: string; grade: string }[];
+  };
+  const records = new Map(planted.records.map((r) => [r.id, r]));
+  const pins = parsed.events.flatMap((e) => (e.type === "link_pinned" ? [e] : []));
+
+  it("pins 4 to 6 strings along the money path, one of them a contradiction", () => {
+    expect(pins.length).toBeGreaterThanOrEqual(4);
+    expect(pins.length).toBeLessThanOrEqual(6);
+    expect(pins.filter((p) => p.rel === "contradicts")).toHaveLength(1);
+    expect(pins.map((p) => `${p.from}>${p.to}`)).toEqual(expect.arrayContaining(["HEX-01>HEX-05", "HEX-01>HEX-04", "HEX-04>HEX-09"]));
+  });
+
+  it("pins only what the runtime would accept: both cards face up, the record returned and filed under an end, its grade", () => {
+    for (const p of pins) {
+      const before = parsed.events.filter((e) => e.ts_ms <= p.ts_ms);
+      const up = new Set(before.flatMap((e) => (e.type === "op" && e.op.op === "reveal_hex" ? [e.op.hex] : [])));
+      const back = new Set(before.flatMap((e) => (e.type === "record_shown" ? [e.record.id] : [])));
+      const r = records.get(p.record_id)!;
+      expect(up.has(p.from) && up.has(p.to), p.record_id).toBe(true);
+      expect(back.has(p.record_id), p.record_id).toBe(true);
+      expect([p.from, p.to], p.record_id).toContain(r.hex);
+      expect(p.grade).toBe(r.grade);
+      // each string follows the op the runtime accepted
+      expect(before.some((e) => e.type === "op" && e.op.op === "pin_link" && e.op.from === p.from && e.op.to === p.to && e.op.rel === p.rel)).toBe(true);
+    }
+    expect(new Set(pins.map((p) => `${p.from}>${p.to}>${p.rel}`)).size).toBe(pins.length);
+  });
+
+  it("moves between the board, the browser and the desk, and the scene keeps every string", () => {
+    const screens = parsed.events.flatMap((e) => (e.type === "op" && e.op.op === "show_screen" ? [e.op.screen] : []));
+    for (const sc of ["board", "browser", "desk"] as const) expect(screens, sc).toContain(sc);
+    expect(screens).not.toContain("hexmap");
+    expect(foldEvents(parsed.events).links).toHaveLength(pins.length);
   });
 });

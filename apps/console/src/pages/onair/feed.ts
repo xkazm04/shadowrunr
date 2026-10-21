@@ -5,7 +5,7 @@ import type { RunRow, RunTranscriptResult } from "@shadowrunr/contract";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useDataLayer, useRpc, type Query } from "../../data";
 import { LiveFeed, ReplayPlayer, type Feed, type FeedSnapshot } from "./player";
-import { initialScene } from "@shadowrunr/stage-kit";
+import { initialScene, type TsMs } from "@shadowrunr/stage-kit";
 
 export type Source = { readonly kind: "live" } | { readonly kind: "run"; readonly runId: string; readonly tournamentId: string };
 
@@ -37,10 +37,27 @@ function store<T>(initial: T) {
   };
 }
 
+/** One replay at a time: switching runs disposes the old player. */
+const replay = store<{ key: string; player: ReplayPlayer } | null>(null);
+
 /** The operator's pick; null until they choose (then the newest stored run plays). */
 const chosen = store<Source | null>(null);
 
-export function selectSource(s: Source): void {
+/** A seek waiting for its run's replay to exist (a jump from the rundown before the transcript loads). */
+let pendingSeek: { readonly key: string; readonly at: TsMs } | null = null;
+
+/**
+ * Choose what On Air plays. With `at`, the replay is put at that transcript time: at once when
+ * that run's player already exists, else as soon as it is created.
+ */
+export function selectSource(s: Source, opts: { readonly at?: TsMs } = {}): void {
+  const key = sourceKey(s);
+  pendingSeek = null;
+  if (opts.at !== undefined && s.kind === "run") {
+    const cur = replay.get();
+    if (cur?.key === key) cur.player.seek(opts.at);
+    else pendingSeek = { key, at: opts.at };
+  }
   chosen.set(s);
 }
 
@@ -48,14 +65,15 @@ export function useChosenSource(): Source | null {
   return useSyncExternalStore(chosen.subscribe, chosen.get, chosen.get);
 }
 
-/** One replay at a time: switching runs disposes the old player. */
-const replay = store<{ key: string; player: ReplayPlayer } | null>(null);
 
 function ensureReplay(key: string, events: RunTranscriptResult): void {
   const cur = replay.get();
   if (cur?.key === key) return;
   cur?.player.dispose();
-  replay.set({ key, player: new ReplayPlayer(events) });
+  const player = new ReplayPlayer(events);
+  if (pendingSeek?.key === key) player.seek(pendingSeek.at);
+  pendingSeek = null;
+  replay.set({ key, player });
 }
 
 /**
@@ -78,7 +96,7 @@ export interface OnAirFeed {
   readonly transcript: Query<RunTranscriptResult> | undefined;
   readonly feed: Feed | null;
   readonly snapshot: FeedSnapshot;
-  readonly select: (s: Source) => void;
+  readonly select: (s: Source, opts?: { readonly at?: TsMs }) => void;
 }
 
 /** Wires the chosen source to a feed; plays while `active`, pauses when hidden or unmounted. */

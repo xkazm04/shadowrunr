@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseEvent, parseRpcResult } from "./door";
 import { ERROR_CODES, RPC_METHODS } from "./generated/meta";
@@ -13,19 +13,19 @@ const FIXTURE = new URL(
 const report = { check: "PF-01", state: "green", detail: "scripted engine" };
 
 describe("parseRpcResult", () => {
-  it("accepts a valid reply and returns the typed result", () => {
-    const r = parseRpcResult("preflight.run", JSON.stringify({ result: [report] }));
+  it("accepts a valid reply and returns the typed result", async () => {
+    const r = await parseRpcResult("preflight.run", JSON.stringify({ result: [report] }));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value[0]?.state).toBe("green");
   });
 
-  it("accepts an already-decoded body", () => {
-    const r = parseRpcResult("runs.page", { result: { items: [] } });
+  it("accepts an already-decoded body", async () => {
+    const r = await parseRpcResult("runs.page", { result: { items: [] } });
     expect(r).toEqual({ ok: true, value: { items: [] } });
   });
 
-  it("rejects an invalid payload with the path of the violation", () => {
-    const r = parseRpcResult("preflight.run", { result: [{ ...report, state: "purple" }] });
+  it("rejects an invalid payload with the path of the violation", async () => {
+    const r = await parseRpcResult("preflight.run", { result: [{ ...report, state: "purple" }] });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.kind).toBe("invalid");
@@ -33,43 +33,43 @@ describe("parseRpcResult", () => {
     }
   });
 
-  it("rejects null in an optional field (optional fields are omitted, never null)", () => {
-    const r = parseRpcResult("runs.page", { result: { items: [], next_cursor: null } });
+  it("rejects null in an optional field (optional fields are omitted, never null)", async () => {
+    const r = await parseRpcResult("runs.page", { result: { items: [], next_cursor: null } });
     expect(r.ok).toBe(false);
     if (!r.ok && r.error.kind === "invalid") expect(r.error.path).toBe("/result/next_cursor");
   });
 
-  it("rejects an unknown method without looking at the body", () => {
-    const r = parseRpcResult("no.such", { result: [] });
+  it("rejects an unknown method without looking at the body", async () => {
+    const r = await parseRpcResult("no.such", { result: [] });
     expect(r).toEqual({
       ok: false,
       error: { kind: "unknown_method", message: 'unknown RPC method "no.such"', method: "no.such" },
     });
   });
 
-  it("returns a daemon error reply as an rpc error with its code", () => {
+  it("returns a daemon error reply as an rpc error with its code", async () => {
     const body = { error: { code: "not_found", message: "run x", detail: { run_id: "x" } } };
-    const r = parseRpcResult("run.verdict", body);
+    const r = await parseRpcResult("run.verdict", body);
     expect(r).toEqual({
       ok: false,
       error: { kind: "rpc", code: "not_found", message: "run x", detail: { run_id: "x" } },
     });
   });
 
-  it("rejects an error code outside the taxonomy", () => {
-    const r = parseRpcResult("run.verdict", { error: { code: "sim_failed", message: "x" } });
+  it("rejects an error code outside the taxonomy", async () => {
+    const r = await parseRpcResult("run.verdict", { error: { code: "sim_failed", message: "x" } });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe("invalid");
   });
 
-  it("reports text that is not JSON as a parse error", () => {
-    const r = parseRpcResult("preflight.run", "{not json");
+  it("reports text that is not JSON as a parse error", async () => {
+    const r = await parseRpcResult("preflight.run", "{not json");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe("parse");
   });
 
-  it("rejects a body that is neither a result nor an error", () => {
-    const r = parseRpcResult("preflight.run", { results: [] });
+  it("rejects a body that is neither a result nor an error", async () => {
+    const r = await parseRpcResult("preflight.run", { results: [] });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe("invalid");
   });
@@ -163,11 +163,11 @@ describe("tournament.results", () => {
     usage_by_role: {},
   };
 
-  it("accepts a results.json written before tier decisions", () => {
-    expect(parseRpcResult("tournament.results", { result: old }).ok).toBe(true);
+  it("accepts a results.json written before tier decisions", async () => {
+    expect((await parseRpcResult("tournament.results", { result: old })).ok).toBe(true);
   });
 
-  it("accepts a tier decision and the per-cell run counts", () => {
+  it("accepts a tier decision and the per-cell run counts", async () => {
     const decided = {
       ...old,
       cells: [{ ...cell, runs_with_fail: 0, usable_runs: 1 }],
@@ -185,12 +185,12 @@ describe("tournament.results", () => {
         },
       ],
     };
-    const r = parseRpcResult("tournament.results", { result: decided });
+    const r = await parseRpcResult("tournament.results", { result: decided });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.tier_decisions?.[0]?.winner).toBe("haiku");
   });
 
-  it("rejects a decision reason outside the vocabulary", () => {
+  it("rejects a decision reason outside the vocabulary", async () => {
     const bad = {
       ...old,
       tier_decisions: [
@@ -204,7 +204,7 @@ describe("tournament.results", () => {
         },
       ],
     };
-    expect(parseRpcResult("tournament.results", { result: bad }).ok).toBe(false);
+    expect((await parseRpcResult("tournament.results", { result: bad })).ok).toBe(false);
   });
 });
 
@@ -221,5 +221,70 @@ describe("generated metadata", () => {
     for (const m of ["ledger.page", "runs.page", "tournaments.page"] as const) {
       expect(RPC_METHODS).toContain(m);
     }
+  });
+});
+
+describe("per-method result validators (lazy)", () => {
+  // Fresh modules per case, so the door's memo and the loader map start empty.
+  async function freshDoor() {
+    vi.resetModules();
+    const meta = await import("./generated/meta");
+    const door = await import("./door");
+    return { loaders: meta.RESULT_LOADERS, door };
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("loads only the called method's validator module", async () => {
+    const { loaders, door } = await freshDoor();
+    const spies = Object.fromEntries(
+      Object.keys(loaders).map((m) => [m, vi.spyOn(loaders, m as keyof typeof loaders)]),
+    );
+    const r = await door.parseRpcResult("runs.page", { result: { items: [] } });
+    expect(r).toEqual({ ok: true, value: { items: [] } });
+    const called = Object.entries(spies).filter(([, s]) => s.mock.calls.length > 0);
+    expect(called.map(([m, s]) => [m, s.mock.calls.length])).toEqual([["runs.page", 1]]);
+    // The second call reuses the loaded validator: no second load.
+    await door.parseRpcResult("runs.page", { result: { items: [] } });
+    expect(spies["runs.page"]?.mock.calls.length).toBe(1);
+  });
+
+  it("does not load a validator for an error reply or an unknown method", async () => {
+    const { loaders, door } = await freshDoor();
+    const spy = vi.spyOn(loaders, "run.verdict");
+    const r = await door.parseRpcResult("run.verdict", { error: { code: "busy", message: "x" } });
+    expect(r.ok).toBe(false);
+    expect((await door.parseRpcResult("no.such", { result: 1 })).ok).toBe(false);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("resolves a failed validator load as unavailable_validator and never throws; the next call retries", async () => {
+    const { loaders, door } = await freshDoor();
+    const spy = vi.spyOn(loaders, "runs.page").mockRejectedValueOnce(new Error("Failed to fetch chunk"));
+    const r = await door.parseRpcResult("runs.page", { result: { items: [] } });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("unavailable_validator");
+      expect(r.error.message).toContain("runs.page");
+      expect(r.error.message).toContain("Failed to fetch chunk");
+    }
+    expect(await door.parseRpcResult("runs.page", { result: { items: [] } })).toEqual({ ok: true, value: { items: [] } });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("preloads validators ahead of a reply, and a preloaded method is not loaded again", async () => {
+    const { loaders, door } = await freshDoor();
+    const spy = vi.spyOn(loaders, "runs.page");
+    await door.preloadResultValidators(["runs.page"]);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await door.parseRpcResult("runs.page", { result: { items: [] } })).ok).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("has a loader for every method", async () => {
+    const { loaders } = await freshDoor();
+    expect(Object.keys(loaders).sort()).toEqual([...RPC_METHODS].sort());
   });
 });

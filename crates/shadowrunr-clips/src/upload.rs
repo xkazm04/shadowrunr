@@ -18,7 +18,8 @@ use shadowrunr_types::clips::{
     ClipAct, ClipCandidate, ClipDryRun, ClipPlatform, ClipPublishReport,
 };
 
-use crate::render::{grade_name, DISCLOSURE};
+use crate::host::ClipHost;
+use crate::render::{grade_name, ClipInput, DISCLOSURE};
 use crate::store::{refuse_blocked, write_json, ClipStore};
 use crate::{now_ms, Result};
 
@@ -45,7 +46,8 @@ pub trait UploadAdapter {
     fn platform(&self) -> ClipPlatform;
     /// Uploads allowed per UTC day, when the platform has a cap.
     fn daily_budget(&self) -> Option<u32>;
-    fn request(&self, c: &ClipCandidate) -> DryRequest;
+    /// The request for `c`, naming `host` in its text.
+    fn request(&self, c: &ClipCandidate, host: &ClipHost) -> DryRequest;
 }
 
 fn video(c: &ClipCandidate) -> Option<(String, u64)> {
@@ -57,10 +59,15 @@ fn video(c: &ClipCandidate) -> Option<(String, u64)> {
     })
 }
 
-fn description(c: &ClipCandidate) -> String {
+fn description(c: &ClipCandidate, host: &ClipHost) -> String {
     let mut d = format!(
-        "{DISCLOSURE}. Arch-Lich Malakor is an original AI character; this clip is cut from a {} stream.",
-        if c.source.tournament_id.is_some() { "simulated" } else { "recorded" }
+        "{DISCLOSURE}. {} is an original AI character; this clip is cut from a {} stream.",
+        host.full_name,
+        if c.source.tournament_id.is_some() {
+            "simulated"
+        } else {
+            "recorded"
+        }
     );
     if let Some(e) = &c.evidence {
         d.push_str(&format!(
@@ -95,7 +102,7 @@ impl UploadAdapter for YouTube {
     fn daily_budget(&self) -> Option<u32> {
         Some(100)
     }
-    fn request(&self, c: &ClipCandidate) -> DryRequest {
+    fn request(&self, c: &ClipCandidate, host: &ClipHost) -> DryRequest {
         let file = video(c);
         let mut headers = base_headers();
         headers.insert(
@@ -128,8 +135,8 @@ impl UploadAdapter for YouTube {
             body: serde_json::json!({
                 "snippet": {
                     "title": title,
-                    "description": description(c),
-                    "tags": ["Shadowrunr", "Malakor", "AI character"],
+                    "description": description(c, host),
+                    "tags": ["Shadowrunr", host.name, "AI character"],
                     "categoryId": "24"
                 },
                 "status": {
@@ -154,7 +161,7 @@ impl UploadAdapter for TikTok {
     fn daily_budget(&self) -> Option<u32> {
         None
     }
-    fn request(&self, c: &ClipCandidate) -> DryRequest {
+    fn request(&self, c: &ClipCandidate, host: &ClipHost) -> DryRequest {
         let file = video(c);
         let size = file.as_ref().map_or(0, |(_, b)| *b);
         let mut headers = base_headers();
@@ -165,7 +172,7 @@ impl UploadAdapter for TikTok {
         let mut notes = vec![
             "inbox draft: the video lands in the creator's TikTok inbox and the owner finishes the post in the app, where the AI-generated content label is set".into(),
             "Direct Post (at most 15/day per the digest) needs the platform's API audit first".into(),
-            format!("caption to paste: {}", description(c).replace('\n', " / ")),
+            format!("caption to paste: {}", description(c, host).replace('\n', " / ")),
         ];
         if file.is_none() {
             notes.push(
@@ -202,7 +209,7 @@ impl UploadAdapter for Twitch {
     fn daily_budget(&self) -> Option<u32> {
         None
     }
-    fn request(&self, c: &ClipCandidate) -> DryRequest {
+    fn request(&self, c: &ClipCandidate, _host: &ClipHost) -> DryRequest {
         let mut headers = base_headers();
         headers.insert("Client-Id".into(), NO_CREDENTIAL.into());
         DryRequest {
@@ -286,10 +293,16 @@ pub fn publish_dry_run(
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_default();
     let dir = store.dir(id);
+    // The host the draft was written for (`clip.json`); the neutral host when it has none.
+    let host = std::fs::read_to_string(dir.join("clip.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<ClipInput>(&t).ok())
+        .map(|i| i.host)
+        .unwrap_or_default();
     let mut requests = Vec::new();
     for p in platforms.unwrap_or(&ALL_PLATFORMS) {
         let a = adapter_for(*p);
-        let req = a.request(&c);
+        let req = a.request(&c, &host);
         let rel = format!("requests/{}.json", platform_name(*p));
         write_json(&dir.join(&rel), &req)?;
         let used = budget

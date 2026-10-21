@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import type { CharacterDetail, Situation, TournamentRow } from "@shadowrunr/contract";
 import { useRpc } from "../../data";
 import { pageRoute, RouteLink, useRouter } from "../../router";
+import { transcriptRoute } from "../../router/brain";
 import { Chip, ChipRow, State } from "../../ui/Chip";
 import { FilterTable, type Column, type Facets } from "../../ui/FilterTable";
 import { Head, Section } from "../../ui/Section";
@@ -219,7 +220,7 @@ function Detail({ s, t, tid }: { s: Situation; t: SituationTally | undefined; ti
                       {p !== undefined && (
                         <>
                           {" · "}
-                          <RouteLink to={pageRoute("brain", "transcripts", run, String(p.line))}>line {p.line}</RouteLink>
+                          <RouteLink to={transcriptRoute({ tournamentId: tid, runId: run }, p.line)}>line {p.line}</RouteLink>
                         </>
                       )}
                     </li>

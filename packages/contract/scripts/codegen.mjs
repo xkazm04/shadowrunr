@@ -1,16 +1,22 @@
 // The contract generator: JSON Schema (exported from crates/shadowrunr-types) -> TS types,
 // compiled ajv validators and the method/error metadata. Used by generate.mjs and check.mjs.
 // Output is deterministic: the same schema always yields byte-identical files.
+//
+// Validators are split so a reader pays only for what it reads: validators.js holds the eager
+// ServerFrame + ErrorEnvelope (every /events frame and every error reply), and results/<Def>.js
+// holds one method result's validator, compiled from that def's closure alone and loaded
+// lazily through meta.ts's RESULT_LOADERS.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { join, relative } from "node:path";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import standaloneCode from "ajv/dist/standalone/index.js";
 import { compile } from "json-schema-to-typescript";
 
 export const SCHEMA_FILE = "contract.schema.json";
-export const GENERATED_FILES = ["types.ts", "validators.js", "validators.d.ts", "meta.ts"];
+/** The per-result validator modules, a subfolder of the generated tree. */
+export const RESULTS_DIR = "results";
 const MAX_ERROR_CODES = 10;
 
 const BANNER = [
@@ -76,12 +82,10 @@ function validatorFiles(schema, methods) {
   });
   ajv.addSchema(schema);
   const ref = (name) => `${schema.$id}#/$defs/${name}`;
-  // One validator per def: methods sharing a result type share its validator.
-  const defs = [
-    ...new Set(["ServerFrame", "ErrorEnvelope", ...methods.map((m) => resultDef(schema, m))]),
-  ];
-  const exported = Object.fromEntries(defs.map((d) => [`validate${d}`, ref(d)]));
-  const js = ["// @ts-nocheck", "/* eslint-disable */", BANNER, standaloneCode(ajv, exported), ""];
+  const module = (exported) =>
+    lf(["// @ts-nocheck", "/* eslint-disable */", BANNER, standaloneCode(ajv, exported), ""].join("\n"));
+  const eager = ["ServerFrame", "ErrorEnvelope"];
+  const js = module(Object.fromEntries(eager.map((d) => [`validate${d}`, ref(d)])));
   const dts = [
     BANNER,
     `import type { ErrorObject } from "ajv";`,
@@ -93,10 +97,23 @@ function validatorFiles(schema, methods) {
     `  errors?: ErrorObject[] | null;`,
     `}`,
     ``,
-    ...defs.map((d) => `export declare const validate${d}: ValidateFn<T.${d}>;`),
+    ...eager.map((d) => `export declare const validate${d}: ValidateFn<T.${d}>;`),
     ``,
-  ];
-  return { js: lf(js.join("\n")), dts: dts.join("\n") };
+  ].join("\n");
+  const files = { "validators.js": js, "validators.d.ts": dts };
+  // One module per result def: methods sharing a result type share its module.
+  for (const d of new Set(methods.map((m) => resultDef(schema, m)))) {
+    files[`${RESULTS_DIR}/${d}.js`] = module({ validate: ref(d) });
+    files[`${RESULTS_DIR}/${d}.d.ts`] = [
+      BANNER,
+      `import type * as T from "../types";`,
+      `import type { ValidateFn } from "../validators.js";`,
+      ``,
+      `export declare const validate: ValidateFn<T.${d}>;`,
+      ``,
+    ].join("\n");
+  }
+  return files;
 }
 
 function errorCodes(schema) {
@@ -113,7 +130,6 @@ function metaTs(schema, methods) {
     BANNER,
     `import type { RpcMethods } from "./types";`,
     `import type { ValidateFn } from "./validators.js";`,
-    `import * as v from "./validators.js";`,
     ``,
     `/** Every RPC method, sorted. */`,
     `export const RPC_METHODS = [`,
@@ -129,30 +145,69 @@ function metaTs(schema, methods) {
     ...errorCodes(schema).map((c) => `  ${JSON.stringify(c)},`),
     `] as const;`,
     ``,
-    `/** The result validator of every method. */`,
-    `export const RESULT_VALIDATORS: { readonly [M in RpcMethod]: ValidateFn<RpcResult<M>> } = {`,
-    ...methods.map((m) => `  ${JSON.stringify(m)}: v.validate${resultDef(schema, m)},`),
+    `/** A method's result validator, loaded on first use (one module per result def). */`,
+    `export type ResultLoader<M extends RpcMethod> = () => Promise<ValidateFn<RpcResult<M>>>;`,
+    ``,
+    `/** The result validator loader of every method. */`,
+    `export const RESULT_LOADERS: { readonly [M in RpcMethod]: ResultLoader<M> } = {`,
+    ...methods.map(
+      (m) => `  ${JSON.stringify(m)}: () => import("./${RESULTS_DIR}/${resultDef(schema, m)}.js").then((m) => m.validate),`,
+    ),
     `};`,
     ``,
   ];
   return lines.join("\n");
 }
 
-/** Generate every file from `<schemaDir>/contract.schema.json` into `outDir`. */
+/** Generate every file from `<schemaDir>/contract.schema.json` into `outDir`. The results/
+ * folder is rewritten whole, so a result def that left the schema leaves no module behind. */
 export async function generate(schemaDir, outDir) {
   const schema = JSON.parse(await readFile(join(schemaDir, SCHEMA_FILE), "utf8"));
   const methods = Object.keys(schema.properties);
   if ([...methods].sort().join() !== [...schema.required].sort().join()) {
     throw new Error("schema: every method must be required");
   }
-  const { js, dts } = validatorFiles(schema, methods);
   const files = {
     "types.ts": await typesTs(schema),
-    "validators.js": js,
-    "validators.d.ts": dts,
+    ...validatorFiles(schema, methods),
     "meta.ts": metaTs(schema, methods),
   };
-  await mkdir(outDir, { recursive: true });
-  for (const name of GENERATED_FILES) await writeFile(join(outDir, name), files[name]);
-  return GENERATED_FILES;
+  await rm(join(outDir, RESULTS_DIR), { recursive: true, force: true });
+  await mkdir(join(outDir, RESULTS_DIR), { recursive: true });
+  const names = Object.keys(files).sort();
+  for (const name of names) await writeFile(join(outDir, name), files[name]);
+  return names;
+}
+
+/** Every file under `dir`, as sorted `/`-separated relative paths (empty when `dir` is absent). */
+export async function listTree(dir) {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true }).catch((e) => {
+    if (e.code === "ENOENT") return [];
+    throw e;
+  });
+  return entries
+    .filter((e) => e.isFile())
+    .map((e) => relative(dir, join(e.parentPath, e.name)).replace(/\\/g, "/"))
+    .sort();
+}
+
+const readLf = (p) => readFile(p, "utf8").then(lf);
+
+/** The drift between a committed generated tree and a fresh one, over the WHOLE tree: files
+ * only the fresh tree has (`missing`), files only the committed one has (`extra`), and files
+ * whose content differs (`changed`, line endings ignored). */
+export async function diffTrees(committedDir, freshDir) {
+  const committed = await listTree(committedDir);
+  const fresh = await listTree(freshDir);
+  const have = new Set(committed);
+  const want = new Set(fresh);
+  const changed = [];
+  for (const f of fresh) {
+    if (have.has(f) && (await readLf(join(committedDir, f))) !== (await readLf(join(freshDir, f)))) changed.push(f);
+  }
+  return {
+    missing: fresh.filter((f) => !have.has(f)),
+    extra: committed.filter((f) => !want.has(f)),
+    changed,
+  };
 }

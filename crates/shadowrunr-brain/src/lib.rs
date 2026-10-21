@@ -60,7 +60,7 @@ use shadowrunr_types::{
 
 pub use character::{
     load_character, load_character_with, parse_manifest, validate_character, CharacterPackage,
-    Foil, LineBank, PackageIssue, RankTitles, Situation, SituationBank,
+    Foil, LineBank, PackageIssue, RankTitles, Situation, SituationBank, Stimulus,
 };
 pub use fleet::{FleetMode, FleetProbe};
 pub use memory::{

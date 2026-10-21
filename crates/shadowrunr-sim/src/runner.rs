@@ -127,43 +127,38 @@ pub(crate) fn drop_op_echo(sent: &[Op], evs: Vec<StreamEvent>) -> Vec<StreamEven
         .collect()
 }
 
+/// The record a model op names for the stage: a `show_screen`'s or a `pin_link`'s.
+fn named_record(ev: &StreamEvent) -> Option<&str> {
+    match ev {
+        StreamEvent::Op {
+            op:
+                Op::ShowScreen {
+                    record_id: Some(id),
+                    ..
+                }
+                | Op::PinLink { record_id: id, .. },
+            ..
+        } => Some(id.as_str()),
+        _ => None,
+    }
+}
+
 /// One beat in transcript order: the brain's events, then what the stage made of its ops
 /// (echoes dropped, [`drop_op_echo`]). The brain writes its ops before the stage has seen
-/// them, so a `record_shown` the stage emitted for a record the model's own `show_screen`
-/// names is moved to just before that op: the contract sends a record before the op that
-/// shows it.
+/// them, so a `record_shown` the stage emitted for a record the model's own `show_screen` or
+/// `pin_link` names is moved to just before that op: the contract sends a record before the
+/// op that shows or cites it.
 pub(crate) fn beat_events(brain: Vec<StreamEvent>, stage: Vec<StreamEvent>) -> Vec<StreamEvent> {
-    let named: Vec<&str> = brain
-        .iter()
-        .filter_map(|e| match e {
-            StreamEvent::Op {
-                op:
-                    Op::ShowScreen {
-                        record_id: Some(id),
-                        ..
-                    },
-                ..
-            } => Some(id.as_str()),
-            _ => None,
-        })
-        .collect();
+    let named: Vec<&str> = brain.iter().filter_map(named_record).collect();
     let (mut early, rest): (Vec<StreamEvent>, Vec<StreamEvent>) =
         stage.into_iter().partition(|e| {
             matches!(e, StreamEvent::RecordShown { record, .. } if named.contains(&record.id.as_str()))
         });
     let mut out = Vec::with_capacity(brain.len() + early.len() + rest.len());
     for e in brain {
-        if let StreamEvent::Op {
-            op:
-                Op::ShowScreen {
-                    record_id: Some(id),
-                    ..
-                },
-            ..
-        } = &e
-        {
+        if let Some(id) = named_record(&e) {
             if let Some(i) = early.iter().position(
-                |r| matches!(r, StreamEvent::RecordShown { record, .. } if &record.id == id),
+                |r| matches!(r, StreamEvent::RecordShown { record, .. } if record.id == id),
             ) {
                 out.push(early.remove(i));
             }
@@ -630,6 +625,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         core_tier: spec.core_tier,
         audience_size: spec.audience_size,
         brief: prep.brief.clone(),
+        host_name: Some(prep.persona.name.clone()),
     })?;
     w.push_all(stage.start(0, spec.segment))?;
 
@@ -1405,7 +1401,7 @@ pub(crate) mod tests {
                 StreamEvent::CaseOpen { case, .. },
                 StreamEvent::Op {
                     op: Op::ShowScreen {
-                        screen: shadowrunr_types::ScreenId::Hexmap,
+                        screen: shadowrunr_types::ScreenId::Board,
                         record_id: None,
                         focus: None
                     },
@@ -2348,6 +2344,7 @@ pub(crate) mod tests {
             retrieved: Some("2026-10-19".into()),
             content_hash: Some("ab".repeat(32)),
             via: None,
+            date: None,
         };
         let file = CaseFile {
             case_id: case.id.clone(),
@@ -2779,7 +2776,7 @@ pub(crate) mod tests {
         assert_eq!(record.prep.as_deref(), Some("sample"));
     }
 
-    // ---- the streamer screen (appendix (screens)) --------------------------------------
+    // ---- the streamer screen (appendix (screens and board)) ----------------------------
 
     /// Plays a fixed script: at each listed time it returns those events, as the brain would
     /// (its ops, and the `job` events its pool reports).
@@ -2819,7 +2816,7 @@ pub(crate) mod tests {
         opts.hooks = Hooks::default();
         opts.judge = false;
         opts.tick_s = 5;
-        let mut sp = spec("screens", ModelTier::Haiku, 3, 40);
+        let mut sp = spec("screens", ModelTier::Haiku, 3, 50);
         sp.segment = SegmentId::Seg02aHexmap;
         let out = tmp.path().join("out");
         let prep = prepare(
@@ -2871,11 +2868,11 @@ pub(crate) mod tests {
                 ),
                 // r1 comes back: the runtime opens its first filed record.
                 (15_000, vec![done("r1")]),
-                // He goes back to the map to choose the next hex.
+                // He goes back to the board to choose the next card.
                 (
                     20_000,
                     vec![op(Op::ShowScreen {
-                        screen: ScreenId::Hexmap,
+                        screen: ScreenId::Board,
                         record_id: None,
                         focus: None,
                     })],
@@ -2884,8 +2881,8 @@ pub(crate) mod tests {
                 (25_000, vec![done("r2")]),
                 // r3 comes back 10 s later, past the hold: the browser opens on it.
                 (30_000, vec![done("r3")]),
-                // He puts a record nobody has shown yet on the desk, its map on another hex:
-                // the record goes out before his op, though the brain wrote the op first.
+                // He puts a record nobody has shown yet on the desk, its board on another
+                // card: the record goes out before his op, though the brain wrote the op first.
                 (
                     35_000,
                     vec![op(Op::ShowScreen {
@@ -2893,6 +2890,28 @@ pub(crate) mod tests {
                         record_id: Some("DOC-01".into()),
                         focus: Some("HEX-02".into()),
                     })],
+                ),
+                // He flips the treasury and the mixer, then pins the string between them on a
+                // record that came back with r1 but was never shown: it goes out before his
+                // op too, and the string after it.
+                (
+                    45_000,
+                    vec![
+                        op(Op::RevealHex {
+                            hex: "HEX-04".into(),
+                            grade: shadowrunr_types::EvidenceGrade::Doc,
+                        }),
+                        op(Op::RevealHex {
+                            hex: "HEX-09".into(),
+                            grade: shadowrunr_types::EvidenceGrade::Clm,
+                        }),
+                        op(Op::PinLink {
+                            from: "HEX-04".into(),
+                            to: "HEX-09".into(),
+                            rel: shadowrunr_types::LinkRel::Paid,
+                            record_id: "CLM-02".into(),
+                        }),
+                    ],
                 ),
             ],
         };
@@ -2925,28 +2944,43 @@ pub(crate) mod tests {
                     Some(format!("{ts_ms} record_shown {}", record.id))
                 }
                 StreamEvent::Job { ts_ms, job_id, .. } => Some(format!("{ts_ms} job {job_id}")),
+                StreamEvent::Op {
+                    ts_ms,
+                    op: Op::PinLink { record_id, .. },
+                } => Some(format!("{ts_ms} pin_link {record_id}")),
+                StreamEvent::LinkPinned {
+                    ts_ms, record_id, ..
+                } => Some(format!("{ts_ms} link_pinned {record_id}")),
                 _ => None,
             })
             .collect();
         assert_eq!(
             screen,
             [
-                "0 show_screen hexmap",
-                // Each dispatch zooms the map to where the minions are going.
-                "5000 show_screen hexmap @HEX-04",
-                "5000 show_screen hexmap @HEX-01",
-                "5000 show_screen hexmap @HEX-05",
+                "0 show_screen board",
+                // Each dispatch zooms the board to where the minions are going.
+                "5000 show_screen board @HEX-04",
+                "5000 show_screen board @HEX-01",
+                "5000 show_screen board @HEX-05",
                 "10000 show_screen browser DOC-01",
                 "15000 job r1",
                 "15000 record_shown DOC-03",
                 "15000 show_screen browser DOC-03",
-                "20000 show_screen hexmap",
+                "20000 show_screen board",
                 "25000 job r2",
                 "30000 job r3",
                 "30000 record_shown REP-02",
                 "30000 show_screen browser REP-02",
                 "35000 record_shown DOC-01",
                 "35000 show_screen desk DOC-01 @HEX-02",
+                // The brain writes the beat's ops first: the record moves before the pin
+                // that cites it, then each flip zooms the board to its card (past his hold),
+                // then the string goes up.
+                "45000 record_shown CLM-02",
+                "45000 pin_link CLM-02",
+                "45000 show_screen board @HEX-04",
+                "45000 show_screen board @HEX-09",
+                "45000 link_pinned CLM-02",
             ]
         );
         let refused: Vec<(TsMs, &str)> = events

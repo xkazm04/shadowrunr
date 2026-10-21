@@ -8,8 +8,8 @@
 //!   line whose audio cannot start within `max_lag_ms` of its `say` is `skipped`, and a slow
 //!   client loses frames, never the service.
 //! - `GET /avatar/{file}` (`avatar`): the face rig the stage draws (`layers.json` plus its
-//!   PNGs) from `<data>/avatar/rig/`; 404 when there is none, and the stage draws its bundled
-//!   placeholder.
+//!   PNGs) from `<data>/characters/<id>/avatar/rig/` for the character on air, else the shared
+//!   `<data>/avatar/rig/`; 404 when there is none, and the stage draws its bundled placeholder.
 //! - `<run dir>/voice.jsonl` (`log`): what the voice rendered and skipped, and what the stage
 //!   reported playing, on the session's stream clock.
 //! - `shadowrunr voice check|say|replay` (`cli`, with `probe` and `replay`).
@@ -118,7 +118,8 @@ fn resolve(root: &Path, p: &str) -> String {
     }
 }
 
-/// `<data>/avatar/rig`: where `/avatar/{file}` serves from.
+/// `<data>/avatar/rig`: the shared rig `/avatar/{file}` falls back to when the character on
+/// air has none of its own (`crate::character::rig_dir`).
 pub fn rig_dir(data: &Path) -> PathBuf {
     data.join("avatar").join("rig")
 }

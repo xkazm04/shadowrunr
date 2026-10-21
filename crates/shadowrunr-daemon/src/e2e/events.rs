@@ -210,7 +210,9 @@ async fn live_sim_events_arrive_before_the_engine_answers() {
     assert_eq!(started["result"]["run_id"], "gated-1", "{started}");
 
     let mut ws = subscribe(&addr, json!({ "subscribe": "gated-1", "since": 0 })).await;
-    let head = read_until(&mut ws, 2, |v| {
+    // The gate, not the clock, is the claim: the engine is held until the frames are read, so
+    // the deadline only bounds a failure (2 s timed out under a loaded workspace test run).
+    let head = read_until(&mut ws, 20, |v| {
         v["event"]["type"] == "segment_start" || is_end(v)
     })
     .await;

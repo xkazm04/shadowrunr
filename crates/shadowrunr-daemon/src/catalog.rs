@@ -16,6 +16,7 @@ use shadowrunr_segments::table::{
 };
 use shadowrunr_segments::{HandoverRule, RankTable, SegmentTable};
 use shadowrunr_types::catalog::*;
+use shadowrunr_types::character::{CharacterManifest, TUNING_DEFAULTS};
 
 use crate::config::Config;
 use crate::rpc::RpcError;
@@ -210,22 +211,6 @@ fn package_files(dir: &Path) -> Vec<PackageFile> {
     out
 }
 
-#[derive(Deserialize)]
-struct SituationsFile {
-    #[serde(default)]
-    situations: Vec<Situation>,
-}
-
-fn situations(dir: &Path) -> Result<Vec<Situation>, RpcError> {
-    let path = dir.join("situations.json");
-    if !path.is_file() {
-        return Ok(Vec::new());
-    }
-    let file: SituationsFile = serde_json::from_str(&read_text(&path)?)
-        .map_err(|e| RpcError::io(format!("{}: {e}", path.display())))?;
-    Ok(file.situations)
-}
-
 fn summary(cfg: &Config, id: &str) -> Result<CharacterSummary, RpcError> {
     let pkg = load(cfg, id)?;
     let tones = tone_ids(&pkg.dir);
@@ -242,14 +227,16 @@ fn summary(cfg: &Config, id: &str) -> Result<CharacterSummary, RpcError> {
     })
 }
 
-/// `character.list`: every package under `<characters>/`, sorted by id. A package that does
-/// not load is left out and reported on stderr (`character.get` names its error).
+/// `character.list`: every package under `<characters>/` (except `_`-prefixed scaffolds),
+/// sorted by id. A package that does not load is left out and reported on stderr (`character.get` names its error).
 pub fn character_list(cfg: &Config) -> Vec<CharacterSummary> {
     let mut ids: Vec<String> = std::fs::read_dir(&cfg.paths.characters)
         .map(|rd| {
             rd.filter_map(Result::ok)
                 .filter(|e| e.path().join("character.toml").is_file())
                 .filter_map(|e| e.file_name().to_str().map(String::from))
+                // `_template` and its like are scaffolds for `character new`, not characters.
+                .filter(|id| !id.starts_with('_'))
                 .collect()
         })
         .unwrap_or_default();
@@ -302,9 +289,24 @@ pub fn character_get(cfg: &Config, id: &str) -> Result<CharacterDetail, RpcError
         .map(|r| (*r, pkg.rank_titles.title(*r)))
         .collect();
     let tone_list: Vec<String> = tones.iter().map(|t| t.id.clone()).collect();
+    let m = &pkg.manifest;
+    let rank_overrides = (!m.ranks.weights.is_empty()
+        || !m.ranks.thresholds.is_empty()
+        || m.ranks.propose_min_rank.is_some())
+    .then(|| RankOverrides {
+        weights: m.ranks.weights.clone(),
+        thresholds: m.ranks.thresholds.clone(),
+        propose_min_rank: m.ranks.propose_min_rank,
+    });
     Ok(CharacterDetail {
+        identity: m.identity.clone(),
+        voice: m.voice.clone(),
+        avatar: m.avatar.clone(),
+        rank_overrides,
+        tuning: tuning_rows(m),
+        segment_flavour: m.segments.clone(),
         files: package_files(&pkg.dir),
-        situations: situations(&pkg.dir)?,
+        situations: pkg.situations.situations,
         tagline: tagline(&pkg.dir),
         active_tone: active_tone(cfg, &pkg.id, &pkg.default_tone, &tone_list),
         id: pkg.id,
@@ -317,6 +319,34 @@ pub fn character_get(cfg: &Config, id: &str) -> Result<CharacterDetail, RpcError
         rules,
         rank_titles,
     })
+}
+
+/// Every tuning key in table order: the package's entry over the engine default.
+pub fn tuning_rows(m: &CharacterManifest) -> Vec<TuningRow> {
+    let set = m.tuning.entries();
+    TUNING_DEFAULTS
+        .iter()
+        .map(|d| match set.iter().find(|(k, _)| *k == d.key) {
+            Some((_, e)) => TuningRow {
+                key: d.key.to_string(),
+                value: e.value,
+                default: d.value,
+                set: true,
+                provenance: e.provenance,
+                source: e.source.clone(),
+                doc: d.doc.trim().to_string(),
+            },
+            None => TuningRow {
+                key: d.key.to_string(),
+                value: d.value,
+                default: d.value,
+                set: false,
+                provenance: d.provenance,
+                source: d.source.map(str::to_string),
+                doc: d.doc.trim().to_string(),
+            },
+        })
+        .collect()
 }
 
 fn trigger_name(t: Trigger) -> &'static str {
@@ -505,14 +535,17 @@ pub fn segment_tables(cfg: &Config) -> Result<SegmentTables, RpcError> {
     })
 }
 
-/// `ranks.table`: `<segments>/ranks.toml` (the built-in copy when absent) with the titles of
-/// `character` (default: `[sim] character`).
+/// `ranks.table`: `<segments>/ranks.toml` (the built-in copy when absent) with the `[ranks]`
+/// overrides and titles of `character` (default: `[sim] character`): the ladder its streams
+/// run.
 pub fn rank_table(cfg: &Config, character: Option<&str>) -> Result<RankTableInfo, RpcError> {
     let character = character.unwrap_or(&cfg.sim.character);
     let pkg = load(cfg, character)?;
     let path = cfg.paths.segments.join("ranks.toml");
     let table = RankTable::load_or_builtin(&path)
-        .map_err(|e| RpcError::io(format!("{}: {e}", path.display())))?;
+        .map_err(|e| RpcError::io(format!("{}: {e}", path.display())))?
+        .with_overrides(&pkg.manifest.ranks)
+        .map_err(|e| RpcError::io(format!("character {character} [ranks]: {e}")))?;
     Ok(RankTableInfo {
         character: pkg.id.clone(),
         propose_min_rank: table.propose_min_rank,

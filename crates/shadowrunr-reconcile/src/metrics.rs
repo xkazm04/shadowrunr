@@ -6,16 +6,13 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use serde_json::Value;
 use shadowrunr_types::{CheckState, Rank, Role, SegmentId, Speaker, StreamEvent, TsMs};
 
+use crate::cells;
 use crate::runs::{ts, wire, RunData};
 use crate::stats::{percentile, rate};
 use crate::types::{
     DirectiveOutcome, HandoverTiming, IncidentSource, LatencyStats, Metrics, RankEngagement,
-    RankRow, RoleLatency, RuleFailure, RuleIncident, RunSummary, SegmentMetrics, ToneFinding,
+    RankRow, RoleLatency, RuleIncident, RunSummary, SegmentMetrics, ToneFinding,
 };
-
-/// Judge checks a brief adds (`directive:prevent:<id>`, `directive:try:<id>`): reported as
-/// directive outcomes, never as red-line incidents.
-const DIRECTIVE_CHECK_PREFIX: &str = "directive:";
 
 /// Per-directive outcomes over the runs' verdicts (WP15): held rates for prevent directives,
 /// attempted rates for try directives, each with n and its bound. The aggregation is the
@@ -74,7 +71,7 @@ struct SegAcc {
     ms: i64,
     chat: u32,
     answered: u32,
-    malakor: u32,
+    host: u32,
     ops: u32,
     moderation: u32,
     polls: u32,
@@ -215,7 +212,7 @@ fn segments(runs: &[RunData]) -> Vec<SegmentMetrics> {
                 StreamEvent::Say {
                     speaker: Speaker::Host,
                     ..
-                } => a.malakor += 1,
+                } => a.host += 1,
                 StreamEvent::Op { .. } => a.ops += 1,
                 StreamEvent::Moderation { .. } => a.moderation += 1,
                 _ => {}
@@ -245,8 +242,8 @@ fn segments(runs: &[RunData]) -> Vec<SegmentMetrics> {
                 minutes,
                 chat_msgs: a.chat,
                 chat_per_min: per_min(a.chat),
-                malakor_lines: a.malakor,
-                malakor_lines_per_min: per_min(a.malakor),
+                host_lines: a.host,
+                host_lines_per_min: per_min(a.host),
                 answered: rate(a.answered, a.chat),
                 ops: a.ops,
                 moderation_events: a.moderation,
@@ -264,67 +261,27 @@ fn mean(v: &[f64]) -> Option<f64> {
     (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64)
 }
 
+/// One finding per tone x instrument hash, from the shared tally (directive checks are
+/// directive outcomes, not tone findings).
 fn tones(runs: &[RunData]) -> Vec<ToneFinding> {
-    type Key = (String, Option<String>);
-    #[derive(Default)]
-    struct Cell {
-        runs: u32,
-        quality: BTreeMap<String, (u32, u32)>,
-        rules: BTreeMap<String, (u32, u32, Vec<String>)>,
-    }
-    let mut cells: BTreeMap<Key, Cell> = BTreeMap::new();
-    for run in runs {
-        let Some(verdict) = &run.verdict else {
-            continue;
-        };
+    let mut by: BTreeMap<(String, Option<String>), Vec<&RunData>> = BTreeMap::new();
+    for run in runs.iter().filter(|r| r.verdict.is_some()) {
         let key = (
             run.tone_variant().unwrap_or_else(|| "unknown".into()),
             run.instrument_hash.clone(),
         );
-        let cell = cells.entry(key).or_default();
-        cell.runs += 1;
-        for q in &verdict.quality {
-            let e = cell.quality.entry(q.dimension.clone()).or_default();
-            e.1 += 1;
-            if q.value {
-                e.0 += 1;
-            }
-        }
-        for r in &verdict.rules {
-            let e = cell.rules.entry(r.rule.clone()).or_default();
-            match r.state {
-                CheckState::Fail => {
-                    e.0 += 1;
-                    e.1 += 1;
-                    e.2.extend(r.evidence.iter().cloned());
-                }
-                CheckState::Pass => e.1 += 1,
-                CheckState::NotProvoked | CheckState::NotEvaluable => {}
-            }
-        }
+        by.entry(key).or_default().push(run);
     }
-    cells
-        .into_iter()
-        .map(|((tone_variant, instrument_hash), c)| ToneFinding {
-            tone_variant,
-            quality_rates: c
-                .quality
-                .into_iter()
-                .filter_map(|(d, (k, n))| rate(k, n).map(|r| (d, r)))
-                .collect(),
-            rule_failures: c
-                .rules
-                .into_iter()
-                .filter(|(_, (fails, _, _))| *fails > 0)
-                .map(|(rule, (fails, n, refs))| RuleFailure {
-                    rule,
-                    fails,
-                    n,
-                    refs,
-                })
-                .collect(),
-            instrument_hash,
-            runs: c.runs,
+    by.into_iter()
+        .map(|((tone_variant, instrument_hash), runs)| {
+            let t = cells::tally(runs);
+            ToneFinding {
+                tone_variant,
+                quality_rates: t.quality_rates(),
+                rule_failures: t.rule_failures(),
+                instrument_hash,
+                runs: t.runs,
+            }
         })
         .collect()
 }
@@ -377,12 +334,8 @@ fn red_lines(runs: &[RunData]) -> Vec<RuleIncident> {
     let mut out = Vec::new();
     for run in runs {
         if let Some(v) = &run.verdict {
-            for r in v
-                .rules
-                .iter()
-                .filter(|r| r.state == CheckState::Fail)
-                .filter(|r| !r.rule.starts_with(DIRECTIVE_CHECK_PREFIX))
-            {
+            // Directive checks are directive outcomes, never red-line incidents.
+            for r in cells::hard_rules(v).filter(|r| r.state == CheckState::Fail) {
                 out.push(RuleIncident {
                     run_id: run.run_id.clone(),
                     rule: r.rule.clone(),
@@ -612,6 +565,7 @@ mod directive_tests {
                 data_dir: tmp.path().join("data"),
                 runs_root: tmp.path().to_path_buf(),
                 characters_root: None,
+                persona: Default::default(),
             },
             Arc::new(shadowrunr_engine::ScriptedEngine),
             Arc::new(|| 1_000),
@@ -627,5 +581,49 @@ mod directive_tests {
         }
         // Nothing about directives when no run carried one.
         assert_eq!(directive_summary(&[]), None);
+    }
+
+    /// Co-published numbers reconcile: directive checks are directive outcomes, so they are
+    /// in neither the tone table's rule failures nor its quality rates (red lines already
+    /// excluded them).
+    #[test]
+    fn tone_findings_carry_no_directive_checks() {
+        let tmp = tempfile::tempdir().unwrap();
+        briefed_tournament(tmp.path());
+        let src = Source::Tournament {
+            tournament_id: "t-brief".into(),
+        };
+        let runs = load_source(tmp.path(), &src).unwrap();
+        let m = analyze(&runs);
+        assert!(!m.tones.is_empty());
+        for t in &m.tones {
+            for r in &t.rule_failures {
+                assert!(!r.rule.starts_with("directive:"), "{}", r.rule);
+            }
+            for k in t.quality_rates.keys() {
+                assert!(!k.starts_with("directive:"), "{k}");
+            }
+        }
+    }
+
+    /// The summary sentence's hard-rule failure count and the tone table agree.
+    #[test]
+    fn summary_hard_rule_count_matches_the_tone_table() {
+        let tmp = tempfile::tempdir().unwrap();
+        briefed_tournament(tmp.path());
+        let src = Source::Tournament {
+            tournament_id: "t-brief".into(),
+        };
+        let runs = load_source(tmp.path(), &src).unwrap();
+        let m = analyze(&runs);
+        let table: u32 = m
+            .tones
+            .iter()
+            .flat_map(|t| t.rule_failures.iter())
+            .map(|r| r.fails)
+            .sum();
+        let summary = crate::deterministic_summary(&m);
+        assert!(summary.contains("Hard-rule failures: 0;"), "{summary}");
+        assert_eq!(table, 0);
     }
 }

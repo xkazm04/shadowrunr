@@ -1185,6 +1185,7 @@ pub fn assemble(
                 retrieved: Some(page.retrieved.clone()),
                 content_hash: Some(page.content_hash.clone()),
                 via: page.via.clone(),
+                date: None,
             });
         }
     }

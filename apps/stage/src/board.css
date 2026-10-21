@@ -1,0 +1,307 @@
+/* The evidence board (stage-kit `EvidenceBoard`): paper cards pinned on dark cork, face down until
+   flipped, strings between them, the acts as regions, the thesis band on top and the timeline
+   strip along the bottom. Colours are the token variables only; sizes are canvas pixels, like
+   the rest of the stage. */
+
+.region-board {
+  z-index: 1;
+}
+
+.layout-desk .region-board {
+  filter: brightness(0.82);
+}
+
+.board {
+  padding: 0;
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--sr-color-text-mute-on-dark) 7%, transparent) 1px, transparent 1.6px) 0 0 / 14px 14px,
+    radial-gradient(ellipse at 50% 40%, var(--sr-color-screen-set-near), var(--sr-color-scrim) 80%);
+}
+
+/* ─── The zoomed layer: regions, cards and strings move together ───────────────────────────── */
+
+.board-zoom {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  transition: transform 0.9s var(--move);
+}
+
+.board-act {
+  position: absolute;
+  border: 1px dashed color-mix(in srgb, var(--sr-color-text-mute-on-dark) 20%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sr-color-screen-set-far) 45%, transparent);
+  transition:
+    border-color 0.8s,
+    background 0.8s,
+    box-shadow 0.8s;
+}
+
+.board-act.lit {
+  border: 1px solid color-mix(in srgb, var(--sr-color-foil) 60%, transparent);
+  background: color-mix(in srgb, var(--sr-color-foil) 7%, transparent);
+  box-shadow: inset 0 0 40px color-mix(in srgb, var(--sr-color-foil) 10%, transparent);
+}
+
+.board-act-name {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 6px;
+  overflow: hidden;
+  font-family: var(--display);
+  font-size: calc(13px * var(--act-s, 1));
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--sr-color-text-mute-on-dark);
+}
+
+.board-act-name b {
+  margin-right: 6px;
+  color: color-mix(in srgb, var(--sr-color-text-mute-on-dark) 55%, transparent);
+}
+
+.board-act.lit .board-act-name,
+.board-act.lit .board-act-name b {
+  color: var(--sr-color-foil);
+}
+
+/* ─── Cards ─────────────────────────────────────────────────────────────────────────────────── */
+
+.board-card {
+  position: absolute;
+  transform-origin: 0 0;
+  transition: opacity 0.9s var(--move);
+}
+
+.card-back,
+.card-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  backface-visibility: hidden;
+}
+
+.card-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--sr-color-text-mute-on-dark) 22%, transparent);
+  background:
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--sr-color-text-mute-on-dark) 5%, transparent) 0 6px, transparent 6px 12px),
+    var(--sr-color-screen-hex);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--sr-color-mask-ink) 45%, transparent);
+}
+
+.card-back .card-id {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--sr-color-text-mute-on-dark);
+}
+
+.card-fog {
+  font-family: var(--display);
+  font-size: 46px;
+  color: color-mix(in srgb, var(--sr-color-text-mute-on-dark) 40%, transparent);
+  animation: card-fog 6s ease-in-out infinite;
+}
+
+@keyframes card-fog {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.card-face {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px 9px;
+  border-top: 6px solid var(--grade);
+  background: var(--sr-color-surface-card);
+  color: var(--sr-color-text-ink);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--sr-color-mask-ink) 55%, transparent);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 22px;
+}
+
+.card-glyph {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--sr-color-text-ink);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.card-role {
+  flex: 1;
+  overflow: hidden;
+  font-family: var(--ui);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--sr-color-text-mute);
+}
+
+.card-face .card-id {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--sr-color-text-mute);
+}
+
+.card-label {
+  display: -webkit-box;
+  margin-top: 6px;
+  overflow: hidden;
+  font-family: var(--ui);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.12;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+}
+
+.card-date {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--sr-color-text-mute);
+}
+
+.card-grade {
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: var(--grade);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sr-color-text-ink);
+}
+
+/* ALLEGED sits in the foot, beside the grade it qualifies, never over the label. */
+.card-alleged {
+  margin: 0 6px 0 auto;
+  padding: 0 5px;
+  border: 1.5px solid var(--sr-color-signal-deep);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--sr-color-signal-deep);
+  transform: rotate(-4deg);
+}
+
+.card-pin {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: -5px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--sr-color-surface-paper), var(--sr-color-foil) 45%, var(--sr-color-signal-deep));
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--sr-color-mask-ink) 60%, transparent);
+}
+
+.board-card.latest .card-face {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--grade) 80%, transparent),
+    0 0 22px color-mix(in srgb, var(--grade) 45%, transparent);
+}
+
+.board-card.in-focus .card-face,
+.board-card.in-focus .card-back {
+  box-shadow:
+    0 0 0 3px var(--sr-color-foil),
+    0 0 26px color-mix(in srgb, var(--sr-color-foil) 50%, transparent);
+}
+
+.board-card.on-record .card-face {
+  animation: record-pulse 2.4s ease-in-out infinite;
+}
+
+.board-card.hinted .card-back {
+  border: 2px dashed var(--sr-color-foil);
+}
+
+.card-hint {
+  position: absolute;
+  right: -8px;
+  top: -8px;
+  min-width: 26px;
+  height: 26px;
+  border: 2px solid var(--sr-color-foil);
+  border-radius: 13px;
+  background: var(--sr-color-scrim);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 22px;
+  text-align: center;
+  color: var(--sr-color-foil);
+}
+
+.board-card.dimmed {
+  opacity: 0.24;
+}
+
+.board-card.under {
+  opacity: 0;
+}
+
+/* The flip: the back turns away, then the face turns in. */
+.board-card.flipping .card-back {
+  animation: card-flip-out 0.55s ease-in both;
+}
+
+.board-card.flipping .card-face {
+  animation: card-flip-in 0.6s 0.5s var(--move) both;
+}
+
+.board-card.flipping .card-alleged {
+  animation: card-stamp 0.45s 1.05s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+@keyframes card-flip-out {
+  to {
+    transform: perspective(700px) rotateY(90deg);
+  }
+}
+
+@keyframes card-flip-in {
+  from {
+    transform: perspective(700px) rotateY(-90deg);
+  }
+}
+
+@keyframes card-stamp {
+  from {
+    opacity: 0;
+    transform: rotate(-4deg) scale(1.8);
+  }
+}

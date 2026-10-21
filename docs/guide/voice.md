@@ -441,7 +441,7 @@ fails is logged once on stderr. To line the log up with a recording, see `record
 
 ### The face rig
 
-`GET /avatar/{file}` serves `<data>/avatar/rig/<file>`. The name must be one segment of
+`GET /avatar/{file}` serves the rig of the character on air: `<data>/characters/<id>/avatar/rig/<file>`, else the shared `<data>/avatar/rig/<file>` (see `characters.md`). The name must be one segment of
 `[A-Za-z0-9._-]` with no `..`, and end in `.json`, `.png` or `.webp`. Anything else, or a file
 that is not there, is 404, and the stage draws its placeholder. Responses carry
 `cache-control: no-cache`, so a re-split rig shows on the next load.

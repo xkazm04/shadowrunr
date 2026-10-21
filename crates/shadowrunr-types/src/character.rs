@@ -121,7 +121,7 @@ pub struct Noun {
     pub many: String,
 }
 
-/// `[voice]`: schema only in this version (the daemon still reads its own `[voice]`).
+/// `[voice]`: each present field overrides the daemon's `[voice]` for this character.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CharacterVoice {
@@ -136,7 +136,7 @@ pub struct CharacterVoice {
     pub speed: Option<f64>,
 }
 
-/// `[avatar]`: schema only in this version (the daemon still reads its own rig path).
+/// `[avatar]`: the character's face; its rig lives at `<data>/characters/<id>/avatar/rig/`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CharacterAvatar {

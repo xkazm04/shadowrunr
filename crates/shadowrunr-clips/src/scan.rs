@@ -20,14 +20,15 @@ use std::sync::Arc;
 use regex::Regex;
 use shadowrunr_brain::moderation::Policy;
 use shadowrunr_types::clips::{
-    ClipAct, ClipCandidate, ClipCaption, ClipEvidence, ClipHex, ClipLane, ClipMarker,
-    ClipRecording, ClipScanReport, ClipScanRun, ClipScoring, ClipSignals, ClipSource, ClipStatus,
-    ClipTransition, ClipWeights, ClipWindow,
+    ClipCandidate, ClipCaption, ClipEvidence, ClipHex, ClipLane, ClipMarker, ClipRecording,
+    ClipScanReport, ClipScanRun, ClipScoring, ClipSignals, ClipSource, ClipStatus, ClipTransition,
+    ClipWeights, ClipWindow,
 };
 use shadowrunr_types::{Engine, EvidenceGrade, Op, SegmentId, StreamEvent};
 
 use crate::footage;
 use crate::hook::{self, HookWindow};
+use crate::host::ClipHost;
 use crate::render::{self, header_for, ClipInput, DISCLOSURE};
 use crate::signals::{self, kind_weight, Crowd};
 use crate::store::{self, ClipStore};
@@ -56,6 +57,9 @@ pub struct RunInput {
     pub dir: PathBuf,
     /// The transcript path as recorded on candidates (relative to the runs root).
     pub transcript_label: String,
+    /// Who the run's host is (its character's persona): captions, the hook read and the
+    /// draft's `clip.json` name them.
+    pub host: ClipHost,
 }
 
 #[derive(Clone)]
@@ -293,8 +297,8 @@ fn evidence(stream: &Stream, cut: &Cut, anchor_ts: i64) -> Option<ClipEvidence> 
 }
 
 /// The scene events of the cut on the clip clock: the state before it (case, segment,
-/// revealed hexes, the foil on stage, the screen up and the records shown) at 0, then the
-/// window's ops and votes. Never chat or
+/// revealed hexes, the foil on stage, the screen up, the records shown and the strings pinned)
+/// at 0, then the window's ops, strings and votes. Never chat or
 /// lines: captions carry the lines, and handles stay in the room.
 fn clip_events(stream: &Stream, cut: &Cut, re: Option<&Regex>) -> Vec<StreamEvent> {
     let first_ev = stream.lines[cut.first].event;
@@ -311,12 +315,14 @@ fn clip_events(stream: &Stream, cut: &Cut, re: Option<&Regex>) -> Vec<StreamEven
             (stream.spoken_at[i] - cut.spoken_start).clamp(0, cut.duration_ms())
         };
         let keep = match ev {
-            // The screen up when the cut starts, and every record it may open (records are
-            // staged case data, never chat, so they are not redacted).
+            // The screen up when the cut starts, every record it may open (records are staged
+            // case data, never chat, so they are not redacted), and the board's strings: the
+            // ones pinned before the cut stand at 0, the cut's own are drawn in.
             StreamEvent::SegmentStart { .. }
             | StreamEvent::Handover { .. }
             | StreamEvent::CaseOpen { .. }
-            | StreamEvent::RecordShown { .. } => true,
+            | StreamEvent::RecordShown { .. }
+            | StreamEvent::LinkPinned { .. } => true,
             StreamEvent::Op { op, .. } => match op {
                 Op::RevealHex { .. }
                 | Op::SummonFoil { .. }
@@ -380,9 +386,11 @@ fn overlaps(a: &Cut, b: &Cut) -> bool {
 
 /// Score, cut and rank one stream. Returns the kept cuts best first, plus the markers and
 /// the hook outcome.
+#[allow(clippy::too_many_arguments)]
 async fn rank(
     stream: &Stream,
     run_id: &str,
+    host: &ClipHost,
     engine: Option<&dyn Engine>,
     opts: &ScanOptions,
     re: Option<&Regex>,
@@ -456,7 +464,7 @@ async fn rank(
                     .collect(),
             })
             .collect();
-        match hook::read(engine, run_id, &windows).await {
+        match hook::read(engine, run_id, &windows, host).await {
             Ok(scores) => {
                 for (k, p) in picked.iter_mut().enumerate() {
                     if let Some(s) = scores.get(&format!("w{}", k + 1)) {
@@ -667,6 +675,7 @@ fn candidate(
             None
         },
         disclosure: DISCLOSURE.into(),
+        host: input.host.clone(),
         provenance: format!(
             "{} · stream {}-{}",
             input.run_id,
@@ -785,8 +794,16 @@ pub async fn scan(
         let recording = footage::read_recording(&input.dir);
         let audio = audio_context(recording.as_ref(), opts.ffmpeg.as_deref());
         let re = redactor(&stream.viewer_names);
-        let (kept, markers, hook_state) =
-            rank(&stream, &input.run_id, engine, opts, re.as_ref(), &audio).await;
+        let (kept, markers, hook_state) = rank(
+            &stream,
+            &input.run_id,
+            &input.host,
+            engine,
+            opts,
+            re.as_ref(),
+            &audio,
+        )
+        .await;
         let run = RunCtx {
             input,
             recording: recording.as_ref(),
@@ -891,40 +908,12 @@ pub async fn scan(
 }
 
 /// Re-render a stored candidate (`clips render`): refused once the owner has approved,
-/// rejected or published it; re-gated afterwards.
+/// rejected or published it; re-gated afterwards. The store lock is held only to snapshot and
+/// to commit, never across the render ([`crate::job`]); a failed render keeps the previous one.
 pub fn rerender(
     store: &ClipStore,
     id: &str,
     tools: Option<&render::RenderTools>,
 ) -> Result<ClipCandidate> {
-    let _lock = store.lock()?;
-    let mut c = store.load(id)?;
-    store::refuse_blocked(&c, ClipAct::Render)?;
-    let r = render::render(&store.dir(id), &c, tools)?;
-    let note = match &r.fallback_reason {
-        Some(why) => format!("poster frame only: {why}"),
-        None => format!("video {:.1} s, {}x{}", r.duration_s, r.width, r.height),
-    };
-    c.history.push(ClipTransition {
-        status: ClipStatus::RenderedDraft,
-        at_ms: r.rendered_ms,
-        by: "render".into(),
-        note: Some(note),
-    });
-    c.render = Some(r);
-    let exclusions = stored_exclusions(&c);
-    regate(store, &mut c, exclusions);
-    c.status = ClipStatus::PendingOwnerGate;
-    c.history.push(ClipTransition {
-        status: ClipStatus::PendingOwnerGate,
-        at_ms: c.gate.evaluated_ms,
-        by: "gate".into(),
-        note: Some(if c.gate.held {
-            format!("held: {}", c.gate.hold_reasons.len())
-        } else {
-            "every check passed; waits for the owner's signature".into()
-        }),
-    });
-    store.save(&c)?;
-    Ok(c.with_acts())
+    crate::job::rerender_with(store, id, &crate::job::ToolRenderer(tools))
 }

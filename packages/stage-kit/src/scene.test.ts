@@ -36,10 +36,10 @@ const op = (ts: number, o: Extract<StreamEvent, { type: "op" }>["op"]): StreamEv
 describe("layouts and segments", () => {
   it("opens each segment on its default screen", () => {
     expect(defaultScreen("SEG-01")).toBe("host");
-    expect(defaultScreen("SEG-02A")).toBe("hexmap");
+    expect(defaultScreen("SEG-02A")).toBe("board");
     expect(defaultScreen("SEG-02B-I")).toBe("host");
-    const all: LayoutId[] = ["boot", "host", "hexmap", "browser", "desk"];
-    expect(all.filter(isContentScreen)).toEqual(["hexmap", "browser", "desk"]);
+    const all: LayoutId[] = ["boot", "host", "board", "hexmap", "browser", "desk"];
+    expect(all.filter(isContentScreen)).toEqual(["board", "hexmap", "browser", "desk"]);
   });
 
   it("starts in boot, switches on segment_start, and animates a handover", () => {
@@ -47,6 +47,8 @@ describe("layouts and segments", () => {
     expect(s.layout).toBe("boot");
     s = reduce(s, { type: "stream_start", ts_ms: 0, stream_id: "s", character: "malakor", tone_variant: "theatrical", core_tier: "haiku", audience_size: 3 });
     expect(s.meta?.audienceSize).toBe(3);
+    expect(s.meta?.hostName).toBeUndefined();
+    expect(reduce(initialScene(), { type: "stream_start", ts_ms: 0, stream_id: "s", character: "keeper", tone_variant: "calm", core_tier: "haiku", audience_size: 3, host_name: "Odile" }).meta?.hostName).toBe("Odile");
     s = reduce(s, { type: "segment_start", ts_ms: 100, segment: "SEG-01" });
     expect(s.layout).toBe("host");
     expect(s.screen).toBe("host");
@@ -56,11 +58,11 @@ describe("layouts and segments", () => {
     s = reduce(s, { type: "segment_end", ts_ms: 300, segment: "SEG-01", ses: 0.5 });
     expect(s.seals).toEqual([{ segment: "SEG-01", ses: 0.5, at: 300 }]);
     s = reduce(s, { type: "handover", ts_ms: 400, from: "SEG-01", to: "SEG-02A", reason: "dare" });
-    expect(s.layout).toBe("hexmap");
+    expect(s.layout).toBe("board");
     expect(s.segment).toBe("SEG-02A");
     expect(s.pendingSwitch).toBeNull();
     const handoverTransition = s.transition;
-    expect(handoverTransition).toMatchObject({ from: "host", to: "hexmap", cause: "handover", segment: "SEG-02A", reason: "dare" });
+    expect(handoverTransition).toMatchObject({ from: "host", to: "board", cause: "handover", segment: "SEG-02A", reason: "dare" });
     // The segment_start that follows a handover does not trigger a second transition.
     s = reduce(s, { type: "segment_start", ts_ms: 500, segment: "SEG-02A" });
     expect(s.transition).toBe(handoverTransition);
@@ -96,16 +98,16 @@ describe("screens", () => {
   it("keeps boot before the first segment and opens each segment on its default screen", () => {
     expect(initialScene()).toMatchObject({ layout: "boot", screen: "host", records: {}, tabs: [], activeRecord: null, pendingScreen: null });
     expect(foldEvents(seg02a, 0)).toMatchObject({ layout: "host", screen: "host" });
-    expect(foldEvents(seg02a)).toMatchObject({ layout: "hexmap", screen: "hexmap" });
-    // A transcript that starts in SEG-02A (no handover) still gets the hexmap.
-    expect(foldEvents([{ type: "segment_start", ts_ms: 0, segment: "SEG-02A" }]).layout).toBe("hexmap");
+    expect(foldEvents(seg02a)).toMatchObject({ layout: "board", screen: "board" });
+    // A transcript that starts in SEG-02A (no handover) still gets the board.
+    expect(foldEvents([{ type: "segment_start", ts_ms: 0, segment: "SEG-02A" }]).layout).toBe("board");
   });
 
   it("opens a record in the browser when record_shown comes first, and moves it to the desk", () => {
     let s = foldEvents([...seg02a, shown(20, rec("REP-01")), screen(21, "browser", "REP-01")]);
     expect(s).toMatchObject({ layout: "browser", screen: "browser", tabs: ["REP-01"], activeRecord: "REP-01", pendingScreen: null });
     expect(s.records["REP-01"]?.title).toBe("Record REP-01");
-    expect(s.transition).toMatchObject({ from: "hexmap", to: "browser", cause: "screen", at: 21 });
+    expect(s.transition).toMatchObject({ from: "board", to: "browser", cause: "screen", at: 21 });
     expect(s.transition?.segment).toBeUndefined();
     s = reduce(s, screen(22, "desk"));
     expect(s).toMatchObject({ layout: "desk", activeRecord: "REP-01" });
@@ -115,11 +117,11 @@ describe("screens", () => {
     expect(s.layout).toBe("host");
   });
 
-  it("waits on hexmap for a record named before it arrives (the opposite order)", () => {
+  it("waits on the board for a record named before it arrives (the opposite order)", () => {
     let s = foldEvents([...seg02a, screen(20, "browser", "REP-02")]);
-    expect(s).toMatchObject({ layout: "hexmap", screen: "hexmap", pendingScreen: { screen: "browser", recordId: "REP-02", at: 20 } });
+    expect(s).toMatchObject({ layout: "board", screen: "board", pendingScreen: { screen: "browser", recordId: "REP-02", at: 20 } });
     s = reduce(s, shown(21, rec("REP-01")));
-    expect(s.layout).toBe("hexmap");
+    expect(s.layout).toBe("board");
     expect(s.tabs).toEqual([]);
     s = reduce(s, shown(25, rec("REP-02")));
     expect(s).toMatchObject({ layout: "browser", tabs: ["REP-02"], activeRecord: "REP-02", pendingScreen: null });
@@ -128,7 +130,7 @@ describe("screens", () => {
 
   it("opens the latest record for a browser or desk without a record_id, or waits for the next one", () => {
     let s = foldEvents([...seg02a, screen(20, "desk")]);
-    expect(s).toMatchObject({ layout: "hexmap", pendingScreen: { screen: "desk", at: 20 } });
+    expect(s).toMatchObject({ layout: "board", pendingScreen: { screen: "desk", at: 20 } });
     expect(s.pendingScreen?.recordId).toBeUndefined();
     s = reduce(s, shown(21, rec("REP-01")));
     expect(s).toMatchObject({ layout: "desk", activeRecord: "REP-01" });
@@ -176,7 +178,7 @@ describe("screens", () => {
 
   it("a record_shown alone opens nothing", () => {
     const s = foldEvents([...seg02a, shown(20, rec("REP-01"))]);
-    expect(s).toMatchObject({ layout: "hexmap", tabs: [], activeRecord: null });
+    expect(s).toMatchObject({ layout: "board", tabs: [], activeRecord: null });
   });
 
   it("zooms the map to a focus on hexmap and desk, the desk to its record's hex, and back to the overview", () => {
@@ -445,7 +447,7 @@ describe("case_open", () => {
     expect(foldEvents(events, 10).caseFile).toBeNull();
     const s = foldEvents(events);
     expect(s.caseFile).toBe(real);
-    expect(s.layout).toBe("hexmap");
+    expect(s.layout).toBe("board");
     expect(s.revealOrder).toEqual(["HEX-07"]);
   });
 
@@ -487,7 +489,7 @@ describe("foldEvents", () => {
       { type: "handover", ts_ms: 10, from: "SEG-01", to: "SEG-02A", reason: "r" },
     ];
     expect(foldEvents(evs, 5).layout).toBe("host");
-    expect(foldEvents(evs).layout).toBe("hexmap");
+    expect(foldEvents(evs).layout).toBe("board");
     expect(foldEvents(evs).applied).toBe(2);
   });
 

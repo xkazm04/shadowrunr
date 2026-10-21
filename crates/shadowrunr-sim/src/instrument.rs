@@ -24,7 +24,7 @@ use crate::SimError;
 
 /// Bump when the simulator's or the judge's logic changes in a way that changes verdicts
 /// (prompt templates, verification rules, scheduling).
-pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/10";
+pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/11";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstrumentFile {
@@ -411,17 +411,20 @@ mod tests {
     }
 
     /// `fixture` hashed with no brief and no experiment: the golden that both entries must
-    /// leave untouched when absent. It moves only with `SIM_LOGIC_VERSION` (`/10`: the
+    /// leave untouched when absent. It moves only with `SIM_LOGIC_VERSION` (`/11`: the
     /// tone's line bank and the owner's directions in the prompt and the hash, the narrowed
     /// character-break and persona-leak rails, the judge's scaled comic-craft scores over 24
-    /// sampled turns and the tic check, after `/9`: the character-neutral engine, every Malakor word read from the package (`say host` in the
+    /// sampled turns and the tic check, after `/10`: the evidence board (SEG-02A's default
+    /// screen, `pin_link` and its `link_pinned`, a record's summary in the judged transcript,
+    /// the strings rule), after `/9`: the character-neutral engine, every Malakor word read
+    /// from the package (`say host` in the
     /// judged transcript, the owner's brief in the judge prompt), after `/8`: owned
     /// situational requests, the through-line agenda and the lag ceiling, after `/7`: the map
     /// focus, the investigation's screen defaults and dwells, a record before the model's op that
     /// shows it, after `/6`: the screens, runtime screen defaults and a returning research job
     /// opening its record, after `/5`: carried bait picked first, after `/4`: two picks a beat,
     /// gifts and the cold open carried, the speech-aware say gap, a full-length session).
-    const PRE_BRIEF_HASH: &str = "8f77cc81668067351dbede2eb343e730ba3314c37f8eae21a1e2987ac65b54f8";
+    const PRE_BRIEF_HASH: &str = "8d743e412a599191906cac058e200e697386e784c01d772dbf0d019e78828bba";
 
     #[test]
     fn a_brief_joins_the_hash_only_when_present() {

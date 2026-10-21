@@ -432,7 +432,7 @@
     },
     "CharacterAvatar": {
       "additionalProperties": false,
-      "description": "`[avatar]`: schema only in this version (the daemon still reads its own rig path).",
+      "description": "`[avatar]`: the character's face; its rig lives at `<data>/characters/<id>/avatar/rig/`.",
       "properties": {
         "face": {
           "description": "The stage's face renderer: `glow`, `cut` or `depth`.",
@@ -451,6 +451,10 @@
         "active_tone": {
           "description": "The tone the operator chose, else `default_tone` (see [`CharacterSummary`]).",
           "type": "string"
+        },
+        "avatar": {
+          "$ref": "#/$defs/CharacterAvatar",
+          "description": "`[avatar]` as written: `face` overrides `[stage] avatar`."
         },
         "bible": {
           "type": "string"
@@ -479,8 +483,16 @@
         "id": {
           "type": "string"
         },
+        "identity": {
+          "$ref": "#/$defs/CharacterIdentity",
+          "description": "`[identity]` as written; omitted when the package has none (the neutral identity)."
+        },
         "name": {
           "type": "string"
+        },
+        "rank_overrides": {
+          "$ref": "#/$defs/RankOverrides",
+          "description": "`[ranks]` overrides of the engine ladder; omitted when the package sets none."
         },
         "rank_titles": {
           "additionalProperties": false,
@@ -513,6 +525,13 @@
           },
           "type": "array"
         },
+        "segment_flavour": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SegmentFlavour"
+          },
+          "description": "`[segments.<id>]`: flavour appended to each segment's prompts; omitted when none.",
+          "type": "object"
+        },
         "situations": {
           "items": {
             "$ref": "#/$defs/Situation"
@@ -527,6 +546,17 @@
             "$ref": "#/$defs/ToneInfo"
           },
           "type": "array"
+        },
+        "tuning": {
+          "description": "Every tuning key in table order, with the package's value over the engine default.\nAbsent (an older daemon): not shown.",
+          "items": {
+            "$ref": "#/$defs/TuningRow"
+          },
+          "type": "array"
+        },
+        "voice": {
+          "$ref": "#/$defs/CharacterVoice",
+          "description": "`[voice]` as written: each field set overrides the daemon's `[voice]`."
         }
       },
       "required": [
@@ -608,6 +638,31 @@
         "follower",
         "sign_off",
         "disclosure"
+      ],
+      "type": "object"
+    },
+    "CharacterIssue": {
+      "description": "One problem `character validate` found: `file: key: reason`.",
+      "properties": {
+        "file": {
+          "description": "Relative to the package, with `/` separators, e.g. `character.toml`.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The dotted key (`tuning.carry_ms`) or `line <n>`; omitted when the issue is the file.",
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/IssueSeverity"
+        }
+      },
+      "required": [
+        "file",
+        "reason",
+        "severity"
       ],
       "type": "object"
     },
@@ -1055,9 +1110,27 @@
       },
       "type": "object"
     },
+    "CharacterValidateParams": {
+      "description": "`character.validate`: check a package (`<characters>/<id>/`) the way `character validate`\ndoes.",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "CharacterValidateResult": {
+      "items": {
+        "$ref": "#/$defs/CharacterIssue"
+      },
+      "type": "array"
+    },
     "CharacterVoice": {
       "additionalProperties": false,
-      "description": "`[voice]`: schema only in this version (the daemon still reads its own `[voice]`).",
+      "description": "`[voice]`: each present field overrides the daemon's `[voice]` for this character.",
       "properties": {
         "sid": {
           "description": "The voice's verified speaker id.",
@@ -1403,7 +1476,7 @@
           "type": "integer"
         },
         "speaker": {
-          "description": "`malakor`, or the foil id.",
+          "description": "`host` (`malakor` on drafts written before character packages), or the foil id.",
           "type": "string"
         },
         "start_ms": {
@@ -4232,6 +4305,14 @@
         }
       ]
     },
+    "IssueSeverity": {
+      "description": "How bad a package issue is: an `error` fails `character validate`; a `warning` (a\ntemplate placeholder still to fill) does not.",
+      "enum": [
+        "error",
+        "warning"
+      ],
+      "type": "string"
+    },
     "JudgeVerdict": {
       "properties": {
         "judge_tier": {
@@ -4978,7 +5059,7 @@
           "type": "object"
         },
         {
-          "description": "Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.\n`focus` names a case hex the map zooms to on `hexmap`/`desk` (absent: the overview).\nPin a labelled string between two face-up cards on the evidence board, citing the\nreturned record that shows it (appendix (screens and board)).",
+          "description": "Pin a labelled string between two face-up cards on the evidence board, citing the\nreturned record that shows it, filed under one of them (appendix (screens and board)).",
           "properties": {
             "from": {
               "type": "string"
@@ -5007,6 +5088,7 @@
           "type": "object"
         },
         {
+          "description": "Switch the broadcast's main screen (appendix (screens and board)). Only the screens the\ncurrent segment (and state) allows; `record_id` names a staged case record for\n`browser`/`desk`. `focus` names a case hex the map or board zooms to on\n`hexmap`/`board`/`desk` (absent: the overview).",
           "properties": {
             "focus": {
               "type": "string"
@@ -5460,6 +5542,69 @@
         "title",
         "weight"
       ],
+      "type": "object"
+    },
+    "RankOverrides": {
+      "description": "What a package's `[ranks]` changes in the engine ladder (`segments/data/ranks.toml`).",
+      "properties": {
+        "propose_min_rank": {
+          "$ref": "#/$defs/Rank"
+        },
+        "thresholds": {
+          "additionalProperties": false,
+          "properties": {
+            "acolyte": {
+              "$ref": "#/$defs/RankThreshold"
+            },
+            "cultist": {
+              "$ref": "#/$defs/RankThreshold"
+            },
+            "dread_council": {
+              "$ref": "#/$defs/RankThreshold"
+            },
+            "lich": {
+              "$ref": "#/$defs/RankThreshold"
+            },
+            "thrall": {
+              "$ref": "#/$defs/RankThreshold"
+            },
+            "warlock": {
+              "$ref": "#/$defs/RankThreshold"
+            }
+          },
+          "type": "object"
+        },
+        "weights": {
+          "additionalProperties": false,
+          "properties": {
+            "acolyte": {
+              "format": "double",
+              "type": "number"
+            },
+            "cultist": {
+              "format": "double",
+              "type": "number"
+            },
+            "dread_council": {
+              "format": "double",
+              "type": "number"
+            },
+            "lich": {
+              "format": "double",
+              "type": "number"
+            },
+            "thrall": {
+              "format": "double",
+              "type": "number"
+            },
+            "warlock": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        }
+      },
       "type": "object"
     },
     "RankRow": {
@@ -6771,7 +6916,7 @@
         },
         {
           "const": "hexmap",
-          "description": "The case hexmap full-size.",
+          "description": "The case hexmap full-size. No segment shows it now; kept for older transcripts.",
           "type": "string"
         },
         {
@@ -6947,12 +7092,13 @@
           },
           "type": "array"
         },
-        "malakor_lines": {
+        "host_lines": {
+          "description": "Lines the host said (`say` with `speaker: host`). Reads the stored v1 name\n`malakor_lines` too.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
         },
-        "malakor_lines_per_min": {
+        "host_lines_per_min": {
           "format": "double",
           "type": "number"
         },
@@ -7004,7 +7150,7 @@
         "runs",
         "minutes",
         "chat_msgs",
-        "malakor_lines",
+        "host_lines",
         "ops",
         "moderation_events",
         "polls",
@@ -7362,7 +7508,8 @@
       "type": "object"
     },
     "Situation": {
-      "description": "One situation of `situations.json` (format in docs/spec/contract.md).",
+      "additionalProperties": false,
+      "description": "One situation of `situations.json` (format in docs/spec/contract.md). The one parse type of\nthe bank: the brain's package load parses into it and validates it, and the sim and\n`character.get` serve what that load returned. An unknown field is an error.",
       "properties": {
         "archetype": {
           "type": "string"
@@ -7400,13 +7547,14 @@
           "type": "array"
         },
         "silence_s": {
+          "description": "Length of a `silence` situation in seconds; the sim's default (120) when absent.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
         },
         "stimulus": {
-          "description": "`message`, `silence`, `vote` or `wave`; inferred by the sim when absent.",
-          "type": "string"
+          "$ref": "#/$defs/Stimulus",
+          "description": "How the sim performs it; inferred from archetype, invariants and behaviour when absent."
         }
       },
       "required": [
@@ -7523,6 +7671,31 @@
       },
       "type": "object"
     },
+    "Stimulus": {
+      "description": "How a situation is performed (`situations.json` `stimulus`).",
+      "oneOf": [
+        {
+          "const": "message",
+          "description": "A featured chatter sends a message performing the behaviour.",
+          "type": "string"
+        },
+        {
+          "const": "silence",
+          "description": "The room goes silent (no chat at all) for a window.",
+          "type": "string"
+        },
+        {
+          "const": "vote",
+          "description": "A featured chatter votes, which needs an open poll.",
+          "type": "string"
+        },
+        {
+          "const": "wave",
+          "description": "A crowd wave (raid arrival, copypasta flood) generated by the room, not by one chatter.",
+          "type": "string"
+        }
+      ]
+    },
     "StreamBrief": {
       "description": "What one stream receives from the Lord of the Darkness (WP15): the latest chosen plan's\ndispatch, segments and topics, plus the directives that are active when the stream starts\n(never proposed or inactive ones). The brain renders it once, in its stable prefix; the sim\nhashes its canonical JSON into the instrument. Built by `shadowrunr_brain::build_stream_brief`\n(the one builder, used by the live path and the sim). A brief with nothing in it is no brief.",
       "properties": {
@@ -7573,6 +7746,10 @@
             },
             "core_tier": {
               "$ref": "#/$defs/ModelTier"
+            },
+            "host_name": {
+              "description": "The character's short name as the stage labels its lines and face, e.g. \"Malakor\"\n(`[identity] name`, else the last word of the package name). Omitted by older\nstreams: the stage then says \"Host\".",
+              "type": "string"
             },
             "stream_id": {
               "type": "string"
@@ -8600,6 +8777,52 @@
       ],
       "type": "object"
     },
+    "TuningRow": {
+      "description": "One tuning key of a package: the value the engine runs with and where it came from.",
+      "properties": {
+        "default": {
+          "description": "The engine default (`TUNING_DEFAULTS`).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "doc": {
+          "description": "What the key governs, in one line.",
+          "type": "string"
+        },
+        "key": {
+          "description": "e.g. `carry_ms` (`_ms` milliseconds, `_s` seconds, else a count).",
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance",
+          "description": "The package's provenance when set, else the default's."
+        },
+        "set": {
+          "description": "The package sets this key in `[tuning]`.",
+          "type": "boolean"
+        },
+        "source": {
+          "description": "The run or lesson behind the value; omitted when none is named.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value in effect: the package's when it sets the key, else the engine default.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "value",
+        "default",
+        "set",
+        "provenance",
+        "doc"
+      ],
+      "type": "object"
+    },
     "Usage": {
       "properties": {
         "cache_creation_tokens": {
@@ -9200,6 +9423,22 @@
         },
         "result": {
           "$ref": "#/$defs/CharacterSummary"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "character.validate": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/CharacterValidateParams"
+        },
+        "result": {
+          "$ref": "#/$defs/CharacterValidateResult"
         }
       },
       "required": [
@@ -9951,6 +10190,7 @@
     "character.rules",
     "character.rules.set",
     "character.tone.set",
+    "character.validate",
     "clips.approve",
     "clips.feedback",
     "clips.get",

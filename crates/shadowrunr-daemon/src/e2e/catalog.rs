@@ -51,6 +51,12 @@ async fn character_list_and_get_expose_the_package() {
     assert_eq!(d.foils.len(), 5);
     assert!(d.foils.iter().all(|f| f.declared));
     assert!(!d.situations.is_empty());
+    // One parse: character.get serves the bank the brain loaded and validated.
+    let pkg = shadowrunr_brain::load_character(&repo().join("characters/malakor"), "").unwrap();
+    assert_eq!(
+        serde_json::to_value(&d.situations).unwrap(),
+        serde_json::to_value(&pkg.situations.situations).unwrap()
+    );
     let rule = d.rules.iter().find(|r| r.id == "crisis-handoff").unwrap();
     assert!(rule.enabled && rule.default && !rule.text.is_empty());
     assert_eq!(
@@ -203,4 +209,82 @@ async fn reconcile_types_match_the_contract() {
     round_trip::<ReconcileReport>(&report);
     let proposals = rpc(&addr, "plan.proposals", json!({ "report_id": report_id })).await;
     round_trip::<Vec<PlanOption>>(&proposals);
+}
+
+/// A characters root holding the keeper fixture (an original test persona) and the template.
+pub(crate) fn keeper_root(tmp: &std::path::Path) -> std::path::PathBuf {
+    fn copy(from: &std::path::Path, to: &std::path::Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap() {
+            let e = e.unwrap();
+            if e.file_type().unwrap().is_dir() {
+                copy(&e.path(), &to.join(e.file_name()));
+            } else {
+                std::fs::copy(e.path(), to.join(e.file_name())).unwrap();
+            }
+        }
+    }
+    let root = tmp.join("characters");
+    copy(
+        &repo().join("crates/shadowrunr-brain/tests/fixtures/characters/keeper"),
+        &root.join("keeper"),
+    );
+    copy(
+        &repo()
+            .join("characters")
+            .join(crate::character::TEMPLATE_ID),
+        &root.join(crate::character::TEMPLATE_ID),
+    );
+    root
+}
+
+#[tokio::test]
+async fn character_get_shows_the_v2_tables_and_validate_lists_issues() {
+    use shadowrunr_types::catalog::{CharacterIssue, IssueSeverity};
+    use shadowrunr_types::character::{Provenance, TUNING_DEFAULTS};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let addr = start(test_config(tmp.path(), repo().join("characters"))).await;
+    let v = rpc(&addr, "character.get", json!({ "id": "malakor" })).await;
+    let d: CharacterDetail = typed(&v);
+    assert!(!has_null(&v), "{v}");
+    assert_eq!(d.identity.as_ref().unwrap().follower.many, "minions");
+    assert_eq!(d.voice.as_ref().unwrap().sid, Some(3));
+    assert_eq!(d.avatar.as_ref().unwrap().face.as_deref(), Some("cut"));
+    assert!(
+        d.rank_overrides.is_none(),
+        "malakor keeps the engine ladder"
+    );
+    assert_eq!(d.tuning.len(), TUNING_DEFAULTS.len());
+    let max_picks = d.tuning.iter().find(|r| r.key == "max_picks").unwrap();
+    assert!(max_picks.set && max_picks.value == max_picks.default);
+    assert_eq!(max_picks.provenance, Provenance::Measured);
+    let carry_max = d.tuning.iter().find(|r| r.key == "carry_max").unwrap();
+    assert!(!carry_max.set && carry_max.source.is_none());
+    // The template is a scaffold, not a character.
+    let list: Vec<CharacterSummary> = typed(&rpc(&addr, "character.list", json!({})).await);
+    assert!(list.iter().all(|c| !c.id.starts_with('_')), "{list:?}");
+
+    let issues: Vec<CharacterIssue> =
+        typed(&rpc(&addr, "character.validate", json!({ "id": "malakor" })).await);
+    assert!(issues.is_empty(), "{issues:?}");
+    let issues: Vec<CharacterIssue> =
+        typed(&rpc(&addr, "character.validate", json!({ "id": "_template" })).await);
+    assert!(!issues.is_empty());
+    assert!(issues.iter().all(|i| i.severity == IssueSeverity::Warning));
+    let v = rpc(&addr, "character.validate", json!({ "id": "nobody" })).await;
+    assert_eq!(v["error"]["code"], "not_found", "{v}");
+
+    // A second character: its own words, tuning and flavour.
+    let tmp2 = tempfile::tempdir().unwrap();
+    let addr = start(test_config(tmp2.path(), keeper_root(tmp2.path()))).await;
+    let d: CharacterDetail = typed(&rpc(&addr, "character.get", json!({ "id": "keeper" })).await);
+    assert_eq!(d.identity.as_ref().unwrap().name, "Odile");
+    let carry = d.tuning.iter().find(|r| r.key == "carry_ms").unwrap();
+    assert_eq!(
+        (carry.value, carry.default, carry.set),
+        (30_000, 25_000, true)
+    );
+    assert_eq!(carry.source.as_deref(), Some("fixture: a slower room"));
+    assert_eq!(d.segment_flavour.len(), 1);
 }

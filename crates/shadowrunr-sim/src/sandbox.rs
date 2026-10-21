@@ -1357,6 +1357,7 @@ pub async fn run_sandbox(
             core_tier: spec.core_tier,
             audience_size: spec.audience_size,
             brief: prep.brief.clone(),
+            host_name: Some(prep.persona.name.clone()),
         })?;
         let mut stage = stage;
         log.push_all(Stage::start(&mut stage, 0, spec.segment))?;

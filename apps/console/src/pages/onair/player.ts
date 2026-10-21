@@ -21,7 +21,7 @@ export interface FeedSnapshot {
   readonly start: TsMs;
   readonly end: TsMs;
   readonly speed: number;
-  /** Bumped on play, pause and restart: the progress bar re-keys its CSS animation on it. */
+  /** Bumped on play, pause, restart and seek: the progress bar re-keys its CSS animation on it. */
   readonly epoch: number;
   readonly live: boolean;
   /** Live only: the stream reported missed events and no contiguous frame has followed yet. */
@@ -34,6 +34,8 @@ export interface Feed {
   play(): void;
   pause(): void;
   restart(): void;
+  /** Put transcript time `t` on screen (clamped to the run); keeps playing or paused as it was. */
+  seek(t: TsMs): void;
   dispose(): void;
 }
 
@@ -110,6 +112,22 @@ export class ReplayPlayer implements Feed {
     this.anchor = wasPlaying ? { wall: this.now(), pos: this.timeline.start } : null;
     this.emit({ epoch: this.snapshot.epoch + 1 });
     if (wasPlaying) this.schedule();
+  }
+
+  /**
+   * One clock, re-anchored: the scene becomes the fold up to `t` (Timeline rebuilds on a backward
+   * seek), the seeked position is emitted before anything is rescheduled (so the needle never
+   * snaps back), and a playing replay sleeps until the next due event, still never per frame.
+   */
+  seek(t: TsMs): void {
+    if (this.timeline.events.length === 0) return;
+    const to = Math.min(this.timeline.end, Math.max(this.timeline.start, t));
+    const playing = this.snapshot.playing;
+    this.clear();
+    const scene = this.timeline.advanceTo(to);
+    this.anchor = playing ? { wall: this.now(), pos: to } : null;
+    this.emit({ scene, position: to, epoch: this.snapshot.epoch + 1 });
+    if (playing) this.schedule();
   }
 
   dispose(): void {
@@ -233,6 +251,8 @@ export class LiveFeed implements Feed {
   play(): void {}
   pause(): void {}
   restart(): void {}
+  /** The live feed has no past to seek into: the scrubber is disabled, and this is a no-op. */
+  seek(_t: TsMs): void {}
   dispose(): void {
     this.listeners.clear();
   }

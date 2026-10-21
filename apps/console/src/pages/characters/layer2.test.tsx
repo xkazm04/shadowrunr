@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import DOM_BUDGETS from "../../../budgets/dom.json";
 import { fail, mountPage, nodes, ok, role, roles, settle, type Script } from "../../kit/testing";
 import { Layer2 } from "./Layer2";
-import { genResults, genRoster, malakorDetail, malakorRules, malakorSummary } from "./testgen";
+import { genResults, genRoster, malakorDetail, malakorParams, malakorRules, malakorSummary } from "./testgen";
 
 const BUDGET: number = DOM_BUDGETS.routes["wall+l2"];
 
@@ -22,6 +22,8 @@ interface Daemon {
   state?: Record<string, boolean>;
   /** The daemon's active.json tone, changed by character.tone.set. */
   tone?: { value: string };
+  /** character.get serves the v2 tables (malakorParams) instead of the v1 detail. */
+  v2?: boolean;
 }
 
 const daemon =
@@ -31,7 +33,7 @@ const daemon =
       case "character.list":
         return ok(o.roster ?? [malakorSummary()]);
       case "character.get":
-        return /"id":"malakor"/.test(sent) ? ok({ ...malakorDetail(), ...(o.tone ? { active_tone: o.tone.value } : {}) }) : fail("not_found", "no such character");
+        return /"id":"malakor"/.test(sent) ? ok({ ...(o.v2 ? malakorParams() : malakorDetail()), ...(o.tone ? { active_tone: o.tone.value } : {}) }) : fail("not_found", "no such character");
       case "character.tone.set": {
         const tone = /"tone":"([^"]+)"/.exec(sent)?.[1] ?? "";
         if (o.tone) o.tone.value = tone;
@@ -80,6 +82,46 @@ describe("characters/all", () => {
   });
 });
 
+describe("characters/<id>/package/parameters", () => {
+  it("shows the v2 tables read-only and marks the tuning key that differs from the default", async () => {
+    mount(["malakor", "package", "parameters"], { v2: true });
+    await settle();
+    expect(role("characters-identity")?.textContent).toContain("Lord of the Darkness (Lord)");
+    expect(role("characters-identity")?.textContent).toContain("minion / minions");
+    expect(role("characters-voice")?.textContent).toContain("Cut-out portrait");
+    const ranks = role("characters-rank-overrides")?.textContent ?? "";
+    expect(ranks).toContain("Warlock or higher");
+    expect(ranks).toContain("Lesser Lich");
+    const rows = roles("characters-tuning-row");
+    expect(rows).toHaveLength(3);
+    const differs = rows.filter((r) => r.getAttribute("data-differs") === "true");
+    expect(differs).toHaveLength(1);
+    expect(differs[0]?.textContent).toContain("How long an unanswered message is carried into the next beats");
+    expect(differs[0]?.textContent).toContain("30 s");
+    expect(differs[0]?.textContent).toContain("25 s");
+    expect(screen.getByText("1 of 3 differ from the default")).toBeTruthy();
+    expect(role("characters-flavour")?.textContent).toContain("Improv room");
+    expect(role("characters-flavour")?.textContent).toContain("cold open");
+  });
+
+  it("never renders a raw enum id", async () => {
+    mount(["malakor", "package", "parameters"], { v2: true });
+    await settle();
+    const text = role("characters-package")?.textContent ?? "";
+    for (const id of ["SEG-01", "dread_council", "propose_min_rank", "cold_open", "carry_ms", "assumption", "measured"]) expect(text).not.toContain(id);
+    expect(text).not.toMatch(/\bwarlock\b|\bcut\b/);
+  });
+
+  it("shows an empty state for every v2 table a v1 package leaves out", async () => {
+    mount(["malakor", "package", "parameters"]);
+    await settle();
+    for (const r of ["characters-identity", "characters-voice", "characters-rank-overrides", "characters-tuning", "characters-flavour"]) expect(role(r)).toBeNull();
+    const empties = [...document.querySelectorAll("[data-state='empty']")].map((e) => e.textContent ?? "");
+    expect(empties).toHaveLength(5);
+    expect(empties[0]).toContain("No identity table");
+  });
+});
+
 describe("characters/<id>/package", () => {
   it("opens on the constitution: nine locked red lines, then the prose", async () => {
     mount(["malakor"]);
@@ -87,7 +129,7 @@ describe("characters/<id>/package", () => {
     expect(role("characters-package")?.getAttribute("data-tab")).toBe("constitution");
     expect(role("characters-redlines")?.children).toHaveLength(9);
     expect(screen.getByRole("heading", { name: "Who he is" })).toBeTruthy();
-    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    expect(screen.getAllByRole("tab")).toHaveLength(7);
   });
 
   it("switches tabs by route", async () => {
@@ -215,7 +257,7 @@ describe("situations link to their verdicts", () => {
     const detail = role("characters-situation");
     expect(detail?.textContent).toContain("Judged in 8 runs of t-scale: 2 failed");
     const links = [...(role("characters-situation-evidence")?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href"));
-    expect(links).toEqual(["#/simulator/verdicts/run-0", "#/brain/transcripts/run-0/10", "#/simulator/verdicts/run-1", "#/brain/transcripts/run-1/10"]);
+    expect(links).toEqual(["#/simulator/verdicts/run-0", "#/brain/transcripts/t-scale%2Frun-0/10", "#/simulator/verdicts/run-1", "#/brain/transcripts/t-scale%2Frun-1/10"]);
   });
 
   it("selects a situation by route from the table", async () => {

@@ -22,7 +22,7 @@ use shadowrunr_types::review::{
     ReviewSessionParams, ReviewSessionRow, ReviewSessionsParams, ReviewTagParams, SessionTags,
 };
 use shadowrunr_types::sandbox::SandboxReport;
-use shadowrunr_types::{Engine, ErrorCode, JudgeVerdict, Role};
+use shadowrunr_types::{Engine, ErrorCode, JudgeVerdict, Role, StreamEvent};
 
 use crate::config::Config;
 use crate::rpc::RpcError;
@@ -198,7 +198,7 @@ pub fn feedback_row(
     let facts = rows::transcript_facts(&dir)?;
     if !facts.malakor_lines.contains(&p.line) {
         return Err(RpcError::invalid(format!(
-            "line {} of {} is not a Malakor line",
+            "line {} of {} is not a host line",
             p.line, p.session_id
         )));
     }
@@ -319,10 +319,18 @@ pub async fn tag_with(
             .map_err(|e| RpcError::io(e.to_string()))?,
     );
     let (tier, effort, timeout_ms) = cfg.engine.route(Role::Tagger);
+    let character = events.iter().find_map(|e| match e {
+        StreamEvent::StreamStart { character, .. } => Some(character.clone()),
+        _ => None,
+    });
     let route = tagger::Route {
         tier,
         effort,
         timeout_ms,
+        persona: crate::character::persona_of(
+            &cfg.paths.characters,
+            character.as_deref().unwrap_or(&cfg.sim.character),
+        ),
     };
     let done = tagger::tag_events(ledgered, route, &id, &events, runs::now_ms()).await;
     if done.engine_down {

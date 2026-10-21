@@ -438,9 +438,15 @@ pub fn body(ev: &StreamEvent) -> String {
         StreamEvent::LinkPinned {
             from,
             to,
+            rel,
             record_id,
+            grade,
             ..
-        } => format!("link_pinned {from} -> {to} citing {record_id}"),
+        } => format!(
+            "link_pinned {from} -{}-> {to} citing {record_id} [{}]",
+            wire(rel),
+            wire(grade)
+        ),
         StreamEvent::Chat { msg, .. } => format!(
             "chat [{}] {} ({}): {}",
             msg.id,
@@ -459,7 +465,7 @@ pub fn body(ev: &StreamEvent) -> String {
             ..
         } => {
             let who = match speaker {
-                Speaker::Host => "MALAKOR".to_string(),
+                Speaker::Host => "HOST".to_string(),
                 Speaker::Foil => format!("FOIL {}", foil.as_deref().unwrap_or("?")),
             };
             let to = if replying_to.is_empty() {

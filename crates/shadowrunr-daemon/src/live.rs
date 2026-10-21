@@ -135,6 +135,16 @@ impl LiveRun {
     pub fn is_done(&self) -> bool {
         self.lock().done
     }
+
+    /// The character the run streams, from its `stream_start` (the first event); `None`
+    /// before it is written.
+    pub fn character(&self) -> Option<String> {
+        let first = self.lock().history.first().cloned()?;
+        let v: serde_json::Value = serde_json::from_str(&first).ok()?;
+        (v["type"] == "stream_start")
+            .then(|| v["character"].as_str().map(str::to_string))
+            .flatten()
+    }
 }
 
 /// Runs in flight, plus the most recent one for `{"subscribe": "live"}`.
@@ -164,6 +174,16 @@ impl LiveRegistry {
 
     pub fn latest(&self) -> watch::Receiver<Option<Arc<LiveRun>>> {
         self.latest.subscribe()
+    }
+
+    /// The character of the most recent run still in flight (a `sim.start` run or a sandbox
+    /// session), if any.
+    pub fn streaming_character(&self) -> Option<String> {
+        let latest = self.latest.borrow().clone()?;
+        if latest.is_done() {
+            return None;
+        }
+        latest.character()
     }
 
     /// Whether any run is in flight.

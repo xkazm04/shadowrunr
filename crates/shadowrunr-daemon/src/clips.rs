@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use shadowrunr_brain::moderation::{Policy, PolicySource};
-use shadowrunr_clips::{ClipError, RunInput, ScanOptions};
+use shadowrunr_clips::{ClipError, ClipHost, RunInput, ScanOptions};
 use shadowrunr_sim::{classify, RunClass};
 use shadowrunr_types::clips::{
     ClipCandidate, ClipHeardLine, ClipRunRecording, ClipScanReport, ClipScanSource, ClipsScanParams,
@@ -50,8 +50,26 @@ fn label(cfg: &Config, dir: &Path) -> String {
         .unwrap_or_else(|_| "transcript.jsonl".into())
 }
 
+/// The run's host: the persona of the character its `stream_start` names (else
+/// `[sim] character`). A package that does not load gives the neutral host.
+fn host(cfg: &Config, dir: &Path) -> ClipHost {
+    let character = std::fs::read_to_string(dir.join("transcript.jsonl"))
+        .ok()
+        .and_then(|t| {
+            let first = t.lines().next()?.to_string();
+            let v: serde_json::Value = serde_json::from_str(&first).ok()?;
+            (v["type"] == "stream_start").then(|| v["character"].as_str().map(str::to_string))?
+        })
+        .unwrap_or_else(|| cfg.sim.character.clone());
+    ClipHost::from(&crate::character::persona_of(
+        &cfg.paths.characters,
+        &character,
+    ))
+}
+
 fn input(cfg: &Config, tournament_id: Option<String>, run_id: String, dir: PathBuf) -> RunInput {
     RunInput {
+        host: host(cfg, &dir),
         transcript_label: label(cfg, &dir),
         tournament_id,
         run_id,
@@ -179,7 +197,9 @@ pub fn recording(cfg: &Config, session_id: &str) -> Result<ClipRunRecording, Rpc
     })
 }
 
-/// `clips.render`: records the stage when the tools exist; blocking, minutes for a video.
+/// `clips.render`: records the stage when the tools exist; blocking, minutes for a video. The
+/// store lock is held only to snapshot and to commit, so the owner's other acts never wait on
+/// it; a second render of the same clip is a conflict, and a failed one keeps the last video.
 pub fn render(cfg: &Config, id: &str) -> Result<ClipCandidate, RpcError> {
     let tools = cfg.render_tools();
     Ok(shadowrunr_clips::scan::rerender(

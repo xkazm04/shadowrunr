@@ -91,12 +91,15 @@ export function VoiceCaptionPanel({
   now,
   compact,
   onAir,
+  speaker = "Host",
 }: {
   view: VoiceCaptionView | null;
   redactions: Redaction[];
   now: number;
   compact: boolean;
   onAir: boolean;
+  /** Who says the line (the stream's host name); shown upper-cased. */
+  speaker?: string;
 }) {
   const text = view?.caption.text;
   const line = useMemo(() => (text === undefined ? null : wordTimings(text)), [text]);
@@ -106,7 +109,7 @@ export function VoiceCaptionPanel({
       {view && line && view.opacity > 0 && (
         <div className="caption" key={view.caption.id} style={{ opacity: view.opacity, fontSize: captionSize(view.caption.text, compact) }}>
           <div className="caption-head">
-            <span className="speaker">MALAKOR</span>
+            <span className="speaker">{speaker.toUpperCase()}</span>
             {view.caption.replyingTo.slice(0, 3).map((n) => (
               <span className="reply-chip" key={n}>
                 ↳ {n}

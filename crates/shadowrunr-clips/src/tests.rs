@@ -18,6 +18,7 @@ use shadowrunr_types::{
 
 use crate::gate;
 use crate::hook::{self, HookWindow};
+use crate::host::ClipHost;
 use crate::render;
 use crate::scan::{self, RunInput, ScanOptions};
 use crate::signals::{self, Crowd};
@@ -163,7 +164,7 @@ fn lines_play_back_to_back_and_questions_precede_their_answers() {
             msg_id: "q1".into()
         }
     );
-    assert!(matches!(l[1].who, Who::Malakor));
+    assert!(matches!(l[1].who, Who::Host));
     assert_eq!(l[0].spoken_start, 5_000);
     assert!(l[1].spoken_start >= l[0].spoken_end);
     assert!(
@@ -423,13 +424,69 @@ fn caption_tracks_are_well_formed() {
         text: "Bow.".into(),
         unvoiced: false,
     }];
+    let host = malakor_host();
     assert_eq!(
-        render::srt(&caps),
+        render::srt(&caps, &host),
         "1\n00:00:01,250 --> 00:00:03,725\nBow.\n\n"
     );
-    let ass = render::ass(&caps);
+    let ass = render::ass(&caps, &host);
     assert!(ass.contains("PlayResX: 1080") && ass.contains("PlayResY: 1920"));
-    assert!(ass.contains("Dialogue: 0,0:00:01.25,0:00:03.72,Malakor,"));
+    assert!(ass.contains("Style: Malakor,"));
+    assert!(ass.contains("Dialogue: 0,0:00:01.25,0:00:03.72,Malakor,ARCH-LICH MALAKOR,"));
+}
+
+fn malakor_host() -> ClipHost {
+    ClipHost {
+        full_name: "Arch-Lich Malakor".into(),
+        name: "Malakor".into(),
+        follower: "minion".into(),
+    }
+}
+
+/// A second character's draft names its own host everywhere a clip names one, and a stored
+/// `malakor` speaker still reads as the host.
+#[test]
+fn captions_and_the_hook_read_name_the_run_s_host() {
+    let keeper = ClipHost {
+        full_name: "Keeper Odile Marsh".into(),
+        name: "Odile".into(),
+        follower: "deckhand".into(),
+    };
+    let caps = vec![
+        ClipCaption {
+            start_ms: 0,
+            end_ms: 1_000,
+            speaker: "viewer".into(),
+            text: "Which ship?".into(),
+            unvoiced: false,
+        },
+        ClipCaption {
+            start_ms: 1_000,
+            end_ms: 2_000,
+            speaker: crate::host::HOST_SPEAKER.into(),
+            text: "The lamp ship.".into(),
+            unvoiced: false,
+        },
+        ClipCaption {
+            start_ms: 2_000,
+            end_ms: 3_000,
+            speaker: "malakor".into(),
+            text: "Stored before the rename.".into(),
+            unvoiced: false,
+        },
+    ];
+    let srt = render::srt(&caps, &keeper);
+    assert!(srt.contains("[A DECKHAND ASKS] Which ship?"), "{srt}");
+    assert!(srt.contains("\nThe lamp ship."), "{srt}");
+    assert!(srt.contains("\nStored before the rename."), "{srt}");
+    let ass = render::ass(&caps, &keeper);
+    assert!(ass.contains("Style: Odile,"), "{ass}");
+    assert!(ass.contains(",Odile,KEEPER ODILE MARSH,"), "{ass}");
+    for t in [&srt, &ass] {
+        assert!(!t.contains("MALAKOR") && !t.contains("MINION"), "{t}");
+    }
+    assert!(hook::system(&keeper).contains("Keeper Odile Marsh"));
+    assert!(!hook::system(&keeper).contains("Malakor"));
 }
 
 /// Answers every hook read with fixed scores; records the requests.
@@ -481,6 +538,7 @@ fn write_run(root: &Path, extra: Vec<StreamEvent>) -> RunInput {
         run_id: "r1".into(),
         dir,
         transcript_label: "sim/t1/r1/transcript.jsonl".into(),
+        host: malakor_host(),
     }
 }
 
@@ -1182,4 +1240,319 @@ async fn acts_are_derived_on_load_and_never_stored() {
     store.save(&read).unwrap();
     let on_disk: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     assert!(on_disk.get("acts").is_none(), "{on_disk}");
+}
+
+// ----- a render outside the store lock (challenge-2026-10-21, clips-pipeline A) -----------
+
+/// The clip as a verified video: both cuts on disk and in its render record.
+fn as_video(store: &ClipStore, mut c: ClipCandidate) -> ClipCandidate {
+    let dir = store.dir(&c.id);
+    std::fs::write(dir.join("cut-9x16.mp4"), b"vertical cut, take one").unwrap();
+    std::fs::write(dir.join("cut-16x9.mp4"), b"landscape cut, take one").unwrap();
+    let mut r = c.render.clone().expect("a render");
+    r.kind = "video".into();
+    r.fallback_reason = None;
+    r.files.insert(
+        0,
+        shadowrunr_types::clips::ClipFile {
+            path: "cut-16x9.mp4".into(),
+            kind: "cut_16x9".into(),
+            bytes: 23,
+        },
+    );
+    r.files.insert(
+        0,
+        shadowrunr_types::clips::ClipFile {
+            path: "cut-9x16.mp4".into(),
+            kind: "cut_9x16".into(),
+            bytes: 22,
+        },
+    );
+    c.render = Some(r);
+    c.status = ClipStatus::PendingOwnerGate;
+    store.save(&c).unwrap();
+    c
+}
+
+fn video_files(c: &ClipCandidate) -> Vec<String> {
+    c.render
+        .as_ref()
+        .map(|r| {
+            r.files
+                .iter()
+                .filter(|f| f.kind.starts_with("cut_") || f.kind == "video")
+                .map(|f| f.path.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[tokio::test]
+async fn a_poster_fallback_never_replaces_a_good_video() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, base) = stored_candidate(tmp.path()).await;
+    let c = as_video(&store, base);
+    // No tools: the real renderer can only make a poster, which must not replace the cuts.
+    let _ = scan::rerender(&store, &c.id, None);
+    let after = store.load(&c.id).unwrap();
+    assert_eq!(after.render.as_ref().unwrap().kind, "video");
+    assert_eq!(video_files(&after), vec!["cut-9x16.mp4", "cut-16x9.mp4"]);
+    let dir = store.dir(&c.id);
+    assert_eq!(
+        std::fs::read(dir.join("cut-9x16.mp4")).unwrap(),
+        b"vertical cut, take one"
+    );
+    assert_eq!(
+        std::fs::read(dir.join("cut-16x9.mp4")).unwrap(),
+        b"landscape cut, take one"
+    );
+    let last = after.history.last().unwrap();
+    assert!(
+        last.note
+            .as_deref()
+            .unwrap_or("")
+            .starts_with("render failed: "),
+        "{last:?}"
+    );
+}
+
+/// A renderer that says when it starts, then waits for the test's word: `Ok` renders the
+/// poster set into the staging dir, `Err` fails with that reason.
+struct Gated {
+    started: std::sync::mpsc::Sender<()>,
+    go: Mutex<std::sync::mpsc::Receiver<std::result::Result<(), String>>>,
+}
+
+impl crate::job::Renderer for Gated {
+    fn render(
+        &self,
+        staging: &Path,
+        c: &ClipCandidate,
+    ) -> crate::Result<shadowrunr_types::clips::ClipRender> {
+        let _ = self.started.send(());
+        let word = self
+            .go
+            .lock()
+            .unwrap()
+            .recv()
+            .unwrap_or_else(|_| Err("the test went away".into()));
+        match word {
+            Ok(()) => render::render(staging, c, None),
+            Err(why) => Err(crate::ClipError::Io(why)),
+        }
+    }
+}
+
+type Word = std::sync::mpsc::Sender<std::result::Result<(), String>>;
+type Job = std::thread::JoinHandle<crate::Result<ClipCandidate>>;
+
+/// Start a re-render of `id` on its own thread and return once its renderer is running.
+fn render_in_flight(store: &ClipStore, id: &str) -> (Word, Job) {
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (go_tx, go_rx) = std::sync::mpsc::channel();
+    let gated = Gated {
+        started: started_tx,
+        go: Mutex::new(go_rx),
+    };
+    let (store, id) = (store.clone(), id.to_string());
+    let job = std::thread::spawn(move || crate::job::rerender_with(&store, &id, &gated));
+    started_rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("the renderer started");
+    (go_tx, job)
+}
+
+/// `name -> bytes` of every entry in `dir`.
+fn listing(dir: &Path) -> Vec<(String, u64)> {
+    let mut out: Vec<(String, u64)> = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| {
+            (
+                e.file_name().to_string_lossy().into_owned(),
+                e.metadata().map(|m| m.len()).unwrap_or(0),
+            )
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// Run `f` on its own thread; `Some` when it returned within `secs`.
+fn within<T: Send + 'static>(secs: u64, f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    rx.recv_timeout(std::time::Duration::from_secs(secs)).ok()
+}
+
+#[tokio::test]
+async fn the_owner_keeps_working_while_a_clip_renders() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, base) = stored_candidate(tmp.path()).await;
+    let mut a = base.clone();
+    a.status = ClipStatus::PendingOwnerGate;
+    store.save(&a).unwrap();
+    let mut b = base.clone();
+    b.id = "clip-00000000000000bb".into();
+    b.status = ClipStatus::PendingOwnerGate;
+    store.save(&b).unwrap();
+
+    let (go, job) = render_in_flight(&store, &a.id);
+    let s = store.clone();
+    let approved = within(1, move || {
+        s.approve("clip-00000000000000bb", "owner", Some("r"), None)
+    });
+    let s = store.clone();
+    let tagged = within(1, move || {
+        s.feedback(
+            "clip-00000000000000bb",
+            &[shadowrunr_types::clips::ClipFeedbackTag::Landed],
+            None,
+        )
+    });
+    let s = store.clone();
+    let id = a.id.clone();
+    let tagged_a = within(1, move || {
+        s.feedback(&id, &[shadowrunr_types::clips::ClipFeedbackTag::Flat], None)
+    });
+    go.send(Ok(())).unwrap();
+    let rendered = job.join().unwrap();
+
+    let approved = approved.expect("approve returned within 1 s of a render in flight");
+    assert_eq!(approved.unwrap().status, ClipStatus::ApprovedForUpload);
+    assert!(tagged.expect("feedback returned within 1 s").is_ok());
+    assert!(tagged_a
+        .expect("feedback on the rendering clip within 1 s")
+        .is_ok());
+    // The commit lands on the fresh candidate: the feedback given meanwhile is kept.
+    let rendered = rendered.unwrap();
+    assert_eq!(rendered.status, ClipStatus::PendingOwnerGate);
+    let stored = store.load(&a.id).unwrap();
+    assert_eq!(
+        stored.feedback.map(|f| f.tags),
+        Some(vec![shadowrunr_types::clips::ClipFeedbackTag::Flat])
+    );
+    assert!(!crate::job::staging_dir(&store, &a.id).exists());
+}
+
+#[tokio::test]
+async fn a_failed_rerender_keeps_the_previous_video() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, base) = stored_candidate(tmp.path()).await;
+    let c = as_video(&store, base);
+    let before = store.load(&c.id).unwrap();
+    let (go, job) = render_in_flight(&store, &c.id);
+    go.send(Err("ffmpeg exited 1".into())).unwrap();
+    let got = job.join().unwrap();
+    assert!(got.is_err(), "a failed render is reported: {got:?}");
+
+    let after = store.load(&c.id).unwrap();
+    assert_eq!(after.render, before.render, "the previous render is kept");
+    assert_eq!(video_files(&after), vec!["cut-9x16.mp4", "cut-16x9.mp4"]);
+    let dir = store.dir(&c.id);
+    assert_eq!(
+        std::fs::read(dir.join("cut-9x16.mp4")).unwrap(),
+        b"vertical cut, take one"
+    );
+    assert_eq!(
+        std::fs::read(dir.join("cut-16x9.mp4")).unwrap(),
+        b"landscape cut, take one"
+    );
+    assert_eq!(after.history.len(), before.history.len() + 1);
+    let note = after.history.last().unwrap().note.clone().unwrap();
+    assert!(note.starts_with("render failed: "), "{note}");
+    assert!(note.contains("ffmpeg exited 1"), "{note}");
+    assert!(!crate::job::staging_dir(&store, &c.id).exists());
+}
+
+#[tokio::test]
+async fn a_rejection_during_the_render_wins() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, base) = stored_candidate(tmp.path()).await;
+    let c = as_video(&store, base);
+    let (go, job) = render_in_flight(&store, &c.id);
+    let s = store.clone();
+    let id = c.id.clone();
+    let rejected = within(1, move || s.reject(&id, "wrong moment", None))
+        .expect("reject returned within 1 s")
+        .unwrap();
+    assert_eq!(rejected.status, ClipStatus::Rejected);
+    go.send(Ok(())).unwrap();
+    let err = job.join().unwrap().unwrap_err();
+    assert!(matches!(err, crate::ClipError::Conflict(_)), "{err}");
+    assert!(err.to_string().contains("rejected"), "{err}");
+    assert!(err.to_string().contains("wrong moment"), "{err}");
+
+    let after = store.load(&c.id).unwrap();
+    assert_eq!(after.status, ClipStatus::Rejected);
+    assert_eq!(after.render, c.render, "the render field is unchanged");
+    assert!(!crate::job::staging_dir(&store, &c.id).exists());
+}
+
+#[tokio::test]
+async fn a_rescan_removal_during_the_render_is_not_undone() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, base) = stored_candidate(tmp.path()).await;
+    let mut c = base;
+    c.status = ClipStatus::PendingOwnerGate;
+    store.save(&c).unwrap();
+    let (go, job) = render_in_flight(&store, &c.id);
+    {
+        // What a rescan does to an untouched draft, under the store lock.
+        let s = store.clone();
+        let id = c.id.clone();
+        within(1, move || {
+            let _lock = s.lock().unwrap();
+            std::fs::remove_dir_all(s.dir(&id)).unwrap();
+        })
+        .expect("the rescan's write phase is not blocked by the render");
+    }
+    go.send(Ok(())).unwrap();
+    let err = job.join().unwrap().unwrap_err();
+    assert!(matches!(err, crate::ClipError::NotFound(_)), "{err}");
+    assert!(!store.dir(&c.id).exists(), "the clip dir is not recreated");
+    assert!(!crate::job::staging_dir(&store, &c.id).exists());
+}
+
+#[tokio::test]
+async fn a_second_render_of_the_same_clip_is_refused_at_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, base) = stored_candidate(tmp.path()).await;
+    let c = as_video(&store, base);
+    let (go, job) = render_in_flight(&store, &c.id);
+    let before = listing(&store.dir(&c.id));
+    let s = store.clone();
+    let id = c.id.clone();
+    let err = within(1, move || scan::rerender(&s, &id, None))
+        .expect("the second render returned at once")
+        .unwrap_err();
+    assert!(matches!(err, crate::ClipError::Conflict(_)), "{err}");
+    assert!(err.to_string().contains("render in progress"), "{err}");
+    assert_eq!(listing(&store.dir(&c.id)), before, "nothing written");
+    go.send(Ok(())).unwrap();
+    let _ = job.join().unwrap();
+}
+
+#[tokio::test]
+async fn the_clip_dir_holds_only_complete_files_while_rendering() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (store, base) = stored_candidate(tmp.path()).await;
+    let c = as_video(&store, base);
+    let before = listing(&store.dir(&c.id));
+    let (go, job) = render_in_flight(&store, &c.id);
+    assert_eq!(listing(&store.dir(&c.id)), before);
+    go.send(Err("the recorder failed".into())).unwrap();
+    let _ = job.join().unwrap();
+    // Failed: every media file is as it was (only candidate.json gained the note).
+    let after: Vec<(String, u64)> = listing(&store.dir(&c.id))
+        .into_iter()
+        .filter(|(n, _)| n != "candidate.json")
+        .collect();
+    let want: Vec<(String, u64)> = before
+        .into_iter()
+        .filter(|(n, _)| n != "candidate.json")
+        .collect();
+    assert_eq!(after, want);
 }
