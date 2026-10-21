@@ -1,6 +1,7 @@
 // The replay player is event-driven: one timer per due event (coalesced), none between them,
 // and pausing leaves nothing scheduled. Counts are asserted, never timings.
 import type { StreamEvent } from "@shadowrunr/contract";
+import { foldEvents } from "@shadowrunr/stage-kit";
 import { describe, expect, it } from "vitest";
 import { manualTimers } from "../../data/testing";
 import { COALESCE_MS, LOOP_HOLD_MS, LiveFeed, ReplayPlayer } from "./player";
@@ -99,6 +100,45 @@ describe("ReplayPlayer", () => {
   });
 });
 
+describe("ReplayPlayer.seek", () => {
+  it("paused at the start, seek puts the fold up to that moment on screen and schedules nothing", () => {
+    const events = transcript(1000);
+    const { player, timers } = rig(events, 4);
+    player.seek(30_000);
+    const snap = player.getSnapshot();
+    expect(snap.position).toBe(30_000);
+    expect(snap.scene).toEqual(foldEvents(events.filter((e) => e.ts_ms <= 30_000)));
+    expect(snap.playing).toBe(false);
+    expect(timers.pending()).toEqual([]);
+  });
+
+  it("playing, a backward seek rebuilds the scene, keeps playing on one timer and bumps the epoch", () => {
+    const events = transcript(3000);
+    const { player, timers, advance } = rig(events, 4);
+    player.play();
+    advance(90_000 / 4);
+    expect(player.getSnapshot().position).toBeGreaterThanOrEqual(89_000);
+    const epoch = player.getSnapshot().epoch;
+    player.seek(10_000);
+    const snap = player.getSnapshot();
+    expect(snap.scene.applied).toBe(events.filter((e) => e.ts_ms <= 10_000).length);
+    expect(snap.position).toBe(10_000);
+    expect(snap.playing).toBe(true);
+    expect(timers.pending()).toHaveLength(1);
+    expect(snap.epoch).toBeGreaterThan(epoch);
+  });
+
+  it("clamps a seek to the run's span", () => {
+    const events = transcript(100);
+    const { player } = rig(events);
+    player.seek(-5_000);
+    expect(player.getSnapshot().position).toBe(player.getSnapshot().start);
+    player.seek(10_000_000);
+    expect(player.getSnapshot().position).toBe(player.getSnapshot().end);
+    expect(player.getSnapshot().scene.applied).toBe(events.length);
+  });
+});
+
 describe("LiveFeed", () => {
   it("folds events and starts a new scene for a new run", () => {
     const live = new LiveFeed();
@@ -136,5 +176,16 @@ describe("LiveFeed", () => {
     expect(live.getSnapshot().gap).toBe(true);
     live.push(chat, "r1", 10);
     expect(live.getSnapshot().gap).toBe(false);
+  });
+
+  it("seek is a no-op on the live feed", () => {
+    const live = new LiveFeed();
+    for (const e of transcript(10)) live.push(e, "r1");
+    const before = live.getSnapshot();
+    let notified = 0;
+    live.subscribe(() => notified++);
+    live.seek(0);
+    expect(live.getSnapshot()).toBe(before);
+    expect(notified).toBe(0);
   });
 });
