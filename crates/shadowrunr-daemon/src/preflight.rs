@@ -1,9 +1,15 @@
 //! Pre-flight checks PF-01..PF-08: the media-less mapping of the design's pre-flight board.
 //! Every check returns exactly one [`HealthReport`]; a red check blocks `sim.start` and makes
 //! `shadowrunr preflight` exit non-zero. Nothing here spends quota.
+//!
+//! Every non-green row is authored with its [`Remedy`] beside the check ([`Checked`]): applied
+//! (`shadowrunr preflight --fix` may run it, see `preflight_fix`), guided (a command or file
+//! the operator acts on) or external (outside shadowrunr). The checks themselves stay
+//! read-only; a remedy is only a description until `--fix` applies it.
 
 use std::path::Path;
 
+use serde::Serialize;
 use shadowrunr_brain::moderation::{ListStatus, Policy};
 use shadowrunr_segments::{SegmentConfig, SegmentError, SegmentRuntime};
 use shadowrunr_sim::calibration::{self, CalibrationOrigin};
@@ -16,11 +22,100 @@ use crate::engine::EngineHandle;
 pub const RED_FREE_BYTES: u64 = 1 << 30;
 pub const AMBER_FREE_BYTES: u64 = 5 << 30;
 
-fn rep(check: &str, state: HealthState, detail: impl Into<String>) -> HealthReport {
-    HealthReport {
-        check: check.into(),
-        state,
-        detail: detail.into(),
+/// How a non-green row is repaired: the remediation ladder as data, never prose to parse.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Remedy {
+    /// `shadowrunr preflight --fix` applies it (`command` is the manual equivalent).
+    Applied {
+        #[serde(flatten)]
+        fix: Fix,
+        command: String,
+    },
+    /// The operator acts: a command to run and/or a file to write or repair.
+    Guided {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        command: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        file: Option<String>,
+        text: String,
+    },
+    /// Outside shadowrunr (the engine fleet, the disk, the media stack).
+    External { text: String },
+}
+
+/// A repair `preflight --fix` knows how to apply.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "fix", rename_all = "snake_case")]
+pub enum Fix {
+    /// Rebuild `<data>/memory/index.sqlite` from the markdown (derived data only).
+    Reindex,
+    /// Install term lists from their known sources: network, so it also needs `--download`.
+    InstallLists { lists: Vec<ListSource> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ListSource {
+    pub list_id: String,
+    pub source: String,
+}
+
+impl Remedy {
+    fn guided(command: Option<String>, file: Option<&Path>, text: impl Into<String>) -> Self {
+        Self::Guided {
+            command,
+            file: file.map(|f| f.display().to_string()),
+            text: text.into(),
+        }
+    }
+
+    fn external(text: impl Into<String>) -> Self {
+        Self::External { text: text.into() }
+    }
+
+    /// The suffix a human pre-flight row ends with.
+    pub fn hint(&self) -> String {
+        match self {
+            Self::Applied {
+                fix: Fix::Reindex, ..
+            } => "fix: shadowrunr preflight --fix".into(),
+            Self::Applied {
+                fix: Fix::InstallLists { .. },
+                ..
+            } => "fix: shadowrunr preflight --fix --download".into(),
+            Self::Guided {
+                command: Some(c), ..
+            } => format!("fix: {c}"),
+            Self::Guided { text, .. } => format!("fix: {text}"),
+            Self::External { text } => format!("external: {text}"),
+        }
+    }
+}
+
+/// One check's report and its remedy (none when green or when nothing is known to help).
+#[derive(Debug, Clone, Serialize)]
+pub struct Checked {
+    #[serde(flatten)]
+    pub report: HealthReport,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remedy: Option<Remedy>,
+}
+
+impl Checked {
+    fn fix(mut self, remedy: Remedy) -> Self {
+        self.remedy = Some(remedy);
+        self
+    }
+}
+
+fn rep(check: &str, state: HealthState, detail: impl Into<String>) -> Checked {
+    Checked {
+        report: HealthReport {
+            check: check.into(),
+            state,
+            detail: detail.into(),
+        },
+        remedy: None,
     }
 }
 
@@ -39,26 +134,48 @@ pub fn any_red(reports: &[HealthReport]) -> bool {
 
 /// Run all eight checks, in order.
 pub async fn run_all(cfg: &Config, engine: &EngineHandle) -> Vec<HealthReport> {
-    let mut reports = vec![
-        pf01_engine(engine).await,
-        pf02_character(cfg),
-        pf03_memory(cfg),
-        pf04_segments(cfg),
-        pf05_policy(cfg),
-        pf06_calibration(cfg),
-        pf07_disk(cfg),
-        pf08_media(),
+    run_all_checked(cfg, engine)
+        .await
+        .into_iter()
+        .map(|c| c.report)
+        .collect()
+}
+
+/// [`run_all`] with each row's remedy. Read-only, like every check.
+pub async fn run_all_checked(cfg: &Config, engine: &EngineHandle) -> Vec<Checked> {
+    let mut rows = vec![
+        pf01(engine).await,
+        pf02(cfg),
+        pf03(cfg),
+        pf04(cfg),
+        pf05(cfg),
+        pf06(cfg),
+        pf07(cfg),
+        pf08(),
     ];
     // PF-09 (integrations) appears only when Personas activity is configured.
-    reports.extend(crate::integrations::activity::preflight_line(cfg).await);
-    reports
+    rows.extend(
+        crate::integrations::activity::preflight_line(cfg)
+            .await
+            .map(|report| Checked {
+                report,
+                remedy: None,
+            }),
+    );
+    rows
 }
 
 /// PF-01: the engine's own health (WP1), folded into one report.
 pub async fn pf01_engine(engine: &EngineHandle) -> HealthReport {
+    pf01(engine).await.report
+}
+
+async fn pf01(engine: &EngineHandle) -> Checked {
     let reports = engine.engine.health().await;
+    let external =
+        || Remedy::external("repair the engine named in the detail (CLI install, account login)");
     if reports.is_empty() {
-        return rep("PF-01", HealthState::Amber, "engine reported no health");
+        return rep("PF-01", HealthState::Amber, "engine reported no health").fix(external());
     }
     let state = reports
         .iter()
@@ -68,11 +185,20 @@ pub async fn pf01_engine(engine: &EngineHandle) -> HealthReport {
         .map(|r| r.detail.as_str())
         .collect::<Vec<_>>()
         .join("; ");
-    rep("PF-01", state, detail)
+    let c = rep("PF-01", state, detail);
+    if state == HealthState::Green {
+        c
+    } else {
+        c.fix(external())
+    }
 }
 
 /// PF-02: the default character package loads and its constitution is present.
 pub fn pf02_character(cfg: &Config) -> HealthReport {
+    pf02(cfg).report
+}
+
+fn pf02(cfg: &Config) -> Checked {
     let id = &cfg.sim.character;
     let dir = cfg.paths.characters.join(id);
     match shadowrunr_brain::load_character(&dir, "") {
@@ -93,7 +219,12 @@ pub fn pf02_character(cfg: &Config) -> HealthReport {
             "PF-02",
             HealthState::Red,
             format!("character {id} at {}: {e}", dir.display()),
-        ),
+        )
+        .fix(Remedy::guided(
+            None,
+            Some(&dir),
+            "repair the character package, or point [sim] character / [paths] characters at one that loads",
+        )),
     }
 }
 
@@ -120,6 +251,10 @@ fn nearest_dir_readonly(dir: &Path) -> Option<(std::path::PathBuf, bool)> {
 /// `preflight` tool is declared read-only). A stale index is amber with the repair command;
 /// the rebuild itself is `shadowrunr memory reindex`.
 pub fn pf03_memory(cfg: &Config) -> HealthReport {
+    pf03(cfg).report
+}
+
+fn pf03(cfg: &Config) -> Checked {
     let dir = cfg.paths.memory();
     if !dir.is_dir() {
         return match nearest_dir_readonly(&dir) {
@@ -136,12 +271,18 @@ pub fn pf03_memory(cfg: &Config) -> HealthReport {
                 "PF-03",
                 HealthState::Red,
                 format!("{} cannot be created: {} is read-only", dir.display(), at.display()),
-            ),
+            )
+            .fix(Remedy::external(format!("make {} writable", at.display()))),
             None => rep(
                 "PF-03",
                 HealthState::Red,
                 format!("{}: no existing parent directory", dir.display()),
-            ),
+            )
+            .fix(Remedy::guided(
+                None,
+                None,
+                "point [paths] data at an existing directory",
+            )),
         };
     }
     if nearest_dir_readonly(&dir).is_some_and(|(_, ro)| ro) {
@@ -149,7 +290,8 @@ pub fn pf03_memory(cfg: &Config) -> HealthReport {
             "PF-03",
             HealthState::Red,
             format!("{} is read-only", dir.display()),
-        );
+        )
+        .fix(Remedy::external(format!("make {} writable", dir.display())));
     }
     match shadowrunr_brain::memory::verify_index(&dir) {
         Ok(c) if c.in_step() => rep(
@@ -176,17 +318,47 @@ pub fn pf03_memory(cfg: &Config) -> HealthReport {
                 dir.display(),
                 c.problems.join("; ")
             ),
-        ),
+        )
+        .fix(Remedy::Applied {
+            fix: Fix::Reindex,
+            command: "shadowrunr memory reindex".into(),
+        }),
         Err(e) => rep(
             "PF-03",
             HealthState::Red,
             format!("memory markdown unreadable at {}: {e}", dir.display()),
-        ),
+        )
+        .fix(Remedy::guided(
+            Some("shadowrunr memory reindex".into()),
+            Some(&dir),
+            "repair the unreadable markdown, then reindex",
+        )),
     }
 }
 
 /// PF-04: segment tables parse, active segments start, descoped segments are refused.
 pub fn pf04_segments(cfg: &Config) -> HealthReport {
+    pf04(cfg).report
+}
+
+fn pf04(cfg: &Config) -> Checked {
+    let c = pf04_tables(cfg);
+    if c.report.state == HealthState::Green {
+        c
+    } else if !cfg.paths.segments.is_dir() {
+        c.fix(Remedy::guided(
+            None,
+            Some(&cfg.paths.segments),
+            "point [paths] segments at the segment data directory",
+        ))
+    } else {
+        c.fix(Remedy::external(
+            "the segment tables shipped with this build are broken: rebuild from a good tree",
+        ))
+    }
+}
+
+fn pf04_tables(cfg: &Config) -> Checked {
     let tables = match shadowrunr_segments::table::tables() {
         Ok(t) => t.len(),
         Err(e) => return rep("PF-04", HealthState::Red, format!("segment tables: {e}")),
@@ -264,6 +436,10 @@ fn same_file(a: &Path, b: &Path) -> bool {
 /// operator-installed lists its placeholders name: green with "installed list <id> (<n>
 /// terms)", amber with "placeholder only".
 pub fn pf05_policy(cfg: &Config) -> HealthReport {
+    pf05(cfg).report
+}
+
+fn pf05(cfg: &Config) -> Checked {
     let path = cfg.paths.policy.join("platform-rules.json");
     if !path.is_file() {
         return rep(
@@ -273,7 +449,12 @@ pub fn pf05_policy(cfg: &Config) -> HealthReport {
                 "{} absent: the brain uses its built-in term rules",
                 path.display()
             ),
-        );
+        )
+        .fix(Remedy::guided(
+            None,
+            Some(&path),
+            "write the platform rules file (the repo ships policy/platform-rules.json)",
+        ));
     }
     let text = match std::fs::read_to_string(&path) {
         Ok(t) => t,
@@ -283,6 +464,11 @@ pub fn pf05_policy(cfg: &Config) -> HealthReport {
                 HealthState::Red,
                 format!("{}: {e}", path.display()),
             )
+            .fix(Remedy::guided(
+                None,
+                Some(&path),
+                "repair the platform rules file",
+            ))
         }
     };
     let v: serde_json::Value = match serde_json::from_str(&text) {
@@ -293,6 +479,11 @@ pub fn pf05_policy(cfg: &Config) -> HealthReport {
                 HealthState::Red,
                 format!("{}: {e}", path.display()),
             )
+            .fix(Remedy::guided(
+                None,
+                Some(&path),
+                "repair the platform rules file",
+            ))
         }
     };
     let platforms: Vec<String> = v
@@ -306,7 +497,13 @@ pub fn pf05_policy(cfg: &Config) -> HealthReport {
         .map_or(0, Vec::len);
     let policy = match Policy::from_file_with_local(&path, &cfg.paths.policy.join("local")) {
         Ok(p) => p,
-        Err(e) => return rep("PF-05", HealthState::Red, e.to_string()),
+        Err(e) => {
+            return rep("PF-05", HealthState::Red, e.to_string()).fix(Remedy::guided(
+                None,
+                Some(&path),
+                "repair the platform rules file",
+            ))
+        }
     };
     // The brain's PolicySource::Auto reads <characters>/../policy; say so when the
     // configured file is a different one.
@@ -330,14 +527,79 @@ pub fn pf05_policy(cfg: &Config) -> HealthReport {
         detail.push_str(&lists_detail);
     }
     let mut state = lists_state;
+    let mut remedy = list_remedy(&policy.lists);
     if !same_file(&path, &auto) {
         state = HealthState::Amber;
         detail.push_str(&format!(
             "; the brain reads {} (PolicySource::Auto), not this file",
             auto.display()
         ));
+        remedy = remedy.or_else(|| {
+            Some(Remedy::guided(
+                None,
+                Some(&auto),
+                "keep the platform rules where the brain reads them, and point [paths] policy there",
+            ))
+        });
     }
-    rep("PF-05", state, detail)
+    let c = rep("PF-05", state, detail);
+    match remedy {
+        Some(r) => c.fix(r),
+        None => c,
+    }
+}
+
+/// The remedy for unserved placeholder categories: install, per category, a list with a
+/// known source (applied, network-gated); guided when a category has none.
+fn list_remedy(lists: &[ListStatus]) -> Option<Remedy> {
+    let mut chosen: Vec<ListSource> = Vec::new();
+    let mut manual: Vec<&str> = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for l in lists {
+        let category = l.category.as_str();
+        if seen.contains(&category) {
+            continue;
+        }
+        seen.push(category);
+        let in_category = || lists.iter().filter(move |x| x.category == category);
+        if in_category().any(|x| x.installed_terms.is_some()) {
+            continue;
+        }
+        // Only a list with no installed file yet: a fix never overwrites an operator's copy.
+        let known = in_category().find_map(|x| {
+            let k = crate::policy_install::known(&x.list_id)?;
+            (x.error.is_none()).then(|| ListSource {
+                list_id: x.list_id.clone(),
+                source: k.url.to_string(),
+            })
+        });
+        match known {
+            Some(src) => chosen.push(src),
+            None => manual.push(&l.list_id),
+        }
+    }
+    if !manual.is_empty() {
+        return Some(Remedy::Guided {
+            command: Some(format!(
+                "shadowrunr policy install-list {} --source <url|path>",
+                manual[0]
+            )),
+            file: None,
+            text: format!("no known source for {}", manual.join(", ")),
+        });
+    }
+    if chosen.is_empty() {
+        return None;
+    }
+    let command = chosen
+        .iter()
+        .map(|l| format!("shadowrunr policy install-list {}", l.list_id))
+        .collect::<Vec<_>>()
+        .join(" && ");
+    Some(Remedy::Applied {
+        fix: Fix::InstallLists { lists: chosen },
+        command,
+    })
 }
 
 /// The installed-list part of PF-05: green when every placeholder category is served by an
@@ -380,6 +642,11 @@ pub fn installed_lists(lists: &[ListStatus]) -> (HealthState, String) {
 
 /// PF-06: `sim/calibration.json` is present (amber when only the built-in defaults exist).
 pub fn pf06_calibration(cfg: &Config) -> HealthReport {
+    pf06(cfg).report
+}
+
+fn pf06(cfg: &Config) -> Checked {
+    let file = cfg.paths.sim.join("calibration.json");
     match calibration::load(&cfg.paths.sim) {
         Ok((cal, CalibrationOrigin::File { path }, _)) => {
             let assumptions = cal.assumptions().len();
@@ -399,10 +666,19 @@ pub fn pf06_calibration(cfg: &Config) -> HealthReport {
             HealthState::Amber,
             format!(
                 "{} absent: only the built-in defaults exist (every figure is an assumption)",
-                cfg.paths.sim.join("calibration.json").display()
+                file.display()
             ),
-        ),
-        Err(e) => rep("PF-06", HealthState::Red, e.to_string()),
+        )
+        .fix(Remedy::guided(
+            None,
+            Some(&file),
+            "write the calibration file (the repo ships sim/calibration.json)",
+        )),
+        Err(e) => rep("PF-06", HealthState::Red, e.to_string()).fix(Remedy::guided(
+            None,
+            Some(&file),
+            "repair the calibration file",
+        )),
     }
 }
 
@@ -410,6 +686,10 @@ pub fn pf06_calibration(cfg: &Config) -> HealthReport {
 /// directory is not created and no probe file is written (a missing directory is created by
 /// the first run).
 pub fn pf07_disk(cfg: &Config) -> HealthReport {
+    pf07(cfg).report
+}
+
+fn pf07(cfg: &Config) -> Checked {
     let dir = cfg.paths.sim_runs();
     let (at, readonly) = match nearest_dir_readonly(&dir) {
         Some(x) => x,
@@ -419,6 +699,11 @@ pub fn pf07_disk(cfg: &Config) -> HealthReport {
                 HealthState::Red,
                 format!("{}: no existing parent directory", dir.display()),
             )
+            .fix(Remedy::guided(
+                None,
+                None,
+                "point [paths] runs at an existing directory",
+            ))
         }
     };
     if readonly {
@@ -430,7 +715,8 @@ pub fn pf07_disk(cfg: &Config) -> HealthReport {
                 dir.display(),
                 at.display()
             ),
-        );
+        )
+        .fix(Remedy::external(format!("make {} writable", at.display())));
     }
     match fs2::available_space(&at) {
         Ok(free) => {
@@ -442,27 +728,46 @@ pub fn pf07_disk(cfg: &Config) -> HealthReport {
             } else {
                 HealthState::Green
             };
-            rep(
+            let c = rep(
                 "PF-07",
                 state,
                 format!("{} writable; {gib:.1} GiB free", dir.display()),
-            )
+            );
+            if state == HealthState::Green {
+                c
+            } else {
+                c.fix(Remedy::external(format!(
+                    "free disk space on {}",
+                    at.display()
+                )))
+            }
         }
         Err(e) => rep(
             "PF-07",
             HealthState::Amber,
             format!("{} writable; free space unknown: {e}", dir.display()),
-        ),
+        )
+        .fix(Remedy::external(format!(
+            "check the disk under {}",
+            at.display()
+        ))),
     }
 }
 
 /// PF-08: the media stack is out of scope in the media-less phase.
 pub fn pf08_media() -> HealthReport {
+    pf08().report
+}
+
+fn pf08() -> Checked {
     rep(
         "PF-08",
         HealthState::Amber,
         "not in media-less phase (TTS, avatar, OBS, chat connectors)",
     )
+    .fix(Remedy::external(
+        "the media stack is outside the media-less phase",
+    ))
 }
 
 #[cfg(test)]

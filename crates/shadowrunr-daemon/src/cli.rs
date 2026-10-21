@@ -41,14 +41,22 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Run pre-flight checks PF-01..PF-08; exits non-zero if any check is red.
+    /// Run pre-flight checks PF-01..PF-08; exits non-zero if any check is red. Read-only
+    /// unless `--fix` is given.
     Preflight {
-        /// Print the reports as JSON.
+        /// Print the reports as JSON (with `--fix`: the before -> after board).
         #[arg(long)]
         json: bool,
         /// Check the scripted engine instead of the live fleet.
         #[arg(long)]
         scripted: bool,
+        /// Apply the safe remedies (memory reindex; list installs with --download), then
+        /// re-probe and print before -> after. Exits non-zero only if a check is still red.
+        #[arg(long)]
+        fix: bool,
+        /// With --fix: allow remedies that download (term lists from their known source).
+        #[arg(long, requires = "fix")]
+        download: bool,
     },
     /// Text simulations.
     #[command(subcommand)]
@@ -491,7 +499,18 @@ pub fn main() -> ExitCode {
 
 pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
     match cmd {
-        Command::Preflight { json, scripted } => preflight_cmd(&cfg, json, scripted).await,
+        Command::Preflight {
+            json,
+            scripted,
+            fix: false,
+            ..
+        } => preflight_cmd(&cfg, json, scripted).await,
+        Command::Preflight {
+            json,
+            scripted,
+            fix: true,
+            download,
+        } => preflight_fix_cmd(&cfg, json, scripted, download).await,
         Command::Sim(SimCommand::Run(a)) => sim_run(&cfg, a).await,
         Command::Sim(SimCommand::Tournament(a)) => sim_tournament(&cfg, a).await,
         Command::Sim(SimCommand::Summarize { dir, json }) => sim_summarize(&from_cwd(&dir), json),
@@ -1109,20 +1128,48 @@ async fn policy_install_cmd(
 
 async fn preflight_cmd(cfg: &Config, json: bool, scripted: bool) -> Result<ExitCode, String> {
     let engine = EngineHandle::build(cfg, scripted);
-    let reports = preflight::run_all(cfg, &engine).await;
+    let rows = preflight::run_all_checked(cfg, &engine).await;
+    let reports: Vec<_> = rows.iter().map(|c| c.report.clone()).collect();
     if json {
         print_json(&reports);
     } else {
-        for r in &reports {
+        for c in &rows {
+            let r = &c.report;
             let state = match r.state {
                 HealthState::Green => "green",
                 HealthState::Amber => "amber",
                 HealthState::Red => "RED  ",
             };
-            println!("{}  {state}  {}", r.check, r.detail);
+            let hint = c
+                .remedy
+                .as_ref()
+                .map(|m| format!("  {}", m.hint()))
+                .unwrap_or_default();
+            println!("{}  {state}  {}{hint}", r.check, r.detail);
         }
     }
     Ok(if preflight::any_red(&reports) {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+async fn preflight_fix_cmd(
+    cfg: &Config,
+    json: bool,
+    scripted: bool,
+    download: bool,
+) -> Result<ExitCode, String> {
+    use crate::preflight_fix::{apply, render, FixOptions};
+    let engine = EngineHandle::build(cfg, scripted);
+    let outcome = apply(cfg, &engine, FixOptions { download }).await;
+    if json {
+        print_json(&outcome);
+    } else {
+        print!("{}", render(&outcome));
+    }
+    Ok(if outcome.any_red() {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS

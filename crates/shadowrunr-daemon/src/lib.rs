@@ -16,6 +16,7 @@ pub mod media;
 pub mod paging;
 pub mod policy_install;
 pub mod preflight;
+pub mod preflight_fix;
 pub mod prep;
 pub mod record;
 pub mod report_wire;

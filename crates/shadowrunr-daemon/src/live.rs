@@ -259,21 +259,37 @@ pub fn brief_line(run_id: &str, brief: Option<&StreamBrief>) -> String {
     )
 }
 
-/// `preflight_red`, naming every red check, when pre-flight is red.
+/// `preflight_red`, naming every red check, when pre-flight is red. `detail.red` carries
+/// each red row as `{check, detail, remedy?}`, so a client shows the fix beside the red.
 pub async fn refuse_if_red(state: &AppState) -> Result<(), RpcError> {
-    let reports = preflight::run_all(&state.cfg, &state.engine).await;
-    if !preflight::any_red(&reports) {
+    let rows = preflight::run_all_checked(&state.cfg, &state.engine).await;
+    let red: Vec<&preflight::Checked> = rows
+        .iter()
+        .filter(|c| c.report.state == shadowrunr_types::HealthState::Red)
+        .collect();
+    if red.is_empty() {
         return Ok(());
     }
-    let red: Vec<String> = reports
+    let message = red
         .iter()
-        .filter(|r| r.state == shadowrunr_types::HealthState::Red)
-        .map(|r| format!("{} {}", r.check, r.detail))
+        .map(|c| format!("{} {}", c.report.check, c.report.detail))
+        .collect::<Vec<_>>()
+        .join("; ");
+    let detail: Vec<serde_json::Value> = red
+        .iter()
+        .map(|c| {
+            let mut row = serde_json::json!({ "check": c.report.check, "detail": c.report.detail });
+            if let Some(r) = &c.remedy {
+                row["remedy"] = serde_json::to_value(r).unwrap_or_default();
+            }
+            row
+        })
         .collect();
     Err(RpcError::new(
         ErrorCode::PreflightRed,
-        format!("pre-flight is red: {}", red.join("; ")),
-    ))
+        format!("pre-flight is red: {message}"),
+    )
+    .with_detail(serde_json::json!({ "red": detail })))
 }
 
 /// `sim.start`: refuse while a pre-flight check is red or a sandbox session runs, then run in

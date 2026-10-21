@@ -39,10 +39,20 @@ Where things land:
 deterministic `ScriptedEngine`. It spends no quota, and its content is placeholder text by
 design.
 
-## `shadowrunr preflight [--json] [--scripted]`
+## `shadowrunr preflight [--json] [--scripted] [--fix [--download]]`
 
 Runs PF-01..PF-08 and prints one line per check. The command exits non-zero if any check is
-red. `--json` prints the `HealthReport[]` instead.
+red. `--json` prints the `HealthReport[]` instead. Pre-flight is read-only: without `--fix` it
+creates, writes and repairs nothing.
+
+Each amber or red line ends with its remedy, authored beside the check:
+- `fix: shadowrunr preflight --fix`: an applied remedy that `--fix` runs for you (PF-03 stale
+  index: `memory reindex`).
+- `fix: shadowrunr preflight --fix --download`: an applied remedy that downloads (PF-05
+  placeholder-only lists with a known source: `policy install-list <id>`).
+- `fix: <command or what to do>`: guided; you act (PF-02 package, PF-05 absent or not the file
+  the brain reads, PF-06 calibration absent).
+- `external: <what>`: outside shadowrunr (PF-01 engine, PF-07 disk, PF-08 media stack).
 
 | Check | What it verifies | Red when | Amber when |
 |---|---|---|---|
@@ -64,7 +74,33 @@ PF-04  green  4 tables valid; SEG-01, SEG-02A start; SEG-02B-I, SEG-02B-II refus
 PF-05  green  23 term rules; platforms: tiktok, twitch, youtube
 PF-06  green  .../sim/calibration.json: 43 sources, 8 archetypes, 4 populations, 5 figures are assumptions
 PF-07  green  .../runs/sim writable; 496.1 GiB free
-PF-08  amber  not in media-less phase (TTS, avatar, OBS, chat connectors)
+PF-08  amber  not in media-less phase (TTS, avatar, OBS, chat connectors)  external: the media stack is outside the media-less phase
+```
+
+`--fix` applies the applied remedies, re-runs every check and prints a before -> after board.
+A row's state shows `before -> after` when it changed. The fix's success claim is the re-probe:
+a fix whose row did not improve is reported as `not fixed`.
+- **Reindex** refuses while a daemon answers `/rpc` on the configured `[daemon] port`, since it
+  holds the index open: `not fixed: the daemon on 127.0.0.1:<port> holds the index; stop it
+  first`.
+- **List installs** need `--download` as well. Without it nothing is fetched and the row says
+  `needs --download: fetches <list-id> from <source>`. An install writes only a list that has
+  no installed copy; it never overwrites one.
+- A second run on a repaired store prints `nothing to fix`.
+
+The command exits non-zero only if a check is still red after the fix pass. `--fix --json`
+prints `{rows: [{check, before, after, detail, remedy?, remaining?, result?}], nothing_to_fix}`.
+In it, `remedy` is `{kind: "applied", fix, command, ...}`, `{kind: "guided", command?, file?,
+text}` or `{kind: "external", text}`, and `result` is `{status: "fixed" | "not_fixed" |
+"needs_download", message}`. Plain `--json` keeps the `HealthReport[]` array.
+
+```
+$ shadowrunr preflight --fix --scripted
+PF-01  green  scripted engine
+...
+PF-03  amber -> green  fixed: memory reindex
+...
+PF-08  amber  not in media-less phase (TTS, avatar, OBS, chat connectors)  external: the media stack is outside the media-less phase
 ```
 
 Other PF-03 details: `.../data/memory: empty store, no index yet` (green), `.../data/memory
@@ -76,7 +112,8 @@ restored there shows up in this line without a code change.
 ## `shadowrunr memory reindex [--json]`
 
 Deletes and rebuilds `<data>/memory/index.sqlite` from the markdown truth. This is the repair
-PF-03 names when the index is stale; pre-flight only verifies and never rebuilds. Stop the
+PF-03 names when the index is stale; pre-flight only verifies and never rebuilds
+(`shadowrunr preflight --fix` runs this repair and refuses while a daemon answers). Stop the
 daemon first, because it holds the index open. `--json` prints the counts as JSON. The command
 fails when there is no memory store to reindex.
 
@@ -459,7 +496,8 @@ Notes:
 - **Run ids:** `run_id` may be bare or `<tournament_id>/<run_id>`. A bare id that exists in
   several tournaments is rejected as ambiguous.
 - **Starting a sim:** `sim.start` runs pre-flight first and refuses with `preflight_red`
-  while any check is red. It also refuses descoped segments, returns `busy` beyond
+  while any check is red. The error's `detail.red` lists each red row as `{check, detail,
+  remedy?}`, with the same remedy `shadowrunr preflight` prints. It also refuses descoped segments, returns `busy` beyond
   `max_live_runs`, and `conflict` while a sandbox session runs. An empty `spec.run_id` gets a generated one. The run lands in
   `<runs>/sim/adhoc/`.
 
