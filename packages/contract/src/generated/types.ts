@@ -448,7 +448,7 @@ export type Platform = "twitch" | "youtube" | "kick" | "sim";
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "Speaker".
  */
-export type Speaker = "malakor" | "foil";
+export type Speaker = "foil" | "host";
 /**
  * Malakor's action grammar. The model emits `OP: {json}` lines; only these ops are allowed.
  *
@@ -669,6 +669,13 @@ export type DecidedBy = "only_eligible" | "quality" | "cost_per_usable_stream";
  * via the `definition` "IneligibleReason".
  */
 export type IneligibleReason = "hard_fail" | "unmeasured";
+/**
+ * Where a tuning value came from.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Provenance".
+ */
+export type Provenance = "measured" | "assumption";
 /**
  * An owner act on a candidate; [`ClipCandidate::act_block`] says when it is allowed.
  *
@@ -3976,6 +3983,308 @@ export interface StageAck {
    * How long the socket has been open with no event, if stalled now.
    */
   stalled_ms: number;
+}
+/**
+ * `[avatar]`: schema only in this version (the daemon still reads its own rig path).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterAvatar".
+ */
+export interface CharacterAvatar {
+  /**
+   * The stage's face renderer: `glow`, `cut` or `depth`.
+   */
+  face?: string;
+  /**
+   * Rig spec, relative to the package, e.g. `rig/m8.spec.json`.
+   */
+  rig?: string;
+}
+/**
+ * `[identity]`: the words the engine's own text uses for this character. When the table is
+ * present, `name`, `patron`, `follower`, `sign_off` and `disclosure` are required.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterIdentity".
+ */
+export interface CharacterIdentity {
+  /**
+   * Lowercase words chat calls the character by (addressing detection, the name stoplist).
+   * Absent: the name's words of four letters or more.
+   */
+  address_words?: string[];
+  /**
+   * The in-character AI disclosure that replaces a persona leak which disclosed being an AI.
+   */
+  disclosure: string;
+  follower: Noun;
+  /**
+   * Short name, e.g. "Malakor" (`{name}`).
+   */
+  name: string;
+  patron: Patron;
+  /**
+   * Speaker labels a model reply may start a line with, stripped before speech. Absent:
+   * `**Name:**`, `Name:`, `NAME:` and `**Name**:`.
+   */
+  reply_prefixes?: string[];
+  researcher?: Noun;
+  /**
+   * The fleet-loss sign-off, spoken when the engine fleet stays lost.
+   */
+  sign_off: string;
+  /**
+   * Title before the name, e.g. "Arch-Lich" (`{title}`).
+   */
+  title?: string;
+}
+/**
+ * A word in the singular and the plural, e.g. `{ one = "minion", many = "minions" }`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Noun".
+ */
+export interface Noun {
+  many: string;
+  one: string;
+}
+/**
+ * The character's patron (`{patron}`, `{patron_title}`). Written without an article: the
+ * engine's text supplies "the".
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Patron".
+ */
+export interface Patron {
+  /**
+   * e.g. "Lord of the Darkness".
+   */
+  name: string;
+  /**
+   * The short form, e.g. "Lord" ("the Lord's brief").
+   */
+  title: string;
+}
+/**
+ * `[lines]`: model-free in-character lines. Each may use placeholders.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterLines".
+ */
+export interface CharacterLines {
+  /**
+   * Replaces a line a `block` term rule caught.
+   */
+  blocked?: string;
+  /**
+   * Replaces a line that did nothing but ask someone for personal details.
+   */
+  private_details?: string;
+  /**
+   * Rebuttals of a forged decree; none may name or describe the patron.
+   */
+  rebuttals?: string[];
+  /**
+   * Stand-ins for a line that broke character or leaked the persona (a fresh bit each).
+   */
+  recast?: string[];
+}
+/**
+ * `character.toml`, v2. Tables added in v2 (`identity`, `voice`, `avatar`, `lines`,
+ * `tuning`, `segments`, and the ladder keys of `ranks`) are optional: a v1 file still loads,
+ * with the engine's neutral defaults.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterManifest".
+ */
+export interface CharacterManifest {
+  avatar?: CharacterAvatar;
+  /**
+   * Tone variant used when none is chosen (`tones/<id>.md`).
+   */
+  default_tone: string;
+  /**
+   * Summonable SEG-01 foils (`foils/<id>.md`), in order.
+   */
+  foils?: string[];
+  /**
+   * Package id: the directory name, `[A-Za-z0-9_-]`.
+   */
+  id: string;
+  identity?: CharacterIdentity;
+  lines?: CharacterLines;
+  /**
+   * Display name, e.g. "Arch-Lich Malakor".
+   */
+  name: string;
+  ranks?: CharacterRanks;
+  /**
+   * Optional constitution rules (`rules/<id>.md`), on or off by default.
+   */
+  rules?: {
+    [k: string]: boolean | undefined;
+  };
+  /**
+   * Per-segment flavour appended to the segment's prompts (placeholders filled).
+   */
+  segments?: {
+    [k: string]: SegmentFlavour | undefined;
+  };
+  /**
+   * One line under the name in the operator app.
+   */
+  tagline?: string;
+  tuning?: CharacterTuning;
+  voice?: CharacterVoice;
+}
+/**
+ * `[ranks]`: the title the character says for each rank (wire names are fixed), and optional
+ * overrides of the engine's ladder. An override replaces only what it names.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterRanks".
+ */
+export interface CharacterRanks {
+  acolyte?: string;
+  cultist?: string;
+  dread_council?: string;
+  lich?: string;
+  propose_min_rank?: Rank;
+  thrall?: string;
+  /**
+   * How a rank is reached (the base rank, `thrall`, takes none).
+   */
+  thresholds?: {
+    acolyte?: RankThreshold;
+    cultist?: RankThreshold;
+    dread_council?: RankThreshold;
+    lich?: RankThreshold;
+    thrall?: RankThreshold;
+    warlock?: RankThreshold;
+  };
+  warlock?: string;
+  /**
+   * Vote weight per rank (positive, non-decreasing up the ladder after merging).
+   */
+  weights?: {
+    acolyte?: number;
+    cultist?: number;
+    dread_council?: number;
+    lich?: number;
+    thrall?: number;
+    warlock?: number;
+  };
+}
+/**
+ * One rank's qualifying conditions: gifting at least `min_gifted`, or any `tiers` entry.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "RankThreshold".
+ */
+export interface RankThreshold {
+  min_gifted?: number;
+  tiers?: TierThreshold[];
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "TierThreshold".
+ */
+export interface TierThreshold {
+  /**
+   * Minimum cumulative months at that tier.
+   */
+  min_months?: number;
+  /**
+   * Current subscription tier: 1, 2 or 3.
+   */
+  tier: number;
+}
+/**
+ * `[segments."SEG-01"]`: flavour appended to a segment's prompts.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SegmentFlavour".
+ */
+export interface SegmentFlavour {
+  /**
+   * Appended to the segment's rules prompt.
+   */
+  rules_prompt?: string;
+  /**
+   * State name -> text appended to that state's prompt line.
+   */
+  states?: {
+    [k: string]: string | undefined;
+  };
+}
+/**
+ * `[tuning]` as written: every key optional.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterTuning".
+ */
+export interface CharacterTuning {
+  bit_spacing_ms?: TuningEntry;
+  browser_dwell_ms?: TuningEntry;
+  carry_max?: TuningEntry;
+  carry_ms?: TuningEntry;
+  closing_now_s?: TuningEntry;
+  closing_s?: TuningEntry;
+  desk_dwell_ms?: TuningEntry;
+  failed_beat_slack_s?: TuningEntry;
+  goodbye_drain_max_s?: TuningEntry;
+  hold_gap_ms?: TuningEntry;
+  lag_ceiling_ms?: TuningEntry;
+  lookahead_max_ms?: TuningEntry;
+  max_picks?: TuningEntry;
+  min_cover_ms?: TuningEntry;
+  quiet_bit_ms?: TuningEntry;
+  render_lag_ms?: TuningEntry;
+  request_answer_ms?: TuningEntry;
+  request_lead_ms?: TuningEntry;
+  request_max_ms?: TuningEntry;
+  screen_hold_ms?: TuningEntry;
+  sign_off_window_s?: TuningEntry;
+  stall_every_s?: TuningEntry;
+  stop_sign_off_s?: TuningEntry;
+}
+/**
+ * One `[tuning]` key: `{ value = 25000, provenance = "assumption", source = "..." }`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "TuningEntry".
+ */
+export interface TuningEntry {
+  provenance: Provenance;
+  /**
+   * The run id or lesson the value comes from.
+   */
+  source?: string;
+  /**
+   * A positive whole number in the key's unit (`_ms` milliseconds, `_s` seconds, else a
+   * count).
+   */
+  value: number;
+}
+/**
+ * `[voice]`: schema only in this version (the daemon still reads its own `[voice]`).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterVoice".
+ */
+export interface CharacterVoice {
+  /**
+   * The voice's verified speaker id.
+   */
+  sid?: number;
+  /**
+   * Speaking-rate multiplier (1.0 is the voice's own rate).
+   */
+  speed?: number;
+  /**
+   * TTS voice id, e.g. `af_heart`.
+   */
+  voice?: string;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema

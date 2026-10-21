@@ -1,7 +1,7 @@
 # Model-free lines Malakor speaks while the Spire's machinery fails him (the engine fleet is
 # degraded or down), at most one every `stall_every_s` seconds and never the same line within
 # the last ten. Each fits any segment and blames in-world machinery, never a viewer.
-# `sign_off` ends the stream when the fleet stays lost past the grace period.
+# The fleet-loss sign-off is `[identity] sign_off` in character.toml.
 
 lines = [
     "The scrying glass has clouded over. A moment, minions, while I polish it with my most expensive sleeve.",
@@ -29,5 +29,3 @@ lines = [
     "The Spire's lamps gutter. Speak among yourselves, minions; full dread resumes shortly.",
     "The ledger insists on checking its own sums twice. I admire the instinct. I resent the timing.",
 ]
-
-sign_off = "The Spire's runes have gone dark, and the Lord of the Darkness recalls me to the crypt. Guard the throne room, minions. I shall return."

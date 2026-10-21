@@ -36,7 +36,7 @@ export function transcript(n: number): StreamEvent[] {
   for (let i = out.length; i < n; i++, t += 40) {
     const k = i % 10;
     if (k === 3) out.push({ type: "picked", ts_ms: t, msg_ids: [`m${i - 1}`], reason: "top 1" });
-    else if (k === 5) out.push({ type: "say", ts_ms: t, speaker: "malakor", text: `Line ${i}: per my last decree, *sigh*, the ledger is open.` });
+    else if (k === 5) out.push({ type: "say", ts_ms: t, speaker: "host", text: `Line ${i}: per my last decree, *sigh*, the ledger is open.` });
     else if (k === 7) out.push({ type: "op", ts_ms: t, op: { op: "mark_moment", label: `beat ${i}` } });
     else if (k === 8 && i % 1000 === 8) out.push({ type: "op", ts_ms: t, op: { op: "show_card", card_id: `c${i}`, title: "The Audit", body: "Promised: 4%; Delivered: 0%" } });
     else if (k === 9 && i % 500 === 9) out.push({ type: "op", ts_ms: t, op: { op: "reveal_hex", hex: `HEX-${(i % 16) + 1}`, grade: "REP" } });

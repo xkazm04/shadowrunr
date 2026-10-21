@@ -118,10 +118,10 @@ describe("parseStreamEvent: every StreamEvent type, through the contract door", 
   });
 
   it("accepts optional fields omitted (the contract omits them, never null)", () => {
-    expect(ok(parseStreamEvent({ type: "say", ts_ms: 1, speaker: "malakor", text: "Rise." }))).toEqual({
+    expect(ok(parseStreamEvent({ type: "say", ts_ms: 1, speaker: "host", text: "Rise." }))).toEqual({
       type: "say",
       ts_ms: 1,
-      speaker: "malakor",
+      speaker: "host",
       text: "Rise.",
     });
     const chat = ok(

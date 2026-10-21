@@ -400,6 +400,21 @@
       ],
       "type": "object"
     },
+    "CharacterAvatar": {
+      "additionalProperties": false,
+      "description": "`[avatar]`: schema only in this version (the daemon still reads its own rig path).",
+      "properties": {
+        "face": {
+          "description": "The stage's face renderer: `glow`, `cut` or `depth`.",
+          "type": "string"
+        },
+        "rig": {
+          "description": "Rig spec, relative to the package, e.g. `rig/m8.spec.json`.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "CharacterDetail": {
       "description": "`character.get`: the whole package as the operator sees it.",
       "properties": {
@@ -510,11 +525,254 @@
       ],
       "type": "object"
     },
+    "CharacterIdentity": {
+      "additionalProperties": false,
+      "description": "`[identity]`: the words the engine's own text uses for this character. When the table is\npresent, `name`, `patron`, `follower`, `sign_off` and `disclosure` are required.",
+      "properties": {
+        "address_words": {
+          "description": "Lowercase words chat calls the character by (addressing detection, the name stoplist).\nAbsent: the name's words of four letters or more.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "disclosure": {
+          "description": "The in-character AI disclosure that replaces a persona leak which disclosed being an AI.",
+          "type": "string"
+        },
+        "follower": {
+          "$ref": "#/$defs/Noun",
+          "description": "What the character calls the viewers (`{follower}`, `{followers}`)."
+        },
+        "name": {
+          "description": "Short name, e.g. \"Malakor\" (`{name}`).",
+          "type": "string"
+        },
+        "patron": {
+          "$ref": "#/$defs/Patron",
+          "description": "Who the character answers to in the fiction: the owner whose brief the stream carries."
+        },
+        "reply_prefixes": {
+          "description": "Speaker labels a model reply may start a line with, stripped before speech. Absent:\n`**Name:**`, `Name:`, `NAME:` and `**Name**:`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "researcher": {
+          "$ref": "#/$defs/Noun",
+          "description": "What the character calls the research workers it sends out (`{researcher}`,\n`{researchers}`). Absent: \"researcher\", \"researchers\"."
+        },
+        "sign_off": {
+          "description": "The fleet-loss sign-off, spoken when the engine fleet stays lost.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Title before the name, e.g. \"Arch-Lich\" (`{title}`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "patron",
+        "follower",
+        "sign_off",
+        "disclosure"
+      ],
+      "type": "object"
+    },
+    "CharacterLines": {
+      "additionalProperties": false,
+      "description": "`[lines]`: model-free in-character lines. Each may use placeholders.",
+      "properties": {
+        "blocked": {
+          "description": "Replaces a line a `block` term rule caught.",
+          "type": "string"
+        },
+        "private_details": {
+          "description": "Replaces a line that did nothing but ask someone for personal details.",
+          "type": "string"
+        },
+        "rebuttals": {
+          "description": "Rebuttals of a forged decree; none may name or describe the patron.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "recast": {
+          "description": "Stand-ins for a line that broke character or leaked the persona (a fresh bit each).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "CharacterListResult": {
       "items": {
         "$ref": "#/$defs/CharacterSummary"
       },
       "type": "array"
+    },
+    "CharacterManifest": {
+      "additionalProperties": false,
+      "description": "`character.toml`, v2. Tables added in v2 (`identity`, `voice`, `avatar`, `lines`,\n`tuning`, `segments`, and the ladder keys of `ranks`) are optional: a v1 file still loads,\nwith the engine's neutral defaults.",
+      "properties": {
+        "avatar": {
+          "$ref": "#/$defs/CharacterAvatar",
+          "description": "The character's face. Absent (or any field absent): the daemon's config."
+        },
+        "default_tone": {
+          "description": "Tone variant used when none is chosen (`tones/<id>.md`).",
+          "type": "string"
+        },
+        "foils": {
+          "description": "Summonable SEG-01 foils (`foils/<id>.md`), in order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "Package id: the directory name, `[A-Za-z0-9_-]`.",
+          "type": "string"
+        },
+        "identity": {
+          "$ref": "#/$defs/CharacterIdentity",
+          "description": "Who the character is in the engine's own text. Absent: a neutral identity built from\n`name` ([`Persona::neutral`])."
+        },
+        "lines": {
+          "$ref": "#/$defs/CharacterLines",
+          "description": "Model-free in-character lines the output gate and the orchestrator speak. Absent lines\nuse the engine's neutral defaults."
+        },
+        "name": {
+          "description": "Display name, e.g. \"Arch-Lich Malakor\".",
+          "type": "string"
+        },
+        "ranks": {
+          "$ref": "#/$defs/CharacterRanks",
+          "description": "Rank titles, and overrides of the engine's rank ladder (`segments/data/ranks.toml`)."
+        },
+        "rules": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "Optional constitution rules (`rules/<id>.md`), on or off by default.",
+          "type": "object"
+        },
+        "segments": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SegmentFlavour"
+          },
+          "description": "Per-segment flavour appended to the segment's prompts (placeholders filled).",
+          "type": "object"
+        },
+        "tagline": {
+          "description": "One line under the name in the operator app.",
+          "type": "string"
+        },
+        "tuning": {
+          "$ref": "#/$defs/CharacterTuning",
+          "description": "Lesson-tuned constants, each with its provenance. An absent key is the engine default\n([`TUNING_DEFAULTS`])."
+        },
+        "voice": {
+          "$ref": "#/$defs/CharacterVoice",
+          "description": "The character's voice. Absent (or any field absent): the daemon's `[voice]` config."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "default_tone"
+      ],
+      "type": "object"
+    },
+    "CharacterRanks": {
+      "additionalProperties": false,
+      "description": "`[ranks]`: the title the character says for each rank (wire names are fixed), and optional\noverrides of the engine's ladder. An override replaces only what it names.",
+      "properties": {
+        "acolyte": {
+          "type": "string"
+        },
+        "cultist": {
+          "type": "string"
+        },
+        "dread_council": {
+          "type": "string"
+        },
+        "lich": {
+          "type": "string"
+        },
+        "propose_min_rank": {
+          "$ref": "#/$defs/Rank",
+          "description": "Lowest rank allowed to use `!propose`."
+        },
+        "thrall": {
+          "type": "string"
+        },
+        "thresholds": {
+          "additionalProperties": false,
+          "description": "How a rank is reached (the base rank, `thrall`, takes none).",
+          "properties": {
+            "acolyte": {
+              "$ref": "#/$defs/RankThreshold"
+            },
+            "cultist": {
+              "$ref": "#/$defs/RankThreshold"
+            },
+            "dread_council": {
+              "$ref": "#/$defs/RankThreshold"
+            },
+            "lich": {
+              "$ref": "#/$defs/RankThreshold"
+            },
+            "thrall": {
+              "$ref": "#/$defs/RankThreshold"
+            },
+            "warlock": {
+              "$ref": "#/$defs/RankThreshold"
+            }
+          },
+          "type": "object"
+        },
+        "warlock": {
+          "type": "string"
+        },
+        "weights": {
+          "additionalProperties": false,
+          "description": "Vote weight per rank (positive, non-decreasing up the ladder after merging).",
+          "properties": {
+            "acolyte": {
+              "format": "double",
+              "type": "number"
+            },
+            "cultist": {
+              "format": "double",
+              "type": "number"
+            },
+            "dread_council": {
+              "format": "double",
+              "type": "number"
+            },
+            "lich": {
+              "format": "double",
+              "type": "number"
+            },
+            "thrall": {
+              "format": "double",
+              "type": "number"
+            },
+            "warlock": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
     },
     "CharacterRuleInfo": {
       "description": "An optional rule with its text (`character.get`).",
@@ -659,6 +917,127 @@
         "id",
         "tone"
       ],
+      "type": "object"
+    },
+    "CharacterTuning": {
+      "additionalProperties": false,
+      "description": "`[tuning]` as written: every key optional.",
+      "properties": {
+        "bit_spacing_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "Least time between the starts of two new bits, ms."
+        },
+        "browser_dwell_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "After this long on `browser` the screen moves to `desk`, ms."
+        },
+        "carry_max": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "The most messages carried at once; the oldest go first."
+        },
+        "carry_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "How long an unanswered message is carried into the next beats, ms."
+        },
+        "closing_now_s": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "The goodbye: the last this many seconds, where the sign-off is asked for, s."
+        },
+        "closing_s": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "The closing window: the last this many seconds of a session (wrap-up), s."
+        },
+        "desk_dwell_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "After this long on `desk` the screen pulls back to the hexmap, ms."
+        },
+        "failed_beat_slack_s": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "A failed beat's stall is due this much before `stall_every_s` (one beat), s."
+        },
+        "goodbye_drain_max_s": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "After a sign-off the stream holds past the planned end at most this long, s."
+        },
+        "hold_gap_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "A quiet beat may hold only while the host's last line is younger than this, ms."
+        },
+        "lag_ceiling_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "A line queued further behind than this is dropped (the voice's 15 s max lag less its render lag), ms."
+        },
+        "lookahead_max_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "The most the lookahead lead may grow to, ms."
+        },
+        "max_picks": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "The most chat messages answered in one beat (a ceiling, not a quota)."
+        },
+        "min_cover_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "A cover line never goes out sooner than this into a slow core call, ms."
+        },
+        "quiet_bit_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "No chat worth answering for this long before a new bit starts, ms."
+        },
+        "render_lag_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "The voice's render lag after a `say`, part of the lookahead lead, ms."
+        },
+        "request_answer_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "An owned request is answered within this long of reaching a beat, ms."
+        },
+        "request_lead_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "While an owned request waits, a beat holds for speech only past this much queued, ms."
+        },
+        "request_max_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "An owned request still unanswered this long after it reached a beat is dropped, ms."
+        },
+        "screen_hold_ms": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "A runtime screen default never overrides a model `show_screen` this recent, ms."
+        },
+        "sign_off_window_s": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "A sign-off counts when it lands in the last this many seconds, s."
+        },
+        "stall_every_s": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "While the fleet fails, a stall line once nobody has spoken this long, s."
+        },
+        "stop_sign_off_s": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "After a stop request, the host has this long to sign off, s."
+        }
+      },
+      "type": "object"
+    },
+    "CharacterVoice": {
+      "additionalProperties": false,
+      "description": "`[voice]`: schema only in this version (the daemon still reads its own `[voice]`).",
+      "properties": {
+        "sid": {
+          "description": "The voice's verified speaker id.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "speed": {
+          "description": "Speaking-rate multiplier (1.0 is the voice's own rate).",
+          "format": "double",
+          "type": "number"
+        },
+        "voice": {
+          "description": "TTS voice id, e.g. `af_heart`.",
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "ChatMsg": {
@@ -4293,6 +4672,23 @@
       ],
       "type": "object"
     },
+    "Noun": {
+      "additionalProperties": false,
+      "description": "A word in the singular and the plural, e.g. `{ one = \"minion\", many = \"minions\" }`.",
+      "properties": {
+        "many": {
+          "type": "string"
+        },
+        "one": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "one",
+        "many"
+      ],
+      "type": "object"
+    },
     "Op": {
       "description": "Malakor's action grammar. The model emits `OP: {json}` lines; only these ops are allowed.",
       "oneOf": [
@@ -4557,6 +4953,25 @@
       ],
       "type": "object"
     },
+    "Patron": {
+      "additionalProperties": false,
+      "description": "The character's patron (`{patron}`, `{patron_title}`). Written without an article: the\nengine's text supplies \"the\".",
+      "properties": {
+        "name": {
+          "description": "e.g. \"Lord of the Darkness\".",
+          "type": "string"
+        },
+        "title": {
+          "description": "The short form, e.g. \"Lord\" (\"the Lord's brief\").",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "title"
+      ],
+      "type": "object"
+    },
     "PlanChooseParams": {
       "properties": {
         "option_ids": {
@@ -4808,6 +5223,21 @@
       ],
       "type": "object"
     },
+    "Provenance": {
+      "description": "Where a tuning value came from.",
+      "oneOf": [
+        {
+          "const": "measured",
+          "description": "Measured on a run (name it in `source`).",
+          "type": "string"
+        },
+        {
+          "const": "assumption",
+          "description": "A judgement not yet calibrated.",
+          "type": "string"
+        }
+      ]
+    },
     "QualityFact": {
       "description": "A judged quality fact (humor, tone, responsiveness...): reported as a rate with n.",
       "properties": {
@@ -4996,6 +5426,24 @@
         "propose_min_rank",
         "ranks"
       ],
+      "type": "object"
+    },
+    "RankThreshold": {
+      "additionalProperties": false,
+      "description": "One rank's qualifying conditions: gifting at least `min_gifted`, or any `tiers` entry.",
+      "properties": {
+        "min_gifted": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tiers": {
+          "items": {
+            "$ref": "#/$defs/TierThreshold"
+          },
+          "type": "array"
+        }
+      },
       "type": "object"
     },
     "RankedCell": {
@@ -6323,6 +6771,24 @@
       ],
       "type": "object"
     },
+    "SegmentFlavour": {
+      "additionalProperties": false,
+      "description": "`[segments.\"SEG-01\"]`: flavour appended to a segment's prompts.",
+      "properties": {
+        "rules_prompt": {
+          "description": "Appended to the segment's rules prompt.",
+          "type": "string"
+        },
+        "states": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "State name -> text appended to that state's prompt line.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "SegmentId": {
       "oneOf": [
         {
@@ -6864,11 +7330,19 @@
       "description": "What a reconcile run covers: a whole tournament or an explicit list of runs.\nWire: `{ \"tournament_id\": \"...\" }` or `{ \"run_ids\": [\"...\"] }`."
     },
     "Speaker": {
-      "enum": [
-        "malakor",
-        "foil"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "enum": [
+            "foil"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "host",
+          "description": "The character the stream runs (`stream_start.character` names it). Reads the v1 wire\nvalue `malakor` too, so old transcripts and fixtures still load.",
+          "type": "string"
+        }
+      ]
     },
     "StageAck": {
       "description": "`/events` client -> daemon: what a subscriber (the stage) has applied.",
@@ -7653,6 +8127,29 @@
       ],
       "type": "object"
     },
+    "TierThreshold": {
+      "additionalProperties": false,
+      "properties": {
+        "min_months": {
+          "default": 0,
+          "description": "Minimum cumulative months at that tier.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tier": {
+          "description": "Current subscription tier: 1, 2 or 3.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tier"
+      ],
+      "type": "object"
+    },
     "ToneFinding": {
       "properties": {
         "instrument_hash": {
@@ -7920,6 +8417,30 @@
         "from",
         "on",
         "to"
+      ],
+      "type": "object"
+    },
+    "TuningEntry": {
+      "additionalProperties": false,
+      "description": "One `[tuning]` key: `{ value = 25000, provenance = \"assumption\", source = \"...\" }`.",
+      "properties": {
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "source": {
+          "description": "The run id or lesson the value comes from.",
+          "type": "string"
+        },
+        "value": {
+          "description": "A positive whole number in the key's unit (`_ms` milliseconds, `_s` seconds, else a\ncount).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "provenance"
       ],
       "type": "object"
     },

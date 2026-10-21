@@ -1,10 +1,10 @@
 //! In-character stalling while the engine fleet fails. A beat whose core call failed with a
 //! fleet-class error has no line from the model; once `BrainTuning.stall_every_s` passed
-//! since Malakor last spoke, the brain speaks a model-free stall line from the character
-//! package (`stalls.toml`) instead of leaving the throne room silent. The same file carries
-//! the fleet-loss sign-off.
+//! since the host last spoke, the brain speaks a model-free stall line from the character
+//! package (`stalls.toml`) instead of leaving the stream silent. The fleet-loss sign-off is the
+//! persona's (`[identity] sign_off`).
 //!
-//! A live host also covers a SLOW call: when a core call is still running once Malakor has
+//! A live host also covers a SLOW call: when a core call is still running once the host has
 //! been quiet `stall_every_s`, a stall line goes out at once on the brain's cover channel and
 //! the model's reply follows when it lands ([`cover_call`]; record `engine_stall` /
 //! `covered`). The 5-minute sandbox smoke run saw an 18.4 s successful call leave a 19.1 s
@@ -21,6 +21,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use serde::Deserialize;
+use shadowrunr_types::character::{Persona, Tuning};
 use shadowrunr_types::{StreamEvent, TsMs};
 use tokio::time::{sleep_until, Instant};
 
@@ -37,13 +38,13 @@ pub const COVERED: &str = "covered";
 
 /// A failed beat's stall is due this many seconds before `stall_every_s`: one beat, since a
 /// failed beat can only speak at a beat boundary.
-pub const FAILED_BEAT_SLACK_S: u64 = 5;
+pub const FAILED_BEAT_SLACK_S: u64 = Tuning::DEFAULT.failed_beat_slack_s;
 
 /// At most this many cover lines over one core call (its timeout is 30 s).
 pub const COVER_LINES: usize = 2;
 
 /// A cover line never goes out sooner than this into a core call.
-pub const MIN_COVER_MS: u64 = 4_000;
+pub const MIN_COVER_MS: u64 = Tuning::DEFAULT.min_cover_ms;
 
 /// The cover for one core call: prepared lines (each the events of one stall line), when the
 /// first goes out after the call starts, and the spacing of the next.
@@ -85,26 +86,22 @@ where
     }
 }
 
-/// Seconds since Malakor last spoke before a failed beat speaks a stall line.
-pub const DEFAULT_STALL_EVERY_S: u64 = 12;
+/// Seconds since the host last spoke before a failed beat speaks a stall line.
+pub const DEFAULT_STALL_EVERY_S: u64 = Tuning::DEFAULT.stall_every_s;
 
 /// A stall line is not repeated within this many stall lines (fewer when the bank is
 /// smaller: never within `len - 1`).
 pub const STALL_REPEAT_WINDOW: usize = 10;
 
-/// Stall lines when the package has no `stalls.toml`.
+/// Stall lines when the package has no `stalls.toml`: neutral, any character can say them.
 const DEFAULT_LINES: &[&str] = &[
-    "The scrying glass has clouded over. A moment, minions, while I polish it.",
-    "The bone-clerks are slow tonight. I am told this is a union matter.",
-    "The Spire's runes are flickering again. Nobody touch anything.",
-    "The ledger is jammed. Eleven centuries of accounts, and today it chooses to stick.",
-    "Hold your places, minions. The Phylactery Orb refuses to be rushed.",
+    "One moment. The machinery behind me is catching its breath.",
+    "A short pause while the backstage crew finds the right drawer.",
+    "The lights are flickering again. Nobody touch anything.",
+    "The paperwork is jammed. Of course it chooses tonight to stick.",
+    "Hold your places. Something backstage refuses to be rushed.",
     "Do not mistake this pause for weakness. It is a dramatic pause. A long one.",
 ];
-
-/// The fleet-loss sign-off when the package has no `stalls.toml`.
-const DEFAULT_SIGN_OFF: &str = "The Lord of the Darkness recalls me to the crypt... Guard the \
-    throne room, minions. I shall return.";
 
 /// `stalls.toml`: model-free lines for an engine outage, and the fleet-loss sign-off.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,7 +114,7 @@ impl Default for StallBank {
     fn default() -> Self {
         Self {
             lines: DEFAULT_LINES.iter().map(|s| s.to_string()).collect(),
-            sign_off: DEFAULT_SIGN_OFF.to_string(),
+            sign_off: Persona::default().sign_off,
         }
     }
 }
@@ -131,18 +128,22 @@ struct StallsToml {
 }
 
 impl StallBank {
-    /// `<dir>/stalls.toml`. A missing file, an empty `lines` or a blank `sign_off` falls back
-    /// to the built-in defaults; a malformed file is an error.
-    pub fn load(dir: &Path) -> Result<Self, BrainError> {
+    /// `<dir>/stalls.toml`. A missing file or an empty `lines` falls back to the built-in
+    /// lines; the sign-off is the file's `sign_off` (a v1 package) when set, else the
+    /// persona's (`[identity] sign_off`). A malformed file is an error.
+    pub fn load(dir: &Path, persona: &Persona) -> Result<Self, BrainError> {
         let path = dir.join("stalls.toml");
+        let defaults = Self {
+            sign_off: persona.fill(&persona.sign_off),
+            ..Self::default()
+        };
         if !path.is_file() {
-            return Ok(Self::default());
+            return Ok(defaults);
         }
         let text = fs::read_to_string(&path)
             .map_err(|e| BrainError::Package(format!("{}: {e}", path.display())))?;
         let raw: StallsToml =
             toml::from_str(&text).map_err(|e| BrainError::Package(format!("stalls.toml: {e}")))?;
-        let defaults = Self::default();
         let lines: Vec<String> = raw
             .lines
             .iter()
@@ -165,7 +166,7 @@ impl StallBank {
 }
 
 /// Whether a beat whose core call failed speaks a stall line: the fleet is degraded or down,
-/// and Malakor has not spoken for `every_s` seconds (or at all).
+/// and the host has not spoken for `every_s` seconds (or at all).
 pub fn stall_due(mode: FleetMode, last_say_ms: Option<TsMs>, now_ms: TsMs, every_s: u64) -> bool {
     if mode == FleetMode::Healthy {
         return false;
@@ -267,17 +268,20 @@ mod tests {
     }
     use crate::moderation::{gate_text, Policy};
 
-    fn malakor_dir() -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
+    fn malakor_bank() -> StallBank {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..")
             .join("characters")
-            .join("malakor")
+            .join("malakor");
+        crate::load_character_with(&dir, "", &crate::RulesOverride::None)
+            .unwrap()
+            .stalls
     }
 
     #[test]
     fn malakor_ships_at_least_twenty_short_stall_lines_and_a_sign_off() {
-        let bank = StallBank::load(&malakor_dir()).unwrap();
+        let bank = malakor_bank();
         assert_ne!(bank, StallBank::default(), "stalls.toml is read");
         assert!(bank.lines.len() >= 20, "{}", bank.lines.len());
         for l in &bank.lines {
@@ -291,7 +295,7 @@ mod tests {
     #[test]
     fn every_stall_line_and_sign_off_passes_the_output_gate_unchanged() {
         let policy = Policy::builtin();
-        let bank = StallBank::load(&malakor_dir()).unwrap();
+        let bank = malakor_bank();
         let defaults = StallBank::default();
         for l in bank
             .lines
@@ -319,7 +323,7 @@ mod tests {
     #[test]
     fn a_missing_stalls_file_uses_the_defaults() {
         let d = tempfile::tempdir().unwrap();
-        let bank = StallBank::load(d.path()).unwrap();
+        let bank = StallBank::load(d.path(), &Persona::default()).unwrap();
         assert_eq!(bank, StallBank::default());
         assert!(bank.lines.len() >= 6);
         assert!(!bank.sign_off.is_empty());
@@ -329,20 +333,20 @@ mod tests {
     fn an_empty_or_partial_file_falls_back_per_key_and_a_malformed_one_fails() {
         let d = tempfile::tempdir().unwrap();
         fs::write(d.path().join("stalls.toml"), "sign_off = \"Back soon.\"\n").unwrap();
-        let bank = StallBank::load(d.path()).unwrap();
+        let bank = StallBank::load(d.path(), &Persona::default()).unwrap();
         assert_eq!(bank.lines, StallBank::default().lines);
         assert_eq!(bank.sign_off, "Back soon.");
         fs::write(d.path().join("stalls.toml"), "lines = [\"A.\", \" \"]\n").unwrap();
-        let bank = StallBank::load(d.path()).unwrap();
+        let bank = StallBank::load(d.path(), &Persona::default()).unwrap();
         assert_eq!(bank.lines, vec!["A.".to_string()]);
         assert_eq!(bank.sign_off, StallBank::default().sign_off);
         fs::write(d.path().join("stalls.toml"), "lines = 3\n").unwrap();
-        assert!(StallBank::load(d.path()).is_err());
+        assert!(StallBank::load(d.path(), &Persona::default()).is_err());
     }
 
     #[test]
     fn no_stall_line_repeats_within_ten() {
-        let bank = StallBank::load(&malakor_dir()).unwrap();
+        let bank = malakor_bank();
         for salt in [0u64, 1, 42, u64::MAX] {
             let mut s = Staller::new();
             let picks: Vec<&str> = (0..200).map(|_| s.next(&bank, salt).unwrap()).collect();

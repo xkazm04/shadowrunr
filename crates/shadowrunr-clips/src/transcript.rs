@@ -326,7 +326,7 @@ impl Stream {
                 line_no: *line_no,
                 ts_ms: *ts_ms,
                 who: match speaker {
-                    Speaker::Malakor => Who::Malakor,
+                    Speaker::Host => Who::Malakor,
                     Speaker::Foil => Who::Foil(foil.clone().unwrap_or_else(|| "foil".into())),
                 },
                 text: text.clone(),

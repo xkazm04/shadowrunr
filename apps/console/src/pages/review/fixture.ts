@@ -22,7 +22,7 @@ function transcript() {
   const tags: LineTag[] = [];
   const push = (e: StreamEvent): number => events.push(e);
   const say = (t: number, text: string, kind?: LineKind, extra: Partial<Pick<LineTag, "target" | "edge" | "why">> & { replying?: string[] } = {}): number => {
-    const line = push({ type: "say", ts_ms: Math.round(t * 1000), speaker: "malakor", text, ...(extra.replying ? { replying_to: extra.replying } : {}) });
+    const line = push({ type: "say", ts_ms: Math.round(t * 1000), speaker: "host", text, ...(extra.replying ? { replying_to: extra.replying } : {}) });
     if (kind) tags.push({ line, kind, target: extra.target ?? "chat", edge: extra.edge ?? "none", ...(extra.why ? { why: extra.why } : {}) });
     return line;
   };

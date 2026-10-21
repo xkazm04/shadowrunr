@@ -179,7 +179,13 @@ async fn generation_writes_a_staged_checked_prep_through_the_planner() {
     assert_eq!(r.role, Role::Planner);
     assert!(r.allowed_tools.is_empty());
     assert!(r.json_schema.is_some());
-    assert_eq!(r.system, planner::SYSTEM);
+    assert_eq!(
+        r.system,
+        planner::system(&super::planner_input(&cfg, "malakor", None).unwrap())
+    );
+    assert!(r
+        .system
+        .contains("material Arch-Lich Malakor, an original character"));
     // Trusted material: the constitution, the tone, the bible's running jokes and notes.
     assert!(r.prompt.contains("## The constitution (immutable)"));
     assert!(r.prompt.contains("## Running jokes"));

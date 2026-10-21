@@ -245,7 +245,7 @@ describe("chat, decrees, moderation", () => {
     s = reduce(s, { type: "moderation", ts_ms: 5000, stage: "input", rule: "term:slur", msg_id: "slur", action: "dropped" });
     // The beat's verdicts may still be arriving: only the line it named is drawn, as purged.
     expect(shownLane(s).map((l) => l.id)).toEqual(["slur"]);
-    s = reduce(s, { type: "say", ts_ms: 5000, speaker: "malakor", text: "Next." });
+    s = reduce(s, { type: "say", ts_ms: 5000, speaker: "host", text: "Next." });
     expect(shownLane(s).map((l) => l.id)).toEqual(["slur"]);
     s = reduce(s, chat(5200, msg("late")));
     expect(shownLane(s).map((l) => l.id)).toEqual(["slur", "ok"]);
@@ -295,7 +295,7 @@ describe("chat, decrees, moderation", () => {
 describe("say", () => {
   it("routes Malakor's lines to the caption with reply names, foil lines to the foil", () => {
     let s = reduce(initialScene(), chat(1, msg("m1")));
-    s = reduce(s, { type: "say", ts_ms: 2, speaker: "malakor", text: "Rise.", replying_to: ["m1", "ghost"] });
+    s = reduce(s, { type: "say", ts_ms: 2, speaker: "host", text: "Rise.", replying_to: ["m1", "ghost"] });
     expect(s.caption).toMatchObject({ text: "Rise.", at: 2, replyingTo: ["name-m1"] });
     s = reduce(s, op(3, { op: "summon_foil", foil: "the-inspector" }));
     expect(s.foil).toEqual({ id: "the-inspector", since: 3 });
@@ -521,7 +521,7 @@ describe("a 100k-line transcript (10× scale)", () => {
 });
 
 describe("caption queue", () => {
-  const say = (ts: number, text: string): StreamEvent => ({ type: "say", ts_ms: ts, speaker: "malakor", text });
+  const say = (ts: number, text: string): StreamEvent => ({ type: "say", ts_ms: ts, speaker: "host", text });
 
   it("shows a lone caption when it is said", () => {
     const s = foldEvents([say(1000, "Rise.")]);

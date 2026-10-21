@@ -51,6 +51,7 @@ use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use shadowrunr_types::character::Tuning;
 use shadowrunr_types::{
     Case, ChatMsg, Engine, EngineError, EngineKind, EngineReply, EngineRequest, EpisodeKind,
     FactScope, FleetHealth, ModelTier, Op, Role, SegmentContext, Speaker, StreamEvent, TsMs,
@@ -58,15 +59,15 @@ use shadowrunr_types::{
 };
 
 pub use character::{
-    load_character, load_character_with, CharacterPackage, Foil, RankTitles, Situation,
-    SituationBank,
+    load_character, load_character_with, parse_manifest, validate_character, CharacterPackage,
+    Foil, LineBank, PackageIssue, RankTitles, Situation, SituationBank,
 };
 pub use fleet::{FleetMode, FleetProbe};
 pub use memory::{
     consolidate, rebuild_index, should_consolidate, ConsolidationReport, FactStatus, MemoryStore,
     StoredFact,
 };
-pub use moderation::{FilterConfig, HexInfo, PolicySource};
+pub use moderation::{FilterConfig, HexInfo, PersonaGate, PolicySource};
 pub use pace::{PaceConfig, SpeechClock};
 pub use picker::PickerConfig;
 pub use pool::{Job, JobCtx, JobRunner, JobStatus, JobUpdate, ResearchRunner, WorkerPool};
@@ -121,7 +122,7 @@ pub struct BrainConfig {
 /// Knobs with working defaults; pass to [`Brain::new_with`].
 #[derive(Debug, Clone)]
 pub struct BrainTuning {
-    /// Seconds Malakor keeps chatting after the fleet goes degraded or down.
+    /// Seconds the host keeps chatting after the fleet goes degraded or down.
     pub fleet_grace_s: u64,
     /// A stream episode is written every N beats (and at `end_stream`).
     pub episode_every_ticks: u32,
@@ -148,6 +149,29 @@ pub struct BrainTuning {
     pub stall_every_s: u64,
     /// The speech clock and the per-beat speech budget (see [`pace`]).
     pub pace: PaceConfig,
+    /// The character's lesson-tuned constants (`[tuning]`): the orchestrator's carry, hold,
+    /// bit and request timings and the stall cover. The keys that also live in `picker`,
+    /// `stall_every_s` and `pace` are copied there by [`BrainTuning::for_character`].
+    pub tuning: Tuning,
+}
+
+impl BrainTuning {
+    /// The defaults with a character's `[tuning]` applied (its package's resolved table).
+    pub fn for_character(pkg: &CharacterPackage) -> Self {
+        Self::default().with_tuning(pkg.tuning)
+    }
+
+    /// These knobs with `t` applied: `max_picks`, `stall_every_s`, the pace's render lag,
+    /// lookahead cap and lag ceiling, and the rest of the table.
+    pub fn with_tuning(mut self, t: Tuning) -> Self {
+        self.picker.max_picks = t.max_picks;
+        self.stall_every_s = t.stall_every_s;
+        self.pace.render_lag_ms = t.render_lag_ms;
+        self.pace.lookahead_max_ms = t.lookahead_max_ms;
+        self.pace.lag_ceiling_ms = t.lag_ceiling_ms;
+        self.tuning = t;
+        self
+    }
 }
 
 impl Default for BrainTuning {
@@ -166,6 +190,7 @@ impl Default for BrainTuning {
             care_window_s: care::DEFAULT_CARE_WINDOW_S,
             stall_every_s: stall::DEFAULT_STALL_EVERY_S,
             pace: PaceConfig::default(),
+            tuning: Tuning::DEFAULT,
         }
     }
 }
@@ -265,7 +290,7 @@ pub struct Brain {
     ticks: u64,
     salt: u64,
     names: Vec<String>,
-    /// Malakor's last spoken lines, for the repetition guard.
+    /// The host's last spoken lines, for the repetition guard.
     spoken: VecDeque<String>,
     /// The active foil's last lines, for the repetition guard.
     foil_spoken: VecDeque<String>,
@@ -287,17 +312,13 @@ impl Brain {
         tuning: BrainTuning,
     ) -> Result<Self, BrainError> {
         let store = MemoryStore::open(&cfg.memory_dir)?;
-        let policy = Policy::load(&tuning.policy, &cfg.character.dir, &tuning.platforms)?;
-        let prefix = stable_prefix_with_brief(&cfg.character, None);
-        let mut names: Vec<String> = ["malakor", "lich", "overlord", "my lord"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        for w in cfg.character.name.to_lowercase().split_whitespace() {
-            if w.chars().count() >= 4 && !names.iter().any(|n| n == w) {
-                names.push(w.to_string());
-            }
-        }
+        let pkg = &cfg.character;
+        let policy = Policy::load(&tuning.policy, &pkg.dir, &tuning.platforms)?
+            .with_persona(PersonaGate::new(&pkg.persona, &pkg.lines));
+        let prefix = stable_prefix_with_brief(pkg, None);
+        // The names chat calls the character by (`[identity] address_words`, plus the display
+        // name's words).
+        let names = pkg.persona.address_words.clone();
         let salt = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos() as u64)
@@ -309,7 +330,7 @@ impl Brain {
             filter,
             care: CareLedger::new(tuning.care_window_s),
             removed: Vec::new(),
-            removed_names: RemovedNames::new(),
+            removed_names: RemovedNames::for_persona(&cfg.character.persona),
             picker: Picker::new(tuning.picker.clone()),
             working: WorkingSet::new(tuning.working_set_ttl_ms),
             fleet: FleetWatch::new(tuning.fleet_grace_s),
@@ -325,7 +346,8 @@ impl Brain {
             session_retry_tick: 0,
             cover: None,
             prep: None,
-            orch: Orchestrator::new(salt),
+            orch: Orchestrator::new(salt)
+                .with_character(tuning.tuning, cfg.character.lines.clone()),
             beat_clock: tokio::time::Instant::now(),
             hexes: Vec::new(),
             turns: Vec::new(),
@@ -433,7 +455,7 @@ impl Brain {
         self.prep.as_ref()
     }
 
-    /// A live host's cover channel: while a core call is still running once Malakor has been
+    /// A live host's cover channel: while a core call is still running once the host has been
     /// quiet `stall_every_s`, a stall line goes out here at once instead of waiting for the
     /// beat to end (`stall::cover_call`). Without it (simulated time), slow calls are not
     /// covered.
@@ -492,7 +514,7 @@ impl Brain {
             let (text, mut events) = self.gate_stall(now_ms, line);
             events.push(StreamEvent::Say {
                 ts_ms: now_ms,
-                speaker: Speaker::Malakor,
+                speaker: Speaker::Host,
                 foil: None,
                 text,
                 replying_to: Vec::new(),
@@ -519,9 +541,9 @@ impl Brain {
             first_after: std::time::Duration::from_millis(
                 u64::try_from(first_ms)
                     .unwrap_or(0)
-                    .max(stall::MIN_COVER_MS),
+                    .max(self.tuning.tuning.min_cover_ms),
             ),
-            every: std::time::Duration::from_millis(every_ms.max(stall::MIN_COVER_MS)),
+            every: std::time::Duration::from_millis(every_ms.max(self.tuning.tuning.min_cover_ms)),
         })
     }
 
@@ -735,7 +757,7 @@ impl Brain {
             self.on_air_ms(now_ms),
             self.tuning
                 .stall_every_s
-                .saturating_sub(stall::FAILED_BEAT_SLACK_S),
+                .saturating_sub(self.tuning.tuning.failed_beat_slack_s),
         );
         if !due {
             return;
@@ -748,7 +770,7 @@ impl Brain {
         self.aired(self.on_air_ms(now_ms), &text);
         ev.push(StreamEvent::Say {
             ts_ms: now_ms,
-            speaker: Speaker::Malakor,
+            speaker: Speaker::Host,
             foil: None,
             text,
             replying_to: Vec::new(),
@@ -765,7 +787,7 @@ impl Brain {
         self.aired(self.on_air_ms(now_ms), &text);
         ev.push(StreamEvent::Say {
             ts_ms: now_ms,
-            speaker: Speaker::Malakor,
+            speaker: Speaker::Host,
             foil: None,
             text,
             replying_to: Vec::new(),
@@ -924,7 +946,7 @@ impl Brain {
         let authority = pick
             .chosen
             .iter()
-            .any(|c| c.injection || claims_authority(&c.msg.text));
+            .any(|c| c.injection || claims_authority(&c.msg.text, &self.cfg.character.persona));
 
         // Recall.
         let pkg = &self.cfg.character;
@@ -1006,7 +1028,9 @@ impl Brain {
             .as_deref()
             .and_then(|f| pkg.foil(f))
             .map(|f| f.text.clone());
-        let working_text = self.working.render(foil_text.as_deref());
+        let working_text = self
+            .working
+            .render(foil_text.as_deref(), &self.cfg.character.persona.followers);
         let nonce = fnv1a64(format!("{}:{}:{}", self.salt, self.ticks, now_ms).as_bytes());
         let fresh_bit = std::mem::take(&mut self.fresh_bit);
         let care = [
@@ -1134,7 +1158,12 @@ impl Brain {
                 return Err(e.into());
             }
         };
-        let mut lines = parse_reply(&reply.text, &ctx.allowed_ops, active_foil.as_deref());
+        let mut lines = parse_reply(
+            &reply.text,
+            &ctx.allowed_ops,
+            active_foil.as_deref(),
+            &self.cfg.character.persona.reply_prefixes,
+        );
         // The beat's speech budget: spoken lines past it go whole, the last first.
         let spoken_at: Vec<usize> = lines
             .iter()
@@ -1240,12 +1269,12 @@ impl Brain {
                     }
                     self.working.remember_line(&out);
                     self.orch.spoke(&out);
-                    turn.push(format!("Malakor: {out}"));
+                    turn.push(format!("{}: {out}", self.cfg.character.persona.name));
                     self.aired(self.on_air_ms(now_ms), &out);
                     say_idx.push(ev.len());
                     ev.push(StreamEvent::Say {
                         ts_ms: now_ms,
-                        speaker: Speaker::Malakor,
+                        speaker: Speaker::Host,
                         foil: None,
                         text: out,
                         replying_to: Vec::new(),
@@ -1336,7 +1365,7 @@ impl Brain {
                         ts_ms: now_ms,
                         stream_id: self.cfg.stream_id.clone(),
                         kind: EpisodeKind::Stream,
-                        text: format!("Malakor noted: {noted}"),
+                        text: format!("{} noted: {noted}", self.cfg.character.persona.name),
                         importance: 3,
                     };
                     self.store.write_episode(&ep)?;

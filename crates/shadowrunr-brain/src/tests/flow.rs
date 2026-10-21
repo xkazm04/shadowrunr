@@ -158,7 +158,10 @@ async fn the_roast_request_is_owned_through_a_speech_hold_and_answered_ahead_of_
     );
     // The answering line is asked to answer the request itself.
     let prompt = last_core_prompt(&engine);
-    assert!(prompt.contains(Ask::RoastMe.note()), "{prompt}");
+    assert!(
+        prompt.contains(&Ask::RoastMe.note(&malakor_package().persona)),
+        "{prompt}"
+    );
     assert!(
         !prompt.contains("m-costume"),
         "the taunt is not in the beat: {prompt}"
@@ -213,7 +216,10 @@ async fn the_intrusion_request_is_owned_through_a_speech_hold_ahead_of_its_viewe
     assert!(picked_reason.contains("+owed"), "{picked_reason}");
     assert!(replies(&beats[2]).iter().any(|i| i == "m-hack"));
     let prompt = last_core_prompt(&engine);
-    assert!(prompt.contains(Ask::Intrusion.note()), "{prompt}");
+    assert!(
+        prompt.contains(&Ask::Intrusion.note(&malakor_package().persona)),
+        "{prompt}"
+    );
     // Nothing expired: the request was never dropped.
     for ev in &beats {
         assert!(

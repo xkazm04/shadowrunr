@@ -64,10 +64,12 @@ fn parse_json_lenient(s: &str) -> Option<Value> {
     None
 }
 
-fn strip_speaker(line: &str) -> &str {
+/// A line without the speaker label the model may start it with (`[identity]
+/// reply_prefixes`).
+fn strip_speaker<'a>(line: &'a str, prefixes: &[String]) -> &'a str {
     let l = line.trim();
-    for p in ["**Malakor:**", "Malakor:", "MALAKOR:", "**Malakor**:"] {
-        if let Some(rest) = l.strip_prefix(p) {
+    for p in prefixes {
+        if let Some(rest) = l.strip_prefix(p.as_str()) {
             return rest.trim();
         }
     }
@@ -109,7 +111,12 @@ fn parse_op(json: &str, allowed: &[String]) -> Line {
 }
 
 /// Parse the model's reply into ordered lines. `active_foil` gates `FOIL` lines.
-pub fn parse_reply(text: &str, allowed_ops: &[String], active_foil: Option<&str>) -> Vec<Line> {
+pub fn parse_reply(
+    text: &str,
+    allowed_ops: &[String],
+    active_foil: Option<&str>,
+    prefixes: &[String],
+) -> Vec<Line> {
     let mut out = Vec::new();
     for raw in text.lines() {
         let line = raw.trim();
@@ -155,7 +162,7 @@ pub fn parse_reply(text: &str, allowed_ops: &[String], active_foil: Option<&str>
                 continue;
             }
         }
-        let said = strip_speaker(line);
+        let said = strip_speaker(line, prefixes);
         if !said.is_empty() {
             out.push(Line::Say(said.to_string()));
         }
@@ -189,6 +196,10 @@ pub fn op_example(tag: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn prefixes() -> Vec<String> {
+        crate::tests::malakor_package().persona.reply_prefixes
+    }
     use shadowrunr_types::{EvidenceGrade, Rank, ScreenId, SegmentId};
 
     fn allowed(tags: &[&str]) -> Vec<String> {
@@ -198,7 +209,7 @@ mod tests {
     #[test]
     fn parses_lines_ops_and_notes() {
         let reply = "Bow, minions.\nOP: {\"op\":\"mark_moment\",\"label\":\"bow\"}\nNOTE: v1 loves chickens\nMalakor: Silence!";
-        let lines = parse_reply(reply, &allowed(&["mark_moment"]), None);
+        let lines = parse_reply(reply, &allowed(&["mark_moment"]), None, &prefixes());
         assert_eq!(lines.len(), 4);
         assert_eq!(lines[0], Line::Say("Bow, minions.".into()));
         assert!(matches!(&lines[1], Line::Op { tag, .. } if tag == "mark_moment"));
@@ -209,7 +220,7 @@ mod tests {
     #[test]
     fn disallowed_op_is_rejected() {
         let reply = "OP: {\"op\":\"sign_off\",\"reason\":\"bored\"}";
-        let lines = parse_reply(reply, &allowed(&["mark_moment"]), None);
+        let lines = parse_reply(reply, &allowed(&["mark_moment"]), None, &prefixes());
         assert_eq!(
             lines,
             vec![Line::Rejected {
@@ -225,6 +236,7 @@ mod tests {
             "OP: {\"op\":\"mark_moment\",\"label\":\"x\"\nOP: not json",
             &allowed(&["mark_moment"]),
             None,
+            &prefixes(),
         );
         assert!(matches!(&lines[0], Line::Op { .. }));
         assert!(matches!(&lines[1], Line::Rejected { rule, .. } if rule == "op_parse"));
@@ -307,7 +319,7 @@ mod tests {
 Memory candidates (not spoken): NOTE: v1 is new
 Memory candidates:
 Back to conquest.";
-        let lines = parse_reply(reply, &[], None);
+        let lines = parse_reply(reply, &[], None, &prefixes());
         let spoken: Vec<_> = lines
             .iter()
             .filter_map(|l| match l {

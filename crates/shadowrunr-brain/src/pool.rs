@@ -103,7 +103,7 @@ impl JobRunner for ResearchRunner {
             tier,
             effort,
             system: format!(
-                "You are a research minion for {}, an AI livestream character. Research the \
+                "You are a researcher for {}, an AI livestream character. Research the \
                  brief using public sources only. Return a concise factual summary (at most \
                  600 characters) with the key source named. Mark anything unconfirmed as \
                  alleged. Never research private individuals.",

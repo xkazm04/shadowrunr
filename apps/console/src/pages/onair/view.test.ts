@@ -46,7 +46,7 @@ describe("captions", () => {
 
   it("prefers the newer of Malakor's line and the foil's", () => {
     const s = foldEvents([
-      { type: "say", ts_ms: 0, speaker: "malakor", text: "Welcome." },
+      { type: "say", ts_ms: 0, speaker: "host", text: "Welcome." },
       { type: "say", ts_ms: 10, speaker: "foil", foil: "the-life-coach", text: "Growth!" },
     ]);
     const c = captionView(s, 10, 1);

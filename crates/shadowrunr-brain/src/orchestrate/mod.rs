@@ -91,24 +91,26 @@ use std::collections::{HashMap, HashSet};
 use shadowrunr_types::prep::{BeatMode, BitKind, ConnectorKind, PrepBit, StreamPrep};
 use shadowrunr_types::{ChatMsg, Command, SegmentContext, StreamEvent, TsMs};
 
-use crate::moderation::{self, Candidate, IN_CHARACTER_LINES};
+use crate::character::LineBank;
+use crate::moderation::{self, Candidate};
 use crate::picker::{is_bare_emote, is_question, is_vote, mentions, Pick};
 use crate::util::{fnv1a64, normalize, one_line, similarity};
 
 use agenda::{Agenda, BeatShape, LoopKind};
-use requests::{situational_ask, Ask, Rotation, REBUTTALS};
+use requests::{situational_ask, Ask, Rotation};
 use room::RoomWatch;
+use shadowrunr_types::character::Tuning;
 
 /// The segment state in which the room is still filling.
 pub const COLD_OPEN_STATE: &str = "cold_open";
 /// No chat worth answering for this long before a new bit starts (assumption).
-pub const QUIET_BIT_MS: i64 = 8_000;
+pub const QUIET_BIT_MS: i64 = Tuning::DEFAULT.quiet_bit_ms;
 /// At least this long between the starts of two new bits, so a premise has time to be
 /// answered and the deck lasts the segment (assumption).
-pub const BIT_SPACING_MS: i64 = 20_000;
+pub const BIT_SPACING_MS: i64 = Tuning::DEFAULT.bit_spacing_ms;
 /// A quiet beat may hold only while his last line is younger than this: with 5 s beats the
 /// next one speaks well under the 15 s say-gap ceiling (assumption).
-pub const HOLD_GAP_MS: i64 = 7_000;
+pub const HOLD_GAP_MS: i64 = Tuning::DEFAULT.hold_gap_ms;
 /// Reacts in a row after which a thin room gets a bit line alongside its one pick.
 pub const THIN_REACT_STREAK: u32 = 3;
 /// A room is thin when at most this many messages are worth answering.
@@ -127,12 +129,12 @@ const TWO_LINES_MAX_CHARS: usize = 220;
 const REMARK_MIN_WORDS: usize = 4;
 /// How long a message a beat could not answer is carried into the next beats (assumption:
 /// two to five beats, so the answer still reads as one to the asker).
-pub const CARRY_MS: i64 = 25_000;
+pub const CARRY_MS: i64 = Tuning::DEFAULT.carry_ms;
 /// Appended to the `beat_plan` reason of a beat whose core call failed: what it planned was
 /// rolled back ([`Orchestrator::rollback`]).
 pub const ROLLED_BACK: &str = "; rolled back: core call failed";
 /// The most messages carried at once; the oldest go first.
-pub const CARRY_MAX: usize = 6;
+pub const CARRY_MAX: usize = Tuning::DEFAULT.carry_max;
 /// The `input` moderation rule that records a carried message dropped unanswered: action
 /// `expired` (it waited [`CARRY_MS`]) or [`CAPPED`] (the [`CARRY_MAX`] cap dropped it).
 pub const CARRY_RULE: &str = "carry";
@@ -145,13 +147,13 @@ pub const UNAIRED: &str = "unaired";
 pub const GATHERING_SPACING_MS: i64 = 20_000;
 /// An owned request is answered within this long of reaching a beat (assumption: the target the
 /// two rules below keep; four beats).
-pub const REQUEST_ANSWER_MS: i64 = 20_000;
+pub const REQUEST_ANSWER_MS: i64 = Tuning::DEFAULT.request_answer_ms;
 /// While an owned request waits, a beat holds for speech only while more than this is queued
 /// (assumption: its line still starts well inside the voice's `max_lag_ms` of 15 s).
-pub const REQUEST_LEAD_MS: i64 = 8_000;
+pub const REQUEST_LEAD_MS: i64 = Tuning::DEFAULT.request_lead_ms;
 /// An owned request still unanswered this long after it reached a beat is dropped
 /// ([`CARRY_RULE`] / `expired`): an answer that late no longer reads as one (assumption).
-pub const REQUEST_MAX_MS: i64 = 90_000;
+pub const REQUEST_MAX_MS: i64 = Tuning::DEFAULT.request_max_ms;
 
 /// The beat note for an open with no prepared story, and for gathering lines after one.
 pub const GATHERING_NOTE: &str = "(The room is still gathering. One short in-character line \
@@ -323,6 +325,11 @@ pub struct Orchestrator {
     agenda: Agenda,
     /// (viewer, ask) answered this stream: that viewer's same ask is no longer owned.
     asked: HashSet<(String, Ask)>,
+    /// The character's tuning: the carry, hold, bit and request timings (the constants above
+    /// are their engine defaults).
+    tuning: Tuning,
+    /// The character's recast lines and forged-decree rebuttals.
+    lines: LineBank,
 }
 
 /// The situational ask an owned request makes: a single message (never a wave or a safety
@@ -442,6 +449,13 @@ impl Orchestrator {
         }
     }
 
+    /// This orchestrator running a character's tuning and line bank.
+    pub fn with_character(mut self, tuning: Tuning, lines: LineBank) -> Self {
+        self.tuning = tuning;
+        self.lines = lines;
+        self
+    }
+
     /// Note this beat's raw inbox, before the pre-filter: which messages are first contacts.
     pub fn observe_inbox(&mut self, inbox: &[ChatMsg]) {
         self.first.clear();
@@ -491,7 +505,7 @@ impl Orchestrator {
             cand: c.clone(),
             since: now_ms,
             first: false,
-            expires: free_at.max(now_ms).saturating_add(CARRY_MS),
+            expires: free_at.max(now_ms).saturating_add(self.tuning.carry_ms),
             held: false,
             owned: self.owns(c),
         });
@@ -591,7 +605,7 @@ impl Orchestrator {
             }
             // An owned request is carried until answered, up to REQUEST_MAX_MS.
             let expired = match k.owned {
-                Some(_) => now_ms.saturating_sub(k.since) >= REQUEST_MAX_MS,
+                Some(_) => now_ms.saturating_sub(k.since) >= self.tuning.request_max_ms,
                 None => !k.held && now_ms >= k.expires,
             };
             if expired {
@@ -885,7 +899,7 @@ impl Orchestrator {
         // In the cold open what is carried is held; once the room opens, its clock starts from
         // this beat's drain.
         let cold = b.ctx.state == COLD_OPEN_STATE;
-        let from_drain = free_at.saturating_add(CARRY_MS);
+        let from_drain = free_at.saturating_add(self.tuning.carry_ms);
         self.carry_next = b
             .cands
             .iter()
@@ -918,7 +932,7 @@ impl Orchestrator {
         let quiet_ms = now.saturating_sub(self.quiet_since.unwrap_or(now));
         let gap_ms = b.speech_until_ms.map(|t| now.saturating_sub(t).max(0));
         // The goodbye beat always speaks: a quiet hold there would cost the sign-off.
-        let may_hold = gap_ms.is_some_and(|g| g < HOLD_GAP_MS)
+        let may_hold = gap_ms.is_some_and(|g| g < self.tuning.hold_gap_ms)
             && self.last_mode != Some(BeatMode::Hold)
             && !b.closing;
 
@@ -926,7 +940,7 @@ impl Orchestrator {
         // a closing beat run at once; an owned request waits only for REQUEST_LEAD_MS.
         let queued = free_at.saturating_sub(now);
         let hold_lead = if owed {
-            b.speech_lead_ms.max(REQUEST_LEAD_MS)
+            b.speech_lead_ms.max(self.tuning.request_lead_ms)
         } else {
             b.speech_lead_ms
         };
@@ -1136,8 +1150,8 @@ impl Orchestrator {
         if let Some(prep) = b.prep {
             let spaced = self
                 .last_bit_ms
-                .is_none_or(|t| now.saturating_sub(t) >= BIT_SPACING_MS);
-            if quiet_ms >= QUIET_BIT_MS && spaced && self.active_bit.is_none() {
+                .is_none_or(|t| now.saturating_sub(t) >= self.tuning.bit_spacing_ms);
+            if quiet_ms >= self.tuning.quiet_bit_ms && spaced && self.active_bit.is_none() {
                 if let Some(bit) = self.next_bit(prep, b.ctx.segment, false) {
                     let (m, what) = self.bit_lines(bit, 0, 2);
                     self.last_bit_ms = Some(now);
@@ -1199,7 +1213,7 @@ impl Orchestrator {
             return p;
         }
         if let Some(prep) = b.prep {
-            if quiet_ms >= QUIET_BIT_MS && self.active_bit.is_none() {
+            if quiet_ms >= self.tuning.quiet_bit_ms && self.active_bit.is_none() {
                 if let Some(bit) = self.next_bit(prep, b.ctx.segment, false) {
                     let (m, what) = self.bit_lines(bit, 0, 2);
                     self.last_bit_ms = Some(now);
@@ -1473,7 +1487,10 @@ impl Orchestrator {
         } else {
             carry.sort_by_key(|k| (k.owned.is_none(), std::cmp::Reverse(k.since)));
         }
-        let keep = CARRY_MAX.max(carry.iter().filter(|k| k.owned.is_some()).count());
+        let keep = self
+            .tuning
+            .carry_max
+            .max(carry.iter().filter(|k| k.owned.is_some()).count());
         self.capped = carry
             .iter()
             .skip(keep)
@@ -1525,10 +1542,12 @@ impl Orchestrator {
     /// line. Either rotation never repeats one of its recent choices.
     pub fn recast(&mut self, authority: bool, original: &str) -> String {
         if authority {
-            self.rebuttals.choose(REBUTTALS, original).to_string()
+            self.rebuttals
+                .choose(&self.lines.rebuttals, original)
+                .to_string()
         } else {
             self.in_character
-                .choose(IN_CHARACTER_LINES, original)
+                .choose(&self.lines.recast, original)
                 .to_string()
         }
     }

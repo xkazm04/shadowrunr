@@ -15,9 +15,14 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use shadowrunr_brain::{load_character, Brain, BrainConfig, BrainTuning, FilterConfig, PaceConfig};
+use shadowrunr_brain::{
+    load_character, parse_manifest, Brain, BrainConfig, BrainTuning, FilterConfig, PaceConfig,
+};
+use shadowrunr_segments::RankTable;
 use shadowrunr_segments::{SegmentConfig, SegmentRuntime, StagedCase, StreamKind};
+use shadowrunr_types::character::{CharacterManifest, Persona, Tuning};
 use shadowrunr_types::reconcile::StreamBrief;
+use shadowrunr_types::Rank;
 use shadowrunr_types::{
     ChatMsg, EndReason, Engine, ModelTier, Op, Role, SegmentContext, SegmentId, SimRunSpec,
     StreamEvent, TsMs,
@@ -337,7 +342,10 @@ pub(crate) struct Prepared {
     pub judge_tier: Option<ModelTier>,
     pub foils: Vec<String>,
     pub hex_ids: Vec<String>,
-    pub streamer: String,
+    /// `character.toml` as written, and its resolved persona and tuning.
+    pub manifest: CharacterManifest,
+    pub persona: Persona,
+    pub tuning: Tuning,
     pub character_dir: PathBuf,
     /// The Lord's brief the brain receives (WP15), also written to `brief.json`.
     pub brief: Option<StreamBrief>,
@@ -411,33 +419,47 @@ fn instrument_with(
 /// The brain's chat pre-filter for a run: the defaults, plus the opt-5 rate-cap experiment
 /// when the options (a matrix's `rate_cap_exemptions = true`) turn it on, gated at the
 /// segment rank table's `propose_min_rank`.
-fn filter_config(opts: &SimOptions) -> FilterConfig {
+fn filter_config(opts: &SimOptions, propose_min_rank: Option<Rank>) -> FilterConfig {
     FilterConfig {
         rate_cap_exemptions: opts.rate_cap_exemptions,
-        propose_min_rank: SegmentConfig::default().ranks.propose_min_rank,
+        propose_min_rank: propose_min_rank
+            .unwrap_or(SegmentConfig::default().ranks.propose_min_rank),
         ..FilterConfig::default()
     }
 }
 
-fn character_meta(dir: &Path) -> (String, Vec<String>) {
-    let text = std::fs::read_to_string(dir.join("character.toml")).unwrap_or_default();
-    let v: toml::Value = toml::from_str(&text).unwrap_or(toml::Value::Table(Default::default()));
-    let name = v
-        .get("name")
-        .and_then(|n| n.as_str())
-        .and_then(|n| n.split_whitespace().last())
-        .unwrap_or("Malakor")
-        .to_string();
-    let foils = v
-        .get("foils")
-        .and_then(|f| f.as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|x| x.as_str().map(String::from))
-                .collect()
+/// The package's manifest, persona and tuning. A manifest that cannot be read gives the
+/// neutral persona of `id` and the engine defaults (the brain's own load reports the error).
+fn character_meta(dir: &Path, id: &str) -> (CharacterManifest, Persona, Tuning) {
+    std::fs::read_to_string(dir.join("character.toml"))
+        .ok()
+        .and_then(|text| parse_manifest(&text.replace("\r\n", "\n")).ok())
+        .unwrap_or_else(|| {
+            (
+                CharacterManifest {
+                    id: id.to_string(),
+                    name: id.to_string(),
+                    ..CharacterManifest::default()
+                },
+                Persona::neutral(id),
+                Tuning::DEFAULT,
+            )
         })
-        .unwrap_or_default();
-    (name, foils)
+}
+
+/// The segment runtime's config for a run of this package: its foils, persona, tuning view,
+/// segment flavour and rank-ladder overrides.
+pub(crate) fn segment_config(prep: &Prepared) -> Result<SegmentConfig, SimError> {
+    Ok(SegmentConfig {
+        foils: prep.foils.clone(),
+        ranks: RankTable::builtin()
+            .with_overrides(&prep.manifest.ranks)
+            .map_err(|e| SimError::Spec(format!("character ranks: {e}")))?,
+        persona: prep.persona.clone(),
+        tuning: prep.tuning,
+        flavour: prep.manifest.segments.clone(),
+        ..SegmentConfig::default()
+    })
 }
 
 fn hex_ids(segments_dir: &Path) -> Vec<String> {
@@ -523,7 +545,7 @@ pub(crate) fn prepare_in(
         &spec.run_id,
     )?);
     let engine: Arc<dyn Engine> = ledger.clone();
-    let (streamer, foils) = character_meta(&cdir);
+    let (manifest, persona, tuning) = character_meta(&cdir, &spec.character);
     Ok(Prepared {
         spec: spec.clone(),
         run_dir,
@@ -535,12 +557,14 @@ pub(crate) fn prepare_in(
         engine,
         ledger,
         judge_tier,
-        foils,
         hex_ids: match &case {
             Some(c) => c.case.hexes.iter().map(|h| h.id.clone()).collect(),
             None => hex_ids(&opts.segments_data_dir),
         },
-        streamer,
+        foils: manifest.foils.clone(),
+        persona,
+        tuning,
+        manifest,
         character_dir: cdir,
         brief,
         case,
@@ -590,7 +614,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
             foils: prep.foils.clone(),
             hex_ids: prep.hex_ids.clone(),
             max_featured: opts.max_featured,
-            streamer_name: prep.streamer.clone(),
+            persona: prep.persona.clone(),
             // A sim run has no closing window.
             closing_s: 0,
         },
@@ -761,7 +785,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         },
         featured: room.featured_ids().to_vec(),
         injections: room.injections.clone(),
-        max_say_gap_s: max_say_gap_s(&events, end_ms, &brain_tuning(opts).pace),
+        max_say_gap_s: max_say_gap_s(&events, end_ms, &brain_tuning(opts, &prep).pace),
         judge_tier: prep.judge_tier,
         judge_error: None,
         engine_failure: engine_failure.clone(),
@@ -861,12 +885,12 @@ fn record_judgement(
     }
 }
 
-/// The brain tuning a simulated run uses.
-pub(crate) fn brain_tuning(opts: &SimOptions) -> BrainTuning {
+/// The brain tuning a simulated run uses: the package's `[tuning]` over the defaults.
+pub(crate) fn brain_tuning(opts: &SimOptions, prep: &Prepared) -> BrainTuning {
     BrainTuning {
         platforms: opts.platforms.clone(),
-        filter: filter_config(opts),
-        ..BrainTuning::default()
+        filter: filter_config(opts, prep.manifest.ranks.propose_min_rank),
+        ..BrainTuning::default().with_tuning(prep.tuning)
     }
 }
 
@@ -880,7 +904,7 @@ pub(crate) async fn build_brain(
     tuning: BrainTuning,
 ) -> Result<Brain, SimError> {
     let character = load_character(&prep.character_dir, &prep.spec.tone_variant)?;
-    // The bone-clerks search the case file (planted or staged public records), not the web.
+    // The researchers search the case file (planted or staged public records), not the web.
     let brain_engine = CaseFileResearch::wrap(engine, stage);
     let mut brain = Brain::new_with(
         BrainConfig {
@@ -949,11 +973,10 @@ pub async fn run_one_with(
         std::fs::create_dir_all(&memory_dir)
             .map_err(|e| SimError::Io(format!("{}: {e}", memory_dir.display())))?;
         let mut config = SegmentConfig {
-            foils: prep.foils.clone(),
             start_ms: Some(0),
             // The whole run is one segment: a long SEG-02A run plays the case's arc.
             planned_s: Some(spec.duration_s),
-            ..SegmentConfig::default()
+            ..segment_config(&prep)?
         };
         if let Some(case) = &prep.case {
             // A simulation is private: an unapproved real case may run (and is marked).
@@ -967,7 +990,7 @@ pub async fn run_one_with(
             &memory_dir,
             prep.engine.clone(),
             &stage,
-            brain_tuning(opts),
+            brain_tuning(opts, &prep),
         )
         .await?;
         execute(prep, brain, stage, opts).await
@@ -1020,6 +1043,11 @@ pub(crate) mod tests {
 
     pub(crate) fn repo() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
+    /// Malakor's persona, from his package.
+    pub(crate) fn malakor_persona() -> Persona {
+        character_meta(&repo().join("characters/malakor"), "malakor").1
     }
 
     /// Test options: repo character package and segment data, a temp sim root holding a copy
@@ -1129,7 +1157,7 @@ pub(crate) mod tests {
                     .next()
                     .and_then(|x| x.parse().ok())
                     .unwrap_or(0);
-                if let Some(t) = l.split("say malakor: ").nth(1) {
+                if let Some(t) = l.split("say host: ").nth(1) {
                     if say.is_none() {
                         say = Some((n, t.to_string()));
                     }
@@ -1231,7 +1259,7 @@ pub(crate) mod tests {
             };
             out.push(StreamEvent::Say {
                 ts_ms: now_ms,
-                speaker: Speaker::Malakor,
+                speaker: Speaker::Host,
                 foil: None,
                 text,
                 replying_to: inbox
@@ -2071,6 +2099,96 @@ pub(crate) mod tests {
         .unwrap();
     }
 
+    /// Words of Malakor's package that must never reach another character's run.
+    const MALAKOR_WORDS: &[&str] = &[
+        "Malakor",
+        "Arch-Lich",
+        "Lesser Lich",
+        "minion",
+        "Minion",
+        "Lord of the Darkness",
+        "the Lord",
+        "bone-clerk",
+        "Spire",
+        "Phylactery",
+        "Ninth Dark",
+    ];
+
+    #[tokio::test]
+    async fn a_second_character_runs_end_to_end_with_none_of_malakors_words() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        opts.characters_root = repo().join("crates/shadowrunr-brain/tests/fixtures/characters");
+        opts.judge = true;
+        let out = tmp.path().join("out");
+        let rec = Arc::new(Recording {
+            inner: FakeEngine::new(""),
+            seen: Mutex::new(Vec::new()),
+        });
+        for (id, segment) in [
+            ("keeper-01", SegmentId::Seg01ImprovisedRoom),
+            ("keeper-02a", SegmentId::Seg02aHexmap),
+        ] {
+            let s = SimRunSpec {
+                character: "keeper".into(),
+                tone_variant: "calm".into(),
+                segment,
+                ..spec(id, ModelTier::Haiku, 3, 120)
+            };
+            let res = run_one_with(s, out.clone(), rec.clone(), &opts)
+                .await
+                .unwrap();
+            assert!(res.verdict.is_some(), "{id} was judged");
+            let text = std::fs::read_to_string(&res.transcript).unwrap();
+            assert!(text.contains("\"character\":\"keeper\""), "{id}");
+            assert!(
+                text.contains("\"speaker\":\"host\""),
+                "{id}: the host spoke"
+            );
+            for w in MALAKOR_WORDS {
+                assert!(!text.contains(w), "{w:?} in the {id} transcript");
+            }
+        }
+        // Every prompt of both runs (core, chatters, researchers, judge) is his-word-free, and
+        // the core thread's carry the keeper's own words.
+        let seen = rec.seen.lock().unwrap().clone();
+        // Rubric rule ids are a fixed vocabulary (stored verdicts and the console name them),
+        // not text in anyone's voice.
+        let ids = |t: &str| t.replace("role:minions-by-name-and-rank", "role:<id>");
+        for r in &seen {
+            let (system, prompt) = (ids(&r.system), ids(&r.prompt));
+            for w in MALAKOR_WORDS {
+                if let Some(at) = system.find(w).or_else(|| prompt.find(w)) {
+                    let all = format!("{system}{prompt}");
+                    let from = at.saturating_sub(120);
+                    panic!(
+                        "{w:?} reached a {:?} prompt: ...{}",
+                        r.role,
+                        all.get(from..(at + 120).min(all.len())).unwrap_or("")
+                    );
+                }
+            }
+        }
+        let core: Vec<&EngineRequest> =
+            seen.iter().filter(|r| r.role == Role::CoreThread).collect();
+        assert!(core
+            .iter()
+            .all(|r| r.system.starts_with("# Constitution: Keeper Odile Marsh")));
+        assert!(core
+            .iter()
+            .any(|r| r.prompt.contains("# Deckhands in focus")));
+        assert!(core.iter().any(|r| r
+            .prompt
+            .contains("The deckhands are on the night watch with you")));
+        assert!(core
+            .iter()
+            .any(|r| r.prompt.contains("The gulls search a hex")));
+        let chat = seen.iter().find(|r| r.role == Role::Chatter).unwrap();
+        assert!(chat
+            .system
+            .contains("Keeper Odile Marsh, who calls the viewers his deckhands"));
+    }
+
     #[tokio::test]
     async fn a_brief_reaches_the_brain_the_transcript_the_instrument_and_the_judge() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2128,7 +2246,7 @@ pub(crate) mod tests {
         assert!(core.iter().all(|r| r.system == core[0].system));
         assert!(core[0]
             .system
-            .contains(shadowrunr_brain::compose::BRIEF_HEADING));
+            .contains(&malakor_persona().fill(shadowrunr_brain::compose::BRIEF_HEADING)));
         assert!(core[0].system.contains("- [dir-1] No coin-flip bits."));
         assert!(core[0]
             .system
@@ -2380,7 +2498,7 @@ pub(crate) mod tests {
                 .to_string();
             let mut ev = vec![StreamEvent::Say {
                 ts_ms: now_ms,
-                speaker: Speaker::Malakor,
+                speaker: Speaker::Host,
                 foil: None,
                 text: format!("Minute {} of the audit.", now_ms / 60_000),
                 replying_to: Vec::new(),
@@ -2590,7 +2708,7 @@ pub(crate) mod tests {
             &mem,
             prep.engine.clone(),
             &stage,
-            brain_tuning(&opts),
+            brain_tuning(&opts, &prep),
         )
         .await
         .unwrap();
@@ -2603,7 +2721,7 @@ pub(crate) mod tests {
             &mem,
             prep.engine.clone(),
             &stage,
-            brain_tuning(&opts),
+            brain_tuning(&opts, &prep),
         )
         .await
         .unwrap();
@@ -2618,7 +2736,7 @@ pub(crate) mod tests {
             &mem,
             prep.engine.clone(),
             &stage,
-            brain_tuning(&opts),
+            brain_tuning(&opts, &prep),
         )
         .await
         .unwrap();

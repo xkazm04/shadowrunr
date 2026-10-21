@@ -1,12 +1,15 @@
 //! The weighted rank ladder as a data table (`data/ranks.toml`).
 //!
 //! The table is loaded at runtime ([`RankTable::load`]) and falls back to a compiled-in copy
-//! of the same file ([`RankTable::builtin`]). Every threshold in it is a labelled assumption.
+//! of the same file ([`RankTable::builtin`]): the engine default. A character package may
+//! override weights, thresholds and the `!propose` gate (`[ranks]` in `character.toml`,
+//! [`RankTable::with_overrides`]). Every threshold in it is a labelled assumption.
 
 use std::path::Path;
 use std::sync::OnceLock;
 
 use serde::Deserialize;
+use shadowrunr_types::character::CharacterRanks;
 use shadowrunr_types::Rank;
 
 use crate::SegmentError;
@@ -95,6 +98,40 @@ impl RankTable {
         } else {
             Ok(Self::builtin().clone())
         }
+    }
+
+    /// This table with a character package's `[ranks]` overrides applied: a weight, a
+    /// threshold (gifts and tiers together) or the `!propose` gate replaces only what it
+    /// names. The merged table is validated like a file.
+    pub fn with_overrides(&self, o: &CharacterRanks) -> Result<RankTable, SegmentError> {
+        let mut t = self.clone();
+        for r in &mut t.ranks {
+            if let Some(w) = o.weights.get(&r.rank) {
+                r.weight = *w;
+            }
+            if let Some(th) = o.thresholds.get(&r.rank) {
+                r.min_gifted = th.min_gifted;
+                r.tiers = th
+                    .tiers
+                    .iter()
+                    .map(|x| TierRule {
+                        tier: x.tier,
+                        min_months: x.min_months,
+                    })
+                    .collect();
+            }
+        }
+        if let Some(p) = o.propose_min_rank {
+            t.propose_min_rank = p;
+        }
+        t.validate().map_err(|e| match e {
+            SegmentError::Data { detail, .. } => SegmentError::Data {
+                file: "character.toml [ranks]".into(),
+                detail,
+            },
+            other => other,
+        })?;
+        Ok(t)
     }
 
     /// The compiled-in default (`data/ranks.toml`).
@@ -271,5 +308,40 @@ mod tests {
     fn load_or_builtin_falls_back() {
         let table = RankTable::load_or_builtin(Path::new("definitely/not/here.toml")).unwrap();
         assert_eq!(&table, t());
+    }
+
+    #[test]
+    fn package_overrides_replace_only_what_they_name() {
+        use shadowrunr_types::character::{RankThreshold, TierThreshold};
+        assert_eq!(
+            &t().with_overrides(&CharacterRanks::default()).unwrap(),
+            t()
+        );
+        let mut o = CharacterRanks::default();
+        o.weights.insert(Rank::Warlock, 2.1);
+        o.thresholds.insert(
+            Rank::Acolyte,
+            RankThreshold {
+                min_gifted: Some(1),
+                tiers: vec![TierThreshold {
+                    tier: 1,
+                    min_months: 2,
+                }],
+            },
+        );
+        o.propose_min_rank = Some(Rank::Acolyte);
+        let m = t().with_overrides(&o).unwrap();
+        assert_eq!(m.vote_weight(Rank::Warlock), 2.1);
+        assert_eq!(m.vote_weight(Rank::Lich), t().vote_weight(Rank::Lich));
+        assert_eq!(m.rank_for(None, 0, 1), Rank::Acolyte);
+        assert_eq!(m.rank_for(Some(1), 0, 0), Rank::Thrall);
+        assert!(m.may_propose(Rank::Acolyte));
+        // A merged ladder that breaks a rule is refused, naming the package.
+        o.weights.insert(Rank::DreadCouncil, 0.5);
+        let e = t().with_overrides(&o).unwrap_err().to_string();
+        assert!(
+            e.contains("character.toml [ranks]") && e.contains("non-decreasing"),
+            "{e}"
+        );
     }
 }

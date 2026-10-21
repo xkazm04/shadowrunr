@@ -1,7 +1,7 @@
 //! One output gate for every surface a line reaches.
 //!
 //! A line the brain produces reaches the audience or memory through one of five surfaces:
-//! Malakor's own voice, a foil's voice, an on-screen card, a package stall line, or a NOTE that
+//! the host's own voice, a foil's voice, an on-screen card, a package stall line, or a NOTE that
 //! becomes a long-term episode. Each surface declares its [`Profile`] here, the checks it runs,
 //! and [`pass`] runs them in one fixed order. A rail enforced on four paths out of five is a
 //! rail with a door in it: [`Surface::profile`] matches every surface with no wildcard, so a
@@ -13,7 +13,7 @@ use shadowrunr_types::{StreamEvent, TsMs};
 
 use crate::moderation::{
     self, gate_line, output_events, recast_in_character, HexInfo, Policy, RemovedNames, TermAction,
-    AI_DISCLOSURE_LINE, CRISIS_BAN_RULE, NAME_WITHHELD,
+    CRISIS_BAN_RULE, NAME_WITHHELD,
 };
 use crate::util::near_duplicate;
 
@@ -30,7 +30,7 @@ pub const REPETITION_RULE: &str = "repetition";
 /// Where a line goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Surface {
-    /// Malakor's own spoken line.
+    /// The host's own spoken line.
     Spoken,
     /// The active foil's line, shown and voiced on stage.
     Foil,
@@ -216,8 +216,9 @@ pub fn pass(
         Terms::Line => {
             let (mut out, fired) = gate_line(text, ctx.policy, ctx.hexes, p.crisis && ctx.crisis);
             g.events.extend(output_events(now, &fired));
-            // A recast line fits the beat: a rebuttal when it answered a forged decree.
-            if p.recast && recast_in_character(&fired) && out != AI_DISCLOSURE_LINE {
+            // A recast line fits the beat: a rebuttal when it answered a forged decree. The
+            // persona's honest AI disclosure is never recast.
+            if p.recast && recast_in_character(&fired) && out != ctx.policy.persona.disclosure {
                 out = recast(text);
             }
             out

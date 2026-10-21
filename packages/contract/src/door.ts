@@ -114,11 +114,30 @@ function eventMessage(frame: ServerFrame): EventMessage {
   return { kind: "event", event: frame };
 }
 
+/** The v1 `say` speaker value: the daemon replays stored transcripts verbatim, and lines written
+ *  before the character-neutral contract say `malakor` where they now say `host`. */
+const LEGACY_HOST = "malakor";
+
+function hostSpeaker(event: unknown): unknown {
+  return isRecord(event) && event["type"] === "say" && event["speaker"] === LEGACY_HOST
+    ? { ...event, speaker: "host" }
+    : event;
+}
+
+/** A frame with a legacy `say` speaker read as `host` (bare or enveloped). */
+function legacyFrame(frame: unknown): unknown {
+  if (isRecord(frame) && "seq" in frame && "event" in frame) {
+    const event = hostSpeaker(frame["event"]);
+    return event === frame["event"] ? frame : { ...frame, event };
+  }
+  return hostSpeaker(frame);
+}
+
 /** Decode and validate one `/events` frame, given as text or as an already-decoded value. */
 export function parseEvent(raw: unknown): Result<EventMessage, DoorError> {
   const decoded = decode(raw);
   if (!decoded.ok) return decoded;
-  const frame = decoded.value;
+  const frame = legacyFrame(decoded.value);
   return validateServerFrame(frame)
     ? ok(eventMessage(frame))
     : fail(invalid(validateServerFrame, "", "event frame"));

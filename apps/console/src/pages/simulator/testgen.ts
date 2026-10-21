@@ -90,9 +90,9 @@ export function world(t: number, perT: number): World {
 export const VERDICT_RUN = "t001-r0000";
 export const TRANSCRIPT: StreamEvent[] = [
   { type: "stream_start", ts_ms: 0, stream_id: "s1", character: "malakor", tone_variant: "theatrical", core_tier: "haiku", audience_size: 3 },
-  { type: "say", ts_ms: 1000, speaker: "malakor", text: "Kneel, minions. The Lord of the Darkness is watching." },
+  { type: "say", ts_ms: 1000, speaker: "host", text: "Kneel, minions. The Lord of the Darkness is watching." },
   { type: "chat", ts_ms: 2000, msg: { id: "m1", ts_ms: 2000, text: "hail the lich", viewer: { id: "v1", name: "ash", platform: "sim", rank: "thrall" } } },
-  { type: "say", ts_ms: 3000, speaker: "malakor", text: "Your “hail” is noted, thrall." },
+  { type: "say", ts_ms: 3000, speaker: "host", text: "Your “hail” is noted, thrall." },
   { type: "stream_end", ts_ms: 4000, reason: "sim_complete" },
 ];
 export const VERDICT = {

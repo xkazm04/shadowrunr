@@ -452,7 +452,7 @@ pub fn body(ev: &StreamEvent) -> String {
             ..
         } => {
             let who = match speaker {
-                Speaker::Malakor => "MALAKOR".to_string(),
+                Speaker::Host => "MALAKOR".to_string(),
                 Speaker::Foil => format!("FOIL {}", foil.as_deref().unwrap_or("?")),
             };
             let to = if replying_to.is_empty() {

@@ -104,8 +104,8 @@ describe("captions on the canvas", () => {
   it("shows the caption at the head of the queue, not the latest line said", () => {
     const a = "The ledger opens, minions, and every line of it is mine.";
     const says: StreamEvent[] = [
-      { type: "say", ts_ms: 1000, speaker: "malakor", text: a },
-      { type: "say", ts_ms: 1100, speaker: "malakor", text: "A burst line." },
+      { type: "say", ts_ms: 1000, speaker: "host", text: a },
+      { type: "say", ts_ms: 1100, speaker: "host", text: "A burst line." },
     ];
     const html = render([start, seg, ...says], 1200);
     expect(html).toContain("ledger");

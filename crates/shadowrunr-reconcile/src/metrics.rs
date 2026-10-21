@@ -213,7 +213,7 @@ fn segments(runs: &[RunData]) -> Vec<SegmentMetrics> {
                     }
                 }
                 StreamEvent::Say {
-                    speaker: Speaker::Malakor,
+                    speaker: Speaker::Host,
                     ..
                 } => a.malakor += 1,
                 StreamEvent::Op { .. } => a.ops += 1,
@@ -460,7 +460,7 @@ fn latency(runs: &[RunData]) -> LatencyStats {
         }
         for (_, ev) in run.numbered() {
             if let StreamEvent::Say {
-                speaker: Speaker::Malakor,
+                speaker: Speaker::Host,
                 first_text_ms: Some(f),
                 ..
             } = ev

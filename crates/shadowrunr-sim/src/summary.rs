@@ -803,7 +803,9 @@ pub fn report_md(res: &Results) -> String {
     }
 
     if !res.directives.is_empty() {
-        s.push_str("\n## The Lord's directives\n\n| directive | kind | outcome |\n|---|---|---|\n");
+        s.push_str(
+            "\n## The owner's directives\n\n| directive | kind | outcome |\n|---|---|---|\n",
+        );
         for o in &res.directives {
             s.push_str(&format!(
                 "| `{}` | {} | {} |\n",

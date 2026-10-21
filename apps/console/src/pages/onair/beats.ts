@@ -89,7 +89,7 @@ export function countsOf(events: readonly StreamEvent[]): RunCounts {
   let start = Number.POSITIVE_INFINITY;
   let end = Number.NEGATIVE_INFINITY;
   for (const e of events) {
-    if (e.type === "say" && e.speaker === "malakor") spoken++;
+    if (e.type === "say" && e.speaker === "host") spoken++;
     else if (e.type === "chat") chat++;
     else if (e.type === "picked") picked += e.msg_ids.length;
     start = Math.min(start, e.ts_ms);

@@ -94,6 +94,7 @@ pub fn planner_input(
         .collect();
     Ok(planner::PlannerInput {
         character_name: pkg.name.clone(),
+        persona: pkg.persona.clone(),
         constitution: pkg.constitution.clone(),
         tone_id: pkg.tone_variant.clone(),
         tone_text: pkg.tone_text.clone(),
@@ -143,7 +144,7 @@ pub async fn generate_with(
             role: Role::Planner,
             tier,
             effort,
-            system: planner::SYSTEM.to_string(),
+            system: planner::system(&input),
             prompt,
             allowed_tools: Vec::new(),
             timeout_ms,

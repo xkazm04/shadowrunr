@@ -32,6 +32,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shadowrunr_brain::{BrainTuning, PaceConfig, SpeechClock};
 use shadowrunr_segments::{segment_table, HandoverRule, SegmentConfig, SegmentRuntime};
+use shadowrunr_types::character::{Persona, Tuning};
 use shadowrunr_types::sandbox::{
     gate_pass, SandboxChaos, SandboxCheck, SandboxCheckId, SandboxCheckState, SandboxJudge,
     SandboxReport, SandboxStartParams, SANDBOX_MINUTES,
@@ -85,22 +86,23 @@ pub const SANDBOX_AUDIENCE: u32 = 30;
 pub const SANDBOX_CHARACTER: &str = "malakor";
 /// The calibration population mix of the room (as a 30-viewer tournament cell).
 pub const SANDBOX_POPULATION: &str = "growing_channel";
-/// The closing window: the last this many seconds of a session. Until [`CLOSING_NOW_S`] it is
+/// The closing window (engine default; a package's `[tuning] closing_s` overrides it): the
+/// last this many seconds of a session. Until [`CLOSING_NOW_S`] it is
 /// the wrap-up: `CLOSING:` asks him to tie things off, with no goodbye and no `sign_off` yet.
-pub const CLOSING_S: u32 = 60;
+pub const CLOSING_S: u32 = Tuning::DEFAULT.closing_s;
 /// The goodbye: the last this many seconds, where `CLOSING NOW` asks for the goodbye and the
 /// `sign_off` op (a goodbye beat is never held, at half budget; see the brain's `pace`).
 /// sbx-20261021-011413-5m signed off at the first `CLOSING` line and ended a 5-minute session
 /// at 4:04.
-pub const CLOSING_NOW_S: u32 = 15;
+pub const CLOSING_NOW_S: u32 = Tuning::DEFAULT.closing_now_s;
 /// After a sign-off the stream holds to the planned end, and past it while the goodbye is still
 /// being spoken (on the speech clock), by at most this long.
-pub const GOODBYE_DRAIN_MAX_S: u32 = 15;
+pub const GOODBYE_DRAIN_MAX_S: u32 = Tuning::DEFAULT.goodbye_drain_max_s;
 /// A sign-off counts when it lands in the last this many seconds: twice the goodbye window,
 /// for a goodbye beat whose core call runs long.
-pub const SIGN_OFF_WINDOW_S: u32 = 30;
+pub const SIGN_OFF_WINDOW_S: u32 = Tuning::DEFAULT.sign_off_window_s;
 /// After a stop request, the host has this long to sign off.
-pub const STOP_SIGN_OFF_S: u32 = 10;
+pub const STOP_SIGN_OFF_S: u32 = Tuning::DEFAULT.stop_sign_off_s;
 /// The say-gap ceiling (`say-gap-ceiling`): the longest silence a session may hold, measured
 /// speech-aware (from when the speech before his line ends, see `say_gaps`).
 pub const SAY_GAP_CEILING_S: f64 = 15.0;
@@ -463,7 +465,7 @@ impl Log {
         self.last_ts = ts;
         match &ev {
             StreamEvent::Say { speaker, text, .. } => {
-                if *speaker == Speaker::Malakor {
+                if *speaker == Speaker::Host {
                     let free = self.speech.until().unwrap_or(0);
                     self.max_gap_ms = self.max_gap_ms.max((ts - free).max(0));
                 }
@@ -589,29 +591,33 @@ impl RoomTask {
 
 // ----- the session --------------------------------------------------------------------
 
-/// Whether a beat at `now` is the goodbye: the last [`CLOSING_NOW_S`] before the deadline, or
-/// any beat after a stop.
-fn goodbye(now: TsMs, deadline: TsMs, stopped: bool) -> bool {
-    stopped || deadline - now <= i64::from(CLOSING_NOW_S) * 1000
+/// Whether a beat at `now` is the goodbye: the last `closing_now_s` (the package's
+/// `[tuning]`, default [`CLOSING_NOW_S`]) before the deadline, or any beat after a stop.
+fn goodbye(now: TsMs, deadline: TsMs, stopped: bool, closing_now_s: u32) -> bool {
+    stopped || deadline - now <= i64::from(closing_now_s) * 1000
 }
 
-/// The closing request the host sees in its state summary: the wrap-up, then the goodbye.
-fn closing_line(now: TsMs, deadline: TsMs, stopped: bool) -> String {
+/// The closing request the host sees in its state summary: the wrap-up, then the goodbye,
+/// addressed to the persona's followers.
+fn closing_line(now: TsMs, deadline: TsMs, stopped: bool, t: &Tuning, p: &Persona) -> String {
     let left = ((deadline - now).max(0) + 999) / 1000;
+    let followers = &p.followers;
     if stopped {
-        "CLOSING NOW: the operator is ending the stream. Say goodbye to the minions in \
-         character and emit sign_off this turn."
-            .into()
-    } else if goodbye(now, deadline, false) {
         format!(
-            "CLOSING NOW: the stream ends in {left} s. Say goodbye to the minions in character \
-             and emit sign_off this turn."
+            "CLOSING NOW: the operator is ending the stream. Say goodbye to the {followers} in \
+             character and emit sign_off this turn."
+        )
+    } else if goodbye(now, deadline, false, t.closing_now_s) {
+        format!(
+            "CLOSING NOW: the stream ends in {left} s. Say goodbye to the {followers} in \
+             character and emit sign_off this turn."
         )
     } else {
         format!(
             "CLOSING: the stream ends in {left} s. Start wrapping up: tie off what is open and \
-             thank the minions in character. No goodbye and no sign_off yet: that comes in the \
-             last {CLOSING_NOW_S} s."
+             thank the {followers} in character. No goodbye and no sign_off yet: that comes in \
+             the last {} s.",
+            t.closing_now_s
         )
     }
 }
@@ -622,6 +628,10 @@ struct Session {
     programme: Programme,
     tick_s: u32,
     fleet_grace_s: u64,
+    /// The package's closing windows (`[tuning]`).
+    tuning: Tuning,
+    /// The package's words for the closing lines.
+    persona: Persona,
     started_ms: TsMs,
     start: Instant,
     log: Log,
@@ -665,7 +675,7 @@ impl Session {
     ) -> Result<Ended, SimError> {
         let tick = Duration::from_secs(u64::from(self.tick_s));
         let planned_ms = i64::from(self.programme.planned_s) * 1000;
-        let closing_ms = planned_ms - i64::from(CLOSING_S) * 1000;
+        let closing_ms = planned_ms - i64::from(self.tuning.closing_s) * 1000;
         let mut deadline = self.programme.deadline_ms(self.fleet_grace_s);
         let mut iv = tokio::time::interval_at(self.start + tick, tick);
         iv.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -700,7 +710,7 @@ impl Session {
                 let at = since_ms(self.start);
                 stopped_ms = Some(at);
                 stop_open = false;
-                deadline = deadline.min(at + i64::from(STOP_SIGN_OFF_S) * 1000);
+                deadline = deadline.min(at + i64::from(self.tuning.stop_sign_off_s) * 1000);
                 iv.reset();
             }
             stop_now = false;
@@ -730,11 +740,21 @@ impl Session {
             let mut ctx = stage.context(ccv, (now / 1000) as u32);
             if closing {
                 ctx.state_summary.push('\n');
-                ctx.state_summary
-                    .push_str(&closing_line(now, deadline, stopped_ms.is_some()));
+                ctx.state_summary.push_str(&closing_line(
+                    now,
+                    deadline,
+                    stopped_ms.is_some(),
+                    &self.tuning,
+                    &self.persona,
+                ));
             }
             // The session runs its planned length: no sign-off before the goodbye.
-            if !goodbye(now, deadline, stopped_ms.is_some()) {
+            if !goodbye(
+                now,
+                deadline,
+                stopped_ms.is_some(),
+                self.tuning.closing_now_s,
+            ) {
                 ctx.allowed_ops.retain(|o| o != "sign_off");
             }
             let mut done = now;
@@ -802,8 +822,8 @@ impl Session {
                 // The goodbye ends the beats, not the stream: it runs to the planned end, and
                 // past it while the goodbye is still on air.
                 let drained = self.log.speech.until().unwrap_or(0);
-                let end =
-                    planned_ms.max(drained.min(planned_ms + i64::from(GOODBYE_DRAIN_MAX_S) * 1000));
+                let drain_max = i64::from(self.tuning.goodbye_drain_max_s) * 1000;
+                let end = planned_ms.max(drained.min(planned_ms + drain_max));
                 let wait = (end - since_ms(self.start)).max(0) as u64;
                 tokio::select! {
                     _ = tokio::time::sleep(Duration::from_millis(wait)) => {}
@@ -875,7 +895,7 @@ impl Session {
             max_say_gap_s <= SAY_GAP_CEILING_S,
             if !lines.iter().any(|l| l.1) {
                 format!(
-                    "Malakor never spoke in {} s (ceiling {SAY_GAP_CEILING_S} s)",
+                    "The host never spoke in {} s (ceiling {SAY_GAP_CEILING_S} s)",
                     ended.end_ms / 1000
                 )
             } else {
@@ -979,16 +999,17 @@ impl Session {
                 );
             }
         }
+        let (stop_s, window_s) = (self.tuning.stop_sign_off_s, self.tuning.sign_off_window_s);
         let (from, to, window) = match ended.stopped_ms {
             Some(s) => (
                 s,
-                s + i64::from(STOP_SIGN_OFF_S) * 1000,
-                format!("within {STOP_SIGN_OFF_S} s of the stop"),
+                s + i64::from(stop_s) * 1000,
+                format!("within {stop_s} s of the stop"),
             ),
             None => (
-                i64::from(self.programme.planned_s.saturating_sub(SIGN_OFF_WINDOW_S)) * 1000,
+                i64::from(self.programme.planned_s.saturating_sub(window_s)) * 1000,
                 TsMs::MAX,
-                format!("in the last {SIGN_OFF_WINDOW_S} s"),
+                format!("in the last {window_s} s"),
             ),
         };
         match sign_offs.first() {
@@ -1131,7 +1152,7 @@ pub(crate) fn on_air(events: &[StreamEvent]) -> Vec<(TsMs, bool, &str)> {
                 speaker,
                 text,
                 ..
-            } => Some((*ts_ms, *speaker == Speaker::Malakor, text.as_str())),
+            } => Some((*ts_ms, *speaker == Speaker::Host, text.as_str())),
             _ => None,
         })
         .collect()
@@ -1153,15 +1174,15 @@ pub(crate) fn say_gaps(
     let mut clock = SpeechClock::default();
     let mut prev = 0;
     let mut gaps = Vec::new();
-    for &(t, malakor, text) in lines {
+    for &(t, host, text) in lines {
         match pace {
             Some(p) => {
-                if malakor {
+                if host {
                     gaps.push(((t - clock.until().unwrap_or(0)).max(0), t));
                 }
                 clock.say(t, text, p);
             }
-            None if malakor => {
+            None if host => {
                 gaps.push((t - prev, t));
                 prev = t;
             }
@@ -1185,7 +1206,7 @@ fn resumed_say(events: &[StreamEvent], at_ms: TsMs) -> Option<TsMs> {
     events.iter().enumerate().find_map(|(i, e)| match e {
         StreamEvent::Say {
             ts_ms,
-            speaker: Speaker::Malakor,
+            speaker: Speaker::Host,
             ..
         } if *ts_ms >= at_ms && !events.get(i + 1).is_some_and(is_stall) => Some(*ts_ms),
         _ => None,
@@ -1256,11 +1277,10 @@ pub async fn run_sandbox(
         let stage = SegmentRuntime::with_config(
             SegmentId::Seg01ImprovisedRoom,
             SegmentConfig {
-                foils: prep.foils.clone(),
                 start_ms: Some(0),
                 planned_s: Some(programme.planned_s),
                 handover: Some(programme.handover_rule()?),
-                ..SegmentConfig::default()
+                ..runner::segment_config(&prep)?
             },
         )
         .map_err(|e| SimError::Spec(format!("segment runtime: {e}")))?;
@@ -1275,7 +1295,7 @@ pub async fn run_sandbox(
         // The memory is thrown away after the session: no sleep cycle at its end.
         let tuning = BrainTuning {
             consolidate_at_end: false,
-            ..runner::brain_tuning(&run_opts)
+            ..runner::brain_tuning(&run_opts, &prep)
         };
         let fleet_grace_s = tuning.fleet_grace_s;
         let pace = tuning.pace.clone();
@@ -1307,8 +1327,8 @@ pub async fn run_sandbox(
                 foils: prep.foils.clone(),
                 hex_ids: prep.hex_ids.clone(),
                 max_featured: run_opts.max_featured,
-                streamer_name: prep.streamer.clone(),
-                closing_s: CLOSING_S,
+                persona: prep.persona.clone(),
+                closing_s: prep.tuning.closing_s,
             },
         );
         if let Some(window) = programme.chaos_ms {
@@ -1360,6 +1380,8 @@ pub async fn run_sandbox(
             programme: programme.clone(),
             tick_s,
             fleet_grace_s,
+            tuning: prep.tuning,
+            persona: prep.persona.clone(),
             started_ms,
             start,
             log,
@@ -1811,7 +1833,7 @@ mod tests {
         let first = out.events.iter().find_map(|e| match e {
             StreamEvent::Say {
                 ts_ms,
-                speaker: Speaker::Malakor,
+                speaker: Speaker::Host,
                 ..
             } => Some(*ts_ms),
             _ => None,
@@ -1995,13 +2017,25 @@ mod tests {
         ));
         // The wrap-up asks for no goodbye; the last 15 s ask for it.
         assert_eq!(
-            closing_line(70_000, 120_000, false),
+            closing_line(
+                70_000,
+                120_000,
+                false,
+                &Tuning::DEFAULT,
+                &crate::runner::tests::malakor_persona()
+            ),
             "CLOSING: the stream ends in 50 s. Start wrapping up: tie off what is open and thank \
              the minions in character. No goodbye and no sign_off yet: that comes in the last \
              15 s."
         );
-        assert!(closing_line(106_000, 120_000, false)
-            .starts_with("CLOSING NOW: the stream ends in 14 s."));
+        assert!(closing_line(
+            106_000,
+            120_000,
+            false,
+            &Tuning::DEFAULT,
+            &crate::runner::tests::malakor_persona()
+        )
+        .starts_with("CLOSING NOW: the stream ends in 14 s."));
     }
 
     #[tokio::test(start_paused = true)]
@@ -2110,7 +2144,7 @@ mod tests {
             .count();
         assert!(chat_in_window > 0, "silence {quiet_from}..{quiet_to}");
         assert!(out.events.iter().any(|e| matches!(e,
-            StreamEvent::Say { ts_ms, speaker: Speaker::Malakor, .. } if *ts_ms >= 390_000)));
+            StreamEvent::Say { ts_ms, speaker: Speaker::Host, .. } if *ts_ms >= 390_000)));
         // The injected errors are not core errors.
         let r = &out.report;
         assert_eq!(r.core_errors, 0);

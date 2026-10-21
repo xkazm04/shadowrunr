@@ -378,20 +378,29 @@ pub fn target_hex(case: &Case, brief: &str) -> Option<usize> {
     best.filter(|_| !tied).map(|(i, _)| i)
 }
 
-/// The bone-clerks' report on `brief`: what a research job returns for a case with a planted
+/// The researchers' report on `brief`: what a research job returns for a case with a planted
 /// case file. `prior_searches` is how many searches the brief's hex already had this stream
 /// and `cap` the table's `max_searches_per_hex`; at the cap the report says the next move is
-/// the Plebiscite's instead of repeating the file.
-pub fn report(case: &Case, file: &CaseFile, brief: &str, prior_searches: u32, cap: u32) -> String {
+/// the Plebiscite's instead of repeating the file. `researchers` is the persona's word for
+/// them (`{researchers}`, e.g. "bone-clerks").
+pub fn report(
+    case: &Case,
+    file: &CaseFile,
+    brief: &str,
+    prior_searches: u32,
+    cap: u32,
+    researchers: &str,
+) -> String {
     let Some(i) = target_hex(case, brief) else {
-        return "The bone-clerks could not tell which hex this brief means. Name exactly one \
-                hex from the map (\"HEX-04: ...\")."
-            .into();
+        return format!(
+            "The {researchers} could not tell which hex this brief means. Name exactly one \
+             hex from the map (\"HEX-04: ...\")."
+        );
     };
     let hex = &case.hexes[i];
     if prior_searches >= cap {
         return format!(
-            "{}: already searched {cap} times this stream. The bone-clerks will not search it \
+            "{}: already searched {cap} times this stream. The {researchers} will not search it \
              again; the next move on {} goes to the Plebiscite.",
             hex.id, hex.id
         );
@@ -412,13 +421,13 @@ pub fn report(case: &Case, file: &CaseFile, brief: &str, prior_searches: u32, ca
     if found.is_empty() {
         return if file.fictional {
             format!(
-                "{} ({}): the bone-clerks searched the case file and found nothing on record. \
+                "{} ({}): the {researchers} searched the case file and found nothing on record. \
                  PLANTED FICTIONAL DEMO CASE.",
                 hex.id, hex.label
             )
         } else {
             format!(
-                "{} ({}): the bone-clerks searched the staged public record and found nothing \
+                "{} ({}): the {researchers} searched the staged public record and found nothing \
                  filed under this hex. Do not fill the gap: it stays unproven.",
                 hex.id, hex.label
             )
@@ -550,7 +559,14 @@ mod tests {
     fn report_returns_records_for_seeded_hexes() {
         let case = demo_case();
         let file = CaseFile::demo();
-        let r = report(&case, &file, "HEX-04: trace the treasury wallet", 0, 2);
+        let r = report(
+            &case,
+            &file,
+            "HEX-04: trace the treasury wallet",
+            0,
+            2,
+            "bone-clerks",
+        );
         assert!(r.starts_with("HEX-04 (Treasury wallet demo-0001): 2 planted FICTIONAL"));
         assert!(r.contains("DOC-03 [DOC]"), "{r}");
         assert!(r.contains("CLM-02 [CLM]"), "{r}");
@@ -562,7 +578,14 @@ mod tests {
     fn report_says_nothing_found_for_empty_hexes() {
         let case = demo_case();
         let file = CaseFile::demo();
-        let r = report(&case, &file, "HEX-08: who controls Mirecrown Trust", 1, 2);
+        let r = report(
+            &case,
+            &file,
+            "HEX-08: who controls Mirecrown Trust",
+            1,
+            2,
+            "bone-clerks",
+        );
         assert!(r.contains("found nothing on record"), "{r}");
         assert!(!r.contains("[DOC]") && !r.contains("[REP]") && !r.contains("[CLM]"));
     }
@@ -571,11 +594,11 @@ mod tests {
     fn report_at_the_cap_points_to_the_plebiscite() {
         let case = demo_case();
         let file = CaseFile::demo();
-        let r = report(&case, &file, "HEX-07 again", 2, 2);
+        let r = report(&case, &file, "HEX-07 again", 2, 2, "bone-clerks");
         assert!(r.contains("will not search it again"), "{r}");
         assert!(r.contains("Plebiscite"), "{r}");
         assert!(!r.contains("CLM-03"), "the file is not repeated: {r}");
-        let r = report(&case, &file, "the usual suspects", 5, 2);
+        let r = report(&case, &file, "the usual suspects", 5, 2, "bone-clerks");
         assert!(r.contains("Name exactly one hex"), "{r}");
     }
 
@@ -584,7 +607,14 @@ mod tests {
         let case = demo_case();
         let file = CaseFile::demo();
         for h in &case.hexes {
-            let r = report(&case, &file, &format!("{}: everything", h.id), 0, 2);
+            let r = report(
+                &case,
+                &file,
+                &format!("{}: everything", h.id),
+                0,
+                2,
+                "bone-clerks",
+            );
             assert!(r.chars().count() < REPORT_CHARS, "{} is cut: {r}", h.id);
             for rec in file.records_for(&h.id) {
                 assert!(r.contains(&rec.source), "{}", rec.id);
@@ -596,14 +626,14 @@ mod tests {
     fn a_real_case_reports_its_public_records() {
         let (case, file) = crate::cases::tests::real_case();
         file.validate(&case, SourceAllowlist::builtin()).unwrap();
-        let r = report(&case, &file, "HEX-01: who runs it", 0, 2);
+        let r = report(&case, &file, "HEX-01: who runs it", 0, 2, "bone-clerks");
         assert!(
             r.starts_with("HEX-01 (Test Holdings LLC): 1 public record(s) on file."),
             "{r}"
         );
         assert!(r.contains("DOC-01 [DOC]"), "{r}");
         assert!(!r.contains("FICTIONAL"), "{r}");
-        let r = report(&case, &file, "HEX-03: the fund", 0, 2);
+        let r = report(&case, &file, "HEX-03: the fund", 0, 2, "bone-clerks");
         assert!(r.contains("found nothing filed under this hex"), "{r}");
         assert!(!r.contains("FICTIONAL"), "{r}");
         // A DOC through a Wayback capture keeps the publisher's URL as its source.
@@ -635,8 +665,8 @@ mod tests {
         for h in &case.hexes {
             let brief = format!("{}: everything", h.id);
             assert_eq!(
-                report(&case, &file, &brief, 0, 2),
-                report(&case, &file, &brief, 0, 2)
+                report(&case, &file, &brief, 0, 2, "bone-clerks"),
+                report(&case, &file, &brief, 0, 2, "bone-clerks")
             );
         }
     }

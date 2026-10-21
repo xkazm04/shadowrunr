@@ -101,6 +101,7 @@ fn wire_types(gen: &mut SchemaGenerator) {
     gen.subschema_for::<crate::voice::VoiceClientFrame>();
     gen.subschema_for::<reconcile::SegmentMetrics>();
     gen.subschema_for::<CharacterRuleInfo>();
+    gen.subschema_for::<crate::character::CharacterManifest>();
 }
 
 /// Two passes over every object schema, so the schema says what a reader may receive:
@@ -213,6 +214,19 @@ pub fn contract_schema() -> Value {
     root
 }
 
+/// The JSON Schema of one `character.toml` (v2), as `character validate` reads it: what a
+/// package author may write (the deserialize view, so defaulted keys are optional).
+pub fn character_manifest_schema() -> Value {
+    let gen = SchemaSettings::draft2020_12()
+        .for_deserialize()
+        .into_generator();
+    let mut root = gen
+        .into_root_schema_for::<crate::character::CharacterManifest>()
+        .to_value();
+    normalize(&mut root);
+    root
+}
+
 /// `file name -> file text` for `packages/contract/schema/`: pretty JSON, LF, trailing newline.
 pub fn export_files() -> BTreeMap<&'static str, String> {
     let text = serde_json::to_string_pretty(&contract_schema()).expect("schema serializes") + "\n";
@@ -222,6 +236,22 @@ pub fn export_files() -> BTreeMap<&'static str, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_character_manifest_schema_names_every_v2_table() {
+        let s = character_manifest_schema();
+        let props = s["properties"].as_object().expect("properties");
+        for key in [
+            "identity", "voice", "avatar", "ranks", "rules", "lines", "tuning", "segments",
+        ] {
+            assert!(props.contains_key(key), "{key}");
+        }
+        assert_eq!(s["additionalProperties"], false);
+        let tuning = s["$defs"]["CharacterTuning"]["properties"]
+            .as_object()
+            .expect("tuning keys");
+        assert_eq!(tuning.len(), crate::character::TUNING_DEFAULTS.len());
+    }
 
     #[test]
     fn export_is_deterministic() {

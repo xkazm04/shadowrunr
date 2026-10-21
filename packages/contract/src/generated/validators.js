@@ -1868,7 +1868,7 @@ return errors === 0;
 }
 validate447.evaluated = {"props":{"command":true,"id":true,"text":true,"ts_ms":true,"viewer":true},"dynamicProps":false,"dynamicItems":false};
 
-const schema181 = {"enum":["malakor","foil"],"type":"string"};
+const schema181 = {"oneOf":[{"enum":["foil"],"type":"string"},{"const":"host","description":"The character the stream runs (`stream_start.character` names it). Reads the v1 wire\nvalue `malakor` too, so old transcripts and fixtures still load.","type":"string"}]};
 
 function validate457(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -1880,13 +1880,89 @@ evaluated0.props = undefined;
 if(evaluated0.dynamicItems){
 evaluated0.items = undefined;
 }
+const _errs0 = errors;
+let valid0 = false;
+let passing0 = null;
+const _errs1 = errors;
 if(typeof data !== "string"){
-validate457.errors = [{instancePath,schemaPath:"#/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+const err0 = {instancePath,schemaPath:"#/oneOf/0/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err0];
+}
+else {
+vErrors.push(err0);
+}
+errors++;
+}
+if(!(data === "foil")){
+const err1 = {instancePath,schemaPath:"#/oneOf/0/enum",keyword:"enum",params:{allowedValues: schema181.oneOf[0].enum},message:"must be equal to one of the allowed values"};
+if(vErrors === null){
+vErrors = [err1];
+}
+else {
+vErrors.push(err1);
+}
+errors++;
+}
+var _valid0 = _errs1 === errors;
+if(_valid0){
+valid0 = true;
+passing0 = 0;
+}
+const _errs3 = errors;
+if(typeof data !== "string"){
+const err2 = {instancePath,schemaPath:"#/oneOf/1/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err2];
+}
+else {
+vErrors.push(err2);
+}
+errors++;
+}
+if("host" !== data){
+const err3 = {instancePath,schemaPath:"#/oneOf/1/const",keyword:"const",params:{allowedValue: "host"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err3];
+}
+else {
+vErrors.push(err3);
+}
+errors++;
+}
+var _valid0 = _errs3 === errors;
+if(_valid0 && valid0){
+valid0 = false;
+passing0 = [passing0, 1];
+}
+else {
+if(_valid0){
+valid0 = true;
+passing0 = 1;
+}
+}
+if(!valid0){
+const err4 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+if(vErrors === null){
+vErrors = [err4];
+}
+else {
+vErrors.push(err4);
+}
+errors++;
+validate457.errors = vErrors;
 return false;
 }
-if(!((data === "malakor") || (data === "foil"))){
-validate457.errors = [{instancePath,schemaPath:"#/enum",keyword:"enum",params:{allowedValues: schema181.enum},message:"must be equal to one of the allowed values"}];
-return false;
+else {
+errors = _errs0;
+if(vErrors !== null){
+if(_errs0){
+vErrors.length = _errs0;
+}
+else {
+vErrors = null;
+}
+}
 }
 validate457.errors = vErrors;
 return errors === 0;

@@ -130,7 +130,10 @@ pub enum EndReason {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Speaker {
-    Malakor,
+    /// The character the stream runs (`stream_start.character` names it). Reads the v1 wire
+    /// value `malakor` too, so old transcripts and fixtures still load.
+    #[serde(alias = "malakor")]
+    Host,
     Foil,
 }
 

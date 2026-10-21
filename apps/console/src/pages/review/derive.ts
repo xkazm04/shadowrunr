@@ -63,7 +63,7 @@ export function derive(rs: ReviewSession): Derived {
     const line = i + 1;
     last = Math.max(last, tsOf(e));
     if (e.type === "chat") chatById.set(e.msg.id, { line, t: tsOf(e), msg: e.msg });
-    if (e.type !== "say" || e.speaker !== "malakor") return;
+    if (e.type !== "say" || e.speaker !== "host") return;
     const tag = tags.get(line);
     const kind: ShownKind = stall.has(line) ? "stall" : tag ? tag.kind : "untagged";
     says.push({ line, t: tsOf(e), text: e.text, kind, tag, replyingTo: e.replying_to ?? [] });
