@@ -199,6 +199,11 @@ starts that follow a pause show as onsets. In the sessions measured so far, spee
 200 ms after its `played` time, at the head and the tail alike (no drift); about 70 ms of that is
 the silence at the start of each Kokoro sentence.
 
+Those sessions predate the stage's playout clock (`apps/stage/src/voice/playout.ts`). `played` is
+now the wall time the part's start is heard: the browser's output timestamp includes the output
+latency, so the constant shrinks by that latency (the rest of the ~130 ms). `av_sync` judges the
+spread and the drift, not this constant.
+
 ## Clips from the recording
 
 `shadowrunr clips scan --run <session dir>` reads the session's `voice.jsonl` and

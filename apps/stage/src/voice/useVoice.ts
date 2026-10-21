@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { RESTING, type FaceSignal, type FaceSource } from "../avatar/types";
 import { VoiceCaptions, type SaidLine, type VoiceCaptionView } from "./captions";
+import { playoutOf, type PlayoutClock } from "./playout";
 import type { FaceState } from "./report";
 import type { VoiceSession, VoiceStatus } from "./session";
 import { audioRunning, sharedAudio, unlockAudio } from "./webaudio";
@@ -79,6 +80,17 @@ export interface VoiceView {
 }
 
 /**
+ * The captions on heard time: the caption shown and the moment a line is known unvoiced are both
+ * read off the playout clock, the same time the face and the `played` report use.
+ */
+export function heardCaptions(captions: VoiceCaptions, playout: PlayoutClock) {
+  return {
+    unvoiced: (run: string, seq: number) => captions.unvoiced(run, seq, playout.heardNow()),
+    view: (run: string, said: readonly SaidLine[], streamNow: number) => captions.view(run, said, playout.heardNow(), streamNow),
+  };
+}
+
+/**
  * The status the stage shows for a session's: a ready voice whose audio does not run is waiting
  * for a click in a browser, and only waiting in the broadcast view, which never asks for one.
  */
@@ -115,16 +127,18 @@ export function useVoice(opts: { blocked: string | null; url: string; runId: str
     import("./session").then(
       ({ VoiceSession }) => {
         if (cancelled) return;
-        const now = () => audio.audio.currentTime;
+        const playout = playoutOf(audio.audio);
+        const heard = heardCaptions(captions, playout);
         const s = new VoiceSession({
           url,
           audio: audio.audio,
+          playout,
           onStatus: setStatus,
           ...(broadcast ? { onUtterance: unlockAudio } : {}),
-          onSkipped: (run, seq) => captions.unvoiced(run, seq, now()),
+          onSkipped: heard.unvoiced,
           events: {
             scheduled: (p) => captions.scheduled(p),
-            dropped: (run, seq) => captions.unvoiced(run, seq, now()),
+            dropped: heard.unvoiced,
           },
         });
         session.current = s;
@@ -155,7 +169,7 @@ export function useVoice(opts: { blocked: string | null; url: string; runId: str
   const caption = useCallback(
     (run: string, said: readonly SaidLine[], streamNow: number) => {
       const audio = sharedAudio();
-      return audio ? captions.view(run, said, audio.audio.currentTime, streamNow) : null;
+      return audio ? heardCaptions(captions, playoutOf(audio.audio)).view(run, said, streamNow) : null;
     },
     [captions],
   );

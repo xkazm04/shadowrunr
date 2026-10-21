@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createClock } from "../avatar/motion";
-import type { FaceSignal } from "../avatar/types";
+import { RESTING, type FaceSignal } from "../avatar/types";
 import type { Utterance } from "./frame";
 import { MAX_AHEAD_S, START_LEAD_S, VISEME_LEAD_MS, VoicePlayer, type AudioLike, type BufferLike, type SourceLike } from "./player";
 
@@ -18,6 +18,7 @@ function pcm(samples: readonly number[]): string {
 
 class FakeAudio implements AudioLike {
   currentTime = 10;
+  outputLatency: number | undefined = undefined;
   levelNow = 0.5;
   readonly output = {};
   readonly started: { at: number; buffer: BufferLike | null; stopped: boolean }[] = [];
@@ -263,7 +264,7 @@ describe("the face signal follows the audio clock", () => {
     const { audio, player } = rig();
     player.accept(utt(1, 0, 500, { visemes: spans }));
     const start = player.scheduled()[0]!.start;
-    expect(player.signalAt(start - 0.01).phase).toBe("idle");
+    expect(player.signalAt(start - VISEME_LEAD_MS / 1000 - 0.01).phase).toBe("idle");
     const early = player.signalAt(start + 0.02);
     expect(early).toMatchObject({ phase: "speaking", viseme: "kk", level: 0.5 });
     // 70 ms in reads 105 ms with the lead: already the vowel
@@ -272,6 +273,26 @@ describe("the face signal follows the audio clock", () => {
     audio.levelNow = 0.9;
     expect(player.signalAt(start + 0.2).level).toBe(0.9);
     expect(player.signalAt(start + 0.5).phase).toBe("idle");
+  });
+
+  it("reads heard time: resting until the sound reaches the speakers, then the lead from the heard sound", () => {
+    const audio = new FakeAudio();
+    audio.outputLatency = 0.1;
+    const h = handClock();
+    const player = new VoicePlayer(audio, h.clock);
+    const signals: FaceSignal[] = [];
+    player.subscribe((s) => signals.push(s));
+    player.accept(utt(1, 0, 500, { visemes: [{ v: "kk", start_ms: 0, end_ms: 100 }] }));
+    const start = player.scheduled()[0]!.start;
+    // the context has passed the start, but the sound has not reached the speakers
+    audio.currentTime = start + 0.05;
+    h.tick();
+    expect(signals[signals.length - 1]).toEqual(RESTING);
+    // the mouth opens its 35 ms lead before the heard sound, on the first shape (0 ms in)
+    audio.currentTime = start + 0.1 - VISEME_LEAD_MS / 1000 + 1e-9;
+    h.tick();
+    expect(signals[signals.length - 1]).toMatchObject({ phase: "speaking", viseme: "kk" });
+    expect(player.signalAt(start - VISEME_LEAD_MS / 1000 - 0.001)).toEqual(RESTING);
   });
 
   it("without mouth shapes it speaks with no viseme, so the mouth follows the level", () => {

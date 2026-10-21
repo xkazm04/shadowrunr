@@ -6,6 +6,7 @@ import { createClock } from "../avatar/motion";
 import type { SocketLike } from "../source";
 import { readJson } from "../test-json";
 import type { AudioLike, BufferLike, SourceLike } from "./player";
+import { PlayoutClock } from "./playout";
 import { faceFrame, faceStateOf, playedFrame, stageDroppedFrame } from "./report";
 import { VoiceSession } from "./session";
 import { shownStatus } from "./useVoice";
@@ -39,7 +40,12 @@ class FakeSocket implements SocketLike {
 
 class FakeAudio implements AudioLike {
   currentTime = 10;
+  outputLatency: number | undefined = undefined;
+  stamp: { contextTime: number; performanceTime: number } | undefined = undefined;
   readonly output = {};
+  outputTimestamp() {
+    return this.stamp;
+  }
   createBuffer(_c: number, len: number, rate: number): BufferLike {
     const d = new Float32Array(len);
     return { duration: len / rate, getChannelData: () => d };
@@ -79,10 +85,10 @@ const utterance = (seq: number, part: number, ms: number) => ({
   pcm: btoa("\x00\x10".repeat(ms * 8)),
 });
 
-function rig(opts: { onUtterance?: () => void; onSkipped?: (run: string, seq: number) => void } = {}) {
+function rig(opts: { onUtterance?: () => void; onSkipped?: (run: string, seq: number) => void } = {}, start = 1_700_000_000_000) {
   const audio = new FakeAudio();
   const h = handClock();
-  let wall = 1_700_000_000_000;
+  let wall = start;
   const sock = new FakeSocket();
   const s = new VoiceSession({
     url: "ws://127.0.0.1:7795/voice",
@@ -90,10 +96,27 @@ function rig(opts: { onUtterance?: () => void; onSkipped?: (run: string, seq: nu
     clock: h.clock,
     onStatus: () => {},
     wall: () => wall,
+    playout: new PlayoutClock(audio, { wall: () => wall, perfWall: (p) => 999_500 + p }),
     socket: () => sock,
     ...opts,
   });
   return { audio, h, sock, s, advance: (ms: number) => (wall += ms) };
+}
+
+/** A part placed at context 12.0 (accepted at 11.94, START_LEAD_S ahead), its played report seen at `ctx`. */
+function playedAt(o: { ctx: number; wall: number; latency?: number; stamp?: { contextTime: number; performanceTime: number } }) {
+  const r = rig({}, o.wall);
+  r.audio.currentTime = 11.94;
+  if (o.latency !== undefined) r.audio.outputLatency = o.latency;
+  r.audio.stamp = o.stamp;
+  r.s.follow("r");
+  r.s.start();
+  r.sock.open();
+  r.sock.push(utterance(4, 0, 500));
+  expect(r.s.player.scheduled()[0]!.start).toBeCloseTo(12.0, 9);
+  r.audio.currentTime = o.ctx;
+  r.h.tick();
+  return r.sock.reports();
 }
 
 describe("report frames", () => {
@@ -127,6 +150,26 @@ describe("the session reports on the /voice socket", () => {
     expect(sock.reports()).toEqual([{ played: { run_id: "r", seq: 4, part: 0, at_wall_ms: 1_700_000_000_000 } }]);
     h.tick();
     expect(sock.reports()).toHaveLength(1);
+  });
+
+  it("the wall time the part's start is heard, from the output timestamp (the latency is not added twice)", () => {
+    // performanceTime 500 is wall 1_000_000; the sample at context 11.9 is at the speakers then.
+    // Today's tick-based estimate (wall 1_000_300, 140 ms past the start) would say 1_000_160.
+    const reports = playedAt({ ctx: 12.14, wall: 1_000_300, latency: 0.1, stamp: { contextTime: 11.9, performanceTime: 500 } });
+    expect(reports).toEqual([{ played: { run_id: "r", seq: 4, part: 0, at_wall_ms: 1_000_100 } }]);
+  });
+
+  it("the same start seen on two ticks 20 ms of wall apart (a quantized context clock) reports one time", () => {
+    const stamp = { contextTime: 11.9, performanceTime: 500 };
+    const a = playedAt({ ctx: 12.14, wall: 1_000_300, latency: 0.1, stamp });
+    const b = playedAt({ ctx: 12.14, wall: 1_000_320, latency: 0.1, stamp });
+    expect(a).toEqual(b);
+  });
+
+  it("without an output timestamp the report uses the latency the device reports now (a device swap)", () => {
+    const reports = playedAt({ ctx: 12.3, wall: 2_000_000, latency: 0.2 });
+    // heard now is 12.1, 100 ms past the start
+    expect(reports).toEqual([{ played: { run_id: "r", seq: 4, part: 0, at_wall_ms: 1_999_900 } }]);
   });
 
   it("each whole line the stage's cap drops", () => {

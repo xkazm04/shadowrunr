@@ -1,10 +1,12 @@
 // The voice player: schedules utterances back to back on one AudioContext and turns what is
 // playing into the face's signal.
 //
-// **The audio is the one clock.** Each utterance is scheduled at an exact AudioContext time; the
-// face reads the mouth shape at `ctx.currentTime` minus that utterance's start (plus a 35 ms lead,
-// the mouth leads the sound a little, as a face does), and the loudness from an AnalyserNode on
-// the output. Neither the wall clock nor a frame's arrival time moves the mouth.
+// **The audio is the one clock, read as heard.** Each utterance is scheduled at an exact
+// AudioContext time; the face reads the mouth shape at the heard time (`PlayoutClock.heardNow()`:
+// the context time minus the device's output latency) minus that utterance's start, plus a 35 ms
+// lead (the mouth leads the heard sound a little, as a face does; the renderer owns the lead), and
+// the loudness from an AnalyserNode on the output. Neither the wall clock nor a frame's arrival
+// time moves the mouth. Scheduling, the cap and `ahead` stay on the context's own time.
 //
 // **Bounded and in order.** Parts play gaplessly in (seq, part) order. A frame at or behind what
 // was already accepted is dropped. When more than `MAX_AHEAD_S` of audio is waiting, the oldest
@@ -19,6 +21,7 @@
 import { RESTING, type FaceSignal, type FaceSource } from "../avatar/types";
 import type { Clock } from "../avatar/motion";
 import { decodePcm16, visemeAt, type Utterance } from "./frame";
+import { PlayoutClock } from "./playout";
 
 /**
  * Audio waiting ahead of the playhead, at most (seconds). The brain paces a beat to a 260-character
@@ -55,6 +58,10 @@ export interface AudioLike {
   readonly output: unknown;
   /** The output's loudness now, 0..1. */
   level(): number;
+  /** Seconds from the context's output to the speakers (`AudioContext.outputLatency`), if reported. */
+  readonly outputLatency?: number | undefined;
+  /** The context time at the speakers and the performance time (ms) it was there, if reported. */
+  outputTimestamp?(): { contextTime?: number | undefined; performanceTime?: number | undefined } | undefined;
 }
 
 /** One part as the player placed it on the audio clock (seconds). */
@@ -74,7 +81,7 @@ export interface ScheduledPart {
 export interface PlayerEvents {
   /** A part was placed at `start`, or moved there when the cap closed a gap behind a dropped line. */
   scheduled?(p: ScheduledPart): void;
-  /** A part's audio started; `lateS` is how far the audio clock had passed its start when seen. */
+  /** A part's audio was heard; `lateS` is how far heard time had passed its start when seen. */
   started?(p: ScheduledPart, lateS: number): void;
   /** A whole line was dropped to keep the audio within MAX_AHEAD_S. */
   dropped?(runId: string, seq: number): void;
@@ -116,6 +123,8 @@ export class VoicePlayer implements FaceSource {
     private readonly audio: AudioLike,
     private readonly clock: Clock,
     private readonly events: PlayerEvents = {},
+    /** When the audio is heard (default: a clock of its own on `audio`). */
+    readonly playout: PlayoutClock = new PlayoutClock(audio),
   ) {}
 
   /** Seconds of audio scheduled past the playhead. */
@@ -191,11 +200,12 @@ export class VoicePlayer implements FaceSource {
     this.listeners.clear();
   }
 
-  /** The face signal at the audio clock's `now`. */
+  /** The face signal at heard time `now` (context seconds): the mouth at `now` plus its lead. */
   signalAt(now: number): FaceSignal {
-    const e = this.queue.find((x) => x.start <= now && now < x.start + x.buffer.duration);
+    const t = now + VISEME_LEAD_MS / 1000;
+    const e = this.queue.find((x) => x.start <= t && t < x.start + x.buffer.duration);
     if (!e) return RESTING;
-    const ms = (now - e.start) * 1000 + VISEME_LEAD_MS;
+    const ms = Math.max(0, (t - e.start) * 1000);
     const level = Math.min(1, Math.max(0, this.audio.level()));
     return { phase: "speaking", level: Math.round(level * 100) / 100, viseme: visemeAt(e.visemes, ms), open: 0, generation: e.generation };
   }
@@ -220,7 +230,7 @@ export class VoicePlayer implements FaceSource {
     this.events.scheduled?.(part(e));
   }
 
-  /** Tell each part whose start the audio clock has passed, once. */
+  /** Tell each part whose start has been heard, once. */
   private tell(now: number) {
     for (const e of this.queue) {
       if (e.start > now) break;
@@ -241,8 +251,9 @@ export class VoicePlayer implements FaceSource {
     e.source = null;
   }
 
+  /** Tell what has been heard and forget what has been heard whole. */
   private prune() {
-    const now = this.audio.currentTime;
+    const now = this.playout.heardNow();
     this.tell(now);
     while (this.queue.length && this.queue[0]!.start + this.queue[0]!.buffer.duration <= now) this.queue.shift();
   }
@@ -288,7 +299,7 @@ export class VoicePlayer implements FaceSource {
     if (this.stopTick) return;
     this.stopTick = this.clock.subscribe(() => {
       this.prune();
-      const s = this.signalAt(this.audio.currentTime);
+      const s = this.signalAt(this.playout.heardNow());
       this.emit(s);
       if (this.queue.length === 0) {
         this.stopTick = null;

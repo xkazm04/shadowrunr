@@ -388,10 +388,17 @@ the placeholder painter) is loaded with `import()` when the face mounts.
   (remembered in localStorage) and unlocks the AudioContext inside the click. The stage connects
   to `<daemon>/voice` and sends `{"follow": {"run_id"}}` for the run it is showing. Each
   `utterance` is decoded from base64 PCM16 into an AudioBuffer and scheduled back to back on one
-  AudioContext. A frame at or behind what was accepted is dropped. Past 6 s of queued audio, the
-  oldest unstarted utterance is dropped and the rest close up. **The audio is the one clock**:
-  the mouth shape is read at `currentTime` minus the utterance's start (35 ms ahead), and the
-  loudness comes from an AnalyserNode. A headless browser is never voiced.
+  AudioContext. A frame at or behind what was accepted is dropped. Past 16 s of queued audio
+  (`MAX_AHEAD_S`), the oldest unstarted line is dropped whole and the rest close up. **The audio
+  is the one clock**: the mouth shape is read at the heard time minus the utterance's start (35 ms
+  ahead), and the loudness comes from an AnalyserNode. A headless browser is never voiced.
+- **Heard time** (`playout.ts`). One `PlayoutClock` per AudioContext answers "when is it heard"
+  for the face, the captions and the reports. Heard time is `currentTime` minus the device's
+  `outputLatency` (0 where the browser reports none), and it never goes backwards. The `played`
+  report's `at_wall_ms` is the wall time the part's start is heard, from `getOutputTimestamp()`'s
+  coherent pair. That pair already includes the output path, so the latency is not added again,
+  and the time does not depend on which frame tick noticed the start. Without a timestamp it is
+  the wall now plus the distance from the heard time now.
 - **Disclosure and status.** While the voice is on, the badge reads "AI character · synthetic
   voice" and a "synthetic voice" label sits under the face. The controls show the voice state
   (off, starting, ready, degraded) with its reason.

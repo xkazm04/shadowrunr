@@ -14,6 +14,7 @@ import { frames, type Clock } from "../avatar/motion";
 import type { SocketLike } from "../source";
 import { parseVoiceFrame } from "./frame";
 import { VoicePlayer, type AudioLike, type PlayerEvents } from "./player";
+import { PlayoutClock } from "./playout";
 import { faceFrame, playedFrame, stageDroppedFrame, type FaceState, type VoiceClientFrame } from "./report";
 
 export interface VoiceStatus {
@@ -41,8 +42,10 @@ export interface VoiceSessionOptions {
   onSkipped?: (runId: string, seq: number) => void;
   /** Hears the player's parts as they are scheduled, start and are dropped. */
   events?: PlayerEvents;
-  /** The wall clock in epoch ms (default `Date.now`), for the reports' `at_wall_ms`. */
+  /** The wall clock in epoch ms (default `Date.now`), for the face report's `at_wall_ms`. */
   wall?: () => number;
+  /** When the audio is heard, on the audio clock and the wall (default: one on `audio` and `wall`). */
+  playout?: PlayoutClock;
   socket?: (url: string) => SocketLike;
 }
 
@@ -60,17 +63,24 @@ export class VoiceSession {
 
   constructor(private readonly o: VoiceSessionOptions) {
     const ev = o.events ?? {};
-    this.player = new VoicePlayer(o.audio, o.clock ?? frames(), {
-      scheduled: (p) => ev.scheduled?.(p),
-      started: (p, lateS) => {
-        this.report(playedFrame(p.runId, p.seq, p.part, this.wall() - lateS * 1000));
-        ev.started?.(p, lateS);
+    const playout = o.playout ?? new PlayoutClock(o.audio, { wall: o.wall });
+    this.player = new VoicePlayer(
+      o.audio,
+      o.clock ?? frames(),
+      {
+        scheduled: (p) => ev.scheduled?.(p),
+        started: (p, lateS) => {
+          // `played` is the wall time the part's start was heard, whichever tick noticed it
+          this.report(playedFrame(p.runId, p.seq, p.part, playout.wallOf(p.start)));
+          ev.started?.(p, lateS);
+        },
+        dropped: (runId, seq) => {
+          this.report(stageDroppedFrame(runId, seq));
+          ev.dropped?.(runId, seq);
+        },
       },
-      dropped: (runId, seq) => {
-        this.report(stageDroppedFrame(runId, seq));
-        ev.dropped?.(runId, seq);
-      },
-    });
+      playout,
+    );
   }
 
   /** The face drawn now: reported on the first call and on every change. */

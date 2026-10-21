@@ -29,6 +29,11 @@ function make(): WebAudio | null {
     createBuffer: (ch, len, rate) => ctx.createBuffer(ch, len, rate) as BufferLike,
     createBufferSource: () => ctx.createBufferSource() as SourceLike,
     output: analyser,
+    get outputLatency() {
+      return ctx.outputLatency;
+    },
+    // the coherent (context time at the speakers, performance time) pair the playout clock reads
+    outputTimestamp: () => (typeof ctx.getOutputTimestamp === "function" ? ctx.getOutputTimestamp() : undefined),
     level() {
       analyser.getFloatTimeDomainData(buf);
       let sum = 0;
