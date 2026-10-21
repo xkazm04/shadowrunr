@@ -599,8 +599,28 @@ fn pre_parsed_command_field_is_honoured() {
     assert_eq!(rt.proposals()[0].text, "pre-parsed");
 }
 
+/// (rule, msg_id, action) of every input-stage moderation event in `evs`.
+fn declines(evs: &[StreamEvent]) -> Vec<(String, Option<String>, String)> {
+    evs.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Moderation {
+                stage: ModStage::Input,
+                rule,
+                msg_id,
+                action,
+                ..
+            } => Some((rule.clone(), msg_id.clone(), action.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+fn declined(rule: &str, msg_id: &str) -> (String, Option<String>, String) {
+    (rule.into(), Some(msg_id.into()), "ignored".into())
+}
+
 #[test]
-fn commands_outside_the_segment_are_ignored() {
+fn commands_outside_the_segment_are_declined_by_name() {
     let mut rt = seg01();
     let evs = rt.ingest_chat(
         0,
@@ -609,7 +629,89 @@ fn commands_outside_the_segment_are_ignored() {
             msg("m2", 0, "a", Rank::Thrall, "!hint HEX-01 look"),
         ],
     );
-    assert!(evs.is_empty());
+    // Declined, never executed: the events are the only trace, and they carry no chat text.
+    assert_eq!(
+        declines(&evs),
+        [
+            declined("command_not_in_segment", "m1"),
+            declined("command_not_in_segment", "m2")
+        ]
+    );
+    assert_eq!(evs.len(), 2);
+}
+
+#[test]
+fn the_cold_open_takes_proposals_and_declines_summons() {
+    let mut rt = seg01_cold();
+    assert_eq!(rt.state(), "cold_open");
+    let evs = rt.ingest_chat(
+        1_000,
+        &[
+            msg("m1", 1_000, "a", Rank::Thrall, "!summon the-disruptor"),
+            msg("m2", 1_000, "w", Rank::Warlock, "!propose a duel"),
+        ],
+    );
+    assert_eq!(declines(&evs), [declined("command_closed_in_state", "m1")]);
+    assert!(!evs.iter().any(|e| matches!(
+        e,
+        StreamEvent::Op {
+            op: Op::StartPoll { .. },
+            ..
+        }
+    )));
+    assert_eq!(rt.state(), "cold_open");
+    assert_eq!(rt.open_poll_id(), None);
+    assert_eq!(rt.proposals().len(), 1);
+    assert_eq!(rt.proposals()[0].text, "a duel");
+}
+
+#[test]
+fn a_vote_with_no_poll_open_is_declined() {
+    let mut rt = seg02a();
+    assert_eq!(rt.state(), "briefing");
+    let evs = rt.ingest_chat(0, &[msg("m1", 0, "a", Rank::Thrall, "!vote HEX-02")]);
+    assert_eq!(declines(&evs), [declined("no_open_poll", "m1")]);
+}
+
+#[test]
+fn a_vote_for_no_option_is_declined() {
+    let mut rt = seg01();
+    rt.apply_ops(0, &[poll("p1", &["a", "b"], Rank::Thrall, 30)]);
+    let evs = rt.ingest_chat(1_000, &[msg("m1", 1_000, "x", Rank::Thrall, "!vote c")]);
+    assert_eq!(declines(&evs), [declined("unknown_option", "m1")]);
+    assert!(votes(&evs).is_empty());
+}
+
+#[test]
+fn a_summon_while_a_crowd_poll_runs_is_declined() {
+    let mut rt = seg01();
+    rt.apply_ops(0, &[poll("p1", &["a", "b"], Rank::Thrall, 30)]);
+    assert_eq!(rt.state(), "crowd_game");
+    let evs = rt.ingest_chat(
+        1_000,
+        &[msg("m1", 1_000, "x", Rank::Thrall, "!summon the-disruptor")],
+    );
+    assert_eq!(declines(&evs), [declined("foil_vote_not_open", "m1")]);
+    assert_eq!(rt.open_poll_id(), Some("p1"));
+    assert!(votes(&evs).is_empty());
+}
+
+#[test]
+fn declines_are_counted_in_the_state_for_a_minute_without_chat_text() {
+    let mut rt = seg01();
+    rt.ingest_chat(
+        1_000,
+        &[
+            msg("m1", 1_000, "a", Rank::Thrall, "!vote secret-a"),
+            msg("m2", 2_000, "b", Rank::Thrall, "!vote secret-b"),
+            msg("m3", 3_000, "c", Rank::Thrall, "!vote secret-c"),
+        ],
+    );
+    let s = rt.context(0, 3).state_summary;
+    assert!(s.contains("declined lately: !vote x3 (no poll open)"), "{s}");
+    assert!(!s.contains("secret"), "{s}");
+    rt.tick(62_000, 0);
+    assert!(!rt.context(0, 62).state_summary.contains("declined lately"));
 }
 
 #[test]
