@@ -276,7 +276,10 @@ class Warm(unittest.TestCase):
 
     def test_a_dead_worker_is_respawned_at_its_death_not_at_the_next_demand(self) -> None:
         gate = Path(self.tmp.name) / "gate"
-        folder = self.spawns(FAKE_WARM_SLOW_SPAWNS="3+", FAKE_WARM_LOAD_GATE=str(gate))
+        hold = Path(self.tmp.name) / "hold"
+        folder = self.spawns(
+            FAKE_WARM_SLOW_SPAWNS="3+", FAKE_WARM_LOAD_GATE=str(gate), FAKE_WARM_TEXT_GATE=str(hold)
+        )
         sidecar = self.sidecar(workers=2)
         pool = self.pools[0]
         self.say(sidecar, "x", "This one will DIE now.")
@@ -294,7 +297,11 @@ class Warm(unittest.TestCase):
         gate.touch()
         self.wait_until(lambda: sorted(self.states(pool).values()) == ["live", "live"], "ready")
         # Both workers are back: two sentences at once render on two processes, the new one too.
-        self.say(sidecar, "z", "The first one PAUSE10 waits here. The second one is spoken here.")
+        # The first is held until the second has started, so one worker cannot take both.
+        started = len(self.pid_lines())
+        self.say(sidecar, "z", "The first one HOLD waits here. The second one is spoken here.")
+        self.wait_until(lambda: len(self.pid_lines()) == started + 2, "both sentences started")
+        hold.touch()
         self.sink.wait_for(lambda m: len(m) == 4)
         respawned = (folder / "3.txt").read_text(encoding="utf-8").strip()
         self.assertIn(respawned, self.pid_lines()[-2:])

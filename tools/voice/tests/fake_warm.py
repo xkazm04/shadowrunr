@@ -3,7 +3,8 @@
 
 It prints a line of chatter, then its ready line, then answers one ``{"text"}`` line at a time.
 The text decides what it does, as in ``fake_engine.py``: ``FAIL`` answers an error, ``SLOW``
-sleeps 30 s first, ``PAUSE<n>`` sleeps ``n`` tenths of a second, and ``DIE`` exits mid-sentence.
+sleeps 30 s first, ``PAUSE<n>`` sleeps ``n`` tenths of a second, ``HOLD`` waits until the file
+``FAKE_WARM_TEXT_GATE`` names exists, and ``DIE`` exits mid-sentence.
 Otherwise it answers ``0.1 s`` of a tone per word and, with ``--faced``, prints one token line
 before it. ``FAKE_WARM_LOAD=fail`` makes it fail its load. Every sentence appends its text to
 ``FAKE_ENGINE_LOG``, ``start``/``end`` lines to ``FAKE_ENGINE_SPANS``, and the worker's pid to
@@ -29,6 +30,9 @@ import re
 import sys
 import time
 
+# Run as a script, so its own folder is on sys.path.
+from fake_engine import note as append_line
+
 MARK = b"@@warm "
 
 
@@ -38,10 +42,12 @@ def say(message: dict[str, object]) -> None:
 
 
 def note(env: str, text: str) -> None:
+    """One line to the file ``env`` names. Two workers note at once, so this is
+    ``fake_engine``'s locked append: a plain ``"a"`` append on Windows seeks, then writes, and
+    two workers can land on one offset, losing a line."""
     path = os.environ.get(env)
     if path:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(text + "\n")
+        append_line(path, text)
 
 
 def claim_spawn() -> int:
@@ -107,6 +113,9 @@ def main(argv: list[str]) -> int:
             return 9
         if "SLOW" in text:
             time.sleep(30)
+        hold = os.environ.get("FAKE_WARM_TEXT_GATE")
+        while "HOLD" in text and hold and not os.path.exists(hold):
+            time.sleep(0.02)
         pause = re.search(r"PAUSE(\d+)", text)
         if pause:
             time.sleep(int(pause.group(1)) / 10)
