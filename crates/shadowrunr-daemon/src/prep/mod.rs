@@ -8,6 +8,8 @@
 //! - [`checks`]: the mechanical checks (lengths, counts, real names, links, callbacks to earlier
 //!   streams, segments, duplicates, the brain's output gate). A failed check stays on the
 //!   staged prep and holds its approval, with no override.
+//! - [`rules`]: the prep rules (counts, lines per kind, payoffs, connector kinds), held once;
+//!   the prompt, the reply schema, the checks and the guide's check table render from them.
 //! - [`store`]: the durable, locked store and the owner's transitions.
 //! - [`cli`]: `shadowrunr prep ...`.
 //!
@@ -18,6 +20,7 @@
 pub mod checks;
 pub mod cli;
 pub mod planner;
+pub mod rules;
 pub mod store;
 
 #[cfg(test)]

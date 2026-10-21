@@ -8,34 +8,15 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 use shadowrunr_brain::moderation::{gate_text, Policy};
-use shadowrunr_types::prep::{BitKind, ConnectorKind, PrepCheck, PrepCheckState, StreamPrep};
+use shadowrunr_types::prep::{PrepCheck, PrepCheckState, StreamPrep};
 
-/// The longest line a prep may hold, in characters (lines are spoken aloud).
-pub const MAX_LINE_CHARS: usize = 220;
-/// Cold-open beats, fewest and most.
-pub const COLD_OPEN_BEATS: (usize, usize) = (6, 10);
-/// Quiet-room premises, at least.
-pub const MIN_PREMISES: usize = 12;
-/// Stories and callbacks, fewest and most.
-pub const STORIES: (usize, usize) = (3, 5);
-pub const CALLBACKS: (usize, usize) = (3, 5);
-/// Connector lines of each kind, at least.
-pub const MIN_CONNECTORS_PER_KIND: usize = 3;
-/// Lines in a told story, fewest and most.
-pub const STORY_LINES: (usize, usize) = (2, 5);
+pub use super::rules::{
+    BitRule, BITS, COLD_OPEN_BEATS, CONNECTOR_KINDS, MAX_LINE_CHARS, MIN_CONNECTORS_PER_KIND,
+};
 
 /// The operator's list of real people and channels the prep must never name, one per line
 /// (`#` comments), beside `platform-rules.json`. Optional and local; never committed.
 pub const REAL_NAMES_FILE: &str = "real-names.txt";
-
-/// Every connector kind, in wire order.
-pub const CONNECTOR_KINDS: [ConnectorKind; 5] = [
-    ConnectorKind::IntoRoom,
-    ConnectorKind::IntoBit,
-    ConnectorKind::BackToChat,
-    ConnectorKind::IntoPoll,
-    ConnectorKind::IntoHandover,
-];
 
 /// What the checks read besides the prep.
 pub struct CheckContext<'a> {
@@ -143,8 +124,8 @@ fn check(id: &str, problems: Vec<String>, pass_detail: String) -> PrepCheck {
     }
 }
 
-fn count_kind(p: &StreamPrep, kind: BitKind) -> usize {
-    p.bits.iter().filter(|b| b.kind == kind).count()
+fn count_kind(p: &StreamPrep, rule: &BitRule) -> usize {
+    p.bits.iter().filter(|b| b.kind == rule.kind).count()
 }
 
 fn wire<T: serde::Serialize>(v: &T) -> String {
@@ -202,9 +183,7 @@ pub fn run(p: &StreamPrep, ctx: &CheckContext, dropped: &Dropped) -> Vec<PrepChe
         .map(|(at, _)| format!("{at} is empty"))
         .collect();
 
-    let premises = count_kind(p, BitKind::Premise);
-    let stories = count_kind(p, BitKind::Story);
-    let callbacks = count_kind(p, BitKind::Callback);
+    let bit_counts: Vec<(&BitRule, usize)> = BITS.iter().map(|r| (r, count_kind(p, r))).collect();
     let beats = p.cold_open.beats.len();
     let per_kind: Vec<(String, usize)> = CONNECTOR_KINDS
         .iter()
@@ -222,17 +201,10 @@ pub fn run(p: &StreamPrep, ctx: &CheckContext, dropped: &Dropped) -> Vec<PrepChe
             COLD_OPEN_BEATS.0, COLD_OPEN_BEATS.1
         ));
     }
-    if premises < MIN_PREMISES {
-        counts.push(format!("{premises} premises (at least {MIN_PREMISES})"));
-    }
-    if !(STORIES.0..=STORIES.1).contains(&stories) {
-        counts.push(format!("{stories} stories ({}-{})", STORIES.0, STORIES.1));
-    }
-    if !(CALLBACKS.0..=CALLBACKS.1).contains(&callbacks) {
-        counts.push(format!(
-            "{callbacks} callbacks ({}-{})",
-            CALLBACKS.0, CALLBACKS.1
-        ));
+    for (r, n) in &bit_counts {
+        if !r.count_ok(*n) {
+            counts.push(format!("{n} {} ({})", r.plural, r.count_text()));
+        }
     }
     for (k, n) in &per_kind {
         if *n < MIN_CONNECTORS_PER_KIND {
@@ -242,7 +214,12 @@ pub fn run(p: &StreamPrep, ctx: &CheckContext, dropped: &Dropped) -> Vec<PrepChe
         }
     }
     let counts_detail = format!(
-        "cold open {beats} beats, {premises} premises, {stories} stories, {callbacks} callbacks, connectors {}",
+        "cold open {beats} beats, {}, connectors {}",
+        bit_counts
+            .iter()
+            .map(|(r, n)| format!("{n} {}", r.plural))
+            .collect::<Vec<_>>()
+            .join(", "),
         per_kind
             .iter()
             .map(|(k, n)| format!("{k} {n}"))
@@ -253,20 +230,18 @@ pub fn run(p: &StreamPrep, ctx: &CheckContext, dropped: &Dropped) -> Vec<PrepChe
     let mut shape = dropped.shape.clone();
     shape.extend(empty);
     for b in &p.bits {
+        let r = super::rules::rule(b.kind);
         let n = b.lines.len();
-        match b.kind {
-            BitKind::Premise if n != 1 => {
-                shape.push(format!("{} is a premise with {n} lines (one)", b.id))
-            }
-            BitKind::Story if !(STORY_LINES.0..=STORY_LINES.1).contains(&n) => shape.push(format!(
-                "{} is a story with {n} lines ({}-{})",
-                b.id, STORY_LINES.0, STORY_LINES.1
-            )),
-            BitKind::Callback if n == 0 => shape.push(format!("{} has no lines", b.id)),
-            _ => {}
+        if !r.lines_ok(n) {
+            shape.push(format!(
+                "{} is a {} with {n} lines ({})",
+                b.id,
+                r.singular,
+                r.lines_text()
+            ));
         }
-        if b.kind == BitKind::Story && b.payoff.as_deref().is_none_or(|x| x.trim().is_empty()) {
-            shape.push(format!("{} is a story without a payoff", b.id));
+        if r.payoff_required && b.payoff.as_deref().is_none_or(|x| x.trim().is_empty()) {
+            shape.push(format!("{} is a {} without a payoff", b.id, r.singular));
         }
     }
 

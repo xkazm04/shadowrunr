@@ -11,10 +11,8 @@ use shadowrunr_types::prep::{BitKind, ColdOpen, Connector, ConnectorKind, PrepBi
 use shadowrunr_types::reconcile::NextStreamPlan;
 use shadowrunr_types::SegmentId;
 
-use super::checks::{
-    Dropped, CALLBACKS, COLD_OPEN_BEATS, MAX_LINE_CHARS, MIN_CONNECTORS_PER_KIND, MIN_PREMISES,
-    STORIES, STORY_LINES,
-};
+use super::checks::Dropped;
+use super::rules::{self, BITS, COLD_OPEN_BEATS};
 
 /// Stable system prefix (byte-identical across calls for one character), a persona template:
 /// [`system`] fills it.
@@ -166,86 +164,51 @@ into your reply.\n",
             fence = Some(f);
         }
     }
-    s.push_str(&format!(
-        "\n## What to write\n\
-- cold_open: a title and {}-{} beat lines telling one short tale from the Spire in order, \
-then a handoff line that turns from the story to the room.\n\
-- premises, across the segments above: at least {MIN_PREMISES} (one line each: an \
-invitation chat can join in one line, standing alone, with a payoff the host lands).\n\
-- stories: {}-{} short told stories ({}-{} lines each, with a payoff). Required; not premises.\n\
-- callbacks: {}-{} running gags from the bible, re-dressed for tonight, needing no earlier \
-stream (1-3 lines each, with a payoff). Required; not premises.\n\
-- connectors: at least {MIN_CONNECTORS_PER_KIND} lines of each kind: into_room (from the cold \
-open into the room), into_bit (from chat back to a prepared bit), back_to_chat (from a bit \
-back to chat), into_poll (into a vote), into_handover (toward the segment handover).\n\
-- Every line at most {MAX_LINE_CHARS} characters; no line repeated.\n\
-Reply with JSON only, matching the schema.\n",
-        COLD_OPEN_BEATS.0,
-        COLD_OPEN_BEATS.1,
-        STORIES.0,
-        STORIES.1,
-        STORY_LINES.0,
-        STORY_LINES.1,
-        CALLBACKS.0,
-        CALLBACKS.1,
-    ));
+    s.push_str("\n## What to write\n");
+    s.push_str(&rules::prompt_lines());
+    s.push_str("Reply with JSON only, matching the schema.\n");
     Ok((s, fence))
 }
 
-/// The reply schema.
+/// The reply schema, rendered from [`rules`].
 pub fn schema(segments: &[SegmentId]) -> Value {
     let segs: Vec<String> = segments.iter().map(wire).collect();
-    let line = json!({"type": "string", "maxLength": MAX_LINE_CHARS});
+    let line = rules::line_schema();
+    let mut required = vec!["cold_open"];
+    let mut properties = json!({
+        "cold_open": {
+            "type": "object",
+            "required": ["title", "beats", "handoff"],
+            "properties": {
+                "title": line,
+                "beats": {"type": "array", "items": line, "minItems": COLD_OPEN_BEATS.0, "maxItems": COLD_OPEN_BEATS.1},
+                "handoff": line
+            }
+        }
+    });
     // One array per kind, each with its own count: a single `bits` array with a `kind` field
     // let the model fill it with premises only (the first real run: 16 premises, 0 stories,
     // 0 callbacks).
-    let bits = |min: usize, max: Option<usize>, min_lines: usize, max_lines: usize| {
-        let mut arr = json!({
-            "type": "array",
-            "minItems": min,
-            "items": {
-                "type": "object",
-                "required": ["segment", "lines", "payoff"],
-                "properties": {
-                    "segment": {"type": "string", "enum": segs},
-                    "lines": {"type": "array", "items": line, "minItems": min_lines, "maxItems": max_lines},
-                    "payoff": line
-                }
+    for r in &BITS {
+        required.push(r.plural);
+        properties[r.plural] = r.schema(&segs);
+    }
+    required.push("connectors");
+    properties["connectors"] = json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "required": ["kind", "line"],
+            "properties": {
+                "kind": {"type": "string", "enum": rules::connector_wire_names()},
+                "line": line
             }
-        });
-        if let Some(max) = max {
-            arr["maxItems"] = json!(max);
         }
-        arr
-    };
+    });
     json!({
         "type": "object",
-        "required": ["cold_open", "premises", "stories", "callbacks", "connectors"],
-        "properties": {
-            "cold_open": {
-                "type": "object",
-                "required": ["title", "beats", "handoff"],
-                "properties": {
-                    "title": line,
-                    "beats": {"type": "array", "items": line, "minItems": COLD_OPEN_BEATS.0, "maxItems": COLD_OPEN_BEATS.1},
-                    "handoff": line
-                }
-            },
-            "premises": bits(MIN_PREMISES, None, 1, 1),
-            "stories": bits(STORIES.0, Some(STORIES.1), STORY_LINES.0, STORY_LINES.1),
-            "callbacks": bits(CALLBACKS.0, Some(CALLBACKS.1), 1, 3),
-            "connectors": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["kind", "line"],
-                    "properties": {
-                        "kind": {"type": "string", "enum": ["into_room", "into_bit", "back_to_chat", "into_poll", "into_handover"]},
-                        "line": line
-                    }
-                }
-            }
-        }
+        "required": required,
+        "properties": properties
     })
 }
 

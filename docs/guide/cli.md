@@ -411,8 +411,8 @@ The checks (each `pass` or `fail`, with a detail naming the line):
 | Check | Fails when |
 |---|---|
 | `line_length` | a line is longer than 220 characters |
-| `counts` | the cold open is not 6-10 beats; fewer than 12 premises; stories or callbacks outside 3-5; fewer than 3 connectors of any kind |
-| `shape` | a premise is not one line, a story is not 2-5 lines or has no payoff, a line is empty, or the reply had an item of unknown kind |
+| `counts` | the cold open is not 6-10 beats; fewer than 12 premises; stories outside 3-5; callbacks outside 3-5; fewer than 3 connectors of any kind |
+| `shape` | a premise is not one line, a story is not 2-5 lines, a callback is not 1-3 lines, a bit has no payoff, a line is empty, or the reply had an item of unknown kind |
 | `real_names` | a line has an `@handle`, names a real platform or channel, "a real/famous streamer", "a streamer named ...", or a name on the operator's `<policy>/real-names.txt` (one per line, `#` comments; local, never committed) |
 | `urls` | a line has a link or a web address |
 | `prior_streams` | a line leans on an earlier stream ("last time", "as I said", "remember when", "yesterday" ...) |

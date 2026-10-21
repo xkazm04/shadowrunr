@@ -772,3 +772,82 @@ fn the_shipped_sample_still_passes_all_nine_checks() {
     assert_eq!(checks.len(), 9);
     assert!(checks::failed(&checks).is_empty(), "{checks:?}");
 }
+
+#[test]
+fn the_schema_connector_enum_is_the_rule_table() {
+    let schema = super::planner::schema(&[SegmentId::Seg01ImprovisedRoom]);
+    let kinds: Vec<&str> = schema["properties"]["connectors"]["items"]["properties"]["kind"]
+        ["enum"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    let table: Vec<String> = super::rules::CONNECTOR_KINDS
+        .iter()
+        .map(|k| {
+            serde_json::to_value(k)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_string()
+        })
+        .collect();
+    assert_eq!(kinds, table);
+}
+
+/// One table, three renderings: each bit rule is the schema's counts and lines, the prompt's
+/// text and the gate's limits.
+#[test]
+fn every_bit_rule_renders_into_schema_prompt_and_gate() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    let schema = super::planner::schema(&[SegmentId::Seg01ImprovisedRoom]);
+    let input = super::planner_input(&cfg, "malakor", None).unwrap();
+    let (prompt, _) = super::planner::prompt(&input).unwrap();
+    for r in &super::rules::BITS {
+        let arr = &schema["properties"][r.plural];
+        assert_eq!(arr["minItems"], r.count.0, "{}", r.plural);
+        match r.count.1 {
+            Some(max) => assert_eq!(arr["maxItems"], max, "{}", r.plural),
+            None => assert!(arr.get("maxItems").is_none(), "{}", r.plural),
+        }
+        let lines = &arr["items"]["properties"]["lines"];
+        assert_eq!(lines["minItems"], r.lines.0, "{}", r.plural);
+        assert_eq!(lines["maxItems"], r.lines.1, "{}", r.plural);
+        let required = arr["items"]["required"].as_array().unwrap();
+        assert_eq!(
+            required.iter().any(|v| v == "payoff"),
+            r.payoff_required,
+            "{}",
+            r.plural
+        );
+        assert!(prompt.contains(&r.prompt_line()), "{}", r.prompt_line());
+        // The gate: one line past the most fails shape; no payoff fails it when required.
+        let over = sample_checks(&|p| {
+            let b = p.bits.iter_mut().find(|b| b.kind == r.kind).unwrap();
+            b.lines = (0..=r.lines.1)
+                .map(|i| format!("A fresh line number {i} for the gate."))
+                .collect();
+        });
+        assert_eq!(only_failure(&over).0, "shape", "{}", r.plural);
+    }
+    assert!(prompt.contains(&super::rules::prompt_lines()));
+}
+
+#[test]
+fn the_guide_check_rows_are_the_rule_table() {
+    let doc = std::fs::read_to_string(repo().join("docs/guide/cli.md")).unwrap();
+    for (id, text) in super::rules::doc_rows() {
+        let prefix = format!("| `{id}` | ");
+        let row = doc
+            .lines()
+            .find_map(|l| l.strip_prefix(&prefix))
+            .unwrap_or_else(|| panic!("no `{id}` row in the guide"));
+        assert_eq!(
+            row.trim_end().trim_end_matches('|').trim_end(),
+            text,
+            "{id}"
+        );
+    }
+}
