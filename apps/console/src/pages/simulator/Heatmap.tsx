@@ -1,7 +1,7 @@
-// simulator/heatmap[/<key>]: one tournament's cells worst first (the summary.rs rule, in
-// ./cells.ts). Each cell counts its rule fails, not provoked and not evaluable checks, as
-// heatmap.md does; the 95% bounds live on each rule, whose n is runs. A cell opens its rules,
-// quality rates and runs.
+// simulator/heatmap[/<key>]: one tournament's cells as a map of tone × tier by segment ×
+// audience (./CellMap.tsx), then worst first (the summary.rs rule, in ./cells.ts). Each cell
+// counts its rule fails, not provoked and not evaluable checks, as heatmap.md does; the 95%
+// bounds live on each rule, whose n is runs. A cell opens its rules, quality rates and runs.
 import { useMemo, useState } from "react";
 import { QueryView } from "../../kit";
 import { usePaged, useRpc } from "../../data";
@@ -33,6 +33,8 @@ import {
 import type { CellKey, CellResult, SimResults } from "./results";
 import { int, pct } from "../../kit/events";
 import { RefList, RunLink, Found } from "./common";
+import { CellMap } from "./CellMap";
+import { pivot } from "./matrix";
 import styles from "./l2.module.css";
 
 /** A cell lists this many runs inline; the rest are one click away in Runs. */
@@ -90,7 +92,7 @@ export function HeatmapPage({ cellKey }: { cellKey: string | undefined }) {
       <Head
         kicker="Simulator · layer 2"
         title="Heatmap"
-        lede="Worst first. A cell counts its rule fails over evaluated checks. The checks in one run share its host, seed and room, so a cell is as many observations as it has judged runs: the bounds are on each rule, where n is runs."
+        lede="A map of the cells by tone × tier and segment × audience, coloured by held, then the same cells worst first. A cell counts its rule fails over evaluated checks. The checks in one run share its host, seed and room, so a cell is as many observations as it has judged runs: the bounds are on each rule, where n is runs."
       />
       <QueryView query={tournaments.query} isEmpty={(t) => t.length === 0} emptyTitle="No tournaments yet">
         {(all) => (
@@ -125,9 +127,14 @@ export function HeatmapPage({ cellKey }: { cellKey: string | undefined }) {
 function Cells(props: { r: SimResults; cols: readonly Column<CellResult>[]; selected: CellKey | undefined; onOpen: (c: CellResult) => void }) {
   const { r, selected } = props;
   const rows = useMemo(() => worstFirst(r.cells), [r.cells]);
+  // Every run of the tournament, for each position's held (the row's derivation over its runs).
+  const runs = usePaged("runs.page", { tournament_id: r.tournament_id, limit: PAGE_LIMIT });
+  const runRows = runs.query.data;
+  const blocks = useMemo(() => pivot(r.cells, runRows ?? []), [r.cells, runRows]);
   const sel = selected ? rows.find((c) => sameCell(c.cell, selected)) : undefined;
   return (
     <>
+      <CellMap tournamentId={r.tournament_id} blocks={blocks} selected={selected} onOpen={props.onOpen} />
       <FilterTable
         rows={rows}
         columns={props.cols}

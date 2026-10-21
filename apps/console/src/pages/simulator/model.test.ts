@@ -2,7 +2,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildTile, gridLayout, hitTest, runGrid, summarise, tilesInView, tileOrigin } from "./grid";
-import { cellChecks, cellRouteKey, parseCellRouteKey, rateBound, worstFirst } from "./cells";
+import { cellChecks, cellRouteKey, parseCellRouteKey, rateBound, THIN_N, worstFirst } from "./cells";
+import { pivot } from "./matrix";
 import { healthColor } from "./ramp";
 import { eventText, parseRef } from "../../kit/events";
 import { verifyQuote } from "./quote";
@@ -169,5 +170,91 @@ describe("quote verification (A/1 core.js:241-249)", () => {
 
   it("reads the words of every event kind", () => {
     expect(TRANSCRIPT.map(eventText)).toEqual(["s1 · malakor · theatrical · haiku · 3 viewers", "Kneel, minions. The Lord of the Darkness is watching.", "hail the lich", "Your “hail” is noted, thrall.", "sim_complete"]);
+  });
+});
+
+describe("the heatmap map (matrix.ts): tone × tier by segment × audience", () => {
+  const w = world(1, 72);
+  const results = w.results.get("t001");
+  if (!results) throw new Error("no results");
+  const runs = w.runs.get("t001") ?? [];
+
+  it("pivots one instrument's 36 cells into 6 rows by 6 columns, tiers in model order, audiences ascending", () => {
+    const blocks = pivot(results.cells, runs);
+    expect(blocks).toHaveLength(1);
+    const b = blocks[0];
+    if (!b) throw new Error("no block");
+    expect(b.hash).toBe("a3f9c2e17b44d0e5");
+    expect(b.rows.map((r) => `${r.tone}/${r.tier}`)).toEqual([
+      "theatrical/haiku",
+      "theatrical/sonnet",
+      "theatrical/opus",
+      "weary-middle-manager/haiku",
+      "weary-middle-manager/sonnet",
+      "weary-middle-manager/opus",
+    ]);
+    expect(b.cols.map((c) => `${c.segment}/${c.audience}`)).toEqual(["SEG-01/3", "SEG-01/30", "SEG-01/300", "SEG-02A/3", "SEG-02A/30", "SEG-02A/300"]);
+    expect(b.positions.flat().filter((p) => p.cell !== undefined)).toHaveLength(36);
+  });
+
+  it("keeps two instrument hashes as two blocks, never one merged grid", () => {
+    const other = results.cells.slice(0, 5).map((c) => ({ ...c, cell: { ...c.cell, instrument_hash: "bbbbbbbbbbbbbbbb" } }));
+    const blocks = pivot([...results.cells, ...other], runs);
+    expect(blocks.map((b) => b.hash)).toEqual(["a3f9c2e17b44d0e5", "bbbbbbbbbbbbbbbb"]);
+    expect(blocks[0]?.positions.flat().filter((p) => p.cell)).toHaveLength(36);
+    expect(blocks[1]?.positions.flat().filter((p) => p.cell)).toHaveLength(5);
+  });
+
+  it("marks a combination absent from results 'not run': no figure, no held, out of every marginal", () => {
+    const gone = results.cells.filter((c) => !(c.cell.tone === "theatrical" && c.cell.core_tier === "haiku" && c.cell.segment === "SEG-01" && c.cell.audience_size === 3));
+    const b = pivot(gone, runs)[0];
+    if (!b) throw new Error("no block");
+    const p = b.positions[0]?.[0];
+    expect(p?.cell).toBeUndefined();
+    expect(p?.held).toBeUndefined();
+    expect(b.rowMargins[0]?.cells).toBe(5);
+    expect(b.colMargins[0]?.cells).toBe(5);
+    const full = pivot(results.cells, runs)[0];
+    expect(b.rowMargins[0]?.evaluated).toBeLessThan(full?.rowMargins[0]?.evaluated ?? 0);
+  });
+
+  it("sums a row's counted fails, evaluated checks and judged runs, and says how many of its cells are thin", () => {
+    const b = pivot(results.cells, runs)[0];
+    if (!b) throw new Error("no block");
+    const row = results.cells.filter((c) => c.cell.tone === "theatrical" && c.cell.core_tier === "haiku");
+    expect(row).toHaveLength(6);
+    const m = b.rowMargins[0];
+    expect(m).toEqual({
+      cells: 6,
+      fail: row.reduce((a, c) => a + cellChecks(c).fail, 0),
+      evaluated: row.reduce((a, c) => a + cellChecks(c).evaluated, 0),
+      judged: row.reduce((a, c) => a + c.judged, 0),
+      thin: row.filter((c) => c.judged < THIN_N).length,
+    });
+    expect(m?.thin).toBe(6); // two judged runs a cell: every one is thin
+    expect(b.positions[0]?.every((p) => p.thin)).toBe(true);
+  });
+
+  it("marks a cell whose red-line rule failed", () => {
+    const b = pivot(results.cells, runs)[0];
+    const red = b?.positions.flat().filter((p) => p.red) ?? [];
+    const expected = results.cells.filter((c) => (c.rules["red-line:hateful-conduct"]?.fail ?? 0) > 0);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(red.map((p) => p.cell)).toEqual(expect.arrayContaining(expected));
+    expect(red).toHaveLength(expected.length);
+  });
+
+  it("colours a cell by the row's held derivation over its own runs: the run-weighted cells give back the row's held", () => {
+    const b = pivot(results.cells, runs)[0];
+    const row = w.tournaments[0];
+    let sum = 0;
+    let n = 0;
+    for (const p of b?.positions.flat() ?? []) {
+      if (p.held === undefined) continue;
+      sum += p.held * p.heldRuns;
+      n += p.heldRuns;
+    }
+    expect(n).toBe(runs.filter((r) => r.health !== undefined).length);
+    expect(sum / n).toBeCloseTo(row?.held ?? -1, 10);
   });
 });

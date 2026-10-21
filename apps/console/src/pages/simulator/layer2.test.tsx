@@ -7,6 +7,7 @@ import { pageRoute, type RouterStore } from "../../router";
 import { page } from "./index";
 import { tableView } from "../../ui/tableView";
 import { Layer2 } from "./Layer2";
+import { cellRouteKey } from "./routeKey";
 import { abWorld, daemon, VERDICT_RUN, world, type World } from "./testgen";
 
 let router: RouterStore | undefined;
@@ -157,6 +158,52 @@ describe("simulator layer 2", () => {
     expect(page.label("heatmap", 1, ["simulator", "heatmap"])).toBe("Heatmap");
     expect(page.label(key, 2, ["simulator", "heatmap", key])).toBe("theatrical · haiku · SEG-01 · a3");
     expect(page.label(VERDICT_RUN, 2, ["simulator", "verdicts", VERDICT_RUN])).toBe(VERDICT_RUN);
+  });
+
+  it("maps the cells as a keyboard grid: tone × tier by segment × audience, one tab stop, Enter opens the cell", async () => {
+    const w = world(1, 72);
+    const res = w.results.get("t001");
+    // One combination never ran: the map says so instead of colouring it.
+    if (res) res.cells = res.cells.filter((c) => !(c.cell.tone === "weary-middle-manager" && c.cell.core_tier === "opus" && c.cell.segment === "SEG-02A" && c.cell.audience_size === 300));
+    mount(w, ["heatmap"]);
+    const grid = await screen.findByRole("grid", { name: "Cells of t001 by tone × tier and segment × audience" });
+    const cells = () => within(grid).getAllByRole("gridcell").filter((c) => c.hasAttribute("data-pos"));
+    await settle(() => expect(cells()).toHaveLength(36));
+    expect(cells().filter((c) => c.getAttribute("data-state") === "empty")).toHaveLength(1);
+    const empty = cells().find((c) => c.getAttribute("data-state") === "empty");
+    expect(empty?.getAttribute("aria-label")).toMatch(/not run/);
+    expect(empty?.textContent).not.toMatch(/%/);
+    expect(cells().filter((c) => c.getAttribute("data-red") === "true").length).toBeGreaterThan(0);
+    expect(cells().filter((c) => c.getAttribute("data-thin") === "true")).toHaveLength(35);
+    // Every row and column carries its marginal, counted with its thin cells named.
+    expect(within(grid).getAllByText(/6 thin|5 thin/).length).toBeGreaterThanOrEqual(12);
+    // The roving tab stop: exactly one position is tabbable, and the arrows move it.
+    const stops = () => cells().filter((c) => c.tabIndex === 0);
+    expect(stops()).toHaveLength(1);
+    const first = stops()[0] as HTMLElement;
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowRight" });
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "ArrowDown" });
+    const at = document.activeElement as HTMLElement;
+    expect(stops()).toEqual([at]);
+    expect(at.getAttribute("aria-label")).toMatch(/^theatrical · sonnet · SEG-01 · a30/);
+    fireEvent.keyDown(at, { key: "Enter" });
+    const want = cellRouteKey("t001", { instrument_hash: "a3f9c2e17b44d0e5", tone: "theatrical", core_tier: "sonnet", segment: "SEG-01", audience_size: 30 });
+    await settle(() => expect(router?.getRoute()).toEqual(pageRoute("simulator", "heatmap", want)));
+  });
+
+  it("selects the routed cell on the map, with its detail and the worst-first table beneath", async () => {
+    const key = cellRouteKey("t001", { instrument_hash: "a3f9c2e17b44d0e5", tone: "weary-middle-manager", core_tier: "opus", segment: "SEG-02A", audience_size: 300 });
+    mount(world(1, 72), ["heatmap", key]);
+    const grid = await screen.findByRole("grid", { name: "Cells of t001 by tone × tier and segment × audience" });
+    const cells = () => within(grid).getAllByRole("gridcell").filter((c) => c.hasAttribute("data-pos"));
+    await settle(() => expect(cells()).toHaveLength(36));
+    const selected = cells().filter((c) => c.getAttribute("aria-selected") === "true");
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.getAttribute("aria-label")).toMatch(/^weary-middle-manager · opus · SEG-02A · a300/);
+    expect(selected[0]?.tabIndex).toBe(0);
+    await settle(() => expect(screen.getByText("Failing rules")).toBeTruthy());
+    expect(screen.getByRole("table", { name: /Cells of t001, worst first/ })).toBeTruthy();
   });
 
   it("shows the offline state and an unknown sub-page as empty", async () => {

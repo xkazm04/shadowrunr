@@ -51,3 +51,34 @@
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: var(--sr-space-tick) var(--sr-space-base); margin: 0; }
 .kv dt { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .08em; text-transform: uppercase; }
 .kv dd { margin: 0; }
+
+/* The heatmap's map (CellMap.tsx): tone × tier by segment × audience, one grid per instrument.
+   A position's fill is the ramp of its held (inline, computed like Layer 1's run cells); the
+   ember dot is the Layer 1 red-line mark; a dashed edge is a thin cell; "not run" is hatched. */
+.mxMaps { display: flex; flex-direction: column; gap: var(--sr-space-base); margin: var(--sr-space-base) 0 var(--sr-space-section); }
+.mxLegend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sr-space-tight) var(--sr-space-compact); margin: 0; color: var(--sr-color-text-mute); font-size: var(--sr-size-caption); }
+.mxRamp { display: inline-block; width: 6rem; height: .6rem; border: var(--sr-stroke-hair) solid var(--sr-color-text-ink); }
+.mxKey { position: relative; display: inline-block; width: .9rem; height: .9rem; margin-left: var(--sr-space-compact); border: var(--sr-stroke-hair) solid var(--sr-color-line); background: var(--sr-color-surface-card); }
+.mxScroll { max-width: 100%; overflow-x: auto; }
+.mxGrid { border-collapse: separate; border-spacing: var(--sr-space-hair); font-size: var(--sr-size-small); font-variant-numeric: tabular-nums; }
+.mxGrid th { padding: var(--sr-space-tick) var(--sr-space-tight); font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .06em; text-align: left; white-space: nowrap; }
+.mxCorner { color: var(--sr-color-text-mute); font-size: var(--sr-size-caption); text-transform: uppercase; vertical-align: bottom; }
+.mxGrid .mxSeg { border-bottom: var(--sr-stroke-rule) solid var(--sr-color-text-ink); text-align: center; }
+.mxGrid .mxAud { font-family: var(--sr-font-mono); font-weight: var(--sr-weight-regular); text-align: center; }
+.mxTone { vertical-align: top; border-right: var(--sr-stroke-rule) solid var(--sr-color-text-ink); }
+.mxGrid .mxTier { font-family: var(--sr-font-mono); font-weight: var(--sr-weight-regular); }
+.mxPos { position: relative; min-width: 3.4rem; height: 2.6rem; padding: 0; border: var(--sr-stroke-hair) solid var(--sr-color-line); background: var(--sr-color-surface-card); cursor: pointer; text-align: center; vertical-align: bottom; }
+.mxPos:hover { border-color: var(--sr-color-text-ink); }
+.mxPos:focus-visible { outline: var(--sr-stroke-heavy) solid var(--sr-page-accent, var(--sr-color-signal)); outline-offset: var(--sr-space-hair); }
+.mxPos[aria-selected="true"] { border: var(--sr-stroke-heavy) solid var(--sr-color-text-ink); background: var(--sr-color-row-selected); }
+.mxFill { position: absolute; inset: 0 0 1.1rem; display: block; }
+.mxFig { position: relative; display: block; font-family: var(--sr-font-mono); font-size: var(--sr-size-caption); }
+.mxSub { display: block; color: var(--sr-color-text-mute); font-size: var(--sr-size-micro); white-space: nowrap; }
+.mxPos[data-thin="true"],
+.mxKey[data-thin="true"] { border-style: dashed; border-color: var(--sr-color-text-mute); }
+.mxPos[data-state="empty"],
+.mxKey[data-state="empty"] { cursor: default; background: repeating-linear-gradient(135deg, transparent 0 .3rem, var(--sr-color-line) .3rem .35rem); }
+.mxPos[data-red="true"]::after,
+.mxKey[data-red="true"]::after { position: absolute; top: .2rem; right: .2rem; width: .5rem; height: .5rem; border-radius: 50%; background: var(--sr-sim-red-line); box-shadow: 0 0 0 var(--sr-stroke-hair) var(--sr-color-text-ink); content: ""; }
+.mxKey[data-red="true"]::after { top: .15rem; right: .15rem; }
+.mxMargin { min-width: 3.4rem; padding: var(--sr-space-tick) var(--sr-space-tight); border-top: var(--sr-stroke-hair) solid var(--sr-color-line); color: var(--sr-color-text-ink); text-align: center; vertical-align: middle; }
