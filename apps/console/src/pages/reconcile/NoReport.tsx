@@ -15,8 +15,10 @@ export function NoReport() {
   const [error, setError] = useState<string | undefined>();
 
   const list = tournaments.data ?? [];
-  // Newest last in the daemon's listing; default to it until the operator picks.
-  const source = picked || list[list.length - 1]?.tournament_id || "";
+  // The listing is in id order, not time: default to the newest by `updated_ms` (ties, and a
+  // daemon older than the field, go to the later row) until the operator picks.
+  const newest = list.reduce<(typeof list)[number] | undefined>((b, t) => (!b || (t.updated_ms ?? -1) >= (b.updated_ms ?? -1) ? t : b), undefined);
+  const source = picked || newest?.tournament_id || "";
   // The layer owns the call, so a run started before a tab switch still shows (and still blocks).
   const inflight = run.running[0];
   const busy = run.pending || inflight !== undefined;
