@@ -1,0 +1,18 @@
+# Malakor's blend candidates: stock kokoro-multi-lang-v1_0 voices only (Apache-2.0), mixed by
+# weight with shadowrunr_voice.blend. No real person's voice, no cloning.
+#
+# The inputs are the deepest male voices by rendered median pitch (one benched line, 4 threads,
+# 2026-10-21, n=1 render each): am_onyx 93 Hz, am_echo 111 Hz, bm_lewis 115 Hz, bm_george 145 Hz
+# (af_heart, the stock voice, 198 Hz). Weights are normalised to sum to 1. Each blend takes a
+# Mandarin male slot (zm_*) unless it sets `sid`.
+
+[voices.malakor-a]
+# Low American weight with British stage diction.
+am_onyx = 0.6
+bm_lewis = 0.4
+
+[voices.malakor-b]
+# Darker and rounder; a little George for the consonants.
+am_onyx = 0.45
+am_echo = 0.35
+bm_george = 0.2
