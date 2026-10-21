@@ -64,6 +64,7 @@ export function AllPage() {
                 getKey={(c) => c.id}
                 haystack={(c) => `${c.name} ${c.id} ${c.default_tone} ${c.tones.join(" ")}`}
                 label="All characters"
+                viewKey="characters.all"
                 placeholder="Search name, id or tone"
                 estimateRem={4.6}
                 onActivate={(c) => router.navigate(pkgRoute(c.id, "constitution"))}

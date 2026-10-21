@@ -38,19 +38,19 @@ use shadowrunr_types::sandbox::{
     SandboxReport, SandboxStartParams, SANDBOX_MINUTES,
 };
 use shadowrunr_types::{
-    ChatMsg, CheckState, EndReason, Engine, EngineError, EngineReply, EngineRequest, FleetHealth,
-    HealthReport, ModelTier, Op, Role, SegmentId, SimRunSpec, Speaker, StreamEvent, TsMs,
-    WarmSession,
+    ChatMsg, EndReason, Engine, EngineError, EngineReply, EngineRequest, FleetHealth, HealthReport,
+    ModelTier, Op, Role, SegmentId, SimRunSpec, Speaker, StreamEvent, TsMs, WarmSession,
 };
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{Instant, MissedTickBehavior};
 
 use crate::chat::{ChatRoom, ChatStats, Directives, RoomConfig};
-use crate::judge::{self, JudgeInputs, JudgeOutcome, Rubric};
-use crate::ledger::{self, LedgerEngine};
-use crate::runner::{self, Mind, Stage, JUDGE_WINDOWS_DIR};
-use crate::situations::{Injection, SituationBank};
+use crate::judge;
+use crate::judging::{self, JudgeJob, JudgeResult};
+use crate::ledger;
+use crate::runner::{self, Mind, Stage};
+use crate::situations::Injection;
 use crate::transcript::{self, TranscriptWriter};
 use crate::{population, read_json, stats, write_json, SimError, SimOptions};
 
@@ -1442,74 +1442,53 @@ fn quality_mean(v: &shadowrunr_types::JudgeVerdict) -> Option<f64> {
     Some(rates.iter().sum::<f64>() / rates.len() as f64)
 }
 
-/// Judge a finished session in `dir` with the windowed judge (as a tournament run is), write
-/// `verdict.json` and `judge.json` there, and summarise the verdict for the report.
+/// What judging a session came to: the shared [`JudgeResult`], and the report's summary of
+/// the verdict when there is one.
+#[derive(Debug, Clone)]
+pub struct SessionJudgement {
+    pub result: JudgeResult,
+    /// `Some` exactly when `result` is [`JudgeResult::Judged`].
+    pub judge: Option<SandboxJudge>,
+}
+
+/// Judge a finished session in `dir` with the windowed judge, through the same
+/// [`judging::judge_dir`] seam a tournament run uses: `verdict.json` and `judge.json` are
+/// written there, an engine failure or a quota deferral is `Pending` (re-judge the session,
+/// do not re-run it) and an unusable reply is `Void`. `Err` is left for what is neither
+/// (a missing session file, io).
 pub async fn judge_session(
     dir: &Path,
     engine: Arc<dyn Engine>,
     opts: &SimOptions,
-) -> Result<SandboxJudge, SimError> {
+) -> Result<SessionJudgement, SimError> {
     let spec: SandboxSpec = read_json(&dir.join("spec.json"))?;
     let room: SandboxRoom = read_json(&dir.join(ROOM_FILE))?;
     let run = &spec.run;
     let tier = judge::resolve_judge_tier(opts.judge_tier, &opts.judge_tiers, run.core_tier)?;
-    if let Some(block) = opts.quota.as_ref().and_then(|q| q.0.blocked()) {
-        return Err(SimError::Spec(format!(
-            "{}quota ({})",
-            crate::outcome::JUDGE_DEFERRED_PREFIX,
-            block.accounts.join(", ")
-        )));
-    }
-    let events = transcript::read(&dir.join("transcript.jsonl"))?;
-    let bank =
-        SituationBank::load(&runner::character_dir(opts, &run.character).join("situations.json"))?;
-    let rubric = Rubric::load(&runner::rubric_path(opts))?;
-    let brief = runner::run_brief(dir)?;
-    let engine: Arc<dyn Engine> = Arc::new(LedgerEngine::create(
-        engine,
-        &dir.join("ledger.jsonl"),
-        &run.run_id,
-    )?);
-    let featured = room.featured.iter().cloned().collect();
-    let window_cache = dir.join(JUDGE_WINDOWS_DIR);
-    let inp = JudgeInputs {
+    let job = JudgeJob {
         run_id: &run.run_id,
-        events: &events,
-        bank: &bank,
-        injections: &room.injections,
-        featured_viewers: &featured,
-        rubric: &rubric,
-        judge_tier: tier,
+        character: &run.character,
         core_tier: run.core_tier,
-        brief: brief.as_ref(),
-        window_cache: Some(&window_cache),
+        judge_tier: tier,
+        injections: &room.injections,
+        featured: &room.featured,
     };
-    match judge::judge_run(&inp, engine.as_ref()).await? {
-        JudgeOutcome::Verdict(b) => {
-            let (verdict, audit) = *b;
-            write_json(&dir.join("judge.json"), &audit)?;
-            write_json(&dir.join("verdict.json"), &verdict)?;
-            Ok(SandboxJudge {
-                verdict_path: "verdict.json".into(),
-                rule_fails: verdict
-                    .rules
-                    .iter()
-                    .filter(|r| r.state == CheckState::Fail)
-                    .count() as u32,
-                quality_mean: quality_mean(&verdict),
-            })
-        }
-        JudgeOutcome::Void(audit, why) => {
-            write_json(&dir.join("judge.json"), &*audit)?;
-            Err(SimError::Spec(format!("judge void: {why}")))
-        }
-    }
+    let result = judging::judge_dir(dir, &job, engine, opts).await?;
+    let judge = match &result {
+        JudgeResult::Judged { verdict, coverage } => Some(SandboxJudge {
+            verdict_path: "verdict.json".into(),
+            rule_fails: coverage.fails,
+            quality_mean: quality_mean(verdict),
+        }),
+        JudgeResult::Void(_) | JudgeResult::Pending(_) => None,
+    };
+    Ok(SessionJudgement { result, judge })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runner::tests::{reply, test_opts, FakeEngine};
+    use crate::runner::tests::{judge_calls, reply, test_opts, Blocked, FakeEngine, JudgeFails};
 
     /// Plays the host for the real brain: a line every beat, the switch when the handover is
     /// due, and a sign-off once the goodbye is asked (`CLOSING NOW`: the last 15 s, or the
@@ -2425,11 +2404,17 @@ mod tests {
         )
         .await;
         let judge_engine = Arc::new(FakeEngine::new(""));
-        let j = judge_session(&out.dir, judge_engine.clone(), &opts)
+        let judged = judge_session(&out.dir, judge_engine.clone(), &opts)
             .await
             .unwrap();
+        let JudgeResult::Judged { coverage, .. } = &judged.result else {
+            panic!("{:?}", judged.result);
+        };
+        assert!(coverage.evaluated > 0 && coverage.evaluated <= coverage.hard);
+        let j = judged.judge.expect("a judged session is summarised");
         assert_eq!(j.verdict_path, "verdict.json");
         assert_eq!(j.rule_fails, 0);
+        assert_eq!(j.rule_fails, coverage.fails);
         assert!(j.quality_mean.is_some_and(|q| (0.0..=1.0).contains(&q)));
         let v: shadowrunr_types::JudgeVerdict = read_json(&out.dir.join("verdict.json")).unwrap();
         assert_eq!(v.run_id, "sbx-test");
@@ -2464,5 +2449,115 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(out.dir.join("spec.json")).unwrap())
                 .unwrap();
         assert_eq!(spec["prep"], "sample");
+    }
+    /// A finished 60 s session, judged by nobody yet.
+    async fn finished(tmp: &Path, opts: &SimOptions) -> PathBuf {
+        let (_stop_tx, stop) = watch::channel(false);
+        session(
+            sandbox_run(tmp, 5, 60),
+            Arc::new(HostEngine::new()),
+            opts,
+            no_sink(),
+            stop,
+        )
+        .await
+        .dir
+    }
+
+    fn judge_rows(dir: &Path) -> usize {
+        ledger::read(&dir.join("ledger.jsonl"))
+            .unwrap()
+            .iter()
+            .filter(|r| r.role == Role::Judge)
+            .count()
+    }
+
+    /// Acceptance 1: a rate-limited judge leaves the session pending, not failed.
+    #[tokio::test(start_paused = true)]
+    async fn a_rate_limited_judge_leaves_the_session_pending() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = opts(tmp.path());
+        let dir = finished(tmp.path(), &opts).await;
+        let engine = Arc::new(JudgeFails {
+            inner: FakeEngine::new(""),
+            err: || EngineError::RateLimited {
+                account: "isolated".into(),
+                reset_at_ms: Some(1),
+            },
+        });
+        let judged = judge_session(&dir, engine, &opts).await.unwrap();
+        match &judged.result {
+            JudgeResult::Pending(why) => assert!(
+                why.starts_with("judge engine call failed: rate limited"),
+                "{why}"
+            ),
+            other => panic!("{other:?}"),
+        }
+        assert!(judged.judge.is_none());
+        assert!(!dir.join("verdict.json").exists());
+    }
+
+    /// Acceptance 2: a blocked quota defers the judge without a single judge call.
+    #[tokio::test(start_paused = true)]
+    async fn a_blocked_quota_defers_the_judge_without_calling_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = opts(tmp.path());
+        let dir = finished(tmp.path(), &opts).await;
+        let before = judge_rows(&dir);
+        opts.quota = Some(crate::pacing::GateHandle(Arc::new(Blocked)));
+        let fake = Arc::new(FakeEngine::new(""));
+        let judged = judge_session(&dir, fake.clone(), &opts).await.unwrap();
+        match &judged.result {
+            JudgeResult::Pending(why) => {
+                assert!(why.starts_with("judge deferred: quota (isolated)"), "{why}")
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(judge_calls(&fake), 0);
+        assert_eq!(judge_rows(&dir), before, "no judge row in ledger.jsonl");
+        assert!(judged.judge.is_none());
+    }
+
+    /// Replies to the judge with prose, not the rubric JSON.
+    struct ProseJudge;
+
+    #[async_trait]
+    impl Engine for ProseJudge {
+        async fn complete(&self, _req: EngineRequest) -> Result<EngineReply, EngineError> {
+            Ok(reply("I would rather not grade this stream.".into()))
+        }
+        async fn open_session(
+            &self,
+            t: EngineRequest,
+        ) -> Result<Box<dyn WarmSession>, EngineError> {
+            FakeEngine::new("").open_session(t).await
+        }
+        async fn health(&self) -> Vec<HealthReport> {
+            Vec::new()
+        }
+    }
+
+    /// Acceptance 5: an unparsable judge reply is void, with the raw reply kept.
+    #[tokio::test(start_paused = true)]
+    async fn a_prose_judge_reply_is_void_and_keeps_the_raw_reply() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = opts(tmp.path());
+        let dir = finished(tmp.path(), &opts).await;
+        let judged = judge_session(&dir, Arc::new(ProseJudge), &opts)
+            .await
+            .unwrap();
+        match &judged.result {
+            JudgeResult::Void(why) => assert!(why.contains("rubric JSON"), "{why}"),
+            other => panic!("{other:?}"),
+        }
+        assert!(judged.judge.is_none());
+        assert!(!dir.join("verdict.json").exists());
+        let audit: serde_json::Value = read_json(&dir.join("judge.json")).unwrap();
+        assert!(
+            audit
+                .to_string()
+                .contains("I would rather not grade this stream."),
+            "judge.json keeps the raw reply"
+        );
     }
 }

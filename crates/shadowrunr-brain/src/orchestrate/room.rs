@@ -26,7 +26,7 @@ pub struct RoomEvent {
 }
 
 /// What the state text said about votes and the handover, beat to beat.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RoomWatch {
     started: bool,
     /// Questions of the polls seen open, by poll id.

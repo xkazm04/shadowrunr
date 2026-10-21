@@ -86,3 +86,7 @@
 
 /* The "no matches" row when a filter empties the table. */
 .emptyCell { padding: var(--sr-space-base); }
+
+/* The row you came back from after a drill-down: a brief colour fade, then an ordinary row. */
+.returned { animation: back 1.2s; }
+@keyframes back { from { background: var(--sr-color-row-selected); } }

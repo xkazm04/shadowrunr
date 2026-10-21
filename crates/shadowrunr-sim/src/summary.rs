@@ -351,6 +351,8 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
             usage: UsageTotals::default(),
             usage_by_role: BTreeMap::new(),
             max_say_gap_s: None,
+            runs_with_fail: None,
+            usable_runs: None,
         });
         cell.runs += 1;
         if r.failed {
@@ -464,6 +466,7 @@ pub fn summarize_full(out_dir: &Path) -> Result<(Results, Excluded), SimError> {
         usage_total,
         usage_by_role,
         directives: directive_outcomes(verdicts),
+        tier_decisions: Vec::new(),
     };
     write_json(&out_dir.join("results.json"), &results)?;
     std::fs::write(out_dir.join("heatmap.md"), heatmap_md(&results))
@@ -943,6 +946,8 @@ mod tests {
                 usage: UsageTotals::default(),
                 usage_by_role: BTreeMap::new(),
                 max_say_gap_s: None,
+                runs_with_fail: None,
+                usable_runs: None,
             };
             c.rules.insert(
                 "r".into(),

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { createClock } from "../avatar/motion";
 import type { SocketLike } from "../source";
+import { readJson } from "../test-json";
 import type { AudioLike, BufferLike, SourceLike } from "./player";
 import { faceFrame, faceStateOf, playedFrame, stageDroppedFrame } from "./report";
 import { VoiceSession } from "./session";
@@ -32,7 +33,7 @@ class FakeSocket implements SocketLike {
   }
   /** What was sent, minus the follow frames. */
   reports() {
-    return this.sent.map((s) => JSON.parse(s) as Record<string, unknown>).filter((f) => !("follow" in f));
+    return this.sent.map((s) => readJson(s) as Record<string, unknown>).filter((f) => !("follow" in f));
   }
 }
 

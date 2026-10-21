@@ -56,6 +56,7 @@ export function RunsPage() {
             getKey={(r) => `${r.tournament_id}/${r.run_id}`}
             haystack={haystack}
             label="Runs"
+            viewKey="simulator.runs"
             placeholder={`Filter ${int(all.length)} runs${paged.done ? "" : " (loading more)"}`}
             facets={FACETS}
             onActivate={(r) => router.navigate(pageRoute("simulator", "verdicts", r.run_id))}

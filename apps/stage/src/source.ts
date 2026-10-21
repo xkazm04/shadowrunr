@@ -192,7 +192,7 @@ export function connectDaemon(
   run: string,
   speed: number,
   h: DaemonHandlers,
-  socket: (url: string) => SocketLike = (u) => new WebSocket(u) as unknown as SocketLike,
+  socket: (url: string) => SocketLike = (u) => new WebSocket(u) as SocketLike,
 ): DaemonLink {
   let ws: SocketLike | null = null;
   let stopped = false;

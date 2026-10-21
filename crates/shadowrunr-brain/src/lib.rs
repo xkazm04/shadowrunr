@@ -35,6 +35,7 @@ pub mod grammar;
 pub mod memory;
 pub mod moderation;
 pub mod orchestrate;
+pub mod outgate;
 pub mod pace;
 pub mod picker;
 pub mod pool;
@@ -80,15 +81,13 @@ use care::{care_note, removed_note, CareLedger};
 use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line};
-use moderation::{
-    gate_line, gate_text, output_events, recast_in_character, InputFilter, Policy, RemovedNames,
-    TermAction, CRISIS_BAN_RULE, NAME_WITHHELD,
-};
-use orchestrate::{requests::claims_authority, BeatInputs, Orchestrator};
-use picker::{PickContext, Picker};
+use moderation::{InputFilter, Policy, RemovedNames, CRISIS_BAN_RULE};
+use orchestrate::{requests::claims_authority, BeatInputs, BeatTxn, Orchestrator, ROLLED_BACK};
+use outgate::{GateCtx, Surface};
+use picker::{Pick, PickContext, Picker};
 use shadowrunr_types::prep::BeatMode;
 use stall::{stall_due, Staller, STALL_RULE};
-use util::{fnv1a64, near_duplicate, one_line, REPEAT_WINDOW};
+use util::{fnv1a64, one_line, REPEAT_WINDOW};
 use working::{select_window, WindowItem, WorkingSet, RECENCY_FLOOR};
 
 #[derive(Debug, thiserror::Error)]
@@ -257,7 +256,7 @@ pub struct Brain {
     care: CareLedger,
     /// Display names of viewers removed from chat (`crisis-chat-ban`), in ban order.
     removed: Vec<String>,
-    /// The same names as the output gate withholds them from the host's lines.
+    /// The same names as the output gate withholds them from every surface ([`outgate`]).
     removed_names: RemovedNames,
     picker: Picker,
     working: WorkingSet,
@@ -293,6 +292,8 @@ pub struct Brain {
     names: Vec<String>,
     /// The host's last spoken lines, for the repetition guard.
     spoken: VecDeque<String>,
+    /// The active foil's last lines, for the repetition guard.
+    foil_spoken: VecDeque<String>,
     /// The repetition guard emptied the last quiet beat: nudge the next turn.
     fresh_bit: bool,
     last_prompt: Option<String>,
@@ -354,6 +355,7 @@ impl Brain {
             salt,
             names,
             spoken: VecDeque::new(),
+            foil_spoken: VecDeque::new(),
             fresh_bit: false,
             last_prompt: None,
             last_reply: None,
@@ -479,6 +481,21 @@ impl Brain {
         self.speech.until()
     }
 
+    /// A package line ([`Surface::Stall`]) through the output gate: the text as aired and the
+    /// moderation records it fired.
+    fn gate_stall(&self, now_ms: TsMs, line: &str) -> (String, Vec<StreamEvent>) {
+        let ctx = GateCtx {
+            now_ms,
+            policy: &self.policy,
+            hexes: &self.hexes,
+            crisis: false,
+            removed: &self.removed_names,
+            recent: &[],
+        };
+        let g = outgate::pass(Surface::Stall, line, &ctx, &mut |t| t.to_string());
+        (g.text.unwrap_or_default(), g.events)
+    }
+
     /// A line goes on air at `at`: the speech clock moves past it.
     fn aired(&mut self, at: TsMs, text: &str) {
         self.speech.say(at, text, &self.tuning.pace);
@@ -494,8 +511,7 @@ impl Brain {
             let Some(line) = rotation.next(&self.cfg.character.stalls, self.salt) else {
                 break;
             };
-            let (text, fired) = gate_text(line, &self.policy, &self.hexes);
-            let mut events = output_events(now_ms, &fired);
+            let (text, mut events) = self.gate_stall(now_ms, line);
             events.push(StreamEvent::Say {
                 ts_ms: now_ms,
                 speaker: Speaker::Host,
@@ -632,6 +648,24 @@ impl Brain {
         self.store.write_episode(&ep)
     }
 
+    /// The beat's core call failed: the orchestrator un-consumes the beat ([`Orchestrator::rollback`]),
+    /// a fresh research bit stays fresh, and the beat's `beat_plan` says it was rolled back so
+    /// the transcript stays complete.
+    fn roll_back_beat(
+        &mut self,
+        txn: BeatTxn,
+        pick: &Pick,
+        now_ms: TsMs,
+        fresh_bit: bool,
+        beat_plan: &mut StreamEvent,
+    ) {
+        self.orch.rollback(txn, pick, now_ms);
+        self.fresh_bit |= fresh_bit;
+        if let StreamEvent::BeatPlan { reason, .. } = beat_plan {
+            reason.push_str(ROLLED_BACK);
+        }
+    }
+
     /// One beat's lines as one turn of the pending stream episode; a beat with no lines adds
     /// nothing. Recall and the sleep cycle read the first EPISODE_ITEM_CHARS of an episode,
     /// so a turn that would carry the pending episode past that starts the next one.
@@ -731,8 +765,8 @@ impl Brain {
         let Some(line) = self.stall.next(&self.cfg.character.stalls, self.salt) else {
             return;
         };
-        let (text, fired) = gate_text(line, &self.policy, &self.hexes);
-        ev.extend(output_events(now_ms, &fired));
+        let (text, events) = self.gate_stall(now_ms, line);
+        ev.extend(events);
         self.aired(self.on_air_ms(now_ms), &text);
         ev.push(StreamEvent::Say {
             ts_ms: now_ms,
@@ -749,8 +783,7 @@ impl Brain {
         let grace = self.tuning.fleet_grace_s;
         // Every spoken line goes through the output gate, the package's sign-off included.
         let line = self.cfg.character.stalls.sign_off.clone();
-        let (text, fired) = gate_text(&line, &self.policy, &self.hexes);
-        let mut ev = output_events(now_ms, &fired);
+        let (text, mut ev) = self.gate_stall(now_ms, &line);
         self.aired(self.on_air_ms(now_ms), &text);
         ev.push(StreamEvent::Say {
             ts_ms: now_ms,
@@ -840,6 +873,8 @@ impl Brain {
         let core_ms = self.cover.as_ref().and(self.latency.median());
         let lead_ms = pace::lookahead_lead(&self.tuning.pace, core_ms);
         let queued_ms = self.speech.queued_ms(now_ms);
+        // What the beat consumes stands only once its core call is delivered.
+        let txn = self.orch.begin();
         let mut plan = self.orch.plan(&BeatInputs {
             now_ms,
             ctx,
@@ -884,8 +919,6 @@ impl Brain {
             .picker
             .pick_upto(&cands, &pctx, self.engine.as_ref(), &corr, plan.ceiling)
             .await;
-        self.filter
-            .note_answered(pick.chosen.iter().map(|c| c.msg.viewer.id.as_str()));
         if !pick.chosen.is_empty() {
             ev.push(StreamEvent::Picked {
                 ts_ms: now_ms,
@@ -896,8 +929,11 @@ impl Brain {
         let beat_plan = self.orch.commit(&mut plan, &pick, now_ms);
         // Every message the carry cap dropped leaves a record.
         ev.extend(self.orch.take_capped(now_ms));
+        let plan_at = ev.len();
         ev.push(beat_plan);
         if plan.mode == BeatMode::Hold {
+            self.filter
+                .note_answered(pick.chosen.iter().map(|c| c.msg.viewer.id.as_str()));
             if self
                 .ticks
                 .is_multiple_of(u64::from(self.tuning.episode_every_ticks.max(1)))
@@ -996,6 +1032,7 @@ impl Brain {
             .working
             .render(foil_text.as_deref(), &self.cfg.character.persona.followers);
         let nonce = fnv1a64(format!("{}:{}:{}", self.salt, self.ticks, now_ms).as_bytes());
+        let fresh_bit = std::mem::take(&mut self.fresh_bit);
         let care = [
             care_note(self.care.active(), now_ms),
             removed_note(&self.removed),
@@ -1027,7 +1064,7 @@ impl Brain {
             pkg,
             active_foil: active_foil.as_deref(),
             nonce,
-            fresh_bit: std::mem::take(&mut self.fresh_bit),
+            fresh_bit,
             brief: self.brief.as_ref(),
             care_note: care.as_deref(),
             material: plan.material.as_deref(),
@@ -1099,12 +1136,15 @@ impl Brain {
             Ok(r) => {
                 self.engine_down = false;
                 self.note_health(now_ms, "core call answered", &mut ev);
+                self.filter
+                    .note_answered(pick.chosen.iter().map(|c| c.msg.viewer.id.as_str()));
                 r
             }
             Err(e) if fleet_class(&e) => {
                 self.engine_down = true;
                 self.note_health(now_ms, failure_detail(&e), &mut ev);
-                self.record_turn(&turn, now_ms)?;
+                // Nothing aired: the picks are owed, not conversation, so no turn records them.
+                self.roll_back_beat(txn, &pick, now_ms, fresh_bit, &mut ev[plan_at]);
                 // The grace clock starts at the failure, not at the next beat.
                 if self.fleet.observe(now_ms, FleetMode::Down) == FleetVerdict::SignOff {
                     ev.extend(self.sign_off_events(now_ms));
@@ -1113,7 +1153,10 @@ impl Brain {
                 }
                 return Ok(ev);
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                self.roll_back_beat(txn, &pick, now_ms, fresh_bit, &mut ev[plan_at]);
+                return Err(e.into());
+            }
         };
         let mut lines = parse_reply(
             &reply.text,
@@ -1202,36 +1245,24 @@ impl Brain {
         for line in lines {
             match line {
                 Line::Say(text) => {
-                    let (mut out, fired) = gate_line(&text, &self.policy, &self.hexes, crisis);
-                    ev.extend(output_events(now_ms, &fired));
-                    // A recast line fits the beat: a rebuttal when it answered a forged decree.
-                    if recast_in_character(&fired) && out != self.policy.persona.disclosure {
-                        out = self.orch.recast(authority, &text);
-                    }
-                    if out.is_empty() {
-                        continue;
-                    }
-                    // A viewer removed from chat is never named again, whoever brought them up.
-                    let out = match self.removed_names.withhold(&out) {
-                        None => out,
-                        Some(kept) => {
-                            ev.push(moderation::output_event(
-                                now_ms,
-                                CRISIS_BAN_RULE,
-                                NAME_WITHHELD,
-                            ));
-                            if kept.is_empty() {
-                                continue;
-                            }
-                            kept
-                        }
+                    let gate = GateCtx {
+                        now_ms,
+                        policy: &self.policy,
+                        hexes: &self.hexes,
+                        crisis,
+                        removed: &self.removed_names,
+                        recent: if guard_repeats { &[&self.spoken] } else { &[] },
                     };
-                    // Repetition guard: never say a near-duplicate of a recent line.
-                    if guard_repeats && self.spoken.iter().any(|p| near_duplicate(&out, p)) {
-                        ev.push(moderation::output_event(now_ms, "repetition", "suppressed"));
-                        suppressed += 1;
+                    let orch = &mut self.orch;
+                    // A recast line fits the beat: a rebuttal when it answered a forged decree.
+                    let g = outgate::pass(Surface::Spoken, &text, &gate, &mut |t| {
+                        orch.recast(authority, t)
+                    });
+                    ev.extend(g.events);
+                    suppressed += usize::from(g.repeated);
+                    let Some(out) = g.text else {
                         continue;
-                    }
+                    };
                     self.spoken.push_back(out.clone());
                     while self.spoken.len() > REPEAT_WINDOW {
                         self.spoken.pop_front();
@@ -1251,10 +1282,26 @@ impl Brain {
                     });
                 }
                 Line::Foil { foil, text } => {
-                    let (out, fired) = gate_text(&text, &self.policy, &self.hexes);
-                    ev.extend(output_events(now_ms, &fired));
-                    if out.is_empty() {
+                    let gate = GateCtx {
+                        now_ms,
+                        policy: &self.policy,
+                        hexes: &self.hexes,
+                        crisis,
+                        removed: &self.removed_names,
+                        recent: if guard_repeats {
+                            &[&self.spoken, &self.foil_spoken]
+                        } else {
+                            &[]
+                        },
+                    };
+                    let g = outgate::pass(Surface::Foil, &text, &gate, &mut |t| t.to_string());
+                    ev.extend(g.events);
+                    let Some(out) = g.text else {
                         continue;
+                    };
+                    self.foil_spoken.push_back(out.clone());
+                    while self.foil_spoken.len() > REPEAT_WINDOW {
+                        self.foil_spoken.pop_front();
                     }
                     turn.push(format!("{foil}: {out}"));
                     // The stage shows a foil's line: it takes reading time.
@@ -1276,12 +1323,21 @@ impl Brain {
                             *job_id = assigned;
                         }
                         Op::ShowCard { title, body, .. } => {
-                            let (t, f1) = gate_text(title, &self.policy, &self.hexes);
-                            let (b, f2) = gate_text(body, &self.policy, &self.hexes);
-                            ev.extend(output_events(now_ms, &f1));
-                            ev.extend(output_events(now_ms, &f2));
-                            *title = t;
-                            *body = b;
+                            let gate = GateCtx {
+                                now_ms,
+                                policy: &self.policy,
+                                hexes: &self.hexes,
+                                crisis,
+                                removed: &self.removed_names,
+                                recent: &[],
+                            };
+                            for field in [title, body] {
+                                let g = outgate::pass(Surface::Card, field, &gate, &mut |t| {
+                                    t.to_string()
+                                });
+                                ev.extend(g.events);
+                                *field = g.text.unwrap_or_default();
+                            }
                         }
                         _ => {}
                     }
@@ -1291,24 +1347,25 @@ impl Brain {
                     ev.push(StreamEvent::Op { ts_ms: now_ms, op });
                 }
                 Line::Note(text) => {
-                    if self
-                        .policy
-                        .strictest(&text)
-                        .is_some_and(|r| r.action == TermAction::Block)
-                    {
-                        ev.push(moderation::output_event(now_ms, "note_blocked", "dropped"));
+                    let gate = GateCtx {
+                        now_ms,
+                        policy: &self.policy,
+                        hexes: &self.hexes,
+                        crisis,
+                        removed: &self.removed_names,
+                        recent: &[],
+                    };
+                    let g = outgate::pass(Surface::Note, &text, &gate, &mut |t| t.to_string());
+                    ev.extend(g.events);
+                    let Some(noted) = g.text else {
                         continue;
-                    }
+                    };
                     let ep = shadowrunr_types::Episode {
                         id: self.store.new_id("ep", now_ms),
                         ts_ms: now_ms,
                         stream_id: self.cfg.stream_id.clone(),
                         kind: EpisodeKind::Stream,
-                        text: format!(
-                            "{} noted: {}",
-                            self.cfg.character.persona.name,
-                            self.policy.bleep(&text)
-                        ),
+                        text: format!("{} noted: {noted}", self.cfg.character.persona.name),
                         importance: 3,
                     };
                     self.store.write_episode(&ep)?;

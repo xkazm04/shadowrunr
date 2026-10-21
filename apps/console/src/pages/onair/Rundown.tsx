@@ -71,6 +71,7 @@ function Runs(props: { selected: string | undefined }) {
               getKey={keyOf}
               haystack={haystack}
               label="Runs"
+              viewKey="onair.rundown"
               placeholder="Filter runs: tone, tier, segment, run id"
               facets={FACETS}
               onActivate={(r) => router.navigate(pageRoute("onair", "rundown", r.tournament_id, r.run_id))}

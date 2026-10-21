@@ -1457,7 +1457,7 @@ async fn engine_outage_counts_as_fleet_down() {
 }
 
 #[tokio::test]
-async fn a_beat_is_one_turn_record_whether_the_engine_answered_or_not() {
+async fn a_failed_beat_is_no_turn_record_and_the_beat_that_answers_its_picks_is_one() {
     let dir = tempfile::tempdir().unwrap();
     let engine = FakeEngine::new();
     engine.push(
@@ -1481,12 +1481,14 @@ async fn a_beat_is_one_turn_record_whether_the_engine_answered_or_not() {
     )
     .await
     .unwrap();
-    // Beat 2 answers; beat 3 sees beat 1 as ONE turn and beat 2 as one more.
+    // Beat 1 aired nothing, so it is no turn: its picks are carried. Beat 2 answers them;
+    // beat 3 sees beat 2 as ONE turn, the picks and the answer together.
     b.tick(6_000, Vec::new(), &c).await.unwrap();
     b.tick(11_000, Vec::new(), &c).await.unwrap();
     let p = last_core_prompt(&engine);
-    assert_eq!(p.matches("[this-stream-").count(), 2, "{p}");
+    assert_eq!(p.matches("[this-stream-").count(), 1, "{p}");
     assert!(p.contains("[this-stream-1] Alba"), "{p}");
+    assert!(p.contains("Malakor: Bow before me."), "{p}");
 }
 
 #[tokio::test]
@@ -3109,4 +3111,187 @@ async fn sandbox_a_removed_viewer_is_never_named_again_even_when_chat_names_them
     let p = last_core_prompt(&engine);
     assert!(p.contains("Malakor: Vexed or not, the urn is open."), "{p}");
     assert!(!p.contains("Malakor: Vex's debts"), "{p}");
+}
+
+// ── One output gate: every surface runs its declared profile ([`outgate`]) ─────
+
+/// A wp16 brain whose beat at 1_000 removed `vex_walrus` from chat (crisis-chat-ban) and
+/// summoned the-disruptor.
+async fn removed_vex_with_foil(dir: &Path, engine: &FakeEngine) -> (Brain, SegmentContext) {
+    let mut b = wp16_brain(dir, Arc::new(engine.clone()), "{}", 1_800).await;
+    let vex = viewer("sim-v0007", "vex_walrus", Rank::Warlock);
+    let c = ctx(&["summon_foil", "show_card"]);
+    engine.push(
+        Role::CoreThread,
+        Ok("vex_walrus, the bit can wait: please reach out to a local crisis line or someone you trust nearby.\nOP: {\"op\":\"summon_foil\",\"foil\":\"the-disruptor\"}"),
+    );
+    b.tick(1_000, vec![msg("d1", 900, &vex, L167)], &c)
+        .await
+        .unwrap();
+    assert!(b.is_banned("sim-v0007"));
+    assert_eq!(
+        b.working_set().active_foil.as_deref(),
+        Some("the-disruptor")
+    );
+    (b, c)
+}
+
+fn names_vex(text: &str) -> bool {
+    text.to_lowercase()
+        .split(|ch: char| !(ch.is_alphanumeric() || ch == '_'))
+        .any(|w| w == "vex" || w == "vex_walrus")
+}
+
+fn output_mods_for(ev: &[StreamEvent], rule: &str) -> Vec<String> {
+    mods(ev, ModStage::Output)
+        .into_iter()
+        .filter(|m| m.0 == rule)
+        .map(|m| m.2)
+        .collect()
+}
+
+fn noted_episodes(b: &Brain) -> Vec<String> {
+    b.memory()
+        .episodes_since(i64::MIN, 1_000)
+        .unwrap()
+        .into_iter()
+        .map(|e| e.text)
+        .filter(|t| t.starts_with("Malakor noted:"))
+        .collect()
+}
+
+#[tokio::test]
+async fn outgate_a_foil_line_never_names_a_removed_viewer() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let (mut b, c) = removed_vex_with_foil(d.path(), &engine).await;
+    engine.push(
+        Role::CoreThread,
+        Ok("FOIL the-disruptor: Vex owes the crypt a drink."),
+    );
+    let ev = b.tick(11_000, Vec::new(), &c).await.unwrap();
+    assert!(!says(&ev).iter().any(|s| names_vex(s)), "{:?}", says(&ev));
+    assert_eq!(
+        output_mods_for(&ev, moderation::CRISIS_BAN_RULE),
+        vec![moderation::NAME_WITHHELD.to_string()]
+    );
+    engine.push(Role::CoreThread, Ok("The ledger closes at midnight."));
+    b.tick(21_000, Vec::new(), &c).await.unwrap();
+    let p = last_core_prompt(&engine);
+    assert!(!p.contains("Vex owes"), "{p}");
+}
+
+#[tokio::test]
+async fn outgate_a_card_never_names_a_removed_viewer() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let (mut b, c) = removed_vex_with_foil(d.path(), &engine).await;
+    engine.push(
+        Role::CoreThread,
+        Ok("OP: {\"op\":\"show_card\",\"card_id\":\"c1\",\"title\":\"Ledger\",\"body\":\"Vex's debts are due. The moat is full.\"}"),
+    );
+    let ev = b.tick(11_000, Vec::new(), &c).await.unwrap();
+    let body = ev.iter().find_map(|e| match e {
+        StreamEvent::Op {
+            op: Op::ShowCard { title, body, .. },
+            ..
+        } => Some((title.clone(), body.clone())),
+        _ => None,
+    });
+    assert_eq!(
+        body,
+        Some(("Ledger".to_string(), "The moat is full.".to_string()))
+    );
+    assert_eq!(
+        output_mods_for(&ev, moderation::CRISIS_BAN_RULE),
+        vec![moderation::NAME_WITHHELD.to_string()]
+    );
+}
+
+#[tokio::test]
+async fn outgate_a_foil_line_in_a_crisis_beat_points_at_help() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = wp16_brain(d.path(), Arc::new(engine.clone()), "{}", 1_800).await;
+    let soot = viewer("sim-v0003", "SootGoblin24", Rank::Thrall);
+    let c = ctx(&["summon_foil"]);
+    engine.push(
+        Role::CoreThread,
+        Ok("The disruptor rises.\nOP: {\"op\":\"summon_foil\",\"foil\":\"the-disruptor\"}"),
+    );
+    b.tick(1_000, Vec::new(), &c).await.unwrap();
+    assert_eq!(
+        b.working_set().active_foil.as_deref(),
+        Some("the-disruptor")
+    );
+    engine.push(
+        Role::CoreThread,
+        Ok("FOIL the-disruptor: where do you live? I can send help."),
+    );
+    let ev = b
+        .tick(11_000, vec![msg("d1", 10_900, &soot, L167)], &c)
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), vec!["d1".to_string()]);
+    let foil_says: Vec<String> = ev
+        .iter()
+        .filter_map(|e| match e {
+            StreamEvent::Say {
+                speaker: Speaker::Foil,
+                text,
+                ..
+            } => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(foil_says.len(), 1, "{foil_says:?}");
+    assert!(
+        foil_says[0].contains(moderation::CRISIS_HELP_LINE),
+        "{foil_says:?}"
+    );
+    assert_eq!(
+        output_mods_for(&ev, moderation::PERSONAL_DATA_RULE),
+        vec!["replaced".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn outgate_a_note_never_writes_a_removed_viewer_into_memory() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let (mut b, c) = removed_vex_with_foil(d.path(), &engine).await;
+    engine.push(
+        Role::CoreThread,
+        Ok("The urn is open.\nNOTE: vex_walrus keeps begging for gold"),
+    );
+    let ev = b.tick(11_000, Vec::new(), &c).await.unwrap();
+    let noted = noted_episodes(&b);
+    assert!(!noted.iter().any(|t| t.contains("vex_walrus")), "{noted:?}");
+    assert_eq!(
+        output_mods_for(&ev, outgate::NOTE_RULE),
+        vec![moderation::NAME_WITHHELD.to_string()]
+    );
+}
+
+#[tokio::test]
+async fn outgate_a_note_never_writes_a_disclosure_into_memory() {
+    let d = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = wp16_brain(d.path(), Arc::new(engine.clone()), "{}", 1_800).await;
+    let soot = viewer("sim-v0003", "SootGoblin24", Rank::Thrall);
+    let c = ctx(&[]);
+    engine.push(
+        Role::CoreThread,
+        Ok("SootGoblin24, the bit can wait: please reach out to a local crisis line or someone you trust nearby.\nNOTE: v7 said they want to end it all"),
+    );
+    let ev = b
+        .tick(1_000, vec![msg("d1", 900, &soot, L167)], &c)
+        .await
+        .unwrap();
+    let noted = noted_episodes(&b);
+    assert!(noted.is_empty(), "{noted:?}");
+    assert_eq!(
+        output_mods_for(&ev, outgate::NOTE_RULE),
+        vec![outgate::CARE_SEALED.to_string()]
+    );
 }

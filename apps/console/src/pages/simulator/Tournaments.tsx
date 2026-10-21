@@ -50,6 +50,7 @@ export function TournamentList() {
             getKey={(t) => t.tournament_id}
             haystack={(t) => `${t.tournament_id} ${t.instrument_hash}`}
             label="Tournaments"
+            viewKey="simulator.tournaments"
             placeholder={`Filter ${int(rows.length)} tournaments${paged.done ? "" : " (loading more)"}`}
             onActivate={(t) => router.navigate(pageRoute("simulator", "tournaments", t.tournament_id))}
           />
@@ -100,6 +101,7 @@ export function TournamentDetail({ id }: { id: string }) {
               getKey={(r) => r.row.run_id}
               haystack={(r) => `${r.row.run_id} ${r.row.spec.tone_variant} ${r.row.spec.core_tier} ${r.row.spec.segment} ${r.row.spec.audience_size}`}
               label={`Runs of ${id}`}
+              viewKey={`simulator.tournaments.${id}.runs`}
               onActivate={(r) => router.navigate(pageRoute("simulator", "verdicts", r.row.run_id))}
             />
           )}

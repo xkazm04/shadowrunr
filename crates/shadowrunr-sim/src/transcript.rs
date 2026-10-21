@@ -7,14 +7,20 @@ use std::path::{Path, PathBuf};
 
 use shadowrunr_types::{Speaker, StreamEvent, TsMs};
 
+use crate::sandbox::EventSink;
 use crate::{wire, SimError};
 
+/// The one door every transcript line passes through: it assigns the line number, writes the
+/// line and, when a sink is attached, hands the event to it at once - before any flush, so a
+/// live publisher never waits on the file buffer.
 pub struct TranscriptWriter {
     path: PathBuf,
     out: BufWriter<File>,
     events: Vec<StreamEvent>,
     /// Flush after every event, so a reader tailing the file sees each line as it happens.
     flush_each: bool,
+    /// Called with each event and its 1-based line, in push order, after the line is written.
+    sink: Option<EventSink>,
 }
 
 impl TranscriptWriter {
@@ -26,7 +32,13 @@ impl TranscriptWriter {
             out: BufWriter::new(f),
             events: Vec::new(),
             flush_each: false,
+            sink: None,
         })
+    }
+
+    /// This writer, handing every pushed event to `sink` (`None`: no observer).
+    pub fn with_sink(self, sink: Option<EventSink>) -> Self {
+        Self { sink, ..self }
     }
 
     /// A writer that flushes every event as it is pushed (a live session).
@@ -46,7 +58,11 @@ impl TranscriptWriter {
             self.flush()?;
         }
         self.events.push(ev);
-        Ok(self.events.len())
+        let line = self.events.len();
+        if let (Some(sink), Some(ev)) = (&self.sink, self.events.last()) {
+            sink(line as u64, ev);
+        }
+        Ok(line)
     }
 
     pub fn push_all(&mut self, evs: impl IntoIterator<Item = StreamEvent>) -> Result<(), SimError> {
@@ -402,6 +418,40 @@ mod tests {
         let mut b = TranscriptWriter::create(&buffered).unwrap();
         b.push(chat(0, "m1", "A", "hi")).unwrap();
         assert_eq!(read(&buffered).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn a_sink_hears_every_push_in_order_before_any_flush() {
+        use std::sync::{Arc, Mutex};
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("t.jsonl");
+        let heard: Arc<Mutex<Vec<(u64, StreamEvent)>>> = Arc::default();
+        let sink: crate::sandbox::EventSink = {
+            let heard = heard.clone();
+            Arc::new(move |seq, ev: &StreamEvent| heard.lock().unwrap().push((seq, ev.clone())))
+        };
+        let mut w = TranscriptWriter::create(&p).unwrap().with_sink(Some(sink));
+        let evs: Vec<StreamEvent> = (0..5)
+            .map(|i| chat(i * 1000, &format!("m{i}"), "A", &format!("line {i}")))
+            .collect();
+        for ev in &evs {
+            w.push(ev.clone()).unwrap();
+        }
+        // Buffered: nothing on disk yet, yet the sink heard all five, numbered by line.
+        assert_eq!(read(&p).unwrap().len(), 0, "no flush happened");
+        let heard = heard.lock().unwrap().clone();
+        let seqs: Vec<u64> = heard.iter().map(|(s, _)| *s).collect();
+        assert_eq!(seqs, [1, 2, 3, 4, 5]);
+        let got: Vec<StreamEvent> = heard.into_iter().map(|(_, e)| e).collect();
+        assert_eq!(
+            serde_json::to_value(&got).unwrap(),
+            serde_json::to_value(&evs).unwrap()
+        );
+        // No sink is the plain buffered writer.
+        let mut plain = TranscriptWriter::create(&dir.path().join("p.jsonl"))
+            .unwrap()
+            .with_sink(None);
+        assert_eq!(plain.push(evs[0].clone()).unwrap(), 1);
     }
 
     #[test]

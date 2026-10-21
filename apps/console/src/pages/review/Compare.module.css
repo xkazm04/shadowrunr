@@ -1,0 +1,7 @@
+/* Compare two sessions: the two sides under a heavy rule; the rest prints through tabkit tables, chips
+   and the layer 2 verdict stamp, because review.l2 css is budgeted. */
+
+.sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--sr-space-base); }
+.side { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact) var(--sr-space-near); align-items: center; padding-top: var(--sr-space-near); border-top: var(--sr-stroke-heavy) solid; }
+.title { flex-basis: 100%; }
+.rule { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact); align-items: baseline; }

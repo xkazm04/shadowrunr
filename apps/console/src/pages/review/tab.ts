@@ -5,7 +5,8 @@ import type { Derived } from "./derive";
 import type { Feedback } from "./hooks";
 import type { ShownKind } from "./names";
 
-export type TabId = "timeline" | "types" | "player" | "judge" | "moderation" | "calls";
+/** `compare` spans two sessions (`#/review/<A>/compare/<B>`); it is not one of the session tabs' bodies. */
+export type TabId = "timeline" | "types" | "player" | "judge" | "moderation" | "calls" | "compare";
 
 export interface TabProps {
   readonly rs: ReviewSession;

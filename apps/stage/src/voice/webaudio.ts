@@ -27,7 +27,7 @@ function make(): WebAudio | null {
       return ctx.currentTime;
     },
     createBuffer: (ch, len, rate) => ctx.createBuffer(ch, len, rate) as BufferLike,
-    createBufferSource: () => ctx.createBufferSource() as unknown as SourceLike,
+    createBufferSource: () => ctx.createBufferSource() as SourceLike,
     output: analyser,
     level() {
       analyser.getFloatTimeDomainData(buf);

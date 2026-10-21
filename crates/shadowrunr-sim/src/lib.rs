@@ -21,6 +21,7 @@ pub mod casefile;
 pub mod chat;
 pub mod instrument;
 pub mod judge;
+pub mod judging;
 pub mod ledger;
 pub mod matrix;
 pub mod outcome;
@@ -186,6 +187,20 @@ pub struct SimOptions {
     /// newest approved prep, or the fictional sample. The run records which one it used as
     /// `prep` ([`runner::prep_label`]).
     pub stream_prep: Option<StreamPrep>,
+    /// Observes the run's transcript as it is written: each event with its 1-based line, at
+    /// push time (a live `sim.start` publishes through it). `None` by default; it observes
+    /// only, so it never enters the instrument hash and changes no byte the run writes.
+    pub live_sink: Option<LiveSink>,
+}
+
+/// A [`sandbox::EventSink`] carried in [`SimOptions`] (which is `Debug`).
+#[derive(Clone)]
+pub struct LiveSink(pub sandbox::EventSink);
+
+impl std::fmt::Debug for LiveSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("LiveSink")
+    }
 }
 
 /// The instrument entry name of the opt-5 rate-cap experiment.
@@ -241,6 +256,7 @@ impl Default for SimOptions {
             rate_cap_exemptions: false,
             case: None,
             stream_prep: None,
+            live_sink: None,
         }
     }
 }

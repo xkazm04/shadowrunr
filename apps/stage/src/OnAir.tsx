@@ -98,7 +98,8 @@ export function VoiceCaptionPanel({
   compact: boolean;
   onAir: boolean;
 }) {
-  const line = useMemo(() => (view ? wordTimings(view.caption.text) : null), [view?.caption.text]);
+  const text = view?.caption.text;
+  const line = useMemo(() => (text === undefined ? null : wordTimings(text)), [text]);
   const redaction = [...redactions].reverse().find((r) => now >= r.at && now - r.at < REDACTION_MS);
   return (
     <div className={`caption-panel${compact ? " compact" : ""}`}>

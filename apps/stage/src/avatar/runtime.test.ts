@@ -224,8 +224,8 @@ describe("without WebGL2", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const face = () => {
       const attrs = new Map<string, string>();
-      const root = { setAttribute: (k: string, v: string) => void attrs.set(k, v) } as unknown as HTMLElement;
-      const canvas = { width: 0, height: 0, style: { visibility: "" } } as unknown as HTMLCanvasElement;
+      const root = { setAttribute: (k: string, v: string) => void attrs.set(k, v) } as HTMLElement;
+      const canvas = { width: 0, height: 0, style: { visibility: "" } } as HTMLCanvasElement;
       const handle = startFace({ root, canvas, rigBase: null, source: { subscribe: () => () => {} }, size: 300 });
       return { attrs, canvas, handle };
     };
@@ -267,8 +267,8 @@ async function face(start: typeof startFace, motion: string | null = null) {
   const h = handClock();
   const look = lookBox();
   const attrs = new Map<string, string>();
-  const root = { setAttribute: (k: string, v: string) => void attrs.set(k, v) } as unknown as HTMLElement;
-  const canvas = { width: 0, height: 0, style: { visibility: "" } } as unknown as HTMLCanvasElement;
+  const root = { setAttribute: (k: string, v: string) => void attrs.set(k, v) } as HTMLElement;
+  const canvas = { width: 0, height: 0, style: { visibility: "" } } as HTMLCanvasElement;
   const handle = start({ root, canvas, rigBase: "http://daemon/avatar/", source: { subscribe: () => () => {} }, size: 300, clock: h.clock, look });
   await settleMicrotasks();
   expect(attrs.get("data-face")).toBe("ready");

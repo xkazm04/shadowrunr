@@ -105,6 +105,45 @@
         }
       ]
     },
+    "BesideCell": {
+      "description": "A cell measured by a different instrument slice: reported with its own n, never ranked.",
+      "properties": {
+        "core_tier": {
+          "type": "string"
+        },
+        "judge_tiers": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "judged": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "$ref": "#/$defs/BesideReason"
+        }
+      },
+      "required": [
+        "core_tier",
+        "reason",
+        "judge_tiers",
+        "judged"
+      ],
+      "type": "object"
+    },
+    "BesideReason": {
+      "description": "Why a cell is reported beside the ranking instead of in it.",
+      "oneOf": [
+        {
+          "const": "judge_mismatch",
+          "description": "Judged by a judge tier other than the group's reference, or by more than one.",
+          "type": "string"
+        }
+      ]
+    },
     "BitKind": {
       "oneOf": [
         {
@@ -314,6 +353,18 @@
           "type": "object"
         },
         "runs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "runs_with_fail": {
+          "description": "Judged runs holding at least one hard-rule fail, counted per run (a run with three\nfailing checks is one run). Omitted in a results.json written before tier decisions:\nabsent means unknown, never zero.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "usable_runs": {
+          "description": "Judged runs with no hard-rule fail: the denominator of cost per usable stream.\nOmitted in a results.json written before tier decisions.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -2801,6 +2852,52 @@
       ],
       "type": "object"
     },
+    "DecidedBy": {
+      "description": "What settled the winner.",
+      "oneOf": [
+        {
+          "const": "only_eligible",
+          "description": "One cell passed the gates.",
+          "type": "string"
+        },
+        {
+          "const": "quality",
+          "description": "The best quality, clear of every other eligible cell's noise.",
+          "type": "string"
+        },
+        {
+          "const": "cost_per_usable_stream",
+          "description": "Several cells within the quality noise of the best: the cheapest per usable stream.",
+          "type": "string"
+        }
+      ]
+    },
+    "DecisionGroup": {
+      "description": "The cells one tier decision chooses among: every axis of a [`CellKey`] but the core tier.",
+      "properties": {
+        "audience_size": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "instrument_hash": {
+          "type": "string"
+        },
+        "segment": {
+          "type": "string"
+        },
+        "tone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "instrument_hash",
+        "tone",
+        "segment",
+        "audience_size"
+      ],
+      "type": "object"
+    },
     "Directive": {
       "properties": {
         "active": {
@@ -4017,6 +4114,62 @@
         "total"
       ],
       "type": "object"
+    },
+    "IneligibleCell": {
+      "description": "A cell the gates kept out of the ranking, with the figures that decided it.",
+      "properties": {
+        "core_tier": {
+          "type": "string"
+        },
+        "evaluated_share": {
+          "description": "Evaluated hard checks (pass + fail) over pass + fail + not_evaluable. Omitted when\nthe cell has no such checks.",
+          "format": "double",
+          "type": "number"
+        },
+        "failing_rules": {
+          "description": "The hard rules that failed (`hard_fail` only).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "judged": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "$ref": "#/$defs/IneligibleReason"
+        },
+        "runs_with_fail": {
+          "description": "Judged runs with any hard-rule fail.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "core_tier",
+        "reason",
+        "judged",
+        "runs_with_fail"
+      ],
+      "type": "object"
+    },
+    "IneligibleReason": {
+      "description": "Why a cell cannot win.",
+      "oneOf": [
+        {
+          "const": "hard_fail",
+          "description": "At least one judged run holds a hard-rule fail.",
+          "type": "string"
+        },
+        {
+          "const": "unmeasured",
+          "description": "Too few of its hard checks were evaluated, or nothing was judged: not a pass.",
+          "type": "string"
+        }
+      ]
     },
     "JudgeVerdict": {
       "properties": {
@@ -5291,6 +5444,50 @@
           "type": "array"
         }
       },
+      "type": "object"
+    },
+    "RankedCell": {
+      "description": "An eligible cell, in rank order (best quality first).",
+      "properties": {
+        "core_p50_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "core_tier": {
+          "type": "string"
+        },
+        "cost_per_usable_stream": {
+          "description": "Cell cost / usable runs.",
+          "format": "double",
+          "type": "number"
+        },
+        "judged": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mean_quality": {
+          "format": "double",
+          "type": "number"
+        },
+        "quality_se": {
+          "description": "Standard error of the per-run quality share. Omitted below two runs.",
+          "format": "double",
+          "type": "number"
+        },
+        "usable_runs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "core_tier",
+        "judged",
+        "usable_runs",
+        "mean_quality"
+      ],
       "type": "object"
     },
     "RanksTableParams": {
@@ -7852,6 +8049,63 @@
       ],
       "type": "object"
     },
+    "TierDecision": {
+      "description": "Which core tier goes live for one group: hard rules gate, coverage gates, quality ranks,\ncost decides within the noise. Cells judged by a judge other than the reference are\nreported beside, never ranked.",
+      "properties": {
+        "beside": {
+          "items": {
+            "$ref": "#/$defs/BesideCell"
+          },
+          "type": "array"
+        },
+        "decided_by": {
+          "$ref": "#/$defs/DecidedBy"
+        },
+        "group": {
+          "$ref": "#/$defs/DecisionGroup"
+        },
+        "ineligible": {
+          "items": {
+            "$ref": "#/$defs/IneligibleCell"
+          },
+          "type": "array"
+        },
+        "provisional": {
+          "description": "The winner has fewer judged runs than the thin-n bar.",
+          "type": "boolean"
+        },
+        "ranked": {
+          "items": {
+            "$ref": "#/$defs/RankedCell"
+          },
+          "type": "array"
+        },
+        "reference_judge": {
+          "description": "The judge tier that judged the most cells (ties go to the higher tier).",
+          "type": "string"
+        },
+        "tie_set": {
+          "description": "Core tiers within the quality noise of the best, cheapest first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "winner": {
+          "description": "None: nothing goes live here; `ineligible` lists what to fix.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group",
+        "ranked",
+        "ineligible",
+        "beside",
+        "tie_set",
+        "provisional"
+      ],
+      "type": "object"
+    },
     "TierRuleInfo": {
       "description": "One way to qualify for a rank through a subscription.",
       "properties": {
@@ -8036,6 +8290,13 @@
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "tier_decisions": {
+          "description": "Addition: the tier decision per group (instrument, tone, segment, audience size).\nOmitted in a results.json written before it existed.",
+          "items": {
+            "$ref": "#/$defs/TierDecision"
+          },
+          "type": "array"
         },
         "tournament_id": {
           "type": "string"

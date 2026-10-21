@@ -45,7 +45,8 @@ describe("parseVoiceFrame", () => {
   });
 
   it("an utterance with no mouth shapes has no visemes key", () => {
-    const { visemes: _drop, ...bare } = utterance;
+    const bare: Partial<typeof utterance> = { ...utterance };
+    delete bare.visemes;
     const u = parseVoiceFrame(JSON.stringify(bare));
     expect(u.ok && "visemes" in u.value).toBe(false);
   });

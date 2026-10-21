@@ -121,6 +121,7 @@ export function SituationsTab({ d, selected }: { d: CharacterDetail; selected: s
             getKey={(s) => s.id}
             haystack={(s) => `${s.id} ${s.archetype} ${s.behaviour} ${s.required}`}
             label="Situations"
+            viewKey={`characters.${d.id}.situations`}
             placeholder={`Search ${int(d.situations.length)} situations`}
             facets={facets}
             estimateRem={3.4}

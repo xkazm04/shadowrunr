@@ -135,3 +135,130 @@ async fn live_run_resumes_from_a_seq_after_a_disconnect() {
         assert_eq!(&f["event"], d);
     }
 }
+
+/// The scripted engine, except that its first model call waits for `gate`.
+struct GatedEngine {
+    gate: std::sync::Arc<tokio::sync::Notify>,
+    first: std::sync::atomic::AtomicBool,
+}
+
+impl GatedEngine {
+    async fn wait_first(&self) {
+        if self.first.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            self.gate.notified().await;
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl shadowrunr_types::Engine for GatedEngine {
+    async fn complete(
+        &self,
+        req: shadowrunr_types::EngineRequest,
+    ) -> Result<shadowrunr_types::EngineReply, shadowrunr_types::EngineError> {
+        self.wait_first().await;
+        shadowrunr_engine::ScriptedEngine.complete(req).await
+    }
+    async fn open_session(
+        &self,
+        template: shadowrunr_types::EngineRequest,
+    ) -> Result<Box<dyn shadowrunr_types::WarmSession>, shadowrunr_types::EngineError> {
+        self.wait_first().await;
+        shadowrunr_engine::ScriptedEngine
+            .open_session(template)
+            .await
+    }
+    async fn health(&self) -> Vec<shadowrunr_types::HealthReport> {
+        shadowrunr_engine::ScriptedEngine.health().await
+    }
+}
+
+/// Opens the gate when the test ends, pass or fail: the runtime waits for the sim's blocking
+/// thread on shutdown, so a gate left shut would hang the test instead of failing it.
+struct OpenOnDrop(std::sync::Arc<tokio::sync::Notify>);
+
+impl Drop for OpenOnDrop {
+    fn drop(&mut self) {
+        self.0.notify_one();
+    }
+}
+
+/// A live sim's events reach subscribers as they are written, not when a buffer fills: with
+/// the engine's first answer held back, `stream_start` and the stage's opening are already
+/// on the socket.
+#[tokio::test]
+async fn live_sim_events_arrive_before_the_engine_answers() {
+    let tmp = tempfile::tempdir().unwrap();
+    let gate = std::sync::Arc::new(tokio::sync::Notify::new());
+    let _open = OpenOnDrop(gate.clone());
+    let engine = crate::engine::EngineHandle {
+        engine: std::sync::Arc::new(GatedEngine {
+            gate: gate.clone(),
+            first: std::sync::atomic::AtomicBool::new(true),
+        }),
+        fleet: None,
+    };
+    let state =
+        crate::server::AppState::new(test_config(tmp.path(), repo().join("characters")), engine);
+    let addr = super::start_state(state).await;
+    let started = rpc(
+        &addr,
+        "sim.start",
+        json!({ "spec": spec("gated-1"), "judge": false }),
+    )
+    .await;
+    assert_eq!(started["result"]["run_id"], "gated-1", "{started}");
+
+    let mut ws = subscribe(&addr, json!({ "subscribe": "gated-1", "since": 0 })).await;
+    let head = read_until(&mut ws, 2, |v| {
+        v["event"]["type"] == "segment_start" || is_end(v)
+    })
+    .await;
+    assert_eq!(head[0]["seq"], 1, "{head:?}");
+    assert_eq!(head[0]["event"]["type"], "stream_start", "{head:?}");
+    let last = head.last().unwrap();
+    assert_eq!(last["event"]["type"], "segment_start", "{head:?}");
+    for (i, f) in head.iter().enumerate() {
+        assert_eq!(f["seq"].as_u64().unwrap(), i as u64 + 1, "{head:?}");
+    }
+
+    // Released, the run completes on the same socket.
+    gate.notify_one();
+    let rest = read_until(&mut ws, 120, is_end).await;
+    assert_eq!(
+        rest.last().unwrap()["event"]["type"],
+        "stream_end",
+        "{rest:?}"
+    );
+}
+
+/// Every live frame's seq is its line in the run's `transcript.jsonl`, and its event is that
+/// line: N frames for N lines, no gaps.
+#[tokio::test]
+async fn live_seq_is_the_transcript_line() {
+    let tmp = tempfile::tempdir().unwrap();
+    let addr = start(test_config(tmp.path(), repo().join("characters"))).await;
+    let started = rpc(
+        &addr,
+        "sim.start",
+        json!({ "spec": spec("seq-1"), "judge": false }),
+    )
+    .await;
+    assert_eq!(started["result"]["run_id"], "seq-1", "{started}");
+    let mut ws = subscribe(&addr, json!({ "subscribe": "seq-1", "since": 0 })).await;
+    let all = read_until(&mut ws, 120, is_end).await;
+    assert!(all.iter().all(|f| f.get("error").is_none()), "{all:?}");
+    let disk: Vec<Value> =
+        std::fs::read_to_string(tmp.path().join("runs/sim/adhoc/seq-1/transcript.jsonl"))
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+    assert_eq!(all.len(), disk.len(), "N frames for N lines");
+    for (i, (f, d)) in all.iter().zip(&disk).enumerate() {
+        let frame: EventFrame = serde_json::from_value(f.clone()).unwrap();
+        assert_eq!(frame.seq, i as u64 + 1, "seq is the 1-based line");
+        assert_eq!(frame.run_id, "seq-1");
+        assert_eq!(&f["event"], d, "line {}", i + 1);
+    }
+}

@@ -51,7 +51,7 @@ function ser(v: unknown): unknown {
 function recordingGl() {
   const log: unknown[][] = [];
   let n = 0;
-  const target = {};
+  const target = {} as WebGL2RenderingContext;
   const gl = new Proxy(target, {
     get(_t, prop) {
       if (typeof prop !== "string") return undefined;
@@ -69,19 +69,19 @@ function recordingGl() {
       };
     },
   });
-  return { gl: gl as unknown as WebGL2RenderingContext, log };
+  return { gl, log };
 }
 
-class FakeCanvas extends EventTarget {
-  width = 320;
-  height = 240;
-  constructor(private readonly gl: WebGL2RenderingContext, private readonly log: unknown[][]) {
-    super();
-  }
-  getContext(type: string, attrs: unknown) {
-    this.log.push(["getContext", type, JSON.parse(JSON.stringify(attrs ?? null))]);
-    return this.gl;
-  }
+/** A canvas double: an EventTarget (for the context-lost events) with the size and getContext. */
+function fakeCanvas(gl: WebGL2RenderingContext, log: unknown[][]) {
+  return Object.assign(new EventTarget(), {
+    width: 320,
+    height: 240,
+    getContext(type: string, attrs: unknown): WebGL2RenderingContext | null {
+      log.push(["getContext", type, structuredClone(attrs ?? null)]);
+      return gl;
+    },
+  });
 }
 
 const spec: FormSpec = {
@@ -115,9 +115,15 @@ const spec: FormSpec = {
   ],
 };
 
+/** An image double: the recording context logs it by its id. */
+function image(id: string): LayerImage {
+  const img: Partial<ImageBitmap> & { __id: string } = { __id: id };
+  return img as ImageBitmap;
+}
+
 function form(): LoadedForm {
   const images = new Map<string, LayerImage>();
-  for (const l of spec.layers) if (l.file) images.set(l.file, { __id: `img:${l.file}` } as unknown as LayerImage);
+  for (const l of spec.layers) if (l.file) images.set(l.file, image(`img:${l.file}`));
   return { spec, images, form: "rig" };
 }
 
@@ -158,9 +164,9 @@ interface Face {
 /** Drive one renderer through the script and return its call stream. */
 async function drive(make: (canvas: HTMLCanvasElement, restored: () => void) => Promise<Face>): Promise<unknown[][]> {
   const { gl, log } = recordingGl();
-  const canvas = new FakeCanvas(gl, log);
+  const canvas = fakeCanvas(gl, log);
   let restored = 0;
-  const face = await make(canvas as unknown as HTMLCanvasElement, () => restored++);
+  const face = await make(canvas as HTMLCanvasElement, () => restored++);
   log.push(["--frames"]);
   POSES.forEach((p, i) => face.render(p, i));
   canvas.width = 200;

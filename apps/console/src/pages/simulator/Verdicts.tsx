@@ -43,6 +43,7 @@ export function VerdictPicker() {
             getKey={(r) => `${r.tournament_id}/${r.run_id}`}
             haystack={(r) => `${r.run_id} ${r.tournament_id} ${r.spec.tone_variant} ${r.spec.core_tier}`}
             label="Judged runs"
+            viewKey="simulator.verdicts"
             placeholder={`Filter ${int(rows.length)} judged runs${paged.done ? "" : " (loading more)"}`}
             onActivate={(r) => router.navigate(pageRoute("simulator", "verdicts", r.run_id))}
           />

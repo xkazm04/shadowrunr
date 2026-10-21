@@ -649,6 +649,27 @@ export type CalibrationOrigin =
       kind: "default_assumption";
     };
 /**
+ * Why a cell is reported beside the ranking instead of in it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "BesideReason".
+ */
+export type BesideReason = "judge_mismatch";
+/**
+ * What settled the winner.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "DecidedBy".
+ */
+export type DecidedBy = "only_eligible" | "quality" | "cost_per_usable_stream";
+/**
+ * Why a cell cannot win.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "IneligibleReason".
+ */
+export type IneligibleReason = "hard_fail" | "unmeasured";
+/**
  * Where a tuning value came from.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -3684,6 +3705,11 @@ export interface TournamentResults {
       | undefined;
   };
   runs: number;
+  /**
+   * Addition: the tier decision per group (instrument, tone, segment, audience size).
+   * Omitted in a results.json written before it existed.
+   */
+  tier_decisions?: TierDecision[];
   tournament_id: string;
   usage_by_role: {
     [k: string]: UsageTotals | undefined;
@@ -3714,6 +3740,17 @@ export interface CellResult {
     [k: string]: RuleTally | undefined;
   };
   runs: number;
+  /**
+   * Judged runs holding at least one hard-rule fail, counted per run (a run with three
+   * failing checks is one run). Omitted in a results.json written before tier decisions:
+   * absent means unknown, never zero.
+   */
+  runs_with_fail?: number;
+  /**
+   * Judged runs with no hard-rule fail: the denominator of cost per usable stream.
+   * Omitted in a results.json written before tier decisions.
+   */
+  usable_runs?: number;
   usage: UsageTotals;
   usage_by_role: {
     [k: string]: UsageTotals | undefined;
@@ -3799,6 +3836,106 @@ export interface UsageTotals {
   errors: number;
   input_tokens: number;
   output_tokens: number;
+}
+/**
+ * Which core tier goes live for one group: hard rules gate, coverage gates, quality ranks,
+ * cost decides within the noise. Cells judged by a judge other than the reference are
+ * reported beside, never ranked.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "TierDecision".
+ */
+export interface TierDecision {
+  beside: BesideCell[];
+  decided_by?: DecidedBy;
+  group: DecisionGroup;
+  ineligible: IneligibleCell[];
+  /**
+   * The winner has fewer judged runs than the thin-n bar.
+   */
+  provisional: boolean;
+  ranked: RankedCell[];
+  /**
+   * The judge tier that judged the most cells (ties go to the higher tier).
+   */
+  reference_judge?: string;
+  /**
+   * Core tiers within the quality noise of the best, cheapest first.
+   */
+  tie_set: string[];
+  /**
+   * None: nothing goes live here; `ineligible` lists what to fix.
+   */
+  winner?: string;
+}
+/**
+ * A cell measured by a different instrument slice: reported with its own n, never ranked.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "BesideCell".
+ */
+export interface BesideCell {
+  core_tier: string;
+  judge_tiers: string[];
+  judged: number;
+  reason: BesideReason;
+}
+/**
+ * The cells one tier decision chooses among: every axis of a [`CellKey`] but the core tier.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "DecisionGroup".
+ */
+export interface DecisionGroup {
+  audience_size: number;
+  instrument_hash: string;
+  segment: string;
+  tone: string;
+}
+/**
+ * A cell the gates kept out of the ranking, with the figures that decided it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "IneligibleCell".
+ */
+export interface IneligibleCell {
+  core_tier: string;
+  /**
+   * Evaluated hard checks (pass + fail) over pass + fail + not_evaluable. Omitted when
+   * the cell has no such checks.
+   */
+  evaluated_share?: number;
+  /**
+   * The hard rules that failed (`hard_fail` only).
+   */
+  failing_rules?: string[];
+  judged: number;
+  reason: IneligibleReason;
+  /**
+   * Judged runs with any hard-rule fail.
+   */
+  runs_with_fail: number;
+}
+/**
+ * An eligible cell, in rank order (best quality first).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "RankedCell".
+ */
+export interface RankedCell {
+  core_p50_ms?: number;
+  core_tier: string;
+  /**
+   * Cell cost / usable runs.
+   */
+  cost_per_usable_stream?: number;
+  judged: number;
+  mean_quality: number;
+  /**
+   * Standard error of the per-run quality share. Omitted below two runs.
+   */
+  quality_se?: number;
+  usable_runs: number;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema

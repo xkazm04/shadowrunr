@@ -9,6 +9,10 @@ import type { SegmentId, StreamEvent } from "@shadowrunr/contract";
 import { EVENT_TYPES, buildMap, foldEvents } from "@shadowrunr/stage-kit";
 import { parseCase, parseTranscript } from "@shadowrunr/stage-kit/parse";
 import { resolveCase, revealedHexIds, transcriptCase } from "./source";
+import { readJson } from "./test-json";
+
+/** The `type` of one transcript line. */
+const lineType = (line: string): unknown => (readJson(line) as { type?: unknown }).type;
 
 const root = join(__dirname, "..");
 const repo = join(root, "..", "..");
@@ -109,8 +113,8 @@ describe("fixtures/demo.jsonl", () => {
   it("is reproducible from scripts/make-demo.mjs (same ops, same order)", () => {
     // Guard against hand edits drifting from the generator: the first and last lines are fixed.
     const lines = text.trim().split("\n");
-    expect(JSON.parse(lines[0]!).type).toBe("stream_start");
-    expect(JSON.parse(lines[lines.length - 1]!).type).toBe("stream_end");
+    expect(lineType(lines[0]!)).toBe("stream_start");
+    expect(lineType(lines[lines.length - 1]!)).toBe("stream_end");
   });
 });
 

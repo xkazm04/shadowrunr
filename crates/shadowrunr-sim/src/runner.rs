@@ -10,7 +10,6 @@
 //! The brain and the segment runtime sit behind the [`Mind`] and [`Stage`] traits so the
 //! loop can be tested before `shadowrunr_brain` and `shadowrunr_segments` land.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -33,14 +32,15 @@ use crate::calibration::{self, Calibration, CalibrationOrigin};
 use crate::casefile::CaseFileResearch;
 use crate::chat::{ChatRoom, ChatStats, RoomConfig};
 use crate::instrument::{self, Instrument, InstrumentInputs};
-use crate::judge::{self, JudgeInputs, JudgeOutcome, Rubric};
+use crate::judge::{self, Rubric};
+use crate::judging::{self, JudgeJob, JudgeResult};
 use crate::ledger::LedgerEngine;
 use crate::outcome;
 use crate::pacing::GateHandle;
 use crate::population;
 use crate::sandbox;
 use crate::situations::{Injection, SituationBank};
-use crate::transcript::{self, TranscriptWriter};
+use crate::transcript::TranscriptWriter;
 use crate::{read_json, write_json, RunOutput, SimError, SimOptions};
 
 /// The character's mind, as the loop sees it.
@@ -620,7 +620,8 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         },
     );
     let transcript_path = prep.run_dir.join("transcript.jsonl");
-    let mut w = TranscriptWriter::create(&transcript_path)?;
+    let mut w = TranscriptWriter::create(&transcript_path)?
+        .with_sink(opts.live_sink.as_ref().map(|s| s.0.clone()));
     w.push(StreamEvent::StreamStart {
         ts_ms: 0,
         stream_id: spec.run_id.clone(),
@@ -825,7 +826,8 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
     })
 }
 
-/// Judge a simulated run; writes `verdict.json` + `judge.json`, or records a void judge.
+/// Judge a simulated run through [`judging::judge_loaded`] and record what it came to:
+/// `verdict.json` + `judge.json`, a void judge, or a pending one.
 #[allow(clippy::too_many_arguments)]
 async fn judge_into(
     run_dir: &Path,
@@ -839,62 +841,47 @@ async fn judge_into(
     quota: Option<&GateHandle>,
     brief: Option<&StreamBrief>,
 ) -> Result<Option<shadowrunr_types::JudgeVerdict>, SimError> {
-    record.judge_tier = Some(tier);
-    // Before the judge call, ask the engine whether any account can serve it.
-    if let Some(block) = quota.and_then(|q| q.0.blocked()) {
-        record.status = RunStatus::JudgePending;
-        record.judge_error = Some(format!(
-            "{}quota ({}){}",
-            outcome::JUDGE_DEFERRED_PREFIX,
-            block.accounts.join(", "),
-            block
-                .until_ms
-                .map(|u| format!(" until {}", crate::pacing::utc(u)))
-                .unwrap_or_default()
-        ));
-        return Ok(None);
-    }
-    let featured: HashSet<String> = record.featured.iter().cloned().collect();
-    let window_cache = run_dir.join(JUDGE_WINDOWS_DIR);
-    let inp = JudgeInputs {
+    let job = JudgeJob {
         run_id: &spec.run_id,
+        character: &spec.character,
+        core_tier: spec.core_tier,
+        judge_tier: tier,
+        injections: &record.injections,
+        featured: &record.featured,
+    };
+    let loaded = judging::Loaded {
         events,
         bank,
-        injections: &record.injections,
-        featured_viewers: &featured,
         rubric,
-        judge_tier: tier,
-        core_tier: spec.core_tier,
         brief,
-        window_cache: Some(&window_cache),
     };
-    match judge::judge_run(&inp, engine).await {
-        Ok(JudgeOutcome::Verdict(b)) => {
-            let (verdict, audit) = *b;
-            write_json(&run_dir.join("judge.json"), &audit)?;
-            write_json(&run_dir.join("verdict.json"), &verdict)?;
+    let result = judging::judge_loaded(run_dir, &job, &loaded, engine, quota).await?;
+    Ok(record_judgement(record, tier, result))
+}
+
+/// The run record's judge fields for a [`JudgeResult`]; the verdict when judged.
+fn record_judgement(
+    record: &mut RunRecord,
+    tier: ModelTier,
+    result: JudgeResult,
+) -> Option<shadowrunr_types::JudgeVerdict> {
+    record.judge_tier = Some(tier);
+    match result {
+        JudgeResult::Judged { verdict, .. } => {
             record.status = RunStatus::Judged;
             record.judge_error = None;
-            Ok(Some(verdict))
+            Some(*verdict)
         }
-        Ok(JudgeOutcome::Void(audit, why)) => {
-            write_json(&run_dir.join("judge.json"), &audit)?;
+        JudgeResult::Void(why) => {
             record.status = RunStatus::JudgeVoid;
             record.judge_error = Some(why);
-            Ok(None)
+            None
         }
-        Err(SimError::Engine(e)) => {
-            // Rate limit, unavailable, timeout, io: the engine's fault, re-judge later.
-            // Refused / parse: a content outcome, void.
-            record.status = if outcome::is_engine_error(&e) {
-                RunStatus::JudgePending
-            } else {
-                RunStatus::JudgeVoid
-            };
-            record.judge_error = Some(format!("{}{e}", outcome::JUDGE_ENGINE_PREFIX));
-            Ok(None)
+        JudgeResult::Pending(why) => {
+            record.status = RunStatus::JudgePending;
+            record.judge_error = Some(why);
+            None
         }
-        Err(e) => Err(e),
     }
 }
 
@@ -1028,29 +1015,16 @@ pub async fn judge_existing(
     let spec: SimRunSpec = read_json(&run_dir.join("spec.json"))?;
     let mut record: RunRecord = read_json(&run_dir.join("run.json"))?;
     let tier = judge::resolve_judge_tier(opts.judge_tier, &opts.judge_tiers, spec.core_tier)?;
-    let events = transcript::read(&run_dir.join("transcript.jsonl"))?;
-    let bank = SituationBank::load(&character_dir(opts, &spec.character).join("situations.json"))?;
-    let rubric = Rubric::load(&rubric_path(opts))?;
-    // The brief the run was made with, not whatever `<data>` holds now.
-    let brief = run_brief(run_dir)?;
-    let engine: Arc<dyn Engine> = Arc::new(LedgerEngine::create(
-        engine,
-        &run_dir.join("ledger.jsonl"),
-        &spec.run_id,
-    )?);
-    let v = judge_into(
-        run_dir,
-        &spec,
-        &events,
-        &bank,
-        &rubric,
-        tier,
-        &mut record,
-        engine.as_ref(),
-        opts.quota.as_ref(),
-        brief.as_ref(),
-    )
-    .await?;
+    let job = JudgeJob {
+        run_id: &spec.run_id,
+        character: &spec.character,
+        core_tier: spec.core_tier,
+        judge_tier: tier,
+        injections: &record.injections,
+        featured: &record.featured,
+    };
+    let result = judging::judge_dir(run_dir, &job, engine, opts).await?;
+    let v = record_judgement(&mut record, tier, result);
     write_json(&run_dir.join("run.json"), &record)?;
     Ok(v)
 }
@@ -1059,6 +1033,7 @@ pub async fn judge_existing(
 pub(crate) mod tests {
     use super::*;
     use crate::population::tests::fake_rank;
+    use crate::transcript;
     use crate::Hooks;
     use shadowrunr_types::{
         CheckState, EngineError, EngineKind, EngineReply, EngineRequest, HealthReport,
@@ -1693,6 +1668,49 @@ pub(crate) mod tests {
         assert!(out.join("smoke/ledger.jsonl").is_file());
     }
 
+    /// A live sink observes the run and changes nothing in it: the same spec and seed write
+    /// the same transcript bytes and the same instrument with or without one, and the sink
+    /// hears every transcript line once, numbered by line.
+    #[tokio::test]
+    async fn a_live_sink_changes_neither_the_transcript_nor_the_instrument() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut plain = test_opts(&tmp.path().join("sim"));
+        plain.hooks = Hooks::default();
+        plain.judge = false;
+        assert!(plain.live_sink.is_none(), "no sink by default");
+        let heard: Arc<Mutex<Vec<u64>>> = Arc::default();
+        let mut live = plain.clone();
+        live.live_sink = Some(crate::LiveSink({
+            let heard = heard.clone();
+            Arc::new(move |seq, _ev: &StreamEvent| heard.lock().unwrap().push(seq))
+        }));
+        assert!(format!("{live:?}").contains("live_sink: Some"));
+
+        let mut runs = Vec::new();
+        for (name, opts) in [("plain", &plain), ("live", &live)] {
+            let out = tmp.path().join(name);
+            let res = run_one_with(
+                spec("golden", ModelTier::Haiku, 30, 300),
+                out.clone(),
+                Arc::new(shadowrunr_engine::ScriptedEngine),
+                opts,
+            )
+            .await
+            .expect("run completes");
+            let bytes = std::fs::read(&res.transcript).unwrap();
+            let inst: Instrument = read_json(&out.join("golden/instrument.json")).unwrap();
+            runs.push((bytes, inst));
+        }
+        let (plain_bytes, plain_inst) = &runs[0];
+        let (live_bytes, live_inst) = &runs[1];
+        assert!(plain_bytes == live_bytes, "transcript bytes differ");
+        assert_eq!(plain_inst.base_hash, live_inst.base_hash);
+        assert_eq!(plain_inst.instrument_hash, live_inst.instrument_hash);
+        let lines = plain_bytes.iter().filter(|b| **b == b'\n').count() as u64;
+        assert!(lines > 3, "a real run");
+        assert_eq!(*heard.lock().unwrap(), (1..=lines).collect::<Vec<_>>());
+    }
+
     // ---- WP13: an engine failure is not a result ---------------------------------------
 
     /// Speaks like [`FakeMind`] until `at_ms`, then signs off on fleet loss like the brain.
@@ -1725,9 +1743,10 @@ pub(crate) mod tests {
     }
 
     /// [`FakeEngine`] whose judge calls fail with `err`.
-    struct JudgeFails {
-        inner: FakeEngine,
-        err: fn() -> EngineError,
+    /// [`FakeEngine`] whose judge calls fail with `err`.
+    pub(crate) struct JudgeFails {
+        pub inner: FakeEngine,
+        pub err: fn() -> EngineError,
     }
 
     #[async_trait]
@@ -1750,7 +1769,7 @@ pub(crate) mod tests {
         }
     }
 
-    fn judge_calls(e: &FakeEngine) -> usize {
+    pub(crate) fn judge_calls(e: &FakeEngine) -> usize {
         e.calls
             .lock()
             .unwrap()
@@ -1901,7 +1920,8 @@ pub(crate) mod tests {
         }
     }
 
-    struct Blocked;
+    /// A quota gate that serves no account.
+    pub(crate) struct Blocked;
     impl crate::pacing::QuotaGate for Blocked {
         fn blocked(&self) -> Option<crate::pacing::QuotaBlock> {
             Some(crate::pacing::QuotaBlock {
@@ -1938,6 +1958,47 @@ pub(crate) mod tests {
             .await
             .unwrap()
             .is_some());
+    }
+
+    /// Acceptance 6 (guard): a tournament run whose judge times out is judge_pending on disk
+    /// and to `outcome::classify`; the re-judge on the same dir, through the same
+    /// `judging::judge_dir` seam a sandbox session uses, produces the verdict.
+    #[tokio::test]
+    async fn a_timed_out_judge_is_pending_and_the_rejudge_judges_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = test_opts(&tmp.path().join("sim"));
+        let out = tmp.path().join("out");
+        let engine = Arc::new(JudgeFails {
+            inner: FakeEngine::new(""),
+            err: || EngineError::Timeout { after_ms: 600_000 },
+        });
+        let res = run_one_with(
+            spec("tp", ModelTier::Haiku, 3, 60),
+            out.clone(),
+            engine,
+            &opts,
+        )
+        .await
+        .unwrap();
+        assert!(res.verdict.is_none());
+        let dir = out.join("tp");
+        let record: RunRecord = read_json(&dir.join("run.json")).unwrap();
+        assert_eq!(record.status, RunStatus::JudgePending);
+        assert!(record
+            .judge_error
+            .as_deref()
+            .is_some_and(|e| e.starts_with(outcome::JUDGE_ENGINE_PREFIX)));
+        assert_eq!(outcome::classify(&dir), outcome::RunClass::JudgePending);
+        assert!(!dir.join("verdict.json").exists());
+
+        let v = judge_existing(&dir, Arc::new(FakeEngine::new("")), &opts)
+            .await
+            .unwrap();
+        assert!(v.is_some());
+        let record: RunRecord = read_json(&dir.join("run.json")).unwrap();
+        assert_eq!(record.status, RunStatus::Judged);
+        assert_eq!(record.judge_error, None);
+        assert_eq!(outcome::classify(&dir), outcome::RunClass::Judged);
     }
 
     // ---- WP15: the Lord's brief ----------------------------------------------------------

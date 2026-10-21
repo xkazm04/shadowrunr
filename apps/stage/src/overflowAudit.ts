@@ -2,6 +2,15 @@
 
 import { useEffect } from "react";
 
+declare global {
+  interface Window {
+    /** The debug view's scene probe (`?debug=1`), written by App for browser automation. */
+    __stage?: unknown;
+    /** The overflow audit's last findings (`?debug=1`). */
+    __stageOverflow?: string[];
+  }
+}
+
 /** Outline anything inside the canvas that overflows its box (`?debug=1`). Re-checks every
  * second, so entry animations that have finished are measured at rest. */
 export function useOverflowAudit(enabled: boolean, root: React.RefObject<HTMLDivElement | null>) {
@@ -24,7 +33,7 @@ export function useOverflowAudit(enabled: boolean, root: React.RefObject<HTMLDiv
           found.push(`${el.className || el.tagName} (${el.scrollWidth}x${el.scrollHeight} > ${el.clientWidth}x${el.clientHeight})`);
         }
       }
-      (window as unknown as { __stageOverflow: string[] }).__stageOverflow = found;
+      window.__stageOverflow = found;
       document.body.dataset.overflow = found.length ? found.join(" | ") : "none";
     };
     audit();
