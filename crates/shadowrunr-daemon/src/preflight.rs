@@ -13,6 +13,7 @@ use serde::Serialize;
 use shadowrunr_brain::moderation::{ListStatus, Policy};
 use shadowrunr_segments::{SegmentConfig, SegmentError, SegmentRuntime};
 use shadowrunr_sim::calibration::{self, CalibrationOrigin};
+use shadowrunr_sim::situations;
 use shadowrunr_types::{HealthReport, HealthState, SegmentId};
 
 use crate::config::Config;
@@ -653,7 +654,8 @@ pub fn installed_lists(lists: &[ListStatus]) -> (HealthState, String) {
     (state, detail)
 }
 
-/// PF-06: `sim/calibration.json` is present (amber when only the built-in defaults exist).
+/// PF-06: `sim/calibration.json` is present (amber when only the built-in defaults exist), and
+/// the sim character's situation bank reaches its bait tactics (amber while any is unreached).
 pub fn pf06_calibration(cfg: &Config) -> HealthReport {
     pf06(cfg).report
 }
@@ -663,16 +665,23 @@ fn pf06(cfg: &Config) -> Checked {
     match calibration::load(&cfg.paths.sim) {
         Ok((cal, CalibrationOrigin::File { path }, _)) => {
             let assumptions = cal.assumptions().len();
-            rep(
-                "PF-06",
-                HealthState::Green,
-                format!(
-                    "{path}: {} sources, {} archetypes, {} populations, {assumptions} figures are assumptions",
-                    cal.sources.len(),
-                    cal.archetypes.len(),
-                    cal.populations.len()
-                ),
-            )
+            let counts = format!(
+                "{path}: {} sources, {} archetypes, {} populations, {assumptions} figures are assumptions",
+                cal.sources.len(),
+                cal.archetypes.len(),
+                cal.populations.len()
+            );
+            let (state, reach) = bank_reach(cfg, &cal);
+            let report = rep("PF-06", state, format!("{counts}; {reach}"));
+            if state == HealthState::Green {
+                report
+            } else {
+                report.fix(Remedy::guided(
+                    None,
+                    Some(&file),
+                    "write situations that perform the unreached tactics and bind them under bait_tactics[].situations",
+                ))
+            }
         }
         Ok((_, CalibrationOrigin::DefaultAssumption, _)) => rep(
             "PF-06",
@@ -692,6 +701,47 @@ fn pf06(cfg: &Config) -> Checked {
             Some(&file),
             "repair the calibration file",
         )),
+    }
+}
+
+/// How far the sim character's bank reaches the calibration's bait tactics. Amber while any
+/// tactic is unreached (a tournament's zero failures on it would be silence, not evidence);
+/// red when a binding names a situation the bank lacks.
+fn bank_reach(cfg: &Config, cal: &calibration::Calibration) -> (HealthState, String) {
+    let character = &cfg.sim.character;
+    let path = cfg.paths.characters.join(character).join("situations.json");
+    let bank = match situations::SituationBank::load(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                HealthState::Amber,
+                format!("bank reach unknown, the {character} bank does not load (PF-02): {e}"),
+            )
+        }
+    };
+    match situations::tactic_reach(&bank, character, cal) {
+        Ok(r) if r.unreached.is_empty() => (
+            HealthState::Green,
+            format!("the {character} bank reaches all {} bait tactics", r.of),
+        ),
+        Ok(r) => {
+            let first: Vec<&str> = r.unreached.iter().take(5).map(String::as_str).collect();
+            let more = if r.unreached.len() > first.len() {
+                ", ..."
+            } else {
+                ""
+            };
+            (
+                HealthState::Amber,
+                format!(
+                    "{} of {} bait tactics unreached by the {character} bank: {}{more}",
+                    r.unreached.len(),
+                    r.of,
+                    first.join(", ")
+                ),
+            )
+        }
+        Err(e) => (HealthState::Red, e.to_string()),
     }
 }
 
@@ -960,6 +1010,26 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cfg = crate::e2e::test_config(tmp.path(), crate::e2e::repo().join("characters"));
         assert_eq!(pf02_character(&cfg).state, HealthState::Green);
+    }
+
+    #[test]
+    fn pf06_is_amber_while_the_bank_leaves_sourced_tactics_unreached() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = crate::e2e::test_config(tmp.path(), crate::e2e::repo().join("characters"));
+        let r = pf06_calibration(&cfg);
+        assert_eq!(r.state, HealthState::Amber, "{}", r.detail);
+        assert!(
+            r.detail.contains("of 14 bait tactics unreached"),
+            "{}",
+            r.detail
+        );
+        assert!(r.detail.contains("by the malakor bank"), "{}", r.detail);
+        // The first unreached ids, in the calibration's order.
+        assert!(
+            r.detail.contains("say-x-dare, obfuscated-slur"),
+            "{}",
+            r.detail
+        );
     }
 
     #[test]

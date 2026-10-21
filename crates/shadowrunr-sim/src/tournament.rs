@@ -33,7 +33,8 @@ use crate::pacing::{
     self, ClockHandle, GateHandle, PaceClock, QuotaBlock, QuotaGate, SystemPaceClock,
     DEFAULT_MAX_PAUSE_MS, MAX_RETRIES, RESUME_MARGIN_MS,
 };
-use crate::runner::{instrument_for, judge_existing, run_one_with};
+use crate::runner::{character_dir, instrument_for, judge_existing, run_one_with};
+use crate::situations::{tactic_reach, SituationBank, TacticReach};
 use crate::summary::{summarize_full, Results};
 use crate::{read_json, write_json, SimError, SimOptions};
 
@@ -129,6 +130,8 @@ pub struct TournamentPlan {
     pub dir: PathBuf,
     pub base_hash: String,
     pub runs: Vec<PlannedRun>,
+    /// Which of the calibration's bait tactics the matrix character's bank performs.
+    pub bank_reach: TacticReach,
 }
 
 impl TournamentPlan {
@@ -165,7 +168,11 @@ pub fn plan(
     out_root: &Path,
     opts: &SimOptions,
 ) -> Result<TournamentPlan, SimError> {
-    let (_, _, cal_text) = calibration::load(&opts.sim_root)?;
+    let (cal, _, cal_text) = calibration::load(&opts.sim_root)?;
+    // A tactic bound to a situation the bank lacks fails here, before any spend.
+    let bank =
+        SituationBank::load(&character_dir(opts, &matrix.character).join("situations.json"))?;
+    let bank_reach = tactic_reach(&bank, &matrix.character, &cal)?;
     let first_tone = &matrix.axes.tones[0];
     let first_core = matrix.axes.core_tiers[0];
     let base =
@@ -209,6 +216,7 @@ pub fn plan(
         dir,
         base_hash: base,
         runs,
+        bank_reach,
     })
 }
 
@@ -720,6 +728,27 @@ seeds = [1, 2]
         std::fs::write(path, text).unwrap();
     }
 
+    #[test]
+    fn plan_reports_the_bank_reach_and_refuses_a_dangling_tactic_binding() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = private_opts(tmp.path());
+        let text = std::fs::read_to_string(repo().join("sim/calibration.json")).unwrap();
+        std::fs::write(base.sim_root.join("calibration.json"), &text).unwrap();
+        let matrix = Matrix::parse(MATRIX).unwrap();
+        let sim = effective_options(&matrix, &base);
+        let root = tmp.path().join("runs");
+        let p = plan(&matrix, &root, &sim).unwrap();
+        assert_eq!(p.bank_reach.of, 14);
+        assert!(p.bank_reach.reached.contains_key("instruction-override"));
+        // A binding to a situation the bank lacks stops the plan before any spend.
+        let mut v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        v["bait_tactics"][0]["situations"] = serde_json::json!({ "malakor": ["gone"] });
+        std::fs::write(base.sim_root.join("calibration.json"), v.to_string()).unwrap();
+        let e = plan(&matrix, &root, &sim).unwrap_err();
+        assert!(e.to_string().contains("gone"), "{e}");
+        assert!(!root.exists(), "a refused plan wrote nothing");
+    }
+
     #[tokio::test]
     async fn resume_skips_completed_runs() {
         let tmp = tempfile::tempdir().unwrap();
@@ -1166,6 +1195,12 @@ seeds = [1, 2, 3]
             tournament_id: "t".into(),
             dir: dir.clone(),
             base_hash: "h".into(),
+            bank_reach: TacticReach {
+                character: "malakor".into(),
+                of: 0,
+                reached: Default::default(),
+                unreached: Vec::new(),
+            },
             runs: (0..n)
                 .map(|i| {
                     let s = spec(&format!("r{i}"), ModelTier::Haiku, 3, 60);

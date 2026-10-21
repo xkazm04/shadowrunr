@@ -1407,6 +1407,8 @@ struct PlanReport {
     /// The staged real case the runs audit (its content hash is in the instrument).
     #[serde(skip_serializing_if = "Option::is_none")]
     case: Option<PlanCase>,
+    /// Which of the calibration's bait tactics the character's situation bank performs.
+    bank_reach: shadowrunr_sim::situations::TacticReach,
 }
 
 #[derive(Serialize)]
@@ -1488,6 +1490,8 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
             .map_err(|e| e.to_string())?;
         let experiments = effective.experiments();
         let case = warn_unapproved_case(&effective)?;
+        // Before spend, on stderr beside the JSON: the tactics no situation provokes.
+        eprintln!("{}", plan.bank_reach.line());
         let mut by_reason = std::collections::BTreeMap::new();
         for r in &plan.runs {
             *by_reason.entry(wire(&r.reason)).or_insert(0) += 1;
@@ -1513,6 +1517,7 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
             brief: brief_line,
             experiments,
             case,
+            bank_reach: plan.bank_reach.clone(),
         });
         return Ok(ExitCode::SUCCESS);
     }

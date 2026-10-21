@@ -61,7 +61,7 @@ Each amber or red line ends with its remedy, authored beside the check:
 | PF-03 | `<data>/memory` is usable and its SQLite index agrees with the markdown truth. Read-only: it creates, writes and rebuilds nothing (the repair is `shadowrunr memory reindex`) | the directory is read-only or cannot be created, or the markdown is unreadable | the index is stale (missing, or its counts disagree with the markdown): the detail names the repair |
 | PF-04 | Segment tables are valid; every active segment starts and every descoped segment is refused, both sets read from the segment tables (the one source of the descoped set); the segment data dir exists | any of these fails | |
 | PF-05 | `<policy>/platform-rules.json` parses (term-rule regexes included) | it does not parse | absent; or not the file the brain reads (`<characters>/../policy`) |
-| PF-06 | `<sim>/calibration.json` is present and valid | it does not parse | only the built-in defaults exist |
+| PF-06 | `<sim>/calibration.json` is present and valid (population archetypes and cited source ids resolve); the `[sim] character` bank reaches its `bait_tactics` | it does not parse, or a tactic binds a situation the bank lacks | only the built-in defaults exist; or a bait tactic is bound to no situation (the detail names the count and the first ids) |
 | PF-07 | `<runs>/sim` is writable; free disk space | not writable, or under 1 GiB | under 5 GiB |
 | PF-08 | Media stack (TTS, avatar, OBS, chat connectors) | | always: "not in media-less phase" |
 
@@ -72,7 +72,7 @@ PF-02  green  Arch-Lich Malakor (malakor): constitution 3375 chars, tone theatri
 PF-03  green  .../data/memory: index in step with the markdown (0 episodes, 0 facts, 0 tombstones)
 PF-04  green  4 tables valid; SEG-01, SEG-02A start; SEG-02B-I, SEG-02B-II refused
 PF-05  green  23 term rules; platforms: tiktok, twitch, youtube
-PF-06  green  .../sim/calibration.json: 43 sources, 8 archetypes, 4 populations, 5 figures are assumptions
+PF-06  amber  .../sim/calibration.json: 43 sources, 8 archetypes, 4 populations, 9 figures are assumptions; 10 of 14 bait tactics unreached by the malakor bank: say-x-dare, obfuscated-slur, payload-split, loaded-history-question, villain-licence, ...
 PF-07  green  .../runs/sim writable; 496.1 GiB free
 PF-08  amber  not in media-less phase (TTS, avatar, OBS, chat connectors)  external: the media stack is outside the media-less phase
 ```
@@ -176,7 +176,12 @@ shadowrunr sim tournament sim/matrices/pilot.toml --plan-only
 - `--plan-only` prints the action the planner would take for every run (`skip`, `rejudge` or
   `run`) with its reason (`new`, `complete`, `void_kept`, `stale`, `partial`,
   `engine_failed`, `judge_pending`) and the counts. It builds no engine, runs nothing, spends
-  no quota and writes nothing.
+  no quota and writes nothing. It prints `bank_reach` (and a `bank reach: N of M tactics
+  (unreached: ...)` line on stderr): which of the calibration's `bait_tactics` the
+  character's situations perform, bound in `sim/calibration.json` under
+  `bait_tactics[].situations.<character>`. A binding to a situation the bank lacks stops the
+  plan before any spend. An unreached tactic is never provoked, so zero failures on it are
+  silence, not evidence.
 - `--brief current|<path>` (also on `sim run`, or `brief = "current"` in a matrix) hands
   every run the Lord's brief: the latest chosen plan's dispatch, segments and topics, plus the
   active directives (never proposed ones). `current` reads them from `<data>`; a path reads a

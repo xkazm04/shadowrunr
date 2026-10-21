@@ -63,6 +63,12 @@ pub struct BaitTactic {
     pub example: String,
     #[serde(default)]
     pub source_ids: Vec<String>,
+    /// The situations that perform this tactic, per character bank:
+    /// `{ "malakor": ["prompt-injection"] }`. The binding lives here, beside the sourced
+    /// threat model, so the bank's schema does not change; `situations::tactic_reach` checks
+    /// every id against the bank and reports the tactics no situation performs.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub situations: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,7 +124,58 @@ impl Calibration {
                 )));
             }
         }
+        cal.check_references()?;
         Ok(cal)
+    }
+
+    /// Cross-references a typo would otherwise turn into a silently skewed mix or an unsourced
+    /// figure that claims a source: population archetypes must be archetypes, every cited
+    /// source id must be a source (or the literal `assumption`), tactic ids must be unique.
+    fn check_references(&self) -> Result<(), SimError> {
+        for (pop, mix) in &self.populations {
+            if let Some(a) = mix.keys().find(|a| !self.archetypes.contains_key(*a)) {
+                return Err(SimError::Spec(format!(
+                    "calibration populations.{pop} names archetype {a:?}, which is not in archetypes (have: {})",
+                    self.archetypes.keys().cloned().collect::<Vec<_>>().join(", ")
+                )));
+            }
+        }
+        let known = |id: &str| {
+            id.trim().eq_ignore_ascii_case("assumption") || self.sources.iter().any(|s| s.id == id)
+        };
+        let cited = self
+            .audience_sizes
+            .iter()
+            .map(|(k, v)| (format!("audience_sizes.{k}"), &v.source_ids))
+            .chain(
+                self.archetypes
+                    .iter()
+                    .map(|(k, v)| (format!("archetypes.{k}"), &v.source_ids)),
+            )
+            .chain(
+                self.bait_tactics
+                    .iter()
+                    .map(|t| (format!("bait_tactics.{}", t.id), &t.source_ids)),
+            );
+        for (path, ids) in cited {
+            if let Some(id) = ids.iter().find(|id| !known(id)) {
+                return Err(SimError::Spec(format!(
+                    "calibration {path} cites source {id:?}, which is not in sources"
+                )));
+            }
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        if let Some(t) = self
+            .bait_tactics
+            .iter()
+            .find(|t| !seen.insert(t.id.as_str()))
+        {
+            return Err(SimError::Spec(format!(
+                "calibration bait_tactics has duplicate id {:?}",
+                t.id
+            )));
+        }
+        Ok(())
     }
 
     pub fn default_assumption() -> Self {
@@ -191,6 +248,9 @@ impl Calibration {
         for (k, v) in &self.archetypes {
             note(format!("archetypes.{k}"), &v.source_ids);
         }
+        for t in &self.bait_tactics {
+            note(format!("bait_tactics.{}", t.id), &t.source_ids);
+        }
         out
     }
 }
@@ -244,7 +304,10 @@ mod tests {
             assert!(is_assumption(&a.source_ids));
             assert!(!a.example_lines.is_empty(), "{id} has example lines");
         }
-        assert_eq!(cal.assumptions().len(), 3 + cal.archetypes.len());
+        assert_eq!(
+            cal.assumptions().len(),
+            3 + cal.archetypes.len() + cal.bait_tactics.len()
+        );
         assert!(DEFAULT_CALIBRATION.contains("\"assumption\""));
     }
 
@@ -281,6 +344,68 @@ mod tests {
         for pop in ["small_new_channel", "growing_channel", "raid_moment"] {
             assert!(cal.population(pop).is_ok(), "{pop}");
         }
+    }
+
+    fn edited(f: impl FnOnce(&mut serde_json::Value)) -> Result<Calibration, SimError> {
+        let mut v: serde_json::Value = serde_json::from_str(DEFAULT_CALIBRATION).unwrap();
+        v["sources"] = serde_json::json!([{ "id": "c01", "title": "a source" }]);
+        f(&mut v);
+        Calibration::parse(&v.to_string())
+    }
+
+    #[test]
+    fn a_population_naming_an_unknown_archetype_does_not_parse() {
+        let e = edited(|v| v["populations"]["small_new_channel"]["trol"] = 0.1.into()).unwrap_err();
+        let msg = e.to_string();
+        assert!(msg.contains("small_new_channel"), "{msg}");
+        assert!(msg.contains("trol"), "{msg}");
+    }
+
+    #[test]
+    fn a_dangling_source_id_does_not_parse() {
+        let e = edited(|v| v["archetypes"]["baiter"]["source_ids"] = serde_json::json!(["c99"]))
+            .unwrap_err();
+        assert!(e.to_string().contains("archetypes.baiter"), "{e}");
+        assert!(e.to_string().contains("c99"), "{e}");
+        let e = edited(|v| v["bait_tactics"][0]["source_ids"] = serde_json::json!(["c01", "c99"]))
+            .unwrap_err();
+        assert!(
+            e.to_string().contains("bait_tactics.spell-word-slur"),
+            "{e}"
+        );
+        assert!(e.to_string().contains("c99"), "{e}");
+        let e = edited(|v| v["audience_sizes"]["3"]["source_ids"] = serde_json::json!(["c99"]))
+            .unwrap_err();
+        assert!(e.to_string().contains("audience_sizes.3"), "{e}");
+        // Known ids and the literal "assumption" are fine.
+        edited(|v| {
+            v["archetypes"]["baiter"]["source_ids"] = serde_json::json!(["c01", "assumption"])
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn unsourced_bait_tactics_are_assumptions() {
+        let cal =
+            edited(|v| v["bait_tactics"][1]["source_ids"] = serde_json::json!(["c01"])).unwrap();
+        let a = cal.assumptions();
+        assert!(
+            a.contains(&"bait_tactics.spell-word-slur".to_string()),
+            "{a:?}"
+        );
+        assert!(
+            !a.iter()
+                .any(|x| x.starts_with("bait_tactics.chat-injection")),
+            "{a:?}"
+        );
+    }
+
+    #[test]
+    fn the_shipped_calibration_has_no_dangling_reference() {
+        let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sim/calibration.json");
+        let text = std::fs::read_to_string(p).unwrap();
+        let cal = Calibration::parse(&text).unwrap();
+        assert_eq!(cal.bait_tactics.len(), 14);
     }
 
     #[test]

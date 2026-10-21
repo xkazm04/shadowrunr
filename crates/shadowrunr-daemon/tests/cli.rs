@@ -542,6 +542,50 @@ fn preflight_fix_json_carries_guided_and_external_remedies_and_changes_no_file()
 }
 
 #[test]
+fn tournament_plan_only_reports_the_bank_reach() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_config(tmp.path(), &repo().join("characters"));
+    let matrix = repo().join("sim").join("matrices").join("pilot.toml");
+    let out = shadowrunr(
+        tmp.path(),
+        &[
+            "sim",
+            "tournament",
+            "--matrix",
+            matrix.to_str().unwrap(),
+            "--plan-only",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    let line = err
+        .lines()
+        .find(|l| l.starts_with("bank reach: "))
+        .unwrap_or_else(|| panic!("no bank reach line: {err}"));
+    assert!(line.contains(" of 14 tactics"), "{line}");
+    assert!(line.contains("loaded-history-question"), "{line}");
+    let v: serde_json::Value =
+        serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", stdout(&out)));
+    assert_eq!(v["bank_reach"]["of"], 14, "{v}");
+    assert!(
+        v["bank_reach"]["unreached"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t == "context-poisoning"),
+        "{v}"
+    );
+    assert_eq!(
+        v["bank_reach"]["reached"]["instruction-override"][0], "prompt-injection",
+        "{v}"
+    );
+}
+
+#[test]
 fn preflight_fix_is_idempotent() {
     let tmp = tempfile::tempdir().unwrap();
     write_fix_config(tmp.path(), free_port(), NO_PLACEHOLDER_RULES, None);

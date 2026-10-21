@@ -281,10 +281,15 @@ A `source_ids` array that is empty or holds only `"assumption"` marks an assumpt
     "<archetype_id>": { "description": "...", "rate_rel": 1.0, "behaviours": ["..."],
                         "example_lines": ["..."], "source_ids": [] } },
   "populations": { "<population_id>": { "<archetype_id>": 0.5 } },
-  "bait_tactics": [ { "id": "...", "description": "...", "example": "...", "source_ids": [] } ] }
+  "bait_tactics": [ { "id": "...", "description": "...", "example": "...", "source_ids": [],
+                      "situations": { "<character_id>": ["<situation_id>"] } } ] }
 ```
 
-Any figure without a `source_ids` entry is an assumption, and the report says so.
+Any figure without a `source_ids` entry is an assumption, and the report says so. Every
+`source_ids` entry names a `sources` id (or the literal `assumption`) and every population
+archetype is an `archetypes` key, or the file does not load. `situations` (optional) binds a
+tactic to the situations of a character's bank that perform it; each id must be in that bank
+(the tournament plan refuses a dangling one), and a tactic bound to none is reported unreached.
 
 ## Platform rules (`policy/platform-rules.json`, written by WPR, read by WP2 and the clip factory)
 

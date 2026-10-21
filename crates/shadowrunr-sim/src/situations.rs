@@ -4,6 +4,7 @@
 //! every situation into the run and records each attempt, so the judge can tell a rule that
 //! held from a rule that was never tested (`not_provoked`).
 
+use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
@@ -12,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use shadowrunr_types::catalog;
 use shadowrunr_types::SegmentId;
 
+use crate::calibration::Calibration;
 use crate::population::ArchetypeKind;
 use crate::rng::Rng;
 use crate::SimError;
@@ -105,6 +107,67 @@ impl From<shadowrunr_brain::SituationBank> for SituationBank {
             situations: bank.situations.into_iter().map(Situation).collect(),
         }
     }
+}
+
+/// How far a character's bank reaches the calibration's sourced bait tactics: the threat
+/// model the simulated audience is meant to carry. A tactic no situation performs is never
+/// provoked, so a tournament's zero failures on it are silence, not evidence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TacticReach {
+    pub character: String,
+    /// Tactics the calibration documents.
+    pub of: usize,
+    /// Tactic id -> the bank's situations that perform it.
+    pub reached: BTreeMap<String, Vec<String>>,
+    /// Tactics no situation performs, in the calibration's order.
+    pub unreached: Vec<String>,
+}
+
+impl TacticReach {
+    /// `bank reach: 4 of 14 tactics (unreached: a, b, ...)`.
+    pub fn line(&self) -> String {
+        let mut line = format!("bank reach: {} of {} tactics", self.reached.len(), self.of);
+        if !self.unreached.is_empty() {
+            line.push_str(&format!(" (unreached: {})", self.unreached.join(", ")));
+        }
+        line
+    }
+}
+
+/// Bind the calibration's bait tactics to `character`'s bank. Every situation id a tactic
+/// binds for this character must be in the bank: a dangling binding is an error, so a renamed
+/// situation cannot quietly drop a tactic out of reach.
+pub fn tactic_reach(
+    bank: &SituationBank,
+    character: &str,
+    cal: &Calibration,
+) -> Result<TacticReach, SimError> {
+    let mut reached = BTreeMap::new();
+    let mut unreached = Vec::new();
+    for t in &cal.bait_tactics {
+        let ids = t
+            .situations
+            .get(character)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        if let Some(id) = ids.iter().find(|id| bank.get(id).is_none()) {
+            return Err(SimError::Spec(format!(
+                "calibration bait_tactics.{}: situations.{character} names {id:?}, which is not in the {character} situation bank",
+                t.id
+            )));
+        }
+        if ids.is_empty() {
+            unreached.push(t.id.clone());
+        } else {
+            reached.insert(t.id.clone(), ids.to_vec());
+        }
+    }
+    Ok(TacticReach {
+        character: character.to_string(),
+        of: cal.bait_tactics.len(),
+        reached,
+        unreached,
+    })
 }
 
 /// One scheduled injection and what became of it. Written into `run.json`.
@@ -407,6 +470,59 @@ mod tests {
         std::fs::write(d.path().join("situations.json"), text).unwrap();
         let e = SituationBank::load(&d.path().join("situations.json")).unwrap_err();
         assert!(e.to_string().contains("unknown rule crisis-handof"), "{e}");
+    }
+
+    fn shipped_calibration() -> crate::calibration::Calibration {
+        let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sim");
+        crate::calibration::load(&p).unwrap().0
+    }
+
+    #[test]
+    fn a_tactic_bound_to_an_unknown_situation_fails_at_load() {
+        let mut cal = shipped_calibration();
+        cal.bait_tactics[3]
+            .situations
+            .insert("malakor".into(), vec!["no-such-situation".into()]);
+        let tactic = cal.bait_tactics[3].id.clone();
+        let e = tactic_reach(&malakor_bank(), "malakor", &cal).unwrap_err();
+        let msg = e.to_string();
+        assert!(msg.contains(&format!("bait_tactics.{tactic}")), "{msg}");
+        assert!(msg.contains("no-such-situation"), "{msg}");
+        assert!(msg.contains("malakor"), "{msg}");
+    }
+
+    #[test]
+    fn the_shipped_bank_reach_names_its_blind_spots() {
+        let reach = tactic_reach(&malakor_bank(), "malakor", &shipped_calibration()).unwrap();
+        assert_eq!(reach.of, 14);
+        for t in [
+            "loaded-history-question",
+            "payload-split",
+            "obfuscated-slur",
+            "context-poisoning",
+            "spoken-chat-injection",
+        ] {
+            assert!(reach.unreached.iter().any(|u| u == t), "{t}: {reach:?}");
+            assert!(!reach.reached.contains_key(t), "{t}");
+        }
+        assert_eq!(
+            reach.reached["instruction-override"],
+            vec!["prompt-injection".to_string()]
+        );
+        assert_eq!(reach.reached.len() + reach.unreached.len(), reach.of);
+        let line = reach.line();
+        assert!(
+            line.starts_with(&format!(
+                "bank reach: {} of 14 tactics",
+                reach.reached.len()
+            )),
+            "{line}"
+        );
+        assert!(line.contains("loaded-history-question"), "{line}");
+        // Another character's bank is reached by nothing the calibration binds.
+        let other = tactic_reach(&malakor_bank(), "someone-else", &shipped_calibration()).unwrap();
+        assert!(other.reached.is_empty());
+        assert_eq!(other.unreached.len(), 14);
     }
 
     #[test]
