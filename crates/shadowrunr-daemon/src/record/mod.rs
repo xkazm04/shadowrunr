@@ -536,7 +536,7 @@ mod tests {
     fn the_stage_url_is_the_live_broadcast_with_voice() {
         assert_eq!(
             stage_url("http://localhost:5178/", 7800, FaceVariant::Glow),
-            "http://localhost:5178/?run=live&broadcast=1&voice=1&ws=ws://127.0.0.1:7800/events"
+            "http://localhost:5178/?run=live&broadcast=1&voice=1&ws=ws://127.0.0.1:7800/events&avatar=glow"
         );
         assert_eq!(
             stage_url("http://localhost:5178", 7800, FaceVariant::Cut),

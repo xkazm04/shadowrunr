@@ -33,6 +33,15 @@ const REFUSED_SHOWN_MS: TsMs = 60_000;
 /// while he talks about it; uncalibrated.
 pub const SCREEN_HOLD_MS: TsMs = 8_000;
 
+/// After this long on `browser`, the runtime moves to `desk`: the record stays up and the map
+/// beside it shows the record's hex. ASSUMPTION: a record read aloud takes about half a minute,
+/// and the 2026-10-21 10-minute show sat on one record for over five; uncalibrated.
+pub const BROWSER_DWELL_MS: TsMs = 40_000;
+
+/// After this long on `desk`, the runtime pulls back to the `hexmap` overview to choose the
+/// next fog. ASSUMPTION: uncalibrated, like [`BROWSER_DWELL_MS`].
+pub const DESK_DWELL_MS: TsMs = 30_000;
+
 /// Records on file the state summary's screen line names, newest first.
 const SCREEN_RECORDS_SHOWN: usize = 4;
 
@@ -475,6 +484,11 @@ pub struct SegmentRuntime {
     /// The record last opened in the browser window: `browser`/`desk` without a `record_id`
     /// reopen it.
     screen_record: Option<String>,
+    /// The hex the map is zoomed to on `hexmap`/`desk` (`None`: the overview). On `desk`
+    /// without a `focus` it is the record's hex, as the stage draws it.
+    screen_focus: Option<String>,
+    /// When the screen up was last put up, by anyone (the dwell defaults).
+    screen_since: TsMs,
     /// When the model's last accepted `show_screen` was made (the hold rule).
     llm_screen_ms: Option<TsMs>,
     /// Records already sent as `record_shown` this session.
@@ -553,6 +567,8 @@ impl SegmentRuntime {
         let mut rt = Self {
             screen: table.default_screen(&table.initial),
             screen_record: None,
+            screen_focus: None,
+            screen_since: 0,
             llm_screen_ms: None,
             shown: BTreeSet::new(),
             job_filed: BTreeMap::new(),
@@ -1341,16 +1357,18 @@ impl SegmentRuntime {
     }
 
     /// Open the waiting Plebiscite when a poll can open: SEG-02A, no poll open, and a state
-    /// that takes `poll_opened`. Yields its `start_poll` op.
-    fn open_due_plebiscite(&mut self, now_ms: TsMs) -> Option<StreamEvent> {
+    /// that takes `poll_opened`. Yields its `start_poll` op, then the map's overview.
+    fn open_due_plebiscite(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
         if self.signed_off
             || self.poll.is_some()
             || !self.table.allows_op("dispatch_research")
             || !self.table.accepts(&self.state, Trigger::PollOpened)
         {
-            return None;
+            return Vec::new();
         }
-        let hex = self.plebiscite_due.take()?;
+        let Some(hex) = self.plebiscite_due.take() else {
+            return Vec::new();
+        };
         let base = format!("plebiscite-{hex}");
         let mut id = base.clone();
         let mut n = 1;
@@ -1376,7 +1394,7 @@ impl SegmentRuntime {
             votes: BTreeMap::new(),
         });
         self.fire(Trigger::PollOpened);
-        Some(StreamEvent::Op {
+        let mut events = vec![StreamEvent::Op {
             ts_ms: now_ms,
             op: Op::StartPoll {
                 poll_id: id,
@@ -1385,7 +1403,9 @@ impl SegmentRuntime {
                 min_rank: Rank::Thrall,
                 secs,
             },
-        })
+        }];
+        events.extend(self.poll_screen(now_ms));
+        events
     }
 
     /// Research is withheld while a Plebiscite waits or runs: the next move is the audience's.
@@ -1513,6 +1533,7 @@ impl SegmentRuntime {
                     votes: BTreeMap::new(),
                 });
                 self.fire(Trigger::PollOpened);
+                return Ok(self.poll_screen(now_ms).into_iter().collect());
             }
             Op::ClosePoll { poll_id } => {
                 let named = |p: &Poll| {
@@ -1581,10 +1602,16 @@ impl SegmentRuntime {
                 let h = &mut self.case.hexes[i];
                 h.fog = false;
                 h.grade = Some(*grade);
+                let id = h.id.clone();
                 if lifts_fog && self.arc.is_some() {
                     self.reveals.push(self.elapsed_ms());
                 }
                 self.fire(Trigger::HexRevealed);
+                // The map zooms to the hex just revealed.
+                return Ok(self
+                    .screen_default(now_ms, ScreenId::Hexmap, None, Some(id))
+                    .into_iter()
+                    .collect());
             }
             Op::DispatchResearch { job_id, brief } => {
                 if job_id.trim().is_empty() || brief.trim().is_empty() {
@@ -1610,11 +1637,17 @@ impl SegmentRuntime {
                         }
                         return Err("research_cap_reached");
                     }
-                    *self.searches.entry(hex).or_default() += 1;
+                    *self.searches.entry(hex.clone()).or_default() += 1;
                     let filed = self.file_findings(i);
                     if !filed.is_empty() {
                         self.job_filed.insert(job_id.clone(), filed);
                     }
+                    self.jobs.insert(job_id.clone());
+                    // The minions set off: the map zooms to where they are going.
+                    return Ok(self
+                        .screen_default(now_ms, ScreenId::Hexmap, None, Some(hex))
+                        .into_iter()
+                        .collect());
                 }
                 self.jobs.insert(job_id.clone());
             }
@@ -1624,8 +1657,13 @@ impl SegmentRuntime {
                 }
             }
             // Appendix (screens): the state's allow-list, then a record on file for the
-            // browser window. A `record_id` on `host` or `hexmap` is ignored.
-            Op::ShowScreen { screen, record_id } => {
+            // browser window, then a case hex to focus. A `record_id` on `host` or `hexmap`
+            // and a `focus` on `host` or `browser` are ignored.
+            Op::ShowScreen {
+                screen,
+                record_id,
+                focus,
+            } => {
                 if !self.table.allows_screen_in(&self.state, *screen) {
                     return Err("screen_not_allowed");
                 }
@@ -1646,12 +1684,25 @@ impl SegmentRuntime {
                     }
                     ScreenId::Host | ScreenId::Hexmap => None,
                 };
+                let focus = match (screen, focus) {
+                    (ScreenId::Hexmap | ScreenId::Desk, Some(raw)) => {
+                        let Some(i) = self.find_hex(raw) else {
+                            return Err("unknown_hex");
+                        };
+                        Some(self.case.hexes[i].id.clone())
+                    }
+                    // The desk's map shows the record's hex unless told otherwise.
+                    (ScreenId::Desk, None) => record.as_deref().and_then(|id| self.record_hex(id)),
+                    _ => None,
+                };
                 if let Some(id) = record {
                     let shown = self.record_shown(now_ms, &id);
                     self.pre_echo.extend(shown);
                     self.screen_record = Some(id);
                 }
                 self.screen = *screen;
+                self.screen_focus = focus;
+                self.screen_since = now_ms;
                 self.llm_screen_ms = Some(now_ms);
             }
             Op::MarkMoment { label } => {
@@ -1734,14 +1785,81 @@ impl SegmentRuntime {
         now_ms: TsMs,
         screen: ScreenId,
         record_id: Option<String>,
+        focus: Option<String>,
     ) -> StreamEvent {
         self.screen = screen;
+        self.screen_since = now_ms;
         if record_id.is_some() {
             self.screen_record.clone_from(&record_id);
         }
+        self.screen_focus.clone_from(&focus);
         StreamEvent::Op {
             ts_ms: now_ms,
-            op: Op::ShowScreen { screen, record_id },
+            op: Op::ShowScreen {
+                screen,
+                record_id,
+                focus,
+            },
+        }
+    }
+
+    /// The hex a filed record is about.
+    fn record_hex(&self, id: &str) -> Option<String> {
+        let file = self.case_file.as_ref()?;
+        file.records
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| r.hex.clone())
+    }
+
+    /// A default the investigation drives (a dispatch, a reveal, a poll, a dwell): nothing
+    /// after a sign-off, for a screen the state does not allow, while the model's own
+    /// `show_screen` holds ([`SCREEN_HOLD_MS`]), or when that very view is already up. A
+    /// default suppressed by the hold is spent.
+    fn screen_default(
+        &mut self,
+        now_ms: TsMs,
+        screen: ScreenId,
+        record_id: Option<String>,
+        focus: Option<String>,
+    ) -> Option<StreamEvent> {
+        if self.signed_off
+            || !self.table.allows_screen_in(&self.state, screen)
+            || self.screen_held(now_ms)
+        {
+            return None;
+        }
+        let same_record = record_id.is_none() || record_id == self.screen_record;
+        if self.screen == screen && self.screen_focus == focus && same_record {
+            return None;
+        }
+        Some(self.runtime_screen(now_ms, screen, record_id, focus))
+    }
+
+    /// A poll opened: the map's overview, to choose the next fog.
+    fn poll_screen(&mut self, now_ms: TsMs) -> Option<StreamEvent> {
+        self.screen_default(now_ms, ScreenId::Hexmap, None, None)
+    }
+
+    /// The dwell defaults: [`BROWSER_DWELL_MS`] on `browser` moves to `desk` (the record, and
+    /// its hex on the map; the overview when the desk is not allowed), and [`DESK_DWELL_MS`]
+    /// on `desk` pulls back to the `hexmap` overview. Any `show_screen` restarts the clock.
+    fn screen_dwell(&mut self, now_ms: TsMs) -> Option<StreamEvent> {
+        let up = now_ms - self.screen_since;
+        match self.screen {
+            ScreenId::Browser if up >= BROWSER_DWELL_MS => {
+                let record = self.screen_record.clone();
+                let hex = record.as_deref().and_then(|id| self.record_hex(id));
+                if record.is_some() && self.table.allows_screen_in(&self.state, ScreenId::Desk) {
+                    self.screen_default(now_ms, ScreenId::Desk, record, hex)
+                } else {
+                    self.screen_default(now_ms, ScreenId::Hexmap, None, None)
+                }
+            }
+            ScreenId::Desk if up >= DESK_DWELL_MS => {
+                self.screen_default(now_ms, ScreenId::Hexmap, None, None)
+            }
+            _ => None,
         }
     }
 
@@ -1750,7 +1868,7 @@ impl SegmentRuntime {
     fn screen_start(&mut self, now_ms: TsMs) -> StreamEvent {
         self.llm_screen_ms = None;
         let screen = self.table.default_screen(&self.state);
-        self.runtime_screen(now_ms, screen, None)
+        self.runtime_screen(now_ms, screen, None, None)
     }
 
     /// The state's default screen, when the state just entered excludes the screen up. An
@@ -1760,7 +1878,7 @@ impl SegmentRuntime {
             return None;
         }
         let screen = self.table.default_screen(&self.state);
-        Some(self.runtime_screen(now_ms, screen, None))
+        Some(self.runtime_screen(now_ms, screen, None, None))
     }
 
     /// The model chose a screen within the last [`SCREEN_HOLD_MS`].
@@ -1792,7 +1910,7 @@ impl SegmentRuntime {
             return Vec::new();
         }
         let mut events: Vec<StreamEvent> = self.record_shown(now_ms, &id).into_iter().collect();
-        events.push(self.runtime_screen(now_ms, ScreenId::Browser, Some(id)));
+        events.push(self.runtime_screen(now_ms, ScreenId::Browser, Some(id), None));
         events
     }
 
@@ -1802,6 +1920,11 @@ impl SegmentRuntime {
         let mut line = format!("Screen: {}", screen_name(self.screen));
         if let (ScreenId::Browser | ScreenId::Desk, Some(id)) = (self.screen, &self.screen_record) {
             line.push_str(&format!(" on {id}"));
+        }
+        match (self.screen, &self.screen_focus) {
+            (ScreenId::Hexmap, Some(hex)) => line.push_str(&format!(" focused on {hex}")),
+            (ScreenId::Desk, Some(hex)) => line.push_str(&format!(", map focused on {hex}")),
+            _ => {}
         }
         let now = self.table.screens_in(&self.state);
         if now.len() < self.table.screens.len() {
@@ -1841,11 +1964,13 @@ impl SegmentRuntime {
     /// emits `handover` and enters the `handover_pending` state; the brain is expected to emit
     /// `switch_segment`, and after the rule's grace period the clock switches by itself
     /// (`segment_end`, `segment_start`).
-    /// A state the clock moved into that excludes the screen up gets its default screen.
+    /// A state the clock moved into that excludes the screen up gets its default screen, and
+    /// a browser or desk up past its dwell gives way ([`BROWSER_DWELL_MS`], [`DESK_DWELL_MS`]).
     pub fn tick(&mut self, now_ms: TsMs, ccv: u32) -> Vec<StreamEvent> {
         let mut events = self.tick_clock(now_ms, ccv);
         if !self.signed_off {
             events.extend(self.screen_fit(now_ms));
+            events.extend(self.screen_dwell(now_ms));
         }
         events
     }
@@ -2499,6 +2624,7 @@ mod tests {
         Op::ShowScreen {
             screen,
             record_id: record_id.map(str::to_string),
+            focus: None,
         }
     }
 
@@ -2535,7 +2661,8 @@ mod tests {
                 StreamEvent::Op {
                     op: Op::ShowScreen {
                         screen: ScreenId::Hexmap,
-                        record_id: None
+                        record_id: None,
+                        focus: None
                     },
                     ..
                 }

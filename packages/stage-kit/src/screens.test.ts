@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Hex, ShownRecord } from "@shadowrunr/contract";
-import { fitMap, hexBoxes, spiral, type Box } from "./hexgrid";
+import { fitMap, hexBoxes, hexDistance, MAP_ZOOM_MAX, spiral, zoomMap, type Box } from "./hexgrid";
 import { provenance, sourceParts, tabTitle } from "./ui/Browser";
 
 const hexes = (n: number): Hex[] => spiral(n).map(([q, r], i) => ({ id: `HEX-${i}`, q, r, kind: "entity", label: `h${i}`, fog: true }));
@@ -40,6 +40,46 @@ describe("fitMap", () => {
     const wide: Box = { x: 100, y: 16, w: 1136, h: 742 };
     const given = fitMap(hs, 74, area, [corner], [wide]);
     expect(given.scale).toBeCloseTo(fitMap(hs, 74, area, [corner]).scale);
+  });
+});
+
+describe("zoomMap", () => {
+  const area: Box = { x: 20, y: 16, w: 1216, h: 742 };
+  const corner: Box = { x: -16, y: 528, w: 448, h: 448 };
+  const hs = hexes(37);
+
+  it("zooms to the focused hex and its ring, larger than the overview and capped", () => {
+    const overview = fitMap(hs, 74, area, [corner]);
+    const z = zoomMap(hs, 74, "HEX-0", area, [corner])!;
+    expect(z.ring.sort()).toEqual(hs.filter((h) => hexDistance(h, hs[0]!) <= 1).map((h) => h.id).sort());
+    expect(z.ring).toHaveLength(7);
+    expect(z.fit.scale).toBeGreaterThan(overview.scale * 2);
+    expect(z.fit.scale).toBeLessThanOrEqual(MAP_ZOOM_MAX);
+    // Every focus zooms alike: the fit is the ring's cells, not the hexes the case has there.
+    const edge = zoomMap(hs, 74, "HEX-36", area, [corner])!;
+    expect(edge.ring.length).toBeLessThan(7);
+    expect(edge.fit.scale).toBeCloseTo(z.fit.scale, 1);
+  });
+
+  for (const focus of ["HEX-0", "HEX-5", "HEX-20", "HEX-36"]) {
+    it(`focused on ${focus}: the ring stays inside the area and no drawn hex lies under the corner`, () => {
+      const z = zoomMap(hs, 74, focus, area, [corner])!;
+      const boxes = hexBoxes(hs, 74, z.fit);
+      hs.forEach((h, i) => {
+        if (z.ring.includes(h.id)) expect(inside(boxes[i]!, area), h.id).toBe(true);
+        if (!z.under.includes(h.id)) expect(hits(boxes[i]!, corner), h.id).toBe(false);
+      });
+      for (const id of z.under) expect(z.ring).not.toContain(id);
+    });
+  }
+
+  it("leaves out the hexes the zoom puts under the corner", () => {
+    const z = zoomMap(hs, 74, "HEX-0", area, [corner])!;
+    expect(z.under.length).toBeGreaterThan(0);
+  });
+
+  it("is null for a hex that is not on the map", () => {
+    expect(zoomMap(hs, 74, "HEX-99", area, [corner])).toBeNull();
   });
 });
 

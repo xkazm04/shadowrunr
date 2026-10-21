@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { Case, StreamEvent } from "@shadowrunr/contract";
-import { CANVAS_H, CANVAS_W, fitMap, foldEvents, hexBoxes } from "@shadowrunr/stage-kit";
+import { CANVAS_H, CANVAS_W, fitMap, foldEvents, hexBoxes, zoomMap } from "@shadowrunr/stage-kit";
 import { parseCase } from "@shadowrunr/stage-kit/parse";
 import { HEX_SIZE, hexArea } from "@shadowrunr/stage-kit/ui";
 import { LOOK_CHAT, LOOK_CONTENT, LOOK_HOST, lookFor } from "./avatar/look";
@@ -126,6 +126,37 @@ describe("no hex under him", () => {
       });
     }
   }
+  for (const layout of ["hexmap", "desk"] as const) {
+    it(`${layout}: focused on any demo hex, no drawn hex lies under him (or the desk's browser), and the ring reads large`, () => {
+      const rects = layoutRects(layout, { poll: true, foil: true });
+      const frame = hexFrame(layout, rects)!;
+      const overview = fitMap(demo.hexes, HEX_SIZE, hexArea(frame), frame.avoid, frame.prefer);
+      const map = rects.hexmap;
+      for (const focus of demo.hexes) {
+        const zoom = zoomMap(demo.hexes, HEX_SIZE, focus.id, hexArea(frame), frame.avoid, frame.prefer)!;
+        expect(zoom.ring).toContain(focus.id);
+        expect(zoom.fit.scale, focus.id).toBeGreaterThan(overview.scale * 1.4);
+        const boxes = hexBoxes(demo.hexes, HEX_SIZE, zoom.fit).map((b) => ({ ...b, x: b.x + map.x, y: b.y + map.y }));
+        demo.hexes.forEach((h, i) => {
+          if (zoom.under.includes(h.id)) return;
+          expect(overlaps(boxes[i]!, rects.avatar), `${focus.id}: ${h.id}`).toBe(false);
+          if (layout === "desk") expect(overlaps(boxes[i]!, rects.browser), `${focus.id}: ${h.id}`).toBe(false);
+        });
+        // No overlay card stands over the ring on the hexmap screen (the lane is kept clear).
+        for (const lane of frame.prefer ?? []) {
+          demo.hexes.forEach((h, i) => {
+            if (zoom.ring.includes(h.id)) expect(overlaps(boxes[i]!, { ...lane, x: lane.x + map.x, y: lane.y + map.y }), `${focus.id}: ${h.id}`).toBe(false);
+          });
+        }
+        // The ring itself stays inside its window.
+        demo.hexes.forEach((h, i) => {
+          if (!zoom.ring.includes(h.id)) return;
+          const b = boxes[i]!;
+          expect(b.x >= map.x && b.y >= map.y && b.x + b.w <= map.x + map.w && b.y + b.h <= map.y + map.h, `${focus.id}: ${h.id}`).toBe(true);
+        });
+      }
+    });
+  }
   it("has no frame where the map is not shown", () => {
     for (const layout of ["boot", "host", "browser"] as const) expect(hexFrame(layout, layoutRects(layout, { poll: false, foil: false }))).toBeNull();
   });
@@ -155,10 +186,11 @@ describe("source", () => {
     expect(readParams("?ws=javascript:alert(1)").ws).toBe("ws://127.0.0.1:7717/events");
     expect(readParams("?t=90&paused=1")).toMatchObject({ startAt: 90, paused: true });
     expect(readParams("?t=abc").startAt).toBe(0);
-    expect(readParams("").avatar).toBe("glow");
+    expect(readParams("").avatar).toBe("cut");
+    expect(readParams("?avatar=glow").avatar).toBe("glow");
     expect(readParams("?avatar=cut").avatar).toBe("cut");
     expect(readParams("?avatar=depth").avatar).toBe("depth");
-    expect(readParams("?avatar=nope").avatar).toBe("glow");
+    expect(readParams("?avatar=nope").avatar).toBe("cut");
     expect(readParams("").rig).toBeNull();
     expect(readParams("?rig=http://127.0.0.1:7801/rig").rig).toBe("http://127.0.0.1:7801/rig/");
     expect(readParams("?rig=javascript:alert(1)").rig).toBeNull();

@@ -3,7 +3,7 @@
 
 import type { Case, StreamEvent } from "@shadowrunr/contract";
 import { checkCase, parseFrame, type EventsFrame } from "@shadowrunr/stage-kit/parse";
-import { FACE_VARIANTS, type FaceVariant } from "./avatar/variants";
+import { DEFAULT_FACE, FACE_VARIANTS, type FaceVariant } from "./avatar/variants";
 
 export const DEFAULT_WS = "ws://127.0.0.1:7717/events";
 export const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 4, 8] as const;
@@ -32,14 +32,14 @@ export interface StageParams {
   voice: boolean;
   /** `?face=demo|rest|<viseme>`: drive the face from a scripted signal (dev builds only). */
   face: string | null;
-  /** `?avatar=glow|cut|depth`: which renderer draws the face (default glow; anything else is glow). */
+  /** `?avatar=cut|glow|depth`: which renderer draws the face (default cut; anything else is cut). */
   avatar: FaceVariant;
   /** `?rig=<http(s) url>`: the face rig's base (default: the daemon's `/avatar/` beside `ws`). */
   rig: string | null;
 }
 
 function variantParam(v: string | null): FaceVariant {
-  return (FACE_VARIANTS as readonly string[]).includes(v ?? "") ? (v as FaceVariant) : "glow";
+  return (FACE_VARIANTS as readonly string[]).includes(v ?? "") ? (v as FaceVariant) : DEFAULT_FACE;
 }
 
 /** An http(s) rig base with its trailing slash, or null. */

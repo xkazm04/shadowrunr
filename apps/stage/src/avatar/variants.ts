@@ -8,6 +8,10 @@ import type { FaceHandle, startFace as glowStartFace } from "./runtime";
 export const FACE_VARIANTS = ["glow", "cut", "depth"] as const;
 export type FaceVariant = (typeof FACE_VARIANTS)[number];
 
+/** The face drawn when nothing names one: the cut-out, the owner's pick from the 2026-10-21
+ * recorded show. `glow` stays selectable. */
+export const DEFAULT_FACE: FaceVariant = "cut";
+
 /**
  * Where Malakor looks, relative to his own face box: `x` -1 (his box's left edge of the canvas
  * side) .. 1 (right), `y` -1 (up) .. 1 (down); `{x: 0, y: 0}` is straight at the viewer. Read every

@@ -4215,8 +4215,11 @@
           "type": "object"
         },
         {
-          "description": "Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.",
+          "description": "Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.\n`focus` names a case hex the map zooms to on `hexmap`/`desk` (absent: the overview).",
           "properties": {
+            "focus": {
+              "type": "string"
+            },
             "op": {
               "const": "show_screen",
               "type": "string"

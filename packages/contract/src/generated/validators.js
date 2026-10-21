@@ -1893,7 +1893,7 @@ return errors === 0;
 }
 validate443.evaluated = {"dynamicProps":false,"dynamicItems":false};
 
-const schema178 = {"description":"Malakor's action grammar. The model emits `OP: {json}` lines; only these ops are allowed.","oneOf":[{"properties":{"msg_id":{"type":"string"},"op":{"const":"highlight","type":"string"}},"required":["op","msg_id"],"type":"object"},{"properties":{"min_rank":{"$ref":"#/$defs/Rank"},"op":{"const":"start_poll","type":"string"},"options":{"items":{"type":"string"},"type":"array"},"poll_id":{"type":"string"},"question":{"type":"string"},"secs":{"format":"uint32","minimum":0,"type":"integer"}},"required":["op","poll_id","question","options","min_rank","secs"],"type":"object"},{"properties":{"op":{"const":"close_poll","type":"string"},"poll_id":{"type":"string"}},"required":["op","poll_id"],"type":"object"},{"properties":{"foil":{"type":"string"},"op":{"const":"summon_foil","type":"string"}},"required":["op","foil"],"type":"object"},{"properties":{"op":{"const":"dismiss_foil","type":"string"}},"required":["op"],"type":"object"},{"properties":{"grade":{"$ref":"#/$defs/EvidenceGrade"},"hex":{"type":"string"},"op":{"const":"reveal_hex","type":"string"}},"required":["op","hex","grade"],"type":"object"},{"properties":{"brief":{"type":"string"},"job_id":{"type":"string"},"op":{"const":"dispatch_research","type":"string"}},"required":["op","job_id","brief"],"type":"object"},{"properties":{"body":{"type":"string"},"card_id":{"type":"string"},"op":{"const":"show_card","type":"string"},"title":{"type":"string"}},"required":["op","card_id","title","body"],"type":"object"},{"properties":{"label":{"type":"string"},"op":{"const":"mark_moment","type":"string"}},"required":["op","label"],"type":"object"},{"properties":{"op":{"const":"switch_segment","type":"string"},"to":{"$ref":"#/$defs/SegmentId"}},"required":["op","to"],"type":"object"},{"properties":{"op":{"const":"sign_off","type":"string"},"reason":{"type":"string"}},"required":["op","reason"],"type":"object"},{"description":"Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.","properties":{"op":{"const":"show_screen","type":"string"},"record_id":{"type":"string"},"screen":{"$ref":"#/$defs/ScreenId"}},"required":["op","screen"],"type":"object"}]};
+const schema178 = {"description":"Malakor's action grammar. The model emits `OP: {json}` lines; only these ops are allowed.","oneOf":[{"properties":{"msg_id":{"type":"string"},"op":{"const":"highlight","type":"string"}},"required":["op","msg_id"],"type":"object"},{"properties":{"min_rank":{"$ref":"#/$defs/Rank"},"op":{"const":"start_poll","type":"string"},"options":{"items":{"type":"string"},"type":"array"},"poll_id":{"type":"string"},"question":{"type":"string"},"secs":{"format":"uint32","minimum":0,"type":"integer"}},"required":["op","poll_id","question","options","min_rank","secs"],"type":"object"},{"properties":{"op":{"const":"close_poll","type":"string"},"poll_id":{"type":"string"}},"required":["op","poll_id"],"type":"object"},{"properties":{"foil":{"type":"string"},"op":{"const":"summon_foil","type":"string"}},"required":["op","foil"],"type":"object"},{"properties":{"op":{"const":"dismiss_foil","type":"string"}},"required":["op"],"type":"object"},{"properties":{"grade":{"$ref":"#/$defs/EvidenceGrade"},"hex":{"type":"string"},"op":{"const":"reveal_hex","type":"string"}},"required":["op","hex","grade"],"type":"object"},{"properties":{"brief":{"type":"string"},"job_id":{"type":"string"},"op":{"const":"dispatch_research","type":"string"}},"required":["op","job_id","brief"],"type":"object"},{"properties":{"body":{"type":"string"},"card_id":{"type":"string"},"op":{"const":"show_card","type":"string"},"title":{"type":"string"}},"required":["op","card_id","title","body"],"type":"object"},{"properties":{"label":{"type":"string"},"op":{"const":"mark_moment","type":"string"}},"required":["op","label"],"type":"object"},{"properties":{"op":{"const":"switch_segment","type":"string"},"to":{"$ref":"#/$defs/SegmentId"}},"required":["op","to"],"type":"object"},{"properties":{"op":{"const":"sign_off","type":"string"},"reason":{"type":"string"}},"required":["op","reason"],"type":"object"},{"description":"Switch the broadcast's main screen (appendix (screens)). Only the screens the current\nsegment (and state) allows; `record_id` names a staged case record for `browser`/`desk`.\n`focus` names a case hex the map zooms to on `hexmap`/`desk` (absent: the overview).","properties":{"focus":{"type":"string"},"op":{"const":"show_screen","type":"string"},"record_id":{"type":"string"},"screen":{"$ref":"#/$defs/ScreenId"}},"required":["op","screen"],"type":"object"}]};
 const schema179 = {"description":"What fills the broadcast's main screen. `host` is the big-avatar room; the others put the\ncontent full-size with Malakor cut out in the bottom-left corner.","oneOf":[{"const":"host","description":"The big-avatar room (the cold open, the improvised room).","type":"string"},{"const":"hexmap","description":"The case hexmap full-size.","type":"string"},{"const":"browser","description":"A browser-styled window on one staged case record.","type":"string"},{"const":"desk","description":"Both windows: the browser in front of the hexmap.","type":"string"}]};
 
 function validate449(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
@@ -3227,26 +3227,15 @@ vErrors.push(err61);
 errors++;
 }
 else {
-if(data.op !== undefined){
-let data30 = data.op;
+if(data.focus !== undefined){
 const _errs82 = errors;
-if(typeof data30 !== "string"){
-const err62 = {instancePath:instancePath+"/op",schemaPath:"#/oneOf/11/properties/op/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(typeof data.focus !== "string"){
+const err62 = {instancePath:instancePath+"/focus",schemaPath:"#/oneOf/11/properties/focus/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err62];
 }
 else {
 vErrors.push(err62);
-}
-errors++;
-}
-if("show_screen" !== data30){
-const err63 = {instancePath:instancePath+"/op",schemaPath:"#/oneOf/11/properties/op/const",keyword:"const",params:{allowedValue: "show_screen"},message:"must be equal to constant"};
-if(vErrors === null){
-vErrors = [err63];
-}
-else {
-vErrors.push(err63);
 }
 errors++;
 }
@@ -3256,10 +3245,21 @@ else {
 var valid13 = true;
 }
 if(valid13){
-if(data.record_id !== undefined){
+if(data.op !== undefined){
+let data31 = data.op;
 const _errs84 = errors;
-if(typeof data.record_id !== "string"){
-const err64 = {instancePath:instancePath+"/record_id",schemaPath:"#/oneOf/11/properties/record_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(typeof data31 !== "string"){
+const err63 = {instancePath:instancePath+"/op",schemaPath:"#/oneOf/11/properties/op/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err63];
+}
+else {
+vErrors.push(err63);
+}
+errors++;
+}
+if("show_screen" !== data31){
+const err64 = {instancePath:instancePath+"/op",schemaPath:"#/oneOf/11/properties/op/const",keyword:"const",params:{allowedValue: "show_screen"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err64];
 }
@@ -3274,13 +3274,31 @@ else {
 var valid13 = true;
 }
 if(valid13){
-if(data.screen !== undefined){
+if(data.record_id !== undefined){
 const _errs86 = errors;
+if(typeof data.record_id !== "string"){
+const err65 = {instancePath:instancePath+"/record_id",schemaPath:"#/oneOf/11/properties/record_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err65];
+}
+else {
+vErrors.push(err65);
+}
+errors++;
+}
+var valid13 = _errs86 === errors;
+}
+else {
+var valid13 = true;
+}
+if(valid13){
+if(data.screen !== undefined){
+const _errs88 = errors;
 if(!(validate449(data.screen, {instancePath:instancePath+"/screen",parentData:data,parentDataProperty:"screen",rootData,dynamicAnchors}))){
 vErrors = vErrors === null ? validate449.errors : vErrors.concat(validate449.errors);
 errors = vErrors.length;
 }
-var valid13 = _errs86 === errors;
+var valid13 = _errs88 === errors;
 }
 else {
 var valid13 = true;
@@ -3289,13 +3307,14 @@ var valid13 = true;
 }
 }
 }
-else {
-const err65 = {instancePath,schemaPath:"#/oneOf/11/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err65];
 }
 else {
-vErrors.push(err65);
+const err66 = {instancePath,schemaPath:"#/oneOf/11/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err66];
+}
+else {
+vErrors.push(err66);
 }
 errors++;
 }
@@ -3311,6 +3330,7 @@ valid0 = true;
 passing0 = 11;
 if(props0 !== true){
 props0 = props0 || {};
+props0.focus = true;
 props0.op = true;
 props0.record_id = true;
 props0.screen = true;
@@ -3328,12 +3348,12 @@ props0.screen = true;
 }
 }
 if(!valid0){
-const err66 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+const err67 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
-vErrors = [err66];
+vErrors = [err67];
 }
 else {
-vErrors.push(err66);
+vErrors.push(err67);
 }
 errors++;
 validate445.errors = vErrors;
