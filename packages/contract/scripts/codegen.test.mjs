@@ -40,10 +40,10 @@ describe("generate", () => {
     expect(files).toEqual(defs.flatMap((d) => [`${d}.d.ts`, `${d}.js`]).sort());
   });
 
-  it("keeps only ServerFrame and ErrorEnvelope in the eager validators module", async () => {
+  it("keeps only the /events frame validators and ErrorEnvelope in the eager validators module", async () => {
     const js = await readFile(join(first, "validators.js"), "utf8");
     const exported = [...js.matchAll(/^export const (\w+)/gm)].map((m) => m[1]).sort();
-    expect(exported).toEqual(["validateErrorEnvelope", "validateServerFrame"]);
+    expect(exported).toEqual(["validateErrorEnvelope", "validateEventFrame", "validateServerFrame", "validateStreamEvent"]);
     const dts = await readFile(join(first, "validators.d.ts"), "utf8");
     expect([...dts.matchAll(/export declare const (\w+)/g)].map((m) => m[1]).sort()).toEqual(exported);
   });
@@ -103,10 +103,21 @@ describe("forAjv (tagged unions validate by their tag)", () => {
       .filter(([, d]) => d.discriminator)
       .map(([n, d]) => `${n}(${d.discriminator.propertyName})`)
       .sort();
-    expect(tagged).toEqual(["CalibrationOrigin(kind)", "Command(cmd)", "EngineError(kind)", "Op(op)", "StreamEvent(type)", "VoiceFrame(type)"]);
+    // ClipActBlock(kind) joined with the evidence-board contract after the card was written:
+    // derived detection picked it up with no edit here.
+    expect(tagged).toEqual([
+      "CalibrationOrigin(kind)",
+      "ClipActBlock(kind)",
+      "Command(cmd)",
+      "EngineError(kind)",
+      "Op(op)",
+      "StreamEvent(type)",
+      "VoiceFrame(type)",
+    ]);
     // Derived from the schema, not a hand list: a new tagged union is picked up, an untagged one is not.
     const tag = (v) => ({ type: "object", properties: { t: { const: v, type: "string" }, x: { type: "integer" } }, required: ["t"] });
-    const probe = { ...schema, $defs: { ...schema.$defs, NewUnion: { oneOf: [tag("a"), tag("b")] }, Loose: { oneOf: [tag("a"), { type: "object", properties: {} }] } } };
+    const loose = { oneOf: [tag("a"), { type: "object", properties: {} }] };
+    const probe = { ...schema, $defs: { ...schema.$defs, NewUnion: { oneOf: [tag("a"), tag("b")] }, Loose: loose } };
     const out = codegen.forAjv(probe);
     expect(out.$defs.NewUnion.discriminator).toEqual({ propertyName: "t" });
     expect(out.$defs.Loose.discriminator).toBeUndefined();

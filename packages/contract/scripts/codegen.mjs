@@ -3,7 +3,8 @@
 // Output is deterministic: the same schema always yields byte-identical files.
 //
 // Validators are split so a reader pays only for what it reads: validators.js holds the eager
-// ServerFrame + ErrorEnvelope (every /events frame and every error reply), and results/<Def>.js
+// ServerFrame (and its EventFrame / StreamEvent arms) + ErrorEnvelope (every /events frame and
+// every error reply), and results/<Def>.js
 // holds one method result's validator, compiled from that def's closure alone and loaded
 // lazily through meta.ts's RESULT_LOADERS.
 
@@ -72,6 +73,43 @@ async function typesTs(schema) {
   return lf(ts);
 }
 
+/** The property every alternative of a `oneOf` requires with a const value (a serde
+ * internally-tagged enum), or undefined when the union is not tagged that way. Tag values must
+ * be distinct, as a discriminator maps each value to one alternative. */
+function unionTag(def) {
+  const alts = def.oneOf;
+  if (!Array.isArray(alts) || alts.length < 2) return undefined;
+  const isTaggable = (a) => a?.type === "object" && a.properties && Array.isArray(a.required);
+  if (!alts.every(isTaggable)) return undefined;
+  const candidates = Object.keys(alts[0].properties).sort();
+  return candidates.find((p) => {
+    const values = alts.map((a) => (a.required.includes(p) ? a.properties[p]?.const : undefined));
+    return values.every((v) => typeof v === "string") && new Set(values).size === values.length;
+  });
+}
+
+/** Prepare a schema for ajv (the schema file itself is untouched): every tagged union in
+ * `$defs` (every alternative an object that requires one common string-const property) gains
+ * `discriminator: {propertyName}`, so ajv validates the one alternative the
+ * payload's tag names and reports that alternative's errors, instead of every alternative's.
+ * The accepted set is unchanged: with distinct required const tags at most one alternative can
+ * match, which is exactly what the `oneOf` already demands. */
+export function forAjv(schema) {
+  const $defs = map(schema.$defs, (def) => {
+    const propertyName = unionTag(def);
+    // Every alternative is an object, so the union-level `type` (which ajv's strict mode wants
+    // beside `discriminator`) accepts nothing the alternatives did not.
+    return propertyName === undefined ? def : { ...def, type: "object", discriminator: { propertyName } };
+  });
+  return { ...schema, $defs };
+}
+
+/** The validators compiled into the eager module: everything /events needs (the frame, routed
+ * by shape to one of its three arms) and the error reply. */
+const EAGER = ["ServerFrame", "EventFrame", "StreamEvent", "ErrorEnvelope"];
+/** The `$defs` prefix of the validator-only entry points (not a name the Rust export uses). */
+const ENTRY = "entry:";
+
 function validatorFiles(schema, methods) {
   const ajv = new Ajv2020({
     code: { source: true, esm: true, lines: true },
@@ -79,13 +117,20 @@ function validatorFiles(schema, methods) {
     strict: true,
     allowUnionTypes: true,
     validateFormats: false,
+    discriminator: true,
   });
-  ajv.addSchema(schema);
+  // The eager validators are exported through `{allOf: [{$ref}]}` entry points: ajv compiles a
+  // def it is asked for directly apart from the same def reached by `$ref`, so exporting
+  // StreamEvent beside ServerFrame (which refs it) would emit its validator twice (+54 KB);
+  // a bare `{$ref}` entry would be followed to the def itself, hence the allOf.
+  const prepared = forAjv(schema);
+  const entry = (d) => `${ENTRY}${d}`;
+  for (const d of EAGER) prepared.$defs[entry(d)] = { allOf: [{ $ref: `#/$defs/${d}` }] };
+  ajv.addSchema(prepared);
   const ref = (name) => `${schema.$id}#/$defs/${name}`;
   const module = (exported) =>
     lf(["// @ts-nocheck", "/* eslint-disable */", BANNER, standaloneCode(ajv, exported), ""].join("\n"));
-  const eager = ["ServerFrame", "ErrorEnvelope"];
-  const js = module(Object.fromEntries(eager.map((d) => [`validate${d}`, ref(d)])));
+  const js = module(Object.fromEntries(EAGER.map((d) => [`validate${d}`, ref(entry(d))])));
   const dts = [
     BANNER,
     `import type { ErrorObject } from "ajv";`,
@@ -97,7 +142,7 @@ function validatorFiles(schema, methods) {
     `  errors?: ErrorObject[] | null;`,
     `}`,
     ``,
-    ...eager.map((d) => `export declare const validate${d}: ValidateFn<T.${d}>;`),
+    ...EAGER.map((d) => `export declare const validate${d}: ValidateFn<T.${d}>;`),
     ``,
   ].join("\n");
   const files = { "validators.js": js, "validators.d.ts": dts };
