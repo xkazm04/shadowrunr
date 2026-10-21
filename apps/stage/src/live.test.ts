@@ -3,11 +3,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { StreamEvent } from "@shadowrunr/contract";
-import { foldEvents } from "@shadowrunr/stage-kit";
+import { Timeline, foldEvents } from "@shadowrunr/stage-kit";
 import {
   ACK_EVERY_MS,
   DISCONNECTED_SLATE_MS,
   EventRing,
+  KEYFRAME_EVERY,
   LiveSession,
   LiveStore,
   RING_MAX,
@@ -305,5 +306,93 @@ describe("watchdog", () => {
     store.accept({ kind: "event", event: end(100) }, 100);
     store.status("closed", 200);
     expect(store.watch(60_000)).toEqual({ disconnected: false, stalled: false, stalledMs: 0 });
+  });
+});
+
+describe("the DVR window over the ring (keyframes and sceneAt)", () => {
+  const say = (ts: number, text: string): StreamEvent => ({ type: "say", ts_ms: ts, speaker: "host", text });
+  /** start, then a mix of hints and Malakor's lines: n events, ts = index * 100 (+ base). */
+  function mixed(n: number, base = 0, id = "s-1"): StreamEvent[] {
+    const evs = [start(base, id)];
+    for (let i = 1; i < n; i++) evs.push(i % 7 === 0 ? say(base + i * 100, `Line ${i}.`) : hint(base + i * 100, i));
+    return evs;
+  }
+  const feed = (store: LiveStore, evs: StreamEvent[], runId = "r", from = 1) =>
+    evs.forEach((e, i) => store.accept({ kind: "event", event: e, seq: from + i, runId }, 0));
+
+  it("a seek inside the held window folds exactly what a Timeline over the whole stream shows", () => {
+    const store = new LiveStore(0);
+    const evs = mixed(3000);
+    feed(store, evs);
+    const t = evs[2500]!.ts_ms;
+    const at = store.sceneAt(t);
+    expect(at.clamped).toBe(false);
+    expect(at.scene).toEqual(new Timeline(evs).advanceTo(t));
+  });
+
+  it("at the head it is the live scene itself, never a re-fold", () => {
+    const store = new LiveStore(0);
+    const evs = mixed(3000);
+    feed(store, evs);
+    expect(store.sceneAt(evs[2999]!.ts_ms).scene).toBe(store.scene);
+    expect(store.sceneAt(evs[2999]!.ts_ms + 5000).scene).toBe(store.scene);
+    expect(store.lastSeekFolds).toBe(0);
+  });
+
+  it("every seek inside the window folds at most KEYFRAME_EVERY events", () => {
+    const store = new LiveStore(0);
+    const evs = mixed(3000);
+    feed(store, evs);
+    const from = store.windowStart()!;
+    // the scene after the event just before the oldest held one is a keyframe: the window opens there
+    expect(from).toBeGreaterThanOrEqual(evs[999]!.ts_ms);
+    expect(from).toBeLessThan(evs[1100]!.ts_ms);
+    let worst = 0;
+    for (let t = from; t <= evs[2999]!.ts_ms; t += 37) {
+      expect(store.sceneAt(t).clamped).toBe(false);
+      worst = Math.max(worst, store.lastSeekFolds);
+    }
+    expect(worst).toBeLessThanOrEqual(KEYFRAME_EVERY);
+    expect(KEYFRAME_EVERY).toBe(100);
+  });
+
+  it("a time older than the oldest held keyframe clamps to the earliest reachable scene", () => {
+    const store = new LiveStore(0);
+    const evs = mixed(3000);
+    feed(store, evs);
+    const from = store.windowStart()!;
+    const at = store.sceneAt(evs[200]!.ts_ms);
+    expect(at.clamped).toBe(true);
+    expect(at.t).toBe(from);
+    expect(at.scene).toEqual(new Timeline(evs).advanceTo(from));
+  });
+
+  it("a new run id or a stream_start clears the keyframes: an old run's time clamps to the new start", () => {
+    for (const how of ["run", "stream_start"] as const) {
+      const store = new LiveStore(0);
+      feed(store, mixed(500));
+      const next = mixed(3, 1_000_000, "s-2");
+      if (how === "run") feed(store, next, "r2");
+      else feed(store, next, "r", 501);
+      expect(store.scene.meta?.streamId).toBe("s-2");
+      const at = store.sceneAt(20_000);
+      expect(at.clamped).toBe(true);
+      expect(at.t).toBe(1_000_000);
+      expect(at.scene).toEqual(new Timeline(next).advanceTo(1_000_000));
+    }
+  });
+
+  it("scrubbing never changes the ack the sandbox's stage_ack gate reads", () => {
+    const evs = mixed(800);
+    const plain = new LiveStore(0);
+    const scrubbed = new LiveStore(0);
+    for (const s of [plain, scrubbed]) {
+      s.status("open", 0);
+      evs.forEach((e, i) => s.accept({ kind: "event", event: e, seq: i + 1, runId: "r" }, i * 100));
+    }
+    // the preview sits 30 s behind live
+    scrubbed.sceneAt(evs[799]!.ts_ms - 30_000);
+    expect(scrubbed.ack(90_000)).toEqual(plain.ack(90_000));
+    expect(scrubbed.lastSeq).toBe(800);
   });
 });
