@@ -189,8 +189,8 @@ describe("startFace without WebGL2", () => {
   it("is unavailable, hides its canvas and keeps the silhouette, like the glow", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const attrs = new Map<string, string>();
-    const root = { setAttribute: (k: string, v: string) => void attrs.set(k, v) } as unknown as HTMLElement;
-    const canvas = { width: 0, height: 0, style: { visibility: "" } } as unknown as HTMLCanvasElement;
+    const root = { setAttribute: (k: string, v: string) => void attrs.set(k, v) } as HTMLElement;
+    const canvas = { width: 0, height: 0, style: { visibility: "" } } as HTMLCanvasElement;
     const drawn: unknown[] = [];
     const handle = startFace({
       root,

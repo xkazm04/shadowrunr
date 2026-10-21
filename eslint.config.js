@@ -3,6 +3,10 @@
 //   cycles       no import cycles (import-x/no-cycle)
 //   hygiene      no `any`, no `as unknown as`, no JSON.parse outside @shadowrunr/contract's door,
 //                no raw keydown listener outside src/keys/listener.ts, no empty (swallowed) catch
+//   stage        apps/stage (the broadcast canvas) holds the same hygiene: its two JSON decoders
+//                (clip.ts, voice/frame.ts) are named doors for JSON.parse only, and Controls.tsx is
+//                its one keyboard file. React-Compiler-class hook findings ride a counted ratchet in
+//                apps/stage/eslint-suppressions.json (per file, per rule; prune it, never grow it).
 //
 // Typed linting is off on purpose: the workspace compiles with TypeScript 7 (no JS API), so the
 // parser runs on the root TypeScript 6 devDependency without type information.
@@ -19,10 +23,17 @@ const C = "apps/console/src";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const CONSOLE_TSCONFIG = join(ROOT, "apps/console/tsconfig.json");
 
-/** The one door: JSON.parse is allowed here and nowhere else. */
-const DOOR = ["packages/contract/src/**"];
+const S = "apps/stage/src";
 
-const restricted = (allowJsonParse, allowKeydown) => [
+/** The one door: JSON.parse is allowed here and nowhere else (the stage names its own below). */
+const DOOR = ["packages/contract/src/**"];
+/** The stage's doors: its two typed decoders, and the one helper its tests read JSON through. */
+const STAGE_DOORS = [`${S}/clip.ts`, `${S}/voice/frame.ts`, `${S}/test-json.ts`];
+
+const CONSOLE_KEYS = "No raw keyboard listeners: declare the binding in src/keys/keymap.ts.";
+const STAGE_KEYS = "No raw keyboard listeners: the stage's keys live in src/Controls.tsx.";
+
+const restricted = (allowJsonParse, allowKeydown, keyMessage = CONSOLE_KEYS) => [
   "error",
   {
     selector: "TSAsExpression[expression.type='TSAsExpression'][expression.typeAnnotation.type='TSUnknownKeyword']",
@@ -41,11 +52,11 @@ const restricted = (allowJsonParse, allowKeydown) => [
     : [
         {
           selector: "CallExpression[callee.property.name='addEventListener'][arguments.0.value=/^key(down|up|press)$/]",
-          message: "No raw keyboard listeners: declare the binding in src/keys/keymap.ts.",
+          message: keyMessage,
         },
         {
           selector: "AssignmentExpression[left.property.name=/^onkey(down|up|press)$/]",
-          message: "No raw keyboard listeners: declare the binding in src/keys/keymap.ts.",
+          message: keyMessage,
         },
       ]),
 ];
@@ -66,11 +77,10 @@ export default tseslint.config(
       "**/generated/**",
       "runs/**",
       ".contest/**",
-      "apps/stage/**",
     ],
   },
   {
-    files: ["apps/console/**/*.{ts,tsx}", "packages/*/src/**/*.{ts,tsx}"],
+    files: ["apps/console/**/*.{ts,tsx}", "packages/*/src/**/*.{ts,tsx}", `${S}/**/*.{ts,tsx}`],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: { parser: tseslint.parser, ecmaVersion: 2022, sourceType: "module" },
     rules: {
@@ -88,12 +98,29 @@ export default tseslint.config(
     rules: reactHooks.configs.flat.recommended.rules,
   },
   {
+    // The broadcast stage: the hygiene rules above plus the hooks set, keyed to its own keyboard file.
+    files: [`${S}/**/*.{ts,tsx}`],
+    plugins: { "react-hooks": reactHooks },
+    rules: {
+      ...reactHooks.configs.flat.recommended.rules,
+      "no-restricted-syntax": restricted(false, false, STAGE_KEYS),
+    },
+  },
+  {
     files: DOOR,
     rules: { "no-restricted-syntax": restricted(true, false), "no-restricted-properties": "off" },
   },
   {
+    files: STAGE_DOORS,
+    rules: { "no-restricted-syntax": restricted(true, false, STAGE_KEYS), "no-restricted-properties": "off" },
+  },
+  {
     files: [`${C}/keys/listener.ts`],
     rules: { "no-restricted-syntax": restricted(false, true) },
+  },
+  {
+    files: [`${S}/Controls.tsx`],
+    rules: { "no-restricted-syntax": restricted(false, true, STAGE_KEYS) },
   },
   {
     files: [`${C}/**/*.{ts,tsx}`],

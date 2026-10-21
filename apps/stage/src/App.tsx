@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import demoCaseJson from "../fixtures/demo-case.json";
 import demoTranscript from "../fixtures/demo.jsonl?raw";
 import type { Case, StreamEvent } from "@shadowrunr/contract";
-import { Controls } from "./Controls";
+import { Controls, usePlaybackKeys } from "./Controls";
 import { CANVAS_H, CANVAS_W, Timeline, buildMap, fitCanvas, initialScene, type SceneState } from "@shadowrunr/stage-kit";
 import { checkCase, parseCase, parseTranscript, type ParseIssue } from "@shadowrunr/stage-kit/parse";
 import {
@@ -214,9 +214,9 @@ export function App() {
   const captionSpeaking = useCallback((s: boolean) => mixer.setCaption(s), [mixer]);
 
   // ── Keyboard ─────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (params.broadcast || live) return;
-    const on = (e: KeyboardEvent) => {
+  // The listener itself lives in Controls.tsx, the stage's one keyboard file.
+  const onPlaybackKey = useCallback(
+    (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       if (e.code === "Space") {
         e.preventDefault();
@@ -228,10 +228,10 @@ export function App() {
         const next = SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, (i === -1 ? 2 : i) + (e.key === "]" ? 1 : -1)))]!;
         setSpeed(next);
       }
-    };
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
-  }, [params.broadcast, live, seek]);
+    },
+    [seek],
+  );
+  usePlaybackKeys(!params.broadcast && !live, onPlaybackKey);
 
   // ── Drag and drop ────────────────────────────────────────────────────────────
   const onFile = useCallback(async (f: File) => {
@@ -291,7 +291,7 @@ export function App() {
   const map = useMemo(() => buildMap(resolved.case, revealKey ? revealKey.split(",") : []), [resolved.case, revealKey]);
   useOverflowAudit(params.debug, rootRef);
   if (params.debug) {
-    (window as unknown as { __stage: unknown }).__stage = { now, applied: scene.applied, card: scene.card };
+    window.__stage = { now, applied: scene.applied, card: scene.card };
   }
   const watch = store ? store.watch(performance.now()) : null;
   // with the voice sounding, captions follow its audio clock (voice/captions.ts)

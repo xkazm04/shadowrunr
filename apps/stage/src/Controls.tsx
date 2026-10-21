@@ -21,6 +21,17 @@ const CASE_LABEL: Record<CaseSource, string> = {
   none: "no case file: hexes drawn from ids",
 };
 
+/** The replay's playback keys (space, arrows, [ ]): the stage's one raw keydown listener for them.
+ * Controls.tsx is the stage's declared keyboard file (eslint.config.js), so App's handler is
+ * attached here while `enabled` (not broadcast, not live). */
+export function usePlaybackKeys(enabled: boolean, onKey: (e: KeyboardEvent) => void): void {
+  useEffect(() => {
+    if (!enabled) return;
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [enabled, onKey]);
+}
+
 export function Controls({
   events,
   start,

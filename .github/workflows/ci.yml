@@ -122,6 +122,8 @@ jobs:
         run: pnpm -C apps/stage typecheck
       - name: stage test
         run: pnpm -C apps/stage test
+      - name: stage lint (eslint; hook-compiler findings ratcheted in apps/stage/eslint-suppressions.json)
+        run: pnpm -C apps/stage lint
       - name: stage build
         run: pnpm -C apps/stage build
 

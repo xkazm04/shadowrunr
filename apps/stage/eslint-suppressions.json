@@ -1,0 +1,40 @@
+{
+  "src/App.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    },
+    "react-hooks/purity": {
+      "count": 1
+    },
+    "react-hooks/refs": {
+      "count": 36
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    },
+    "react-hooks/use-memo": {
+      "count": 1
+    }
+  },
+  "src/ClipStage.tsx": {
+    "react-hooks/preserve-manual-memoization": {
+      "count": 2
+    },
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/avatar/Avatar.tsx": {
+    "react-hooks/refs": {
+      "count": 6
+    }
+  },
+  "src/voice/useVoice.ts": {
+    "react-hooks/refs": {
+      "count": 7
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  }
+}

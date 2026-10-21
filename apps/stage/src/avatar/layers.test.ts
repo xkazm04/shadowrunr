@@ -10,7 +10,7 @@ import { checkSpec, fetchRig, loadForm, type Fetcher, type FormSpec, type Loaded
 import { ART, placeholderSpec } from "./placeholder";
 
 const spec = placeholderSpec();
-const clone = (): Record<string, unknown> => structuredClone(spec) as unknown as Record<string, unknown>;
+const clone = (): Record<string, unknown> => ({ ...structuredClone(spec) });
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -122,7 +122,7 @@ describe("rig or placeholder", () => {
 describe("the renderer's pure parts", () => {
   it("asks for an alpha, premultiplied WebGL2 context and rejects without one", async () => {
     const asked: [string, unknown][] = [];
-    const canvas = { getContext: (kind: string, attrs?: unknown) => (asked.push([kind, attrs]), null) } as unknown as HTMLCanvasElement;
+    const canvas = { getContext: (kind: string, attrs?: unknown) => (asked.push([kind, attrs]), null) } as HTMLCanvasElement;
     await expect(createGlowRenderer(canvas, { spec, images: new Map(), form: "placeholder" })).rejects.toThrow(/WebGL2 unavailable/);
     expect(asked).toEqual([["webgl2", CONTEXT_ATTRIBUTES]]);
     expect(CONTEXT_ATTRIBUTES.alpha && CONTEXT_ATTRIBUTES.premultipliedAlpha).toBe(true);

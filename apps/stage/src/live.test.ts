@@ -15,6 +15,7 @@ import {
   STALLED_MS,
 } from "./live";
 import type { SocketLike } from "./source";
+import { readJson } from "./test-json";
 
 const start = (ts: number, id = "s-1"): StreamEvent => ({
   type: "stream_start",
@@ -53,7 +54,7 @@ class FakeSocket implements SocketLike {
   readyState = 0;
   sent: unknown[] = [];
   send(data: string): void {
-    this.sent.push(JSON.parse(data));
+    this.sent.push(readJson(data));
   }
   close(): void {
     this.drop();

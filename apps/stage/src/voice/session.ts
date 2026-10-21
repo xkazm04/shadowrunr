@@ -129,7 +129,7 @@ export class VoiceSession {
 
   private open() {
     this.o.onStatus({ state: "starting", reason: "connecting to the voice" });
-    const s = (this.o.socket ?? ((u) => new WebSocket(u) as unknown as SocketLike))(this.o.url);
+    const s = (this.o.socket ?? ((u) => new WebSocket(u) as SocketLike))(this.o.url);
     this.ws = s;
     s.onopen = () => {
       this.retry = 0;

@@ -20,13 +20,13 @@ class FakeAudio implements AudioLike {
   currentTime = 10;
   levelNow = 0.5;
   readonly output = {};
-  readonly started: { at: number; buffer: BufferLike; stopped: boolean }[] = [];
+  readonly started: { at: number; buffer: BufferLike | null; stopped: boolean }[] = [];
   createBuffer(_ch: number, length: number, sampleRate: number): BufferLike {
     const data = new Float32Array(length);
     return { duration: length / sampleRate, getChannelData: () => data };
   }
   createBufferSource(): SourceLike {
-    const rec = { at: NaN, buffer: null as unknown as BufferLike, stopped: false };
+    const rec: { at: number; buffer: BufferLike | null; stopped: boolean } = { at: NaN, buffer: null, stopped: false };
     const src: SourceLike = {
       buffer: null,
       connect: () => undefined,

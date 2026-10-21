@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b",
+    "lint": "eslint src --max-warnings 0 && node --test scripts/lint-gate.test.mjs",
     "demo:fixture": "node scripts/make-demo.mjs"
   },
   "dependencies": {
