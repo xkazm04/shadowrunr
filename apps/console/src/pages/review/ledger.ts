@@ -6,6 +6,7 @@
 // overlay never outranks later server state. The operator's mark is attention spent once: it is
 // either shown as the daemon holds it or shown as not saved, never silently lost.
 import type { FeedbackTag, LineFeedback } from "@shadowrunr/contract";
+import { feedbackByLine } from "./derive";
 
 export type MarkStatus = "idle" | "sending" | "saved" | "failed";
 
@@ -96,12 +97,7 @@ export function pruneLedger(l: Ledger, rows: readonly LineFeedback[]): Ledger {
 
 /** The mark each line shows: the server's rows with the ledger on top. */
 export function viewOf(l: Ledger, rows: readonly LineFeedback[]): Map<number, LineFeedback> {
-  const m = new Map<number, LineFeedback>();
-  for (const r of rows) {
-    const k = markOf(r);
-    if (k) m.set(r.line, k);
-    else m.delete(r.line);
-  }
+  const m = feedbackByLine(rows);
   for (const [line, e] of l) {
     let shown: LineFeedback | null | undefined;
     if (e.head.state === "sending") shown = optimistic(e.head.write);
