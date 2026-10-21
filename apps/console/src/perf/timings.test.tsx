@@ -4,22 +4,15 @@
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { cpus, platform, release } from "node:os";
 import { env } from "node:process";
-import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeEach, describe, it, vi } from "vitest";
 import type { RunRow } from "@shadowrunr/contract";
-import type { Script } from "../kit/testing";
-import { Layer1 as BrainL1 } from "../pages/brain/Layer1";
 import { Recorder } from "../pages/brain/testgen";
-import { Layer1 as CharactersL1 } from "../pages/characters/Layer1";
-import { Layer1 as OnAirL1 } from "../pages/onair/Layer1";
-import { Layer1 as ReconcileL1 } from "../pages/reconcile/Layer1";
 import { session } from "../pages/reconcile/session";
-import { Layer1 as SegmentsL1 } from "../pages/segments/Layer1";
-import { Layer1 as SimulatorL1 } from "../pages/simulator/Layer1";
 import { Layer2 as SimulatorL2 } from "../pages/simulator/Layer2";
 import { filterRows } from "../ui/filterRows";
-import { brain10x, brainScript, charactersScript, onairRuns, onairScript, reconcileScript, segmentsScript, sim10x, simScript } from "./fixture";
+import { brain10x, onairRuns, reviewRows10x, sim10x, simScript } from "./fixture";
 import { mountPerf, quiet, type Mounted } from "./harness";
+import { LAYER1, type Named } from "./pages";
 
 const REPORT = import.meta.env.MODE === "perf" || env["SR_PERF_REPORT"] === "1";
 const lines: string[] = [];
@@ -51,9 +44,10 @@ afterAll(() => {
   );
 });
 
-async function renderMs(name: string, ui: ReactNode, script: Script, hash: string): Promise<void> {
+async function renderMs({ name, probe }: Named): Promise<void> {
+  probe.before?.();
   const t0 = performance.now();
-  mounted = mountPerf(ui, script, hash);
+  mounted = mountPerf(probe.ui(), probe.script(), probe.hash);
   await quiet(mounted, 400);
   lines.push(`render ${name}: ${ms(performance.now() - t0)} to a still DOM (fixture build excluded)`);
 }
@@ -64,22 +58,13 @@ describe.skipIf(!REPORT)("timings at 10x (reported only)", () => {
     brain10x();
     sim10x();
     onairRuns();
-    await renderMs("onair.l1", <OnAirL1 active />, onairScript(), "#/onair");
-    mounted?.dispose();
-    cleanup();
-    await renderMs("characters.l1", <CharactersL1 active />, charactersScript(), "#/characters");
-    mounted?.dispose();
-    cleanup();
-    await renderMs("brain.l1", <BrainL1 active />, brainScript(brain10x()), "#/brain");
-    mounted?.dispose();
-    cleanup();
-    await renderMs("segments.l1", <SegmentsL1 active />, segmentsScript(), "#/segments");
-    mounted?.dispose();
-    cleanup();
-    await renderMs("simulator.l1", <SimulatorL1 active />, simScript(sim10x()), "#/simulator");
-    mounted?.dispose();
-    cleanup();
-    await renderMs("reconcile.l1", <ReconcileL1 active />, reconcileScript(), "#/reconcile");
+    reviewRows10x();
+    for (const l of LAYER1) {
+      await renderMs(l);
+      mounted?.dispose();
+      mounted = undefined;
+      cleanup();
+    }
   }, 300_000);
 
   it("filter: p95 of a text filter over the 48k-run list (pure, and through the page)", async () => {

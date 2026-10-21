@@ -14,6 +14,8 @@ import { genResults, genRoster, malakorDetail, malakorRules } from "../pages/cha
 import { runRow as onairRunRow, TABLES as ONAIR_TABLES, transcript as onairTranscript } from "../pages/onair/testdata";
 import { genDirectives, genProposals, genReport } from "../pages/reconcile/testgen";
 import { genRanks, genTables } from "../pages/segments/testgen";
+import { bigSession, feedbackRow, sessionRows } from "../pages/review/fixture";
+import { FEEDBACK } from "../pages/review/names";
 import { daemon as simDaemon, world, type World } from "../pages/simulator/testgen";
 
 export const SCALE = {
@@ -130,6 +132,32 @@ export function segmentsScript(tables: SegmentTables = tables10x()): Script {
         return ok(genRanks());
       case "reconcile.list":
         return ok([]);
+      default:
+        return fail("method_not_found", method);
+    }
+  };
+}
+
+// --- review ----------------------------------------------------------------------------------
+
+/** 2,000 sandbox sessions on the wall (newest first). */
+export const reviewRows10x = lazy(() => sessionRows(SCALE.streams));
+/** One mark per session, the tags cycled, so the feedback panel totals every tag. */
+export const reviewFeedback10x = lazy(() => reviewRows10x().map((r, i) => feedbackRow(1 + (i % 50), [FEEDBACK[i % FEEDBACK.length]?.[0] ?? "landed"], r.session_id)));
+export const REVIEW_BIG_SESSION = "sbx-10x-100k";
+/** A 100k-event session over an hour (the timeline's 10x). */
+export const reviewBigSession = lazy(() => bigSession({ events: SCALE.transcriptLines, minutes: 60, id: REVIEW_BIG_SESSION }));
+
+/** Review's daemon: the session wall (`rows`, 2,000 by default), every mark, and the 100k-event session. */
+export function reviewScript(rows = reviewRows10x()): Script {
+  return (method, sent) => {
+    switch (method) {
+      case "review.sessions":
+        return ok(rows);
+      case "review.feedback.list":
+        return ok(reviewFeedback10x());
+      case "review.session":
+        return param(sent, "session_id") === REVIEW_BIG_SESSION ? ok(reviewBigSession()) : fail("not_found", "no such session");
       default:
         return fail("method_not_found", method);
     }
