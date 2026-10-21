@@ -379,15 +379,16 @@ describe("polls", () => {
     expect(matchOption(o, " ")).toBeNull();
     let s = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "p", question: "?", options: o, min_rank: "thrall", secs: 30 }));
     s = reduce(s, chat(2, msg("a", "warlock", { cmd: "vote", option: "the-d" })));
-    expect(s.polls.p!.ballots).toEqual({});
+    expect(s.polls.p!.ballots.size).toBe(0);
   });
 
   it("counts !summon only in a foil vote: a crowd poll ignores it", () => {
     let s = reduce(initialScene(), op(1, { op: "start_poll", poll_id: "p", question: "?", options: ["the-disruptor", "the-inspector"], min_rank: "thrall", secs: 30 }));
     s = reduce(s, chat(2, msg("a", "warlock", { cmd: "summon", foil: "the-disruptor" })));
-    expect(s.polls.p!.ballots).toEqual({});
+    expect(s.polls.p!.ballots.size).toBe(0);
     s = reduce(s, chat(3, msg("b", "warlock", { cmd: "vote", option: "the-disruptor" })));
-    expect(Object.keys(s.polls.p!.ballots)).toEqual(["v-b"]);
+    expect(s.polls.p!.ballots.size).toBe(1);
+    expect(s.polls.p!.ballots.get("v-b")).toEqual({ option: "the-disruptor", rank: "warlock" });
   });
 });
 

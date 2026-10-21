@@ -3,6 +3,7 @@
 
 import type { Case, Command, EndReason, EvidenceGrade, LinkRel, ModelTier, Rank, ScreenId, SegmentId, ShownRecord, VoteTally } from "@shadowrunr/contract";
 import { ChatMemory } from "./chatMemory";
+import { ViewerBook } from "./viewerBook";
 import type { TsMs } from "./vocab";
 
 /** What the canvas draws: `boot` before the first segment, then the main screen (contract
@@ -102,8 +103,28 @@ export interface Poll {
   tallies: VoteTally[];
   /** Rank-weighted votes observed in chat (`!vote` / `!summon`), per option, per rank. */
   observed: Record<string, Partial<Record<Rank, number>>>;
-  /** viewer id → option, so a changed vote moves rather than doubles. */
-  ballots: Record<string, { option: string; rank: Rank }>;
+  /** Chat ballots per option, kept beside `observed` so a bar reads its voters without a scan. */
+  observedVoters: Record<string, number>;
+  /** viewer id → option, so a changed vote moves rather than doubles (a persistent book: a
+   * ballot costs amortized O(1), not a copy of every voter). */
+  ballots: ViewerBook<{ option: string; rank: Rank }>;
+}
+
+/** One hex's community `!grade` ballots: viewer id → grade, and the running count per grade. */
+export interface GradeBook {
+  ballots: ViewerBook<EvidenceGrade>;
+  counts: Record<EvidenceGrade, number>;
+}
+
+export const EMPTY_GRADE_BOOK: GradeBook = { ballots: ViewerBook.empty(), counts: { DOC: 0, REP: 0, CLM: 0, SPC: 0 } };
+
+/** `book` with `viewer`'s grade set to `grade`; a repeated grade moves rather than adds. */
+export function castGrade(book: GradeBook, viewer: string, grade: EvidenceGrade): GradeBook {
+  const prev = book.ballots.get(viewer);
+  const counts = { ...book.counts };
+  if (prev !== undefined) counts[prev] -= 1;
+  counts[grade] += 1;
+  return { ballots: book.ballots.set(viewer, grade), counts };
 }
 
 /** A ballot command from chat, held until the poll it may count in opens. */
@@ -253,8 +274,8 @@ export interface SceneState {
   /** The evidence board's strings, in the order pinned (at most LINK_MAX). */
   links: PinnedLink[];
   hints: Record<string, Hint>;
-  /** Community `!grade` ballots per hex, viewer id → grade, so a repeated grade moves rather than adds. */
-  gradeVotes: Record<string, Record<string, EvidenceGrade>>;
+  /** Community `!grade` ballots per hex (viewer id → grade), so a repeated grade moves rather than adds. */
+  gradeVotes: Record<string, GradeBook>;
   /** Authoritative jury tallies per hex, from the runtime's `grade:<hex>` vote events. */
   jury: Record<string, VoteTally[]>;
   jobs: Job[];

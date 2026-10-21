@@ -68,19 +68,23 @@ export function castBallot(poll: Poll, voter: Voter, cmd: Command): Poll {
   if (option === null) return poll;
   const observed: Poll["observed"] = {};
   for (const [k, v] of Object.entries(poll.observed)) observed[k] = { ...v };
-  const prev = poll.ballots[voter.id];
+  const observedVoters = { ...poll.observedVoters };
+  const prev = poll.ballots.get(voter.id);
   if (prev) {
     const bucket = observed[prev.option] ?? {};
     bucket[prev.rank] = Math.max(0, (bucket[prev.rank] ?? 0) - RANK_WEIGHT[prev.rank]);
     observed[prev.option] = bucket;
+    observedVoters[prev.option] = (observedVoters[prev.option] ?? 0) - 1;
   }
   const bucket = observed[option] ?? {};
   bucket[voter.rank] = (bucket[voter.rank] ?? 0) + RANK_WEIGHT[voter.rank];
   observed[option] = bucket;
+  observedVoters[option] = (observedVoters[option] ?? 0) + 1;
   return {
     ...poll,
     observed,
-    ballots: { ...poll.ballots, [voter.id]: { option, rank: voter.rank } },
+    observedVoters,
+    ballots: poll.ballots.set(voter.id, { option, rank: voter.rank }),
   };
 }
 
@@ -100,11 +104,9 @@ export function openFoilVote(poll: Poll, pending: readonly PendingBallot[]): Pol
 
 /** The tally of the ballots the screen saw in chat, in the runtime's `VoteTally` shape. */
 export function observedTally(poll: Poll): VoteTally[] {
-  const voters = new Map<string, number>();
-  for (const b of Object.values(poll.ballots)) voters.set(b.option, (voters.get(b.option) ?? 0) + 1);
   return poll.options.map((option) => {
     const obs = poll.observed[option] ?? {};
     const weight = RANKS.reduce((a, r) => a + (obs[r] ?? 0), 0);
-    return { option, voters: voters.get(option) ?? 0, weight };
+    return { option, voters: poll.observedVoters[option] ?? 0, weight };
   });
 }

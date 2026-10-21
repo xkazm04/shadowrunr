@@ -17,7 +17,9 @@ import {
   PENDING_BALLOT_MAX,
   QUEUED_HOLD_MS,
   RECORD_MAX,
+  EMPTY_GRADE_BOOK,
   REDACTION_MAX,
+  castGrade,
   defaultScreen,
   initialScene,
   type Decree,
@@ -34,6 +36,7 @@ import {
   type Transition,
 } from "./sceneModel";
 import { wordTimings } from "./timing";
+import { ViewerBook } from "./viewerBook";
 import type { TsMs } from "./vocab";
 
 function setScreen(
@@ -204,8 +207,8 @@ function applyChat(s: SceneState, msg: ChatMsg, at: TsMs): SceneState {
       return { ...next, hints: { ...s.hints, [cmd.hex]: hint } };
     }
     case "grade": {
-      const votes = { ...s.gradeVotes[cmd.hex], [msg.viewer.id]: cmd.grade };
-      return { ...next, gradeVotes: { ...s.gradeVotes, [cmd.hex]: votes } };
+      const book = castGrade(s.gradeVotes[cmd.hex] ?? EMPTY_GRADE_BOOK, msg.viewer.id, cmd.grade);
+      return { ...next, gradeVotes: { ...s.gradeVotes, [cmd.hex]: book } };
     }
     case "propose":
       return next;
@@ -356,7 +359,8 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
           openedAt: at,
           tallies: ev.tallies,
           observed: {},
-          ballots: {},
+          observedVoters: {},
+          ballots: ViewerBook.empty(),
         };
         if (ev.closed) fresh.closedAt = at;
         return { ...s, polls: { ...s.polls, [ev.poll_id]: fresh }, activePoll: ev.poll_id };
@@ -422,7 +426,8 @@ function applyOp(
         openedAt: at,
         tallies: op.options.map((option) => ({ option, voters: 0, weight: 0 })),
         observed: {},
-        ballots: {},
+        observedVoters: {},
+        ballots: ViewerBook.empty(),
       };
       const opened = openFoilVote(poll, pending);
       return { ...s, polls: { ...s.polls, [op.poll_id]: opened }, activePoll: op.poll_id };
