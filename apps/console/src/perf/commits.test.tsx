@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { LIVE, selectSource } from "../pages/onair/feed";
 import { Layer1 as OnAirL1 } from "../pages/onair/Layer1";
 import { onairScript } from "./fixture";
+import { DEFAULT_COALESCE_MS } from "../data/cache";
 import { BUDGETS, frame, idle, line, mountPerf, quiet, type Mounted } from "./harness";
 
 let mounted: Mounted | undefined;
@@ -35,6 +36,8 @@ describe("React commits per live event at On Air (10x fixture)", () => {
     // beat picks another line, so nothing but the close can release this one).
     await act(async () => m.live.push(frame(2, chat(2))));
     await act(async () => m.live.push(frame(3, { type: "picked", ts_ms: 2500, msg_ids: ["live-m1"], reason: "top" })));
+    // stream_start's refetches land once the data layer's burst window closes, before measuring.
+    await act(async () => m.timers.advance(DEFAULT_COALESCE_MS));
     await quiet(m, 50);
     const budget = line(BUDGETS.commits, "onair.liveEvent");
 

@@ -10,6 +10,7 @@ import { gridLayout, gridRect, tileOrigin } from "../pages/simulator/grid";
 import { Layer1 as SimulatorL1 } from "../pages/simulator/Layer1";
 import { world } from "../pages/simulator/testgen";
 import { brain10x, brainScript, SCALE, simGrid, simScript } from "./fixture";
+import { DEFAULT_COALESCE_MS } from "../data/cache";
 import { BUDGETS, frame, idle, line, mountPerf, quiet, type Mounted } from "./harness";
 
 /** A 2D context that records every call by name (canvas passes are counted on it). */
@@ -56,6 +57,7 @@ const passes = () => calls.get("clearRect") ?? 0;
 async function push(m: Mounted, seq: number, event: unknown): Promise<void> {
   await act(async () => {
     m.socket().push(frame(seq, event));
+    m.timers.advance(DEFAULT_COALESCE_MS); // the event's refetches wait out the burst window
   });
 }
 

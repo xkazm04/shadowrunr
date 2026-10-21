@@ -4,7 +4,7 @@ import { QueryCache } from "./cache";
 import { ConnectionStore } from "./connection";
 import type { DoorSource, EventEnvelope } from "./door";
 import type { DataError } from "./errors";
-import { invalidatedByMutation } from "./invalidation";
+import { mutationRules } from "./invalidation";
 import { MutationStore } from "./mutations";
 import type { Result } from "./result";
 import { createRpcClient, type CallOptions, type FetchLike, type RpcClient } from "./rpc";
@@ -93,7 +93,7 @@ export function createDataLayer(opts: DataLayerOptions): DataLayer {
     mutate(method, params, callOpts) {
       return mutations.run(method, params, async () => {
         const r = await client.call(method, params, callOpts);
-        if (r.ok) cache.invalidate(invalidatedByMutation(method));
+        if (r.ok) cache.invalidateWhere(mutationRules(method), { params }, false);
         return r;
       });
     },
@@ -113,7 +113,7 @@ export function createDataLayer(opts: DataLayerOptions): DataLayer {
       cache.startBackstop();
       stream = openEventStream({
         ...streamOpts("live", (env) => {
-          cache.onEvent(env.event.type);
+          cache.onEvent(env.runId === undefined ? { type: env.event.type } : { type: env.event.type, runId: env.runId });
           for (const l of live) l(env);
         }),
         onStatus: (status, info) => {

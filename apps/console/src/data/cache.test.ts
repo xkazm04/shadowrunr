@@ -45,10 +45,12 @@ describe("query cache", () => {
     s.cache.watch("runs.page", { limit: 50 }, () => undefined);
     s.cache.watch("directive.list", {}, () => undefined);
     await flush();
-    s.cache.onEvent("stream_end");
+    s.cache.onEvent({ type: "stream_end" });
+    s.timers.advance(250);
     await flush();
     expect(s.fetch.calls).toEqual(["runs.page", "directive.list", "runs.page"]);
-    s.cache.onEvent("chat"); // chat invalidates nothing
+    s.cache.onEvent({ type: "chat" }); // chat invalidates nothing
+    s.timers.advance(250);
     await flush();
     expect(s.fetch.calls).toHaveLength(3);
   });
@@ -101,6 +103,10 @@ describe("data layer", () => {
     await flush();
     sockets.last().open();
     sockets.last().push({ seq: 1, run_id: "r1", event: { type: "stream_end", ts_ms: 1, reason: "sim_complete" } });
+    timers.advance(249); // the coalescing window is still open
+    await flush();
+    expect(fetch.calls).toEqual(["runs.page"]);
+    timers.advance(1);
     await flush();
     expect(fetch.calls).toEqual(["runs.page", "runs.page"]);
     sockets.last().drop();

@@ -34,11 +34,12 @@ function daemon(runs: Record<string, number>): (method: string, sent: string) =>
   };
 }
 
-function mount(ui: ReactNode, runs: Record<string, number>): { layer: DataLayer; calls: string[] } {
+function mount(ui: ReactNode, runs: Record<string, number>): { layer: DataLayer; calls: string[]; timers: ReturnType<typeof manualTimers> } {
   const fetch = scriptedFetch((m, sent) => daemon(runs)(m, typeof sent === "string" ? sent : ""));
-  const layer = createDataLayer({ baseUrl: "http://x", door: contractDoor, fetch, socket: fakeSockets().factory, timers: manualTimers() });
+  const timers = manualTimers();
+  const layer = createDataLayer({ baseUrl: "http://x", door: contractDoor, fetch, socket: fakeSockets().factory, timers });
   render(<DataProvider layer={layer}>{ui}</DataProvider>);
-  return { layer, calls: fetch.calls };
+  return { layer, calls: fetch.calls, timers };
 }
 
 async function settle(rounds = 12) {
@@ -89,9 +90,12 @@ describe("usePaged", () => {
   });
 
   it("refetches every page when an event invalidates the method", async () => {
-    const { calls, layer } = mount(<Chain max={2} />, { t1: 300 });
+    const { calls, layer, timers } = mount(<Chain max={2} />, { t1: 300 });
     await settle();
-    await act(async () => layer.cache.onEvent("stream_end"));
+    await act(async () => {
+      layer.cache.onEvent({ type: "stream_end" });
+      timers.advance(250);
+    });
     await settle();
     expect(calls.filter((c) => c === "runs.page").length).toBe(4);
   });

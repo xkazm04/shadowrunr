@@ -1,8 +1,11 @@
-// Query cache over the RPC client. Entries refetch when an event or mutation invalidates their
-// method (see invalidation.ts); a slow backstop timer refreshes entries that are still watched
-// and older than `backstopMs`, in case an event was missed. No per-tick work otherwise.
+// Query cache over the RPC client. Entries refetch when an event or mutation invalidates them
+// (see invalidation.ts: a rule names a method and may scope it to some params); an event's
+// refetches wait out a short window so a burst costs one fetch per key. A slow backstop timer
+// refreshes entries that are still watched and older than `backstopMs`, in case an event was
+// missed. No per-tick work otherwise.
+import type { RpcMethod } from "@shadowrunr/contract";
 import type { DataError } from "./errors";
-import { invalidatedByEvent } from "./invalidation";
+import { eventRules, type CachedReply, type Rule, type ScopeContext } from "./invalidation";
 import type { RpcClient } from "./rpc";
 import type { Timers } from "./socket";
 
@@ -34,9 +37,18 @@ export interface QueryCacheOptions {
   readonly timers?: Timers;
   /** Unwatched entries kept for instant re-mounts; the oldest beyond this are dropped. */
   readonly maxIdleEntries?: number;
+  /** How long an event's refetches wait for the rest of its burst (needs `timers`). */
+  readonly coalesceMs?: number;
+}
+
+/** What a pushed event tells invalidation: its type and, when enveloped, its run. */
+export interface EventScope {
+  readonly type: string;
+  readonly runId?: string;
 }
 
 export const DEFAULT_BACKSTOP_MS = 5 * 60_000;
+export const DEFAULT_COALESCE_MS = 250;
 
 /** Deterministic key: object keys sorted, so `{a,b}` and `{b,a}` share an entry. */
 export function queryKey(method: string, params: unknown): string {
@@ -63,7 +75,11 @@ export class QueryCache {
   private readonly backstopMs: number;
   private readonly timers: Timers | undefined;
   private readonly maxIdle: number;
+  private readonly coalesceMs: number;
   private backstop: number | null = null;
+  /** Keys an event invalidated, fetched when the coalescing window closes. */
+  private readonly due = new Set<string>();
+  private window: number | null = null;
   /** Counts network calls; budgets and tests read it. */
   fetches = 0;
 
@@ -73,6 +89,7 @@ export class QueryCache {
     this.backstopMs = opts.backstopMs ?? DEFAULT_BACKSTOP_MS;
     this.timers = opts.timers;
     this.maxIdle = opts.maxIdleEntries ?? 256;
+    this.coalesceMs = opts.coalesceMs ?? DEFAULT_COALESCE_MS;
   }
 
   getSnapshot(key: string): QuerySnapshot {
@@ -98,11 +115,29 @@ export class QueryCache {
 
   /** Marks every entry of these methods stale and refetches the watched ones. */
   invalidate(methods: readonly string[]): void {
-    if (methods.length === 0) return;
-    for (const [key, e] of this.entries) {
-      if (!methods.includes(e.method)) continue;
+    this.invalidateWhere(methods as readonly RpcMethod[], {}, false);
+  }
+
+  /**
+   * Marks stale every entry a rule holds (its method, and its scope unless the scope proves the
+   * entry unchanged) and refetches the watched ones: now, or once `coalesce`'s window closes.
+   */
+  invalidateWhere(rules: readonly Rule[], ctx: Omit<ScopeContext, "cached">, coalesce: boolean): void {
+    if (rules.length === 0) return;
+    const full: ScopeContext = { ...ctx, cached: (m) => this.cached(m) };
+    const hit: [string, Entry][] = [];
+    for (const rule of rules) {
+      const method = typeof rule === "string" ? rule : rule.method;
+      for (const [key, e] of this.entries) {
+        if (e.method === method && (typeof rule === "string" || rule.scope(e.params, full))) hit.push([key, e]);
+      }
+    }
+    // Every scope read the cache as the event found it; only now does anything turn stale.
+    for (const [key, e] of hit) {
       e.stale = true;
-      if (e.listeners.size > 0) void this.fetch(key, e);
+      if (e.listeners.size === 0) continue;
+      if (coalesce && this.timers && this.coalesceMs > 0) this.schedule(key);
+      else void this.fetch(key, e);
     }
   }
 
@@ -125,8 +160,8 @@ export class QueryCache {
     }
   }
 
-  onEvent(type: string): void {
-    this.invalidate(invalidatedByEvent(type));
+  onEvent(event: EventScope): void {
+    this.invalidateWhere(eventRules(event.type), event.runId === undefined ? {} : { runId: event.runId }, true);
   }
 
   refetch(method: string, params: unknown): void {
@@ -150,9 +185,36 @@ export class QueryCache {
 
   dispose(): void {
     if (this.timers && this.backstop !== null) this.timers.clearTimeout(this.backstop);
+    if (this.timers && this.window !== null) this.timers.clearTimeout(this.window);
     this.backstop = null;
+    this.window = null;
+    this.due.clear();
     for (const e of this.entries.values()) e.inflight?.abort();
     this.entries.clear();
+  }
+
+  private *cached(method: RpcMethod): Iterable<CachedReply> {
+    for (const e of this.entries.values()) {
+      if (e.method !== method) continue;
+      const fresh = e.snapshot.status === "ready" && !e.stale && !e.inflight;
+      yield { params: e.params, data: e.snapshot.data, fresh };
+    }
+  }
+
+  private schedule(key: string): void {
+    this.due.add(key);
+    const timers = this.timers;
+    if (!timers || this.window !== null) return;
+    this.window = timers.setTimeout(() => {
+      this.window = null;
+      const keys = [...this.due];
+      this.due.clear();
+      for (const k of keys) {
+        const e = this.entries.get(k);
+        // A watch or a mutation may have fetched it since; that reply is newer than the event.
+        if (e?.stale && e.listeners.size > 0) void this.fetch(k, e);
+      }
+    }, this.coalesceMs);
   }
 
   private async fetch(key: string, e: Entry): Promise<void> {
