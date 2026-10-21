@@ -131,11 +131,13 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # extraction_timeout_s = 900
 
 # Malakor's local voice and face (contract appendix (voice); docs/guide/voice.md). Off unless
-# `enabled = true`. Kokoro runs through sherpa-onnx, once per sentence, on this machine; nothing
-# is sent anywhere. Paths are machine-local: keep them in your own shadowrunr.toml.
+# `enabled = true`. Kokoro runs through sherpa-onnx on this machine, kept loaded when the python
+# has sherpa-onnx (the warm engine), else one engine run per sentence; nothing is sent anywhere.
+# Paths are machine-local: keep them in your own shadowrunr.toml.
 # [voice]
 # enabled = false
 # python = "python"                 # interpreter for `python -m shadowrunr_voice`
+# python = "<voice venv>/Scripts/python.exe"  # the venv in docs/guide/voice.md: warm engine + mouth shapes
 # sidecar = "tools/voice"           # the sidecar package's parent directory
 # engine_dir = "<sherpa-onnx TTS home: bin/ and kokoro/>"
 # durations_model = "<kokoro durations subgraph .onnx; absent = no mouth shapes>"
@@ -145,5 +147,5 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # max_lag_ms = 15000                # skip a line whose audio cannot start within this of its say
 # render_timeout_ms = 30000
 # lines_in_flight = 3               # lines with the sidecar at once; their audio still goes in order
-# render_workers = 3                # engine runs at once in the sidecar
-# render_threads = 2                # threads per engine run; keep workers x threads within the physical cores
+# render_workers = 3                # engine runs at once in the sidecar (warm: loaded workers)
+# render_threads = 2                # threads per engine run; absent = 2, or 4 for the warm engine

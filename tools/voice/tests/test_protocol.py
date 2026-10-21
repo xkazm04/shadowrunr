@@ -82,9 +82,10 @@ class Protocol(unittest.TestCase):
 
     def test_hello_first_with_the_voice_and_no_visemes_without_a_model(self) -> None:
         settings = Settings(engine_dir=self.root, command=FAKE)
-        message, dead, faces = hello(settings)
+        message, dead, faces, warm = hello(settings)
         self.assertIsNone(dead)
         self.assertIsNone(faces)
+        self.assertIsNone(warm)
         self.assertEqual(
             {k: v for k, v in message.items() if k != "reason"},
             {
@@ -104,7 +105,7 @@ class Protocol(unittest.TestCase):
         present.write_bytes(b"")
         settings = Settings(engine_dir=self.root, command=FAKE, durations=present)
         with mock.patch.dict(sys.modules, {"numpy": None, "onnxruntime": None}):
-            message, dead, _ = hello(settings)
+            message, dead, _, _ = hello(settings)
         self.assertIsNone(dead)
         self.assertFalse(message["visemes"])
         self.assertIn("not installed", message["reason"])

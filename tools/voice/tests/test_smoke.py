@@ -28,13 +28,14 @@ class RealEngine(unittest.TestCase):
             timeout_s=90.0,
             durations=Path(DURATIONS) if DURATIONS else None,
         )
-        message, dead, faces = hello(settings)
+        message, dead, faces, warm = hello(settings)
         self.assertIsNone(dead, message.get("reason"))
+        print(f"\nsmoke: {message.get('reason')}")
         self.assertEqual(message["sample_rate"], 24_000)
         if DURATIONS:
             self.assertTrue(message["visemes"], message.get("reason"))
         sink = Sink()
-        sidecar = Sidecar(settings, sink.send, faces=faces)
+        sidecar = Sidecar(settings, sink.send, faces=faces, warm=warm)
         try:
             began = time.monotonic()
             sidecar.feed('{"type":"say","id":"smoke","text":"I am Malakor."}')
