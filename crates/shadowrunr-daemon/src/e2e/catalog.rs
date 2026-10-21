@@ -51,6 +51,12 @@ async fn character_list_and_get_expose_the_package() {
     assert_eq!(d.foils.len(), 5);
     assert!(d.foils.iter().all(|f| f.declared));
     assert!(!d.situations.is_empty());
+    // One parse: character.get serves the bank the brain loaded and validated.
+    let pkg = shadowrunr_brain::load_character(&repo().join("characters/malakor"), "").unwrap();
+    assert_eq!(
+        serde_json::to_value(&d.situations).unwrap(),
+        serde_json::to_value(&pkg.situations.situations).unwrap()
+    );
     let rule = d.rules.iter().find(|r| r.id == "crisis-handoff").unwrap();
     assert!(rule.enabled && rule.default && !rule.text.is_empty());
     assert_eq!(

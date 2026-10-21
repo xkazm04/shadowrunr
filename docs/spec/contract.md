@@ -193,10 +193,17 @@ A value is a positive whole number in the key's unit (`_ms`, `_s`, else a count)
       "invariants": ["red-line:hateful-conduct"] } ] }
 ```
 
-Optional situation fields (parsed by the sim):
+Optional situation fields:
 - `"stimulus": "message|silence|vote|wave"`: inferred from archetype and invariants when absent.
 - `"silence_s"`: default 120.
 - `"segments": ["SEG-02A"]`: scheduled in every segment when absent.
+
+The bank is parsed once, by the package load (`shadowrunr_types::catalog::Situation`), and the
+sim, `character.get` and pre-flight PF-02 all read that load. It fails the package, naming the
+file, the situation and the field, on an unknown field, a `stimulus` or segment outside the
+values above, a duplicate `id`, or a `rule:<id>` invariant with no `rules/<id>.md` in the
+package. Rubric ids (`red-line:`, `role:`, `talk:`) are not the package's to check: the judge
+reads them against `rubric.toml`.
 
 Brain wire values:
 - `job.status`: `queued`, `running`, `progress`, `done`, `failed`, `cancelled`.
