@@ -3586,6 +3586,27 @@
           "evidence": "crates/shadowrunr-types/Cargo.toml:12 The complete dependency list contains serialization, errors, async-trait and schemars, with no verification library, ghost-erasure macro or verifier-coupled pin."
         }
       ]
+    },
+    "d6365504-acc7-4901-b7cf-569781f6644c/audience-absorption-at-scale": {
+      "context": "sim-instruments",
+      "subject": "audience-absorption-at-scale",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T21:47:05.703Z",
+      "worker": "04c9241e-672d-4578-aaa6-d7365de73b90",
+      "techniques": [
+        {
+          "technique": "first-contact-exemptions",
+          "verdict": "deviation",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:6 The enabled treatment adds a rank-gated proposal bypass; moderation.rs:958-962 confirms it has no per-batch or answered-state guard, unlike the bounded exemption list."
+        },
+        {
+          "technique": "room-scaled-rate-caps",
+          "verdict": "deviation",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:7 The enabled experiment's rate_cap_for implementation doubles the allowance for unaddressed chatter below ten chatters and drops it from 12 to 6 at ten, violating addressed-only leniency and continuity."
+        }
+      ]
     }
   }
 }

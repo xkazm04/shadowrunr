@@ -1,0 +1,47 @@
+{
+ "schema": "conform-run/1",
+ "worker": "04c9241e-672d-4578-aaa6-d7365de73b90",
+ "subject": "audience-absorption-at-scale",
+ "evaluatedAt": "2026-10-22T21:47:05.703798+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "sim-instruments",
+   "subject": "audience-absorption-at-scale",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "sim/matrices/rate-cap-exemptions.toml:27 The treatment enables repeatable rank-gated proposal exemptions and loosens caps for unaddressed chatter, violating the standard's bounded exemptions and addressed-only leniency.",
+   "techniques": [
+    {
+     "technique": "first-contact-exemptions",
+     "verdict": "deviation",
+     "evidence": "sim/matrices/rate-cap-exemptions.toml:6 The enabled treatment adds a rank-gated proposal bypass; moderation.rs:958-962 confirms it has no per-batch or answered-state guard, unlike the bounded exemption list."
+    },
+    {
+     "technique": "room-scaled-rate-caps",
+     "verdict": "deviation",
+     "evidence": "sim/matrices/rate-cap-exemptions.toml:7 The enabled experiment's rate_cap_for implementation doubles the allowance for unaddressed chatter below ten chatters and drops it from 12 to 6 at ten, violating addressed-only leniency and continuity."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-22T21:47:05.703798+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "audience-absorption-at-scale"
+   ],
+   "techniques": [
+    "first-contact-exemptions",
+    "room-scaled-rate-caps"
+   ],
+   "deviations": 1,
+   "context": "sim-instruments",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

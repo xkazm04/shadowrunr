@@ -4831,7 +4831,11 @@
           "revision": 2,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:27 The treatment enables repeatable rank-gated proposal exemptions and loosens caps for unaddressed chatter, violating the standard's bounded exemptions and addressed-only leniency.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:10c4a251c835d294",
+          "evaluatedRevision": 3
         },
         {
           "subject": "prompt-assembly",
