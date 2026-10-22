@@ -11,6 +11,7 @@ use std::collections::VecDeque;
 
 use shadowrunr_types::{StreamEvent, TsMs};
 
+use crate::case_names::{CaseNames, ID_REWRITTEN, ID_SPOKEN_RULE};
 use crate::moderation::{
     self, gate_line, output_events, recast_in_character, HexInfo, Policy, RemovedNames, TermAction,
     CRISIS_BAN_RULE, NAME_WITHHELD,
@@ -58,6 +59,7 @@ impl Surface {
                 terms: Terms::Line,
                 crisis: true,
                 recast: true,
+                speak_ids: true,
                 drop_empty: true,
                 names: Names::Repair,
                 care_seal: false,
@@ -67,6 +69,7 @@ impl Surface {
                 terms: Terms::Line,
                 crisis: true,
                 recast: false,
+                speak_ids: true,
                 drop_empty: true,
                 names: Names::Repair,
                 care_seal: false,
@@ -76,6 +79,7 @@ impl Surface {
                 terms: Terms::Line,
                 crisis: true,
                 recast: false,
+                speak_ids: false,
                 drop_empty: false,
                 names: Names::Repair,
                 care_seal: false,
@@ -85,6 +89,7 @@ impl Surface {
                 terms: Terms::Line,
                 crisis: false,
                 recast: false,
+                speak_ids: false,
                 drop_empty: false,
                 names: Names::Off,
                 care_seal: false,
@@ -94,6 +99,7 @@ impl Surface {
                 terms: Terms::BlockOrBleep,
                 crisis: false,
                 recast: false,
+                speak_ids: false,
                 drop_empty: true,
                 names: Names::Drop,
                 care_seal: true,
@@ -132,6 +138,8 @@ pub struct Profile {
     pub crisis: bool,
     /// A line the gate replaced is recast to fit the beat (the orchestrator supplies it).
     pub recast: bool,
+    /// A card or record id left in the line is spoken as its name ([`CaseNames::speak`]).
+    pub speak_ids: bool,
     /// A line the checks emptied is not emitted.
     pub drop_empty: bool,
     /// A self-harm disclosure is never written.
@@ -153,6 +161,9 @@ impl Profile {
         }
         if self.recast {
             v.push("recast");
+        }
+        if self.speak_ids {
+            v.push("speak_ids");
         }
         if self.drop_empty {
             v.push("drop_empty");
@@ -177,6 +188,8 @@ pub struct GateCtx<'a> {
     pub now_ms: TsMs,
     pub policy: &'a Policy,
     pub hexes: &'a [HexInfo],
+    /// The case's cards and records by name, for [`Profile::speak_ids`].
+    pub names: &'a CaseNames,
     /// The beat answers a self-harm disclosure.
     pub crisis: bool,
     pub removed: &'a RemovedNames,
@@ -236,6 +249,15 @@ pub fn pass(
             ctx.policy.bleep(text)
         }
     };
+    // Ids are machine handles: a card or record id is said as its name, each rewrite counted.
+    if p.speak_ids {
+        let (spoken, n) = ctx.names.speak(&out);
+        for _ in 0..n {
+            g.events
+                .push(moderation::output_event(now, ID_SPOKEN_RULE, ID_REWRITTEN));
+        }
+        out = spoken;
+    }
     if p.drop_empty && out.is_empty() {
         return g.drop();
     }
@@ -299,6 +321,7 @@ mod tests {
                     "line_gate",
                     "crisis",
                     "recast",
+                    "speak_ids",
                     "drop_empty",
                     "withhold_names",
                     "repeats",
@@ -306,6 +329,7 @@ mod tests {
                 Surface::Foil => &[
                     "line_gate",
                     "crisis",
+                    "speak_ids",
                     "drop_empty",
                     "withhold_names",
                     "repeats",
@@ -340,6 +364,7 @@ mod tests {
             now_ms: 5,
             policy: &policy,
             hexes: &[],
+            names: &CaseNames::default(),
             crisis: false,
             removed: &removed,
             recent: &[&recent],

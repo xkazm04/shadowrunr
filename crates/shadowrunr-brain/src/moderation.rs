@@ -1727,7 +1727,13 @@ fn names_hex(text_lower: &str, h: &HexInfo) -> bool {
         }
     }
     let label = h.label.trim().to_lowercase();
-    label.chars().count() >= 4 && text_lower.contains(&label)
+    if label.chars().count() >= 4 && text_lower.contains(&label) {
+        return true;
+    }
+    // The name as spoken (HEX-NAMES): the label up to its fictional marker or first comma
+    // ("Mirecrown Trust (fictional)" -> "mirecrown trust").
+    let core = label.split(['(', ',']).next().unwrap_or_default().trim();
+    core.chars().count() >= 5 && text_lower.contains(core)
 }
 
 /// Byte spans of the sentences of a line (split after `.`, `!` or `?` followed by space).

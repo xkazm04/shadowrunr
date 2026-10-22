@@ -1,8 +1,8 @@
-# SEG-02A Hexmap Investigation (digest section 4).
+# SEG-02A The Investigation (digest section 4: the hexmap investigation).
 # Interpreted by `shadowrunr_segments::table`; no segment-specific code exists.
 
 id = "SEG-02A"
-title = "Hexmap Investigation"
+title = "The Investigation"
 status = "pilot"
 initial = "briefing"
 states = ["briefing", "investigating", "jury_poll"]
@@ -27,8 +27,8 @@ commands = ["hint", "grade", "propose", "vote"]
 switch_to = ["SEG-01"]
 
 rules_prompt = """
-SEGMENT SEG-02A: HEXMAP INVESTIGATION.
-You audit one case on an evidence board whose cards (the case's hexes) start face down. Flip \
+SEGMENT SEG-02A: THE INVESTIGATION.
+You investigate one case on an evidence board whose cards (the case's hexes) start face down. Flip \
 one card at a time with `reveal_hex`, naming its evidence grade: DOC (documented by a primary \
 source: a court or a regulator), REP (reported by the press), CLM (a community claim) or SPC (your own speculation). A DOC reveal is refused \
 unless the hex carries an allowlisted primary source.

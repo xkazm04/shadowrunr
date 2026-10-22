@@ -29,6 +29,7 @@
 //!    rest of the stream). Every line put on air advances the speech clock.
 
 pub mod care;
+pub mod case_names;
 pub mod character;
 pub mod compose;
 pub mod fleet;
@@ -79,6 +80,7 @@ pub use compose::{brief_summary, build_stream_brief, load_stream_brief, normaliz
 pub use shadowrunr_types::reconcile::StreamBrief;
 
 use care::{care_note, removed_note, CareLedger};
+use case_names::CaseNames;
 use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line};
@@ -289,6 +291,8 @@ pub struct Brain {
     /// When this beat started, on the tokio clock (for [`Brain::on_air_ms`]).
     beat_clock: tokio::time::Instant,
     hexes: Vec<HexInfo>,
+    /// The case's cards and filed records by name, for the output gate ([`case_names`]).
+    case_names: CaseNames,
     turns: Vec<String>,
     ticks: u64,
     salt: u64,
@@ -353,6 +357,7 @@ impl Brain {
                 .with_character(tuning.tuning, cfg.character.lines.clone()),
             beat_clock: tokio::time::Instant::now(),
             hexes: Vec::new(),
+            case_names: CaseNames::default(),
             turns: Vec::new(),
             ticks: 0,
             salt,
@@ -410,6 +415,7 @@ impl Brain {
     /// carry "alleged". `reveal_hex` ops update grades as they happen.
     pub fn set_case(&mut self, case: &Case) {
         self.hexes = case.hexes.iter().map(HexInfo::from).collect();
+        self.case_names = CaseNames::from_hexes(&case.hexes);
     }
 
     pub fn set_hexes(&mut self, hexes: Vec<HexInfo>) {
@@ -491,6 +497,7 @@ impl Brain {
             now_ms,
             policy: &self.policy,
             hexes: &self.hexes,
+            names: &self.case_names,
             crisis: false,
             removed: &self.removed_names,
             recent: &[],
@@ -852,6 +859,7 @@ impl Brain {
         }
         if !ctx.hexes.is_empty() {
             self.hexes = ctx.hexes.iter().map(HexInfo::from).collect();
+            self.case_names = CaseNames::read(ctx);
         }
         self.ticks += 1;
         self.working.expire(now_ms);
@@ -1289,6 +1297,7 @@ impl Brain {
                         now_ms,
                         policy: &self.policy,
                         hexes: &self.hexes,
+                        names: &self.case_names,
                         crisis,
                         removed: &self.removed_names,
                         recent: if guard_repeats { &[&self.spoken] } else { &[] },
@@ -1326,6 +1335,7 @@ impl Brain {
                         now_ms,
                         policy: &self.policy,
                         hexes: &self.hexes,
+                        names: &self.case_names,
                         crisis,
                         removed: &self.removed_names,
                         recent: if guard_repeats {
@@ -1367,6 +1377,7 @@ impl Brain {
                                 now_ms,
                                 policy: &self.policy,
                                 hexes: &self.hexes,
+                                names: &self.case_names,
                                 crisis,
                                 removed: &self.removed_names,
                                 recent: &[],
@@ -1392,6 +1403,7 @@ impl Brain {
                         now_ms,
                         policy: &self.policy,
                         hexes: &self.hexes,
+                        names: &self.case_names,
                         crisis,
                         removed: &self.removed_names,
                         recent: &[],

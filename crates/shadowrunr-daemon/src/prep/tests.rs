@@ -190,7 +190,7 @@ async fn generation_writes_a_staged_checked_prep_through_the_planner() {
     assert!(r.prompt.contains("## The constitution (immutable)"));
     assert!(r.prompt.contains("## Running jokes"));
     assert!(r.prompt.contains("## SEG-01: the Improvised Room"));
-    assert!(r.prompt.contains("## SEG-02A: the Hexmap Investigation"));
+    assert!(r.prompt.contains("## SEG-02A: The Investigation"));
     assert!(r
         .prompt
         .contains("Tonight's programme: SEG-01 for 20 minutes."));
