@@ -1,0 +1,16 @@
+{"card":"Long calls die with their button: the layer owns in-flight mutations","context":"console-data-layer","slot":"A","status":"landed",
+ "shas":["1552a1e","8697173"],
+ "tests_added":[
+  "apps/console/src/data/mutations.test.ts::joins a second call for the same key to the flight in progress: one request, one answer",
+  "apps/console/src/data/mutations.test.ts::guards per key, never per method: t1 and t2 both run",
+  "apps/console/src/data/mutations.test.ts::guards only while in flight: the same call after it settles is sent again",
+  "apps/console/src/data/mutations.test.ts::keeps a failure nobody was mounted to read, until it is acknowledged",
+  "apps/console/src/data/mutations.test.ts::keeps the newest 32 settled outcomes and never evicts a call in flight",
+  "apps/console/src/data/react.test.tsx::a fresh instance after an unmount sees the run in flight and disables its button",
+  "apps/console/src/pages/reconcile/inflight.test.tsx::NoReport keeps 'Reconciling…' across reconcile/report -> chat -> report and sends no second run"],
+ "guard_cases":["case 2: t1 and t2 both run (per-key, not per-method) - green before by design","case 3: same call after settle is sent again (in-flight-only guard) - green before by design"],
+ "cases_total":7,"cases_red_before":5,"cases_green_after":7,
+ "gates":{"pnpm -C apps/console test":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console lint":0,"pnpm -C apps/console build":0},
+ "files_changed":12,"lines_changed":484,
+ "deviations_from_card":"(1) Case 7 lives in a new coupled test apps/console/src/pages/reconcile/inflight.test.tsx, not react.test.tsx: eslint boundaries forbid data/ importing kit/ or pages/. (2) Commit split: commit 1 = data layer + NoReport (case 7 needs it) + budget; commit 2 = ChatPage, PlanPage, ClipActions. (3) Pages show a missed failure (settled.error) until the operator's next run/seal/render, which acks it, rather than ack-on-read in an effect (react-hooks set-state-in-effect lint). The hook-level contract (unacked until ack(); a second reader sees none after ack) is as carded and tested. (4) Caller claims: an outcome settles already-acknowledged when a mounted caller still awaits it, so the starter never sees its own error twice. (5) ChatPage does not read settled: its orphaned call still writes reply/failure into the module session store, so nothing is lost there. (6) apps/console/budgets/bundle.json entry js 291,500 -> 294,500 under the lock (measured 291,724 -> 294,162 B, +2,438 B: MutationStore + hooks ride the first load with the data layer, which the layer composes at boot).",
+ "notes":"Critic note honoured: the report still opened after a remount at HEAD (the orphaned closure calls session.showReport); the card's claim is about pending/disabled state and lost errors, which is what the tests pin. A second click/submit while a run is in flight sends no second reconcile.run (pinned in case 7 with both click and form submit). Limit stated in code and commit: client-only, the daemon has no reconcile.run guard, so two console tabs are not protected. NoReport edit kept to the busy/inflight/missed-error lines."}

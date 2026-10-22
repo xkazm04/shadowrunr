@@ -1,0 +1,17 @@
+{"card":"Walk a segment's state machine: pick a state, see what's open and where it leads","context":"console-segments-page","slot":"B","status":"landed",
+ "shas":["3330bfc"],
+ "tests_added":[
+  "apps/console/src/pages/segments/layer2.test.tsx::segments/tables/<SEG>/<state>: walking the state machine > addresses a state by route and selects it",
+  "apps/console/src/pages/segments/layer2.test.tsx::... > lists the cold open's narrowed ops, not the segment's",
+  "apps/console/src/pages/segments/layer2.test.tsx::... > expands the '*' row into opening's exits, each a link that walks on",
+  "apps/console/src/pages/segments/layer2.test.tsx::... > shows foil vote's guarded exits and its entries",
+  "apps/console/src/pages/segments/layer2.test.tsx::... > draws the cold-open clock as an exit",
+  "apps/console/src/pages/segments/layer2.test.tsx::... > flags a state the table strands, and none on SEG-01 as shipped",
+  "apps/console/src/pages/segments/layer2.test.tsx::... > refuses an unknown state and keeps the card on its initial state",
+  "apps/console/src/pages/segments/model.test.ts::walking a segment's state machine (5 cases) + labels the breadcrumbs (depth-3 crumb 'SEG-01 / foil vote')"],
+ "guard_cases":[],
+ "cases_total":7,"cases_red_before":7,"cases_green_after":7,
+ "gates":{"pnpm -C apps/console typecheck":0,"pnpm -C apps/console test":0,"pnpm -C apps/console lint":0,"pnpm -C apps/console build":0},
+ "files_changed":11,"lines_changed":438,
+ "deviations_from_card":"One commit (tests import stateView/reachable, which do not typecheck before the implementation). Coupled file outside the write set: apps/console/budgets/perf.json segments.l2.tables DOM line 365 -> 500 (measured 458: 336 -> 401 from the walk on the old fixture, 401 -> 458 from the fixture's SEG-01 becoming the shipped table with 15 transitions), taken under the lock. The cold-open clock edge's source state is named once in model.ts as COLD_OPEN_STATE='cold_open' because ColdOpenInfo carries only `to` (mirrors shadowrunr-segments table::COLD_OPEN_STATE); every other rule comes from the payload. The per-state rules table (incl. the Commands column from 94a86ad) and the transitions table are kept as full listings.",
+ "notes":"Bundle: segments.l2 js 76.6 KiB of 97.7 KiB, css 22.8 KiB of the 23,500 line (no raise). A picked state is local on the all-cards view; on a focused card it replaces the route (segments/tables/<SEG>/<state>), which re-renders in place (rise depth 2). First-match shadowing of a '*' row by an earlier specific row is not computed (would re-encode runtime matching)."}

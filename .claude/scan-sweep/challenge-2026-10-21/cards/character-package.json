@@ -1,0 +1,127 @@
+[
+  {
+    "context": "character-package",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "The crisis handoff is an operator toggle: lock rails the override cannot reach",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "characters/malakor/character.toml",
+      "crates/shadowrunr-brain/src/character.rs",
+      "crates/shadowrunr-brain/src/rules.rs",
+      "crates/shadowrunr-brain/src/compose.rs",
+      "crates/shadowrunr-daemon/src/catalog.rs",
+      "crates/shadowrunr-daemon/src/cli.rs",
+      "crates/shadowrunr-daemon/src/e2e/mod.rs",
+      "crates/shadowrunr-daemon/tests/cli.rs",
+      "crates/shadowrunr-types/src/catalog.rs",
+      "packages/contract/schema/contract.schema.json",
+      "packages/contract/src/generated/types.ts",
+      "packages/contract/src/generated/validators.js",
+      "apps/console/src/pages/characters/RulesTab.tsx",
+      "docs/spec/contract.md"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "crates/shadowrunr-types/src/catalog.rs (RuleState gains `locked: bool`, additive)",
+      "packages/contract generated schema/types (regenerated, additive field)",
+      "apps/console/src/pages/characters/RulesTab.tsx (console-characters-page context: a locked rule renders without a Switch)"
+    ],
+    "acceptance": [
+      "malakor package loaded with an override file {\"crisis-handoff\": false} -> rule crisis-handoff has enabled=true, locked=true (today enabled=false: rules.rs:169 lets the override win)",
+      "rules::set_rule(malakor, \"crisis-handoff\", false) -> Err(BrainError::Rejected(\"crisis-handoff is a rail ...\")) and rules.json is not written (today Ok and the file holds {\"crisis-handoff\": false}, e2e/mod.rs:386-397)",
+      "RPC character.rules.set {id: crisis-handoff, enabled: false} -> error, and a following character.rules still reports crisis-handoff enabled:true locked:true",
+      "safety_directive for a picked self-harm candidate on malakor with override {\"crisis-handoff\": false} -> names rule \"Crisis handoff\" (crisis-handoff), never NEUTRAL_DISTRESS_DIRECTIVE (today compose.rs:440-449 falls back to 'respond with care')",
+      "a package whose character.toml lists rule x under `rails` but sets [rules] x = false, or lists a rail with no rules/x.md -> load_character Err naming x",
+      "set_rule(malakor, \"no-financial-promotion\", false) and (\"crisis-chat-ban\", false) -> still Ok (only rails lock; optional rules stay switches)",
+      "CLI `character rules malakor` -> crisis-handoff printed as `lock` instead of `on`/`off`; RulesTab renders data-locked=true with no Switch for it"
+    ],
+    "premise": [
+      "characters/malakor/character.toml:15-19 - crisis-handoff sits in the optional [rules] table beside no-financial-promotion, 'on or off by default', with an operator override that wins",
+      "crates/shadowrunr-brain/src/rules.rs:169 - `let enabled = over.get(&id).copied().unwrap_or(default);` the override beats every rule; no rule kind exists",
+      "crates/shadowrunr-brain/src/rules.rs:209-230 - set_rule only rejects unknown ids; any known rule can be written false",
+      "crates/shadowrunr-brain/src/compose.rs:423-449 - with crisis-handoff disabled the self-harm directive degrades to NEUTRAL_DISTRESS_DIRECTIVE 'A viewer may be in distress; respond with care.'",
+      "crates/shadowrunr-daemon/src/e2e/mod.rs:386-397 - the e2e test proves character.rules.set {crisis-handoff:false} succeeds and persists",
+      "apps/console/src/pages/characters/RulesTab.tsx:76 - every rule, crisis-handoff included, is a live Switch",
+      "characters/malakor/constitution.md:39-58 - the crisis handoff is not among the nine immutable red lines, so nothing above the toggle carries it",
+      "registry live-safety-rails golden path: 'a rail packaged as an optional rule the owner may toggle off for a night has become a preference, and the fallback it leaves behind (\"respond with care\") no longer carries the shape that made the response safe. Owners configure how a rail is delivered ... never whether.'"
+    ],
+    "rollback": "Revert the series: the `rails` key is additive in character.toml, RuleState.locked is an additive field, and operator rules.json files are never rewritten (a stored crisis-handoff:false is ignored while locked and honoured again after revert).",
+    "gate": "policy-tighten",
+    "test_command": "cargo test -p shadowrunr-brain -p shadowrunr-daemon && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check && pnpm -C packages/contract check && pnpm -C apps/console typecheck && pnpm -C apps/console test && pnpm -C apps/console lint",
+    "runner_up": "Judge criteria for package rules are re-typed in sim/rubric.toml (rule:crisis-handoff folds in crisis-chat-ban's prose; crisis-chat-ban has no situation) and rule_set ignores the enabled set: derive rule:<id> from rules/*.md and label disabled rules in the verdict.",
+    "body": "## Summary\nThe crisis handoff - the one rail the live-safety-rails standard says must be positively *done* on every path - ships as an optional rule the operator can switch off from a console Switch, after which the brain degrades to a generic 'respond with care'. Give the package a `rails` list: a rail is a rule file the override cannot disable, set_rule refuses, and the console shows as locked.\n\n## Description\nToday a package rule has one kind: optional, default from character.toml [rules], override from <data>/characters/<id>/rules.json wins (rules.rs:169). That puts crisis-handoff on the same footing as no-financial-promotion. Leaning on the live-safety-rails golden path ('Rails are outcomes, not rules among rules' / owners configure how, 'never whether') and its technique crisis-handoff-one-kind-line, this adds a second kind. `character.toml` gains `rails = [\"crisis-handoff\"]`; the loader validates every rail has a rules/<id>.md and a true default; resolve_rules marks it `locked` and ignores the override for it (the stored override is left untouched, not deleted); set_rule returns Rejected for a rail; RuleState carries `locked` so the CLI prints `lock` and RulesTab renders the rule without a Switch. crisis-chat-ban and no-financial-promotion stay owner switches: how the rail is delivered stays configurable, whether it fires does not. NEUTRAL_DISTRESS_DIRECTIVE remains only for packages that declare no crisis rail. Gate: policy-tighten (the operator loses the ability to disable one safety rule) + architecture (a rule kind). The sim instrument hash already covers the enabled set (instrument.rs:168-175), so runs made under an override that disabled the handoff stay segregated.\n\n## Flow\n- character.toml: add `rails = [\"crisis-handoff\"]` with a comment saying rails cannot be toggled\n- brain rules.rs: CharacterRule.locked; resolve_rules skips the override for rails; set_rule rejects a rail; load validates rails\n- brain compose.rs: a test pins that an override cannot reach the neutral fallback\n- types RuleState.locked -> regenerate packages/contract\n- daemon catalog/cli: map Rejected to a clear error; print `lock`\n- console RulesTab: locked row with a lock label, no Switch; the 'differs from defaults' count ignores locked rows\n\n## Expected impact\nNo operator click, stale rules.json or scripted CLI call can leave a viewer disclosing self-harm without the crisis line. Closes a deviation from live-safety-rails that the registry map still records as `unknown`.\n\n## Evaluation\nClaim: an operator override can disable the crisis handoff today, and after the change it cannot.\nBefore: 0 of 7 acceptance cases pass (override wins, set_rule writes false, directive degrades, no rails key, no lock state)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first in brain rules/compose tests, daemon e2e and the console RulesTab test\nResult: better\nGate: policy-tighten, architecture",
+    "evidence": "rules.rs:169 `let enabled = over.get(&id).copied().unwrap_or(default);`\ncompose.rs:425-426 `pub const NEUTRAL_DISTRESS_DIRECTIVE: &str = \"A viewer may be in distress; respond with care. ...\"`; compose.rs:440-449 `Some(match pkg.enabled_rules().find(|r| r.id == CRISIS_RULE_ID) { ... None => format!(\"SAFETY FIRST ({who}): {NEUTRAL_DISTRESS_DIRECTIVE}\")`\ne2e/mod.rs:389 `json!({ \"character\": \"malakor\", \"id\": \"crisis-handoff\", \"enabled\": false })` -> :397 `assert_eq!(saved, json!({ \"crisis-handoff\": false }));`\nRulesTab.tsx:76 `<Switch checked={r.enabled} ... onChange={(next) => void toggle(r.id, next)} />`\ncharacter.toml:17-19 `[rules] crisis-chat-ban = true / crisis-handoff = true`",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Strong, grounded safety tightening, but it overrides a documented owner decision and must not route as a silent self-landable tighten."
+    },
+    "revision": "Re-gate as `policy-tighten, direction` (owner sign-off required) since contract.md:276-277/:636-637 and cli.md:681 document the crisis-handoff toggle and neutral fallback as intended operator capability; the owner must approve removing it."
+  },
+  {
+    "context": "character-package",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "situations.json has three parsers that disagree: one validated bank at load",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-brain/src/character.rs",
+      "crates/shadowrunr-brain/src/lib.rs",
+      "crates/shadowrunr-sim/src/situations.rs",
+      "crates/shadowrunr-daemon/src/catalog.rs",
+      "crates/shadowrunr-daemon/src/preflight.rs",
+      "crates/shadowrunr-daemon/src/e2e/catalog.rs",
+      "crates/shadowrunr-types/src/catalog.rs",
+      "packages/contract/schema/contract.schema.json",
+      "packages/contract/src/generated/types.ts",
+      "packages/contract/src/generated/validators.js",
+      "docs/spec/contract.md"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "crates/shadowrunr-types/src/catalog.rs (Situation becomes the one parse type: `stimulus` String -> closed enum, deny_unknown_fields; contract regenerated)"
+    ],
+    "acceptance": [
+      "malakor package -> load_character returns situations where seg02a-raid-subject has segments == [SEG-02A] (today the brain's Situation, character.rs:54-66, has no `segments` field and drops it)",
+      "situations.json with two entries id \"x\" -> load_character Err \"situations.json: duplicate id x\" and preflight PF-02 is red (today brain + catalog accept it and PF-02 is green; only the sim rejects it at run start, situations.rs:102-108)",
+      "a situation carrying `\"segment\": [\"SEG-02A\"]` (typo) -> load Err naming the unknown field (today every parser ignores it and the sim schedules it in every segment)",
+      "a situation with `\"stimulus\": \"silent\"` -> load Err naming the value (today types::Situation accepts any String so character.get serves it, and the sim fails only when a run starts)",
+      "a situation with invariant \"rule:crisis-handof\" -> load Err 'unknown rule crisis-handof (rules/: crisis-chat-ban, crisis-handoff, no-financial-promotion)' (today judge.rs:185-200 silently mints a rule with 'no rubric description')",
+      "daemon character.get on malakor -> situations equal pkg.situations from the brain load (one parse; the catalog.rs:207-221 re-parse is gone)",
+      "a situation with segments [\"SEG-09\"] -> PF-02 red with the reason (today PF-02 is green while character.get fails the whole package)"
+    ],
+    "premise": [
+      "crates/shadowrunr-brain/src/character.rs:46-66 - brain Situation: no segments, stimulus or silence_s; serde silently drops them",
+      "crates/shadowrunr-sim/src/situations.rs:31-52 - sim Situation: its own struct with StimulusKind enum and Option<Vec<SegmentId>>, 'proposed contract addition' comments",
+      "crates/shadowrunr-types/src/catalog.rs:55-76 - third Situation: stimulus is a free String, segments Vec<SegmentId>",
+      "crates/shadowrunr-daemon/src/catalog.rs:207-221 - character.get re-reads situations.json with its own SituationsFile instead of the loaded package",
+      "crates/shadowrunr-sim/src/situations.rs:99-110 - only the sim checks duplicate ids; the brain loader (character.rs:225-231) and the catalog do not",
+      "crates/shadowrunr-daemon/src/preflight.rs:75-90 - PF-02 reports '{n} situations' green from the brain parse, the one parse that validates nothing",
+      "crates/shadowrunr-sim/src/judge.rs:185-200 - an invariant no rubric entry names becomes a generic rule, so a typo is judged instead of rejected",
+      "characters/malakor/situations.json:329-331,347-349,364-366,381-383 - four situations depend on `segments`, which the brain parse discards",
+      "registry simulated-audience-testing / situation-bank-with-near-misses: each situation is 'tied to the rule it probes' - the link the judge uses to decide which rules were tested"
+    ],
+    "rollback": "Revert the series: types::Situation returns to its prior fields, the brain keeps its own bank, sim and daemon go back to their own parses; no stored data changes (situations.json is only read).",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-brain -p shadowrunr-sim -p shadowrunr-daemon -p shadowrunr-types && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check && pnpm -C packages/contract check && pnpm -C apps/console typecheck",
+    "runner_up": "Foil files are free prose with uneven shape (the-disruptor.md and the-life-coach.md have no Function/Signature-bits parity with the other three): a foil section schema validated at load and surfaced in the catalog.",
+    "body": "## Summary\nThe package's situation bank is parsed by three different structs - brain, sim and the wire type - and they disagree on fields and validation. The brain parse, which preflight trusts, drops `segments` and checks nothing; the sim parse is the only one that rejects duplicates; the wire type takes any stimulus string. Make `shadowrunr_types::catalog::Situation` the single parse type, validate the bank once in the brain loader, and have the sim and the daemon consume the loaded bank.\n\n## Description\nToday a broken bank is green in preflight (PF-02 counts situations from the brain parse), served by character.get or failing it whole, and discovered only when a sim run starts. Leaning on invariant-placement / placement-precedes-gate (put the rule where every consumer converges: the package load) and simulated-audience-testing / situation-bank-with-near-misses (the situation-to-rule link must be real), the change: types::Situation gets a closed `Stimulus` enum and `deny_unknown_fields`; brain character.rs parses into it and runs `validate_bank` - unique ids, known segments, every `rule:<id>` invariant resolves to a rules/<id>.md of the package; the brain re-exports the bank; sim situations.rs wraps the same type (StimulusKind maps 1:1, inference unchanged); daemon catalog.rs serves pkg.situations; PF-02 goes red with the load error. Rubric-owned ids (red-line:, role:, talk:) stay the sim's to check - the package does not know the rubric. Gate: architecture; shared contract changes are additive except the stimulus enum, which narrows an undocumented-free string to the four values the contract already documents.\n\n## Flow\n- types catalog.rs: Stimulus enum, deny_unknown_fields; regenerate packages/contract\n- brain character.rs: drop the local Situation/SituationBank, parse + validate_bank, errors name file, id and field\n- sim situations.rs: SituationBank built from the brain-validated list; the duplicate check moves to the brain\n- daemon catalog.rs: delete SituationsFile/situations(), use pkg.situations; PF-02 keeps its shape and now means something\n- docs/spec/contract.md: optional fields are no longer 'parsed by the sim' only\n\n## Expected impact\nOne answer to 'is this bank valid' at every surface. A typo in a provocation file fails the package at load and preflight instead of silently scheduling a segment-scoped doxxing provocation in every segment, or judging a misspelled rule as a new one.\n\n## Evaluation\nClaim: the three parsers disagree, so a defective bank passes preflight and is caught late or never.\nBefore: 0 of 7 acceptance cases pass\nAfter: 7 of 7\nMethod: gate - acceptance tests written first in brain character.rs tests, sim situations tests and daemon e2e catalog/preflight\nResult: better\nGate: architecture",
+    "evidence": "brain character.rs:54-66 `pub struct Situation { id, behaviour, archetype, near_miss, required, forbidden, invariants }` (no segments/stimulus)\nsim situations.rs:49-51 `/// Optional: only schedule in these segments (proposed contract addition). Absent = all. pub segments: Option<Vec<SegmentId>>,`\ntypes catalog.rs:68-70 `/// message, silence, vote or wave; inferred by the sim when absent. pub stimulus: Option<String>,`\ndaemon catalog.rs:208-220 `struct SituationsFile { situations: Vec<Situation> } ... serde_json::from_str(&read_text(&path)?)`\nsim situations.rs:106-107 `return Err(SimError::Spec(\"situations.json has duplicate ids\".into()));`\npreflight.rs:89 `pkg.situations.situations.len()`\ngrep for consumers of the brain's pkg.situations: preflight.rs:89 and the character.rs:281 test only",
+    "critic": {
+      "verdict": "build",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Grounded, falsifiable consolidation that moves defect discovery from sim start to load and preflight."
+    }
+  }
+]

@@ -1,0 +1,21 @@
+{"card":"Three clocks converted ad hoc: one playout clock owns 'when is it heard'","context":"stage-voice-client","slot":"A","status":"landed",
+ "shas":["c5d25dc"],
+ "tests_added":[
+  "apps/stage/src/voice/playout.test.ts::heard time > is the context time minus the output latency; with no latency reported, the context time",
+  "apps/stage/src/voice/playout.test.ts::heard time > never goes backwards when the latency rises (a device swap), and the next wall time uses the new latency",
+  "apps/stage/src/voice/playout.test.ts::heard time > one clock per context, so the clamp is shared by every reader",
+  "apps/stage/src/voice/playout.test.ts::the wall time a sample is heard > comes from the output timestamp, which already includes the latency",
+  "apps/stage/src/voice/playout.test.ts::the wall time a sample is heard > an empty timestamp (a context not yet running reports zeros) falls back to the wall",
+  "apps/stage/src/voice/playout.test.ts::the captions read heard time > a part at context 12.0 is not yet heard at context 12.05 with 0.1 s of output latency",
+  "apps/stage/src/voice/playout.test.ts::the captions read heard time > an unvoiced line is stamped on the same heard clock",
+  "apps/stage/src/voice/player.test.ts::the face signal follows the audio clock > reads heard time: resting until the sound reaches the speakers, then the lead from the heard sound",
+  "apps/stage/src/voice/report.test.ts::the session reports on the /voice socket > the wall time the part's start is heard, from the output timestamp (the latency is not added twice)",
+  "apps/stage/src/voice/report.test.ts::the session reports on the /voice socket > the same start seen on two ticks 20 ms of wall apart (a quantized context clock) reports one time",
+  "apps/stage/src/voice/report.test.ts::the session reports on the /voice socket > without an output timestamp the report uses the latency the device reports now (a device swap)"
+ ],
+ "guard_cases":["absent outputLatency -> heardNow equals currentTime (case 1 second half; existing player/report tests with no latency stay green unchanged except one lead-shifted bound)"],
+ "cases_total":6,"cases_red_before":6,"cases_green_after":6,
+ "gates":{"pnpm -C apps/stage test":0,"pnpm -C apps/stage typecheck":0,"pnpm -C apps/stage lint":0,"pnpm -C apps/stage build":0},
+ "files_changed":10,"lines_changed":367,
+ "deviations_from_card":"One commit instead of the two the rollback names: the tests import heardCaptions and the session's playout option, so they cannot compile alone; reverting c5d25dc restores today's mapping. Red-before was measured with playout.ts absent (playout.test/report.test fail on import) and with it present but unwired (6 assertion/TypeError failures). Case 3 follows the revision: at_wall_ms 1_000_100 from the output timestamp, latency not added; the fake tick (ctx 12.14, wall 1_000_300) gives 1_000_160 today. Case 4 is tick-independent via the output timestamp; without a timestamp the fallback (wall now + start - heardNow) is still tick-sampled. Case 6's 'next played report uses the new latency' is pinned on the fallback path (no timestamp). Latency is outputLatency only (baseLatency not subtracted), as the card states. The signal now looks up the entry at heard+lead, so the mouth opens 35 ms before the heard start and closes 35 ms before the heard end; one existing assertion (idle at start-0.01) moved to start-lead-0.01. Scheduling, the cap and `ahead` stay on context time. latencyHint 'playback' unchanged.",
+ "notes":"Coupled docs: apps/stage/DESIGN.md voice bullet (fixes stale 'Past 6 s' -> 16 s MAX_AHEAD_S, adds a Heard time bullet; HEAD re-read at 8feeb05, only that bullet touched) and docs/guide/recording.md (appended a paragraph after the ~200 ms note). Build prints the pre-existing >500 kB chunk warning. Working tree has sibling builders' uncommitted console/crates changes, none touched."}

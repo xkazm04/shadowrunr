@@ -1,0 +1,115 @@
+[
+  {
+    "context": "sim-runner-judging",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "One judge seam for runs and sandbox sessions, with typed pending/void/judged",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-sim/src/runner.rs",
+      "crates/shadowrunr-sim/src/sandbox.rs",
+      "crates/shadowrunr-sim/src/lib.rs",
+      "crates/shadowrunr-daemon/src/sandbox.rs"
+    ],
+    "new_files": [
+      "crates/shadowrunr-sim/src/judging.rs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "judge_session on a finished session dir whose fake engine returns EngineError::RateLimited for Role::Judge -> JudgeResult::Pending(\"judge engine call failed: rate limited ...\"); the daemon's session.json judge check = Unmeasured with detail starting 'judge pending' (today: Fail with the error text)",
+      "judge_session with opts.quota blocked (a QuotaGate returning Some(QuotaBlock)) -> Pending('judge deferred: quota ...'), zero Judge rows appended to ledger.jsonl, judge check Unmeasured (today: Err(Spec) -> Fail)",
+      "judge_session whose verdict has 0 fails but every hard rule not_provoked or not_evaluable -> judge check Unmeasured, detail '0 of N hard checks evaluated' (today: rule_fails == 0 -> Pass)",
+      "judge_session whose verdict has 1 hard-rule fail -> judge check Fail; report.judge carries rule_fails 1 (verdict unchanged)",
+      "judge_session whose judge reply is not the rubric JSON -> JudgeResult::Void, judge.json written with raw_reply, judge check Unmeasured 'judge void' (today: Err -> Fail, indistinguishable from an outage)",
+      "tournament run_one_with whose judge call times out -> run.json status judge_pending and outcome::classify == JudgePending; then judge_existing on the same dir with a healthy engine -> Judged (WP13 behaviour held through the shared judging::judge_dir seam)"
+    ],
+    "premise": [
+      "crates/shadowrunr-sim/src/runner.rs:755 - judge_into: its own quota check (769-781), JudgeInputs build, judge_run, judge.json/verdict.json writes, EngineError -> JudgePending vs JudgeVoid mapping (811-821)",
+      "crates/shadowrunr-sim/src/runner.rs:949 - judge_existing re-loads spec, bank, rubric and brief and re-wraps a LedgerEngine before calling judge_into: a second copy of the input loading",
+      "crates/shadowrunr-sim/src/sandbox.rs:1423 - judge_session is a third copy: its own bank/rubric/brief/LedgerEngine loading (1439-1448) and its own quota check (1432-1438) returning Err(SimError::Spec(\"judge deferred: ...\"))",
+      "crates/shadowrunr-sim/src/sandbox.rs:1463 - judge::judge_run(...).await? propagates an engine error (rate limit, timeout) as a plain Err: a session has no pending state",
+      "crates/shadowrunr-sim/src/sandbox.rs:1478 - a void judge reply becomes Err(SimError::Spec(\"judge void: ...\")), the same Err shape as an outage",
+      "crates/shadowrunr-sim/src/sandbox.rs:1470 - the SandboxJudge it returns carries only rule_fails; how many hard checks were evaluated is dropped",
+      "crates/shadowrunr-daemon/src/sandbox.rs:527 - the judge check is Pass whenever rule_fails == 0, even if no hard rule was evaluated",
+      "crates/shadowrunr-daemon/src/sandbox.rs:540 - any Err from the judge, engine outage and quota deferral included, sets the judge check to Fail",
+      "crates/shadowrunr-sim/src/outcome.rs:13 - the crate's own rule: judge_pending = sound transcript, judge failed on the engine, re-judge never re-run; judge_void is content-only",
+      "crates/shadowrunr-types/src/sandbox.rs:146 - gate_pass: an unmeasured check is not a pass, so Pending/Void -> Unmeasured keeps every session gate that fails today failing (no loosening)"
+    ],
+    "rollback": "Three commits: (1) add judging.rs and route judge_into/judge_existing through it (pure refactor, existing tests unchanged); (2) route judge_session through it, returning the typed result; (3) the daemon maps the result to check states. Revert in reverse order. No stored format changes: judge.json/verdict.json are unchanged and session.json uses existing SandboxCheckState values.",
+    "gate": "policy-tighten",
+    "test_command": "cargo test -p shadowrunr-sim && cargo test -p shadowrunr-daemon sandbox && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "Lift the duplicated beat (ingest_chat -> mind.tick -> apply_ops+drop_op_echo -> job_done -> sign-off -> stage.tick) out of runner.rs:598-647 and sandbox.rs:727-796 into one function both drivers call.",
+    "body": "## Summary\nThe judge has three entry points that each re-implement input loading, the quota gate, the judge call and the outcome mapping: `runner::judge_into`, `runner::judge_existing` and `sandbox::judge_session`. Only the tournament pair maps an engine failure to `judge_pending`. The sandbox copy turns an outage, a quota deferral and a void reply into the same `Err`, which the daemon records as a judge **Fail**. It also records a judge **Pass** whenever `rule_fails == 0`, even when no hard rule was evaluated. Move judging into one module that returns a typed outcome, and make every caller use it.\n\n## Description\nNew `crates/shadowrunr-sim/src/judging.rs` owns the path from a run directory to a judged state. It loads the bank, the rubric and the brief the run was made with, wraps the ledger, asks the quota gate, calls `judge::judge_run`, writes `judge.json`/`verdict.json`, and returns `JudgeResult { Judged { verdict, coverage }, Void(why), Pending(why) }`. Coverage is the evaluated hard checks (pass + fail) out of the hard checks in the verdict. `judge_into` and `judge_existing` become thin mappers from `JudgeResult` to `RunStatus`. `judge_session` returns the same typed result with the `SandboxJudge` summary. The daemon maps a Judged result with a fail to Fail, a Judged result with zero evaluated hard checks to Unmeasured, and Pending or Void to Unmeasured with the reason. Every one of these still fails the session gate, because `gate_pass` treats unmeasured as not passed. What changes is the label, and with it whether the operator re-runs the stream or only re-judges it.\n\nTechnique: simulated-audience-testing / verdict-states-beyond-pass-fail (\"a provider outage is not evidence that the host misbehaved\"; \"a pending run is re-judged, never re-run\"). It also applies cheapest-passing-tier-selection's coverage gate to a single session: zero failures with nothing evaluated is unmeasured, not a pass. Gate: policy-tighten (a session judge that evaluated nothing no longer reads Pass) and architecture (three copies become one module).\n\n## Flow\n- judging::judge_dir(dir, JudgeJob{run_id, core_tier, character, injections, featured}, engine, opts) -> JudgeResult\n- runner::judge_into / judge_existing -> judge_dir -> RunStatus::{Judged, JudgeVoid, JudgePending}\n- sandbox::judge_session -> judge_dir -> SessionJudgement{result, SandboxJudge?}\n- daemon sandbox host -> check state Fail | Pass | Unmeasured('judge pending' | 'judge void' | '0 of N hard checks evaluated')\n\n## Expected impact\nA sandbox session judged during a rate limit stops reading as a content failure of the host. A session whose judge decided nothing stops reading as a clean pass. The next change to the judge plumbing, such as a judge timeout policy or a session re-judge RPC, lands in one module instead of three.\n\n## Evaluation\nClaim: one judge seam gives sandbox sessions the WP13 verdict states that tournaments already have, and stops a judge that evaluated nothing from passing a session.\nBefore: 0 of 6 acceptance cases pass (cases 1, 2, 3 and 5 read Fail/Pass today; cases 4 and 6 have no shared-seam assertion)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first against fake engines (a role-scoped erroring FakeEngine, a blocked QuotaGate)\nResult: better\nGate: policy-tighten + architecture",
+    "evidence": "crates/shadowrunr-daemon/src/sandbox.rs:527-540: `Ok(j) => { let st = if j.rule_fails == 0 { SandboxCheckState::Pass } else { SandboxCheckState::Fail };` ... `Err(e) => set_check(&mut report, \"judge\", SandboxCheckState::Fail, e.to_string()),`\ncrates/shadowrunr-sim/src/sandbox.rs:1432-1437: `if let Some(block) = opts.quota.as_ref().and_then(|q| q.0.blocked()) { return Err(SimError::Spec(format!(\"{}quota ({})\", crate::outcome::JUDGE_DEFERRED_PREFIX, ...`\ncrates/shadowrunr-sim/src/sandbox.rs:1463: `match judge::judge_run(&inp, engine.as_ref()).await? {`\ncrates/shadowrunr-sim/src/sandbox.rs:1478-1480: `JudgeOutcome::Void(audit, why) => { ... Err(SimError::Spec(format!(\"judge void: {why}\")))`\ncrates/shadowrunr-sim/src/runner.rs:811-818: `Err(SimError::Engine(e)) => { record.status = if outcome::is_engine_error(&e) { RunStatus::JudgePending } else { RunStatus::JudgeVoid };`\ngrep judge_session outside the sim crate: only crates/shadowrunr-daemon/src/sandbox.rs:24 and :137 (one caller, no re-judge path).",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "True premise, a principled consolidation that tightens rather than loosens, and the cases are red today."
+    }
+  },
+  {
+    "context": "sim-runner-judging",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "Tier choice is a markdown side effect: make it a gate-first decision in results",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-sim/src/summary.rs",
+      "crates/shadowrunr-sim/src/lib.rs",
+      "crates/shadowrunr-types/src/results.rs",
+      "packages/contract/schema/contract.schema.json",
+      "packages/contract/src/generated/types.ts",
+      "packages/contract/src/generated/validators.js",
+      "packages/contract/src/generated/validators.d.ts"
+    ],
+    "new_files": [
+      "crates/shadowrunr-sim/src/decision.rs"
+    ],
+    "shared_surfaces": [
+      "crates/shadowrunr-types/src/results.rs (additive, serde-default fields)",
+      "packages/contract (regenerated: tournament.results gains optional tier_decisions and per-cell runs_with_fail / usable_runs)"
+    ],
+    "acceptance": [
+      "group with haiku (6 judged runs, 0 hard fails, mean quality 0.80, $0.75/run) and sonnet (6 judged, 0 fails, 0.81, $15.37/run) whose quality gap is inside the per-run standard error -> tier_decisions[g].winner == haiku, tie_set == [haiku, sonnet], decided_by == cost_per_usable_stream (today report.md names sonnet: highest quality wins, cost never decides)",
+      "cell with 6 judged runs, 1 of which holds any hard-rule fail -> ineligible {reason: hard_fail, runs_with_fail: 1, judged: 6}; CellResult.runs_with_fail == 1 in results.json",
+      "cell with 0 fails but 70% of its hard checks not_evaluable -> ineligible {reason: unmeasured, evaluated_share: 0.30} and cannot win (today it wins if its quality is highest)",
+      "the only eligible cell has 3 judged runs -> winner set with provisional: true in results.json (today the flag exists only as prose in report.md)",
+      "group where two cells were judged by opus and one by sonnet -> the sonnet-judged cell is listed in beside[] and never ranked (today all three rank together; summary.rs:716 calls it 'a confound to keep in mind')",
+      "group where every cell has a hard fail -> winner null with the failing cells and rules listed; report.md prints 'nothing goes live' and the failures",
+      "a results.json written before this change (no tier_decisions, no runs_with_fail) -> deserializes as TournamentResults and passes validateTournamentResults in packages/contract"
+    ],
+    "premise": [
+      "crates/shadowrunr-sim/src/summary.rs:716 - the selection rule exists only as report prose: 'Only tiers with zero rule fails and at least one judged run can win; ties go to the lower p50 latency'",
+      "crates/shadowrunr-sim/src/summary.rs:754-767 - the winner is computed inside report_md (a String builder) and never reaches results.json, so tournament.results consumers cannot read it",
+      "crates/shadowrunr-sim/src/summary.rs:756 - eligibility is judged > 0 && rule_fails() == 0: one judged run suffices and coverage (the not_evaluable share) is never checked",
+      "crates/shadowrunr-sim/src/summary.rs:757-766 - the ranking is mean quality then p50 latency; usage.cost_usd is printed (751) but never decides",
+      "crates/shadowrunr-sim/src/summary.rs:334-340 - CellKey has no judge tier; summary.rs:377-380 merges every judge tier into cell.judge_tiers, and the winner group (717-728) ranks across judges",
+      "crates/shadowrunr-sim/src/summary.rs:373-391 - run identity (each run's verdict) is in hand while tallying, then discarded: no per-run hard-fail count and no per-run quality spread are kept",
+      "crates/shadowrunr-types/src/results.rs:84-104 - CellResult carries tallies only (no runs_with_fail, no usable runs), so a downstream view cannot rebuild a per-run gate",
+      ".ai/registry-map.json, row sim-runner-judging / simulated-audience-testing: state deviation, evidence 'crates/shadowrunr-sim/src/summary.rs:756 Winner selection requires only one judged run and breaks quality ties on latency, allowing insufficient coverage and bypassing cost per usable stream' (stale, revisionsBehind 1)",
+      "apps/console/src/pages/simulator/ - grep -i winner finds no match: the console cannot show the decision because results.json carries none"
+    ],
+    "rollback": "Two commits: (1) decision.rs, the additive results.rs fields and the regenerated contract; (2) report_md renders from the decision. The new fields are serde-default / skip-if-empty, so older and newer results.json stay readable in both directions after a revert. No stored data is rewritten; re-running `shadowrunr sim summarize` regenerates results.json either way.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-sim && cargo test -p shadowrunr-types && pnpm -C packages/contract generate && pnpm -C packages/contract check && pnpm -C packages/contract typecheck && pnpm -C packages/contract test && pnpm -C apps/console typecheck && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "Judge the windows of a long stream concurrently under the quota gate instead of one after another (judge.rs:1794-1806); a 3 h case run pays 9 serial judge calls.",
+    "body": "## Summary\nWhich model tier goes live is the tournament's whole purpose, and today that answer exists only as a string inside `report_md`. The rule is applied in a markdown builder (summary.rs:754-767), never reaches `results.json`, and is exactly the recorded deviation: one judged run suffices, coverage is never checked, ties break on latency instead of cost, and cells judged by different judges rank together. Move the decision into a pure `decision.rs`, run it from `summarize` while run identity is still in hand, and put its output on the wire as `tier_decisions`. The report then renders the decision instead of making it.\n\n## Description\nThe module implements cheapest-passing-tier-selection as declared. Gates come first. A cell is ineligible if any judged run holds a hard-rule fail, counted per run rather than pooled. It is also ineligible as unmeasured if its evaluated hard checks (pass + fail) fall below a declared share of pass + fail + not_evaluable. Quality ranks second. Among cells within the per-run noise of the best, the lowest cost per usable stream wins, where cost per usable stream is cell cost divided by the judged runs with no hard fail. A winner below THIN_N judged runs is marked `provisional: true`. Only cells that share the group's reference judge tier are ranked; the rest are reported in `beside[]`, per instrument-hash-never-merge (\"when a slice was measured by a different instrument, it is not in the ranking\"). `summarize_full` computes each cell's `runs_with_fail`, `usable_runs` and per-run quality standard error from the verdicts it already loads. Only the decision and the two counts go on the wire, as additive serde-default fields in `results.rs`, after which `pnpm -C packages/contract generate` runs. `report_md` prints the decision with its reasons and no longer decides on its own.\n\nTechnique: simulated-audience-testing / cheapest-passing-tier-selection (gate on hard rules, gate on coverage, rank on quality, cheapest within noise, cost per usable stream), with instrument-hash-never-merge for the judge slice. Gate: architecture, with an additive change to a shared contract.\n\n## Flow\n- summarize_full: per run -> any_hard_fail, usable, per-run mean quality (run identity still present)\n- decision::decide(groups) -> Vec<TierDecision{group, reference_judge, eligible, ineligible[{cell, reason, figures}], beside[], tie_set, winner?, provisional, decided_by}>\n- Results.tier_decisions written to results.json -> tournament.results (contract regenerated)\n- report_md renders the decision rows instead of computing max_by\n\n## Expected impact\nThe tournament's answer becomes data. The console, Reconcile and Personas can read the winner, each losing cell's reason and the provisional flag, rather than re-deriving them or scraping report.md. The decision also stops contradicting the declared standard. A cheap tier within the noise of the best wins. An unmeasured cell cannot win. A cell judged by a different judge is reported beside the ranking, not ranked in it. This closes the registry-map deviation recorded against summary.rs:756.\n\n## Evaluation\nClaim: a typed, gate-first decision computed with run identity replaces a prose rule in a report builder, which deviates from the standard on four counts.\nBefore: 1 of 7 acceptance cases pass (case 6, 'no winner', already holds in prose; the other six have no field to assert, or decide differently)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first over fake_run tournaments and hand-built CellResult groups\nResult: better\nGate: architecture (additive shared contract)",
+    "evidence": "crates/shadowrunr-sim/src/summary.rs:754-767: `let winner = cs.iter().filter(|c| c.judged > 0 && c.rule_fails() == 0 && c.mean_quality().is_some()).max_by(|a, b| a.mean_quality()...total_cmp(...).then(b.core_latency.p50_ms...cmp(&a.core_latency.p50_ms...)));`\ncrates/shadowrunr-sim/src/summary.rs:716: \"Only tiers with zero rule fails and at least one judged run can win; ties go to the lower p50 latency. A different judge tier may have judged each core tier ... which is a confound to keep in mind.\"\ncrates/shadowrunr-types/src/results.rs:113-141 TournamentResults: no winner or decision field.\nsim/matrices/night.toml: judge_tiers = [\"opus\", \"sonnet\"] with core_tiers [\"haiku\", \"sonnet\"]; an opus core in the same scheme falls to a sonnet judge (night-opus.toml exists for that reason).\ngrep -rn -i winner apps/console/src/pages/simulator -> no matches.\n.ai/registry-map.json row sim-runner-judging: subject simulated-audience-testing, state \"deviation\" at summary.rs:756.",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 5,
+      "grounding": 4,
+      "falsifiability": 4,
+      "reason": "Strong, grounded card whose judge-slice rule is underspecified enough to let a wrong build pass."
+    },
+    "revision": "Rewrite acceptance case 5 to pin the rule: the reference judge is the judge tier that judged the most cells in the group (ties go to the higher tier); a cell whose judge_tiers holds more than one tier, or a tier other than the reference, is listed in beside[] with reason judge_mismatch; add the assertion that a group with a single judge tier ranks every cell."
+  }
+]

@@ -1,0 +1,108 @@
+[
+  {
+    "context": "daemon-core-rpc",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "sim.start publishes through a transcript sink; retire the 100 ms file tailer",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "crates/shadowrunr-daemon/src/live.rs",
+      "crates/shadowrunr-sim/src/transcript.rs",
+      "crates/shadowrunr-sim/src/runner.rs",
+      "crates/shadowrunr-sim/src/lib.rs",
+      "crates/shadowrunr-daemon/src/e2e/events.rs",
+      "crates/shadowrunr-daemon/src/e2e/resilience.rs"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "crates/shadowrunr-sim public API: SimOptions gains an optional live sink (default None, never hashed into the instrument). shadowrunr-types and packages/contract stay unchanged."
+    ],
+    "acceptance": [
+      "sim.start with a test engine whose first complete() awaits a Notify, plus a /events subscriber {subscribe:<run>, since:0} -> stream_start (seq 1) and the stage's segment-start events arrive within 2 s, BEFORE the Notify is released (today: 0 frames; they sit in the BufWriter)",
+      "a full scripted sim.start run -> every enveloped frame's seq equals its 1-based line in runs/sim/adhoc/<run>/transcript.jsonl and its event equals that line; N frames for N lines, no gaps",
+      "TranscriptWriter with a sink, push 5 events without flush -> sink called 5 times with seqs 1..5 in push order, before any flush()",
+      "run_one_with with no sink (tournament path), same scripted spec/seed -> transcript.jsonl bytes and instrument.json base_hash identical to the pre-change golden captured first",
+      "a panicking sim under sim.start -> subscriber still gets an engine error frame 'sim panicked: engine exploded' and the run id can be started again (a_panicking_sim_does_not_kill_the_daemon stays green)"
+    ],
+    "premise": [
+      "crates/shadowrunr-daemon/src/live.rs:12-15 - the module records the gap itself: 'The sim writes its transcript through a buffered writer, so events reach subscribers in buffer-sized batches ... an event sink in SimOptions would make this exact'",
+      "crates/shadowrunr-sim/src/transcript.rs:22-30 - TranscriptWriter::create wraps a BufWriter with flush_each:false; crates/shadowrunr-sim/src/runner.rs:551 - run_one_with uses create(), flushing only on abort (runner.rs:635) and at stream end (runner.rs:676)",
+      "crates/shadowrunr-daemon/src/live.rs:203-244 - Tail re-opens transcript.jsonl every TAIL_EVERY=100 ms (live.rs:39, live.rs:375-379) and reads to end",
+      "crates/shadowrunr-daemon/src/live.rs:239-241 - Tail silently drops a line that does not parse, so live seq can shift against replay seq; crates/shadowrunr-daemon/src/runs.rs:254-255 - replay of the same file fails loudly on that line instead",
+      "crates/shadowrunr-sim/src/sandbox.rs:141-143 - an EventSink type ('called once per transcript event, in order ... seq is the event's 1-based line') already exists; crates/shadowrunr-daemon/src/sandbox.rs:385-399 - the sandbox path pushes into LiveRun through it, so the daemon runs two live publishers for one LiveRun type",
+      "crates/shadowrunr-daemon/src/config.rs:434-446 - sim_options builds via ..SimOptions::default(); the other SimOptions literals (shadowrunr-sim lib.rs:265, runner.rs:1004, sandbox.rs:1224) also spread a base, so a new defaulted field compiles everywhere"
+    ],
+    "rollback": "Two commits: (1) the sim crate adds the optional sink to TranscriptWriter/SimOptions (inert when None); (2) daemon live.rs switches sim.start to it and deletes Tail. Reverting (2) restores the tailer; reverting (1) afterwards removes the unused field. No stored data or wire shape changes.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-sim transcript && cargo test -p shadowrunr-sim runner && cargo test -p shadowrunr-daemon e2e:: && cargo test -p shadowrunr-daemon live && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "One typed method table: dispatch, MCP tools and DaemonClient bind each method's Params/Result from visit_methods at compile time instead of a ~50-arm string match returning Value (rpc.rs:282-465) and a per-call-site T in DaemonClient::call (cli.rs:563-583), which also drops error.detail (cli.rs:586-597).",
+    "body": "## Summary\nThe daemon has two ways of turning a running stream into /events frames: sandbox sessions push each event through an `EventSink` the moment it is written, while `sim.start` polls `transcript.jsonl` every 100 ms behind an 8 KB BufWriter. Make the transcript writer the single door: `TranscriptWriter` takes an optional sink, `run_one_with` attaches the one from `SimOptions`, and `live::start_sim` hands it a closure that pushes into the `LiveRun`. The tailer (`Tail`, `TAIL_EVERY`, the drain loop) is deleted.\n\n## Description\nToday On Air, watching a live sim against the real fleet, sees nothing until 8 KB of events pile up in the BufWriter. With multi-second engine calls per tick that means many ticks of dead screen, then a burst. The module's own header names the fix (live.rs:12-15). The tailer also re-reads the file every 100 ms and silently skips a line that fails to parse, so a live seq can drift from the replay seq of the same run, which breaks `since` resume across the live-to-disk handover.\n\nTechnique: realtime-events / change-data-capture - tap the one chokepoint every writer already passes (here `TranscriptWriter::push`, the line that assigns the seq) and observe-don't-act in the hook (the sink is a mutex push plus a non-blocking broadcast send, `LiveRun::push` live.rs:91-97). Also the golden path's 'Delivery honesty: shed with a ledger': the silent parse-skip in Tail is a drop with no count; with the sink there is no parse step to drop at. The buffered file write stays for tournaments (performance unchanged), because live subscribers are served from LiveRun's in-memory history, never from the file.\n\n## Flow\n- sim: `TranscriptWriter::with_sink(Option<EventSink>)`; `push` writes the line, then calls `sink(line_no, &ev)`; no extra flush.\n- sim: `SimOptions.live_sink: Option<LiveSink>` (newtype with a manual Debug, Default None, never hashed); `run_one_with` passes it at runner.rs:551.\n- daemon live.rs: `start_sim` builds the sink from `run.clone()` (same shape as daemon sandbox.rs:385-399, including the pushed!=seq warning), sets `opts.live_sink`, and `follow` becomes 'await the sim, map the outcome'. Delete `Tail`, `TAIL_EVERY`, the select loop.\n- tests: gated-engine e2e (acceptance 1), seq==line e2e (2), writer unit (3), golden no-sink run (4); resilience e2e unchanged (5).\n\n## Expected impact\nLive sim events reach subscribers at write time instead of per 8 KB batch; one live publisher shape for sim and sandbox; one fewer polling loop per run; live seq is the transcript line by construction. Tournament runs are byte-identical.\n\n## Evaluation\nClaim: sim.start events are delivered as they are written, with seq equal to the transcript line, and the no-sink path is unchanged.\nBefore: 1 of 5 acceptance cases pass (1 fails on timeout; 2-4 do not compile: no sink API; 5 passes today and must stay green)\nAfter: 5 of 5\nMethod: gate - acceptance tests written first\nResult: better\nGate: architecture (crosses into shadowrunr-sim's public SimOptions; no contract change)",
+    "evidence": "live.rs:12 '//! The sim writes its transcript through a buffered writer, so events reach subscribers in' / live.rs:13 '//! buffer-sized batches rather than one by one (see the WP5 report: an event sink in' / live.rs:14 '//! `SimOptions` would make this exact).' ; live.rs:39 'const TAIL_EVERY: Duration = Duration::from_millis(100);' ; live.rs:239 'if serde_json::from_str::<StreamEvent>(text).is_ok() { run.push(Arc::from(text)); }' (else dropped, uncounted) ; shadowrunr-sim transcript.rs:22-28 'pub fn create(path) ... out: BufWriter::new(f), ... flush_each: false' ; runner.rs:551 'let mut w = TranscriptWriter::create(&transcript_path)?;' ; shadowrunr-sim sandbox.rs:143 'pub type EventSink = Arc<dyn Fn(u64, &StreamEvent) + Send + Sync>;' ; shadowrunr-sim sandbox.rs:1321 'w: TranscriptWriter::create_live(...)' ; grep 'Tail::' crates/shadowrunr-daemon/src -> only live.rs:352 (single consumer).",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "True premise, a real two-publisher seam, and acceptance that cannot be satisfied by a stub."
+    }
+  },
+  {
+    "context": "daemon-core-rpc",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Pre-flight carries its fix: `preflight --fix` repairs, re-probes, shows before->after",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-daemon/src/preflight.rs",
+      "crates/shadowrunr-daemon/src/cli.rs",
+      "crates/shadowrunr-daemon/src/live.rs",
+      "crates/shadowrunr-daemon/src/lib.rs",
+      "crates/shadowrunr-daemon/tests/cli.rs",
+      "crates/shadowrunr-daemon/src/e2e/mod.rs",
+      "docs/guide/cli.md"
+    ],
+    "new_files": [
+      "crates/shadowrunr-daemon/src/preflight_fix.rs"
+    ],
+    "shared_surfaces": [
+      "docs/spec/contract.md: the existing optional error.detail of `preflight_red` gains a documented shape {red:[{check,detail,remedy}]}. HealthReport, the JSON Schema and packages/contract are untouched, and `preflight --json` without --fix keeps its array output"
+    ],
+    "acceptance": [
+      "memory store whose index misses one markdown episode (PF-03 amber), no daemon on the configured port, `shadowrunr preflight --fix` -> index rebuilt, output has `PF-03  amber -> green  fixed: memory reindex`, exit 0",
+      "same store, a daemon answering /rpc on the configured port -> index.sqlite bytes and mtime unchanged; row says `PF-03  amber  not fixed: the daemon on 127.0.0.1:<port> holds the index; stop it first`",
+      "plain `shadowrunr preflight` on the PF-03-amber store -> writes nothing (index stamp unchanged) and the row ends `fix: shadowrunr preflight --fix`",
+      "PF-05 'placeholder only' and `--fix` without `--download` -> no network call, nothing under <policy>/local; row says `needs --download: fetches <list-id> from <source>`",
+      "PF-06 calibration absent and PF-08 -> `preflight --fix --json` rows carry remedy {\"kind\":\"guided\",\"command\":...} / {\"kind\":\"external\",...} and the fix pass changes no file",
+      "`preflight --fix` run twice on a repaired store -> the second run prints `nothing to fix` and exits 0 (idempotent)",
+      "sim.start while PF-02 is red -> error code preflight_red with detail.red[0] == {check:'PF-02', detail:<the report detail>, remedy:{kind:...}} (today detail is absent and the reds are joined into message prose)"
+    ],
+    "premise": [
+      "crates/shadowrunr-daemon/src/preflight.rs:101 and preflight.rs:171-179 - PF-03's remedy is prose inside detail: REINDEX_HINT 'index stale: run `shadowrunr memory reindex`'",
+      "crates/shadowrunr-daemon/src/preflight.rs:372-376 - PF-05's remedy is prose: '(placeholder only for ...: run `shadowrunr policy install-list <id>`)'",
+      "crates/shadowrunr-types/src/engine.rs:147-152 - HealthReport is {check, state, detail}: no structured remedy, so every surface must parse prose",
+      "crates/shadowrunr-daemon/src/cli.rs:274-279 - memory reindex says 'Stop the daemon first (it holds the index open)' but nothing checks; the operator loop is preflight -> read amber -> copy command -> stop daemon -> run it -> re-run preflight",
+      "crates/shadowrunr-daemon/src/cli.rs:1110-1129 - preflight_cmd prints `check state detail` and exits; there is no fix path",
+      "crates/shadowrunr-daemon/src/live.rs:293-306 - refuse_if_red joins red checks into the message string with no detail, so the console's refusal is prose too",
+      "crates/shadowrunr-daemon/src/preflight.rs:118-122 - pre-flight is read-only by design (the MCP preflight tool is declared read-only); a fix must therefore be a separate, explicit command path, never part of run_all"
+    ],
+    "rollback": "One feature commit plus one docs commit. Reverting removes preflight_fix.rs, the --fix/--download flags and the detail on preflight_red. run_all, HealthReport and `preflight --json` output are unchanged throughout, so nothing downstream depends on the new path.",
+    "gate": "direction",
+    "test_command": "cargo test -p shadowrunr-daemon preflight && cargo test -p shadowrunr-daemon --test cli && cargo test -p shadowrunr-daemon e2e:: && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "PF-08 probes the configured voice sidecar and OBS recorder instead of the hard-coded 'not in media-less phase' amber (preflight.rs:459-466), although VoiceHub and record/ ship in this daemon.",
+    "body": "## Summary\nEvery amber or red pre-flight row gets a structured remedy computed beside the check (applied / guided command / external). `shadowrunr preflight` prints it. `shadowrunr preflight --fix` applies the safe ones on request, re-probes, and prints a before->after board. The `preflight_red` refusal from `sim.start` carries the same rows as `detail.red`, so the console can show the fix next to the red instead of a joined sentence.\n\n## Description\nThe checks already know the repair (PF-03 says `shadowrunr memory reindex`, PF-05 says `shadowrunr policy install-list <id>`), but only as prose in `detail`. The operator does the rest by hand: read it, copy it, remember that the daemon must be stopped for reindex (cli.rs:277, never checked), run it, then re-run pre-flight to see whether it worked. Technique: health-checks / remediation-affordances. Each check is authored with its remediation. The ladder (instruction -> guided -> applied -> declared external) is a structural per-check property, not prose. Applied fixes are mutations and need consent per application: they run only under `--fix`, never during run_all, which stays read-only per preflight.rs:118-122. Confirmation scales with blast radius, so network installs need `--download`. The fix's success claim is the re-probe (the after-board), and fixes are idempotent (acceptance 6). Remedies live in a daemon-side `Checked { report, remedy }`, so HealthReport and the schema stay as they are. The recorded agent-runtime-assembly deviation (an absent policy file is amber) is left alone: its row gets a guided remedy and keeps its verdict.\n\n## Flow\n- preflight.rs: `run_all_checked` returns `Vec<Checked>`; `run_all` maps to reports (MCP and RPC unchanged). Remedy table: PF-03 stale -> Applied(Reindex); PF-05 unserved list -> Applied(InstallList{id, source}), gated by --download; PF-05 absent / PF-06 absent -> Guided(command or file); PF-07 disk, PF-01 engine -> External(text); PF-08 -> External.\n- preflight_fix.rs: `apply(cfg, checked, opts)`. Reindex refuses when a DaemonClient call to the configured port answers. InstallList calls policy_install::install only with --download. It then re-runs run_all_checked and returns `FixOutcome { before, applied, after }`.\n- cli.rs: `preflight --fix [--download] [--json]`; table `check  before -> after  fixed|not fixed: reason`; exit non-zero only if the after-board has a red.\n- live.rs: refuse_if_red attaches `detail.red`.\n- tests and docs/guide/cli.md.\n\n## Expected impact\nA stale index or an unserved term list goes from a six-step manual loop to one command with proof that it worked. The unsafe case (reindex under a running daemon) is refused instead of only warned about. The console's 'pre-flight is red' refusal becomes data it can act on.\n\n## Evaluation\nClaim: pre-flight rows carry a structured remedy, --fix applies the safe ones with a re-probe, and the refusal detail is structured.\nBefore: 0 of 7 acceptance cases pass (no --fix flag, no remedy field, preflight_red has no detail)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first\nResult: better\nGate: direction (new operator capability inside declared scope; no policy loosened: installs only tighten moderation, and reindex rebuilds a derived index from the markdown truth)",
+    "evidence": "preflight.rs:101 'pub const REINDEX_HINT: &str = \"index stale: run `shadowrunr memory reindex`\";' ; preflight.rs:374 '\" (placeholder only for {}: run `shadowrunr policy install-list <id>`)\"' ; shadowrunr-types engine.rs:147-151 'pub struct HealthReport { pub check: String, pub state: HealthState, pub detail: String }' ; cli.rs:277 '/// Stop the daemon first (it holds the index open).' ; cli.rs:1110 'async fn preflight_cmd(cfg, json, scripted)' prints only 'println!(\"{}  {state}  {}\", r.check, r.detail)' ; live.rs:303-306 'Err(RpcError::new(ErrorCode::PreflightRed, format!(\"pre-flight is red: {}\", red.join(\"; \"))))' with no with_detail ; grep '\\-\\-fix' crates/shadowrunr-daemon/src -> 0 hits.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Grounded, safe by construction (read-only run_all kept, consent per mutation), and the key cases are discriminating."
+    }
+  }
+]

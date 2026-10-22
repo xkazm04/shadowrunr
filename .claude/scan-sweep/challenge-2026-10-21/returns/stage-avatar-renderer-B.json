@@ -1,0 +1,15 @@
+{"card":"The shipped glow face never turns to the chatter it is answering","context":"stage-avatar-renderer","slot":"B","status":"landed",
+ "shas":["36757ee","32c7e3d","2dc9a95"],
+ "tests_added":[
+  "apps/stage/src/avatar/look.test.ts::lookBox tells a subscriber about a real change only, once, and never after it unsubscribes",
+  "apps/stage/src/avatar/runtime.test.ts::the look on a whole face > the glow face wakes when the stage looks at the chat, turns its head and slides its eye light",
+  "apps/stage/src/avatar/runtime.test.ts::the look on a whole face > (guard) a settled glow face whose look does not change asks for no frames",
+  "apps/stage/src/avatar/runtime.test.ts::the look on a whole face > under reduced motion the glow face snaps to a new look in one still frame",
+  "apps/stage/src/avatar/runtime.test.ts::the look on a whole face > the cut face lets the frame clock idle once settled, and still wakes on a new look",
+  "apps/stage/src/avatar/runtime.test.ts::the look on a whole face > the depth face holds no timer, and a new look wakes it"],
+ "guard_cases":["case 3: a settled glow face with an unchanged look asks for no frames (green before by design: the old glow face ignored the look)"],
+ "cases_total":6,"cases_red_before":5,"cases_green_after":6,
+ "gates":{"pnpm -C apps/stage test (273 tests, incl. renderers.golden.test.ts unchanged and green)":0,"pnpm -C apps/stage typecheck":0,"pnpm -C apps/stage build":0},
+ "files_changed":9,"lines_changed":317,
+ "deviations_from_card":"Premise drift: commit 5c38732 (merged 9ca1dc2 after bab51ca) made `cut` the default face (variants.ts DEFAULT_FACE), so `glow` is no longer the shipped broadcast face. Built anyway: glow is still selectable and is depth's fallback, and the cut face - now the default - is exactly the one whose per-frame look subscriber kept the page's frame clock running forever, so the event half of the card is worth more than when proposed. Faces are tested end to end through startFace (renderers, loadForm and depth png/geom mocked via vi.mock, globals stubbed) rather than through a hand-assembled loop. Glow wraps its driver with withLook only when a look is given, so a look-less glow face is the old one exactly. withLook.poll() is kept (tested in cut/look.test.ts) though no face calls it any more. Tests were committed with the implementation (commit 3) because they import GLOW_LOOK_YAW / LookBox.subscribe, which do not typecheck before. cut/look.test.ts not edited: its existing cases now guard that CUT_LOOK keeps the cut-out bit-for-bit.",
+ "notes":"Glow look units: eye light 3.5 x 2 px per unit (glow.ts / GLOW_MAPPING unchanged), a full look adds the same again, head GLOW_LOOK_YAW=6 deg / pitch 2.5, total held inside 8 x 5 deg (judged for the orthographic warp, not measured in a browser - eyeball ?avatar=glow with a chat-answer caption before relying on the cap). Slot A's golden call-stream test is untouched and green: renderers are not changed. Coupled file: Avatar.tsx's look ref now forwards subscribe through a stable listener set; a new look prop object fires one change. No browser eyeball was done."}

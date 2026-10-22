@@ -1,0 +1,26 @@
+{"card":"Live preview cannot look back: a keyframed DVR window over the live ring","context":"stage-app","slot":"B","status":"landed",
+ "shas":["e971a4b","edc5327"],
+ "tests_added":[
+  "apps/stage/src/live.test.ts::the DVR window over the ring (keyframes and sceneAt) > a seek inside the held window folds exactly what a Timeline over the whole stream shows",
+  "apps/stage/src/live.test.ts::... > at the head it is the live scene itself, never a re-fold",
+  "apps/stage/src/live.test.ts::... > every seek inside the window folds at most KEYFRAME_EVERY events",
+  "apps/stage/src/live.test.ts::... > a time older than the oldest held keyframe clamps to the earliest reachable scene",
+  "apps/stage/src/live.test.ts::... > a new run id or a stream_start clears the keyframes: an old run's time clamps to the new start",
+  "apps/stage/src/live.test.ts::... > scrubbing never changes the ack the sandbox's stage_ack gate reads",
+  "apps/stage/src/dvr.test.ts::dvr transport > follow --seek(t)--> behind(t), clamped to the held window",
+  "apps/stage/src/dvr.test.ts::dvr transport > play advances at speed and returns to follow on reaching the head",
+  "apps/stage/src/dvr.test.ts::dvr transport > pause while following freezes the head moment; a paused moment that leaves the window clamps",
+  "apps/stage/src/dvr.test.ts::dvr transport > step moves from the head while following and from t while behind; goLive -> follow",
+  "apps/stage/src/dvr.test.ts::dvr transport > behind, the preview shows the past scene at t with estimated captions, not the voice's",
+  "apps/stage/src/dvr.test.ts::the broadcast view (guard) > broadcast=1 has no DVR state, and the canvas always draws the head"
+ ],
+ "guard_cases":[
+  "case 6: ack identical while the preview is 30 s behind (guard by intent; red before only because sceneAt did not exist)",
+  "case 8: broadcast=1 builds no DVR state and draws the head (guard by intent; red before only because dvr.ts did not exist)",
+  "existing live.test.ts ack/resume/watchdog cases and lint-gate cases 5/6 stay green unchanged"
+ ],
+ "cases_total":8,"cases_red_before":8,"cases_green_after":8,
+ "gates":{"pnpm -C apps/stage test":0,"pnpm -C apps/stage typecheck":0,"pnpm -C apps/stage build":0,"pnpm -C apps/stage lint":0},
+ "files_changed":9,"lines_changed":560,
+ "deviations_from_card":"Tests and implementation committed together in e971a4b (the tests do not typecheck without sceneAt/dvr.ts); wiring in edc5327. Coupled file outside the write set: apps/stage/eslint-suppressions.json, PRUNED only (App.tsx react-hooks/refs 36 -> 33, via eslint --prune-suppressions; no suppression added) because the rewired render reads fewer refs and ESLint fails on unpruned suppressions. The window opens at the keyframe just before the oldest held event (scene after event #999 of 3000), not at the oldest held event itself. sceneAt returns {scene, t, clamped}. Clip markers in Controls are now placed by (at - start)/span instead of clipMarkers' frac so they align with a live track whose ring has evicted its start (identical for replays of sorted transcripts).",
+ "notes":"No browser smoke against a live daemon: the App/Controls wiring is covered by typecheck, lint and build, and the logic by the 12 unit tests (store + pure transport + liveView). Live speed buttons now set the DVR playback speed only (the daemon subscription speed is fixed by ?speed=); playing at a higher speed than the subscription catches up to the head. One vitest run hit ENOTEMPTY on node_modules/.vitest-cache from a concurrent sibling run; the re-run was green."}

@@ -1,0 +1,16 @@
+{"card":"'Voice ready' while lines vanish: a voice panel that shows the loss and acts","context":"stage-voice-client","slot":"B","status":"landed",
+ "shas":["c4a87b8"],
+ "tests_added":[
+  "apps/stage/src/voice/health.test.ts::counts the daemon's skipped lines by reason, and the panel says so",
+  "apps/stage/src/voice/health.test.ts::counts the frames the guard refused, with the last reason",
+  "apps/stage/src/voice/health.test.ts::counts the lines the stage's cap dropped and the audio waiting; a run change starts afresh",
+  "apps/stage/src/voice/health.test.ts::shows the reconnect pending, and Reconnect now opens at once without losing the backoff",
+  "apps/stage/src/voice/health.test.ts::a blocked context in the operator view offers Enable audio, and pressing it resumes the audio",
+  "apps/stage/src/voice/health.test.ts::a socket waiting to reconnect offers Reconnect now in the operator view",
+  "apps/stage/src/voice/health.test.ts::the broadcast view offers no action and its status rule is unchanged"],
+ "guard_cases":["the broadcast view offers no action and its status rule is unchanged (case 6; green before by design)"],
+ "cases_total":6,"cases_red_before":6,"cases_green_after":6,
+ "gates":{"pnpm -C apps/stage test":0,"pnpm -C apps/stage typecheck":0,"pnpm -C apps/stage lint":0,"pnpm -C apps/stage build":0},
+ "files_changed":10,"lines_changed":524,
+ "deviations_from_card":"Case 5 is split into two tests (unlock, retry routing), so 7 tests cover 6 cases; red before was measured with a stub health.ts so failures were assertions: 6 tests red, 1 guard green. Case 2: the session counts bad frames itself in health(); useVoice does not pass onBadFrame (it would have nothing to do with it beyond the health the session already keeps). The unlock pin goes through the real webaudio.unlockAudio/sharedAudio/audioRunning on a stubbed suspended AudioContext: one resume inside the press, audioRunning() true after, shownStatus back to plain ready, toggle untouched. The reason text no longer claims a page click works; it names the Enable audio button. Skips use the /voice wire's VoiceSkip only (late|queue_full|error), deduped per seq since the daemon may skip a line part by part. The existing report.test.ts operator-view expectation was updated to the new reason+action. In useVoice the running session is mirrored in state so render reads it without a new react-hooks/refs violation (suppressions unchanged, no new ones).",
+ "notes":"Panel rows: audio waiting, stage drops, daemon skips by reason, bad frames + last, reconnect attempt + countdown; chip adds 'N lost'. Controls only render outside broadcast (App.tsx), and shownStatus never sets an action in broadcast. No contract, frame, or storage change. Working tree has sibling in-flight changes in apps/console, crates and packages/contract; my gates ran on the working tree including them and were green."}

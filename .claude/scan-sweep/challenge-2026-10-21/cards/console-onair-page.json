@@ -1,0 +1,116 @@
+[
+  {
+    "context": "console-onair-page",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Live mode shows only what arrived while the poster was open: fold the run",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/pages/onair/feed.ts",
+      "apps/console/src/pages/onair/player.ts",
+      "apps/console/src/pages/onair/Layer1.tsx",
+      "apps/console/src/data/layer.ts",
+      "apps/console/src/pages/onair/player.test.ts",
+      "apps/console/src/pages/onair/onair.dom.test.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/pages/onair/feed.live.dom.test.tsx"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "fake daemon has a run in flight with seq 1..50 (stream_start, case_open, summon_foil, start_poll); mount <Layer1 active/> with source=live -> On Air's own socket sends {subscribe:'live',since:0,run_id:''}, the 50 replayed frames fold, HUD reads 'Live · theatrical · haiku · 300 simulated viewers', data-poll and data-foil are set (today: HUD says 'waiting for the stream', no poll, no foil)",
+      "live scene after mount equals foldEvents(events 1..50) from stage-kit: scene.applied === 50 and scene.meta.streamId === 's1'",
+      "unmount On Air (Poster active=false) while seq 51..80 arrive (close_poll, dismiss_foil), remount -> screen has no vote panel and no foil; scene equals foldEvents(1..80) (today: stale poll and foil stay up, 51..80 never applied)",
+      "resubscribe replays seq 40..80 after a drop -> each event applied once: scene.applied === 80, not 121",
+      "a frame with a new run_id, or a stream_start, resets the scene to that run (existing LiveFeed test keeps passing)",
+      "operator switches the selector from Live to a stored run -> On Air's live socket is closed (0 open live subscriptions owned by On Air); switching back opens one and re-folds from seq 1",
+      "socket reports a seq gap (onIssue reason 'gap') -> HUD status reads 'Live · missed events, catching up' until the next contiguous frame"
+    ],
+    "premise": [
+      "apps/console/src/shell/Poster.tsx:131-135 - a page's Layer1 is mounted only while its poster is active and not on the wall, so On Air's hooks do not run on any other page",
+      "apps/console/src/pages/onair/feed.ts:61-62,87 - the live scene is a module LiveFeed fed by useLiveEvents only 'while On Air is mounted'",
+      "apps/console/src/data/layer.ts:82-87 - the app-wide /events stream fans each frame to the listeners attached at that moment; frames before On Air mounts reach nobody in On Air",
+      "apps/console/src/pages/onair/player.ts:192-199 - LiveFeed.push starts from initialScene() on the first run_id it sees, so joining mid-run folds only from the join point (no stream_start meta, no case_file, no open poll)",
+      "apps/console/src/pages/onair/view.ts:211-214 - without scene.meta (set by stream_start) the HUD says 'waiting for the stream' although a run is on air",
+      "apps/console/src/pages/onair/Layer1.tsx:26-28 - live screenState keys 'Nothing is on air' off scene.applied === 0, i.e. off mount history, not off the run",
+      "docs/spec/contract.md:411-414 - subscribe 'live' with since:0, run_id:'' returns enveloped frames from the start of the run in flight",
+      "apps/console/src/data/socket.ts:104-108,130-140 - the socket client already sends that hello, resets per run, drops replayed duplicates and reports gaps via onIssue",
+      "apps/console/src/data/layer.ts:32,78-80 - openReplay(target, onEvent) opens a dedicated enveloped stream; zero consumers outside layer.ts"
+    ],
+    "rollback": "Three commits (data-layer openLive alias, LiveFeed seq fold + page-owned subscription in feed.ts, HUD gap status + tests); git revert of the series restores the useLiveEvents fan-out path. No stored state or contract change.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/console test -- src/pages/onair; pnpm -C apps/console typecheck; pnpm -C apps/console lint; pnpm -C apps/console build",
+    "runner_up": "The live segment set is hand-listed in six sites (Layer1.tsx:16, Rundown.tsx:35-36, Screen.tsx:108/110, view.ts:207, reconcile/DirectivesPage.tsx:18, review/names.ts:30): derive it from segments.tables status.",
+    "body": "## Summary\nOn Air's live screen is a function of when the operator opened the poster, not of the run on air. Give the live feed its own resumable subscription (since:0 from the run in flight, the contract's own resume path), owned by the page's lifetime, so the scene is always foldEvents(run so far).\n\n## Description\nThe screen's live scene is a module-level LiveFeed fed by the app-wide /events fan-out, and only while On Air's Layer1 is mounted (Poster.tsx:131-135, feed.ts:61-62,87). Open On Air mid-run and the fold starts from the first frame that happens to arrive: no stream_start meta (HUD says 'waiting for the stream'), no case file, no open poll, no foil. Leave On Air for Brain and come back, and every close_poll / dismiss_foil / reveal_hex in between is missing, so a closed poll and a dismissed foil stay on the operator's monitor. The daemon already solves this: a 'live' subscribe with since:0, run_id:'' backfills the run in flight with seq numbers that dedupe on resume (contract.md:411-414), and the console socket client implements it (socket.ts:104-140). Its only consumer is the app-wide stream, which started before On Air existed. openReplay, which opens exactly such a dedicated stream, has zero consumers.\n\nLeans on realtime-events / subscription-lifecycle ('events arrive before any consumer attaches'; every subscription names its reaper, no zombie after the owner leaves) and push-vs-refetch-reconciliation (the push is truth only if the consumer saw all of it). The live feed becomes: subscribe while (Layer1 mounted AND source=live), fold every enveloped frame through stage-kit reduce with the seq cursor, reset on new run_id or stream_start, close on unmount or on switching to a stored run. A gap issue surfaces as HUD status instead of a silently wrong scene.\n\n## Flow\n- data/layer.ts: `openLive(onEvent, onIssue)`, a thin named wrapper over openEventStream('live') (openReplay stays for replays).\n- player.ts: LiveFeed gains `reset()`, a `gap` flag in its snapshot, and applies frames by seq once.\n- feed.ts: useOnAirFeed opens openLive in an effect keyed on (mounted, source.kind==='live') and disposes it on cleanup; the useLiveEvents push goes.\n- Layer1.tsx: screenState reads the gap flag ('Live · missed events, catching up').\n- Tests: new feed.live.dom.test.tsx on fakeSockets (mountPage exposes them), player.test.ts for seq dedupe and reset.\n\n## Expected impact\nThe live monitor an operator watches during a run is correct on first open and after every page switch. The 'waiting for the stream' / 'Nothing is on air' false negatives during a live run disappear. Cost: one extra WebSocket while On Air shows Live, closed when it does not.\n\n## Evaluation\nClaim: the live scene equals the fold of the run in flight regardless of when On Air mounted.\nBefore: 0 of 7 acceptance cases pass (mid-run join folds from the join point; remount misses the gap; no page-owned socket exists)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first on the fakeSockets + manualTimers rig\nResult: better\nGate: architecture (moves the live feed's ownership from the app-wide fan-out to a page-owned resumable subscription); no contract change, no policy change.",
+    "evidence": "Poster.tsx:131-133 `{p.view !== \"wall\" && p.active && ( <Suspense fallback={null}> <Layer1 active={p.view === \"l1\"} />`; feed.ts:61 `/** The live feed folds every /events event while On Air is mounted. */`; feed.ts:87 `useLiveEvents((env) => live.push(env.event, env.runId));`; player.ts:193-195 `const fresh = (runId !== undefined && runId !== this.runId) || event.type === \"stream_start\"; ... const base = fresh ? initialScene() : this.snapshot.scene;`; view.ts:213 `: \"waiting for the stream\"`; contract.md:413-414 'sends \"since\": 0, \"run_id\": \"\" to get enveloped frames from the start of the run in flight'; socket.ts:107-108 `since: lastSeq ?? 0, ...(opts.target === \"live\" ? { run_id: lastRunId ?? \"\" } : {})`; grep -rn openReplay apps packages -> only apps/console/src/data/layer.ts:32 and :78.",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Real, well-grounded live-scene correctness bug; one case is free-riding on existing socket dedupe."
+    },
+    "revision": "Drop acceptance case 4 (resubscribe replay applied once, scene.applied===80): socket.ts:135 already drops replayed seq, so it cannot distinguish a right build from a wrong one."
+  },
+  {
+    "context": "console-onair-page",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Replay is play/pause/restart: scrub, and jump the screen to any beat or moment",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 4,
+    "write_set": [
+      "apps/console/src/pages/onair/player.ts",
+      "apps/console/src/pages/onair/feed.ts",
+      "apps/console/src/pages/onair/Layer1.tsx",
+      "apps/console/src/pages/onair/Layer1.module.css",
+      "apps/console/src/pages/onair/RunDetail.tsx",
+      "apps/console/src/pages/onair/Layer2.module.css",
+      "apps/console/src/pages/onair/player.test.ts",
+      "apps/console/src/pages/onair/onair.dom.test.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/pages/onair/scrub.dom.test.tsx"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "ReplayPlayer paused at start, seek(30_000) -> snapshot.position === 30_000, scene equals foldEvents(events with ts_ms <= 30_000), playing stays false, timers.pending() is empty",
+      "ReplayPlayer playing at 90_000, seek(10_000) -> scene rebuilt (applied === count of events <= 10_000), playing true, exactly one timer pending, epoch bumped",
+      "Layer1 replaying a run: the progress bar is a role=slider with aria-valuemin/max/now in transcript time; ArrowRight -> position +5 s, ArrowLeft -> -5 s, Home -> start, End -> end (today: aria-hidden, no input)",
+      "the scrubber draws one band per stage-kit segmentSpans span and one tick per clipMarkers mark_moment; a 100k-line transcript keeps nodes() <= PAGE_L1",
+      "Rundown run detail: activate 'Play from here' on the beat at ts T (a start_poll) -> route is #/onair, the screen's snapshot.position === T and data-poll is set",
+      "clicking a segment span in RunDetail's timeline bar -> On Air plays that run from the span's start",
+      "source=live -> the scrubber is aria-disabled and LiveFeed.seek is a no-op"
+    ],
+    "premise": [
+      "apps/console/src/pages/onair/player.ts:29-36 - the Feed interface is subscribe/getSnapshot/play/pause/restart/dispose: no seek",
+      "apps/console/src/pages/onair/Layer1.tsx:44-53 - Progress is aria-hidden and display-only",
+      "apps/console/src/pages/onair/Layer1.tsx:72-77 - the transport offers only Play/Pause and Restart",
+      "apps/console/src/pages/onair/RunDetail.tsx:76-83 - every beat row prints its time but only links to the transcript line; it cannot put that moment on screen",
+      "apps/console/src/pages/onair/RunDetail.tsx:38-44 - the segment-span bar is role=img, not actionable",
+      "apps/console/src/pages/onair/RunDetail.tsx:46-56 - 'Replay on screen' selects the run and navigates, with no position",
+      "apps/console/src/pages/onair/feed.ts:54-59 - ensureReplay keeps the existing player for the same key, so 'Replay on screen' for the run already playing resumes wherever it was",
+      "packages/stage-kit/src/playback.ts:35-47 - Timeline.advanceTo already rebuilds on a backward seek: a seek is a clock re-anchor plus one advanceTo",
+      "packages/stage-kit/src/playback.ts:61 - clipMarkers exists for a scrubber; its only non-test consumer is apps/stage/src/Controls.tsx:73",
+      "apps/stage/src/App.tsx:142-149,224-225 - the broadcast stage already seeks and steps 5 s on arrow keys; the console operator has to leave for the stage to scrub"
+    ],
+    "rollback": "Two commits (player/feed seek with tests; scrubber + beat/span jump UI with DOM tests). Reverting the second leaves a harmless unused seek; reverting both restores today's transport. No stored state.",
+    "gate": "none",
+    "test_command": "pnpm -C apps/console test -- src/pages/onair; pnpm -C apps/console typecheck; pnpm -C apps/console lint; pnpm -C apps/console build",
+    "runner_up": "Rundown run rows carry their segment spans and beat counts inline, so the operator picks a run to replay without opening each one.",
+    "body": "## Summary\nThe On Air screen replays a real run, but the operator can only play, pause or restart it. The rundown already lists every beat with its time, yet no beat can be put on screen at that time. Add seek to the replay player and make it reachable three ways: a keyboard and pointer scrubber with segment bands and moment ticks, 'Play from here' on every beat, and clickable segment spans.\n\n## Description\nToday, to see what the screen looked like when a poll opened at 4:12, the operator restarts and waits up to a minute at 4x, or leaves the console for the broadcast stage, which already scrubs (apps/stage/src/App.tsx:142-149). The data for a jump is all present: beatsOf gives each beat's ts (RunDetail.tsx:76-83), segmentSpans and clipMarkers give bands and ticks (playback.ts:61), and Timeline.advanceTo rebuilds on a backward seek (playback.ts:35-47). The missing pieces are a seek verb on the player and a control that is not aria-hidden.\n\nLeans on media-playback / playback-clock (one clock held outside reactive state: seek re-anchors the ReplayPlayer's single anchor, the scrubber derives from the snapshot, no second position variable; the 'needle snaps back mid-scrub' case is covered by emitting the seeked position before rescheduling) and transport-contract (a control never lies: on the live feed the scrubber is disabled, not an enabled no-op). Event-driven scheduling stays: seek clears the one timer and schedules the next due event, so the player still never ticks per frame.\n\n## Flow\n- player.ts: `seek(t)` on Feed; ReplayPlayer clamps, rewinds or advances the Timeline, re-anchors the clock if playing, bumps epoch, reschedules; LiveFeed.seek is a no-op.\n- feed.ts: `selectSource(s, { at })` stores a pending seek applied when the player for that key is created or already exists.\n- Layer1.tsx: Progress becomes Scrubber (role=slider, arrows 5 s, Home/End, pointer drag) with segment bands and moment ticks from stage-kit.\n- RunDetail.tsx: 'Play from here' per beat row and clickable span segments call selectSource(run, { at }) and navigate to #/onair.\n- Tests first: player.test.ts seek cases, scrub.dom.test.tsx for the slider and the beat jump, a DOM budget case in onair.dom.test.tsx.\n\n## Expected impact\nInspecting any moment of a run takes one click from the rundown instead of restart-and-wait or a trip to the stage. The screen becomes a review instrument, not a loop.\n\n## Evaluation\nClaim: any beat, moment or segment start of a stored run can be put on screen in one action, by keyboard or pointer.\nBefore: 0 of 7 acceptance cases pass (no seek verb; progress aria-hidden; beats link only to the transcript)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (manualTimers player rig, mountPage DOM tests)\nResult: better\nGate: none (in-context UI; stage-kit is read, not edited). Shares feed.ts/player.ts with slot A: build sequentially, not in parallel.",
+    "evidence": "player.ts:29-36 `export interface Feed { subscribe; getSnapshot; play(): void; pause(): void; restart(): void; dispose(): void; }`; Layer1.tsx:50 `<div className={styles.prog} aria-hidden=\"true\" data-role=\"onair-progress\">`; RunDetail.tsx:80-82 `<RouteLink to={pageRoute(\"brain\", \"transcripts\", runId, String(b.line))} ...>L{b.line}</RouteLink>`; RunDetail.tsx:38 `role=\"img\" aria-label={Segments: ...}`; feed.ts:56 `if (cur?.key === key) return;`; playback.ts:37-40 `if (t < this.appliedTo) { this.cursor = 0; this.state = initialScene(); }`; grep -rn clipMarkers apps packages (non-test) -> apps/stage/src/Controls.tsx:5,73 and packages/stage-kit/src/playback.ts:61 only; apps/stage/src/App.tsx:224 `else if (e.key === \"ArrowRight\") seek(clock.current + 5000);`.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Grounded, falsifiable UX elevation; schedule after slot A and shell-router A."
+    }
+  }
+]

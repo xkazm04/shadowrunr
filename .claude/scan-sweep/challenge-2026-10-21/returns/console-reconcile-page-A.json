@@ -1,0 +1,15 @@
+{"card":"The plan composer keeps its own sealed plan: derive it from the daemon's live plan","context":"console-reconcile-page","slot":"A","status":"landed",
+ "shas":["9b889ec","4b43dba"],
+ "tests_added":[
+  "apps/console/src/pages/reconcile/planState.test.ts::composerState (6 cases)",
+  "apps/console/src/pages/reconcile/planState.test.ts::draftOf (3 cases)",
+  "apps/console/src/pages/reconcile/layer2.test.tsx::after a reload shows the daemon's live plan, seeds the choice from it and will not re-seal it",
+  "apps/console/src/pages/reconcile/layer2.test.tsx::names the report a live plan was sealed from when it is another one",
+  "apps/console/src/pages/reconcile/layer2.test.tsx::warns when the live plan cannot be read and still allows sealing",
+  "apps/console/src/pages/reconcile/layer2.test.tsx::chooses options, seals them with plan.choose and shows the dispatch (extended: 'No live plan yet', plan.current refetched after plan.choose, button then 'This is the live plan')"],
+ "guard_cases":[],
+ "cases_total":13,"cases_red_before":13,"cases_green_after":13,
+ "gates":{"pnpm -C apps/console test -- src/pages/reconcile (reconcile files)":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console build":0,"eslint src/pages/reconcile --max-warnings 0":0,"stylelint + check-size + check-token-refs":0,"pnpm -C apps/console lint (whole tree)":1,"pnpm -C apps/console test (whole suite)":1},
+ "files_changed":5,"lines_changed":263,
+ "deviations_from_card":"testgen.ts and Layer2.module.css not touched (not needed). hooks.ts not touched: plan.current is read in PlanPage via useRpc and folded by planState.liveRead. Added a 'loading' state (seal disabled, 'Reading the live plan…') so a click cannot race a live plan not yet read. The existing seal test's script now returns not_found from plan.current until plan.choose, then the sealed plan (the daemon persists it) - required by acceptance 6 (sealed block from the refetch). base() returns not_found for plan.current by default. Sealed block heading reads 'Live plan <id> from <report>' instead of 'Sealed <id>'; it renders for live-here and live-elsewhere.",
+ "notes":"Whole-tree lint and full-suite test were red only in apps/console/src/pages/simulator (Matrix.tsx set-state-in-effect; simulator/layer2.test.tsx 2 failures; earlier model.test.ts missing ./matrix) - console-simulator-page B's in-flight work, re-run after a wait, still only there. Typecheck went green on the re-run. Reconcile: 46/46 tests green. Bundle: reconcile.l2 81.8 KiB of 97.7 KiB, no budget change. PlanPage diff kept small; all derivation lives in planState.ts for console-data-layer A."}

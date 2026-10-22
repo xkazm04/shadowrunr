@@ -1,0 +1,123 @@
+[
+  {
+    "context": "console-brain-page",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Brain totals are page-window samples: one daemon ledger.summary per source",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "crates/shadowrunr-types/src/rpc.rs",
+      "crates/shadowrunr-daemon/src/paging.rs",
+      "crates/shadowrunr-daemon/src/rpc.rs",
+      "crates/shadowrunr-daemon/src/e2e/paging.rs",
+      "packages/contract/schema/contract.schema.json",
+      "packages/contract/src/generated/types.ts",
+      "packages/contract/src/generated/meta.ts",
+      "packages/contract/src/generated/validators.js",
+      "apps/console/src/data/invalidation.ts",
+      "apps/console/src/pages/brain/useBrain.ts",
+      "apps/console/src/pages/brain/Layer1.tsx",
+      "apps/console/src/pages/brain/Engine.tsx",
+      "apps/console/src/pages/brain/engineModel.ts",
+      "apps/console/src/pages/brain/testgen.tsx",
+      "apps/console/src/pages/brain/layer1.test.tsx",
+      "apps/console/src/pages/brain/layer2.test.tsx"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "crates/shadowrunr-types (new LedgerSummaryParams/LedgerSummary + method registration, additive)",
+      "packages/contract (regenerated: 4 generated files, no hand edits)"
+    ],
+    "acceptance": [
+      "daemon: tournament of 3 runs x 3,000 ledger rows (9,000 > both console windows), ledger.summary {tournament_id} -> calls 9000, sum of per-role calls 9000, errors == rows with error_kind, no cursor in the reply",
+      "daemon: one role with successful durations [800,1200,1000] and one failed 9000 ms -> duration_p50 1000 (failed calls excluded, as engineModel.ts:79 does), first_text_p50 by nearest rank (reconcile stats::percentile)",
+      "daemon: rows costed 0.004 and 0.006 plus one row without cost_usd -> cost_usd 0.01 and uncosted_calls 1 (an unknown cost is counted, never folded into $0)",
+      "daemon: a trailing partial line in ledger.jsonl is left out (same complete_lines rule as ledger.page); an unknown run_id -> the same RpcError ledger.page returns",
+      "console Engine: scripted season whose newest tournament has 9,000 rows -> StatBand 'Engine calls' reads 9,000 without '(first pages)', role table calls/p50/p95 come from the summary, Call ledger still pages with 'Load 5000 more'",
+      "console Layer1: same season -> scope HUD reads '9,000 calls' and the tournament row's runs count; lamp counts equal the summary's per-role calls; the truncation flag names only the lanes ('lanes drawn from the first pages')",
+      "console: ledger.summary answers an error -> Engine and Layer1 fall back to the window aggregate and keep the '(first pages)' label (degraded, never blank)",
+      "console: a stream_end event invalidates ledger.summary together with ledger.page"
+    ],
+    "premise": [
+      "apps/console/src/pages/brain/useBrain.ts:10 - Layer1's window is ledgerPages 12 x pageSize 500 = 6,000 ledger rows and runPages 4 x 500 = 2,000 runs",
+      "apps/console/src/pages/brain/Engine.tsx:22-23,109,113 - Engine reads the same newest tournament's ledger with PAGE 500 x STEP 10 = 5,000 rows, so the two floors quote different call totals for one tournament past 5,000 rows",
+      "apps/console/src/pages/brain/brainModel.ts:237 - Layer1's headline is calls: ledger.length, runs: runs.length - window sizes, not the tournament's",
+      "apps/console/src/pages/brain/Layer1.tsx:76-77 - the HUD prints int(model.calls) calls and int(model.runs) runs as the tournament's",
+      "crates/shadowrunr-types/src/rpc.rs:213 - TournamentRow already carries the real runs count the HUD ignores",
+      "apps/console/src/pages/brain/Engine.tsx:85 and apps/console/src/pages/brain/Layer1.tsx:169 - both floors admit the sample with a '(first pages)' label instead of answering the whole source",
+      "apps/console/src/pages/brain/engineModel.ts:61 - cost += l.cost_usd ?? 0 folds unknown cost into zero (registry companion-runtime deviation recorded at Engine.tsx:54)",
+      "crates/shadowrunr-daemon/src/paging.rs:260-288 - ledger_page re-reads every file of the source via complete_lines for each page and skips by offset, so Engine's 10 pages read the tournament 10 times to get a sample",
+      "apps/console/src/pages/brain/Layer1.tsx:51-57 - precedent: useFirstWords already prefers the reconciler's full-population latency over the sampled transcripts",
+      "crates/shadowrunr-types/src/rpc.rs:449 and crates/shadowrunr-daemon/src/rpc.rs:309 - one line each registers and dispatches a method; crates/shadowrunr-reconcile/src/stats.rs:67 percentile is pub (lib.rs:21 pub mod stats) and the daemon already depends on that crate (crates/shadowrunr-daemon/Cargo.toml:22)"
+    ],
+    "rollback": "Three commits (types+daemon method, contract regen, console consumer); revert the console commit first and the floors read the window again; the method is additive so reverting the first two leaves no consumer",
+    "gate": "contract",
+    "test_command": "cargo test -p shadowrunr-types && cargo test -p shadowrunr-daemon && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check && pnpm -C packages/contract generate && pnpm -C packages/contract test && pnpm -C packages/contract typecheck && pnpm -C apps/console test -- src/pages/brain src/data && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "Pre-flight titles and the 'expected amber' verdict are console re-implementations (CHECK_TITLES hand-list preflightModel.ts:9-19, regex over prose detail preflightModel.ts:27): the daemon should carry title and expected as fields",
+    "body": "## Summary\nEvery number on the Brain floors comes from a client-side fold over a page window: Layer 1 reads 6,000 ledger rows and 2,000 runs, Engine reads 5,000 rows, and each folds its own sample. Past 5,000 calls the two floors give two different totals for one tournament, and both label the gap '(first pages)'. Add `ledger.summary`, a daemon method over the same source grammar as `ledger.page` (run, tournament or the daemon ledger). It folds every complete row once and returns the totals, per-role routes and per-account rows that engineModel computes today. The floors render the summary. The paged ledger stays for the table and the lanes only.\n\n## Description\nThe technique is metrics-rollups / bundle-endpoints: numbers read together are computed together, in one scan and under one predicate, and a failed section is shown as failed rather than as empty. Today the Brain page has two endpoints in disguise: two windows, two folds, and two answers to 'how many calls'. measurement-honesty / unmeasurable-vs-zero covers the cost field. The summary counts `uncosted_calls` beside `cost_usd`, so the StatBand can say '$x + n uncosted' and stop showing a silent $0. The summary keeps engineModel's definitions exactly: failed calls are left out of the duration percentiles, and percentiles are nearest-rank through reconcile `stats::percentile`. It also streams lines with the `complete_lines` rule ledger.page uses, so one source has one interpretation. The browser keeps a fallback: if `ledger.summary` errors, the floors fold the window as they do now and keep the '(first pages)' label. The method is additive and reads the same files, so nothing new is stored or exposed (accounts stay labels only, per LedgerEntry's doc). The recorded bounded-enumeration deviation (offset resume, Engine.tsx:112) is left alone. This card stops depending on that path for totals, and does not fix it.\n\n## Flow\n- types: `LedgerSummaryParams { run_id?, tournament_id? }`, `LedgerSummary { calls, errors, fallbacks, cost_usd, uncosted_calls, unrouted, routes: [RouteSummary], accounts: [AccountSummary] }`, register `ledger.summary`\n- daemon paging.rs: `ledger_summary` reuses `ledger_files` + line parsing, folds per role/account, and computes percentiles with reconcile stats. rpc.rs dispatch. e2e over a >5,000-row tournament\n- regenerate the contract\n- console: engineModel adapts LedgerSummary -> EngineSummary (one adapter, so EngineFloor is unchanged). Engine and useBrain read `ledger.summary` for totals, roles and lamps. Layer1 runs come from the TournamentRow. invalidation adds ledger.summary on stream_end/segment_end/job\n- tests: testgen's scripted daemon answers ledger.summary from its generated season\n\n## Expected impact\nThe Brain floors give one true call, error, fallback and cost total for any tournament size, and the same number on both floors. Engine stops re-reading the tournament's ledger 10 times to produce a sample. Unknown cost becomes visible instead of reading as zero. The page windows keep their real job: the drawn lanes and the browsable table.\n\n## Evaluation\nClaim: a daemon-side summary makes the Brain's totals whole-source and consistent across floors.\nBefore: 0 of 8 acceptance cases pass (no ledger.summary method; Engine reads 5,000 and Layer1 reads 6,000 of 9,000; missing cost folds to $0)\nAfter: 8 of 8\nMethod: gate - acceptance tests written first (daemon e2e + console scripted season)\nResult: better\nGate: contract (additive method in shadowrunr-types / packages/contract) + architecture",
+    "evidence": "useBrain.ts:10 `export const WINDOW = { tournaments: 500, runPages: 4, ledgerPages: 12, pageSize: 500 } as const;` | Engine.tsx:22-23 `const PAGE = 500; const STEP = 10;` Engine.tsx:85 `label: more ? \"Engine calls (first pages)\" : \"Engine calls\"` | brainModel.ts:237 `calls: ledger.length, runs: runs.length` | engineModel.ts:61 `cost += l.cost_usd ?? 0;` | paging.rs:271-283 `'files: for file in ledger_files(cfg, &p)? { let lines = complete_lines(&file.path)?; if skip >= lines.len() ... skip -= ...` | types rpc.rs:212-213 `pub instrument_hash: String, pub runs: usize,` | grep 'ledger.summary' over crates/ packages/ apps/ -> 0 hits",
+    "critic": {
+      "verdict": "build",
+      "ambition": 5,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "True premise, honest L, and sharp cases at a scale that exceeds both windows. Sequence it before brain-page B."
+    }
+  },
+  {
+    "context": "console-brain-page",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Engine floor has no baseline: compare two ledgers role by role",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "apps/console/src/pages/brain/Engine.tsx",
+      "apps/console/src/pages/brain/engineModel.ts",
+      "apps/console/src/pages/brain/Layer2.module.css",
+      "apps/console/src/pages/brain/layer2.test.tsx",
+      "apps/console/src/pages/brain/testgen.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/pages/brain/EngineCompare.tsx",
+      "apps/console/src/pages/brain/engineModel.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "compareSummaries: core_thread base p50 1000 ms n=200, candidate p50 1400 ms n=200 -> delta +400 ms, direction 'worse'",
+      "compareSummaries: a role only in the candidate -> state 'new' with no delta; a role only in the baseline -> state 'gone'",
+      "compareSummaries: a role with 12 calls on one side under minN 20 -> no latency delta, state 'too few calls' (never a signed number)",
+      "compareSummaries: errors 2/100 base vs 10/100 candidate -> error rate +8.0 pp 'worse'; cost delta with uncosted rows on either side is marked lower-bound",
+      "UI: season of 3 tournaments, Engine source gen-t0002 -> Compare defaults to the previous tournament gen-t0001, and data-role brain-compare names 'baseline gen-t0001' and 'candidate gen-t0002' above the rows",
+      "UI: baseline ledger has more pages than the window -> the compare header says 'baseline: first 5,000 calls', marks the comparison partial, and still renders the rows",
+      "UI: baseline and candidate TournamentRow.instrument_hash differ -> a caution note that the instruments differ, as Tournaments.tsx:139 does",
+      "UI: source is the daemon ledger -> Compare defaults to 'none' and no compare table renders until a baseline is picked"
+    ],
+    "premise": [
+      "apps/console/src/pages/brain/Engine.tsx:108-113 - one `picked` source and one ledger query: the floor can show exactly one ledger",
+      "apps/console/src/pages/brain/Engine.tsx:118-133 - the source select already lists every tournament with its run count, so the baseline candidates are already in hand",
+      "apps/console/src/pages/brain/EngineFloor.tsx:27-66 - LiveRoutes shows calls, errors, p50, p95 and first-text p50 per role for one side only",
+      "apps/console/src/pages/brain/engineModel.ts:48 - summariseLedger is a pure fold over rows, so the baseline is the same function applied to a second window",
+      "crates/shadowrunr-types/src/rpc.rs:210-213 - TournamentRow carries instrument_hash and runs, enough to warn on a cross-instrument compare",
+      "apps/console/src/pages/simulator/Tournaments.tsx:139 - the console already warns 'compare cells within one hash only' in prose; no surface compares engine behaviour (grep -i 'compare|baseline' over apps/console/src/pages: no engine comparison)"
+    ],
+    "rollback": "Single commit; EngineCompare.tsx is new, Engine.tsx gains a select and one conditional section; reverting restores the single-ledger floor",
+    "gate": "none",
+    "test_command": "pnpm -C apps/console test -- src/pages/brain && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "The scope wall reports pulses it will not let you open: a lane or error dot should open that lane's runs, and an engine-ledger row should open the transcript line at its timestamp",
+    "body": "## Summary\nThe operator changes routes, tiers, accounts or the character, runs a tournament, and opens the Engine floor to see if the engine got faster or flakier. The floor shows one ledger. To answer the question the operator flips the source select back and forth and remembers the p95s. Add a 'Compare with' baseline. By default it is the previous tournament. The routing table then gains a per-role delta view: calls, error rate in pp, p50, p95 and first-text p50 in ms, plus fallbacks and cost. Both sides are named, and a delta only shows where the sample can carry it.\n\n## Description\nThe technique is diff-comparison / pair-and-baseline-selection. The baseline is the question, here a temporal one: 'what changed since the last tournament?'. So the pair appears above the rows, and the sides are named by role (baseline and candidate), not as left and right. diff-honesty applies too: if either window is truncated, the compare says it is partial and does not present the delta as whole-source. measurement-honesty / minimum-sample-floors applies as well: a role below minN shows 'too few calls', not a p95 swing built on 12 calls. A role present on one side only is 'new' or 'gone', never a delta against zero. When instrument_hash differs, the compare carries a caution, as the simulator does. `compareSummaries(base, cand, {minN})` is a pure function next to summariseLedger, and EngineCompare renders its rows with Chip tones (worse=caution, better=ok). The baseline ledger uses the same usePaged window as the source. If card A lands, both sides read ledger.summary and the partial note disappears, but this card does not depend on it. No contract change, and nothing new is stored.\n\n## Flow\n- Engine: `compareTo` state. Default is the tournament before the source in the tournaments page, or none for the daemon ledger. A 'Compare with' select sits next to 'Ledger'\n- second usePaged('ledger.page', baseParams, STEP) only when compareTo is set, then summariseLedger on both\n- engineModel.compareSummaries -> rows {role, state: both|new|gone|thin, base, cand, deltas, direction}\n- EngineCompare: header (baseline id, candidate id, partial, instrument note) and a table with data-role brain-compare\n- tests: pure model tests and a scripted-season UI test\n\n## Expected impact\nThe question the Engine floor exists to answer ('did my change make the engine better?') takes one glance instead of select-flipping from memory. Regressions in p95 or error rate per role become visible right after the tournament that caused them.\n\n## Evaluation\nClaim: a named-baseline per-role compare answers the before/after question on the Engine floor.\nBefore: 0 of 8 acceptance cases pass (no compareSummaries, no Compare control, no brain-compare surface)\nAfter: 8 of 8\nMethod: gate - acceptance tests written first\nResult: better\nGate: none (in-scope console feature, no contract change)",
+    "evidence": "Engine.tsx:108 `const [picked, setPicked] = useState<string | null>(null);` Engine.tsx:113 `const ledger = usePaged(\"ledger.page\", params, pages);` (the only ledger query) | EngineFloor.tsx:45-61 one LiveRoutes row per st.routes with o = seen.get(r.role) from a single EngineSummary | engineModel.ts:48 `export function summariseLedger(rows: readonly LedgerEntry[]): EngineSummary` | grep -rli 'compare|baseline' apps/console/src/pages -> brain/BandArt.tsx (prose), characters/*, onair/ClipDetail.tsx, reconcile/*, review/Judge.tsx, simulator/cells.ts (cell sort), simulator/Tournaments.tsx:139 (hash note): none compares engine ledgers",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Grounded operator feature with honest sample-floor and partial-window handling. Land it after card A because they share files."
+    }
+  }
+]

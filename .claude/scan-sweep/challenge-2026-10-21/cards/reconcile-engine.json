@@ -1,0 +1,123 @@
+[
+  {
+    "context": "reconcile-engine",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "One cell-and-tally spine: reconcile stops re-deriving verdict aggregates 3 ways",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-reconcile/src/metrics.rs",
+      "crates/shadowrunr-reconcile/src/budget.rs",
+      "crates/shadowrunr-reconcile/src/runs.rs",
+      "crates/shadowrunr-reconcile/src/stats.rs",
+      "crates/shadowrunr-reconcile/src/lib.rs",
+      "crates/shadowrunr-reconcile/src/tests.rs",
+      "crates/shadowrunr-reconcile/src/tests_scale.rs"
+    ],
+    "new_files": [
+      "crates/shadowrunr-reconcile/src/cells.rs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "briefed tournament fixture (metrics.rs directive_tests::briefed_tournament: r1 fails directive:prevent:dir-1, quality carries directive:try:dir-2/3) -> analyze(runs).tones[*].rule_failures has no rule starting 'directive:' and quality_rates has no key starting 'directive:' (today both leak in; red_lines already excludes them)",
+      "same briefed fixture -> the report's deterministic_summary 'Hard-rule failures: 0' and the sum of tone rule_failures.fails agree (both 0); today the tone table lists 1 failing rule while the summary says 0",
+      "two judged runs identical in tone/tier/segment/audience but instrument.json hashes 'h1' and 'h2' -> budget::synthesis_prompt metrics block runs.cells lists 2 cells, each runs=1 (today 1 cell with runs=2, merging instruments contrary to docs/spec/contract.md:169)",
+      "same two-hash fixture with h1 quality 0/2 pass and h2 2/2 pass -> quality_lines ranks the h1 cell worst on its own 0% rate, never a pooled 50% cell",
+      "one-cell tournament -> the prompt's per-segment rule rows and ToneFinding.rule_failures are equal row-for-row (rule, fails, n, refs), both produced by cells::tally",
+      "existing reconcile_aggregates_directive_outcomes_and_says_which_held and the tests_scale budget tests still pass unchanged (directive outcomes and prompt budget behaviour preserved)"
+    ],
+    "premise": [
+      "crates/shadowrunr-reconcile/src/metrics.rs:293 - tones() tallies every verdict.rules entry with no 'directive:' filter, and :286 counts every quality dimension incl. directive:try:*",
+      "crates/shadowrunr-reconcile/src/metrics.rs:384 - red_lines() filters rules starting DIRECTIVE_CHECK_PREFIX: one report includes directive checks in one table and excludes them in another",
+      "crates/shadowrunr-reconcile/src/lib.rs:747-750 - deterministic_summary counts 'Hard-rule failures' from red_lines (directive-free)",
+      "crates/shadowrunr-reconcile/src/budget.rs:314-340 - rule_rows() is a second copy of the tones() rule tally (metrics.rs:293-304): same tuple accumulator, also unfiltered for directive checks",
+      "crates/shadowrunr-reconcile/src/budget.rs:241 - Stratum = (tone, tier, segment, audience) with no instrument hash; runs.cells (:348) and quality_lines' worst-cell ranking (:767) pool instruments",
+      "docs/spec/contract.md:169 - 'Results from different hashes are never merged'; crates/shadowrunr-sim/src/summary.rs:340-346 keys CellKey on instrument_hash + tone + tier + segment + audience",
+      "crates/shadowrunr-reconcile/src/budget.rs:247-276 and crates/shadowrunr-reconcile/src/runs.rs:49-75 - run axes (tone, tier, segment, audience, character) are derived by four separate spec-else-transcript fallbacks",
+      "crates/shadowrunr-reconcile/src/stats.rs:3-7 - self-described 'minimal local duplicate' of sim stats to fold 'once public'; crates/shadowrunr-sim/src/lib.rs:33 has 'pub mod stats' and crates/shadowrunr-reconcile/Cargo.toml already depends on shadowrunr-sim",
+      "crates/shadowrunr-reconcile/src/metrics.rs:18 - a local 'directive:' prefix while crates/shadowrunr-sim/src/judge.rs:213,215 export DIRECTIVE_PREVENT_PREFIX / DIRECTIVE_TRY_PREFIX"
+    ],
+    "rollback": "One new module plus call-site swaps; git revert of the 1-2 commits restores metrics.rs/budget.rs/stats.rs verbatim. No stored file format or wire type changes (ToneFinding / SynthesisInput shapes unchanged).",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-reconcile && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "Reconcile stores read-modify-write across the LLM await: choose() saves a StoredReport loaded before a multi-second engine call (lib.rs:478 -> :559), so two chooses on one report drop a plan; per-store lock + re-read after the await.",
+    "body": "## Summary\nReconcile aggregates the same judge verdicts three times with three slightly different rules, and the differences reach the owner: directive checks leak into tone rule failures and quality rates while red lines and the summary sentence exclude them, and the synthesis prompt's matrix cells merge instrument hashes the contract says are never merged. Introduce one `cells.rs` spine every consumer reads.\n\n## Description\n`metrics::tones` (metrics.rs:293) and `budget::rule_rows` (budget.rs:314) are copy-paste tallies; neither filters `directive:` checks, while `metrics::red_lines` (metrics.rs:384) does. The prompt's `Stratum` (budget.rs:241) has no instrument hash, unlike the sim's `CellKey` (summary.rs:340) and contract.md:169. Run axes are re-derived in four places (runs.rs:49-75, budget.rs:247-276) and `stats.rs` is a self-declared temporary copy of `shadowrunr_sim::stats`.\n\nThe move: `cells.rs` owns (1) `RunData::cell() -> CellKey` (the sim's key type from shadowrunr_types::results, hash included), derived once; (2) `tally(runs, CheckFilter::HardRules)` excluding the sim's DIRECTIVE_PREVENT/TRY prefixes, used by tones(), segment rule rows and failure_lines; (3) `stats` becomes a re-export of `shadowrunr_sim::stats` plus the local `rate()` wrapper. Technique: measurement-honesty/co-published-numbers-must-reconcile (numbers shown together, derived from one source, must agree); instrument separation per measurement-honesty/instrument-exposure-control. Gate: architecture.\n\n## Flow\n- add cells.rs with CellKey derivation and the single tally; unit tests first\n- metrics::tones and budget::rule_rows call cells::tally; drop the local 'directive:' const for the sim's\n- budget Stratum -> CellKey (hash included) for runs.cells, quality_lines and stratified sampling\n- stats.rs -> pub use shadowrunr_sim::stats::{wilson, rate_bound, percentile} + rate()\n\n## Expected impact\nThe report page's tone table, summary sentence and incident list stop disagreeing about directive checks; the Reconciler is never told a cell is 50% when it is two instruments at 0% and 100%; the next aggregation change is made once, not three times.\n\n## Evaluation\nClaim: one tally and one cell key make the report's co-published numbers agree and keep instruments apart.\nBefore: 0 of 4 new acceptance cases pass (directive leak, summary/table disagreement, merged hash cells, pooled worst cell); 2 regression cases pass\nAfter: 6 of 6\nMethod: gate - acceptance tests written first\nResult: better\nGate: cargo test -p shadowrunr-reconcile, clippy -D warnings, fmt --check",
+    "evidence": "metrics.rs:293-304 `for r in &verdict.rules { let e = cell.rules.entry(r.rule.clone()).or_default(); match r.state { CheckState::Fail => {...` (no prefix filter) vs metrics.rs:384 `.filter(|r| !r.rule.starts_with(DIRECTIVE_CHECK_PREFIX))`; budget.rs:318-329 identical accumulator `let e = by.entry(r.rule.clone()).or_default(); match r.state { CheckState::Fail => { e.0 += 1; e.1 += 1; e.2.extend(...`; budget.rs:240-241 `/// (tone, tier, segment, audience)` `type Stratum = (String, String, String, String);`; contract.md:168-169 'Results from different hashes are never merged.'; stats.rs:3 'Minimal local duplicate of the statistics in `shadowrunr-sim`'; sim lib.rs:33 `pub mod stats;`; sim judge.rs:213 `pub const DIRECTIVE_PREVENT_PREFIX: &str = \"directive:prevent:\";`",
+    "critic": {
+      "verdict": "build",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Co-published numbers that disagree and pooled instruments are real defects; one spine fixes both with red-first tests."
+    }
+  },
+  {
+    "context": "reconcile-engine",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "A chosen character diff is only shown: let the owner apply and revert it",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "crates/shadowrunr-reconcile/src/lib.rs",
+      "crates/shadowrunr-reconcile/src/verify.rs",
+      "crates/shadowrunr-reconcile/src/tests.rs",
+      "crates/shadowrunr-types/src/reconcile.rs",
+      "crates/shadowrunr-types/src/rpc.rs",
+      "crates/shadowrunr-daemon/src/rpc.rs",
+      "packages/contract/schema/contract.schema.json",
+      "packages/contract/src/generated/types.ts",
+      "packages/contract/src/generated/validators.js",
+      "apps/console/src/pages/reconcile/PlanPage.tsx",
+      "apps/console/src/data/invalidation.ts",
+      "apps/console/src/pages/reconcile/layer2.test.tsx",
+      "docs/spec/contract.md"
+    ],
+    "new_files": [
+      "crates/shadowrunr-reconcile/src/apply.rs"
+    ],
+    "shared_surfaces": [
+      "crates/shadowrunr-types (new AppliedChange type, OptionApplyParams / OptionRevertParams, method registry entries at rpc.rs:437 area)",
+      "packages/contract (regenerated schema / types / validators)",
+      "crates/shadowrunr-daemon/src/rpc.rs (two thin method arms)"
+    ],
+    "acceptance": [
+      "report whose opt-1 is a verified character_change diff on bible.md; option.apply {report_id, option_id:'opt-1', diff_sha: sha256(stored diff)} -> bible.md equals the patched text, StoredReport.applied holds {option_id:'opt-1', file:'bible.md', before_sha, after_sha} and the reply returns it",
+      "bible.md hand-edited after the report so hunk 1 no longer matches -> option.apply returns invalid_params 'hunk 1 of bible.md does not match the current file' and bible.md is byte-identical",
+      "diff_sha that is not the sha of the stored diff (the console showed different content) -> refused invalid_params, no file written",
+      "opt-2 of kind topic (no diff) -> option.apply invalid_params 'option opt-2 carries no diff'",
+      "option.apply twice on opt-1 -> second call refused 'already applied', file unchanged",
+      "diff touching bible.md and tones/theatrical.md where the tone hunk does not match -> neither file changes (all-or-nothing)",
+      "option.revert after apply -> bible.md byte-identical to the pre-image and the applied record marked reverted; option.revert after a further hand edit (sha != after_sha) -> refused, file unchanged",
+      "console PlanPage: a character_change card with a diff shows 'Apply to package'; click sends option.apply with the diff's sha, then the card shows 'Applied' with a Revert button and plan.proposals is invalidated"
+    ],
+    "premise": [
+      "crates/shadowrunr-reconcile/src/verify.rs:501-503 - check_diff verifies every hunk's old side matches the current file 'so the owner is never shown a diff that cannot apply' -- yet nothing applies it",
+      "grep -rln 'character_change|CharacterChange' over crates apps packages docs -> only reconcile (lib/synth/tests/verify), crates/shadowrunr-types/src/reconcile.rs, the contract schema/generated files, console reconcile model.ts/PlanPage.tsx/testgen.ts and docs/spec/contract.md; grep for fs::write / write_json_atomic on bible/tone/character paths across crates hits only tests (verify.rs, sim instrument.rs): no writer of bible.md or tones/*.md exists",
+      "crates/shadowrunr-reconcile/src/lib.rs:473-561 - choose() only feeds chosen options into the dispatch prompt and writes the plan; no character file is touched",
+      "crates/shadowrunr-reconcile/src/synth.rs:401 - the dispatch 'must convey every chosen option': a bible change reaches Malakor as a spoken order, not a package edit, so the next tournament runs the old bible under the same instrument hash (docs/spec/contract.md:167-168: the hash covers the character package files)",
+      "apps/console/src/pages/reconcile/PlanPage.tsx:74 - the diff renders read-only (DiffView); :75-78 the only action is 'Choose for the next stream'",
+      "apps/console/src/pages/reconcile/PlanPage.tsx:25 - the lede says a diff 'may touch ... a segment table', which crates/shadowrunr-reconcile/src/verify.rs:408-418 forbids: the surface already mis-describes what a diff can do",
+      "crates/shadowrunr-daemon/src/server.rs:56-61 - the daemon's Reconciler already holds characters_root = cfg.paths.characters, the directory apply writes",
+      "crates/shadowrunr-reconcile/src/lib.rs:67-83 - write_json_atomic's temp + fsync + rename pattern exists to reuse for the patched files"
+    ],
+    "rollback": "Additive: new apply.rs, two new RPC methods, an optional `applied` field on StoredReport (serde default, skipped when empty: older reports load in new code, newer reports load in old code). Reverting the commit series removes the methods and button; any file already applied is restored with option.revert first, or via git on the characters/ tree.",
+    "gate": "direction",
+    "test_command": "cargo test -p shadowrunr-reconcile && cargo test -p shadowrunr-types && cargo test -p shadowrunr-daemon && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check && pnpm -C packages/contract check && pnpm -C packages/contract typecheck && pnpm -C apps/console typecheck && pnpm -C apps/console test && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "Close the loop: the next report scores the previous plan -- per chosen option and directive, before/after rates with bounds -- so the owner stops choosing the next plan blind to whether the last one worked (needs plan_id stamped on runs).",
+    "body": "## Summary\nReconcile spends an LLM call, a mechanical verifier and a hunk-matching check to produce a character_change diff the owner can trust, then shows it read-only. Choosing it only turns it into a spoken order in the Lord's dispatch; the bible on disk never changes, so the next tournament measures the old character under the same instrument hash. Add `option.apply` / `option.revert`: one click applies the exact diff the owner saw, re-verified against the current files, all-or-nothing, with a recorded pre-image to undo.\n\n## Description\nThe verifier already proves applicability (verify.rs:501-561); the missing half is the write. `apply.rs` extends the parsed patch with new-side lines, re-runs check_diff against characters_root at apply time (the staleness window between report and click), binds the request to `diff_sha` of the stored diff so the approved content cannot be swapped, writes each file atomically, and records `AppliedChange {option_id, file, before_sha, after_sha, pre_image_path, applied_ms, reverted_ms?}` on the StoredReport. Revert restores the pre-image only while the file still hashes to after_sha. constitution.md and non-bible/tone paths stay refused by the same check_diff. Techniques: hitl-approval/gate-state-machines (the owner's click is the only open transition, consumed once; content swapped before execution is refused) and hitl-approval/oracle-before-gate (the owner reviews the exact bytes that are applied); undo per undo-history/checkpoint-restore. Gate: direction (the console gains an owner-initiated write into the character package; no model output is ever applied without that click).\n\n## Flow\n- owner opens Plan options and reads the verified diff\n- clicks Apply to package -> option.apply {report_id, option_id, diff_sha}\n- daemon re-verifies, writes bible.md / tones/*.md atomically, records the pre-image\n- card flips to Applied + Revert; the next tournament picks up the new instrument hash on its own\n- Revert -> option.revert restores the pre-image if nobody edited since\n\n## Expected impact\nA proposed character improvement goes from 'read diff, open an editor, hand-copy hunks, hope it matches' to one click with undo, and the change reaches the next measured tournament instead of only the dispatch text.\n\n## Evaluation\nClaim: an owner-approved, verified diff is applied exactly, refused when stale or swapped, and reversible.\nBefore: 0 of 8 acceptance cases pass (no apply/revert method exists)\nAfter: 8 of 8\nMethod: gate - acceptance tests written first\nResult: better\nGate: reconcile/types/daemon cargo tests, clippy, fmt, contract check, console typecheck/test/lint/build",
+    "evidence": "verify.rs:501-502 '/// Validate a `character_change` diff. With `character_dir`, also check that every hunk's old side matches the current file, so the owner is never shown a diff that cannot apply.'; grep 'fs::write|write_json_atomic|write_atomic' | grep -i 'bible|tone|charact' over crates -> only verify.rs test lines and sim/src/instrument.rs tests; lib.rs:558-560 choose ends `stored.plans.push(plan.clone()); self.save(&stored)?; write_json_atomic(&self.cfg.data_dir.join(\"next_plan.json\"), &plan)?;`; synth.rs:401 'It must convey every chosen option and every active directive'; PlanPage.tsx:74 `{o.diff !== undefined && o.diff.length > 0 && <DiffView diff={o.diff} />}` followed by the checkbox 'Choose for the next stream'; daemon rpc.rs:265-268 plan.choose is the only plan write method.",
+    "critic": {
+      "verdict": "void",
+      "ambition": 5,
+      "grounding": 3,
+      "falsifiability": 5,
+      "reason": "Policy-loosen: a new RPC write of LLM-composed, chat-derived text into the owner's tracked bible/tones, which feed the trusted prompt prefix - owner-only decision, not a challenge build."
+    }
+  }
+]

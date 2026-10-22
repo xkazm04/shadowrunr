@@ -1,0 +1,116 @@
+[
+  {
+    "context": "stage-avatar-renderer",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Three face renderers re-implement the rig's per-layer animation rules",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "apps/stage/src/avatar/glow.ts",
+      "apps/stage/src/avatar/cut/renderer.ts",
+      "apps/stage/src/avatar/depth/renderer.ts",
+      "apps/stage/src/avatar/cut/gpu.ts"
+    ],
+    "new_files": [
+      "apps/stage/src/avatar/layer-frame.ts",
+      "apps/stage/src/avatar/layer-frame.test.ts",
+      "apps/stage/src/avatar/gl-kit.ts",
+      "apps/stage/src/avatar/renderers.golden.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "layerFrame(seam layer kind 5, no voice_gain; pose voice 0.5 open 0.3) -> gain 1.38 (0.9 + 2*max(0.4,0.3)*0.6)",
+      "layerFrame(eye layer blink 'iris', pose blinkR 1, voice 0) -> gain 0.4, eye uniform [cx, cy, 0.92, 0]",
+      "layerFrame(eye layer blink 'dim', blink 1) -> gain 0 (light goes to dark crystal)",
+      "layerFrame(float layer, pose activity 0) -> float uniform [0,0,0,0] (a settled face draws exactly its rest frame)",
+      "apertureLift(rig with aperture, open small enough that lift < 0.2) for an aperture_glow draw -> skip true; the lift formula lives in exactly one module (rg 'open_frac \\?\\? 0.15' over apps/stage/src/avatar -> 1 file, was 3)",
+      "recording fake WebGL2 (records every uniform*/draw call) driving createGlowRenderer, createCutRenderer and createDepthRenderer over a fixture form and 3 fixed poses -> call streams identical to goldens captured on the pre-refactor tree (guard: green before and after)",
+      "uploadLayerTextures(gl, images) is the only place that sets UNPACK_PREMULTIPLY_ALPHA_WEBGL (rg -> 1 file, was 3) and contextLossGuard(canvas, build, onRestored) the only place listening for webglcontextlost (rg -> 1 file, was 3)"
+    ],
+    "premise": [
+      "apps/stage/src/avatar/glow.ts:325 - seam gain rule `0.9 + (l.voice_gain ?? 2) * Math.max(voice * 0.8, pose.open) * 0.6`; identical at apps/stage/src/avatar/cut/renderer.ts:298 and apps/stage/src/avatar/depth/renderer.ts:312",
+      "apps/stage/src/avatar/glow.ts:326-330 - pulse gain rule; copied at apps/stage/src/avatar/cut/renderer.ts:299 and apps/stage/src/avatar/depth/renderer.ts:313",
+      "apps/stage/src/avatar/glow.ts:333-346 - iris/dim eye blink, eye uniforms and eye voice warm; copied at apps/stage/src/avatar/cut/renderer.ts:300-313 and apps/stage/src/avatar/depth/renderer.ts:314-327",
+      "apps/stage/src/avatar/glow.ts:291 - aperture lift formula; copied at apps/stage/src/avatar/cut/renderer.ts:272 and apps/stage/src/avatar/depth/renderer.ts:283",
+      "apps/stage/src/avatar/glow.ts:188-198 - float parameters (amp, freq, rot, pivot, phase 1.7*fi+0.4, phase2 2.3*fi+1.1); copied at apps/stage/src/avatar/cut/renderer.ts:168-178 and apps/stage/src/avatar/depth/renderer.ts:192-204",
+      "apps/stage/src/avatar/glow.ts:128-144 - texture upload loop; copied at apps/stage/src/avatar/cut/renderer.ts:115-131 and apps/stage/src/avatar/depth/renderer.ts:152-168",
+      "apps/stage/src/avatar/glow.ts:101-121 - program build with KHR_parallel_shader_compile; re-made at apps/stage/src/avatar/depth/renderer.ts:130-146 and apps/stage/src/avatar/cut/gpu.ts:44-65",
+      "apps/stage/src/avatar/glow.ts:230-250 - context lost/restored rebuild; copied at apps/stage/src/avatar/cut/renderer.ts:214-235 and apps/stage/src/avatar/depth/renderer.ts:225-243",
+      "apps/stage/src/avatar/glow.ts:344 vs apps/stage/src/avatar/cut/renderer.ts:311 vs apps/stage/src/avatar/depth/renderer.ts:325 - the gaze channel is mapped three different ways (3.5/2 px, EYE_PX 9/6, look.eyeX + 3.5/2) with no table saying which differences are intended",
+      "apps/stage/src/avatar/runtime.test.ts:1-8 - the only avatar test touching the runtime; no renderer has a GPU-free test of its per-layer rules"
+    ],
+    "rollback": "Commit series: (1) golden recorder + goldens on the untouched tree, (2) layer-frame.ts + tests, (3) gl-kit.ts, (4..6) one renderer per commit switched over. Revert 6..2 in reverse; the goldens commit stays as a guard. No stored data, no contract change.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/stage test -- src/avatar && pnpm -C apps/stage typecheck && pnpm -C apps/stage build",
+    "runner_up": "One face host: the ~120-line startFace lifecycle (fail/backing/warnOnce/IntersectionObserver/MutationObserver/matchMedia) copied in runtime.ts, cut/index.ts and depth/index.ts becomes mountFace(opts, makeRenderer).",
+    "body": "## Summary\nThe rig's animation semantics - how the seam brightens with the voice, how an eye blinks as an iris or dims as a facet, how a float drifts, how far the aperture opens, how the gaze moves the eye light - are written out three times, once in each WebGL renderer (glow, cut, depth), along with three copies of texture upload, program build and context-loss rebuild. Pull the per-layer rules into one pure `layer-frame.ts` and the GL plumbing into `gl-kit.ts`; each renderer keeps only what is genuinely its own (its passes, its mesh, its composite).\n\n## Description\nLeans on talking-avatar / rig-parameter-contract: 'everything the renderer can derive on its own stays in the renderer' - but in ONE place - and 'each target renderer maps every channel or says it ignores it'. Today a new layer field (a brow, a third blink style, a voice-reactive halo) must be added in three files that already drift: the gaze channel has three different mappings (glow.ts:344, cut/renderer.ts:311, depth/renderer.ts:325) with nothing saying which differences are deliberate. Also module-design / seams-and-adapters ('two producers must feed one consumer identically; classify known divergences'): `layerFrame(draw, pose, rig, mapping)` returns plain numbers {skip, gain, eye, eyeP, gaze, float, aper}; each renderer passes a small mapping table (its gaze px, its follow rule) so the divergences become declared data instead of drifted code. Behaviour is pinned first by a recording fake WebGL2 context whose call streams are captured on the untouched tree.\n\n## Flow\n- Write the recording fake gl + goldens for all three renderers on the current tree (green).\n- Write layer-frame tests (red), implement layer-frame.ts (green).\n- gl-kit.ts: compileProgram (cut/gpu.ts program moves here), uploadLayerTextures, contextLossGuard.\n- Switch glow, then cut, then depth, one commit each; the goldens stay byte-identical.\n\n## Expected impact\nRenderer files shrink by ~150 lines each; per-layer rules become testable without a GPU for the first time; the next renderer variant or rig channel is one edit, not three; gaze divergences become a reviewed table.\n\n## Evaluation\nClaim: the per-layer rules and GL plumbing exist once, with behaviour unchanged.\nBefore: 0 of 7 acceptance cases pass (layer-frame/gl-kit absent; the rg counts read 3; case 6 is a guard, green both sides)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first\nResult: better\nGate: architecture",
+    "evidence": "glow.ts:325 `if (kind === 5) gain *= 0.9 + (l.voice_gain ?? 2) * Math.max(voice * 0.8, pose.open) * 0.6;` == cut/renderer.ts:298 == depth/renderer.ts:312. glow.ts:291 / cut/renderer.ts:272 / depth/renderer.ts:283 `const lift = ap ? pose.open * (ap.open_frac ?? 0.15) * (ap.bottom - ap.top) * (0.75 + 0.35 * Math.min(1, voice)) : 0;` (rg hit in 3 files). `gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)` at glow.ts:131, cut/renderer.ts:118, depth/renderer.ts:155. `addEventListener(\"webglcontextlost\"` at glow.ts:249, cut/renderer.ts:234, depth/renderer.ts:242. `phase2: 2.3 * fi + 1.1` at glow.ts:196, cut/renderer.ts:176, depth/renderer.ts:201. u_gaze: glow.ts:344 `pose.gazeX * 3.5, pose.gazeY * 2.0`; cut/renderer.ts:311 `pose.gazeX * EYE_PX[0]`; depth/renderer.ts:325 `look.eyeX + pose.gazeX * 3.5`.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Real triplicated logic with documented drift, safe refactor plan behind golden call streams."
+    }
+  },
+  {
+    "context": "stage-avatar-renderer",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "The shipped glow face never turns to the chatter it is answering",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "apps/stage/src/avatar/runtime.ts",
+      "apps/stage/src/avatar/look.ts",
+      "apps/stage/src/avatar/variants.ts",
+      "apps/stage/src/avatar/Avatar.tsx",
+      "apps/stage/src/avatar/cut/look.ts",
+      "apps/stage/src/avatar/cut/index.ts",
+      "apps/stage/src/avatar/depth/index.ts",
+      "apps/stage/src/avatar/runtime.test.ts",
+      "apps/stage/src/avatar/cut/look.test.ts"
+    ],
+    "new_files": [
+      "apps/stage/src/avatar/look.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "lookBox(): subscribe(fn); set(LOOK_CHAT) -> fn called once with {x:1,y:-0.1}; set(LOOK_CHAT) again -> not called again; after unsubscribe, set(LOOK_HOST) -> not called",
+      "glow face loop (createDriver idleLinger 1 + withLook in glow units, hand clock) settled at rest, then look.set(LOOK_CHAT) -> loop.running true on the next tick, and after 0.6 s of ticks pose.yaw > 0.8 * GLOW_LOOK_YAW and pose.gazeX * 3.5 > 3 (px); before: startFace drops `look`, yaw stays the driver's drift",
+      "the same glow loop with no look change after settling -> hand clock scheduled false (the look adds no frames of its own)",
+      "glow face under calm (data-motion=calm), look.set(LOOK_CONTENT) -> exactly one still frame drawn with yaw = 0.6 * GLOW_LOOK_YAW and the loop not running",
+      "cut face with a look source (createCutRenderer mocked, WebGL2RenderingContext stubbed), driver settled and look unchanged -> shared clock size 0 and not scheduled; before: the per-frame look subscriber at cut/index.ts:136 keeps the clock scheduled forever",
+      "depth face with a look source (vi.useFakeTimers, createDepthRenderer + fetchDepth mocked) -> vi.getTimerCount() === 0 after start, and a look.set wakes the loop; before: a 100 ms setInterval is live for the face's lifetime"
+    ],
+    "premise": [
+      "apps/stage/src/Stage.tsx:116-118 - the stage computes where Malakor should look (lookFor: chat column while the caption answers chatters, content in corner layouts) every render",
+      "apps/stage/src/Stage.tsx:154 - and hands it to <Avatar look={look} variant={variant}>",
+      "apps/stage/src/source.ts:41-43 - the variant defaults to `glow` (anything but cut|depth is glow), so the broadcast runs the glow face",
+      "apps/stage/src/avatar/runtime.ts:143-152 - the glow startFace options have no `look`; apps/stage/src/avatar/variants.ts:25 adds `look` only to the type the other variants take - the shipped face ignores LOOK_CHAT and LOOK_CONTENT entirely",
+      "apps/stage/src/avatar/look.ts:26-33 - LookBox is get/set only: no event, so every consumer must poll",
+      "apps/stage/src/avatar/Avatar.tsx:58,62 - Avatar always passes a look source, so the cut and depth polling paths are always on",
+      "apps/stage/src/avatar/cut/index.ts:133-140 - cut subscribes `() => { if (driver.poll()) l.wake(); }` to the shared clock; it returns undefined, and apps/stage/src/avatar/motion.ts:52 drops a subscriber only on `false`, so the page's frame clock never idles with ?avatar=cut (contradicts runtime.ts:6-11 'none when nothing moves')",
+      "apps/stage/src/avatar/depth/index.ts:141-151 - depth polls the look with a 100 ms setInterval for the face's whole life",
+      "apps/stage/src/avatar/cut/look.ts:83-155 - a pure eyes-lead/head-follows look driver (withLook) already exists and is tested; its gaze is in cut units (EYE_PX 9/6, lines 23-24) and needs a units option to drive glow's 3.5/2 px eye light (glow.ts:344) without editing glow.ts"
+    ],
+    "rollback": "Three commits: (1) LookBox.subscribe + Avatar forwarding (additive), (2) glow runtime wraps its driver with withLook and wakes on the look event, (3) cut/depth replace polling with the event. Revert (2) alone to restore the old glow face; (1) and (3) stand on their own.",
+    "gate": "none",
+    "test_command": "pnpm -C apps/stage test -- src/avatar && pnpm -C apps/stage typecheck && pnpm -C apps/stage build",
+    "runner_up": "A visible 'thinking' face (gaze aversion, dimmed eye light) in the gap between a chat message and the voice - needs a composing signal the stage does not have yet (types.ts:17), so it would land outside this context.",
+    "body": "## Summary\nWhen Malakor answers a chatter, the stage already decides he should look at the chat column, and in a corner layout at the content (Stage.tsx:116-118). The face viewers actually see - the default `glow` variant - throws that away: its startFace takes no look (runtime.ts:143-152). Give the glow face the eyes-lead, head-follows look the cut-out prototype already has, and make the look an event instead of a poll, which also stops the cut face from keeping the page's frame clock running forever and the depth face from waking ten times a second.\n\n## Description\nViewer-facing: a host who turns toward the person they are answering reads as listening to that person. The data exists, the behaviour is built (cut/look.ts withLook, tested), and the shipped face does not use it. Leans on talking-avatar / procedural-presence-motion (presence comes from motion that relates to what is happening) and face-signal-across-surfaces ('a face renderer threatens a window's idle cost': still at rest, woken by change, never polled). LookBox gains `subscribe` (fires only on a real change); Avatar forwards it through its look ref; glow's startFace wraps its driver with withLook (a `units` option keeps glow's 3.5/2 px saccades and adds the look on top, with a glow head-turn cap GLOW_LOOK_YAW ~6 deg so the orthographic warp does not tear) and wakes on the event; reduced motion snaps to the look in one still frame. cut and depth drop their per-frame subscriber and their setInterval for the same event.\n\n## Flow\n- look.ts: LookBox.subscribe; variants.ts: LookSource.subscribe optional.\n- Avatar.tsx: the ref-backed look source forwards subscribe.\n- runtime.ts: withLook(createDriver, look, glow units); look event -> loop.wake().\n- cut/index.ts, depth/index.ts: event replaces poll; cut/look.ts gains the units option.\n- Eyeball with `?face=demo` and a chat-answer caption on glow, then cut, then depth.\n\n## Expected impact\nOn the default broadcast face Malakor turns to the chat column for every chat answer and toward the content in corner layouts; cut and depth return to zero frames and zero timers at rest.\n\n## Evaluation\nClaim: the glow face follows the stage's look, and no variant polls it.\nBefore: 0 of 6 acceptance cases pass (no LookBox event; glow ignores look; cut keeps the clock scheduled; depth holds a live interval)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first\nResult: better\nGate: none",
+    "evidence": "Stage.tsx:116-118 `const look = useMemo(() => lookBox(), []); const gaze = lookFor(scene.layout, speaking && caption ? caption.replyingTo : null); useEffect(() => look.set(gaze), [look, gaze]);` Stage.tsx:154 `<Avatar ... variant={variant} look={look} />`. source.ts:41-43 variantParam -> 'glow' unless cut|depth. runtime.ts:143-152 startFace(opts: {root, canvas, rigBase, source, size, clock?, onDrawn?}) - no look. variants.ts:25 `StartFaceOptions = Parameters<typeof glowStartFace>[0] & { look?: LookSource }`. cut/index.ts:136-138 `clock.subscribe(() => { if (driver.poll()) l.wake(); })` (returns undefined); motion.ts:52 `if (keep === false) subs.delete(fn); else subs.set(fn, time);` and :55 `if (subs.size > 0) schedule();`. depth/index.ts:144 `const poll = setInterval(() => {...}, 100);`. look.ts:26-33 lookBox has get/set only.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Strong, grounded, viewer-visible fix that also removes a never-idling clock and a perpetual timer."
+    }
+  }
+]

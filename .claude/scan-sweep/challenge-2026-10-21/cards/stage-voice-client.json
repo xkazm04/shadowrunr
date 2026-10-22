@@ -1,0 +1,114 @@
+[
+  {
+    "context": "stage-voice-client",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Three clocks converted ad hoc: one playout clock owns 'when is it heard'",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 6,
+    "write_set": [
+      "apps/stage/src/voice/webaudio.ts",
+      "apps/stage/src/voice/player.ts",
+      "apps/stage/src/voice/session.ts",
+      "apps/stage/src/voice/useVoice.ts",
+      "apps/stage/src/voice/player.test.ts",
+      "apps/stage/src/voice/report.test.ts",
+      "apps/stage/DESIGN.md",
+      "docs/guide/recording.md"
+    ],
+    "new_files": [
+      "apps/stage/src/voice/playout.ts",
+      "apps/stage/src/voice/playout.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "PlayoutClock over a fake context {currentTime 12.05, outputLatency 0.1}: heardNow() -> 11.95 (context time minus the output latency); with outputLatency absent/undefined -> 12.05 (today's value, no regression)",
+      "VoicePlayer on a fake audio with outputLatency 0.1, one utterance scheduled at start S: signal at currentTime S+0.05 -> RESTING (the sound has not reached the speakers); at currentTime S+0.1-0.035 -> phase 'speaking' with the viseme at 0 ms (the 35 ms lead is kept, now measured from the heard sound)",
+      "VoiceSession played report for a part at context start 12.0, output timestamp {contextTime 11.9, performanceTime p} with wall = timeOrigin+p = 1_000_000 ms and outputLatency 0.1 -> at_wall_ms 1_000_200 (today: 1_000_100, latency ignored)",
+      "the same part observed on two ticks 20 ms of wall apart while the context clock has not advanced (quantized currentTime) -> both ticks yield the identical at_wall_ms (today wall()-lateS*1000 differs by 20 ms)",
+      "useVoice caption clock: a part at context start 12.0 with outputLatency 0.1 and currentTime 12.05 -> VoiceCaptions.view shows 0 words (the clock passed in is heard time, not context time); unvoiced(run, seq, now) is stamped on the same heard clock",
+      "output latency rises from 0.02 to 0.2 between two ticks (a device swap) -> heardNow() never goes backwards (clamped monotone), and the next played report uses the new latency"
+    ],
+    "premise": [
+      "apps/stage/src/voice/player.ts:198 - the face reads the mouth shape at (ctx.currentTime - e.start)*1000 + VISEME_LEAD_MS: the context's time, not the time the sample reaches the speakers",
+      "apps/stage/src/voice/player.ts:291 - the per-frame signal is signalAt(this.audio.currentTime)",
+      "apps/stage/src/voice/session.ts:66 - played at_wall_ms = this.wall() - lateS*1000, where lateS = currentTime - start observed on whatever tick noticed it (player.ts:229): a fourth ad hoc conversion, sampled non-atomically",
+      "apps/stage/src/voice/useVoice.ts:118 and :158 - captions are fed audio.audio.currentTime raw, for unvoiced stamps and the view",
+      "apps/stage/src/voice/webaudio.ts:19 - new AudioContext({ latencyHint: 'playback' }) (the largest-buffer hint) and AudioLike (player.ts:50-58, webaudio.ts:25-38) exposes no latency or output timestamp; `git grep -n 'outputLatency\\|baseLatency\\|getOutputTimestamp' -- apps packages crates tools docs` returns zero hits",
+      "docs/spec/contract.md:1207-1208 - played means 'the part's audio started playing, at the stage's wall clock'; docs/guide/recording.md:198-200 - speech is measured ~200 ms after played, only ~70 ms of it the Kokoro leading silence: the remaining ~130 ms path is unaccounted",
+      "crates/shadowrunr-daemon/src/record/watch.rs:46-51 - the product's own thresholds: sound earlier than picture by >45 ms is noticeable; nothing measures face-vs-sound, and the mouth is driven ahead of the context time, i.e. ahead of the sound by 35 ms plus the whole output path",
+      "registry voice-io/speech-timing-timeline ('The consumer maps samples through its own chunk schedule ... and adds its output latency') and talking-avatar/viseme-drive ('looks up the shape at the playback position plus the device's output latency ... the renderer owns the lead')"
+    ],
+    "rollback": "Two commits: (1) playout.ts + tests and AudioLike's optional latency/outputTimestamp fields (no behaviour change: the clock defaults to latency 0 and currentTime), (2) player/session/useVoice switched to the clock plus docs. Reverting (2) restores today's mapping; reverting both removes the module. No contract, file format or stored data changes.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/stage test && pnpm -C apps/stage typecheck && pnpm -C apps/stage build",
+    "runner_up": "One stage-side line ledger (said -> scheduled -> started -> done | skipped(reason) | stage_dropped | timed-out) replacing the three partial fate derivations in session.ts:161-163 (reason discarded), player.ts:254-272 and captions.ts:85-90/140 (VOICE_WAIT_S guess).",
+    "body": "## Summary\nThe stage converts between three clocks: the AudioContext's, the speakers', and the wall. It does this in four places, by hand, and none of them knows the audio's output latency. The face reads the mouth at the context's time (player.ts:198), the captions get the context's time raw (useVoice.ts:118, :158), and the `played` report rebuilds wall time from whichever frame tick noticed the start (session.ts:66). Add one `PlayoutClock` module that owns the answer to \"when is the sample at context time t heard, on the audio clock and on the wall\". It samples `getOutputTimestamp()` and `outputLatency` once per tick. The face, the captions and the reports all read from it.\n\n## Description\nThis leans on voice-io `speech-timing-timeline` (the consumer maps samples through its own schedule and adds its output latency) and talking-avatar `viseme-drive` (look up the shape at the playback position plus the device's output latency; the renderer owns the lead). It is also the `one-authority-per-vocabulary` law applied to time.\n\nToday's context is created with `latencyHint: 'playback'` (webaudio.ts:19), the largest-buffer hint. The mouth is then driven ahead of the context time by 35 ms, and so ahead of the sound by 35 ms plus the whole output path. The product's own detectability bound is 45 ms early (watch.rs:46-48), and no check measures face against sound. The recorder measures speech about 200 ms after `played`, of which only about 70 ms is the Kokoro leading silence (recording.md:198-200). The `played` time is also sampled non-atomically: wall() and currentTime are read on a rAF tick, so a quantized context clock leaks tick jitter into the times that `av_sync`, the clip cutter and `voiced` read.\n\n`PlayoutClock` takes an `AudioLike` and gains two optional members: `outputLatency` and `outputTimestamp()`. It exposes `heardNow()` (context seconds, monotone), `heardAt(ctxStart)` (the context time the start is heard) and `wallOf(ctxTime)` (epoch ms, from the coherent contextTime/performanceTime pair). The player's `signalAt` and `tell` read heard time and keep `VISEME_LEAD_MS` as the renderer's own lead. The session's `started` hook reports `wallOf(heardAt(p.start))`, which matches the contract's own words, 'the part's audio started playing' (contract.md:1207). `useVoice` hands captions `heardNow()`. Where the browser reports nothing, the latency is 0 and the result is today's behaviour. Gate: architecture. The *constant* in `av_offset_ms` shrinks by the latency the browser reports, so recording.md's ~200 ms note is updated. `av_sync` judges spread and drift, not the constant (watch.rs:369), and the clip cut still opens before `played`.\n\n## Flow\n- playout.test.ts first: heardNow, wallOf, monotone clamp, absent-latency fallback (red)\n- playout.ts, plus the AudioLike optional members in player.ts and the real ones in webaudio.ts (green)\n- player.test.ts: resting before the heard start, and the viseme at 0 ms at heard start minus the lead (red), then player.ts reads the clock\n- report.test.ts: at_wall_ms includes the latency and is tick-independent (red), then session.ts uses clock.wallOf\n- useVoice.ts: the caption and unvoiced stamps use heardNow\n- DESIGN.md (also fixes its stale 'Past 6 s', since MAX_AHEAD_S is 16 at player.ts:28) and recording.md's offset note\n\n## Expected impact\nThe mouth, the captions and the reported play time all describe the moment the sound is heard, in one place. A new consumer, such as a gesture or a lower-third keyed to a word, gets the right time by construction instead of a fifth hand conversion. Tick jitter leaves the `played` times that the watched checks and the clips read.\n\n## Evaluation\nClaim: one playout clock makes face, captions and played reports agree on heard time, latency-corrected and tick-independent\nBefore: 0 of 6 acceptance cases pass (no clock module; player/session ignore latency; at_wall_ms depends on the observing tick)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first against fake AudioLike with outputLatency/outputTimestamp\nResult: better\nGate: architecture",
+    "evidence": "player.ts:198 `const ms = (now - e.start) * 1000 + VISEME_LEAD_MS;` | player.ts:291 `const s = this.signalAt(this.audio.currentTime);` | player.ts:229 `this.events.started?.(part(e), now - e.start);` | session.ts:66 `this.report(playedFrame(p.runId, p.seq, p.part, this.wall() - lateS * 1000));` | useVoice.ts:118 `const now = () => audio.audio.currentTime;` | useVoice.ts:158 `captions.view(run, said, audio.audio.currentTime, streamNow)` | webaudio.ts:19 `new AudioContext({ latencyHint: \"playback\" })` | `git grep -n \"outputLatency\\|baseLatency\\|getOutputTimestamp\" -- apps packages crates tools docs` -> no output | recording.md:198-200 'speech starts about 200 ms after its `played` time ... about 70 ms of that is the silence at the start of each Kokoro sentence' | watch.rs:46-48 AV_SYNC_EARLY_MS = 45",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 4,
+      "falsifiability": 3,
+      "reason": "Strong move; one acceptance case encodes a latency double-count."
+    },
+    "revision": "Rewrite case 3: with outputTimestamp {contextTime 11.9, performanceTime p}, wall(timeOrigin+p)=1_000_000 and outputLatency 0.1, at_wall_ms = 1_000_100 (start minus contextTime; latency NOT added again because the output timestamp already includes it), and set the fake's tick wall()/currentTime so today's wall()-lateS*1000 yields a different value."
+  },
+  {
+    "context": "stage-voice-client",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "'Voice ready' while lines vanish: a voice panel that shows the loss and acts",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "apps/stage/src/voice/session.ts",
+      "apps/stage/src/voice/useVoice.ts",
+      "apps/stage/src/voice/names.ts",
+      "apps/stage/src/voice/session.test.ts",
+      "apps/stage/src/voice/report.test.ts",
+      "apps/stage/src/Controls.tsx",
+      "apps/stage/src/App.tsx",
+      "apps/stage/src/styles.css",
+      "apps/stage/DESIGN.md"
+    ],
+    "new_files": [
+      "apps/stage/src/voice/health.ts",
+      "apps/stage/src/voice/health.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "session receives skipped frames reason late x1 and queue_full x2 for the followed run -> health().skipped == {late:1, queue_full:2, error:0}, and the panel row reads '3 lines not voiced by the daemon (2 queue full, 1 late)'",
+      "a non-JSON frame then an utterance with a bad sample_rate -> health().badFrames == 2 and health().lastBad == 'voice utterance frame: bad sample_rate' (useVoice wires onBadFrame; today nothing listens)",
+      "the player's cap drops one line -> health().stageDropped == 1 and health().behindS equals player.ahead (rounded to 0.1 s); a run change resets all counts to 0",
+      "the socket closes twice -> health().reconnect == {attempt:2, nextInMs:2000}; retryNow() opens a new socket at once and clears the pending timer; a further close resumes backoff from attempt 3",
+      "operator view, voice toggled on, context suspended -> shownStatus carries action 'unlock' and a reason naming the Enable audio button; clicking it calls unlockAudio() once and leaves voiceOn true (today the only unlock is toggle off then on, and the reason points at a page click that does nothing)",
+      "broadcast view (?broadcast=1) -> no panel and no action rendered; the status rule for broadcast is unchanged"
+    ],
+    "premise": [
+      "apps/stage/src/voice/session.ts:37,144 - onBadFrame exists, but useVoice.ts:119-129 never passes it: bad frames are dropped with no trace (git grep onBadFrame -> only session.ts and session.test.ts:56)",
+      "apps/stage/src/voice/session.ts:161-163 - a skipped frame's reason (late|queue_full|error, parsed at frame.ts:79) is thrown away; only (run_id, seq) reaches the captions",
+      "apps/stage/src/voice/player.ts:110-113,121-125 - dropped, droppedLines and ahead are kept 'for tests and the debug surface' (player.ts:133); git grep shows no consumer outside player.ts and its tests",
+      "apps/stage/src/Controls.tsx:183-186 - the operator sees one label plus a reason string: 'voice ready' stays up while the stage drops lines and the daemon skips them",
+      "apps/stage/src/voice/useVoice.ts:85-89 - a suspended context in the operator view reads 'audio is blocked until a click on the page', but the only unlockAudio() call outside broadcast is App.tsx:208, inside toggleVoice(on) - clicking the page does nothing; the operator must toggle the voice off and on",
+      "apps/stage/src/voice/session.ts:167-173 - a closed socket shows 'reconnecting' with backoff up to 10 s and no way to retry now and no attempt count"
+    ],
+    "rollback": "One feature commit plus its tests: health.ts is additive, session/useVoice gain a health() snapshot and retryNow(), and Controls renders a panel. Reverting the commit restores the single label; no contract, socket frame or storage change.",
+    "gate": "none",
+    "test_command": "pnpm -C apps/stage test && pnpm -C apps/stage typecheck && pnpm -C apps/stage build",
+    "runner_up": "'Catch up now': an operator action that drops every unstarted queued line except the newest, reported as stage_dropped (needs a new reason beside stage_cap, a contract change in crates/shadowrunr-types/src/voice.rs).",
+    "body": "## Summary\nThe operator view tells the stage's operator one word about the voice: off, starting, ready or degraded. The stage and the daemon know much more. They know how many seconds of audio wait behind the playhead, which lines the stage's cap dropped, which lines the daemon skipped and why (late, queue full, error), which frames failed the guard, and which reconnect attempt is pending. All of that is thrown away or kept only for tests. The operator decides blind whether the voice is keeping up, and the one action the status asks for ('click on the page') does nothing. This card makes the voice chip open a small panel that shows those facts for the followed run and offers the two actions they call for: Enable audio, and Reconnect now.\n\n## Description\nThis leans on voice-io `voice-ux-integration` ('an enabled-looking voice button does nothing' is its named failure, and the 'ready'-but-blocked state is exactly that). It also leans on the golden path's rule that everything spoken must exist as text, so a line that was not voiced must be visible as such to the operator, with its reason. `health.ts` is a pure reducer over the events the session already sees: skipped by reason, stage_dropped, a bad frame with its message, a reconnect scheduled/opened, and a run change that resets the counts. `VoiceSession.health()` returns its snapshot plus `player.ahead`. `retryNow()` clears the backoff timer and opens. `shownStatus` gains an `action: 'unlock'|'retry'|null`, so the chip renders a button instead of prose. The unlock button calls `unlockAudio()` inside its own click without flipping the toggle. The broadcast view renders nothing new. The counts are per followed run, which matches what the daemon logs to voice.jsonl, so the panel and the `voiced` check describe the same lines.\n\n## Flow\n- health.test.ts and session.test.ts cases first (red)\n- health.ts reducer; session.ts feeds it from the skipped, utterance, bad-frame, close and open paths, and gains retryNow()\n- useVoice wires onBadFrame, exposes health on a throttled re-render (App already repaints every 32 ms live, App.tsx:170-175) and the action on the status\n- Controls.tsx: the chip becomes a button that opens the panel (behind N s, cap-dropped N, daemon-skipped N by reason, bad frames N + last message, reconnect attempt and countdown) with Enable audio and Reconnect now; names.ts holds the labels; styles.css\n- DESIGN.md's voice section\n\n## Expected impact\nUnlocking audio after a reload takes 1 click instead of 2 (toggle off, toggle on), and the instruction is no longer false. A voice that silently loses lines, whether to the daemon's queue, lateness or the stage's cap, shows that loss while it happens instead of only in a post-run `voiced` check. A dead socket can be retried at once instead of waiting up to 10 s of backoff.\n\n## Evaluation\nClaim: the operator sees why lines go unvoiced and can act on blocked audio and a dead socket from the chip\nBefore: 0 of 6 acceptance cases pass (no health snapshot, onBadFrame unwired, reasons discarded, no retryNow, no unlock action)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first (vitest on fake socket/audio, shownStatus unit)\nResult: better\nGate: none",
+    "evidence": "session.ts:161-163 `} else if (this.runId === null || v.run_id === this.runId) { // a skipped line ... this.o.onSkipped?.(v.run_id, v.seq);` (reason dropped) | useVoice.ts:119-129 VoiceSession options have no onBadFrame | `git grep -n \"\\.ahead\\b\\|droppedLines\\|onBadFrame\" -- apps/stage/src` -> only player.ts, session.ts, and *.test.ts | useVoice.ts:88 `return { state: \"degraded\", reason: \"audio is blocked until a click on the page\" };` | App.tsx:206-208 `(on: boolean) => { if (on) unlockAudio();` is the only non-broadcast unlock (git grep unlockAudio) | Controls.tsx:183-186 single label + reason span | session.ts:172 backoff `Math.min(10_000, 500 * 2 ** Math.min(this.retry, 5))`",
+    "critic": {
+      "verdict": "build",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Grounded, testable, fixes a false operator instruction."
+    }
+  }
+]

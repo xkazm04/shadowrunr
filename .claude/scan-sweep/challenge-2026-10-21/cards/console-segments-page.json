@@ -1,0 +1,112 @@
+[
+  {
+    "context": "console-segments-page",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "The vote calculator tallies by a rule the runtime never runs: one outcome rule",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/pages/segments/model.ts",
+      "apps/console/src/pages/segments/Ranks.tsx",
+      "apps/console/src/pages/segments/Layer2.module.css",
+      "apps/console/src/pages/segments/model.test.ts",
+      "apps/console/src/pages/segments/layer2.test.tsx",
+      "crates/shadowrunr-segments/src/runtime.rs"
+    ],
+    "new_files": [
+      "crates/shadowrunr-segments/tests/data/poll_outcomes.json"
+    ],
+    "shared_surfaces": [
+      "crates/shadowrunr-segments/src/runtime.rs (test module only: a #[cfg(test)] case that runs the shared fixture through the private `outcome`; no runtime behaviour change)"
+    ],
+    "acceptance": [
+      "tally with A = 2 thralls (2.0), B = 1 warlock (2.0) on the shipped weights -> verdict names A the winner on more voters (runtime outcome rule); today it says 'The weight ties.'",
+      "A = 1 warlock (2.0), B = 1 warlock (2.0) -> verdict 'Tie: the host breaks it on air' with both options listed; never a winner",
+      "all inputs 0 -> verdict 'No votes' (today: 'The head-count ties. The weight ties.')",
+      "poll minimum rank set to warlock in the calculator, 6 thralls back A, 1 warlock backs B -> thrall rows render excluded, B wins on 1 voter, and the out shows '6 votes ignored below Warlock' (runtime ignores them as poll_min_rank)",
+      "START_VOTES (6 thralls A; 2 thralls, 2 warlocks, 1 dread council B) -> B wins on weight 8.4 vs 6.0 and the verdict still announces the head-count disagreement ('most voters backed A')",
+      "every case in crates/shadowrunr-segments/tests/data/poll_outcomes.json -> the TS pollOutcome and the Rust outcome return the same winner/tie/no-votes verdict (vitest and cargo test both read the one file)"
+    ],
+    "premise": [
+      "apps/console/src/pages/segments/model.ts:178-180 - console verdict is two independent words, head-count winner and weight winner, with a 0.05 'weight ties' band; it never names an outcome",
+      "crates/shadowrunr-segments/src/runtime.rs:338-361 - the runtime's rule: highest weight wins (1e-9), equal weight goes to more voters, level on both is a Tie the host breaks on air; no voters is NoVotes",
+      "crates/shadowrunr-segments/src/runtime.rs:1204-1206 - votes below the poll's min_rank are ignored (poll_min_rank); the calculator has no poll minimum rank at all",
+      "crates/shadowrunr-segments/src/runtime.rs:261 - one vote per viewer, last counts; calculator counts are already per-viewer so this holds",
+      "apps/console/src/pages/segments/Ranks.tsx:94-101 - the Calculator calls tally() and calls itself 'illustrative arithmetic'; Ranks.tsx:139 prints only t.verdict",
+      "apps/console/src/pages/segments/layer2.test.tsx:131,133 - tests pin today's verdict strings ('Head-count: A wins. Weight: B wins.')",
+      "crates/shadowrunr-segments/data/ranks.toml:23-53 - shipped weights 1.0,1.4,1.7,2.0,2.2,2.4: equal-weight ballots across ranks are common (2 thralls = 1 warlock), so the voter tie-break the console omits decides real ballots"
+    ],
+    "rollback": "Two commits: (1) fixture + Rust fixture test + TS pollOutcome with model tests; (2) Ranks.tsx calculator wiring and DOM tests. Revert (2) to restore the old calculator; (1) has no runtime effect.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-segments && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check && pnpm -C apps/console typecheck && pnpm -C apps/console test && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "RANK_ORDER (model.ts:46) and Face.tsx MINI_STEPS hand-list the rank ladder the contract and ranks.table already carry; derive both from the wire.",
+    "body": "## Summary\nThe Ranks page's 'Try a vote' calculator re-implements ballot tallying with a different rule than the runtime runs. It reports head-count and weight winners side by side with a 0.05 tie band, while the runtime decides by weight, breaks weight ties on more voters, hands true ties to the host, and drops votes below the poll's minimum rank. Make the outcome rule one thing: a TS `pollOutcome` that mirrors runtime `outcome`, pinned to it by a single fixture file both test suites read.\n\n## Description\nLeans on audience-steering-economies / sublinear-vote-weight ('The tally': weight decides, a weight tie goes to more distinct voters, a full tie goes to a pre-announced rule; give the host both numbers and announce when head-count and weight winners differ). The runtime already does this (runtime.rs:338-361); the console does not, so the one surface that teaches the operator how a weighted ballot resolves teaches a rule that differs on every equal-weight ballot (common with weights 1.0/2.0). The move: (1) crates/shadowrunr-segments/tests/data/poll_outcomes.json lists tallies -> expected verdict; a #[cfg(test)] case in runtime.rs feeds them to `outcome`; (2) model.ts replaces the verdict half of `tally` with `pollOutcome(tallies)` returning Winner/Tie/NoVotes plus a `diverges` flag (head-count leader differs from winner); model.test.ts imports the same JSON (resolveJsonModule is on in apps/console/tsconfig.json); (3) the calculator gains a poll minimum-rank select (default thrall), greys rows below it, counts ignored votes, and prints the runtime's verdict followed by the divergence sentence. The calculator stays local and sends nothing.\n\n## Flow\n- Write fixture + failing Rust and TS fixture tests\n- Implement pollOutcome; keep heads/weight/max bars\n- Wire calculator: min-rank select, excluded rows, verdict + divergence line\n- Update layer2 DOM tests to the new verdicts\n\n## Expected impact\nThe operator reads the same decision the show will make on air; a future change to the runtime rule fails the console's fixture test instead of drifting silently.\n\n## Evaluation\nClaim: the calculator's verdict equals the runtime outcome for every fixture ballot and honours poll min rank.\nBefore: 1 of 6 acceptance cases pass (only the START_VOTES weight winner agrees)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first\nResult: better\nGate: architecture (one rule across Rust and TS via a shared fixture; no wire change)",
+    "evidence": "model.ts:179 `const weightWord = Math.abs(weight.a - weight.b) < 0.05 ? \"The weight ties.\" : ...`; runtime.rs:348 `if t.weight > b.weight + 1e-9 || (level && t.voters > b.voters) { top = vec![t]; } else if level && t.voters == b.voters { top.push(t); }`; runtime.rs:1204 `if rank < p.min_rank { events.push(ignored(\"poll_min_rank\")); continue; }`; ranks.toml weights 1.0/1.4/1.7/2.0/2.2/2.4; layer2.test.tsx:131 expects 'Head-count: A wins. Weight: B wins.'",
+    "critic": {
+      "verdict": "void",
+      "ambition": 2,
+      "grounding": 3,
+      "falsifiability": 4,
+      "reason": "Restates stage-kit-scene-engine A (stage-kit leaders() is already the TS outcome rule, exported and consumable by the console); the residue is an S."
+    }
+  },
+  {
+    "context": "console-segments-page",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Walk a segment's state machine: pick a state, see what's open and where it leads",
+    "size": "M",
+    "effort": 7,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/pages/segments/SegmentCard.tsx",
+      "apps/console/src/pages/segments/model.ts",
+      "apps/console/src/pages/segments/Layer2.tsx",
+      "apps/console/src/pages/segments/Tables.tsx",
+      "apps/console/src/pages/segments/index.ts",
+      "apps/console/src/pages/segments/Layer2.module.css",
+      "apps/console/src/pages/segments/model.test.ts",
+      "apps/console/src/pages/segments/layer2.test.tsx",
+      "apps/console/src/pages/segments/testgen.ts"
+    ],
+    "new_files": [
+      "apps/console/src/pages/segments/StateWalk.tsx"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "route segments/tables/SEG-01/foil_vote -> card renders with the foil_vote state selected; breadcrumb reads 'SEG-01 / foil vote'; Layer2 no longer shows 'There is no page' for a 3-part tables route whose state exists",
+      "selected state cold_open on SEG-01 -> effective ops panel lists highlight, show_card, mark_moment, sign_off (state_rules narrowing), not the segment's full allowed_ops",
+      "selected state opening -> exits list foil_vote_opened -> foil vote, foil_summoned -> foil live, poll_opened -> crowd game, handover_due -> handover pending (the '*' row expanded), each target a link that walks to that state",
+      "selected state foil_vote -> foil_vote_closed shows two guarded exits (foil_active -> foil live, no_foil -> opening); entries list opening and foil live via foil_vote_opened",
+      "selected state cold_open -> exit 'cold open clock -> opening' derived from clock.cold_open.to, so the clock edge is shown as an edge rather than only prose",
+      "a generated table with a state no transition or clock edge reaches from initial -> that chain step carries data-unreachable and the card shows 'unreachable from <initial>'; SEG-01 as shipped shows none",
+      "route segments/tables/SEG-01/no_such_state -> invalid StatePanel naming the state; card still renders with the initial state selected"
+    ],
+    "premise": [
+      "apps/console/src/pages/segments/SegmentCard.tsx:38-45 - the states print as a linear arrow chain, implying cold_open -> opening -> foil_vote -> ... although transitions loop back (foil_vote -> opening on no_foil)",
+      "apps/console/src/pages/segments/SegmentCard.tsx:95 and 112-121 - per-state rules and transitions are two separate flat tables; the operator joins segment ops, state narrowing ('as the segment') and '*' rows in their head",
+      "apps/console/src/pages/segments/SegmentCard.tsx:114 - '*' rows render as 'any state' and are never expanded per state",
+      "crates/shadowrunr-segments/data/segments/seg-01.toml:8,73-75,86-162 - six states, cold_open narrows ops, 15 transitions incl. guarded pairs and a '*' handover_due row",
+      "apps/console/src/pages/segments/Layer2.tsx:27 - tables take at most one id (rest.length === 0), so no state is addressable",
+      "apps/console/src/pages/segments/index.ts:20 - breadcrumbs know only depth 2 under tables",
+      "packages/contract/src/generated/types.ts:3569-3597 - StateRulesInfo and TransitionInfo already carry everything needed; no wire change"
+    ],
+    "rollback": "One feature commit plus one test commit; revert restores the static chain and the one-id route. No data or contract touched.",
+    "gate": "none",
+    "test_command": "pnpm -C apps/console typecheck && pnpm -C apps/console test && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "The Ranks page runs sublinear-vote-weight's two checks on the live ladder (heaviest voter vs newcomers; top ranks vs a two-thirds room) instead of a static 'assumptions' banner.",
+    "body": "## Summary\nA segment's table is a state machine, but the card prints it as a linear chain plus two flat tables. Make the chain the control: pick a state (or follow a link to segments/tables/<SEG>/<state>) and the card shows exactly what is open there - effective ops, screens, rules line - and every exit and entry by trigger and guard, with each target a link that walks on. Unreachable states are flagged.\n\n## Description\nLeans on show-segment-format-design / segment-as-state-table: a table exists so it can be validated before air and compared after it, and actions and commands are declared per state. The console already receives states, state_rules, transitions and the cold-open clock edge (contract types.ts:3569-3597) but makes the operator assemble the per-state view from three places, and its arrow chain misstates the flow. New pure model fn `stateView(seg, state)` -> {ops, screens, prompt, exits[], entries[]} expands '*' rows and adds clock edges (cold_open.to; handover_due is already a row); `reachable(seg)` is a BFS from `initial`. StateWalk.tsx renders the chain as a radio group of buttons (arrow keys move) and the panel; Layer2 accepts tables/<SEG>/<state>; index.ts labels depth 3. If segments-runtime card B lands per-state commands in StateRulesInfo, stateView picks them up as one more field - the two compose (both touch SegmentCard.tsx; land in either order), and this card does not depend on it.\n\n## Flow\n- Model: stateView + reachable with fixtures from testgen\n- Route: Layer2 known-check and breadcrumb for depth 3\n- UI: StateWalk replaces the static chain inside SegmentCard; the transitions table stays as the full listing\n- DOM tests for selection, walking, the unreachable flag, a bad state\n\n## Expected impact\n'What can the host do in foil_vote, and how does it leave?' goes from cross-reading three tables to one click; a table edit that strands a state is visible on the page before air.\n\n## Evaluation\nClaim: every state's effective rules and edges render from the payload, addressable by route.\nBefore: 0 of 7 acceptance cases pass (no state selection or route exists)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first\nResult: better\nGate: none",
+    "evidence": "SegmentCard.tsx:38 `{seg.states.map((x, i) => (` with `{i > 0 && <em aria-hidden=\"true\" />}` arrows; SegmentCard.tsx:114 `{t.from === \"*\" ? \"any state\" : humanState(t.from)}`; Layer2.tsx:27 `const known = tab !== undefined && rest.length === 0 && ...`; seg-01.toml:102-106 `from = \"foil_vote\" on = \"foil_vote_closed\" guard = \"no_foil\" to = \"opening\"`; seg-01.toml:160-162 `from = \"*\" on = \"handover_due\" to = \"handover_pending\"`; layer2.test.tsx:57 asserts the linear chain text.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Grounded, falsifiable UX elevation over data already on the wire."
+    }
+  }
+]

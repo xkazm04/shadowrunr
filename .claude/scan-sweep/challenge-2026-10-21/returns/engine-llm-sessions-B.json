@@ -1,0 +1,16 @@
+{"card":"A live core turn queues behind a 15-minute judge: admit by lane, deadline at enqueue","context":"engine-llm-sessions","slot":"B","status":"landed",
+ "shas":["1f08480"],
+ "tests_added":[
+  "crates/shadowrunr-engine/tests/fake_cli.rs::a_core_turn_is_admitted_ahead_of_queued_judges",
+  "crates/shadowrunr-engine/tests/fake_cli.rs::a_core_turn_that_waits_past_its_budget_times_out_in_the_queue",
+  "crates/shadowrunr-engine/tests/fake_cli.rs::a_chat_pick_gets_in_while_a_warm_core_holds_a_slot_and_judges_fill_the_batch_lane",
+  "crates/shadowrunr-engine/tests/fake_cli.rs::batch_roles_never_take_a_reserved_slot",
+  "crates/shadowrunr-engine/tests/fake_cli.rs::queue_time_is_ledgered_only_when_a_call_waited",
+  "crates/shadowrunr-engine/src/config.rs::tests::the_live_reserve_defaults_to_two_and_stays_below_the_cap",
+  "crates/shadowrunr-engine/src/admission.rs::tests (7 unit tests: lane table, clamp, free slot no wait, batch never takes reserve, live overflows to shared, expiry and release, whole-budget timeout)"],
+ "guard_cases":["existing global_semaphore_caps_live_processes (max_live_processes=1 still serialises; reserve clamps to 0)"],
+ "cases_total":6,"cases_red_before":6,"cases_green_after":6,
+ "gates":{"cargo test -p shadowrunr-engine":0,"cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt -p shadowrunr-engine -- --check":0,"cargo fmt --all -- --check":1,"cargo test --workspace":0},
+ "files_changed":8,"lines_changed":790,
+ "deviations_from_card":"Red-before was a compile failure (new config key, Fleet admission accessor, LedgerRow::queue_ms), so tests and implementation landed in one commit. Acceptance cases assert ordering (which fake process had started/finished, admission waiting count) instead of wall-clock upper bounds (<900 ms / <600 ms); only lower bounds (>=1200 ms, queue_ms >= 250) are timed. Admission is done in Fleet::complete around CliRunner::run (run_once no longer acquires itself), so the one-shot runner seam stays unchanged and receives the remaining budget as req.timeout_ms. ClaudeCli::new now takes an Admission instead of max_live (engine-internal callers only). ClaudeWarmSession::open takes a deadline; open_session stops on a queue Timeout instead of trying the next account. Queue time is NOT console-visible: the console reads the ledger row type in shadowrunr-types, which is outside this write set (ledger.rs is 152 lines; the card's ledger.rs:497-523 cite does not exist).",
+ "notes":"cargo fmt --all -- --check is red only on sibling in-flight files (crates/shadowrunr-daemon/src/preflight.rs, daemon/tests/cli.rs, sim calibration.rs/situations.rs/tournament.rs); the engine crate is fmt-clean. The API rung is not bounded by the enqueue deadline (it spawns no process); the deadline covers CLI accounts, warm spawns/turns and alt CLIs. With defaults (6 total, 2 reserved) batch work now gets at most 4 concurrent processes. shadowrunr.example.toml does not yet document live_reserved_processes (out of write set)."}

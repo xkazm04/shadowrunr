@@ -1,0 +1,122 @@
+[
+  {
+    "context": "stage-kit-scene-engine",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "The screen counts ballots the runtime refuses: pin it to runtime vectors",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "packages/stage-kit/src/scene.ts",
+      "packages/stage-kit/src/tallies.ts",
+      "packages/stage-kit/src/sceneModel.ts",
+      "packages/stage-kit/src/index.ts",
+      "packages/stage-kit/src/scene.test.ts",
+      "crates/shadowrunr-segments/tests/ballot_vectors.rs",
+      "packages/stage-kit/src/generated/ballot-vectors.json",
+      "packages/stage-kit/src/ballots.ts",
+      "packages/stage-kit/src/ballots.test.ts"
+    ],
+    "new_files": [
+      "crates/shadowrunr-segments/tests/ballot_vectors.rs",
+      "packages/stage-kit/src/generated/ballot-vectors.json",
+      "packages/stage-kit/src/ballots.ts",
+      "packages/stage-kit/src/ballots.test.ts"
+    ],
+    "shared_surfaces": [
+      "crates/shadowrunr-segments: a new integration test only (writes a stage-kit golden file); no runtime code or wire change"
+    ],
+    "acceptance": [
+      "Runtime-opened foil vote [the-disruptor, the-life-coach]; chat `!vote the-d` (a unique prefix) -> the runtime's tally has 0 voters; the scene's chat-observed tally also has 0 voters (today the scene credits the-disruptor: scene.ts:99-100)",
+      "Crowd poll opened by op start_poll with options [the-disruptor, the-life-coach]; chat `!summon the-disruptor` -> the runtime counts nothing (summon only lands in a Foil poll, runtime.rs:1190); the scene counts nothing (today castBallot accepts it for any active poll)",
+      "Poll [HEX-04, HEX-03] min_rank acolyte; votes dread_council `HEX-04`, cultist `hex-03`, thrall `HEX-03`, acolyte `2`, then the cultist re-votes `1` -> the scene's observed tally equals the runtime's last `vote` tally exactly (option, voters, weight within 1e-9)",
+      "Every scenario in ballot-vectors.json (a StreamEvent list plus the runtime's last `vote` tallies) -> foldEvents(scenario.events) then `observedTally(poll)` equals scenario.expected; at least 8 scenarios covering prefix, index, case/trim, re-vote, under-rank, summon-vs-vote by poll kind, unknown option, zero-voter row",
+      "`leaders` on rows [{A, weight 1.4, voters 0}, {B, weight 1, voters 1}] -> [B] (the runtime's outcome() skips voters==0 rows, runtime.rs:342; today the TS rule keeps A as leader)",
+      "cargo test -p shadowrunr-segments --test ballot_vectors with a hand-edited ballot-vectors.json -> fails naming the first differing scenario; UPDATE_GOLDEN=1 rewrites it byte-identical to the generated output",
+      "ballot-vectors.json `deviations` lists exactly the declared screen-side gaps (e.g. `command_from_text`: a chat line with no parsed `command` is not a ballot on screen, although runtime.rs:1160 parses its text) -> ballots.test asserts that list; a scenario that diverges without being declared fails"
+    ],
+    "premise": [
+      "packages/stage-kit/src/scene.ts:90-101 - matchOption accepts exact text, a 1-based index, AND a unique case-insensitive prefix (lines 99-100)",
+      "crates/shadowrunr-segments/src/runtime.rs:266-277 - Poll::option_index accepts only a 1-based index or a trimmed case-insensitive exact match; no prefix",
+      "packages/stage-kit/src/scene.test.ts:363 - the prefix rule is tested as a feature ('matches options by text, index and unique prefix'), so the divergence is pinned on the wrong side",
+      "packages/stage-kit/src/scene.ts:212-219 - `vote` and `summon` both cast into whatever poll is active",
+      "crates/shadowrunr-segments/src/runtime.rs:1190 - a `!summon` only counts in a poll of kind Foil; runtime.rs:1531 - an op-opened start_poll is kind Crowd",
+      "crates/shadowrunr-segments/src/runtime.rs:340-361 - outcome() filters `voters > 0`; packages/stage-kit/src/tallies.ts:38 skips a row only when voters<=0 AND weight<=0",
+      "packages/stage-kit/src/tallies.ts:57-65 - before the first authoritative `vote` event, bar lengths, voter counts and the leader come from the scene's own chat ballots, so the screen can crown an option the runtime never counted; rank bands always come from them",
+      "packages/stage-kit/src/tallies.ts:29-34 - the module states the screen must read the runtime's rule 'so the bar it crowns is the result the host announces'; no test compares the two",
+      "crates/shadowrunr-segments/src/runtime.rs:1145,1426 - ingest_chat and apply_ops are public, so an integration test drives real scenarios and captures the runtime's `vote` tallies without touching runtime code"
+    ],
+    "rollback": "Two commits: (1) the Rust vectors test + generated JSON (additive; revert drops both); (2) the stage-kit ballots.ts extraction, rule fixes and tests. Reverting (2) restores matchOption/castBallot in scene.ts verbatim. Nothing persisted or on the wire changes.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-segments --test ballot_vectors && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check && pnpm -C packages/stage-kit typecheck && pnpm -C packages/stage-kit test && pnpm -C packages/stage-kit lint && pnpm -C apps/stage test && pnpm -C apps/console test",
+    "runner_up": "Moderation `action` is a free string the scene decodes by prefix (letThrough: warned/ignored/exempt:/collapsed:, scene.ts:144-146): make the let-through set a contract enum so the lane gate is typed, not string-matched.",
+    "body": "## Summary\nThe broadcast vote panel keeps its own chat-side ballot count: rank bands always, and bar lengths, voter counts and the leader until the first runtime `vote` tally lands. That count is a third copy of the runtime's poll rules, and it already disagrees with them. The screen accepts unique prefixes the runtime rejects. It credits `!summon` into crowd polls the runtime ignores. It crowns zero-voter rows the runtime skips. Pin the screen's ballot rule to vectors the runtime itself produces, extract the rule into one module, and record any intended gap as a declared deviation instead of letting it drift silently.\n\n## Description\nRegistry `audience-steering-economies` / binding-votes: 'Code tallies the ballot', and the result the room sees must be the one the host enacts. A screen that shows a different leader from the one the host announces is an overturn the system committed. The fix follows `conformance-checking` / declared-deviation-register and derived-expectation-needs-an-evidence-floor: the expected values are not re-derived in TS. They are captured from the real `SegmentRuntime`, whose ingest_chat and apply_ops are public (runtime.rs:1145,1426).\n\nA new integration test, `crates/shadowrunr-segments/tests/ballot_vectors.rs`, runs about 8-12 scenarios: a foil vote opened by `!summon`, a crowd poll opened by an op, prefix, index, case/trim, re-vote, under-rank and unknown option. It writes `{scenarios:[{name, events:[StreamEvent...], expected:[VoteTally...]}], deviations:[...]}` to `packages/stage-kit/src/generated/ballot-vectors.json`. The test compares byte-for-byte, and `UPDATE_GOLDEN=1` rewrites the file. The stage-app card used the same precedent of a Rust test writing a stage artifact.\n\nOn the TS side, `ballots.ts` takes over three things:\n- matchOption, on the runtime's rule: index first, then a trimmed exact match, no prefix.\n- The cast rule. A vote counts in any poll above its min rank. A summon counts only in foil-vote polls, recognised by the runtime-minted `foil-vote-` id that the vectors pin.\n- An `observedTally(poll)` view.\n\n`leaders` adopts the voters>0 filter, and scene.ts keeps only the call site. `ballots.test.ts` folds each scenario through `foldEvents`, asserts equality and checks the declared-deviation list.\n\nGate: architecture. A rule moves module and gains a cross-language conformance test; nothing changes on the wire.\n\n## Flow\n- The runtime test drives the scenarios, captures the last `vote` tallies and writes the golden JSON into stage-kit.\n- The stage-kit test folds the same events, and `observedTally` must equal the runtime's tally.\n- An intended gap (for example, text-only commands) goes under `deviations`. Any other divergence fails.\n- Changing a poll rule in Rust regenerates the JSON, and the TS test fails until the screen follows.\n\n## Expected impact\nThe vote panel can no longer crown or band an option the runtime did not count. The promise that 'the bar it crowns is the result the host announces' (tallies.ts:29-34) becomes a tested invariant instead of a comment. The next poll-rule change, such as a new poll kind or a weight change, fails a test on whichever side forgot to follow.\n\n## Evaluation\nClaim: on every vector scenario, the screen's chat-side tally equals the runtime's.\nBefore: 0 of 7 acceptance cases pass. No vectors exist. Cases 1, 2 and 5 fail on the current rules. Case 3 agrees only by coincidence and is never compared against the runtime.\nAfter: 7 of 7\nMethod: gate - acceptance tests written first\nResult: better\nGate: architecture",
+    "evidence": "scene.ts:99-100 `const prefix = options.filter((o) => o.toLowerCase().startsWith(want)); return prefix.length === 1 ? prefix[0]! : null;` vs runtime.rs:266-277 `if let Ok(n) = raw.parse::<usize>() {...} self.options.iter().position(|o| o.trim().eq_ignore_ascii_case(raw))`. runtime.rs:1190 `if let Some(p) = self.poll.as_mut().filter(|p| p.kind == PollKind::Foil) {` vs scene.ts:212-216 `case \"summon\": { const pollId = s.activePoll; ... const raw = cmd.cmd === \"vote\" ? cmd.option : cmd.foil;`. runtime.rs:342 `for t in tallies.iter().filter(|t| t.voters > 0)` vs tallies.ts:38 `if (t.voters <= 0 && t.weight <= 0) continue;`. scene.test.ts:363 `it(\"matches options by text, index and unique prefix\"` (line 369 expects matchOption(o, \"the-d\") === \"the-disruptor\"). runtime.rs:1160 `msg.command.clone().or_else(|| parse_command(&msg.text))`; the scene reads only msg.command (scene.ts applyChat).",
+    "critic": {
+      "verdict": "build",
+      "ambition": 5,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Real, tested-on-the-wrong-side divergence, with runtime-derived vectors that a stub cannot satisfy."
+    }
+  },
+  {
+    "context": "stage-kit-scene-engine",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "Ballot and grade books copy every voter per vote: fold them in linear time",
+    "size": "M",
+    "effort": 5,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "packages/stage-kit/src/chatMemory.ts",
+      "packages/stage-kit/src/sceneModel.ts",
+      "packages/stage-kit/src/scene.ts",
+      "packages/stage-kit/src/tallies.ts",
+      "packages/stage-kit/src/index.ts",
+      "packages/stage-kit/src/scene.test.ts",
+      "packages/stage-kit/src/viewerBook.ts",
+      "packages/stage-kit/src/viewerBook.test.ts",
+      "packages/stage-kit/src/fold.perf.test.ts"
+    ],
+    "new_files": [
+      "packages/stage-kit/src/viewerBook.ts",
+      "packages/stage-kit/src/viewerBook.test.ts",
+      "packages/stage-kit/src/fold.perf.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "Fold one start_poll + 8000 `!vote` chat events from 8000 distinct viewers through reduce -> completes in < 2,000 ms (measured at HEAD: 63,040 ms)",
+      "Fold 8000 `!grade` chat events from distinct viewers on one hex -> < 1,000 ms (measured at HEAD: 14,338 ms)",
+      "Ratio guard: fold time for 8000 ballots / fold time for 2000 ballots -> < 8 (linear is ~4; at HEAD 63,040 / 1,460 = 43)",
+      "Persistence: s1 = fold of 100 ballots and 100 grades; s2 = reduce over s1 with 100 more, including re-votes by s1's voters -> pollBars(s1.polls.p) and gradeTallies(s1) deep-equal their values captured before s2 was built (retained scenes and keyframes stay valid)",
+      "Re-vote across a generation merge: viewer v1 votes A first, 70 other ballots follow (past the young-generation size), v1 votes B -> A has no v1 ballot, B counts v1 once, observed weight moved rather than doubled",
+      "Equivalence: for each fixture transcript the apps/stage tests fold (fixture.test.ts / onair.test.ts inputs), pollBars and gradeTallies of the new scene deep-equal a snapshot captured from the current implementation before the change"
+    ],
+    "premise": [
+      "packages/stage-kit/src/scene.ts:122 - every accepted ballot rebuilds `ballots: { ...poll.ballots, [viewer]: ... }`, an O(voters) copy per vote",
+      "packages/stage-kit/src/scene.ts:232-233 - every `!grade` rebuilds the hex's viewer->grade object and the outer gradeVotes object",
+      "packages/stage-kit/src/chatMemory.ts:1-5 - the same failure was found and fixed for chat lines ('copying a 600-entry object per line made it quadratic') with a young/old generational map; the fix was never generalized to the other viewer-keyed books",
+      "packages/stage-kit/src/sceneModel.ts:100,211 - ballots and gradeVotes are plain Records keyed by viewer id, unbounded (unlike chats: CHAT_MEMORY_MAX)",
+      "packages/stage-kit/src/playback.ts:35-39 - a backward seek refolds from event 0, so the whole quadratic cost is paid again on every backward scrub (apps/stage/src/App.tsx:285 calls timeline.advanceTo on render)",
+      "apps/stage/src/live.ts:115 - the live OBS stage applies reduce once per event on the render thread; from the measured 4000->8000 delta one vote costs ~12 ms at that turnout, so a voting burst stalls the broadcast canvas",
+      "packages/stage-kit/src/tallies.ts:65 - pollBars recounts voters with Object.values(poll.ballots).filter per option, on every render"
+    ],
+    "rollback": "A commit series local to stage-kit. viewerBook.ts is additive, and reverting the scene/sceneModel/tallies commits restores the Record-based books. No persisted or wire format changes. Sequence it after this context's slot-A card (both touch the ballot code in scene.ts and tallies.ts) or rebase onto it.",
+    "gate": "architecture",
+    "test_command": "pnpm -C packages/stage-kit typecheck && pnpm -C packages/stage-kit test && pnpm -C packages/stage-kit lint && pnpm -C apps/stage test && pnpm -C apps/console test",
+    "runner_up": "The replay Timeline seeks backward by refolding from event 0 (playback.ts:35-39): checkpoint it. This is the keyframe technique stage-app B applies to the live ring, so it is filed as runner-up only.",
+    "body": "## Summary\nThe scene reducer keeps a poll's ballots, and each hex's community grades, as plain objects keyed by viewer id, and it copies the whole object on every vote. Folding them is quadratic, and worse in practice, because V8 drops large spread objects to dictionary mode.\n\nMeasured on 2026-10-21 against HEAD (vitest 5.0.5, Windows, n=1 run per size):\n- Distinct `!vote` ballots: 1000 / 2000 / 4000 / 8000 take 244 / 1,460 / 13,002 / 63,040 ms.\n- The same number of plain chat lines: 9 / 18 / 44 / 337 ms.\n- `!grade` ballots: 739 / 2,472 / 7,835 / 14,338 ms.\n\nThe chat memory hit the same wall and was fixed (chatMemory.ts:1-5), but the fix stayed private to chat. Generalize it into one persistent viewer-keyed book and put ballots and grade ballots on it.\n\n## Description\nThis leans on two subjects:\n- `audience-absorption-at-scale`: a show that works in a small room must not collapse in a big one. The sims calibrate rooms of 3, 30 and 300 today (crates/shadowrunr-sim/data/default-calibration.json:7-10), but the stage targets real platform audiences.\n- `time-travel-replay` / scrub-performance: a backward seek refolds from event 0 (playback.ts:35-39), so the fold cost is paid again on every scrub.\n\nThe move:\n- Extract ChatMemory's young/old generational scheme into a generic `ViewerBook<V>`: get, has, set-with-overwrite, size and values. It is immutable with amortized O(1) writes. Old snapshots must stay valid, because Timeline and the keyframes retain reduce's results.\n- ChatMemory becomes a thin specialization that keeps its own eviction and keep-pinned rule.\n- Poll.ballots and gradeVotes[hex] become ViewerBooks.\n- The per-rank `observed` weights become a running aggregate, updated in O(1) per ballot; a re-vote subtracts the previous ballot.\n- pollBars reads per-option voter counts from that aggregate instead of filtering every ballot on each render.\n\n`Poll.ballots` and `SceneState.gradeVotes` are read only inside stage-kit (no consumer in apps/), so the type change is internal.\n\nGate: architecture.\n\n## Flow\n- reduce(chat with !vote) sets ballots[viewer] in amortized O(1), adds the new ballot's weight to the aggregate and subtracts the previous ballot's.\n- reduce(chat with !grade) sets gradeVotes[hex][viewer].\n- The tallies read the aggregates; nothing iterates every ballot on each render.\n- The perf tests fold 8000 ballots under a 2 s bound and guard the 8000/2000 ratio.\n\n## Expected impact\nA large poll stops freezing the OBS canvas and the replay scrubber. Folding 8000 ballots drops from about 63 s to well under a second; the target is under 2 s, a 30x margin for CI noise. The cost of one vote no longer grows with turnout. Memory stays bounded by distinct voters, as it is today.\n\n## Evaluation\nClaim: ballot and grade folds are linear in the number of ballots.\nBefore: 0 of 6 acceptance cases pass as tests. Cases 1-3 fail on timing (63,040 ms, 14,338 ms, ratio 43); cases 4-6 do not exist yet.\nAfter: 6 of 6\nMethod: gate - acceptance tests written first (the bench figures above come from a scratch vitest run against packages/stage-kit/src/scene.ts at HEAD)\nResult: better\nGate: architecture",
+    "evidence": "Scratch bench (vitest 5.0.5 with --root in the scratchpad, importing packages/stage-kit/src/scene.ts at HEAD; one start_poll, then one chat per distinct viewer; 2026-10-21): chat 1000 9ms, 2000 18ms, 4000 44ms, 8000 337ms; vote 1000 244ms, 2000 1460ms, 4000 13002ms, 8000 63040ms; grade 1000 739ms, 2000 2472ms, 4000 7835ms, 8000 14338ms. scene.ts:122 `ballots: { ...poll.ballots, [msg.viewer.id]: { option, rank: msg.viewer.rank } },`; scene.ts:232-233 `const votes = { ...s.gradeVotes[cmd.hex], [msg.viewer.id]: cmd.grade }; return { ...next, gradeVotes: { ...s.gradeVotes, [cmd.hex]: votes } };`; chatMemory.ts:5 `// (copying a 600-entry object per line made it quadratic).`; grep '\\.ballots|gradeVotes|\\.observed' over apps/ and packages/ (excluding node_modules/worktrees): hits only packages/stage-kit/src/{scene.ts,sceneModel.ts,tallies.ts,scene.test.ts}.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Measured, reproducible superlinear fold with clear linear-time and persistence guards. Build it after slot A."
+    }
+  }
+]

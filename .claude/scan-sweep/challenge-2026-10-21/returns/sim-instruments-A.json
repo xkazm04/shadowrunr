@@ -1,0 +1,15 @@
+{"card":"The instrument hash misses what a run reads: platform rules, prep, knobs","context":"sim-instruments","slot":"A","status":"landed",
+ "shas":["6cca9fd"],
+ "tests_added":[
+  "crates/shadowrunr-sim/src/instrument.rs::tests::an_edited_platform_rule_changes_the_base_hash",
+  "crates/shadowrunr-sim/src/instrument.rs::tests::absent_platform_rules_hash_as_absent_and_crlf_like_lf",
+  "crates/shadowrunr-sim/src/runner.rs::tests::the_prep_the_brain_voices_joins_the_base_hash",
+  "crates/shadowrunr-sim/src/runner.rs::tests::every_harness_knob_joins_the_base_hash",
+  "crates/shadowrunr-sim/src/runner.rs::tests::the_resolved_judge_tier_joins_the_instrument_hash",
+  "crates/shadowrunr-sim/src/tournament.rs::tests::a_platform_rules_edit_starts_a_new_tournament_and_leaves_the_old_one"],
+ "guard_cases":["inside the_resolved_judge_tier test: haiku core and sonnet core (both judged by opus) keep one instrument_hash; base_hash identical across core tiers","inside case 6: old tournament dir and its instrument.json byte-unchanged after the new plan"],
+ "cases_total":6,"cases_red_before":6,"cases_green_after":6,
+ "gates":{"cargo test -p shadowrunr-sim":0,"cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt --all -- --check":0,"cargo test --workspace":0},
+ "files_changed":4,"lines_changed":409,
+ "deviations_from_card":"Revision applied: case 6 asserts a new tournament_id, every run New, old dir byte-unchanged. Policy path is derived inside instrument::compute by the <character>/../../policy convention (no policy_rules input field). instrument_for gained a core_tier parameter so the per-run hash carries the resolved judge tier (None with judging off; a judge-tier misconfiguration now fails at plan, before spend). Platforms are sorted before joining. SIM_LOGIC_VERSION not bumped (stays shadowrunr-sim/11). Two existing assertions moved as a direct consequence: PRE_BRIEF_HASH golden (the always-present `absent` rules entry) and instrument_change_gives_separate_results now expects 2 instrument hashes (one per judge tier) instead of 1. Tests and impl landed in one commit because the tests live in the same source files.",
+ "notes":"Architecture gate: every existing base hash changes once; in-progress tournaments restart in a new <matrix>-<base10> folder; no run dir or instrument.json is rewritten or deleted. Live sink stays out of the hash (existing a_live_sink_changes_neither_the_transcript_nor_the_instrument still green). First cargo test attempt hit sibling engine-llm-sessions in-flight (crate::ladder unresolved in shadowrunr-engine); green on re-run after 60s."}

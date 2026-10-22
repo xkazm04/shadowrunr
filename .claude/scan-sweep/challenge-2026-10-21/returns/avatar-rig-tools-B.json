@@ -1,0 +1,16 @@
+{"card":"Re-split replaces the live rig blind: stage a candidate, judge extremes, promote","context":"avatar-rig-tools","slot":"B","status":"landed",
+ "shas":["74dd35e","0ca9930"],
+ "tests_added":[
+  "tools/rig/tests/test_review.py::Runs::test_a_candidate_run_leaves_the_live_rig_alone",
+  "tools/rig/tests/test_review.py::Judging::test_a_misplaced_element_ranks_worst_and_the_others_stay_clean",
+  "tools/rig/tests/test_review.py::Judging::test_the_extremes_sheet_drops_the_jaw_and_lifts_the_floats",
+  "tools/rig/tests/test_review.py::Runs::test_promote_refuses_an_element_that_got_worse_unless_accepted",
+  "tools/rig/tests/test_review.py::Runs::test_promote_keeps_the_previous_rig_and_revert_brings_it_back_byte_for_byte",
+  "tools/rig/tests/test_review.py::Judging::test_region_colours_follow_the_name_and_a_legend_names_them",
+  "tools/rig/tests/test_review.py::Runs::test_the_previous_rig_survives_a_second_promote_and_a_changed_live_rig"],
+ "guard_cases":[],
+ "cases_total":7,"cases_red_before":7,"cases_green_after":7,
+ "gates":{"cd tools/rig && python -m unittest discover -t . -s tests (47 tests)":0,"ruff check --line-length 100 shadowrunr_rig tests":0,"ruff format --check --line-length 100 shadowrunr_rig tests":0,"cd tools/avatar && python -m unittest test_depth_map test_learned_depth":0},
+ "files_changed":6,"lines_changed":849,
+ "deviations_from_card":"Case 2 as revised: the jaw's polygon is pushed 4 px right; report.json ranks jaw first (p99 189) and every other non-static element stays below 8 (head 6.0). Per-element error is measured on the pixels an element OWNS, not inside its bbox (head's bbox contains the jaw and would share its error): a pixel belongs to the frontmost solid drawn there, or to the element whose fill invented what that solid shows; rows partition the frame (owned_px sums to W*H). Coupled file outside write_set: tools/rig/shadowrunr_rig/rigdir.py gains publish_files(out, files, depth=) (publish refactored onto a shared _publish) so promote and revert move rig bytes through rigdir byte for byte, with layers.json last; no second writer. One feat commit, not two (tests for promote need __main__ and review together). Added a 7th case pinning that promotion never loses the previous rig (second promote with nothing staged and a revert over a changed live rig both refuse, rig.prev untouched). Every run (not only --candidate) writes report.json and extremes.png beside its rig so promote has a live baseline.",
+ "notes":"Finding: the rest-frame error is blind to most misplacements. In a sweep shifting each element 4 px in 4 directions on the drawn bust, only jaw (x and +y), head (x), shard (+y) and torso (-y) produced rest error; misplaced lights recompose the portrait exactly. README says so and points at extremes.png. Revert restores a half depth pair (only one of depth.png/depth.json) not at all - rigdir never keeps one without the other. Runner-up (--only <element>) not built. Synthetic images only; data/ untouched."}

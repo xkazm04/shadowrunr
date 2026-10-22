@@ -1,0 +1,19 @@
+{"card":"Warm pool supervises its workers: respawn off the critical path, quarantine crash loops",
+ "context":"voice-sidecar","slot":"A","status":"landed",
+ "shas":["3c91bc8","af93b90","7df6a73"],
+ "tests_added":[
+  "tools/voice/tests/test_warm.py::Warm.test_a_partial_start_keeps_the_warm_engine_and_names_its_workers",
+  "tools/voice/tests/test_warm.py::Warm.test_a_dead_worker_is_respawned_at_its_death_not_at_the_next_demand",
+  "tools/voice/tests/test_warm.py::Warm.test_a_crash_looping_slot_is_quarantined_and_the_burst_runs_on_the_live_one",
+  "tools/voice/tests/test_warm.py::Warm.test_with_every_worker_quarantined_a_say_fails_at_once_without_a_reload",
+  "tools/voice/tests/test_warm.py::Warm.test_acquire_never_loads_a_worker_on_the_acquiring_thread",
+  "tools/voice/tests/test_warm.py::Warm.test_close_kills_and_reaps_a_respawn_mid_load"],
+ "guard_cases":[],
+ "cases_total":6,"cases_red_before":6,"cases_green_after":6,
+ "gates":{
+  "cd tools/voice && python -m unittest tests.test_warm (20 tests)":0,
+  "cd tools/voice && python -m unittest discover -t . -s tests":1,
+  "ruff check + ruff format --check (touched python files)":0},
+ "files_changed":6,"lines_changed":503,
+ "deviations_from_card":"Case 2 made deterministic per the critic: no wall-clock bounds. fake_warm gained FAKE_WARM_SPAWNS (atomic spawn-number files holding the pid), FAKE_WARM_FAIL_SPAWNS, FAKE_WARM_SLOW_SPAWNS, FAKE_WARM_LOAD_MS and FAKE_WARM_LOAD_GATE (load held until a file the test creates exists). The test asserts the replacement spawn file appears with no sentence asked for (respawn began at the death), that a sentence during the held load is answered by the live worker, and after the gate opens that the respawned pid renders. Case 4's 'within 1 s' is asserted as 'no reload attempted' (spawn count unchanged) plus the exact reason. Case 6's pid check is Popen.poll() after close (reaped) plus no voice-respawn-* thread alive. Backoff is a module constant RESPAWN_BACKOFF_S, patched to (0.0,) in test_warm setUp. One test-only fix after the red commit: case 2's 'z' text was lengthened because the splitter merged two short sentences. Contract commit is typed docs(...) (wording only).",
+ "notes":"Full voice suite rc=1 only on tests.test_pool (test_lines_overlap_in_the_pool_and_go_out_in_order, test_the_pool_never_runs_more_than_its_workers) - process-engine timing tests that never touch warm.py; re-run once, still red; the same tests (plus test_cancel_mid_pool...) are red on an untouched git-archive export of base 94e5998 under the current machine load (sibling builds), so it is load, not this change. Every other voice test green (82 run, 1 skipped). The daemon's readiness substring 'engine: warm' is preserved ('engine: warm (2 of 3 workers loaded in ...)'). contract.md edited under the scan-sweep-challenge.lock, committed alone, lock removed. test_pool.py untouched."}

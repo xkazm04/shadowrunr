@@ -1,0 +1,115 @@
+[
+  {
+    "context": "stage-app",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "The on-air command card is a hand copy of the segment table, and it has drifted",
+    "size": "M",
+    "effort": 5,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "crates/shadowrunr-segments/tests/stage_commands.rs",
+      "apps/stage/src/generated/segment-commands.json",
+      "apps/stage/src/OnAir.tsx",
+      "apps/stage/src/onair.test.ts",
+      "apps/stage/DESIGN.md"
+    ],
+    "new_files": [
+      "crates/shadowrunr-segments/tests/stage_commands.rs",
+      "apps/stage/src/generated/segment-commands.json"
+    ],
+    "shared_surfaces": [
+      "crates/shadowrunr-segments (test only; table and COMMAND_SPECS are read, not changed)"
+    ],
+    "acceptance": [
+      "cargo test -p shadowrunr-segments --test stage_commands with apps/stage/src/generated/segment-commands.json absent -> fails naming the missing file; with the file regenerated (UPDATE_GOLDEN=1) -> passes",
+      "edit one COMMAND_SPECS `what` (or one segment's `commands = [...]`) without regenerating -> the golden test fails and prints the drifted entry",
+      "standingCommands(\"SEG-02A\") with no poll -> rows contain !hint, !grade AND !propose (table seg-02a.toml:24 allows it; today the card omits it)",
+      "standingCommands(\"SEG-01\") -> the !propose row's args are \"<text>\" (COMMAND_SPECS), not the stage's \"<scheme>\"",
+      "standingCommands(\"SEG-02B-I\") and a scene in layout boot -> [] (descoped table commands = [])",
+      "!vote: absent while no poll is open, present while one is (existing onair.test.ts cases keep passing, row text now from the table)",
+      "a command listed in a segment's table but absent from COMMAND_SPECS -> the golden test fails (no row can be invented on the stage side)"
+    ],
+    "premise": [
+      "apps/stage/src/OnAir.tsx:6 - the file says the command table is `shadowrunr-segments` COMMAND_SPECS, copied: the stage has no RPC",
+      "apps/stage/src/OnAir.tsx:43 - PROPOSE args hand-typed as \"<scheme>\"",
+      "crates/shadowrunr-segments/src/command.rs:43 - the authoritative args are \"<text>\"",
+      "apps/stage/src/OnAir.tsx:54-55 - SEG-02A standing card lists only [HINT, GRADE]",
+      "crates/shadowrunr-segments/data/segments/seg-02a.toml:24 - commands = [\"hint\", \"grade\", \"propose\", \"vote\"]",
+      "crates/shadowrunr-segments/data/segments/seg-01.toml:22 - commands = [\"summon\", \"propose\", \"vote\"]",
+      "crates/shadowrunr-daemon/src/catalog.rs:490 - the daemon already derives CommandInfo from COMMAND_SPECS for the console; only the stage re-types it",
+      "crates/shadowrunr-clips/src/footage.rs:613 - precedent: a Rust test already reads apps/stage/src/layouts.ts to pin a cross-language rule"
+    ],
+    "rollback": "Two commits (golden test + JSON, then OnAir switch to the JSON); git revert of the second restores the hand list, of the first removes the test. No runtime, schema or stored-data change.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-segments --test stage_commands && pnpm -C apps/stage test && pnpm -C apps/stage typecheck && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "Replay transport and source loading as one pure state machine: Play after the end is dead (App.tsx:124-128), and a failed ?file quietly plays the fictional demo (the recorded demo-data-plane deviation, App.tsx:78-80)",
+    "body": "## Summary\nThe standing card the broadcast shows between explainers tells viewers which chat commands they can use. It is a hand copy of the Rust segment table, and it has already drifted. In SEG-02A it leaves out `!propose`, which the table allows, and it shows `!propose <scheme>` where the parser documents `<text>`. Derive the card from one committed artifact that a Rust test generates and gates for drift.\n\n## Description\nToday OnAir.tsx hard-codes five CommandRow constants and a per-segment switch (OnAir.tsx:43-58). The real vocabulary lives in `COMMAND_SPECS` (command.rs:21) and in each segment's `commands = [...]` (data/segments/*.toml). The daemon derives it for the console (catalog.rs:490), but the stage has no RPC and replays have no daemon, so it copied the data. This is the registry's `segment-as-state-table` failure mode 'the frozen view' (and 'prose duplicating the table'): an operator or viewer surface that projects the table and stops following it. The move follows `codegen` / drift-gating plus commit-vs-derive-policy. A new integration test in shadowrunr-segments renders `{segment -> [{name,args,what,rank_gated}]}` from `table::tables()` and `COMMAND_SPECS` in table order, with a `_generated` provenance key. It compares the result byte-for-byte with `apps/stage/src/generated/segment-commands.json`, and `UPDATE_GOLDEN=1` rewrites the file. footage.rs:613 sets the precedent for a Rust test reading a stage file. `standingCommands` then reads the JSON. The stage keeps exactly one presentation rule of its own: `!vote` shows only while a poll is open. The stage stays offline-capable, because the JSON is bundled, and drift becomes a red `cargo test` instead of a wrong card on air.\n\n## Flow\n- write the golden test first (fails: file absent)\n- generate the JSON with UPDATE_GOLDEN=1; commit\n- write onair.test.ts cases for SEG-02A !propose and the args (fail against the hand list)\n- replace the CommandRow constants and switch with a lookup over the JSON, keeping the vote-while-poll rule\n- DESIGN.md: replace 'copied' with 'generated + gated by cargo test'\n\n## Expected impact\nViewers in SEG-02A learn that they can propose schemes, and every command row matches what the parser accepts. A future command, argument change or segment edit cannot reach air with a stale card, because CI fails first. This also removes the stage's last hand copy of daemon rules from OnAir.\n\n## Evaluation\nClaim: the on-air standing card equals the segment table for every segment.\nBefore: 0 of 7 acceptance cases pass (no golden file or test, SEG-02A omits !propose, args differ)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first\nResult: better\nGate: architecture (a new cross-language generated artifact; no contract or schema change)",
+    "evidence": "apps/stage/src/OnAir.tsx:43 `const PROPOSE: CommandRow = { cmd: \"!propose\", args: \"<scheme>\", what: \"Propose a scheme. Rank-gated.\" };` | OnAir.tsx:54-55 `case \"SEG-02A\": return [HINT, GRADE];` | command.rs:41-44 `name: \"propose\", args: \"<text>\", what: \"Propose a scheme. Rank-gated.\", rank_gated: true` | seg-02a.toml:24 `commands = [\"hint\", \"grade\", \"propose\", \"vote\"]` | grep COMMAND_SPECS: only command.rs, daemon/catalog.rs, console testgen.ts (a test fixture copy), stage OnAir.tsx comment",
+    "critic": {
+      "verdict": "void",
+      "ambition": 2,
+      "grounding": 5,
+      "falsifiability": 3,
+      "reason": "Floor failure: a real but S-sized fix (two-line drift plus a golden test) dressed up as M; route it as a quick fix instead."
+    }
+  },
+  {
+    "context": "stage-app",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Live preview cannot look back: a keyframed DVR window over the live ring",
+    "size": "L",
+    "effort": 7,
+    "impact": 7,
+    "risk": 6,
+    "write_set": [
+      "apps/stage/src/dvr.ts",
+      "apps/stage/src/dvr.test.ts",
+      "apps/stage/src/live.ts",
+      "apps/stage/src/live.test.ts",
+      "apps/stage/src/App.tsx",
+      "apps/stage/src/Controls.tsx",
+      "apps/stage/src/styles.css",
+      "apps/stage/DESIGN.md"
+    ],
+    "new_files": [
+      "apps/stage/src/dvr.ts",
+      "apps/stage/src/dvr.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "LiveStore fed 3000 contiguous seq events (ring 2000); store.sceneAt(ts of event #2500) -> deep-equals new Timeline(all 3000).advanceTo(that ts)",
+      "store.sceneAt(head ts) -> the same object as store.scene (the live head is never re-folded)",
+      "any seek inside the held window -> store.lastSeekFolds <= KEYFRAME_EVERY (100), never a fold from the window start",
+      "store.sceneAt(t older than the oldest held keyframe) -> { clamped: true } and the earliest reachable scene, never a wrong partial fold",
+      "a new run_id or a stream_start -> keyframes cleared; sceneAt(a ts from the old run) -> clamped to the new run's start",
+      "store.ack(wall) while the preview is 30 s behind -> identical {seq, gaps, stalled_ms} to an unscrubbed store (scrubbing never changes what the sandbox's stage_ack gate reads)",
+      "dvr transport: follow --seek(t)--> behind(t); play advances at speed and returns to follow on reaching the head; goLive -> follow; in behind, voiceCaption is not used (estimated captions for the past moment)",
+      "broadcast=1 -> no DVR state exists and the canvas always draws the head (unchanged OBS path)"
+    ],
+    "premise": [
+      "apps/stage/src/Controls.tsx:94 - seekFromPointer returns early when live: the scrubber is inert during a live run",
+      "apps/stage/src/Controls.tsx:110,113,154 - play/pause, restart and every speed button are disabled={live}",
+      "apps/stage/src/Controls.tsx:147 - clip markers still render and call onSeek in live mode...",
+      "apps/stage/src/App.tsx:95,144 - ...but live has no Timeline, so seek() returns at `if (!timeline) return;`: an on-screen marker that does nothing",
+      "apps/stage/src/live.ts:12,120 - the live store already keeps the last 2000 events in a ring, so the material to look back over is in memory",
+      "packages/stage-kit/src/scene.ts:273-278 - reduce is pure and spreads prev (structural sharing), so a keyframe is a retained reference, not a deep copy",
+      "packages/stage-kit/src/playback.ts:36-40 - Timeline rebuilds from the start on every backward seek; the DVR cannot reuse it over a rolling ring"
+    ],
+    "rollback": "New dvr.ts plus additive LiveStore keyframes. Revert the App/Controls wiring commit to restore the inert live controls, and the store commit to remove keyframes. No contract, daemon or stored-data change.",
+    "gate": "none",
+    "test_command": "pnpm -C apps/stage test && pnpm -C apps/stage typecheck && pnpm -C apps/stage build",
+    "runner_up": "Live feed-health strip in the operator controls: lastSeq, gaps, busy frames and stall ms (what the ack reports to the sandbox gate, live.ts:158) with a resubscribe action, instead of a bare 'daemon open' status string",
+    "body": "## Summary\nDuring a live run, an operator watching the stage preview who misses a moment (a redaction flash, a decree, a vote result) cannot look back until the run ends. The scrubber, play and speed controls are disabled, and the clip markers drawn on the track are inert buttons. The last 2000 events are already in memory. Add a DVR window: scrub back inside the held window in the preview only, play from there at speed, then go back to live.\n\n## Description\nThis applies registry `time-travel-replay` / scrub-performance: keyframes every N items, so a seek restores the nearest keyframe at or before t and re-folds only the tail. Worst-case seek cost is then bounded by the keyframe spacing, not the stream length. `transport-and-time-mapping` governs the follow/behind states. `LiveStore` records `{ringIndex, ts, scene}` every 100 applied events. A keyframe is only a retained reference, because `reduce` spreads prev. Keyframes are evicted with the ring, so memory stays bounded at about 20 scenes. `sceneAt(t)` picks the newest keyframe still inside the ring with ts <= t, folds the ring tail to t, and reports `clamped` when t falls before the window. Per the law, the fold is never authoritative over the head: at the head it returns `store.scene` itself. A pure `dvr.ts` transport (`follow | behind{t, playing}`) owns the preview clock. App and Controls enable the scrubber over `[windowStart, head]`, show 'N s behind live' and a GO LIVE button, and make clip markers seek. While behind, captions use the estimated timing, because the voice is live audio. The broadcast view (`?broadcast=1`, which sandbox and recording use) never builds DVR state, and acks keep reading lastSeq, so the OBS path and the stage_ack gate do not change.\n\n## Flow\n- dvr.test.ts and live.test.ts cases first (all fail: no sceneAt, no transport)\n- LiveStore: keyframes aligned to the ring, sceneAt, clear on reset\n- dvr.ts: pure transport reducer\n- App: in live non-broadcast, scene = follow ? store.scene : store.sceneAt(t); Controls: enable track/markers/play in live, add a behind-live badge and GO LIVE\n- DESIGN.md Live mode: the DVR window and its limits\n\n## Expected impact\nThe operator gets a 'wait, go back' over the held window of a live run, the live clip markers start working, and keyboard seek works in live. All of this stays off the broadcast path and leaves the acks unchanged.\n\n## Evaluation\nClaim: a live preview can be scrubbed inside the held window, with exact scenes and a bounded fold cost, without touching broadcast or acks.\nBefore: 0 of 8 acceptance cases pass (no sceneAt, no keyframes, live seek is a no-op)\nAfter: 8 of 8\nMethod: gate - acceptance tests written first\nResult: better\nGate: none (stage-local, additive)",
+    "evidence": "Controls.tsx:94 `if (!el || live) return;` | Controls.tsx:110 `disabled={live} title=\"Space\"` | Controls.tsx:147 `onSeek(Math.max(start, m.at - 3000));` | App.tsx:95 `new Timeline(...)` only when `loaded && !live` | App.tsx:144 `if (!timeline) return;` | live.ts:12 `export const RING_MAX = 2000;` | playback.ts:37-39 `if (t < this.appliedTo) { this.cursor = 0; this.state = initialScene(); }`",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Ambitious, well-bounded, and the core cases would catch a wrong fold."
+    }
+  }
+]

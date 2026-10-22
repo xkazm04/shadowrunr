@@ -1,0 +1,21 @@
+{"card":"Facet counts are hand-built by every page and ignore the filter: derive them","context":"console-ui-primitives","slot":"A","status":"landed",
+ "shas":["6e94764","4bdcf17"],
+ "tests_added":[
+  "apps/console/src/ui/ui.test.tsx::facet counts > counts every option in one pass over the rows",
+  "apps/console/src/ui/ui.test.tsx::facet counts > supplies the counts when the options carry none",
+  "apps/console/src/ui/ui.test.tsx::facet counts > counts under the typed query, agreeing with the count line",
+  "apps/console/src/ui/ui.test.tsx::facet counts > prints given counts verbatim whatever the query (guard: the daemon's totals)",
+  "apps/console/src/ui/ui.test.tsx::facet counts > counts a 48,000-row table off the deferred query, in the same pass as the rows",
+  "apps/console/src/ui/ui.test.tsx::facet counts > leaves no hand-computed facet count in the migrated pages (Incidents keeps the daemon's)"],
+ "guard_cases":["case 4: counts:'given' option count 412 prints verbatim whatever the query (green before by design: before the change every option count was printed as given)"],
+ "cases_total":6,"cases_red_before":5,"cases_green_after":6,
+ "gates":{
+  "pnpm -C apps/console test (full suite, 418 passed / 2 skipped)":0,
+  "pnpm -C apps/console test -- src/ui src/pages/... (card test_command part 1)":0,
+  "pnpm -C apps/console typecheck":0,
+  "pnpm -C apps/console lint":0,
+  "pnpm -C apps/console build (shared tree)":1,
+  "vite build + check-bundle on an exported 94e5998 tree with only my 9 files applied":0},
+ "files_changed":10,"lines_changed":280,
+ "deviations_from_card":"Case 5 dropped per the revision, so there are 6 cases, not 7. In commit 1, derived counts are the default and they override the counts pages still hand in (the card's rollback text says hand counts 'still win' in commit 1). I kept the default the card states (derived), so commit 1 alone already shows correct counts; nothing renders differently except the numbers. Incidents keeps exactly today's given counts; in its paged (cut) path it still shows no counts, as it does today. simulator/Runs hoists its now-static facet spec to a module const, which removed the useMemo and an unused rows binding. facetCounts runs one text pass, then one predicate per row per option. Inside FilterTable I paid for the new bytes with behaviour-preserving dedupes: a spacer() helper, an int() formatter, hoisting q = deferred.trim(), and a faceted flag. Those were needed because onair.l2 had only 135 B of headroom at the base.",
+ "notes":"Build is red in the shared tree only because of sibling work. door is 527691 B, the base-red route, which the contract sibling's regenerated validators grew from 525580. onair.l2 is 100305 B, and the sibling's uncommitted apps/console/src/pages/onair/ClipDetail.tsx alone puts it at 100172 with my ui files reverted. Measured exactly on an exported 94e5998 tree (vite build + check-bundle, per-route bytes) with only my files applied: door 525580 (+0), onair.l2 99998 of 100000 (+133), brain.l2 +8, characters.l2 +56, reconcile.l2 +51, segments.l2 +68, simulator.l2 +1, entry +0. Every route other than door is within budget on its own. onair.l2 has 2 B of headroom left, so the next byte in FilterTable or onair, or the ClipDetail sibling, needs a budget decision. Full-suite runs under load once timed out src/app/shell.dom.test.tsx at 5110 ms against its 5000 ms limit; it passes alone and is not mine. The scratch export used for the measurement is at C:/Users/kazda/AppData/Local/Temp/claude/C--Users-kazda-kiro-overlord/864a7185-6668-471c-89bd-f6e12c14ea27/scratchpad/base. It contains node_modules junctions into the repo: do not rm -rf it, remove the junctions first."}

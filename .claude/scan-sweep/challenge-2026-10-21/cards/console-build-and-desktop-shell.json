@@ -1,0 +1,108 @@
+[
+  {
+    "context": "console-build-and-desktop-shell",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "The desktop CSP hard-pins the daemon at :7717 the console lets you move",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "apps/console/src-tauri/src/lib.rs",
+      "apps/console/src-tauri/tauri.conf.json",
+      "apps/console/src/data/config.ts",
+      "apps/console/src/data/errors.ts",
+      "apps/console/src/ui/States.tsx",
+      "apps/console/src/app/compose.ts"
+    ],
+    "new_files": [
+      "apps/console/src-tauri/src/endpoint.rs",
+      "apps/console/src/data/config.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "endpoint::resolve(args=[], env={}) -> Ok(Endpoint{url:\"http://127.0.0.1:7717\", source:Default}) and endpoint::csp_for(that) == the exact CSP string tauri.conf.json:24 carries today (byte-for-byte, so the default build is unchanged)",
+      "endpoint::resolve(args=[\"--daemon\",\"http://127.0.0.1:9000\"], env={SHADOWRUNR_DAEMON_URL:\"http://127.0.0.1:8000\"}) -> url :9000, source Arg; csp_for(...) contains `connect-src ... http://127.0.0.1:9000 ws://127.0.0.1:9000` and `media-src 'self' http://127.0.0.1:9000` and contains no `7717`",
+      "endpoint::resolve(env={SHADOWRUNR_DAEMON_URL:\"http://10.0.0.5:7717\"}) -> Err naming the source `SHADOWRUNR_DAEMON_URL` and the rule `loopback only` (malformed/non-loopback stops; it never falls through to the default)",
+      "endpoint::resolve(env={SHADOWRUNR_DAEMON_URL:\"not a url\"}) -> Err naming SHADOWRUNR_DAEMON_URL (absent skips, malformed stops)",
+      "readDataConfig(search=\"?daemon=http://127.0.0.1:1\", env={VITE_DAEMON_URL:\"http://127.0.0.1:2\"}, shell=\"http://127.0.0.1:9000\") -> daemonUrl \"http://127.0.0.1:9000\" (the shell value wins: it is the only one the window's CSP admits); with shell undefined -> \"http://127.0.0.1:1\" exactly as today",
+      "errorView(unavailable) under daemonUrl http://127.0.0.1:9000 -> hint \"Start it with `shadowrunr daemon --port 9000`; ...\" and OfflineState renders the same port, not the literal 7717"
+    ],
+    "premise": [
+      "apps/console/src-tauri/tauri.conf.json:24 - the desktop CSP's connect-src and media-src are the literal http://127.0.0.1:7717 / ws://127.0.0.1:7717",
+      "apps/console/src/data/config.ts:15-21 - the console resolves its daemon from `?daemon=`, then VITE_DAEMON_URL, then DEFAULT_DAEMON_URL; any value but :7717 is refused by the desktop CSP, so a VITE_DAEMON_URL build or a daemon on another port is a desktop console that only ever reports offline",
+      "apps/console/src/data/rpc.ts:7 - DEFAULT_DAEMON_URL is a second spelling of the same origin the CSP spells",
+      "crates/shadowrunr-daemon/src/config.rs:192-205 and crates/shadowrunr-daemon/src/cli.rs:85 - the daemon's port is operator-configurable ([daemon] port, --port), default 7717",
+      "apps/console/src/data/errors.ts:76 and apps/console/src/ui/States.tsx:48 - the offline remedy prints `shadowrunr daemon --port 7717` regardless of which daemon the console was pointed at",
+      "apps/console/src-tauri/src/lib.rs:6-11 - the shell resolves nothing: Builder::default().plugin(opener).run(generate_context!()), so there is no seam where the window learns the endpoint",
+      "apps/console/src/app/compose.ts:14, apps/console/src/pages/onair/ClipPlayer.tsx:15, apps/console/src/pages/review/WatchPane.tsx:44 - three call sites re-read readDataConfig, all of which inherit the one resolution once it takes the shell source",
+      ".github/workflows/ci.yml:51 - src-tauri is not built in CI, so a drift between the CSP string and the console's endpoint is caught by nothing today"
+    ],
+    "rollback": "Two commits (shell: endpoint.rs + lib.rs + tauri.conf.json window create:false; console: config/errors/States source + tests). Reverting either restores the literal CSP and three-source chain; the default build's CSP is byte-identical, so no stored state or contract changes.",
+    "gate": "architecture",
+    "test_command": "cargo test --manifest-path apps/console/src-tauri/Cargo.toml && cargo clippy --manifest-path apps/console/src-tauri/Cargo.toml --all-targets -- -D warnings && cargo fmt --manifest-path apps/console/src-tauri/Cargo.toml -- --check && pnpm -C apps/console typecheck && pnpm -C apps/console test && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "One gate-script kernel for check-size/check-token-refs/check-bundle (each re-implements walk() and the 1/2 exit convention, check-size.mjs:13-18, check-token-refs.mjs:25-30) with a seeded-violation liveness test per gate - real but smaller payoff.",
+    "body": "## Summary\nThe daemon's address is an operator setting ([daemon] port, --port, ?daemon=, VITE_DAEMON_URL), but the desktop shell freezes it into a static CSP at tauri.conf.json:24. Every non-default endpoint yields a desktop console whose fetches and WebSocket are blocked by its own CSP and which then tells the operator to start a daemon on 7717. Move the endpoint into one declared precedence chain resolved by the shell at boot, derive the CSP from it, inject it into the window, and let the console's config and its offline remedy read the same value.\n\n## Description\nLeans on settings/cross-source-precedence-chain (one declared, named order; absent is a skip, malformed is a stop) and quality-gates/refusal-names-a-reachable-remedy (the offline hint is a remedy that must resolve in the reader's environment). New `endpoint.rs` in the shell: `resolve(args, env) -> Result<Endpoint{url, source}, EndpointError>` over Arg `--daemon` > Env `SHADOWRUNR_DAEMON_URL` > Default, loopback hosts only (127.0.0.1, localhost, [::1]) so the CSP never widens beyond what it admits today; `csp_for(&Endpoint) -> String` that reproduces today's string exactly for the default. `lib.rs` patches `context.config_mut().app.security.csp` before run, sets the main window to `create:false` in tauri.conf.json and builds it in setup with `WebviewWindowBuilder::from_config(...).initialization_script(\"window.__SHADOWRUNR_DAEMON__=...\")`; an Err shows a blocking message dialog naming the source and exits. Console: `readDataConfig` gains a first `shell` source (the injected global), and `errors.ts`/`States.tsx` format the port from the resolved daemonUrl. Gate: architecture (the shell gains a boot seam; no contract change; CSP stays loopback-scoped, so this is policy-neutral).\n\n## Flow\n- Shell boot: resolve(args, env) -> Err: dialog + exit 1 | Ok: csp_for -> context config -> window with injected endpoint\n- Console boot: compose.ts readDataConfig(search, env, window.__SHADOWRUNR_DAEMON__) -> createDataLayer(baseUrl)\n- Daemon down: OfflineState hint prints the port of the endpoint actually in use\n\n## Expected impact\nThe desktop console works against any configured daemon port; one place declares the endpoint and the CSP can no longer disagree with the data layer; a bad override fails at boot with its source named instead of as a permanent 'daemon not reachable'.\n\n## Evaluation\nClaim: the desktop endpoint is one resolved value the CSP, data layer and remedy all derive from.\nBefore: 0 of 6 acceptance cases pass (no endpoint module, no shell source in readDataConfig, hint is a literal)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first (Rust unit tests in endpoint.rs, vitest config.test.ts and an errors hint case)\nResult: better\nGate: architecture",
+    "evidence": "tauri.conf.json:24 \"csp\": \"... media-src 'self' http://127.0.0.1:7717; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:7717 ws://127.0.0.1:7717\"\nconfig.ts:21 daemonUrl: q.get(\"daemon\") ?? env[\"VITE_DAEMON_URL\"] ?? DEFAULT_DAEMON_URL,\nrpc.ts:7 export const DEFAULT_DAEMON_URL = \"http://127.0.0.1:7717\";\nerrors.ts:76 unavailable: \"Start it with `shadowrunr daemon --port 7717`; the console reconnects on its own.\",\nStates.tsx:48 hint=\"Start it with `shadowrunr daemon --port 7717`; ...\"\ndaemon config.rs:193 pub port: u16, / :205 port: 7717,\nlib.rs:8-11 tauri::Builder::default().plugin(tauri_plugin_opener::init()).run(tauri::generate_context!())\ngit grep -n 7717 apps/console/src-tauri -> only lib.rs:2 (doc) and tauri.conf.json:24\nci.yml:51 '# ... apps/console/src-tauri is its own Cargo workspace and is not built.'",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Grounded, loopback-pinned so policy-neutral; remove the unlisted dialog-plugin dependency."
+    },
+    "revision": "Replace the blocking message dialog with: on Err, print the source and rule to stderr and exit 1 (no new tauri plugin, no Cargo.toml change)."
+  },
+  {
+    "context": "console-build-and-desktop-shell",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "check-bundle says a route is over, never which chunk grew: diff vs measured",
+    "size": "M",
+    "effort": 5,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "apps/console/scripts/check-bundle.mjs",
+      "apps/console/vite.config.ts",
+      "apps/console/package.json"
+    ],
+    "new_files": [
+      "apps/console/scripts/bundle-measure.mjs",
+      "apps/console/scripts/bundle-measure.test.ts",
+      "apps/console/budgets/bundle.measured.json"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "measureRoutes(synthetic manifest {index.html entry -> _Button-AAAA.js; src/pages/review/Layer2.tsx dynamic -> _Button-AAAA.js, _Compare-BBBB.js}, sizeOf) -> review.l2 measured without the entry's _Button and with a per-chunk list [{chunk:\"_Compare.js\", js:n}] (hash stripped)",
+      "chunkKey(\"_FilterTable-C7LN3YTt.js\") == chunkKey(\"_FilterTable-Zz9Qq1Aa.js\") == \"_FilterTable.js\"; chunkKey(\"src/pages/review/Layer2.tsx\") is unchanged",
+      "diffRoutes(baseline {review.l2:{js:95630, chunks:{\"src/pages/review/Layer2.tsx\":60000,\"_Button.js\":4000}}}, measured {review.l2:{js:104202, chunks:{...Layer2.tsx:68000, _Button.js:4000, _Compare.js:572}}}) -> review.l2 delta +8572 B with rows [Layer2.tsx +8000, _Compare.js +572 (new)] sorted by |delta|, _Button.js omitted as unchanged",
+      "a route over budget -> the failure line is followed by its top-3 contributing chunk deltas against bundle.measured.json and the slack line (budget - measured); exit code stays 1 (the verdict is still budget-only; the baseline never blocks)",
+      "no budgets/bundle.measured.json present -> report prints 'no baseline: run pnpm -C apps/console budget:bundle --write-baseline' and the gate verdict is unchanged (exit 0 when within budget)",
+      "check-bundle --write-baseline -> writes bundle.measured.json with every route's js/css and per-chunk js keyed by hash-free chunkKey; a second run with no source change reports every route delta 0"
+    ],
+    "premise": [
+      "apps/console/scripts/check-bundle.mjs:80-90 - the gate prints one total row per route and a 'js N B > budget M B' failure; no chunk, no delta, no slack",
+      "apps/console/scripts/check-bundle.mjs:43-57 - measure() already walks each route's chunk keys and sizes every chunk, then throws the per-chunk figures away",
+      "apps/console/budgets/bundle.json:2 - every budget raise carries hand-computed before/after figures and hand-attributed causes (e.g. 'review.l2 js 100,000 -> 105,000 (95,630 -> 104,202 B: the compare view ...)', 'door ... (527,963 B ... +272 B)'), i.e. the developer measures and attributes by hand each time",
+      "apps/console/dist/.vite/manifest.json - shared chunk keys carry content hashes ('_Button-DSPKYARD.js', '_FilterTable-C7LN3YTt.js'), so a naive per-key diff never matches across builds; chunkKey normalisation is required",
+      "apps/console/vite.config.ts:13 - vitest only includes src/**/*.test.{ts,tsx}, so the build scripts have no tests today",
+      "git log -- apps/console/budgets/bundle.json: 6d7eca9, 0216632, 849ac0b, 7230a4b, c55834c - five recent commits each re-measured routes by hand"
+    ],
+    "rollback": "One commit: check-bundle.mjs goes back to its inline measure, bundle-measure.mjs/test and bundle.measured.json are deleted, the vitest include and the package.json script revert. The budget verdict is unchanged throughout, so nothing depends on the new files.",
+    "gate": "none",
+    "test_command": "pnpm -C apps/console test && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "Desktop console starts the daemon itself when it is down (a narrow Rust command launching `shadowrunr daemon` as a supervised child, surfaced as the OfflineState action) - the bigger operator leap, but it grants the webview a process-spawn capability, which reads as widening access.",
+    "body": "## Summary\nThe bundle gate is the console's only build-time surface for a page builder, and it answers 'over or not' while discarding the per-chunk figures it already computed. Every budget raise in bundle.json is a hand-measured before/after with a hand-guessed cause. Keep the verdict exactly as it is and add the missing compare mode: a committed measured baseline, per-chunk attribution with hash-free chunk names, and a delta report that names what grew.\n\n## Description\nLeans on quality-gates/refusal-names-a-reachable-remedy (a refusal says what to do: here, which chunk to look at, and the exact command that refreshes the baseline) and quality-gates/blocking-by-input-determinism (only the deterministic byte budget blocks; the baseline diff is report-only, so a stale baseline can never turn the build red). Extract the pure part of check-bundle.mjs into scripts/bundle-measure.mjs: closure, chunkKey (strip the `-<hash>` suffix from `_`-prefixed keys), measureRoutes(manifest, sizeOf) returning per-route totals plus per-chunk js, diffRoutes(baseline, measured). check-bundle.mjs stays the CLI: same table, same exit codes, plus a delta column, a slack column and, on failure, the top contributing chunks. `--write-baseline` writes budgets/bundle.measured.json; the package.json budget:bundle script documents it. vitest include gains scripts/**/*.test.ts.\n\n## Flow\n- pnpm build -> check-bundle: table now shows js, budget, slack, delta vs baseline\n- route over -> failure + 'grew: src/pages/review/Layer2.tsx +8.0 KiB, _Compare.js +0.6 KiB (new)'\n- raise accepted -> budget:bundle --write-baseline, commit budgets/bundle.measured.json beside the budget line\n\n## Expected impact\nA budget failure becomes actionable in one read instead of a manual build-diff; budget-raise commits cite generated figures instead of hand arithmetic; the scripts get their first unit tests.\n\n## Evaluation\nClaim: check-bundle attributes a route's growth to chunks against a committed baseline without changing its verdict.\nBefore: 0 of 6 acceptance cases pass (no measure module, no chunkKey, no baseline, no tests for scripts)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first in scripts/bundle-measure.test.ts over synthetic manifests\nResult: better\nGate: none",
+    "evidence": "check-bundle.mjs:87 console.log(name.padEnd(16), kb(m.js)..., kb(budget.js)..., kb(m.css)..., kb(m.gzip)...);\ncheck-bundle.mjs:88 if (m.js > budget.js) failures.push(`${name}: js ${m.js} B > budget ${budget.js} B`);\ncheck-bundle.mjs:48-53 for (const k of keys) { ... js += size(c.file); gzip += gz(c.file); ... } (per-chunk sizes summed and dropped)\nbundle.json:2 '... Compare two sessions, measured: review.l2 js 100,000 -> 105,000 (95,630 -> 104,202 B: the compare view ...'\ndist manifest underscore keys: ['_Avatar-Di93nggS.js', '_Button-DSPKYARD.js', '_FilterTable-C7LN3YTt.js', ...]\nvite.config.ts:13 include: [\"src/**/*.test.{ts,tsx}\"]",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Honest M at the floors; guard the hash-stripping key against stem collisions."
+    },
+    "revision": "Add an acceptance case: a manifest with two distinct shared chunks _index-AAAA.js and _index-BBBB.js keeps them as two separate chunk entries (disambiguated, never summed into one '_index.js')."
+  }
+]

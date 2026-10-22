@@ -1,0 +1,16 @@
+{"card":"`voice replay` tunes blind: compare configs, show the lines each one saves","context":"daemon-voice-service","slot":"B","status":"landed",
+ "shas":["aa5b5fc"],
+ "tests_added":[
+  "crates/shadowrunr-daemon/src/voice/replay/compare.rs::tests::an_arms_spec_is_a_grid_and_zero_is_refused",
+  "crates/shadowrunr-daemon/src/voice/cli.rs::tests::replay_arms_are_checked_before_anything_runs",
+  "crates/shadowrunr-daemon/src/voice/replay.rs::tests::replay_with_a_fake_keeps_each_lines_fate",
+  "crates/shadowrunr-daemon/src/voice/replay/compare.rs::tests::the_diff_names_the_lines_an_arm_saves_loses_and_changes",
+  "crates/shadowrunr-daemon/src/voice/replay/compare.rs::tests::repeats_aggregate_to_a_median_with_its_range_and_n",
+  "crates/shadowrunr-daemon/src/voice/replay/compare.rs::tests::two_arms_print_as_json_with_outcomes_and_their_diff",
+  "crates/shadowrunr-daemon/src/voice/replay.rs::tests::the_plain_report_prints_the_same_header_and_row"],
+ "guard_cases":["case 6: no --arms/--repeat/--baseline -> HEADER + row byte-identical (replay.rs the_plain_report_prints_the_same_header_and_row pins the literal; HEADER/row() untouched in the diff; compare::plan(None,None,None)==None selects the old path)"],
+ "cases_total":6,"cases_red_before":5,"cases_green_after":6,
+ "gates":{"cargo test -p shadowrunr-daemon voice::replay":0,"cargo test -p shadowrunr-daemon voice::cli":0,"cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt --all -- --check":1,"cargo test -p shadowrunr-daemon":0,"cargo test --workspace":0},
+ "files_changed":4,"lines_changed":1177,
+ "deviations_from_card":"One commit, not two: the tests cannot compile without the new API (brief allows). Cases 1-5 counted red as compile-fail (API absent). Plain `--json` gains an additive `outcomes` field (table output unchanged). --baseline defaults to [voice] plus flags; an arm equal to the baseline shares its replays. Repeats interleave by round across configs.",
+ "notes":"cargo fmt --all -- --check rc=1 ONLY on crates/shadowrunr-daemon/src/runs.rs (sibling console-characters-page A, uncommitted); my files were formatted with rustfmt per-file and are clean. replay_with fake test ran 5x green (~0.3 s). voice/mod.rs and voice/sidecar.rs untouched."}

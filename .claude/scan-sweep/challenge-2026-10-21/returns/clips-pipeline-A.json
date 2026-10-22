@@ -1,0 +1,16 @@
+{"card":"Render outside the store lock: stage, render, commit with a staleness check","context":"clips-pipeline","slot":"A","status":"landed",
+ "shas":["564d4d4"],
+ "tests_added":[
+  "crates/shadowrunr-clips/src/tests.rs::a_poster_fallback_never_replaces_a_good_video",
+  "crates/shadowrunr-clips/src/tests.rs::the_owner_keeps_working_while_a_clip_renders",
+  "crates/shadowrunr-clips/src/tests.rs::a_failed_rerender_keeps_the_previous_video",
+  "crates/shadowrunr-clips/src/tests.rs::a_rejection_during_the_render_wins",
+  "crates/shadowrunr-clips/src/tests.rs::a_rescan_removal_during_the_render_is_not_undone",
+  "crates/shadowrunr-clips/src/tests.rs::a_second_render_of_the_same_clip_is_refused_at_once",
+  "crates/shadowrunr-clips/src/tests.rs::the_clip_dir_holds_only_complete_files_while_rendering"],
+ "guard_cases":["existing the_owner_act_table_is_what_the_store_renderer_and_uploader_do (rerender refusals unchanged through the new path) - green before and after"],
+ "cases_total":7,"cases_red_before":7,"cases_green_after":7,
+ "gates":{"cargo test -p shadowrunr-clips":0,"cargo test -p shadowrunr-daemon clips":0,"cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt --all -- --check":0,"cargo test -p shadowrunr-daemon":0,"cargo test --workspace":0},
+ "files_changed":6,"lines_changed":623,
+ "deviations_from_card":"(1) The staging dir and per-clip guard are under <data>/clips/.render/<id>/ and <id>.lock, not inside the clip dir. Inside it, a rescan's remove_dir_all would race the files being written, and the media route could reach staged files. '.render' fails check_id, so store.all() and the rescan skip it. (2) One commit, not three: the seam tests cannot compile without job.rs. (3) The 'never downgrade' rule applies to the real renderer too. A poster result where the clip already has a video (for example no tools, or a failed cut) is treated as a failed render: the video is kept and a 'render failed: <reason>; the previous video is kept' note is added. (4) A failed render saves that history note and returns Err(Io) so the RPC/CLI reports the failure. (5) Acceptance case 2 is pinned twice: through the seam (Err) and through the real renderer with no tools. The real-renderer test is the one that was red by assertion on today's tree.",
+ "notes":"Premise re-verified at 63e4bc9. rerender held store.lock() across render::render (scan.rs:900-928, line numbers shifted from the card). render.rs:709/768-770/870-879/901 deleted the previous outputs. The types-crate moves did not change the behaviour. Red before: 1 test by assertion on today's tree (the kind fell to poster), 6 by compile (no Renderer seam). scan::rerender keeps its signature and now delegates to job::rerender_with(store, id, &ToolRenderer(tools)). The daemon's clips::render is unchanged apart from its doc. rpc.rs approve/reject/feedback still call the store from the async handler, but each lock is now held for milliseconds. For slot B: scan.rs only lost the rerender body, and tests.rs gained a block at the end. The staleness mark is (status, render.rendered_ms, history.len()), so feedback, which writes no history, is kept across a render."}

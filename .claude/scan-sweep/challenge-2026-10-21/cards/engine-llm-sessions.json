@@ -1,0 +1,108 @@
+[
+  {
+    "context": "engine-llm-sessions",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "One failure ladder for one-shot and warm turns; warm sessions degrade in place",
+    "size": "L",
+    "effort": 7,
+    "impact": 7,
+    "risk": 6,
+    "write_set": [
+      "crates/shadowrunr-engine/src/fleet.rs",
+      "crates/shadowrunr-engine/src/session.rs",
+      "crates/shadowrunr-engine/src/lib.rs",
+      "crates/shadowrunr-engine/tests/fake_cli.rs"
+    ],
+    "new_files": [
+      "crates/shadowrunr-engine/src/ladder.rs",
+      "crates/shadowrunr-engine/tests/fixtures/claude_overloaded_reconstructed.jsonl",
+      "crates/shadowrunr-engine/tests/fixtures/claude_not_logged_in_reconstructed.jsonl"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "warm session opened on account a whose turn streams an overloaded (529) result, account b healthy -> send() returns Ok with account b, fallback_reason names account a, ledger rows [a: transient (warm), b: success (warm)] (today: Err(Unavailable) from session.rs:371)",
+      "warm session on account a whose turn streams 'Not logged in · Please run /login', account b healthy -> send() returns Ok from b and fleet.accounts()[0].cooling_until_ms is Some (today: a is cooled but the error is returned, session.rs:367-370)",
+      "warm session, every account rate-limited, api_key_env set and api_base_url pointed at a local stub responder -> send() returns Ok with engine AnthropicApi, fallback_reason lists every account, the request body's messages carry the session's earlier user/assistant turns, fleet_state().mode == Degraded (today: Err(RateLimited), session.rs:359-364)",
+      "fleet_state() is Degraded after a one-shot served by the API; then a warm turn served on a CLI account -> fleet_state().mode == Primary (today: stays Degraded; the warm path never calls set_mode)",
+      "ladder::step table test: for each Failure kind (RateLimited, Auth, Transient, Fatal) Fleet::complete and ClaudeWarmSession::send take the same verdict from one function",
+      "warm turn on account a streams model_not_found (404) with b healthy -> Err(Unavailable) containing 404 and b's calls.jsonl is empty (Fatal still never rotates; regression guard)"
+    ],
+    "premise": [
+      "crates/shadowrunr-engine/src/fleet.rs:494-508 - Fleet::complete hand-codes the failure policy: RateLimited cool+next, Auth cool+next, Transient next, Fatal return",
+      "crates/shadowrunr-engine/src/session.rs:340-372 - ClaudeWarmSession::send re-implements it differently: RateLimited rotates, Auth cools but returns the error (367-370), Transient and everything else returns at once (371)",
+      "crates/shadowrunr-engine/src/session.rs:359-364 - a warm session that runs out of accounts returns RateLimited; it never reaches the API rung",
+      "crates/shadowrunr-engine/src/fleet.rs:626-632 - open_session does reach the API rung (ApiSession), and fleet.rs:562-593 complete reaches the alt CLIs; the warm turn path reaches neither",
+      "crates/shadowrunr-engine/src/fleet.rs:139 - set_mode is called only from fleet.rs (482,542,578,595,613,627,634); session.rs never calls it, so warm turns never move FleetState",
+      "crates/shadowrunr-brain/src/lib.rs:657-668 - the brain papers over every warm error by dropping the session and running a second, cold Fleet::complete, so one beat can spend the warm attempts plus a whole cold ladder",
+      "crates/shadowrunr-brain/src/lib.rs:779 and crates/shadowrunr-brain/src/fleet.rs:47-62 - the sign-off clock counts any non-Healthy reading of that FleetState toward the 300 s grace (lib.rs:154)",
+      "crates/shadowrunr-engine/src/session.rs:451-456 - ApiSession already keeps a Turn history; ClaudeWarmSession keeps none, so a backend switch has nothing to carry (recorded registry deviation agent-cli-transport @ session.rs:354)"
+    ],
+    "rollback": "Commits: ladder.rs with complete/open_session switched to it (behaviour-preserving), then the warm send switch, then the in-place API degrade. Each reverts with git revert in reverse order; no stored data or contract is touched.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-engine && cargo test -p shadowrunr-brain && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "FleetState derived from capacity (cooling table + api/alt presence) instead of the last call's outcome, so the brain's sign-off clock reads the fleet rather than whichever role called last.",
+    "body": "## Summary\nThe fleet's failure policy (what a rate limit, a bad login, an overload or a fatal error makes the engine do next) is written twice: once in `Fleet::complete` and again, differently, in `ClaudeWarmSession::send`. Extract it into one `ladder` module both paths consult, and let a warm session walk the same rungs: rotate accounts on rate-limit, auth and transient failures, then degrade in place to an API conversation that carries the session's own turns, reporting fleet mode on every served turn.\n\n## Description\nToday the warm path is a weaker copy of the one-shot ladder. A 529 overload or an auth failure on the warm account ends the turn with an error even when another account is healthy; when every account is cooling the warm session returns `RateLimited` instead of reaching the API rung that `open_session` itself would have used; and warm turns never call `set_mode`, so `FleetState` describes whichever one-shot ran last. The brain compensates at `crates/shadowrunr-brain/src/lib.rs:657-668` by catching every warm error and running a second, cold ladder, which doubles worst-case beat latency and throws the session away.\n\nTechniques: agent-cli-transport / fallback-ladder (one labelled ladder, each rung tried only when the one above is honestly unavailable); multi-provider-gateway-plane / router-versus-candidate-failure (a candidate failure moves to the next candidate, a request failure stops the loop); agent-cli-transport / thread-custody-across-resume (the host keeps its own transcript mirror so a switch does not drop the thread).\n\nThe move:\n- `ladder.rs`: `fn step(&Failure) -> Step { Rotate { cool: Option<Option<i64>> }, Stop(EngineError) }`, an `Attempts` value that collects elimination reasons, and `served(&FleetInner, EngineKind)` that sets the mode. `complete` and `open_session` use it.\n- `ClaudeWarmSession` keeps a turn mirror (user prompt, assistant text) since open. `send` consults `step`; on rotation it moves account (as today, now also for Auth/Transient); when no account is left and the API is configured it switches its backend to an API conversation seeded from the mirror (the `ApiSession` body, reused), with `fallback_reason` set. A later `send` after the cooldown can return to a CLI account with a fresh process.\n- Every successful warm turn calls `served`, so the mode is Primary/Degraded by what actually answered.\nThe brain's cold fallback stays (outside this context) but stops being the only route to the API.\n\n## Flow\n- send -> CLI turn on account a\n- Failure -> ladder::step -> Rotate (cool a when told) -> next healthy account, same prompt\n- no account left -> API backend seeded with the turn mirror -> reply, fallback_reason, mode Degraded\n- Fatal -> Stop, returned unchanged\n- success anywhere -> warm ledger row + served() sets mode\n\n## Expected impact\nOne failure policy instead of two. A warm core thread survives an overload or a dead login on one seat without a dropped session and a second cold ladder. FleetState reflects warm turns, so the brain's sign-off clock reads what is actually answering. A new failure rule lands once.\n\n## Evaluation\nClaim: the warm path follows the same ladder as one-shot calls and reports fleet mode.\nBefore: 1 of 6 acceptance cases pass (only the Fatal regression guard)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first in tests/fake_cli.rs and ladder.rs\nResult: better\nGate: architecture",
+    "evidence": "fleet.rs:494-508 `match f { Failure::RateLimited {..} => { inner.cool(i, reset_at_ms); reasons.push(..) } Failure::Auth {..} => { inner.cool(i, None); reasons.push(..) } Failure::Transient {..} => reasons.push(..), Failure::Fatal(e) => return Err(e) }`; session.rs:367-371 `Failure::Auth { .. } => { self.inner.cool(self.account_idx, None); return Err(f.into_engine_error(self.account_label())); } other => return Err(other.into_engine_error(self.account_label()))`; session.rs:359-364 `_ => return Err(EngineError::RateLimited { account: from, reset_at_ms })`; `grep -n set_mode crates/shadowrunr-engine/src/*.rs` -> only fleet.rs:139,482,542,578,595,613,627,634; brain lib.rs:657-668 `Err(_) => { // The warm process died: fall back to a cold call, reopen next beat. self.session = None; ... } ... self.engine.complete(req).await`.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Real, verified duplication with a user-visible consequence (warm core dies on one bad seat); strong behavioural cases."
+    }
+  },
+  {
+    "context": "engine-llm-sessions",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "A live core turn queues behind a 15-minute judge: admit by lane, deadline at enqueue",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-engine/src/claude_cli.rs",
+      "crates/shadowrunr-engine/src/session.rs",
+      "crates/shadowrunr-engine/src/fleet.rs",
+      "crates/shadowrunr-engine/src/config.rs",
+      "crates/shadowrunr-engine/src/ledger.rs",
+      "crates/shadowrunr-engine/src/lib.rs",
+      "crates/shadowrunr-engine/tests/fake_cli.rs"
+    ],
+    "new_files": [
+      "crates/shadowrunr-engine/src/admission.rs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "max_live_processes=2, live_reserved_processes=1, two Role::Judge one-shots on a fake account with delay_ms 1500 started first, then a Role::CoreThread complete -> the core reply returns in < 900 ms and the second judge is the one that waits (today: core waits >= 1500 ms)",
+      "max_live_processes=1, one Role::Researcher one-shot holding the slot (delay_ms 2000), Role::CoreThread complete with timeout_ms 300 -> Err(Timeout { after_ms: 300 }) within 600 ms and the ledger row has error_kind 'timeout' and queue_ms >= 250 (today: waits 2000 ms, then runs with a fresh 300 ms budget)",
+      "a CoreThread warm session holds a live permit; with the batch lane saturated by delayed Judge calls, a ChatPicker one-shot still completes -> Ok in < 900 ms",
+      "batch roles never take a reserved permit: live_reserved_processes=1, max_live_processes=2, three concurrent Judge calls (delay 400 ms) take >= 1200 ms in total and never run two at once",
+      "EngineConfig::default() -> live_reserved_processes() == 2, clamped below max_live_processes(); serde of a default config has no live_reserved_processes key; max_live_processes=1 -> reserve 0 (one shared slot, today's behaviour)",
+      "a successful one-shot that waited for a permit -> its ledger row carries queue_ms > 0; one that did not wait omits queue_ms"
+    ],
+    "premise": [
+      "crates/shadowrunr-engine/src/claude_cli.rs:157-158,167 - one global Semaphore caps every CLI process, whatever the role",
+      "crates/shadowrunr-engine/src/claude_cli.rs:238-245 - run_once awaits acquire_owned() with no deadline; the request's timeout only wraps the stdout read at claude_cli.rs:287",
+      "crates/shadowrunr-engine/src/session.rs:162-169 and session.rs:47 - a warm spawn awaits the same semaphore without a deadline, then holds its permit for the process's whole life",
+      "crates/shadowrunr-engine/src/fleet.rs:297-304 - alt-CLI fallbacks queue on the same semaphore, also without a deadline",
+      "crates/shadowrunr-engine/src/config.rs:85 - six permits by default; config.rs:16-23 - CoreThread is budgeted 30 s and ChatPicker 20 s while Judge holds a slot up to 900 s, Reconciler 600 s, Consolidator 300 s, Researcher 240 s",
+      "crates/shadowrunr-brain/src/pool.rs:100-122 - research jobs run on the same engine, concurrently (pool_size, brain lib.rs:116), with WebSearch/WebFetch tools and a 240 s route",
+      "crates/shadowrunr-engine/src/ledger.rs:497-523 - a ledger row has duration_ms but no queue time, so a slow live turn cannot be told from a slow model"
+    ],
+    "rollback": "admission.rs and the config key land first unused; then claude_cli/session/fleet switch to it; then the ledger field. Each is a clean git revert; the config key is optional and the ledger field is skip-if-zero, so old readers and configs are unaffected.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-engine && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "Spend precedes the error: failed CLI/API turns that reported usage and total_cost_usd (refusal, error_max_turns) are ledgered with zero spend because TurnParser::finish and parse_response drop the outcome on error (stream.rs:677-678, 706-707; api.rs:220-227; fleet.rs:186-187).",
+    "body": "## Summary\nEvery `claude`, codex and agy process the engine spawns waits on one global semaphore with no deadline, and the request's timeout starts only after the permit is granted. A 30 s core-thread turn can sit behind a 900 s judge, a 600 s reconciler or a 240 s research job, then still get its full 30 s. Split admission into a live lane (CoreThread, ChatPicker, Chatter) with reserved permits and a batch lane capped below the total, start the request's deadline at enqueue, and record queue time in the ledger.\n\n## Description\nThis is the engine's process cap, not its model choice. The arrivals are not alike (a sub-second picker vs a quarter-hour judge), yet they share one line. Techniques: admission-queue / queue-cardinality (classes of work that need isolation get separate lines, not a priority knob on one); admission-queue / wait-telemetry (a fast executor reads as a slow one when the wait is not measured); model-call-outcome-integrity / one-deadline-across-attempts (one wall-clock budget computed when the call begins, every step spends from it).\n\nThe move:\n- `admission.rs`: `Admission { shared: Arc<Semaphore>, reserve: Arc<Semaphore> }`, `fn lane(Role) -> Lane`, `async fn admit(&self, role, deadline: Instant) -> Result<(Permit, waited_ms), Expired>`. Live roles take the reserve or the shared lane, whichever frees first; batch roles take only the shared lane; the wait is bounded by the deadline.\n- `ClaudeCli` holds `Admission` instead of `sem`; `run_once`, the warm `spawn` and `spawn_alt` admit with `Instant::now() + timeout_ms` and pass the remainder to their read timeout. A wait that exhausts the budget is `Failure::Fatal(EngineError::Timeout)`, ledgered like any timeout.\n- `EngineConfig::live_reserved_processes` (default 2, clamped to max-1; with max 1 the single slot is shared, today's behaviour).\n- `LedgerRow::queue_ms` (skipped when 0).\n\n## Flow\n- complete(req) -> deadline = now + timeout_ms\n- admit(role, deadline): live -> reserve | shared; batch -> shared only\n- waited past the deadline -> Timeout row with queue_ms\n- permit -> spawn, read with the remaining budget -> reply row with queue_ms\n\n## Expected impact\nThe live voice can no longer be starved by the show's own background work (research jobs, sleep-cycle consolidation, a sim's judge and chatters on the same fleet). A core turn's 30 s means 30 s from when it was asked, so the brain's stall cover and fleet-loss policy see a bounded call. Queue time becomes visible in the ledger rows the console pages.\n\n## Evaluation\nClaim: live roles are admitted ahead of batch work and the timeout covers the wait.\nBefore: 0 of 6 acceptance cases pass (no lanes, no queue deadline, no queue_ms field)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first in tests/fake_cli.rs (fake CLI delay_ms) and admission.rs unit tests\nResult: better\nGate: architecture",
+    "evidence": "claude_cli.rs:238-245 `let _permit = self.sem.clone().acquire_owned().await.map_err(..)?;` then claude_cli.rs:287 `match tokio::time::timeout(Duration::from_millis(req.timeout_ms), read).await` (the timeout wraps only the read); session.rs:162-169 same acquire, permit kept in LiveProc._permit (session.rs:47); fleet.rs:297-304 same acquire for alt CLIs; `grep -n acquire_owned crates/shadowrunr-engine/src/*.rs` -> claude_cli.rs:241, fleet.rs:300, session.rs:165 (all on ClaudeCli.sem); config.rs:85 `DEFAULT_MAX_LIVE_PROCESSES: usize = 6`; config.rs:16 CoreThread 30_000, :22 Judge 900_000, :23 Reconciler 600_000.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 4,
+      "falsifiability": 4,
+      "reason": "Verified head-of-line blocking of the live voice behind batch roles; concrete, testable fix."
+    }
+  }
+]

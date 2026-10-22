@@ -1,0 +1,126 @@
+[
+  {
+    "context": "stage-kit-overlays",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Console On Air mirrors the broadcast with its own lives: one on-screen schedule",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "packages/stage-kit/src/ui/index.ts",
+      "packages/stage-kit/src/ui/ExplainerCard.tsx",
+      "packages/stage-kit/src/ui/VotePanel.tsx",
+      "packages/stage-kit/src/ui/Decrees.tsx",
+      "packages/stage-kit/src/ui/Overlays.tsx",
+      "packages/stage-kit/src/ui/Caption.tsx",
+      "packages/stage-kit/src/ui/JobTicker.tsx",
+      "apps/stage/src/OnAir.tsx",
+      "apps/stage/src/Stage.tsx",
+      "apps/console/src/pages/onair/view.ts",
+      "apps/console/src/pages/onair/view.test.ts",
+      "apps/console/src/pages/onair/Screen.tsx"
+    ],
+    "new_files": [
+      "packages/stage-kit/src/ui/onScreen.ts",
+      "packages/stage-kit/src/ui/onScreen.test.ts"
+    ],
+    "shared_surfaces": [
+      "apps/console/src/pages/onair/view.ts (console-onair-page context: its timed views become projections of the stage-kit schedule)",
+      "apps/stage/src/OnAir.tsx (stage-app context: cardShowing/tickerActive/VoiceCaptionPanel redaction window become imports)"
+    ],
+    "acceptance": [
+      "scene with show_card at ts 0, console cardView(scene, 10_000, 1) -> non-null, because the broadcast ExplainerCard is still up until CARD_MS=16000 (today null at 7000)",
+      "poll p1 closed at ts 0, console voteView(scene, 7_000, 1) -> non-null with closed=true, matching visiblePoll(scene, 7_000) (today null: pollAfterClose 5000 vs POLL_LINGER_MS 9000)",
+      "one `highlight` decree at ts 0 and no picks, console decreeView(scene, 100, 1) -> the highlighted line, same key as decreeAt(...) (today null: the console filters to kind==='picked')",
+      "two `say` lines at ts 0 and ts 200 (a burst), console captionView(scene, 300, 1).key -> the first line's id, equal to captionAt(scene, 300).id (today the console shows the second, latest-said line)",
+      "onScreen(scene, t) for every t in a folded fixture run sampled each 250 ms -> card/poll/decree/caption/moment/seal/redaction presence equals what ExplainerCard, visiblePoll, decreeAt, captionAt, MomentMarks, SealToast and CaptionPanel render at t (pinned on the current stage tree first, so the stage does not move)",
+      "apps/stage cardShowing and tickerActive and VoiceCaptionPanel's redaction window -> deleted or one-line re-exports of onScreen (grep for `now - c.at` and `REDACTION_MS)` in apps/stage/src returns 0)",
+      "replay at speed 4: console Screen at position p -> the same overlay set as the stage at clock p (both transcript time; the console keeps only its CSS negative delay, derived from the entry's `since`)"
+    ],
+    "premise": [
+      "apps/console/src/pages/onair/Screen.tsx:1-2 - the console screen is documented as 'a 16:9 screenprint of the broadcast' rebuilt over a stage-kit scene",
+      "apps/console/src/pages/onair/view.ts:7-8 - its lives come from a design prototype: LIFE_MS = { slip: 8000, card: 7000, decree: 5500, moment: 3600, pollAfterClose: 5000 }",
+      "packages/stage-kit/src/ui/ExplainerCard.tsx:6,103-104 - the broadcast card lives CARD_MS = 16000",
+      "packages/stage-kit/src/ui/VotePanel.tsx:7,14 - the broadcast poll lingers POLL_LINGER_MS = 9000 after close (console: 5000, view.ts:75-76)",
+      "apps/console/src/pages/onair/view.ts:169-178 - console decree = the latest `picked` decree only, for 5500 ms; the broadcast shows highlight AND picked in queued turns and holds the last one (packages/stage-kit/src/decrees.ts:12,43-51; packages/stage-kit/src/ui/Decrees.tsx:14-22)",
+      "apps/console/src/pages/onair/view.ts:133-137 - console caption = scene.caption, the latest line SAID; the broadcast shows the queued caption showing now (apps/stage/src/Stage.tsx:111-112, packages/stage-kit/src/scene.ts:265-272, packages/stage-kit/src/sceneModel.ts:184-187)",
+      "apps/console/src/pages/onair/view.ts:19-23 - console lives are wall time (divide by speed); the stage's replay clock is transcript time advancing dt*speed (apps/stage/src/App.tsx:122-123)",
+      "apps/stage/src/OnAir.tsx:31-35 - cardShowing re-derives ExplainerCard.tsx:103-104's window by hand; OnAir.tsx:106 VoiceCaptionPanel re-derives Caption.tsx:47's redaction window",
+      "packages/stage-kit/src/ui/Overlays.tsx:73-75,90-91,109-110,125-126 - every timed overlay owns its visibility window inline; nothing outside a component can ask 'what is on screen at t'",
+      "apps/console/src/pages/onair/view.test.ts:18-19,72,81 - the console's divergent lives are pinned by tests ('shows a card for seven seconds')"
+    ],
+    "rollback": "Three commits (schedule + pin tests; stage overlays read it; console view reads it). Reverting the console commit restores LIFE_MS views; reverting the first two restores inline windows. No stored data, no contract change.",
+    "gate": "architecture",
+    "test_command": "pnpm -C packages/stage-kit test && pnpm -C packages/stage-kit typecheck && pnpm -C packages/stage-kit lint && pnpm -C apps/stage test && pnpm -C apps/stage build && pnpm -C apps/console test && pnpm -C apps/console typecheck && pnpm -C apps/console build",
+    "runner_up": "The on-air production-detail rule is eight scattered `!onAir &&` branches (plus a copy in VoiceCaptionPanel) with no leak test: one audience projection and a saturated-scene broadcast leak gate.",
+    "body": "## Summary\nThe console's On Air screen says it is 'a 16:9 screenprint of the broadcast', but it decides what is on screen with its own rules. Those rules come from a design prototype, and they disagree with the broadcast in four places:\n- the explainer card lasts 7 s instead of 16 s;\n- a closed poll lingers 5 s instead of 9 s;\n- the decree slot shows only picks, never highlights, and has no queue;\n- the caption slot shows the latest line said instead of the queued line showing now.\n\nAn operator watching the console during a burst, or after a highlight, sees a screen the audience is not seeing. Extract one pure on-screen schedule in stage-kit. The broadcast overlays and the console view both read it, so the two monitors agree by construction.\n\n## Description\nThis leans on audience-steering-economies / visible-consequence-of-steering: 'The screen is a second announcer... it never recomputes it... by a rule of its own. A renderer that recomputes keeps whichever parts of the rule its author copied... one shared function that mirrors the deciding rule, with tests, is the floor.' It also leans on module-design / seams-and-adapters: two consumers of one decision get one producer.\n\nToday every timed overlay keeps its window inline (Overlays.tsx, ExplainerCard, VotePanel, CaptionPanel), and nothing outside a component can ask 'what is on screen at t'. So apps/stage copies those windows by hand (cardShowing, the VoiceCaptionPanel redaction window), and the console re-invents them with different numbers.\n\nThe new `packages/stage-kit/src/ui/onScreen.ts` exports `onScreen(scene, t)`. It returns `{card, poll, decree, caption, moment, seal, redaction, intro, wipe, ticker}`. Each entry is `{key, since, until, leaving}` or null, built from the existing pure rules: decreeAt, captionAt, CARD_MS, POLL_LINGER_MS, REDACTION_MS, SEAL_MS, and TICKER_LINGER_MS moved in from apps/stage. The components read their entry instead of `now - x.at`. visiblePoll and cardShowing become one-liners over it.\n\nThe console's view.ts keeps only its presentation: the body trimmed to 150 characters, the bar scale, the 'Summon ' strip, and a negative CSS delay derived from `since`. Its presence decisions come from onScreen. Time is transcript time on both sides, which is what the stage's own replay clock uses. The prototype's wall-time lives are retired.\n\nThis is a visible change on the console. It is gated `architecture`: the console moves to the broadcast's truth, and the broadcast does not move.\n\n## Flow\n- Pin the stage first: onScreen.test samples a folded fixture run every 250 ms and asserts that the schedule equals what each current component renders. This is written against the untouched components, so it is green on HEAD once onScreen exists.\n- Write the console acceptance tests (red: 7000/5000/picked-only/latest-said).\n- Implement onScreen.ts. The stage components and apps/stage OnAir.tsx read it, and the pin tests stay green.\n- view.ts derives presence from onScreen. Rewrite the view.test cases that pinned the prototype lives.\n- Run the gates.\n\n## Expected impact\nThe operator's monitor and the broadcast name the same card, decree, poll and caption at every instant, live or in replay. A future overlay gets its window in one place, and both surfaces inherit it. apps/stage stops hand-copying stage-kit's timing constants.\n\n## Evaluation\nClaim: one schedule makes the console screen agree with the broadcast on every timed overlay.\nBefore: 0 of 4 console agreement cases pass (card 7000 vs 16000, poll 5000 vs 9000, highlight decree absent, burst caption = latest said); the duplicate-window grep finds 2 copies in apps/stage.\nAfter: 7 of 7 acceptance cases.\nMethod: gate - acceptance tests written first; stage pin tests written on the untouched tree.\nResult: better\nGate: architecture",
+    "evidence": "view.ts:8 `export const LIFE_MS = { slip: 8000, card: 7000, decree: 5500, moment: 3600, pollAfterClose: 5000 } as const;` | ExplainerCard.tsx:6 `export const CARD_MS = 16000;` | VotePanel.tsx:7 `export const POLL_LINGER_MS = 9000;` | view.ts:170 `const picked = scene.decrees.filter((d) => d.kind === \"picked\");` vs Decrees.tsx:22 label for d.kind === \"highlight\" ('DECREE OF THE LICH') | view.ts:134 `const c = scene.caption;` vs Stage.tsx:112 `const caption = captionAt(scene, now);` | OnAir.tsx:32-35 `export function cardShowing(...) { const c = scene.card; return c !== null && now - c.at >= 0 && now - c.at <= CARD_MS; }` | OnAir.tsx:106 `const redaction = [...redactions].reverse().find((r) => now >= r.at && now - r.at < REDACTION_MS);` == Caption.tsx:47 | view.test.ts:75 `it(\"shows a card for seven seconds ...\"` / :81 `expect(cardView(s, 7000, 1)).toBeNull();`",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Strong, grounded unification; one acceptance case needs to be a writable single-package test."
+    },
+    "revision": "Replace case 7 with a console-only unit case: cardView(scene with show_card at ts 0, position 15_000, speed 4) is non-null and its delayMs equals -15_000 (presence and delay in transcript time, not position/speed)."
+  },
+  {
+    "context": "stage-kit-overlays",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Viewers vote by a name the runtime drops: show ballot keys, say what landed",
+    "size": "M",
+    "effort": 5,
+    "impact": 8,
+    "risk": 4,
+    "write_set": [
+      "packages/stage-kit/src/ui/VotePanel.tsx",
+      "packages/stage-kit/src/ui/ChatLane.tsx",
+      "packages/stage-kit/src/ui/index.ts",
+      "apps/stage/src/styles.css"
+    ],
+    "new_files": [
+      "packages/stage-kit/src/ui/ballotKey.ts",
+      "packages/stage-kit/src/ui/ballotKey.test.ts",
+      "apps/stage/src/overlays.test.ts"
+    ],
+    "shared_surfaces": [
+      "apps/stage/src/styles.css (the OBS skin for the new key and outcome classes)",
+      "ordering: if stage-kit-scene-engine card A (ballots.ts pinned to runtime vectors) lands first, ballotKey reuses its matcher instead of mirroring runtime.rs:266-276"
+    ],
+    "acceptance": [
+      "foil poll options ['the-disruptor','the-life-coach'] open -> VotePanel markup shows key '1' on The Disruptor's row and '2' on The Life Coach's row, and the foot reads '!vote 1-2'",
+      "chat `!vote The Life Coach` while that poll is open -> ChatLane chip reads 'VOTE · not an option' (the runtime drops it silently: runtime.rs:1201-1203), never 'VOTE The Life Coach' as if counted",
+      "chat `!vote 2` -> chip 'VOTE 2 · The Life Coach'; chat `!vote THE-LIFE-COACH` -> chip 'VOTE 2 · The Life Coach' (the runtime's index and case-insensitive id rule)",
+      "a thrall votes `!vote 1` in a poll with min_rank warlock -> chip 'VOTE · below Warlock' (the runtime emits ignored poll_min_rank: runtime.rs:1204-1207)",
+      "`!vote 1` with no poll open at the line's ts_ms -> chip 'VOTE · no open poll'",
+      "the poll closed -> the keys and the '!vote 1-N' foot are gone, and the winner row renders exactly as today",
+      "ballotKey(options, raw) table test -> agrees with the runtime's option_index for '0', '3' of 2, ' 2 ', 'the-disruptor', 'The Disruptor', 'the-dis'"
+    ],
+    "premise": [
+      "crates/shadowrunr-segments/src/runtime.rs:266-276 - a ballot counts only as a 1-based index or the option string itself, case-insensitive (`o.trim().eq_ignore_ascii_case(raw)`)",
+      "crates/shadowrunr-segments/src/runtime.rs:1279 - a foil poll's options are the foil ids (config.foils), e.g. 'the-disruptor' (crates/shadowrunr-brain/src/character.rs:277)",
+      "packages/stage-kit/src/ui/VotePanel.tsx:18-20,43 - the panel shows each foil option by its display name (foilInfo: 'The Life Coach', packages/stage-kit/src/lore.ts:72-74), not by anything the runtime accepts",
+      "crates/shadowrunr-segments/src/command.rs:87-88 - `!vote The Life Coach` parses to option 'The Life Coach', which matches neither an index nor 'the-life-coach'",
+      "crates/shadowrunr-segments/src/runtime.rs:1201-1203 - an unmatched option is `continue`d with no event: the voter gets no signal anywhere",
+      "packages/stage-kit/src/ui/VotePanel.tsx:29-91 - the panel never shows what to type: no key, no command",
+      "packages/stage-kit/src/ui/ChatLane.tsx:17-18 - a vote line's chip echoes the raw text (`VOTE ${c.option}`), so a dropped ballot looks exactly like a counted one"
+    ],
+    "rollback": "Two commits (ballotKey + VotePanel keys; ChatLane outcome chips). Each reverts alone; no scene or contract change.",
+    "gate": "none",
+    "test_command": "pnpm -C packages/stage-kit test && pnpm -C packages/stage-kit typecheck && pnpm -C packages/stage-kit lint && pnpm -C apps/stage test && pnpm -C apps/stage build",
+    "runner_up": "Hinted hexes show only a count badge: surface the leading `!hint` text on the hex and in the inspector, so the room piles onto a lead instead of re-typing it blind.",
+    "body": "## Summary\nThe vote panel is the show's main call to action, and it names options in a way the runtime will not accept. A foil poll's options are ids like `the-life-coach`. The panel prints 'The Life Coach'. A viewer who types `!vote The Life Coach` is dropped without any signal, and the chat lane echoes their line as `VOTE The Life Coach`, exactly like a counted ballot. Give every option a ballot key, so viewers type `!vote 2`. Then make the chat lane say what happened to each vote line: counted for which option, not an option, below rank, or no open poll.\n\n## Description\nThis leans on audience-steering-economies / visible-consequence-of-steering: 'if the room cannot see the line from its choice to a change... the experience is identical to not having voted, and the room stops bothering'. A ballot the room cannot cast correctly is worse, because the room believes it voted. The 'screen is a second announcer' clause sets the rule for the outcome chip: it mirrors the runtime's deciding rule (runtime.rs:266-276), and it never applies a looser rule of its own.\n\nThe new `ui/ballotKey.ts` resolves a raw option against a poll's options exactly as option_index does: a 1-based index, or a trimmed, case-insensitive exact match. If stage-kit-scene-engine card A has landed, it reuses that card's runtime-pinned matcher instead. Its table test carries the runtime's own cases.\n\nVotePanel:\n- shows the key beside each row while the poll is open;\n- shows a '!vote 1-N' foot beside the timer;\n- shows the rank gate as it already does.\n\nChatLane resolves each `!vote` line against the poll that was open at the line's `ts_ms`, between openedAt and closedAt. The chip then reads one of:\n- 'VOTE 2 · The Life Coach'\n- 'VOTE · not an option'\n- 'VOTE · below Warlock', when the viewer's rank is under poll.minRank\n- 'VOTE · no open poll'\n\nNo production detail is involved, so the same text shows on air and in preview. The tallies and bars are untouched, because the scene-engine card owns them.\n\n## Flow\n- Write the ballotKey table test and the renderToStaticMarkup cases in apps/stage/src/overlays.test.ts (red).\n- Implement ballotKey.ts and VotePanel keys.\n- Add the ChatLane outcome chip, with a poll-at-ts lookup over scene.polls.\n- Add styles.css classes for the key and for the chip's counted, refused and neutral tones.\n- Run the gates and do a broadcast-view visual check at 1920x1080.\n\n## Expected impact\nEvery viewer who follows the panel casts a ballot that counts. Every viewer whose ballot was dropped sees why within one chat row, while they can still re-vote. Today the foil vote silently discards the most natural thing to type, which is the name on screen.\n\n## Evaluation\nClaim: the broadcast tells viewers a ballot the runtime accepts, and shows each vote line's real outcome.\nBefore: 0 of 7 acceptance cases pass (no keys rendered; the chip echoes raw text for counted and dropped lines alike).\nAfter: 7 of 7.\nMethod: gate - acceptance tests written first\nResult: better\nGate: none",
+    "evidence": "runtime.rs:266-276 `fn option_index(&self, raw: &str) -> Option<usize> { let raw = raw.trim(); if let Ok(n) = raw.parse::<usize>() { if (1..=self.options.len()).contains(&n) { return Some(n - 1); } } self.options.iter().position(|o| o.trim().eq_ignore_ascii_case(raw)) }` | runtime.rs:1279 `let options = self.config.foils.clone();` | runtime.rs:1201-1203 `let Some(i) = p.option_index(&option) else { continue; };` | VotePanel.tsx:18-20 `function optionLabel(o: string): string { return o.startsWith(\"the-\") ? foilInfo(o).name : o; }` | lore.ts:72-74 `\"the-life-coach\": { id: \"the-life-coach\", name: \"The Life Coach\"` | command.rs:87-88 `\"vote\" if !args.is_empty() => Some(Command::Vote { option: join_capped(&args) })` | ChatLane.tsx:17-18 `case \"vote\": return `VOTE ${c.option}`;` | grep '!vote' packages/stage-kit/src/ui -> 0 hits (the panel never names the command)",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Real viewer-facing defect, but the matcher restates scene-engine A; keep only the keys and outcome chips."
+    },
+    "revision": "Drop ballotKey.ts/ballotKey.test.ts and acceptance case 7; resolve ballots through stage-kit-scene-engine A's runtime-vector-pinned ballots.ts and land after it."
+  }
+]

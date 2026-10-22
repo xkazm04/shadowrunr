@@ -1,0 +1,112 @@
+[
+  {
+    "context": "voice-sidecar",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Warm pool supervises its workers: respawn off the critical path, quarantine crash loops",
+    "size": "M",
+    "effort": 7,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "tools/voice/shadowrunr_voice/warm.py",
+      "tools/voice/shadowrunr_voice/sidecar.py",
+      "tools/voice/tests/fake_warm.py",
+      "tools/voice/tests/test_warm.py",
+      "docs/guide/voice.md",
+      "docs/spec/contract.md"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "docs/spec/contract.md (voice appendix sentence on worker loading/replacement; wording only, wire unchanged)"
+    ],
+    "acceptance": [
+      "workers=3, fake_warm told to fail the 2nd spawn's load (new FAKE_WARM_FAIL_SPAWNS counter) -> hello() returns a WarmPool (not the process fallback, not dead under --engine warm), reason names 'engine: warm' and '2 of 3 workers', and a say renders audio",
+      "workers=2, worker A DIEs at t0, respawn load delayed 1.5 s (new FAKE_WARM_LOAD_MS), the next sentence needing A is asked for at t0+1.0 s -> its audio arrives by t0+2.0 s (respawn began at the death, not at the demand; today ~t0+2.5 s or later)",
+      "workers=2, every respawn after the first load fails -> after the crash budget (e.g. 3 failed loads in 60 s) the slot is quarantined: a 6-sentence burst produces 6 audio lines on the one live worker and 0 errors caused by a reload attempt (today a sentence routed to the dead idle worker errors)",
+      "workers=1, the only worker quarantined -> a say is answered with error 'the warm engine is not running' within 1 s, not after a LOAD_TIMEOUT_S reload attempt",
+      "acquire() never calls Worker.ready() on the acquiring thread (unit test with a patched Worker records the calling thread) -> a sentence's render timeout never includes a model load",
+      "close() while a background respawn is loading -> the respawning process is killed and reaped (pid not alive within 5 s), no thread left blocked in ready()"
+    ],
+    "premise": [
+      "tools/voice/shadowrunr_voice/warm.py:335-347 - acquire() restarts a dead worker synchronously (kill, start, ready()) on the render thread of the sentence that drew it; on failure release() puts the still-dead worker back in _idle",
+      "tools/voice/shadowrunr_voice/warm.py:332-333 - acquire takes a dead idle worker whenever no live one is idle, so with one broken worker every burst that exhausts the live ones routes a sentence into a reload",
+      "tools/voice/shadowrunr_voice/warm.py:73 - LOAD_TIMEOUT_S = 90.0 is the ready() default used by that inline reload; the daemon's lag bound is max_lag_ms 15000 (crates/shadowrunr-daemon/src/voice/mod.rs:93), so a reload on the head of line can push a line to `late`",
+      "tools/voice/shadowrunr_voice/warm.py:430-431 - the render clock `began` is reset after acquire, so the reload cost is invisible in took_ms and outside the render timeout",
+      "tools/voice/shadowrunr_voice/warm.py:315-321 - WarmPool.start is all-or-nothing: one worker failing its load closes every worker",
+      "tools/voice/shadowrunr_voice/sidecar.py:186-189 - that failure makes open_warm return None: auto falls back to the per-sentence binary (a model load per sentence), --engine warm makes the voice dead",
+      "docs/guide/voice.md:99-101 - the guide states the lazy design: 'the next sentence that needs that worker starts a new one (a model load). A worker that dies is replaced the same way.'",
+      "tools/voice/tests/test_warm.py:111-122 - the only load-failure test fails every worker (FAKE_WARM_LOAD=fail); no per-spawn failure, crash-loop or respawn-timing test exists"
+    ],
+    "rollback": "Revert the commit series; warm.py returns to lazy in-acquire restart, fake_warm's new env knobs are inert when unset, the docs sentences revert with it. No stored state or wire format changes.",
+    "gate": "architecture",
+    "test_command": "cd tools/voice && python -m unittest discover -t . -s tests",
+    "runner_up": "Move viseme computation (durations ONNX + per-sample RMS) off the single sender thread into each render thread (sidecar.py:466) - smaller win, mostly hidden by playback after part 0.",
+    "body": "## Summary\nThe warm pool treats a dead worker as a lazy problem: whichever sentence next draws it pays a full model load inline, a worker that cannot load is retried on every draw, and one bad worker at startup throws away the whole pool. Make WarmPool the supervisor of its workers: start with whatever loads (>=1), respawn a dead worker in the background the moment it dies, keep a per-worker crash budget that quarantines a crash-looping slot, and let acquire() hand out only live workers.\n\n## Description\nLeans on subprocess-lifecycle `concurrency-and-slots` (a slot must be backed by a live process - 'slots held with no live process'; the slot's reaper is the reap) and sidecar-provisioning `plugin-lazy-load-and-reload` ('a plugin process died under a live request'), with backend-platform `self-healing` for the bounded-retry/quarantine shape. Today the cost of a crash lands on the viewer: the head-of-line sentence absorbs a load the daemon's 15 s lag bound does not know about, and a permanently broken slot converts a share of every burst into `skipped: error` lines forever. Moving the load to a supervisor thread started at death makes the reload overlap useful work, the crash budget turns a crash loop into a smaller healthy pool, and a partial start keeps the warm engine instead of falling back to a model load per sentence. The hello reason gains 'N of M workers' inside the existing 'engine: warm (...)' phrase, so the daemon's readiness check is untouched.\n\n## Flow\n- Worker death (reader sees EOF, timeout kill) -> pool marks the slot respawning and starts a supervisor thread: start + ready() with backoff\n- acquire(): wait on the condition for a LIVE idle worker; if every slot is quarantined, raise EngineError at once\n- crash budget: K failed loads in a window -> slot quarantined, logged once to stderr with its tail\n- start(): load all in parallel, keep the ones that are ready; fail only when zero load\n- close(): stop supervisors, kill and reap any process mid-load\n\n## Expected impact\nA worker crash mid-show no longer puts a multi-second model load on the sentence the viewer is waiting for; a broken slot stops producing line errors; a flaky load at startup keeps the warm engine (RTF ~0.32) instead of the per-sentence binary.\n\n## Evaluation\nClaim: dead and broken workers are healed or quarantined off the critical path.\nBefore: 0 of 6 acceptance cases pass (partial start falls back, reload is inline, crash loop errors sentences, no quarantine, no background respawn to reap)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first against fake_warm with per-spawn failure and load-delay knobs\nResult: better\nGate: architecture (changes the pool's lifecycle model documented in docs/guide/voice.md)",
+    "evidence": "warm.py:332-347:\n            live = [w for w in self._idle if w.alive]\n            worker = live[0] if live else self._idle[0]\n            self._idle.remove(worker)\n        if not worker.alive:\n            try:\n                worker.kill()\n                worker.start()\n                worker.ready()\n            ...\n            except EngineError:\n                self.release(worker)\n                raise\nwarm.py:315-321: for worker in self.workers: worker.start() / worker.ready(...)  except EngineError: self.close(); raise\nsidecar.py:186-189: load_ms = pool.start()  except EngineError as exc: ... return None, f\"it would not load: {exc}\"\nwarm.py:73: LOAD_TIMEOUT_S = 90.0\nwarm.py:430-431: if not self.cancelled: began = time.monotonic()\ndocs/guide/voice.md:99-101: 'A sentence past render_timeout_ms kills its worker, and the next sentence that needs that worker starts a new one (a model load). A worker that dies is replaced the same way.'",
+    "critic": {
+      "verdict": "build",
+      "ambition": 5,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Real critical-path defect, grounded line by line, with crash-loop and partial-start cases that are red today."
+    }
+  },
+  {
+    "context": "voice-sidecar",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "Hello and audio carry engine identity and sentence cost as fields, not prose",
+    "size": "M",
+    "effort": 5,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "tools/voice/shadowrunr_voice/sidecar.py",
+      "tools/voice/tests/test_protocol.py",
+      "tools/voice/tests/test_warm.py",
+      "crates/shadowrunr-daemon/src/voice/sidecar.rs",
+      "crates/shadowrunr-daemon/src/voice/probe.rs",
+      "crates/shadowrunr-daemon/src/voice/renderer.rs",
+      "crates/shadowrunr-daemon/src/voice/cli.rs",
+      "docs/spec/contract.md"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "docs/spec/contract.md voice appendix (daemon-private sidecar protocol; additive fields, protocol stays 1)",
+      "crates/shadowrunr-daemon/src/voice/* (daemon-voice-service context: the coupled consumer)"
+    ],
+    "acceptance": [
+      "warm hello (fake_warm, workers=3) -> message has engine == {kind:'warm', workers:3, load_ms:int>=0}; reason still ends with 'engine: warm (...)' for old daemons",
+      "auto without sherpa_onnx -> engine == {kind:'process', fallback:'sherpa_onnx is not installed'}; --engine warm with a failing load -> engine.kind == 'none' beside the dead reason",
+      "Rust: hello_state with the engine binary missing, engine.kind='warm' and a reason worded 'pool up' (no 'engine: warm' substring) -> RendererState::Ready (today: Degraded)",
+      "Rust: hello with no engine field and reason containing 'engine: warm' -> Ready (old-sidecar back-compat); engine.kind='process' with the binary missing -> Degraded naming the binary",
+      "audio line -> carries render_ms (int>=0) and held_ms (rendered-to-sent wait) and, with visemes on, face_ms; on_line maps them into Rendered as Some, and an audio line without them parses with None",
+      "`shadowrunr voice say` part line prints 'render N ms' from the field when present (unit test on the formatting helper)"
+    ],
+    "premise": [
+      "tools/voice/shadowrunr_voice/sidecar.py:205-206 - the sidecar's own docstring: the engine in use rides in `reason`; 'The hello has no field of its own for it.'",
+      "tools/voice/shadowrunr_voice/sidecar.py:232-236 - the engine is formatted as prose: f\"engine: warm ({len(warm.workers)} workers loaded in ...)\" / 'engine: process (the warm engine is off: ...)'",
+      "crates/shadowrunr-daemon/src/voice/probe.rs:27 - pub const WARM_ENGINE: &str = \"engine: warm\";",
+      "crates/shadowrunr-daemon/src/voice/probe.rs:134-136 - readiness without the binary is decided by reason.contains(WARM_ENGINE): a rewording in sidecar.py silently degrades the voice",
+      "docs/spec/contract.md:1206-1207 - the contract codifies it: 'The hello has no field for it: its reason ends with engine: warm ...'",
+      "crates/shadowrunr-daemon/src/voice/sidecar.rs:54-60 - SidecarLine::Hello parses only protocol, visemes, reason",
+      "tools/voice/shadowrunr_voice/sidecar.py:484-488 - per-sentence render time and say-to-send latency go only to stderr",
+      "crates/shadowrunr-daemon/src/voice/sidecar.rs:48,315-318 - the daemon keeps only the last STDERR_TAIL = 5 stderr lines, for exit reasons: per-sentence cost is discarded",
+      "crates/shadowrunr-daemon/src/voice/cli.rs:269-275 - `voice say` prints only arrival time per part; it cannot split render vs wait vs face cost"
+    ],
+    "rollback": "Revert the series: the fields are additive (serde default on the daemon, ignored by old daemons) and reason keeps its current wording, so either side can roll back alone.",
+    "gate": "contract",
+    "test_command": "cd tools/voice && python -m unittest discover -t . -s tests; cargo test -p shadowrunr-daemon voice; cargo clippy --workspace --all-targets -- -D warnings; cargo fmt --all -- --check",
+    "runner_up": "Reserve one warm slot for the head of line so cancelled look-ahead renders (which cannot be killed, warm.py:409-419) never make a new line's first sentence wait.",
+    "body": "## Summary\nThe sidecar announces which engine it runs by writing a sentence into `reason`, and the daemon decides whether the voice is ready by substring-matching that sentence. Per-sentence cost (render time, how long a rendered sentence waited for its turn, viseme time) exists in the sidecar and is printed to stderr, where the daemon throws it away. Make both typed: an `engine` object on hello and timing fields on audio, parsed by the daemon and shown by `voice say`.\n\n## Description\nLeans on voice-io `engine-abstraction`: 'callers branch on capability, never on identity', and absent / broken / ready must be distinguishable - today the daemon branches on a phrase, and 'warm failed to load, fell back' vs 'warm not installed' are both prose. Also voice-io `real-time-synthesis-budget`: an engine's speed is a measured figure, and the protocol is the one place it can be measured per sentence without scraping logs. Additive fields under protocol 1; reason keeps its words, so old daemons and old sidecars interoperate both ways. The daemon's hello_state branches on engine.kind and falls back to the substring only when the field is absent.\n\n## Flow\n- sidecar hello(): build engine = {kind: warm|process|none, workers?, load_ms?, fallback?} beside the unchanged reason\n- Sidecar._speak: stamp render_ms (render.took_ms), held_ms (send time minus render done), face_ms (viseme time) on each audio line\n- daemon SidecarLine::Hello gains engine: Option<EngineHello>; probe::hello_state(cfg, visemes, reason, engine)\n- Rendered gains render_ms/held_ms/face_ms: Option<u32>; cli `voice say` prints them\n- contract appendix documents the fields and retires 'The hello has no field for it'\n\n## Expected impact\nA wording change in the sidecar can no longer flip the voice to degraded; operators see where a sentence's latency went (render vs queue vs face) in `voice say` and replays, which is the input every later latency decision needs.\n\n## Evaluation\nClaim: engine identity and sentence cost are machine-readable on the wire.\nBefore: 0 of 6 acceptance cases pass (no engine field, substring decides readiness, no timing fields)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first (Python protocol tests, Rust on_line/hello_state tests)\nResult: better\nGate: contract (daemon-private sidecar protocol in docs/spec/contract.md; additive)",
+    "evidence": "sidecar.py:205-206: '``engine: process`` with why the warm one is not. The hello has no field of its own for it.'\nsidecar.py:232: engine = f\"engine: warm ({len(warm.workers)} workers loaded in {warm.load_ms / 1000:.1f} s)\"\nprobe.rs:27: pub const WARM_ENGINE: &str = \"engine: warm\";\nprobe.rs:134: let warm = reason.as_deref().is_some_and(|r| r.contains(WARM_ENGINE));\ncontract.md:1207: 'binary (`--engine auto|warm|process`, default `auto`). The hello has no field for it: its'\nsidecar.rs:54-60: Hello { protocol: u32, visemes: bool, reason: Option<String> }\nsidecar.py:484-488: print(f\"voice: part {part} rendered in {render.took_ms} ms, sent ... after its say\", file=sys.stderr)\nsidecar.rs:48: const STDERR_TAIL: usize = 5;",
+    "critic": {
+      "verdict": "void",
+      "ambition": 2,
+      "grounding": 5,
+      "falsifiability": 3,
+      "reason": "Floor failure: an honest S (additive fields plus a parse branch) inflated to M at bare-minimum scores."
+    }
+  }
+]

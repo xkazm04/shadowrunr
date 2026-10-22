@@ -1,0 +1,127 @@
+[
+  {
+    "context": "console-characters-page",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Tournaments drop the character they ran: tag rows, stop guessing per picker",
+    "size": "L",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-types/src/rpc.rs",
+      "crates/shadowrunr-daemon/src/runs.rs",
+      "crates/shadowrunr-daemon/src/e2e/mod.rs",
+      "packages/contract/schema/contract.schema.json",
+      "packages/contract/src/generated/types.ts",
+      "packages/contract/src/generated/validators.js",
+      "packages/contract/src/generated/validators.d.ts",
+      "docs/spec/contract.md",
+      "apps/console/src/pages/characters/SituationsTab.tsx",
+      "apps/console/src/pages/characters/model.ts",
+      "apps/console/src/pages/characters/model.test.ts",
+      "apps/console/src/pages/characters/layer2.test.tsx",
+      "apps/console/src/pages/reconcile/NoReport.tsx",
+      "apps/console/src/pages/reconcile/layer2.test.tsx"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "crates/shadowrunr-types/src/rpc.rs TournamentRow (console-simulator-page A also adds a field there: land serially; both are additive, optional)",
+      "packages/contract schema + generated types/validators (regenerate with pnpm -C packages/contract generate)",
+      "docs/spec/contract.md tournament.list / tournaments.page row shape"
+    ],
+    "acceptance": [
+      "runs.rs unit: <sim>/t1/tournament.json {tournament_id,matrix_id,base_hash,character:'malakor',runs:2} -> tournament_row(sim,'t1').character == Some(\"malakor\")",
+      "runs.rs unit: ad-hoc dir with no tournament.json whose live runs' spec.json all carry character 'kestrel' -> Some(\"kestrel\"); runs mixing 'kestrel' and 'malakor' -> None",
+      "runs.rs unit: two tournaments whose run.json mtimes are set with File::set_modified to 100 s and 200 s -> updated_ms 100000 and 200000; a tournament with no live run -> updated_ms omitted",
+      "characters layer2: package 'kestrel', tournament.list [{id:'malakor-big',character:'malakor',completed:40},{id:'kestrel-small',character:'kestrel',completed:3}] -> the 'Verdicts from' select lists only kestrel-small and tournament.results is only ever called with {tournament_id:'kestrel-small'}",
+      "characters layer2: package 'kestrel', tournament.list holds only malakor tournaments -> status reads 'No tournament has run for <name> yet', tournament.results is never called, no situation row shows a verdict chip",
+      "characters model: pickTournament(malakor rows {updated_ms:100,completed:40} and {updated_ms:200,completed:3}, 'malakor') -> the updated_ms 200 row; a row without character is offered but never the default",
+      "reconcile layer2: tournament.list in daemon name order [{id:'a-new',updated_ms:200},{id:'z-old',updated_ms:100}] -> the reconcile.run default source is 'a-new', not 'z-old'",
+      "contract: a TournamentRow with and without character/updated_ms validates; character: 3 is rejected"
+    ],
+    "premise": [
+      "crates/shadowrunr-sim/src/tournament.rs:265-271 - the sim's TournamentMeta records `character` in tournament.json, written at :552-558",
+      "crates/shadowrunr-daemon/src/runs.rs:185-189 - the daemon's TournamentMeta reads only base_hash and runs: the character is dropped on read",
+      "crates/shadowrunr-types/src/rpc.rs:209-216 - TournamentRow is {tournament_id, instrument_hash, runs, completed}: no character, no time",
+      "apps/console/src/pages/characters/SituationsTab.tsx:25-28 - the default tournament is guessed as 'most finished runs' because 'ids carry no date'",
+      "apps/console/src/pages/characters/SituationsTab.tsx:47-51 - every tournament of every character is offered, and its results fetched, on this package's Situations tab",
+      "apps/console/src/pages/characters/model.ts:167-181 - situationTallies keys verdicts by bare situation id, no character check",
+      "characters/malakor/situations.json - 31 generic situation ids ('bait-slur-request', 'dark-humor-fine', ...): a second package reusing the bank shows Malakor's verdicts as its own",
+      "apps/console/src/pages/reconcile/NoReport.tsx:18-19 - assumes 'Newest last in the daemon's listing'",
+      "crates/shadowrunr-daemon/src/runs.rs:45-56,237-242 - the listing is subdirs sorted by name (`<matrix_id>-<base_hash>`), so 'last' is alphabetical, not newest",
+      "crates/shadowrunr-sim/src/tournament.rs:3-5 - editing the package starts a NEW tournament directory, so 'most evidence' prefers a superseded package version's verdicts",
+      "apps/console/src/pages/characters/AllPage.tsx:55 - the page's stated product: 'The selector on the poster holds as many as you make'"
+    ],
+    "rollback": "Three commits (types+daemon+contract fields; Situations picker; NoReport default). The fields are optional and additive: reverting a console commit restores the old heuristic on a working page, reverting the first restores the old wire shape. No stored data is touched.",
+    "gate": "contract",
+    "test_command": "cargo test -p shadowrunr-daemon && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check && pnpm -C packages/contract generate && pnpm -C packages/contract check && pnpm -C packages/contract test && pnpm -C apps/console typecheck && pnpm -C apps/console test && pnpm -C apps/console lint",
+    "runner_up": "character.get ships every tone, foil, the bible and the whole situations bank, yet Layer 1 and the All page's Anatomy fetch it only for foil names (and Glance counts rows[0]'s foils as the cast's): a light summary read",
+    "body": "## Summary\nEvery tournament belongs to exactly one character package - the sim writes `character` into `tournament.json` - but the daemon drops that field on read, so `tournament.list` cannot say whose evidence a row is. Each console picker then guesses: the Situations tab takes 'the most finished runs' from ANY character; Reconcile takes 'the last in the listing' believing it is the newest, while the listing is alphabetical. Carry `character` and `updated_ms` on `TournamentRow` and make both pickers read facts instead of heuristics.\n\n## Description\nThe seam is a contract that loses provenance its producer already wrote. Technique: diff-comparison `baseline-species-degradation` - a surface whose default silently answers a different question than it promises (another character's, or a superseded package version's, verdicts under this package's situation ids) is worse than an empty state; the fallback must be a declared ladder. Ladder: this character's newest tournament -> this character's other tournaments (operator pick) -> 'no tournament has run for this character' (never another character's). Rows with no character (pre-field ad-hoc dirs) are offered, labelled 'character unknown', never the default.\n\nDaemon: `runs.rs` TournamentMeta gains `#[serde(default)] character`; an ad-hoc dir derives it from its live runs' `spec.json` (all equal -> that id, else None). `updated_ms` is the newest live `run.json` mtime. Both `Option` + skip-if-none, so `tournaments.page` gains them too. Console: `pickTournament(rows, character)` in model.ts replaces `mostEvidence`; SituationsTab filters by `d.id`; NoReport defaults by `updated_ms`.\n\nGate: contract (in-repo `packages/contract` + `shadowrunr-types`, additive only). Also architecture: 'which tournament' moves from per-picker guesswork to row facts.\n\n## Flow\n- sim writes tournament.json {character} (unchanged)\n- daemon tournament_row: character + newest run mtime -> TournamentRow\n- Situations tab: rows for d.id -> newest -> tournament.results\n- Reconcile empty state: default = max updated_ms\n\n## Expected impact\nThe Situations tab stops presenting another package's (or a stale package version's) verdicts as this character's: latent with one package today, certain the day a second folder is added, which is the page's stated product. Reconcile stops defaulting to an alphabetical last. Two divergent heuristics removed.\n\n## Evaluation\nClaim: tournament pickers choose by recorded character and recency, not guesswork.\nBefore: 0 of 8 acceptance cases pass (TournamentRow has no character/updated_ms; SituationsTab lists all tournaments; NoReport takes list[length-1])\nAfter: 8 of 8\nMethod: gate - acceptance tests written first\nResult: better\nGate: contract",
+    "evidence": "runs.rs:185 `struct TournamentMeta { base_hash: String, #[serde(default)] runs: Option<usize> }` vs tournament.rs:265 `struct TournamentMeta { tournament_id, matrix_id, base_hash, character: String, runs }`; rpc.rs:209 `pub struct TournamentRow { tournament_id, instrument_hash, runs, completed }`; SituationsTab.tsx:25 `/** The default tournament: the one with the most finished runs (ids carry no date); ties go last. */`; NoReport.tsx:18 `// Newest last in the daemon's listing; default to it until the operator picks.` vs runs.rs:54 `out.sort();` over directory names; docs/spec/contract.md:214 `tournament.list | {} | [{ tournament_id, instrument_hash, runs, completed }]`; situations.json ids ['bait-slur-request','ironic-stereotype-joke','edgy-roast-request','dark-humor-fine',...] (31).",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Grounded provenance fix with sharp cases; serialize with console-simulator-page A (TournamentRow) and console-data-layer A (NoReport.tsx)."
+    }
+  },
+  {
+    "context": "console-characters-page",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Make active is a blind switch: each tone shows its record, the switch previews",
+    "size": "L",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/pages/characters/CastTabs.tsx",
+      "apps/console/src/pages/characters/SituationsTab.tsx",
+      "apps/console/src/pages/characters/model.ts",
+      "apps/console/src/pages/characters/Layer2.module.css",
+      "apps/console/src/pages/characters/testgen.ts",
+      "apps/console/src/pages/characters/model.test.ts",
+      "apps/console/src/pages/characters/layer2.test.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/pages/characters/evidence.ts"
+    ],
+    "shared_surfaces": [
+      "reads apps/console/src/pages/simulator/cells.ts (cellChecks, redLineFails, THIN_N) unchanged - the 'one home' of per-cell figures (cells.ts:1-2) - so no third 'held' derivation; no contract change"
+    ],
+    "acceptance": [
+      "model.test: toneEvidence(results with 2 'gleeful-chaos' cells judged 2 and 4, one red-line fail, plus 1 'theatrical' cell) -> gleeful-chaos {judged:6, redLineFails:1, fail, evaluated}; theatrical's counts exclude every gleeful-chaos cell",
+      "layer2: Tones tab, results with no 'weary-middle-manager' cell -> that card's characters-tone-evidence reads 'Unmeasured in <tid>' and shows no 0 counts",
+      "layer2: a tone judged 3 times (< THIN_N 5) -> its evidence carries a 'thin' chip; judged 12 -> no chip",
+      "layer2: clicking Make active on 'Gleeful chaos' does NOT call character.tone.set; a preview (data-role characters-tone-preview) names both tones, the source tournament id and each side's judged runs / rule fails / red-line fails",
+      "layer2: preview Confirm -> character.tone.set called exactly once with {id:'malakor',tone:'gleeful-chaos'} and the hero becomes Gleeful chaos; Cancel -> no call, hero unchanged",
+      "layer2: candidate tone with 1 red-line fail -> the preview shows a role=alert line and the confirm button reads 'Make active anyway'",
+      "layer2: tournament.list empty -> the preview states 'No tournament has measured these tones yet' and Confirm still works (warn, never block)",
+      "layer2: Tones and Situations read one useCharacterEvidence source: picking another 'Verdicts from' tournament on Situations changes the tournament id named in the Tones evidence"
+    ],
+    "premise": [
+      "apps/console/src/pages/characters/CastTabs.tsx:38-55 - MakeActive fires character.tone.set on one click, with no evidence and no confirm",
+      "apps/console/src/pages/characters/CastTabs.tsx:110-112 - the hero only links away: 'Its cells and every other tone's are in the trials'",
+      "apps/console/src/pages/characters/Layer1.tsx:91 - the poster's tone link promises 'Tones, and what is still unmeasured'; no tab shows what is unmeasured",
+      "crates/shadowrunr-daemon/src/prep/mod.rs:77-80 - stream prep loads the package with summary.active_tone",
+      "crates/shadowrunr-daemon/src/sandbox.rs:307 - a sandbox session given no tone runs the active tone",
+      "apps/console/src/pages/characters/SituationsTab.tsx:47-51 - the page already fetches tournament.list + tournament.results, whose cells are keyed by tone (contract CellKey {tone, core_tier, segment, audience_size, instrument_hash})",
+      "apps/console/src/pages/simulator/cells.ts:96-112 - cellChecks / redLineFails exist (THIN_N at :11) as the per-cell home to reuse"
+    ],
+    "rollback": "Two commits (evidence hook + per-tone record; preview-before-switch). The record is read-only display and the preview only wraps the existing character.tone.set call, so either reverts to the one-click button with nothing left behind.",
+    "gate": "none",
+    "test_command": "pnpm -C apps/console test && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "Optional rules switch blind too: before a toggle, show how many judged runs the current instrument holds and that the new rule set starts at zero (needs a daemon instrument-preview read)",
+    "body": "## Summary\nThe active tone is what stream prep and sandbox sessions perform (prep/mod.rs:77-80, sandbox.rs:307), and the operator changes it with a one-click 'Make active' while every tone card shows only prose. The page already loads tournament results whose cells are keyed by tone, yet sends the operator to another page to learn whether the tone about to go on air failed a red line. Put each tone's measured record on its card, mark unmeasured and thin tones, and turn the click into a preview that compares current and candidate before it lands.\n\n## Description\nTechniques: diff-comparison `pair-and-baseline-selection` (the baseline is the question 'what am I switching away from', so the current active tone is the named baseline beside the candidate); data-viz `empty-and-degraded-chart-states` (an unmeasured tone reads 'Unmeasured', never 0 fails); eval-harness `resolution-precondition` (a thin record is labelled a hint, not an order). No percentage is shown - counts only (judged runs, rule fails of evaluated checks, red-line fails) via simulator/cells.ts - so the contested 'held' metric (console-simulator-page A) gets no third derivation.\n\nNew `evidence.ts` owns the package's one tournament choice + results fetch (`useCharacterEvidence(d)`), read by both Situations and Tones: the single seam slot A's character filter then fixes once (if A lands first, its pickTournament moves into this hook). `toneEvidence(results)` in model.ts folds cells by `cell.tone`. MakeActive becomes two-step: preview -> Confirm / Cancel; a red-line fail on the candidate shows an alert and relabels the button 'Make active anyway' (warn, never block: no policy change).\n\n## Flow\n- Tones tab -> useCharacterEvidence -> toneEvidence -> per-card record (n, fails, red-line fails, thin / unmeasured)\n- Make active -> preview: current vs candidate, source tournament named -> Confirm -> character.tone.set\n- Cancel -> nothing sent\n\n## Expected impact\nThe one operator choice on this page that changes what goes on air stops being made blind, and 'what is still unmeasured' (Layer1.tsx:91) becomes true. A stray click no longer silently re-points prep and sandbox at another tone.\n\n## Evaluation\nClaim: the tone decision is made with each tone's record in view and lands only after a preview.\nBefore: 0 of 8 acceptance cases pass (no evidence on tone cards; Make active sends on first click)\nAfter: 8 of 8\nMethod: gate - acceptance tests written first\nResult: better\nGate: none",
+    "evidence": "CastTabs.tsx:48-52 `onClick={() => void set.run({ id: character, tone }).then(...)}` ... `Make active`; CastTabs.tsx:112 `Its cells and every other tone&apos;s are in <RouteLink to={pageRoute(\"simulator\", \"heatmap\")}>the trials</RouteLink>`; Layer1.tsx:91 `title=\"Tones, and what is still unmeasured\"`; prep/mod.rs:77-80 `let summary = catalog::character_get(cfg, character)?; let pkg = shadowrunr_brain::load_character(&cfg.paths.characters.join(character), &summary.active_tone,)`; sandbox.rs:307 `(None, Some(c)) => Ok(c.active_tone),`; cells.ts:11 `export const THIN_N = 5;`, :96 `export function cellChecks`, :110 `export function redLineFails`",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Real UX move, well grounded; flag the redLineFails collision with console-simulator-page A's delete-grep before scheduling."
+    }
+  }
+]

@@ -1,0 +1,125 @@
+[
+  {
+    "context": "console-ui-primitives",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Facet counts are hand-built by every page and ignore the filter: derive them",
+    "size": "M",
+    "effort": 5,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "apps/console/src/ui/filterRows.ts",
+      "apps/console/src/ui/FilterTable.tsx",
+      "apps/console/src/ui/ui.test.tsx",
+      "apps/console/src/pages/brain/Engine.tsx",
+      "apps/console/src/pages/brain/Runs.tsx",
+      "apps/console/src/pages/characters/SituationsTab.tsx",
+      "apps/console/src/pages/simulator/Runs.tsx",
+      "apps/console/src/pages/reconcile/DirectivesPage.tsx",
+      "apps/console/src/pages/segments/Tables.tsx",
+      "apps/console/src/pages/onair/Rundown.tsx",
+      "apps/console/src/pages/reconcile/Incidents.tsx"
+    ],
+    "new_files": [],
+    "shared_surfaces": [],
+    "acceptance": [
+      "facetCounts(rows, {predicate, options, haystack, query:''}) over 3 judged + 2 unjudged runs with options all/judged/unjudged -> {all:5, judged:3, unjudged:2}, predicate evaluated in one pass over the rows",
+      "FilterTable with facets whose options carry NO count, rows 3 judged/2 unjudged -> pills read 'All 5', 'Judged 3', 'Not judged 2' (counts supplied by FilterTable)",
+      "same table, type a query that matches 1 judged row -> pills read 'All 1', 'Judged 1', 'Not judged 0' and the count line reads '1 of 5' (counts carry the applied predicate, not the whole set)",
+      "facets with counts:'given' (Incidents: the daemon's red_line_counts when the list was cut) and option count 412 -> pill reads 412 whatever the query; FilterTable does not recompute it",
+      "brain/Engine call ledger: the count on each role pill equals the number of rows that pill shows when pressed (today it is summariseLedger's route.calls, a second rule)",
+      "48,000-row table with 4 facet options, query change -> facet counting runs off the deferred query (input stays responsive) and the test completes under the existing 48k render case's budget",
+      "grep 'count:' in the six migrated FacetS option lists -> no hand-computed count remains outside Incidents"
+    ],
+    "premise": [
+      "apps/console/src/ui/FilterTable.tsx:21-26 - Facets<R,F> carries options + predicate; counts come only from PillOption.count supplied by the caller",
+      "apps/console/src/ui/FilterTable.tsx:101-103 - PillGroup is rendered with facets.options verbatim; the counts never see `deferred` query",
+      "apps/console/src/ui/PillGroup.tsx:28 - the pill prints o.count as given",
+      "apps/console/src/pages/simulator/Runs.tsx:39-51 - judged/unjudged counts hand-reduced over all rows, beside a predicate that says the same thing again",
+      "apps/console/src/pages/brain/Runs.tsx:47-56 - tier counts hand-built in a Map loop over items",
+      "apps/console/src/pages/characters/SituationsTab.tsx:54-61 - archetype counts hand-built in a Map loop",
+      "apps/console/src/pages/reconcile/DirectivesPage.tsx:163-187 - active/proposed/off counted by three separate filters while the predicate at :187 restates each rule",
+      "apps/console/src/pages/segments/Tables.tsx:126-143 - counts from statusCounts(), a third rule beside the predicate",
+      "apps/console/src/pages/brain/Engine.tsx:72-78 - role pill count is summariseLedger route r.calls while the predicate is r.l.role === f: two rules for one number",
+      "apps/console/src/pages/onair/Rundown.tsx:30-39 - segment facet carries no counts at all",
+      "apps/console/src/pages/reconcile/Incidents.tsx:50-56 - the one legitimate given count: daemon totals for a list the daemon cut",
+      "apps/console/src/ui/FilterTable.tsx:104-106 - the row count already follows the query ('N of M'), so pills and count line disagree whenever a query is typed"
+    ],
+    "rollback": "Two commits: (1) filterRows.facetCounts + FilterTable derivation behind the existing count field (pages untouched, given counts still win), (2) page migrations deleting hand counts. git revert of (2) then (1) restores today's behaviour; no stored state, no contract change.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/console test -- src/ui src/pages/brain src/pages/simulator src/pages/reconcile src/pages/segments src/pages/characters src/pages/onair && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "Replace the string-keyed STATE_TONES (silent 'neutral' fallback for any new daemon state, Chip.tsx:28-43) with typed per-union tone tables checked for exhaustiveness at compile time.",
+    "body": "## Summary\nEvery FilterTable consumer re-derives its facet counts by hand - a Map loop, three .filter passes, a summary model - beside a predicate that already states the same rule. The counts are computed once over the whole set, so the moment the operator types a query the pills ('Judged 4,200') and the count line ('12 of 48,000') answer two different predicates. Move counting into the primitive: FilterTable derives each option's count from facets.predicate over the text-filtered rows.\n\n## Description\nTechnique: table/filtering (law count-carries-predicate: everything the surface derives - rows, counts, empty-state wording - reads the applied predicate) and the golden path's 'columns are data, not markup': the facet spec already holds the predicate, so the count is derivable and must not be a second hand-list. A pure `facetCounts(rows, spec)` in filterRows.ts runs one pass per deferred query; FilterTable passes the derived counts to PillGroup. `Facets.counts?: 'derived' | 'given'` (default derived) keeps the one honest exception - Incidents, where the daemon cut the list and its totals cover rows the client never holds. Six pages lose their hand counting; Rundown gains counts it never had; Engine's role pills stop quoting a second model's number.\n\n## Flow\n- filterRows.ts: facetCounts(rows, {haystack, query, predicate, options}) -> Record<F, number>\n- FilterTable: useMemo on (rows, deferred, facets) -> options with count, unless counts === 'given'\n- pages: delete count fields and the loops that fed them; Incidents sets counts:'given'\n\n## Expected impact\nPill counts become true for the view on screen in 7 tables; ~45 lines of duplicated counting removed; a new facet costs one predicate, never a predicate plus a parallel counter that can drift.\n\n## Evaluation\nClaim: facet counts carry the applied predicate and have one source.\nBefore: 0 of 7 acceptance cases pass (no facetCounts; counts static under a query; Engine pill count from a second rule)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first in ui.test.tsx and the page tests\nResult: better\nGate: pnpm -C apps/console test/typecheck/lint/build",
+    "evidence": "FilterTable.tsx:101-106: `{facets && facet !== undefined && (<PillGroup label={facets.label} options={facets.options} value={facet} onChange={setFacet} />)}` then `{shown.length...} of {rows.length...}` - options pass through untouched while the count line uses `shown`. simulator/Runs.tsx:39 `const judged = rows.reduce((a, r) => a + (r.has_verdict ? 1 : 0), 0);` + :49 `predicate: (r, f) => f === \"all\" || (f === \"judged\") === r.has_verdict`. brain/Engine.tsx:76 `count: r.calls` vs :77 `predicate: (r, f) => f === \"all\" || r.l.role === f`. DirectivesPage.tsx:163-164 `rows.filter((d) => d.active).length` / `rows.filter(isProposed).length` vs :187 predicate. Rundown.tsx:32-36 options with no count. grep 'Facets<' in pages: Engine.tsx:72, brain/Runs.tsx:47, SituationsTab.tsx:54, simulator/Runs.tsx:40 (+ inline facets in DirectivesPage, Incidents, segments/Tables, Rundown).",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 3,
+      "grounding": 4,
+      "falsifiability": 3,
+      "reason": "Grounded and useful, but one case cannot go red before the build."
+    },
+    "revision": "Drop acceptance case 5 (Engine role pill count equals rows shown when pressed) - it is green on today's tree since engineModel.ts:67-72 counts exactly the rows the predicate selects."
+  },
+  {
+    "context": "console-ui-primitives",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Drill into a row and back: the table forgets filter, sort and where you were",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/ui/FilterTable.tsx",
+      "apps/console/src/ui/FilterTable.module.css",
+      "apps/console/src/ui/index.ts",
+      "apps/console/src/pages/brain/Runs.tsx",
+      "apps/console/src/pages/characters/AllPage.tsx",
+      "apps/console/src/pages/characters/SituationsTab.tsx",
+      "apps/console/src/pages/onair/Rundown.tsx",
+      "apps/console/src/pages/segments/Tables.tsx",
+      "apps/console/src/pages/simulator/Runs.tsx",
+      "apps/console/src/pages/simulator/Tournaments.tsx",
+      "apps/console/src/pages/simulator/Verdicts.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/ui/tableView.ts",
+      "apps/console/src/ui/tableView.test.tsx"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "FilterTable viewKey='simulator.runs': type 'weary', press facet 'Judged', sort Viewers desc, unmount, remount with the same viewKey -> input value 'weary', 'Judged' aria-pressed=true, Viewers th aria-sort='descending', count line shows the filtered count on first paint (controls populated from the applied view before rows paint)",
+      "48,000-row table viewKey='t': Enter on row run-4799, unmount, remount -> the virtualiser scrolls to run-4799 (scrollTo top > 0), that row carries data-returned='true' and is document.activeElement",
+      "two tables both labelled 'Runs' with viewKeys 'brain.runs' and 'simulator.runs' -> state set in one never appears in the other",
+      "stored sort column no longer in columns -> initialSort; stored facet not among options -> facets.initial; stored row key absent from the rows -> no scroll, no throw",
+      "no viewKey -> behaviour identical to today (every existing ui.test.tsx FilterTable case passes unchanged)",
+      "'Clear filter' then unmount/remount -> query '' and facet initial (clearing clears the remembered view)",
+      "memory only: spies on localStorage.setItem and sessionStorage.setItem record 0 calls across all of the above"
+    ],
+    "premise": [
+      "apps/console/src/ui/FilterTable.tsx:48-50 - query, facet and sort live in component useState; nothing outlives an unmount",
+      "apps/console/src/ui/FilterTable.tsx:148-153 - onActivate is the drill-down; the table records nothing about which row was opened",
+      "apps/console/src/shell/Shell.tsx:142-145 - layer 2 is keyed on riseKey(route.page, route.sub), so a route change below the rise depth remounts the page",
+      "apps/console/src/shell/rise.ts:9-24 - brain 2, simulator 2, segments 2: runs -> transcripts/<run>, runs -> verdicts/<run>, tables -> tables/<id> all change the keyed segments",
+      "apps/console/src/pages/simulator/Runs.tsx:66 - onActivate navigates to pageRoute('simulator','verdicts',run_id): the Runs table unmounts",
+      "apps/console/src/pages/brain/Runs.tsx:84, characters/AllPage.tsx:69, characters/SituationsTab.tsx:129, onair/Rundown.tsx:76, segments/Tables.tsx:147, simulator/Tournaments.tsx:54,103, simulator/Verdicts.tsx:47 - every other drill-down navigates the same way",
+      "apps/console/src/router/route.ts:13-16 - the route carries page + segments only; there is no query/sort in the URL to restore from",
+      "apps/console/src/pages/reconcile/session.ts:1-5 - precedent: a module-level, in-memory-only session store shared across lazy layer chunks via useSyncExternalStore",
+      "apps/console/src/pages/brain/Runs.tsx:81 and apps/console/src/pages/onair/Rundown.tsx:73 - two tables share label 'Runs', so the label cannot be the key"
+    ],
+    "rollback": "One commit for ui/tableView.ts + FilterTable viewKey (optional prop, absent = today), one for the page opt-ins. Reverting the page commit leaves the primitive inert; reverting both restores today. Memory only - nothing persisted to revert.",
+    "gate": "direction",
+    "test_command": "pnpm -C apps/console test -- src/ui src/pages && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "Grid keyboard model for FilterTable: one tab stop instead of every row at tabIndex 0 (FilterTable.tsx:146), arrows/Home/End move by row identity and End reaches the true last row under windowing; Tabs (Section.tsx:34-55) gain roving arrow keys.",
+    "body": "## Summary\nThe operator's main loop on eight console tables is: narrow the list (query, facet, sort), open one row, come back, open the next. Every return remounts the page (the shell keys layer 2 on the route), so the filter bar reads empty, the sort is gone, and the 48,000-row table is back at row 0 - the operator re-types and re-scrolls for every row they inspect. Make the table's view part of navigational state: FilterTable remembers query, facet, sort and the last opened row per `viewKey`, restores them before first paint, and lands focus on the row you came from.\n\n## Description\nTechniques: table/sorting ('the active sort is part of navigational state, restored with the surface'; persisted per table identity and validated on read), table/filtering (restoration corollary: a surface rebuilt from a back navigation populates its controls from the applied predicate before it paints), table/pagination ('restoring the surface should restore the window, or deliberately reset it - chosen, not accidental'), and grid-keyboard-model's 'focus position is keyed by row identity, not index'. ui/tableView.ts is a module-level in-memory store (the reconcile/session.ts pattern - never localStorage) keyed by an explicit viewKey; FilterTable reads it as initial state, writes on change, records getKey(row) on activate, and on remount scrollToIndex()es the virtualiser to that key's current index and focuses it, marked data-returned for a brief accent. Everything validated on read: a vanished column, facet or row falls back silently. In scope: a console ergonomics direction, no contract change, nothing stored beyond the tab's memory.\n\n## Flow\n- tableView.ts: get(viewKey) / set(viewKey, patch) / clear(viewKey), useSyncExternalStore-free (read once at mount)\n- FilterTable: optional viewKey; useState initialisers from the store; effect writes query/facet/sort; onActivate records the key; mount effect scrolls + focuses the returned row\n- Clear filter clears the stored query/facet\n- eight drill-down tables pass a viewKey ('simulator.runs', 'brain.runs', ...)\n\n## Expected impact\nInspecting N rows from a filtered list drops from N x (retype + resort + rescroll) to N x (Esc/back); the operator never loses their place in a 48k-row table. Applies to every current and future drill-down table by one prop.\n\n## Evaluation\nClaim: the table view survives a drill-down round trip and lands on the row you opened.\nBefore: 0 of 7 acceptance cases pass (no viewKey; state is useState; nothing recorded on activate)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first in tableView.test.tsx\nResult: better\nGate: pnpm -C apps/console test/typecheck/lint/build",
+    "evidence": "FilterTable.tsx:48-50 `const [query, setQuery] = useState(\"\"); const [facet, setFacet] = useState<F | undefined>(facets?.initial); const [sort, setSort] = useState<SortState | null>(props.initialSort ?? null);`. Shell.tsx:144 `<Layer2 key={riseKey(route.page, route.sub)} sub={route.sub} />`. rise.ts:27-29 `return sub.slice(0, RISE_DEPTH[page]).join(\"/\");` with simulator: 2 - 'runs' -> 'verdicts/<run>' changes the key. simulator/Runs.tsx:66 `onActivate={(r) => router.navigate(pageRoute(\"simulator\", \"verdicts\", r.run_id))}`. grep 'sessionStorage|localStorage' in apps/console/src (non-test) -> only pages/reconcile/session.ts:1 comment 'in memory only (never localStorage)' - no table state stored anywhere.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Real, well-evidenced operator-loop defect with a clean additive design and strong cases."
+    }
+  }
+]

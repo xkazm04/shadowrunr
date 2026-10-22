@@ -1,0 +1,21 @@
+{"card":"Live mode shows only what arrived while the poster was open: fold the run","context":"console-onair-page","slot":"A","status":"landed",
+ "shas":["66ea6fa","2a80e8c"],
+ "tests_added":[
+  "apps/console/src/pages/onair/feed.live.dom.test.tsx::opened mid-run, its own subscription backfills from seq 1 and the HUD names the stream",
+  "apps/console/src/pages/onair/feed.live.dom.test.tsx::the live scene equals stage-kit's fold of events 1..50",
+  "apps/console/src/pages/onair/feed.live.dom.test.tsx::leaving and coming back folds what happened while away: no stale poll, no stale foil",
+  "apps/console/src/pages/onair/feed.live.dom.test.tsx::a new run id resets the scene to that run (guard)",
+  "apps/console/src/pages/onair/feed.live.dom.test.tsx::switching to a stored run closes On Air's live subscription; switching back re-folds from seq 1",
+  "apps/console/src/pages/onair/feed.live.dom.test.tsx::a seq gap says so in the HUD until the next contiguous frame",
+  "apps/console/src/pages/onair/player.test.ts::LiveFeed reset() starts over from an empty scene, still live",
+  "apps/console/src/pages/onair/player.test.ts::LiveFeed a gap holds until the next contiguous seq"],
+ "guard_cases":["case 5: a new run_id / stream_start resets the scene (green before by design; existing LiveFeed unit test also still passes)"],
+ "cases_total":6,"cases_red_before":5,"cases_green_after":6,
+ "gates":{
+  "pnpm -C apps/console test -- src/pages/onair (runs whole suite)":"1 red: src/pages/characters/layer2.test.tsx (sibling character-package A in-flight); all onair/perf/data files green (vitest run src/pages/onair src/perf src/data: 0)",
+  "pnpm -C apps/console typecheck":"1 error only in src/pages/characters/testgen.ts:86 'locked' not in RuleState (sibling in-flight, re-run after >60s, still only there); no errors in my files",
+  "pnpm -C apps/console lint":0,
+  "pnpm -C apps/console build":"tsc -b blocked by the same sibling characters error; vite build 0 + check-bundle 0 (16 routes, 0 over) run directly"},
+ "files_changed":9,"lines_changed":413,
+ "deviations_from_card":"Case 4 dropped per revision (6 acceptance cases). Coupled files outside write_set: apps/console/src/perf/harness.tsx (+live.open/live.push broadcast helper) and apps/console/src/perf/commits.test.tsx (pushes to every open live subscription): the guard pushed to sockets.last(), which is now the app-wide stream since On Air's effect runs before DataProvider.start. apps/console/budgets/bundle.json (shared, under lock, own commit 66ea6fa): onair.l2 js 101,000 -> 101,500, measured about 100,860 B at HEAD -> 101,283 B. Tests and implementation landed in one commit (tests reference liveFeed/reset/markGap that did not exist). The card's openReplay is untouched (still zero consumers). LiveFeed applies frames as they come (the socket already drops replayed seq); seq is used only to clear the gap flag; reset() on each new subscription makes the scene the fold from seq 1.",
+ "notes":"feed.ts now exports liveFeed (read-only Feed) for tests; FeedSnapshot gains optional gap. Subscription keyed on (mounted, source.kind==='live'), not on active, so a nested On Air page keeps the fold. Slot B (replay scrub) builds on feed.ts/player.ts after this: LiveFeed.seek should be a no-op beside reset/markGap. Untracked packages/stage-kit/nul and other litter predate this build and are not mine."}

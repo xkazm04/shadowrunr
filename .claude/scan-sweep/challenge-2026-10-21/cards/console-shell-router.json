@@ -1,0 +1,131 @@
+[
+  {
+    "context": "console-shell-router",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "A page's URL grammar is spelled in four places: declare it once, derive the rest",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/shell/types.ts",
+      "apps/console/src/shell/rise.ts",
+      "apps/console/src/shell/Shell.tsx",
+      "apps/console/src/pages/brain/index.ts",
+      "apps/console/src/pages/brain/Layer2.tsx",
+      "apps/console/src/pages/onair/RunDetail.tsx",
+      "apps/console/src/pages/onair/Layer1.tsx",
+      "apps/console/src/pages/reconcile/Refs.tsx",
+      "apps/console/src/pages/simulator/common.tsx",
+      "apps/console/src/pages/characters/SituationsTab.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/router/schema.ts",
+      "apps/console/src/router/schema.test.ts",
+      "apps/console/src/pages/brain/routes.ts",
+      "apps/console/src/pages/brain/routes.test.ts"
+    ],
+    "shared_surfaces": [
+      "apps/console/src/shell/types.ts PageModule gains an optional `routes` field (console-internal; every page folder implements PageModule)"
+    ],
+    "acceptance": [
+      "matchSub(BRAIN_ROUTES, [\"transcripts\",\"t1/r7\",\"12\"]) -> {ok:true, params:{run:\"t1/r7\", line:\"12\"}, riseDepth:2}",
+      "matchSub(BRAIN_ROUTES, [\"nonsense\"]) -> {ok:false, fallback:[]}; mounting the shell at #/brain/nonsense -> location.hash becomes #/brain by replaceState (no push), not the EmptyState brain/Layer2.tsx:51 renders today",
+      "riseKey(\"brain\", [\"transcripts\",\"r1\",\"12\"]) derived from BRAIN_ROUTES -> \"transcripts/r1\", and for every brain sub used in motion.dom.test the schema-derived key equals the RISE_DEPTH fallback (parity)",
+      "crumbs(#/brain/transcripts/t1%2Fr7/12) with schema labels -> [\"Season\",\"Brain\",\"Transcripts\",\"t1/r7\",\"Line 12\"] (identical to brainLabel today; brainLabel deleted)",
+      "transcriptRoute({tournamentId:\"t2\", runId:\"r7\"}, 12) -> encodes #/brain/transcripts/t2%2Fr7/12; transcriptRoute({runId:\"r7\"}) -> #/brain/transcripts/r7 (bare only when no tournament is known)",
+      "RunDetail for tournament t2 run r7 -> its transcript link and line-ref hrefs start #/brain/transcripts/t2%2Fr7 (today #/brain/transcripts/r7, RunDetail.tsx:58,80, which find_run rejects as ambiguous when r7 exists in two tournaments, runs.rs:170-180)",
+      "rg 'pageRoute\\(\"brain\", \"transcripts\"' apps/console/src/pages/onair apps/console/src/pages/reconcile apps/console/src/pages/simulator apps/console/src/pages/characters -> 0 hits (today 6)"
+    ],
+    "premise": [
+      "apps/console/src/pages/brain/Layer2.tsx:43 - brain's grammar is parsed by positional destructure `const [floor, run, line] = sub`",
+      "apps/console/src/pages/brain/index.ts:13-18 - the same grammar restated as a depth switch for breadcrumb labels (brainLabel)",
+      "apps/console/src/shell/rise.ts:9-24 - the shell restates every page's grammar a third time, as a hand-list of depths whose comments describe each page's URL",
+      "apps/console/src/pages/characters/routes.ts:28-49 - characters wrote its grammar as readSub + crumbLabel + pkgRoute: the reader/labeller/builder trio is re-made by hand per page",
+      "apps/console/src/router/route.ts:26-28 - pageRoute(page, ...sub: string[]) is untyped below the page id; 82 non-test call sites build sub-routes from string literals",
+      "apps/console/src/pages/brain/Runs.tsx:19,26 - brain's own list links a qualified run `${tournament_id}/${run_id}`",
+      "apps/console/src/pages/onair/RunDetail.tsx:58,80 - On Air links the transcript with the bare runId although tournamentId is in scope (RunDetail.tsx:92-93)",
+      "apps/console/src/pages/onair/Layer1.tsx:127 - chat route uses run.runId bare; pages/onair/feed.ts:85 shows the source also carries tournamentId",
+      "crates/shadowrunr-daemon/src/runs.rs:156-180 - find_run splits a qualified ref, otherwise scans all tournaments and errors 'run id {rid} is in N tournaments; use <tournament_id>/<run_id>'",
+      "crates/shadowrunr-sim/src/matrix.rs:183-195 - run ids are `<tone>.<tier>.<segment>.a<size>.s<seed>`, deterministic per matrix cell, so a re-run tournament reproduces the same run ids",
+      "apps/console/src/router/route.ts:55-70 - decodeRoute canonicalises unknown PAGE ids to a fallback with a reason; nothing does so for unknown SUB-routes"
+    ],
+    "rollback": "Commits land in order: schema (new files only) -> shell derives from schema with RISE_DEPTH/label fallback -> brain declares routes -> cross-page links migrate. Each reverts independently with git revert; pages without a schema keep the hand-list path throughout.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/console test && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "Layer-2/Layer-1 Suspense has no error boundary or retry (recorded app-shell deviation, Poster.tsx:131, Shell.tsx:143): a chunk-load failure blanks the app - too small (S) and already recorded.",
+    "body": "## Summary\nEach page's nested URL grammar is restated in four independent places - the Layer2 positional parser, the breadcrumb label switch in index.ts, the shell's RISE_DEPTH hand-list, and every link builder on other pages. Declare it once as a route schema the page module exports, and derive parse, labels, rise depth, canonicalisation and typed link builders from it. Brain, the most cross-linked page, is the pilot; the schema type is general and characters/routes.ts already proves the shape.\n\n## Description\nLeans on app-shell / navigation-model: 'the discipline covers every level the shell can name, not just the top' and 'deep links resolve through the same door ... an unrecognized address degrades to a defined fallback'. Today the router owns only the page-id vocabulary (route.ts:7); below it, `sub` is a string[] every consumer reinterprets. The drift is already live: Brain's own run list links `t/r` (Runs.tsx:19) while On Air, Reconcile, Simulator and Characters link a bare run id (RunDetail.tsx:58,80 drops a tournamentId it holds), and the daemon refuses a bare id that exists in two tournaments (runs.rs:173). Run ids are deterministic per matrix cell (matrix.rs:184), so re-running a tournament makes On Air's transcript links ambiguous.\n\nThe move: `router/schema.ts` defines a small segment tree (literal | param, optional label fn, `rise` marker) with `matchSub`, `labelOf` and a typed builder. PageModule gets `routes?`. The shell derives riseKey and crumb labels from it (falling back to RISE_DEPTH / `label` for undeclared pages, so migration is page by page) and replace-navigates an unmatched sub to its deepest valid prefix. `pages/brain/routes.ts` declares engine | transcripts[/:run[/:line]] | preflight and exports `transcriptRoute({tournamentId?, runId}, line?)`, which qualifies whenever the caller knows the tournament; the five cross-page call sites switch to it.\n\n## Flow\n- Add schema.ts + tests (pure, no consumers).\n- PageModule.routes optional; Shell labelFor/riseKey prefer it; unmatched sub -> replace to fallback.\n- brain/routes.ts declares the grammar; brain/index.ts drops brainLabel; Layer2 reads params from matchSub.\n- onair/RunDetail, onair/Layer1, reconcile/Refs, simulator/common, characters/SituationsTab call transcriptRoute.\n\n## Expected impact\nOne place states Brain's URL; renaming a floor or adding a param breaks typecheck at every link instead of silently landing on an EmptyState. On Air transcript links stop hitting the daemon's ambiguity error. The other six pages migrate by declaring a schema, and RISE_DEPTH shrinks to nothing.\n\n## Evaluation\nClaim: a declared route schema removes three restatements of Brain's grammar and fixes bare-run transcript links.\nBefore: 0 of 7 acceptance cases pass (no schema module, no transcriptRoute, #/brain/nonsense renders an EmptyState, RunDetail links bare ids, 6 hand-built cross-page transcript routes)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first\nResult: better\nGate: architecture",
+    "evidence": "brain/Layer2.tsx:43 `const [floor, run, line] = sub;` | brain/index.ts:15-17 `if (parts[1] === \"transcripts\" && depth === 2) return segment; ... depth === 3) return `Line ${segment}`` | rise.ts:14-15 `// <floor> / <run>; the line is a scroll target in the transcript` / `brain: 2,` | Runs.tsx:19 `export const qualifiedRun = (r: RunRow): string => `${r.tournament_id}/${r.run_id}`;` | RunDetail.tsx:58 `<RouteLink to={pageRoute(\"brain\", \"transcripts\", runId)}` and :93 `useRpc(\"run.transcript\", { run_id: runId, tournament_id: tournamentId })` | runs.rs:156-158 `match run_ref.split_once('/') { Some((t, r)) => (Some(t), r), None => (tournament_id, run_ref) }` and :173-174 `\"run id {rid} is in {} tournaments ({}); use <tournament_id>/<run_id>\"` | grep `pageRoute(\"brain\", \"transcripts\"` non-test: brain/Layer1.tsx:28, brain/Runs.tsx:26,84, brain/Viewer.tsx:94, characters/SituationsTab.tsx:222, onair/Layer1.tsx:127, onair/RunDetail.tsx:58,80, reconcile/Refs.tsx:18, simulator/common.tsx:27 | `grep -rn 'pageRoute(' pages app | grep -v test | wc -l` -> 82",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Sound architecture move with a concrete user-visible bug as its proof."
+    }
+  },
+  {
+    "context": "console-shell-router",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Go to anything: Ctrl+K opens a page, a recent place or a pasted run#line ref",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 4,
+    "write_set": [
+      "apps/console/src/shell/Shell.tsx",
+      "apps/console/src/shell/keyActions.ts",
+      "apps/console/src/shell/keyActions.test.ts",
+      "apps/console/src/keys/keymap.ts",
+      "apps/console/src/keys/keymap.test.ts",
+      "apps/console/src/shell/Chrome.tsx",
+      "apps/console/src/shell/Chrome.module.css"
+    ],
+    "new_files": [
+      "apps/console/src/shell/goto.ts",
+      "apps/console/src/shell/goto.test.ts",
+      "apps/console/src/shell/GoTo.tsx",
+      "apps/console/src/shell/GoTo.module.css",
+      "apps/console/src/shell/goto.dom.test.tsx"
+    ],
+    "shared_surfaces": [
+      "apps/console/src/keys/keymap.ts is owned by console-app-bootstrap: one new binding (Ctrl+k, modes wall/l1/l2, typing never) and one KeyAction variant"
+    ],
+    "acceptance": [
+      "resolveQuery(\"calm.t1.SEG-02A.a40.s7#12\", []) -> first candidate route #/brain/transcripts/calm.t1.SEG-02A.a40.s7/12, label 'Transcript line 12'",
+      "resolveQuery(\"t2/r7#3\", []) -> first candidate #/brain/transcripts/t2%2Fr7/3 (qualified ref kept as one segment)",
+      "resolveQuery(\"#/simulator/heatmap/a%2Fb\") and resolveQuery(\"http://127.0.0.1:1420/#/simulator/heatmap/a%2Fb\") -> candidate pageRoute('simulator','heatmap','a/b') via decodeRoute; resolveQuery(\"#/nope\") -> no route candidate",
+      "resolveQuery(\"SEG-02A\") -> candidate #/segments/tables/SEG-02A; resolveQuery(\"tri\") -> page candidate Simulator matched from POSTERS copy ('The Trials'), no second page list",
+      "recents after visiting #/brain/engine, #/review/s1/timeline, #/brain/engine -> [#/brain/engine, #/review/s1/timeline] (deduped, newest first, cap 8, wall excluded), labelled from crumbs()",
+      "resolve(KEYMAP, 'l2', 'Ctrl+k', false) -> {type:'goto'}; effectOf({type:'goto'}, l2 ctx) -> {kind:'open-goto'}; conflictReport(KEYMAP).conflicts stays []",
+      "DOM: mount #/review/s1, Ctrl+K, type 't2/r7#3', Enter -> location.hash === '#/brain/transcripts/t2%2Fr7/3', palette unmounted, spread focused; Ctrl+K then Escape -> palette closed and hash still #/review/s1 (Esc does not also go up)",
+      "DOM: with the palette closed the shell renders no [data-role='goto'] node (budgets/dom.json shell allowance unchanged)"
+    ],
+    "premise": [
+      "apps/console/src/keys/keymap.ts:43-60 - the whole global keymap: 1-7 page jumps, M, Esc, arrows, r; no go-to/search binding exists",
+      "apps/console/src/shell/Shell.tsx:79-96 - the one keymap dispatch site; effects are navigate/hover/skip-intro/blur/command (keyActions.ts:13-19)",
+      "apps/console/src/kit/events.ts:111-118 - parseRef already turns `<run>#<line>` into {runId, line}; its only consumers render refs already on screen (reconcile/Refs.tsx:16, simulator/common.tsx:24, characters/SituationsTab.tsx:214, simulator/Verdicts.tsx:75,119) - no input accepts one",
+      "apps/console/src/pages/brain/Layer2.tsx:49-50 + pages/brain/Runs.tsx:84 - reaching a line today: wall/7-key -> Brain -> Transcripts tab -> find the run in a list -> open -> pick the line",
+      "crates/shadowrunr-daemon/src/runs.rs:156-159 - run.transcript accepts `<tournament>/<run>` as one ref, so a pasted qualified ref resolves unambiguously",
+      "apps/console/src/router/route.ts:55 - decodeRoute is the one hash parser, reusable for pasted links; route.ts:105 crumbs() gives labels for recents",
+      "apps/console/src/shell/posters.ts:5-13 - POSTERS name/short/tag is the page vocabulary the palette searches",
+      "apps/console/src/keys/listener.ts:20 - the global listener skips defaultPrevented events, so the overlay can own arrows/Enter/Escape",
+      "apps/console/src/pages/onair/Screen.tsx:110 - segment ids look like SEG-02A and route to segments/tables/<id>"
+    ],
+    "rollback": "One feature behind one keymap binding: revert the commit series (binding, keyActions effect, Shell mount, new goto files) and the shell is unchanged; nothing is persisted (recents are in-memory session state).",
+    "gate": "none",
+    "test_command": "pnpm -C apps/console test && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "Mixer-bus tallies carry per-page attention (preflight red, reconcile failed) via a PageModule attention hook - today the tally only marks the current page (MixerBus.tsx:28,46).",
+    "body": "## Summary\nThe operator reads run#line refs, segment ids and console links everywhere - reconcile reports, verdicts, chat, CLI output - but the console has no way to accept one. Getting to a transcript line takes five moves through the wall, a tab, a list and a pick. Ctrl+K opens a one-field Go to overlay that resolves a pasted ref/hash/segment id, page names and the places visited this session; Enter lands there.\n\n## Description\nLeans on app-shell's golden path ('the shell never unmounts ... the only legitimate home for ... command palettes') and navigation-model ('the palette searches [the registry]', 'deep links resolve through the same door'). goto.ts is pure: `resolveQuery(q, recents)` tries, in order, decodeRoute on a hash or URL-with-hash, parseRef on `<run>#<line>` (qualified `t/r#n` kept as one segment), a SEG-id pattern, then fuzzy page matches over POSTERS and recents labelled by crumbs(). Recents are a reducer over route changes (dedupe, newest first, cap 8, wall excluded) held in Shell state - not persisted, so nothing new is stored. GoTo.tsx mounts only while open (DOM budget untouched), owns its keys (arrows/Enter/Escape preventDefault so the global listener skips them, listener.ts:20) and navigates through router.navigate, the one write door. Chrome gets a 'Go to - Ctrl K' button for pointer users.\n\n## Flow\n- keymap: `{chord:'Ctrl+k', modes: wall/l1/l2, action:{type:'goto'}}`.\n- keyActions: goto -> {kind:'open-goto'}; Shell sets open state.\n- GoTo: input + candidate listbox (aria-activedescendant); Enter -> navigate -> close -> focus returns to spread/poster.\n- Recents update from useRoute in Shell.\n\n## Expected impact\nA ref copied from anywhere opens at its line in one keystroke plus a paste; 'back to where I was two pages ago' becomes Ctrl+K, Enter. No new data is fetched or stored.\n\n## Evaluation\nClaim: one overlay turns a five-move navigation into one, for refs, links, segment ids and recent places.\nBefore: 0 of 8 acceptance cases pass (no goto binding, no resolver, no overlay)\nAfter: 8 of 8\nMethod: gate - acceptance tests written first\nResult: better\nGate: none",
+    "evidence": "keymap.ts:43-60 KEYMAP = skip-intro, 1-7 'Jump to page', m, Escape (up/blur), Arrow*, r - nothing else | keyActions.ts:13-19 Effect = navigate|hover|skip-intro|blur|command|none | grep -rn 'parseRef(' src (non-test): kit/events.ts:111,121,125, characters/SituationsTab.tsx:214, reconcile/Refs.tsx:16, simulator/common.tsx:24, simulator/Verdicts.tsx:75,119 - all render-side | grep -rni 'palette|ctrl+k|goto' keys shell kit app ui -> only PAGE_PALETTES/colour hits | runs.rs:156 `match run_ref.split_once('/')`",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Grounded, testable shell elevation with a pure core."
+    }
+  }
+]

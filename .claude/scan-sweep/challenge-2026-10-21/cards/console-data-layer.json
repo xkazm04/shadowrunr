@@ -1,0 +1,116 @@
+[
+  {
+    "context": "console-data-layer",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Long calls die with their button: the layer owns in-flight mutations",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/data/layer.ts",
+      "apps/console/src/data/react.tsx",
+      "apps/console/src/data/index.ts",
+      "apps/console/src/data/react.test.tsx",
+      "apps/console/src/pages/reconcile/NoReport.tsx",
+      "apps/console/src/pages/reconcile/PlanPage.tsx",
+      "apps/console/src/pages/reconcile/ChatPage.tsx",
+      "apps/console/src/pages/onair/ClipActions.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/data/mutations.ts",
+      "apps/console/src/data/mutations.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "layer.mutate('reconcile.run', {source:{tournament_id:'t1'}}) twice while the first is in flight (scripted fetch hangs then answers) -> fetch.calls has exactly one 'reconcile.run' and both promises resolve to the same report_id",
+      "mutate('reconcile.run', t1) and mutate('reconcile.run', t2) concurrently -> two calls (single-flight is per key = queryKey(method, params), never per method)",
+      "mutate('directive.add', p), then mutate('directive.add', p) again after the first settles -> two calls (the guard is in-flight only, not a result cache)",
+      "a component using useMutation('reconcile.run') starts a run (fetch hangs), is unmounted, and a fresh instance mounts -> useInflight('reconcile.run') lists one entry with params {source:{tournament_id:'t1'}} and startedAt, and the fresh instance's run button is disabled",
+      "the in-flight call fails with busy while no consumer is mounted -> the next mounted consumer reads settled.error (code 'busy') once; ack() clears it, so a second mount sees none",
+      "41 settled mutations -> the store keeps the newest 32 settled entries; in-flight entries are never evicted",
+      "NoReport rendered against a hanging reconcile.run, then the route switches reconcile/report -> reconcile/chat -> reconcile/report -> 'Reconciling…' and the source tournament are still shown, and clicking Run again sends no second reconcile.run"
+    ],
+    "premise": [
+      "apps/console/src/data/react.tsx:85 - `const [pending, setPending] = useState(false);` pending is component state, so it dies with the hook instance",
+      "apps/console/src/data/react.tsx:88-99 - run() flips that local flag around layer.mutate; nothing outside the instance knows a call is running",
+      "apps/console/src/data/layer.ts:69-73 - mutate() is client.call + invalidate; no record of in-flight or settled mutations, no per-key guard",
+      "apps/console/src/data/react.tsx:105-106 - LLM_TIMEOUT_MS = 11 min; reconcile.run, plan.choose and lord.chat run for minutes",
+      "apps/console/src/shell/rise.ts:22 + apps/console/src/shell/Shell.tsx:144 - reconcile's layer 2 is keyed on its first sub segment (the tab), so switching report/plan/directives/chat remounts the page and resets every useMutation",
+      "apps/console/src/pages/reconcile/NoReport.tsx:63 - the UI tells the operator 'Keep this page open; the report opens here when it is written' - the layer's limitation shown as an instruction",
+      "apps/console/src/pages/reconcile/NoReport.tsx:57 - the Run button's only guard is run.pending, which a remount resets to false",
+      "apps/console/src/pages/reconcile/NoReport.tsx:27 - a failure lands in setError of the instance that started the call; after a remount it is dropped",
+      "crates/shadowrunr-reconcile/src/lib.rs:229-238 - Reconciler::run mints a fresh rec-<ms> id per call with no in-flight guard; crates/shadowrunr-daemon/src/rpc.rs:237-239 calls it directly, so a second click pays for a second multi-minute opus run",
+      "apps/console/src/pages/reconcile/ChatPage.tsx:27 - `if (!message || send.pending) return;` - the same local-only guard for lord.chat; PlanPage.tsx:85/118 and ClipActions.tsx:116/124 (clips.render) repeat it"
+    ],
+    "rollback": "Two commits: (1) data/mutations.ts plus the layer/react wiring, with useMutation's public shape unchanged; (2) the four page consumers. Reverting (2) restores the pages verbatim; reverting (1) restores the local-state hook. No stored data, no contract change.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/console test -- src/data src/pages/reconcile src/pages/onair && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "One portable read definition: useRpc (react.tsx:59-69), usePaged's pagedOf (paged.ts:223-239) and useRpcMany (paged.ts:300-311) each assemble the Query shape and errorView by hand; one fold-to-Query function they all call (portable-read-definitions).",
+    "body": "## Summary\nA mutation's pending state lives in the button that started it (`useState` in useMutation). Reconcile's tabs remount layer 2, so a ten-minute reconcile.run, plan.choose or lord.chat loses its 'running' state, its error and its double-click guard as soon as the operator looks at another tab. The page tells the operator to 'keep this page open' (NoReport.tsx:63) to work around it. This card moves in-flight mutations into the data layer: a small MutationStore keyed by queryKey(method, params), with single-flight per key, an in-flight list per method, and a bounded set of settled results.\n\n## Description\nThis leans on concurrency-guards' **single-flight-primitives** (pick the second caller's policy for each operation: here, a second caller for the same key joins the first flight) and **guard-key-design** (the key is method plus canonical params, so t1 and t2 still both run). It also leans on client-fetch-cache's **in-flight-dedup** (a settled failure never answers a new caller: the guard holds only while the call is in flight).\n\nThe new `data/mutations.ts` owns a map from key to {method, params, startedAt, promise} for in-flight calls, and a ring of the last 32 settled {key, result, settledAt, acked}. `layer.mutate` goes through it; invalidation on success stays where it is. `react.tsx` gains `useInflight(method)`, which reads the store through useSyncExternalStore. `useMutation` keeps its `{run, pending}` shape and adds `running` (the method's in-flight entries, readable after a remount) and `settled` (an unacknowledged outcome, with `ack()`). Per-row callers such as directive.deactivate keep per-instance `pending`, so no row is disabled that was not disabled before.\n\nConsumers: NoReport shows 'Reconciling <tournament> - started 3 min ago' from `running[0]` and drops the 'keep this page open' line. ChatPage keeps 'The Lord is considering…' across tab switches. PlanPage keeps 'Composing…'. RenderButton keeps 'Rendering…' while the operator moves between clips.\n\nGate: architecture. The data layer gains a second store beside QueryCache. It is client-only: no daemon change and no contract change. The daemon still has no reconcile.run guard (reconcile lib.rs:229), so one console tab is protected and two tabs are not. The card states that limit openly.\n\n## Flow\n- run(params) -> key = queryKey(method, params) -> already in flight? return the same promise : start client.call and register the entry\n- settle -> remove from in-flight, push to settled, invalidate on ok (unchanged), notify subscribers\n- remount -> useInflight(method) / useMutation().running restores 'running…' and the disabled button; settled shows a missed error once until ack()\n\n## Expected impact\nNo duplicate multi-minute opus runs from a double-click after a tab switch. The pages stop asking the operator not to navigate. Errors from long calls are no longer lost when the view that started them unmounts.\n\n## Evaluation\nClaim: in-flight mutations survive a remount and do not fire twice for one key.\nBefore: 0 of 7 acceptance cases pass (useInflight and settled do not exist, a remount resets pending, a second run sends a second call)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (mutations.test.ts for 1-3, 5 and 6 against scriptedFetch with a {hang:true} reply; react.test.tsx for 4 and 7 with mount/unmount)\nResult: better\nGate: vitest + tsc + eslint/size + vite build for apps/console",
+    "evidence": "react.tsx:85 `const [pending, setPending] = useState(false);`\nlayer.ts:69-73 `async mutate(method, params, callOpts) { const r = await client.call(method, params, callOpts); if (r.ok) cache.invalidate(invalidatedByMutation(method)); return r; }`\nrise.ts:21-22 `// <tab>; held and failed filter the report in place` / `reconcile: 1,` ; Shell.tsx:144 `<Layer2 key={riseKey(route.page, route.sub)} sub={route.sub} />`\nNoReport.tsx:63 `The reconciler is reading {source}. Keep this page open; the report opens here when it is written.`\nreconcile lib.rs:229-238 `pub async fn run(&self, source: Source) ... let mut report_id = format!(\"rec-{created_ms}\"); while self.report_path(&report_id)?.exists() { report_id = format!(\"rec-{created_ms}-{n}\"); ...`\ngrep useMutation in pages (non-test): 18 sites; LLM_TIMEOUT_MS users: NoReport.tsx:12, PlanPage.tsx:85, ChatPage.tsx:22; RENDER_TIMEOUT_MS: ClipActions.tsx:116",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 4,
+      "falsifiability": 4,
+      "reason": "Real double-spend and lost-error path, well-specified cases."
+    }
+  },
+  {
+    "context": "console-data-layer",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "One job event refetches every watched ledger page: scope invalidation",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/data/invalidation.ts",
+      "apps/console/src/data/cache.ts",
+      "apps/console/src/data/layer.ts",
+      "apps/console/src/data/cache.test.ts",
+      "apps/console/src/data/paged.test.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/data/invalidation.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "cache watches ledger.page {run_id:'r1',limit:500} and {run_id:'r2',limit:500}; event {type:'job'} with runId 'r1' -> exactly one fetch (r1's), r2 untouched",
+      "cache watches a 12-page ledger.page chain for tournament_id 'T' and holds runs.page rows for T that do not contain 'sbx-1'; a job event with runId 'sbx-1' -> 0 fetches; the same event with the runId of a row in T -> the chain refetches",
+      "a tournament-scoped entry where NO cached runs row mentions the event's run -> the entry IS invalidated (an unknown scope falls back to today's broad rule, never staler)",
+      "ledger.page with no run_id/tournament_id (the daemon engine ledger) -> invalidated by every job event regardless of runId",
+      "mutation clips.approve {id:'c1'} succeeds while clips.get {id:'c1'} and clips.get {id:'c2'} are watched -> one clips.get refetch (c1) plus clips.list",
+      "five job events for r1 inside one 250 ms window -> one ledger.page fetch per watched key, not five aborted-and-restarted ones",
+      "a rule naming a method not in RPC_METHODS or an event type not in StreamEvent['type'] -> tsc error (tables typed against the contract)"
+    ],
+    "premise": [
+      "apps/console/src/data/layer.ts:85-86 - the live handler passes only env.event.type to the cache (`cache.onEvent(env.event.type)`); the envelope's runId never reaches invalidation",
+      "apps/console/src/data/cache.ts:100-107 - invalidate() matches only e.method; every params of that method is marked stale and every watched one refetches",
+      "apps/console/src/data/cache.ts:147 - fetch() aborts the in-flight request and restarts it, so a burst of events restarts every watched page once per event",
+      "apps/console/src/data/invalidation.ts:5,13 - both tables are Record<string, readonly string[]>, untyped against RpcMethod / StreamEvent type, so a misspelt name silently never invalidates",
+      "apps/console/src/data/invalidation.ts:8-9 - segment_end and job invalidate ledger.page wholesale",
+      "apps/console/src/pages/brain/useBrain.ts:10,44 - the Brain window watches up to 12 ledger.page pages of 500 rows for the latest tournament (and 4 runs.page pages)",
+      "crates/shadowrunr-daemon/src/sandbox.rs:370 - a sandbox session registers on the live stream under its session id, which belongs to no tournament; crates/shadowrunr-brain/src/lib.rs:592 emits a Job event per research-job status change",
+      "packages/contract/src/generated/types.ts:2082-2087 - LedgerPageParams carries run_id / tournament_id, and RunRow (types.ts:3202,3204) carries run_id + tournament_id: the scope can be answered from data the cache already holds",
+      "apps/console/src/data/invalidation.ts:24-25,30 - clips.approve/reject and review.tag invalidate every clips.get / review.session, though their params name exactly one id (ClipIdParams.id types.ts:1771, ReviewSessionParams.session_id types.ts:2845)"
+    ],
+    "rollback": "One commit in data/: the typed rule tables, the scope predicates and the coalescing window in cache.ts. Reverting restores method-wide invalidation unchanged. Because of the unknown-scope fallback, the forward change can only skip refetches it proves irrelevant.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/console test -- src/data src/pages/brain src/pages/onair src/pages/review && pnpm -C apps/console typecheck && pnpm -C apps/console lint",
+    "runner_up": "ConnectionStore's hand-written truth table has no state for 'the contract door failed to load': socket.ts:166-167 sets stream 'closed' with rpc 'unknown', and summarise (connection.ts:17-23) answers 'connecting' forever - make it an explicit reducer with a 'broken' summary (small, S).",
+    "body": "## Summary\nEvery pushed event invalidates whole RPC methods. A `job` or `segment_end` from any live run, such as a sandbox session that belongs to no tournament, refetches every watched ledger.page page. On the Brain page that is up to 12 pages of 500 rows, aborted and restarted once per event. Mutations work the same way: approving clip c1 refetches every open clips.get. This card makes invalidation scoped and typed. Each rule names an RpcMethod and a scope predicate over the entry's params, the event's runId or the mutation's params. Bursts coalesce to one fetch per key.\n\n## Description\nThis leans on realtime-events' **push-vs-refetch-reconciliation** invalidation grammar ('Which scope? Still relevant? Refetch now or mark stale': 'an event that always says everything changed is a poll with extra steps'), its **coalescing-and-batching** (one burst, one fetch), and **event-registry** (the vocabulary is checked before runtime: the tables are typed against RpcMethod and StreamEvent['type']).\n\ninvalidation.ts becomes `EVENT_RULES: { [T in StreamEvent['type']]?: readonly Rule[] }` and `MUTATION_RULES: { [M in RpcMethod]?: readonly Rule[] }`, where `Rule = { method: RpcMethod; scope?: (entryParams, ctx) => boolean }`. ctx carries `runId` for events and the mutation's params for mutations.\n\nThe ledger.page rule works like this. An entry with run_id matches only that run. An entry with no filter (the daemon engine ledger) always matches. An entry with tournament_id matches when a cached runs.page or runs.list row ties the run to that tournament. It also matches when no cached row mentions the run, so an unknown scope invalidates as broadly as today. clips.get, review.session and character.get match on their id param.\n\ncache.ts gets `invalidateWhere(method, pred)` and a short coalescing window (timers injected, 250 ms by default) that collapses repeated invalidations of one key into one fetch. layer.ts passes `{type, runId}` to the cache.\n\nNo staleness is introduced: the only entries skipped are ones the predicate proves irrelevant, and the 5-minute backstop (cache.ts:126-137) still runs. The coalescing window delays a refetch by at most 250 ms.\n\n## Flow\n- live envelope {seq, runId, event} -> cache.onEvent({type, runId})\n- rules for the type -> for each watched entry of rule.method: scope(entry.params, ctx)? mark stale and schedule the key\n- the coalescing window closes -> one fetch per scheduled key\n- mutate(method, params) ok -> MUTATION_RULES[method] with ctx {params} -> same path\n\n## Expected impact\nA sandbox session no longer churns the Brain window's 12 x 500-row ledger chain on every job or segment end. Approving one clip refetches one clip. A misspelt method or event name in the tables fails tsc instead of silently never firing.\n\n## Evaluation\nClaim: invalidation fetches only the keys an event or mutation can have changed, at most once per burst.\nBefore: 0 of 7 acceptance cases pass (case 1: 2 fetches, case 2: 12, case 5: 2 clips.get, case 6: 5 starts, case 7 compiles; case 3 is the regression guard and also passes before)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first in invalidation.test.ts / cache.test.ts, counting cache.fetches and scriptedFetch.calls with manualTimers\nResult: better\nGate: vitest + tsc + eslint for apps/console",
+    "evidence": "layer.ts:85-88 `...streamOpts(\"live\", (env) => { cache.onEvent(env.event.type); for (const l of live) l(env); })`\ncache.ts:100-106 `invalidate(methods) { ... for (const [key, e] of this.entries) { if (!methods.includes(e.method)) continue; e.stale = true; if (e.listeners.size > 0) void this.fetch(key, e); } }`\ncache.ts:147 `e.inflight?.abort();`\ninvalidation.ts:5 `export const EVENT_INVALIDATES: Readonly<Record<string, readonly string[]>>` ; :8 `segment_end: [\"ledger.page\"],` ; :9 `job: [\"ledger.page\"],` ; :24 `\"clips.approve\": [\"clips.list\", \"clips.get\"],`\nuseBrain.ts:10 `export const WINDOW = { tournaments: 500, runPages: 4, ledgerPages: 12, pageSize: 500 } as const;` ; :44 `usePaged(\"ledger.page\", base, WINDOW.ledgerPages)`\nsandbox.rs:370 `let live_run = state.live.register(&session_id, usize::MAX)?;`\nbrain lib.rs:592 `ev.push(StreamEvent::Job { ts_ms: now_ms, job_id: ..., status: ..., summary: ... });`\ntypes.ts:2082-2086 `export interface LedgerPageParams { cursor?: string; limit: number; run_id?: string; tournament_id?: string; }`",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 4,
+      "falsifiability": 3,
+      "reason": "Sound move, but the irrelevance proof as written contradicts its own headline case."
+    },
+    "revision": "Rewrite case 3 and its rule: a tournament-scoped entry skips an event only when a cursor-exhausted (complete) runs listing for T is cached and lacks the run; case 3 becomes 'T's runs listing is partial (has a next cursor) and no cached row mentions the run -> the chain IS invalidated', leaving case 2 (complete listing for T without sbx-1 -> 0 fetches) as the headline."
+  }
+]

@@ -1,0 +1,118 @@
+[
+  {
+    "context": "workspace-tooling-and-policy",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "CI is a hand-list that skips the Python lanes: derive lanes, gate coverage",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      ".github/workflows/ci.yml",
+      "README.md",
+      "tools/voice/tests/test_pool.py"
+    ],
+    "new_files": [
+      "scripts/ci-lanes.mjs",
+      "scripts/ci-lanes.test.mjs",
+      "scripts/fixtures/ci-lanes/ (small fixture ci.yml + package.json trees)"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "current tree + current ci.yml -> `node scripts/ci-lanes.mjs --check` exits 1 and names exactly the three uncovered Python lanes: tools/voice (unittest discover), tools/rig (unittest discover), tools/avatar (test_depth_map, test_learned_depth)",
+      "fixture ci.yml with the `stage-kit lint` step deleted -> exit 1 naming `packages/stage-kit lint` as uncovered",
+      "fixture workspace where apps/stage gains a `lint` script and ci.yml is unchanged -> exit 1 naming `apps/stage lint`",
+      "fixture ci.yml step `pnpm -C packages/gone test` (no such workspace package) -> exit 1 naming it as a stale lane",
+      "fixture ci.yml run line invoking pnpm or python in a form the planner cannot parse (e.g. `cd packages/tokens && pnpm test`) -> exit 1 'unparseable lane', never a silent pass",
+      "tree after the build (ci.yml has the python job) -> exit 0 and prints the denominator `N lanes derived, N covered, 0 uncovered, 0 stale, 0 unparseable` with N >= 22",
+      "`python -m unittest tests.test_pool` from tools/voice run 20 times in a loop -> 20 of 20 OK (today it fails intermittently at tools/voice/tests/test_pool.py:89, peak 1 != 2)"
+    ],
+    "premise": [
+      ".github/workflows/ci.yml:87-123 - every web gate is a hand-written step, one per (package, script); nothing derives them from pnpm-workspace.yaml or the package scripts",
+      ".github/workflows/ci.yml:41 and :63 - only a `rust` job and a `web` job; no job runs Python, although tools/voice, tools/rig and tools/avatar carry 125 unittest cases (76 + 28 + 21, run locally 2026-10-21)",
+      "README.md:38-39 - 'CI (`.github/workflows/ci.yml`) runs all of them' - false for the Python suites the scout brief itself names as gates",
+      "pnpm-workspace.yaml:1-3 - workspace membership (apps/*, packages/*) a planner can replay",
+      "package.json:8-10 - root test/lint/typecheck already use `pnpm -r`, so the lane set is derivable; CI does not use it",
+      "tools/voice/tests/test_pool.py:89 - `self.assertEqual(peak, 2)` over PAUSE3 sentences depends on timing: failed in this run's director baseline (scratchpad baseline.txt voice-py=1) and in 1 of 4 scout runs, passing on reruns of the same commit - the lane cannot block until this is deterministic",
+      "tools/voice/pyproject.toml - `dependencies = []` (stdlib, fake engine in tools/voice/tests/fake_engine.py); tools/rig/pyproject.toml - numpy, pillow; tools/avatar/test_depth_map.py:12-13 - numpy + PIL: all installable on a stock runner, no model, engine binary or secret"
+    ],
+    "rollback": "Revert the commit series: ci.yml returns to the hand-list, scripts/ci-lanes.* and fixtures are deleted, test_pool.py returns to its prior assertion. No stored data or contract is touched.",
+    "gate": "architecture",
+    "test_command": "node --test scripts/ci-lanes.test.mjs && node scripts/ci-lanes.mjs --check && (cd tools/voice && for i in $(seq 20); do python -m unittest tests.test_pool || exit 1; done) && (cd tools/voice && python -m unittest discover -t . -s tests) && (cd tools/rig && python -m unittest discover -t . -s tests) && (cd tools/avatar && python -m unittest test_depth_map test_learned_depth)",
+    "runner_up": "Make the root package.json scripts the single lane definition CI calls (build filters ./packages/** and ./apps/** while test/lint/typecheck use pnpm -r) - weaker: still blind to Python.",
+    "body": "## Summary\nCI's lanes are a hand-maintained list of steps, and the list has already fallen behind the repo: three Python suites (125 tests, among them the voice sidecar's JSON-lines protocol the daemon speaks) are gates in every local brief but never run on a pull request, while the README tells readers CI runs everything. Derive the lane set from the workspace's own manifests and make a missing, stale or unparseable lane a red build.\n\n## Description\nAdd `scripts/ci-lanes.mjs` (Node, no dependencies). It derives the expected lanes - every workspace package (pnpm-workspace.yaml globs) x its gate scripts {check, typecheck, test, lint, build}, plus every `tools/*` Python suite (a `tests/` package -> `unittest discover`; top-level `test_*.py` -> those modules) - then reads ci.yml's `run:` lines and reports uncovered lanes, stale lanes (naming a package that does not exist) and run lines it cannot parse. `--check` exits non-zero on any of the three and always prints its checked denominator. Wire it as the first web step and add a `python` job (ubuntu, Python 3.12, `pip install numpy pillow`) running the three suites. Before the voice lane may block, make tools/voice/tests/test_pool.py:89 deterministic: assert `peak <= 2` for the bound the test is named after, and prove the overlap with fake sentences long enough (or gated) that both have started before either ends. A verdict that varies on an unchanged commit cannot gate.\n\nTechniques: foreign-config-replay (pipeline-authoring - 'a check ran locally and was never scheduled in the pipeline'), blocking-by-input-determinism (quality-gates - 'a second language in the build that the test lanes never execute'; 'a gate whose verdict varies on an unchanged commit'), unparseable-form-is-a-finding and checked-vs-skipped-denominators for the planner's own honesty. Gate: architecture (CI topology). Coupled file outside the context: tools/voice/tests/test_pool.py (the lane cannot land red).\n\n## Flow\n- planner reads pnpm-workspace.yaml + each package.json scripts + tools/* layout -> expected lanes\n- planner reads ci.yml run lines -> scheduled lanes (+ unparseable list)\n- diff -> uncovered / stale / unparseable -> exit code + denominator line\n- CI web job runs the planner first; new python job runs the three suites\n- README Development section names the Python lane and the planner\n\n## Expected impact\nThe voice sidecar protocol, the rig's layer spec and the avatar depth prep become merge-blocking for the first time; adding a gate script to any package (e.g. a future stage `lint`) without scheduling it turns CI red instead of drifting silently; README's 'all of them' becomes true and stays mechanically true.\n\n## Evaluation\nClaim: CI coverage of declared gates becomes derived and enforced.\nBefore: 0 of 7 acceptance cases pass (no planner exists; Python lanes absent from ci.yml; test_pool intermittently red)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (node:test fixtures for the planner; the 20x loop for test_pool)\nResult: better\nGate: architecture",
+    "evidence": "grep -n python .github/workflows/ci.yml -> no match; jobs are `rust:` (line 41) and `web:` (line 63). Local 2026-10-21: tools/voice `Ran 76 tests ... FAILED (failures=1, skipped=1)`: `FAIL: test_the_pool_never_runs_more_than_its_workers ... test_pool.py, line 89 ... AssertionError: 1 != 2`; three reruns of tests.test_pool: OK / FAILED (failures=1) / OK. Director baseline log for this run shows the same failure (voice-py=1). tools/rig `Ran 28 tests ... OK`; tools/avatar `Ran 21 tests ... OK`. README.md:38-39 'CI (`.github/workflows/ci.yml`) runs all of them on each push to `main` and on every pull request'.",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 3,
+      "reason": "Valuable and grounded; one acceptance figure is inconsistent with the card's own derivation rule."
+    },
+    "revision": "In case 6 replace 'with N >= 22' with the exact count the planner's stated rule derives (17 web package-script lanes + the Python suites, stating whether rust lanes are counted), so the denominator is a checkable number rather than an unreachable bound."
+  },
+  {
+    "context": "workspace-tooling-and-policy",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "The broadcast stage is the one package no lint gate reads: bring it under",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "eslint.config.js",
+      "apps/stage/package.json",
+      ".github/workflows/ci.yml",
+      "apps/stage/src/App.tsx",
+      "apps/stage/src/Controls.tsx",
+      "apps/stage/src/OnAir.tsx",
+      "apps/stage/src/overflowAudit.ts",
+      "apps/stage/src/source.ts",
+      "apps/stage/src/voice/session.ts",
+      "apps/stage/src/voice/webaudio.ts",
+      "apps/stage/src/voice/frame.test.ts",
+      "apps/stage/src/avatar/cut/plan.test.ts",
+      "apps/stage/src/avatar/layers.test.ts",
+      "apps/stage/src/avatar/runtime.test.ts",
+      "apps/stage/src/voice/player.test.ts"
+    ],
+    "new_files": [
+      "apps/stage/eslint-suppressions.json"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "`pnpm -C apps/stage lint` on the built tree -> exit 0 with --max-warnings 0 (today no lint script exists; a read-only probe with the root rules finds 81 findings across 15 files)",
+      "seed `const x = y as unknown as Z` in apps/stage/src/source.ts -> lint exits 1 with the 'No `as unknown as`' message",
+      "seed `JSON.parse(s)` in apps/stage/src/OnAir.tsx -> exit 1; the existing call inside a declared stage decoder (apps/stage/src/clip.ts, apps/stage/src/voice/frame.ts) -> exit 0",
+      "seed `window.addEventListener('keydown', f)` in apps/stage/src/App.tsx -> exit 1; the stage's single declared keyboard file (Controls.tsx) -> exit 0",
+      "seed one extra `react-hooks/refs` violation in App.tsx beyond the suppressions baseline -> exit 1 (the baseline is a per-file, per-rule counted set, not a rule turned off)",
+      "fix one baselined violation and run `eslint --prune-suppressions` -> the count drops and lint still passes (the ratchet only moves down)",
+      "`grep -n 'apps/stage/' eslint.config.js` shows no ignore entry for apps/stage"
+    ],
+    "premise": [
+      "eslint.config.js:69 - `apps/stage/**` is in the global ignores; eslint.config.js:73 scopes the hygiene rules to apps/console and packages/*/src only",
+      "apps/stage/package.json:6-14 - scripts are dev/build/preview/test/typecheck/demo:fixture, no lint; .github/workflows/ci.yml:109-114 runs stage typecheck/test/build only",
+      "eslint.config.js:1-5 - the header states hygiene gates (no as-unknown-as, JSON.parse only at the door, no raw keydown, no swallowed catch) as workspace rules; the OBS broadcast canvas is exempt from every one",
+      "apps/stage/src/clip.ts:77 and apps/stage/src/voice/frame.ts:37 - stage parses untrusted JSON (dropped clip.json, /voice frames) outside any declared door",
+      "apps/stage/src/App.tsx:232 and apps/stage/src/Controls.tsx:84 - two raw window keydown listeners in one app",
+      "apps/stage/src/OnAir.tsx:101 - useMemo keyed on `view?.caption.text` but closes over `view` (react-hooks/exhaustive-deps)",
+      "probe (root config + a stage block, read-only, 2026-10-21): 81 findings - 46 react-hooks/refs (42 of all findings in App.tsx), 20 no-restricted-syntax, 6 no-restricted-properties, 9 other; console by contrast has zero `as unknown as` (grep -rln 'as unknown as' apps/console/src -> no output)"
+    ],
+    "rollback": "Revert the series: the ignore returns, the lint script, CI step and suppressions file go; the small type-guard/listener edits in stage revert independently (each behaviour-neutral, covered by stage's existing vitest suite).",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/stage lint && pnpm -C apps/stage typecheck && pnpm -C apps/stage test && pnpm -C apps/stage build && pnpm -C apps/console lint && pnpm -C packages/stage-kit lint && pnpm -C packages/contract lint",
+    "runner_up": "Move the stage's hand-written voice-frame and clip.json validators (voice/frame.ts, clip.ts) into @shadowrunr/contract's door so one decoder serves stage and console (touches the shared contract).",
+    "body": "## Summary\napps/stage is the surface that actually goes to air, and it is the only workspace package the lint gates never read: it is globally ignored, has no lint script, and CI never lints it. Remove the exemption, fix the hygiene findings, and hold the React-Compiler-class hook findings on a counted ratchet instead of a blanket off.\n\n## Description\nAdd a stage block to eslint.config.js with the console's hygiene rules (no any, no `as unknown as`, no swallowed catch, JSON.parse only at a door, one keyboard file) and the react-hooks recommended set. Stage's doors are named, not waived: its two JSON decoders (clip.ts, voice/frame.ts) join the door list for the JSON.parse rule only, each a single function returning a typed result. Fold App.tsx's keydown listener into Controls.tsx, the stage's one declared keyboard file. Replace the 10 `as unknown as` casts (5 production, 5 test) with type guards or typed test doubles; route test-file JSON line reads through the stage decoders or a single test helper; fix OnAir.tsx:101's dependency list and the unused binding. The ~51 React-Compiler-class findings (react-hooks/refs, set-state-in-effect, preserve-manual-memoization, use-memo, immutability, purity), clustered in App.tsx's imperative playback refs, go into ESLint 10's native suppressions file via `--suppress-rule`: a per-file, per-rule counted set that fails on any new instance and only shrinks via --prune-suppressions. Add `lint` to apps/stage/package.json and a `stage lint` CI step (Card A's planner, if landed first, would demand exactly this step).\n\nTechniques: ratchet-design and counted-set-snapshot (metric-gates - 'gating a metric that cannot be zeroed today'), excess-indicts-the-instrument (quality-gates - the refs cluster on one file is recorded as one baseline, not 46 independent defects), waiver-names-its-finding (door entries name files and the one rule they relax). Gate: architecture (lint topology). Coupled files outside the context: the stage sources listed in write_set (the gate cannot land red).\n\n## Flow\n- eslint.config.js: drop the `apps/stage/**` ignore; add the stage block; add the two stage decoders to the JSON.parse door; stage keyboard-file override\n- fix ~25 hygiene findings in stage source and tests\n- `eslint --suppress-rule` for the compiler-class hook rules only -> apps/stage/eslint-suppressions.json\n- apps/stage/package.json `lint`; ci.yml `stage lint` step\n\n## Expected impact\nThe on-air canvas gets the same untrusted-input discipline as the console; a new unchecked cast, raw listener or stray JSON parse in the broadcast path becomes a red build; the App.tsx refs debt becomes a visible, shrinking number instead of an unread exemption.\n\n## Evaluation\nClaim: stage source is lint-gated, hygiene at zero, compiler-class hook findings ratcheted.\nBefore: 0 of 7 acceptance cases pass (no lint script; ignore present; every seed goes undetected)\nAfter: 7 of 7\nMethod: gate - seeded violations written first and watched red\nResult: better\nGate: architecture",
+    "evidence": "eslint.config.js:69 `\"apps/stage/**\",` inside ignores; eslint.config.js:73 `files: [\"apps/console/**/*.{ts,tsx}\", \"packages/*/src/**/*.{ts,tsx}\"]`. Probe output: `69 files 81 msgs`; [('react-hooks/refs', 46), ('no-restricted-syntax', 20), ('no-restricted-properties', 6), ('react-hooks/set-state-in-effect', 2), ('react-hooks/preserve-manual-memoization', 2), ('react-hooks/use-memo', 1), ('react-hooks/immutability', 1), ('react-hooks/purity', 1), ('react-hooks/exhaustive-deps', 1), ('@typescript-eslint/no-unused-vars', 1)]; per file: App.tsx 42, voice/useVoice.ts 8, fixture.test.ts 4, ClipStage.tsx 3. `npx eslint --help` lists --suppress-rule and --prune-suppressions (ESLint 10.13.0).",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 3,
+      "grounding": 4,
+      "falsifiability": 4,
+      "reason": "Grounded tightening of the broadcast package, but the declared write set cannot produce a green lint."
+    },
+    "revision": "Add apps/stage/src/fixture.test.ts, apps/stage/src/live.test.ts and apps/stage/src/voice/report.test.ts to write_set (they contain JSON.parse the stage block will flag, so case 1 cannot reach exit 0 without editing them)."
+  }
+]

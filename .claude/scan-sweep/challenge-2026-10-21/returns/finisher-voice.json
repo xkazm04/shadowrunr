@@ -1,0 +1,9 @@
+{
+  "status": "fixed",
+  "root_cause": "Test instrument, not the pool. Trace of a failing run shows both 'z' sentences lent to two distinct live workers (respawned included). The fake workers append their pid to FAKE_WARM_PIDS concurrently; fake_warm's plain 'a' append on Windows is seek-then-write, so simultaneous appends land on one offset and a line is lost (2 procs x 2000 appends kept 3565 lines). fake_warm now reuses fake_engine's byte-range-locked note(). Coordinator's HOLD gate kept unchanged.",
+  "shas": ["2951dc9"],
+  "before": "1/15 fail at 7df6a73, 4/15 at 5f1a095, 8/20 fail with HOLD gate",
+  "after": "30/30 pass sequential; full suite 104 OK (1 skipped) rc 0; ruff check clean",
+  "seeded_red": "plain append restored in fake_warm.note: 20/20 fail; fix restored before commit",
+  "product_change": false
+}

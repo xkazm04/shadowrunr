@@ -1,0 +1,20 @@
+{"card":"One judge seam for runs and sandbox sessions, with typed pending/void/judged","context":"sim-runner-judging","slot":"A","status":"landed",
+ "shas":["e6d5932","2c61d44"],
+ "tests_added":[
+  "crates/shadowrunr-sim/src/judging.rs::tests::coverage_counts_only_decided_hard_rules",
+  "crates/shadowrunr-sim/src/runner.rs::tests::a_timed_out_judge_is_pending_and_the_rejudge_judges_it",
+  "crates/shadowrunr-sim/src/sandbox.rs::tests::a_rate_limited_judge_leaves_the_session_pending",
+  "crates/shadowrunr-sim/src/sandbox.rs::tests::a_blocked_quota_defers_the_judge_without_calling_it",
+  "crates/shadowrunr-sim/src/sandbox.rs::tests::a_prose_judge_reply_is_void_and_keeps_the_raw_reply",
+  "crates/shadowrunr-daemon/src/sandbox.rs::tests::a_pending_judge_is_unmeasured_not_failed",
+  "crates/shadowrunr-daemon/src/sandbox.rs::tests::a_quota_deferred_judge_is_unmeasured",
+  "crates/shadowrunr-daemon/src/sandbox.rs::tests::a_judge_that_evaluated_no_hard_rule_does_not_pass_the_session",
+  "crates/shadowrunr-daemon/src/sandbox.rs::tests::one_hard_rule_fail_fails_the_judge",
+  "crates/shadowrunr-daemon/src/sandbox.rs::tests::a_void_judge_is_unmeasured_and_named"
+ ],
+ "guard_cases":["case 4: one hard-rule fail -> judge check Fail, report.judge.rule_fails 1 (green before by design)","case 6: run_one_with judge timeout -> judge_pending/classify JudgePending, judge_existing -> Judged (WP13 behaviour held through judging::judge_dir)"],
+ "cases_total":6,"cases_red_before":4,"cases_green_after":6,
+ "gates":{"cargo test -p shadowrunr-sim":0,"cargo test -p shadowrunr-daemon sandbox":0,"cargo test -p shadowrunr-daemon":0,"cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt --all -- --check":0,"cargo test --workspace":0},
+ "files_changed":5,"lines_changed":871,
+ "deviations_from_card":"Two commits instead of three: the sim judge_session return type and the daemon JudgeFn/mapping cannot compile apart, so steps 2 and 3 of the card's rollback landed as one commit (2c61d44); step 1 (judging.rs + runner refactor) is e6d5932. Red-before for cases 1, 2, 5 was measured by a temporary probe test at HEAD 0216632 (judge_session returned Err(Engine(RateLimited)), Err(Spec('judge deferred: quota (isolated)')), Err(Spec('judge void: judge reply is not the rubric JSON')), which the daemon maps to Fail); case 3 red-before is the daemon's rule_fails == 0 -> Pass code path. The final-API tests themselves were compile-red before the implementation. judging.rs also exposes judge_loaded (inputs in hand) beside judge_dir so run_one_with keeps judging its in-memory transcript; judge_dir now asks the quota gate before loading anything (judge_existing used to load first). The existing daemon test's fake_judge(None) now models a pre-judge error (missing spec.json) -> Fail instead of 'judge timed out', since a real timeout is now Pending. Pass detail format changed from '0 rule fails (verdict.json)' to '0 rule fails, E of N hard checks evaluated (verdict.json)'. Test helpers JudgeFails, Blocked, judge_calls in runner tests became pub(crate) for reuse.",
+ "notes":"Deliberate side effect (policy-tighten), in the 2c61d44 body and pinned by a_judge_that_evaluated_no_hard_rule_does_not_pass_the_session: a sandbox session whose judge evaluated no hard rule used to read judge Pass and could pass its gate; it now reads Unmeasured '0 of N hard checks evaluated' and its session gate fails. No stored format changed (SandboxJudge, judge.json, verdict.json unchanged; session.json uses existing check states). Premise re-verified at HEAD 0216632 after types-crate B and 9ca1dc2 (line numbers shifted, all claims held). Early in the build I ran 'cargo fmt --all' (not --check) once; it may have touched in-flight sibling brain files, but the brain sibling has since committed f2e09d2 and the fmt check is green."}

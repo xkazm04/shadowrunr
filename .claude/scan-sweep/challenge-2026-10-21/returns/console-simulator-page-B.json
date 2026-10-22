@@ -1,0 +1,17 @@
+{"card":"The Heatmap is a worst-first list: pivot cells into a tone×tier by segment×audience map","context":"console-simulator-page","slot":"B","status":"landed",
+ "shas":["191cdcc"],
+ "tests_added":[
+  "apps/console/src/pages/simulator/model.test.ts::pivots one instrument's 36 cells into 6 rows by 6 columns, tiers in model order, audiences ascending",
+  "apps/console/src/pages/simulator/model.test.ts::keeps two instrument hashes as two blocks, never one merged grid",
+  "apps/console/src/pages/simulator/model.test.ts::marks a combination absent from results 'not run': no figure, no held, out of every marginal",
+  "apps/console/src/pages/simulator/model.test.ts::sums a row's counted fails, evaluated checks and judged runs, and says how many of its cells are thin",
+  "apps/console/src/pages/simulator/model.test.ts::marks a cell whose red-line rule failed",
+  "apps/console/src/pages/simulator/model.test.ts::colours a cell by the row's held derivation over its own runs: the run-weighted cells give back the row's held",
+  "apps/console/src/pages/simulator/layer2.test.tsx::maps the cells as a keyboard grid: tone × tier by segment × audience, one tab stop, Enter opens the cell",
+  "apps/console/src/pages/simulator/layer2.test.tsx::selects the routed cell on the map, with its detail and the worst-first table beneath"],
+ "guard_cases":[],
+ "cases_total":8,"cases_red_before":8,"cases_green_after":8,
+ "gates":{"pnpm -C apps/console test (full suite, 601 passed)":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console lint":0,"pnpm -C apps/console build (check-bundle 0 over; simulator.l2 79.1 KiB js / 15.5 KiB css, budgets 100,000 / 16,000 B, no raise)":0},
+ "files_changed":6,"lines_changed":546,
+ "deviations_from_card":"(1) The component is CellMap.tsx, not Matrix.tsx: Matrix.tsx and matrix.ts collide on Windows' case-insensitive filesystem (vite resolved ./Matrix to matrix.ts, the component import was undefined). (2) Cell colour: per the coordinator's 'no third way', a position is coloured by the TournamentRow.held derivation (mean over judged runs of RunRow.health) applied to the cell's own runs, not the pooled checks; a test proves the run-weighted cells give back row.held exactly. This needs one extra runs.page chain per heatmap tournament (unfiltered); a run carries no instrument hash, so a coordinate shared by two blocks gets no colour rather than a guessed one. (3) Marginal cells are role=gridcell but outside the roving arrow set; the tests count positions by data-pos. (4) 8 cases for the card's 7 (the held-identity case added). (5) tableView memory not used: the map is a grid with no sort/filter state, and the worst-first FilterTable stays mounted across cell routes.",
+ "notes":"One commit (tests + implementation together: the tests import matrix.ts). An earlier full-suite run showed 4 red in src/pages/reconcile/layer2.test.tsx (sibling console-reconcile-page A in flight); the final full run was 601/601 green. No budget raise; simulator.l2 css is at 15.5 KiB of a 16,000 B line, so the next simulator css addition will likely need one. testgen.ts unchanged."}

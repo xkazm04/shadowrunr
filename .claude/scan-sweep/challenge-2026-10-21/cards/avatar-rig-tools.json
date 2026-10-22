@@ -1,0 +1,111 @@
+[
+  {
+    "context": "avatar-rig-tools",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Rig folder has two writers, two compositors: one rigdir module owns both",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "tools/rig/shadowrunr_rig/rigdir.py",
+      "tools/rig/shadowrunr_rig/split.py",
+      "tools/rig/shadowrunr_rig/__main__.py",
+      "tools/rig/tests/test_rigdir.py",
+      "tools/rig/README.md",
+      "tools/avatar/depth_map.py",
+      "tools/avatar/test_depth_map.py",
+      "tools/avatar/test_learned_depth.py"
+    ],
+    "new_files": [
+      "tools/rig/shadowrunr_rig/rigdir.py",
+      "tools/rig/tests/test_rigdir.py"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "synthetic rig folder holding layers.json, its layer PNGs, depth.png and depth.json; publish a new rig through rigdir.publish -> depth.png and depth.json are removed TOGETHER (or both kept and reported stale), never depth.png alone with an orphan depth.json; the run prints 'depth map is stale: run tools/avatar/depth_map.py <dir>'",
+      "rig folder with an unrelated PNG the old layers.json does not name (notes.png) -> publish leaves it untouched; only files the old layers.json named are cleared",
+      "rigdir.depth_status(folder) where depth.json inputs sha256s match the current layers.json and PNGs -> 'fresh'; after one layer PNG is rewritten -> 'stale' naming that file; with no depth.json -> 'missing'",
+      "synthetic rig with a light layer (alpha 128, rgb 100) over a black static background: depth_map's model-input portrait at that pixel == rigdir.compose_rest there (light added at gain, NOT multiplied by alpha), as split.compose_rest and the stage shader draw it; today depth_map.portrait gives ~50 vs 100",
+      "synthetic cut layer with gain 0.5 and occl 0.5 -> depth_map's model-input portrait equals rigdir.compose_rest (gain and occl honoured); today depth_map ignores both",
+      "layers.json naming file '../escape.png', or a layer PNG whose size differs from its bbox -> depth_map.make raises ValueError via rigdir.load (check_formspec + size check); today load_rig reads folder/'../escape.png'",
+      "python tools/avatar/depth_map.py <dir> --check on a stale folder -> exit 3 naming the changed input; on a fresh folder -> exit 0 and writes nothing"
+    ],
+    "premise": [
+      "tools/rig/shadowrunr_rig/__main__.py:82-83 - `for old in a.out.glob(\"*.png\"): old.unlink()` deletes every PNG in --out, including depth.png, which tools/avatar/depth_map.py writes into the same folder",
+      "tools/avatar/depth_map.py:6-9 - depth_map reads the rig's layers.json and PNGs and writes depth.png and depth.json 'into the same folder' (:510 depth.png, :526 depth.json)",
+      "tools/rig/README.md:5 and :36 - the daemon serves <data>/avatar/rig at /avatar/{file}; the run 'removes the old PNGs in --out'",
+      "apps/stage/src/avatar/depth/index.ts:25-27 - the stage fetches depth.json and depth.png beside the rig and throws on a missing PNG; tools/avatar/depth_map.py:12-13 - with no depth.png the stage draws the glow face. So every re-split silently turns the depth face off and leaves an orphan depth.json and learned.* behind",
+      "apps/stage/src/avatar/depth/geom.ts:25-36 - checkDepthMeta checks version, size and near/far only; the sha256 `inputs` depth_map records (tools/avatar/depth_map.py:521-523) are compared by nobody, so a depth map made for an older rig of the same size is applied to a new one",
+      "tools/avatar/depth_map.py:342-345 - its rest-frame portrait adds light layers as rgb*alpha and composites cuts ignoring gain/occl; tools/rig/shadowrunr_rig/split.py:263-268 compose_rest adds lights as rgb*gain (no alpha) and occludes cuts by alpha*occl; apps/stage/src/avatar/glow-shaders.ts:211-212 (`float cov = u_occl > 0.0 ? c.a : 1.0; light *= u_gain * v_shade * cov;`) agrees with compose_rest. The learned-v1 model is shown a picture the stage never draws",
+      "tools/avatar/depth_map.py:83-111 - load_rig re-parses layers.json with no check_formspec: no FILE_RE (tools/rig/shadowrunr_rig/formspec.py:60, :296-299); :95 reads `(folder / file)` for any string",
+      "grep -n shadowrunr_rig tools/avatar/*.py -> zero hits: the depth tool imports nothing from the package that defines the format it reads"
+    ],
+    "rollback": "Three commits (rigdir module + split re-export; __main__ publishes via rigdir; depth_map onto rigdir + --check). Revert in reverse order; split.compose_rest stays importable throughout, the on-disk format is unchanged, and no stored history is touched (learned.* re-pends once, which test_a_changed_rig_waits_for_the_model_again already allows).",
+    "gate": "architecture",
+    "test_command": "cd tools/rig && python -m unittest discover -t . -s tests ; cd tools/avatar && python -m unittest test_depth_map test_learned_depth",
+    "runner_up": "The region spec / FormSpec rules live three times (formspec.check_spec, formspec.check_formspec, apps/stage layers.ts checkSpec): one JSON Schema under characters/ all three read.",
+    "body": "## Summary\nThe rig folder `<data>/avatar/rig` is written by two tools that do not know each other: the splitter (`tools/rig`) and the depth prep (`tools/avatar/depth_map.py`). The splitter's cleanup globs every PNG and so deletes `depth.png` on each re-split, leaving `depth.json` and `learned.*` orphaned; the stage then silently falls back to the glow face. The depth prep re-parses `layers.json` without the package's checks and re-implements the rest-frame compositor, and its version disagrees with both the splitter and the stage on how lights and gain/occl combine, so the learned depth model is shown a picture the stage never draws. One `shadowrunr_rig.rigdir` module should own the folder: load+validate, compose_rest, the set of files a rig owns, publish (clear by the old manifest, invalidate dependent artefacts as a pair), and depth freshness.\n\n## Description\nLeans on talking-avatar `single-image-layer-decomposition` (law derivation-names-recomputation: the step is a reproducible command with its inputs and outputs named; step 5: record the rig geometry once, nobody re-derives it). Today the inputs ARE named (depth.json `inputs`) but nothing reads them, and the derivation that feeds the model is re-derived differently. `rigdir.py` gets `load(folder)` (check_formspec, picture size == bbox), `compose_rest(fs, pictures)` (moved from split.py; split re-exports it), `owned_files(fs)`, `publish(out, fs, pictures)` (clears only PNGs the old layers.json named; removes depth.png+depth.json together when layer inputs changed, keeps them when byte-identical; layers.json written last), and `depth_status(folder)`. depth_map imports it (a 3-line sys.path shim to ../rig when the package is not installed; both tools need only numpy+Pillow) for load and the model-input portrait, and gains `--check`. The stage-side freshness check is out of scope (stage-avatar-renderer) and is named as a follow-up.\n\n## Flow\n- split -> rigdir.publish(out): old manifest read, its PNGs cleared, new PNGs written, layers.json last, dependent depth artefacts invalidated as a pair, status printed\n- depth_map make -> rigdir.load (validated) -> method -> portrait via rigdir.compose_rest -> depth.png/json\n- depth_map --check -> rigdir.depth_status -> exit 0 fresh / 3 stale / 2 missing\n\n## Expected impact\nRe-splitting no longer silently turns the depth face off; a stale depth map is named instead of applied; the learned-v1 calibration runs on the frame the stage draws; a malformed layers.json is refused by the same rules the stage uses. One module changes when the FormSpec grows a field.\n\n## Evaluation\nClaim: the rig folder has one owner and one compositor.\nBefore: 0 of 7 acceptance cases pass (depth.png deleted alone; unrelated PNGs deleted; no depth_status; light composited as rgb*a; gain/occl ignored; ../ path read; no --check)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first on synthetic rigs (no portrait)\nResult: better\nGate: architecture",
+    "evidence": "tools/rig/shadowrunr_rig/__main__.py:82-83:\n    for old in a.out.glob(\"*.png\"):\n        old.unlink()\ntools/avatar/depth_map.py:510: Image.fromarray(levels).save(folder / \"depth.png\", format=\"PNG\", optimize=False)\ntools/avatar/depth_map.py:342-345:\n        if layer.get(\"mode\") == \"light\":\n            rgb[y0:y1, x0:x1] += sub[..., :3] * a\n        else:\n            rgb[y0:y1, x0:x1] = rgb[y0:y1, x0:x1] * (1.0 - a) + sub[..., :3] * a\ntools/rig/shadowrunr_rig/split.py:263-268:\n        if layer.get(\"mode\") == \"light\" or layer[\"kind\"] == \"static\":\n            dst += rgb * gain\n        else:\n            occl = a * float(layer.get(\"occl\", 1.0))\n            dst *= 1 - occl\n            dst += rgb * gain * a\napps/stage/src/avatar/glow-shaders.ts:211-212: float cov = u_occl > 0.0 ? c.a : 1.0;  light *= u_gain * v_shade * cov;\napps/stage/src/avatar/depth/geom.ts:25-36 checkDepthMeta: version, width/height, near/far, planes - no inputs check\n$ grep -n shadowrunr_rig tools/avatar/*.py -> (no output)",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Verified depth-loss-on-resplit and a learned model fed a frame the stage never draws; solid cases."
+    }
+  },
+  {
+    "context": "avatar-rig-tools",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Re-split replaces the live rig blind: stage a candidate, judge extremes, promote",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "tools/rig/shadowrunr_rig/__main__.py",
+      "tools/rig/shadowrunr_rig/split.py",
+      "tools/rig/shadowrunr_rig/review.py",
+      "tools/rig/tests/test_review.py",
+      "tools/rig/README.md"
+    ],
+    "new_files": [
+      "tools/rig/shadowrunr_rig/review.py",
+      "tools/rig/tests/test_review.py"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "synthetic portrait + spec, main([... '--out', live, '--candidate']) with a stand-in fill -> every byte under `live` is unchanged; `live.next/` holds layers.json, the PNGs and report.json",
+      "report.json for the synthetic split -> one row per element with name, bbox, coverage_px, filled_px (pixels the fill replaced), rest error mean/p99 inside its bbox; the rows' bboxes cover every pixel whose global rest error exceeds 8",
+      "synthetic spec whose jaw has uncover: 6 -> extremes.png is three W x H panels (rest | jaw dropped 6 px | floats at +amp); the jaw panel differs from the rest panel only inside the union of the jaw bbox and that bbox shifted down 6 px",
+      "`promote` where live/report.json exists and one candidate element's p99 rose by more than 4 -> exit 1, prints that element as 'worse' with before->after, live unchanged; with --accept -> promoted",
+      "`promote` -> previous live files are kept in `live.prev/`, candidate files replace live with layers.json written last; then `promote --revert` -> live is byte-identical to before the promote",
+      "regions.png debug overlay -> each element's colour is fixed by its name (same name, same colour across runs) and a legend strip names every element; today colours come from default_rng(3) in iteration order with no legend"
+    ],
+    "premise": [
+      "tools/rig/shadowrunr_rig/__main__.py:81-86 - the run makes --out, unlinks its PNGs and writes the new rig straight into the folder the daemon serves (tools/rig/README.md:5); tools/rig/README.md:37-38 - '/avatar/ responses are not cached', so the live stage takes whatever the run wrote, good or bad, with no way back",
+      "tools/rig/shadowrunr_rig/__main__.py:87-92 - the only judgement printed is one global mean/p99/max rest error; nothing says WHICH element a bad p99 comes from, so tuning the hand-measured polygon spec (characters/malakor/rig/m8.spec.json) is edit-run-squint",
+      "tools/rig/shadowrunr_rig/split.py:249-251 - compose_rest draws the rest frame only ('no bloom, no motion'); the jaw's `uncover` (split.py:185-188) and float amp decide what a viewer sees when the jaw opens, and nothing renders them",
+      "tools/rig/shadowrunr_rig/split.py:272-278 - debug_overlay colours each coverage from default_rng(3) in dict order with no legend: the operator cannot tell which colour is which element",
+      "registry talking-avatar / single-image-layer-decomposition decision rule: 'When a layer looks wrong only in motion, judge it in motion: review stills of every control at its extremes, not the neutral frame' - the tool reviews the neutral frame only",
+      "tools/rig/shadowrunr_rig/split.py:56 keeps per-element coverage, and split.py:168-176 holds each cut's fill mask `fm`: the data for per-element attribution exists and is discarded"
+    ],
+    "rollback": "Two commits (review.py + split hooks for per-element bookkeeping and extremes; __main__ --candidate/promote/--revert + README). Revert either; without --candidate the run behaves exactly as today, and the extra on-disk files (report.json, extremes.png, *.next / *.prev folders) are ignored by the stage, which reads only files layers.json names.",
+    "gate": "direction",
+    "test_command": "cd tools/rig && python -m unittest discover -t . -s tests",
+    "runner_up": "`--only <element>` re-splits one element against a cached working copy, so a polygon tweak takes seconds instead of a full LaMa pass.",
+    "body": "## Summary\nTuning Malakor's rig means editing hand-measured polygons, re-running the splitter, and having it overwrite the rig the live stage is serving, judged by one global error number on a neutral frame. The operator decides blind whether the new rig is better, which element regressed, and what the jaw reveals when it opens - though the splitter already holds per-element coverage and fill masks. Add a candidate mode: write to `<out>.next`, a per-element report, an extremes contact sheet, and a `promote` that compares against the live report, refuses a regression unless accepted, and keeps `<out>.prev` for a one-step revert.\n\n## Description\nLeans on talking-avatar `single-image-layer-decomposition`, decision rule 'judge it in motion: review stills of every control at its extremes', and the golden path's 'one image is a promise about pixels that do not exist' - the jaw-open panel shows exactly the pixels the fill invented. `review.py` holds `element_report(result, fs, pictures, portrait)`, `extremes(fs, pictures, spec)` (compose_rest with the jaw layer offset by its `uncover` and floats by their amp - numpy translations, no renderer port), `compare(live, candidate, tol)`, and `promote/revert` (file-by-file os.replace, layers.json last). split.py records filled_px per element in bookkeeping that never reaches layers.json. debug_overlay gets name-hashed colours and a legend strip. A new operator mode on the tool's own CLI, hence gate `direction` (in scope). Shares only __main__'s write step with card A; whichever lands second rebases onto the other's call.\n\n## Flow\n- `python -m shadowrunr_rig ... --out rig --candidate` -> rig.next/{layers.json, *.png, report.json, extremes.png}; prints a per-element table and the delta against rig/report.json\n- operator opens extremes.png: jaw open and float extremes\n- `python -m shadowrunr_rig promote --out rig` -> refuses naming the worse elements, or promotes (rig -> rig.prev, rig.next -> rig)\n- `python -m shadowrunr_rig promote --out rig --revert` -> the previous rig is back\n\n## Expected impact\nA spec edit is judged per element and in motion before the live stage sees it; a regression is caught by name instead of by eye on air; a bad rig is one command from undone. Edit-run-squint becomes edit-run-read-promote.\n\n## Evaluation\nClaim: the operator can preview, compare, promote and revert a rig.\nBefore: 0 of 6 acceptance cases pass (no candidate mode, no per-element report, no extremes, no compare, no revert, unlabelled overlay)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first on the synthetic portrait of tests/test_split.py with the stand-in fill\nResult: better\nGate: direction",
+    "evidence": "tools/rig/shadowrunr_rig/__main__.py:81-86:\n    a.out.mkdir(parents=True, exist_ok=True)\n    for old in a.out.glob(\"*.png\"):\n        old.unlink()\n    for name, pic in pictures.items():\n        _save(pic, a.out / name)\n    path = fsm.write_layers_json(fs, a.out)\ntools/rig/shadowrunr_rig/__main__.py:90-92: print(f\"rest frame vs portrait: mean {err.mean():.2f}, p99 ..., max ...\")\ntools/rig/shadowrunr_rig/split.py:250-251: \"The rig's rest frame as the renderer draws it (no bloom, no motion)\"\ntools/rig/shadowrunr_rig/split.py:274: rng = np.random.default_rng(3)\ntools/rig/README.md:37-38: \"Reload the stage to see the new rig: `/avatar/` responses are not cached.\"\n$ grep -rn 'candidate|promote|revert' tools/rig -> (no output)",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 3,
+      "reason": "Good operator workflow on verified gaps; the per-element attribution case is satisfiable by the background row alone."
+    },
+    "revision": "Replace case 2 with: 'synthetic spec with one non-static element's polygon shifted 4 px off its feature -> report.json ranks that element's p99 highest and every other non-static element's p99 stays below 8'."
+  }
+]

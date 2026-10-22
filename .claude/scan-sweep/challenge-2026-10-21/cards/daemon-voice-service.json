@@ -1,0 +1,113 @@
+[
+  {
+    "context": "daemon-voice-service",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "A line enters voice.jsonl only once it renders: ledger it, stop guessing done",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-types/src/voice.rs",
+      "packages/contract/schema/contract.schema.json",
+      "packages/contract/src/generated/types.ts",
+      "crates/shadowrunr-daemon/src/voice/service.rs",
+      "crates/shadowrunr-daemon/src/voice/service/tests.rs",
+      "crates/shadowrunr-daemon/src/voice/log.rs",
+      "crates/shadowrunr-daemon/src/record/mod.rs",
+      "crates/shadowrunr-daemon/src/record/watch.rs",
+      "docs/guide/voice.md"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "crates/shadowrunr-types/src/voice.rs (VoiceLogEvent gains `queued`)",
+      "packages/contract (regenerated schema + types for the voice.jsonl line)"
+    ],
+    "acceptance": [
+      "hub + FakeRenderer, a followed run pushes one Malakor say -> the run's voice.jsonl holds {event:queued, seq:1} before its first `rendered` line (today: no line until the render)",
+      "a line is queued, then its run's last follower drops before the worker takes it -> voice.jsonl ends with {event:skipped, seq:N, reason:\"unfollowed\"} (today speak() returns at service.rs:511 and the line vanishes from the log)",
+      "voice_progress(text with only {event:queued, seq:5}) -> unplayed == 1 (today 0)",
+      "voice_progress(queued 5 + skipped 5 late) -> unplayed == 0; queued 5 + rendered 5.0 + played 5.0 -> unplayed == 0",
+      "wait_for_voice_within(log holding one queued line, quiet 50 ms, max 2 s), rendered+played lines for that seq appended at 300 ms -> returns at >= 300 ms (today it returns at ~50 ms with the line still rendering)",
+      "watch::voiced on a log with queued lines and the same rendered/played/skipped lines as before -> the same verdict and detail text as without them; clips voice::parse -> identical VoiceTiming"
+    ],
+    "premise": [
+      "crates/shadowrunr-daemon/src/record/mod.rs:54 - VOICE_QUIET is 2 s: the recorder calls the voice done after 2 s with no new voice.jsonl line",
+      "crates/shadowrunr-daemon/src/record/mod.rs:451 - done = unplayed == 0 && speaking_until passed && 2 s quiet; nothing knows about a line that has not rendered",
+      "crates/shadowrunr-daemon/src/record/mod.rs:390-404 - voice_progress counts only `rendered` parts as unplayed; a queued or rendering line is invisible",
+      "docs/guide/voice.md:227-235 - measured first audio p50/p90 on the warm engine 1.6/2.0 s up to 5.3/7.3 s under load: routinely longer than VOICE_QUIET",
+      "crates/shadowrunr-daemon/src/voice/service.rs:299-313 - enqueue writes nothing to the log; only lines pushed out as queue_full get a skipped frame",
+      "crates/shadowrunr-daemon/src/voice/service.rs:511-513 - a line whose run is no longer followed returns with no frame and no log line",
+      "crates/shadowrunr-daemon/src/voice/service.rs:261-273 - unfollow removes the run but leaves its lines in the shared queue",
+      "crates/shadowrunr-daemon/src/voice/service.rs:409-414 - a feeder that lags loses Malakor lines with one stderr line, though run.attach(since) (service.rs:376) can replay them",
+      "crates/shadowrunr-daemon/src/voice/log.rs:285-326 - VoiceLogs::service logs only utterances and skips",
+      "crates/shadowrunr-types/src/voice.rs:211-222 - VoiceLogEvent has rendered/skipped/played/stage_dropped/face, no queued",
+      "crates/shadowrunr-daemon/src/sandbox.rs:523 and crates/shadowrunr-daemon/src/record/cli.rs:154 - the sandbox's watched checks and the OBS stop both wait on wait_for_voice",
+      "crates/shadowrunr-daemon/src/record/watch.rs:187-194 - `voiced` cannot tell a line the voice dropped silently from one it never saw (`never rendered`)",
+      "crates/shadowrunr-clips/src/voice.rs:64-65 and crates/shadowrunr-daemon/src/record/watch.rs:131-134 - both readers skip lines they cannot parse, so a new event is additive"
+    ],
+    "rollback": "Three commits (types+contract regen; hub/log ledger + feeder re-attach; record/watch reading `queued`) revert in reverse order; old logs without `queued` read exactly as today, so a revert leaves no unreadable run dirs.",
+    "gate": "contract",
+    "test_command": "cargo test -p shadowrunr-types && cargo test -p shadowrunr-daemon voice:: && cargo test -p shadowrunr-daemon record:: && cargo test -p shadowrunr-clips && pnpm -C packages/contract generate && pnpm -C packages/contract check && pnpm -C packages/contract typecheck && pnpm -C packages/contract test && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "One shared queue and one global order chain (service.rs:91, :431) serve every followed run: a sandbox preview's backlog pushes the live run's lines out as queue_full and holds its frames; give each run its own queue and order chain.",
+    "body": "## Summary\nvoice.jsonl is the only record the recorder, the sandbox's watched checks and the clip cutter have of what the voice did, but a line gets into it only once it renders. A line that is queued or still rendering is invisible, so `wait_for_voice` calls the voice done after 2 s of quiet even though the line is still owed. That ends OBS recordings and measures `voiced` before the last line has played. A line whose follower left, or that a lagging feeder lost, never shows up in the log at all. The fix is to make the log a complete per-line ledger: write `queued` when a line enters the queue and exactly one terminal (rendered parts, or `skipped` with a reason, now including `unfollowed`) for every queued line. Readers then stop on \"nothing owed\" instead of a quiet-window guess.\n\n## Description\nThis leans on voice-io `tts-pipeline` (\"an utterance is an entity, not a function call\": identity is minted at enqueue, and every utterance ends in a known state) and on live-response-latency-budgeting `first-word-budget-decomposition` (a stage that nobody can see cannot be budgeted). Today the utterance's identity (`<run>:<seq>`) exists from enqueue (service.rs:299), but the durable record starts at render. The structural move is to have the hub own the line's whole lifecycle in the log:\n- `VoiceLogs::queued(line)` is written from `enqueue`.\n- Every early return in `speak()` and every unfollow writes a terminal skip, logged directly because the run's broadcast may already be gone.\n- The feeder recovers from `Lagged` by re-attaching from `last` instead of dropping lines.\n- `voice_progress` counts queued seqs with no terminal as owed.\n\n`VOICE_DRAIN_MAX` (45 s) and `max_lag_ms` (15 s) still bound the wait, so a stuck line cannot hold a recording forever. Gate: contract, because `VoiceLogEvent` gains `queued` in shadowrunr-types and the contract package is regenerated. Every reader already skips unknown lines.\n\n## Flow\n- say reaches the feeder -> enqueue -> log `queued {seq}`\n- worker takes it -> rendered parts / skipped {late|error|queue_full|unfollowed} -> log\n- stage reports played / stage_dropped -> log\n- wait_for_voice: owed = queued - terminal; done when owed == 0, audio over, quiet; bounded by VOICE_DRAIN_MAX\n- watch::voiced: a silently lost line now shows as skipped unfollowed, not `never rendered`\n\n## Expected impact\nRecordings and sandbox watched checks no longer end while a final line is still rendering. Measured first audio (p90 2.0 to 7.3 s) is longer than the 2 s quiet window, so the cut can happen today on any show whose last line arrives after the voice has gone idle. Every Malakor line in a run directory gets an auditable fate, and the sandbox's `voiced` check stops reporting dropped lines as `never rendered`.\n\n## Evaluation\nClaim: voice.jsonl records every line from enqueue to a terminal, and the drain waits on owed lines rather than quiet.\nBefore: 0 of 6 acceptance cases pass (cases 1-5 fail today; case 6 is the no-regression guard and is written against the new event)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first (service/tests.rs with FakeRenderer, record/mod.rs voice_progress and wait_for_voice_within with tempfiles, watch/clips parsers)\nResult: better\nGate: contract",
+    "evidence": "record/mod.rs:54 `pub const VOICE_QUIET: Duration = Duration::from_secs(2);` | record/mod.rs:451 `let done = unplayed == 0 && now >= speaking_until && now >= changed_at + quiet;` | record/mod.rs:390 `Some(\"rendered\") => {` (the only producer of unplayed) | service.rs:511-513 `if !hub.followed(&line.run_id) { return; }` | service.rs:409-413 `Err(RecvError::Lagged(n)) => { eprintln!(\"voice: {} fell {n} events behind; those lines are not voiced\" ...` | log.rs:323 `VoiceFrame::Status { .. } => return,` (service logs only utterance/skipped) | types voice.rs:211-221 enum VoiceLogEvent { Rendered, Skipped, Played, StageDropped, Face } | docs/guide/voice.md:231 `paced (24 lines) | warm | ... | 1.6 / 2.0 s, 1.9 / 3.3 s, 5.3 / 7.3 s` | sandbox.rs:523 `tokio::join!(judging, crate::record::wait_for_voice(&dir))` | record/cli.rs:154 `let waited = wait_for_voice(dir).await;`",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Real recording-cut defect with a principled fix; one scoped behaviour is untested."
+    },
+    "revision": "Add a case: the feeder receives RecvError::Lagged(n) -> it re-attaches from its last seq and every lost line appears in voice.jsonl as queued plus one terminal (no line goes unlogged)."
+  },
+  {
+    "context": "daemon-voice-service",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "`voice replay` tunes blind: compare configs, show the lines each one saves",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "crates/shadowrunr-daemon/src/voice/replay.rs",
+      "crates/shadowrunr-daemon/src/voice/cli.rs",
+      "docs/guide/voice.md"
+    ],
+    "new_files": [
+      "crates/shadowrunr-daemon/src/voice/replay/compare.rs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "parse_arms(\"workers=1,3 flight=2\") -> [(workers 1, flight 2), (workers 3, flight 2)]; `voice replay t.jsonl --arms workers=0` -> usage error, exit 2",
+      "replay_with(FakeRenderer, a transcript of 3 Malakor lines where line 2 is scripted Hang, max_lag_ms 60) -> report.outcomes == {1: spoken, 2: late, 3: spoken}",
+      "compare(baseline {1: spoken, 2: late, 3: queue_full}, arm {1: spoken, 2: spoken, 3: error}) -> saved [2], lost [], changed [3: queue_full -> error], each with its text cut to 60 chars",
+      "aggregate of 3 repeats with first_audio p50 [1600, 1900, 5300] ms -> the row cell reads `1.9 s (1.6-5.3, n=3)`",
+      "`--json` with two arms -> {\"baseline\":{...},\"arms\":[{\"workers\":..,\"lines_in_flight\":..,\"repeats\":3,\"outcomes\":{\"1\":\"spoken\",...},\"saved\":[..],\"lost\":[..]}]}",
+      "no --arms, no --repeat -> stdout is byte-identical to today's HEADER + one row (back compat)"
+    ],
+    "premise": [
+      "crates/shadowrunr-daemon/src/voice/cli.rs:41-62 - `voice replay` takes one value each for workers/lines_in_flight/threads: one arm per invocation",
+      "crates/shadowrunr-daemon/src/voice/replay.rs:333-355 - the output is one table row of totals (spoken/late/qfull/error, first_p50/p90)",
+      "crates/shadowrunr-daemon/src/voice/replay.rs:222,271,286 - the replay already knows each line's fate (`resolved: HashMap<u64, &str>`) and throws it away into counts at :300-308",
+      "crates/shadowrunr-daemon/src/voice/replay.rs:181 - replay() builds a SidecarRenderer itself, so its accounting has no test without Python; the Renderer seam (renderer.rs:45-53) and FakeRenderer (renderer.rs:99-238) already exist",
+      "docs/guide/voice.md:227-235 - the tuning table was assembled by hand from back-to-back invocations, n = 1 to 3 per row, and spreads from 1.6/2.0 s to 5.3/7.3 s within one row: a single run cannot separate a config's effect from machine load",
+      "docs/guide/voice.md:240-246 - the render_workers default was chosen from such replays and is called provisional"
+    ],
+    "rollback": "Two commits (replay_with seam + per-line outcomes; arms/repeat/compare CLI); reverting the second leaves the plain one-row replay exactly as today, and reverting the first restores the inline SidecarRenderer.",
+    "gate": "none",
+    "test_command": "cargo test -p shadowrunr-daemon voice::replay && cargo test -p shadowrunr-daemon voice::cli && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "`voice check` proves the files exist but not that the voice keeps up: `check --speak` renders a probe sentence and reports RTF and first audio against the live budget.",
+    "body": "## Summary\nThe operator tunes the live voice (workers, lines in flight, threads) with `voice replay`. Each invocation runs one config once and prints one row of totals. So the tuning decision is made blind: the operator gets two rows from two runs on a machine whose load moves the first audio from 1.6 to 5.3 s, and has no view of which lines a config actually saves or loses. The proposal makes replay a compare mode. `--arms workers=2,3 flight=1,3 --repeat 3 [--baseline workers=3,flight=3]` runs every arm `repeat` times over the same transcript. It prints each figure as a median with its range and n, plus a per-line diff against the baseline (saved, lost, changed reason, with the line's text).\n\n## Description\nThis leans on voice-io `real-time-synthesis-budget`: an engine configuration is admitted to live speech on measured first audio and keep-up, on the tier that runs it, and figures carry their n. The replay already resolves each line's fate (replay.rs:222) and collapses it into counts. The change keeps the fate as `outcomes: BTreeMap<seq, Outcome>` on the Report. It splits `replay_with(renderer: Arc<dyn Renderer>, ...)` out of `replay()`, so the accounting is tested with FakeRenderer and no Python, while `replay()` stays the sidecar wrapper. A new `replay/compare.rs` adds the arm grid, the repeat aggregation (median, min-max, n) and the line diff (majority outcome across repeats per seq). The plain invocation stays byte-identical.\n\n## Flow\n- `shadowrunr voice replay show.jsonl --arms \"workers=2,3 flight=1,3\" --repeat 3`\n- for each arm x repeat: replay_with(sidecar for that arm) -> Report with outcomes\n- aggregate per arm -> one row: `spoken 22/24 (21-24, n=3)  first p50 1.9 s (1.6-5.3)`\n- diff vs baseline -> `saved: #14 \"You kneel when...\" (late -> spoken); lost: none`\n- `--json` -> the same structure for scripts\n\n## Expected impact\nThe one decision this CLI exists for, picking the live voice config, gets made on paired evidence with its spread. Before, it was made on single runs and a hand-assembled table. The operator sees which lines a config rescues (the ones an audience would have missed) rather than a one-line difference in totals that load alone can produce.\n\n## Evaluation\nClaim: one replay command compares configs with repeat statistics and a per-line diff.\nBefore: 0 of 6 acceptance cases pass (no arms parser, no outcomes, no compare, no aggregation; case 6 is the back-compat guard)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first, driven by FakeRenderer through replay_with\nResult: better\nGate: none",
+    "evidence": "cli.rs:47-55 `workers: Option<usize>, ... lines_in_flight: Option<usize>, ... threads: Option<u32>` (one value each) | replay.rs:222 `let mut resolved: HashMap<u64, &'static str> = HashMap::new();` then :300-308 folded into report.spoken/partial/late/queue_full/error counts | replay.rs:181 `let (renderer, task) = SidecarRenderer::start(voice.clone(), stop());` | replay.rs:333 `pub fn row(r: &Report) -> String` (one row) | docs/guide/voice.md:228 `n = 1 to 3 per row, run back to back` and :231 `1.6 / 2.0 s, 1.9 / 3.3 s, 5.3 / 7.3 s`",
+    "critic": {
+      "verdict": "build",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Grounded, testable without Python, honest about n; modest but clears floors."
+    }
+  }
+]

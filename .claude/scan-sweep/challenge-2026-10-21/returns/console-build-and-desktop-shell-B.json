@@ -1,0 +1,17 @@
+{"card":"check-bundle says a route is over, never which chunk grew: diff vs measured","context":"console-build-and-desktop-shell","slot":"B","status":"landed",
+ "shas":["763acb9"],
+ "tests_added":[
+  "apps/console/scripts/bundle-measure.test.ts::measures a route beyond the entry with a hash-free per-chunk list",
+  "apps/console/scripts/bundle-measure.test.ts::chunkKey strips a shared chunk's content hash and leaves source keys alone",
+  "apps/console/scripts/bundle-measure.test.ts::two distinct shared chunks with the same stem stay two entries, never summed",
+  "apps/console/scripts/bundle-measure.test.ts::diffRoutes names what grew, sorted by |delta|, unchanged chunks omitted",
+  "apps/console/scripts/bundle-measure.test.ts::an over-budget route is followed by its top-3 chunk deltas and the slack line; exit stays 1",
+  "apps/console/scripts/bundle-measure.test.ts::with no baseline the report says how to write one and the verdict is unchanged",
+  "apps/console/scripts/bundle-measure.test.ts::a written baseline carries js/css/per-chunk js and reads back as delta 0 everywhere",
+  "apps/console/scripts/bundle-measure.test.ts::guard: the verdict is budget-only and the failure heads are unchanged"],
+ "guard_cases":["guard: the verdict is budget-only and the failure heads are unchanged (unit)","old-vs-new checker on one dist: 72 budget variants (each route js-1, js=budget, css-1, unbudgeted; ghost route) x baseline present/absent = 144 of 144 identical exit code and failure lines (scratch harness, not committed); also clean 569f4bb build old rc 0 == new rc 0"],
+ "cases_total":8,"cases_red_before":8,"cases_green_after":8,
+ "gates":{"pnpm -C apps/console test":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console lint":0,"pnpm -C apps/console build":0},
+ "files_changed":5,"lines_changed":690,
+ "deviations_from_card":"package.json unchanged: the existing budget:bundle script already forwards --write-baseline, so the documented refresh command is `pnpm -C apps/console build && pnpm -C apps/console budget:bundle --write-baseline` (in check-bundle.mjs header, the baseline's $comment and the no-baseline hint). Synthetic hashes in tests are 8 chars (vite's real length; chunkKey matches exactly -[\w-]{8}, which also handles hashes containing '-', e.g. _StatBand-1bNxvU-n.js) instead of the card's AAAA shorthand. Same-stem collision naming: _index~1.js/_index~2.js ordered by hash-free importer list then key, stable under rehash (tested). Red-before was an import failure (module absent), not an assertion, so tests and implementation landed as one commit. budgets/bundle.json not edited.",
+ "notes":"bundle.measured.json was measured from a clean `git archive` export of 569f4bb (node_modules junctioned) so siblings' uncommitted work is not in it; at the time of commit the shared-tree build shows deltas (e.g. characters.l2 +3806 B, onair.l1 +1620 B) that are siblings' in-flight bytes. Coordinator: after the wave lands, refresh with the command above and commit the baseline. Gates were red mid-run only on siblings' in-flight files (onair/view.test.ts, characters layer2.test.tsx size, config.test.ts); final rerun all 0. One build hit exit 2 (manifest missing) from a concurrent sibling build emptying dist; rerun was 0."}

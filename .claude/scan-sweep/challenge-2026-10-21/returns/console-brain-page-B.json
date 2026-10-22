@@ -1,0 +1,17 @@
+{"card":"Engine floor has no baseline: compare two ledgers role by role","context":"console-brain-page","slot":"B","status":"landed",
+ "shas":["ab0621f"],
+ "tests_added":[
+  "apps/console/src/pages/brain/engineModel.test.ts::compareSummaries > signs a latency change per role and calls a slower candidate worse",
+  "apps/console/src/pages/brain/engineModel.test.ts::compareSummaries > names a role on one side only as new or gone, with no delta",
+  "apps/console/src/pages/brain/engineModel.test.ts::compareSummaries > refuses a delta on a role under the minimum sample",
+  "apps/console/src/pages/brain/engineModel.test.ts::compareSummaries > reads error rate in percentage points and marks a cost delta over uncosted rows as a lower bound",
+  "apps/console/src/pages/brain/layer2.test.tsx::brain/engine > compares the source with the previous tournament by default, both sides named",
+  "apps/console/src/pages/brain/layer2.test.tsx::brain/engine > says the baseline is a window and the comparison partial when its summary fails",
+  "apps/console/src/pages/brain/layer2.test.tsx::brain/engine > cautions when the two tournaments ran on different instruments",
+  "apps/console/src/pages/brain/layer2.test.tsx::brain/engine > compares nothing for the daemon ledger until a baseline is picked"],
+ "guard_cases":[],
+ "cases_total":8,"cases_red_before":8,"cases_green_after":8,
+ "gates":{"pnpm -C apps/console test -- src/pages/brain":0,"pnpm -C apps/console test (full, 547 passed)":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console lint":0,"pnpm -C apps/console build":0},
+ "files_changed":6,"lines_changed":434,
+ "deviations_from_card":"Built on ledger.summary (slot A): both sides read the summary; the baseline's ledger.page window (STEP x PAGE = 5,000) is fetched only when the baseline's summary errors, so acceptance case 6 ('baseline: first 5,000 calls', partial) is exercised through a failing baseline summary over a 9,000-row baseline. Layer2.module.css left untouched: the first cut added a .pair rule that pushed brain.l2 css to 17,268 B > 17,000 B budget; removed it and reused .note instead of raising the line (bundle.json not touched). Tests and implementation landed as one commit (the model test cannot typecheck before compareSummaries exists). Existing test 'derives routing...' switched from getByRole('combobox') to getByLabelText('Ledger') since the floor now has two selects. Cost is compared at the totals level only (RouteSummary carries no per-role cost).",
+ "notes":"perf.json has no Engine-floor (brain.l2.engine) RPC line and no perf test mounts the Engine floor, so no budget line changes. RPC cost of the compare: +1 ledger.summary per baseline (plus up to 10 ledger.page only on a failed baseline summary). testgen Season gains optional `ledgers` (per-tournament map) with ledgerOf(); default behaviour unchanged. minN default 20; thin roles suppress rate and latency deltas alike."}

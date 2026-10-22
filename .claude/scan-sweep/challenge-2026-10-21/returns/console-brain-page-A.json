@@ -1,0 +1,25 @@
+{"card":"Brain totals are page-window samples: one daemon ledger.summary per source","context":"console-brain-page","slot":"A","status":"landed",
+ "shas":["dadd7d7","aab0153"],
+ "tests_added":[
+  "crates/shadowrunr-daemon/src/e2e/paging.rs::ledger_summary_folds_every_row_of_a_tournament_past_both_console_windows",
+  "crates/shadowrunr-daemon/src/e2e/paging.rs::ledger_summary_percentiles_leave_failed_calls_out_and_count_unknown_cost",
+  "apps/console/src/pages/brain/layer1.test.tsx::quotes the tournament's whole ledger from ledger.summary, not the page window",
+  "apps/console/src/pages/brain/layer1.test.tsx::falls back to the window's fold, labelled, when ledger.summary fails",
+  "apps/console/src/pages/brain/layer2.test.tsx::reads its totals and per-role routes from ledger.summary and still pages the call ledger",
+  "apps/console/src/pages/brain/layer2.test.tsx::says how many calls carry no cost instead of folding them into $0",
+  "apps/console/src/pages/brain/layer2.test.tsx::falls back to the window's fold with the '(first pages)' label when ledger.summary fails",
+  "apps/console/src/pages/brain/layer2.test.tsx::refetches ledger.summary with ledger.page when a stream ends"
+ ],
+ "guard_cases":["layer1: falls back to the window's fold when ledger.summary fails (today's behaviour, green before by design)","layer2 engine: falls back with '(first pages)' when ledger.summary fails (green before by design)"],
+ "cases_total":8,"cases_red_before":6,"cases_green_after":8,
+ "gates":{
+  "cargo test -p shadowrunr-types":0,"cargo test -p shadowrunr-daemon":0,
+  "cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt --all -- --check":0,"cargo test --workspace":0,
+  "pnpm -C packages/contract generate":0,"pnpm -C packages/contract test":0,"pnpm -C packages/contract typecheck":0,"pnpm -C packages/contract lint":0,"pnpm -C packages/contract check":0,
+  "pnpm -C apps/console test (full suite, 530 passed)":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console lint":0,
+  "pnpm -C apps/stage typecheck":0,"pnpm -C apps/stage test":0,
+  "pnpm -C apps/console build":1
+ },
+ "files_changed":62,"lines_changed":9600,
+ "deviations_from_card":"Coupled files beyond the write set: docs/spec/contract.md (method row + LedgerSummary shape), packages/contract/src/generated/results/* (the per-result codegen now regenerates every result module; all but LedgerSummary.{js,d.ts} only renumber validator ids, which is most of the line count), apps/console/budgets/perf.json (brain.l1 rpc line + ledger.summary: 1 with a dated why; the rpc gate fails any unlisted method). Engine.tsx's per-row Cost column shows '–' for an uncosted row instead of $0. The Layer1 flag with the summary reads 'Newest tournament · lanes drawn from the first pages only' so the sibling-owned perf/pages.tsx ready matcher (/first pages only/) needed no edit. Two commits, not three: types+daemon+contract regen went in one locked commit (the contract check compares the schema to the Rust types, so splitting would leave main red); console in the second. Console tests and implementation in one commit (the tests need testgen's ledger.summary answer). Rust tests were red on the assertion before the implementation but were committed with it.",
+ "notes":"Acceptance 8 card cases: daemon 4 (in 2 e2e tests, both red before: method_not_found), console 4 (Engine whole totals, Layer1 HUD/lamps/flag, error fallback, invalidation); plus one extra console cost case (red before: '$0.6666' vs '$1.20 + 3,000 uncosted'). Red before counted: 2 Rust tests + 4 console tests = 6; 2 console fallback tests are guards. RED GATE NOT MINE: pnpm -C apps/console build fails only on onair.l2 js 103,719 B > 103,500 B, re-run after waiting with the same result; onair.l2 carries stage-kit, and f660a65 (stage-kit-scene-engine, ballots.ts +110 lines, 'ballots' appears in the onair feed chunk) landed between my two commits. Brain routes and the door are within budget (brain.l1 27.2 KiB, brain.l2 77.0 KiB, door 124.3 / 128.9 KiB, door.result largest 163.0 / 170.9 KiB, entry 281.6 / 281.7 KiB). The shared-surface lock was taken for dadd7d7 and released. For slot B: EngineSummary gained `uncosted`; fromLedgerSummary(summary, runStart) and costText(s, usd) live in engineModel.ts; Engine's Tables takes `whole: LedgerSummary | undefined`; testgen exports ledgerSummary(rows)."}

@@ -1,0 +1,116 @@
+[
+  {
+    "context": "console-review-page",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Operator marks become a per-line sequenced write ledger, not a racy overlay",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/pages/review/hooks.ts",
+      "apps/console/src/pages/review/FeedbackPanel.tsx",
+      "apps/console/src/pages/review/Player.tsx",
+      "apps/console/src/pages/review/PlayerParts.tsx",
+      "apps/console/src/pages/review/Moment.tsx",
+      "apps/console/src/pages/review/player.test.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/pages/review/ledger.ts",
+      "apps/console/src/pages/review/ledger.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "ledger: write#1 save(L,[landed]) in flight, write#2 save(L,[flat]) resolves ok, then write#1 rejects -> byLine(L).tags == [flat] (today hooks.ts:47 rolls L back to its pre-#1 state, showing no mark while the daemon holds [flat])",
+      "ledger: save(L1) and save(L2) in flight; L1 fails, L2 succeeds -> status(L1)='failed' with its payload kept for retry, status(L2)='saved', byLine(L2) kept",
+      "panel: while save(L1) is in flight the Save button on L2 is enabled (today the single useMutation pending, hooks.ts:52 -> FeedbackPanel.tsx:70, disables Save on every line)",
+      "player: mark 1 + Enter with review.feedback.set held open -> data-line advances to the next roast before the reply arrives (today onSaved={next} fires only after the await, FeedbackPanel.tsx:42-45)",
+      "player: the held write then fails -> a '1 mark not saved - Retry' notice shows naming the line; Retry resends the same tags/note and on ok the notice clears and the line counts as marked",
+      "ledger: rs.feedback refetch carries row (L, at_ms >= the entry's ack) -> the entry is pruned from the overlay (today local entries live for the life of the view, hooks.ts:28, masking any later server state)",
+      "player: Enter pressed twice while one write on the same line is pending -> exactly one review.feedback.set is sent (today the keyboard path Player.tsx:102 bypasses the disabled button)"
+    ],
+    "premise": [
+      "apps/console/src/pages/review/hooks.ts:42 - `before` is captured once per call from the render's closure",
+      "apps/console/src/pages/review/hooks.ts:47 - on failure the line is unconditionally set back to `before`, regardless of later writes to the same line",
+      "apps/console/src/pages/review/hooks.ts:52 - `pending` is the single shared useMutation boolean for every line",
+      "apps/console/src/data/react.tsx:90-97 - useMutation sets pending true on run and false in finally: with two runs in flight the first to finish clears it while the second is still pending",
+      "apps/console/src/pages/review/hooks.ts:28 - the `local` overlay map is never pruned",
+      "apps/console/src/data/invalidation.ts:28-29 - review.feedback.set never invalidates review.session, so the overlay is the only truth for this view",
+      "apps/console/src/pages/review/FeedbackPanel.tsx:41-45 - save awaits the RPC before onSaved; Player.tsx:150 passes onSaved={next}, so each step blocks on the daemon append",
+      "apps/console/src/pages/review/Player.tsx:102 - bare Enter calls panel.save() with no pending guard",
+      "apps/console/src/pages/review/FeedbackPanel.tsx:33-39 - the draft resets on line change; status is a free string compared to 'Saved' (FeedbackPanel.tsx:71)"
+    ],
+    "rollback": "Two commits: (1) ledger.ts + ledger.test.ts, pure and unused; (2) hooks.ts/FeedbackPanel/Player/PlayerParts/Moment switch to it. Reverting (2) restores the overlay; (1) then reverts as dead code. No contract, daemon or stored-data change.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/console test -- src/pages/review && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "One review route codec (tab/kind/line plus timeline size+filter, moderation pick, calls minute) replacing the hand-parsing in Layer2.tsx:27-44, index.ts:10-17 and the pageRoute calls in Timeline/Player, so Back from a moment restores the tab state it came from.",
+    "body": "## Summary\nThe Review page's feedback state is an optimistic overlay with one rollback snapshot per call and one shared pending flag. Make it a per-line sequenced write ledger (draft -> sending#seq -> saved | failed(payload)) so a late failure never clobbers a newer success, pending is per line, the player can advance before the daemon answers, and a failed mark is retryable instead of a transient status string.\n\n## Description\nhooks.ts:38-51 snapshots `before` and restores it on any failure, so two writes to one line resolve last-to-fail-wins rather than last-written-wins. useMutation's pending is one boolean per hook (data/react.tsx:90-97), so Save is disabled on every line while any line saves, and the keyboard path (Player.tsx:102) is not guarded at all. The overlay is never pruned (hooks.ts:28) and review.session is never refetched for feedback (invalidation.ts:29), so the overlay silently outranks any later server state. A pure `ledger.ts` reducer keyed by line holds entries {seq, payload, state}; a reply settles only the entry whose seq it carries; a failure reverts to the newest acknowledged state for that line, not a snapshot; a server row at or after the ack prunes the entry. Leans on review-iteration-loops / gate-record-outlives-the-media: the operator's judgement is attention spent once, so its record must never be silently lost or shown wrong - the record is a queue whose rows carry whether they landed.\n\n## Flow\n- ledger.ts: reducer + selectors (byLine, statusOf(line), failed()) - pure, unit tested first\n- hooks.ts: useFeedback drives the ledger; save() enqueues and returns a seq; per-line pending\n- FeedbackPanel: disabled/status from statusOf(line), not set.pending or a string\n- Player: Save and next advances on enqueue; PlayerParts shows a failed-marks notice with Retry\n- Moment: the drawer's panel shows the same per-line status\n\n## Expected impact\nNo mark ever displays a state the daemon does not hold; the player's step time stops including the daemon's append round trip; a failed write is recoverable from the screen instead of a status line that vanishes on the next line.\n\n## Evaluation\nClaim: concurrent and failed feedback writes resolve to the newest write, per line, and the player does not block on the RPC.\nBefore: 0 of 7 acceptance cases pass (cases 1, 3, 4, 5, 6, 7 fail on today's code by the cited lines; case 2 has no per-line status to assert)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (ledger.test.ts pure; player.test.tsx with a held review.feedback.set double)\nResult: better\nGate: architecture",
+    "evidence": "hooks.ts:42 `const before = local.has(line) ? local.get(line) : base.get(line) ?? null;`\nhooks.ts:47 `setLocal((m) => new Map(m).set(line, before ?? null));`\nhooks.ts:52 `return { byLine, save, pending: set.pending };`\ndata/react.tsx:90 `setPending(true);` ... :97 `setPending(false);` (one boolean per hook instance)\ninvalidation.ts:28 `// Feedback is optimistic on the page; only the wall's counts refetch, never the whole session.` :29 `\"review.feedback.set\": [\"review.sessions\", \"review.feedback.list\"]`\nFeedbackPanel.tsx:42-45 `const err = await props.feedback.save(...); if (err) {...} setStatus(\"Saved\"); props.onSaved?.();`\nPlayer.tsx:102 `else if (e.key === \"Enter\") panel.current?.save();`",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Real concurrency/data-integrity defect in the operator's judgement record, fully grounded, tight test plan."
+    }
+  },
+  {
+    "context": "console-review-page",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Compare two sandbox sessions: what got fixed, what broke, what moved",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 4,
+    "write_set": [
+      "apps/console/src/pages/review/Layer2.tsx",
+      "apps/console/src/pages/review/tab.ts",
+      "apps/console/src/pages/review/index.ts",
+      "apps/console/src/pages/review/names.ts",
+      "apps/console/src/pages/review/Judge.tsx",
+      "apps/console/budgets/bundle.json"
+    ],
+    "new_files": [
+      "apps/console/src/pages/review/compare.ts",
+      "apps/console/src/pages/review/Compare.tsx",
+      "apps/console/src/pages/review/Compare.module.css",
+      "apps/console/src/pages/review/compare.test.tsx"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "route #/review/<A>/compare/<B> with two valid session ids -> the compare view renders both session titles; #/review/<A>/compare/nope -> the 'There is no page at' StatePanel (Layer2 known-check)",
+      "rules: A fails {r1,r2}, B fails {r2,r3} -> three lists 'Newly failing: <ruleName(r3)>', 'Fixed: <ruleName(r1)>', 'Still failing: <ruleName(r2)>', each ref opening that session's timeline line",
+      "B has no verdict -> the judge block reads 'B was not judged' and lists no 'Fixed' rules (unmeasured is not pass), never 'No rule failed'",
+      "checks: say_gap pass in A, fail in B -> one changed row 'Say gap: passed -> failed' in fail tone; unchanged checks collapse to 'n checks unchanged'",
+      "figures: reply-wait p95 3.2 s -> 5.1 s -> shows '+1.9 s' in fail tone because B crosses REPLY_LIMIT_S; longest silence likewise against SILENCE_LIMIT_S",
+      "mix: roast share 30% -> 12% -> a row 'Roast -18 pts', kinds ordered by absolute share change",
+      "quality: humor_landed 4/5 in A, 1/5 in B -> listed first with both rates (dimRows of each)",
+      "from any session's tab bar a 'Compare with previous' link targets the session started just before it (by started_ms in review.sessions); on the oldest session it is absent"
+    ],
+    "premise": [
+      "apps/console/src/pages/review/Layer2.tsx:27 - TAB_IDS is the closed set timeline/types/player/judge/moderation/calls: no view spans two sessions",
+      "apps/console/src/pages/review/Layer2.tsx:44 - `known` requires a single session id and a known tab, so compare needs a new tab id with a session-id arg",
+      "apps/console/src/pages/review/Layer1.tsx:67-72 - the wall can only sort sessions (oldest / fails / roast); each row links to one session (Layer1.tsx:143)",
+      "apps/console/src/pages/review/Judge.tsx:24-36 - dimRows(rs, catalog) is already a pure per-session reducer reusable for a diff",
+      "apps/console/src/pages/review/derive.ts:80 - replyWaitS per session; tabkit.tsx:34 pct gives its p95",
+      "apps/console/src/pages/review/names.ts:47 and names.ts:53 - SILENCE_LIMIT_S and REPLY_LIMIT_S are the page's failure lines",
+      "apps/console/src/pages/review/hooks.ts:15 - useSession(id) is a cached review.session read; two can mount at once",
+      "apps/console/budgets/bundle.json:60-63 - review.l2 css budget 35000 against 34,148 B measured at UI-2 (per the file's $comment), so compare CSS must reuse tabkit/kit classes or raise the line in the same change"
+    ],
+    "rollback": "Additive: one commit adds compare.ts + tests, one wires the tab, route and link. Reverting the wiring commit removes the route and link; compare.ts goes with it. No contract, daemon or stored-data change.",
+    "gate": "direction",
+    "test_command": "pnpm -C apps/console test -- src/pages/review && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "A cross-session 'notes to act on' queue of every marked line with a note, grouped by mark - today feedback.jsonl is a write-only sink nothing outside the console and daemon review module reads.",
+    "body": "## Summary\nThe operator runs a sandbox session, changes the brain, runs another, and today has to judge 'better or worse' by flipping between two session pages and remembering numbers. Add a compare view, `review/<A>/compare/<B>`, reached in one click from any session ('Compare with previous'), that answers the iteration question directly: rules newly failing / fixed / still failing, gate checks that flipped, reply-wait and silence figures with deltas against the page's limits, line-mix share shifts and quality-dimension moves.\n\n## Description\nThe page already holds every number needed, per session: verdict rules and evidence, checks, derive()'s replyWaitS and mix, dimRows. It never sets two side by side - the wall only sorts (Layer1.tsx:67-72) and every tab is one session (Layer2.tsx:27). A pure `compare.ts` takes two (ReviewSession, Derived) pairs and returns the diff; Compare.tsx renders it with the existing Section/Chip/StatBand primitives. Leans on review-iteration-loops: review exists to drive the next revision, and its unmeasured-is-not-pass law (stale certificates failure mode) sets the rule that an unjudged side shows as unmeasured, never as a clean pass.\n\n## Flow\n- compare.ts: ruleDiff, checkDiff, figureDiff (with limit crossings), mixDiff, dimDiff - pure, tested first\n- tab.ts / Layer2.tsx: TabId 'compare', known-check accepts a session-id arg, tab bar gains 'Compare with previous' (from useSessions by started_ms)\n- index.ts: breadcrumb label 'Compare'\n- Compare.tsx (+ minimal css): two useSession reads, five sections, rule refs open the owning session's timeline line\n\n## Expected impact\nThe operator's after-change question ('did that fix it, and what did it break?') becomes one click and one screen instead of two pages and memory; regressions hidden behind an unchanged pass/fail verdict (one rule swapping for another, reply p95 drifting over 4 s) become visible.\n\n## Evaluation\nClaim: two sessions can be compared on rules, checks, figures, mix and quality from one route.\nBefore: 0 of 8 acceptance cases pass (no compare route or diff exists)\nAfter: 8 of 8\nMethod: gate - acceptance tests written first (compare.test.tsx: pure diff cases on tabs.fixture sessions plus a mounted Layer2 route test)\nResult: better\nGate: direction (new in-scope review mode); review.l2 css budget checked by `pnpm -C apps/console build`",
+    "evidence": "Layer2.tsx:27 `const TAB_IDS: readonly TabId[] = [\"timeline\", \"types\", \"player\", \"judge\", \"moderation\", \"calls\"];`\nLayer2.tsx:44 `const known = sessionId !== undefined && (head === undefined || isTab(head)) && rest.length === 0 && (tab !== \"player\" || isKind(arg));`\nLayer1.tsx:67 `export function sortRows(rows, order: WallOrder)` - the wall's only multi-session operation\nJudge.tsx:24 `export function dimRows(rs: ReviewSession, catalog: ReadonlyMap<string, RuleInfo>): DimRow[]`\nnames.ts:47 `export const SILENCE_LIMIT_S = 15;` names.ts:53 `export const REPLY_LIMIT_S = 4;`\nbundle.json:60-63 `\"review.l2\": { \"js\": 100000, \"css\": 35000 }`; $comment: 'review.l2 css 30,000 -> 35,000 (28,160 -> 34,148 B ...)'\ngit grep 'review_dir|feedback.jsonl|LineFeedback|FeedbackTag' -- crates tools apps (outside pages/review): only crates/shadowrunr-daemon/src/review/{mod,rows,store}.rs, config.rs and e2e/review.rs (runner-up premise)",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Grounded, additive, in-scope feature that directly serves the review loop; budget risk already named."
+    }
+  }
+]

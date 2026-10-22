@@ -1,0 +1,16 @@
+{"card":"Viewers vote by a name the runtime drops: show ballot keys, say what landed","context":"stage-kit-overlays","slot":"B","status":"landed",
+ "shas":["a177311","929f538"],
+ "tests_added":[
+  "apps/stage/src/overlays.test.ts::an open poll shows each option's key and the command to type",
+  "apps/stage/src/overlays.test.ts::guard: a closed poll drops the keys and the command; the winner row stays as it was",
+  "apps/stage/src/overlays.test.ts::a display name the runtime does not accept reads 'not an option', never as counted",
+  "apps/stage/src/overlays.test.ts::an index or a case-folded option id is counted, and the chip names the option",
+  "apps/stage/src/overlays.test.ts::a voter below the poll's rank reads 'below Warlock'",
+  "apps/stage/src/overlays.test.ts::a vote with no poll open at its time reads 'no open poll', before and after the poll",
+  "apps/stage/src/overlays.test.ts::a vote counted while the poll was open still reads counted after it closes"],
+ "guard_cases":["closed poll: keys and '!vote 1-N' gone, winner row markup unchanged (card case 6)"],
+ "cases_total":7,"cases_red_before":6,"cases_green_after":7,
+ "gates":{"pnpm -C packages/stage-kit test":0,"pnpm -C packages/stage-kit typecheck":0,"pnpm -C packages/stage-kit lint":0,"pnpm -C apps/stage test":0,"pnpm -C apps/stage typecheck":0,"pnpm -C apps/stage lint":0,"pnpm -C apps/stage build":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console lint":0,"pnpm -C apps/console build":0,"pnpm -C apps/console test":1},
+ "files_changed":4,"lines_changed":230,
+ "deviations_from_card":"Per revision: no ballotKey.ts/ballotKey.test.ts and no case 7. The chip reuses ballots.ts ballotOption (counted decision, incl. rank gate) and matchOption (to name the refusal); no second matcher. Card case 6 is a guard (green before). Added a 7th case: outcome is judged at the line's ts_ms, so a counted vote still reads counted after the poll closes. optionLabel is now exported from VotePanel (ChatLane uses it). The card's 1920x1080 visual check was not run. No bundle budget raised (console untouched, check-bundle 0 over).",
+ "notes":"apps/console test red only in src/perf/dom.test.tsx segments.l2.tables. That is the console-segments-page B sibling's uncommitted segments files: their typecheck was also red on the first run and green on the re-run after ~75s. My change does not touch apps/console. Follow-up: the runtime now emits input moderation `ignored` events with the rule (unknown_option, poll_min_rank, no_open_poll), but the scene's letThrough drops them without recording them. If scene-engine stored a per-msg rule, the chip could show the runtime's own verdict and stop deriving it. That needs scene.ts/sceneModel.ts, which are outside this write set. Known edge: a !vote in the same ts batch as, but before, the start_poll would read counted, though the runtime saw no poll."}

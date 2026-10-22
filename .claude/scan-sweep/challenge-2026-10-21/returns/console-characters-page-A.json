@@ -1,0 +1,17 @@
+{"card":"Tournaments drop the character they ran: tag rows, stop guessing per picker","context":"console-characters-page","slot":"A","status":"landed",
+ "shas":["34a6810","5ed27da","80d08e9"],
+ "tests_added":[
+  "crates/shadowrunr-daemon/src/runs.rs::tests::a_tournament_row_carries_the_character_its_tournament_json_recorded",
+  "crates/shadowrunr-daemon/src/runs.rs::tests::an_ad_hoc_directory_takes_its_runs_character_only_when_they_agree",
+  "crates/shadowrunr-daemon/src/runs.rs::tests::updated_ms_is_the_newest_live_run_json_mtime",
+  "packages/contract/src/door.test.ts::tournament rows carry their character and recency (2 tests)",
+  "apps/console/src/pages/characters/model.test.ts::the default tournament for situation verdicts (2 tests)",
+  "apps/console/src/pages/characters/layer2.test.tsx::situation verdicts come only from this character's tournaments (2 tests)",
+  "apps/console/src/pages/reconcile/source.test.tsx::reconcile's default source tournament"],
+ "guard_cases":["contract 'accepts a row with and without character/updated_ms' half was green before by design (unknown fields passed); its 'character: 3 is rejected' half was red"],
+ "cases_total":8,"cases_red_before":8,"cases_green_after":8,
+ "gates":{"cargo test -p shadowrunr-daemon":0,"cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt --all -- --check":0,"cargo test --workspace":0,"pnpm -C packages/contract generate":0,"pnpm -C packages/contract check":0,"pnpm -C packages/contract test":0,"pnpm -C packages/contract typecheck":0,"pnpm -C packages/contract lint":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console test":0,"pnpm -C apps/console lint":0,"pnpm -C apps/stage typecheck":0,"pnpm -C apps/stage test":0,"pnpm -C apps/console build":1},
+ "files_changed":15,"lines_changed":581,
+ "deviations_from_card":"(1) The reconcile case lives in NEW apps/console/src/pages/reconcile/source.test.tsx, not reconcile/layer2.test.tsx: that file is at 397 lines and the console size gate (400) would fail. (2) Coupled files outside the write set: packages/contract/src/door.test.ts (contract case), packages/contract/src/generated/results/TournamentListResult.js and TournamentsPage.js (generator output; validators.js/.d.ts did not change because validators are per-result modules now), apps/console/budgets/bundle.json (characters.l2 js 117,500 -> 118,000, measured 117,553 B; ~116,950 B without this change). (3) e2e/mod.rs needed no change (it does not pin the row shape). (4) SituationsTab's mostEvidence was deleted (replaced by model.ts pickTournament/offeredTournaments).",
+ "notes":"pnpm -C apps/console build exits 1 ONLY on entry js 296,211 B > 294,500: measured identical with my console files reverted to HEAD, so it is the uncommitted sibling console-data-layer B work in apps/console/src/data/ (invalidation.ts/cache.ts); not raised by me. Waited and re-ran: unchanged. cargo test for the daemon was blocked for a while by daemon-voice-service B's in-flight voice/replay.rs (compare module missing) - it resolved itself (aa5b5fc). Shared-surface lock taken for commits 1-2 (contract/types and bundle.json), released before commit 3."
+}

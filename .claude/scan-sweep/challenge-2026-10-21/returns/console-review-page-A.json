@@ -1,0 +1,18 @@
+{"card":"Operator marks become a per-line sequenced write ledger, not a racy overlay","context":"console-review-page","slot":"A","status":"landed",
+ "shas":["efb228e","c8a6f18"],
+ "tests_added":[
+  "apps/console/src/pages/review/ledger.test.ts::a late failure of an older write never clobbers a newer success on the same line",
+  "apps/console/src/pages/review/ledger.test.ts::keeps status per line: a failed line keeps its payload for retry, a saved one keeps its mark",
+  "apps/console/src/pages/review/ledger.test.ts::an optimistic write shows at once and a cleared mark hides the server row",
+  "apps/console/src/pages/review/ledger.test.ts::a refetched server row at or after the ack prunes the line; an older row does not",
+  "apps/console/src/pages/review/ledger.test.ts::pruning keeps a failed write for retry but drops its stale ack",
+  "apps/console/src/pages/review/player.test.tsx::advances to the next roast before the daemon answers the write",
+  "apps/console/src/pages/review/player.test.tsx::keeps Save enabled on another line while one line's write is in flight",
+  "apps/console/src/pages/review/player.test.tsx::sends exactly one write when Enter is pressed again on a line whose write is pending",
+  "apps/console/src/pages/review/player.test.tsx::shows a failed write as a retryable notice naming the line; Retry resends the same mark"],
+ "guard_cases":[],
+ "cases_total":7,"cases_red_before":7,"cases_green_after":7,
+ "gates":{"pnpm -C apps/console test":0,"pnpm -C apps/console test -- src/pages/review":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console lint":0,"pnpm -C apps/console build":1},
+ "files_changed":7,"lines_changed":440,
+ "deviations_from_card":"Moment.tsx unchanged: its drawer already renders FeedbackPanel, which now reads per-line status from the ledger, so the drawer gets it with no edit. Ledger red-before for cases 1/2/6 was module-absent (import failure), not an assertion; player cases 3/4/5/7 were assertion-red on bab51ca. Case 4 test turns 'Skip lines I already marked' off first: with skip on, today's optimistic overlay already moved data-line via the render-time skip, so the case only isolates the await with skip off. Tests and implementation for the wiring landed in one feat commit (the player cases are red without it). Failed-marks notice reuses Player.module.css .tag and FeedbackPanel.module.css .err (no new CSS). save() now returns the write's seq (or undefined when the line has a write in flight); onSaved receives whether the line now carries a mark so the player's next() does not read a render-behind ref.",
+ "notes":"Bundle: review.l2 js 93.4 KiB / 97.7 KiB (from 92.8), css 33.7 KiB; review.l1 53.1 / 58.6 KiB. build rc=0 on the first post-change run (door 515.6 KiB under 519.5); the re-run after a whitespace-only edit was rc=1 only on door 523.7 KiB > 519.5 KiB, which grew between my two builds with no change of mine outside review.l2 - a sibling's in-flight work (base-red route). 427 console tests pass. Extra ledger cases beyond acceptance (optimistic/clear, prune-keeps-failed) are additions, not guards."}

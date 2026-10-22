@@ -1,0 +1,10 @@
+{"run":"challenge-2026-10-21","approval":"invocation explicitly asked to execute for all contexts (approval in advance)",
+ "runs":[
+  {"n":1,"hosts":["console-review-page","console-ui-primitives","stage-avatar-renderer","brain-composition-memory","daemon-core-rpc","sim-runner-judging","types-crate","voice-sidecar","workspace-tooling-and-policy"],"riders":{"types-crate":["tokens-package"]}},
+  {"n":2,"hosts":["console-onair-page","console-shell-router","stage-app","character-package","daemon-show-prep-and-review","reconcile-engine","contract-package","clips-pipeline"]},
+  {"n":3,"hosts":["console-brain-page","console-quality-gates","stage-kit-scene-engine","engine-llm-sessions","sim-instruments","avatar-rig-tools"]},
+  {"n":4,"hosts":["console-simulator-page","console-app-bootstrap","segments-runtime","daemon-integrations","daemon-voice-service"]},
+  {"n":5,"hosts":["console-reconcile-page","console-data-layer","stage-voice-client"]},
+  {"n":6,"hosts":["console-characters-page","stage-kit-overlays","console-build-and-desktop-shell"]},
+  {"n":7,"hosts":["console-segments-page"]}
+ ]}

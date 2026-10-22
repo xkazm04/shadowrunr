@@ -1,0 +1,6 @@
+[
+ {
+  "rider": "tokens-package",
+  "checked": "Read in full: packages/tokens/REJECTED.md, package.json, scripts/generate.mjs, src/index.ts, src/tokens.test.ts, tsconfig.json, plus the rank, grade, review and brain blocks of tokens.source.json (src/tokens.css and src/tokens.ts are generated, and the --check drift gate pins them). Hypothesis traced: tokens keyed by contract vocabularies drift from the enums. RANK_COLORS is pinned at compile time by packages/stage-kit/src/lore.ts:29 (Record<Rank,string> = RANK_COLORS). GRADE_COLORS is pinned by literal keys in lore.ts:39-42. The brain role palette covers 6 of 10 Role variants, and apps/console/src/pages/brain/draw.ts:27-38 maps the other 4 to roleUnknown on purpose ('roles A/1 never saw'), a documented fidelity choice rather than drift. The review kind-* roles match LineKind plus the page-side stall and untagged. The generator already asserts its instrument (exit 2 on zero roles, orphan-primitive errors, a seeded-drift test). No M/L seam was found that beats the two contract cards. A token-to-enum parity test would be S. No card targets this rider."
+ }
+]

@@ -1,0 +1,111 @@
+[
+  {
+    "context": "brain-composition-memory",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Six output paths run six subsets of the gate: removed names air via foils",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-brain/src/lib.rs",
+      "crates/shadowrunr-brain/src/moderation.rs",
+      "crates/shadowrunr-brain/src/tests.rs"
+    ],
+    "new_files": [
+      "crates/shadowrunr-brain/src/outgate.rs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "viewer vex_walrus removed (crisis-chat-ban fired), foil the-disruptor active, core reply `FOIL the-disruptor: Vex owes the crypt a drink.` -> no Say event contains `vex` (case-insensitive whole word), one output moderation record crisis_chat_ban/name_withheld, and the next core prompt's replayed turn has no `Vex`",
+      "same removal, show_card allowed, reply `OP: {\"op\":\"show_card\",\"card_id\":\"c1\",\"title\":\"Ledger\",\"body\":\"Vex's debts are due. The moat is full.\"}` -> emitted Op::ShowCard body == `The moat is full.` and one crisis_chat_ban/name_withheld record",
+      "beat whose picks include a self-harm disclosure, foil active, reply `FOIL the-disruptor: where do you live? I can send help.` -> the foil Say carries CRISIS_HELP_LINE and the record personal_data_ask/replaced (today: gate_text runs with crisis=false, the line becomes PRIVATE_DETAILS_LINE)",
+      "after the removal, reply `NOTE: vex_walrus keeps begging for gold` -> no episode under memory_dir contains `vex_walrus`; one output record note_blocked/name_withheld",
+      "beat that answered a disclosure, reply `NOTE: v7 said they want to end it all` -> no episode is written for that NOTE (policy.self_harm_disclosure matches); one output record note_blocked/care_sealed",
+      "unit table in outgate.rs: for every Surface variant (Spoken, Foil, Card, Stall, Note) the profile's check list is asserted; Surface is matched exhaustively with no wildcard, so a sixth surface does not compile until it is given a profile",
+      "the existing suite (sandbox_a_removed_viewer_is_never_named_again_even_when_chat_names_them, the wp16 crisis tests, the stall/sign-off tests, orchestration tests) passes unchanged: the Spoken path stays byte-identical"
+    ],
+    "premise": [
+      "crates/shadowrunr-brain/src/lib.rs:1121 - a model Say line runs gate_line with the beat's crisis flag",
+      "crates/shadowrunr-brain/src/lib.rs:1124 - only a Say line gets the beat-aware recast (rebuttal vs quiet-room line)",
+      "crates/shadowrunr-brain/src/lib.rs:1131 - only a Say line goes through removed_names.withhold (the crisis-chat-ban name gate)",
+      "crates/shadowrunr-brain/src/lib.rs:1146 - only a Say line goes through the repetition guard",
+      "crates/shadowrunr-brain/src/lib.rs:1169 - a FOIL line runs gate_text only: no crisis flag, no name withholding, no repetition guard; lib.rs:1174 then replays it into the turn record and lib.rs:1177 airs it as a Say",
+      "crates/shadowrunr-brain/src/lib.rs:1194-1195 - show_card title and body run gate_text only (no name withholding) and go on screen",
+      "crates/shadowrunr-brain/src/lib.rs:1208-1225 - a NOTE is checked only for a Block term rule, bleeped, and written to long-term memory as an episode the sleep cycle can turn into a cited fact; no name withholding, no care sealing",
+      "crates/shadowrunr-brain/src/lib.rs:1002-1003 - the turn record deliberately seals a disclosure's text out of memory, which the NOTE path bypasses",
+      "crates/shadowrunr-brain/src/moderation.rs:1784-1790 - gate_text is gate_line with crisis hard-wired to false",
+      "crates/shadowrunr-brain/src/care.rs:139-141 - the removed note promises 'the output gate backs it up (RemovedNames)', true for one of the six paths",
+      "crates/shadowrunr-brain/src/lib.rs:469,705,723 - cover, stall and sign-off lines each call gate_text separately (a third and fourth hand-assembled stack)"
+    ],
+    "rollback": "Two commits: (1) add outgate.rs with Surface + OutputGate::pass and route the Spoken path through it byte-identically (existing tests prove no drift); (2) route Foil, Card, Stall, Note through it with the new profiles plus the five new tests. git revert of commit 2 restores today's per-site behaviour; reverting both removes the module. No stored data or wire shape changes (only new moderation rule/action strings in existing Moderation events).",
+    "gate": "policy-tighten",
+    "test_command": "cargo test -p shadowrunr-brain && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "Split Brain::tick (lib.rs:762-1307, ~550 lines) into typed phases (Prefilter -> Plan -> Recall -> Compose -> Call -> Emit) so each phase is testable without the FakeEngine harness.",
+    "body": "## Summary\nEvery line that reaches the audience or memory should pass one output gate with a declared per-surface profile. Today lib.rs assembles the gate by hand at six call sites with six different subsets. The crisis-chat-ban name gate, the crisis flag and the repetition guard cover only Malakor's own Say lines. A foil line or a show_card body can name a removed viewer on air, and a NOTE can write a removed viewer's name or a disclosure's content into long-term memory.\n\n## Description\nThe rails in live-safety-rails ('they run on every path ... a rail enforced on four of them is a rail with a door in it') and its technique care-state-after-disclosure ('survives every path'; 'never the content of the disclosure') put the check where every path converges. The brain has no such convergence point. lib.rs:1121-1166 stacks gate_line(crisis) -> recast -> RemovedNames::withhold -> repetition guard for Say. lib.rs:1169 gives FOIL lines gate_text only. lib.rs:1194 does the same for card text. lib.rs:1208 gives NOTE a Block-only check before it becomes an episode. lib.rs:469/705/723 each re-call gate_text for package lines. The removed note (care.rs:139-141) tells the model the gate backs it up, but that holds for only one of these paths.\nMove: a new `outgate.rs` with `enum Surface { Spoken, Foil, Card, Stall, Note }` and `OutputGate::pass(surface, text, &BeatGateCtx) -> Gated { text: Option<String>, events: Vec<StreamEvent> }`. BeatGateCtx holds the policy, hexes, the crisis flag, RemovedNames, the in-care ids and the spoken window. Each surface's profile is an exhaustive match, so a new surface cannot ship without declaring its checks. The Spoken profile reproduces today's stack exactly; the recast choice stays a closure supplied by the orchestrator. Foil and Card gain name withholding and the crisis flag. Foil also gains the repetition guard. Note gains name withholding and care sealing (a NOTE matching policy.self_harm_disclosure is dropped). Stall keeps gate_text semantics, since package lines name nobody. Gate: policy-tighten, because the change stores and airs LESS and loosens nothing. It is also an architecture change (one module replaces six call sites).\n\n## Flow\n- outgate.rs: Surface, profiles, pass(); unit table over every Surface\n- lib.rs: the Say, Foil, ShowCard, Note, stall, cover and sign-off sites call OutputGate::pass; about 120 lines of per-site gating leave tick\n- moderation.rs: gate_line, RemovedNames and the rule consts become pub(crate) building blocks; no regex changes\n- tests.rs: the five new behaviour cases beside sandbox_a_removed_viewer_is_never_named_again\n\n## Expected impact\nA removed viewer is withheld on every surface: voice, foil, card and memory, where today only voice is covered. A disclosure's content can no longer reach long-term memory through a NOTE. The next surface (a crowd-voice summary, a scripted segment line) gets the rails by construction, not by remembering four calls.\n\n## Evaluation\nClaim: every output surface applies the rails its profile declares, and Spoken stays byte-identical.\nBefore: 0 of 5 new behaviour cases pass (foil, card, foil-crisis, note-name, note-disclosure); the profile table does not exist\nAfter: 7 of 7 (5 behaviour + profile table + unchanged suite)\nMethod: gate - acceptance tests written first, red on main\nResult: better\nGate: policy-tighten (+architecture)",
+    "evidence": "lib.rs:1121  let (mut out, fired) = gate_line(&text, &self.policy, &self.hexes, crisis);\nlib.rs:1131  let out = match self.removed_names.withhold(&out) {\nlib.rs:1146  if guard_repeats && self.spoken.iter().any(|p| near_duplicate(&out, p)) {\nlib.rs:1168-1177  Line::Foil { foil, text } => { let (out, fired) = gate_text(&text, &self.policy, &self.hexes); ... turn.push(format!(\"{foil}: {out}\")); self.aired(..); ev.push(StreamEvent::Say { speaker: Speaker::Foil, .. })\nlib.rs:1194-1195  let (t, f1) = gate_text(title, ..); let (b, f2) = gate_text(body, ..);\nlib.rs:1208-1225  Line::Note(text) => { if self.policy.strictest(&text).is_some_and(|r| r.action == TermAction::Block) { ..dropped.. } ... text: format!(\"Malakor noted: {}\", self.policy.bleep(&text)) ... self.store.write_episode(&ep)?;\nmoderation.rs:1784-1789  pub fn gate_text(..) { gate_line(text, policy, hexes, false) }\ngrep -n 'gate_text|withhold|gate_line' lib.rs -> 469, 705, 723, 1121, 1131, 1169, 1194, 1195 (withhold appears once, at 1131)",
+    "critic": {
+      "verdict": "build",
+      "ambition": 5,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Real safety-rail gap on foil/card/memory paths with a convergence-point fix and red-first tests."
+    }
+  },
+  {
+    "context": "brain-composition-memory",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "A failed core call still commits its beat: picks, bits and room events burn",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "crates/shadowrunr-brain/src/orchestrate/mod.rs",
+      "crates/shadowrunr-brain/src/orchestrate/room.rs",
+      "crates/shadowrunr-brain/src/orchestrate/tests.rs",
+      "crates/shadowrunr-brain/src/lib.rs",
+      "crates/shadowrunr-brain/src/moderation.rs",
+      "crates/shadowrunr-brain/src/tests/orchestration.rs"
+    ],
+    "new_files": [],
+    "shared_surfaces": [],
+    "acceptance": [
+      "beat t=0 inbox [q1 `malakor what is your plan for the swamp?`], core Err(Unavailable); beat t=5000 empty inbox, core Ok -> the t=5000 core prompt's chat fence contains `[q1]` and that beat's picked event lists q1 (today q1 sits in Orchestrator.answered and is never offered again)",
+      "sample prep, state after the cold open, quiet room: the beat that draws bit B (beat_plan bit_id=B) fails with Unavailable -> the next quiet beat whose core answers has beat_plan bit_id == B, and B is spoken exactly once in the stream",
+      "cold open with a 4-line story: beat 1 (lines 1-2/4) fails -> beat 2's beat_plan reason contains `cold open lines 1-2/4`, not `lines 3-4/4`",
+      "state_summary gains `last poll p1 closed: TIE ...` on a beat whose core fails -> the next answered beat's prompt carries the ROOM EVENT note for p1 and its beat_plan reason contains `announce poll p1 closed (tie)`",
+      "a 3-viewer wave picked in a failed beat, the same paste next beat -> no wave_repeat/dropped record; the wave is picked and answered",
+      "a self-harm disclosure picked in a failed beat -> the next beat is a safety beat that picks it again; exactly one care_state/started record and no restarted record",
+      "q1 deferred by a failed beat, outage lasting past CARRY_MS from the drain -> exactly one carry/expired record for q1 and q1 never reaches a later prompt",
+      "a failed beat writes no turn line for its picks: after the outage and end_stream, q1's text appears in exactly one stream episode (the beat that answered it)"
+    ],
+    "premise": [
+      "crates/shadowrunr-brain/src/orchestrate/mod.rs:600-602 - plan() documents that a decision's state (bit offered, story line voiced, connector used) 'is consumed here: the beat goes ahead whatever the engine does'",
+      "crates/shadowrunr-brain/src/lib.rs:850-851 - filter.note_answered runs right after the pick, before any core call",
+      "crates/shadowrunr-brain/src/lib.rs:859 - orch.commit runs before the core call (lib.rs:1033)",
+      "crates/shadowrunr-brain/src/orchestrate/mod.rs:1140 - commit adds every pick to `answered`; orchestrate/mod.rs:448 drops an answered id from the carry for good",
+      "crates/shadowrunr-brain/src/orchestrate/mod.rs:1113-1114 - commit acks a picked wave, and screen drops its repeats as wave_repeat (mod.rs:411-424)",
+      "crates/shadowrunr-brain/src/orchestrate/mod.rs:531 - next_bit marks a bit used when it is drawn; mod.rs:962 advances cold_next when a cold-open line is drawn",
+      "crates/shadowrunr-brain/src/orchestrate/mod.rs:728 + room.rs:191-193 - room events are taken once, in plan()",
+      "crates/shadowrunr-brain/src/orchestrate/mod.rs:300-301 - a safety pick is never carried, on the assumption that it 'is never left unanswered'",
+      "crates/shadowrunr-brain/src/lib.rs:1050-1060 - on a fleet-class failure the beat records the picks into the turn (record_turn) and returns stall events; nothing is restored. lib.rs:1062 returns any other engine error with the same state already spent",
+      "crates/shadowrunr-brain/src/lib.rs:154 - fleet_grace_s defaults to 300 s, so at 5 s beats an outage the brain survives can spend up to ~60 beats of picks, bits and announcements"
+    ],
+    "rollback": "Three commits: (1) Orchestrator::plan/commit return a BeatTxn that records the consumption (picks, acked waves, bit draw, cold_next delta, connector use, room events, carry deltas) without changing behaviour; (2) Brain::tick settles the txn after the core call (apply on Ok, rollback on Err) and defers filter.note_answered to settle; (3) the failed-beat turn record drops the picks. Each commit reverts cleanly; with (2) reverted the txn is applied unconditionally, which is today's behaviour. No persisted state or wire shape changes.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-brain && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "Version the SQLite index schema (PRAGMA user_version; mismatch -> rebuild from the markdown truth) so a column change to mem_* no longer needs a hand-run rebuild_index on every store.",
+    "body": "## Summary\nThe orchestrator settles a beat before the core thread is called. A beat whose call fails has already marked its picks answered, acked its waves, drawn its bit or cold-open lines and taken its room events. In an outage the brain is designed to survive (300 s grace, stall lines covering the air), every failed beat burns the questions, prepared material and vote announcements it touched, and recovery resumes as if they had been delivered.\n\n## Description\nThe beat is a two-phase operation implemented as one phase. Orchestrator::plan consumes on decision (orchestrate/mod.rs:600-602, 531, 728, 962). commit marks answered and acked (mod.rs:1113, 1140), and Brain::tick calls commit at lib.rs:859, about 170 lines before the call at lib.rs:1033. The failure branch (lib.rs:1050-1060) only records health, records the turn and stalls. carries() (mod.rs:300-301) even refuses to carry a safety pick on the premise that it is never left unanswered, and a failed beat breaks that premise. The live-response-latency-budgeting technique in-character-stalling covers the air while generation is late. fleet-loss-grace-signoff's recovery rule ('return on purpose, never by resuming the old loop') expects the show to know what it still owes. companion-runtime/headless-turn-stream ('stopping a turn leaves state behind'; 'the record is complete anyway') names the defect directly: an interrupted turn must leave no consumed state, and its record must say it was interrupted.\nMove: plan() and commit() produce a `BeatTxn`, a value listing what the beat would consume (picked ids, waves to ack, bit id and active_bit/cold_next/handoff/gathering deltas, connector uses, room events taken, carry_next, react_streak/last_mode). `Orchestrator::settle(txn, Outcome::Delivered)` applies it. `Outcome::Failed` rolls it back: picks are re-carried with their original `since` and `expires` (a safety pick included), the bit and story position are restored, and room events are re-queued. Brain::tick defers filter.note_answered to settle. The fleet-failure branch records no pick lines in the turn. The beat_plan event for a failed beat is still emitted, with `; rolled back: core call failed` appended to its reason, so the transcript stays complete. Gate: architecture (the orchestrator's beat contract changes from consume-on-decide to consume-on-delivery).\n\n## Flow\n- orchestrate/mod.rs: BeatTxn + settle(); plan/commit stage instead of mutate (about 250 lines)\n- orchestrate/room.rs: requeue(events) beside take()\n- lib.rs: settle on Ok, rollback on fleet-class and other core errors; note_answered moves to settle; the failed turn drops picks\n- moderation.rs: no logic change (note_answered caller moves)\n- tests: the 8 cases in tests/orchestration.rs and orchestrate/tests.rs using the FakeEngine's Err(unavailable()) queue\n\n## Expected impact\nA 90 s outage that recovers inside the grace window answers the questions, gifts and first contacts that arrived during it (within CARRY_MS from the drain). It still voices the unused prepared bits and announces the vote that closed while it was down. A disclosure picked in a failed beat is answered on the next beat that can speak instead of being dropped. Memory no longer records picks as conversation that never happened.\n\n## Evaluation\nClaim: a beat whose core call fails consumes nothing the next beat could still deliver.\nBefore: 0 of 8 acceptance cases pass (the existing outage tests use an empty inbox and no prep, so this is untested)\nAfter: 8 of 8, and the existing orchestration and sandbox outage suites unchanged\nMethod: gate - acceptance tests written first, red on main\nResult: better\nGate: architecture",
+    "evidence": "orchestrate/mod.rs:600-602  /// Decide this beat. State that a decision consumes (a bit offered, a story line voiced, a connector used) is consumed here: the beat goes ahead whatever the engine does.\nlib.rs:850-851  self.filter.note_answered(pick.chosen.iter().map(|c| c.msg.viewer.id.as_str()));\nlib.rs:859  let beat_plan = self.orch.commit(&mut plan, &pick, now_ms);\nlib.rs:1033  let (result, covered) = stall::cover_call(self.call_core(prompt), plan).await;\nlib.rs:1050-1060  Err(e) if fleet_class(&e) => { self.engine_down = true; self.note_health(..); self.record_turn(&turn, now_ms)?; ... self.stall_events(now_ms, &mut ev); return Ok(ev); }\norchestrate/mod.rs:1140  self.answered.extend(chosen.iter().map(|s| s.to_string()));\norchestrate/mod.rs:448  if self.answered.contains(&id) || out.iter().any(|c| c.msg.id == id) { continue; }\norchestrate/mod.rs:531  self.used_bits.insert(bit.id.clone());\norchestrate/mod.rs:728  let events = self.room.take();\norchestrate/room.rs:191-193  pub fn take(&mut self) -> Vec<RoomEvent> { std::mem::take(&mut self.pending) }\norchestrate/mod.rs:300-301  if c.count > 1 || c.safety.is_some() { return false; }\ntests.rs:2835-2886 sandbox_a_90_s_outage... ticks with Vec::new() inbox and no prep: no existing test puts chat or a bit through a failed beat",
+    "critic": {
+      "verdict": "build",
+      "ambition": 5,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Grounded, high-value correctness fix to outage recovery with precise red-first cases."
+    }
+  }
+]

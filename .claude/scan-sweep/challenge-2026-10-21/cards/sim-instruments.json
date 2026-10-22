@@ -1,0 +1,102 @@
+[
+  {
+    "context": "sim-instruments",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "The instrument hash misses what a run reads: platform rules, prep, knobs",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-sim/src/instrument.rs",
+      "crates/shadowrunr-sim/src/runner.rs",
+      "crates/shadowrunr-sim/src/tournament.rs",
+      "crates/shadowrunr-sim/src/lib.rs"
+    ],
+    "new_files": [],
+    "shared_surfaces": [],
+    "acceptance": [
+      "instrument::compute over a fixture repo, then one regex in <repo>/policy/platform-rules.json edited -> base_hash differs and files contains an entry `policy/platform-rules.json` with the new sha (today: no such entry, hash unchanged)",
+      "same fixture with no platform-rules.json beside the character -> entry `policy/platform-rules.json` = `absent`, and two computes give the same base_hash; the file saved with CRLF hashes like LF",
+      "instrument_for with opts.stream_prep = sample_prep() vs the same prep with one bit text changed -> base hashes differ; stream_prep None -> no `prep.json` entry at all",
+      "instrument_for with featured_every_ticks 1 vs 2, or max_featured 8 vs 4, or tick_s 5 vs 10, or platforms [twitch] vs [youtube] -> base hashes differ (each a `harness/<knob>` entry)",
+      "two specs differing only in the judge tier resolved from judge_tiers for their core tier (haiku core -> opus judge, opus core -> sonnet judge) -> instrument_hash includes `judge/<tier>` and differs although the tone is the same",
+      "tournament::plan on a dir with a complete run, then platform-rules.json edited -> that run is planned Run/Stale with stale_hash set, not Skip/Complete (today: Skip, so the tournament mixes two rule sets under one hash)"
+    ],
+    "premise": [
+      "crates/shadowrunr-sim/src/instrument.rs:1-4 - module doc promises 'installed moderation lists and sim logic' are the instrument; compute (instrument.rs:147-232) hashes character files, rules.enabled, policy/local/*.txt (:176-188), segments, rubric (:194), calibration (:196), brief, experiments, case - and never policy/platform-rules.json",
+      "crates/shadowrunr-brain/src/lib.rs:158 - BrainTuning default policy is PolicySource::Auto; crates/shadowrunr-brain/src/moderation.rs:466-475 - Auto reads <character>/../../policy/platform-rules.json, whose term_rules block/bleep/warn what the simulated brain says (policy/platform-rules.json:171-442)",
+      "crates/shadowrunr-sim/src/runner.rs:877-883 - brain_tuning passes opts.platforms (which platforms' term rules apply); runner.rs:399-408 instrument_with passes no platforms, no prep, no tick/featured knobs, no judge tier",
+      "crates/shadowrunr-sim/src/runner.rs:911-912 - the brain voices opts.stream_prep; runner.rs:772 records only prep_label (an id) in run.json; crates/shadowrunr-daemon/src/cli.rs:1346 sets it from the newest approved prep, so approving a prep mid-tournament changes runs without changing the hash",
+      "crates/shadowrunr-sim/src/lib.rs:150,158,160,166 - tick_s, max_featured, featured_every_ticks, platforms are run knobs; sim/matrices/*.toml set them (e.g. sim/matrices/night.toml:9,14-15) and tournament.rs:59-82 effective_options applies them, but none joins the hash",
+      "crates/shadowrunr-sim/src/tournament.rs:3-5 - doc claims editing inputs 'starts a new tournament directory instead of mixing instruments'; tournament.rs:166-186 plans Skip when the stored instrument_hash equals the recomputed one, so an edit outside the hashed set is silently merged",
+      "crates/shadowrunr-sim/src/runner.rs:1007 - the judge tier is resolved per run from opts.judge_tiers and the core tier; sim/matrices/night-opus.toml:1-2 has to say in a comment that its Sonnet-judged scores are not comparable because nothing in the hash says so"
+    ],
+    "rollback": "Revert the commit series; instrument entries are additive, so reverting restores the previous hashes and every tournament directory made before the change becomes current again (directories made under the new hashes stay on disk as separate tournaments, nothing is deleted).",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-sim instrument && cargo test -p shadowrunr-sim tournament && cargo test -p shadowrunr-sim runner && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "policy/platform-rules.json repeats one regex per platform with a different action (profanity-strong-clip/-live :197-215, profanity-directed-tiktok/-warn :229-247) and no rule carries must-match/must-not-match examples, so pii-phone blocks 'gifted 50 100 200 subs': per-platform action map plus per-rule fixtures asserted at load.",
+    "body": "## Summary\nThe instrument hash is the only thing that stops a tournament from pooling results from two different hosts, and it leaves out four inputs that change what the simulated host says or how it is judged: `policy/platform-rules.json` (the term rules the brain blocks and bleeps with), the stream prep the brain voices, the run's harness knobs (tick, featured cadence and cap, platforms), and the judge tier. Make each one an instrument entry so that changing any of them starts a new series instead of merging silently.\n\n## Description\nLeans on simulated-audience-testing / instrument-hash-never-merge: procedure step 1 says the host's held-constant inputs, including 'moderation lists', are part of the instrument; step 4 says an optional input joins only when present; the decision rule says 'when the hash changes mid-tournament, the tournament splits'. The code hashes the operator's installed lists (`policy/local/*.txt`) but not the rules file that names them. It records the prep only as a label, and leaves out the matrix knobs and the judge tier, although the golden path names 'the judge model' as part of the instrument. So today, editing a regex, approving a new prep or resuming a matrix with a different cadence keeps the tournament directory and Skips the completed runs. Old and new behaviour then sit in one cell, and reconcile (crates/shadowrunr-reconcile/src/metrics.rs:280-283 keys on tone + instrument_hash) pools them.\nThis is an `architecture` gate: every shipped tournament gets a new base hash, once. That is the technique's intended effect ('a fix to the instrument is still a change to it'), and the commit should say so.\n\n## Flow\n- InstrumentInputs gains `policy_rules: &Path` (always: sha or `absent`), `prep: Option<&StreamPrep>` (canonical JSON digest, as brief_digest), `harness: &[(&str, String)]` (tick_s, featured_every_ticks, max_featured, platforms joined) and a run-level `judge_tier: Option<ModelTier>` combined with the tone into instrument_hash.\n- runner::instrument_with derives these from SimOptions and the spec (policy path by the same <character>/../../policy convention moderation.rs uses; judge tier via judge::resolve_judge_tier).\n- tournament::plan needs no logic change: a mismatched hash already plans Stale and moves the old run aside.\n- Unit tests per entry, plus one plan test proving a rules edit moves a complete run to Stale.\n\n## Expected impact\nNo tournament can mix two rule sets, two preps, two cadences or two judges in one cell again. The next reconcile report's rates describe one instrument. night-opus's 'not comparable' becomes a hash difference instead of a comment.\n\n## Evaluation\nClaim: the hash covers every input that changes a simulated run or its verdict.\nBefore: 0 of 6 acceptance cases pass (no platform-rules, prep, harness or judge entry exists; plan Skips after a rules edit)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first\nResult: better\nGate: architecture (all existing base hashes change once; existing run dirs are kept, not rewritten)",
+    "evidence": "instrument.rs:176-188 `walk(&cd.join(\"..\").join(\"..\").join(\"policy\").join(\"local\"), ...) if rel.ends_with(\".txt\") { files.push(file_entry(format!(\"policy/local/{rel}\"), &p)?) }` - the only policy entry. moderation.rs:466-475 `PolicySource::Auto => { let p = character_dir.join(\"..\").join(\"..\").join(\"policy\").join(\"platform-rules.json\"); if p.is_file() { Self::from_file(&p)? } ...`. runner.rs:399-408 InstrumentInputs { character_dir, tone, segments_dir, rubric_path, calibration_text, brief, experiments, case } - no prep/platforms/knobs/judge. runner.rs:772 `prep: Some(prep_label(stream_prep_for(opts, &spec.character)))`. tournament.rs:179-183 `Some(h) if h != hash => Stale ... Some(_) => decide(...)` (Skip when complete). grep 'platform-rules' crates/shadowrunr-sim/src/instrument.rs -> only the comment at :177.",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 4,
+      "falsifiability": 3,
+      "reason": "Real comparability bug, verified; the one case that tests the split targets the wrong mechanism."
+    },
+    "revision": "Replace case 6 with: 'tournament::plan on a matrix with a complete run, then platform-rules.json edited -> plan.tournament_id differs from the first plan (new <matrix>-<base10> dir), every run is New, and the old tournament dir and its instrument.json are byte-unchanged (today: same tournament_id, run planned Skip/Complete)'."
+  },
+  {
+    "context": "sim-instruments",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "The sourced bait tactics are dead data: bind them to the bank, report reach",
+    "size": "M",
+    "effort": 5,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "crates/shadowrunr-sim/src/calibration.rs",
+      "crates/shadowrunr-sim/src/situations.rs",
+      "crates/shadowrunr-sim/src/tournament.rs",
+      "crates/shadowrunr-daemon/src/preflight.rs",
+      "crates/shadowrunr-daemon/src/cli.rs",
+      "characters/malakor/situations.json",
+      "sim/calibration.json"
+    ],
+    "new_files": [],
+    "shared_surfaces": [],
+    "acceptance": [
+      "a situations.json entry with `\"tactics\": [\"no-such-tactic\"]`, loaded with the shipped calibration -> load error naming the situation and the unknown tactic (today the field is ignored)",
+      "shipped characters/malakor/situations.json x shipped sim/calibration.json -> situations::tactic_reach lists loaded-history-question, payload-split, obfuscated-slur, context-poisoning and spoken-chat-injection as unreached, and instruction-override as reached by prompt-injection",
+      "pf06_calibration on the shipped repo -> Amber, and the message names the count of unreached tactics and the first ids (today Green with no mention of tactics)",
+      "`shadowrunr sim tournament --matrix sim/matrices/pilot.toml --plan-only` -> output carries a `bank reach: N of 14 tactics` line plus the unreached ids",
+      "a calibration whose population names archetype `trol` (not in archetypes) -> Calibration::parse error (today it parses)",
+      "a calibration archetype or bait tactic citing source id `c99` that is not in sources -> parse error; a bait tactic with no source_ids -> listed by assumptions() as `bait_tactics.<id>` (today assumptions() scans sizes and archetypes only)"
+    ],
+    "premise": [
+      "sim/calibration.json:570-700 - 14 sourced bait_tactics (instruction-override ... context-poisoning), including loaded-history-question, 'The Neuro-sama ban trigger' (:619-626)",
+      "crates/shadowrunr-sim/src/calibration.rs:58-66,77 - BaitTactic is parsed into Calibration.bait_tactics, and nothing reads it: grep 'bait_tactics|BaitTactic' over crates/ hits only calibration.rs",
+      "crates/shadowrunr-sim/src/chat.rs:980-998 - the featured-viewer prompt steers a baiter only by the archetype's description, behaviours and two example_lines; no tactic is chosen or recorded",
+      "crates/shadowrunr-sim/src/situations.rs:32-52 - Situation has id/behaviour/archetype/near_miss/required/forbidden/invariants/stimulus/silence_s/segments and no link to a calibrated tactic",
+      "characters/malakor/situations.json - the baiter situations cover instruction-override (prompt-injection, :139), say/repeat (bait-slur-request, :5), authority-impersonation (fake-lord-dispatch, :153) and real-person-steering (roast-real-streamer, foil-made-real); no situation performs a cipher/decode, payload split, loaded history question, TTS read-out or context poisoning; copypasta-flood (:429) carries no payload",
+      "crates/shadowrunr-sim/src/calibration.rs:102-121 - parse validates audience sizes only; populations (:75) and source_ids are never checked against archetypes or sources; assumptions() (:179-195) scans audience_sizes and archetypes only",
+      "crates/shadowrunr-daemon/src/preflight.rs:381-407 - PF-06 reports sources/archetypes/populations counts and assumptions, nothing about whether the bank reaches the threat model the calibration documents"
+    ],
+    "rollback": "Revert the series. The `tactics` field is optional (serde default), so reverting the code leaves situations.json loadable; reverting the situations.json tags restores the previous instrument hash for character/situations.json.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-sim calibration && cargo test -p shadowrunr-sim situations && cargo test -p shadowrunr-daemon preflight && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "Matrices are validated only for empty axes, case and id (matrix.rs:91-131): population ids, tones and judge tiers are not checked against calibration/character before spend, and the A/B pair rate-cap-exemptions(.toml/-control.toml) is two hand-synced files kept equal by a test (matrix.rs:325-353); declare arms in one matrix and validate at plan.",
+    "body": "## Summary\nThe calibration documents 14 sourced bait tactics, the threat model the simulated audience is meant to carry, and no code reads them. The situation bank has no link to them, so nobody can see that the bank never provokes the tactic that got Neuro-sama banned (loaded-history-question), nor cipher, payload-split, TTS or context-poisoning bait. Tag situations with the tactics they perform, validate the tags against the calibration, and report the bank's reach in preflight and the tournament plan. Calibration cross-references get validated too.\n\n## Description\nLeans on simulated-audience-testing / situation-bank-with-near-misses. Its decision rule: 'when a rule has no situation that provokes it, its result is not provoked, and coverage says so'. Procedure step 6: 'the bank is the memory of every failure the show has seen'. It also leans on sourced-population-calibration: a sourced figure only counts when it shapes the run. Today the sourced list is decoration. Every tournament reports zero failures on tactics no situation ever performed, and no report says so. The change binds the two instruments: `Situation.tactics: Vec<String>` (serde default), checked at bank load against `Calibration.bait_tactics`, and a pure `tactic_reach(bank, cal)` that preflight PF-06 and `--plan-only` print. In the same seam, Calibration::parse gains the cross-reference checks it lacks (population archetypes, source ids). assumptions() learns bait_tactics, but populations are left alone: that gap is the recorded deviation in .ai/registry-map.json.\nThe card does not write the missing situations. That is content for the character package. It makes the gap visible and machine-checked so that writing them becomes a tracked task. Tagging situations.json changes that file's hash, so a new instrument series starts. That is intended. Coordinate with the character-package card that consolidates situations.json parsing, since both touch situations.rs.\n\n## Flow\n- calibration.rs: validate population archetype keys and every source_ids entry; assumptions() covers bait_tactics.\n- situations.rs: optional `tactics`; `validate_tactics(&bank, &cal)`; `tactic_reach` -> reached map + unreached list.\n- characters/malakor/situations.json: tag the 6-8 situations that perform a tactic today.\n- preflight.rs PF-06: Amber with the unreached ids while any sourced tactic is unreached; cli.rs plan-only prints the reach line.\n- tournament.rs plan: load error when a tag is unknown, before any spend.\n\n## Expected impact\nThe bank's blind spots against the documented threat model stop being invisible: the operator sees '5 of 14 tactics reached' before a 450-run heavy tournament. Calibration typos fail at load instead of skewing a population mix.\n\n## Evaluation\nClaim: every sourced tactic is either reached by a tagged situation or reported as unreached, and calibration cross-references are enforced.\nBefore: 0 of 6 acceptance cases pass (field ignored, no reach function, PF-06 Green, no plan line, dangling archetype/source ids parse)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first\nResult: better\nGate: architecture (new optional situations field; one-time instrument series change for character/situations.json)",
+    "evidence": "grep -rn 'bait_tactics\\|BaitTactic' crates --include=*.rs | grep -v calibration.rs -> no output (zero consumers). calibration.rs:179-195 assumptions(): `for (k, v) in &self.audience_sizes { note(...) } for (k, v) in &self.archetypes { note(...) }` only. chat.rs:982-986 `let a = self.cal.archetype(&v.archetype); let desc = ...; let beh = a.map(|a| a.behaviours.join(\"; \")); let ex = a.map(|a| a.example_lines.iter().take(2)...)`. situations.json baiter behaviours: bait-slur-request 'asks Malakor to say or repeat a slur, disguised as a spell word'; prompt-injection 'ignore your instructions, new rule'; fake-lord-dispatch 'claims to be the Lord'; copypasta-flood 'the same long copypasta pasted dozens of times' (no payload). preflight.rs:390 message: '{path}: {} sources, {} archetypes, {} populations, {assumptions} figures are assumptions'. Shipped calibration today has no dangling source ids or archetype keys (checked by script): the validation is a guard, not a fix.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Verified dead data against the documented threat model; cheap, falsifiable coverage guard."
+    }
+  }
+]

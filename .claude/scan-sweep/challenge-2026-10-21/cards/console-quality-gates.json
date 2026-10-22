@@ -1,0 +1,116 @@
+[
+  {
+    "context": "console-quality-gates",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Perf gates iterate the page registry: the seventh page has no 10x line",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/perf/dom.test.tsx",
+      "apps/console/src/perf/rpc.test.tsx",
+      "apps/console/src/perf/timings.test.tsx",
+      "apps/console/src/perf/fixture.ts",
+      "apps/console/src/perf/harness.tsx",
+      "apps/console/budgets/perf.json"
+    ],
+    "new_files": [
+      "apps/console/src/perf/pages.tsx",
+      "apps/console/src/perf/coverage.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "Object.keys(PERF_PAGES) vs PAGE_IDS (src/router/route.ts:7) -> equal sets; today there is no PERF_PAGES and review is in neither the dom nor the rpc table, so the test fails",
+      "PERF_PAGES typed `satisfies Record<PageId, PerfPage>` with the review entry deleted -> `pnpm -C apps/console typecheck` fails naming the missing key 'review'",
+      "budgets/perf.json gains dom line \"ghost.l1\" that no PERF_PAGES entry measures -> coverage test fails with 'ghost.l1: budgeted but no page measures it' (the reverse rule check-bundle.mjs:91-92 already applies to bundle routes)",
+      "a PERF_PAGES entry that measures 'review.l1' while perf.json has no dom line for it -> coverage test fails with 'review.l1: measured but no line in budgets/perf.json'",
+      "review layer 1 at 2,000 sessions (fixture sessionRows(2000)) -> DOM nodes <= dom['review.l1'].max and the session list is virtualised (node count does not grow between 200 and 2,000 rows)",
+      "review layer 1 first paint at 10x -> RPC tally is exactly {review.sessions: 1}; a review.session or review.feedback.list call on the wall fails as unlisted (overBudget, harness.tsx:110-114)",
+      "review layer 2 timeline on bigSession({events: 100000}) -> DOM nodes <= dom['review.l2.timeline'].max",
+      "an entry marked { exempt: '' } (empty reason) -> coverage test fails: an exemption must say why"
+    ],
+    "premise": [
+      "apps/console/src/app/pages.ts:11 - PAGES registers seven pages: onair, characters, brain, segments, simulator, review, reconcile",
+      "apps/console/src/router/route.ts:7 - PAGE_IDS is the closed tuple of the same seven ids",
+      "apps/console/budgets/perf.json:4-17 - the dom table holds lines for six pages only; no review line",
+      "apps/console/budgets/perf.json:19-26 - the rpc table holds six pages; no review line",
+      "apps/console/src/perf/dom.test.tsx:65-121 - every page is a hand-written it() with its own Layer import, script, hash and ready probe; review is absent",
+      "apps/console/src/perf/rpc.test.tsx:318-342 - the same six pages hand-listed again",
+      "apps/console/src/perf/timings.test.tsx:343-364 - and a third time, mount/dispose/cleanup repeated per page",
+      "apps/console/src/perf/fixture.ts:136-279 - one script per page; none for review",
+      "apps/console/scripts/check-bundle.mjs:9-10,81-93 - the bundle gate derives routes from the build and fails both an unbudgeted route and a budget without a route; review.l1/review.l2 are budgeted there (budgets/bundle.json:56-63), so the bundle gate saw the seventh page and the perf gate did not",
+      "apps/console/src/perf/harness.tsx:41-45 - line() only throws when a test asks for a line; nothing asks whether every page was asked",
+      "apps/console/src/pages/review/Layer1.tsx:30 - layer 1 reads useSessions (review.sessions, hooks.ts:12: no paging params) and renders through VirtualList (Layer1.tsx:99)",
+      "apps/console/src/pages/review/fixture.ts:95,136 - bigSession({events,minutes}) and sessionRows(n) already generate a review world of any size"
+    ],
+    "rollback": "Revert the commit series: the new pages.tsx and coverage.test.ts go, the three tests return to their hand-listed it() blocks, and the review lines leave perf.json. No production code is touched.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/console typecheck && pnpm -C apps/console test -- src/perf && pnpm -C apps/console lint",
+    "runner_up": "contest.ts re-implements daemon rules (verdictHealth = runs.rs verdict_health, CLOCK_DEFAULTS = table.rs serde defaults, OP_TAGS a third copy beside segments/testgen.ts:7 and table.rs:52): serve them from one shared source so the harness cannot drift from the daemon.",
+    "body": "## Summary\nThe perf gate is a hand-list. Seven pages are registered (app/pages.ts:11), six have 10x DOM and RPC lines (budgets/perf.json:4-26), and the three perf suites each re-list those six by hand. Session review shipped as the seventh page with bundle lines (the bundle gate derives routes and refuses an unbudgeted one) and with no 10x line at all, and nothing went red. Make the measured page set a typed table keyed by PageId, have every perf suite iterate it, and add a two-way coverage check, then give review its lines.\n\n## Description\nquality-gates / item-liveness and metric-gates / counted-set-snapshot: a gate whose population is a hand-list stops covering new items silently; the gate must be keyed by the identity of what it governs and refuse an item with no line, the way check-bundle.mjs:91-92 already does for routes. Here the identity is PageId.\n\n- `src/perf/pages.tsx` (new): `PERF_PAGES = {...} satisfies Record<PageId, PerfPage>`, where a PerfPage is `{ l1: Probe; l2?: Record<string, Probe> } | { exempt: string }` and a Probe is `{ ui, script, hash, ready? }`. The six existing probes move here verbatim from dom.test.tsx (same hashes, same ready predicates), so their measured counts do not change.\n- dom.test.tsx, rpc.test.tsx and timings.test.tsx become loops over PERF_PAGES (it.each), keeping each line's name (`<page>.l1`, `<page>.l2.<list>`).\n- `src/perf/coverage.test.ts` (new): PERF_PAGES keys equal PAGE_IDS; every measured name has a dom line and every l1 an rpc line; every perf.json dom/rpc key is measured by some entry; an exemption has a non-empty reason.\n- fixture.ts gains `reviewScript()` over `sessionRows(SCALE.streams)` and `bigSession({ events: SCALE.transcriptLines, ... })`; perf.json gains `review.l1`, `review.l2.timeline` (dom) and `review.l1` (rpc) at measured + ~8%, the existing margin rule (perf.json:2).\n\nThe compile-time Record<PageId,...> catches a new page at typecheck; the runtime test catches orphan and missing budget lines, which the type cannot.\n\n## Flow\n- Builder writes coverage.test.ts first: it fails (no PERF_PAGES, no review lines).\n- Move the six probes into pages.tsx; convert the three suites to iterate; run `test -- src/perf`: the six existing lines still pass at their current counts.\n- Add reviewScript and the review probes; measure; write the review lines with their `why`.\n- coverage.test.ts passes; typecheck proves the Record is exhaustive.\n\n## Expected impact\nThe 10x gate covers every page the console ships, and the next page cannot land without declaring its DOM and RPC lines (or a written exemption). The per-page wiring that is today spelled three times (dom, rpc, timings) is spelled once. Review, whose layer 2 holds 100k-line sessions and six tabs, gets its first scale measurement.\n\n## Evaluation\nClaim: the perf gates cover exactly the registered page set, both ways, and review is held to a 10x line.\nBefore: 0 of 8 acceptance cases pass (no PERF_PAGES; review has no dom/rpc line; nothing compares perf.json keys to pages)\nAfter: 8 of 8\nMethod: gate - acceptance tests written first\nResult: better\nGate: architecture (test-suite structure only; no production code, no contract)",
+    "evidence": "pages.ts:11 `export const PAGES = { onair, characters, brain, segments, simulator, review, reconcile } satisfies PageRegistry;` | `grep -rn review apps/console/src/perf | wc -l` -> 0 | perf.json dom keys: onair.l1, characters.l1, brain.l1, segments.l1, simulator.l1, reconcile.l1, onair.l2.rundown, characters.l2.all, brain.l2.runs, brain.l2.transcript, segments.l2.tables, simulator.l2.runs, reconcile.l2.report (no review) | rpc keys: onair.l1, characters.l1, brain.l1, segments.l1, simulator.l1, reconcile.l1 | check-bundle.mjs:91-92 `for (const name of Object.keys(BUDGETS.routes)) { if (!(name in measured)) failures.push(`${name}: budgeted but no such route was built`); }` | bundle.json:56 `\"review.l1\": {`, :60 `\"review.l2\": {`",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 3,
+      "falsifiability": 4,
+      "reason": "Sound gate redesign, but one acceptance case contradicts the page's actual first-paint calls."
+    },
+    "revision": "Rewrite case 6: review layer 1 first paint at 10x -> the RPC tally is exactly {review.sessions: 1, review.feedback.list: 1} (what Layer1.tsx:30-31 calls today), and any other method (e.g. review.session) fails as unlisted."
+  },
+  {
+    "context": "console-quality-gates",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "Owner exceptions live as hand-edits a recapture erases: make them an overlay",
+    "size": "M",
+    "effort": 5,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "apps/console/fidelity/run.mjs",
+      "apps/console/fidelity/roles.json",
+      "apps/console/fidelity/contract.texture.json",
+      "apps/console/package.json"
+    ],
+    "new_files": [
+      "apps/console/fidelity/exceptions.json",
+      "apps/console/fidelity/exceptions.mjs",
+      "apps/console/fidelity/exceptions.test.mjs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "contract {characters:{halftoneA:{opacity:'0.55'}}} + exception {target:'texture', key:'characters.halftoneA', prop:'opacity', winner:'0.55', port:'0', why, decided, ref} -> applyExceptions returns a contract holding '0' there and problems []",
+      "same exception but the contract (a fresh capture) holds winner '0.6' -> problem 'characters.halftoneA.opacity: the winner moved from 0.55 to 0.6 under an owner exception; re-decide it', run exits 1",
+      "exception keyed characters.halftoneC (no such layer) -> problem 'matches nothing in contract.texture.json', run exits 1 (never silently dropped)",
+      "exception with an empty why or no decided date -> rejected as unparseable, run exits 1",
+      "two exceptions on characters.grain.opacity -> problem 'duplicate exception', run exits 1",
+      "committed contract.texture.json + committed exceptions.json, offline (no Playwright, no contest data) -> every exception's winner value equals the committed contract value and the six characters/segments opacities in the contract are the winner's (0.55 / 0.35 / 0.4), not '0'",
+      "`node fidelity/run.mjs` summary with exceptions honoured -> prints 'N owner exception(s) applied' with each key, so a green run names what it waived"
+    ],
+    "premise": [
+      "apps/console/fidelity/roles.json:40 - the texture exception is recorded as prose: 'contract.texture.json holds \"0\" for characters and segments where the winner had 0.4; a fresh `texture.py capture` writes the winner's 0.4 back, so re-apply the exception after one'",
+      "apps/console/fidelity/contract.texture.json:4,12,20,56,64,72 - six captured winner values hand-edited to \"0\" (halftoneA, halftoneB, grain on characters and segments); git show 0d7a5a2 shows 0.55->0 and 0.35->0 edited directly into the captured file",
+      "apps/console/fidelity/texture.py:94-95 - capture mode overwrites the whole contract file with fresh measurements, so the hand-edits are lost on every recapture",
+      "apps/console/fidelity/texture.py:103-122 - check compares port against the contract verbatim; it has no notion of a sanctioned difference, so after a recapture the gate demands the port re-add grain and halftone under body text, the opposite of the owner's decision (packages/tokens/REJECTED.md:18-22)",
+      "apps/console/fidelity/run.mjs:84,91 - per-page contracts are passed straight to style-contract.py (an external skill tool) with no seam where a sanctioned difference could be applied",
+      "apps/console/fidelity/run.mjs:98-100 - the texture contract is passed as a path to texture.py, so a merged copy written to the run's tmp dir (run.mjs:74) needs no change to either Python tool",
+      "apps/console/fidelity/run.mjs:110 - the summary prints only each tool's last line; nothing says which differences were owner-approved"
+    ],
+    "rollback": "Revert the series: contract.texture.json returns to its hand-edited '0' values, roles.json:40 regains its prose instruction, exceptions.json/.mjs/.test.mjs go, and run.mjs passes contract files directly again. No product code or contract package is touched.",
+    "gate": "architecture",
+    "test_command": "node --test apps/console/fidelity/exceptions.test.mjs && pnpm -C apps/console typecheck && FIDELITY_REQUIRED=1 pnpm -C apps/console fidelity (local, with SHADOWRUNR_CONTEST_DATA set)",
+    "runner_up": "Budget raises as a structured ledger: replace bundle.json's ~4 KB prose $comment (and perf.json's free-text why) with {line, from, to, measured, date, why} entries and a ratchet check that flags slack (e.g. simulator.l1 dom line 84 over a measured 55)",
+    "body": "## Summary\nThe fidelity gate's oracle is a captured copy of the winning prototype, and the owner has twice decided the port should differ from it (no grain, then no halftone, on the light posters). Both decisions were applied by hand-editing six captured numbers to \"0\", with a prose note telling whoever recaptures to re-apply them. A recapture therefore erases the owner's decision and turns the gate against it. Record exceptions as a named overlay applied at check time, restore the captured file to what was captured, and make every exception loud when it no longer matches.\n\n## Description\nquality-gates / waiver-names-its-finding (one waiver, one finding; a waiver that names nothing is reported, not honoured or dropped) and oracle-frozen-during-repair (the oracle must not be edited to make the port pass). Each exception names its target contract, key, property, the winner value it overrides, the port value, why, the decision date and a ref (packages/tokens/REJECTED.md).\n\n- `fidelity/exceptions.json` (new): the six current exceptions, moved out of contract.texture.json.\n- `fidelity/exceptions.mjs` (new): `parseExceptions(json)` and `applyExceptions(contract, exceptions, target) -> { contract, applied, problems }`. Problems: unparseable (missing why/decided/port), unmatched key or prop, winner moved, duplicate.\n- `run.mjs`: in check mode, write a merged copy of each contract (page contracts and texture) into its tmp dir (run.mjs:74) and hand that path to style-contract.py / texture.py, so neither Python tool changes; any problem fails the run; the summary lists the applied exceptions. In capture mode, after writing, re-run applyExceptions against the fresh capture and report any winner that moved.\n- `contract.texture.json`: the six values go back to the winner's captured 0.55 / 0.35 / 0.4.\n- `roles.json:40`: the 're-apply after recapture' instruction is replaced by a pointer to exceptions.json.\n- `package.json`: a `fidelity:exceptions` script running the offline check, the one part of the fidelity gate that needs neither Playwright nor the contest data.\n\n## Flow\n- Write exceptions.test.mjs first (cases 1-6): all fail, the module does not exist.\n- Build exceptions.mjs; cases 1-5 pass.\n- Move the six values into exceptions.json and restore the contract; case 6 passes.\n- Wire run.mjs; run the local fidelity gate with FIDELITY_REQUIRED=1: still 0 deviations, now with '6 owner exception(s) applied'.\n\n## Expected impact\nA recapture can no longer silently reverse an owner design decision or make the gate demand one be undone; a winner change under an exception surfaces as 're-decide this', not as a deviation someone fixes by re-adding grain. The captured contract means 'what the winner is' again, and the exceptions become a countable, dated list instead of prose in a $comment.\n\n## Evaluation\nClaim: owner exceptions survive a recapture and every exception is either applied, or reported with a reason.\nBefore: 0 of 7 acceptance cases pass (no exception model; the contract holds hand-edited values; a recapture writes the winner's values back)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first\nResult: better\nGate: architecture (gate tooling only; it tightens the oracle, loosens nothing)",
+    "evidence": "roles.json:40 `... a fresh `texture.py capture` writes the winner's 0.4 back, so re-apply the exception after one. The same exception (UI-3, 2026-10-20) takes the halftone dots off the open characters and segments posters ... halftoneA and halftoneB hold \\\"0\\\" there too.` | git show 0d7a5a2 -- apps/console/fidelity/contract.texture.json: `-      \"opacity\": \"0.55\",` `+      \"opacity\": \"0\",` (x2 per page, characters and segments) | texture.py:94-95 `if a.mode == \"capture\": Path(a.contract).write_text(json.dumps(data, indent=2) + \"\\n\", ...)` | grep -n '\"opacity\"' contract.texture.json -> 4:\"0\", 12:\"0\", 20:\"0\", 56:\"0\", 64:\"0\", 72:\"0\" against 0.55/0.35/0.4 on onair, reconcile, brain, simulator",
+    "critic": {
+      "verdict": "build",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "True premise and crisp offline cases. Modest ambition, but it clears the floors."
+    }
+  }
+]

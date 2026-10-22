@@ -1,0 +1,111 @@
+[
+  {
+    "context": "console-reconcile-page",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "The plan composer keeps its own sealed plan: derive it from the daemon's live plan",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "apps/console/src/pages/reconcile/session.ts",
+      "apps/console/src/pages/reconcile/PlanPage.tsx",
+      "apps/console/src/pages/reconcile/hooks.ts",
+      "apps/console/src/pages/reconcile/layer2.test.tsx",
+      "apps/console/src/pages/reconcile/testgen.ts",
+      "apps/console/src/pages/reconcile/Layer2.module.css"
+    ],
+    "new_files": [
+      "apps/console/src/pages/reconcile/planState.ts",
+      "apps/console/src/pages/reconcile/planState.test.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "planState pure: composerState(live=undefined, reportId='rec-A', draft=[]) -> {kind:'none'}; live={report_id:'rec-A',option_ids:['opt-1','opt-3']}, draft=['opt-3','opt-1'] -> {kind:'live-here', same:true}; draft=['opt-1'] -> {kind:'live-here', same:false, removed:['opt-3'], added:[]}; live.report_id='rec-B' -> {kind:'live-elsewhere', from:'rec-B'}",
+      "fresh session (session.reset), plan.current returns genPlan(['opt-1','opt-3']) for rec-1792284840627 -> plan page shows [data-role=reconcile-sealed] with 'Per my last decree', checkboxes opt-1 and opt-3 are checked, the seal button is disabled and reads 'This is the live plan' (today: nothing checked, 'Seal this plan', no sealed block)",
+      "same mount, untick opt-3 -> composer shows 'Differs from the live plan: drops opt-3' and the button reads 'Replace the live plan' and is enabled",
+      "plan.current returns a plan with report_id 'rec-OTHER' -> composer names 'The live plan was sealed from report rec-OTHER', checkboxes start empty, button reads 'Replace the live plan' (never the neutral 'Seal this plan')",
+      "plan.current answers not_found -> composer reads 'No live plan yet' and 'Seal this plan' as today; the existing test 'chooses options, seals them with plan.choose and shows the dispatch' still passes",
+      "plan.choose ok -> the sealed block renders from the refetched plan.current (fetch.calls contains plan.current after plan.choose) and SessionState has no 'sealed' key (tsc fails if any code reads session.sealed)",
+      "plan.current fails with a non-not_found error -> composer shows a caution 'Could not read the live plan' with the error title, and sealing stays allowed"
+    ],
+    "premise": [
+      "apps/console/src/pages/reconcile/session.ts:1-5 - the page store is 'in memory only'; :19-20 holds 'The plan plan.choose returned, per report id' as `sealed`",
+      "apps/console/src/pages/reconcile/PlanPage.tsx:38 - the chosen set is read only from the session store; :46 passes `sealed={s.sealed[reportId]}`; :92 the only writer is `session.seal` after a successful plan.choose",
+      "apps/console/src/pages/reconcile/PlanPage.tsx:99 - with an empty store the composer says 'Nothing chosen yet: the plan rides on the directives alone' and :112 offers 'Seal this plan', so after a reload one click re-runs the planner LLM and overwrites the live plan with an option-less one",
+      "crates/shadowrunr-reconcile/src/lib.rs:558-560 - choose() persists the plan (stored.plans and next_plan.json); :565 next_plan() reads it back; crates/shadowrunr-daemon/src/rpc.rs:257-260 serves it as plan.current (NotFound when none)",
+      "packages/contract/src/generated/types.ts:2175-2180 - NextStreamPlan carries option_ids and report_id, enough to seed the selection and name the report the live plan came from",
+      "apps/console/src/data/invalidation.ts:16 - plan.choose already invalidates plan.current, so a daemon-derived composer refreshes for free",
+      "grep plan.current apps/console/src (non-test) -> data/invalidation.ts:16, pages/onair/Dispatch.tsx:58, pages/onair/Layer1.tsx:120; zero under pages/reconcile: the page that seals the plan is the one page that never reads it"
+    ],
+    "rollback": "Revert the commit series; session.ts regains `sealed`/`seal`, PlanPage reads it again, planState.ts and its test are deleted. No contract, daemon or stored-data change.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/console test -- src/pages/reconcile && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "One directive-decision component: the proposed-directive Keep/Drop control is written twice (ChatPage.tsx:122-164, DirectivesPage.tsx:105-131) with different guards (only the chat copy waits for directive.list before offering Keep) - one shared control, one state machine.",
+    "body": "## Summary\nThe Plan options composer shows the sealed plan and the chosen options from a module-level in-memory store, while the daemon persists the same plan and serves it as `plan.current`. Reload the console and the page forgets the live plan, offers 'Seal this plan' over an empty selection, and one click re-runs the planner LLM and replaces what Malakor will receive. Make the daemon's live plan the authority and derive the composer's state from it.\n\n## Description\nToday `session.ts` keeps `chosen` and `sealed` per report (session.ts:18-20) and PlanPage reads only those (PlanPage.tsx:38,46). The daemon writes `next_plan.json` on every choose (lib.rs:558-560) and serves it (rpc.rs:257-260); the contract plan carries `report_id` and `option_ids` (types.ts:2175-2180). The console keeps a second, volatile copy of daemon state, and the copy is the one the operator acts on.\n\nThe move leans on client-state `invalidation-strategy` (the server is the authority, the client learns by refetch) and `status-fsms` (name the states the flags combine into), and hitl-approval `resume-after-decision` (what the operator approves must be what is shown). A pure `planState.ts` derives `composerState(live, reportId, draft)` into named states - `none`, `live-here` (same | differs, with added/removed), `live-elsewhere` (sealed from another report), `unknown` (read failed). PlanPage reads `plan.current`, seeds the draft from `live.option_ids` when the live plan answers this report and the operator has not touched the selection, and labels the action by state: disabled 'This is the live plan', 'Replace the live plan' with the diff, or 'Seal this plan'. `sealed` and `seal` leave the session store; only the unsent draft (`chosen`) stays, which is the half-made choice the store's header says it exists for.\n\n## Flow\n- Plan tab mounts -> plan.proposals and plan.current in parallel\n- composerState(live, reportId, draft) -> none / live-here(same|differs) / live-elsewhere / unknown\n- draft untouched and live-here -> checkboxes seeded from live.option_ids\n- Seal -> plan.choose -> invalidation refetches plan.current -> sealed block renders from the daemon's answer\n\n## Expected impact\nThe operator can no longer overwrite the live plan by accident after a reload, sees which report the live plan came from, and sees what a re-seal would change before paying for a multi-second LLM call. One source of truth for the plan across Reconcile and On-air.\n\n## Evaluation\nClaim: the composer reflects the daemon's live plan, not a volatile copy.\nBefore: 0 of 7 acceptance cases pass (planState.ts does not exist; with a fresh session the plan page renders no sealed block and offers 'Seal this plan' over nothing).\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (planState.test.ts table + layer2.test.tsx mounts with a scripted plan.current)\nResult: better\nGate: architecture",
+    "evidence": "session.ts:20 `readonly sealed: Readonly<Record<string, NextStreamPlan>>;` | PlanPage.tsx:46 `sealed={s.sealed[reportId]}` | PlanPage.tsx:99 `Nothing chosen yet: the plan rides on the directives alone` | rpc.rs:257 `\"plan.current\" => match state.reconciler.next_plan()? {` | lib.rs:560 `write_json_atomic(&self.cfg.data_dir.join(\"next_plan.json\"), &plan)?;` | grep -rn 'plan\\.current' apps/console/src (non-test): data/invalidation.ts:16, pages/onair/Dispatch.tsx:58, pages/onair/Layer1.tsx:120 - none in pages/reconcile",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Grounded, falsifiable single-authority fix for a real accidental-overwrite path."
+    }
+  },
+  {
+    "context": "console-reconcile-page",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Directives are judged per report but never shown: put held/broken beside each",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 4,
+    "write_set": [
+      "apps/console/src/pages/reconcile/DirectivesPage.tsx",
+      "apps/console/src/pages/reconcile/ReportPage.tsx",
+      "apps/console/src/pages/reconcile/model.ts",
+      "apps/console/src/pages/reconcile/model.test.ts",
+      "apps/console/src/pages/reconcile/layer2.test.tsx",
+      "apps/console/src/pages/reconcile/testgen.ts",
+      "apps/console/src/pages/reconcile/Layer2.module.css"
+    ],
+    "new_files": [
+      "apps/console/src/pages/reconcile/DirectiveOutcomes.tsx"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "model: outcomeIndex({directives:[{id:'dir-1',kind:'prevent',check:'directive:prevent:dir-1',runs:4,verdict:'broken',rate:{rate:0.5,n:4,bound}}]}) -> Map{'dir-1' -> that outcome}; a report without `directives` -> empty Map; outcomeOrder sorts broken, ignored, unmeasured, attempted, held",
+      "Directives tab with the report on show carrying dir-1 broken (2 of 4, refs ['run-1#12']) -> dir-1's row shows a fail-toned 'Broken' chip, 'held 2 of 4' with the 95% bound, and a ref link to #/brain/transcripts/run-1/12",
+      "same mount -> a 'Broken' facet exists with count = active directives whose outcome is broken; selecting it lists only those rows, each still with its Deactivate action",
+      "active directive dir-2 with no outcome in the report -> its cell reads 'Not judged in rec-...' muted, never 'Held'",
+      "outcome with rate.n below SMALL_SAMPLE_N (30) -> the cell carries the small-sample mark (same rule as model.ts caution), so a 1-of-1 'held' does not read as settled",
+      "Report tab for a report whose directives = [held dir-0, broken dir-1, ignored dir-3 (try)] -> a 'The Lord's directives' section lists three rows worst-first (broken, ignored, held), each named by its directive.list text, or 'retired directive dir-9' when the id is no longer listed",
+      "no report stored -> Directives tab renders as today (outcome column shows '-', no error panel); existing tests 'lists, adds and deactivates directives over RPC' and 'virtualises 2,000 directives' still pass"
+    ],
+    "premise": [
+      "packages/contract/src/generated/types.ts:2485-2488 - ReconcileReport.directives?: DirectiveOutcome[] (WP15: what happened to each of the Lord's directives in the source runs); :2520-2537 DirectiveOutcome carries id, kind, runs, verdict, rate (n + bound), refs",
+      "crates/shadowrunr-reconcile/src/lib.rs:317-319 - every report computes `metrics::directive_outcomes(&runs)` ('computed, never left to the synthesis')",
+      "crates/shadowrunr-sim/src/summary.rs:126-131 - verdict is unmeasured / broken / held / ignored / attempted from judged checks",
+      "crates/shadowrunr-daemon/src/report_wire.rs:49-59 - report_reply mutates and returns the stored report, so `directives` reaches the wire",
+      "grep -rn 'DirectiveOutcome\\|DirectiveVerdict' apps/console/src -> zero hits: the console never renders the field",
+      "apps/console/src/pages/reconcile/DirectivesPage.tsx:154-160 - the table's columns are kind, text, scope, added, state; :133-152 Deactivate is offered with no evidence of whether the directive held",
+      "apps/console/src/pages/reconcile/ReportPage.tsx:59-67 - the report renders segments, incidents, ranks, tone, synthesis; no directives section",
+      "apps/console/src/pages/reconcile/hooks.ts:12-19 - useReportId/useReport already resolve the report on show, so the Directives tab reads it without a new RPC"
+    ],
+    "rollback": "Revert the commit series: DirectiveOutcomes.tsx and the model helpers go, DirectivesPage's column and facet and ReportPage's section disappear. Read-only UI over a field the daemon already sends; no contract or daemon change.",
+    "gate": "none",
+    "test_command": "pnpm -C apps/console test -- src/pages/reconcile && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "A report switcher with a two-report compare: the page shows only the newest report or one typed by id (NoReport.tsx:71-79, kit/useNewestReport.ts:15-22) though reconcile.list returns them all - pick any report and see held/failed/rates move against the previous one.",
+    "body": "## Summary\nThe operator keeps, drops and deactivates standing directives blind. Every reconcile report already carries a computed outcome per directive - held, broken, attempted, ignored or unmeasured, with n, a 95% bound and transcript refs - and the console renders none of it. Put the verdict beside each directive and in the report, so Deactivate and Keep are decided against evidence.\n\n## Description\nWP15 made the reconciler judge the Lord's directives (lib.rs:317-319, summary.rs:126-131) and ship them as `ReconcileReport.directives` (types.ts:2485-2488). A zero-consumer grep over apps/console finds no reader. The Directives tab (DirectivesPage.tsx:154-160) lists kind/text/scope/added/state; the Report tab (ReportPage.tsx:59-67) skips the field. The only trace is a sentence the daemon appends to the prose summary (lib.rs:320-323).\n\nThe change leans on hitl-approval `oracle-before-gate` (show the decider what to judge the item against) and measurement-honesty `minimum-sample-floors` (a rate never without its n, small samples marked). `model.ts` gains `outcomeIndex` and `outcomeOrder`; a new `DirectiveOutcomes.tsx` renders a verdict cell (chip + 'held k of n' + bound via RateBar + RefLinks into Brain transcripts) and a report section. DirectivesPage reads the report on show through the existing `useReportId`/`useReport` hooks, adds an Outcome column and a Broken facet beside Active/Proposed/All/Off, and names which report the verdicts come from. ReportPage adds 'The Lord's directives' worst-first, naming each by its directive.list text. A missing outcome reads 'Not judged', never 'Held'.\n\n## Flow\n- Open Directives -> directive.list + report on show (already cached by the poster)\n- Each row: verdict chip, rate with n and bound, refs -> Brain transcript line\n- Facet Broken -> only directives the character broke -> Deactivate in place\n- Report tab -> directives section worst-first, beside segments and incidents\n\n## Expected impact\nThe directive loop closes in the console: the operator sees which standing orders the character obeys, which it breaks and where, and which no run measured, and prunes them with one click instead of reading transcripts to guess.\n\n## Evaluation\nClaim: every directive's judged outcome is visible where the operator decides on it.\nBefore: 0 of 7 acceptance cases pass (no outcomeIndex; no outcome column, facet or report section).\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (model.test.ts + layer2.test.tsx with genReport carrying directives)\nResult: better\nGate: none (read-only render of a field already on the wire)",
+    "evidence": "types.ts:2488 `directives?: DirectiveOutcome[];` | lib.rs:319 `let directives = metrics::directive_outcomes(&runs);` | summary.rs:128 `(DirectiveKind::Prevent, n, k) if k < n => DirectiveVerdict::Broken,` | grep -rn 'DirectiveOutcome\\|DirectiveVerdict\\|\\.directives\\b' apps/console/src -> only ChatPage.tsx:110,112 (lord.chat turn.directives) and PlanPage.tsx:156,160 (plan.directives); no reader of ReconcileReport.directives | DirectivesPage.tsx:154-160 COLUMNS kind/text/scope/created/state",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Surfaces computed evidence the console drops, at the decision point."
+    }
+  }
+]

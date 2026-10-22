@@ -1,0 +1,16 @@
+{"card":"Drill into a row and back: the table forgets filter, sort and where you were","context":"console-ui-primitives","slot":"B","status":"landed",
+ "shas":["ab05057","ebefdbf"],
+ "tests_added":[
+  "apps/console/src/ui/tableView.test.tsx::restores query, facet and sort on remount, before the rows paint",
+  "apps/console/src/ui/tableView.test.tsx::keeps two tables with the same label apart by viewKey",
+  "apps/console/src/ui/tableView.test.tsx::falls back when what it remembered is gone: column, facet option, row",
+  "apps/console/src/ui/tableView.test.tsx::'Clear filter' forgets the remembered query and facet, and keeps the sort",
+  "apps/console/src/ui/tableView.test.tsx::without a viewKey nothing is remembered (guard: today's behaviour)",
+  "apps/console/src/ui/tableView.test.tsx::scrolls a 48,000-row table back to the opened row and focuses it",
+  "apps/console/src/ui/tableView.test.tsx::afterAll Storage.prototype.setItem spy records 0 calls"],
+ "guard_cases":["case 4 fallbacks (vanished column/facet/row) - trivially green before since nothing was remembered","case 5 no viewKey = today (plus every existing ui.test.tsx FilterTable case unchanged)","case 7 memory only: Storage.prototype.setItem (local+session) 0 calls across the file"],
+ "cases_total":7,"cases_red_before":4,"cases_green_after":7,
+ "gates":{"pnpm -C apps/console test":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console lint":0,"pnpm -C apps/console build":1},
+ "files_changed":13,"lines_changed":340,
+ "deviations_from_card":"Tests and the primitive landed in one commit (tests pass the viewKey prop, which does not typecheck before it exists); they were run red first (4 of 6 tests red, by assertion). Clear-filter case extended to also assert sort survives Clear, which makes it red before. tableView exposes get/set/clear/reset; FilterTable uses get/set only. Returned-row accent is a 1.2s background fade (no movement, so no reduced-motion block), kept minimal for CSS budgets. Per-identity keys: characters.<id>.situations and simulator.tournaments.<id>.runs.",
+ "notes":"Build gate rc=1 ONLY on routes I did not touch: entry js 286050 > 286000 and review.l2 js 104197 > 100000 / css 35443 > 35000 - the sibling console-review-page B in-flight files (review/tab.ts, Layer2.tsx, CompareView). My code lives in the FilterTable chunk only (verified: 'data-returned'/'opened:' absent from entry closure); every l2 using FilterTable is under budget. No budget line raised. Earlier, while the sibling was mid-edit, typecheck/test were red only in review/compare.test.tsx; after it settled typecheck 0 and full test 450 passed. A larger first CSS draft pushed brain/onair/reconcile/segments l2 css over; slimmed to 2 rules, all under."}

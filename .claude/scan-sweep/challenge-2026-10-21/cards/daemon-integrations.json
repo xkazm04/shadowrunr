@@ -1,0 +1,112 @@
+[
+  {
+    "context": "daemon-integrations",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "MCP start_sim and preflight run beside the daemon: route them through it",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs",
+      "crates/shadowrunr-daemon/src/integrations/mcp.rs",
+      "crates/shadowrunr-daemon/src/integrations/mcp_tests.rs",
+      "crates/shadowrunr-daemon/src/cli.rs",
+      "docs/guide/personas.md"
+    ],
+    "new_files": [
+      "crates/shadowrunr-daemon/src/integrations/mcp_backend.rs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "daemon AppState (scripted) served on an ephemeral port with a sandbox session running; MCP start_sim {spec:{run_id:'m1'}} -> isError result whose envelope code is 'conflict' (today: the run starts in the MCP process)",
+      "daemon up with live run 'x' in flight; MCP start_sim {spec:{run_id:'x'}} -> isError conflict and the daemon's run dir for 'x' is NOT renamed by move_aside (today: the MCP process moves it aside)",
+      "daemon up with max_live_runs = 1 and one run in flight; MCP start_sim -> isError 'busy' (today: another concurrent run starts in the MCP process)",
+      "daemon up; MCP start_sim succeeds -> result {host:'daemon'}, the run is in the DAEMON state's live registry (daemon_state.live.get(id).is_some()) and the MCP server's running() is empty, so wait_idle returns at once",
+      "daemon up on the scripted engine; MCP start_sim {live:true} -> isError with detail.reason 'engine_mismatch' and the EngineFactory was called 0 times (no second fleet built)",
+      "daemon up; MCP preflight -> equals the daemon's preflight.run rows and the EngineFactory was called 0 times",
+      "no daemon on cfg.daemon.port; MCP start_sim with writes allowed -> runs in-process exactly as today, result {host:'mcp', engine:'scripted'}"
+    ],
+    "premise": [
+      "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:122 - Tools::new builds its own AppState (AppState::new(cfg, EngineHandle::scripted())): the MCP process carries a private live registry and sandbox registry",
+      "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:133-138 - live_state() builds a second live engine through the factory (EngineHandle::build at mcp.rs:257) in the MCP process",
+      "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:181-183 - the preflight tool runs on live_state(), so a read-only preflight builds a second live fleet",
+      "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:273-288 - start_sim dispatches sim.start on the MCP's own state and tracks the run in a local `started` list",
+      "crates/shadowrunr-daemon/src/live.rs:319-324 - sim.start refuses when state.sandbox.running(): the guard reads the calling process's registry only",
+      "crates/shadowrunr-daemon/src/live.rs:329-334 - register(run_id, max_live_runs) then runs::move_aside(run_dir): both per-process; the MCP process can rename a run dir the daemon is writing",
+      "crates/shadowrunr-daemon/src/sandbox.rs:364-367 - sandbox start refuses while state.live.any_in_flight(): blind to runs the MCP process started",
+      "crates/shadowrunr-daemon/src/integrations/mcp.rs:255-273 - run_stdio never calls activity::start_for_daemon; that hook is only at cli.rs:1564 (daemon serve), so an MCP-started run forwards no stream_end to Personas",
+      "crates/shadowrunr-daemon/src/integrations/mcp_tools.rs:313-330 - wait_idle holds the MCP process open until its runs end because it owns them",
+      "crates/shadowrunr-daemon/src/cli.rs:570-611 - DaemonClient already speaks /rpc on 127.0.0.1:<port>; cli.rs:614-626 rpc_reply keeps only code+message, dropping the envelope's detail",
+      "crates/shadowrunr-daemon/src/rpc.rs:312-315 - engine.status exposes the daemon's fleet mode (scripted/live), enough to check `live` against the daemon's engine",
+      "crates/shadowrunr-daemon/src/config.rs:193,205 - cfg.daemon.port defaults to 7717, readable by the MCP process"
+    ],
+    "rollback": "Two commits: (1) DaemonClient::call_envelope in cli.rs (additive), (2) the mcp_backend probe + routing in mcp_tools.rs. Reverting (2) restores the in-process path untouched; (1) is unused after revert and can stay or go.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-daemon integrations::mcp; cargo clippy --workspace --all-targets -- -D warnings; cargo fmt --all -- --check",
+    "runner_up": "Activity follows the live registry's `latest` watch slot (activity.rs:282-299, live.rs:194 send_replace): two runs registered before the watcher wakes (max_live_runs=2, sandbox + sim) leave the first unfollowed - subscribe to registrations instead.",
+    "body": "## Summary\n`shadowrunr mcp` is a second, invisible daemon. Its one write (`start_sim`) and its `preflight` run on a private AppState with its own live registry, sandbox registry and (for `live:true` / preflight) its own live engine fleet. Every guard the daemon holds - sandbox-vs-sim exclusion, `max_live_runs`, same-run_id conflict, move_aside of a stale dir - is per-process, so Athena can start a run beside a live sandbox rehearsal, rename the directory of a run the daemon is writing, and spend quota from a fleet the daemon's ledger and cooldowns never see. Runs it starts are also invisible to the console's live view and forward no activity to Personas.\n\n## Description\nAdd `integrations/mcp_backend.rs`: per write/preflight call, probe the configured daemon port (`engine.status`, ~500 ms). When it answers, `start_sim` and `preflight` are proxied as `/rpc` calls through a `DaemonClient::call_envelope` that keeps the full error envelope (code, message, detail) so MCP `isError` results keep their shape. `live` is checked against the daemon's fleet mode and refused with `engine_mismatch` instead of building a second fleet. When nothing answers, today's in-process path runs unchanged; the result names the host (`daemon` | `mcp`). Read tools stay in-process (they read the same files). Technique: mcp-tools / first-party-agent-is-a-principal (\"two doors onto one store resolve their gates separately\" -> one admission) and ambient-selection-is-not-an-argument (an operator and an agent acting on one running instance must share its exclusion).\n\n## Flow\n- tools/call start_sim -> write gate (unchanged) -> backend probe\n- daemon answers -> engine.status mode vs `live` -> mismatch: isError engine_mismatch; else POST /rpc sim.start -> daemon guards apply -> {run_id, host:'daemon'}\n- no daemon -> in-process as today -> {host:'mcp'}\n- preflight -> daemon preflight.run (PF-09 then carries the daemon forwarder's real counts) or in-process fallback\n\n## Expected impact\nOne admission door for runs: the sandbox/sim exclusion, run caps and run-dir custody hold for agent-started runs; no second fleet spending quota outside the daemon's ledger; agent-started runs appear live in the console and reach Personas activity.\n\n## Evaluation\nClaim: agent writes obey the daemon's guards when a daemon is up\nBefore: 1 of 7 acceptance cases pass (only the no-daemon fallback)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first against server::router(state) served on an ephemeral port\nResult: better\nGate: architecture",
+    "evidence": "mcp_tools.rs:122 `let scripted = AppState::new(cfg.clone(), EngineHandle::scripted());`; :135 `AppState::new((*self.cfg).clone(), (self.factory)(&self.cfg))`; :182 `let state = self.live_state().await;` (preflight); live.rs:319 `if let Some(id) = state.sandbox.running() {`; live.rs:331 `.register(&run_id, state.cfg.daemon.max_live_runs)?;` live.rs:334 `runs::move_aside(&run_dir, ...)`; grep start_for_daemon over crates -> only activity.rs:253 (def) and cli.rs:1564 (daemon serve); mcp.rs:257 `EngineHandle::build(c, false)`.",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 4,
+      "falsifiability": 4,
+      "reason": "Strong move; the reverse mismatch direction is the costly one and is untested."
+    },
+    "revision": "Add a case: daemon up on a live engine; MCP start_sim {} (live defaults false) -> isError engine_mismatch, no run registered in the daemon, EngineFactory called 0 times."
+  },
+  {
+    "context": "daemon-integrations",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Personas activity is green with a wrong secret: prove delivery in one command",
+    "size": "M",
+    "effort": 5,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "crates/shadowrunr-daemon/src/integrations/status.rs",
+      "crates/shadowrunr-daemon/src/integrations/activity.rs",
+      "crates/shadowrunr-daemon/src/integrations/forwarder.rs",
+      "crates/shadowrunr-daemon/src/integrations/activity_tests.rs",
+      "crates/shadowrunr-daemon/src/cli.rs",
+      "docs/guide/personas.md"
+    ],
+    "new_files": [],
+    "shared_surfaces": [],
+    "acceptance": [
+      "fake webhook verifying with secret A, env secret B; `personas status --send-test` (status::send_test) -> delivery 'refused', detail names HTTP 401 and 'signature/secret mismatch', exit 1, secret value absent from text and JSON",
+      "matching secret -> delivery 'delivered', the fake accepted exactly one signed body with kind 'test' and no run_id/seq/show detail, exit 0",
+      "fake answers POST 404 -> delivery 'trigger_not_found' with the endpoint named, exit 1",
+      "closed port -> delivery 'unreachable', exit 3",
+      "activity off -> `--send-test` reports 'activity off' and the fake records 0 hits",
+      "forwarder whose one event was refused (401) while GET /webhook/{id} answers 200 -> preflight_line is Amber and its detail says '1 refused (HTTP 401)' (today Green: 'trigger answers; 0 delivered, 0 dropped')",
+      "plain `personas status` (no flag) -> sends nothing (fake hits 0) and its activity line says 'unverified: run --send-test'"
+    ],
+    "premise": [
+      "crates/shadowrunr-daemon/src/integrations/status.rs:350-372 - activity_summary reports 'on' once the secret env var is non-empty; it never learns whether Personas accepts the signature",
+      "crates/shadowrunr-daemon/src/integrations/activity.rs:363-373 - PF-09 probes GET /webhook/{id}: it proves the trigger exists, not the secret; 200 -> Green",
+      "crates/shadowrunr-daemon/src/integrations/activity.rs:350-354 - PF-09 counts show delivered and s.dropped() only",
+      "crates/shadowrunr-daemon/src/integrations/forwarder.rs:476-480 - dropped() = failed + dropped_full + dropped_down + lagged: `rejected` (a wrong secret) is in no number the operator sees",
+      "crates/shadowrunr-daemon/src/integrations/forwarder.rs:660-665 - a refusal surfaces only as an eprintln in the daemon's stderr ('check trigger_id and the secret')",
+      "docs/guide/personas.md:65-66 - the setup guide tells the operator PF-09 is green 'when the trigger answers'",
+      "crates/shadowrunr-daemon/src/cli.rs:244-251 - `personas status` takes only --json; no way to exercise the signed path",
+      "crates/shadowrunr-daemon/src/integrations/activity.rs:39-48 - ActivityKind has no test kind; KNOWN_EVENTS (settings.rs:180-187) stays unchanged so the daemon never emits it"
+    ],
+    "rollback": "Two commits: (1) Stats.last_rejected + PF-09 refusal amber (forwarder.rs, activity.rs), (2) status --send-test (status.rs, cli.rs, docs). Each reverts alone; no stored state or config key is added.",
+    "gate": "none",
+    "test_command": "cargo test -p shadowrunr-daemon integrations::; cargo clippy --workspace --all-targets -- -D warnings; cargo fmt --all -- --check",
+    "runner_up": "`personas status` resolves id_mismatch / not_registered blind: it already holds the door's project at this root (status.rs:450-488) - print the exact one-line fix (re-register vs rewrite .personas/project.json) instead of only the mismatch.",
+    "body": "## Summary\nSetting up Personas activity today is: configure, start the daemon, run a sim, then read daemon stderr hoping for a 'refused' line. A wrong or rotated secret leaves PF-09 green ('trigger answers'), `personas status` says 'on (secret set)', and every event is silently refused - `rejected` is counted in no figure the operator or console sees. Make the verdict one command and make PF-09 tell the truth.\n\n## Description\n(1) `shadowrunr personas status --send-test` signs and POSTs one `{source, kind:'test', ts_ms, project_id?}` body (no show data) to the configured trigger through the same deliver path and classifies the answer: delivered / refused (401/403 = signature or secret mismatch) / trigger_not_found (404) / http_<n> / unreachable, with exit codes 0/1/1/1/3 matching status.rs's existing ladder. Plain `status` never sends; its activity line says 'unverified'. (2) The forwarder records `last_rejected` (status code) beside `rejected`; PF-09 turns Amber with 'N refused (HTTP 401: secret mismatch?)' when rejected > 0, and shows refused next to delivered/dropped. The test kind is never in KNOWN_EVENTS, so configuration cannot route show events to it. Leans on the failure-not-empty-success law as mcp-tools/tool-schema-design states it ('failed calls reading as successes downstream'), applied to the outbound integration; settings stay secret-by-name.\n\n## Flow\n- `personas status --send-test` -> settings + secret env -> one signed test POST -> verdict line + exit code\n- daemon forwarder refusal -> stats.rejected, stats.last_rejected -> PF-09 Amber 'refused' (the console preflight board shows it with no console change)\n\n## Expected impact\nSecret/trigger misconfiguration is found in one command instead of after a show; PF-09 stops reporting green while every event is refused.\n\n## Evaluation\nClaim: the operator can verify the signed path and PF-09 reflects refusals\nBefore: 0 of 7 acceptance cases pass (no --send-test; PF-09 Green on refusal)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first against the existing Fake webhook in activity_tests.rs (personas_verify port)\nResult: better\nGate: none (operator-invoked, carries no show data; daemon emission set unchanged)",
+    "evidence": "forwarder.rs:478-480 `pub fn dropped(&self) -> u64 { self.failed + self.dropped_full + self.dropped_down + self.lagged }`; activity.rs:353 `format!(\"; {} delivered, {} dropped\", s.delivered, s.dropped())`; activity.rs:371-373 `Some(200) => rep(HealthState::Green, ... \"trigger answers\"`; status.rs:358 `let secret = if std::env::var(a.secret_env.trim()).is_ok_and(|v| !v.trim().is_empty()) { \"set\" }`; docs/guide/personas.md:65 'the **PF-09** line is green when the trigger answers'.",
+    "critic": {
+      "verdict": "void",
+      "ambition": 3,
+      "grounding": 4,
+      "falsifiability": 4,
+      "reason": "Extends a cross-repo webhook contract and triggers the external persona; the in-repo remainder is S-sized."
+    }
+  }
+]

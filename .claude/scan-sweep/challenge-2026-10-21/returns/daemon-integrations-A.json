@@ -1,0 +1,17 @@
+{"card":"MCP start_sim and preflight run beside the daemon: route them through it","context":"daemon-integrations","slot":"A","status":"landed",
+ "shas":["02aa6c9","22c845d","0e4cfa8"],
+ "tests_added":[
+  "crates/shadowrunr-daemon/src/integrations/mcp_tests.rs::start_sim_beside_a_daemon_sandbox_session_is_refused",
+  "crates/shadowrunr-daemon/src/integrations/mcp_tests.rs::start_sim_with_a_daemon_run_id_in_flight_is_refused_and_moves_nothing",
+  "crates/shadowrunr-daemon/src/integrations/mcp_tests.rs::start_sim_obeys_the_daemons_max_live_runs",
+  "crates/shadowrunr-daemon/src/integrations/mcp_tests.rs::start_sim_runs_in_the_daemon_when_one_answers",
+  "crates/shadowrunr-daemon/src/integrations/mcp_tests.rs::live_start_sim_against_a_scripted_daemon_is_an_engine_mismatch",
+  "crates/shadowrunr-daemon/src/integrations/mcp_tests.rs::default_start_sim_against_a_live_daemon_is_an_engine_mismatch",
+  "crates/shadowrunr-daemon/src/integrations/mcp_tests.rs::preflight_is_the_daemons_preflight",
+  "crates/shadowrunr-daemon/src/integrations/mcp_tests.rs::without_a_daemon_start_sim_runs_in_process"],
+ "guard_cases":[],
+ "cases_total":8,"cases_red_before":8,"cases_green_after":8,
+ "gates":{"cargo test -p shadowrunr-daemon integrations::mcp":0,"cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt --all -- --check":1,"rustfmt --check (my 5 files)":0,"cargo test -p shadowrunr-daemon":0,"cargo test --workspace":0},
+ "files_changed":6,"lines_changed":440,
+ "deviations_from_card":"8 cases (7 + the revision's reverse mismatch). Case 4 asserts the run reached the daemon's live registry via live.get(id) OR the registry's latest slot, because a scripted run can finish before the assertion; plus MCP running() empty and wait_idle returning within 1 s. Case 6 compares (check,state) rows, not detail text. engine_mismatch uses code 'conflict'. mcp.rs needed no change (premise mcp.rs line refs were stale; run_stdio unchanged). Coupled file: integrations/mod.rs (module declaration). Existing mcp tests now point cfg.daemon.port at a closed port so a developer's daemon on 7717 cannot hijack them. A daemon that answers the probe then fails mid-call is 'unavailable' (never retried in-process); a daemon answering engine.status with an error refuses the call (tightens).",
+ "notes":"cargo fmt --all -- --check rc=1 only on sibling in-flight files (crates/shadowrunr-segments/src/runtime.rs, tests/runtime.rs - segments-runtime B); my files pass rustfmt --check. First cargo test --workspace run failed with 'could not execute process' on the daemon test exe (file lock from a concurrent build); rerun rc=0. No network beyond 127.0.0.1, no LLM calls: the live-daemon test builds a fleet that is never called. Runner-up (activity follows the latest watch slot) not touched."}

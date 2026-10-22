@@ -1,0 +1,20 @@
+{"card":"Console On Air mirrors the broadcast with its own lives: one on-screen schedule","context":"stage-kit-overlays","slot":"A","status":"landed",
+ "shas":["326d83b","3292fd1"],
+ "tests_added":[
+  "apps/console/src/pages/onair/view.test.ts::the broadcast's schedule > keeps the explainer card up as long as the broadcast does",
+  "apps/console/src/pages/onair/view.test.ts::the broadcast's schedule > lingers a closed poll as long as the broadcast's vote panel",
+  "apps/console/src/pages/onair/view.test.ts::the broadcast's schedule > shows a highlighted line in the decree slot, the one decreeAt names",
+  "apps/console/src/pages/onair/view.test.ts::the broadcast's schedule > captions the queued line showing now, not the latest said",
+  "apps/console/src/pages/onair/view.test.ts::the broadcast's schedule > runs presence and the CSS delay on transcript time at any replay speed",
+  "apps/stage/src/onScreen.pin.test.ts::names every timed overlay the stage draws, at every 250 ms of the demo run",
+  "apps/stage/src/onScreen.pin.test.ts::leaves apps/stage no hand-copied visibility window",
+  "packages/stage-kit/src/ui/onScreen.test.ts::onScreen (5 window cases)"],
+ "guard_cases":["case 5: the 250 ms demo-run pin of onScreen against the rendered broadcast canvas - written against the untouched components and green there once onScreen existed (0 misses, every slot exercised), then kept green while the components moved onto the schedule"],
+ "cases_total":7,"cases_red_before":6,"cases_green_after":7,
+ "gates":{
+  "pnpm -C packages/stage-kit test":0,"pnpm -C packages/stage-kit typecheck":0,"pnpm -C packages/stage-kit lint":0,
+  "pnpm -C apps/stage test":0,"pnpm -C apps/stage typecheck":0,"pnpm -C apps/stage lint":0,"pnpm -C apps/stage build":0,
+  "pnpm -C apps/console typecheck":0,"pnpm -C apps/console test":0,"pnpm -C apps/console lint":0,"pnpm -C apps/console build":0},
+ "files_changed":14,"lines_changed":625,
+ "deviations_from_card":"(1) The component pin (case 5) lives in apps/stage/src/onScreen.pin.test.ts, not packages/stage-kit/src/ui/onScreen.test.ts: stage-kit has no react-dom and dependencies may not be added; it renders the full Stage at broadcast=true. stage-kit's onScreen.test.ts carries the pure window cases. (2) Coupled files outside the write set: apps/console/src/pages/onair/Screen.module.css (card/decree/moment exit animations hard-coded 7s/5.5s/3.6s; now calc(var(--out) - fade + var(--d)) so the CSS fade lands at the schedule's until), apps/stage/src/onScreen.pin.test.ts (new). (3) Two commits, not three: stage-kit schedule + stage overlays + pin in one, console in the other. (4) Stage.tsx and JobTicker.tsx untouched (not needed). (5) Acceptance case 4 compares captionView key `m<id>` with captionAt id (the view's key keeps its m/f prefix). (6) view functions keep an ignored optional `_speed` parameter so call sites and the revised case 7 signature stay valid. (7) onScreen adds a `foilLine` slot (the console lower third shows the foil's newer line; now windowed like FoilCard's bubble).",
+ "notes":"Premise re-verified at 25c6267/HEAD: all four mismatches held (LIFE_MS card 7000 vs CARD_MS 16000; pollAfterClose 5000 vs POLL_LINGER_MS 9000; picked-only decree; scene.caption latest-said). Visible console changes: a decree is now held after its turn (label 'Last heard by the Lich'), highlights show as 'Decree of the Lich', the caption clears once the broadcast's caption has faded. Console tests were kept uncommitted until the implementation so siblings running the console suite on main never saw red. Bundle: onair.l1 +1606 B (slack 4.4 KiB), onair.l2 +178 B (slack 0.2 KiB) - no budget raise; bundle.json untouched. One console build ran red on characters.l2 (121359 > 118000 B) mid-run - sibling console-characters-page B's in-flight work; the re-run was green. One vitest startup hit ENOTEMPTY on node_modules/.vitest-cache from a concurrent run; retry green. packages/stage-kit/nul predates this card (not mine)."}

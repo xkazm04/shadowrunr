@@ -1,0 +1,29 @@
+{"card":"Clip owner-act rules live once in the contract, not re-typed in the console","context":"types-crate","slot":"A","status":"landed",
+ "shas":["908df2b","66dc11d","29608ed"],
+ "tests_added":[
+  "crates/shadowrunr-types/src/clips.rs::tests::a_clean_rendered_clip_at_the_gate_may_be_approved",
+  "crates/shadowrunr-types/src/clips.rs::tests::approval_without_a_render_is_blocked_as_no_render",
+  "crates/shadowrunr-types/src/clips.rs::tests::a_failed_check_holds_and_an_unmeasured_one_needs_an_override",
+  "crates/shadowrunr-types/src/clips.rs::tests::the_owner_act_table",
+  "crates/shadowrunr-types/src/clips.rs::tests::acts_are_never_stored_and_are_keyed_by_the_act_vocabulary",
+  "crates/shadowrunr-types/src/clips.rs::tests::the_contract_carries_acts_keyed_by_clip_act",
+  "crates/shadowrunr-clips/src/tests.rs::approve_refuses_through_the_contracts_act_block",
+  "crates/shadowrunr-clips/src/tests.rs::the_owner_act_table_is_what_the_store_renderer_and_uploader_do",
+  "crates/shadowrunr-clips/src/tests.rs::acts_are_derived_on_load_and_never_stored",
+  "apps/console/src/pages/onair/clips.dom.test.tsx::renders the daemon's acts, not its own reading of the checks",
+  "apps/console/src/pages/onair/clips.dom.test.tsx::shuts render and reject when the daemon blocks them, and opens publish when it allows it",
+  "apps/console/src/pages/onair/clips.dom.test.tsx::the view model keeps no copy of the owner-act rule"
+ ],
+ "guard_cases":["the 5 pre-existing clips.dom.test.tsx cases (funnel, signature-gated approve, failed-check refusal, unmeasured override, publish-only-approved) - green before by design, fixtures now carry acts","existing shadowrunr-clips scan_gate_approve_and_dry_run_publish and a_failed_check_holds_whatever_the_override (refusal text unchanged)"],
+ "cases_total":7,"cases_red_before":7,"cases_green_after":7,
+ "gates":{
+  "card test_command (cargo test types/clips/daemon && clippy && fmt && contract generate/check/typecheck/test && console typecheck/test/lint)":0,
+  "cargo test --workspace":0,
+  "pnpm -C packages/contract lint":0,
+  "pnpm -C apps/stage typecheck":0,
+  "pnpm -C apps/stage test":0,
+  "pnpm -C apps/console build":1
+ },
+ "files_changed":12,"lines_changed":7103,
+ "deviations_from_card":"Two commits instead of three for the Rust+contract part: the types/clips refactor and the regenerated contract landed together (908df2b) because the Rust commit alone fails schema_drift. One coupled file outside the write set: crates/shadowrunr-types/src/schema.rs (+2 lines, wire_types names ClipAct so the key vocabulary crosses the contract; ClipActs is a struct whose fields are the ClipAct names, asserted by a schema test and a TS satisfies-check). clips.buttons.test.tsx needed no change. unmeasuredChecks was also deleted from clipModel.ts (override_needed comes from acts). Rust red-before = the API did not exist (compile), per brief; console red-before = 3 assertion failures, committed as test(...) 66dc11d.",
+ "notes":"Bundle (console build exits 1 only on door): door 527,963 B (HEAD, per budgets comment) -> 536,289 B = +8,326 B, all from the regenerated validators (ClipAct, ClipActBlock oneOf, ClipActState, ClipActs, ClipCandidate.acts); door now exceeds its current 532,000 budget by 4,289 B - budget NOT raised. onair.l2 js 100,086 -> 99,774 B (-312 B, under 100,000). Daemon untouched: clips.get returns ClipStore::load, which now derives acts; approve/reject/rerender return candidates with acts refreshed; save strips acts so stored candidate.json is unchanged in shape. Refusal error texts are byte-identical to before (rendered by ClipActBlock::refusal). store::status_name deleted (ClipStatus::as_str/Display). Lock taken and released around 908df2b."}

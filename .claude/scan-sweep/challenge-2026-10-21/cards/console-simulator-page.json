@@ -1,0 +1,121 @@
+[
+  {
+    "context": "console-simulator-page",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "'Held' has two derivations: the tile and the list disagree on one tournament",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "crates/shadowrunr-types/src/rpc.rs",
+      "crates/shadowrunr-daemon/src/runs.rs",
+      "crates/shadowrunr-daemon/src/e2e/paging.rs",
+      "packages/contract/schema/contract.schema.json",
+      "packages/contract/src/generated/types.ts",
+      "packages/contract/src/generated/validators.js",
+      "packages/contract/src/generated/validators.d.ts",
+      "apps/console/src/pages/simulator/grid.ts",
+      "apps/console/src/pages/simulator/cells.ts",
+      "apps/console/src/pages/simulator/data.ts",
+      "apps/console/src/pages/simulator/Tournaments.tsx",
+      "apps/console/src/pages/simulator/testgen.ts",
+      "apps/console/src/pages/simulator/model.test.ts",
+      "apps/console/src/pages/simulator/layer2.test.tsx"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "crates/shadowrunr-types (TournamentRow gains optional held, judged, red_line_fails: additive, in-repo consumers only)",
+      "packages/contract generated types/validators (regenerated; the console validator budget door must still pass)"
+    ],
+    "acceptance": [
+      "daemon fixture: tournament with run A verdict 1 pass/0 fail, run B 50 pass/50 fail, run C unjudged -> tournaments.page row has judged=2, held=0.75 (mean over judged runs), red_line_fails = sum of the runs' red-line fails",
+      "daemon fixture: a judged run whose verdict has zero pass+fail checks -> left out of held's denominator; a tournament where every judged run is like that -> held absent, judged still counted",
+      "console, same A/B tournament in testgen -> the Layer 1 tile label (tileLabel) and the Tournaments list Held cell show the same figure, 75%; today the list shows the pooled 51/101 = 50%",
+      "console, world(45, 24) on simulator/tournaments -> t001 (outside the latest 40) shows a Held percentage, not 'open to read', and the scripted daemon records zero tournament.results calls for the list",
+      "console, clicking the Held header -> rows order by held ascending, unjudged tournaments last (the column has a sortValue)",
+      "console, simulator/tournaments/t001 with the A/B fixture -> the summary's Held reads 75%, matching the list row",
+      "grep over apps/console/src -> no definition of resultsHealth, cellHealth or redLineFails remains (held is read, never recomputed, in the console)"
+    ],
+    "premise": [
+      "apps/console/src/pages/simulator/grid.ts:54-68 - a tile's health is the MEAN of per-run held shares over judged runs",
+      "apps/console/src/pages/simulator/grid.ts:39-47 - resultsHealth is the POOLED pass/(pass+fail) over every cell's rule tallies: ratio of sums, not mean of ratios",
+      "apps/console/src/pages/simulator/draw.ts:32-33 - the tile label prints the mean as '<ID> · <pct>'",
+      "apps/console/src/pages/simulator/Tournaments.tsx:31-37 - the list's 'Held' column prints resultsHealth (pooled) and has no sortValue",
+      "apps/console/src/pages/simulator/Tournaments.tsx:23-25 - Held is fetched only for the latest 40 tournaments (one tournament.results each, data.ts:13-27); the rest read 'open to read'",
+      "apps/console/src/pages/simulator/Tournaments.tsx:125-127 - the detail summary prints the pooled figure while its run table (74) prints per-run health",
+      "apps/console/src/pages/simulator/cells.ts:83-89 - the page's own rule: checks inside one run are not independent, a cell of 2 runs and 95 checks is 2 observations - the pooled figure weights by check count and contradicts it",
+      "apps/console/src/pages/simulator/cells.ts:102-112 - cellHealth and redLineFails have zero consumers (grep: only their definitions in cells.ts)",
+      "crates/shadowrunr-daemon/src/runs.rs:228-233 - TournamentRow carries only completed/runs/hash; tournament_row already walks every run dir and classify parses each verdict.json (crates/shadowrunr-sim/src/outcome.rs:184-186) only to throw it away",
+      "crates/shadowrunr-types/src/rpc.rs:194-200 - per-run health = pass/(pass+fail) is already a contract-defined figure on RunRow"
+    ],
+    "rollback": "Three commits (contract+daemon field, console reads it, dead-code removal); reverting them in reverse order restores today's two derivations. The new TournamentRow fields are optional, so an older console reads a newer daemon unchanged.",
+    "gate": "contract",
+    "test_command": "cargo test -p shadowrunr-daemon runs:: paging && cargo test -p shadowrunr-types && pnpm -C packages/contract generate && pnpm -C packages/contract check && pnpm -C packages/contract test && pnpm -C apps/console typecheck && pnpm -C apps/console test -- simulator && pnpm -C apps/console lint && pnpm -C apps/console build && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "The grid pulls every full RunRow (spec and all, up to 96 pages of 500 at 10x) only to draw health+red per run: a slim per-tournament run-cell projection RPC.",
+    "body": "## Summary\nThe simulator shows one number under one name, 'held', and computes it two incompatible ways. The Layer 1 tile and its HUD best/worst take the mean of per-run shares over judged runs (grid.ts:54-68). The Tournaments list and the tournament summary pool every rule check across the cells (grid.ts:39-47). A tournament with one clean run (1/1) and one half-failing run (50/100) reads 75% on its tile and 50% in the list. The list can only show the number for the latest 40 tournaments, because it fans out a full tournament.results read per row, and the column cannot be sorted. Move 'held' to the daemon as one definition on TournamentRow, and have every console surface read it instead of recomputing it.\n\n## Description\nThis applies data-viz `metric-identity`: two surfaces showing different values under one metric name is the most corrosive defect, and the fix is one authoritative derivation. The definition chosen is the mean over judged runs of the per-run pass/(pass+fail) share, with n = judged runs that evaluated at least one check. It is already the RunRow contract figure (rpc.rs:194), and it is the only one consistent with the page's own independence rule (cells.ts:83-89: a run is the observation, not a check). `tournament_row` already opens each run's verdict through `classify`. It now folds that one parse into `judged`, `held` and `red_line_fails` on the row (runs.rs). The fields are optional and additive in the contract. The console's `buildTile` takes the tile's health and red count from the row; per-run cells still come from runs.page, for drawing. The list's Held column reads `row.held`, gets a sortValue (absent last, per the table `sorting` technique), and stops calling tournament.results. The detail summary reads the same row. `resultsHealth`, plus the dead `cellHealth` and `redLineFails`, are deleted.\n\nGate: contract (crates/shadowrunr-types + packages/contract, additive). Architecture: the daemon becomes the only author of the tournament-level metric.\n\n## Flow\n- daemon tournament_row: one verdict parse per run -> completed, judged, held, red_line_fails\n- contract regenerated -> TournamentRow.held?: number, judged: number, red_line_fails?: number\n- console list/tile/HUD/detail -> read row.held; Held column sortable across all tournaments\n- console no longer derives a tournament-level held anywhere\n\n## Expected impact\nThe same tournament reads the same number on every surface, and its meaning (runs, not checks) is stated once. Held is available and sortable for all tournaments, not just the latest 40. The list stops issuing up to 40 full tournament.results reads to render one column. Three dead or duplicate helpers are removed.\n\n## Evaluation\nClaim: one tournament shows one 'held' on tile, list and detail, for every tournament, sortable\nBefore: 0 of 7 acceptance cases pass (no held on TournamentRow; the list prints the pooled 50% vs the tile's 75%; t001 of 45 reads 'open to read'; the Held column has no sortValue; resultsHealth/cellHealth/redLineFails defined)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (Rust fixture in runs.rs/e2e paging, vitest in model.test.ts and layer2.test.tsx)\nResult: better\nGate: contract",
+    "evidence": "grid.ts:58-67 `if (r.health !== undefined) { sum += r.health; judged += 1; } ... health: judged > 0 ? sum / judged : undefined`; grid.ts:42-46 `for (const c of results?.cells ?? []) { pass += rulePass(c); fail += ruleFails(c); } return pass + fail > 0 ? pass / (pass + fail)`; Tournaments.tsx:36 `r === undefined ? <span ...>open to read</span> : <Health value={resultsHealth(r)} />` (no sortValue on id 'held'); runs.rs:228-233 `Some(TournamentRow { completed: runs.iter().filter(|r| finished(&r.dir)).count(), runs: ..., instrument_hash, tournament_id })`; outcome.rs:185 `if read_json::<JudgeVerdict>(&dir.join(\"verdict.json\")).is_ok() { return RunClass::Judged; }`; grep `cellHealth|redLineFails` over apps/ packages/ -> only cells.ts:102 and cells.ts:110 (definitions).",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Real metric-identity defect with a clean, additive single-author fix and sharp red-first cases."
+    }
+  },
+  {
+    "context": "console-simulator-page",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "The Heatmap is a worst-first list: pivot cells into a tone×tier by segment×audience map",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 4,
+    "write_set": [
+      "apps/console/src/pages/simulator/Heatmap.tsx",
+      "apps/console/src/pages/simulator/l2.module.css",
+      "apps/console/src/pages/simulator/model.test.ts",
+      "apps/console/src/pages/simulator/layer2.test.tsx",
+      "apps/console/src/pages/simulator/testgen.ts"
+    ],
+    "new_files": [
+      "apps/console/src/pages/simulator/matrix.ts",
+      "apps/console/src/pages/simulator/Matrix.tsx"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "pivot(world(1, 72) t001 cells) -> exactly one block (one instrument hash), rows = 2 tones × 3 tiers ordered haiku, sonnet, opus within a tone, columns = 2 segments × audiences 3, 30, 300 ascending; 36 filled positions",
+      "pivot over cells carrying two instrument hashes -> two blocks, one per hash, never one merged grid",
+      "a tone×tier×segment×audience combination absent from results -> a position marked 'not run' (data-state=\"empty\"), never coloured as 0% or 100% and left out of every marginal",
+      "row marginal for (theatrical, haiku) -> sum of that row's cell rule fails / sum of evaluated checks and the summed judged runs; cells with judged < THIN_N carry data-thin=\"true\" and the marginal says how many of its cells are thin",
+      "a cell whose red-line rule failed -> data-red=\"true\" (ember mark, as on the Layer 1 grid)",
+      "jsdom on #/simulator/heatmap -> a role=grid named 'Cells of t001 by tone × tier and segment × audience'; ArrowRight/ArrowDown move the single tab stop; Enter navigates to pageRoute('simulator','heatmap', cellRouteKey('t001', cell))",
+      "jsdom on #/simulator/heatmap/<cellRouteKey> -> that position has aria-selected=\"true\" and the existing CellDetail renders below; the worst-first table is still present beneath the map"
+    ],
+    "premise": [
+      "apps/console/src/pages/simulator/Heatmap.tsx:43-74 - the 'Heatmap' renders a FilterTable of cells, one row per cell, labelled 'tone · tier · segment · aN' (routeKey.ts:5-7)",
+      "apps/console/src/pages/simulator/Heatmap.tsx:125-144 - Cells is only the table plus the selected detail; no axis view exists anywhere in the page",
+      "apps/console/src/pages/simulator/Tournaments.tsx:44 - the page's own lede: a tournament crosses tone, model tier, segment and audience size - the four axes the operator has to reason about",
+      "apps/console/src/pages/simulator/testgen.ts:7-10 - the generated world is 2 tones × 3 tiers × 2 segments × 3 audiences = 36 cells, i.e. 36 rows the operator scans to see whether one tier fails everywhere",
+      "apps/console/src/pages/simulator/cells.ts:96-99,57 - cellChecks (fail/evaluated, counted not bounded) and isThin already exist: every figure the map needs is computed",
+      "apps/console/src/pages/simulator/ramp.ts:6-11 - healthColor is the page's single colour ramp (also the Layer 1 grid's), so the map shares its encoding",
+      "apps/console/src/pages/simulator/SimScreen.tsx:93 and draw.ts:65-70 - a red-line fail is an ember dot on Layer 1; the cell list marks it only as a 'fail' chip without saying red-line (Heatmap.tsx:64)",
+      "apps/console/src/pages/simulator/Tournaments.tsx:136-139 - results from different instrument hashes are never merged; CellKey carries instrument_hash (routeKey.ts:11)"
+    ],
+    "rollback": "One feature commit adding matrix.ts/Matrix.tsx and mounting the map above the existing table; reverting it restores the list-only heatmap. No route, contract or data change.",
+    "gate": "none",
+    "test_command": "pnpm -C apps/console test -- simulator && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "Compare two tournaments cell by cell (instrument A vs B): which cells' fails moved, newly failing rules first, so a constitution change is judged by its own tournament.",
+    "body": "## Summary\nThe tab called Heatmap draws no map. It is a worst-first table of every cell, labelled 'theatrical · haiku · SEG-01 · a30'. The questions a tournament exists to answer are axis questions: does haiku fail at every audience, does SEG-02A break every tone, where does the red line give way. Today the operator answers them by reading 36 or more rows and building the cross-tab in their head, even though the page holds every number it needs. Pivot the cells into a real map. Rows are tone × tier, columns are segment × audience, each cell is coloured by its held share, red-line fails and thin cells are marked, and every row and column has a marginal. One click or Enter opens the cell detail the page already has.\n\n## Description\nThis applies eval-harness `comparison-modes`, specifically the matrix mode ('how does quality vary across this space?'; a headline winner hides losing cells), along with table `grid-keyboard-model` and data-viz `encoding-vocabulary`. The same colour means the same thing on Layer 1 and on the map, because both use healthColor from ramp.ts. The new pure `matrix.ts` holds `pivot(cells)`, which returns one block per instrument hash (results from different hashes are never merged). Within a block, axes are derived from the cells present: tones and segments sorted by name, tiers in ModelTier order, audiences ascending. A missing combination is 'not run', never zero. Marginals sum the existing `cellChecks` fail/evaluated counts and judged runs. They are counted, not bounded, per cells.ts:83-89, so the map makes no stronger claim than the table. The new `Matrix.tsx` renders a role=grid with one roving tab stop and arrow keys. Enter or click navigates to the existing cell route, and the route's cell is aria-selected. Each position's accessible name carries the full cell label and its fail/evaluated figure, so the map is no weaker than the list for a screen reader. Heatmap.tsx mounts the map above the unchanged worst-first table and CellDetail. All changes stay inside the context.\n\n## Flow\n- open simulator/heatmap -> pick a tournament (unchanged) -> map per instrument hash above the list\n- scan a row (tone × tier) or a column (segment × audience) and read its marginal\n- Enter or click a position -> the URL takes the cell key and CellDetail opens below, as today\n\n## Expected impact\nThe tier or tone that fails across a whole axis shows up at a glance instead of after reading 36+ rows. Red-line cells are visible as red-line, not as a generic 'fail' chip. Thin cells read as thin before anyone draws a conclusion from them.\n\n## Evaluation\nClaim: the heatmap answers axis questions directly, per instrument hash, with keyboard reach to any cell\nBefore: 0 of 7 acceptance cases pass (no pivot, no grid role, no marginals, no empty-state positions)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (model.test.ts for pivot/marginals, layer2.test.tsx for the grid in jsdom)\nResult: better\nGate: none",
+    "evidence": "Heatmap.tsx:131-140 `<FilterTable rows={rows} columns={props.cols} getKey={(c) => cellRouteKey(r.tournament_id, c.cell)} haystack={(c) => cellLabel(c.cell)} label={`Cells of ${r.tournament_id}, worst first`} ...`; routeKey.ts:6 `return `${k.tone} · ${k.core_tier} · ${k.segment} · a${k.audience_size}``; testgen.ts:7-10 TONES(2) TIERS(3) SEGS(2) AUDS(3); Heatmap.tsx:64 `{k.fail > 0 && <Chip tone=\"fail\">fail</Chip>}` (no red-line distinction); grep 'role=\"grid\"' in apps/console/src/pages/simulator -> no match.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Grounded UX elevation that answers axis questions the page currently forces the operator to compute by hand."
+    }
+  }
+]

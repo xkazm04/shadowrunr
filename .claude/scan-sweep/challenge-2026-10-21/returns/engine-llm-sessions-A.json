@@ -1,0 +1,18 @@
+{"card":"One failure ladder for one-shot and warm turns; warm sessions degrade in place","context":"engine-llm-sessions","slot":"A","status":"landed",
+ "shas":["02fc74b","f5f79f6"],
+ "tests_added":[
+  "crates/shadowrunr-engine/tests/fake_cli.rs::warm_turn_overloaded_rotates_to_healthy_account",
+  "crates/shadowrunr-engine/tests/fake_cli.rs::warm_turn_not_logged_in_cools_and_rotates",
+  "crates/shadowrunr-engine/tests/fake_cli.rs::warm_session_out_of_accounts_degrades_in_place_to_api_with_its_turns",
+  "crates/shadowrunr-engine/tests/fake_cli.rs::a_warm_cli_turn_moves_the_fleet_back_to_primary",
+  "crates/shadowrunr-engine/tests/fake_cli.rs::warm_turn_model_not_found_is_returned_not_rotated",
+  "crates/shadowrunr-engine/src/ladder.rs::tests::step_table_covers_every_failure_kind",
+  "crates/shadowrunr-engine/src/ladder.rs::tests::mode_follows_what_served",
+  "crates/shadowrunr-engine/src/ladder.rs::tests::attempts_name_the_eliminations",
+  "crates/shadowrunr-engine/src/session.rs::tests::the_mirror_keeps_whole_exchanges_and_starts_with_a_user_turn"],
+ "guard_cases":["warm_turn_model_not_found_is_returned_not_rotated (Fatal never rotates; green before by design)"],
+ "cases_total":6,"cases_red_before":5,"cases_green_after":6,
+ "gates":{"cargo test -p shadowrunr-engine":0,"cargo test -p shadowrunr-brain":0,"cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt --all -- --check":0,"cargo test --workspace":0},
+ "files_changed":7,"lines_changed":901,
+ "deviations_from_card":"step takes Failure by value plus the candidate label (returns Rotate{cool,reason}) instead of &Failure, so Stop can carry the EngineError without cloning. Warm exhaustion without an API key now returns Unavailable naming every account and sets FleetMode::Down (was EngineError::RateLimited from the last account); both are fleet-class for the brain. Case 3 reaches 'all accounts rate-limited' after an earlier answered turn by letting the idle reaper end the process and rewriting the fake accounts' fake.json; case 4 warms the process with one turn before rewriting (the fake reads its config at start-up). The API stub is a loopback tokio TcpListener (127.0.0.1:0), no external network. The alt-CLI rung keeps its old policy (any failure moves on) and the warm path does not reach alt CLIs (they are one-shot, not conversational). Mirror capped at 200 turns (MIRROR_MAX_TURNS), also applied to ApiSession history.",
+ "notes":"Coupled files beyond the write set: none (fixtures were listed in new_files). Brain's cold fallback (brain lib.rs:657-668) untouched, as the card says; it now runs only when the warm ladder truly exhausts. Fake-CLI suite ran 5x green (timing-sensitive idle reaper case stable). Sibling sim files were dirty in the tree during the gates; workspace test still green. Two commits: test (4 red asserts + guard compile at HEAD) then feat."}

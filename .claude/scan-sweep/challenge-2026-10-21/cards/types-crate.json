@@ -1,0 +1,125 @@
+[
+  {
+    "context": "types-crate",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Clip owner-act rules live once in the contract, not re-typed in the console",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-types/src/clips.rs",
+      "crates/shadowrunr-clips/src/store.rs",
+      "crates/shadowrunr-clips/src/upload.rs",
+      "crates/shadowrunr-clips/src/scan.rs",
+      "crates/shadowrunr-clips/src/tests.rs",
+      "packages/contract/schema/contract.schema.json",
+      "packages/contract/src/generated/types.ts",
+      "packages/contract/src/generated/validators.js",
+      "apps/console/src/pages/onair/clipModel.ts",
+      "apps/console/src/pages/onair/ClipActions.tsx",
+      "apps/console/src/pages/onair/clips.buttons.test.tsx",
+      "apps/console/src/pages/onair/clips.dom.test.tsx"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "crates/shadowrunr-types (ClipCandidate gains a read-only `acts` field, plus the new ClipAct / ClipActBlock types)",
+      "packages/contract (regenerated schema, types and validators)"
+    ],
+    "acceptance": [
+      "ClipCandidate status=pending_owner_gate, render present, no failed or unmeasured check -> candidate.act_block(ClipAct::Approve) == None, and ClipStore::approve with a signature succeeds",
+      "status=pending_owner_gate, render=None -> act_block(Approve) == Some(ClipActBlock::NoRender), and ClipStore::approve returns Conflict whose message comes from that same block",
+      "status=pending_owner_gate, a gate check in state fail (id care_state) -> act_block(Approve) == Some(HeldBy{checks:[\"care_state\"]}). An unmeasured check gives None for Approve but acts.approve.override_needed == [\"<id>\"]",
+      "the 5 statuses x 4 acts (render, approve, reject, publish) table -> act_block agrees with what ClipStore::approve/reject, scan::rerender and upload::publish_dry_run accept or refuse, cell for cell (one table test drives both)",
+      "clips.get on a stored candidate.json written before this change (no `acts` key) -> the reply carries `acts`. After store.save the candidate.json on disk carries no `acts` key (derived, never stored)",
+      "console: a candidate whose acts.approve is {blocked:{kind:'held_by',checks:['care_state']}} -> the signature input is disabled and the block text names care_state. clipModel.ts no longer exports approveBlock, canPublish or canRender (grep returns 0)",
+      "contract drift gate: `cargo test -p shadowrunr-types --test schema_drift` passes after `pnpm -C packages/contract generate`, and the generated ClipCandidate type has `acts?: ClipActs` keyed by ClipAct"
+    ],
+    "premise": [
+      "crates/shadowrunr-types/src/clips.rs:17-20 - the clip lifecycle is written only as a doc comment (rendered_draft -> pending_owner_gate -> approved_for_upload -> published, rejected from any state before published). No type or function in the contract encodes it",
+      "crates/shadowrunr-clips/src/store.rs:246-273 - approve refuses when status != PendingOwnerGate, when render is None, when window.needs_reauthoring, and when any gate check is Fail",
+      "apps/console/src/pages/onair/clipModel.ts:48-55 - approveBlock() re-implements the same four refusals in the same order, with its own prose",
+      "crates/shadowrunr-clips/src/store.rs:324 - reject refuses Published|Rejected. apps/console/src/pages/onair/ClipActions.tsx:81 re-implements it as `c.status === \"rejected\" || c.status === \"published\"`",
+      "crates/shadowrunr-clips/src/scan.rs:900-903 - rerender only from RenderedDraft|PendingOwnerGate. apps/console/src/pages/onair/clipModel.ts:64 re-implements canRender with the same two statuses",
+      "crates/shadowrunr-clips/src/upload.rs:281 - publish only from ApprovedForUpload. apps/console/src/pages/onair/clipModel.ts:61 re-implements canPublish",
+      "crates/shadowrunr-clips/src/store.rs:98-106 - status_name() hand-maps ClipStatus to the serde names a second time",
+      "crates/shadowrunr-daemon/src/rpc.rs:320-323 - clips.get returns cfg.clip_store().load(id) unchanged, so the console gets no statement of what it may do"
+    ],
+    "rollback": "Three commits: (1) the types and the shared act_block in the types crate plus the clips store/scan/upload refactor, (2) the regenerated contract, (3) the console switch. Revert in reverse order. `acts` is skip-on-store and derived on load, so no stored candidate.json changes shape and a revert leaves the data untouched",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-types -p shadowrunr-clips -p shadowrunr-daemon && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check && pnpm -C packages/contract generate && pnpm -C packages/contract check && pnpm -C packages/contract typecheck && pnpm -C packages/contract test && pnpm -C apps/console typecheck && pnpm -C apps/console test && pnpm -C apps/console lint",
+    "runner_up": "A socket-channel table (visit_channels) beside visit_methods, so /events and /voice client and server frame unions are generated, not hand-built (schema.rs:271-281 ServerFrame JSON, daemon events.rs:126-145 ad hoc ack-vs-subscribe parse) and VoiceLogLine/VoiceLogEvent stop being the only JsonSchema types missing from the contract",
+    "body": "## Summary\nThe clip publish gate's rule of who may do what in which state is written three times: as a doc comment in the contract, as refusals in shadowrunr-clips, and as a line-for-line TypeScript copy in the console. Move the rule into shadowrunr-types as one pure function, `ClipCandidate::act_block(ClipAct) -> Option<ClipActBlock>`. The store, rerender and publish code call it to refuse. The daemon derives a read-only `acts` field on every candidate it returns, and the console renders that field instead of re-deciding.\n\n## Description\nThis is a contract that two sides re-implement. ipc-contract / generated-type-contracts (one-authority-per-vocabulary) says the engine authors and the interface receives machinery output. The clip states already cross as a generated enum. The transition rule over them does not cross, so approveBlock, canRender, canPublish and the reject guard in the console are hand mirrors of store.rs, scan.rs and upload.rs. The day the daemon adds a refusal (for example a new gate state), the console offers a button the daemon refuses. The reverse also happens: the console hides one the daemon would allow.\n\nThe new types:\n- `ClipAct` = {render, approve, reject, publish}.\n- `ClipActBlock` = tagged {status{status}, no_render, needs_reauthoring, held_by{checks}}.\n- `ClipActs` = per-act `{blocked?, override_needed?}`.\n\n`ClipStatus::as_str` replaces status_name. Refusal prose in the daemon's errors is rendered from the block, so the console text and the daemon error share their cause. The console keeps only the wording. The leaning technique is ipc-contract / generated-type-contracts, section 'Generate the bindings between vocabularies', applied here to the state-to-allowed-act binding.\n\n## Flow\n- Add ClipAct, ClipActBlock and ClipActs, plus `impl ClipCandidate { fn act_block, fn acts }`, to crates/shadowrunr-types/src/clips.rs, with a 5x4 table unit test\n- Add `#[serde(default, skip_serializing_if = \"Option::is_none\")] acts: Option<ClipActs>` on ClipCandidate. ClipStore::load fills it and ClipStore::save strips it\n- store.rs approve/reject, scan.rs rerender and upload.rs publish_dry_run refuse through act_block. status_name is deleted\n- Regenerate packages/contract\n- clipModel.ts drops approveBlock, canPublish and canRender. ClipActions.tsx reads c.acts and keeps the wording table keyed by ClipActBlock kind\n\n## Expected impact\nThe four owner acts that the console and the daemon now decide separately get one decision site. A new refusal lands in one Rust function and reaches the console at the next generate with no TS edit. The console can no longer offer a disabled or enabled button that disagrees with the daemon. The 5x4 table becomes the gate's executable spec.\n\n## Evaluation\nClaim: the clip owner-act rule has one authority, and the console renders it.\nBefore: 0 of 7 acceptance cases pass (no ClipAct type, no `acts` on the wire, console rules are hand copies)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (Rust table test in shadowrunr-types, store/scan/upload refusal parity in shadowrunr-clips tests, console dom test on `acts`)\nResult: better\nGate: architecture (the shared contract changes, but only additively: a derived read-only field)",
+    "evidence": "clipModel.ts:48 `if (c.status !== \"pending_owner_gate\") return ...` | store.rs:246 `if c.status != ClipStatus::PendingOwnerGate {`\nclipModel.ts:50 `if (c.render === undefined) return \"There is no render to approve yet.\"` | store.rs:252 `if c.render.is_none() {`\nclipModel.ts:51 `if (c.window.needs_reauthoring)` | store.rs:257 `if c.window.needs_reauthoring {`\nclipModel.ts:52-53 filter state === \"fail\" ... 'a failed check holds whatever the score, and no override applies' | store.rs:262-273 same filter, same sentence\nclipModel.ts:61 `canPublish = (c) => c.status === \"approved_for_upload\"` | upload.rs:281 `if c.status != ClipStatus::ApprovedForUpload {`\nclipModel.ts:64 `canRender = ... \"rendered_draft\" || ... \"pending_owner_gate\"` | scan.rs:900-903 `matches!(c.status, ClipStatus::RenderedDraft | ClipStatus::PendingOwnerGate)`\nClipActions.tsx:81 `if (c.status === \"rejected\" || c.status === \"published\") return null;` | store.rs:324 `if matches!(c.status, ClipStatus::Published | ClipStatus::Rejected) {`\ngrep importers of the console copies: only ClipActions.tsx:10 (`import { approveBlock, canPublish, canRender, unmeasuredChecks } from \"./clipModel\"`)",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Exact duplication proven at four sites; one-authority fix with a table test that drives both sides."
+    }
+  },
+  {
+    "context": "types-crate",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "Check-id vocabularies cross the contract as enums, not documented strings",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-types/src/sandbox.rs",
+      "crates/shadowrunr-types/src/clips.rs",
+      "crates/shadowrunr-daemon/src/sandbox.rs",
+      "crates/shadowrunr-daemon/src/record/watch.rs",
+      "crates/shadowrunr-daemon/src/cli.rs",
+      "crates/shadowrunr-sim/src/sandbox.rs",
+      "crates/shadowrunr-clips/src/gate.rs",
+      "packages/contract/schema/contract.schema.json",
+      "packages/contract/src/generated/types.ts",
+      "packages/contract/src/generated/validators.js",
+      "apps/console/src/pages/review/names.ts",
+      "apps/console/src/pages/onair/ClipDetail.tsx"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "crates/shadowrunr-types (SandboxCheck.id and GateCheck.id change from String to enums with identical serde names)",
+      "packages/contract (regenerated: `id: string` becomes a literal union)"
+    ],
+    "acceptance": [
+      "serde_json::to_string(&SandboxCheckId::AvSync) -> \"\\\"av_sync\\\"\", and SandboxCheckId::ALL serializes to exactly the 10 strings SANDBOX_CHECKS lists today, in the same order",
+      "SandboxCheckId::is_watched() is true for exactly voiced, face, av_sync and dead_air. gate_pass and check_gates keep their current results (the_watched_checks_gate_only_a_recorded_session passes with ids as enums)",
+      "a SandboxReport JSON carrying every current check id -> deserializes and re-serializes byte-identical (the wire is unchanged)",
+      "{\"id\":\"not_a_check\",\"state\":\"pass\",\"detail\":\"\"} -> SandboxCheck deserialization fails with an error naming the variant (a typo is no longer a silent new check)",
+      "GateCheckId has the 10 ids in clips.rs:236-238 and round-trips each. Every check(...) call in shadowrunr-clips gate.rs takes a GateCheckId, so `grep -c 'check(\"' crates/shadowrunr-clips/src/gate.rs` returns 0",
+      "the regenerated contract: $defs.SandboxCheck.properties.id references SandboxCheckId (enum of 10), and $defs.GateCheck.properties.id references GateCheckId. schema_drift passes",
+      "console: CHECK_NAME in names.ts is typed Readonly<Record<SandboxCheckId,string>>. Deleting one key fails `pnpm -C apps/console typecheck`"
+    ],
+    "premise": [
+      "crates/shadowrunr-types/src/sandbox.rs:358-369 - the sandbox check ids are a `[&str; 10]` constant, not a type",
+      "crates/shadowrunr-types/src/sandbox.rs:392-394 - `SandboxCheck.id: String`, with the vocabulary only in the doc line 'One of [SANDBOX_CHECKS]'",
+      "crates/shadowrunr-types/src/clips.rs:234-239 - `GateCheck.id: String`, with its 10 ids listed only in a doc comment",
+      "packages/contract/schema/contract.schema.json - SandboxCheck.id and GateCheck.id are {\"type\": \"string\"} with the list in `description`, so the generated TS (packages/contract/src/generated/types.ts:2987) is `id: string`",
+      "apps/console/src/pages/review/names.ts:58 - CHECK_NAME is `Readonly<Record<string, string>>`, hand-copying the 10 sandbox ids. Nothing ties it to SANDBOX_CHECKS",
+      "crates/shadowrunr-daemon/src/sandbox.rs:507, 534, 540, 545, 842-844 - producers spell ids as free literals (\"stage_ack\", \"judge\", `matches!(*id, \"stage_ack\" | \"judge\")`)",
+      "crates/shadowrunr-sim/src/sandbox.rs:872, 899, 974, 1022, 1030 - more free-literal ids (\"say_gap\", \"core_errors\", \"sign_off\", `id: \"chaos\".into()`)",
+      "crates/shadowrunr-clips/src/gate.rs:41-48, 126, 134, 159, 164 - `fn check(id: &str, ...)` with literal ids (\"care_state\", \"personal_data\")"
+    ],
+    "rollback": "Two commits: (1) the enums and producer changes in Rust plus the regenerated contract, (2) the console typing. Serde names are byte-identical, so stored session.json and candidate.json are unaffected either way, and the revert is a clean git revert of both",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-types -p shadowrunr-sim -p shadowrunr-clips -p shadowrunr-daemon && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check && pnpm -C packages/contract generate && pnpm -C packages/contract check && pnpm -C packages/contract typecheck && pnpm -C apps/console typecheck && pnpm -C apps/console test && pnpm -C apps/console lint",
+    "runner_up": "Promote the other prose-documented string vocabularies the same way: ClipFile.kind (clips.rs:264-266, read by clipModel.ts:107-108 literals), ClipRender.kind, RuleIncident.stage (reconcile.rs:431-433, although ModStage exists at event.rs:110-116) and SegmentTableInfo.screens (catalog.rs:216-218, although ScreenId exists)",
+    "body": "## Summary\nTwo gate vocabularies cross the wire as String with their members listed in doc comments: the sandbox session checks (10 ids) and the clip publish-gate checks (10 ids). Producers in three crates spell them as free literals, and the console hand-copies one list into `Record<string, string>`. Make them `SandboxCheckId` and `GateCheckId` enums with the same serde names. SANDBOX_CHECKS becomes `SandboxCheckId::ALL`, and SANDBOX_WATCHED_CHECKS becomes `is_watched()`. The contract then generates literal unions, and the compiler checks every producer and the console's label table.\n\n## Description\nThe vocabulary is closed but encoded as an open one. A typo in a producer such as \"stage-ack\" makes a new check that never gates and that the console labels through human(). A renamed check leaves the console's CHECK_NAME stale with no signal. This is ipc-contract / casing-and-naming ('call names are a vocabulary, not strings') together with generated-type-contracts ('the generator describes the wire'). The schema says string while the wire carries one of 10 values, so the TS type tells the consumer less than the contract knows. The change does not alter the wire: serde names are identical, so stored reports and candidates still parse and nothing is irreversible. The sandbox check set is the gate a recorded session passes. Typing it closes the gap where a producer reports a check the gate does not know.\n\n## Flow\n- Add SandboxCheckId (10 variants, ALL, as_str, is_watched) and GateCheckId (10 variants) to the types crate\n- Change SandboxCheck.id and GateCheck.id to the enums. check_gates and gate_pass take the enum\n- Producers in daemon sandbox.rs and record/watch.rs, cli.rs, sim sandbox.rs and clips gate.rs pass variants instead of literals\n- Regenerate the contract\n- Type the console's CHECK_NAME as Record<SandboxCheckId,string> and the gate-check labels as Record<GateCheckId,string>\n\n## Expected impact\nTwo 10-member vocabularies get a single authority each. Mis-spelled or unlisted check ids become compile errors in Rust and TS instead of silent extra rows. The console's label tables become exhaustive by construction. About 30 literal sites go away.\n\n## Evaluation\nClaim: the sandbox and clip gate check ids cross the contract as closed enums with one authority.\nBefore: 0 of 7 acceptance cases pass (no SandboxCheckId or GateCheckId, schema id is string, CHECK_NAME is Record<string,string>)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (serde round-trip and ALL-order tests in shadowrunr-types, a report re-serialization test, the schema $ref assertion in schema.rs tests, a console typecheck with a seeded missing key)\nResult: better\nGate: architecture (the shared contract changes, with byte-identical wire values)",
+    "evidence": "sandbox.rs:358 `pub const SANDBOX_CHECKS: [&str; 10] = [\"say_gap\", \"core_errors\", \"sign_off\", \"chaos\", \"stage_ack\", \"judge\", \"voiced\", \"face\", \"av_sync\", \"dead_air\"];`\nsandbox.rs:393-394 `/// One of [SANDBOX_CHECKS]. pub id: String,`\ncontract.schema.json $defs.SandboxCheck.properties.id = {'description': 'One of [`SANDBOX_CHECKS`].', 'type': 'string'}. $defs.GateCheck.properties.id = {'description': '`care_state`, `personal_data`, ...', 'type': 'string'}\nnames.ts:58 `export const CHECK_NAME: Readonly<Record<string, string>> = { say_gap: \"Say gap\", ..., dead_air: \"Dead air\" };`\ndaemon sandbox.rs:844 `state: if matches!(*id, \"stage_ack\" | \"judge\")`. sim sandbox.rs:1022 `id: \"chaos\".into(),`. gate.rs:134 `check(\"care_state\", GateState::Fail, care_hits.join(\"; \"))`",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 3,
+      "grounding": 3,
+      "falsifiability": 4,
+      "reason": "Sound premise and sharp cases; the cited types-crate lines are wrong and must be fixed before handoff."
+    },
+    "revision": "Correct the premise citations to crates/shadowrunr-types/src/sandbox.rs:121-132 (SANDBOX_CHECKS) and :156-157 (SandboxCheck.id) so the builder works against the real lines."
+  }
+]

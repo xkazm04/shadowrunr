@@ -1,0 +1,7 @@
+{"base":"94e5998","waves":[
+ ["types-crate:B","console-ui-primitives:A","stage-avatar-renderer:A","voice-sidecar:A"],
+ ["types-crate:A","console-review-page:A","stage-avatar-renderer:B","workspace-tooling-and-policy:A"],
+ ["sim-runner-judging:A","brain-composition-memory:A","console-ui-primitives:B","console-review-page:B"],
+ ["daemon-core-rpc:A","brain-composition-memory:B","workspace-tooling-and-policy:B"],
+ ["sim-runner-judging:B","daemon-core-rpc:B"]],
+ "void":["voice-sidecar:B"]}

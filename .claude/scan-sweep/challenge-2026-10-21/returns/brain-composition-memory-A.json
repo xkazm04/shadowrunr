@@ -1,0 +1,16 @@
+{"card":"Six output paths run six subsets of the gate: removed names air via foils","context":"brain-composition-memory","slot":"A","status":"landed",
+ "shas":["f2e09d2"],
+ "tests_added":[
+  "crates/shadowrunr-brain/src/tests.rs::outgate_a_foil_line_never_names_a_removed_viewer",
+  "crates/shadowrunr-brain/src/tests.rs::outgate_a_card_never_names_a_removed_viewer",
+  "crates/shadowrunr-brain/src/tests.rs::outgate_a_foil_line_in_a_crisis_beat_points_at_help",
+  "crates/shadowrunr-brain/src/tests.rs::outgate_a_note_never_writes_a_removed_viewer_into_memory",
+  "crates/shadowrunr-brain/src/tests.rs::outgate_a_note_never_writes_a_disclosure_into_memory",
+  "crates/shadowrunr-brain/src/outgate.rs::tests::every_surface_declares_its_checks",
+  "crates/shadowrunr-brain/src/outgate.rs::tests::the_spoken_profile_is_the_old_say_stack"],
+ "guard_cases":["acceptance 7: the existing shadowrunr-brain suite (sandbox_a_removed_viewer..., wp16 crisis, stall/sign-off, orchestration, flow) unchanged and green before and after: the Spoken path is byte-identical"],
+ "cases_total":7,"cases_red_before":5,"cases_green_after":7,
+ "gates":{"cargo test -p shadowrunr-brain":0,"cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt --all -- --check":0,"cargo test --workspace":0},
+ "files_changed":3,"lines_changed":694,
+ "deviations_from_card":"1) One commit, not the two the rollback plan suggests (Spoken-only, then the rest). The tests use outgate consts and do not compile without the module. git revert f2e09d2 restores today's per-site behaviour. 2) moderation.rs is unchanged: gate_line, RemovedNames, output_event and the rule consts were already reachable, so it did not need to change. 3) Foil gets its own repetition window (Brain.foil_spoken), checked together with Malakor's window. Foil lines are not pushed into Malakor's window, so a Spoken line is never suppressed because of a foil line (this keeps Spoken byte-identical). 4) A NOTE: the existing Block-term drop runs first (note_blocked/dropped, as before), then care seal, then removed names. A NOTE naming a removed viewer is dropped whole, not repaired. 5) A card field emptied by withholding is emitted as an empty string, not dropped. 6) The NOTE test checks only the 'Malakor noted:' episodes for vex_walrus, because the beat-1 turn record names the viewer by design.",
+ "notes":"Premise re-verified after an unrelated merge (5192445) moved lib.rs lines by about 55; all six sites were still there. Mid-build, the sibling's in-flight shadowrunr-sim/daemon sandbox.rs made clippy, fmt and workspace tests red (unused imports, an E0271 type mismatch, a fmt diff). I waited 60 s and re-ran: all green at commit time (workspace 849 passed). The red-before figure was measured with string literals in place of the outgate consts: 5 of 5 failed on their assertions. Slot B can use outgate::pass for any new surface. lib.rs's tick still holds the per-line side effects (spoken window, turn record, aired)."}

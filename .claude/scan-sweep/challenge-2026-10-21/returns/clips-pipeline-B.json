@@ -1,0 +1,16 @@
+{"card":"Re-cut a candidate by whole lines: `clips recut` re-gates a sibling cut","context":"clips-pipeline","slot":"B","status":"landed",
+ "shas":["f61ce1e","2354bdb"],
+ "tests_added":[
+  "crates/shadowrunr-clips/src/tests.rs::a_recut_opening_one_line_earlier_is_a_new_regated_sibling",
+  "crates/shadowrunr-clips/src/tests.rs::a_recut_over_the_band_is_refused_with_the_figure",
+  "crates/shadowrunr-clips/src/tests.rs::a_recut_that_drops_the_setup_is_refused",
+  "crates/shadowrunr-clips/src/tests.rs::a_recut_recomputes_care_state_from_the_whole_stream",
+  "crates/shadowrunr-clips/src/tests.rs::a_recut_redacts_a_chatter_it_pulls_in",
+  "crates/shadowrunr-clips/src/tests.rs::a_rescan_keeps_the_owner_s_recut",
+  "crates/shadowrunr-daemon/tests/cli.rs::clips_recut_cli_prints_the_new_candidate_and_its_gate"],
+ "guard_cases":["the parent X is byte-identical after the recut (asserted inside case 1, not a separate case)"],
+ "cases_total":7,"cases_red_before":7,"cases_green_after":7,
+ "gates":{"cargo test -p shadowrunr-clips":0,"cargo test -p shadowrunr-daemon --test cli clips":0,"cargo clippy --workspace --all-targets -- -D warnings":0,"cargo fmt --all -- --check":0,"cargo test -p shadowrunr-daemon":0,"cargo test --workspace":0},
+ "files_changed":7,"lines_changed":812,
+ "deviations_from_card":"(1) window::cut_lines takes the payoff index too (cut_lines(stream, first, last, payoff, band)): min_first needs it; payoff is recomputed from the anchor beat and its marker exactly as the scan does. (2) Case 3 opens past the setup by the computed number of lines (open=+k, k = setup - first + 1) rather than literally +1, since a scan's cut opens >=12 s before the payoff so +1 never reaches the setup; it also asserts k-1 still lands. (3) The CLI case writes a 60-line SEG-01 run under <tmp>/runs/sim/fixture-t/recut-run instead of the checked-in fixture-run, which holds only two say lines (too short to move an edge). (4) Case 2's message reads 'the window would run 36.7 s, over the 35 s band' (prefixed 'recut of <id>: '). (5) lib.rs untouched (no re-export needed). 'Red before' = the API/verb did not exist (tests could not compile); retention case additionally shown red by removing the is_recut retention line. Tests and implementation committed together in each commit (they cannot compile apart).",
+ "notes":"Lines are addressed as transcript line_nos: a viewer's question shares its answer's line_no and travels with it. A recut whose lines another candidate already holds is a Conflict; open=close=0 is Invalid. Hook and audio are carried from the parent with a provenance note ('not re-measured on this cut'); chat/marker recomputed. Rescan retention: first history entry by=\"recut\" (scan::RECUT_BY / scan::is_recut), counted in report.kept. The daemon resolves the run from the candidate's transcript label under the runs root, else runs::find_run under <runs>/sim/; a candidate scanned from a dir outside the runs root gets NotFound with that reason. No RPC/contract/types change."}

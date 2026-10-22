@@ -1,0 +1,124 @@
+[
+  {
+    "context": "console-app-bootstrap",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Page keys bypass the one keymap: scoped bindings the conflict report sees",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 6,
+    "write_set": [
+      "apps/console/src/keys/keymap.ts",
+      "apps/console/src/keys/listener.ts",
+      "apps/console/src/keys/conflicts.ts",
+      "apps/console/src/keys/keymap.test.ts",
+      "apps/console/src/kit/keyCommands.ts",
+      "apps/console/src/kit/openExternal.test.ts",
+      "apps/console/src/shell/Shell.tsx",
+      "apps/console/src/shell/keyActions.ts",
+      "apps/console/src/pages/review/Player.tsx",
+      "apps/console/src/pages/review/player.test.tsx",
+      "apps/console/src/pages/characters/Layer1.tsx",
+      "apps/console/src/pages/characters/layer1.test.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/keys/scopes.ts"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "conflictReport(KEYMAP).shadows -> lists exactly: review.player shadows global 1-7 (page jump) and ArrowLeft/ArrowRight in l2; characters.roster shadows ArrowLeft/ArrowRight (page-step) in l1 - today the report has no shadows field and cannot see either",
+      "seeded duplicate scoped binding {scope:'review.player', chord:'1'} -> conflictReport(...).conflicts contains {scope:'review.player', mode:'l2', chord:'1'}",
+      "keydown '3' whose target is inside [data-key-scope='review.player'] on #/review/<s>/player/roast -> mark 3 toggles, route unchanged; the same '3' with focus on document.body -> navigates to page 3 (behaviour kept, now resolved by the registry, not a page onKeyDown)",
+      "keydown 'r' on #/segments/tables (no rerun owner mounted) -> event NOT defaultPrevented and dispatch not called; on #/brain/preflight -> preflight.run refetched (today listener.ts:26 prevents default before knowing an owner exists)",
+      "keydown '1' with focus on an <input type=checkbox> inside the review player -> one typing rule decides (keys/listener isTypingTarget, extended with VIDEO and checkbox/radio exemption); grep 'function typing' apps/console/src/pages -> 0 hits",
+      "page bindings derive from PAGE_IDS: keymapFor([...PAGE_IDS, 'x']) yields a binding for '8'; keymap.ts no longer contains the literal PAGE_COUNT = 7",
+      "grep -n 'onKeyDown' in pages/review/Player.tsx and pages/characters/Layer1.tsx -> 0 hits; FeedbackPanel's Ctrl+Enter is declared typing:'only' in the review.player scope"
+    ],
+    "premise": [
+      "apps/console/src/keys/keymap.ts:1-2 - claims 'Every global key binding the console has is declared here' and that conflictReport proves no chord means two things in one mode",
+      "apps/console/src/kit/keyCommands.ts:1-3 - 'Pages never listen to the keyboard themselves, and the keymap stays the one place chords live'",
+      "apps/console/src/pages/review/Player.tsx:93-109 - the review player binds 1-8, Enter, Ctrl+Enter, ArrowLeft, ArrowRight in its own onKeyDown; :107 'Consumed: the shell's keymap (bare 1-7 jump pages) skips a prevented event' - a shadow of keymap.ts:45-50 the conflict report never sees",
+      "apps/console/src/pages/characters/Layer1.tsx:140-148 - the roster's own ArrowLeft/ArrowRight in layer 1 shadow keymap.ts:58-59 'Previous page'/'Next page'",
+      "apps/console/src/pages/review/Player.tsx:39-43 - a second typing rule (VIDEO counts, checkbox/radio do not) diverging from apps/console/src/keys/listener.ts:15-18 isTypingTarget (any INPUT counts, VIDEO does not)",
+      "apps/console/src/keys/keymap.ts:22 and apps/console/src/kit/keyCommands.ts:7 - KeyCommand = \"rerun\" declared twice",
+      "apps/console/src/keys/keymap.ts:41 - PAGE_COUNT = 7 hand-copied while apps/console/src/shell/keyActions.ts:29 uses PAGE_IDS.length (apps/console/src/router/route.ts:7) and apps/console/src/app/pages.ts:1 calls itself 'the only place that knows every page folder'",
+      "apps/console/src/keys/keymap.ts:60 binds 'r' to rerun on every l2; apps/console/src/keys/listener.ts:26 preventDefaults before dispatch; apps/console/src/shell/Shell.tsx:92 drops emitKeyCommand's false (no owner) - only apps/console/src/pages/brain/Preflight.tsx:75 owns it",
+      "apps/console/src/pages/review/ReviewByType.tsx:38-39 - the player's keys are documented as hand prose because no registry entry exists to render them from"
+    ],
+    "rollback": "Three commits (scopes+listener+report, migrate Player, migrate roster+PAGE_IDS derivation); each reverts alone - reverting a migration restores that page's onKeyDown while the scoped registry stays inert.",
+    "gate": "architecture",
+    "test_command": "pnpm -C apps/console test -- keys pages/review/player pages/characters/layer1 app/shell kit/openExternal pages/brain/preflight && pnpm -C apps/console typecheck && pnpm -C apps/console lint",
+    "runner_up": "Derive every page hand-list from app/pages.ts (keymap PAGE_COUNT, router PAGE_IDS, shell POSTERS order) so an eighth page is one registry line - smaller, and partly covered by the shell-router route-schema card.",
+    "body": "## Summary\nThe console's keyboard has a registry that claims to be the only one (keymap.ts:1-2, keyCommands.ts:1-3) and a conflict report that proves nothing collides - but the two densest keyboard surfaces, the review player and the character roster, bind keys in private onKeyDown handlers that shadow the global 1-7 page jumps and arrow page-steps by calling preventDefault first. The report cannot see them, the player carries a second typing rule, and 'r' is swallowed on every layer-2 page though only Brain owns it. Give bindings a focus scope, resolve innermost-scope-first in the one listener, and make the report list scope shadows as owner-visible facts.\n\n## Description\nLeans on accessibility / keyboard-navigation-models ('Shortcuts are accelerators... Discoverable somewhere structural... Never steal typing' - one typing rule, one reference surface) and app-shell / shell-hosted-services (the chord engine is a shell resident; pages declare, the shell resolves). Today a page that wants keys must re-implement the listener (Player.tsx:93-109) and rely on React's bubbling order to beat the window listener; the keymap's guarantees stop at the shell's own bindings.\n\nThe move: `Binding.scope?: KeyScope` (typed union in keys/scopes.ts: 'review.player' | 'characters.roster'), scoped actions `{type:'scoped', scope, command, arg?}`, and a `data-key-scope` attribute on the owning element. listener.ts resolves by walking `e.target.closest('[data-key-scope]')` innermost-first, then global; a command binding resolves only when an owner is mounted, so an unowned 'r' falls through un-prevented. kit/keyCommands.ts generalises useKeyCommand into `useKeyScope(scope, handlers)` typed by the scope's command map; the duplicate KeyCommand goes. conflictReport gains `shadows: {scope, mode, chord, global, scoped}[]`, pinned by test the way meaningChanges is. KEYMAP page bindings come from PAGE_IDS. Player and roster delete their onKeyDown and the private typing().\n\n## Flow\n- keys/scopes.ts: KeyScope union, per-scope command maps, scopeChain(target)\n- keymap.ts: scoped bindings for review.player (1-8 toggle, Enter save, Ctrl+Enter save typing:'only', arrows) and characters.roster (arrows); page bindings from PAGE_IDS\n- listener.ts: resolve(keymap, mode, chord, typing, scopes, owned) innermost-first; one isTypingTarget\n- conflicts.ts: per-scope conflicts + shadows\n- Shell.tsx / keyActions.ts: route scoped effects to useKeyScope owners; ownership check before preventDefault\n- Player.tsx, characters/Layer1.tsx: data-key-scope + useKeyScope, onKeyDown deleted\n\n## Expected impact\nEvery key the operator can press is in one table the report checks: the next page that adds keys (On Air replay, Simulator) cannot silently steal 1-7, and the shortcut help surface the Binding.label field already anticipates (keymap.ts:35) becomes derivable instead of hand prose. Removes a second typing rule and the dead-'r' swallow.\n\n## Evaluation\nClaim: page-local key handling becomes declared, conflict-checked registry entries with identical operator behaviour.\nBefore: 0 of 7 acceptance cases pass (no shadows field; no scope resolution; 'r' prevented with no owner; Player keeps private typing(); PAGE_COUNT literal; onKeyDown in both pages)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first in keymap.test.ts, player.test.tsx, layer1.test.tsx; existing player/roster/shell/preflight suites stay green as the behaviour-preservation check\nResult: better\nGate: architecture",
+    "evidence": "keys/keymap.ts:1 '// The one keymap registry. Every global key binding the console has is declared here, per mode,'; kit/keyCommands.ts:3 'never listen to the keyboard themselves'; pages/review/Player.tsx:102 'if (/^[1-8]$/.test(e.key)) panel.current?.toggle(Number(e.key) - 1);' :107 '// Consumed: the shell's keymap (bare 1-7 jump pages) skips a prevented event.'; pages/characters/Layer1.tsx:142 '// The roster owns its arrows; the keymap leaves a handled key alone.'; keymap.ts:41 'const PAGE_COUNT = 7;'; keymap.ts:22 and keyCommands.ts:7 'export type KeyCommand = \"rerun\";'; grep useKeyCommand -> only pages/brain/Preflight.tsx:75; grep onKeyDown apps/console/src/pages -> characters/Layer1.tsx:140, review/FeedbackPanel.tsx:70, review/Player.tsx:93; grep 'addEventListener(\"keydown' -> only keys/listener.ts:29.",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 3,
+      "reason": "Sound architecture move; one acceptance case is unfalsifiable as written."
+    },
+    "revision": "Rewrite case 5 with observable outcomes: keydown '1' with focus on a checkbox inside the review player -> mark 1 toggles; keydown '1' with focus on the player's <video> -> no mark toggles and route unchanged; keydown '1' in a text <input> -> nothing fires."
+  },
+  {
+    "context": "console-app-bootstrap",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Every query region says how old its data is when the live feed can't vouch",
+    "size": "M",
+    "effort": 5,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "apps/console/src/kit/QueryView.tsx",
+      "apps/console/src/kit/index.ts",
+      "apps/console/src/data/react.tsx",
+      "apps/console/src/data/cache.ts",
+      "apps/console/src/data/layer.ts",
+      "apps/console/src/data/cache.test.ts",
+      "apps/console/src/pages/brain/Preflight.tsx"
+    ],
+    "new_files": [
+      "apps/console/src/kit/freshness.ts",
+      "apps/console/src/kit/Freshness.tsx",
+      "apps/console/src/kit/Freshness.module.css",
+      "apps/console/src/kit/queryView.dom.test.tsx"
+    ],
+    "shared_surfaces": [
+      "apps/console/src/data (console-data-layer context, coupled): Query<T> gains updatedAt; the stream-reopen hook revalidates watched ready entries"
+    ],
+    "acceptance": [
+      "QueryView with data fetched at 14:02:31, stream 'open', no issue -> no freshness line rendered (live path adds zero nodes; shell DOM-count test unchanged)",
+      "same data, stream 'reconnecting' (summary degraded) -> line 'As of 14:02:31 · live updates paused' with a Refresh button that calls query.reload; role=status",
+      "failed refresh over held data (errorView set) -> degraded panel title carries the time: 'Showing the reply from 14:02:31 · <title>' instead of the timeless 'Showing the last good reply'",
+      "query.refreshing true over held data -> region aria-busy='true', content still rendered, no placeholder",
+      "cache: entry ready at t0, stream closes, reopens at t1 -> watched ready entries refetch once (today only status 'error' entries retry); unwatched entries are not fetched",
+      "freshnessOf: updatedAt undefined -> 'none'; stream open but updatedAt older than the last reopen -> 'unconfirmed' until the refetch lands, then 'live'",
+      "Preflight renders 'Last run hh:mm:ss' from query.updatedAt; grep 'layer.cache.getSnapshot' apps/console/src/pages -> 0 hits"
+    ],
+    "premise": [
+      "apps/console/src/kit/QueryView.tsx:16-33 - with data present QueryView renders children with no age and no refreshing signal; :25 the failed-refresh panel says 'Showing the last good reply' without saying from when",
+      "apps/console/src/data/cache.ts:16 - QuerySnapshot.updatedAt exists; apps/console/src/data/react.tsx:29-37 - Query<T> drops it",
+      "apps/console/src/pages/brain/Preflight.tsx:71-73 - Brain reaches around the hook into layer.cache.getSnapshot(queryKey(...)).updatedAt because Query hides the time",
+      "apps/console/src/data/cache.ts:1-3,40 - freshness is event invalidation plus a 5-minute backstop; while /events is down nothing invalidates",
+      "apps/console/src/data/layer.ts:91-93 and apps/console/src/data/cache.ts:110-113 - on stream reopen only entries in status 'error' refetch; ready entries that missed events during the gap stay stale up to 5 min while the chip reads 'online'",
+      "apps/console/src/kit/QueryView.tsx:46-53 - ConnectionState is the only feed-aware wrapper and it replaces content; used in 2 page files (pages/reconcile/ChatPage.tsx:53, pages/reconcile/NoReport.tsx:37) against 37 <QueryView> uses in 29 page files",
+      "apps/console/src/shell/Chrome.tsx:13-17 - the only freshness signal is one global connection chip; nothing ties it to the region the operator is reading"
+    ],
+    "rollback": "Two commits: (1) data layer exposes updatedAt + revalidate-on-reopen, (2) QueryView freshness line + Preflight cleanup; reverting (2) leaves an unused field, reverting (1) restores today's reopen behaviour.",
+    "gate": "none",
+    "test_command": "pnpm -C apps/console test -- kit/queryView data/cache pages/brain app/shell && pnpm -C apps/console typecheck && pnpm -C apps/console lint && pnpm -C apps/console build",
+    "runner_up": "Shortcut reference overlay ('?' in every mode) rendered from KEYMAP labels plus the live page's owned commands, replacing the hand prose key list in ReviewByType.tsx:38-39 - strongest once card A lands scopes.",
+    "body": "## Summary\nThe operator reads run tables, verdicts and rundowns through one primitive, QueryView, that never says how old the numbers are. Freshness rides on /events invalidation; when the feed drops, every region keeps showing its last reply as if live, and after the feed reopens the ready entries are not revalidated at all - they wait for the 5-minute backstop while the chip says 'online'. The app holds the timestamp (cache.ts:16) and the connection state; QueryView should spend them: an 'As of 14:02:31 · live updates paused · Refresh' line exactly when the feed cannot vouch for the region, a timed failed-refresh banner, and an ambient busy state.\n\n## Description\nLeans on async-ui-states / failure-states ('a failed refresh keeps the content on screen... ideally with how stale the data now is... showing old data as if fresh is its own small lie', failure-states.md:62-68), the golden path's `refreshing` row (existing content with at most an ambient indicator), and client-fetch-cache / swr-design (a backstop is not the primary freshness mechanism). A pure `freshnessOf(snapshot, connection, lastReopenAt)` returns live | unconfirmed | failed | none; QueryView renders a one-line Freshness strip only for unconfirmed/failed, so the live path adds no nodes and no per-tick work (absolute time, no ticking clock - cache.ts:3 'No per-tick work'). The coupled data-layer change is two small edits: Query<T> carries updatedAt, and the stream-reopen hook revalidates watched ready entries (not just failed ones) so the strip clears itself honestly.\n\n## Flow\n- data/react.tsx: Query.updatedAt\n- data/cache.ts: revalidateWatched(); data/layer.ts: call it on reopen after a gap and record lastReopenAt\n- kit/freshness.ts: pure classifier (tested without DOM)\n- kit/Freshness.tsx: role=status line + Refresh; QueryView sets aria-busy while refreshing\n- Preflight.tsx: read query.updatedAt, drop the cache reach-around\n\n## Expected impact\n37 query regions across all seven pages gain an honest staleness statement by construction; the operator stops acting on minutes-old rundown or verdict numbers during a feed gap, and stale-after-reconnect drops from up to 5 minutes to one round-trip.\n\n## Evaluation\nClaim: regions the live feed cannot vouch for say so and offer a refresh; reconnect revalidates.\nBefore: 0 of 7 acceptance cases pass (no strip, timeless degraded title, no aria-busy, reopen retries only errors, no classifier, Preflight reaches into the cache)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (kit/queryView.dom.test.tsx, data/cache.test.ts); shell DOM-count test proves the live path adds no nodes\nResult: better\nGate: none",
+    "evidence": "kit/QueryView.tsx:25 'title={`Showing the last good reply · ${query.errorView.title}`}'; data/cache.ts:16 'readonly updatedAt: number | undefined;'; data/react.tsx:29-37 Query has status,data,error,errorView,refreshing,reload - no updatedAt; pages/brain/Preflight.tsx:73 'const at = layer.cache.getSnapshot(queryKey(\"preflight.run\", PREFLIGHT_PARAMS)).updatedAt;'; data/layer.ts:91-92 'if (status === \"open\") { if (everOpened) cache.retryFailed();'; data/cache.ts:112 'if (e.snapshot.status === \"error\" && e.listeners.size > 0 && !e.inflight)'; data/cache.ts:40 'DEFAULT_BACKSTOP_MS = 5 * 60_000'; grep '<QueryView' apps/console/src/pages -> 37 hits in 29 files; grep ConnectionState apps/console/src/pages -> reconcile/ChatPage.tsx, reconcile/NoReport.tsx only.",
+    "critic": {
+      "verdict": "revise",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Grounded and useful; one case is green before the build."
+    },
+    "revision": "Drop acceptance case 1 (already passes today; keep it only as a regression assertion inside the existing shell DOM-count test, not as an acceptance case)."
+  }
+]

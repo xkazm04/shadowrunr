@@ -1,0 +1,35 @@
+{"card":"Page keys bypass the one keymap: scoped bindings the conflict report sees","context":"console-app-bootstrap","slot":"A","status":"landed",
+ "shas":["e475424","2f21c27"],
+ "tests_added":[
+  "apps/console/src/keys/keymap.test.ts::scoped bindings > reports every scope shadow of a global binding, and nothing else",
+  "apps/console/src/keys/keymap.test.ts::scoped bindings > catches a seeded duplicate inside a scope",
+  "apps/console/src/keys/keymap.test.ts::scoped bindings > declares the note's Ctrl+Enter in the player scope, typing only",
+  "apps/console/src/keys/keymap.test.ts::scoped bindings > derives the page jumps from the page list",
+  "apps/console/src/keys/keymap.test.ts::one typing rule > counts text fields and the video, never a checkbox or a radio",
+  "apps/console/src/keys/keymap.test.ts::one typing rule > is the only one: no page keeps a typing rule or a keydown handler of its own for the moved keys",
+  "apps/console/src/keys/keymap.test.ts::the listener with owners > leaves 'r' alone when no page owns the re-run",
+  "apps/console/src/keys/keymap.test.ts::the listener with owners > resolves the innermost scope first, the global binding outside it",
+  "apps/console/src/shell/keyActions.test.ts::the live keymap > derives a page jump per page in PAGE_IDS",
+  "apps/console/src/shell/keyActions.test.ts::the live keymap > has no conflict, and lists the page scopes' shadows of the global keys",
+  "apps/console/src/shell/keyActions.test.ts::the live keymap > hands a scoped action to its scope's owner",
+  "apps/console/src/app/pagekeys.dom.test.tsx::toggles a mark for a key inside the player, and jumps pages for the same key outside it",
+  "apps/console/src/app/pagekeys.dom.test.tsx::decides typing with the one rule: a checkbox takes marks, the video and a text field do not",
+  "apps/console/src/app/pagekeys.dom.test.tsx::keeps every player key (GUARD)",
+  "apps/console/src/app/pagekeys.dom.test.tsx::step the roster inside its scope; outside it the arrows still step pages",
+  "apps/console/src/app/pagekeys.dom.test.tsx::a page command key is left alone where no page owns it, and re-runs Brain's pre-flight where it does"
+ ],
+ "guard_cases":[
+  "app/pagekeys.dom.test.tsx 'keeps every player key': Enter saves and moves on, arrows skip/back, the note takes only Ctrl+Enter, Ctrl+2 left alone - green on HEAD sources by design (measured: 1 of 5 green when the 10 source files were swapped back to HEAD)",
+  "every pre-existing keys/keymap.test.ts, shell/keyActions.test.ts and app/shell.dom.test.tsx key test (bare 1-7, M, Esc, Ctrl+K, intro any-key, wall arrows) unchanged and green",
+  "player.test.tsx walk/skip/save/back/done/held-write tests and layer1.test.tsx 2,000-character roster window test, now driving the scope commands (emitScoped) the way preflight.test drives emitKeyCommand"
+ ],
+ "cases_total":7,"cases_red_before":7,"cases_green_after":7,
+ "gates":{
+  "pnpm -C apps/console test -- keys pages/review/player pages/characters/layer1 app/shell kit/openExternal pages/brain/preflight (vitest ignores the filter after '--', so this ran the full suite: 72 files, 581 passed, 3 skipped)":0,
+  "pnpm -C apps/console typecheck":0,
+  "pnpm -C apps/console lint":0,
+  "pnpm -C apps/console build":0
+ },
+ "files_changed":17,"lines_changed":865,
+ "deviations_from_card":"(1) eslint.config.js boundaries: keys may import nothing, kit may not import keys, pages may import neither keys nor shell. So keymap.ts cannot import PAGE_IDS: keys exports keymapFor(pages) and the live KEYMAP = keymapFor(PAGE_IDS) lives in shell/keyActions.ts (Shell imports it there). Also, the duplicate KeyCommand could not be removed outright, because keys and kit cannot see each other: kit/keyCommands.ts mirrors the vocabulary (KeyCommand, ScopeCommands, ScopedAction), and shell/keyActions.ts holds a compile-time tie (Same<> assertion), so the two copies cannot drift. I did not loosen the boundaries policy. (2) Page tests cannot import keys/shell, so the end-to-end key cases (3, 4, 5 revised, roster) live in a new app/pagekeys.dom.test.tsx that mounts the real App/Shell. That is also the only test that exercises Shell.tsx's glue. player.test.tsx and layer1.test.tsx now drive scope commands through kit emitScoped. player.test's old 'consumes its keys' test moved to the app test as the guard. preflight.test.tsx was not changed (case 4 is in the app test). (3) Case 1 says 'ArrowLeft/ArrowRight in l2' for review.player. Global arrows are bound only in wall and l1, so in l2 the player's arrows shadow nothing. The pinned shadow list is the honest one: review.player 1-7 in l2, and characters.roster ArrowLeft/ArrowRight in l1. (4) Coupled files beyond the write set: keys/index.ts (export), pages/review/FeedbackPanel.tsx (the note's own Ctrl+Enter handler now runs only outside the player, because the player scope declares it), shell/keyActions.test.ts, app/pagekeys.dom.test.tsx, budgets/bundle.json.",
+ "notes":"Bundle: entry js 289,500 -> 291,500 (measured 291,213 B, against a baseline of about 289,180 B with HEAD sources, so +2.0 KB). The scoped bindings, resolver, scope-chain walk and owner registry are part of the first load. I compacted the binding declarations first, then took the lock and committed the raise alone as e475424, with a $comment sentence. Behaviour edges from the one typing rule, as the card requires: a focused <video> now counts as typing everywhere, so bare 1-7 and M no longer fire on it and Esc there blurs instead of going up. A checkbox or radio no longer counts as typing, so page keys and Esc-up work beside one. The roster's arrows no longer fire with Ctrl or Alt held (chords are exact), and before they did. ReviewByType.tsx's hand-written key prose is not changed (out of write set); it can now be rendered from KEYMAP labels. Red-before was measured by swapping the 10 source files back to HEAD: pagekeys 4 of 5 red (guard green) and the keys tests 8 red. The sibling B's QueryView title change briefly turned preflight/review layer1 degraded-title tests red mid-run; B committed and they are green at 2f21c27."}

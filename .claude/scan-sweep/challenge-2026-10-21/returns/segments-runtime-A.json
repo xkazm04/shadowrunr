@@ -1,0 +1,31 @@
+{"card":"The op menu and the op gate are two rule sets: derive the menu from the gate","context":"segments-runtime","slot":"A","status":"landed",
+ "shas":["999cbe7","ba7b0c3"],
+ "tests_added":[
+  "crates/shadowrunr-segments/tests/op_menu.rs::the_menu_is_the_gate_through_the_scripted_seg01_run",
+  "crates/shadowrunr-segments/tests/op_menu.rs::the_menu_is_the_gate_through_the_scripted_research_run",
+  "crates/shadowrunr-segments/tests/op_menu.rs::opening_withholds_close_poll_and_dismiss_foil_with_reasons",
+  "crates/shadowrunr-segments/tests/op_menu.rs::an_open_crowd_poll_withholds_start_poll_and_keeps_close_and_summon",
+  "crates/shadowrunr-segments/tests/op_menu.rs::a_foil_vote_withholds_summon_foil_and_start_poll",
+  "crates/shadowrunr-segments/tests/op_menu.rs::a_pending_handover_withholds_poll_and_summon_and_offers_the_switch",
+  "crates/shadowrunr-segments/tests/op_menu.rs::a_wrong_state_summon_of_an_unknown_foil_says_not_in_state_first",
+  "crates/shadowrunr-segments/tests/op_menu.rs::a_paced_arc_keeps_reveal_hex_and_withholds_seal_switch_and_research_as_before",
+  "crates/shadowrunr-segments/tests/op_menu.rs::a_signed_off_show_offers_nothing_and_names_nothing_not_now",
+  "crates/shadowrunr-segments/tests/runtime.rs::context_reports_table_and_state (updated)"
+ ],
+ "guard_cases":[
+  "op_menu.rs::a_paced_arc_keeps_reveal_hex_and_withholds_seal_switch_and_research_as_before (acceptance 6: reveal_hex stays on the menu under pacing; sign_off/switch_segment withheld, dispatch_research offered)",
+  "op_menu.rs::a_signed_off_show_offers_nothing_and_names_nothing_not_now (acceptance 7: green today because no not-now line exists yet)",
+  "the whole existing runtime.rs suite (every refusal reason the runtime emits is unchanged, incl. a_fleet_loss_sign_off_is_never_held_for_the_seal and pin_link_is_seg02a_only)"
+ ],
+ "cases_total":10,"cases_red_before":8,"cases_green_after":10,
+ "gates":{
+  "cargo test -p shadowrunr-segments":0,
+  "cargo test -p shadowrunr-brain":0,
+  "cargo test -p shadowrunr-sim":0,
+  "cargo clippy --workspace --all-targets -- -D warnings":0,
+  "cargo fmt --all -- --check":0,
+  "cargo test --workspace":0
+ },
+ "files_changed":3,"lines_changed":636,
+ "deviations_from_card":"availability() also covers reveal_hex's not_in_state (require_state(HexRevealed)) and the evidence board's pin_link (screen_not_allowed when the state's screens have no board) - both tag-level, per the coordinator's note that the new board ops must sit under the same rule. Ordering shifts beyond the card's summon_foil example: a wrong-state reveal_hex now says not_in_state before unknown_hex/act_locked, dispatch_research says plebiscite_pending before invalid_job/duplicate_job_id, switch_segment says arc_in_progress before already_in_segment. No existing test pinned those orders. The fleet_lost sign-off exception is kept in apply_op by tolerating availability's dossier_not_sealed for that reason. The SEG-01 scripted run in op_menu.rs adds a quiet opening with a poll at step 1 and a dismiss_foil at step 14 (the runtime.rs scripted_run summons at step 0 and never visits opening/crowd_game). Two commits as the card's rollback plans: tests (red on 999cbe7 alone) then the refactor.",
+ "notes":"Slot B builders: the gate is SegmentRuntime::availability(tag) in runtime.rs (private); context().allowed_ops and the state summary's 'not now: tag (reason), ...' line (placed right after the REFUSED lately line, omitted when signed off) are both derived from it. crates/shadowrunr-sim/src/sandbox.rs:738 still retains sign_off by hand - out of this write set, left as is. A sibling's staged tools/rig/shadowrunr_rig/review.py was in the index during my commits; pathspec commits left it untouched."}

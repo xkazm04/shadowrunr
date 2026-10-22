@@ -1,0 +1,27 @@
+{"card":"Pre-flight carries its fix: `preflight --fix` repairs, re-probes, shows before->after","context":"daemon-core-rpc","slot":"B",
+ "status":"landed",
+ "shas":["6d6573b","cdb467a","5e49cdf"],
+ "tests_added":[
+  "crates/shadowrunr-daemon/tests/cli.rs::preflight_fix_reindexes_a_stale_store_and_shows_before_after",
+  "crates/shadowrunr-daemon/tests/cli.rs::preflight_fix_refuses_to_reindex_under_a_running_daemon",
+  "crates/shadowrunr-daemon/tests/cli.rs::plain_preflight_writes_nothing_and_points_at_the_fix",
+  "crates/shadowrunr-daemon/tests/cli.rs::preflight_fix_never_downloads_without_download",
+  "crates/shadowrunr-daemon/tests/cli.rs::preflight_fix_json_carries_guided_and_external_remedies_and_changes_no_file",
+  "crates/shadowrunr-daemon/tests/cli.rs::preflight_fix_is_idempotent",
+  "crates/shadowrunr-daemon/src/e2e/mod.rs::preflight_red_carries_the_red_rows_with_their_remedy",
+  "crates/shadowrunr-daemon/src/preflight_fix.rs::tests::a_fix_the_re_probe_does_not_confirm_is_not_fixed"
+ ],
+ "guard_cases":["existing preflight_passes_with_a_valid_package (8 human lines), preflight_exits_non_zero_on_a_red_check (--json array of 8 HealthReport), e2e preflight_rpc_returns_eight_reports, sim_start_is_refused_while_preflight_is_red, preflight::tests pf03_verifies_without_writing_and_names_the_repair stayed green unchanged"],
+ "cases_total":7,"cases_red_before":7,"cases_green_after":7,
+ "gates":{
+  "cargo test -p shadowrunr-daemon preflight":0,
+  "cargo test -p shadowrunr-daemon --test cli":0,
+  "cargo test -p shadowrunr-daemon e2e::":0,
+  "cargo clippy --workspace --all-targets -- -D warnings":0,
+  "cargo fmt --all -- --check":0,
+  "cargo test -p shadowrunr-daemon (lib 232 + cli 12 green; doc run re-run alone rc=0 after a sibling-rebuild 'can't find crate' race)":0,
+  "cargo test --workspace":101
+ },
+ "files_changed":9,"lines_changed":1049,
+ "deviations_from_card":"(1) Acceptance 5 asked PF-06's guided remedy to carry `command`; no shadowrunr command writes calibration.json, so the PF-06 remedy is {kind:guided, file:<sim>/calibration.json, text} and the test asserts kind=guided + file. (2) --fix --json prints {rows:[{check,before,after,detail,remedy?,remaining?,result?}],nothing_to_fix}; plain --json keeps the HealthReport[] array. (3) A list install is only offered for a list with no installed copy and no load error (never overwrites an operator's file); categories with no known source get a guided `install-list <id> --source` remedy. (4) Daemon probe uses engine.status (cheap, spends nothing); any /rpc answer counts as a daemon. (5) docs/spec/contract.md was edited under the lock in its own commit (named in shared_surfaces, not in write_set).",
+ "notes":"cargo test --workspace rc=101 only on e2e::events::live_sim_events_arrive_before_the_engine_answers (slot A's 2 s timing test) timing out under whole-workspace load; it passes alone (rc=0) and inside the full shadowrunr-daemon run (232/232). The refusal path it crosses does the same pre-flight work as before (run_all_checked replaces run_all). Flag it as timing-sensitive under load. An unrelated merge (3786dc5 character package v2) landed between my test and feature commits."}

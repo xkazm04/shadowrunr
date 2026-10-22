@@ -1,0 +1,111 @@
+[
+  {
+    "context": "daemon-show-prep-and-review",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "One prep rule table drives prompt, schema and checks; the gate is looser today",
+    "size": "M",
+    "effort": 6,
+    "impact": 7,
+    "risk": 4,
+    "write_set": [
+      "crates/shadowrunr-daemon/src/prep/checks.rs",
+      "crates/shadowrunr-daemon/src/prep/planner.rs",
+      "crates/shadowrunr-daemon/src/prep/mod.rs",
+      "crates/shadowrunr-daemon/src/prep/tests.rs",
+      "docs/guide/cli.md"
+    ],
+    "new_files": [
+      "crates/shadowrunr-daemon/src/prep/rules.rs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "sample prep with cb-01 given 4 lines -> checks::run fails `shape` with detail naming cb-01 (today it passes: checks.rs:265 only tests n==0 while the schema caps callbacks at 3)",
+      "sample prep with prem-01.payoff = None -> `shape` fails naming prem-01 (today passes; schema planner.rs:198 requires a payoff on every bit and the prompt promises one)",
+      "planner::schema(&segments) connectors.items.properties.kind.enum -> exactly the wire names of rules::CONNECTOR_KINDS, in order (today a hand-typed literal at planner.rs:233)",
+      "for every BitKind row in rules::BITS -> schema minItems/maxItems and lines minItems/maxItems equal the row, and planner::prompt contains the row's rendered text (one table, three renderings)",
+      "characters/malakor/prep.sample.json -> still passes all nine checks unchanged (the tightened gate does not break the shipped sample)",
+      "docs/guide/cli.md `counts` and `shape` rows -> equal rules::doc_rows() (a test reads the doc; changing a number in rules.rs without the doc fails)"
+    ],
+    "premise": [
+      "crates/shadowrunr-daemon/src/prep/planner.rs:167 - the prompt tells the planner callbacks are 1-3 lines each, with a payoff",
+      "crates/shadowrunr-daemon/src/prep/planner.rs:226 - schema bits(CALLBACKS.0, Some(CALLBACKS.1), 1, 3): the callback line cap is a literal that checks.rs never sees",
+      "crates/shadowrunr-daemon/src/prep/checks.rs:265 - the gate only fails a callback with 0 lines; 4+ lines pass",
+      "crates/shadowrunr-daemon/src/prep/planner.rs:198 - the schema requires `payoff` on every premise, story and callback",
+      "crates/shadowrunr-daemon/src/prep/checks.rs:268 - the gate requires a payoff only on stories",
+      "crates/shadowrunr-daemon/src/prep/planner.rs:233 - the connector kind enum is a hand-typed string list; checks.rs:32 keeps CONNECTOR_KINDS separately",
+      "crates/shadowrunr-daemon/src/prep/planner.rs:24 - the system prompt says 'a mechanical checker rejects material that breaks the rules below', which is false for the callback-length and payoff rules",
+      "crates/shadowrunr-daemon/src/prep/planner.rs:189 - comment records the first real run returning 16 premises / 0 stories / 0 callbacks because schema and intent diverged",
+      "docs/guide/cli.md:378 - the guide's `shape` row is a fourth hand copy and omits the callback rules",
+      "crates/shadowrunr-daemon/src/prep/store.rs:246 - approval re-runs the same checks, so the looser gate is also the approval gate"
+    ],
+    "rollback": "Two commits (rules.rs + renderings; tightened checks + doc test). Reverting both restores the literals; the stored prep format does not change, staged preps simply re-check on approve.",
+    "gate": "policy-tighten",
+    "test_command": "cargo test -p shadowrunr-daemon prep:: && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "casework::research is one ~200-line function over live reqwest and a live engine (case_cli.rs:124 refuses the scripted engine); put fetching behind a PageSource seam so seeds, dedupe-by-hash, the page cap, fence-echo refusal and staging run end-to-end in tests",
+    "body": "## Summary\nThe stream-prep rules (counts, lines per kind, payoff, connector kinds) are written four times: prompt prose, JSON schema, the mechanical checks and the CLI guide. They have already drifted: the gate that holds approval is looser than what the planner is told and constrained to. Make one `prep::rules` table and render the prompt text, the reply schema, the checks and a doc-asserting test from it.\n\n## Description\nRegistry: review-iteration-loops, technique `critique-carries-its-fix` (a gate whose rules differ from the brief it judges cannot be gated on; law unmeasured-is-not-pass). The system prompt (planner.rs:24) claims a mechanical checker enforces the rules, yet a callback of 4+ lines (schema cap 3, planner.rs:226) or a premise/callback without a payoff (schema-required, planner.rs:198) passes `shape` (checks.rs:265-268) and can be approved (store.rs:246). The connector-kind list is typed twice (planner.rs:233 vs checks.rs:32). `rules.rs` holds `BitRule { kind, count: (min, Option<max>), lines: (min, max), payoff_required }`, the cold-open beat range, MAX_LINE_CHARS, CONNECTOR_KINDS derived from the enum, and renderers `prompt_lines()`, `schema_for(kind)`, `doc_rows()`. checks.rs loops over the table; check ids stay as they are (no contract change, no overlap with the types-crate check-id card). Gate: policy-tighten - the approval gate becomes exactly as strict as what the planner was already told.\n\n## Flow\n- rules.rs: the table and its renderers\n- planner.rs: prompt and schema render from rules (literals deleted)\n- checks.rs: counts/shape iterate the rule rows; callback 1-3 lines and a payoff on every bit enforced\n- tests.rs: drift tests (schema == table, prompt contains table text, doc rows == table) plus the two tightened cases\n- docs/guide/cli.md: rows regenerated\n\n## Expected impact\nOne edit point for every prep rule; the planner's promise and the owner's approval gate become the same rule set; the bug class recorded at planner.rs:189 (schema and intent diverging) becomes a failing test.\n\n## Evaluation\nClaim: the approval gate enforces exactly what the planner is told, from one table.\nBefore: 0 of 6 acceptance cases pass (4-line callback and payoff-less premise pass the gate; enum and counts are literals; the doc is unchecked)\nAfter: 6 of 6\nMethod: gate - acceptance tests written first\nResult: better\nGate: policy-tighten",
+    "evidence": "planner.rs:167 `- callbacks: {}-{} running gags from the bible, re-dressed for tonight, needing no earlier stream (1-3 lines each, with a payoff)`; planner.rs:226 `\"callbacks\": bits(CALLBACKS.0, Some(CALLBACKS.1), 1, 3)`; planner.rs:198 `\"required\": [\"segment\", \"lines\", \"payoff\"]`; planner.rs:233 `\"enum\": [\"into_room\", \"into_bit\", \"back_to_chat\", \"into_poll\", \"into_handover\"]`; checks.rs:265 `BitKind::Callback if n == 0 => shape.push(...)`; checks.rs:268 `if b.kind == BitKind::Story && b.payoff.as_deref().is_none_or(...)`; characters/malakor/prep.sample.json: callbacks have 1-2 lines and all 20 bits carry a payoff, so the tightened gate keeps the sample green.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 3,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Real gate/brief drift on the approval path, closed from one table with tests that fail on the next drift."
+    }
+  },
+  {
+    "context": "daemon-show-prep-and-review",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "`prep revise`: answer failed checks with an edit plan, not a full regenerate",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-daemon/src/prep/checks.rs",
+      "crates/shadowrunr-daemon/src/prep/mod.rs",
+      "crates/shadowrunr-daemon/src/prep/cli.rs",
+      "crates/shadowrunr-daemon/src/prep/store.rs",
+      "crates/shadowrunr-daemon/src/prep/tests.rs",
+      "crates/shadowrunr-daemon/src/e2e/prep.rs",
+      "docs/guide/cli.md"
+    ],
+    "new_files": [
+      "crates/shadowrunr-daemon/src/prep/revise.rs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "staged prep failing only `urls` on conn-01; fake planner returns [{op: rewrite, target: conn-01, line, why}] -> a new staged prep id with all 9 checks passing; every line except conn-01 byte-identical to the base; exit 0",
+      "fake planner also returns a rewrite of prem-04 (named by no finding and no note) -> that op lands in revision.json refused_ops with reason 'target not named'; prem-04 unchanged in the new prep",
+      "base fails `counts` with '2 into_poll connectors (at least 3)' -> the finding is an insert slot of kind into_poll; an insert op adds conn-16 [into_poll]; counts passes",
+      "base with 11 failing lines -> the revision prompt names all 11 locators (no 'and N more' truncation as at checks.rs:134)",
+      "`prep revise <id> --note 'cb-02: too flat'` on an all-pass staged prep -> cb-02 is a legal target; result staged; the base prep.json bytes are unchanged and it stays staged",
+      "revise of an approved or retired prep -> exit 1, conflict; a planner reply that echoes the fence token -> nothing staged, exit 1",
+      "`prep show <new>` -> prints 'revised from <base>: N ops' with each op's target and why; <data>/prep/<new>/revision.json holds the base id, findings, ops and refused_ops"
+    ],
+    "premise": [
+      "crates/shadowrunr-daemon/src/prep/store.rs:238 - a failed check holds approval: 'no override applies; generate a new prep'",
+      "docs/guide/cli.md:368 - 'the fix is a new `prep generate`': the only repair path is a whole new planner call",
+      "crates/shadowrunr-daemon/src/prep/mod.rs:141 - generate is one planner call that writes the whole prep (cold open, 12+ premises, 3-5 stories, 3-5 callbacks, 15+ connectors) from scratch",
+      "crates/shadowrunr-daemon/src/prep/checks.rs:134 - failure detail is prose truncated to 8 problems ('and N more'): neither the owner nor a next stage sees every failing line",
+      "crates/shadowrunr-daemon/src/prep/checks.rs:102 - every line already has a stable locator (`prem-03 line 1`, `conn-01`, `cold_open.beats[2]`) usable as an edit target",
+      "crates/shadowrunr-daemon/src/prep/cli.rs:28 - PrepCommand is generate/list/show/approve/retire only; nothing acts on what `show` reports",
+      "crates/shadowrunr-daemon/src/e2e/prep.rs:156 - one tainted connector (conn-01) fails the whole prep",
+      "crates/shadowrunr-daemon/src/prep/planner.rs:141 - UntrustedFence already wraps model-composed text; the revision prompt reuses it for the base material"
+    ],
+    "rollback": "Additive: a new subcommand, revise.rs and a findings() fn beside run(). Reverting the series removes `prep revise`; revised preps already staged stay ordinary staged preps (revision.json is an unread sidecar).",
+    "gate": "none",
+    "test_command": "cargo test -p shadowrunr-daemon prep:: && cargo test -p shadowrunr-daemon e2e::prep && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "`prep rehearse <id>`: a judged scripted sandbox minute pinned to a STAGED prep, so the owner approves with per-bit landed/flat evidence instead of blind (needs sandbox.rs, overlapping the sim-runner-judging card)",
+    "body": "## Summary\nWhen a staged prep fails one check on one line, the owner's only path is `prep generate` again: a fresh planner call that rewrites all ~73 lines, discards everything that passed and that they already read, and may fail a different check. `prep revise <id> [--note '<locator>: text']...` answers the failing lines (and the owner's notes) with a closed edit plan - rewrite / cut / insert on named locators - applies it, stages the result as a new prep and re-runs every check.\n\n## Description\nRegistry: review-iteration-loops, techniques `edit-plan-over-regeneration` (the revision deliverable is a list of operations; lines no operation names stay byte-identical) and `critique-carries-its-fix` (each finding names its location and the whole class is swept, not truncated). checks.rs gains `findings(p, ctx) -> Vec<Finding { check, at, why, slot }>`, the same predicates run() uses, untruncated, with count shortfalls expressed as insert slots; run() keeps building its prose (check ids and wire unchanged: no contract edit). revise.rs builds the prompt (base material fenced with UntrustedFence, findings and owner notes as the only legal targets), a schema with a closed op enum, and `apply(base, plan) -> (StreamPrep, refused_ops)` that refuses any op whose target is not a finding or a note. The new prep is staged through the existing locked store; revision.json beside it keeps base id, findings, ops and refusals. The approval gate is untouched: the revised prep must pass every check like any other. Both of this context's cards edit checks.rs: if both are approved, land A first and B rebases (disjoint functions).\n\n## Flow\n- `prep revise <id>` -> load the staged base -> findings + notes -> one planner call (edit plan) -> apply -> full checks -> stage a new id + revision.json -> print the summary; exit 0 / 6 as generate does\n- `prep show` prints lineage and ops\n- the base prep is never mutated\n\n## Expected impact\nA one-line failure costs one targeted call and a re-read of the changed lines, not a whole new prep and a full re-read. The owner's notes become actionable (today `show` reports and nothing acts). Approval effort scales with the notes, not the material.\n\n## Evaluation\nClaim: a failed or noted staged prep is repaired in one command, untouched lines byte-identical.\nBefore: 0 of 7 acceptance cases pass (no revise command; detail truncated at 8)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (fake planner engine as in prep/tests.rs)\nResult: better\nGate: none",
+    "evidence": "store.rs:237-239 `\"prep {id} failed {}: a failed check holds and no override applies; generate a new prep\"`; checks.rs:134-137 `problems.into_iter().take(8)` ... `detail.push_str(&format!(\"; and {} more\", n - 8))`; cli.rs:28-69 `enum PrepCommand { Generate, List, Show, Approve, Retire }`; e2e/prep.rs:35 taints only connectors[0] and :155-156 assert the urls check fails naming conn-01 while the rest is clean; the sample prep's line_length detail reads '73 lines'.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "New, scoped owner capability with strong guard cases and no change to the approval gate."
+    }
+  }
+]

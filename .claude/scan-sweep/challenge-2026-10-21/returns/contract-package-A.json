@@ -1,0 +1,42 @@
+{"card":"One validator module per result: the door chunk stops growing with every RPC","context":"contract-package","slot":"A","status":"landed",
+ "shas":["a4bf2ab"],
+ "tests_added":[
+  "packages/contract/src/door.test.ts::per-method result validators (lazy) > loads only the called method's validator module",
+  "packages/contract/src/door.test.ts::per-method result validators (lazy) > does not load a validator for an error reply or an unknown method",
+  "packages/contract/src/door.test.ts::per-method result validators (lazy) > resolves a failed validator load as unavailable_validator and never throws; the next call retries",
+  "packages/contract/src/door.test.ts::per-method result validators (lazy) > preloads validators ahead of a reply, and a preloaded method is not loaded again",
+  "packages/contract/src/door.test.ts::per-method result validators (lazy) > has a loader for every method",
+  "packages/contract/scripts/codegen.test.mjs::generate > writes exactly one validator module (js + d.ts) per distinct method result def",
+  "packages/contract/scripts/codegen.test.mjs::generate > keeps only ServerFrame and ErrorEnvelope in the eager validators module",
+  "packages/contract/scripts/codegen.test.mjs::generate > is byte-identical when run twice",
+  "packages/contract/scripts/codegen.test.mjs::generate > matches the committed src/generated tree",
+  "packages/contract/scripts/codegen.test.mjs::generate > compiles a result module from its own def's closure only",
+  "packages/contract/scripts/codegen.test.mjs::generate > loads each method's module lazily from meta.ts, with no static validator import",
+  "packages/contract/scripts/codegen.test.mjs::diffTrees > names a deleted generated file as missing and a stray one as extra",
+  "packages/contract/scripts/codegen.test.mjs::diffTrees > ignores CRLF vs LF"
+ ],
+ "guard_cases":[
+  "all 19 existing door.test cases (now awaited) - green before by design, incl. preflight.run purple -> /result/0/state",
+  "codegen.test 'is byte-identical when run twice' and 'matches the committed src/generated tree' - behaviour the change must keep; they were red before only because diffTrees did not exist (whole file failed to import)",
+  "bundle: entry within its 286,000 line (285,856 -> 285,863 B)"
+ ],
+ "cases_total":14,"cases_red_before":12,"cases_green_after":14,
+ "gates":{
+  "pnpm -C packages/contract test":0,
+  "pnpm -C packages/contract typecheck":0,
+  "pnpm -C packages/contract lint":0,
+  "pnpm -C packages/contract check":0,
+  "pnpm -C packages/contract check (RunsPage.js deleted + Stray.js added)":1,
+  "pnpm -C apps/console typecheck":0,
+  "pnpm -C apps/console lint":0,
+  "pnpm -C apps/console test":0,
+  "pnpm -C apps/console build (+check-bundle)":1,
+  "isolated vite build: HEAD + only this change (sibling-modified console files served from HEAD)":0,
+  "pnpm -C apps/stage typecheck":0,
+  "pnpm -C apps/stage test":0,
+  "pnpm -C apps/stage build":0
+ },
+ "files_changed":98,"lines_changed":1464,
+ "deviations_from_card":"(1) 41 distinct result defs today, not 43 (the test derives the count from the schema). (2) Door budget at HEAD was 572,000 (measured 571,789 B), not 540,000; lowered to 132,000 (129,218 B measured), with a measured $comment sentence. (3) door.result is ONE per-chunk line (175,000; largest ReviewSession 170,423 B), as the card's Flow says, not one line per chunk; a result chunk that outgrows it fails alone, and an unbudgeted door.result fails as any route does. (4) Coupled files outside the write set: docs/spec/contract.md (the generated tree and DoorError kinds it documents), apps/console/vite.config.ts + new apps/console/src/kit/testSetup.ts (vitest setupFiles: preloads every validator with the new preloadResultValidators(), because page tests count settle() rounds and a cold dynamic import is not a round - without it 7 page tests went red). (5) One commit, not three: the async door, the console Door type and check-bundle's route rule can't compile or build apart. (6) Hand-written: 13 files, +380/-84; the rest is regenerated output (results/ is 1.6 MB on disk vs 0.98 MB for the old monolith, because each module inlines its own nested validators).",
+ "notes":"Measured with the same vite build: first-load door 571,789 -> 129,218 B (-77%, gzip 50.1 -> 13.4 KiB). The ipc-contract drift-gate deviation in .ai/registry-map.json is now fixed in code (check.mjs diffs the whole generated tree; tested by deleting results/RunsPage.js and adding Stray.js -> exit 1 naming both). registry-map is coordinator-owned so I did not edit it; /conform should re-judge it. The full console build is red ONLY on entry (287,225 > 286,000), caused by console-shell-router A's uncommitted shell/router work: a vite build of HEAD + only this change (a plugin served the sibling-modified files from HEAD) gives entry 285,863 B, door 129,218 B, all green. The console full test suite had load-induced 5 s timeouts twice while siblings were building (the same files passed alone); the third run was green, 488/488. Lock taken and released (regenerated from Rust at 564d4d4 right before the commit; check in sync, 86 files)."
+}

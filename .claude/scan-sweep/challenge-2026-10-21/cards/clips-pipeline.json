@@ -1,0 +1,105 @@
+[
+  {
+    "context": "clips-pipeline",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "Render outside the store lock: stage, render, commit with a staleness check",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 6,
+    "write_set": [
+      "crates/shadowrunr-clips/src/render.rs",
+      "crates/shadowrunr-clips/src/scan.rs",
+      "crates/shadowrunr-clips/src/lib.rs",
+      "crates/shadowrunr-clips/src/tests.rs",
+      "crates/shadowrunr-daemon/src/clips.rs"
+    ],
+    "new_files": [
+      "crates/shadowrunr-clips/src/job.rs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "a renderer seam blocked on a channel while re-rendering clip A; from another thread store.approve(B, \"owner\", Some(r), None) and store.feedback(B, ..) -> both return within 1 s (today they wait on the single <data>/clips/.lock until A's render ends)",
+      "clip A has a verified video render (cut_9x16 + cut_16x9 files); a re-render whose renderer returns Err -> candidate.json still lists the previous video files, cut-9x16.mp4 and cut-16x9.mp4 still exist byte-identical, and history gains a 'render failed: <reason>' note instead of a downgrade to a poster",
+      "store.reject(A) lands while A's render is in flight -> the render's commit returns ClipError::Conflict naming the rejection; A stays rejected, its render field is unchanged, and the staging dir is removed",
+      "a rescan removes untouched draft A (remove_dir_all) while A's render is in flight -> the commit returns NotFound and <data>/clips/A/ is NOT recreated",
+      "two concurrent re-renders of the same clip -> the second returns ClipError::Conflict(\"render in progress\") at once and never writes into the clip dir",
+      "during an in-flight render the clip dir holds only complete files: while the renderer is blocked, the listing of <data>/clips/A/ equals the listing before the render (no cut-*.mp4 or draft.mp4 is deleted or half-written there until the commit renames staged files in)"
+    ],
+    "premise": [
+      "crates/shadowrunr-clips/src/scan.rs:898 - rerender takes store.lock() and holds it across render::render (:909) until store.save (:934)",
+      "crates/shadowrunr-clips/src/store.rs:559-570 - the lock is ONE exclusive flock on <data>/clips/.lock for the whole store; approve (:671), reject (:749) and feedback (:794) all take it",
+      "crates/shadowrunr-daemon/src/clips.rs:182 - `clips.render`: 'blocking, minutes for a video'; crates/shadowrunr-clips/src/render.rs:710-729 waits on the node+Chromium recorder's .output()",
+      "crates/shadowrunr-daemon/src/rpc.rs:336-362 - clips.approve / reject / feedback call the store directly from the async handler, so during a render they park a runtime worker on the flock for minutes",
+      "crates/shadowrunr-clips/src/render.rs:709 deletes draft.mp4 before recording; :768-770 deletes cut-16x9.mp4, cut-9x16.mp4, poster.png before cutting; :870-879 on failure deletes the cuts and writes a poster draft - a failed re-render destroys the previous good video",
+      "crates/shadowrunr-daemon/src/media.rs:94 - GET /media/clips/<id>/<file> serves straight from the clip dir that render writes into in place, so a half-encoded mp4 is servable",
+      "crates/shadowrunr-clips/src/scan.rs:843-847 - a rescan remove_dir_all's every untouched draft under the lock, so simply dropping the lock during render would race it; the fix needs a staging dir plus a commit-time check"
+    ],
+    "rollback": "Three commits (job.rs seam + staging renderer; rerender switched to snapshot/render/commit; daemon clips::render pointed at it). Reverting them restores the lock-held rerender; no stored format changes (candidate.json shape is untouched; staging dirs live inside the clip dir and are removed on commit or failure).",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-clips && cargo test -p shadowrunr-daemon clips && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "One deliverable accessor for render files: upload.rs:55 looks for kind==\"video\" but a recording cut emits only cut_9x16/cut_16x9 (render.rs:815-818), so a recorded clip can never yield an applicable YouTube/TikTok request; gate.rs:338 and render.rs:861 string-match kinds too.",
+    "body": "## Summary\nA re-render (minutes: Chromium recording or two ffmpeg encodes) runs while holding the one exclusive lock that guards the whole clip store, and it renders destructively in place. Split it into three phases: a short locked snapshot, an unlocked render into a staging directory, and a short locked commit that re-reads the candidate and refuses if the owner or a rescan moved it meanwhile.\n\n## Description\n`scan::rerender` (scan.rs:893-936) locks `<data>/clips/.lock` (store.rs:559) and keeps it across `render::render`, which shells out to node/Chromium (render.rs:710) or ffmpeg twice (render.rs:780-790). Every other mutation (approve, reject, feedback, publish, scan's write phase) queues behind it, and in the daemon those calls block a tokio worker on the flock (rpc.rs:336-362). Worse, the render deletes the previous outputs first (render.rs:709, :768-770) and on failure falls back to a poster (render.rs:870-879), so one flaky ffmpeg run silently downgrades an already-good video; meanwhile the media route serves the half-written file (media.rs:94).\n\nThe move, named by concurrency-guards' critical-section-across-a-suspension (never hold the lock across the wait) and preparation-is-the-staleness-window (re-check freshness at commit, not at fetch), plus atomic-file-publish for the outputs:\n- `job.rs`: a per-clip guard (`<dir>/.render.lock`, try-lock, refuses a second render with Conflict) and a `Renderer` seam (the real one wraps `render::render` pointed at a staging dir; tests inject a blocking or failing one).\n- Phase 1 (locked, ms): load, run the existing status refusal unchanged, snapshot `(status, render.rendered_ms, history.len())`, copy `clip.json` into `<dir>/.staging-<ts>/`.\n- Phase 2 (unlocked): render into staging; on Err keep the old render and record the failure note.\n- Phase 3 (locked, ms): reload; NotFound if a rescan removed it; Conflict if status or render moved; else rename staged files over the live ones, regate, append history, save (fresh feedback kept).\nThe status refusal itself is not changed and stays wherever the types-crate card puts it.\n\n## Flow\n- owner runs `clips render A` -> lock held ~ms -> released -> Chromium/ffmpeg into staging -> lock ~ms -> commit\n- owner approves B, tags feedback on C, publishes D during A's render: none of them wait\n- A's render fails: A keeps its previous video and gains a history note\n\n## Expected impact\nThe operator can keep working the clip queue while a video renders (today the whole factory freezes for the render's minutes), a failed re-render can no longer destroy a good cut, and the media route never serves a partial file. It is also the precondition for rendering several clips in parallel later.\n\n## Evaluation\nClaim: renders stop serialising the store and stop destroying prior output.\nBefore: 0 of 6 acceptance cases pass (approve/feedback block on the lock; a failed re-render drops the video; reject/rescan during a render are overwritten by the stale save at scan.rs:934 or resurrect the dir; a second render races the same files; partial files are visible).\nAfter: 6 of 6\nMethod: gate - acceptance tests written first against the Renderer seam\nResult: better\nGate: architecture",
+    "evidence": "scan.rs:898 `let _lock = store.lock()?;` ... :909 `let r = render::render(&store.dir(id), &c, tools)?;` ... :934 `store.save(&c)?;` | store.rs:568 `file.lock_exclusive().map_err(io)?;` | daemon clips.rs:182 `/// clips.render: records the stage when the tools exist; blocking, minutes for a video.` | render.rs:709 `let _ = std::fs::remove_file(&out);` | render.rs:768-770 `for f in [\"cut-16x9.mp4\", \"cut-9x16.mp4\", \"poster.png\", \"cut-16x9.ass\"] { let _ = std::fs::remove_file(dir.join(f)); }` | render.rs:870-879 `Err(reason) => { for f in [\"cut-16x9.mp4\", \"cut-9x16.mp4\"] { let _ = std::fs::remove_file(dir.join(f)); } write_draft(...` | media.rs:94 `serve(state.cfg.clip_store().dir(&id).join(&file), ct, &headers).await` | scan.rs:844-846 `std::fs::remove_dir_all(&dir)`",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 4,
+      "falsifiability": 5,
+      "reason": "Real lock-across-suspension and output-destroying failure path, with concurrency cases a stub cannot pass."
+    }
+  },
+  {
+    "context": "clips-pipeline",
+    "slot": "B",
+    "lens": "ux-elevation",
+    "title": "Re-cut a candidate by whole lines: `clips recut` re-gates a sibling cut",
+    "size": "L",
+    "effort": 7,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-clips/src/window.rs",
+      "crates/shadowrunr-clips/src/scan.rs",
+      "crates/shadowrunr-clips/src/lib.rs",
+      "crates/shadowrunr-clips/src/tests.rs",
+      "crates/shadowrunr-daemon/src/clips.rs",
+      "crates/shadowrunr-daemon/src/clips_cli.rs",
+      "crates/shadowrunr-daemon/tests/cli.rs",
+      "docs/guide/cli.md"
+    ],
+    "new_files": [],
+    "shared_surfaces": [],
+    "acceptance": [
+      "candidate X (SEG-01, lines a..b) recut with open=-1 -> a NEW candidate Y whose source.line_from is the previous host line's line_no, window.spoken_start_ms == window::edge_start of that line, status pending_owner_gate, first history note names X's id; X is unchanged",
+      "recut with close=+3 that would run past the 35 s SEG-01 band -> ClipError::Invalid whose message names the would-be duration and the band (e.g. 'would run 41.2 s, over the 35 s band'); no candidate is written",
+      "recut with open=+1 that would drop the payoff's setup line (window::cut's min_first) -> ClipError::Invalid naming the setup rule; nothing written",
+      "recut with open=-k that pulls in a line addressing a viewer in care -> Y.gate care_state is Fail (exclusions recomputed from the run's stream, not copied from X) and Y.gate.held is true",
+      "recut pulling in a line that names a chatter -> Y's caption text shows [viewer] where the handle was, and clip.json / captions.srt carry no handle",
+      "a rescan of the same run after the recut -> Y is kept (report.kept counts it) and is not deleted with the untouched drafts",
+      "`shadowrunr clips recut <X> --open -1` on the CLI fixture run -> exit 0 and prints Y's id, its new window and the gate line; `--json` prints the ClipCandidate"
+    ],
+    "premise": [
+      "crates/shadowrunr-clips/src/scan.rs:603-613 - a candidate id is fnv1a64 of tournament/run/first-last line, and window::cut (crates/shadowrunr-clips/src/window.rs:166-238) is deterministic, so a rescan reproduces the exact same cut",
+      "crates/shadowrunr-clips/src/scan.rs:825-852 - a rescan keeps owner-acted ids untouched and regenerates the rest identically: a rejected cut of a good moment never comes back better",
+      "crates/shadowrunr-types/src/clips.rs:400-401,405 - the owner can tag cut_too_early / cut_too_late, but watched feedback 'never changes the candidate's state' (crates/shadowrunr-clips/src/store.rs:779-781): the app records that the cut is wrong and offers no way to fix it",
+      "crates/shadowrunr-daemon/src/clips_cli.rs:15-101 - the CLI verbs are scan/list/show/render/approve/reject/publish; nothing edits a window, so the only response to a cut one line short is reject",
+      "crates/shadowrunr-clips/src/gate.rs:79-245 - exclusions read the whole stream's state (care spans, moderation, injections), so a re-cut must re-run them against the transcript, not copy the parent's checks",
+      "crates/shadowrunr-clips/src/scan.rs:527-719 - candidate() already builds window, captions (with redaction), evidence, clip.json and gate inputs from a (Stream, Cut) pair; a recut reuses it with an explicit Cut"
+    ],
+    "rollback": "Two commits: (1) window::cut_lines + scan::recut + rescan retention of recut siblings + tests; (2) CLI verb + docs. Reverting both removes the verb; recut siblings already written stay ordinary candidates (no new fields; their provenance is a history entry), so stored data reads unchanged.",
+    "gate": "direction",
+    "test_command": "cargo test -p shadowrunr-clips && cargo test -p shadowrunr-daemon --test cli clips && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "Per-stream hold accounting in the scan report (held count by check id and the share of checks that actually ran), closing the standard's 'silent holds' failure mode; needs ClipScanRun fields in the types crate.",
+    "body": "## Summary\nGive the owner a way to fix a cut instead of only rejecting it: `shadowrunr clips recut <id> --open <+-n> --close <+-n>` moves the window's edges by whole lines and produces a sibling candidate that goes through the gate again from the first check.\n\n## Description\nToday a cut is a take-it-or-leave-it proposal. The owner can tag it cut_too_early or cut_too_late, and the tag changes nothing (store.rs:779-781). Rejecting it doesn't help: the scorer is deterministic and the id comes from the lines (scan.rs:603-613), so every rescan proposes the same cut again or keeps the rejected one (scan.rs:825-852). A moment the owner wants, missing one line of setup, is simply lost.\n\nThe technique is peak-minus-preroll-window (stream-moment-capture): edges snap to whole lines, the window stays inside its segment band, and the setup is never cut to meet the band. That gives the recut its rules. `window::cut_lines(stream, first, last, band)` builds a Cut with the same edge_start/edge_end snapping and refuses, with the figure, anything over the band or anything that drops min_first. evidence-gated-clip-publish says re-cutting is upstream work after which 'the clip comes through the gate again from the first check'. So `scan::recut` re-reads the run's transcript (and voice.jsonl) and rebuilds the Stream. It then calls the existing candidate() with the explicit Cut (fresh captions, redaction, evidence, exclusions), carries the parent's measured signals with a note, writes the result under a new id at pending_owner_gate, and records the parent in its first history entry. The rescan retention rule keeps recut siblings because the owner authored them. The parent is left exactly as it was. No refusal logic is touched, and rejecting the parent stays the owner's separate act.\n\n## Flow\n- `clips show X` -> sees 'opens on the reaction' (or tagged cut_too_late while watching)\n- `clips recut X --open -1` -> new clip Y: window, gate line, held/clear, printed at once\n- `clips render Y` -> `clips approve Y` ; `clips reject X --reason 'recut as Y'`\n\n## Expected impact\nA cut that is one line wrong takes one command to fix instead of being lost. The watched-feedback tags become something the owner can act on. The gate's guarantees stay the same because every recut is re-gated against the full stream.\n\n## Evaluation\nClaim: the owner can move a window's edges by whole lines and get a re-gated candidate, with the band and the setup rule enforced.\nBefore: 0 of 7 acceptance cases pass (no recut exists)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (library cases in tests.rs, CLI case in crates/shadowrunr-daemon/tests/cli.rs on the fixture run)\nResult: better\nGate: direction (a new owner verb inside the clip factory's declared scope; CLI-only, no RPC or contract change, so the console can adopt it later)",
+    "evidence": "scan.rs:603-613 `let seed = format!(\"{}/{}/{}-{}\", ..., first.line_no, last.line_no); let id = format!(\"clip-{:016x}\", shadowrunr_brain::util::fnv1a64(seed.as_bytes()));` | scan.rs:825-832 owner_acted = approval || rejection || status not draft/pending; :843-848 untouched drafts removed | types clips.rs:400-401 `CutTooEarly, CutTooLate,` :405 `/// Watched feedback on a cut. It never changes the candidate's state.` | store.rs:779-781 `Watched feedback: replaces the clip's tags and note, in any state, and changes nothing else.` | clips_cli.rs:16-101 enum ClipsCommand { Scan, List, Show, Render, Approve, Reject, Publish } | grep -rn 'clips\\.\\(trim\\|recut\\)' over *.rs/*.ts/*.md (excluding target, node_modules, worktrees) -> 0 hits",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 4,
+      "falsifiability": 4,
+      "reason": "In-scope owner verb that re-runs the full gate, with cases that prove the gate is not copied."
+    }
+  }
+]

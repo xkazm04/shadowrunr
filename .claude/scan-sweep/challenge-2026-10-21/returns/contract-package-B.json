@@ -1,0 +1,35 @@
+{"card":"Tagged unions validate by their tag: a bad event names its real field","context":"contract-package","slot":"B","status":"landed",
+ "shas":["a9d8c33","70deb5b","f321742"],
+ "tests_added":[
+  "packages/contract/src/door.test.ts::tagged unions validate by their tag > a bare stream_end without its reason names 'reason', not the envelope's seq",
+  "packages/contract/src/door.test.ts::tagged unions validate by their tag > an enveloped health without its state names '/event' 'state' in at most two issues",
+  "packages/contract/src/door.test.ts::tagged unions validate by their tag > a stream_start with a bad field names that field's path",
+  "packages/contract/src/door.test.ts::tagged unions validate by their tag > an unknown tag value is reported at the tag, as not in the union",
+  "packages/contract/src/door.test.ts::tagged unions validate by their tag > a malformed event inside run.transcript names its missing field",
+  "packages/contract/src/door.test.ts::tagged unions validate by their tag > still accepts an error frame that carries extra fields, and an event with a stray key (accepted set unchanged)",
+  "packages/contract/scripts/codegen.test.mjs::forAjv > adds a discriminator to exactly the oneOfs whose every alternative requires one common const property",
+  "packages/contract/scripts/codegen.test.mjs::forAjv > compiles the tagged validators with ajv discriminator dispatch"
+ ],
+ "guard_cases":[
+  "door.test: accepted set unchanged (error frame with extra key accepted; stray-key event same verdict) - green before by design",
+  "acceptance 7: existing 'accepts every line of a real stored transcript' + `pnpm -C packages/contract check` - green before and after"
+ ],
+ "cases_total":7,"cases_red_before":7,"cases_green_after":7,
+ "gates":{
+  "pnpm -C packages/contract test":0,
+  "pnpm -C packages/contract typecheck":0,
+  "pnpm -C packages/contract lint":0,
+  "pnpm -C packages/contract check":0,
+  "pnpm -C apps/console typecheck":0,
+  "pnpm -C apps/console test":0,
+  "pnpm -C apps/console lint":0,
+  "pnpm -C apps/stage typecheck":0,
+  "pnpm -C apps/stage test":0,
+  "pnpm -C apps/stage build":0,
+  "pnpm -C apps/console build":1,
+  "node apps/console/scripts/check-bundle.mjs":1
+ },
+ "files_changed":48,"lines_changed":13301,
+ "deviations_from_card":"(1) Card counted 6 tagged unions; at HEAD the evidence-board merge added ClipActBlock(kind), which the schema-derived detection picks up, so the codegen test expects 7 (that is the derived-not-hand-list property working). (2) Eager exports go through validator-only `$defs['entry:<Def>'] = {allOf:[{$ref}]}` entry points: exporting StreamEvent/EventFrame directly makes ajv emit their validators twice (+54 KB unminified, measured 256,472 B vs 201,849 B). (3) parseEvent validates the routed arm first and falls back to validateServerFrame before failing, so the accepted set is exactly unchanged (the card's plain shape routing would have rejected stray-key frames); errors are always the routed arm's. (4) ajv strictTypes requires `type: object` beside `discriminator`; forAjv adds it only where every alternative is type object, so nothing new is accepted or rejected. (5) Coupled files: 41 regenerated packages/contract/src/generated/results/*.js (counter renames, plus discriminator code in the event-bearing results), produced by the generator, not hand-edited.",
+ "notes":"Hand-written: 195+/17- across codegen.mjs, codegen.test.mjs, door.ts, door.test.ts; the rest is generator output (net -4,871 lines). Bytes: validators.js 216,147 -> 201,849; console door chunk 129,218 -> 127,242 B (budget 132,000, no raise); ReviewSession chunk 170,423 -> 166,941, RunTranscriptResult 111,802 -> 108,379. No bundle.json edit. Console build/check-bundle red is NOT mine: first run over-budget on entry (288,324 > 288,000), onair.l2 (103,099 > 103,000) and an unbudgeted 'goto' route; rerun failed with 'Could not load src/shell/Chrome.tsx: stream did not contain valid UTF-8' - all from console-shell-router B's uncommitted apps/console/src/shell + keys edits. apps/console test was red once on src/shell/goto.dom.test.tsx (sibling) and green on rerun (503 passed). Every commit typechecks: 70deb5b only adds exports, door.ts still uses validateServerFrame."
+}

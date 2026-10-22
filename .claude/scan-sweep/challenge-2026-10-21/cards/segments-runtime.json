@@ -1,0 +1,122 @@
+[
+  {
+    "context": "segments-runtime",
+    "slot": "A",
+    "lens": "architecture-challenger",
+    "title": "The op menu and the op gate are two rule sets: derive the menu from the gate",
+    "size": "M",
+    "effort": 6,
+    "impact": 8,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-segments/src/runtime.rs",
+      "crates/shadowrunr-segments/tests/runtime.rs",
+      "crates/shadowrunr-segments/tests/op_menu.rs"
+    ],
+    "new_files": [
+      "crates/shadowrunr-segments/tests/op_menu.rs"
+    ],
+    "shared_surfaces": [],
+    "acceptance": [
+      "SEG-01 started in `opening` (no poll, no foil): context().allowed_ops -> excludes close_poll and dismiss_foil, and state_summary has a 'not now:' line naming close_poll (no_such_poll) and dismiss_foil (no_active_foil). Today both are listed, and context_reports_table_and_state pins ctx.allowed_ops == table.allowed_ops",
+      "SEG-01 after an accepted start_poll (state crowd_game) -> allowed_ops excludes start_poll (poll_already_open) and still includes close_poll and summon_foil (crowd_game has a foil_summoned row)",
+      "SEG-01 after `!summon the-disruptor` opens a foil vote (state foil_vote) -> allowed_ops excludes summon_foil (not_in_state: foil_vote has no foil_summoned row) and start_poll",
+      "SEG-01 after the handover fires (state handover_pending) -> allowed_ops excludes start_poll and summon_foil (not_in_state) and includes switch_segment",
+      "Property over the scripted SEG-01 run and the scripted research/Plebiscite run, at every step: for each tag in table.allowed_ops, tag is missing from context().allowed_ops <=> apply_ops of that tag's canonical op is refused with exactly the reason the 'not now' line gives it",
+      "SEG-02A arc with reveal pacing before the slot -> reveal_hex STAYS in allowed_ops (a regrade is never paced; the existing 'attempts stay visible as refusals' assertion keeps passing), and sign_off / switch_segment / dispatch_research withholding is unchanged",
+      "Signed off -> allowed_ops is empty and the 'not now' line is absent (the summary already says the show is over)"
+    ],
+    "premise": [
+      "crates/shadowrunr-segments/src/runtime.rs:2057-2070 - context() builds allowed_ops with its own filter chain: allows_op_in, plus three hand-copied withholdings (dispatch_research while a Plebiscite waits, sign_off before the seal, switch_segment under an arc)",
+      "crates/shadowrunr-segments/src/runtime.rs:1475-1752 - apply_op runs a second, larger rule set: the same three withholdings again (1623-1625 plebiscite_pending, 1718-1720 arc_in_progress, 1743-1744 dossier_not_sealed) plus state-level refusals the menu never applies",
+      "crates/shadowrunr-segments/src/runtime.rs:1499-1502 - start_poll is refused poll_already_open while a poll is open, then not_in_state where the table has no poll_opened row; the menu still lists start_poll in both cases",
+      "crates/shadowrunr-segments/src/runtime.rs:1547-1548 - close_poll with no poll open is refused no_such_poll; the menu lists close_poll with no poll open",
+      "crates/shadowrunr-segments/src/runtime.rs:1556,1565-1568 - summon_foil needs a foil_summoned row and dismiss_foil needs an active foil and a foil_dismissed row; crates/shadowrunr-segments/data/segments/seg-01.toml:108-121 gives foil_summoned rows only from opening, foil_live and crowd_game, so foil_vote and handover_pending advertise summon_foil and refuse it",
+      "crates/shadowrunr-brain/src/compose.rs:743-755 - the brain's prompt lists exactly ctx.allowed_ops under 'Actions, one per line, only these'",
+      "crates/shadowrunr-brain/src/grammar.rs:94-99 - an op whose tag is outside allowed_ops is rejected in the brain (op_not_allowed:<tag>) and never reaches the runtime, so narrowing the menu without a reason line would hide the refusal from the runtime's own REFUSED summary (runtime.rs:445-448, 2505-2516)",
+      "crates/shadowrunr-segments/tests/runtime.rs:1263 - the menu's over-advertising is pinned as a feature: assert_eq!(ctx.allowed_ops, rt.table().allowed_ops)",
+      "crates/shadowrunr-segments/tests/runtime.rs:1584-1586 - reveal_hex is deliberately kept on the menu while pacing refuses fog lifts ('attempts stay visible as refusals'), so the availability rule must be tag-level (argument-independent) only",
+      "crates/shadowrunr-sim/src/sandbox.rs:738 - a third site edits the same menu by hand (sign_off before the goodbye), showing the menu is treated as patchable data rather than a derived view"
+    ],
+    "rollback": "Two commits: (1) tests/op_menu.rs + updated runtime.rs tests (red), (2) the availability() extraction. git revert of (2) restores the hand filter; (1) can be reverted alone. No contract, schema or stored-data change.",
+    "gate": "architecture",
+    "test_command": "cargo test -p shadowrunr-segments && cargo test -p shadowrunr-brain && cargo test -p shadowrunr-sim && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "The 'generic' interpreter still branches on SegmentId::Seg02aHexmap (case_open runtime.rs:659, context hexes runtime.rs:2074) and infers the Plebiscite from allows_op(\"dispatch_research\") (runtime.rs:1364): declare a [case] capability in the table so a third segment does not need runtime edits.",
+    "body": "## Summary\nThe runtime answers 'which ops may the host emit now?' twice. context() tells the brain one answer, and apply_op enforces a different one. The menu the brain reads ('Actions, one per line, only these') lists ops that apply_op will refuse for reasons the menu never checks. It lists start_poll while a poll is open, close_poll with no poll, dismiss_foil with no foil, and summon_foil in states with no foil_summoned row. Three withholding rules are also copied by hand into both places. The fix is one tag-level `availability(tag) -> Result<(), &'static str>` that apply_op calls first and context() filters through. A 'not now' line in the state summary names each withheld tag with its reason, so the refusal stays visible after the brain stops being offered the op.\n\n## Description\nRegistry `show-segment-format-design` / segment-as-state-table: 'An action outside the set is unavailable, not discouraged', and 'when anyone but the runtime shows the table, generate the view from the declaration'. The brain's op menu is such a view, and today it is projected by hand (runtime.rs:2057-2070), apart from the gate it describes (runtime.rs:1475-1752). Concretely, it fails to apply poll_already_open (1499), no_such_poll (1547), no_active_foil (1565) and not_in_state for start_poll / summon_foil / dismiss_foil (1502, 1556, 1568). Its three withholdings are copies of 1623, 1718 and 1743. The technique also says 'when a host action is refused, record why'. Because the brain drops off-menu ops itself (grammar.rs:94-99) and the runtime never sees them, the derived menu must carry its reasons. The summary gains `not now: start_poll (poll_already_open), dismiss_foil (no_active_foil)`, built from the same Result values, so prose and gate cannot disagree.\n\nThe rule is tag-level only, meaning a check that holds for every argument. Argument checks (unknown_hex, reveal_not_due, invalid_poll_options, the fleet_lost sign-off exception) stay in apply_op after the availability call. reveal_hex therefore stays on the menu under pacing, as tests/runtime.rs:1584 intends. The change keeps every refusal reason the runtime emits today. The one visible difference is ordering: a wrong-state summon_foil naming an unknown foil now reports not_in_state before unknown_foil, and the tests pin this.\n\n## Flow\n- write tests/op_menu.rs: the canonical op per tag, then walk the scripted SEG-01 run (poll, foil vote, handover) and the scripted research/Plebiscite run. At each step, assert menu/gate equivalence and the reason line. It fails today in opening, crowd_game, foil_vote and handover_pending\n- update context_reports_table_and_state (runtime.rs test 1263) to the derived menu\n- add `fn availability(&self, tag: &str) -> Result<(), &'static str>` that holds signed_off, op_not_allowed, allows_op_in, the per-tag state and resource checks, and the three withholdings\n- apply_op: `self.availability(op_tag(op))?` first, then argument checks only. Delete the duplicated checks\n- context(): `filter(|o| self.availability(o).is_ok())`. state_summary: a 'not now' line for each Err, omitted when signed off\n\n## Expected impact\nThe host stops being offered moves that cannot happen. The 2026-10-20 3 h case run shows the cost of acting on refused moves: commit 2aa6c08 records 16 refused start_polls, 14 refused close_polls, and a host who 'kept telling chat the polls were open'. Every new op or state rule gets one place to live, and the menu, the gate and the summary line follow it by construction instead of by a third hand edit (sandbox.rs:738 already is one).\n\n## Evaluation\nClaim: for every op tag in every reachable state of the two scripted runs, the advertised menu equals the set of tags the gate would accept, and every withheld tag is named with the gate's reason.\nBefore: 1 of 7 acceptance cases pass (case 6 only: reveal_hex visibility and the three existing withholdings)\nAfter: 7 of 7\nMethod: gate - acceptance tests written first (tests/op_menu.rs plus the updated runtime.rs tests)\nResult: better\nGate: architecture (one rule moves into one function; no wire or contract change)",
+    "evidence": "runtime.rs:2062-2069: `self.table.allowed_ops.iter().filter(|o| self.table.allows_op_in(&self.state, o)).filter(|o| !(withheld && o.as_str() == \"dispatch_research\")).filter(|o| !(unsealed && o.as_str() == \"sign_off\")).filter(|o| !(self.arc.is_some() && o.as_str() == \"switch_segment\"))`. runtime.rs:1499-1502: `if self.poll.is_some() { return Err(\"poll_already_open\"); } self.require_state(Trigger::PollOpened)?;`. runtime.rs:1547-1548: `if !self.poll.as_ref().is_some_and(named) { return Err(\"no_such_poll\"); }`. runtime.rs:1565-1568: `if self.active_foil.is_none() { return Err(\"no_active_foil\"); } self.require_state(Trigger::FoilDismissed)?;`. table.rs:923 test: `assert!(!t.accepts(\"foil_vote\", Trigger::FoilSummoned));`. compose.rs:752: `fmt.push_str(\"Actions, one per line, only these:\\n\");`. grammar.rs:95-98: `if !allowed.iter().any(|a| a == &tag) { return Line::Rejected { rule: format!(\"op_not_allowed:{tag}\"), raw, };`. tests/runtime.rs:1263: `assert_eq!(ctx.allowed_ops, rt.table().allowed_ops);`. git show 2aa6c08: 'The 3 h case run (case-3h-464bbf044e) had 16 start_polls refused as duplicate_poll_id and 14 close_polls as no_such_poll, and Malakor kept telling chat the polls were open.' A grep for allowed_ops outside the segments crate finds consumers only at brain compose.rs:745 and lib.rs:1094, sim sandbox.rs:738 (retain) and runner.rs:1301 (test fake), and daemon catalog.rs (the static table, untouched).",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 5,
+      "reason": "Tight write set, real live-show cost, property test makes a wrong build visible."
+    }
+  },
+  {
+    "context": "segments-runtime",
+    "slot": "B-architecture (no UI surface)",
+    "lens": "architecture-challenger",
+    "title": "Chat commands open per state and every decline says why, not silence",
+    "size": "M",
+    "effort": 7,
+    "impact": 7,
+    "risk": 5,
+    "write_set": [
+      "crates/shadowrunr-segments/src/table.rs",
+      "crates/shadowrunr-segments/src/runtime.rs",
+      "crates/shadowrunr-segments/data/segments/seg-01.toml",
+      "crates/shadowrunr-segments/tests/runtime.rs",
+      "crates/shadowrunr-types/src/catalog.rs",
+      "crates/shadowrunr-daemon/src/catalog.rs",
+      "crates/shadowrunr-daemon/src/e2e/catalog.rs",
+      "packages/contract/schema/",
+      "packages/contract/src/generated/types.ts",
+      "packages/contract/src/generated/validators.js",
+      "apps/console/src/pages/segments/SegmentCard.tsx",
+      "apps/console/src/pages/segments/testgen.ts",
+      "apps/console/src/pages/review/names.ts"
+    ],
+    "new_files": [],
+    "shared_surfaces": [
+      "crates/shadowrunr-types/src/catalog.rs (StateRulesInfo gains optional `commands`)",
+      "packages/contract generated schema/types/validators (regenerated, additive optional field)"
+    ],
+    "acceptance": [
+      "SEG-01, `!hint HEX-01 look` -> one moderation event {stage: input, rule: command_not_in_segment, msg_id: m2, action: ignored} (today: no event; commands_outside_the_segment_are_ignored asserts evs.is_empty())",
+      "SEG-01 in cold_open with `[state_rules.cold_open] commands = [\"propose\"]`, `!summon the-disruptor` -> moderation rule command_closed_in_state, no start_poll, state stays cold_open; `!propose a duel` from a Warlock in cold_open -> accepted as today",
+      "SEG-02A in briefing with no poll open, `!vote HEX-02` -> moderation rule no_open_poll (today: silently dropped at runtime.rs:1198-1200)",
+      "An open poll with options [a, b], `!vote c` -> moderation rule unknown_option (today: silently dropped at runtime.rs:1201-1203)",
+      "SEG-01 crowd_game with a crowd poll open, `!summon the-disruptor` -> moderation rule foil_vote_not_open (today: nothing happens and nothing is recorded)",
+      "Three no_open_poll declines within 60 s -> state_summary contains 'declined lately: !vote x3 (no poll open)', with counts only and no chat text",
+      "A table whose `[state_rules.X] commands` names a command the segment does not list -> SegmentTable::from_toml_str returns Err",
+      "segments.tables (daemon e2e catalog) -> SEG-01 state_rules.cold_open.commands == [\"propose\"], and the console's per-state table renders a Commands column"
+    ],
+    "premise": [
+      "crates/shadowrunr-segments/src/table.rs:245-256 - StateRules narrows allowed_ops, prompt and screens per state, but not commands; table.rs:593-595 allows_command is segment-wide",
+      "registry .ai/registry-map.json segments-runtime x show-segment-format-design is a recorded deviation: 'commands per segment rather than per state' (state: deviation, stale by 1 revision)",
+      "crates/shadowrunr-segments/src/runtime.rs:1163-1165 - a command the segment does not take is dropped with `continue`, and no event is recorded",
+      "crates/shadowrunr-segments/src/runtime.rs:1198-1203 - `!vote` with no poll open, or naming no option, is dropped with `continue`",
+      "crates/shadowrunr-segments/src/runtime.rs:1184-1195 - `!summon` while a crowd poll or a Plebiscite is open, or in a state without a foil_vote_opened row, neither counts nor records anything",
+      "crates/shadowrunr-segments/src/runtime.rs:1169-1177 - the same function already records under-rank and unknown-hex declines as moderation input events with action 'ignored', so the vocabulary exists and only the silent paths skip it",
+      "crates/shadowrunr-segments/tests/runtime.rs:592-603 - the silence is pinned: commands_outside_the_segment_are_ignored asserts evs.is_empty()",
+      "crates/shadowrunr-segments/data/segments/seg-01.toml:78-81 - the cold open's 'no polls, no foils yet' lives only as prompt prose, the technique's 'prose duplicating the table' failure",
+      "crates/shadowrunr-types/src/catalog.rs:177-186 - StateRulesInfo has no commands field; crates/shadowrunr-daemon/src/catalog.rs:436-449 destructures StateRules without `..`, so a new table field cannot compile until the operator view carries it",
+      "apps/console/src/pages/segments/SegmentCard.tsx:209-224 - the per-state table shows Ops, Screens and Rules line only",
+      "packages/stage-kit/src/scene.ts:144-145 - letThrough treats action 'ignored' as let-through, so the broadcast's chat lane is unchanged by the new decline events",
+      "apps/console/src/pages/review/names.ts:137-138,144 - input rules without a mapping fall through to 'Chat filters', so the new rules need 'Show mechanics' labels"
+    ],
+    "rollback": "Three commits: (1) red tests, (2) table + runtime + seg-01.toml, (3) catalog field + contract regen + console column/labels. Reverting (3) then (2) restores today's behaviour. The contract field is optional and additive, and no stored data changes.",
+    "gate": "contract",
+    "test_command": "cargo test -p shadowrunr-segments && cargo test -p shadowrunr-daemon catalog && pnpm -C packages/contract generate && pnpm -C packages/contract check && pnpm -C packages/contract test && pnpm -C apps/console typecheck && pnpm -C apps/console test && pnpm -C apps/console lint && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check",
+    "runner_up": "State changes are invisible: fire() (runtime.rs:931-935) moves the table with no event, and a handover's cause is a free string ('switch_segment op', 'ccv >= ...', runtime.rs:1733/2015-2019). A grace-lapse auto-switch records no cause at all (1993-1997), so the portfolio cannot tell rule from ceiling from host. Typed transition events with a cause, but that needs a new StreamEvent variant across stage-kit reducers.",
+    "body": "## Summary\nAudience commands are opened per segment, not per state, and three of the runtime's decline paths drop a viewer's command silently. A `!vote` with no poll, a `!vote` for a non-option, a `!summon` while another vote runs and any command the segment does not take all leave no record, no reason and nothing the host can acknowledge. Move commands into the per-state rules, the same narrowing ops and screens already have. Route every decline through one command gate that records the existing 'ignored' moderation event with a named rule. Give the host a counts-only 'declined lately' line so the decline can be acknowledged in-world.\n\n## Description\nRegistry `show-segment-format-design` / segment-as-state-table, point 4: 'Open commands per state ... Out-of-state commands are declined with a short, in-world acknowledgement, never silently dropped and never executed'. Its failure mode 'Silent declines' says the audience then concludes the command is broken rather than closed. This repo records the per-state gap as a deviation (registry-map: 'commands per segment rather than per state'), and this card closes that half of it. The table half adds `StateRules.commands: Option<Vec<String>>`, validated as a subset of the segment's commands, plus `allows_command_in(state, name)`. The runtime half replaces the `continue`s at runtime.rs:1163, 1198, 1201 and the silent summon path (1184-1195) with `fn command_gate(&self, &Command) -> Result<(), &'static str>`. Its rules are command_not_in_segment, command_closed_in_state, no_open_poll, unknown_option and foil_vote_not_open. Each Err emits the moderation event the function already builds for under-rank declines (1169-1177). SEG-01's cold-open prose ('no polls, no foils yet') becomes data, `commands = [\"propose\"]`. The state summary gains a rolling 60 s 'declined lately' line, with counts per command and reason and never chat text, which keeps the rule at runtime.rs:2046-2047. The catalog carries the new field: the daemon's no-`..` destructuring forces this, and the console's per-state table gets a Commands column. The operator view therefore never becomes the 'frozen view' the technique warns about.\n\nThis is not a policy loosening. Nothing is executed that was not before, no chat text is stored, and the moderation events carry only msg_id and rule, as the existing declines do.\n\n## Flow\n- red: update commands_outside_the_segment_are_ignored to expect named declines, and add the cases above in tests/runtime.rs and table.rs\n- table.rs: the StateRules.commands field, validation and allows_command_in\n- seg-01.toml: cold_open commands\n- runtime.rs: command_gate, decline events, and the declined-lately tally (pruned like `refused`) with its summary line\n- types catalog.rs + daemon catalog.rs: StateRulesInfo.commands. Regenerate packages/contract\n- console: a Commands column in SegmentCard StateRules, a testgen fixture, and names.ts labels under 'Show mechanics'\n\n## Expected impact\nViewers stop shouting into a void. The host gets an in-world cue ('the vote is not open yet') instead of ignoring a burst of !votes. Review and sim judging can count how often the audience reaches for a closed command, which the technique calls a direction signal. A future per-state narrowing (votes closed during a verdict) becomes one TOML line that the gate, the summary and the operator console all honour.\n\n## Evaluation\nClaim: no chat command reaching ingest_chat is dropped without a recorded, named reason, and commands can be closed per state and seen as closed in the operator catalog.\nBefore: 0 of 8 acceptance cases pass\nAfter: 8 of 8\nMethod: gate - acceptance tests written first\nResult: better\nGate: contract (additive optional StateRulesInfo.commands) + architecture",
+    "evidence": "table.rs:245-256 `pub struct StateRules { allowed_ops: Option<Vec<String>>, prompt: Option<String>, screens: Option<Vec<String>> }`. table.rs:593-595 `pub fn allows_command(&self, name: &str) -> bool { self.commands.iter().any(|c| c == name) }`. runtime.rs:1163-1165 `if !self.table.allows_command(command_name(&cmd)) { continue; }`. runtime.rs:1198-1203 `let Some(p) = self.poll.as_mut() else { continue; }; let Some(i) = p.option_index(&option) else { continue; };`. runtime.rs:1184-1195: summon opens a vote only `if self.poll.is_none() && self.table.accepts(&self.state, Trigger::FoilVoteOpened)` and counts only `filter(|p| p.kind == PollKind::Foil)`, with no else branch. tests/runtime.rs:592-603 `fn commands_outside_the_segment_are_ignored() { ... assert!(evs.is_empty()); }`. The registry-map row for segments-runtime / show-segment-format-design reads state deviation, with evidence 'commands per segment rather than per state ... permits segments without exit handover rules'. scene.ts:145 `return action === \"warned\" || action === \"ignored\" || ...`. names.ts:144 is the fallback `R(stage === \"input\" ? \"Chat filters\" : \"Other\", human(rule), human(action))`.",
+    "critic": {
+      "verdict": "build",
+      "ambition": 4,
+      "grounding": 5,
+      "falsifiability": 4,
+      "reason": "Fixes a known deviation with silent-drop evidence and concrete red-first cases."
+    }
+  }
+]

@@ -1,0 +1,17 @@
+{"card":"Directives are judged per report but never shown: put held/broken beside each","context":"console-reconcile-page","slot":"B","status":"landed",
+ "shas":["5606b92"],
+ "tests_added":[
+  "apps/console/src/pages/reconcile/model.test.ts::directive outcomes > indexes a report's outcomes by directive id, and nothing for a report without them",
+  "apps/console/src/pages/reconcile/model.test.ts::directive outcomes > orders worst first: broken, ignored, unmeasured, attempted, held",
+  "apps/console/src/pages/reconcile/model.test.ts::directive outcomes > counts k of n from the rate and marks a small sample with the caution rule",
+  "apps/console/src/pages/reconcile/model.test.ts::directive outcomes > tones a broken directive as a failure and a held one as ok",
+  "apps/console/src/pages/reconcile/outcomes.test.tsx::reconcile/report: the Lord's directives > lists the Lord's directives worst first, each by its directive.list text or as retired",
+  "apps/console/src/pages/reconcile/outcomes.test.tsx::reconcile/directives: outcomes > puts each directive's judged outcome beside it, from the report on show",
+  "apps/console/src/pages/reconcile/outcomes.test.tsx::reconcile/directives: outcomes > filters to the directives the character broke, each still with its Deactivate",
+  "apps/console/src/pages/reconcile/outcomes.test.tsx::reconcile/directives: outcomes > shows a dash for the outcome when no report is stored, and no error"],
+ "guard_cases":["layer2.test.tsx 'lists, adds and deactivates directives over RPC'","layer2.test.tsx 'virtualises 2,000 directives'","layer2.test.tsx 'holds its DOM at 10x' (report section adds nothing when the report has no directives field)"],
+ "cases_total":8,"cases_red_before":8,"cases_green_after":8,
+ "gates":{"pnpm -C apps/console test -- src/pages/reconcile (whole console suite, 616 passed)":0,"pnpm -C apps/console typecheck":0,"pnpm -C apps/console lint":0,"pnpm -C apps/console build":1},
+ "files_changed":8,"lines_changed":420,
+ "deviations_from_card":"New mount tests live in a new coupled file outcomes.test.tsx instead of layer2.test.tsx: adding them there pushed it to 480 lines and failed lint's check-size (limit 400). Bound printed as '95% 15%-85%' (percent, RateBar style). Small-sample mark is a muted Chip (no new CSS) to keep reconcile.l2 css under its 26,800 B line; Layer2.module.css gains one rule (.outcome). DirectivesPage reads reconcile.report via useReportId + useRpc directly (useReport would also fetch plan.proposals, an RPC the tab does not need); same query key, so cached with the Report tab.",
+ "notes":"build rc=1 ONLY on check-bundle 'entry: js 294162 B > budget 291500 B', re-run after ~60s still red. Not mine: my strings ('Not judged in', 'retired directive') land only in the Layer2 lazy chunk; entry growth coincides with the uncommitted console-data-layer work in apps/console/src/data (mutations.ts etc). reconcile.l2 measured 85.3 KiB js / 26.1 KiB css, under its lines; no budget raised. Earlier, sibling data-layer files also made typecheck/lint/tests red transiently; they were green on the final runs."}
