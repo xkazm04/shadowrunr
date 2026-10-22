@@ -138,12 +138,12 @@ class Warm(unittest.TestCase):
     def test_a_test_binary_or_an_explicit_process_is_the_binary(self) -> None:
         message, _, _, warm = hello(self.settings(command=FAKE))
         self.assertIsNone(warm)
-        self.assertTrue(message["reason"].endswith("engine: process"))
+        self.assertIn("; engine: process; plus (", message["reason"])
         message, _, _, warm = hello(
             self.settings(command=FAKE, engine="process", warm_command=FAKE_WARM)
         )
         self.assertIsNone(warm)
-        self.assertTrue(message["reason"].endswith("engine: process"))
+        self.assertIn("; engine: process; plus (", message["reason"])
 
     def test_a_warm_engine_that_will_not_load_falls_back_or_is_dead_when_demanded(self) -> None:
         with mock.patch.dict(os.environ, {"FAKE_WARM_LOAD": "fail"}):

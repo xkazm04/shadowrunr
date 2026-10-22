@@ -6,7 +6,8 @@ time out), ``PAUSE<n>`` sleeps ``n`` tenths of a second. Otherwise it writes ``0
 per word at 24 kHz and, with ``--debug=1``, prints one token line. Every run appends its text to
 the file named by ``FAKE_ENGINE_LOG``, so a test can see which sentences were started; with
 ``FAKE_ENGINE_SPANS`` it also appends ``start <text>`` and ``end <text>`` around its work there,
-so a test can see which runs overlapped. ``HOLD<NAME>`` (capital letters) holds the run after its
+so a test can see which runs overlapped. ``FAKE_ENGINE_ARGS`` gets ``<sid> <speed or -> <text>``
+per run, so a test can see the voice and speed each sentence was asked for. ``HOLD<NAME>`` (capital letters) holds the run after its
 ``start`` line until a file ``<NAME>`` exists in the folder named by ``FAKE_ENGINE_GATES`` - an event
 the test controls, so which runs overlap and which ends first never rests on the clock. A gate that
 never opens fails the run after ``GATE_WAIT_S``.
@@ -80,6 +81,9 @@ def main(argv: list[str]) -> int:
     log = os.environ.get("FAKE_ENGINE_LOG")
     if log:
         note(log, text.strip())
+    asked = os.environ.get("FAKE_ENGINE_ARGS")
+    if asked:
+        note(asked, f"{flags.get('--sid')} {flags.get('--speed', '-')} {text.strip()}")
     spans = os.environ.get("FAKE_ENGINE_SPANS")
     if spans:
         note(spans, f"start {text.strip()}")

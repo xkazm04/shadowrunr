@@ -7,7 +7,8 @@ voices, tokens, espeak-ng data, the US-English lexicon when present).
 
 **The arguments** are the ones Personas and athena run: ``--kokoro-model``, ``--kokoro-voices``,
 ``--kokoro-tokens``, ``--kokoro-data-dir``, ``--kokoro-lexicon`` when present,
-``--num-threads`` (the pool's share of the cores), ``--sid``, ``--output-filename``, then the text. No shell, ever: the text is
+``--num-threads`` (the pool's share of the cores), ``--sid``, ``--speed`` only for a line with a
+delivery (:mod:`.plus`), ``--output-filename``, then the text. No shell, ever: the text is
 one argument in a list, so nothing a model wrote can become a command. On Windows the run carries
 ``CREATE_NO_WINDOW``.
 
@@ -42,6 +43,7 @@ __all__ = [
     "FACE_ARGS",
     "NORMAL_PRIORITY_CLASS",
     "SAMPLE_RATE",
+    "SPEAKER_BYTES",
     "EngineError",
     "KokoroPaths",
     "Render",
@@ -258,9 +260,10 @@ def build_args(
     code_page: int | None = ANSI_CODE_PAGE,
     extra: Sequence[str] = (),
     threads: int = 2,
+    speed: float | None = None,
 ) -> list[str]:
     """The engine's flags, text last and positional. No executable. ``extra`` goes just before
-    the text: :data:`FACE_ARGS` when visemes are on."""
+    the text: :data:`FACE_ARGS` when visemes are on. ``speed`` is left out when ``None``."""
     args = [
         f"--kokoro-model={paths.model}",
         f"--kokoro-voices={paths.voices}",
@@ -272,6 +275,7 @@ def build_args(
     args += [
         f"--num-threads={max(threads, 1)}",
         f"--sid={sid}",
+        *([f"--speed={speed:g}"] if speed is not None else []),
         f"--output-filename={output}",
         *extra,
         spoken_entry(text, code_page),
@@ -390,6 +394,8 @@ class Render:
     threads: int = 2
     urgent: bool = True
     on_done: Callable[[Render], None] | None = None
+    #: The engine's speed (a line with a delivery); ``None`` leaves the flag out.
+    speed: float | None = None
     sample_rate: int = SAMPLE_RATE
     result: Rendered | None = None
     error: EngineError | None = None
@@ -464,6 +470,7 @@ class Render:
                     self.sentence,
                     extra=FACE_ARGS if self.faced else (),
                     threads=self.threads,
+                    speed=self.speed,
                 ),
             ]
             with self.lock:
