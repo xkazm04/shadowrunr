@@ -1,0 +1,131 @@
+{
+  "schema": "conform-run/1",
+  "worker": "8c3ca4ae-222c-444f-8bc3-bb9b56c0b273",
+  "subject": "measurement-honesty",
+  "evaluatedAt": "2026-10-22T00:29:49.176932+00:00",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "pairs": [
+    {
+      "context": "console-reconcile-page",
+      "subject": "measurement-honesty",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "apps/console/src/pages/reconcile/model.ts:66 The caution text treats successful judge calls as the total and can claim every call errored despite successful calls, contradicting the published counts.",
+      "techniques": [
+        {
+          "technique": "co-published-numbers-must-reconcile",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/model.ts:65 Calls counts successes, so comparing errors against that count cannot establish that all calls errored; four successes and four errors trigger the false headline."
+        },
+        {
+          "technique": "control-failure-is-not-a-datum-state",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/ReportPage.tsx:172 The page displays per-tone findings without calculating a controlled A/B contrast or handling a recorded failed control."
+        },
+        {
+          "technique": "incomplete-not-verdict",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/Layer1.tsx:27 At the page acquisition boundary, absent report data produces no triptych values, and an unanswered proposal query leaves its count absent instead of inventing zero."
+        },
+        {
+          "technique": "lower-bound-disclosure",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/Incidents.tsx:101 The tally is explicitly scoped to logged report incidents, with separate pagination totals, rather than claiming external reach or usage."
+        },
+        {
+          "technique": "minimum-sample-floors",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/ReportPage.tsx:181 Every present quality rate renders as a percentage regardless of n; small-sample warnings elsewhere do not implement the required refusal."
+        },
+        {
+          "technique": "noise-band-and-hysteresis",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/CountUp.tsx:29 The animation interpolates a snapshot count; the page does not announce metric deltas or maintain metric-based classification transitions."
+        },
+        {
+          "technique": "renormalize-over-present",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/ReportPage.tsx:131 The SES mean is displayed beside total runs without showing ses_n or the observed fraction when some segment ends lack SES."
+        },
+        {
+          "technique": "the-baseline-is-the-untouched-path",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/DiffView.tsx:20 The diff view presents proposed edits without publishing measured savings or reductions attributable to them."
+        },
+        {
+          "technique": "tuning-corpus-disjointness",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/PlanPage.tsx:106 The page submits selected future plan options; it does not fit an artifact against a corpus or publish a subsequent benchmark measurement."
+        },
+        {
+          "technique": "unelidable-measurement",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/CountUp.tsx:28 Elapsed time drives visual animation rather than measuring the computational cost of hosted work."
+        },
+        {
+          "technique": "unmeasurable-vs-zero",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/DirectiveOutcomes.tsx:33 An absent directive rate receives a no-judgment explanation, while a measured zero remains a distinct k-of-n result."
+        }
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "measurement-honesty",
+      "context": "reconcile-engine",
+      "reason": "withdrawn after review: reviewer (sonnet): stats.rs:10 returns None for n=0 and every Rate carries n and a Wilson or rule-of-three bound, so it is not an unbounded percentage. I also could not confirm in runs.rs that malformed lines let explicitly selected runs reach normal analysis with an empty measured set."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-22T00:29:49.176932+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "measurement-honesty"
+      ],
+      "techniques": [
+        "co-published-numbers-must-reconcile",
+        "control-failure-is-not-a-datum-state",
+        "incomplete-not-verdict",
+        "lower-bound-disclosure",
+        "minimum-sample-floors",
+        "noise-band-and-hysteresis",
+        "renormalize-over-present",
+        "the-baseline-is-the-untouched-path",
+        "tuning-corpus-disjointness",
+        "unelidable-measurement",
+        "unmeasurable-vs-zero"
+      ],
+      "deviations": 1,
+      "context": "reconcile-engine",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "ts": "2026-10-22T00:29:49.176932+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "measurement-honesty"
+      ],
+      "techniques": [
+        "co-published-numbers-must-reconcile",
+        "control-failure-is-not-a-datum-state",
+        "incomplete-not-verdict",
+        "lower-bound-disclosure",
+        "minimum-sample-floors",
+        "noise-band-and-hysteresis",
+        "renormalize-over-present",
+        "the-baseline-is-the-untouched-path",
+        "tuning-corpus-disjointness",
+        "unelidable-measurement",
+        "unmeasurable-vs-zero"
+      ],
+      "deviations": 1,
+      "context": "console-reconcile-page",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}

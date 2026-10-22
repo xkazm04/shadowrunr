@@ -2556,6 +2556,143 @@
           "evidence": "apps/stage/src/voice/webaudio.ts:42 This RMS-derived mouth-animation level is not a speech-quality estimator or an identity acceptance score."
         }
       ]
+    },
+    "ce601bf6-a98a-465f-8f19-3143e6483f8d/measurement-honesty": {
+      "context": "reconcile-engine",
+      "subject": "measurement-honesty",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T00:29:49.176Z",
+      "techniques": [
+        {
+          "technique": "co-published-numbers-must-reconcile",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/lib.rs:307 Nonempty model summaries are published beside deterministic tables without checking their numerical claims against those tables."
+        },
+        {
+          "technique": "control-failure-is-not-a-datum-state",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/src/metrics.rs:276 This path reports grouped measurements, without computing a controlled contrast or receiving a recorded failed experimental control."
+        },
+        {
+          "technique": "incomplete-not-verdict",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/runs.rs:118 Malformed transcript lines become absent events without an acquisition error or completeness refusal; explicitly selected runs can consequently reach normal analysis with an empty measured set."
+        },
+        {
+          "technique": "lower-bound-disclosure",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/src/lib.rs:784 These counts describe supplied simulation records, rather than external reach, usage, ambiguous ladder levels, or unexplained cross-environment effect sizes."
+        },
+        {
+          "technique": "minimum-sample-floors",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/stats.rs:11 The delegated bound function rejects only n=0; rates for n=1 or n=2 remain publishable, without a justified minimum sample floor."
+        },
+        {
+          "technique": "noise-band-and-hysteresis",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/src/lib.rs:780 The analyzer reports a snapshot of stored inputs and does not announce metric changes or maintain classifications across successive reports."
+        },
+        {
+          "technique": "renormalize-over-present",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/metrics.rs:251 Polls without a known positive audience are excluded from the mean, but the result exposes only total polls, without the observed participation count or coverage fraction."
+        },
+        {
+          "technique": "the-baseline-is-the-untouched-path",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/src/budget.rs:41 The estimator sizes prompt capacity; this context does not publish intervention savings against a constructed or untouched control arm."
+        },
+        {
+          "technique": "tuning-corpus-disjointness",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/src/synth.rs:356 This context proposes future changes from existing runs; it does not fit an artifact and then publish its performance on a chosen benchmark corpus."
+        },
+        {
+          "technique": "unelidable-measurement",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/src/metrics.rs:432 This code aggregates recorded durations rather than hosting work inside a cost-measurement harness."
+        },
+        {
+          "technique": "unmeasurable-vs-zero",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/runs.rs:145 The optional JSON reader suppresses read and parse errors, collapsing missing and failed verdict acquisition into the same None without a cause."
+        }
+      ],
+      "withdrawn": {
+        "worker": "8c3ca4ae-222c-444f-8bc3-bb9b56c0b273",
+        "state": "deviation",
+        "at": "2026-10-22T00:30:10.948734+00:00",
+        "reason": "reviewer (sonnet): stats.rs:10 returns None for n=0 and every Rate carries n and a Wilson or rule-of-three bound, so it is not an unbounded percentage. I also could not confirm in runs.rs that malformed lines let explicitly selected runs reach normal analysis with an empty measured set."
+      }
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/measurement-honesty": {
+      "context": "console-reconcile-page",
+      "subject": "measurement-honesty",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T00:29:49.176Z",
+      "worker": "8c3ca4ae-222c-444f-8bc3-bb9b56c0b273",
+      "techniques": [
+        {
+          "technique": "co-published-numbers-must-reconcile",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/model.ts:65 Calls counts successes, so comparing errors against that count cannot establish that all calls errored; four successes and four errors trigger the false headline."
+        },
+        {
+          "technique": "control-failure-is-not-a-datum-state",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/ReportPage.tsx:172 The page displays per-tone findings without calculating a controlled A/B contrast or handling a recorded failed control."
+        },
+        {
+          "technique": "incomplete-not-verdict",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/Layer1.tsx:27 At the page acquisition boundary, absent report data produces no triptych values, and an unanswered proposal query leaves its count absent instead of inventing zero."
+        },
+        {
+          "technique": "lower-bound-disclosure",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/Incidents.tsx:101 The tally is explicitly scoped to logged report incidents, with separate pagination totals, rather than claiming external reach or usage."
+        },
+        {
+          "technique": "minimum-sample-floors",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/ReportPage.tsx:181 Every present quality rate renders as a percentage regardless of n; small-sample warnings elsewhere do not implement the required refusal."
+        },
+        {
+          "technique": "noise-band-and-hysteresis",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/CountUp.tsx:29 The animation interpolates a snapshot count; the page does not announce metric deltas or maintain metric-based classification transitions."
+        },
+        {
+          "technique": "renormalize-over-present",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/ReportPage.tsx:131 The SES mean is displayed beside total runs without showing ses_n or the observed fraction when some segment ends lack SES."
+        },
+        {
+          "technique": "the-baseline-is-the-untouched-path",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/DiffView.tsx:20 The diff view presents proposed edits without publishing measured savings or reductions attributable to them."
+        },
+        {
+          "technique": "tuning-corpus-disjointness",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/PlanPage.tsx:106 The page submits selected future plan options; it does not fit an artifact against a corpus or publish a subsequent benchmark measurement."
+        },
+        {
+          "technique": "unelidable-measurement",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/CountUp.tsx:28 Elapsed time drives visual animation rather than measuring the computational cost of hosted work."
+        },
+        {
+          "technique": "unmeasurable-vs-zero",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/DirectiveOutcomes.tsx:33 An absent directive rate receives a no-judgment explanation, while a measured zero remains a distinct k-of-n result."
+        }
+      ]
     }
   }
 }

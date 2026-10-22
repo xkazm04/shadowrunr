@@ -1881,7 +1881,11 @@
           "revision": 11,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/model.ts:66 The caution text treats successful judge calls as the total and can claim every call errored despite successful calls, contradicting the published counts.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:b702c58e785c6c51",
+          "evaluatedRevision": 11
         },
         {
           "subject": "quality-gates",
