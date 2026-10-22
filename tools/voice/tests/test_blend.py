@@ -4,13 +4,16 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import struct
 import tempfile
 import unittest
 from array import array
 from pathlib import Path
+from unittest import mock
 
+from shadowrunr_voice import blend
 from shadowrunr_voice.blend import (
     KOKORO_V1_SPEAKERS,
     ROW_FLOATS,
@@ -20,6 +23,7 @@ from shadowrunr_voice.blend import (
     assign_slots,
     blend_rows,
     build,
+    default_out,
     load_recipes,
     sid_of,
 )
@@ -187,6 +191,23 @@ class Build(unittest.TestCase):
         for b in blends:
             self.assertAlmostEqual(sum(w for _, w in b.weights), 1.0)
             self.assertNotEqual(b.sid, STOCK_SID)
+        # Malakor's package speaks malakor-a from sid 52: the recipe must keep putting it there.
+        picked = next(b for b in blends if b.name == "malakor-a")
+        self.assertEqual((picked.sid, picked.recipe()), (52, {"am_onyx": 0.6, "bm_lewis": 0.4}))
+
+    def test_without_out_the_file_goes_to_the_voices_folder_by_the_recipe_s_name(self) -> None:
+        folder = self.dir / "home-voices"
+        self.assertEqual(default_out(self.recipe, folder), folder / "malakor-voices.bin")
+        with (
+            mock.patch.object(blend, "VOICES_DIR", folder),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as printed,
+        ):
+            code = blend.main(["--voices", str(self.stock), "--recipe", str(self.recipe)])
+        self.assertEqual(code, 0)
+        self.assertTrue((folder / "malakor-voices.bin").is_file())
+        self.assertTrue((folder / "malakor-voices.bin.json").is_file())
+        self.assertIn("wrote malakor-voices.bin, sha256 ", printed.getvalue())
+        self.assertNotIn(str(folder), printed.getvalue())
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
+use shadowrunr_types::character::VoiceFx;
 
 pub use avatar::avatar_handler;
 pub use service::VoiceHub;
@@ -63,6 +64,17 @@ pub struct VoiceConfig {
     /// The voice id and its verified speaker id (`af_heart` is sid 3 of kokoro-multi-lang-v1_0).
     pub voice: String,
     pub sid: u32,
+    /// The voices file `sid` is read from (`--voices`): a name in `voices_dir`, or a path.
+    /// Absent: the model's own `kokoro/voices.bin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voices_file: Option<String>,
+    /// Where a `voices_file` name is looked for. Absent: `~/.shadowrunr/voices`, where
+    /// `python -m shadowrunr_voice.blend` writes by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voices_dir: Option<String>,
+    /// The effect chain over each sentence (`--fx`). Absent: none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fx: Option<VoiceFx>,
     /// Lines waiting to render, at most; the oldest is skipped (`queue_full`) past it.
     pub max_queue: usize,
     /// A line whose first audio would start later than this after its `say` is skipped (`late`).
@@ -89,6 +101,9 @@ impl Default for VoiceConfig {
             durations_model: None,
             voice: "af_heart".into(),
             sid: 3,
+            voices_file: None,
+            voices_dir: None,
+            fx: None,
             max_queue: 6,
             max_lag_ms: 15_000,
             render_timeout_ms: 30_000,
@@ -105,8 +120,37 @@ impl VoiceConfig {
         self.sidecar = resolve(root, &self.sidecar);
         self.engine_dir = self.engine_dir.map(|p| resolve(root, &p));
         self.durations_model = self.durations_model.map(|p| resolve(root, &p));
+        self.voices_dir = self.voices_dir.map(|p| match home_relative(&p) {
+            Some(home) => home.to_string_lossy().into_owned(),
+            None => resolve(root, &p),
+        });
         self
     }
+
+    /// The voices file the sidecar reads: `voices_file` as a path when it is absolute, else in
+    /// `voices_dir` (else `~/.shadowrunr/voices`). `None` is the model's own.
+    pub fn voices_path(&self) -> Option<PathBuf> {
+        let file = self.voices_file.as_deref()?;
+        if Path::new(file).is_absolute() {
+            return Some(PathBuf::from(file));
+        }
+        let dir = match &self.voices_dir {
+            Some(d) => PathBuf::from(d),
+            None => default_voices_dir()?,
+        };
+        Some(dir.join(file))
+    }
+}
+
+/// `~/<rest>` under the home directory; `None` for any other path.
+fn home_relative(p: &str) -> Option<PathBuf> {
+    let rest = p.strip_prefix("~/").or_else(|| p.strip_prefix("~\\"))?;
+    crate::integrations::settings::home_dir().map(|h| h.join(rest))
+}
+
+/// `~/.shadowrunr/voices`: where `python -m shadowrunr_voice.blend` writes by default.
+pub fn default_voices_dir() -> Option<PathBuf> {
+    crate::integrations::settings::home_dir().map(|h| h.join(".shadowrunr").join("voices"))
 }
 
 fn resolve(root: &Path, p: &str) -> String {

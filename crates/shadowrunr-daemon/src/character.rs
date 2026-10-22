@@ -290,6 +290,12 @@ pub fn voice_for(base: &VoiceConfig, m: Option<&CharacterManifest>) -> VoiceConf
         if let Some(sid) = cv.sid {
             v.sid = sid;
         }
+        if let Some(file) = &cv.voices_file {
+            v.voices_file = Some(file.clone());
+        }
+        if let Some(fx) = cv.fx {
+            v.fx = Some(fx);
+        }
     }
     v
 }
@@ -330,6 +336,7 @@ pub fn rig_dir(data: &Path, character: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shadowrunr_types::character::VoiceFx;
 
     fn repo() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
@@ -587,6 +594,34 @@ mod tests {
         assert_eq!((v.voice.as_str(), v.sid), (base.voice.as_str(), 7));
         assert_eq!(v.max_queue, base.max_queue);
         assert_eq!(voice_for(&base, None).sid, base.sid);
+        assert_eq!((v.voices_file.as_deref(), v.fx), (None, None));
+        let blended: CharacterManifest = toml::from_str(
+            "id = \"k\"\nname = \"K\"\ndefault_tone = \"calm\"\n[voice]\nvoice = \"k-a\"\nsid = 52\n\
+             voices_file = \"k-voices.bin\"\nfx = \"light\"\n",
+        )
+        .unwrap();
+        let mine = VoiceConfig {
+            voices_dir: Some("V".into()),
+            fx: Some(VoiceFx::Heavy),
+            ..VoiceConfig::default()
+        };
+        let v = voice_for(&mine, Some(&blended));
+        assert_eq!(
+            (v.voice.as_str(), v.sid, v.voices_file.as_deref(), v.fx),
+            ("k-a", 52, Some("k-voices.bin"), Some(VoiceFx::Light))
+        );
+        assert_eq!(
+            v.voices_dir.as_deref(),
+            Some("V"),
+            "the folder is the machine's"
+        );
+        assert!(
+            toml::from_str::<CharacterManifest>(
+                "id = \"k\"\nname = \"K\"\ndefault_tone = \"calm\"\n[voice]\nfx = \"loud\"\n"
+            )
+            .is_err(),
+            "an fx that is not a preset is refused"
+        );
         assert_eq!(face_for(FaceVariant::Cut, Some(&m)), FaceVariant::Depth);
         assert_eq!(face_for(FaceVariant::Glow, None), FaceVariant::Glow);
         let odd: CharacterManifest = toml::from_str(

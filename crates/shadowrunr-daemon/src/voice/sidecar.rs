@@ -5,7 +5,11 @@
 //!   `degraded` with the file's name, and nothing is retried (the config has to change). A
 //!   missing binary is left to the `hello`: only a warm engine speaks without it
 //!   (`probe::hello_state`).
-//! - The process is `starting` until its `hello`, then `ready` (with or without mouth shapes).
+//! - The process is `starting` until its `hello`, then `ready` (with or without mouth shapes),
+//!   its reason led by the voice the hello names: `malakor-a (sid 52), fx light`. A hello whose
+//!   reason names no engine in use is a voice that cannot speak (its voices file is missing or
+//!   the wrong size, its FX chain cannot run): `degraded` with that reason, and nothing is
+//!   retried, as for missing Kokoro files. It never falls back to another voice.
 //! - When it exits, every line in flight fails from the part it reached, the state is
 //!   `degraded` with the exit status and the last stderr line, and it restarts with backoff:
 //!   1 s, doubling to 60 s, and at most [`MAX_RESTARTS`] restarts in any [`RESTART_WINDOW`].
@@ -46,6 +50,9 @@ const HELLO_TIMEOUT: Duration = Duration::from_secs(120);
 pub const STOP_GRACE: Duration = Duration::from_secs(2);
 /// Stderr lines kept for the exit reason.
 const STDERR_TAIL: usize = 5;
+/// What every `hello` reason of a voice that speaks names: `engine: warm (...)` or
+/// `engine: process ...`.
+const ENGINE_IN_USE: &str = "engine: ";
 
 /// Lines the sidecar writes.
 #[derive(Debug, Deserialize)]
@@ -57,6 +64,8 @@ enum SidecarLine {
         visemes: bool,
         #[serde(default)]
         reason: Option<String>,
+        #[serde(flatten)]
+        voice: HelloVoice,
     },
     Audio {
         id: String,
@@ -76,6 +85,36 @@ enum SidecarLine {
         #[serde(default)]
         reason: String,
     },
+}
+
+/// The voice a `hello` says it speaks; a sidecar from before `sid` (and `voices`, `fx`) gets no
+/// label.
+#[derive(Debug, Default, Deserialize)]
+struct HelloVoice {
+    #[serde(default)]
+    voice: Option<String>,
+    /// The voices file's name (never its path).
+    #[serde(default)]
+    voices: Option<String>,
+    #[serde(default)]
+    sid: Option<u32>,
+    #[serde(default)]
+    fx: Option<String>,
+}
+
+impl HelloVoice {
+    /// `malakor-a (sid 52), fx light`: the FX left out when there is none, and `, voices
+    /// <file>` added when the file is not the model's own.
+    fn label(&self) -> Option<String> {
+        let mut out = format!("{} (sid {})", self.voice.as_deref()?, self.sid?);
+        if let Some(fx) = self.fx.as_deref().filter(|f| *f != "none") {
+            out.push_str(&format!(", fx {fx}"));
+        }
+        if let Some(file) = self.voices.as_deref().filter(|f| *f != "voices.bin") {
+            out.push_str(&format!(", voices {file}"));
+        }
+        Some(out)
+    }
 }
 
 /// `[[v, start_ms, end_ms]]` as spans; an unknown shape is dropped, not the sentence.
@@ -102,11 +141,19 @@ pub fn sidecar_args(cfg: &VoiceConfig) -> Vec<String> {
     if let Some(d) = &cfg.durations_model {
         a.extend(["--durations".into(), d.clone()]);
     }
+    if let Some(v) = cfg.voices_path() {
+        a.extend(["--voices".into(), v.to_string_lossy().into_owned()]);
+    }
     a.extend([
         "--sid".into(),
         cfg.sid.to_string(),
         "--voice".into(),
         cfg.voice.clone(),
+    ]);
+    if let Some(fx) = cfg.fx {
+        a.extend(["--fx".into(), fx.as_str().into()]);
+    }
+    a.extend([
         "--render-timeout-ms".into(),
         cfg.render_timeout_ms.to_string(),
         "--workers".into(),
@@ -376,7 +423,8 @@ impl SidecarRenderer {
         }
     }
 
-    /// Handle one stdout line. Ok(true) on `hello`; Err for a protocol this daemon cannot speak.
+    /// Handle one stdout line. Ok(true) on `hello`; Err for a protocol this daemon cannot speak,
+    /// or a voice that cannot speak at all.
     fn on_line(&self, line: &str, hello: &mut bool) -> Result<bool, String> {
         let msg: SidecarLine = match serde_json::from_str(line) {
             Ok(m) => m,
@@ -391,12 +439,24 @@ impl SidecarRenderer {
                 protocol,
                 visemes,
                 reason,
+                voice,
             } => {
                 if protocol != PROTOCOL {
                     return Err(format!(
                         "the voice sidecar speaks protocol {protocol}; this daemon speaks {PROTOCOL}"
                     ));
                 }
+                let label = voice.label();
+                if let Some(dead) = reason.as_deref().filter(|r| !r.contains(ENGINE_IN_USE)) {
+                    return Err(match label {
+                        Some(l) => format!("{l}: {dead}"),
+                        None => dead.to_string(),
+                    });
+                }
+                let reason = match (label, reason) {
+                    (Some(l), Some(r)) => Some(format!("{l}; {r}")),
+                    (l, r) => r.or(l),
+                };
                 *hello = true;
                 self.state
                     .send_replace(probe::hello_state(&self.cfg, visemes, reason));
@@ -489,6 +549,7 @@ impl Renderer for SidecarRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shadowrunr_types::character::VoiceFx;
 
     fn renderer() -> SidecarRenderer {
         SidecarRenderer {
@@ -524,6 +585,85 @@ mod tests {
         assert!(sidecar_args(&pinned)
             .join(" ")
             .ends_with("--workers 1 --threads 2"));
+    }
+
+    #[test]
+    fn the_voices_file_and_the_fx_are_arguments() {
+        let cfg = VoiceConfig {
+            voice: "malakor-a".into(),
+            sid: 52,
+            voices_file: Some("malakor-voices.bin".into()),
+            voices_dir: Some("V".into()),
+            fx: Some(VoiceFx::Light),
+            ..VoiceConfig::default()
+        };
+        let voices = Path::new("V").join("malakor-voices.bin");
+        assert_eq!(
+            sidecar_args(&cfg).join(" "),
+            format!(
+                "-m shadowrunr_voice --voices {} --sid 52 --voice malakor-a --fx light \
+                 --render-timeout-ms 30000 --workers 3",
+                voices.display()
+            )
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let own = dir.path().join("mine.bin");
+        let absolute = VoiceConfig {
+            voices_file: Some(own.to_string_lossy().into_owned()),
+            ..cfg.clone()
+        };
+        assert_eq!(
+            absolute.voices_path(),
+            Some(own),
+            "a path is taken as it is"
+        );
+        let home = VoiceConfig {
+            voices_dir: None,
+            ..cfg
+        };
+        if let Some(d) = super::super::default_voices_dir() {
+            assert_eq!(home.voices_path(), Some(d.join("malakor-voices.bin")));
+        }
+        assert_eq!(VoiceConfig::default().voices_path(), None);
+    }
+
+    #[test]
+    fn the_hello_names_the_voice_and_a_voice_that_cannot_speak_is_fatal() {
+        let r = renderer();
+        let mut hello = false;
+        assert_eq!(
+            r.on_line(r#"{"type":"hello","protocol":1,"voice":"malakor-a","voices":"malakor-voices.bin","sid":52,"fx":"light","sample_rate":24000,"visemes":true,"reason":"engine: warm (3 workers loaded in 4.1 s)"}"#, &mut hello),
+            Ok(true)
+        );
+        assert_eq!(
+            *r.state.borrow(),
+            RendererState::Ready {
+                visemes: true,
+                reason: Some(
+                    "malakor-a (sid 52), fx light, voices malakor-voices.bin; engine: warm (3 \
+                     workers loaded in 4.1 s)"
+                        .into()
+                )
+            }
+        );
+        r.on_line(r#"{"type":"hello","protocol":1,"voice":"af_heart","voices":"voices.bin","sid":3,"fx":"none","sample_rate":24000,"visemes":true,"reason":"engine: warm (3 workers loaded in 2.0 s)"}"#, &mut hello).unwrap();
+        assert_eq!(
+            *r.state.borrow(),
+            RendererState::Ready {
+                visemes: true,
+                reason: Some("af_heart (sid 3); engine: warm (3 workers loaded in 2.0 s)".into())
+            }
+        );
+        let mut dead = false;
+        assert_eq!(
+            r.on_line(r#"{"type":"hello","protocol":1,"voice":"malakor-a","voices":"malakor-voices.bin","sid":52,"fx":"light","sample_rate":24000,"visemes":false,"reason":"the voices file malakor-voices.bin is missing"}"#, &mut dead),
+            Err(
+                "malakor-a (sid 52), fx light, voices malakor-voices.bin: the voices file \
+                 malakor-voices.bin is missing"
+                    .into()
+            )
+        );
+        assert!(!dead, "a voice that cannot speak never counts as healthy");
     }
 
     #[test]

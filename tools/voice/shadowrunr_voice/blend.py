@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """An original voice for Malakor: stock Kokoro voices (Apache-2.0) mixed by weight, no cloning.
 
-``python -m shadowrunr_voice.blend --voices <stock voices.bin> --recipe <recipe.toml> --out <file>``
+``python -m shadowrunr_voice.blend --voices <stock voices.bin> --recipe <recipe.toml>``
+``[--out <file>]``
 writes a copy of the stock ``voices.bin`` with each recipe's blend in a speaker slot of its own,
 and beside it ``<file>.json``: each blend's sid, its normalised recipe, the stock speaker it
-displaced, and the sha256 of the stock file, the recipe and the output.
+displaced, and the sha256 of the stock file, the recipe and the output. The file is never the
+repo's: ``--out`` defaults to ``~/.shadowrunr/voices/<recipe>-voices.bin`` (``malakor.toml`` makes
+``malakor-voices.bin``), the folder the daemon looks in for a ``[voice] voices_file`` name.
 
 **The file.** ``voices.bin`` is raw little-endian float32, ``[speakers, 510, 256]``: per speaker,
 row ``r`` is the style for an ``r``-token utterance. A blend is the weighted sum of its inputs,
@@ -48,6 +51,7 @@ __all__ = [
     "assign_slots",
     "blend_rows",
     "build",
+    "default_out",
     "load_recipes",
     "sid_of",
 ]
@@ -70,6 +74,8 @@ KOKORO_V1_SPEAKERS: tuple[str, ...] = (
 )  # fmt: skip
 #: The sidecar's stock voice: never displaced.
 STOCK_SID = 3
+#: Where blended voices files live by default, outside the repo; the daemon's ``voices_dir``.
+VOICES_DIR = Path.home() / ".shadowrunr" / "voices"
 
 
 class BlendError(ValueError):
@@ -167,6 +173,11 @@ def _read_voices(path: Path) -> array[float]:
     return data
 
 
+def default_out(recipe_path: Path, folder: Path = VOICES_DIR) -> Path:
+    """``<folder>/<recipe stem>-voices.bin``: what a character's ``[voice] voices_file`` names."""
+    return folder / f"{recipe_path.stem}-voices.bin"
+
+
 def build(voices_path: Path, recipe_path: Path, out_path: Path) -> dict[str, Any]:
     """Write the blended voices file and its ``.json``; returns what the ``.json`` holds."""
     voices = _read_voices(voices_path)
@@ -216,16 +227,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="shadowrunr_voice.blend", description=__doc__)
     parser.add_argument("--voices", required=True, type=Path, help="the stock voices.bin")
     parser.add_argument("--recipe", required=True, type=Path, help="a recipe .toml")
-    parser.add_argument("--out", required=True, type=Path, help="the blended voices file")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="the blended voices file (default ~/.shadowrunr/voices/<recipe>-voices.bin)",
+    )
     args = parser.parse_args(argv)
+    out = args.out if args.out is not None else default_out(args.recipe, VOICES_DIR)
     try:
-        meta = build(args.voices, args.recipe, args.out)
+        meta = build(args.voices, args.recipe, out)
     except (BlendError, OSError) as exc:
         print(f"blend: {exc}", file=sys.stderr)
         return 1
     for v in meta["voices"]:
         print(f"{v['name']}: sid {v['sid']} (replaces {v['replaces']}) {v['recipe']}")
-    print(f"sha256 {meta['output']['sha256']}")
+    print(f"wrote {out.name}, sha256 {meta['output']['sha256']}")
     return 0
 
 

@@ -31,9 +31,16 @@ disclosure = "Yes, I am an AI character: a lich of the Ninth Dark, performed by 
 
 # Present fields override the daemon's `[voice]` field by field; the rig is served from
 # `<data>/characters/<id>/avatar/rig/`, else the shared `<data>/avatar/rig/`.
+# His voice is an original blend of stock Kokoro voices (0.6 am_onyx + 0.4 bm_lewis), the
+# recipe tools/voice/recipes/malakor.toml, under a light lich FX chain (owner's pick,
+# 2026-10-22). `voices_file` is made on each machine, never committed, with
+# `python -m shadowrunr_voice.blend --voices <engine dir>/kokoro/voices.bin --recipe
+# recipes/malakor.toml` (docs/guide/voice.md); the daemon finds it in `[voice] voices_dir`.
 [voice]
-voice = "af_heart"
-sid = 3
+voice = "malakor-a"
+sid = 52
+voices_file = "malakor-voices.bin"
+fx = "light"
 
 [avatar]
 rig = "rig/m8.spec.json"

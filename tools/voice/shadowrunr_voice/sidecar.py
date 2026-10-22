@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The sidecar's protocol (contract appendix (voice)): JSON lines on stdio, one object per line.
 
-- Out, first: ``{"type":"hello","protocol":1,"voice","sample_rate","visemes":bool,"reason"?}``.
+- Out, first: ``{"type":"hello","protocol":1,"voice","voices","sid","fx","sample_rate",
+  "visemes":bool,"reason"?}``; ``voices`` is the voices file's name, never its path.
 - In: ``{"type":"say","id","text"}`` and ``{"type":"cancel","ids":[...]}``.
 - Out, per sentence: ``{"type":"audio","id","part","last","text","sample_rate","pcm",
   "visemes"?}``; ``visemes`` is ``[[v, start_ms, end_ms]]`` and is left out when there are none.
@@ -24,12 +25,21 @@ sherpa_onnx and numpy in this interpreter, or without Kokoro's files, it is the 
 binary (:mod:`.engine`). A warm render cannot be killed: a cancelled one finishes unheard, and
 its slot is free when it ends. The warm pool supervises its workers: it starts with those that
 load, respawns a dead one in the background, and quarantines one whose loads keep failing.
+
+**The voice.** ``--voices`` names a voices file other than ``kokoro/voices.bin`` (a blend,
+:mod:`.blend`); the warm workers, the binary and the durations model all read that one file.
+One that is missing, not the stock file's size, or without ``--sid`` among its speakers makes
+the voice dead: the hello says why, every ``say`` fails with it, and nothing falls back to
+another voice. ``--fx light|heavy`` runs :mod:`.fx` over each sentence after the pause cut and
+after its mouth shapes are worked out; the length is unchanged, so the mouth timeline holds. It
+needs numpy, and without it the voice is dead too rather than dry.
 """
 
 from __future__ import annotations
 
 import base64
 import collections
+import importlib
 import json
 import sys
 import threading
@@ -39,7 +49,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
 
-from .engine import SAMPLE_RATE, EngineError, KokoroPaths, Render, Rendered, paths_for
+from .engine import (
+    SAMPLE_RATE,
+    EngineError,
+    KokoroPaths,
+    Render,
+    Rendered,
+    paths_for,
+    voices_problem,
+)
 from .text import split_line
 from .visemes import Durations, load_symbols, sentence_visemes, to_ms
 from .warm import WarmPool, WarmRender, missing_package, worker_argv
@@ -47,6 +65,7 @@ from .warm import WarmPool, WarmRender, missing_package, worker_argv
 __all__ = [
     "DEFAULT_THREADS",
     "DEFAULT_WORKERS",
+    "FX_PRESETS",
     "WARM_THREADS",
     "PROTOCOL",
     "Faces",
@@ -55,6 +74,8 @@ __all__ = [
     "Sidecar",
     "hello",
     "open_faces",
+    "voice_problem",
+    "wet_chain",
 ]
 
 PROTOCOL = 1
@@ -70,7 +91,12 @@ DEFAULT_THREADS = 2
 #: so the oversubscription falls on the sentences nobody is waiting for.
 WARM_THREADS = 4
 
+#: ``--fx``: the lich chain's presets (:data:`.fx.PRESETS`), or none.
+FX_PRESETS = ("none", "light", "heavy")
+
 Send = Callable[[dict[str, Any]], None]
+#: One sentence's PCM16 through the FX chain: the same number of samples out.
+Wet = Callable[[bytes], bytes]
 
 
 class Out:
@@ -106,6 +132,27 @@ class Settings:
     engine: str = "auto"
     #: Replaces a warm worker's command line: a test's ``[python, fake_warm.py]``.
     warm_command: Sequence[str] | None = None
+    #: A voices file other than the engine dir's ``kokoro/voices.bin`` (``--voices``).
+    voices: Path | None = None
+    #: The FX preset run over each sentence (:data:`FX_PRESETS`).
+    fx: str = "none"
+
+    @property
+    def paths(self) -> KokoroPaths:
+        return paths_for(self.engine_dir, self.voices)
+
+
+def wet_chain(preset: str) -> Wet | None:
+    """The FX chain for ``preset``, or ``None`` for ``none``. Raises ``ImportError`` without
+    numpy."""
+    if preset == "none":
+        return None
+    fx = importlib.import_module(".fx", __package__)
+
+    def wet(pcm: bytes) -> bytes:
+        return fx.apply(pcm, preset)
+
+    return wet
 
 
 class Faces:
@@ -179,7 +226,7 @@ def open_warm(
         if paths.missing(exe=False):
             return None, "Kokoro's files are missing"
         threads = settings.threads if settings.threads is not None else WARM_THREADS
-        argv = worker_argv(settings.engine_dir, settings.sid, threads, faced)
+        argv = worker_argv(settings.engine_dir, settings.sid, threads, faced, settings.voices)
     else:
         argv = [*settings.warm_command, *(["--faced"] if faced else [])]
     pool = WarmPool(argv, settings.workers)
@@ -196,6 +243,23 @@ def open_warm(
     return pool, None
 
 
+def voice_problem(settings: Settings) -> str | None:
+    """Why this voice cannot speak at all, before any engine is loaded: its voices file, or an
+    FX chain this interpreter cannot run. ``None`` when neither is in the way."""
+    paths = settings.paths
+    if paths.own_voices:
+        problem = voices_problem(paths, settings.sid)
+        if problem is not None:
+            return problem
+    if settings.fx not in FX_PRESETS:
+        return f"fx {settings.fx} is not a preset ({', '.join(FX_PRESETS)})"
+    try:
+        wet_chain(settings.fx)
+    except ImportError as exc:
+        return f"fx {settings.fx} needs {exc.name or 'numpy'}, which is not installed"
+    return None
+
+
 def hello(
     settings: Settings,
 ) -> tuple[dict[str, Any], str | None, Faces | None, WarmPool | None]:
@@ -205,15 +269,22 @@ def hello(
     ``reason`` names what the voice lacks (mouth shapes), then the engine in use: ``engine:
     warm (N workers loaded in S s)`` (``N of M workers`` when some would not load and are being
     respawned) or ``engine: process`` with why the warm one is not. The
-    hello has no field of its own for it."""
-    paths = paths_for(settings.engine_dir)
+    hello has no field of its own for it. A dead voice's reason names no engine: it says why."""
+    paths = settings.paths
     message: dict[str, Any] = {
         "type": "hello",
         "protocol": PROTOCOL,
         "voice": settings.voice,
+        "voices": paths.voices.name,
+        "sid": settings.sid,
+        "fx": settings.fx,
         "sample_rate": SAMPLE_RATE,
         "visemes": False,
     }
+    dead = voice_problem(settings)
+    if dead is not None:
+        message["reason"] = dead
+        return message, dead, None, None
     faces, why = None, None
     if not paths.missing(exe=False):
         faces, why = open_faces(settings, paths)
@@ -277,13 +348,19 @@ class Sidecar:
         dead: str | None = None,
         faces: Faces | None = None,
         warm: WarmPool | None = None,
+        wet: Wet | None = None,
     ) -> None:
         self.settings = settings
-        self.paths = paths_for(settings.engine_dir)
+        self.paths = settings.paths
         self.send = send
         self.dead = dead
         self.faces = faces
         self.warm = warm
+        #: The FX chain; ``wet`` replaces it (a test's). A chain that cannot run is the hello's
+        #: ``dead`` reason, so it is built only for a voice that speaks.
+        self.wet = wet
+        if wet is None and dead is None:
+            self.wet = wet_chain(settings.fx)
         self.workers = len(warm.workers) if warm is not None else max(settings.workers, 1)
         self.threads = max(settings.threads if settings.threads is not None else DEFAULT_THREADS, 1)
         self._lock = threading.Condition()
@@ -470,6 +547,8 @@ class Sidecar:
             if rendered is None:
                 return
             visemes = self.faces.visemes(rendered, SAMPLE_RATE) if self.faces else None
+            # The chain keeps the length, so mouth shapes worked out on the dry audio still hold.
+            pcm = self.wet(rendered.pcm) if self.wet is not None else rendered.pcm
             with self._lock:
                 if line.cancelled or self._closed:
                     return
@@ -480,7 +559,7 @@ class Sidecar:
                 "last": part == len(line.parts) - 1,
                 "text": sentence,
                 "sample_rate": SAMPLE_RATE,
-                "pcm": base64.b64encode(rendered.pcm).decode("ascii"),
+                "pcm": base64.b64encode(pcm).decode("ascii"),
             }
             if visemes is not None:
                 message["visemes"] = visemes

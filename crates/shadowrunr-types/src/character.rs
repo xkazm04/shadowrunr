@@ -134,6 +134,39 @@ pub struct CharacterVoice {
     /// Speaking-rate multiplier (1.0 is the voice's own rate).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speed: Option<f64>,
+    /// The voices file `sid` is read from, by name: a file in the daemon's `[voice] voices_dir`
+    /// (`~/.shadowrunr/voices` by default), made on each machine from a committed recipe
+    /// (`tools/voice/recipes`), never bundled. Absent: the model's own `voices.bin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voices_file: Option<String>,
+    /// The effect chain over each sentence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fx: Option<VoiceFx>,
+}
+
+/// The voice sidecar's effect chain (`tools/voice`, `--fx`): the same length out, so the mouth
+/// timeline holds.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceFx {
+    /// The engine's audio as it is.
+    #[default]
+    None,
+    /// Pitch and formants a little down, light grit, a short crypt reverb.
+    Light,
+    /// Further down, more grit, a doubled chest and a longer crypt.
+    Heavy,
+}
+
+impl VoiceFx {
+    /// The sidecar's `--fx` value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Light => "light",
+            Self::Heavy => "heavy",
+        }
+    }
 }
 
 /// `[avatar]`: the character's face; its rig lives at `<data>/characters/<id>/avatar/rig/`.

@@ -54,6 +54,7 @@ __all__ = [
     "scale_silence",
     "spoken_entry",
     "token_lines",
+    "voices_problem",
 ]
 
 ENGINE_FILENAME = "sherpa-onnx-offline-tts" + (".exe" if sys.platform == "win32" else "")
@@ -113,13 +114,23 @@ class KokoroPaths:
     tokens: Path
     espeak: Path
     lexicon: Path
+    #: The model's own ``voices.bin``: the size a voices file must have.
+    stock_voices: Path | None = None
+
+    @property
+    def own_voices(self) -> bool:
+        """Whether the voices file is not the engine dir's own (a blend, :mod:`.blend`)."""
+        return self.stock_voices is not None and self.voices != self.stock_voices
 
     def missing(self, *, exe: bool = True) -> list[str]:
-        """What is not there, engine first, named relative to the engine dir."""
+        """What is not there, engine first, named relative to the engine dir. A voices file of
+        the operator's own is :func:`voices_problem`'s."""
         gone: list[str] = []
         if exe and not self.exe.is_file():
             gone.append(f"bin/{self.exe.name}")
         for path in (self.model, self.voices, self.tokens):
+            if path == self.voices and self.own_voices:
+                continue
             if not path.is_file():
                 gone.append(f"kokoro/{path.name}")
         if not self.espeak.is_dir():
@@ -127,16 +138,47 @@ class KokoroPaths:
         return gone
 
 
-def paths_for(engine_dir: Path) -> KokoroPaths:
+def paths_for(engine_dir: Path, voices: Path | None = None) -> KokoroPaths:
+    """Kokoro's files under ``engine_dir``; ``voices`` replaces its ``voices.bin`` for the
+    engine and the mouth shapes alike."""
     model = engine_dir / "kokoro"
+    stock = model / "voices.bin"
     return KokoroPaths(
         exe=engine_dir / "bin" / ENGINE_FILENAME,
         model=model / "model.onnx",
-        voices=model / "voices.bin",
+        voices=voices if voices is not None else stock,
         tokens=model / "tokens.txt",
         espeak=model / "espeak-ng-data",
         lexicon=model / "lexicon-us-en.txt",
+        stock_voices=stock,
     )
+
+
+#: One speaker's style rows in a voices file: 510 rows of 256 float32.
+SPEAKER_BYTES = 510 * 256 * 4
+#: kokoro-multi-lang-v1_0's speakers: a voices file's size when the stock one is not there.
+SPEAKERS = 53
+
+
+def voices_problem(paths: KokoroPaths, sid: int) -> str | None:
+    """Why the voices file cannot speak ``sid``, by its name and never its path, or ``None``.
+
+    sherpa-onnx refuses a voices file whose size is not the model's speaker count, so a blend
+    must be the stock file's size exactly; the sid must be one of its speakers."""
+    name = paths.voices.name
+    if not paths.voices.is_file():
+        return f"the voices file {name} is missing"
+    size = paths.voices.stat().st_size
+    stock = paths.stock_voices
+    want = SPEAKERS * SPEAKER_BYTES
+    if stock is not None and stock.is_file() and stock.stat().st_size > 0:
+        want = stock.stat().st_size
+    if size != want:
+        return f"the voices file {name} is {size} bytes; the model's voices.bin is {want}"
+    speakers = size // SPEAKER_BYTES
+    if not 0 <= sid < speakers:
+        return f"sid {sid} is not one of the {speakers} speakers in the voices file {name}"
+    return None
 
 
 # --- the argument ---------------------------------------------------------------------------------

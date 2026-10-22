@@ -143,6 +143,11 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # durations_model = "<kokoro durations subgraph .onnx; absent = no mouth shapes>"
 # voice = "af_heart"                # with its verified speaker id
 # sid = 3
+# voices_file = "<a blended voices file: a name in voices_dir, or a path; absent = kokoro/voices.bin>"
+# voices_dir = "~/.shadowrunr/voices"  # where a voices_file name is found (the blend tool's default)
+# fx = "none"                       # the lich chain over each sentence: "none", "light" or "heavy"
+# (The character package's [voice] overrides voice, sid, voices_file and fx: Malakor's is
+# malakor-a, sid 52 of malakor-voices.bin, fx light. docs/guide/voice.md makes the file.)
 # max_queue = 6                     # lines waiting to render; the oldest is skipped past it
 # max_lag_ms = 15000                # skip a line whose audio cannot start within this of its say
 # render_timeout_ms = 30000
