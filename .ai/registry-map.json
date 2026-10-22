@@ -1767,7 +1767,11 @@
           "revision": 2,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "conformant",
+          "evidence": "apps/console/src/pages/onair/ClipActions.tsx:47 The operator UI requires a signature and any required override reason, surfaces moment labels, and distinguishes unmeasured signals from zero.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:ac9b45455bb38636",
+          "evaluatedRevision": 2
         },
         {
           "subject": "client-fetch-cache",
@@ -5456,7 +5460,11 @@
           "revision": 2,
           "changedAt": "2026-10-21",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/gate.rs:146 The personal-data check detects solicitation in non-viewer lines but does not exclude disclosed personal details, leaving a required exclusion unchecked.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:ac9b45455bb38636",
+          "evaluatedRevision": 2
         },
         {
           "subject": "generated-speech-acceptance",

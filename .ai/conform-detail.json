@@ -2693,6 +2693,68 @@
           "evidence": "apps/console/src/pages/reconcile/DirectiveOutcomes.tsx:33 An absent directive rate receives a no-judgment explanation, while a measured zero remains a distinct k-of-n result."
         }
       ]
+    },
+    "12e5be0b-9811-4c5b-a7ec-8a57e204d016/stream-moment-capture": {
+      "context": "clips-pipeline",
+      "subject": "stream-moment-capture",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T00:47:19.283Z",
+      "worker": "a1260cf8-fc1e-485a-898e-ca723a4d430a",
+      "techniques": [
+        {
+          "technique": "evidence-gated-clip-publish",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/gate.rs:146 PersonalData passes when no solicitation or removed solicitation is found; this does not check whether viewer cues or host statements disclose personal details."
+        },
+        {
+          "technique": "host-emitted-moment-markers",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/signals.rs:169 Length, cooldown and ceiling checks run retrospectively during transcript scanning; emission validation in runtime.rs:1892-1895 checks only a non-empty label, so excessive markers already become stage events."
+        },
+        {
+          "technique": "multi-signal-moment-scoring",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/scan.rs:144 Audio uses the entire recording's RMS as its baseline rather than the required rolling baseline; crowd normalization, missing-signal redistribution and unmeasured weight labels are implemented."
+        },
+        {
+          "technique": "peak-minus-preroll-window",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/scan.rs:643 Crowd candidates record 5000 ms as applied lag although cutting anchors on the beat's payoff without subtracting it; forward reaction attribution is permitted, but provenance must record the correction actually applied."
+        }
+      ]
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/stream-moment-capture": {
+      "context": "console-onair-page",
+      "subject": "stream-moment-capture",
+      "bundle": "media-generation",
+      "state": "conformant",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T00:47:19.283Z",
+      "worker": "a1260cf8-fc1e-485a-898e-ca723a4d430a",
+      "techniques": [
+        {
+          "technique": "evidence-gated-clip-publish",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/ClipActions.tsx:47 At the UI boundary, approval requires an explicit signature, honors daemon blocks and requires a reason for unmeasured-check overrides; the detail page displays checks and the approval trail."
+        },
+        {
+          "technique": "host-emitted-moment-markers",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/view.ts:188 The screen renders the structured marker's label as a stage overlay; clip detail also exposes capped markers and chat-request provenance."
+        },
+        {
+          "technique": "multi-signal-moment-scoring",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/ClipDetail.tsx:159 The ranking surface displays missing signals as unmeasured with reasons, shows nominal and applied weights, and labels ranking weights unmeasured."
+        },
+        {
+          "technique": "peak-minus-preroll-window",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/ClipDetail.tsx:132 This context displays stored intervals, pre-roll, duration bands and re-authoring flags; it does not choose or change clip boundaries."
+        }
+      ]
     }
   }
 }
