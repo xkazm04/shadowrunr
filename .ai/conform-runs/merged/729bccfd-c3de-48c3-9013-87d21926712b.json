@@ -1,0 +1,38 @@
+{
+  "schema": "conform-run/1",
+  "worker": "729bccfd-c3de-48c3-9013-87d21926712b",
+  "subject": "build-economics",
+  "evaluatedAt": "2026-10-22T21:57:07.906676+00:00",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "pairs": [],
+  "declined": [
+    {
+      "subject": "build-economics",
+      "context": "console-build-and-desktop-shell",
+      "reason": "withdrawn after review: reviewer (sonnet): The anchor config.toml:4 only shows the shared `target-dir`. The deviation rests on absence claims (no byte ceiling, pruner, cache-hit or timing instruments, no concurrency isolation) that I could not confirm from this context's files. Any such control would live in repo-wide CI or root tooling, whi"
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-22T21:57:07.906676+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "build-economics"
+      ],
+      "techniques": [
+        "build-measurement",
+        "cache-budgeting",
+        "capability-feature-gating",
+        "compilation-unit-splitting",
+        "debug-artifact-economics",
+        "declinable-capability-split",
+        "dev-variant-design"
+      ],
+      "deviations": 1,
+      "context": "console-build-and-desktop-shell",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}

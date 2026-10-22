@@ -3540,6 +3540,124 @@
           "evidence": "apps/stage/src/clip.test.ts:32 Valid-fixture mutations and positive controls exist, but all top-level refusal assertions check only .ok and never the specific rejection message."
         }
       ]
+    },
+    "3b37a94d-3e69-4c44-8598-301f66448d9a/trust-base": {
+      "context": "types-crate",
+      "subject": "trust-base",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T21:21:37.992Z",
+      "worker": "63733f2d-4ae7-4684-8c3b-1f06fcc9606c",
+      "techniques": [
+        {
+          "technique": "assumptions-are-build-errors",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/lib.rs:41 Fixed-width integers use a language guarantee; searches found no proof-dependent platform premise requiring a corresponding build assertion."
+        },
+        {
+          "technique": "census-counts-unmarked-members",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/Cargo.toml:5 The inherited edition is 2021, but searches across the entire crate found no set_var, remove_var or before_exec calls to add as unmarked members."
+        },
+        {
+          "technique": "leaf-spec-states-what-callers-read",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/schema.rs:52 The schema visitor has an ordinary checked Rust body; no trusted-body annotation or proof-consumed leaf specification was found."
+        },
+        {
+          "technique": "marker-impl-names-its-exclusion",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/engine.rs:163 These are compiler-enforced trait bounds; searches found no manual unsafe Send/Sync implementation or interior-mutability override."
+        },
+        {
+          "technique": "soundness-argument-names-its-dependencies",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/schema.rs:188 The inspected schema code enforces its name-clash condition directly; searches found no unsafe cast, raw-pointer operation or trusted escape requiring remote soundness dependencies."
+        },
+        {
+          "technique": "trusted-leaf-gets-an-outside-test",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/tests/schema_drift.rs:16 This tests schema drift, and no trusted executable leaf with a proof-consumed contract was found."
+        },
+        {
+          "technique": "verifier-footprint-stays-contained",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/Cargo.toml:12 The complete dependency list contains serialization, errors, async-trait and schemars, with no verification library, ghost-erasure macro or verifier-coupled pin."
+        }
+      ]
+    },
+    "d6365504-acc7-4901-b7cf-569781f6644c/audience-absorption-at-scale": {
+      "context": "sim-instruments",
+      "subject": "audience-absorption-at-scale",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T21:47:05.703Z",
+      "worker": "04c9241e-672d-4578-aaa6-d7365de73b90",
+      "techniques": [
+        {
+          "technique": "first-contact-exemptions",
+          "verdict": "deviation",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:6 The enabled treatment adds a rank-gated proposal bypass; moderation.rs:958-962 confirms it has no per-batch or answered-state guard, unlike the bounded exemption list."
+        },
+        {
+          "technique": "room-scaled-rate-caps",
+          "verdict": "deviation",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:7 The enabled experiment's rate_cap_for implementation doubles the allowance for unaddressed chatter below ten chatters and drops it from 12 to 6 at ten, violating addressed-only leniency and continuity."
+        }
+      ]
+    },
+    "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa/build-economics": {
+      "context": "console-build-and-desktop-shell",
+      "subject": "build-economics",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T21:57:07.906Z",
+      "techniques": [
+        {
+          "technique": "build-measurement",
+          "verdict": "deviation",
+          "evidence": "apps/console/package.json:8 The build measures output bytes but provides no scenario-labeled build timer, process-tree memory sampler or build-cost baseline; searches found no accompanying instruments."
+        },
+        {
+          "technique": "cache-budgeting",
+          "verdict": "deviation",
+          "evidence": "apps/console/src-tauri/.cargo/config.toml:4 The desktop crate retains artifacts in the shared target directory; searches found no byte ceiling, routine enforcing pruner or cache-hit measurement for it."
+        },
+        {
+          "technique": "capability-feature-gating",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/src/lib.rs:2 The shell delegates application logic to a separate daemon; its inspected dependencies provide the window and opener, with no identified heavy optional in-process capability requiring a gate."
+        },
+        {
+          "technique": "compilation-unit-splitting",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/Cargo.toml:4 The inspected native implementation is a small window bootstrap and endpoint resolver, with no identified huge compilation unit or large repeatedly instantiated generic body; frontend lazy chunks alone do not establish compilation-unit economics."
+        },
+        {
+          "technique": "debug-artifact-economics",
+          "verdict": "deviation",
+          "evidence": "apps/console/src-tauri/.cargo/config.toml:1 This explicitly selects shared mutable artifacts; the referenced policy permits concurrent builders and expected Cargo lock waits, whereas the technique requires separate directories for concurrent builds."
+        },
+        {
+          "technique": "declinable-capability-split",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/Cargo.toml:8 The native crate is unpublished and the console package is private; no published consumer unit carrying a declinable capability was identified."
+        },
+        {
+          "technique": "dev-variant-design",
+          "verdict": "deviation",
+          "evidence": "apps/console/package.json:7 The shortest development command runs the browser frontend and desktop development is separately invoked through Tauri, but searches found no authoritative task routing, desktop-only blind-spot list or measured cost comparison for these development choices."
+        }
+      ],
+      "withdrawn": {
+        "worker": "729bccfd-c3de-48c3-9013-87d21926712b",
+        "state": "deviation",
+        "at": "2026-10-22T21:57:31.967045+00:00",
+        "reason": "reviewer (sonnet): The anchor config.toml:4 only shows the shared `target-dir`. The deviation rests on absence claims (no byte ceiling, pruner, cache-hit or timing instruments, no concurrency isolation) that I could not confirm from this context's files. Any such control would live in repo-wide CI or root tooling, whi"
+      }
     }
   }
 }

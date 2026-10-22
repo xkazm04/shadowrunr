@@ -1,0 +1,90 @@
+{
+ "schema": "conform-run/1",
+ "worker": "63733f2d-4ae7-4684-8c3b-1f06fcc9606c",
+ "subject": "trust-base",
+ "evaluatedAt": "2026-10-22T21:21:37.992147+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "types-crate",
+   "subject": "trust-base",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-types/Cargo.toml:13 Context-wide searches found no unsafe, external_body, verus, set_var or remove_var matches, and the inspected manifest declares schema tooling without a prover integration or identified compiler override.",
+   "techniques": [
+    {
+     "technique": "assumptions-are-build-errors",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/lib.rs:41 Fixed-width integers use a language guarantee; searches found no proof-dependent platform premise requiring a corresponding build assertion."
+    },
+    {
+     "technique": "census-counts-unmarked-members",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/Cargo.toml:5 The inherited edition is 2021, but searches across the entire crate found no set_var, remove_var or before_exec calls to add as unmarked members."
+    },
+    {
+     "technique": "leaf-spec-states-what-callers-read",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/schema.rs:52 The schema visitor has an ordinary checked Rust body; no trusted-body annotation or proof-consumed leaf specification was found."
+    },
+    {
+     "technique": "marker-impl-names-its-exclusion",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/engine.rs:163 These are compiler-enforced trait bounds; searches found no manual unsafe Send/Sync implementation or interior-mutability override."
+    },
+    {
+     "technique": "soundness-argument-names-its-dependencies",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/schema.rs:188 The inspected schema code enforces its name-clash condition directly; searches found no unsafe cast, raw-pointer operation or trusted escape requiring remote soundness dependencies."
+    },
+    {
+     "technique": "trusted-leaf-gets-an-outside-test",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/tests/schema_drift.rs:16 This tests schema drift, and no trusted executable leaf with a proof-consumed contract was found."
+    },
+    {
+     "technique": "verifier-footprint-stays-contained",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/Cargo.toml:12 The complete dependency list contains serialization, errors, async-trait and schemars, with no verification library, ghost-erasure macro or verifier-coupled pin."
+    }
+   ],
+   "absenceTerms": [
+    "unsafe",
+    "external_body",
+    "verus",
+    "set_var",
+    "remove_var"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "trust-base",
+   "context": "contract-package",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-22T21:21:37.992147+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "trust-base"
+   ],
+   "techniques": [
+    "assumptions-are-build-errors",
+    "census-counts-unmarked-members",
+    "leaf-spec-states-what-callers-read",
+    "marker-impl-names-its-exclusion",
+    "soundness-argument-names-its-dependencies",
+    "trusted-leaf-gets-an-outside-test",
+    "verifier-footprint-stays-contained"
+   ],
+   "deviations": 0,
+   "context": "types-crate",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}
