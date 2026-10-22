@@ -144,6 +144,36 @@ fn remember_name(voice_id: &str, name: &str) {
         .insert(voice_id.to_string(), name.to_string());
 }
 
+/// The voice as a label names it: its name once read, else "voice 43UFEk…" (never the whole
+/// id dressed up as a name).
+pub fn voice_label(voice_id: &str) -> String {
+    voice_name(voice_id).unwrap_or_else(|| {
+        let head: String = voice_id.chars().take(6).collect();
+        format!("voice {head}…")
+    })
+}
+
+/// How long a name lookup waits: it runs inside `voice.settings.set` and `voice.verify`.
+const NAME_LOOKUP_TIMEOUT_MS: u64 = 5_000;
+
+/// Read `voice_id`'s name (`GET /v1/voices/{voice_id}`) and keep it for the labels, unless it is
+/// already kept. A failed lookup leaves the label's fallback; whatever failed shows on the next
+/// render or verify, so it is not reported here.
+pub async fn lookup_name(cfg: &ElevenlabsConfig, voice_id: &str) {
+    if voice_name(voice_id).is_some() || !cfg.key_set() {
+        return;
+    }
+    let cfg = ElevenlabsConfig {
+        timeout_ms: cfg.timeout_ms.min(NAME_LOOKUP_TIMEOUT_MS),
+        ..cfg.clone()
+    };
+    if let Ok(v) = get_json(&cfg, &format!("/v1/voices/{voice_id}")).await {
+        if let Some(name) = v["name"].as_str() {
+            remember_name(voice_id, name);
+        }
+    }
+}
+
 /// Why a request failed. Every variant's text is safe to show: none carries the key.
 #[derive(Debug, Clone, PartialEq)]
 enum Fail {

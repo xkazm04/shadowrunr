@@ -8,7 +8,7 @@
 //! in the daemon config; no RPC ever carries a key's value.
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 
 use crate::character::VoiceFx;
 use crate::delivery::Delivery;
@@ -50,7 +50,11 @@ pub struct KokoroVoice {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fx: Option<VoiceFx>,
     /// Speaking-rate multiplier (1.0 is the voice's own rate).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "hundredths"
+    )]
     pub speed: Option<f32>,
 }
 
@@ -66,8 +70,21 @@ pub struct ElevenlabsVoice {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     /// Speaking-rate multiplier (1.0 is the voice's own rate).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "hundredths"
+    )]
     pub speed: Option<f32>,
+}
+
+/// A speed written to two decimals, as `Delivery::intensity` is, so a JSON value built from it
+/// reads `1.08`, not the `f32` widened to `1.0800000429153442`.
+fn hundredths<S: Serializer>(v: &Option<f32>, s: S) -> Result<S::Ok, S::Error> {
+    match v {
+        Some(x) => s.serialize_some(&((f64::from(*x) * 100.0).round() / 100.0)),
+        None => s.serialize_none(),
+    }
 }
 
 /// A provider and its voice. Only the chosen provider's table is read; the other is kept so
@@ -249,6 +266,25 @@ mod tests {
         );
         assert_eq!(serde_json::from_str::<VoiceChoice>(&s).unwrap(), c);
         assert!(serde_json::from_str::<VoiceChoice>(r#"{"provider":"openai"}"#).is_err());
+    }
+
+    #[test]
+    fn speeds_reach_a_json_value_at_two_decimals() {
+        let c = VoiceChoice {
+            provider: VoiceProvider::Elevenlabs,
+            kokoro: Some(KokoroVoice {
+                speed: Some(0.95),
+                ..Default::default()
+            }),
+            elevenlabs: Some(ElevenlabsVoice {
+                speed: Some(1.08),
+                ..Default::default()
+            }),
+        };
+        let v = serde_json::to_value(&c).unwrap();
+        assert_eq!(v["elevenlabs"]["speed"], serde_json::json!(1.08));
+        assert_eq!(v["kokoro"]["speed"], serde_json::json!(0.95));
+        assert_eq!(serde_json::from_value::<VoiceChoice>(v).unwrap(), c);
     }
 
     #[test]

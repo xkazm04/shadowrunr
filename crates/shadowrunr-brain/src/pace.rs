@@ -5,7 +5,7 @@
 //! - **The speech clock.** Every line the brain puts on air (his lines, foil lines, stall and
 //!   cover lines, the sign-off) advances `speaking_until`:
 //!   `max(now, speaking_until) + chars / (speech_cps * pace_factor) * 1000 + line_pause_ms`,
-//!   where a model line's cued pace sets [`pace_factor`] (slow 0.85, fast 1.15, else 1.0).
+//!   where a model line's cued pace sets [`pace_factor`] (slow 0.72, fast 1.04, else 1.0).
 //!   Silence is measured from where it ends: "nobody is speaking", not "no event".
 //! - **The hold.** While more than `speech_lead_ms` of speech is still queued, a beat is a
 //!   `hold` (reason `speaking: N.N s queued`) and makes no core call. A safety beat always runs
@@ -42,13 +42,13 @@
 use shadowrunr_types::delivery::Pace;
 use shadowrunr_types::TsMs;
 
-/// How much faster than `speech_cps` a line cued `slow` is spoken (assumption, to measure
-/// against voiced runs).
-pub const PACE_FACTOR_SLOW: f64 = 0.85;
+/// How much faster than `speech_cps` a line cued `slow` is spoken (measured: VP-5 voiced show
+/// 2026-10-22, Kokoro Plus, n=11 slow / 13 fast).
+pub const PACE_FACTOR_SLOW: f64 = 0.72;
 /// A `normal` (or uncued) line: `speech_cps` as measured.
 pub const PACE_FACTOR_NORMAL: f64 = 1.0;
-/// A `fast` line (assumption, to measure against voiced runs).
-pub const PACE_FACTOR_FAST: f64 = 1.15;
+/// A `fast` line (measured, as [`PACE_FACTOR_SLOW`]).
+pub const PACE_FACTOR_FAST: f64 = 1.04;
 
 /// The speaking-rate factor of a line's cued pace; 1.0 for a line with none.
 pub fn pace_factor(pace: Option<Pace>) -> f64 {
@@ -284,14 +284,14 @@ mod tests {
     fn a_cued_pace_scales_the_speaking_rate() {
         let cfg = PaceConfig::default();
         let line = "x".repeat(180);
-        // 180 characters: 10 s at 18 a second, 180 / (18 * 0.85) s slow, 180 / (18 * 1.15) fast.
+        // 180 characters: 10 s at 18 a second, 180 / (18 * 0.72) s slow, 180 / (18 * 1.04) fast.
         assert_eq!(cfg.paced_speech_ms(&line, None), 10_250);
         assert_eq!(cfg.paced_speech_ms(&line, Some(Pace::Normal)), 10_250);
-        assert_eq!(cfg.paced_speech_ms(&line, Some(Pace::Slow)), 11_765 + 250);
-        assert_eq!(cfg.paced_speech_ms(&line, Some(Pace::Fast)), 8_696 + 250);
+        assert_eq!(cfg.paced_speech_ms(&line, Some(Pace::Slow)), 13_889 + 250);
+        assert_eq!(cfg.paced_speech_ms(&line, Some(Pace::Fast)), 9_615 + 250);
         let mut c = SpeechClock::default();
         c.say_paced(0, &line, Some(Pace::Slow), &cfg);
-        assert_eq!(c.until(), Some(12_015));
+        assert_eq!(c.until(), Some(14_139));
     }
 
     #[test]

@@ -256,6 +256,7 @@ impl VoiceHub {
     /// A run streaming `character` started: resolve its voice, and replace the renderer when
     /// the voice differs from the one speaking.
     pub fn stream_start(self: &Arc<Self>, character: &str) {
+        self.stop_preview();
         let Some(voices) = self.voices.get() else {
             return;
         };
@@ -319,6 +320,21 @@ impl VoiceHub {
     fn speaking(&self) -> Option<(Arc<dyn Renderer>, Option<VoiceProvider>)> {
         let c = lock(&self.current);
         c.renderer.clone().map(|r| (r, c.provider))
+    }
+
+    /// Whether a run is being voiced now (a feeder is reading it for its followers).
+    pub fn voicing(&self) -> bool {
+        lock(&self.runs)
+            .values()
+            .any(|r| r.feeder.as_ref().is_some_and(|f| !f.is_finished()))
+    }
+
+    /// Stop the preview renderer, unless a preview holds it (that one stops it when it ends,
+    /// seeing a run voiced).
+    pub fn stop_preview(&self) {
+        if let Ok(mut slot) = self.preview.try_lock() {
+            *slot = None;
+        }
     }
 
     /// The provider speaking now (`None` before any renderer).

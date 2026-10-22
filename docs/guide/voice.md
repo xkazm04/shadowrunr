@@ -497,9 +497,7 @@ outside 0 to 1 is clamped.
 | triumph | -0.04 | +1.2 | 275 ms | 200 ms |
 | tender | 0 | -0.5 | 540 ms | 665 ms |
 
-The table is `LEVERS` in `tools/voice/shadowrunr_voice/plus.py`. The daemon's log (stderr)
-gets one line per line with a delivery, for example
-`voice: plus menace 0.80 slow: sid 50, speed 0.80, pitch -0.79 st, pauses [448, 448, 448, 0]`.
+The table is `LEVERS` in `tools/voice/shadowrunr_voice/plus.py`.
 
 **The emotion blends.** The recipe's `[emotions]` table gives one blend per emotion: the base
 blend's name with its weight, a stock speaker with its weight, the slot (`sid`), and the

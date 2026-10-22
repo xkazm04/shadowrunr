@@ -9,7 +9,10 @@
 //! - **The override** is written atomically (a temp file and a rename), at most
 //!   [`MAX_OVERRIDE_BYTES`], and only inside `<data>` (`tone::contained`).
 //! - **Preview and bench** render through a renderer of their own ([`PreviewVoice`], one at a
-//!   time), never the show's queue, and every line passes the brain's output gate first.
+//!   time), never the show's queue, and every line passes the brain's output gate first. That
+//!   renderer is a second sidecar with warm workers of its own, so it never shares the machine
+//!   with a show: it stops [`PREVIEW_IDLE_MS`] after its last use, at once when a stream starts
+//!   being voiced, and while a run is voiced both RPCs answer `busy`.
 //! - **Keys** are named by env var only: `voice.settings.get` says whether the var is set and
 //!   what the last `voice.verify` found, never the value.
 
@@ -53,6 +56,9 @@ pub const KOKORO_SPEED: RangeInclusive<f32> = 0.5..=2.0;
 pub const ELEVENLABS_SPEED: RangeInclusive<f32> = 0.7..=1.2;
 /// How long a preview waits for its renderer to come up (the sidecar's first load).
 const READY_WAIT: Duration = Duration::from_secs(120);
+/// How long the preview renderer is kept after its last preview or bench (an assumption: long
+/// enough for lines tried one after another, short enough that it is gone before a show).
+pub const PREVIEW_IDLE_MS: u64 = 60_000;
 
 /// One override write at a time.
 static WRITE_LOCK: Mutex<()> = Mutex::new(());
@@ -69,6 +75,8 @@ pub enum Spec {
 pub struct PreviewVoice {
     key: String,
     renderer: Arc<dyn Renderer>,
+    /// Its last use: the idle stop takes only the renderer it was armed for.
+    used: u64,
     /// Dropping it stops the renderer.
     _stop: watch::Sender<bool>,
 }
@@ -191,7 +199,8 @@ fn eleven_spec(cfg: &Config, choice: &VoiceChoice) -> ElevenSpec {
 }
 
 /// The human label: "ElevenLabs Malakor (crypt king alt1), eleven_v4_turbo" or "Kokoro
-/// malakor-a (sid 52), fx light".
+/// malakor-a (sid 52), fx light". An ElevenLabs voice whose name has not been read yet is
+/// "ElevenLabs voice 43UFEk…" ([`elevenlabs::voice_label`]).
 pub fn label(cfg: &Config, choice: &VoiceChoice) -> String {
     match choice.provider {
         VoiceProvider::Kokoro => {
@@ -205,7 +214,7 @@ pub fn label(cfg: &Config, choice: &VoiceChoice) -> String {
         VoiceProvider::Elevenlabs => {
             let s = eleven_spec(cfg, choice);
             let voice = match &s.voice_id {
-                Some(id) => elevenlabs::voice_name(id).unwrap_or_else(|| id.clone()),
+                Some(id) => elevenlabs::voice_label(id),
                 None => "(no voice_id)".into(),
             };
             format!("ElevenLabs {voice}, {}", s.model)
@@ -546,7 +555,21 @@ pub async fn settings_set(
     let cfg = state.cfg.clone();
     let (character, choice) = (p.character.clone(), p.choice.clone());
     crate::tone::blocking(move || store_override(&cfg, &character, choice.as_ref())).await?;
+    name_effective_voice(&state.cfg, &p.character).await;
     settings(state, &p.character)
+}
+
+/// Read the name of `character`'s effective ElevenLabs voice for the label, when it speaks
+/// with one whose name is not kept yet.
+async fn name_effective_voice(cfg: &Config, character: &str) {
+    let over = read_override(cfg, character).ok().flatten();
+    let choice = effective(&package_choice(cfg, character), over.as_ref());
+    if choice.provider != VoiceProvider::Elevenlabs {
+        return;
+    }
+    if let Some(id) = choice.elevenlabs.and_then(|e| e.voice_id) {
+        elevenlabs::lookup_name(&cfg.voice_daemon.elevenlabs, &id).await;
+    }
 }
 
 /// `voice.verify`: ElevenLabs' one cheap authenticated call, or kokoro's whole `voice check` for
@@ -558,7 +581,13 @@ pub async fn verify(
     let cfg = &state.cfg;
     let now = runs::now_ms();
     let status = match p.provider {
-        VoiceProvider::Elevenlabs => elevenlabs::verify(&cfg.voice_daemon.elevenlabs, now).await,
+        VoiceProvider::Elevenlabs => {
+            let status = elevenlabs::verify(&cfg.voice_daemon.elevenlabs, now).await;
+            if status.key != VoiceKeyState::Rejected {
+                name_effective_voice(cfg, &cfg.sim.character).await;
+            }
+            status
+        }
         VoiceProvider::Kokoro => {
             let character = &cfg.sim.character;
             let over = read_override(cfg, character).ok().flatten();
@@ -664,6 +693,7 @@ async fn preview_renderer(
         *slot = Some(PreviewVoice {
             key: spoken.key.clone(),
             renderer,
+            used: 0,
             _stop: stop,
         });
     }
@@ -713,6 +743,51 @@ fn busy() -> RpcError {
     RpcError::new(ErrorCode::Busy, "a preview is already rendering; try again")
 }
 
+/// What a preview or bench answers while a run is voiced.
+pub const STREAM_LIVE: &str = "a stream is live: preview and bench wait until it ends";
+
+/// The preview slot, when no run is voiced and no other preview holds it.
+fn take_slot(
+    state: &AppState,
+) -> Result<tokio::sync::MutexGuard<'_, Option<PreviewVoice>>, RpcError> {
+    if state.voice.voicing() {
+        return Err(RpcError::new(ErrorCode::Busy, STREAM_LIVE));
+    }
+    state.voice.preview.try_lock().map_err(|_| busy())
+}
+
+/// After a preview or bench: stop the renderer when a run is voiced now, else arm its idle
+/// stop ([`PREVIEW_IDLE_MS`]); a later use arms its own, so only the last one fires.
+fn release(state: &Arc<AppState>, slot: &mut Option<PreviewVoice>) {
+    if state.voice.voicing() {
+        *slot = None;
+        return;
+    }
+    let Some(p) = slot.as_mut() else {
+        return;
+    };
+    static USES: AtomicU64 = AtomicU64::new(1);
+    p.used = USES.fetch_add(1, Ordering::Relaxed);
+    arm_idle_stop(state, p.used, Duration::from_millis(PREVIEW_IDLE_MS));
+}
+
+/// Stop the preview renderer `after` from now, if it is still the use `used` (idle since).
+fn arm_idle_stop(state: &Arc<AppState>, used: u64, after: Duration) {
+    let weak = Arc::downgrade(state);
+    tokio::spawn(async move {
+        tokio::time::sleep(after).await;
+        let Some(state) = weak.upgrade() else {
+            return;
+        };
+        // Held: a preview is rendering, and it arms the next stop.
+        let stopped = match state.voice.preview.try_lock() {
+            Ok(mut slot) if slot.as_ref().is_some_and(|p| p.used == used) => slot.take(),
+            _ => None,
+        };
+        drop(stopped);
+    });
+}
+
 /// The character's effective voice, reading the override strictly.
 fn effective_spoken(cfg: &Config, character: &str) -> Result<(Spoken, String), RpcError> {
     let over = read_override(cfg, character)?;
@@ -737,7 +812,7 @@ pub async fn preview(
         )));
     }
     gate(cfg, text)?;
-    let mut slot = state.voice.preview.try_lock().map_err(|_| busy())?;
+    let mut slot = take_slot(state)?;
     let (spoken, _) = effective_spoken(cfg, &p.character)?;
     let renderer = preview_renderer(state, &mut slot, &spoken).await?;
     let utter = Utter {
@@ -750,8 +825,10 @@ pub async fn preview(
         &utter,
         per_part(cfg),
     )
-    .await
-    .map_err(|why| RpcError::new(ErrorCode::Unavailable, why))?;
+    .await;
+    release(state, &mut slot);
+    drop(slot);
+    let take = take.map_err(|why| RpcError::new(ErrorCode::Unavailable, why))?;
     // After the render: the label names the voice the provider reported.
     let (_, label) = effective_spoken(cfg, &p.character)?;
     Ok(VoicePreview {
@@ -781,14 +858,17 @@ pub async fn bench(state: &Arc<AppState>, p: VoiceBenchParams) -> Result<VoiceBe
     contained(&cfg.paths.characters, &path)?;
     let text = read_text(&path)?.unwrap_or_default();
     let file: VoiceBenchFile = toml::from_str(&text).map_err(|e| io(&path, e))?;
-    let mut slot = state.voice.preview.try_lock().map_err(|_| busy())?;
+    let mut slot = take_slot(state)?;
     let (spoken, _) = effective_spoken(cfg, &p.character)?;
     let renderer = preview_renderer(state, &mut slot, &spoken).await?;
     let mut lines = Vec::with_capacity(file.lines.len());
     for entry in &file.lines {
         let delivery = entry.delivery();
         let text = entry.text.trim();
-        let checked = if text.chars().count() > MAX_PREVIEW_CHARS {
+        // A stream voiced since the bench began: the rest of the lines give way to it.
+        let checked = if state.voice.voicing() {
+            Err(STREAM_LIVE.to_string())
+        } else if text.chars().count() > MAX_PREVIEW_CHARS {
             Err(format!("longer than {MAX_PREVIEW_CHARS} characters"))
         } else {
             gate(cfg, text).map_err(|e| e.message)
@@ -816,6 +896,8 @@ pub async fn bench(state: &Arc<AppState>, p: VoiceBenchParams) -> Result<VoiceBe
             error,
         });
     }
+    release(state, &mut slot);
+    drop(slot);
     let (_, label) = effective_spoken(cfg, &p.character)?;
     Ok(VoiceBench {
         provider: spoken.provider,

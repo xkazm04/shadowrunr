@@ -1919,8 +1919,8 @@ Delivery  { emotion: Emotion, intensity: number (0.0..=1.0, clamped when read), 
   `repeated`. A line with no cue ends the run.
 - **Gated lines.** A line the output gate rewrote (recast, bleeped, a name withheld) speaks
   without its cue; a card or record id said as its name keeps it.
-- **The speech clock** divides by `speech_cps * pace_factor`: slow 0.85, normal 1.0, fast 1.15
-  (assumptions, named as consts in `shadowrunr_brain::pace`).
+- **The speech clock** divides by `speech_cps * pace_factor`: slow 0.72, normal 1.0, fast 1.04
+  (measured in a voiced Kokoro Plus show, named as consts in `shadowrunr_brain::pace`).
 
 **Provider and choice.**
 

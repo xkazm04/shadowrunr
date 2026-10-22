@@ -83,7 +83,10 @@ fn the_effective_choice_is_package_then_override_per_field() {
         (e.voice_id.as_deref(), e.model.as_deref(), e.speed),
         (Some("abc123"), Some("eleven_v4_turbo"), Some(1.1))
     );
-    assert_eq!(label(cfg, &eff), "ElevenLabs abc123, eleven_v4_turbo");
+    assert_eq!(
+        label(cfg, &eff),
+        "ElevenLabs voice abc123…, eleven_v4_turbo"
+    );
     let s = spoken(cfg, &eff);
     assert_eq!(s.provider, VoiceProvider::Elevenlabs);
     assert!(matches!(&s.spec, Spec::Elevenlabs(_, spec) if spec.speed == 1.1));
@@ -234,6 +237,63 @@ async fn providers_name_the_key_state_and_keep_the_last_verify() {
 }
 
 #[tokio::test]
+async fn set_and_verify_read_the_voice_name_for_the_label() {
+    let (base, _) = fake().await;
+    let tmp = tempfile::tempdir().unwrap();
+    let env = key_env(Some("good-key"));
+    let st = setup(tmp.path(), Some(el_cfg(&base, &env, 5_000)));
+    let get = || {
+        settings_get(
+            &st,
+            VoiceSettingsGetParams {
+                character: "malakor".into(),
+            },
+        )
+    };
+    let got = settings_set(
+        &st,
+        VoiceSettingsSetParams {
+            character: "malakor".into(),
+            choice: Some(eleven("named-on-set")),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(got.label, "ElevenLabs Voice named-on-set, eleven_v4_turbo");
+
+    // Stored behind the RPC's back: the label waits for a verify, with the id's head meanwhile.
+    store_override(&st.cfg, "malakor", Some(&eleven("named-on-verify"))).unwrap();
+    assert_eq!(
+        get().await.unwrap().label,
+        "ElevenLabs voice named-…, eleven_v4_turbo"
+    );
+    verify(
+        &st,
+        VoiceVerifyParams {
+            provider: VoiceProvider::Elevenlabs,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        get().await.unwrap().label,
+        "ElevenLabs Voice named-on-verify, eleven_v4_turbo"
+    );
+
+    // A voice the account does not have keeps the fallback; the set still succeeds.
+    let got = settings_set(
+        &st,
+        VoiceSettingsSetParams {
+            character: "malakor".into(),
+            choice: Some(eleven("missing")),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(got.label, "ElevenLabs voice missin…, eleven_v4_turbo");
+}
+
+#[tokio::test]
 async fn a_preview_is_gated_and_capped_before_anything_renders() {
     let tmp = tempfile::tempdir().unwrap();
     let st = setup(tmp.path(), None);
@@ -352,4 +412,91 @@ async fn a_failed_bench_line_carries_its_error_and_the_rest_go_on() {
     assert_eq!((b.lines[0].pcm.as_str(), b.lines[0].chars), ("", 0));
     assert!(b.lines[1].error.is_none());
     assert_eq!(b.lines[1].chars, 6, "neutral: no tag");
+}
+
+/// A preview renderer parked in the slot (a fake: no sidecar), and the receiver that sees it stop.
+fn parked() -> (PreviewVoice, watch::Receiver<bool>) {
+    let (stop, rx) = watch::channel(false);
+    let p = PreviewVoice {
+        key: "k".into(),
+        renderer: Arc::new(crate::voice::renderer::fake::FakeRenderer::new()),
+        used: 0,
+        _stop: stop,
+    };
+    (p, rx)
+}
+
+#[tokio::test]
+async fn the_preview_renderer_stops_after_its_last_use_has_been_idle() {
+    let tmp = tempfile::tempdir().unwrap();
+    let st = setup(tmp.path(), None);
+    let (mut p, rx) = parked();
+    p.used = 1;
+    *st.voice.preview.lock().await = Some(p);
+    // A stop armed for an earlier use leaves a renderer used since.
+    arm_idle_stop(&st, 0, Duration::from_millis(10));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(st.voice.preview.lock().await.is_some());
+    assert!(rx.has_changed().is_ok(), "still running");
+    // The last use's stop takes it.
+    arm_idle_stop(&st, 1, Duration::from_millis(10));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(st.voice.preview.lock().await.is_none());
+    assert!(rx.has_changed().is_err(), "its stop was dropped");
+    // A release arms the stop at PREVIEW_IDLE_MS, not at once.
+    let (p, rx) = parked();
+    *st.voice.preview.lock().await = Some(p);
+    release(&st, &mut *st.voice.preview.lock().await);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(st.voice.preview.lock().await.is_some());
+    assert!(rx.has_changed().is_ok());
+}
+
+#[tokio::test]
+async fn a_voiced_stream_stops_the_preview_renderer_and_refuses_previews() {
+    let tmp = tempfile::tempdir().unwrap();
+    let chars = tmp.path().join("characters");
+    copy_dir(&repo().join("characters/malakor"), &chars.join("malakor"));
+    let mut cfg = test_config(tmp.path(), chars);
+    cfg.voice.enabled = true;
+    let st = AppState::new(cfg, EngineHandle::scripted());
+    st.voice.attach(
+        Arc::new(crate::voice::renderer::fake::FakeRenderer::new()),
+        std::future::pending(),
+    );
+    let (p, rx) = parked();
+    *st.voice.preview.lock().await = Some(p);
+    assert!(!st.voice.voicing());
+
+    let run = Arc::new(crate::live::LiveRun::new("r".into()));
+    let following = st.voice.follow(&run, true);
+    assert!(st.voice.voicing());
+    st.voice.stream_start("malakor");
+    assert!(st.voice.preview.lock().await.is_none());
+    assert!(rx.has_changed().is_err(), "the preview renderer stopped");
+
+    let e = preview(
+        &st,
+        VoicePreviewParams {
+            character: "malakor".into(),
+            text: "Kneel.".into(),
+            delivery: None,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert_eq!((e.code, e.message.as_str()), (ErrorCode::Busy, STREAM_LIVE));
+    let e = bench(
+        &st,
+        VoiceBenchParams {
+            character: "malakor".into(),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(e.code, ErrorCode::Busy);
+
+    // The run's last follower leaves: previews may start again.
+    drop(following);
+    assert!(!st.voice.voicing());
 }
