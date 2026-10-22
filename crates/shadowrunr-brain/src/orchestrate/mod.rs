@@ -75,12 +75,26 @@
 //! lead-in before a wait, and a quiet beat with nothing prepared bridges from them instead of
 //! generic filler. Their tags join the `beat_plan` reason (`pick-up after N s`, `lead-in: …`).
 //!
+//! **The case** ([`case`]): in an investigation segment "advance the case" is an open loop of
+//! its own. When a move is open (reveal a card whose research came back, pin a string a returned
+//! record supports, research the next lead when none is out, show a returned record) and
+//! [`case::CASE_BEAT_MS`] passed since the last case move ([`case::CASE_PAYOFF_MS`] for a reveal
+//! or a string), the next voiced beat that is not a hold, a safety beat, a room event, the
+//! goodbye or a beat owed to a request carries the move ahead of chat: one pick at most, a
+//! `# The case` section with the exact op line, reason `case: <move>`. A reply with no case op
+//! is asked again after [`case::CASE_RETRY_MS`].
+//!
+//! Every candidate worth answering that a beat neither picked nor carried leaves a record
+//! ([`CARRY_RULE`] / [`DROPPED`]): nothing leaves the beat unrecorded (the judged stereotype
+//! bait and a sincerely sad regular both did, in speech holds).
+//!
 //! The thresholds are assumptions to tune against sandbox runs, not measurements:
 //! [`QUIET_BIT_MS`], [`BIT_SPACING_MS`], [`HOLD_GAP_MS`], [`THIN_REACT_STREAK`],
 //! [`THIN_ROOM_MAX`], [`RAID_FIRST_CONTACTS`], [`CARRY_MS`], [`CARRY_MAX`],
 //! [`GATHERING_SPACING_MS`], [`REQUEST_ANSWER_MS`], [`REQUEST_LEAD_MS`], [`REQUEST_MAX_MS`].
 
 pub mod agenda;
+pub mod case;
 pub mod requests;
 pub mod room;
 #[cfg(test)]
@@ -97,7 +111,8 @@ use crate::picker::{is_bare_emote, is_question, is_vote, mentions, Pick};
 use crate::util::{fnv1a64, normalize, one_line, similarity};
 
 use agenda::{Agenda, BeatShape, LoopKind};
-use requests::{situational_ask, Ask, Rotation};
+use case::{CaseDesk, CaseMove, CASE_NOTE, CASE_WITH_CHAT};
+use requests::{asks_what_this_is, situational_ask, Ask, Rotation};
 use room::RoomWatch;
 use shadowrunr_types::character::Tuning;
 
@@ -142,6 +157,9 @@ pub const CARRY_RULE: &str = "carry";
 pub const CAPPED: &str = "capped";
 /// The [`CARRY_RULE`] action for a pick whose answer never aired: carried again.
 pub const UNAIRED: &str = "unaired";
+/// The [`CARRY_RULE`] action for a message worth answering that a beat neither picked nor carried
+/// (a remark in a speech hold, say).
+pub const DROPPED: &str = "dropped";
 /// Without a prep, at least this long between two gathering lines of the cold open
 /// (assumption); he holds in between.
 pub const GATHERING_SPACING_MS: i64 = 20_000;
@@ -220,6 +238,8 @@ pub struct Plan {
     pub speaking: bool,
     /// The through-line's directives for this beat (a pick-up, a lead-in), if any.
     pub agenda: Option<String>,
+    /// The case's next move for this beat ([`case`]), if it carries one.
+    pub case: Option<String>,
     pub reason: String,
 }
 
@@ -235,6 +255,7 @@ impl Plan {
             room_note: None,
             speaking: false,
             agenda: None,
+            case: None,
             reason,
         }
     }
@@ -302,6 +323,10 @@ pub struct Orchestrator {
     carry_next: Vec<Carried>,
     /// Ids the carry cap dropped at the last commit, for their records.
     capped: Vec<String>,
+    /// This beat's candidates worth answering (not safety picks), by id.
+    beat_worthy: Vec<String>,
+    /// Ids the last commit neither picked nor carried, for their records.
+    dropped: Vec<String>,
     /// The last commit's picks that would have been carried, had no pick answered them: what
     /// a rollback carries again, with their original clocks.
     unsettled: Vec<Carried>,
@@ -323,6 +348,9 @@ pub struct Orchestrator {
     rebuttals: Rotation,
     /// The through-line's open loops ([`agenda`]).
     agenda: Agenda,
+    /// The case loop ([`case`]) and its next move this beat.
+    case: CaseDesk,
+    case_next: Option<CaseMove>,
     /// (viewer, ask) answered this stream: that viewer's same ask is no longer owned.
     asked: HashSet<(String, Ask)>,
     /// The character's tuning: the carry, hold, bit and request timings (the constants above
@@ -333,15 +361,21 @@ pub struct Orchestrator {
 }
 
 /// The situational ask an owned request makes: a single message (never a wave or a safety
-/// pick) that a situation rule covers.
-fn ask_of(c: &Candidate) -> Option<Ask> {
+/// pick) that a situation rule covers. A newcomer (`first` contact, or a Thrall) asking what
+/// this is makes one too: in a speech hold it was a plain remark and was dropped
+/// (sbx-20261022-102618-10m L272).
+fn ask_of(c: &Candidate, first: bool) -> Option<Ask> {
     if c.count > 1 || c.safety.is_some() || is_vote(c) {
         return None;
     }
     if matches!(c.msg.command, Some(Command::Propose { .. })) {
         return Some(Ask::Proposal);
     }
-    situational_ask(&c.msg.text)
+    situational_ask(&c.msg.text).or_else(|| {
+        ((first || c.msg.viewer.rank == shadowrunr_types::Rank::Thrall)
+            && asks_what_this_is(&c.msg.text))
+        .then_some(Ask::WhatIsThis)
+    })
 }
 
 /// Why a candidate is worth answering, if it is.
@@ -352,7 +386,7 @@ fn worth(c: &Candidate, first: bool, names: &[String]) -> Option<&'static str> {
     if is_filler(c) {
         return None;
     }
-    if ask_of(c).is_some() {
+    if ask_of(c, first).is_some() {
         Some("request")
     } else if moderation::is_gift_or_sub(&c.msg.text) {
         Some("gift")
@@ -494,7 +528,8 @@ impl Orchestrator {
     /// The ask a candidate makes that is owned: one per viewer and kind, so a viewer asking the
     /// same thing again after the answer is plain chat.
     fn owns(&self, c: &Candidate) -> Option<Ask> {
-        ask_of(c).filter(|a| !self.asked.contains(&(c.msg.viewer.id.clone(), *a)))
+        ask_of(c, self.is_first_contact(&c.msg.id))
+            .filter(|a| !self.asked.contains(&(c.msg.viewer.id.clone(), *a)))
     }
 
     /// A pick whose answer never aired (the gate dropped the only line naming it): it is not
@@ -502,7 +537,7 @@ impl Orchestrator {
     /// [`UNAIRED`]).
     pub fn unaired(&mut self, c: &Candidate, now_ms: TsMs, free_at: TsMs) -> StreamEvent {
         self.answered.remove(&c.msg.id);
-        if let Some(a) = ask_of(c) {
+        if let Some(a) = ask_of(c, self.is_first_contact(&c.msg.id)) {
             self.asked.remove(&(c.msg.viewer.id.clone(), a));
         }
         self.carried.retain(|k| k.cand.msg.id != c.msg.id);
@@ -517,23 +552,26 @@ impl Orchestrator {
         moderation::input_event(now_ms, CARRY_RULE, &c.msg.id, UNAIRED)
     }
 
-    /// The owned requests among this beat's candidates, oldest first (by when each first
-    /// reached a beat): the picker takes one a beat ahead of bait and fresh chat.
+    /// The owned requests among this beat's candidates, the most urgent kind first (sincere
+    /// sadness before the rest, [`Ask::priority`]), then oldest first (by when each first reached
+    /// a beat): the picker takes one a beat ahead of bait and fresh chat.
     pub fn owed(&self, cands: &[Candidate], now_ms: TsMs) -> Vec<String> {
-        let mut v: Vec<(TsMs, &str)> = cands
+        let mut v: Vec<(u8, TsMs, &str)> = cands
             .iter()
-            .filter(|c| !self.answered.contains(&c.msg.id) && self.owns(c).is_some())
-            .map(|c| {
+            .filter(|c| !self.answered.contains(&c.msg.id))
+            .filter_map(|c| {
+                let ask = self.owns(c)?;
                 let since = self.carried_in.get(&c.msg.id).map_or(now_ms, |k| k.since);
-                (since, c.msg.id.as_str())
+                Some((ask.priority(), since, c.msg.id.as_str()))
             })
             .collect();
         v.sort();
-        v.into_iter().map(|(_, id)| id.to_string()).collect()
+        v.into_iter().map(|(_, _, id)| id.to_string()).collect()
     }
 
     /// A background job changed state: research out opens a loop, a finished one lands.
-    pub fn note_job(&mut self, job_id: &str, brief: &str, status: &str) {
+    pub fn note_job(&mut self, job_id: &str, brief: &str, status: &str, summary: Option<&str>) {
+        self.case.note_job(job_id, status, summary);
         match status {
             "queued" | "running" | "progress" => self.agenda.open(
                 LoopKind::Research,
@@ -542,6 +580,22 @@ impl Orchestrator {
             ),
             _ => self.agenda.close(LoopKind::Research, job_id),
         }
+    }
+
+    /// An op from a delivered beat: a case op moves the case ([`case`]).
+    pub fn note_op(&mut self, op: &shadowrunr_types::Op, now_ms: TsMs) {
+        self.case.note_op(op, now_ms);
+    }
+
+    /// Whether `viewer_id` already got an answer to this kind of ask this stream (before this
+    /// beat's commit).
+    pub fn has_asked(&self, viewer_id: &str, ask: Ask) -> bool {
+        self.asked.contains(&(viewer_id.to_string(), ask))
+    }
+
+    /// Whether any sincere "are you an AI" was answered this stream (before this beat's commit).
+    pub fn ai_answered(&self) -> bool {
+        self.asked.iter().any(|(_, a)| *a == Ask::AreYouAi)
     }
 
     /// His line went on air: the thread a pick-up ties back to.
@@ -810,6 +864,13 @@ impl Orchestrator {
     /// through-line: the open loops are brought up to date, and a voiced beat outside the cold
     /// open, safety, a room event and the goodbye gets its pick-up and lead-in ([`agenda`]).
     pub fn plan(&mut self, b: &BeatInputs<'_>) -> Plan {
+        self.case_next = self.case.next_move(b.ctx, b.now_ms);
+        let case_loop: Vec<(String, String)> = self
+            .case_next
+            .iter()
+            .map(|m| (m.tag(), format!("the case (next: {})", m.tag())))
+            .collect();
+        self.agenda.sync(LoopKind::Case, &case_loop);
         let mut p = self.decide(b);
         let requests: Vec<(String, String)> = b
             .cands
@@ -931,6 +992,13 @@ impl Orchestrator {
             .iter()
             .filter_map(|c| worth(c, self.is_first_contact(&c.msg.id), b.names))
             .collect();
+        self.beat_worthy = b
+            .cands
+            .iter()
+            .filter(|c| c.safety.is_none() && !self.answered.contains(&c.msg.id))
+            .filter(|c| worth(c, self.is_first_contact(&c.msg.id), b.names).is_some())
+            .map(|c| c.msg.id.clone())
+            .collect();
         if !worthy.is_empty() || self.quiet_since.is_none() {
             self.quiet_since = Some(now);
         }
@@ -1043,6 +1111,43 @@ impl Orchestrator {
                     connector_label(k),
                     one_line(&line, 400)
                 ));
+            }
+            return p;
+        }
+
+        // The case's next move, ahead of chat, unless an owned request takes the beat.
+        if let Some(mv) = self
+            .case_next
+            .clone()
+            .filter(|m| !owed && !b.closing && self.case.due(m, now))
+        {
+            let face_up = b.ctx.hexes.iter().filter(|h| !h.fog).count();
+            let directive = self.case.ask(&mv, face_up, now);
+            let (mode, offer, ceiling, with) = if chat > 0 {
+                (
+                    BeatMode::React,
+                    Offer::Chat,
+                    1,
+                    format!(" with chat ({signals})"),
+                )
+            } else {
+                (BeatMode::Improvise, Offer::SafetyOnly, 0, String::new())
+            };
+            let mut p = Plan::new(
+                mode,
+                offer,
+                ceiling,
+                format!("{lead}case: {}{with}", mv.tag()),
+            );
+            p.case = Some(if ceiling == 0 {
+                directive
+            } else {
+                // The one pick still gets its own line (a gift once got only a highlight beside
+                // the case line, sbx-20261022-110349-10m L351).
+                format!("{directive}\n{CASE_WITH_CHAT}")
+            });
+            if ceiling == 0 {
+                p.note = Some(CASE_NOTE.into());
             }
             return p;
         }
@@ -1466,7 +1571,7 @@ impl Orchestrator {
             self.agenda.close(LoopKind::Request, id);
         }
         for c in &pick.chosen {
-            if let Some(a) = ask_of(c) {
+            if let Some(a) = ask_of(c, self.is_first_contact(&c.msg.id)) {
                 self.asked.insert((c.msg.viewer.id.clone(), a));
             }
         }
@@ -1502,6 +1607,15 @@ impl Orchestrator {
             .map(|k| k.cand.msg.id.clone())
             .collect();
         carry.truncate(keep);
+        // Worth answering, not picked, not carried: recorded, never silently gone.
+        self.dropped = std::mem::take(&mut self.beat_worthy)
+            .into_iter()
+            .filter(|id| {
+                !chosen.contains(id.as_str())
+                    && !self.capped.contains(id)
+                    && !carry.iter().any(|k| &k.cand.msg.id == id)
+            })
+            .collect();
         let fresh: Vec<&str> = carry
             .iter()
             .filter(|k| !self.carried_in.contains_key(&k.cand.msg.id))
@@ -1534,11 +1648,18 @@ impl Orchestrator {
     }
 
     /// The `input` records of the messages the carry cap dropped at the last commit
-    /// ([`CARRY_RULE`] / [`CAPPED`]), taken once: every drop leaves a record.
+    /// ([`CARRY_RULE`] / [`CAPPED`]) and of those it neither picked nor carried ([`DROPPED`]),
+    /// taken once: every drop leaves a record.
     pub fn take_capped(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
-        std::mem::take(&mut self.capped)
-            .iter()
-            .map(|id| moderation::input_event(now_ms, CARRY_RULE, id, CAPPED))
+        let capped = std::mem::take(&mut self.capped)
+            .into_iter()
+            .map(|id| (id, CAPPED));
+        let dropped = std::mem::take(&mut self.dropped)
+            .into_iter()
+            .map(|id| (id, DROPPED));
+        capped
+            .chain(dropped)
+            .map(|(id, action)| moderation::input_event(now_ms, CARRY_RULE, &id, action))
             .collect()
     }
 

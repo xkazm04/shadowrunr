@@ -49,6 +49,9 @@ pub enum LoopKind {
     Request,
     /// A prepared bit whose payoff is still to come.
     Payoff,
+    /// The investigation's next move ([`super::case`]): its own beat carries it, so it is
+    /// never bridged or led into.
+    Case,
 }
 
 impl LoopKind {
@@ -251,7 +254,7 @@ impl Agenda {
         let pick = self
             .loops
             .iter_mut()
-            .filter(|l| l.kind != LoopKind::Request)
+            .filter(|l| !matches!(l.kind, LoopKind::Request | LoopKind::Case))
             .filter(|l| {
                 l.bridged_ms
                     .is_none_or(|t| now_ms.saturating_sub(t) >= BRIDGE_COOLDOWN_MS)

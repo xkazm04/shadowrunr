@@ -172,3 +172,24 @@ id = "ur-28"
 status = "seed"
 tags = ["general"]
 text = "Callback: an hour ago you voted for the swamp. I'd like everyone to remember that while you give opinions."
+
+# Disclosure variants: the honest "are you an AI" answer in more than one sentence, so it
+# never wears into a tic (sbx-20261022-093002-10m: 34% of his lines carried a worn phrase).
+
+[[line]]
+id = "ur-29"
+status = "seed"
+tags = ["ai_question"]
+text = "Real? No. AI. A machine is doing this voice, and it still has better timing than your last three messages."
+
+[[line]]
+id = "ur-30"
+status = "seed"
+tags = ["ai_question"]
+text = "There's no guy in here, it's an AI. So a computer is roasting you, and the computer is winning."
+
+[[line]]
+id = "ur-31"
+status = "seed"
+tags = ["ai_question"]
+text = "AI, pal. Code in a crown. Bad news for you: you can't even blame a human for this."

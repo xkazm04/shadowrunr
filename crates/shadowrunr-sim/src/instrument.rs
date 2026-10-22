@@ -33,7 +33,7 @@ use crate::SimError;
 
 /// Bump when the simulator's or the judge's logic changes in a way that changes verdicts
 /// (prompt templates, verification rules, scheduling).
-pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/11";
+pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/12";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstrumentFile {
@@ -488,7 +488,9 @@ mod tests {
     /// `fixture` hashed with no brief and no experiment: the golden that both entries must
     /// leave untouched when absent. It moves with `SIM_LOGIC_VERSION` and with the entries
     /// every run carries (challenge-2026-10-21: `policy/platform-rules.json`, here `absent`,
-    /// moved it once without a logic bump) (`/11`: the
+    /// moved it once without a logic bump) (`/12`: the case as an owned loop, the
+    /// stereotype bait and sincere sadness owned, every unpicked candidate recorded, the rank
+    /// title in the newcomer and sad notes, a repeated "are you an AI" deflected, after `/11`: the
     /// tone's line bank and the owner's directions in the prompt and the hash, the narrowed
     /// character-break and persona-leak rails, the judge's scaled comic-craft scores over 24
     /// sampled turns and the tic check, after `/10`: the evidence board (SEG-02A's default
@@ -501,7 +503,7 @@ mod tests {
     /// shows it, after `/6`: the screens, runtime screen defaults and a returning research job
     /// opening its record, after `/5`: carried bait picked first, after `/4`: two picks a beat,
     /// gifts and the cold open carried, the speech-aware say gap, a full-length session).
-    const PRE_BRIEF_HASH: &str = "73361248d52fde8fea97be7972a37f259c8da4aa4370d9a0adf56fd4dc02d10a";
+    const PRE_BRIEF_HASH: &str = "03bbd97662d3401dca89fda3730ad70918ec75530aed966e14a8d0e083685355";
 
     #[test]
     fn a_brief_joins_the_hash_only_when_present() {
