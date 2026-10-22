@@ -79,6 +79,14 @@ pub struct PickContext {
     /// Message ids that are their viewer's first message this stream (the orchestrator's
     /// first contacts): boosted, so a newcomer is greeted before the regulars.
     pub first_contacts: HashSet<String>,
+    /// The beat is a raid ([`crate::orchestrate::RAID_FIRST_CONTACTS`] first contacts or more):
+    /// every arrival is a first contact, so one greeting serves them all and only `raid_wave`
+    /// keeps the boost; the other arrivals compete on ordinary terms. Without it the raid's
+    /// lines took both of a beat's slots in 24 of 46 simulated raid beats.
+    pub raid: bool,
+    /// In a raid, the one first contact that keeps the boost: the raid's largest wave (the
+    /// crowd greeted once, with its count), or `None` when no raid line repeats.
+    pub raid_wave: Option<String>,
     /// Messages an earlier beat could not answer, carried by the orchestrator, with how long
     /// they have waited (ms): a small age bonus so fresh chat does not starve them.
     pub carried: HashMap<String, i64>,
@@ -297,7 +305,9 @@ impl Picker {
             s += 0.5;
             why.push("poll");
         }
-        if ctx.first_contacts.contains(&c.msg.id) {
+        if ctx.first_contacts.contains(&c.msg.id)
+            && (!ctx.raid || ctx.raid_wave.as_deref() == Some(c.msg.id.as_str()))
+        {
             s += 1.2;
             why.push("first_contact");
         }
@@ -928,6 +938,61 @@ mod tests {
         // The safety pick uses one of the beat's two slots.
         assert_eq!(pick.chosen.len(), 2);
         assert!(pick.reason.contains("crisis safety"), "{}", pick.reason);
+    }
+
+    /// first-contact-exemptions, suppressed during raids: in a raid every arrival is a first
+    /// contact, so the boost goes to the raid's largest wave alone and the room keeps a slot.
+    /// Offline replay of the sim's `raid_moment` room (8 seeds, 46 raid beats, 92 slots):
+    /// room picks 26 -> 34, beats that greeted the raid twice 24 -> 19, raid episodes left
+    /// ungreeted 2/20 -> 2/20, non-raid beats unchanged.
+    #[test]
+    fn in_a_raid_only_the_largest_wave_keeps_the_first_contact_boost() {
+        let mut wave = cand("w".into(), 10, "r0", Rank::Thrall, "RAID HYPE".into());
+        wave.count = 6;
+        wave.viewers = 6;
+        let lone = cand(
+            "r9".into(),
+            11,
+            "r9",
+            Rank::Thrall,
+            "we come from the north tower".into(),
+        );
+        let room = cand(
+            "reg".into(),
+            12,
+            "reg",
+            Rank::Acolyte,
+            "the soup tonight is cold".into(),
+        );
+        let cands = vec![wave, lone, room];
+        let first: HashSet<String> = ["w", "r9"].iter().map(|s| s.to_string()).collect();
+        let quiet = PickContext {
+            first_contacts: first.clone(),
+            ..PickContext::default()
+        };
+        let p = Picker::new(PickerConfig::default());
+        assert!(p.score(&cands[1], &quiet).1.contains(&"first_contact"));
+        let raid = PickContext {
+            first_contacts: first,
+            raid: true,
+            raid_wave: Some("w".into()),
+            ..PickContext::default()
+        };
+        assert!(p.score(&cands[0], &raid).1.contains(&"first_contact"));
+        assert!(!p.score(&cands[1], &raid).1.contains(&"first_contact"));
+        let mut p = Picker::new(PickerConfig::default());
+        let ids = p.pick_deterministic(&cands, &raid).ids();
+        assert_eq!(ids[0], "w", "the crowd is greeted once");
+        assert!(
+            ids.contains(&"reg".to_string()),
+            "the room keeps a slot: {ids:?}"
+        );
+        let mut p = Picker::new(PickerConfig::default());
+        let ids = p.pick_deterministic(&cands, &quiet).ids();
+        assert!(
+            !ids.contains(&"reg".to_string()),
+            "outside a raid both arrivals go first: {ids:?}"
+        );
     }
 
     /// BRAIN-FIX run 3: carried injection attempts lost their slots to fresher chat and

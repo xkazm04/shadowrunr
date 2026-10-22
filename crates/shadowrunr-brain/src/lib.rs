@@ -911,6 +911,15 @@ impl Brain {
                 .filter(|c| self.orch.is_first_contact(&c.msg.id))
                 .map(|c| c.msg.id.clone())
                 .collect(),
+            raid: self.orch.is_raid(),
+            raid_wave: cands
+                .iter()
+                .filter(|c| c.count > 1 && self.orch.is_first_contact(&c.msg.id))
+                .fold(None::<&moderation::Candidate>, |best, c| match best {
+                    Some(b) if b.viewers >= c.viewers => Some(b),
+                    _ => Some(c),
+                })
+                .map(|c| c.msg.id.clone()),
             carried: self.orch.carried_ages(now_ms),
             owed: self.orch.owed(&cands, now_ms),
         };

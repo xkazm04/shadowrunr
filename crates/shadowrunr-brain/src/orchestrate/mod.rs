@@ -466,6 +466,11 @@ impl Orchestrator {
         }
     }
 
+    /// Whether this beat's inbox is a raid: [`RAID_FIRST_CONTACTS`] first contacts or more.
+    pub fn is_raid(&self) -> bool {
+        self.first.len() >= RAID_FIRST_CONTACTS
+    }
+
     /// Whether a message was its viewer's first this stream (in this beat's inbox, or carried
     /// from an earlier one).
     pub fn is_first_contact(&self, msg_id: &str) -> bool {
@@ -872,7 +877,7 @@ impl Orchestrator {
         let prev_state = self.last_state.replace(b.ctx.state.clone());
         let state_changed = prev_state.as_deref().is_some_and(|s| s != b.ctx.state);
         let safety = b.cands.iter().any(|c| c.safety.is_some());
-        let raid = self.first.len() >= RAID_FIRST_CONTACTS;
+        let raid = self.is_raid();
         let owed = b
             .cands
             .iter()
