@@ -48,7 +48,12 @@ class Sink:
 class FakeDurations:
     """Four frames per word token, none for the pads: what ``fake_engine.py`` writes."""
 
-    def frames(self, tokens: list[int], sid: int) -> list[int]:
+    def __init__(self) -> None:
+        #: Each call's sid and speed.
+        self.calls: list[tuple[int, float]] = []
+
+    def frames(self, tokens: list[int], sid: int, speed: float = 1.0) -> list[int]:
+        self.calls.append((sid, speed))
         return [0 if t == 0 else (0 if t == 50 else 4) for t in tokens]
 
 
@@ -97,6 +102,7 @@ class Protocol(unittest.TestCase):
                 "fx": "none",
                 "sample_rate": 24_000,
                 "visemes": False,
+                "plus": True,
             },
         )
         self.assertIn("durations", message["reason"])

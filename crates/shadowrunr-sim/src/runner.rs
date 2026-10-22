@@ -1296,6 +1296,7 @@ pub(crate) mod tests {
                     .map(|m| vec![m.id.clone()])
                     .unwrap_or_default(),
                 first_text_ms: Some(7),
+                delivery: None,
             });
             if now_ms % 60_000 == 30_000 {
                 self.polls += 1;
@@ -2539,6 +2540,7 @@ pub(crate) mod tests {
                 text: format!("Minute {} of the audit.", now_ms / 60_000),
                 replying_to: Vec::new(),
                 first_text_ms: None,
+                delivery: None,
             }];
             for h in ctx.hexes.iter().filter(|h| h.fog) {
                 if !searched.contains(&format!("{} ", h.id)) {

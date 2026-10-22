@@ -37,6 +37,13 @@ export type Provenance = "measured" | "assumption";
  */
 export type VoiceFx = "none" | "light" | "heavy";
 /**
+ * A text-to-speech provider.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceProvider".
+ */
+export type VoiceProvider = "kokoro" | "elevenlabs";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "CharacterListResult".
  */
@@ -367,6 +374,7 @@ export type StreamEvent =
       type: "picked";
     }
   | {
+      delivery?: Delivery;
       first_text_ms?: number;
       /**
        * Foil id when speaker = foil.
@@ -502,6 +510,21 @@ export type Command =
  * via the `definition` "Platform".
  */
 export type Platform = "twitch" | "youtube" | "kick" | "sim";
+/**
+ * The closed emotion set a cue may name.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Emotion".
+ */
+export type Emotion =
+  "neutral" | "menace" | "glee" | "deadpan" | "hushed" | "outrage" | "sarcasm" | "weary" | "triumph" | "tender";
+/**
+ * The pace a line is spoken at.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Pace".
+ */
+export type Pace = "slow" | "normal" | "fast";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "Speaker".
@@ -769,6 +792,13 @@ export type DecidedBy = "only_eligible" | "quality" | "cost_per_usable_stream";
  */
 export type IneligibleReason = "hard_fail" | "unmeasured";
 /**
+ * A provider's key, by state only (never its value).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceKeyState".
+ */
+export type VoiceKeyState = "not_needed" | "missing" | "set" | "verified" | "rejected";
+/**
  * An owner act on a candidate; [`ClipCandidate::act_block`] says when it is allowed.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -879,6 +909,7 @@ export type VoiceClientFrame = VoiceFollowFrame | VoicePlayedFrame | VoiceStageD
  */
 export type VoiceFrame =
   | {
+      provider?: VoiceProvider;
       reason?: string;
       state: VoiceState;
       type: "status";
@@ -1198,6 +1229,26 @@ export interface RpcMethods {
   "tournaments.page": {
     params: TournamentsPageParams;
     result: TournamentsPage;
+  };
+  "voice.bench": {
+    params: VoiceBenchParams;
+    result: VoiceBench;
+  };
+  "voice.preview": {
+    params: VoicePreviewParams;
+    result: VoicePreview;
+  };
+  "voice.settings.get": {
+    params: VoiceSettingsGetParams;
+    result: VoiceSettings;
+  };
+  "voice.settings.set": {
+    params: VoiceSettingsSetParams;
+    result: VoiceSettings;
+  };
+  "voice.verify": {
+    params: VoiceVerifyParams;
+    result: ProviderStatus;
   };
 }
 /**
@@ -1526,7 +1577,13 @@ export interface TuningRow {
  * via the `definition` "CharacterVoice".
  */
 export interface CharacterVoice {
+  /**
+   * Whether the model is asked to write a delivery cue on its lines. Absent: on.
+   */
+  delivery?: boolean;
+  elevenlabs?: ElevenlabsVoice;
   fx?: VoiceFx;
+  provider?: VoiceProvider;
   /**
    * The voice's verified speaker id.
    */
@@ -1545,6 +1602,25 @@ export interface CharacterVoice {
    * (`tools/voice/recipes`), never bundled. Absent: the model's own `voices.bin`.
    */
   voices_file?: string;
+}
+/**
+ * ElevenLabs' voice. A package carries `model` and `speed` only; `voice_id` names a voice in
+ * the owner's account and normally lives in the local override, so sharing a character never
+ * shares it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ElevenlabsVoice".
+ */
+export interface ElevenlabsVoice {
+  /**
+   * Model id, e.g. `eleven_v3`.
+   */
+  model?: string;
+  /**
+   * Speaking-rate multiplier (1.0 is the voice's own rate).
+   */
+  speed?: number;
+  voice_id?: string;
 }
 /**
  * Params of a method that takes none: `{}`.
@@ -3522,6 +3598,17 @@ export interface Viewer {
   sub_tier?: number;
 }
 /**
+ * A line's delivery. `intensity` is 0.0..=1.0, clamped when read.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Delivery".
+ */
+export interface Delivery {
+  emotion: Emotion;
+  intensity: number;
+  pace: Pace;
+}
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "VoteTally".
  */
@@ -4763,6 +4850,180 @@ export interface TournamentsPageParams {
 export interface TournamentsPage {
   items: TournamentRow[];
   next_cursor?: string;
+}
+/**
+ * `voice.bench`: render `characters/<id>/voice/bench.toml`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceBenchParams".
+ */
+export interface VoiceBenchParams {
+  character: string;
+}
+/**
+ * The rendered emotion bench.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceBench".
+ */
+export interface VoiceBench {
+  label: string;
+  lines: VoiceBenchLine[];
+  provider: VoiceProvider;
+}
+/**
+ * One bench line. On `error` the audio fields are empty (`pcm` "", zero lengths).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceBenchLine".
+ */
+export interface VoiceBenchLine {
+  chars: number;
+  delivery: Delivery;
+  duration_ms: number;
+  error?: string;
+  id: string;
+  pcm: string;
+  sample_rate: number;
+  text: string;
+}
+/**
+ * `voice.preview`: speak `text` (gated by the brain's output gate, at most 400 chars) with
+ * the character's effective choice.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoicePreviewParams".
+ */
+export interface VoicePreviewParams {
+  character: string;
+  delivery?: Delivery;
+  text: string;
+}
+/**
+ * A rendered preview line.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoicePreview".
+ */
+export interface VoicePreview {
+  /**
+   * Characters sent to the provider.
+   */
+  chars: number;
+  delivery?: Delivery;
+  duration_ms: number;
+  label: string;
+  /**
+   * Mono PCM16 little-endian, base64.
+   */
+  pcm: string;
+  provider: VoiceProvider;
+  sample_rate: number;
+  /**
+   * Whether the provider produced mouth shapes.
+   */
+  visemes: boolean;
+}
+/**
+ * `voice.settings.get`, `voice.bench`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceSettingsGetParams".
+ */
+export interface VoiceSettingsGetParams {
+  character: string;
+}
+/**
+ * A character's voice settings.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceSettings".
+ */
+export interface VoiceSettings {
+  character: string;
+  effective: VoiceChoice;
+  /**
+   * The human status label, e.g. "kokoro malakor-a (sid 52), fx light".
+   */
+  label: string;
+  override?: VoiceChoice;
+  package: VoiceChoice;
+  providers: ProviderStatus[];
+}
+/**
+ * A provider and its voice. Only the chosen provider's table is read; the other is kept so
+ * switching back keeps its settings.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceChoice".
+ */
+export interface VoiceChoice {
+  elevenlabs?: ElevenlabsVoice;
+  kokoro?: KokoroVoice;
+  provider: VoiceProvider;
+}
+/**
+ * Kokoro's voice: the same fields as the package `[voice]` kokoro keys.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "KokoroVoice".
+ */
+export interface KokoroVoice {
+  fx?: VoiceFx;
+  /**
+   * Speaker id in the voices file.
+   */
+  sid?: number;
+  /**
+   * Speaking-rate multiplier (1.0 is the voice's own rate).
+   */
+  speed?: number;
+  /**
+   * Voice id, e.g. `af_heart`.
+   */
+  voice?: string;
+  /**
+   * The voices file `sid` is read from, by name (in the daemon's `[voice] voices_dir`).
+   */
+  voices_file?: string;
+}
+/**
+ * One provider's readiness.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ProviderStatus".
+ */
+export interface ProviderStatus {
+  /**
+   * When the key was last verified (epoch ms).
+   */
+  checked_ms?: number;
+  key: VoiceKeyState;
+  provider: VoiceProvider;
+  /**
+   * It can speak now.
+   */
+  ready: boolean;
+  reason?: string;
+}
+/**
+ * `voice.settings.set`: replace the local override; `null` clears it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceSettingsSetParams".
+ */
+export interface VoiceSettingsSetParams {
+  character: string;
+  choice: VoiceChoice | null;
+}
+/**
+ * `voice.verify`: one cheap authenticated call to the provider.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceVerifyParams".
+ */
+export interface VoiceVerifyParams {
+  provider: VoiceProvider;
 }
 /**
  * The frame wrapping [`StageAck`]: `{"ack": {...}}`.

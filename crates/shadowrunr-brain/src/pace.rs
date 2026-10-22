@@ -4,8 +4,9 @@
 //!
 //! - **The speech clock.** Every line the brain puts on air (his lines, foil lines, stall and
 //!   cover lines, the sign-off) advances `speaking_until`:
-//!   `max(now, speaking_until) + chars / speech_cps * 1000 + line_pause_ms`. Silence is
-//!   measured from where it ends: "nobody is speaking", not "no event".
+//!   `max(now, speaking_until) + chars / (speech_cps * pace_factor) * 1000 + line_pause_ms`,
+//!   where a model line's cued pace sets [`pace_factor`] (slow 0.72, fast 1.04, else 1.0).
+//!   Silence is measured from where it ends: "nobody is speaking", not "no event".
 //! - **The hold.** While more than `speech_lead_ms` of speech is still queued, a beat is a
 //!   `hold` (reason `speaking: N.N s queued`) and makes no core call. A safety beat always runs
 //!   at once, and so does a goodbye beat (the state carries a [`CLOSING_NOW_PREFIX`] line): the
@@ -38,7 +39,25 @@
 //! `budget_chars` 260 (about 14 s of speech, inside the 15 s say-gap ceiling),
 //! `lookahead_max_ms` 8000 and `lag_ceiling_ms` 13000.
 
+use shadowrunr_types::delivery::Pace;
 use shadowrunr_types::TsMs;
+
+/// How much faster than `speech_cps` a line cued `slow` is spoken (measured: VP-5 voiced show
+/// 2026-10-22, Kokoro Plus, n=11 slow / 13 fast).
+pub const PACE_FACTOR_SLOW: f64 = 0.72;
+/// A `normal` (or uncued) line: `speech_cps` as measured.
+pub const PACE_FACTOR_NORMAL: f64 = 1.0;
+/// A `fast` line (measured, as [`PACE_FACTOR_SLOW`]).
+pub const PACE_FACTOR_FAST: f64 = 1.04;
+
+/// The speaking-rate factor of a line's cued pace; 1.0 for a line with none.
+pub fn pace_factor(pace: Option<Pace>) -> f64 {
+    match pace {
+        Some(Pace::Slow) => PACE_FACTOR_SLOW,
+        Some(Pace::Fast) => PACE_FACTOR_FAST,
+        Some(Pace::Normal) | None => PACE_FACTOR_NORMAL,
+    }
+}
 
 /// The output moderation rule that records a spoken line dropped to keep a beat in budget.
 pub const PACE_RULE: &str = "pace_budget";
@@ -91,13 +110,19 @@ impl Default for PaceConfig {
 impl PaceConfig {
     /// How long a line takes on air: its characters at `speech_cps`, plus the line pause.
     pub fn speech_ms(&self, text: &str) -> i64 {
+        self.paced_speech_ms(text, None)
+    }
+
+    /// [`Self::speech_ms`] for a line cued at `pace`: its characters at `speech_cps` times
+    /// [`pace_factor`].
+    pub fn paced_speech_ms(&self, text: &str, pace: Option<Pace>) -> i64 {
         let chars = text.chars().count() as f64;
         let cps = if self.speech_cps > 0.0 {
             self.speech_cps
         } else {
             PaceConfig::default().speech_cps
         };
-        (chars / cps * 1000.0).round() as i64 + self.line_pause_ms.max(0)
+        (chars / (cps * pace_factor(pace)) * 1000.0).round() as i64 + self.line_pause_ms.max(0)
     }
 }
 
@@ -111,8 +136,13 @@ impl SpeechClock {
     /// A line goes on air at `at`: it starts when the speech before it ends, and the clock moves
     /// to where it ends.
     pub fn say(&mut self, at: TsMs, text: &str, cfg: &PaceConfig) {
+        self.say_paced(at, text, None, cfg);
+    }
+
+    /// [`Self::say`] for a line cued at `pace`.
+    pub fn say_paced(&mut self, at: TsMs, text: &str, pace: Option<Pace>, cfg: &PaceConfig) {
         let start = self.until.map_or(at, |u| u.max(at));
-        self.until = Some(start.saturating_add(cfg.speech_ms(text)));
+        self.until = Some(start.saturating_add(cfg.paced_speech_ms(text, pace)));
     }
 
     /// When the last speech ends (or ended); `None` before the first line.
@@ -248,6 +278,20 @@ mod tests {
         c.say(30_000, "z", &cfg);
         assert_eq!(c.until(), Some(30_000 + 56 + 250));
         assert_eq!(c.free_at(40_000), 40_000);
+    }
+
+    #[test]
+    fn a_cued_pace_scales_the_speaking_rate() {
+        let cfg = PaceConfig::default();
+        let line = "x".repeat(180);
+        // 180 characters: 10 s at 18 a second, 180 / (18 * 0.72) s slow, 180 / (18 * 1.04) fast.
+        assert_eq!(cfg.paced_speech_ms(&line, None), 10_250);
+        assert_eq!(cfg.paced_speech_ms(&line, Some(Pace::Normal)), 10_250);
+        assert_eq!(cfg.paced_speech_ms(&line, Some(Pace::Slow)), 13_889 + 250);
+        assert_eq!(cfg.paced_speech_ms(&line, Some(Pace::Fast)), 9_615 + 250);
+        let mut c = SpeechClock::default();
+        c.say_paced(0, &line, Some(Pace::Slow), &cfg);
+        assert_eq!(c.until(), Some(14_139));
     }
 
     #[test]

@@ -209,6 +209,10 @@ pub enum StreamEvent {
         replying_to: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         first_text_ms: Option<u64>,
+        /// How the line is spoken: the cue the model wrote at its start. Absent on lines with
+        /// no cue, and on the engine's own lines (stalls, sign-offs).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delivery: Option<crate::delivery::Delivery>,
     },
     Op {
         ts_ms: TsMs,

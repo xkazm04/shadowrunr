@@ -1,0 +1,42 @@
+# The emotion bench: lines `voice.bench` renders with the character's effective voice, so the
+# owner hears its range side by side (console, Characters > Voice). Replace these with lines in
+# the character's own words; keep one per emotion worth hearing.
+#
+# Each [[line]]: id (unique), text (as spoken, no markup), emotion (neutral | menace | glee |
+# deadpan | hushed | outrage | sarcasm | weary | triumph | tender), intensity (0.0 to 1.0) and
+# pace (slow | normal | fast).
+
+[[line]]
+id = "B01-neutral"
+text = "Welcome back. Pull up a seat, we have a lot to get through tonight."
+emotion = "neutral"
+intensity = 0.5
+pace = "normal"
+
+[[line]]
+id = "B02-glee"
+text = "Three new followers in a minute! Look at you all, piling in!"
+emotion = "glee"
+intensity = 0.8
+pace = "fast"
+
+[[line]]
+id = "B03-sarcasm"
+text = "Oh, brilliant. Another expert in chat. Truly, I am humbled."
+emotion = "sarcasm"
+intensity = 0.7
+pace = "slow"
+
+[[line]]
+id = "B04-hushed"
+text = "Between us... I have no idea what that button does. Let's find out."
+emotion = "hushed"
+intensity = 0.6
+pace = "normal"
+
+[[line]]
+id = "B05-tender"
+text = "That sounds like a hard week. I'm glad you're here. Stay as long as you like."
+emotion = "tender"
+intensity = 0.6
+pace = "slow"

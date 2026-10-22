@@ -21,6 +21,7 @@ foils/<foil>.md     optional SEG-01 guest foils (original parody archetypes, nev
 rules/<rule>.md     constitution rules, switched under [rules]; a rail is also listed in `rails`
 stalls.toml         optional: model-free lines spoken while the engine fleet fails
 situations.json     optional: the simulator's situation bank
+voice/bench.toml    optional: the emotion bench, lines the console renders in each emotion (below)
 segments/<SEG-ID>.md  optional: the owner's directions for one segment (below)
 ```
 
@@ -37,7 +38,7 @@ table or key means the engine's neutral default. An unknown key is an error.
 |---|---|---|
 | top level | `id` (the directory name), `name` (display name), `tagline`, `default_tone`, `foils`, `rails` | `tagline`, `foils` and `rails` empty |
 | `[identity]` | `name`, `title`, `address_words`, `reply_prefixes`, `patron`, `follower`, `researcher`, `sign_off`, `disclosure` | a neutral identity built from `name` (viewers, producer, researchers) |
-| `[voice]` | `voice`, `sid`, `voices_file`, `fx` (`none`, `light` or `heavy`), `speed` | the daemon's `[voice]` |
+| `[voice]` | `voice`, `sid`, `voices_file`, `fx` (`none`, `light` or `heavy`), `speed`; `provider` (`kokoro` or `elevenlabs`), `elevenlabs` (`model`, `speed`), `delivery` (`true` or `false`) | the daemon's `[voice]`; provider `kokoro`; delivery cues on |
 | `[avatar]` | `rig` (the rig spec in the package), `face` (`glow`, `cut` or `depth`) | the daemon's `[stage] avatar` |
 | `[ranks]` | a title per rank (`thrall` ... `dread_council`), `weights`, `thresholds`, `propose_min_rank` | the engine's titles and ladder (`segments/data/ranks.toml`) |
 | `[rules]` | `<rule-id> = true/false`: each rule's default | every rule file off |
@@ -197,6 +198,32 @@ RPCs are in [docs/spec/contract.md](../spec/contract.md) (the segment directions
   voice. Malakor's is `malakor-a`, sid 52 of `malakor-voices.bin`, fx `light`
   ([voice.md](voice.md#malakors-voice-the-blend-and-the-lich-chain) makes the file). `speed`
   is part of the schema but not applied yet: the voice sidecar has no rate flag.
+- **Provider.** `[voice] provider` picks who speaks the character: `kokoro` (the default, the
+  local sidecar) or `elevenlabs`. `[voice] elevenlabs = { model = "...", speed = 1.1 }` holds
+  the ElevenLabs settings a package may share; the account's `voice_id` belongs in the
+  operator's local override, `<data>/characters/<id>/voice.json` (gitignored), which wins field
+  by field over the package. The choice is resolved at each stream start. A provider never falls
+  back to another: a failing one leaves the voice `degraded` with its reason.
+- **Delivery cues.** By default the prompt asks the model to open most lines with a cue,
+  `[<emotion> <intensity> <pace>]` (emotions `neutral`, `menace`, `glee`, `deadpan`, `hushed`,
+  `outrage`, `sarcasm`, `weary`, `triumph`, `tender`; pace `slow`, `normal` or `fast`). The
+  brain parses it into the line's `delivery` and strips every other bracket and asterisk markup
+  before the line is spoken. `[voice] delivery = false` turns the instruction off; the prompt is
+  then exactly what it was without cues.
+- **Emotion bench.** `voice/bench.toml` lists lines to hear in each emotion, rendered with the
+  character's effective voice (`voice.bench`). Each entry:
+
+  ```toml
+  [[line]]
+  id = "L06-sarcasm"
+  text = "Oh, wonderful. Another genius in chat who has solved necromancy."
+  emotion = "sarcasm"       # one of the emotions above
+  intensity = 0.8           # 0.0 to 1.0
+  pace = "slow"             # slow | normal | fast
+  ```
+
+  Write the text as spoken, with no markup. The template carries five generic lines; Malakor's
+  carries the ten voice-lab lines.
 - **Face renderer.** The configured character's `[avatar] face` overrides `[stage] avatar` in
   the stage URLs the daemon hands out.
 - **Face rig.** `/avatar/{file}` serves the rig of the character on air (the latest run in

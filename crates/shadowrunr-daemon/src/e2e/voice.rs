@@ -116,7 +116,7 @@ async fn voice_follows_the_newest_run_then_a_named_one() {
     let ready = next(&mut ws).await;
     assert_eq!(
         ready,
-        json!({"type":"status","state":"ready","voice":"af_heart","visemes":true})
+        json!({"type":"status","state":"ready","voice":"af_heart","visemes":true,"provider":"kokoro"})
     );
 
     let a = st.live.register("run-a", 2).unwrap();

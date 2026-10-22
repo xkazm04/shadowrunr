@@ -1,6 +1,7 @@
-// Every label the package's Parameters tab shows. Wire ids (ranks, segments, provenance, face
-// renderers, tuning keys) stay on the wire and never reach the screen: they are named here.
-import type { Provenance, Rank, SegmentId } from "@shadowrunr/contract";
+// Every label the package's Parameters and Voice tabs show. Wire ids (ranks, segments,
+// provenance, face renderers, tuning keys, voice providers, key states, emotions, paces) stay on
+// the wire and never reach the screen: they are named here.
+import type { Delivery, Emotion, Pace, Provenance, Rank, SegmentId, VoiceFx, VoiceKeyState, VoiceProvider } from "@shadowrunr/contract";
 
 export const RANK_ORDER: readonly Rank[] = ["thrall", "acolyte", "cultist", "warlock", "lich", "dread_council"];
 
@@ -42,3 +43,37 @@ export function tuningValue(key: string, v: number): string {
 
 /** A tuning row's label: its one-line doc without the trailing unit note (", ms." / ", s."). */
 export const tuningLabel = (doc: string): string => doc.replace(/,\s*(ms|s)\.?\s*$/, "").replace(/\.\s*$/, "");
+
+export const PROVIDER_ORDER: readonly VoiceProvider[] = ["kokoro", "elevenlabs"];
+export const PROVIDER_NAME: Readonly<Record<VoiceProvider, string>> = { kokoro: "Kokoro", elevenlabs: "ElevenLabs" };
+
+export const KEY_NAME: Readonly<Record<VoiceKeyState, string>> = {
+  not_needed: "No key needed",
+  missing: "Key missing",
+  set: "Key set, not verified",
+  verified: "Key verified",
+  rejected: "Key rejected",
+};
+
+export const FX_ORDER: readonly VoiceFx[] = ["none", "light", "heavy"];
+export const FX_NAME: Readonly<Record<VoiceFx, string>> = { none: "None", light: "Light", heavy: "Heavy" };
+
+export const EMOTION_ORDER: readonly Emotion[] = ["neutral", "menace", "glee", "deadpan", "hushed", "outrage", "sarcasm", "weary", "triumph", "tender"];
+export const EMOTION_NAME: Readonly<Record<Emotion, string>> = {
+  neutral: "Neutral",
+  menace: "Menace",
+  glee: "Glee",
+  deadpan: "Deadpan",
+  hushed: "Hushed",
+  outrage: "Outrage",
+  sarcasm: "Sarcasm",
+  weary: "Weary",
+  triumph: "Triumph",
+  tender: "Tender",
+};
+
+export const PACE_ORDER: readonly Pace[] = ["slow", "normal", "fast"];
+export const PACE_NAME: Readonly<Record<Pace, string>> = { slow: "Slow", normal: "Normal", fast: "Fast" };
+
+/** A line's delivery as words: "Sarcasm 80% · Slow pace". */
+export const deliveryLabel = (d: Delivery): string => `${EMOTION_NAME[d.emotion]} ${Math.round(d.intensity * 100)}% · ${PACE_NAME[d.pace]} pace`;

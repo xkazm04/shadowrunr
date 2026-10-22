@@ -2,8 +2,10 @@
 """The sidecar's protocol (contract appendix (voice)): JSON lines on stdio, one object per line.
 
 - Out, first: ``{"type":"hello","protocol":1,"voice","voices","sid","fx","sample_rate",
-  "visemes":bool,"reason"?}``; ``voices`` is the voices file's name, never its path.
-- In: ``{"type":"say","id","text"}`` and ``{"type":"cancel","ids":[...]}``.
+  "visemes":bool,"plus"?:true,"reason"?}``; ``voices`` is the voices file's name, never its path,
+  and ``plus`` says a say's ``delivery`` is heard (every voice that speaks has it).
+- In: ``{"type":"say","id","text","delivery"?:{"emotion","intensity","pace"}}`` and
+  ``{"type":"cancel","ids":[...]}``.
 - Out, per sentence: ``{"type":"audio","id","part","last","text","sample_rate","pcm",
   "visemes"?}``; ``visemes`` is ``[[v, start_ms, end_ms]]`` and is left out when there are none.
 - Out, on failure: ``{"type":"error","id","part","reason"}``, and the rest of that line is dropped.
@@ -33,12 +35,19 @@ the voice dead: the hello says why, every ``say`` fails with it, and nothing fal
 another voice. ``--fx light|heavy`` runs :mod:`.fx` over each sentence after the pause cut and
 after its mouth shapes are worked out; the length is unchanged, so the mouth timeline holds. It
 needs numpy, and without it the voice is dead too rather than dry.
+
+**Kokoro Plus.** A say with a ``delivery`` is spoken by :mod:`.plus`'s plan: its parts are the
+line's sentences (and its clauses at slow pace), each rendered at the plan's speed on the
+emotion's blend, with the plan's silence added to its end before the chain, and the chain's
+pitch moved by the plan's semitones. Its mouth shapes come from the same sid and speed and end
+in ``sil`` over the silence. A say without one is rendered exactly as before.
 """
 
 from __future__ import annotations
 
 import base64
 import collections
+import dataclasses
 import importlib
 import json
 import sys
@@ -51,12 +60,26 @@ from typing import IO, Any
 
 from .engine import (
     SAMPLE_RATE,
+    SPEAKER_BYTES,
     EngineError,
     KokoroPaths,
     Render,
     Rendered,
     paths_for,
     voices_problem,
+)
+from .plus import (
+    PITCH_FLOOR_ST,
+    EmotionVoice,
+    Plan,
+    clamp_note,
+    cut,
+    edges,
+    emotion_voices,
+    insert_silence,
+    parse_delivery,
+    plan_line,
+    trim_spans,
 )
 from .text import split_line
 from .visemes import Durations, load_symbols, sentence_visemes, to_ms
@@ -74,6 +97,8 @@ __all__ = [
     "Sidecar",
     "hello",
     "open_faces",
+    "pitched_chain",
+    "plus_reason",
     "voice_problem",
     "wet_chain",
 ]
@@ -97,6 +122,8 @@ FX_PRESETS = ("none", "light", "heavy")
 Send = Callable[[dict[str, Any]], None]
 #: One sentence's PCM16 through the FX chain: the same number of samples out.
 Wet = Callable[[bytes], bytes]
+#: The same, with the chain's pitch moved by some semitones (a line with a delivery).
+Pitched = Callable[[bytes, float], bytes]
 
 
 class Out:
@@ -155,6 +182,59 @@ def wet_chain(preset: str) -> Wet | None:
     return wet
 
 
+def pitched_chain(preset: str) -> Pitched | None:
+    """The FX chain for ``preset`` with its shift moved by a line's semitones, in the same one
+    STFT pass; ``None`` for ``none``. Raises ``ImportError`` without numpy."""
+    if preset == "none":
+        return None
+    fx = importlib.import_module(".fx", __package__)
+    base = fx.PRESETS[preset]
+
+    def wet(pcm: bytes, semitones: float) -> bytes:
+        return fx.apply(pcm, dataclasses.replace(base, semitones=base.semitones + semitones))
+
+    return wet
+
+
+def preset_shift(preset: str) -> float | None:
+    """The preset's own pitch shift in semitones, or ``None`` with no chain that can run (no
+    pitch lever)."""
+    if preset not in FX_PRESETS or preset == "none":
+        return None
+    try:
+        fx = importlib.import_module(".fx", __package__)
+    except ImportError:
+        return None
+    return float(fx.PRESETS[preset].semitones)
+
+
+def own_emotion_voices(settings: Settings) -> dict[str, EmotionVoice]:
+    """The voice's emotion blends (:func:`.plus.emotion_voices`); none on the stock file."""
+    paths = settings.paths
+    if not paths.own_voices:
+        return {}
+    try:
+        speakers = paths.voices.stat().st_size // SPEAKER_BYTES
+    except OSError:
+        return {}
+    return emotion_voices(paths.voices, settings.sid, speakers)
+
+
+def plus_reason(settings: Settings, voices: dict[str, EmotionVoice]) -> str:
+    """The hello's ``plus`` clause: the emotion blends found, and once, the emotions whose pitch
+    is held at the floor."""
+    count = len(voices)
+    notes = [f"{count} emotion voice{'' if count == 1 else 's'}" if voices else "no emotion voices"]
+    shift = preset_shift(settings.fx)
+    if shift is None:
+        notes.append("no pitch lever without fx")
+    else:
+        held = clamp_note(voices, shift)
+        if held:
+            notes.append(f"pitch held at {PITCH_FLOOR_ST:.1f} st for {', '.join(held)}")
+    return f"plus ({'; '.join(notes)})"
+
+
 class Faces:
     """The warm durations model and the token table: one sentence's mouth shapes at a time."""
 
@@ -163,9 +243,20 @@ class Faces:
         self.symbols = symbols
         self.sid = sid
 
-    def visemes(self, rendered: Rendered, sample_rate: int) -> list[list[Any]] | None:
+    def visemes(
+        self,
+        rendered: Rendered,
+        sample_rate: int,
+        *,
+        sid: int | None = None,
+        speed: float = 1.0,
+        keep: tuple[int, int] | None = None,
+        pad: int = 0,
+    ) -> list[list[Any]] | None:
         """The sentence's ``[[v, start_ms, end_ms]]``, or ``None``: the face is never worth the
-        sentence, so any failure here sends the audio without it."""
+        sentence, so any failure here sends the audio without it. ``sid`` and ``speed`` are the
+        render's own (a line with a delivery); only samples ``keep`` of the audio are sent, and
+        ``pad`` samples of silence follow them."""
         if not rendered.tokens or not rendered.time_map:
             return None
         try:
@@ -177,12 +268,20 @@ class Faces:
                 time_map=rendered.time_map,
                 pcm=rendered.pcm,
                 sample_rate=sample_rate,
-                sid=self.sid,
+                sid=self.sid if sid is None else sid,
+                speed=speed,
             )
         except Exception as exc:
             print(f"voice: no visemes for a sentence: {exc!r}", file=sys.stderr, flush=True)
             return None
-        return to_ms(spans, len(rendered.pcm) // 2, sample_rate)
+        samples = len(rendered.pcm) // 2
+        if keep is not None and keep != (0, samples):
+            spans = trim_spans(spans, *keep)
+            samples = keep[1] - keep[0]
+        if pad > 0:
+            spans = insert_silence(spans, samples, pad)
+            samples += pad
+        return to_ms(spans, samples, sample_rate)
 
 
 def open_faces(settings: Settings, paths: KokoroPaths) -> tuple[Faces | None, str | None]:
@@ -313,7 +412,9 @@ def hello(
         engine = "engine: process"
     if faces is not None:
         message["visemes"] = True
-    message["reason"] = f"{why}; {engine}" if why is not None else engine
+    message["plus"] = True
+    plus = plus_reason(settings, own_emotion_voices(settings))
+    message["reason"] = f"{why}; {engine}; {plus}" if why is not None else f"{engine}; {plus}"
     return message, None, faces, warm
 
 
@@ -331,6 +432,8 @@ class _Line:
     #: Parts already sent; ``parts[sent]`` is the one the sender waits for next.
     sent: int = 0
     cancelled: bool = False
+    #: How a line with a delivery is spoken (:mod:`.plus`); ``None`` is as before.
+    plan: Plan | None = None
 
 
 class Sidecar:
@@ -349,6 +452,7 @@ class Sidecar:
         faces: Faces | None = None,
         warm: WarmPool | None = None,
         wet: Wet | None = None,
+        pitched: Pitched | None = None,
     ) -> None:
         self.settings = settings
         self.paths = settings.paths
@@ -361,6 +465,17 @@ class Sidecar:
         self.wet = wet
         if wet is None and dead is None:
             self.wet = wet_chain(settings.fx)
+        #: The chain with a line's pitch (``pitched`` replaces it), and Kokoro Plus's inputs:
+        #: the preset's own shift and the voice's emotion blends.
+        self.pitched = pitched
+        self.preset_st: float | None = None
+        self.emotion_voices: dict[str, EmotionVoice] = {}
+        if dead is None:
+            if pitched is None and wet is None:
+                self.pitched = pitched_chain(settings.fx)
+            if self.pitched is not None:
+                self.preset_st = preset_shift(settings.fx)
+            self.emotion_voices = own_emotion_voices(settings)
         self.workers = len(warm.workers) if warm is not None else max(settings.workers, 1)
         self.threads = max(settings.threads if settings.threads is not None else DEFAULT_THREADS, 1)
         self._lock = threading.Condition()
@@ -399,14 +514,25 @@ class Sidecar:
             self.send(_error(ident, 0, "the say has no text"))
             return
         line = _Line(ident, text, time.monotonic())
+        delivery = parse_delivery(message.get("delivery"))
         if self.dead is not None:
             line.problem = self.dead
         elif len(text) > MAX_CHARS:
             line.problem = f"the line is longer than {MAX_CHARS} characters"
-        else:
+        elif delivery is None:
             line.parts = split_line(text)
-            if not line.parts:
-                line.problem = "the line has no words"
+        else:
+            line.plan = plan_line(
+                text,
+                delivery,
+                base_sid=self.settings.sid,
+                voices=self.emotion_voices,
+                preset_st=self.preset_st,
+            )
+            line.parts = line.plan.parts
+            print(f"voice: plus {line.plan.describe()}", file=sys.stderr, flush=True)
+        if line.problem is None and not line.parts:
+            line.problem = "the line has no words"
         with self._lock:
             if self._closed:
                 return
@@ -469,6 +595,7 @@ class Sidecar:
                     return
                 urgent = line is self._lines[0] and len(line.renders) == line.sent
                 sentence = line.parts[len(line.renders)]
+                plan = line.plan
                 render: Render | WarmRender
                 if self.warm is not None:
                     render = WarmRender(
@@ -478,11 +605,13 @@ class Sidecar:
                         faced=self.faces is not None,
                         urgent=urgent,
                         on_done=self._ended,
+                        sid=plan.sid if plan is not None else None,
+                        speed=plan.speed if plan is not None else None,
                     )
                 else:
                     render = Render(
                         self.paths,
-                        self.settings.sid,
+                        plan.sid if plan is not None else self.settings.sid,
                         sentence,
                         self.settings.timeout_s,
                         faced=self.faces is not None,
@@ -490,6 +619,7 @@ class Sidecar:
                         threads=self.threads,
                         urgent=urgent,
                         on_done=self._ended,
+                        speed=plan.speed if plan is not None else None,
                     )
                 line.renders.append(render)
                 self._running += 1
@@ -527,6 +657,31 @@ class Sidecar:
                 for render in left:
                     render.cancel()
 
+    def _plus(
+        self, plan: Plan, part: int, rendered: Rendered
+    ) -> tuple[list[list[Any]] | None, bytes]:
+        """A part of a line with a delivery: Kokoro's quiet cut at an edge that borders a pause,
+        its own pause added to its end, its mouth shapes from its own sid and speed with ``sil``
+        over the pause, then the chain with its pitch. The pause goes in before the chain, so
+        the crypt rings into it."""
+        pad = round(plan.pauses_ms[part] * SAMPLE_RATE / 1000)
+        lead = part > 0 and plan.pauses_ms[part - 1] > 0
+        a, b = edges(rendered.pcm, SAMPLE_RATE, lead=lead, tail=pad > 0)
+        visemes = None
+        if self.faces is not None:
+            visemes = self.faces.visemes(
+                rendered, SAMPLE_RATE, sid=plan.sid, speed=plan.speed, keep=(a, b), pad=pad
+            )
+        dry = (
+            rendered.pcm
+            if (a, b) == (0, len(rendered.pcm) // 2)
+            else cut(rendered.pcm, a, b, SAMPLE_RATE)
+        )
+        pcm = dry + bytes(2 * pad)
+        if plan.pitch_st and self.pitched is not None:
+            return visemes, self.pitched(pcm, plan.pitch_st)
+        return visemes, self.wet(pcm) if self.wet is not None else pcm
+
     def _speak(self, line: _Line) -> None:
         if line.problem is not None:
             self.send(_error(line.id, 0, line.problem))
@@ -546,9 +701,13 @@ class Sidecar:
                 return
             if rendered is None:
                 return
-            visemes = self.faces.visemes(rendered, SAMPLE_RATE) if self.faces else None
-            # The chain keeps the length, so mouth shapes worked out on the dry audio still hold.
-            pcm = self.wet(rendered.pcm) if self.wet is not None else rendered.pcm
+            plan = line.plan
+            if plan is None:
+                visemes = self.faces.visemes(rendered, SAMPLE_RATE) if self.faces else None
+                # The chain keeps the length, so mouth shapes worked out on the dry audio hold.
+                pcm = self.wet(rendered.pcm) if self.wet is not None else rendered.pcm
+            else:
+                visemes, pcm = self._plus(plan, part, rendered)
             with self._lock:
                 if line.cancelled or self._closed:
                     return

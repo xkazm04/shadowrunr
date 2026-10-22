@@ -316,6 +316,42 @@ pub async fn check(cfg: &VoiceConfig) -> Vec<Item> {
     items
 }
 
+/// The ElevenLabs rows: the key's env var (set or missing, never its value), the voice id and
+/// the model. All needed: without a key or a voice it cannot speak.
+pub fn elevenlabs_items(
+    cfg: &super::elevenlabs::ElevenlabsConfig,
+    spec: &super::elevenlabs::ElevenSpec,
+) -> Vec<Item> {
+    let key = cfg.key_set();
+    vec![
+        Item::new(
+            "elevenlabs key",
+            key,
+            true,
+            if key {
+                format!("{} is set", cfg.api_key_env)
+            } else {
+                format!("{} is not set in the environment", cfg.api_key_env)
+            },
+        ),
+        Item::new(
+            "elevenlabs voice",
+            spec.voice_id.is_some(),
+            true,
+            match &spec.voice_id {
+                Some(id) => format!("voice_id {id}"),
+                None => "no voice_id (set it in the character's voice.json)".into(),
+            },
+        ),
+        Item::new(
+            "elevenlabs model",
+            !spec.model.is_empty(),
+            true,
+            format!("{}, speed {}", spec.model, spec.speed),
+        ),
+    ]
+}
+
 /// Whether everything needed to speak is present.
 pub fn all_needed(items: &[Item]) -> bool {
     items.iter().all(|i| i.ok() || !i.needed)
@@ -339,6 +375,33 @@ pub fn table(items: &[Item]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn elevenlabs_rows_name_the_env_var_never_the_key() {
+        let env = format!("SHADOWRUNR_TEST_PROBE_KEY_{}", std::process::id());
+        std::env::set_var(&env, "sk_probe_secret");
+        let cfg = super::super::elevenlabs::ElevenlabsConfig {
+            api_key_env: env.clone(),
+            ..Default::default()
+        };
+        let spec = super::super::elevenlabs::ElevenSpec {
+            voice_id: Some("v1".into()),
+            model: "eleven_v4_turbo".into(),
+            speed: 1.08,
+        };
+        let items = elevenlabs_items(&cfg, &spec);
+        assert!(all_needed(&items));
+        let text = table(&items);
+        assert!(text.contains(&format!("{env} is set")), "{text}");
+        assert!(!text.contains("sk_probe_secret"));
+        std::env::remove_var(&env);
+        let none = super::super::elevenlabs::ElevenSpec {
+            voice_id: None,
+            ..spec
+        };
+        let items = elevenlabs_items(&cfg, &none);
+        assert_eq!(items.iter().filter(|i| !i.ok()).count(), 2);
+    }
 
     #[test]
     fn engine_files_are_probed_relative_to_engine_dir() {

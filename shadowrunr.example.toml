@@ -154,6 +154,14 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # lines_in_flight = 3               # lines with the sidecar at once; their audio still goes in order
 # render_workers = 3                # engine runs at once in the sidecar (warm: loaded workers)
 # render_threads = 2                # threads per engine run; absent = 2, or 4 for the warm engine
+# The ElevenLabs provider, for a character whose voice choice picks it (the package's [voice]
+# provider, or the local <data>/characters/<id>/voice.json). The key is never here: only the
+# name of the env var that holds it. It never falls back to Kokoro (docs/guide/voice.md).
+# [voice.elevenlabs]
+# api_key_env = "ELEVENLABS_API_KEY"
+# model = "eleven_v4_turbo"
+# base_url = "https://api.elevenlabs.io"
+# timeout_ms = 20000
 
 # The OBS recorder: `shadowrunr stream sandbox --record` and `shadowrunr record check`
 # (docs/guide/recording.md). OBS renders the stage through a browser source; obs-websocket's

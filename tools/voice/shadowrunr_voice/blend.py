@@ -27,6 +27,14 @@ hexgrad/Kokoro-82M's ``voices/*.pt`` in sorted name order). ``af_heart`` is sid 
 sidecar already runs. Rendered pitch agrees: the ``am_*``/``bm_*`` sids come out lower than the
 ``af_*``/``bf_*`` ones, ``am_onyx`` lowest.
 
+**Emotion blends (Kokoro Plus, :mod:`.plus`).** A recipe's ``[emotions]`` table gives a blend per
+emotion of the delivery cue: one of the recipe's own ``[voices]`` blends at
+:data:`EMOTION_BASE_MIN` or more of the weight, leaning toward stock speakers, with the
+``pitch_correction`` in semitones that puts it back in the base blend's register. It is mixed
+from the base blend's row as written, so it takes a slot of the same file and the base slot is
+untouched. The ``.json`` lists each one's sid and ``base_sid``, which is how the sidecar finds
+them; the file stays local and is never committed.
+
 Standard library only (``array``, ``tomllib``), so it runs in the sidecar's own interpreter.
 """
 
@@ -48,10 +56,12 @@ __all__ = [
     "ROW_FLOATS",
     "Blend",
     "BlendError",
+    "Emotion",
     "assign_slots",
     "blend_rows",
     "build",
     "default_out",
+    "load_emotions",
     "load_recipes",
     "sid_of",
 ]
@@ -74,6 +84,12 @@ KOKORO_V1_SPEAKERS: tuple[str, ...] = (
 )  # fmt: skip
 #: The sidecar's stock voice: never displaced.
 STOCK_SID = 3
+#: An emotion blend keeps at least this much of its base voice.
+EMOTION_BASE_MIN = 0.6
+#: The emotions a recipe may blend: the delivery cue's set (:data:`.plus.EMOTIONS`) but neutral.
+CUE_EMOTIONS = (
+    "menace", "glee", "deadpan", "hushed", "outrage", "sarcasm", "weary", "triumph", "tender",
+)  # fmt: skip
 #: Where blended voices files live by default, outside the repo; the daemon's ``voices_dir``.
 VOICES_DIR = Path.home() / ".shadowrunr" / "voices"
 
@@ -92,6 +108,22 @@ class Blend:
 
     def recipe(self) -> dict[str, float]:
         return {KOKORO_V1_SPEAKERS[sid]: weight for sid, weight in self.weights}
+
+
+@dataclass(frozen=True)
+class Emotion:
+    """One ``[emotions]`` entry: its base blend, the stock speakers it leans on, all weights
+    normalised together and in the file's order, its slot and its register correction."""
+
+    name: str
+    base: str
+    #: ``(input, weight)``: the base blend's name, or a stock speaker's.
+    mix: tuple[tuple[str, float], ...]
+    sid: int = -1
+    pitch_correction: float = 0.0
+
+    def leans(self) -> tuple[tuple[int, float], ...]:
+        return tuple((sid_of(k), w) for k, w in self.mix if k != self.base)
 
 
 def sid_of(name: str) -> int:
@@ -124,6 +156,45 @@ def load_recipes(table: Mapping[str, Any]) -> list[Blend]:
         if not isinstance(slot, int) or isinstance(slot, bool):
             raise BlendError(f"{name}: sid is an integer")
         out.append(Blend(name, weights, slot))
+    return out
+
+
+def load_emotions(table: Mapping[str, Any], voices: Sequence[Blend]) -> list[Emotion]:
+    """The recipe's ``[emotions]``: ``{emotion: {base blend: w, speaker: w, ..., sid?,
+    pitch_correction?}}``, in the file's order; none when the table is absent. Each keeps one of
+    ``voices`` at :data:`EMOTION_BASE_MIN` or more."""
+    emotions = table.get("emotions")
+    if emotions is None:
+        return []
+    if not isinstance(emotions, Mapping):
+        raise BlendError("[emotions] is a table of emotion blends")
+    blends = {b.name for b in voices}
+    out: list[Emotion] = []
+    for name, mix in emotions.items():
+        if name not in CUE_EMOTIONS:
+            raise BlendError(f"{name}: not an emotion of the cue ({', '.join(CUE_EMOTIONS)})")
+        if not isinstance(mix, Mapping):
+            raise BlendError(f"{name}: an emotion blend is a table of voice = weight")
+        slot = mix.get("sid", -1)
+        if not isinstance(slot, int) or isinstance(slot, bool):
+            raise BlendError(f"{name}: sid is an integer")
+        correction = mix.get("pitch_correction", 0.0)
+        if not isinstance(correction, (int, float)) or isinstance(correction, bool):
+            raise BlendError(f"{name}: pitch_correction is a number of semitones")
+        parts = [(k, v) for k, v in mix.items() if k not in ("sid", "pitch_correction")]
+        if any(not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0 for _, v in parts):
+            raise BlendError(f"{name}: every weight is a positive number")
+        bases = [k for k, _ in parts if k in blends]
+        if len(bases) != 1:
+            raise BlendError(f"{name}: it blends exactly one of the [voices] ({len(bases)} given)")
+        total = float(sum(v for _, v in parts))
+        normal = tuple((k, float(v) / total) for k, v in parts)
+        for k, _ in normal:
+            if k != bases[0]:
+                sid_of(k)
+        if dict(normal)[bases[0]] < EMOTION_BASE_MIN - 1e-9:
+            raise BlendError(f"{name}: {bases[0]} is under {EMOTION_BASE_MIN} of the blend")
+        out.append(Emotion(name, bases[0], normal, slot, float(correction)))
     return out
 
 
@@ -193,10 +264,23 @@ def build(voices_path: Path, recipe_path: Path, out_path: Path) -> dict[str, Any
     except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         raise BlendError(f"{recipe_path.name} is not TOML: {exc}") from None
     blends = assign_slots(load_recipes(table), speakers)
+    emotions = load_emotions(table, blends)
+    # One slot table for both: an emotion's stock speakers are inputs no slot may replace.
+    placed = assign_slots([*blends, *(Blend(e.name, e.leans(), e.sid) for e in emotions)], speakers)
+    emotions = [
+        Emotion(e.name, e.base, e.mix, p.sid, e.pitch_correction)
+        for e, p in zip(emotions, placed[len(blends) :])
+    ]
+    base_sid = {b.name: b.sid for b in blends}
     out = array("f", voices)
     for b in blends:
         start = b.sid * ROW_FLOATS
         out[start : start + ROW_FLOATS] = blend_rows(voices, b.weights)
+    # An emotion is mixed from its base blend's row as just written, in the recipe's order.
+    for e in emotions:
+        weights = [(base_sid[k] if k == e.base else sid_of(k), w) for k, w in e.mix]
+        start = e.sid * ROW_FLOATS
+        out[start : start + ROW_FLOATS] = blend_rows(out, weights)
     if sys.byteorder != "little":
         out.byteswap()
     body = out.tobytes()
@@ -217,6 +301,19 @@ def build(voices_path: Path, recipe_path: Path, out_path: Path) -> dict[str, Any
             for b in blends
         ],
     }
+    if emotions:
+        meta["emotions"] = [
+            {
+                "name": e.name,
+                "sid": e.sid,
+                "replaces": KOKORO_V1_SPEAKERS[e.sid],
+                "base": e.base,
+                "base_sid": base_sid[e.base],
+                "recipe": dict(e.mix),
+                "pitch_correction": e.pitch_correction,
+            }
+            for e in emotions
+        ]
     out_path.with_name(out_path.name + ".json").write_text(
         json.dumps(meta, indent=2) + "\n", encoding="utf-8"
     )
@@ -242,6 +339,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     for v in meta["voices"]:
         print(f"{v['name']}: sid {v['sid']} (replaces {v['replaces']}) {v['recipe']}")
+    for e in meta.get("emotions", []):
+        print(
+            f"emotion {e['name']}: sid {e['sid']} (replaces {e['replaces']}) {e['recipe']}, "
+            f"pitch correction {e['pitch_correction']:+.2f} st"
+        )
     print(f"wrote {out.name}, sha256 {meta['output']['sha256']}")
     return 0
 

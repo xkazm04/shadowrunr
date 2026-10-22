@@ -13,6 +13,8 @@ export type Utterance = Extract<VoiceFrame, { type: "utterance" }>;
 
 const STATES: ReadonlySet<string> = new Set(["off", "starting", "ready", "degraded"]);
 const SKIPS: ReadonlySet<string> = new Set(["late", "queue_full", "error"]);
+// The stage plays every provider alike; a provider it does not know is left off, not refused.
+const PROVIDERS: ReadonlySet<string> = new Set(["kokoro", "elevenlabs"]);
 const KNOWN: ReadonlySet<string> = new Set<string>(VISEMES);
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -46,9 +48,11 @@ export function parseVoiceFrame(text: string): Parsed<VoiceFrame> {
       if (typeof raw.visemes !== "boolean") return bad("visemes");
       if (!optStr(raw.reason)) return bad("reason");
       if (!optStr(raw.voice)) return bad("voice");
+      if (!optStr(raw.provider)) return bad("provider");
       const f: Extract<VoiceFrame, { type: "status" }> = { type: "status", state: raw.state as "off", visemes: raw.visemes };
       if (typeof raw.reason === "string") f.reason = raw.reason;
       if (typeof raw.voice === "string") f.voice = raw.voice;
+      if (typeof raw.provider === "string" && PROVIDERS.has(raw.provider)) f.provider = raw.provider as "kokoro";
       return { ok: true, value: f };
     }
     case "utterance": {

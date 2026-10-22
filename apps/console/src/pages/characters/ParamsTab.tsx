@@ -1,13 +1,16 @@
 // The package's parameters (character.toml v2), read-only: who the character is in the engine's
-// own text ([identity]), its voice and face, its rank-ladder overrides, the lesson-tuned
-// constants against the engine defaults, and the flavour it adds to each segment. Editing stays
-// in the package file; this tab shows what will run.
+// own text ([identity]), its voice provider (the voice itself is the Voice tab's) and face, its
+// rank-ladder overrides, the lesson-tuned constants against the engine defaults, and the flavour
+// it adds to each segment. Editing stays in the package file; this tab shows what will run.
 import type { CharacterDetail, Rank, SegmentId, TuningRow } from "@shadowrunr/contract";
 import type { ReactNode } from "react";
+import { RouteLink } from "../../router";
+import { buttonClass } from "../../ui/Button";
 import { Head, Section } from "../../ui/Section";
 import { EmptyState } from "../../ui/States";
-import { faceLabel, PROVENANCE_NAME, RANK_ORDER, rankLabel, SEGMENT_NAME, stateLabel, tuningLabel, tuningValue } from "./names";
+import { faceLabel, PROVENANCE_NAME, PROVIDER_NAME, RANK_ORDER, rankLabel, SEGMENT_NAME, stateLabel, tuningLabel, tuningValue } from "./names";
 import l2 from "./Layer2.module.css";
+import { pkgRoute } from "./routes";
 import styles from "./Params.module.css";
 
 const KICKER = "Characters · the package";
@@ -63,24 +66,28 @@ function Identity({ d }: { d: CharacterDetail }) {
 function VoiceFace({ d }: { d: CharacterDetail }) {
   const v = d.voice;
   const a = d.avatar;
-  const hasVoice = v !== undefined && (v.voice !== undefined || v.sid !== undefined || v.speed !== undefined);
+  const hasVoice = v !== undefined && Object.keys(v).length > 0;
   const hasFace = a !== undefined && (a.rig !== undefined || a.face !== undefined);
+  // The voice's fields live on the Voice tab (with this machine's override); here, only who speaks.
+  const toVoice = (
+    <RouteLink to={pkgRoute(d.id, "voice")} className={buttonClass("secondary", "compact")} data-role="characters-to-voice">
+      Voice tab
+    </RouteLink>
+  );
   return (
     <Section title="Voice and face">
       {!hasVoice && !hasFace ? (
-        <EmptyState title="The daemon's voice and face" hint="The package sets neither: the daemon's [voice] and [stage] settings apply." />
+        <EmptyState title="The daemon's voice and face" hint={<>The package sets neither: the daemon&apos;s [voice] and [stage] settings apply. Pick a provider and voice on the {toVoice}.</>} />
       ) : (
         <div data-role="characters-voice">
           <Kv
             rows={[
-              ["Voice", v?.voice],
-              ["Speaker id", v?.sid === undefined ? undefined : String(v.sid)],
-              ["Speaking rate", v?.speed === undefined ? undefined : `×${v.speed.toFixed(2)}`],
+              ["Provider", <>{PROVIDER_NAME[v?.provider ?? "kokoro"]}{v?.provider === undefined && <small className={l2.dim}> · unset, so Kokoro</small>} {toVoice}</>],
               ["Face", a?.face === undefined ? undefined : faceLabel(a.face)],
               ["Rig spec", a?.rig === undefined ? undefined : <code className={l2.code}>{a.rig}</code>],
             ]}
           />
-          <p className={l2.note}>Each field set here overrides the daemon's own setting; an unset field keeps it.</p>
+          <p className={l2.note}>The voice, its speed and this machine&apos;s override are on the Voice tab. Each face field set here overrides the daemon&apos;s own setting; an unset field keeps it.</p>
         </div>
       )}
     </Section>

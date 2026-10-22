@@ -405,6 +405,15 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         "segments.directions.set" => {
             ok(crate::segments_dir::rpc_set(state, params(req.params)?).await?)
         }
+        "voice.settings.get" => {
+            ok(crate::voice::settings::settings_get(state, params(req.params)?).await?)
+        }
+        "voice.settings.set" => {
+            ok(crate::voice::settings::settings_set(state, params(req.params)?).await?)
+        }
+        "voice.verify" => ok(crate::voice::settings::verify(state, params(req.params)?).await?),
+        "voice.preview" => ok(crate::voice::settings::preview(state, params(req.params)?).await?),
+        "voice.bench" => ok(crate::voice::settings::bench(state, params(req.params)?).await?),
         other => Err(RpcError::new(
             ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),

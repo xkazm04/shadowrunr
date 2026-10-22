@@ -10,8 +10,10 @@ normal for a look-ahead sentence and rise once it is the one waited for, as the 
 
 **The worker** (``python -m shadowrunr_voice.warm``) loads the model, renders one short sentence
 to warm it, prints ``@@warm {"ready":true,"load_ms":N}``, then reads JSON lines on stdin:
-``{"text","urgent"}`` is a sentence, answered ``@@warm {"ok":true,"pcm":<base64 PCM16>}`` or
-``@@warm {"ok":false,"reason"}``, and ``{"urgent"}`` alone changes the priority of the sentence
+``{"text","urgent","sid"?,"speed"?}`` is a sentence, answered ``@@warm {"ok":true,"pcm":<base64
+PCM16>}`` or ``@@warm {"ok":false,"reason"}``. ``sid`` and ``speed`` (a line with a delivery,
+:mod:`.plus`) replace the worker's own for that sentence only; without them it is rendered as it
+always was. ``{"urgent"}`` alone changes the priority of the sentence
 rendering now. The worker sets its own priority: what the pool spawned may be a venv's launcher
 rather than the process that renders. Its stdout and stderr are one pipe: sherpa's native writes are
 unbuffered and done before ``generate`` returns, so a sentence's token line always comes before
@@ -190,16 +192,27 @@ class Worker:
         return self.load_ms
 
     def render(
-        self, text: str, timeout_s: float, urgent: bool = True
+        self,
+        text: str,
+        timeout_s: float,
+        urgent: bool = True,
+        sid: int | None = None,
+        speed: float | None = None,
     ) -> tuple[bytes, list[list[int]]]:
         """One sentence: its PCM16 and the token lines printed for it. ``urgent`` false runs it
-        below normal priority until :meth:`set_urgent` raises it."""
+        below normal priority until :meth:`set_urgent` raises it. ``sid`` and ``speed`` are
+        sent only when given."""
         if self.proc is None or not self.alive:
             raise EngineError("the warm engine is not running")
         self._drain()
         with self._stdin:
             self.urgent = urgent
-            sent = self._write({"text": text, "urgent": urgent})
+            request: dict[str, Any] = {"text": text, "urgent": urgent}
+            if sid is not None:
+                request["sid"] = sid
+            if speed is not None:
+                request["speed"] = speed
+            sent = self._write(request)
         if not sent:
             self._died()
             raise EngineError("the warm engine stopped")
@@ -549,6 +562,9 @@ class WarmRender:
     faced: bool = False
     urgent: bool = True
     on_done: Callable[[WarmRender], None] | None = None
+    #: The sentence's own sid and speed (a line with a delivery); ``None`` is the worker's.
+    sid: int | None = None
+    speed: float | None = None
     sample_rate: int = SAMPLE_RATE
     result: Rendered | None = None
     error: EngineError | None = None
@@ -607,7 +623,9 @@ class WarmRender:
                     urgent = self.urgent
                 if not self.cancelled:
                     began = time.monotonic()
-                    raw, tokens = worker.render(self.sentence, self.timeout_s, urgent)
+                    raw, tokens = worker.render(
+                        self.sentence, self.timeout_s, urgent, sid=self.sid, speed=self.speed
+                    )
                     self.result = self._rendered(raw, tokens)
         except EngineError as exc:
             self.error = exc
@@ -649,7 +667,30 @@ def _own_priority(urgent: bool) -> None:
     )
 
 
-def _requests(sentences: queue.Queue[str | None]) -> None:
+#: A sentence for the worker: its text, and its own sid and speed or ``None``.
+Request = tuple[str, int | None, float | None]
+#: The speeds a request may ask for; anything else is the worker's own 1.0.
+SPEED_RANGE = (0.5, 2.0)
+
+
+def request_of(message: dict[str, Any]) -> Request:
+    """A sentence request's text, sid and speed; a sid or speed that is not a number is
+    ignored, and a speed outside :data:`SPEED_RANGE` too."""
+    text = message.get("text")
+    sid = message.get("sid")
+    speed = message.get("speed")
+    if not isinstance(sid, int) or isinstance(sid, bool) or sid < 0:
+        sid = None
+    if (
+        not isinstance(speed, (int, float))
+        or isinstance(speed, bool)
+        or not SPEED_RANGE[0] <= speed <= SPEED_RANGE[1]
+    ):
+        speed = None
+    return (text if isinstance(text, str) else "", sid, float(speed) if speed is not None else None)
+
+
+def _requests(sentences: queue.Queue[Request | None]) -> None:
     """stdin, read while a sentence renders (``generate`` lets go of the GIL): a priority change
     takes effect at once, and a sentence's own priority is set as it is queued."""
     for raw in sys.stdin.buffer:
@@ -658,13 +699,12 @@ def _requests(sentences: queue.Queue[str | None]) -> None:
         except ValueError:
             message = None
         if not isinstance(message, dict):
-            sentences.put("")
+            sentences.put(("", None, None))
             continue
         if "urgent" in message:
             _own_priority(bool(message["urgent"]))
         if "text" in message:
-            text = message["text"]
-            sentences.put(text if isinstance(text, str) else "")
+            sentences.put(request_of(message))
     sentences.put(None)
 
 
@@ -732,14 +772,21 @@ def serve(argv: Sequence[str] | None = None) -> int:
         _say(out, {"ready": False, "reason": f"the model speaks {tts.sample_rate} Hz"})
         return 1
     _say(out, {"ready": True, "load_ms": round((time.monotonic() - began) * 1000)})
-    sentences: queue.Queue[str | None] = queue.Queue()
+    sentences: queue.Queue[Request | None] = queue.Queue()
     threading.Thread(target=_requests, args=(sentences,), daemon=True).start()
-    while (text := sentences.get()) is not None:
+    while (request := sentences.get()) is not None:
+        text, sid, speed = request
         if not text:
             _say(out, {"ok": False, "reason": "the request had no text"})
             continue
+        own = config
+        if sid is not None or speed is not None:
+            own = sherpa_onnx.GenerationConfig()
+            own.sid = sid if sid is not None else args.sid
+            own.speed = speed if speed is not None else 1.0
+            own.silence_scale = config.silence_scale
         try:
-            audio = tts.generate(text, config)
+            audio = tts.generate(text, own)
             samples = np.asarray(audio.samples, dtype=np.float32)
             # sherpa's WAV writer: clipped to [-1, 1], times 32767, truncated.
             pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype("<i2").tobytes()

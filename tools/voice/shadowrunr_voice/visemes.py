@@ -102,8 +102,9 @@ class Durations:
         self.output = self.session.get_outputs()[0].name
         self.voices = np.fromfile(voices, dtype=np.float32).reshape(-1, STYLE_ROWS, STYLE_DIM)
 
-    def frames(self, tokens: Sequence[int], sid: int) -> list[int]:
-        """Each token's length in 600-sample frames, as the engine's own run of it had."""
+    def frames(self, tokens: Sequence[int], sid: int, speed: float = 1.0) -> list[int]:
+        """Each token's length in 600-sample frames, as the engine's own run of it had: the
+        same sid and the same speed."""
         np = self._np
         row = min(max(len(tokens) - 2, 0), STYLE_ROWS - 1)
         style = self.voices[sid, row][None, :].astype(np.float32)
@@ -112,7 +113,7 @@ class Durations:
             {
                 "tokens": np.asarray([list(tokens)], dtype=np.int64),
                 "style": style,
-                "speed": np.asarray([1.0], dtype=np.float32),
+                "speed": np.asarray([speed], dtype=np.float32),
             },
         )
         return [int(d) for d in np.asarray(dur).reshape(-1)]
@@ -401,9 +402,10 @@ def sentence_visemes(
     pcm: bytes,
     sample_rate: int,
     sid: int,
+    speed: float = 1.0,
 ) -> list[list[Any]]:
     """The sentence's ``[[v, start, end], ...]`` in samples of the played audio."""
-    frames = [durations.frames(seq, sid) for seq in batches]
+    frames = [durations.frames(seq, sid, speed) for seq in batches]
     return visemes_from_frames(
         symbols,
         batches=batches,

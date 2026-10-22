@@ -1181,9 +1181,21 @@
       "additionalProperties": false,
       "description": "`[voice]`: each present field overrides the daemon's `[voice]` for this character.",
       "properties": {
+        "delivery": {
+          "description": "Whether the model is asked to write a delivery cue on its lines. Absent: on.",
+          "type": "boolean"
+        },
+        "elevenlabs": {
+          "$ref": "#/$defs/ElevenlabsVoice",
+          "description": "ElevenLabs settings: a package carries `model` and `speed`; `voice_id` normally lives in\nthe operator's local override (`<data>/characters/<id>/voice.json`)."
+        },
         "fx": {
           "$ref": "#/$defs/VoiceFx",
           "description": "The effect chain over each sentence."
+        },
+        "provider": {
+          "$ref": "#/$defs/VoiceProvider",
+          "description": "Who speaks the character. Absent: kokoro (the fields above)."
         },
         "sid": {
           "description": "The voice's verified speaker id.",
@@ -3065,6 +3077,29 @@
       ],
       "type": "object"
     },
+    "Delivery": {
+      "description": "A line's delivery. `intensity` is 0.0..=1.0, clamped when read.",
+      "properties": {
+        "emotion": {
+          "$ref": "#/$defs/Emotion"
+        },
+        "intensity": {
+          "format": "float",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "pace": {
+          "$ref": "#/$defs/Pace"
+        }
+      },
+      "required": [
+        "emotion",
+        "intensity",
+        "pace"
+      ],
+      "type": "object"
+    },
     "Directive": {
       "properties": {
         "active": {
@@ -3247,6 +3282,41 @@
         "high",
         "xhigh",
         "max"
+      ],
+      "type": "string"
+    },
+    "ElevenlabsVoice": {
+      "additionalProperties": false,
+      "description": "ElevenLabs' voice. A package carries `model` and `speed` only; `voice_id` names a voice in\nthe owner's account and normally lives in the local override, so sharing a character never\nshares it.",
+      "properties": {
+        "model": {
+          "description": "Model id, e.g. `eleven_v3`.",
+          "type": "string"
+        },
+        "speed": {
+          "description": "Speaking-rate multiplier (1.0 is the voice's own rate).",
+          "format": "float",
+          "type": "number"
+        },
+        "voice_id": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Emotion": {
+      "description": "The closed emotion set a cue may name.",
+      "enum": [
+        "neutral",
+        "menace",
+        "glee",
+        "deadpan",
+        "hushed",
+        "outrage",
+        "sarcasm",
+        "weary",
+        "triumph",
+        "tender"
       ],
       "type": "string"
     },
@@ -4402,6 +4472,35 @@
       ],
       "type": "object"
     },
+    "KokoroVoice": {
+      "additionalProperties": false,
+      "description": "Kokoro's voice: the same fields as the package `[voice]` kokoro keys.",
+      "properties": {
+        "fx": {
+          "$ref": "#/$defs/VoiceFx"
+        },
+        "sid": {
+          "description": "Speaker id in the voices file.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "speed": {
+          "description": "Speaking-rate multiplier (1.0 is the voice's own rate).",
+          "format": "float",
+          "type": "number"
+        },
+        "voice": {
+          "description": "Voice id, e.g. `af_heart`.",
+          "type": "string"
+        },
+        "voices_file": {
+          "description": "The voices file `sid` is read from, by name (in the daemon's `[voice] voices_dir`).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "Latency": {
       "description": "`first_text_ms` percentiles.",
       "properties": {
@@ -5315,6 +5414,15 @@
       ],
       "type": "string"
     },
+    "Pace": {
+      "description": "The pace a line is spoken at.",
+      "enum": [
+        "slow",
+        "normal",
+        "fast"
+      ],
+      "type": "string"
+    },
     "PackageFile": {
       "description": "One file of a character package, relative to the package directory with `/` separators.",
       "properties": {
@@ -5617,6 +5725,35 @@
           "type": "string"
         }
       ]
+    },
+    "ProviderStatus": {
+      "description": "One provider's readiness.",
+      "properties": {
+        "checked_ms": {
+          "description": "When the key was last verified (epoch ms).",
+          "format": "int64",
+          "type": "integer"
+        },
+        "key": {
+          "$ref": "#/$defs/VoiceKeyState"
+        },
+        "provider": {
+          "$ref": "#/$defs/VoiceProvider"
+        },
+        "ready": {
+          "description": "It can speak now.",
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "ready",
+        "key"
+      ],
+      "type": "object"
     },
     "QualityFact": {
       "description": "A judged quality fact (humor, tone, responsiveness...): reported as a rate with n.",
@@ -8233,6 +8370,10 @@
         },
         {
           "properties": {
+            "delivery": {
+              "$ref": "#/$defs/Delivery",
+              "description": "How the line is spoken: the cue the model wrote at its start. Absent on lines with\nno cue, and on the engine's own lines (stalls, sign-offs)."
+            },
             "first_text_ms": {
               "format": "uint64",
               "minimum": 0,
@@ -9713,6 +9854,105 @@
       ],
       "type": "object"
     },
+    "VoiceBench": {
+      "description": "The rendered emotion bench.",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "lines": {
+          "items": {
+            "$ref": "#/$defs/VoiceBenchLine"
+          },
+          "type": "array"
+        },
+        "provider": {
+          "$ref": "#/$defs/VoiceProvider"
+        }
+      },
+      "required": [
+        "provider",
+        "label",
+        "lines"
+      ],
+      "type": "object"
+    },
+    "VoiceBenchLine": {
+      "description": "One bench line. On `error` the audio fields are empty (`pcm` \"\", zero lengths).",
+      "properties": {
+        "chars": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "delivery": {
+          "$ref": "#/$defs/Delivery"
+        },
+        "duration_ms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "pcm": {
+          "type": "string"
+        },
+        "sample_rate": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "delivery",
+        "sample_rate",
+        "pcm",
+        "duration_ms",
+        "chars"
+      ],
+      "type": "object"
+    },
+    "VoiceBenchParams": {
+      "description": "`voice.bench`: render `characters/<id>/voice/bench.toml`.",
+      "properties": {
+        "character": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character"
+      ],
+      "type": "object"
+    },
+    "VoiceChoice": {
+      "additionalProperties": false,
+      "description": "A provider and its voice. Only the chosen provider's table is read; the other is kept so\nswitching back keeps its settings.",
+      "properties": {
+        "elevenlabs": {
+          "$ref": "#/$defs/ElevenlabsVoice"
+        },
+        "kokoro": {
+          "$ref": "#/$defs/KokoroVoice"
+        },
+        "provider": {
+          "$ref": "#/$defs/VoiceProvider"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "type": "object"
+    },
     "VoiceClientFrame": {
       "anyOf": [
         {
@@ -9791,6 +10031,10 @@
         {
           "description": "Sent on connect and whenever the state changes.",
           "properties": {
+            "provider": {
+              "$ref": "#/$defs/VoiceProvider",
+              "description": "Who speaks, when a voice is configured."
+            },
             "reason": {
               "type": "string"
             },
@@ -9942,6 +10186,36 @@
         }
       ]
     },
+    "VoiceKeyState": {
+      "description": "A provider's key, by state only (never its value).",
+      "oneOf": [
+        {
+          "const": "not_needed",
+          "description": "The provider needs no key (kokoro).",
+          "type": "string"
+        },
+        {
+          "const": "missing",
+          "description": "The configured env var is unset or empty.",
+          "type": "string"
+        },
+        {
+          "const": "set",
+          "description": "The env var is set; not verified (or a verify could not reach the provider: `reason`).",
+          "type": "string"
+        },
+        {
+          "const": "verified",
+          "description": "The provider accepted the key.",
+          "type": "string"
+        },
+        {
+          "const": "rejected",
+          "description": "The provider refused the key (401/403).",
+          "type": "string"
+        }
+      ]
+    },
     "VoicePlayed": {
       "description": "`played`: a part's audio started playing on the stage.",
       "properties": {
@@ -9981,6 +10255,161 @@
       },
       "required": [
         "played"
+      ],
+      "type": "object"
+    },
+    "VoicePreview": {
+      "description": "A rendered preview line.",
+      "properties": {
+        "chars": {
+          "description": "Characters sent to the provider.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "delivery": {
+          "$ref": "#/$defs/Delivery"
+        },
+        "duration_ms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "label": {
+          "type": "string"
+        },
+        "pcm": {
+          "description": "Mono PCM16 little-endian, base64.",
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/VoiceProvider"
+        },
+        "sample_rate": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "visemes": {
+          "description": "Whether the provider produced mouth shapes.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "provider",
+        "label",
+        "sample_rate",
+        "pcm",
+        "duration_ms",
+        "chars",
+        "visemes"
+      ],
+      "type": "object"
+    },
+    "VoicePreviewParams": {
+      "description": "`voice.preview`: speak `text` (gated by the brain's output gate, at most 400 chars) with\nthe character's effective choice.",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "delivery": {
+          "$ref": "#/$defs/Delivery"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "text"
+      ],
+      "type": "object"
+    },
+    "VoiceProvider": {
+      "description": "A text-to-speech provider.",
+      "oneOf": [
+        {
+          "const": "kokoro",
+          "description": "The local Kokoro sidecar (Kokoro Plus when its delivery controls are available).",
+          "type": "string"
+        },
+        {
+          "const": "elevenlabs",
+          "description": "The ElevenLabs cloud API.",
+          "type": "string"
+        }
+      ]
+    },
+    "VoiceSettings": {
+      "description": "A character's voice settings.",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "effective": {
+          "$ref": "#/$defs/VoiceChoice",
+          "description": "What the next stream start resolves to."
+        },
+        "label": {
+          "description": "The human status label, e.g. \"kokoro malakor-a (sid 52), fx light\".",
+          "type": "string"
+        },
+        "override": {
+          "$ref": "#/$defs/VoiceChoice",
+          "description": "The local override, when one is stored."
+        },
+        "package": {
+          "$ref": "#/$defs/VoiceChoice",
+          "description": "The package `[voice]` (with the daemon's `[voice]` under it)."
+        },
+        "providers": {
+          "items": {
+            "$ref": "#/$defs/ProviderStatus"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "character",
+        "effective",
+        "package",
+        "providers",
+        "label"
+      ],
+      "type": "object"
+    },
+    "VoiceSettingsGetParams": {
+      "description": "`voice.settings.get`, `voice.bench`.",
+      "properties": {
+        "character": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character"
+      ],
+      "type": "object"
+    },
+    "VoiceSettingsSetParams": {
+      "description": "`voice.settings.set`: replace the local override; `null` clears it.",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "choice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceChoice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "choice"
       ],
       "type": "object"
     },
@@ -10060,6 +10489,18 @@
           "type": "string"
         }
       ]
+    },
+    "VoiceVerifyParams": {
+      "description": "`voice.verify`: one cheap authenticated call to the provider.",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/VoiceProvider"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "type": "object"
     },
     "VoteTally": {
       "properties": {
@@ -11097,6 +11538,86 @@
         "result"
       ],
       "type": "object"
+    },
+    "voice.bench": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/VoiceBenchParams"
+        },
+        "result": {
+          "$ref": "#/$defs/VoiceBench"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "voice.preview": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/VoicePreviewParams"
+        },
+        "result": {
+          "$ref": "#/$defs/VoicePreview"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "voice.settings.get": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/VoiceSettingsGetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/VoiceSettings"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "voice.settings.set": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/VoiceSettingsSetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/VoiceSettings"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "voice.verify": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/VoiceVerifyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ProviderStatus"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
     }
   },
   "required": [
@@ -11162,7 +11683,12 @@
     "tone.variants",
     "tournament.list",
     "tournament.results",
-    "tournaments.page"
+    "tournaments.page",
+    "voice.bench",
+    "voice.preview",
+    "voice.settings.get",
+    "voice.settings.set",
+    "voice.verify"
   ],
   "title": "RpcMethods",
   "type": "object"

@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Deserialize;
-use shadowrunr_types::voice::{Viseme, VisemeSpan};
+use shadowrunr_types::voice::{Viseme, VisemeSpan, VoiceTimings};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, watch};
@@ -32,7 +32,7 @@ use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
 use super::probe;
-use super::renderer::{Part, Rendered, Renderer, RendererState};
+use super::renderer::{Part, Rendered, Renderer, RendererState, Utter};
 use super::VoiceConfig;
 
 /// `CREATE_NO_WINDOW`: the sidecar never flashes a console window on Windows.
@@ -474,14 +474,22 @@ impl SidecarRenderer {
                 let mut sh = self.shared();
                 if let Some(p) = sh.pending.get_mut(&id) {
                     p.next_part = part + 1;
+                    let visemes = spans(visemes);
+                    let timings = if visemes.is_empty() {
+                        VoiceTimings::None
+                    } else {
+                        VoiceTimings::Durations
+                    };
                     let sent =
                         p.tx.send(Part::Audio(Rendered {
                             part,
                             last,
+                            chars: u32::try_from(text.chars().count()).unwrap_or(u32::MAX),
                             text,
                             sample_rate,
                             pcm,
-                            visemes: spans(visemes),
+                            visemes,
+                            timings,
                         }))
                         .is_ok();
                     if last || !sent {
@@ -518,9 +526,14 @@ impl Renderer for SidecarRenderer {
         self.state.subscribe()
     }
 
-    fn say(&self, id: &str, text: &str) -> mpsc::UnboundedReceiver<Part> {
+    fn say(&self, id: &str, utter: &Utter) -> mpsc::UnboundedReceiver<Part> {
         let (tx, rx) = mpsc::unbounded_channel();
-        let line = serde_json::json!({ "type": "say", "id": id, "text": text }).to_string();
+        let mut say = serde_json::json!({ "type": "say", "id": id, "text": utter.text });
+        // Additive in protocol 1: a sidecar without delivery controls ignores the key.
+        if let Some(d) = &utter.delivery {
+            say["delivery"] = serde_json::to_value(d).unwrap_or_default();
+        }
+        let line = say.to_string();
         let mut sh = self.shared();
         match &sh.stdin {
             Some(stdin) if stdin.send(line).is_ok() => {
@@ -550,6 +563,7 @@ impl Renderer for SidecarRenderer {
 mod tests {
     use super::*;
     use shadowrunr_types::character::VoiceFx;
+    use shadowrunr_types::delivery::{Delivery, Emotion, Pace};
 
     fn renderer() -> SidecarRenderer {
         SidecarRenderer {
@@ -697,7 +711,7 @@ mod tests {
     async fn the_protocol_routes_parts_by_id_and_fails_what_is_in_flight() {
         let r = renderer();
         // No process: a say fails at once.
-        let mut dead = r.say("x:1", "hi");
+        let mut dead = r.say("x:1", &Utter::plain("hi"));
         assert!(matches!(
             dead.recv().await,
             Some(Part::Error { part: 0, .. })
@@ -705,12 +719,27 @@ mod tests {
 
         let (in_tx, mut in_rx) = mpsc::unbounded_channel();
         r.shared().stdin = Some(in_tx);
-        let mut rx = r.say("r:4", "Kneel. Now.");
+        let mut rx = r.say("r:4", &Utter::plain("Kneel. Now."));
         let sent: serde_json::Value = serde_json::from_str(&in_rx.recv().await.unwrap()).unwrap();
         assert_eq!(
             sent,
             serde_json::json!({"type":"say","id":"r:4","text":"Kneel. Now."})
         );
+        // A cued line carries its delivery.
+        let cued = Utter {
+            text: "Oh, wonderful.".into(),
+            delivery: Some(Delivery::new(Emotion::Sarcasm, 0.8, Pace::Slow)),
+        };
+        let mut cued_rx = r.say("r:9", &cued);
+        let sent: serde_json::Value = serde_json::from_str(&in_rx.recv().await.unwrap()).unwrap();
+        assert_eq!(
+            sent,
+            serde_json::json!({"type":"say","id":"r:9","text":"Oh, wonderful.",
+                "delivery":{"emotion":"sarcasm","intensity":0.8,"pace":"slow"}})
+        );
+        r.cancel("r:9");
+        in_rx.recv().await.unwrap();
+        assert!(cued_rx.recv().await.is_none());
 
         let mut hello = false;
         assert_eq!(
@@ -751,7 +780,7 @@ mod tests {
         );
 
         // A cancel forgets the id and tells the sidecar.
-        let mut c = r.say("r:5", "x");
+        let mut c = r.say("r:5", &Utter::plain("x"));
         in_rx.recv().await.unwrap();
         r.cancel("r:5");
         let cancel: serde_json::Value = serde_json::from_str(&in_rx.recv().await.unwrap()).unwrap();

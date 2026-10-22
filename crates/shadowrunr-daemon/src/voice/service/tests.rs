@@ -296,7 +296,7 @@ async fn the_renderer_state_is_the_status() {
     .clone();
     assert_eq!(
         &*st,
-        r#"{"type":"status","state":"ready","reason":"numpy is not installed","voice":"af_heart","visemes":false}"#
+        r#"{"type":"status","state":"ready","reason":"numpy is not installed","voice":"af_heart","visemes":false,"provider":"kokoro"}"#
     );
 }
 
@@ -546,4 +546,217 @@ async fn a_feeder_that_falls_behind_reattaches_and_loses_no_line() {
             .count();
         assert_eq!((queued, terminal), (1, 1), "seq {seq}: {l:?}");
     }
+}
+
+/// Voices by character: `keeper` speaks with ElevenLabs, anyone else with Kokoro. Every renderer
+/// it starts is a fake, kept with its key.
+#[derive(Default)]
+struct FakeVoices {
+    started: Mutex<Vec<(String, Arc<FakeRenderer>)>>,
+    /// Lines every ElevenLabs renderer fails.
+    failing: Mutex<Vec<String>>,
+}
+
+impl FakeVoices {
+    fn spoken(character: &str) -> Spoken {
+        let provider = if character == "keeper" {
+            VoiceProvider::Elevenlabs
+        } else {
+            VoiceProvider::Kokoro
+        };
+        Spoken {
+            provider,
+            voice: format!("{character}-voice"),
+            key: format!("{}|{character}", provider.as_str()),
+            spec: crate::voice::settings::Spec::Kokoro(Box::default()),
+        }
+    }
+
+    fn keys(&self) -> Vec<String> {
+        self.started
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, _)| k.clone())
+            .collect()
+    }
+
+    fn renderer(&self, i: usize) -> Arc<FakeRenderer> {
+        self.started.lock().unwrap()[i].1.clone()
+    }
+}
+
+impl Voices for FakeVoices {
+    fn resolve(&self, character: &str) -> Option<Spoken> {
+        Some(Self::spoken(character))
+    }
+
+    fn start(
+        &self,
+        spoken: &Spoken,
+        _stop: watch::Receiver<bool>,
+    ) -> (Arc<dyn Renderer>, Option<JoinHandle<()>>) {
+        let fake = Arc::new(FakeRenderer::new());
+        if spoken.provider == VoiceProvider::Elevenlabs {
+            for line in self.failing.lock().unwrap().iter() {
+                fake.script(line, Script::FailAfter(Vec::new(), 0));
+            }
+        }
+        self.started
+            .lock()
+            .unwrap()
+            .push((spoken.key.clone(), fake.clone()));
+        (fake, None)
+    }
+}
+
+fn stream_start(character: &str) -> Frame {
+    Frame::from(
+        serde_json::json!({"type":"stream_start","ts_ms":0,"stream_id":"s","character":character,
+            "tone_variant":"calm","core_tier":"haiku","audience_size":3})
+        .to_string(),
+    )
+}
+
+fn status_of(hub: &VoiceHub) -> VoiceFrame {
+    (*hub.status().borrow().frame).clone()
+}
+
+#[tokio::test]
+async fn a_stream_start_swaps_the_renderer_before_the_first_line() {
+    let voices = Arc::new(FakeVoices::default());
+    let hub = VoiceHub::new(cfg());
+    hub.attach_voices(
+        voices.clone(),
+        &FakeVoices::spoken("malakor"),
+        std::future::pending(),
+    );
+    assert_eq!(voices.keys(), ["kokoro|malakor"]);
+    match status_of(&hub) {
+        VoiceFrame::Status {
+            provider, voice, ..
+        } => {
+            assert_eq!(provider, Some(VoiceProvider::Kokoro));
+            assert_eq!(voice.as_deref(), Some("malakor-voice"));
+        }
+        other => panic!("{other:?}"),
+    }
+
+    let run = Arc::new(LiveRun::new("r".into()));
+    run.push(stream_start("keeper"));
+    let mut f = hub.follow(&run, true);
+    run.push(say("Kneel."));
+    assert!(matches!(
+        next(&mut f.rx).await,
+        VoiceFrame::Utterance { .. }
+    ));
+    assert_eq!(voices.keys(), ["kokoro|malakor", "elevenlabs|keeper"]);
+    assert!(
+        voices.renderer(0).said.lock().unwrap().is_empty(),
+        "the old voice said nothing"
+    );
+    assert_eq!(*voices.renderer(1).said.lock().unwrap(), ["r:2"]);
+    match status_of(&hub) {
+        VoiceFrame::Status {
+            provider, voice, ..
+        } => {
+            assert_eq!(provider, Some(VoiceProvider::Elevenlabs));
+            assert_eq!(voice.as_deref(), Some("keeper-voice"));
+        }
+        other => panic!("{other:?}"),
+    }
+
+    // The same voice at the next stream start keeps the renderer.
+    drop(f);
+    let again = Arc::new(LiveRun::new("r2".into()));
+    again.push(stream_start("keeper"));
+    let mut f = hub.follow(&again, true);
+    again.push(say("Rise."));
+    assert!(matches!(
+        next(&mut f.rx).await,
+        VoiceFrame::Utterance { .. }
+    ));
+    assert_eq!(voices.keys().len(), 2);
+}
+
+#[tokio::test]
+async fn a_failing_provider_never_falls_back_to_another() {
+    let voices = Arc::new(FakeVoices::default());
+    voices
+        .failing
+        .lock()
+        .unwrap()
+        .extend(["One.".to_string(), "Two.".into(), "Three.".into()]);
+    let hub = VoiceHub::new(cfg());
+    hub.attach_voices(
+        voices.clone(),
+        &FakeVoices::spoken("keeper"),
+        std::future::pending(),
+    );
+    let run = Arc::new(LiveRun::new("r".into()));
+    run.push(stream_start("keeper"));
+    let mut f = hub.follow(&run, true);
+    for (seq, text) in [(2u64, "One."), (3, "Two."), (4, "Three.")] {
+        run.push(say(text));
+        assert_eq!(next(&mut f.rx).await, skipped(seq, 0, VoiceSkip::Error));
+    }
+    assert_eq!(
+        voices.keys(),
+        ["elevenlabs|keeper"],
+        "no other renderer was started"
+    );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match status_of(&hub) {
+            VoiceFrame::Status {
+                state: VoiceState::Degraded,
+                provider,
+                reason,
+                ..
+            } => {
+                assert_eq!(provider, Some(VoiceProvider::Elevenlabs));
+                assert!(reason.unwrap().contains("renders failing"));
+                break;
+            }
+            _ if Instant::now() < deadline => tokio::time::sleep(Duration::from_millis(5)).await,
+            other => panic!("{other:?}"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn rendered_parts_log_provider_chars_and_timings() {
+    let tmp = tempfile::tempdir().unwrap();
+    let voices = Arc::new(FakeVoices::default());
+    let hub = VoiceHub::new(cfg());
+    hub.attach_voices(
+        voices.clone(),
+        &FakeVoices::spoken("keeper"),
+        std::future::pending(),
+    );
+    let log = hub.logs().open("r", tmp.path());
+    let run = Arc::new(LiveRun::new("r".into()));
+    let mut f = hub.follow(&run, true);
+    run.push(Frame::from(
+        serde_json::json!({"type":"say","ts_ms":1,"speaker":"malakor","text":"Kneel.",
+            "delivery":{"emotion":"menace","intensity":0.7,"pace":"slow"}})
+        .to_string(),
+    ));
+    assert!(matches!(
+        next(&mut f.rx).await,
+        VoiceFrame::Utterance { .. }
+    ));
+    log.sync();
+    let text = std::fs::read_to_string(&log.path).unwrap();
+    let lines: Vec<serde_json::Value> = text
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(lines[0]["event"], "queued");
+    assert_eq!(lines[0]["provider"], "elevenlabs");
+    assert_eq!(lines[0]["delivery"]["emotion"], "menace");
+    assert_eq!(lines[1]["event"], "rendered");
+    assert_eq!(lines[1]["provider"], "elevenlabs");
+    assert_eq!(lines[1]["chars"], 6);
+    assert_eq!(lines[1]["timings"], "durations");
 }

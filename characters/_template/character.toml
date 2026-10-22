@@ -98,6 +98,17 @@ disclosure = "Yes, I am an AI character, performed by a machine. The show goes o
 # default: 3
 # sid = 3
 
+# An ElevenLabs voice_id belongs in the operator's local override, never in the package.
+# ? Who speaks the character (kokoro is the local voice)?
+# options: "kokoro" | "elevenlabs"
+# default: "kokoro"
+# provider = "kokoro"
+
+# ? Is the model asked to open its lines with a delivery cue ([emotion intensity pace])?
+# options: true | false
+# default: true
+# delivery = true
+
 [avatar]
 # ? Which renderer draws the face on the stage (the daemon's [stage] avatar when absent)?
 # options: "glow" | "cut" | "depth"

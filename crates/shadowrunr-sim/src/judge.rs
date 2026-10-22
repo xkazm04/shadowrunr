@@ -2372,6 +2372,7 @@ mod tests {
             text: text.into(),
             replying_to: vec![],
             first_text_ms: None,
+            delivery: None,
         }
     }
 

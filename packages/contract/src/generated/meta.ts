@@ -68,6 +68,11 @@ export const RPC_METHODS = [
   "tournament.list",
   "tournament.results",
   "tournaments.page",
+  "voice.bench",
+  "voice.preview",
+  "voice.settings.get",
+  "voice.settings.set",
+  "voice.verify",
 ] as const;
 
 export type RpcMethod = keyof RpcMethods;
@@ -156,4 +161,9 @@ export const RESULT_LOADERS: { readonly [M in RpcMethod]: ResultLoader<M> } = {
   "tournament.list": () => import("./results/TournamentListResult.js").then((m) => m.validate),
   "tournament.results": () => import("./results/TournamentResults.js").then((m) => m.validate),
   "tournaments.page": () => import("./results/TournamentsPage.js").then((m) => m.validate),
+  "voice.bench": () => import("./results/VoiceBench.js").then((m) => m.validate),
+  "voice.preview": () => import("./results/VoicePreview.js").then((m) => m.validate),
+  "voice.settings.get": () => import("./results/VoiceSettings.js").then((m) => m.validate),
+  "voice.settings.set": () => import("./results/VoiceSettings.js").then((m) => m.validate),
+  "voice.verify": () => import("./results/ProviderStatus.js").then((m) => m.validate),
 };

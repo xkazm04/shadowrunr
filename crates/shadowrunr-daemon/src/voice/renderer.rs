@@ -2,8 +2,26 @@
 //! daemon ([`super::sidecar::SidecarRenderer`]), a fake in tests. A renderer takes one line at
 //! a time (`say`) and answers with its sentences, in order, on the line's own channel.
 
-use shadowrunr_types::voice::VisemeSpan;
+use shadowrunr_types::delivery::Delivery;
+use shadowrunr_types::voice::{VisemeSpan, VoiceTimings};
 use tokio::sync::{mpsc, watch};
+
+/// One line to speak: its text and the delivery cue the brain parsed off it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Utter {
+    pub text: String,
+    pub delivery: Option<Delivery>,
+}
+
+impl Utter {
+    /// A line with no cue.
+    pub fn plain(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            delivery: None,
+        }
+    }
+}
 
 /// One rendered sentence: the sidecar's `audio` line.
 #[derive(Debug, Clone, PartialEq)]
@@ -15,6 +33,10 @@ pub struct Rendered {
     /// Mono PCM16LE, base64, as the sidecar sent it.
     pub pcm: String,
     pub visemes: Vec<VisemeSpan>,
+    /// Characters sent to the provider for this part (the usage unit).
+    pub chars: u32,
+    /// Where the part's timing came from.
+    pub timings: VoiceTimings,
 }
 
 /// What a line's channel carries.
@@ -44,10 +66,10 @@ pub enum RendererState {
 
 pub trait Renderer: Send + Sync + 'static {
     fn state(&self) -> watch::Receiver<RendererState>;
-    /// Start rendering `text` as `id`. Its parts arrive in order on the receiver, ending with
+    /// Start rendering `line` as `id`. Its parts arrive in order on the receiver, ending with
     /// a part that is `last` or an error. A renderer that cannot speak answers at once with an
     /// error, so the caller never waits on a dead process.
-    fn say(&self, id: &str, text: &str) -> mpsc::UnboundedReceiver<Part>;
+    fn say(&self, id: &str, line: &Utter) -> mpsc::UnboundedReceiver<Part>;
     /// Stop rendering `id`; nothing more arrives for it.
     fn cancel(&self, id: &str);
 }
@@ -122,6 +144,8 @@ pub mod fake {
         /// Scripts by line text; anything else speaks its text as one sentence.
         scripts: Mutex<HashMap<String, Script>>,
         pub said: Mutex<Vec<String>>,
+        /// Each line's delivery, in the order said.
+        pub deliveries: Mutex<Vec<Option<Delivery>>>,
         pub cancelled: Mutex<VecDeque<String>>,
         /// Lines scripted to hang: their senders, held open.
         hung: Mutex<Vec<mpsc::UnboundedSender<Part>>>,
@@ -144,6 +168,7 @@ pub mod fake {
                 }),
                 scripts: Mutex::new(HashMap::new()),
                 said: Mutex::new(Vec::new()),
+                deliveries: Mutex::new(Vec::new()),
                 cancelled: Mutex::new(VecDeque::new()),
                 hung: Mutex::new(Vec::new()),
                 pcm_bytes: 4800,
@@ -177,6 +202,8 @@ pub mod fake {
                     start_ms: 0,
                     end_ms: 100,
                 }],
+                chars: text.chars().count() as u32,
+                timings: VoiceTimings::Durations,
             })
         }
     }
@@ -186,8 +213,10 @@ pub mod fake {
             self.state.subscribe()
         }
 
-        fn say(&self, id: &str, text: &str) -> mpsc::UnboundedReceiver<Part> {
+        fn say(&self, id: &str, line: &Utter) -> mpsc::UnboundedReceiver<Part> {
+            let text = line.text.as_str();
             self.said.lock().unwrap().push(id.to_string());
+            self.deliveries.lock().unwrap().push(line.delivery);
             let (tx, rx) = mpsc::unbounded_channel();
             let script = self.scripts.lock().unwrap().get(text).cloned();
             let script = script.unwrap_or_else(|| Script::Speak(vec![text.into()], Duration::ZERO));
