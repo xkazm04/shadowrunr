@@ -196,7 +196,7 @@ error (guide: docs/guide/characters.md).
 Tuning keys (`TUNING_DEFAULTS` in `shadowrunr-types` holds each key's engine default and the
 default's provenance): `max_picks`, `carry_ms`, `carry_max`, `hold_gap_ms`, `quiet_bit_ms`,
 `bit_spacing_ms`, `stall_every_s`, `failed_beat_slack_s`, `min_cover_ms`,
-`request_answer_ms`, `request_lead_ms`, `request_max_ms`, `render_lag_ms`,
+`request_answer_ms`, `request_lead_ms`, `request_max_ms`, `speech_cps`, `render_lag_ms`,
 `lookahead_max_ms`, `lag_ceiling_ms`, `screen_hold_ms`, `browser_dwell_ms`, `desk_dwell_ms`,
 `closing_s`, `closing_now_s`, `goodbye_drain_max_s`, `sign_off_window_s`, `stop_sign_off_s`.
 A value is a positive whole number in the key's unit (`_ms`, `_s`, else a count);
@@ -1282,7 +1282,8 @@ like a real case. It is never written live in a quiet moment.
   `max(now, speaking_until) + chars / speech_cps × 1000 + line_pause_ms`. Silence is measured
   from where it ends (the hold rule's "last line is recent", the stall and cover clocks), so
   silence means nobody is speaking. The defaults are tuning values in `BrainTuning.pace`:
-  `speech_cps` 18 (measured: Kokoro `af_heart` speaks about 18.3 characters a second),
+  `speech_cps` 18 (measured: Kokoro `af_heart` speaks about 18.3 characters a second; a
+  character's `[tuning] speech_cps` replaces it, Malakor's 17 for `malakor-a`, measured),
   `line_pause_ms` 250, `speech_lead_ms` 1500 and `budget_chars` 260 (assumptions).
   - While more than `speech_lead_ms` of speech is queued, the beat is a `hold` with reason
     `speaking: N.N s queued` and no core call. A safety beat runs at once. A goodbye beat (the

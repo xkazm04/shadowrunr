@@ -34,7 +34,7 @@ interface CommandRow {
 const PROPOSE: CommandRow = { cmd: "!propose", args: "<scheme>", what: "Propose a scheme. Rank-gated." };
 const SUMMON: CommandRow = { cmd: "!summon", args: "<foil>", what: "Call a guest foil into the room. The weighted vote decides." };
 const VOTE: CommandRow = { cmd: "!vote", args: "<option>", what: "Vote in the open poll. Weight rises with rank." };
-const HINT: CommandRow = { cmd: "!hint", args: "<hex> <text>", what: "Nominate a lead on the hexmap." };
+const HINT: CommandRow = { cmd: "!hint", args: "<hex> <text>", what: "Nominate a lead on the board." };
 const GRADE: CommandRow = { cmd: "!grade", args: "<hex> <DOC|REP|CLM|SPC>", what: "Grade a hex. Jury advice, never proof." };
 
 /** The commands the room can use, per segment (none in a descoped one); `!vote` joins while a poll is open. */

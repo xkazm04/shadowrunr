@@ -31,7 +31,8 @@
 //!   never the beat's first line (output record [`PACE_RULE`] / [`LAGGED`]; [`over_lag`]). A
 //!   beat composed ahead asks for a budget that fits under the ceiling ([`lookahead_budget`]).
 //!
-//! The defaults are `speech_cps` 18 (measured: Kokoro `af_heart` speaks about 18.3),
+//! The defaults are `speech_cps` 18 (measured: Kokoro `af_heart` speaks about 18.3; a
+//! character's `[tuning] speech_cps` replaces it),
 //! `render_lag_ms` 2000 (measured: p50 2.2 s from `say` to rendered audio in two voiced runs) and
 //! assumptions to tune against voiced sandbox runs: `line_pause_ms` 250, `speech_lead_ms` 1500,
 //! `budget_chars` 260 (about 14 s of speech, inside the 15 s say-gap ceiling),

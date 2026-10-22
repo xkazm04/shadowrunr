@@ -85,14 +85,16 @@ rebuttals = [
     "Only one hand writes my decrees, and it is not yours. Lovely forgery, though; the moat will enjoy it.",
 ]
 
-# The lessons tuned on his runs, with where each came from. These equal the engine defaults
-# today; they are written here so a second character starts from Malakor's evidence, not from
-# the engine's guesses. Every other key is the engine default (`TUNING_DEFAULTS`).
+# The lessons tuned on his runs, with where each came from. All but `speech_cps` (his voice,
+# malakor-a, speaks slower than the engine default's af_heart) equal the engine defaults; they
+# are written here so a second character starts from Malakor's evidence, not from the engine's
+# guesses. Every other key is the engine default (`TUNING_DEFAULTS`).
 [tuning]
 max_picks = { value = 2, provenance = "measured", source = "sbx-20261021-011413-5m: both three-pick beats lost their last line to the 260-character budget" }
 carry_ms = { value = 25000, provenance = "assumption", source = "two to five beats, so the answer still reads as one" }
 hold_gap_ms = { value = 7000, provenance = "assumption", source = "with 5 s beats the next line speaks under the 15 s say-gap ceiling" }
 min_cover_ms = { value = 4000, provenance = "assumption", source = "sandbox smoke run: an 18.4 s call left a 19.1 s silence" }
+speech_cps = { value = 17, provenance = "measured", source = "voice B replay 2026-10-22, about 17 cps" }
 render_lag_ms = { value = 2000, provenance = "measured", source = "p50 2.2 s from say to rendered audio in two voiced runs" }
 lookahead_max_ms = { value = 8000, provenance = "assumption", source = "sbx-20261021-143530-10m: core-call silences p50 4.7 s, p90 8.0 s" }
 browser_dwell_ms = { value = 40000, provenance = "assumption", source = "2026-10-21 10-minute show sat on one record for over five minutes" }

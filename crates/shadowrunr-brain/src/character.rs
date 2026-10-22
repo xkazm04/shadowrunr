@@ -903,8 +903,15 @@ mod tests {
         assert_eq!(pkg.lines.recast.len(), 3);
         assert_eq!(pkg.lines.rebuttals.len(), 5);
         assert!(pkg.lines.blocked.starts_with("The Lord's censor"));
-        // Every lesson he carries equals today's engine default, with its provenance.
-        assert_eq!(pkg.tuning, Tuning::DEFAULT);
+        // Every lesson he carries equals today's engine default but his voice's measured rate,
+        // each with its provenance.
+        assert_eq!(
+            pkg.tuning,
+            Tuning {
+                speech_cps: 17,
+                ..Tuning::DEFAULT
+            }
+        );
         let set = pkg.manifest.tuning.entries();
         assert!(set.len() >= 8, "{set:?}");
         for (key, e) in set {
@@ -912,7 +919,14 @@ mod tests {
                 .iter()
                 .find(|d| d.key == key)
                 .unwrap();
-            assert_eq!(e.value, d.value, "{key}");
+            if key == "speech_cps" {
+                assert_eq!(
+                    e.provenance,
+                    shadowrunr_types::character::Provenance::Measured
+                );
+            } else {
+                assert_eq!(e.value, d.value, "{key}");
+            }
             assert!(e.source.is_some(), "{key} names its source");
         }
         assert!(validate_character(&malakor_dir()).is_empty());

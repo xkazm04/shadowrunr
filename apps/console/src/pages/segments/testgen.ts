@@ -74,7 +74,7 @@ const descopedSeg = (id: SegmentId, title: string): SegmentTableInfo => ({
 /** The daemon's command table (crates/shadowrunr-segments/src/command.rs COMMAND_SPECS). */
 export const COMMAND_INFO: CommandInfo[] = [
   { name: "summon", args: "<foil>", what: "Call a guest foil into the room. The weighted vote decides." },
-  { name: "hint", args: "<hex> <text>", what: "Nominate a lead on the hexmap." },
+  { name: "hint", args: "<hex> <text>", what: "Nominate a lead on the board." },
   { name: "grade", args: "<hex> <DOC|REP|CLM|SPC>", what: "Grade a hex. Jury advice, never proof." },
   { name: "propose", args: "<text>", what: "Propose a scheme. Rank-gated.", min_rank: "warlock" },
   { name: "vote", args: "<option>", what: "Vote in the open poll. Weight rises with rank." },

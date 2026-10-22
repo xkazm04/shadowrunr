@@ -4888,6 +4888,7 @@ export interface CharacterTuning {
   request_max_ms?: TuningEntry;
   screen_hold_ms?: TuningEntry;
   sign_off_window_s?: TuningEntry;
+  speech_cps?: TuningEntry;
   stall_every_s?: TuningEntry;
   stop_sign_off_s?: TuningEntry;
 }

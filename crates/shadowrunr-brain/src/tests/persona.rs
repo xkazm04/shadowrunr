@@ -181,3 +181,18 @@ async fn the_gate_speaks_in_the_second_characters_voice() {
         }
     }
 }
+
+#[test]
+fn the_speech_clock_runs_at_the_characters_own_rate() {
+    // Malakor's voice (malakor-a) is measured slower than the engine default's af_heart.
+    let malakor =
+        BrainTuning::for_character(&load_character(&malakor_dir(), "theatrical").unwrap());
+    assert_eq!(malakor.pace.speech_cps, 17.0);
+    assert_eq!(
+        malakor.pace.speech_ms("x".repeat(34).as_str()),
+        2_000 + malakor.pace.line_pause_ms
+    );
+    // A package that leaves it out keeps the engine default.
+    let keeper = BrainTuning::for_character(&load_character(&keeper_dir(), "calm").unwrap());
+    assert_eq!(keeper.pace.speech_cps, PaceConfig::default().speech_cps);
+}

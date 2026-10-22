@@ -49,7 +49,7 @@ export function isAlleged(grade: EvidenceGrade): boolean {
 
 export const SEGMENT_TITLE: Record<SegmentId, string> = {
   "SEG-01": "The Improvised Room",
-  "SEG-02A": "Hexmap Investigation",
+  "SEG-02A": "The Investigation",
   "SEG-02B-I": "Cartography Legion (descoped)",
   "SEG-02B-II": "Dependency Doctrine (descoped)",
 };

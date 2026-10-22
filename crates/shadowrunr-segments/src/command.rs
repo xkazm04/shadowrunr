@@ -28,7 +28,7 @@ pub const COMMAND_SPECS: [CommandSpec; 5] = [
     CommandSpec {
         name: "hint",
         args: "<hex> <text>",
-        what: "Nominate a lead on the hexmap.",
+        what: "Nominate a lead on the board.",
         rank_gated: false,
     },
     CommandSpec {
