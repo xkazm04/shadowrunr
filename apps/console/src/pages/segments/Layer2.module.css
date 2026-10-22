@@ -64,10 +64,13 @@
 .sid { font-family: var(--sr-font-mono); font-weight: var(--sr-weight-bold); background: var(--sr-color-text-ink); color: var(--sr-color-surface-paper); padding: var(--sr-space-hair) var(--sr-space-compact); font-size: var(--sr-size-caption); }
 
 .chain { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sr-space-snug); margin: var(--sr-space-compact) 0; }
-.chainStep { display: inline-flex; align-items: center; gap: var(--sr-space-snug); }
-.chainStep span { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .06em; text-transform: uppercase; font-size: var(--sr-size-label-lg); padding: var(--sr-space-tick) var(--sr-space-near); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); }
-.chainStep span.init { background: var(--sr-color-text-ink); color: var(--sr-color-surface-paper); }
-.chainStep em { display: block; width: var(--sr-space-loose); height: var(--sr-stroke-rule); background: var(--sr-color-text-ink); }
+/* The state walk: the chain is a radio group; the checked state fills, the initial one is
+   underscored in the page accent, a state nothing reaches is dashed. */
+.step { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); letter-spacing: .06em; text-transform: uppercase; font-size: var(--sr-size-label-lg); padding: var(--sr-space-tick) var(--sr-space-near); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-surface-card); color: var(--sr-color-text-ink); cursor: pointer; }
+.step.init { box-shadow: inset 0 -.25rem 0 var(--sr-page-accent); }
+.step[aria-checked="true"] { background: var(--sr-color-text-ink); color: var(--sr-color-surface-paper); }
+.step[data-unreachable] { border-style: dashed; color: var(--sr-color-text-mute); }
+.edges { list-style: none; padding: 0; margin: var(--sr-space-snug) 0; font-size: var(--sr-size-small); }
 
 .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2.6rem; align-items: start; }
 .chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: var(--sr-space-snug) 0; }

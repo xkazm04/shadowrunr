@@ -1,5 +1,5 @@
 // Layer 2 of Segments & ranks: the winner's three tabs (l2b.js P3.L2.segments) as routes:
-//   segments/tables[/<SEG>]   segments/commands   segments/ranks[/<report id>]
+//   segments/tables[/<SEG>[/<state>]]   segments/commands   segments/ranks[/<report id>]
 import { pageRoute, RouteLink, useRouter } from "../../router";
 import { buttonClass } from "../../ui/Button";
 import { Tabs, type TabItem } from "../../ui/Section";
@@ -21,10 +21,10 @@ const isTab = (s: string | undefined): s is TabId => TABS.some((t) => t.id === s
 
 export function Layer2({ sub }: { readonly sub: readonly string[] }) {
   const router = useRouter();
-  const [head, second, ...rest] = sub;
+  const [head, second, third, ...rest] = sub;
   const tab = isTab(head) ? head : undefined;
-  // tables and ranks take one optional id; commands takes none.
-  const known = tab !== undefined && rest.length === 0 && (tab !== "commands" || second === undefined);
+  // tables take a segment id and then one of its states; ranks take one optional id; commands none.
+  const known = tab !== undefined && rest.length === 0 && (tab === "tables" || third === undefined) && (tab !== "commands" || second === undefined);
   return (
     <div className={styles.root} data-page="segments" data-role="segments-layer2">
       <Tabs items={TABS} value={tab ?? "tables"} label="Segments & ranks" onSelect={(id) => router.navigate(pageRoute("segments", id))} />
@@ -36,7 +36,7 @@ export function Layer2({ sub }: { readonly sub: readonly string[] }) {
           </RouteLink>
         </>
       ) : tab === "tables" ? (
-        <TablesPage focus={second} />
+        <TablesPage focus={second} state={third} />
       ) : tab === "commands" ? (
         <CommandsPage />
       ) : (

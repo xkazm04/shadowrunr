@@ -14,11 +14,15 @@ const LABELS: Readonly<Record<string, string>> = {
   ranks: "Ranks and weights",
 };
 
-/** Breadcrumbs: the three nested pages by name, a segment id verbatim, a report as `Report <id>`. */
+/**
+ * Breadcrumbs: the three nested pages by name, a segment id verbatim, a report as `Report <id>`,
+ * a segment's state in words (`foil vote`).
+ */
 export function segmentsLabel(segment: string, depth: number, parts: readonly string[]): string | undefined {
   if (depth === 1) return LABELS[segment];
   if (depth === 2 && parts[1] === "tables") return segment;
   if (depth === 2 && parts[1] === "ranks") return `Report ${segment}`;
+  if (depth === 3 && parts[1] === "tables") return segment.replace(/_/g, " ");
   return undefined;
 }
 

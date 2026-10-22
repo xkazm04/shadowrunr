@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { segmentsLabel } from "./index";
-import { commandRows, descoped, glance, handoverMarks, lifecycleColumns, opGrid, parseVotes, pyramid, qualifies, START_VOTES, tally, TICKS_PER_COLUMN } from "./model";
+import { crumbs, pageRoute } from "../../router";
+import { commandRows, descoped, glance, handoverMarks, lifecycleColumns, opGrid, parseVotes, pyramid, qualifies, reachable, START_VOTES, stateView, tally, TICKS_PER_COLUMN } from "./model";
 import { BASE_SEGMENTS, genRanks, genTables } from "./testgen";
 
 describe("lifecycle", () => {
@@ -92,4 +93,51 @@ it("labels the breadcrumbs", () => {
   expect(segmentsLabel("tables", 1, parts)).toBe("Segment tables");
   expect(segmentsLabel("SEG-01", 2, parts)).toBe("SEG-01");
   expect(segmentsLabel("rec-1", 2, ["segments", "ranks", "rec-1"])).toBe("Report rec-1");
+  expect(crumbs(pageRoute("segments", "tables", "SEG-01", "foil_vote"), segmentsLabel).slice(-2).map((c) => c.label).join(" / ")).toBe("SEG-01 / foil vote");
+});
+
+describe("walking a segment's state machine", () => {
+  const seg01 = BASE_SEGMENTS[0]!;
+  const edge = (e: { on: string; guard: string | undefined; from: string; to: string }) => `${e.from} ${e.on}${e.guard ? ` [${e.guard}]` : ""} -> ${e.to}`;
+
+  it("narrows the cold open's ops, screens and commands; other states run as the segment", () => {
+    const cold = stateView(seg01, "cold_open");
+    expect(cold.ops).toEqual(["highlight", "show_card", "mark_moment", "sign_off"]);
+    expect(cold.opsNarrowed).toBe(true);
+    expect(cold.commands).toEqual(["propose"]);
+    expect(cold.prompt).toBe("The room is still filling.");
+    const open = stateView(seg01, "opening");
+    expect(open.ops).toEqual(seg01.allowed_ops);
+    expect(open.opsNarrowed).toBe(false);
+    expect(open.commands).toEqual(["summon", "propose", "vote"]);
+  });
+
+  it("expands the '*' row into every state's exits", () => {
+    expect(stateView(seg01, "opening").exits.map(edge)).toEqual([
+      "opening foil_vote_opened -> foil_vote",
+      "opening foil_summoned -> foil_live",
+      "opening poll_opened -> crowd_game",
+      "opening handover_due -> handover_pending",
+    ]);
+    expect(stateView(seg01, "opening").exits.at(-1)?.any).toBe(true);
+  });
+
+  it("keeps guarded pairs apart and lists the entries", () => {
+    const v = stateView(seg01, "foil_vote");
+    expect(v.exits.filter((e) => e.on === "foil_vote_closed").map(edge)).toEqual(["foil_vote foil_vote_closed [foil_active] -> foil_live", "foil_vote foil_vote_closed [no_foil] -> opening"]);
+    expect(v.entries.map(edge)).toEqual(["opening foil_vote_opened -> foil_vote", "foil_live foil_vote_opened -> foil_vote"]);
+  });
+
+  it("draws the cold-open clock as an edge", () => {
+    const v = stateView(seg01, "cold_open");
+    expect(v.exits[0]).toMatchObject({ on: "cold open clock", clock: true, to: "opening" });
+    expect(stateView(seg01, "opening").entries.some((e) => e.clock && e.from === "cold_open")).toBe(true);
+  });
+
+  it("flags a state nothing reaches from the initial state", () => {
+    expect([...reachable(seg01)].sort()).toEqual([...seg01.states].sort());
+    const stranded = { ...seg01, states: [...seg01.states, "encore"] };
+    expect(reachable(stranded).has("encore")).toBe(false);
+    expect(stateView(stranded, "encore").reachable).toBe(false);
+  });
 });

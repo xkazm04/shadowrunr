@@ -54,9 +54,9 @@ describe("segments/tables", () => {
     mount(["tables"]);
     await settle();
     const card = all("segments-card")[0];
-    expect([...(card?.querySelectorAll("[data-role='segments-states'] span span") ?? [])].map((s) => s.textContent)).toEqual(["opening", "foil vote", "foil live", "crowd game", "handover pending"]);
-    expect(card?.querySelector("[title='Initial state']")?.textContent).toBe("opening");
-    expect(card?.querySelectorAll("[data-role='segments-transitions'] tbody tr")).toHaveLength(4);
+    expect([...(card?.querySelectorAll("[data-role='segments-states'] [role='radio']") ?? [])].map((s) => s.textContent)).toEqual(["cold open", "opening", "foil vote", "foil live", "crowd game", "handover pending"]);
+    expect(card?.querySelector("[title='Initial state']")?.textContent).toBe("cold open");
+    expect(card?.querySelectorAll("[data-role='segments-transitions'] tbody tr")).toHaveLength(15);
     expect(card?.querySelector("[data-role='segments-transitions'] tbody tr:last-child td")?.textContent).toBe("any state");
     const ho = card?.querySelector("[data-role='segments-handover']");
     expect(ho?.textContent).toContain("when at least 15 viewers hold for 3:00 after the cold open, or at 25:00, whichever comes first. Either way the brain then has 1:00 to switch");
@@ -93,6 +93,77 @@ describe("segments/tables", () => {
     mount(["tables"]);
     await settle();
     expect(nodes()).toBeLessThan(1_600);
+  });
+});
+
+describe("segments/tables/<SEG>/<state>: walking the state machine", () => {
+  const checked = () => [...document.querySelectorAll("[data-role='segments-states'] [role='radio'][aria-checked='true']")].map((b) => b.textContent);
+  const exits = () => all("segments-state-exit").map((li) => `${li.getAttribute("data-on")}${li.getAttribute("data-guard") ? ` [${li.getAttribute("data-guard")}]` : ""} -> ${li.querySelector("a")?.textContent}`);
+  const entries = () => all("segments-state-entry").map((li) => `${li.querySelector("a")?.textContent} via ${li.getAttribute("data-on")}`);
+
+  it("addresses a state by route and selects it", async () => {
+    mount(["tables", "SEG-01", "foil_vote"]);
+    await settle();
+    expect(screen.queryByText(/There is no page/)).toBeNull();
+    expect(all("segments-card").map((c) => c.getAttribute("data-segment"))).toEqual(["SEG-01"]);
+    expect(checked()).toEqual(["foil vote"]);
+    const radio = document.querySelector("[data-role='segments-states'] [aria-checked='true']");
+    await act(async () => fireEvent.keyDown(radio as Element, { key: "ArrowRight" }));
+    expect(checked()).toEqual(["foil live"]);
+  });
+
+  it("lists the cold open's narrowed ops, not the segment's", async () => {
+    mount(["tables", "SEG-01", "cold_open"]);
+    await settle();
+    expect([...(role("segments-state-ops")?.querySelectorAll("code") ?? [])].map((c) => c.textContent)).toEqual(["highlight", "show_card", "mark_moment", "sign_off"]);
+  });
+
+  it("expands the '*' row into opening's exits, each a link that walks on", async () => {
+    mount(["tables", "SEG-01", "opening"]);
+    await settle();
+    expect(exits()).toEqual(["foil_vote_opened -> foil vote", "foil_summoned -> foil live", "poll_opened -> crowd game", "handover_due -> handover pending"]);
+    const link = all("segments-state-exit")[0]?.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("#/segments/tables/SEG-01/foil_vote");
+    await act(async () => fireEvent.click(link as Element));
+    expect(checked()).toEqual(["foil vote"]);
+  });
+
+  it("shows foil vote's guarded exits and its entries", async () => {
+    mount(["tables", "SEG-01", "foil_vote"]);
+    await settle();
+    expect(exits()).toEqual(["foil_vote_closed [foil_active] -> foil live", "foil_vote_closed [no_foil] -> opening", "handover_due -> handover pending"]);
+    expect(entries()).toEqual(["opening via foil_vote_opened", "foil live via foil_vote_opened"]);
+  });
+
+  it("draws the cold-open clock as an exit", async () => {
+    mount(["tables", "SEG-01", "cold_open"]);
+    await settle();
+    const first = all("segments-state-exit")[0];
+    expect(first?.getAttribute("data-clock")).toBe("true");
+    expect(first?.textContent?.replace(/\s+/g, " ")).toContain("cold open clock → opening");
+  });
+
+  it("flags a state the table strands, and none on SEG-01 as shipped", async () => {
+    mount(["tables", "SEG-01"]);
+    await settle();
+    expect(document.querySelectorAll("[data-unreachable]")).toHaveLength(0);
+    cleanup();
+    dispose?.();
+    const t = genTables();
+    const seg = t.segments[0]!;
+    const stranded = { ...t, segments: [{ ...seg, states: [...seg.states, "encore"] }, ...t.segments.slice(1)] };
+    mount(["tables", "SEG-01"], base({ "segments.tables": stranded }));
+    await settle();
+    expect([...document.querySelectorAll("[data-unreachable]")].map((b) => b.textContent)).toEqual(["encore"]);
+    expect(role("segments-card")?.textContent).toContain("encore: unreachable from cold open");
+  });
+
+  it("refuses an unknown state and keeps the card on its initial state", async () => {
+    mount(["tables", "SEG-01", "no_such_state"]);
+    await settle();
+    expect(screen.getByText("No state no_such_state in SEG-01")).toBeTruthy();
+    expect(all("segments-card")).toHaveLength(1);
+    expect(checked()).toEqual(["cold open"]);
   });
 });
 

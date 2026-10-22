@@ -1,4 +1,4 @@
-// One segment's table (l2b.js `.seg-full`): the state chain, allowed ops, screens, commands,
+// One segment's table (l2b.js `.seg-full`): the state walk (StateWalk.tsx), allowed ops, screens, commands,
 // hand-overs, the clock with SEG-01's cold open and handover ruler, the per-state rules, the
 // arc, the transitions and the rules prompt. A descoped table prints its design notes: it has
 // no states to run. Every rule the runtime reads is printed: the daemon test
@@ -9,8 +9,9 @@ import { pageRoute, RouteLink } from "../../router";
 import { Chip } from "../../ui/Chip";
 import styles from "./Layer2.module.css";
 import { fmtSecs, handoverMarks, humanState, STATUS_TONE } from "./model";
+import { StateWalk } from "./StateWalk";
 
-export function SegmentCard({ seg, focused }: { seg: SegmentTableInfo; focused: boolean }) {
+export function SegmentCard({ seg, focused, state }: { seg: SegmentTableInfo; focused: boolean; state?: string | undefined }) {
   const off = seg.status === "descoped";
   return (
     <article className={`${styles.segFull} ${off ? styles.off : ""} ${focused ? styles.flash : ""}`} data-role="segments-card" data-segment={seg.id}>
@@ -25,25 +26,16 @@ export function SegmentCard({ seg, focused }: { seg: SegmentTableInfo; focused: 
           <p className={styles.note}>Descoped is not retired: the segment never ran, so it holds no lifecycle place.</p>
         </>
       ) : (
-        <Runnable seg={seg} />
+        <Runnable seg={seg} focused={focused} state={state} />
       )}
     </article>
   );
 }
 
-function Runnable({ seg }: { seg: SegmentTableInfo }) {
+function Runnable({ seg, focused, state }: { seg: SegmentTableInfo; focused: boolean; state: string | undefined }) {
   return (
     <>
-      <div className={styles.chain} data-role="segments-states">
-        {seg.states.map((x, i) => (
-          <span key={x} className={styles.chainStep}>
-            {i > 0 && <em aria-hidden="true" />}
-            <span className={x === seg.initial ? styles.init : undefined} title={x === seg.initial ? "Initial state" : undefined}>
-              {humanState(x)}
-            </span>
-          </span>
-        ))}
-      </div>
+      <StateWalk seg={seg} state={state} focused={focused} />
       <div className={styles.cols2}>
         <div>
           <h3>

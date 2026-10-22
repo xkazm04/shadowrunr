@@ -204,3 +204,91 @@ export function handoverMarks(h: { sustain_s: number; max_elapsed_s: number; gra
 }
 
 export const humanState = (s: string) => s.replace(/_/g, " ");
+
+/**
+ * The state a `[clock.cold_open]` rule clocks (shadowrunr-segments `table::COLD_OPEN_STATE`).
+ * The wire's ColdOpenInfo carries the rule's target but not its source, so the source is named
+ * here once; the walk draws the clock edge only when the table has this state.
+ */
+export const COLD_OPEN_STATE = "cold_open";
+
+/** One edge of a segment's state machine, as the walk prints it. */
+export interface StateEdge {
+  readonly from: string;
+  /** The trigger, or `cold open clock` for the clock rule's edge. */
+  readonly on: string;
+  readonly guard: string | undefined;
+  readonly to: string;
+  /** Expanded from a `from = "*"` row. */
+  readonly any: boolean;
+  /** A clock rule, not a transition row. */
+  readonly clock: boolean;
+}
+
+/**
+ * Every edge of the table, in table order with the cold-open clock first: `*` rows expand into
+ * one edge per state. Nothing is decided here; the rows are the daemon's.
+ */
+export function stateEdges(seg: SegmentTableInfo): StateEdge[] {
+  const out: StateEdge[] = [];
+  const cold = seg.clock.cold_open;
+  if (cold && seg.states.includes(COLD_OPEN_STATE)) out.push({ from: COLD_OPEN_STATE, on: "cold open clock", guard: undefined, to: cold.to, any: false, clock: true });
+  for (const t of seg.transitions) {
+    const froms = t.from === "*" ? seg.states : [t.from];
+    for (const from of froms) out.push({ from, on: t.on, guard: t.guard, to: t.to, any: t.from === "*", clock: false });
+  }
+  return out;
+}
+
+/** The states a walk from `initial` reaches over the table's edges. */
+export function reachable(seg: SegmentTableInfo, edges: readonly StateEdge[] = stateEdges(seg)): ReadonlySet<string> {
+  const seen = new Set([seg.initial]);
+  const queue = [seg.initial];
+  for (let s = queue.shift(); s !== undefined; s = queue.shift()) {
+    for (const e of edges) {
+      if (e.from === s && !seen.has(e.to)) {
+        seen.add(e.to);
+        queue.push(e.to);
+      }
+    }
+  }
+  return seen;
+}
+
+export interface StateView {
+  readonly state: string;
+  readonly initial: boolean;
+  readonly reachable: boolean;
+  readonly ops: readonly string[];
+  readonly opsNarrowed: boolean;
+  readonly screens: readonly string[];
+  readonly screensNarrowed: boolean;
+  readonly commands: readonly string[];
+  readonly commandsNarrowed: boolean;
+  /** The line the state summary carries while in this state. */
+  readonly prompt: string | undefined;
+  /** Edges leaving the state (a self-loop stays). */
+  readonly exits: readonly StateEdge[];
+  /** Edges from other states into this one. */
+  readonly entries: readonly StateEdge[];
+}
+
+/** What is open in one state and where it leads: the segment's lists narrowed by `state_rules`. */
+export function stateView(seg: SegmentTableInfo, state: string): StateView {
+  const r = seg.state_rules?.[state];
+  const edges = stateEdges(seg);
+  return {
+    state,
+    initial: state === seg.initial,
+    reachable: reachable(seg, edges).has(state),
+    ops: r?.allowed_ops ?? seg.allowed_ops,
+    opsNarrowed: r?.allowed_ops !== undefined,
+    screens: r?.screens ?? seg.screens ?? [],
+    screensNarrowed: r?.screens !== undefined,
+    commands: r?.commands ?? seg.commands,
+    commandsNarrowed: r?.commands !== undefined,
+    prompt: r?.prompt?.trim(),
+    exits: edges.filter((e) => e.from === state),
+    entries: edges.filter((e) => e.to === state && e.from !== state),
+  };
+}

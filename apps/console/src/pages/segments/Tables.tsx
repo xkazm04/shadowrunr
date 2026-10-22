@@ -1,4 +1,4 @@
-// segments/tables[/<SEG>]: the lifecycle flow, the portfolio (virtualised) and each segment's
+// segments/tables[/<SEG>[/<state>]]: the lifecycle flow, the portfolio (virtualised) and each segment's
 // table: states, transitions, allowed ops, commands and the handover clock (l2b.js `tables`).
 import type { SegmentStatus, SegmentTableInfo, SegmentTables } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
@@ -17,7 +17,7 @@ export const CARD_LIMIT = 8;
 
 type Facet = "all" | "runnable" | "descoped";
 
-export function TablesPage({ focus }: { focus: string | undefined }) {
+export function TablesPage({ focus, state }: { focus: string | undefined; state?: string | undefined }) {
   const tables = useTables();
   return (
     <>
@@ -27,20 +27,22 @@ export function TablesPage({ focus }: { focus: string | undefined }) {
         lede="Every segment is a table, not code: states, allowed ops, commands, clocks and transitions, interpreted by one runtime. A segment is born as a pilot and earns its way up."
       />
       <QueryView query={tables} isEmpty={(t) => t.segments.length === 0} emptyTitle="The daemon has no segment tables" emptyHint="Tables load from the segments directory in shadowrunr.toml.">
-        {(t) => <Body tables={t} focus={focus} />}
+        {(t) => <Body tables={t} focus={focus} state={state} />}
       </QueryView>
     </>
   );
 }
 
-function Body({ tables, focus }: { tables: SegmentTables; focus: string | undefined }) {
+function Body({ tables, focus, state }: { tables: SegmentTables; focus: string | undefined; state: string | undefined }) {
   const segs = tables.segments;
   if (focus !== undefined) {
     const seg = segs.find((s) => s.id === focus);
+    const badState = seg !== undefined && state !== undefined && !seg.states.includes(state);
     return (
       <>
+        {badState && <StatePanel state="invalid" title={`No state ${state} in ${focus}`} hint={`Its states: ${seg.states.join(", ")}. The card opens on ${seg.initial}.`} />}
         {seg ? (
-          <SegmentCard seg={seg} focused />
+          <SegmentCard seg={seg} focused state={badState ? undefined : state} />
         ) : (
           <StatePanel state="invalid" title={`No segment ${focus} in the tables`} hint="Pick one from the portfolio below." />
         )}

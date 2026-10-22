@@ -7,12 +7,14 @@ import type { CommandInfo, RankRow, RankTableInfo, ReconcileReport, SegmentId, S
 const OP_TAGS = ["highlight", "start_poll", "close_poll", "summon_foil", "dismiss_foil", "reveal_hex", "dispatch_research", "show_card", "mark_moment", "switch_segment", "sign_off", "show_screen", "pin_link"];
 const COMMANDS = ["summon", "hint", "grade", "propose", "vote"];
 
+// SEG-01 as shipped (crates/shadowrunr-segments/data/segments/seg-01.toml): six states, the
+// cold open narrowing ops and commands, 15 transitions with guarded pairs and a "*" row.
 const seg01: SegmentTableInfo = {
   id: "SEG-01",
   title: "Improvised Room",
   status: "pilot",
-  initial: "opening",
-  states: ["opening", "foil_vote", "foil_live", "crowd_game", "handover_pending"],
+  initial: "cold_open",
+  states: ["cold_open", "opening", "foil_vote", "foil_live", "crowd_game", "handover_pending"],
   allowed_ops: ["highlight", "start_poll", "close_poll", "summon_foil", "dismiss_foil", "show_card", "mark_moment", "switch_segment", "sign_off"],
   screens: ["host"],
   commands: ["summon", "propose", "vote"],
@@ -22,8 +24,19 @@ const seg01: SegmentTableInfo = {
   state_rules: { cold_open: { allowed_ops: ["highlight", "show_card", "mark_moment", "sign_off"], prompt: "The room is still filling.", screens: ["host"], commands: ["propose"] } },
   transitions: [
     { from: "opening", on: "foil_vote_opened", to: "foil_vote" },
+    { from: "foil_live", on: "foil_vote_opened", to: "foil_vote" },
     { from: "foil_vote", on: "foil_vote_closed", guard: "foil_active", to: "foil_live" },
     { from: "foil_vote", on: "foil_vote_closed", guard: "no_foil", to: "opening" },
+    { from: "opening", on: "foil_summoned", to: "foil_live" },
+    { from: "foil_live", on: "foil_summoned", to: "foil_live" },
+    { from: "crowd_game", on: "foil_summoned", to: "crowd_game" },
+    { from: "foil_live", on: "foil_dismissed", to: "opening" },
+    { from: "crowd_game", on: "foil_dismissed", to: "crowd_game" },
+    { from: "handover_pending", on: "foil_dismissed", to: "handover_pending" },
+    { from: "opening", on: "poll_opened", to: "crowd_game" },
+    { from: "foil_live", on: "poll_opened", to: "crowd_game" },
+    { from: "crowd_game", on: "poll_closed", guard: "foil_active", to: "foil_live" },
+    { from: "crowd_game", on: "poll_closed", guard: "no_foil", to: "opening" },
     { from: "*", on: "handover_due", to: "handover_pending" },
   ],
 };
