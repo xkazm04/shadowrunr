@@ -3607,6 +3607,57 @@
           "evidence": "sim/matrices/rate-cap-exemptions.toml:7 The enabled experiment's rate_cap_for implementation doubles the allowance for unaddressed chatter below ten chatters and drops it from 12 to 6 at ten, violating addressed-only leniency and continuity."
         }
       ]
+    },
+    "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa/build-economics": {
+      "context": "console-build-and-desktop-shell",
+      "subject": "build-economics",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T21:57:07.906Z",
+      "techniques": [
+        {
+          "technique": "build-measurement",
+          "verdict": "deviation",
+          "evidence": "apps/console/package.json:8 The build measures output bytes but provides no scenario-labeled build timer, process-tree memory sampler or build-cost baseline; searches found no accompanying instruments."
+        },
+        {
+          "technique": "cache-budgeting",
+          "verdict": "deviation",
+          "evidence": "apps/console/src-tauri/.cargo/config.toml:4 The desktop crate retains artifacts in the shared target directory; searches found no byte ceiling, routine enforcing pruner or cache-hit measurement for it."
+        },
+        {
+          "technique": "capability-feature-gating",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/src/lib.rs:2 The shell delegates application logic to a separate daemon; its inspected dependencies provide the window and opener, with no identified heavy optional in-process capability requiring a gate."
+        },
+        {
+          "technique": "compilation-unit-splitting",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/Cargo.toml:4 The inspected native implementation is a small window bootstrap and endpoint resolver, with no identified huge compilation unit or large repeatedly instantiated generic body; frontend lazy chunks alone do not establish compilation-unit economics."
+        },
+        {
+          "technique": "debug-artifact-economics",
+          "verdict": "deviation",
+          "evidence": "apps/console/src-tauri/.cargo/config.toml:1 This explicitly selects shared mutable artifacts; the referenced policy permits concurrent builders and expected Cargo lock waits, whereas the technique requires separate directories for concurrent builds."
+        },
+        {
+          "technique": "declinable-capability-split",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/Cargo.toml:8 The native crate is unpublished and the console package is private; no published consumer unit carrying a declinable capability was identified."
+        },
+        {
+          "technique": "dev-variant-design",
+          "verdict": "deviation",
+          "evidence": "apps/console/package.json:7 The shortest development command runs the browser frontend and desktop development is separately invoked through Tauri, but searches found no authoritative task routing, desktop-only blind-spot list or measured cost comparison for these development choices."
+        }
+      ],
+      "withdrawn": {
+        "worker": "729bccfd-c3de-48c3-9013-87d21926712b",
+        "state": "deviation",
+        "at": "2026-10-22T21:57:31.967045+00:00",
+        "reason": "reviewer (sonnet): The anchor config.toml:4 only shows the shared `target-dir`. The deviation rests on absence claims (no byte ceiling, pruner, cache-hit or timing instruments, no concurrency isolation) that I could not confirm from this context's files. Any such control would live in repo-wide CI or root tooling, whi"
+      }
     }
   }
 }
