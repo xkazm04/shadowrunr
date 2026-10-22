@@ -5327,7 +5327,11 @@
           "revision": 2,
           "changedAt": "2026-09-30",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/stage/src/voice/player.ts:147 This client schedules supplied utterances and reports playback events rather than judging finished synthetic speech, and searches for intelligibility, speaker_similarity, word_error_rate and listening_board found no context matches.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:944f40c9b53212c0",
+          "evaluatedRevision": 2
         },
         {
           "subject": "test-input-generation",
@@ -5464,7 +5468,11 @@
           "revision": 2,
           "changedAt": "2026-09-30",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/Cargo.toml:3 This context evaluates editorial moments and publication checks rather than synthesized speech fidelity, and searches for intelligibility, speaker_similarity, word_error_rate and listening_board found no context matches.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:944f40c9b53212c0",
+          "evaluatedRevision": 2
         },
         {
           "subject": "quality-gates",

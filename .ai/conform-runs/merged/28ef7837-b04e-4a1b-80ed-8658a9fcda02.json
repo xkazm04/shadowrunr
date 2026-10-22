@@ -1,0 +1,151 @@
+{
+ "schema": "conform-run/1",
+ "worker": "28ef7837-b04e-4a1b-80ed-8658a9fcda02",
+ "subject": "generated-speech-acceptance",
+ "evaluatedAt": "2026-10-22T00:06:57.661061+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "clips-pipeline",
+   "subject": "generated-speech-acceptance",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-clips/Cargo.toml:3 This context evaluates editorial moments and publication checks rather than synthesized speech fidelity, and searches for intelligibility, speaker_similarity, word_error_rate and listening_board found no context matches.",
+   "techniques": [
+    {
+     "technique": "hard-slice-stratification",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/window.rs:77 These are editorial cut-duration bands; this context does not benchmark synthesis on long-text or rare-token slices."
+    },
+    {
+     "technique": "instruction-following-judged-on-audio",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/hook.rs:19 The model rates transcript hooks, not audible adherence to speech instructions."
+    },
+    {
+     "technique": "listening-board",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/scan.rs:438 Ranking selects stream beats for editing, not generators or voice candidates."
+    },
+    {
+     "technique": "normalize-before-you-compare",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/scan.rs:96 Normalization redistributes editorial signal weights; there is no recognizer/reference error comparison."
+    },
+    {
+     "technique": "published-number-comparability",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/lib.rs:57 The reported ranking describes editorial weights, without comparing reproduced speech scores against published results."
+    },
+    {
+     "technique": "round-trip-intelligibility",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/voice.rs:100 Voice logs supply playback timing for cuts; this calculation makes no claim that rendered audio matches its text."
+    },
+    {
+     "technique": "three-axes-beside-intelligibility",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/footage.rs:38 The audio signal estimates editorial liveliness, not speaker identity or synthesized-speech quality."
+    }
+   ],
+   "absenceTerms": [
+    "intelligibility",
+    "speaker_similarity",
+    "word_error_rate"
+   ]
+  },
+  {
+   "context": "stage-voice-client",
+   "subject": "generated-speech-acceptance",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/stage/src/voice/player.ts:147 This client schedules supplied utterances and reports playback events rather than judging finished synthetic speech, and searches for intelligibility, speaker_similarity, word_error_rate and listening_board found no context matches.",
+   "techniques": [
+    {
+     "technique": "hard-slice-stratification",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/player.ts:28 The duration budget controls live playback backlog; this context performs no synthesis benchmark or slice comparison."
+    },
+    {
+     "technique": "instruction-following-judged-on-audio",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/player.ts:210 Audio level and supplied visemes drive animation, without judging emotion, style or role adherence."
+    },
+    {
+     "technique": "listening-board",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:196 The session plays its followed run rather than presenting competing voice candidates for selection."
+    },
+    {
+     "technique": "normalize-before-you-compare",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/captions.ts:116 Captions use supplied scene text; no recognized hypothesis is normalized or compared against a reference."
+    },
+    {
+     "technique": "published-number-comparability",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/report.ts:20 The report records operational playback timing, not reproduced or published speech scores."
+    },
+    {
+     "technique": "round-trip-intelligibility",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/player.ts:156 The player decodes received PCM for playback; it does not evaluate whether the audio says its supplied text."
+    },
+    {
+     "technique": "three-axes-beside-intelligibility",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/webaudio.ts:42 This RMS-derived mouth-animation level is not a speech-quality estimator or an identity acceptance score."
+    }
+   ],
+   "absenceTerms": [
+    "intelligibility",
+    "speaker_similarity",
+    "word_error_rate"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-22T00:06:57.661061+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "generated-speech-acceptance"
+   ],
+   "techniques": [
+    "hard-slice-stratification",
+    "instruction-following-judged-on-audio",
+    "listening-board",
+    "normalize-before-you-compare",
+    "published-number-comparability",
+    "round-trip-intelligibility",
+    "three-axes-beside-intelligibility"
+   ],
+   "deviations": 0,
+   "context": "clips-pipeline",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-22T00:06:57.661061+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "generated-speech-acceptance"
+   ],
+   "techniques": [
+    "hard-slice-stratification",
+    "instruction-following-judged-on-audio",
+    "listening-board",
+    "normalize-before-you-compare",
+    "published-number-comparability",
+    "round-trip-intelligibility",
+    "three-axes-beside-intelligibility"
+   ],
+   "deviations": 0,
+   "context": "stage-voice-client",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}
