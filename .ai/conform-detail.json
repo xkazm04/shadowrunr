@@ -3104,6 +3104,68 @@
           "evidence": "apps/console/src/pages/brain/brainModel.ts:237 The model supplies parallel dashboard measurements rather than a page-level sequence of explanatory stations."
         }
       ]
+    },
+    "438f47d8-694c-4986-92b2-bbba5af4a1c1/on-stream-persona-continuity": {
+      "context": "brain-composition-memory",
+      "subject": "on-stream-persona-continuity",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T02:43:35.903Z",
+      "worker": "b84d731c-7f2b-4529-a283-9e31e85424d8",
+      "techniques": [
+        {
+          "technique": "anti-repetition-window",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/util.rs:143 The rolling guard implements whole-line and sentence similarity, but lacks the required opening-word comparison and declared-signature budgets."
+        },
+        {
+          "technique": "byte-stable-persona-prefix",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:676 Prefix reuse and byte-equality tests exist, but turn recording omits the required prefix fingerprint; searches found prefix_hash callers only in tests."
+        },
+        {
+          "technique": "cited-memory-with-tombstones",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/memory/store.rs:471 Citations and tombstones are implemented, but viewer keys receive only generic syntax checks rather than validation against stable account identities, and fact values lack deterministic scope filtering."
+        },
+        {
+          "technique": "owner-brief-below-the-constitution",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/compose.rs:322 Typed rendering, fencing and precedence framing exist, but this builder checks activation and emptiness without withholding directives that conflict with hard lines."
+        }
+      ]
+    },
+    "382c68f3-bc20-4cc7-8220-18aa850f7087/on-stream-persona-continuity": {
+      "context": "character-package",
+      "subject": "on-stream-persona-continuity",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T02:43:35.903Z",
+      "worker": "b84d731c-7f2b-4529-a283-9e31e85424d8",
+      "techniques": [
+        {
+          "technique": "anti-repetition-window",
+          "verdict": "deviation",
+          "evidence": "characters/malakor/bible.md:111 The package declares a signature catchphrase without an hourly use budget or prohibition on consecutive replies."
+        },
+        {
+          "technique": "immutable-core-swappable-tone",
+          "verdict": "deviation",
+          "evidence": "characters/malakor/constitution.md:3 The constitution declares immutability but does not state the required precedence over the bible, tone, owner brief and memory; the tone documents also omit opening subordination statements."
+        },
+        {
+          "technique": "owner-brief-below-the-constitution",
+          "verdict": "deviation",
+          "evidence": "characters/malakor/directions.md:3 These standing owner directions contain no explicit statement that the constitution outranks them."
+        },
+        {
+          "technique": "tone-as-falsifiable-bet",
+          "verdict": "deviation",
+          "evidence": "characters/malakor/tones/unhinged-roastmaster.md:48 Theatrical is designated as the control, but the variant bet sheets lack quantitative hypotheses and explicit falsifiers or retirement thresholds."
+        }
+      ]
     }
   }
 }

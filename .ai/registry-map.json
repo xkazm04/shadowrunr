@@ -580,7 +580,11 @@
           "revision": 2,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/compose.rs:322 Brief assembly admits active directives without checking conflicts against the constitution, leaving forbidden direction for the model to resolve.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:08c790ffd08803d5",
+          "evaluatedRevision": 2
         },
         {
           "subject": "mcp-tools",
@@ -4594,7 +4598,11 @@
           "revision": 2,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "characters/malakor/tones/unhinged-roastmaster.md:48 The tone names an engagement hypothesis and a guardrail risk but supplies no measurable retirement threshold.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:08c790ffd08803d5",
+          "evaluatedRevision": 2
         },
         {
           "subject": "agent-memory",
