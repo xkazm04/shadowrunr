@@ -643,6 +643,8 @@ tuning_table! {
     request_lead_ms: i64 = 8_000, Assumption, None;
     /// An owned request still unanswered this long after it reached a beat is dropped, ms.
     request_max_ms: i64 = 90_000, Assumption, None;
+    /// Characters the voice speaks a second, the speech clock's rate.
+    speech_cps: u32 = 18, Measured, Some("Kokoro af_heart speaks about 18.3 characters a second");
     /// The voice's render lag after a `say`, part of the lookahead lead, ms.
     render_lag_ms: i64 = 2_000, Measured, Some("p50 2.2 s from say to rendered audio in two voiced runs");
     /// The most the lookahead lead may grow to, ms.
@@ -739,7 +741,7 @@ mod tests {
             source: None,
         });
         assert!(Tuning::resolve(&t).unwrap_err().contains("positive"));
-        assert_eq!(TUNING_DEFAULTS.len(), 23);
+        assert_eq!(TUNING_DEFAULTS.len(), 24);
         assert!(TUNING_DEFAULTS
             .iter()
             .all(|d| d.value > 0 && !d.doc.is_empty()));

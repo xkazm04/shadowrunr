@@ -161,11 +161,12 @@ impl BrainTuning {
         Self::default().with_tuning(pkg.tuning)
     }
 
-    /// These knobs with `t` applied: `max_picks`, `stall_every_s`, the pace's render lag,
-    /// lookahead cap and lag ceiling, and the rest of the table.
+    /// These knobs with `t` applied: `max_picks`, `stall_every_s`, the pace's speech rate,
+    /// render lag, lookahead cap and lag ceiling, and the rest of the table.
     pub fn with_tuning(mut self, t: Tuning) -> Self {
         self.picker.max_picks = t.max_picks;
         self.stall_every_s = t.stall_every_s;
+        self.pace.speech_cps = f64::from(t.speech_cps);
         self.pace.render_lag_ms = t.render_lag_ms;
         self.pace.lookahead_max_ms = t.lookahead_max_ms;
         self.pace.lag_ceiling_ms = t.lag_ceiling_ms;

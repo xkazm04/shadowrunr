@@ -256,6 +256,11 @@ request_lead_ms = { value = 8000, provenance = "assumption" }
 # default: 90000
 request_max_ms = { value = 90000, provenance = "assumption" }
 
+# ? Characters the voice speaks a second, the speech clock's rate. Measure it on your voice.
+# options: a positive whole number (characters a second)
+# default: 18
+speech_cps = { value = 18, provenance = "measured", source = "Kokoro af_heart speaks about 18.3 characters a second" }
+
 # ? The voice's render lag after a `say`, part of the lookahead lead, ms.
 # options: a positive whole number (milliseconds)
 # default: 2000

@@ -1144,6 +1144,10 @@
           "$ref": "#/$defs/TuningEntry",
           "description": "A sign-off counts when it lands in the last this many seconds, s."
         },
+        "speech_cps": {
+          "$ref": "#/$defs/TuningEntry",
+          "description": "Characters the voice speaks a second, the speech clock's rate."
+        },
         "stall_every_s": {
           "$ref": "#/$defs/TuningEntry",
           "description": "While the fleet fails, a stall line once nobody has spoken this long, s."

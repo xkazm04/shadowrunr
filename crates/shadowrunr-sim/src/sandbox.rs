@@ -1734,10 +1734,10 @@ mod tests {
         assert_eq!(detail(r, "dead_air"), "filled from the recording");
         assert!(!r.pass, "an unmeasured check is not a pass");
         // The cold open speaks a line and holds a beat: a line every 10 s, under the 15 s gate.
-        // Speech-aware, each line's 2.25 s on air (36 characters at 18 a second, plus the
-        // pause) is not silence: 7.75 s of nobody speaking between them.
-        assert_eq!(r.max_say_gap_s, 7.75);
-        assert_eq!(r.say_gap_p95_s, 7.75);
+        // Speech-aware, each line's 2.368 s on air (36 characters at his 17 a second, plus the
+        // pause) is not silence: 7.632 s of nobody speaking between them.
+        assert_eq!(r.max_say_gap_s, 7.632);
+        assert_eq!(r.say_gap_p95_s, 7.632);
         assert!(
             detail(r, "say_gap").contains("(say to say 10.0 s;"),
             "{}",

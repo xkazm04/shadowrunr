@@ -1,6 +1,7 @@
 //! What the voice needs on this machine, item by item: Kokoro's files and the engine binary
 //! (from `engine_dir`), the python and the sidecar package, and, for mouth shapes, the durations
-//! model and numpy/onnxruntime. `shadowrunr voice check` prints the table; the service runs the
+//! model and numpy/onnxruntime, and a configured voices file (missing, or not the model's size,
+//! is the sidecar's `degraded` before it starts). `shadowrunr voice check` prints the table; the service runs the
 //! file half before it spawns anything, so missing Kokoro files are `degraded` with their name,
 //! not a crash loop.
 //!
@@ -28,6 +29,12 @@ pub const WARM_ENGINE: &str = "engine: warm";
 
 /// Kokoro's files under `<engine_dir>/kokoro`, all needed.
 pub const KOKORO_FILES: [&str; 4] = ["model.onnx", "voices.bin", "tokens.txt", "espeak-ng-data"];
+
+/// One speaker's style rows in a voices file: 510 rows of 256 float32 (the sidecar's
+/// `engine.SPEAKER_BYTES`).
+pub const SPEAKER_BYTES: u64 = 510 * 256 * 4;
+/// kokoro-multi-lang-v1_0's speakers: the voices file's size when the stock one is not there.
+pub const SPEAKERS: u64 = 53;
 
 /// How long a python probe may take.
 const PY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -110,6 +117,71 @@ fn file_item(item: &str, root: &Path, rel: &Path, needed: bool) -> Item {
             format!("{rel} is not in engine_dir")
         },
     )
+}
+
+/// The configured voices file (`voices_file`, from `[voice]` or the character's package), the
+/// sidecar's own test before it speaks: it must exist, be the model's `kokoro/voices.bin` size
+/// exactly (sherpa-onnx refuses any other) and hold `sid`. Named, never by its path. `None`
+/// when no voices file is set (the model's own is one of the Kokoro rows).
+pub fn voices_item(cfg: &VoiceConfig) -> Option<Item> {
+    let file = cfg.voices_file.as_deref()?;
+    let Some(path) = cfg.voices_path() else {
+        return Some(Item::new(
+            "voices file",
+            false,
+            true,
+            format!("{file}: no voices_dir and no home directory to find it in"),
+        ));
+    };
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| file.to_string());
+    let Some(size) = std::fs::metadata(&path)
+        .ok()
+        .filter(|m| m.is_file())
+        .map(|m| m.len())
+    else {
+        return Some(Item::new(
+            "voices file",
+            false,
+            true,
+            format!("the voices file {name} is missing"),
+        ));
+    };
+    let stock = cfg
+        .engine_dir
+        .as_deref()
+        .and_then(|d| std::fs::metadata(Path::new(d).join("kokoro").join("voices.bin")).ok())
+        .map(|m| m.len())
+        .filter(|&n| n > 0);
+    let want = stock.unwrap_or(SPEAKERS * SPEAKER_BYTES);
+    if size != want {
+        return Some(Item::new(
+            "voices file",
+            false,
+            true,
+            format!("the voices file {name} is {size} bytes; the model's voices.bin is {want}"),
+        ));
+    }
+    let speakers = size / SPEAKER_BYTES;
+    if u64::from(cfg.sid) >= speakers {
+        return Some(Item::new(
+            "voices file",
+            false,
+            true,
+            format!(
+                "sid {} is not one of the {speakers} speakers in the voices file {name}",
+                cfg.sid
+            ),
+        ));
+    }
+    Some(Item::new(
+        "voices file",
+        true,
+        true,
+        format!("{name}, sid {} of {speakers} speakers", cfg.sid),
+    ))
 }
 
 /// The first needed engine file that is missing, as a `degraded` reason.
@@ -238,6 +310,7 @@ pub async fn python_items(cfg: &VoiceConfig) -> Vec<Item> {
 /// Every item, in table order.
 pub async fn check(cfg: &VoiceConfig) -> Vec<Item> {
     let mut items = engine_items(cfg.engine_dir.as_deref());
+    items.extend(voices_item(cfg));
     items.extend(python_items(cfg).await);
     items.push(durations_item(cfg));
     items
@@ -344,6 +417,77 @@ mod tests {
                 reason: Some("engine: process".into())
             }
         );
+    }
+
+    #[test]
+    fn a_missing_or_wrong_sized_voices_file_is_a_needed_row() {
+        let d = tempfile::tempdir().unwrap();
+        let engine = d.path().join("engine");
+        std::fs::create_dir_all(engine.join("kokoro")).unwrap();
+        let stock = vec![0u8; (SPEAKER_BYTES * 3) as usize];
+        std::fs::write(engine.join("kokoro").join("voices.bin"), &stock).unwrap();
+        let voices = d.path().join("voices");
+        std::fs::create_dir_all(&voices).unwrap();
+        let mut cfg = VoiceConfig {
+            engine_dir: Some(engine.to_string_lossy().into_owned()),
+            voices_dir: Some(voices.to_string_lossy().into_owned()),
+            sid: 2,
+            ..VoiceConfig::default()
+        };
+        // None configured: no row (the model's own file is a Kokoro row).
+        assert_eq!(voices_item(&cfg), None);
+
+        cfg.voices_file = Some("lich-voices.bin".into());
+        let missing = voices_item(&cfg).unwrap();
+        assert!(missing.needed && !missing.ok());
+        assert_eq!(missing.detail, "the voices file lich-voices.bin is missing");
+        assert!(!all_needed(&[missing]));
+
+        let file = voices.join("lich-voices.bin");
+        std::fs::write(&file, vec![0u8; (SPEAKER_BYTES * 2) as usize]).unwrap();
+        let short = voices_item(&cfg).unwrap();
+        assert!(!short.ok());
+        assert!(
+            short
+                .detail
+                .contains(&format!("{} bytes", SPEAKER_BYTES * 2))
+                && short.detail.contains(&format!("is {}", SPEAKER_BYTES * 3)),
+            "{}",
+            short.detail
+        );
+        assert!(
+            !short.detail.contains(&*voices.to_string_lossy()),
+            "never the path"
+        );
+
+        std::fs::write(&file, &stock).unwrap();
+        let ok = voices_item(&cfg).unwrap();
+        assert!(ok.ok(), "{}", ok.detail);
+        assert_eq!(ok.detail, "lich-voices.bin, sid 2 of 3 speakers");
+        cfg.sid = 3;
+        assert!(voices_item(&cfg)
+            .unwrap()
+            .detail
+            .contains("sid 3 is not one of the 3"));
+
+        // Without the stock file the model's size is 53 speakers.
+        std::fs::remove_file(engine.join("kokoro").join("voices.bin")).unwrap();
+        cfg.sid = 2;
+        let unsized_ = voices_item(&cfg).unwrap();
+        assert!(
+            unsized_
+                .detail
+                .contains(&format!("is {}", SPEAKERS * SPEAKER_BYTES)),
+            "{}",
+            unsized_.detail
+        );
+        // An absolute voices_file is read as is.
+        cfg.voices_file = Some(file.to_string_lossy().into_owned());
+        cfg.voices_dir = None;
+        assert!(voices_item(&cfg)
+            .unwrap()
+            .detail
+            .starts_with("the voices file lich-voices.bin is"));
     }
 
     #[test]
