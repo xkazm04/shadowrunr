@@ -1,0 +1,17 @@
+{
+ "schema": "conform-run/1",
+ "worker": "e82bf2e9-e5b2-4bc4-b656-2713c0f90acc",
+ "subject": "adaptive-fidelity-tiers",
+ "evaluatedAt": "2026-10-22T21:37:46.602891+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "adaptive-fidelity-tiers",
+   "context": "console-quality-gates",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": []
+}
