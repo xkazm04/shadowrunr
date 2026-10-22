@@ -1,0 +1,17 @@
+{
+ "schema": "conform-run/1",
+ "worker": "9c762243-a68c-4283-b0ae-1bd4f9a0c511",
+ "subject": "canvas-graph",
+ "evaluatedAt": "2026-10-22T22:06:51.671436+00:00",
+ "provider": "agy",
+ "model": "gemini-3.8-flash-high",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "canvas-graph",
+   "context": "console-simulator-page",
+   "reason": "The canvas-graph standard governs pan/zoom node-graph editing surfaces for creating, viewing, and modifying topological entity relationships (nodes, edges, graph layout, viewport camera transforms, direct manipulation, and roving keyboard navigation across an infinite canvas). By contrast, console-simulator-page is a frontend React UI for tournament simulation results and judge verdicts (Layer1.tsx, Layer2.tsx, SimScreen.tsx, Tournaments.tsx, Heatmap.tsx); its use of HTML5 canvas (SimScreen.tsx, draw.ts, grid.ts) renders a fixed 8x5 tournament tile grid with 12x10 run cells displaying health metrics and red-line checks, with no graph topology, entity connections, edge routing, or node-graph manipulation. Its association in registry-map.json was a lexical false positive on 'canvas', 'screen', and 'drawing'."
+  }
+ ],
+ "consults": []
+}
