@@ -3,7 +3,7 @@
 //! a time (`say`) and answers with its sentences, in order, on the line's own channel.
 
 use shadowrunr_types::delivery::Delivery;
-use shadowrunr_types::voice::VisemeSpan;
+use shadowrunr_types::voice::{VisemeSpan, VoiceTimings};
 use tokio::sync::{mpsc, watch};
 
 /// One line to speak: its text and the delivery cue the brain parsed off it.
@@ -33,6 +33,10 @@ pub struct Rendered {
     /// Mono PCM16LE, base64, as the sidecar sent it.
     pub pcm: String,
     pub visemes: Vec<VisemeSpan>,
+    /// Characters sent to the provider for this part (the usage unit).
+    pub chars: u32,
+    /// Where the part's timing came from.
+    pub timings: VoiceTimings,
 }
 
 /// What a line's channel carries.
@@ -198,6 +202,8 @@ pub mod fake {
                     start_ms: 0,
                     end_ms: 100,
                 }],
+                chars: text.chars().count() as u32,
+                timings: VoiceTimings::Durations,
             })
         }
     }

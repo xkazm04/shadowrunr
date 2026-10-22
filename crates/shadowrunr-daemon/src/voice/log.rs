@@ -29,8 +29,9 @@ use std::sync::{Arc, Mutex};
 
 use shadowrunr_types::delivery::Delivery;
 use shadowrunr_types::voice::{
-    VoiceClientFrame, VoiceFrame, VoiceLogEvent, VoiceLogLine, VoiceSkip,
+    VoiceClientFrame, VoiceFrame, VoiceLogEvent, VoiceLogLine, VoiceSkip, VoiceTimings,
 };
+use shadowrunr_types::voice_choice::VoiceProvider;
 
 use crate::runs;
 
@@ -48,6 +49,15 @@ pub const KEEP: usize = 4;
 const REMEMBER: usize = 100_000;
 /// The clock is not estimated yet.
 const UNKNOWN: i64 = i64::MAX;
+
+/// What a rendered part cost, for its `rendered` line: who spoke it, the characters sent (the
+/// usage unit, summed per stream by a reader) and where its timing came from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Usage {
+    pub provider: VoiceProvider,
+    pub chars: u32,
+    pub timings: VoiceTimings,
+}
 
 /// A line before its stream-clock time is known: the wall time it happened at.
 #[derive(Debug, Clone)]
@@ -288,8 +298,9 @@ impl VoiceLogs {
         }
     }
 
-    /// The service sent `frame`: `rendered` for an utterance, `skipped` for a skip.
-    pub fn service(&self, frame: &VoiceFrame) {
+    /// The service sent `frame`: `rendered` for an utterance (with its `usage`), `skipped` for
+    /// a skip.
+    pub fn service(&self, frame: &VoiceFrame, usage: Option<Usage>) {
         let (run_id, line) = match frame {
             VoiceFrame::Utterance {
                 run_id,
@@ -310,9 +321,9 @@ impl VoiceLogs {
                     reason: None,
                     duration_ms: Some(u64::from(*duration_ms)),
                     text: Some(text.clone()),
-                    provider: None,
-                    chars: None,
-                    timings: None,
+                    provider: usage.map(|u| u.provider),
+                    chars: usage.map(|u| u.chars),
+                    timings: usage.map(|u| u.timings),
                     delivery: None,
                 },
             ),
@@ -345,7 +356,14 @@ impl VoiceLogs {
 
     /// The service queued line `seq` of `run_id`: the start of its ledger entry. Every queued
     /// line later gets its `rendered` parts or one `skipped`.
-    pub fn queued(&self, run_id: &str, seq: u64, text: &str, delivery: Option<Delivery>) {
+    pub fn queued(
+        &self,
+        run_id: &str,
+        seq: u64,
+        text: &str,
+        delivery: Option<Delivery>,
+        provider: Option<VoiceProvider>,
+    ) {
         self.record(
             run_id,
             runs::now_ms(),
@@ -358,7 +376,7 @@ impl VoiceLogs {
                 reason: None,
                 duration_ms: None,
                 text: Some(text.to_string()),
-                provider: None,
+                provider,
                 chars: None,
                 timings: None,
                 delivery,
