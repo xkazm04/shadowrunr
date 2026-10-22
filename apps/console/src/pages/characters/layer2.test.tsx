@@ -100,6 +100,9 @@ describe("characters/<id>/package/parameters", () => {
     expect(role("characters-identity")?.textContent).toContain("Lord of the Darkness (Lord)");
     expect(role("characters-identity")?.textContent).toContain("minion / minions");
     expect(role("characters-voice")?.textContent).toContain("Cut-out portrait");
+    expect(role("characters-voice")?.textContent).toContain("Kokoro · unset, so Kokoro");
+    expect(role("characters-voice")?.textContent).not.toContain("af_heart");
+    expect(role("characters-to-voice")?.getAttribute("href")).toBe("#/characters/malakor/package/voice");
     const ranks = role("characters-rank-overrides")?.textContent ?? "";
     expect(ranks).toContain("Warlock or higher");
     expect(ranks).toContain("Lesser Lich");
@@ -140,7 +143,7 @@ describe("characters/<id>/package", () => {
     expect(role("characters-package")?.getAttribute("data-tab")).toBe("constitution");
     expect(role("characters-redlines")?.children).toHaveLength(9);
     expect(screen.getByRole("heading", { name: "Who he is" })).toBeTruthy();
-    expect(screen.getAllByRole("tab")).toHaveLength(8);
+    expect(screen.getAllByRole("tab")).toHaveLength(9);
   });
 
   it("switches tabs by route", async () => {

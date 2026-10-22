@@ -124,6 +124,9 @@ export const MUTATION_RULES: { readonly [M in RpcMethod]?: readonly Rule[] } = {
   "tone.lines.set_status": ["tone.lines.list"],
   "tone.directions.set": ["tone.directions.get"],
   "segments.directions.set": ["segments.directions.get"],
+  "voice.settings.set": [{ method: "voice.settings.get", scope: sameId("character", "character") }],
+  // A key check is per provider, and every character's settings carry the provider rows.
+  "voice.verify": ["voice.settings.get"],
   "review.tag": ["review.sessions", { method: "review.session", scope: sameId("session_id", "session_id") }],
 };
 
