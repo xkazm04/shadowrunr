@@ -38,6 +38,10 @@ use crate::tone::{
     ToneLineWrite, ToneLines, ToneLinesAddParams, ToneLinesParams, ToneLinesSetStatusParams,
     ToneReviewItem, ToneReviewLineParams, ToneVariants, ToneVariantsParams,
 };
+use crate::voice_choice::{
+    ProviderStatus, VoiceBench, VoiceBenchParams, VoicePreview, VoicePreviewParams, VoiceSettings,
+    VoiceSettingsGetParams, VoiceSettingsSetParams, VoiceVerifyParams,
+};
 use crate::{
     Effort, EngineKind, HealthReport, JudgeVerdict, ModelTier, Role, SegmentId, SimRunSpec,
     StreamEvent, TsMs, Usage,
@@ -593,6 +597,11 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<ToneReviewLineParams, ToneReviewItem>("tone.review_line");
     v.method::<SegmentDirectionsGetParams, SegmentDirections>("segments.directions.get");
     v.method::<SegmentDirectionsSetParams, SegmentDirections>("segments.directions.set");
+    v.method::<VoiceSettingsGetParams, VoiceSettings>("voice.settings.get");
+    v.method::<VoiceSettingsSetParams, VoiceSettings>("voice.settings.set");
+    v.method::<VoiceVerifyParams, ProviderStatus>("voice.verify");
+    v.method::<VoicePreviewParams, VoicePreview>("voice.preview");
+    v.method::<VoiceBenchParams, VoiceBench>("voice.bench");
 }
 
 /// Every method name, in table order.

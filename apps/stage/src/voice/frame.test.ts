@@ -38,6 +38,10 @@ describe("parseVoiceFrame", () => {
     });
     const s = parseVoiceFrame('{"type":"status","state":"degraded","reason":"engine missing","voice":"af_heart","visemes":true}');
     expect(s.ok && s.value).toEqual({ type: "status", state: "degraded", reason: "engine missing", voice: "af_heart", visemes: true });
+    const p = parseVoiceFrame('{"type":"status","state":"ready","voice":"v","visemes":false,"provider":"elevenlabs"}');
+    expect(p.ok && p.value).toEqual({ type: "status", state: "ready", voice: "v", visemes: false, provider: "elevenlabs" });
+    const later = parseVoiceFrame('{"type":"status","state":"ready","visemes":false,"provider":"another"}');
+    expect(later.ok && later.value).toEqual({ type: "status", state: "ready", visemes: false });
     const u = parseVoiceFrame(JSON.stringify(utterance));
     expect(u.ok && u.value).toEqual(utterance);
     const k = parseVoiceFrame('{"type":"skipped","run_id":"r","seq":7,"part":0,"reason":"queue_full"}');
@@ -56,6 +60,7 @@ describe("parseVoiceFrame", () => {
     ["an array", "[]", /not an object/],
     ["an unknown type", '{"type":"hello"}', /unknown voice frame type hello/],
     ["an unknown state", '{"type":"status","state":"sleepy","visemes":false}', /bad state/],
+    ["a provider that is not a string", '{"type":"status","state":"off","visemes":false,"provider":1}', /bad provider/],
     ["a negative seq", JSON.stringify({ ...utterance, seq: -1 }), /bad seq/],
     ["a silly sample rate", JSON.stringify({ ...utterance, sample_rate: 12 }), /bad sample_rate/],
     ["an unknown viseme", JSON.stringify({ ...utterance, visemes: [{ v: "zz", start_ms: 0, end_ms: 1 }] }), /bad visemes/],

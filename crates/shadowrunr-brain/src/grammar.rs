@@ -1,19 +1,43 @@
 //! The core thread's output grammar.
 //!
 //! ```text
-//! <plain text>          a spoken line (one Say per line)
+//! <plain text>          a spoken line (one Say per line), optionally opened by a delivery
+//!                       cue: [<emotion> <intensity> <pace>] text
 //! OP: {json}            an action matching the contract's `Op`, allowed only if its tag is
 //!                       in the segment's `allowed_ops`
 //! NOTE: <candidate>     a memory candidate; becomes an episode, never a fact directly
 //! FOIL <id>: <text>     a line for the active foil
 //! ```
+//!
+//! A spoken line's cue is parsed out of its text into a [`Delivery`] ([`spoken`]). Vendor
+//! markup is not portable, so every other bracketed or asterisk span (`[laughs]`, `*sighs*`,
+//! a cue naming an emotion outside the set) is stripped at the door: the voice never reads it
+//! aloud.
 
 use serde_json::Value;
+use shadowrunr_types::delivery::{Delivery, Emotion, Pace, DEFAULT_INTENSITY};
 use shadowrunr_types::Op;
+
+/// A spoken line: the text as said, and the delivery cue it opened with.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Spoken {
+    pub text: String,
+    pub delivery: Option<Delivery>,
+}
+
+impl Spoken {
+    /// A line with no cue.
+    pub fn plain(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            delivery: None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Line {
-    Say(String),
+    Say(Spoken),
     Foil {
         foil: String,
         text: String,
@@ -162,12 +186,110 @@ pub fn parse_reply(
                 continue;
             }
         }
-        let said = strip_speaker(line, prefixes);
-        if !said.is_empty() {
-            out.push(Line::Say(said.to_string()));
+        let said = spoken(strip_speaker(line, prefixes));
+        if !said.text.is_empty() {
+            out.push(Line::Say(said));
         }
     }
     out
+}
+
+/// The cue a line opens with (`[sarcasm 0.8 slow]`, or partial: `[glee]`, `[menace fast]`):
+/// the emotion first, then an intensity and a pace in either order, each optional (intensity
+/// [`DEFAULT_INTENSITY`], pace normal). `None` when the bracket does not open with an emotion
+/// of the set; words after the emotion that are neither are ignored.
+fn parse_cue(inner: &str) -> Option<Delivery> {
+    let mut words = inner.split_whitespace();
+    let emotion = Emotion::parse(words.next()?)?;
+    let mut intensity = DEFAULT_INTENSITY;
+    let mut pace = Pace::Normal;
+    for w in words {
+        if let Ok(i) = w.parse::<f32>() {
+            intensity = i;
+        } else if let Some(p) = Pace::parse(w) {
+            pace = p;
+        }
+    }
+    Some(Delivery::new(emotion, intensity, pace))
+}
+
+/// `text` without markup: every `[...]` span and `*...*` span (an action) goes, with any stray
+/// `[`, `]` or `*`; a `**...**` emphasis keeps its words. Whitespace is collapsed, and none is
+/// left before punctuation. A text with no markup comes back as it is.
+pub fn strip_markup(text: &str) -> String {
+    if !text.contains(['[', ']', '*']) {
+        return text.to_string();
+    }
+    let unbolded = text.replace("**", "");
+    let mut out = String::with_capacity(unbolded.len());
+    let mut rest = unbolded.as_str();
+    while let Some(i) = rest.find(['[', '*']) {
+        out.push_str(&rest[..i]);
+        let close = if rest[i..].starts_with('[') { ']' } else { '*' };
+        rest = match rest[i + 1..].find(close) {
+            Some(j) => &rest[i + 1 + j + 1..],
+            None => &rest[i + 1..],
+        };
+        out.push(' ');
+    }
+    out.push_str(rest);
+    let out = out.replace(']', " ");
+    let mut tidy = String::with_capacity(out.len());
+    for w in out.split_whitespace() {
+        let glued = w.starts_with([',', '.', '!', '?', ';', ':', '\u{2026}']);
+        if !tidy.is_empty() && !glued {
+            tidy.push(' ');
+        }
+        tidy.push_str(w);
+    }
+    tidy
+}
+
+/// A spoken line with its opening cue parsed out and every other markup stripped.
+pub fn spoken(line: &str) -> Spoken {
+    let line = line.trim();
+    let cue = line
+        .strip_prefix('[')
+        .and_then(|r| r.split_once(']'))
+        .and_then(|(inner, rest)| parse_cue(inner).map(|d| (d, rest)));
+    let (delivery, rest) = match cue {
+        Some((d, rest)) => (Some(d), rest),
+        None => (None, line),
+    };
+    Spoken {
+        text: strip_markup(rest.trim()),
+        delivery,
+    }
+}
+
+/// The output record of a model line that makes more than [`MAX_EMOTION_RUN`] lines in a row
+/// cued with one emotion. Recorded so a run can measure cue variety; never enforced.
+pub const DELIVERY_REPEAT_RULE: &str = "delivery_repeat";
+/// Its action.
+pub const DELIVERY_REPEATED: &str = "repeated";
+/// The most lines in a row the prompt asks to cue with one emotion.
+pub const MAX_EMOTION_RUN: u32 = 2;
+
+/// The run of the host's lines cued with one emotion. A line with no cue ends the run.
+#[derive(Debug, Clone, Default)]
+pub struct CueRun {
+    last: Option<Emotion>,
+    len: u32,
+}
+
+impl CueRun {
+    /// Note the next spoken line's cue; true when it makes the run longer than
+    /// [`MAX_EMOTION_RUN`].
+    pub fn note(&mut self, delivery: Option<&Delivery>) -> bool {
+        let emotion = delivery.map(|d| d.emotion);
+        if emotion.is_some() && emotion == self.last {
+            self.len += 1;
+        } else {
+            self.last = emotion;
+            self.len = u32::from(emotion.is_some());
+        }
+        self.len > MAX_EMOTION_RUN
+    }
 }
 
 /// One JSON example per op tag, for the output-format instruction.
@@ -214,10 +336,121 @@ mod tests {
         let reply = "Bow, minions.\nOP: {\"op\":\"mark_moment\",\"label\":\"bow\"}\nNOTE: v1 loves chickens\nMalakor: Silence!";
         let lines = parse_reply(reply, &allowed(&["mark_moment"]), None, &prefixes());
         assert_eq!(lines.len(), 4);
-        assert_eq!(lines[0], Line::Say("Bow, minions.".into()));
+        assert_eq!(lines[0], Line::Say(Spoken::plain("Bow, minions.")));
         assert!(matches!(&lines[1], Line::Op { tag, .. } if tag == "mark_moment"));
         assert_eq!(lines[2], Line::Note("v1 loves chickens".into()));
-        assert_eq!(lines[3], Line::Say("Silence!".into()));
+        assert_eq!(lines[3], Line::Say(Spoken::plain("Silence!")));
+    }
+
+    fn said(reply: &str) -> Vec<Spoken> {
+        parse_reply(reply, &[], None, &prefixes())
+            .into_iter()
+            .filter_map(|l| match l {
+                Line::Say(s) => Some(s),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_full_cue_is_parsed_out_of_the_text() {
+        assert_eq!(
+            said("[sarcasm 0.8 slow] Oh, wonderful."),
+            vec![Spoken {
+                text: "Oh, wonderful.".into(),
+                delivery: Some(Delivery::new(Emotion::Sarcasm, 0.8, Pace::Slow)),
+            }]
+        );
+        // After a speaker label, any case, intensity clamped.
+        assert_eq!(
+            said("Malakor: [MENACE 3 fast] Kneel.")[0].delivery,
+            Some(Delivery::new(Emotion::Menace, 1.0, Pace::Fast))
+        );
+    }
+
+    #[test]
+    fn a_partial_cue_takes_the_defaults() {
+        assert_eq!(
+            said("[glee] Ha!"),
+            vec![Spoken {
+                text: "Ha!".into(),
+                delivery: Some(Delivery::new(
+                    Emotion::Glee,
+                    DEFAULT_INTENSITY,
+                    Pace::Normal
+                )),
+            }]
+        );
+        assert_eq!(
+            said("[hushed fast] Listen.")[0].delivery,
+            Some(Delivery::new(
+                Emotion::Hushed,
+                DEFAULT_INTENSITY,
+                Pace::Fast
+            ))
+        );
+        assert_eq!(
+            said("[weary 0.3] Again.")[0].delivery,
+            Some(Delivery::new(Emotion::Weary, 0.3, Pace::Normal))
+        );
+    }
+
+    #[test]
+    fn a_cue_with_an_unknown_emotion_is_stripped() {
+        assert_eq!(
+            said("[joyful 0.9 fast] Behold."),
+            vec![Spoken::plain("Behold.")]
+        );
+    }
+
+    #[test]
+    fn bracketed_and_asterisk_markup_is_stripped() {
+        assert_eq!(
+            said("[laughs] Fools, all of you [laughs]."),
+            vec![Spoken::plain("Fools, all of you.")]
+        );
+        assert_eq!(
+            said("*sighs* Very well. *adjusts crown*"),
+            vec![Spoken::plain("Very well.")]
+        );
+        // A cue keeps its delivery; later markup still goes, emphasis keeps its words.
+        assert_eq!(
+            said("[triumph 0.9 slow] It is **done** [cackles]!"),
+            vec![Spoken {
+                text: "It is done!".into(),
+                delivery: Some(Delivery::new(Emotion::Triumph, 0.9, Pace::Slow)),
+            }]
+        );
+        // A line that was nothing but markup is not spoken.
+        assert!(said("[laughs]\n*sighs*").is_empty());
+    }
+
+    #[test]
+    fn a_third_line_in_a_row_with_one_emotion_is_counted() {
+        let g = Delivery::new(Emotion::Glee, 0.5, Pace::Normal);
+        let m = Delivery::new(Emotion::Menace, 0.5, Pace::Normal);
+        let mut run = CueRun::default();
+        let seen: Vec<bool> = [
+            Some(&g),
+            Some(&g),
+            Some(&g),
+            Some(&g),
+            Some(&m),
+            None,
+            Some(&m),
+        ]
+        .into_iter()
+        .map(|d| run.note(d))
+        .collect();
+        assert_eq!(seen, vec![false, false, true, true, false, false, false]);
+    }
+
+    #[test]
+    fn a_line_with_no_cue_is_unchanged() {
+        assert_eq!(
+            said("Wait ... what?  Kneel."),
+            vec![Spoken::plain("Wait ... what?  Kneel.")]
+        );
     }
 
     #[test]
@@ -333,7 +566,7 @@ Back to conquest.";
         let spoken: Vec<_> = lines
             .iter()
             .filter_map(|l| match l {
-                Line::Say(s) => Some(s.as_str()),
+                Line::Say(s) => Some(s.text.as_str()),
                 _ => None,
             })
             .collect();

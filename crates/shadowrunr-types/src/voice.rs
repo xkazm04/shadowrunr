@@ -85,6 +85,9 @@ pub enum VoiceFrame {
         voice: Option<String>,
         /// Whether utterances carry mouth shapes (the durations model is present).
         visemes: bool,
+        /// Who speaks, when a voice is configured.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        provider: Option<crate::voice_choice::VoiceProvider>,
     },
     /// One rendered sentence of a `say` line.
     Utterance {
@@ -226,8 +229,9 @@ pub enum VoiceLogEvent {
 }
 
 /// One line of a run's `voice.jsonl` (contract § run-directory artifacts): what the voice did,
-/// on the session's stream clock. Absent keys are omitted.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// on the session's stream clock. Absent keys are omitted, and readers ignore keys they do not
+/// know.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct VoiceLogLine {
     /// Stream-clock ms: wall epoch ms minus the session's `started_ms`.
     pub ts_ms: i64,
@@ -246,6 +250,30 @@ pub struct VoiceLogLine {
     pub duration_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    /// On `queued` and `rendered`: who spoke the line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<crate::voice_choice::VoiceProvider>,
+    /// On `rendered`: the characters sent to the provider for this part (the usage unit).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chars: Option<u32>,
+    /// On `rendered`: where the part's timing came from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timings: Option<VoiceTimings>,
+    /// On `queued`: the line's delivery cue.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<crate::delivery::Delivery>,
+}
+
+/// Where a rendered part's timing came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceTimings {
+    /// The engine's own phoneme durations (the mouth timeline).
+    Durations,
+    /// The provider's character timestamps (logged by count only; the mouth uses loudness).
+    Provider,
+    /// No timing: the mouth uses loudness.
+    None,
 }
 
 #[cfg(test)]
@@ -283,6 +311,7 @@ mod tests {
             reason: None,
             voice: None,
             visemes: false,
+            provider: None,
         };
         assert_eq!(
             serde_json::to_string(&s).unwrap(),
@@ -351,5 +380,33 @@ mod tests {
         let l: VoiceLogLine = serde_json::from_str(r).unwrap();
         assert_eq!(l.last, Some(false));
         assert_eq!(serde_json::to_string(&l).unwrap(), r);
+    }
+
+    #[test]
+    fn log_lines_carry_provider_usage_and_delivery_and_skip_unknown_keys() {
+        let q = r#"{"ts_ms":5,"seq":3,"event":"queued","text":"Kneel.","provider":"elevenlabs","delivery":{"emotion":"menace","intensity":0.7,"pace":"slow"}}"#;
+        let l: VoiceLogLine = serde_json::from_str(q).unwrap();
+        assert_eq!(
+            l.delivery.map(|d| d.pace),
+            Some(crate::delivery::Pace::Slow)
+        );
+        assert_eq!(serde_json::to_string(&l).unwrap(), q);
+        let r = r#"{"ts_ms":6,"seq":3,"event":"rendered","part":0,"chars":6,"timings":"provider","provider_timestamps":41}"#;
+        let l: VoiceLogLine = serde_json::from_str(r).unwrap();
+        assert_eq!(
+            (l.chars, l.timings),
+            (Some(6), Some(VoiceTimings::Provider))
+        );
+        let s = VoiceFrame::Status {
+            state: VoiceState::Ready,
+            reason: None,
+            voice: Some("v".into()),
+            visemes: false,
+            provider: Some(crate::voice_choice::VoiceProvider::Elevenlabs),
+        };
+        assert_eq!(
+            serde_json::to_string(&s).unwrap(),
+            r#"{"type":"status","state":"ready","voice":"v","visemes":false,"provider":"elevenlabs"}"#
+        );
     }
 }

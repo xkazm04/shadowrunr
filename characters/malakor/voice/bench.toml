@@ -1,0 +1,79 @@
+# Malakor's emotion bench: the lines `voice.bench` renders with his effective voice, so the
+# owner hears each emotion of the delivery set side by side (console, Characters > Voice).
+# The ten voice-lab practice lines (pacing, emotion and melody ranges), each mapped onto the
+# closed cue set: emotion (neutral | menace | glee | deadpan | hushed | outrage | sarcasm |
+# weary | triumph | tender), intensity 0.0 to 1.0, pace (slow | normal | fast).
+
+[[line]]
+id = "L01-menace"
+text = "Minion. Come closer. No... closer. I want you to hear exactly how disappointed I am."
+emotion = "menace"
+intensity = 0.8
+pace = "slow"
+
+[[line]]
+id = "L02-glee"
+text = "Five subs! Five! RuneGoblin, you magnificent little goblin, rise! Rise, Grand Treasurer of Tiny Cups!"
+emotion = "glee"
+intensity = 0.9
+pace = "fast"
+
+[[line]]
+id = "L03-deadpan"
+text = "Your request has been received, stamped, filed, and fed to the archive worm. Expect a reply in ninety years."
+emotion = "deadpan"
+intensity = 0.6
+pace = "normal"
+
+# Lab direction "conspiratorial, slightly fast": hushed at normal pace.
+[[line]]
+id = "L04-whisper"
+text = "Between us, the throne is rented. Don't tell the minions. They think I own the furniture."
+emotion = "hushed"
+intensity = 0.7
+pace = "normal"
+
+# Lab direction "accelerating crescendo".
+[[line]]
+id = "L05-outrage"
+text = "You brought me a tax form. To my crypt. On a holy night. With a smiley face drawn on it!"
+emotion = "outrage"
+intensity = 1.0
+pace = "fast"
+
+[[line]]
+id = "L06-sarcasm"
+text = "Oh, wonderful. Another genius in chat who has solved necromancy. Truly, I tremble."
+emotion = "sarcasm"
+intensity = 0.8
+pace = "slow"
+
+[[line]]
+id = "L07-weary"
+text = "Eleven centuries undead, and I still have to explain what a phylactery is. Every. Single. Stream."
+emotion = "weary"
+intensity = 0.7
+pace = "slow"
+
+# Lab direction "measured, grand".
+[[line]]
+id = "L08-triumph"
+text = "Behold! The string is pinned! The regulator acts, the syndicate trembles, and justice, cold and bony, is served!"
+emotion = "triumph"
+intensity = 1.0
+pace = "normal"
+
+[[line]]
+id = "L09-tender"
+text = "bone_beetle, I'm sorry about your dog. Eleven centuries dead, and I still know that one lands hard. Pull up a chair by the fire."
+emotion = "tender"
+intensity = 0.6
+pace = "slow"
+
+# Lab direction "manic then smug": one cue per line, so the rapid list leads.
+[[line]]
+id = "L10-rapid"
+text = "Research out, cards up, strings pinned, chat roasted, coffee cold. And now... silence. Glorious, expensive silence."
+emotion = "glee"
+intensity = 0.8
+pace = "fast"

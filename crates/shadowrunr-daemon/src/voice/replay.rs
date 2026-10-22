@@ -262,7 +262,7 @@ pub async fn replay_with(
             for (ts, f) in events {
                 let at = t0 + Duration::from_secs_f64(ts as f64 / 1000.0 / speed);
                 tokio::time::sleep_until(at).await;
-                let say = malakor_say(&f);
+                let say = malakor_say(&f).map(|u| u.text);
                 let seq = run.push(f);
                 if let Some(text) = say {
                     let _ = said_tx.send((seq, Instant::now(), text));
@@ -460,7 +460,10 @@ mod tests {
         let ev = read_transcript(&path).unwrap();
         assert_eq!(ev.len(), 2);
         assert_eq!(ev[1].0, 1500);
-        assert_eq!(malakor_say(&ev[1].1).as_deref(), Some("Kneel."));
+        assert_eq!(
+            malakor_say(&ev[1].1).map(|u| u.text).as_deref(),
+            Some("Kneel.")
+        );
         std::fs::write(&path, "not json\n").unwrap();
         assert!(read_transcript(&path).is_err());
     }

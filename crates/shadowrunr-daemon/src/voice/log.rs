@@ -27,6 +27,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 
+use shadowrunr_types::delivery::Delivery;
 use shadowrunr_types::voice::{
     VoiceClientFrame, VoiceFrame, VoiceLogEvent, VoiceLogLine, VoiceSkip,
 };
@@ -309,6 +310,10 @@ impl VoiceLogs {
                     reason: None,
                     duration_ms: Some(u64::from(*duration_ms)),
                     text: Some(text.clone()),
+                    provider: None,
+                    chars: None,
+                    timings: None,
+                    delivery: None,
                 },
             ),
             VoiceFrame::Skipped {
@@ -327,6 +332,10 @@ impl VoiceLogs {
                     reason: Some(skip_reason(*reason).into()),
                     duration_ms: None,
                     text: None,
+                    provider: None,
+                    chars: None,
+                    timings: None,
+                    delivery: None,
                 },
             ),
             VoiceFrame::Status { .. } => return,
@@ -336,7 +345,7 @@ impl VoiceLogs {
 
     /// The service queued line `seq` of `run_id`: the start of its ledger entry. Every queued
     /// line later gets its `rendered` parts or one `skipped`.
-    pub fn queued(&self, run_id: &str, seq: u64, text: &str) {
+    pub fn queued(&self, run_id: &str, seq: u64, text: &str, delivery: Option<Delivery>) {
         self.record(
             run_id,
             runs::now_ms(),
@@ -349,6 +358,10 @@ impl VoiceLogs {
                 reason: None,
                 duration_ms: None,
                 text: Some(text.to_string()),
+                provider: None,
+                chars: None,
+                timings: None,
+                delivery,
             },
         );
     }
@@ -368,6 +381,10 @@ impl VoiceLogs {
                 reason: Some(UNFOLLOWED.into()),
                 duration_ms: None,
                 text: None,
+                provider: None,
+                chars: None,
+                timings: None,
+                delivery: None,
             },
         );
     }
@@ -388,6 +405,10 @@ impl VoiceLogs {
                     reason: None,
                     duration_ms: None,
                     text: None,
+                    provider: None,
+                    chars: None,
+                    timings: None,
+                    delivery: None,
                 },
             ),
             VoiceClientFrame::StageDropped(f) => (
@@ -402,6 +423,10 @@ impl VoiceLogs {
                     reason: Some(wire(&f.stage_dropped.reason)),
                     duration_ms: None,
                     text: None,
+                    provider: None,
+                    chars: None,
+                    timings: None,
+                    delivery: None,
                 },
             ),
             VoiceClientFrame::Face(f) => (
@@ -416,6 +441,10 @@ impl VoiceLogs {
                     reason: Some(wire(&f.face.state)),
                     duration_ms: None,
                     text: None,
+                    provider: None,
+                    chars: None,
+                    timings: None,
+                    delivery: None,
                 },
             ),
         };

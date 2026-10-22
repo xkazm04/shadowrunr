@@ -470,6 +470,7 @@ mod tests {
                 reason: None,
                 voice: None,
                 visemes: false,
+                provider: None,
             })
         };
         out.status(&st(shadowrunr_types::voice::VoiceState::Degraded));

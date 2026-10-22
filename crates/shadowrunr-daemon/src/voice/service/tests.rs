@@ -296,7 +296,7 @@ async fn the_renderer_state_is_the_status() {
     .clone();
     assert_eq!(
         &*st,
-        r#"{"type":"status","state":"ready","reason":"numpy is not installed","voice":"af_heart","visemes":false}"#
+        r#"{"type":"status","state":"ready","reason":"numpy is not installed","voice":"af_heart","visemes":false,"provider":"kokoro"}"#
     );
 }
 

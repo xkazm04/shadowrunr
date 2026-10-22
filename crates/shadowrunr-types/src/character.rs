@@ -142,6 +142,16 @@ pub struct CharacterVoice {
     /// The effect chain over each sentence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fx: Option<VoiceFx>,
+    /// Who speaks the character. Absent: kokoro (the fields above).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<crate::voice_choice::VoiceProvider>,
+    /// ElevenLabs settings: a package carries `model` and `speed`; `voice_id` normally lives in
+    /// the operator's local override (`<data>/characters/<id>/voice.json`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elevenlabs: Option<crate::voice_choice::ElevenlabsVoice>,
+    /// Whether the model is asked to write a delivery cue on its lines. Absent: on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<bool>,
 }
 
 /// The voice sidecar's effect chain (`tools/voice`, `--fx`): the same length out, so the mouth

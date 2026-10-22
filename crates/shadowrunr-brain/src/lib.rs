@@ -83,7 +83,7 @@ use care::{care_note, removed_note, CareLedger};
 use case_names::CaseNames;
 use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
-use grammar::{op_tag, parse_reply, Line};
+use grammar::{op_tag, parse_reply, Line, Spoken};
 use moderation::{InputFilter, Policy, RemovedNames, CRISIS_BAN_RULE};
 use orchestrate::requests::{claims_authority, situational_asks, Ask};
 use orchestrate::{BeatInputs, BeatTxn, Orchestrator, ROLLED_BACK};
@@ -275,6 +275,8 @@ pub struct Brain {
     /// When the speech put on air ends (model, foil, stall and cover lines, the sign-off), on
     /// the `now_ms` clock ([`pace`]).
     speech: SpeechClock,
+    /// The run of model lines cued with one emotion ([`grammar::CueRun`]).
+    cue_run: grammar::CueRun,
     /// The last core-call durations on a live host, for the lookahead lead ([`pace`]).
     latency: pace::CoreLatency,
     session: Option<Box<dyn WarmSession>>,
@@ -347,6 +349,7 @@ impl Brain {
             health: FleetMode::Healthy,
             stall: Staller::new(),
             speech: SpeechClock::default(),
+            cue_run: grammar::CueRun::default(),
             latency: pace::CoreLatency::default(),
             session: None,
             session_turns: 0,
@@ -529,6 +532,7 @@ impl Brain {
                 text,
                 replying_to: Vec::new(),
                 first_text_ms: None,
+                delivery: None,
             });
             events.push(moderation::output_event(now_ms, STALL_RULE, stall::COVERED));
             lines.push(events);
@@ -786,6 +790,7 @@ impl Brain {
             text,
             replying_to: Vec::new(),
             first_text_ms: None,
+            delivery: None,
         });
         ev.push(moderation::output_event(now_ms, STALL_RULE, "spoke"));
     }
@@ -803,6 +808,7 @@ impl Brain {
             text,
             replying_to: Vec::new(),
             first_text_ms: None,
+            delivery: None,
         });
         ev.push(StreamEvent::Op {
             ts_ms: now_ms,
@@ -1222,7 +1228,7 @@ impl Brain {
         let lens: Vec<usize> = spoken_at
             .iter()
             .map(|&i| match &lines[i] {
-                Line::Say(t) | Line::Foil { text: t, .. } => t.chars().count(),
+                Line::Say(Spoken { text: t, .. }) | Line::Foil { text: t, .. } => t.chars().count(),
                 _ => 0,
             })
             .collect();
@@ -1244,7 +1250,9 @@ impl Brain {
             .iter()
             .enumerate()
             .filter_map(|(i, l)| match l {
-                Line::Say(t) | Line::Foil { text: t, .. } => Some((i, t.as_str())),
+                Line::Say(Spoken { text: t, .. }) | Line::Foil { text: t, .. } => {
+                    Some((i, t.as_str()))
+                }
                 _ => None,
             })
             .collect();
@@ -1292,7 +1300,7 @@ impl Brain {
         let lost = !over.is_empty() || !late.is_empty();
         for line in lines {
             match line {
-                Line::Say(text) => {
+                Line::Say(Spoken { text, delivery }) => {
                     let gate = GateCtx {
                         now_ms,
                         policy: &self.policy,
@@ -1307,11 +1315,27 @@ impl Brain {
                     let g = outgate::pass(Surface::Spoken, &text, &gate, &mut |t| {
                         orch.recast(authority, t)
                     });
+                    // A line the gate rewrote (recast, bleeped, a name withheld) is not the line
+                    // the cue was written for: it speaks without one. Ids said as names keep it.
+                    let delivery = delivery.filter(|_| {
+                        !g.events.iter().any(|e| {
+                            matches!(e, StreamEvent::Moderation { rule, .. }
+                                if rule != case_names::ID_SPOKEN_RULE)
+                        })
+                    });
                     ev.extend(g.events);
                     suppressed += usize::from(g.repeated);
                     let Some(out) = g.text else {
                         continue;
                     };
+                    // More than two lines in a row cued with one emotion: recorded, not enforced.
+                    if self.cue_run.note(delivery.as_ref()) {
+                        ev.push(moderation::output_event(
+                            now_ms,
+                            grammar::DELIVERY_REPEAT_RULE,
+                            grammar::DELIVERY_REPEATED,
+                        ));
+                    }
                     self.spoken.push_back(out.clone());
                     while self.spoken.len() > REPEAT_WINDOW {
                         self.spoken.pop_front();
@@ -1319,7 +1343,9 @@ impl Brain {
                     self.working.remember_line(&out);
                     self.orch.spoke(&out);
                     turn.push(format!("{}: {out}", self.cfg.character.persona.name));
-                    self.aired(self.on_air_ms(now_ms), &out);
+                    let at = self.on_air_ms(now_ms);
+                    self.speech
+                        .say_paced(at, &out, delivery.map(|d| d.pace), &self.tuning.pace);
                     say_idx.push(ev.len());
                     ev.push(StreamEvent::Say {
                         ts_ms: now_ms,
@@ -1328,6 +1354,7 @@ impl Brain {
                         text: out,
                         replying_to: Vec::new(),
                         first_text_ms: None,
+                        delivery,
                     });
                 }
                 Line::Foil { foil, text } => {
@@ -1363,6 +1390,7 @@ impl Brain {
                         text: out,
                         replying_to: Vec::new(),
                         first_text_ms: None,
+                        delivery: None,
                     });
                 }
                 Line::Op { tag, op } => {

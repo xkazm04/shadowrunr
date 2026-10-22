@@ -8,7 +8,7 @@ use clap::Subcommand;
 use tokio::sync::watch;
 use tokio::time::Instant;
 
-use super::renderer::{b64_decode, duration_ms, Part, Renderer, RendererState};
+use super::renderer::{b64_decode, duration_ms, Part, Renderer, RendererState, Utter};
 use super::replay::compare;
 use super::sidecar::{SidecarRenderer, STOP_GRACE};
 use super::{probe, replay};
@@ -317,7 +317,7 @@ async fn speak(
         }
     }
     let t1 = Instant::now();
-    let mut parts = renderer.say("cli:1", text);
+    let mut parts = renderer.say("cli:1", &Utter::plain(text));
     let per_part = Duration::from_millis(cfg.voice.render_timeout_ms.max(1));
     let (mut n, mut audio_ms, mut shapes) = (0u32, 0u64, 0usize);
     let mut first: Option<Duration> = None;

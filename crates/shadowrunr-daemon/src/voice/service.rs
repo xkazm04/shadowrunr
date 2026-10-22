@@ -31,6 +31,7 @@ use std::time::Duration;
 
 use shadowrunr_types::event::Speaker;
 use shadowrunr_types::voice::{VoiceFrame, VoiceSkip, VoiceState};
+use shadowrunr_types::voice_choice::VoiceProvider;
 use shadowrunr_types::StreamEvent;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, oneshot, watch, Notify, OwnedSemaphorePermit, Semaphore};
@@ -38,7 +39,7 @@ use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::Instant;
 
 use super::log::VoiceLogs;
-use super::renderer::{duration_ms, Part, Renderer, RendererState};
+use super::renderer::{duration_ms, Part, Renderer, RendererState, Utter};
 use super::VoiceConfig;
 use crate::live::{Frame, LiveItem, LiveRun};
 
@@ -69,7 +70,8 @@ impl VoiceItem {
 pub struct Line {
     pub run_id: String,
     pub seq: u64,
-    pub text: String,
+    /// The text and its delivery cue, as the `say` carried them.
+    pub utter: Utter,
     /// When the `say` reached the daemon: the lag clock starts here.
     pub arrived: Instant,
 }
@@ -114,6 +116,7 @@ impl VoiceHub {
                 reason: Some("the voice service is starting".into()),
                 voice: Some(cfg.voice.clone()),
                 visemes: false,
+                provider: Some(VoiceProvider::Kokoro),
             }
         } else {
             VoiceFrame::Status {
@@ -121,6 +124,7 @@ impl VoiceHub {
                 reason: Some("[voice] enabled = false".into()),
                 voice: None,
                 visemes: false,
+                provider: None,
             }
         };
         Arc::new(Self {
@@ -189,24 +193,28 @@ impl VoiceHub {
                 reason: None,
                 voice,
                 visemes: false,
+                provider: Some(VoiceProvider::Kokoro),
             },
             (Some(RendererState::Degraded(why)), _) => VoiceFrame::Status {
                 state: VoiceState::Degraded,
                 reason: Some(why.clone()),
                 voice,
                 visemes: false,
+                provider: Some(VoiceProvider::Kokoro),
             },
             (Some(RendererState::Ready { visemes, .. }), Some(why)) => VoiceFrame::Status {
                 state: VoiceState::Degraded,
                 reason: Some(format!("renders failing: {why}")),
                 voice,
                 visemes: *visemes,
+                provider: Some(VoiceProvider::Kokoro),
             },
             (Some(RendererState::Ready { visemes, reason }), None) => VoiceFrame::Status {
                 state: VoiceState::Ready,
                 reason: reason.clone(),
                 voice,
                 visemes: *visemes,
+                provider: Some(VoiceProvider::Kokoro),
             },
         };
         drop(h);
@@ -315,7 +323,12 @@ impl VoiceHub {
     /// Queue a line (logged `queued`); past `max_queue` the oldest waiting line is skipped
     /// (`queue_full`).
     pub fn enqueue(&self, line: Line) {
-        self.logs.queued(&line.run_id, line.seq, &line.text);
+        self.logs.queued(
+            &line.run_id,
+            line.seq,
+            &line.utter.text,
+            line.utter.delivery,
+        );
         let dropped = {
             let mut q = lock(&self.queue);
             q.push_back(line);
@@ -375,8 +388,8 @@ async fn watch_renderer(hub: Weak<VoiceHub>, mut rx: watch::Receiver<RendererSta
     }
 }
 
-/// Malakor's `say` text, when the frame is one.
-pub(crate) fn malakor_say(frame: &Frame) -> Option<String> {
+/// Malakor's `say` line (its text and delivery), when the frame is one.
+pub(crate) fn malakor_say(frame: &Frame) -> Option<Utter> {
     if !frame.contains("\"say\"") {
         return None;
     }
@@ -384,8 +397,9 @@ pub(crate) fn malakor_say(frame: &Frame) -> Option<String> {
         StreamEvent::Say {
             speaker: Speaker::Host,
             text,
+            delivery,
             ..
-        } if !text.trim().is_empty() => Some(text),
+        } if !text.trim().is_empty() => Some(Utter { text, delivery }),
         _ => None,
     }
 }
@@ -394,14 +408,14 @@ pub(crate) fn malakor_say(frame: &Frame) -> Option<String> {
 async fn feed(hub: Weak<VoiceHub>, run: Arc<LiveRun>, since: u64) {
     let attach = run.attach(since);
     let push = |seq: u64, f: &Frame| {
-        let Some(text) = malakor_say(f) else {
+        let Some(utter) = malakor_say(f) else {
             return true;
         };
         let Some(h) = hub.upgrade() else { return false };
         h.enqueue(Line {
             run_id: run.run_id.clone(),
             seq,
-            text,
+            utter,
             arrived: Instant::now(),
         });
         true
@@ -547,7 +561,7 @@ async fn speak(hub: &VoiceHub, renderer: &dyn Renderer, line: &Line, order: &mut
     }
     let render = Duration::from_millis(hub.cfg.render_timeout_ms.max(1));
     let id = format!("{}:{}", line.run_id, line.seq);
-    let mut parts = renderer.say(&id, &line.text);
+    let mut parts = renderer.say(&id, &line.utter);
     let mut next = 0u32;
     let mut last_at = Instant::now();
     loop {

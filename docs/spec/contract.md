@@ -26,7 +26,10 @@ One `StreamEvent` per line, tagged `"type"`:
 - `chat`
 - `picked`
 - `say` (with `speaker: host|foil`; `host` is the character `stream_start.character` names.
-  Readers also accept the v1 value `malakor` as `host`, so old transcripts still load)
+  Readers also accept the v1 value `malakor` as `host`, so old transcripts still load).
+  Optional `delivery {emotion, intensity, pace}`: how the line is spoken, the cue the model
+  opened it with (Appendix (voice providers)); omitted on a line with no cue, on foil lines and
+  on the engine's own lines (stalls, covers, the sign-off)
 - `op`
 - `vote`
 - `moderation` (with `stage: input|output`)
@@ -115,6 +118,7 @@ segments/<SEG-ID>.md  optional: the owner's directions for one segment, read whi
 foils/<foil>.md     SEG-01 guest foils: original parody archetypes, never real people
 rules/<rule>.md     constitution rules, listed under [rules]; a rail is also listed in rails
 stalls.toml         model-free stall lines for an engine outage (`lines = [...]`)
+voice/bench.toml    optional: the emotion bench lines `voice.bench` renders (`[[line]]`)
 situations.json     sim situation bank (format below)
 ```
 
@@ -149,6 +153,9 @@ disclosure = "Yes, I am an AI character: ..."               # the honest AI disc
 [voice]                             # each field set overrides the daemon's [voice]: voice, sid,
                                     # voices_file (a blended voices file), fx (none|light|heavy)
                                     # (speed is read but not applied yet: the sidecar has no rate flag)
+provider = "kokoro"                 # optional: kokoro (default) | elevenlabs
+elevenlabs = { model = "...", speed = 1.1 }   # optional; voice_id belongs in the local override
+delivery = true                     # optional: ask the model for a delivery cue (default true)
 [avatar]                            # face overrides [stage] avatar; rig names the package's rig spec
 
 [ranks]                             # titles by wire name, lowest first
@@ -332,8 +339,8 @@ runs/sim/<tournament_id>/
 
 Instrument identity: each run records `instrument_hash`, a hash of the character package
 files (with `directions.md`), the tone file and its line bank, segment tables and judge rubric.
-Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/13`
-(the case spoken in names; `/12` the case as an owned loop; `/11` T1: the line bank and
+Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/14`
+(the delivery cue; `/13` the case spoken in names; `/12` the case as an owned loop; `/11` T1: the line bank and
 directions, the narrowed rails, the scaled judge and the tic check; `/10` is the evidence board).
 
 Judge (T1). The rubric samples 24 streamer turns (`sample_turns`). Besides the binary
@@ -1456,8 +1463,10 @@ like a real case. It is never written live in a quiet moment.
   beat's next slot after the safety picks, oldest first, ahead of fresh and ordinary carried
   chat, so he mocks it before it expires; still one injection a beat, one pick per viewer and
   the share and whale caps. The deterministic reason marks it `bait_first`.
-- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/13`: the case spoken in names, ids only
-  in op lines and a spoken id named by the gate (`/12`: the case as an owned loop, the
+- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/14`: a delivery cue asked for on each
+  line, parsed off the spoken text with every other bracket and asterisk markup, and the speech
+  clock scaled by the cued pace (`/13`: the case spoken in names, ids only in op lines and a
+  spoken id named by the gate; `/12`: the case as an owned loop, the
   stereotype bait and sincere sadness owned, every unpicked candidate recorded, the rank title in
   the notes, a repeated "are you an AI" deflected; `/8`: owned requests, the through-line
   and the lag ceiling; `/7`: the map focus, the investigation's screen defaults and dwells, a record before the model's op that shows it; `/6`: the screens, runtime screen defaults and a returning research job
@@ -1484,7 +1493,8 @@ the brain never waits on audio.
 
 **Types** (`shadowrunr_types::voice`, generated into `@shadowrunr/contract`):
 - `VoiceFrame`, tagged on `type`:
-  - `status {state: off|starting|ready|degraded, reason?, voice?, visemes}`
+  - `status {state: off|starting|ready|degraded, reason?, voice?, visemes, provider?}`
+    (`provider`: `kokoro` | `elevenlabs`, when a voice is configured)
   - `utterance {id, run_id, seq, part, last, text, sample_rate, duration_ms, pcm, visemes?}`.
     `pcm` is mono PCM16LE in base64. `visemes` is `[{v, start_ms, end_ms}]` over the Oculus 15
     set (`sil PP FF TH DD kk CH SS nn RR aa E ih oh ou`), and is omitted when the voice has no
@@ -1546,7 +1556,9 @@ speaking JSON lines on stdio:
   (`voices` is the voices file's name, never its path). A hello whose `reason` names no
   `engine:` is dead (for example a missing or wrong-size voices file): the daemon stops the
   sidecar and reports the voice `degraded` with that reason, and never falls back to another voice.
-- In: `{"type":"say","id","text"}` and `{"type":"cancel","ids":[...]}`. `cancel` gets no
+- In: `{"type":"say","id","text","delivery"?}` and `{"type":"cancel","ids":[...]}`. `delivery`
+  is the line's `{emotion, intensity, pace}` (additive in protocol 1: a sidecar without delivery
+  controls ignores it). `cancel` gets no
   reply: queued sentences of those ids are dropped and an in-flight render is killed, or, on the
   warm engine, finishes unheard and its result is discarded.
 - The engine: the warm engine keeps Kokoro loaded in one worker process per `--workers` slot,
@@ -1572,13 +1584,19 @@ speaking JSON lines on stdio:
 **Run-directory artifacts.** Absent values are omitted keys, never `null`.
 - `voice.jsonl`, written by the daemon for a sandbox session (the session opens it; events for a
   run without one are dropped). One `VoiceLogLine` per line, in the order events happen:
-  `{"ts_ms", "seq", "event", "part"?, "last"?, "reason"?, "duration_ms"?, "text"?}`.
+  `{"ts_ms", "seq", "event", "part"?, "last"?, "reason"?, "duration_ms"?, "text"?, "provider"?,
+  "chars"?, "timings"?, "delivery"?}`. Readers ignore keys they do not know.
   - `event`: `queued` (the line entered the voice's queue: `text`), `rendered` (an `utterance`
     went out: `part`, `last`, `duration_ms`, `text`), `skipped` (the service's `skipped`: `part`,
     `reason` `late`|`queue_full`|`error`, or `unfollowed`, logged with no frame, for a line whose
     run nobody followed any more), `played` (stage: `part`),
     `stage_dropped` (stage: `reason` `stage_cap`), `face` (stage: `reason` `rig`|`silhouette`,
     `seq` 0).
+  - Voice providers: `provider` (`kokoro` | `elevenlabs`) on `queued` and `rendered`; on
+    `rendered`, `chars` (characters sent to the provider for the part, the usage unit) and
+    `timings` (`durations`: the engine's own phoneme durations; `provider`: the provider's
+    character timestamps, logged but not used for the mouth; `none`: loudness); on `queued`,
+    `delivery` (the line's cue).
   - A ledger: every `queued` line ends in its `rendered` parts (the last with `last` true) or one
     `skipped`; a queued line with neither is still owed. A `rendered` line with no `last` (a log
     written before it existed) ends its line.
@@ -1868,3 +1886,92 @@ SegmentDirections { character, segment_id: SegmentId, text, updated_ms? }   // t
   characters. The write goes through a temp file and a rename, then the package is validated as
   `character validate` does; a write that adds an error is undone and refused like a Tone Lab
   write. It shares the Tone Lab's one-write-at-a-time lock.
+
+## Appendix (voice providers): delivery cues, the provider choice, `voice.*`
+
+A character's lines carry a delivery, and a character is spoken by one of two providers: the
+local Kokoro sidecar (Kokoro Plus when its delivery controls are available) or the ElevenLabs
+cloud API. The types live in `shadowrunr_types::delivery` and `shadowrunr_types::voice_choice`.
+Optional fields are omitted, never `null`.
+
+**Delivery.**
+
+```
+Emotion   neutral | menace | glee | deadpan | hushed | outrage | sarcasm | weary | triumph | tender
+Pace      slow | normal | fast
+Delivery  { emotion: Emotion, intensity: number (0.0..=1.0, clamped when read), pace: Pace }
+```
+
+- **The cue.** The model may open a spoken line with `[<emotion> <intensity> <pace>]`, e.g.
+  `[sarcasm 0.8 slow] Oh, wonderful.` Partial cues are allowed: after the emotion, an intensity
+  and a pace in either order, each optional (`[glee]` is intensity 0.6, pace normal). The brain
+  parses the cue out of the text into `say.delivery`. Intensity is written to two decimals.
+- **Markup is stripped at the door.** Every other bracketed or asterisk span in a spoken line
+  (`[laughs]`, `*sighs*`, a cue whose emotion is not in the set) is removed, and `**emphasis**`
+  keeps its words. A line that was only markup is not spoken. Pauses are written as punctuation
+  (an ellipsis or a dash).
+- **The prompt.** "How to answer" carries one instruction listing the emotions and the cue
+  format, asking for a cue on most lines and for no emotion more than two lines in a row. A
+  package's `[voice] delivery = false` leaves it out, and the turn is then byte-identical to one
+  without cues.
+- **Variety is measured, not enforced.** A host line that makes more than two lines in a row
+  cued with one emotion adds an output `moderation` record, rule `delivery_repeat`, action
+  `repeated`. A line with no cue ends the run.
+- **Gated lines.** A line the output gate rewrote (recast, bleeped, a name withheld) speaks
+  without its cue; a card or record id said as its name keeps it.
+- **The speech clock** divides by `speech_cps * pace_factor`: slow 0.85, normal 1.0, fast 1.15
+  (assumptions, named as consts in `shadowrunr_brain::pace`).
+
+**Provider and choice.**
+
+```
+VoiceProvider    kokoro | elevenlabs
+KokoroVoice      { voice?, sid?: u32, voices_file?, fx?: VoiceFx, speed?: number }
+ElevenlabsVoice  { voice_id?, model?, speed?: number }
+VoiceChoice      { provider: VoiceProvider, kokoro?: KokoroVoice, elevenlabs?: ElevenlabsVoice }
+```
+
+- The package `[voice]` gains `provider?` (absent: kokoro, so existing packages are unchanged),
+  `elevenlabs?` (a package carries `model` and `speed`; `voice_id` normally lives in the
+  override, so sharing a character never shares the owner's account voice) and `delivery?`
+  (default true).
+- The effective choice, per field: the package `[voice]`, then the daemon's `[voice]` for the
+  kokoro fields, then the local override `<data>/characters/<id>/voice.json` (gitignored), which
+  wins. It is resolved at each stream start, per streaming character, with no daemon restart.
+- **Never a fallback** between providers. A failing provider leaves the voice `degraded` with
+  its reason, and captions carry the show.
+- A provider's API key is named by an env var in the daemon config. Its value never appears in
+  config, logs, RPC results or the console.
+
+**RPCs.**
+
+| method | params | result |
+|---|---|---|
+| `voice.settings.get` | `{ character }` | `VoiceSettings` |
+| `voice.settings.set` | `{ character, choice: VoiceChoice or null }` | `VoiceSettings` |
+| `voice.verify` | `{ provider: VoiceProvider }` | `ProviderStatus` |
+| `voice.preview` | `{ character, text, delivery? }` | `VoicePreview` |
+| `voice.bench` | `{ character }` | `VoiceBench` |
+
+```
+VoiceSettings   { character, effective: VoiceChoice, package: VoiceChoice, override?: VoiceChoice,
+                  providers: [ProviderStatus], label }
+ProviderStatus  { provider, ready: bool, key: not_needed|missing|set|verified|rejected, reason?,
+                  checked_ms? }
+VoicePreview    { provider, label, sample_rate, pcm, duration_ms, chars, visemes: bool, delivery? }
+VoiceBench      { provider, label, lines: [VoiceBenchLine] }
+VoiceBenchLine  { id, text, delivery: Delivery, sample_rate, pcm, duration_ms, chars, error? }
+```
+
+- `label` is the human status label, e.g. "kokoro malakor-a (sid 52), fx light".
+- `voice.settings.set`: `null` clears the override. The write is atomic, contained in
+  `<data>/characters/<id>/`, and at most 4 KB.
+- `voice.verify`: for elevenlabs, one cheap authenticated call. 401/403 is `rejected`; a network
+  error or 429 is `set` with a `reason` (could not verify is not broken).
+- `voice.preview`: `text` (at most 400 characters) passes the brain's output gate first; refused
+  text is `invalid_params` with the gate's reason. `pcm` is base64 PCM16 mono.
+- `voice.bench` renders the package's `voice/bench.toml` with the effective choice. Each
+  `[[line]]` is `id, text, emotion, intensity, pace`; a line that failed carries `error` (and
+  empty audio).
+- Until the daemon implements them, the five methods answer `unavailable` ("... is not
+  implemented yet").

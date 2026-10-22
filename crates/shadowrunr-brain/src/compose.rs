@@ -18,6 +18,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use shadowrunr_types::character::Persona;
+use shadowrunr_types::delivery::Emotion;
 use shadowrunr_types::reconcile::{
     Directive, DirectiveKind, NextStreamPlan, PlanSegment, StreamBrief,
 };
@@ -744,6 +745,19 @@ fn section(s: &mut String, title: &str, body: &str) {
     s.push('\n');
 }
 
+/// The delivery-cue instruction in "How to answer" (`[voice] delivery`, on by default): the
+/// closed emotion set and the cue format the grammar parses ([`crate::grammar::spoken`]).
+pub fn delivery_instruction() -> String {
+    let emotions: Vec<&str> = Emotion::ALL.iter().map(|e| e.as_str()).collect();
+    format!(
+        "Open most lines with a delivery cue, [emotion intensity pace], e.g. [sarcasm 0.8 slow] \
+         Oh, wonderful. Emotions: {}; intensity 0 to 1; pace slow, normal or fast. Vary it: \
+         never the same emotion more than two lines in a row. The cue is the only bracket: \
+         write pauses as ... or a dash.\n",
+        emotions.join(", ")
+    )
+}
+
 /// The per-turn block, in the fixed order.
 pub fn compose_turn(t: &TurnInputs<'_>) -> String {
     let mut s = String::new();
@@ -938,6 +952,9 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
              none is cut.\n",
             t.budget_chars / answers
         ));
+    }
+    if t.pkg.delivery_cues() {
+        fmt.push_str(&delivery_instruction());
     }
     let ops: Vec<&str> = t
         .ctx
@@ -1402,6 +1419,27 @@ Do name the target.
         let other = turn_in(&p, SegmentId::Seg01ImprovisedRoom);
         assert!(!other.contains(SEGMENT_DIRECTIONS_HEADING));
         assert_eq!(other, turn_in(&bare, SegmentId::Seg01ImprovisedRoom));
+    }
+
+    #[test]
+    fn a_package_that_opts_out_of_delivery_cues_gets_the_turn_without_the_instruction() {
+        let on = pkg();
+        assert!(on.delivery_cues(), "on by default");
+        let with = turn_in(&on, SegmentId::Seg01ImprovisedRoom);
+        let instruction = delivery_instruction();
+        assert_eq!(with.matches(&instruction).count(), 1);
+        assert!(instruction.contains(
+            "neutral, menace, glee, deadpan, hushed, outrage, sarcasm, weary, triumph, tender"
+        ));
+        let mut off = pkg();
+        off.manifest.voice = Some(shadowrunr_types::character::CharacterVoice {
+            delivery: Some(false),
+            ..Default::default()
+        });
+        let without = turn_in(&off, SegmentId::Seg01ImprovisedRoom);
+        // Byte-identical to the turn as it was before cues existed.
+        assert_eq!(without, with.replacen(&instruction, "", 1));
+        assert!(!without.contains("delivery cue"));
     }
 
     #[test]

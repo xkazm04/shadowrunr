@@ -405,6 +405,11 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         "segments.directions.set" => {
             ok(crate::segments_dir::rpc_set(state, params(req.params)?).await?)
         }
+        "voice.settings.get" | "voice.settings.set" | "voice.verify" | "voice.preview"
+        | "voice.bench" => Err(RpcError::new(
+            ErrorCode::Unavailable,
+            format!("{} is not implemented yet", req.method),
+        )),
         other => Err(RpcError::new(
             ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),

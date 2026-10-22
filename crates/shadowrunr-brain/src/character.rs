@@ -194,6 +194,16 @@ impl CharacterPackage {
     pub fn enabled_rules(&self) -> impl Iterator<Item = &CharacterRule> {
         self.rules.iter().filter(|r| r.enabled)
     }
+
+    /// Whether the model is asked for a delivery cue on its lines (`[voice] delivery`, on by
+    /// default).
+    pub fn delivery_cues(&self) -> bool {
+        self.manifest
+            .voice
+            .as_ref()
+            .and_then(|v| v.delivery)
+            .unwrap_or(true)
+    }
 }
 
 /// One problem with a package: the file, the key inside it (empty when the problem is the
@@ -936,6 +946,25 @@ mod tests {
     fn empty_tone_uses_default() {
         let pkg = load_character(&malakor_dir(), "").unwrap();
         assert_eq!(pkg.tone_variant, "unhinged-roastmaster");
+    }
+
+    #[test]
+    fn the_emotion_benches_read_and_cue_on_by_default() {
+        use shadowrunr_types::voice_choice::VoiceBenchFile;
+        let read = |dir: &Path| -> VoiceBenchFile {
+            let text = std::fs::read_to_string(dir.join("voice").join("bench.toml")).unwrap();
+            toml::from_str(&text).unwrap()
+        };
+        let malakor = read(&malakor_dir());
+        assert_eq!(malakor.lines.len(), 10);
+        let template = read(&malakor_dir().join("..").join("_template"));
+        assert_eq!(template.lines.len(), 5);
+        for l in malakor.lines.iter().chain(&template.lines) {
+            assert!((0.0..=1.0).contains(&l.intensity), "{}", l.id);
+            assert_eq!(crate::grammar::strip_markup(&l.text), l.text, "{}", l.id);
+        }
+        let pkg = load_character(&malakor_dir(), "theatrical").unwrap();
+        assert!(pkg.delivery_cues());
     }
 
     #[test]
