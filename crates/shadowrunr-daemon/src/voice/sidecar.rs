@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Deserialize;
-use shadowrunr_types::voice::{Viseme, VisemeSpan};
+use shadowrunr_types::voice::{Viseme, VisemeSpan, VoiceTimings};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, watch};
@@ -474,14 +474,22 @@ impl SidecarRenderer {
                 let mut sh = self.shared();
                 if let Some(p) = sh.pending.get_mut(&id) {
                     p.next_part = part + 1;
+                    let visemes = spans(visemes);
+                    let timings = if visemes.is_empty() {
+                        VoiceTimings::None
+                    } else {
+                        VoiceTimings::Durations
+                    };
                     let sent =
                         p.tx.send(Part::Audio(Rendered {
                             part,
                             last,
+                            chars: u32::try_from(text.chars().count()).unwrap_or(u32::MAX),
                             text,
                             sample_rate,
                             pcm,
-                            visemes: spans(visemes),
+                            visemes,
+                            timings,
                         }))
                         .is_ok();
                     if last || !sent {

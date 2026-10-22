@@ -20,13 +20,16 @@
 
 pub mod avatar;
 pub mod cli;
+pub mod elevenlabs;
 pub mod log;
 pub mod probe;
 pub mod renderer;
 pub mod replay;
 pub mod service;
+pub mod settings;
 pub mod sidecar;
 pub mod socket;
+pub mod text;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -89,6 +92,8 @@ pub struct VoiceConfig {
     /// Each engine run's threads (`--threads`). Absent = the sidecar's default (2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub render_threads: Option<u32>,
+    /// `[voice.elevenlabs]`: the cloud provider (a character's choice picks it).
+    pub elevenlabs: elevenlabs::ElevenlabsConfig,
 }
 
 impl Default for VoiceConfig {
@@ -110,6 +115,7 @@ impl Default for VoiceConfig {
             lines_in_flight: 3,
             render_workers: 3,
             render_threads: None,
+            elevenlabs: elevenlabs::ElevenlabsConfig::default(),
         }
     }
 }
@@ -180,14 +186,25 @@ pub async fn voice_handler(
     ws.on_upgrade(move |socket| socket::session(state, socket))
 }
 
-/// Daemon hook: with `[voice] enabled`, start the sidecar and speak through it until the
-/// daemon shuts down. Returns the supervisor, which ends once the sidecar has stopped.
+/// Daemon hook: with `[voice] enabled`, speak with the configured character's (`[sim]
+/// character`) voice until the daemon shuts down, and with each streaming character's from its
+/// stream start on (`settings::DaemonVoices`). Returns a task that ends once the renderer
+/// speaking at shutdown has stopped.
 pub fn start(state: &Arc<AppState>) -> Option<tokio::task::JoinHandle<()>> {
     if !state.voice.enabled() {
         return None;
     }
-    let (renderer, task) =
-        sidecar::SidecarRenderer::start(state.voice.config().clone(), state.shutdown_signal());
-    state.voice.attach(renderer, state.shutdown_signal());
-    Some(task)
+    let voices = Arc::new(settings::DaemonVoices::new(state));
+    let first = settings::spoken_for(&state.cfg, &state.cfg.sim.character);
+    state
+        .voice
+        .attach_voices(voices, &first, state.shutdown_signal());
+    let hub = state.voice.clone();
+    let down = state.shutdown_signal();
+    Some(tokio::spawn(async move {
+        down.await;
+        if let Some(task) = hub.stop_renderer() {
+            let _ = task.await;
+        }
+    }))
 }

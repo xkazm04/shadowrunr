@@ -4,16 +4,37 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use clap::Subcommand;
+use std::sync::Arc;
+
+use clap::{Subcommand, ValueEnum};
+use shadowrunr_types::voice_choice::{VoiceChoice, VoiceProvider};
 use tokio::sync::watch;
 use tokio::time::Instant;
 
 use super::renderer::{b64_decode, duration_ms, Part, Renderer, RendererState, Utter};
 use super::replay::compare;
-use super::sidecar::{SidecarRenderer, STOP_GRACE};
+use super::service::Voices;
+use super::settings::{self, DaemonVoices, Spec};
+use super::sidecar::STOP_GRACE;
 use super::{probe, replay};
 use crate::config::Config;
 use crate::runs;
+
+/// `--provider`: who speaks, whatever the character's choice says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ProviderArg {
+    Kokoro,
+    Elevenlabs,
+}
+
+impl From<ProviderArg> for VoiceProvider {
+    fn from(p: ProviderArg) -> Self {
+        match p {
+            ProviderArg::Kokoro => VoiceProvider::Kokoro,
+            ProviderArg::Elevenlabs => VoiceProvider::Elevenlabs,
+        }
+    }
+}
 
 #[derive(Debug, Subcommand)]
 pub enum VoiceCommand {
@@ -25,8 +46,10 @@ pub enum VoiceCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Speak one line through the sidecar once: each sentence as it arrives, then the audio
-    /// length, the mouth shapes and the time to the first sentence.
+    /// Speak one line once, in the character's effective voice: each sentence as it arrives,
+    /// then the audio length, the mouth shapes, the characters sent and the time to the first
+    /// sentence. The line passes the brain's output gate first, and may open with a delivery
+    /// cue (`[sarcasm 0.8 slow] Oh, wonderful.`).
     #[command(after_help = VOICE_SAY_EXIT_CODES)]
     Say {
         /// The line, as Malakor would say it.
@@ -34,6 +57,12 @@ pub enum VoiceCommand {
         /// Write the audio as a WAV: to PATH, or with no PATH to <data>/voice/say-<ms>.wav.
         #[arg(long, value_name = "PATH", num_args = 0..=1)]
         out: Option<Option<PathBuf>>,
+        /// Speak with this provider (its settings from the character's choice).
+        #[arg(long, value_enum)]
+        provider: Option<ProviderArg>,
+        /// The character whose voice speaks; default [sim] character.
+        #[arg(long)]
+        character: Option<String>,
     },
     /// Replay a recorded run (its transcript.jsonl) at its recorded times through the sidecar
     /// and the voice service, and print the lines spoken and skipped, the audio, the first-audio
@@ -91,15 +120,21 @@ pub const VOICE_CHECK_EXIT_CODES: &str = "Exit codes:
 /// `shadowrunr voice say` exit codes (also in docs/guide/voice.md).
 pub const VOICE_SAY_EXIT_CODES: &str = "Exit codes:
   0  the whole line was spoken
-  1  the sidecar did not start, or a sentence failed or timed out
+  1  the voice did not start, the gate refused the line, or a sentence failed or timed out
   2  usage error";
 
 pub async fn run(cfg: &Config, cmd: VoiceCommand) -> u8 {
     match cmd {
         VoiceCommand::Check { json } => check_cmd(cfg, json).await,
-        VoiceCommand::Say { text, out } => {
+        VoiceCommand::Say {
+            text,
+            out,
+            provider,
+            character,
+        } => {
             let out = out.map(|o| o.unwrap_or_else(|| default_wav(&cfg.paths.data)));
-            say_cmd(cfg, &text, out).await
+            let character = character.unwrap_or_else(|| cfg.sim.character.clone());
+            say_cmd(cfg, &text, out, provider.map(Into::into), &character).await
         }
         VoiceCommand::Replay {
             transcript,
@@ -203,8 +238,33 @@ async fn compare_cmd(
     }
 }
 
+/// The character's effective choice, with `provider` over it when given.
+fn choice_for(
+    cfg: &Config,
+    character: &str,
+    provider: Option<VoiceProvider>,
+) -> Result<VoiceChoice, String> {
+    let over = settings::read_override(cfg, character).map_err(|e| e.message)?;
+    let mut choice = settings::effective(&settings::package_choice(cfg, character), over.as_ref());
+    if let Some(p) = provider {
+        choice.provider = p;
+    }
+    Ok(choice)
+}
+
 async fn check_cmd(cfg: &Config, json: bool) -> u8 {
-    let items = probe::check(&cfg.voice).await;
+    let choice = match choice_for(cfg, &cfg.sim.character, None) {
+        Ok(c) => c,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
+    let spoken = settings::spoken(cfg, &choice);
+    let items = match &spoken.spec {
+        Spec::Kokoro(v) => probe::check(v).await,
+        Spec::Elevenlabs(c, s) => probe::elevenlabs_items(c, s),
+    };
     let ok = probe::all_needed(&items);
     if json {
         match serde_json::to_string_pretty(&items) {
@@ -213,14 +273,14 @@ async fn check_cmd(cfg: &Config, json: bool) -> u8 {
         }
     } else {
         println!(
-            "[voice] is {} (voice {}, sid {})",
+            "[voice] is {}; {} speaks with {}",
             if cfg.voice.enabled {
                 "enabled"
             } else {
                 "disabled"
             },
-            cfg.voice.voice,
-            cfg.voice.sid
+            cfg.sim.character,
+            settings::label(cfg, &choice)
         );
         print!("{}", probe::table(&items));
         let missing = items.iter().filter(|i| i.needed && !i.ok()).count();
@@ -266,30 +326,73 @@ pub fn wav_bytes(pcm: &[u8], sample_rate: u32) -> Vec<u8> {
     w
 }
 
-async fn say_cmd(cfg: &Config, text: &str, out: Option<PathBuf>) -> u8 {
-    if text.trim().is_empty() {
+async fn say_cmd(
+    cfg: &Config,
+    text: &str,
+    out: Option<PathBuf>,
+    provider: Option<VoiceProvider>,
+    character: &str,
+) -> u8 {
+    let line = shadowrunr_brain::grammar::spoken(text);
+    if line.text.trim().is_empty() {
         eprintln!("error: nothing to say");
         return 2;
     }
-    if let Some(why) = probe::engine_missing(&cfg.voice) {
-        eprintln!("error: {why} (run `shadowrunr voice check`)");
+    let policy = match crate::clips::policy(cfg) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: {}", e.message);
+            return 1;
+        }
+    };
+    let (_, fired) = shadowrunr_brain::moderation::gate_text(&line.text, &policy, &[]);
+    if let Some((rule, action)) = fired.first() {
+        eprintln!("error: the brain's output gate refused this line ({rule} {action})");
         return 1;
     }
-    let (stop_tx, mut stop_rx) = watch::channel(false);
+    let choice = match choice_for(cfg, character, provider) {
+        Ok(c) => c,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
+    let spoken = settings::spoken(cfg, &choice);
+    if let Spec::Kokoro(v) = &spoken.spec {
+        if let Some(why) = probe::engine_missing(v) {
+            eprintln!("error: {why} (run `shadowrunr voice check`)");
+            return 1;
+        }
+    }
+    println!("{character} speaks with {}", settings::label(cfg, &choice));
+    let utter = Utter {
+        text: line.text,
+        delivery: line.delivery,
+    };
+    if let Some(d) = &utter.delivery {
+        println!(
+            "delivery: {} {:.2} {}",
+            d.emotion.as_str(),
+            d.intensity,
+            d.pace.as_str()
+        );
+    }
+    let (stop_tx, stop_rx) = watch::channel(false);
     let t0 = Instant::now();
-    let (renderer, task) = SidecarRenderer::start(cfg.voice.clone(), async move {
-        let _ = stop_rx.wait_for(|d| *d).await;
-    });
-    let code = speak(cfg, renderer.as_ref(), text, out, t0).await;
+    let voices = DaemonVoices::standalone(Arc::new(cfg.clone()));
+    let (renderer, task) = voices.start(&spoken, stop_rx);
+    let code = speak(cfg, renderer.as_ref(), &utter, out, t0).await;
     stop_tx.send_replace(true);
-    let _ = tokio::time::timeout(STOP_GRACE * 2, task).await;
+    if let Some(task) = task {
+        let _ = tokio::time::timeout(STOP_GRACE * 2, task).await;
+    }
     code
 }
 
 async fn speak(
     cfg: &Config,
-    renderer: &SidecarRenderer,
-    text: &str,
+    renderer: &dyn Renderer,
+    utter: &Utter,
     out: Option<PathBuf>,
     t0: Instant,
 ) -> u8 {
@@ -302,7 +405,7 @@ async fn speak(
         Ok(RendererState::Ready { visemes, reason }) => {
             let why = reason.map(|r| format!(" ({r})")).unwrap_or_default();
             println!(
-                "sidecar ready in {} ms, mouth shapes {}{why}",
+                "voice ready in {} ms, mouth shapes {}{why}",
                 t0.elapsed().as_millis(),
                 if visemes { "on" } else { "off" }
             );
@@ -312,14 +415,14 @@ async fn speak(
             return 1;
         }
         _ => {
-            eprintln!("error: the voice sidecar did not start");
+            eprintln!("error: the voice did not start");
             return 1;
         }
     }
     let t1 = Instant::now();
-    let mut parts = renderer.say("cli:1", &Utter::plain(text));
-    let per_part = Duration::from_millis(cfg.voice.render_timeout_ms.max(1));
-    let (mut n, mut audio_ms, mut shapes) = (0u32, 0u64, 0usize);
+    let mut parts = renderer.say("cli:1", utter);
+    let per_part = settings::per_part(cfg);
+    let (mut n, mut audio_ms, mut shapes, mut chars) = (0u32, 0u64, 0usize, 0u32);
     let mut first: Option<Duration> = None;
     let mut pcm = Vec::new();
     let mut rate = 0u32;
@@ -330,14 +433,16 @@ async fn speak(
                 first.get_or_insert(at);
                 let d = duration_ms(&r.pcm, r.sample_rate);
                 println!(
-                    "part {}  at {:>5} ms  {:>5} ms audio  {:>3} visemes  {}",
+                    "part {}  at {:>5} ms  {:>5} ms audio  {:>3} visemes  {:>3} chars  {}",
                     r.part,
                     at.as_millis(),
                     d,
                     r.visemes.len(),
+                    r.chars,
                     r.text
                 );
                 n += 1;
+                chars = chars.saturating_add(r.chars);
                 audio_ms += u64::from(d);
                 shapes += r.visemes.len();
                 rate = r.sample_rate;
@@ -353,7 +458,7 @@ async fn speak(
                 break true;
             }
             Ok(None) => {
-                eprintln!("the sidecar stopped mid-line");
+                eprintln!("the voice stopped mid-line");
                 break true;
             }
             Err(_) => {
@@ -364,8 +469,8 @@ async fn speak(
         }
     };
     println!(
-        "{n} part(s), {audio_ms} ms of audio, {shapes} visemes, first part after {} ms, \
-         all in {} ms",
+        "{n} part(s), {audio_ms} ms of audio, {shapes} visemes, {chars} chars, first part after \
+         {} ms, all in {} ms",
         first.map_or_else(|| "-".to_string(), |f| f.as_millis().to_string()),
         t1.elapsed().as_millis()
     );
@@ -421,18 +526,45 @@ mod tests {
             VoiceCommand::Check { json: true }
         ));
         match voice(&["say", "Kneel, mortal."]).unwrap() {
-            VoiceCommand::Say { text, out } => {
+            VoiceCommand::Say {
+                text,
+                out,
+                provider,
+                character,
+            } => {
                 assert_eq!(text, "Kneel, mortal.");
                 assert_eq!(out, None);
+                assert_eq!((provider, character), (None, None));
             }
             other => panic!("{other:?}"),
         }
+        match voice(&[
+            "say",
+            "x",
+            "--provider",
+            "elevenlabs",
+            "--character",
+            "keeper",
+        ])
+        .unwrap()
+        {
+            VoiceCommand::Say {
+                provider,
+                character,
+                ..
+            } => {
+                assert_eq!(provider, Some(ProviderArg::Elevenlabs));
+                assert_eq!(character.as_deref(), Some("keeper"));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(voice(&["say", "x", "--provider", "openai"]).is_err());
         match voice(&["say", "x", "--out"]).unwrap() {
             VoiceCommand::Say { out, .. } => assert_eq!(out, Some(None)),
             other => panic!("{other:?}"),
         }
         match voice(&["say", "--out", "a.wav", "x"]).unwrap() {
-            VoiceCommand::Say { text, out } => {
+            VoiceCommand::Say { text, out, .. } => {
                 assert_eq!(text, "x");
                 assert_eq!(out, Some(Some(PathBuf::from("a.wav"))));
             }

@@ -292,6 +292,9 @@ pub struct Config {
     /// `[voice]`, with its paths resolved against the root (after [`Config::load`], with the
     /// configured character's `[voice]` over it).
     pub voice: crate::voice::VoiceConfig,
+    /// `[voice]` as the file has it (paths resolved), before any character's package: what a
+    /// stream start resolves each streaming character's voice over (`voice::settings`).
+    pub voice_daemon: crate::voice::VoiceConfig,
     /// `[record]`.
     pub record: crate::record::RecordConfig,
     /// `[stage]` (after [`Config::load`], with the configured character's `[avatar] face`).
@@ -419,6 +422,7 @@ impl Config {
                 ..fc.clips
             },
             research: fc.research,
+            voice_daemon: fc.voice.clone().resolved(root),
             voice: fc.voice.resolved(root),
             record: fc.record,
             stage: fc.stage,

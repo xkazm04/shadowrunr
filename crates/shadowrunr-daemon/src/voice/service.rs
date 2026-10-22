@@ -24,21 +24,27 @@
 //!   failed lines in a row turn the status `degraded` until a line speaks again.
 //! - **Fan-out.** Frames go out on a broadcast per run; the status is one watch, so a new client
 //!   gets the current status first.
+//! - **Per stream.** With [`Voices`] attached (the daemon), each run's `stream_start` resolves
+//!   the streaming character's voice (`super::settings`: package, daemon, local override). A
+//!   voice that differs from the one speaking replaces its renderer before the run's first line:
+//!   the old one stops (its lines in flight end with it) and the new one starts. The status names
+//!   the provider and the voice. Nothing ever falls back to another provider.
 
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 
 use shadowrunr_types::event::Speaker;
 use shadowrunr_types::voice::{VoiceFrame, VoiceSkip, VoiceState};
-use shadowrunr_types::voice_choice::VoiceProvider;
+use shadowrunr_types::voice_choice::{ProviderStatus, VoiceProvider};
 use shadowrunr_types::StreamEvent;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, oneshot, watch, Notify, OwnedSemaphorePermit, Semaphore};
 use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::Instant;
 
-use super::log::VoiceLogs;
+use super::log::{Usage, VoiceLogs};
 use super::renderer::{duration_ms, Part, Renderer, RendererState, Utter};
 use super::VoiceConfig;
 use crate::live::{Frame, LiveItem, LiveRun};
@@ -47,6 +53,46 @@ use crate::live::{Frame, LiveItem, LiveRun};
 pub const RUN_BROADCAST: usize = 64;
 /// Failed lines in a row before the status says `degraded`.
 pub const FAILING_AFTER: u32 = 3;
+
+/// A voice the hub can speak with: what the status names, and how it is told apart.
+#[derive(Debug, Clone)]
+pub struct Spoken {
+    pub provider: VoiceProvider,
+    /// The voice's name on the status frame.
+    pub voice: String,
+    /// Two voices with the same key speak alike: a stream start keeps the running renderer.
+    pub key: String,
+    /// What the renderer is built from.
+    pub spec: super::settings::Spec,
+}
+
+/// Where the hub's renderers come from, per stream (the daemon's is
+/// `super::settings::DaemonVoices`; tests use a fake).
+pub trait Voices: Send + Sync + 'static {
+    /// The voice `character` speaks with now; `None` keeps the running renderer.
+    fn resolve(&self, character: &str) -> Option<Spoken>;
+    /// Start a renderer for `spoken`. It stops once `stop` is set or dropped; the handle, when
+    /// there is one, ends after it has stopped.
+    fn start(
+        &self,
+        spoken: &Spoken,
+        stop: watch::Receiver<bool>,
+    ) -> (Arc<dyn Renderer>, Option<JoinHandle<()>>);
+}
+
+/// The renderer speaking now.
+#[derive(Default)]
+struct Current {
+    provider: Option<VoiceProvider>,
+    voice: Option<String>,
+    /// `None` for a renderer attached directly (tests, replay): never swapped.
+    key: Option<String>,
+    renderer: Option<Arc<dyn Renderer>>,
+    /// Dropping it stops the renderer.
+    stop: Option<watch::Sender<bool>>,
+    watcher: Option<JoinHandle<()>>,
+    supervisor: Option<JoinHandle<()>>,
+}
 
 /// A frame for `/voice` clients, serialised once.
 #[derive(Debug, Clone)]
@@ -97,8 +143,15 @@ pub struct VoiceHub {
     runs: Mutex<HashMap<String, RunVoice>>,
     queue: Mutex<VecDeque<Line>>,
     queued: Notify,
-    renderer: OnceLock<Arc<dyn Renderer>>,
+    current: Mutex<Current>,
+    voices: OnceLock<Arc<dyn Voices>>,
+    started: AtomicBool,
     tasks: Mutex<Vec<JoinHandle<()>>>,
+    /// The preview renderer (`voice.preview`, `voice.bench`), apart from the show's; its lock
+    /// is one preview at a time.
+    pub(crate) preview: tokio::sync::Mutex<Option<super::settings::PreviewVoice>>,
+    /// The last `voice.verify` verdict per provider.
+    pub(crate) verdicts: Mutex<HashMap<VoiceProvider, ProviderStatus>>,
     /// Each run's `voice.jsonl` (`log`): what went out, and what the stage reported.
     logs: VoiceLogs,
 }
@@ -134,8 +187,12 @@ impl VoiceHub {
             runs: Mutex::new(HashMap::new()),
             queue: Mutex::new(VecDeque::new()),
             queued: Notify::new(),
-            renderer: OnceLock::new(),
+            current: Mutex::new(Current::default()),
+            voices: OnceLock::new(),
+            started: AtomicBool::new(false),
             tasks: Mutex::new(Vec::new()),
+            preview: tokio::sync::Mutex::new(None),
+            verdicts: Mutex::new(HashMap::new()),
             logs: VoiceLogs::default(),
         })
     }
@@ -157,25 +214,134 @@ impl VoiceHub {
         self.status.subscribe()
     }
 
-    /// Start speaking through `renderer`: its state drives the status, and the worker takes
-    /// lines until `shutdown`. Only the first attach counts.
+    /// Start speaking through `renderer`, for good: its state drives the status, and the
+    /// worker takes lines until `shutdown`. Only the first attach counts.
     pub fn attach(
         self: &Arc<Self>,
         renderer: Arc<dyn Renderer>,
         shutdown: impl std::future::Future<Output = ()> + Send + 'static,
     ) {
-        if !self.cfg.enabled || self.renderer.set(renderer.clone()).is_err() {
+        if !self.cfg.enabled || self.started.swap(true, Ordering::SeqCst) {
             return;
         }
-        let watcher = tokio::spawn(watch_renderer(Arc::downgrade(self), renderer.state()));
-        let worker = tokio::spawn(worker(self.clone(), renderer, shutdown));
-        lock(&self.tasks).extend([watcher, worker]);
+        self.install(Installed {
+            renderer,
+            provider: VoiceProvider::Kokoro,
+            voice: self.cfg.voice.clone(),
+            key: None,
+            stop: None,
+            supervisor: None,
+        });
+        let worker = tokio::spawn(worker(self.clone(), shutdown));
+        lock(&self.tasks).push(worker);
+    }
+
+    /// Start speaking with `first`, then with whatever each stream start resolves (`voices`),
+    /// until `shutdown`. Only the first attach counts.
+    pub fn attach_voices(
+        self: &Arc<Self>,
+        voices: Arc<dyn Voices>,
+        first: &Spoken,
+        shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+    ) {
+        if !self.cfg.enabled || self.started.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let _ = self.voices.set(voices);
+        self.speak_with(first);
+        let worker = tokio::spawn(worker(self.clone(), shutdown));
+        lock(&self.tasks).push(worker);
+    }
+
+    /// A run streaming `character` started: resolve its voice, and replace the renderer when
+    /// the voice differs from the one speaking.
+    pub fn stream_start(self: &Arc<Self>, character: &str) {
+        let Some(voices) = self.voices.get() else {
+            return;
+        };
+        let Some(spoken) = voices.resolve(character) else {
+            return;
+        };
+        if lock(&self.current).key.as_deref() == Some(spoken.key.as_str()) {
+            return;
+        }
+        self.speak_with(&spoken);
+    }
+
+    fn speak_with(self: &Arc<Self>, spoken: &Spoken) {
+        let Some(voices) = self.voices.get() else {
+            return;
+        };
+        let (stop, stop_rx) = watch::channel(false);
+        let (renderer, supervisor) = voices.start(spoken, stop_rx);
+        self.install(Installed {
+            renderer,
+            provider: spoken.provider,
+            voice: spoken.voice.clone(),
+            key: Some(spoken.key.clone()),
+            stop: Some(stop),
+            supervisor,
+        });
+    }
+
+    /// Make a renderer the one speaking. The one before it stops (its stop is dropped), and the
+    /// health starts over.
+    fn install(self: &Arc<Self>, i: Installed) {
+        let watcher = tokio::spawn(watch_renderer(
+            Arc::downgrade(self),
+            i.renderer.state(),
+            i.key.clone(),
+        ));
+        let old = {
+            let mut c = lock(&self.current);
+            *lock(&self.health) = Health::default();
+            std::mem::replace(
+                &mut *c,
+                Current {
+                    provider: Some(i.provider),
+                    voice: Some(i.voice),
+                    key: i.key,
+                    renderer: Some(i.renderer),
+                    stop: i.stop,
+                    watcher: Some(watcher),
+                    supervisor: i.supervisor,
+                },
+            )
+        };
+        if let Some(w) = old.watcher {
+            w.abort();
+        }
+        drop(old.stop);
+        self.publish_status();
+    }
+
+    /// The renderer speaking now, and its provider.
+    fn speaking(&self) -> Option<(Arc<dyn Renderer>, Option<VoiceProvider>)> {
+        let c = lock(&self.current);
+        c.renderer.clone().map(|r| (r, c.provider))
+    }
+
+    /// The provider speaking now (`None` before any renderer).
+    pub fn provider(&self) -> Option<VoiceProvider> {
+        lock(&self.current).provider
+    }
+
+    /// Stop the renderer speaking now, and hand back its supervisor to wait on.
+    pub fn stop_renderer(&self) -> Option<JoinHandle<()>> {
+        let mut c = lock(&self.current);
+        if let Some(stop) = c.stop.take() {
+            stop.send_replace(true);
+        }
+        c.supervisor.take()
     }
 
     /// Stop every task (feeders, the worker and the status watcher).
     pub fn stop(&self) {
         for t in lock(&self.tasks).drain(..) {
             t.abort();
+        }
+        if let Some(w) = lock(&self.current).watcher.take() {
+            w.abort();
         }
         for r in lock(&self.runs).values_mut() {
             if let Some(f) = r.feeder.take() {
@@ -185,36 +351,42 @@ impl VoiceHub {
     }
 
     fn publish_status(&self) {
+        let (voice, provider) = {
+            let c = lock(&self.current);
+            (
+                c.voice.clone().or_else(|| Some(self.cfg.voice.clone())),
+                Some(c.provider.unwrap_or(VoiceProvider::Kokoro)),
+            )
+        };
         let h = lock(&self.health);
-        let voice = Some(self.cfg.voice.clone());
         let frame = match (&h.renderer, &h.failing) {
             (None, _) | (Some(RendererState::Starting), _) => VoiceFrame::Status {
                 state: VoiceState::Starting,
                 reason: None,
                 voice,
                 visemes: false,
-                provider: Some(VoiceProvider::Kokoro),
+                provider,
             },
             (Some(RendererState::Degraded(why)), _) => VoiceFrame::Status {
                 state: VoiceState::Degraded,
                 reason: Some(why.clone()),
                 voice,
                 visemes: false,
-                provider: Some(VoiceProvider::Kokoro),
+                provider,
             },
             (Some(RendererState::Ready { visemes, .. }), Some(why)) => VoiceFrame::Status {
                 state: VoiceState::Degraded,
                 reason: Some(format!("renders failing: {why}")),
                 voice,
                 visemes: *visemes,
-                provider: Some(VoiceProvider::Kokoro),
+                provider,
             },
             (Some(RendererState::Ready { visemes, reason }), None) => VoiceFrame::Status {
                 state: VoiceState::Ready,
                 reason: reason.clone(),
                 voice,
                 visemes: *visemes,
-                provider: Some(VoiceProvider::Kokoro),
+                provider,
             },
         };
         drop(h);
@@ -260,7 +432,7 @@ impl VoiceHub {
         });
         entry.followers += 1;
         let live = entry.feeder.as_ref().is_some_and(|f| !f.is_finished());
-        if !live && self.renderer.get().is_some() && !run.is_done() {
+        if !live && self.started.load(Ordering::SeqCst) && !run.is_done() {
             let since = if from_start { 0 } else { run.len() };
             entry.feeder = Some(tokio::spawn(feed(Arc::downgrade(self), run.clone(), since)));
         }
@@ -301,8 +473,8 @@ impl VoiceHub {
         lock(&self.runs).contains_key(run_id)
     }
 
-    fn send(&self, run_id: &str, frame: VoiceFrame) {
-        self.logs.service(&frame);
+    fn send(&self, run_id: &str, frame: VoiceFrame, usage: Option<Usage>) {
+        self.logs.service(&frame, usage);
         if let Some(r) = lock(&self.runs).get(run_id) {
             let _ = r.tx.send(VoiceItem::new(frame));
         }
@@ -317,6 +489,7 @@ impl VoiceHub {
                 part,
                 reason,
             },
+            None,
         );
     }
 
@@ -328,6 +501,7 @@ impl VoiceHub {
             line.seq,
             &line.utter.text,
             line.utter.delivery,
+            self.provider(),
         );
         let dropped = {
             let mut q = lock(&self.queue);
@@ -375,10 +549,18 @@ impl Drop for Following {
     }
 }
 
-async fn watch_renderer(hub: Weak<VoiceHub>, mut rx: watch::Receiver<RendererState>) {
+async fn watch_renderer(
+    hub: Weak<VoiceHub>,
+    mut rx: watch::Receiver<RendererState>,
+    key: Option<String>,
+) {
     loop {
         let st = rx.borrow_and_update().clone();
         let Some(h) = hub.upgrade() else { return };
+        if lock(&h.current).key != key {
+            // Replaced: the renderer speaking now has its own watcher.
+            return;
+        }
         lock(&h.health).renderer = Some(st);
         h.publish_status();
         drop(h);
@@ -404,10 +586,33 @@ pub(crate) fn malakor_say(frame: &Frame) -> Option<Utter> {
     }
 }
 
-/// Queue each of the run's Malakor lines after `since`, until the run ends.
+/// The character a `stream_start` frame names.
+pub(crate) fn stream_character(frame: &Frame) -> Option<String> {
+    if !frame.contains("\"stream_start\"") {
+        return None;
+    }
+    match serde_json::from_str::<StreamEvent>(frame).ok()? {
+        StreamEvent::StreamStart { character, .. } => Some(character),
+        _ => None,
+    }
+}
+
+/// Queue each of the run's Malakor lines after `since`, until the run ends. The run's
+/// `stream_start` resolves its voice first (read from the run when it came before `since`).
 async fn feed(hub: Weak<VoiceHub>, run: Arc<LiveRun>, since: u64) {
+    if since > 0 {
+        if let (Some(h), Some(character)) = (hub.upgrade(), run.character()) {
+            h.stream_start(&character);
+        }
+    }
     let attach = run.attach(since);
     let push = |seq: u64, f: &Frame| {
+        if let Some(character) = stream_character(f) {
+            if let Some(h) = hub.upgrade() {
+                h.stream_start(&character);
+            }
+            return true;
+        }
         let Some(utter) = malakor_say(f) else {
             return true;
         };
@@ -463,7 +668,6 @@ async fn feed(hub: Weak<VoiceHub>, run: Arc<LiveRun>, since: u64) {
 /// line after another, in the order the lines left the queue.
 async fn worker(
     hub: Arc<VoiceHub>,
-    renderer: Arc<dyn Renderer>,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) {
     tokio::pin!(shutdown);
@@ -484,13 +688,18 @@ async fn worker(
             () = &mut shutdown => return,
         };
         while flights.try_join_next().is_some() {}
+        // The renderer speaking when the line leaves the queue speaks all of it.
+        let Some((renderer, provider)) = hub.speaking() else {
+            continue;
+        };
         let (done, next) = oneshot::channel();
         let order = Order {
             prev: prev.replace(next),
             since: None,
             held: Vec::new(),
         };
-        flights.spawn(fly(hub.clone(), renderer.clone(), line, slot, order, done));
+        let voice = Voice { renderer, provider };
+        flights.spawn(fly(hub.clone(), voice, line, slot, order, done));
     }
 }
 
@@ -500,16 +709,36 @@ struct Order {
     prev: Option<oneshot::Receiver<()>>,
     /// When this line's turn came.
     since: Option<Instant>,
-    /// Frames made before the turn came.
-    held: Vec<VoiceFrame>,
+    /// Frames made before the turn came, with their usage.
+    held: Vec<(VoiceFrame, Option<Usage>)>,
+}
+
+/// A renderer to make the one speaking.
+struct Installed {
+    renderer: Arc<dyn Renderer>,
+    provider: VoiceProvider,
+    voice: String,
+    key: Option<String>,
+    stop: Option<watch::Sender<bool>>,
+    supervisor: Option<JoinHandle<()>>,
+}
+
+/// The renderer a line speaks through, and its provider (for the log).
+struct Voice {
+    renderer: Arc<dyn Renderer>,
+    provider: Option<VoiceProvider>,
 }
 
 impl Order {
     fn emit(&mut self, hub: &VoiceHub, run_id: &str, frame: VoiceFrame) {
+        self.emit_with(hub, run_id, frame, None);
+    }
+
+    fn emit_with(&mut self, hub: &VoiceHub, run_id: &str, frame: VoiceFrame, usage: Option<Usage>) {
         if self.prev.is_some() {
-            self.held.push(frame);
+            self.held.push((frame, usage));
         } else {
-            hub.send(run_id, frame);
+            hub.send(run_id, frame, usage);
         }
     }
 
@@ -517,8 +746,8 @@ impl Order {
     fn take_turn(&mut self, hub: &VoiceHub, run_id: &str) {
         self.prev = None;
         self.since.get_or_insert_with(Instant::now);
-        for f in self.held.drain(..) {
-            hub.send(run_id, f);
+        for (f, usage) in self.held.drain(..) {
+            hub.send(run_id, f, usage);
         }
     }
 
@@ -534,7 +763,7 @@ impl Order {
 /// done with it, then send its frames in its turn.
 async fn fly(
     hub: Arc<VoiceHub>,
-    renderer: Arc<dyn Renderer>,
+    voice: Voice,
     line: Line,
     slot: OwnedSemaphorePermit,
     mut order: Order,
@@ -543,19 +772,27 @@ async fn fly(
     if order.prev.is_none() {
         order.take_turn(&hub, &line.run_id);
     }
-    speak(&hub, renderer.as_ref(), &line, &mut order).await;
+    speak(&hub, &voice, &line, &mut order).await;
     drop(slot);
     order.wait_turn(&hub, &line.run_id).await;
     let _ = done.send(());
 }
 
-async fn speak(hub: &VoiceHub, renderer: &dyn Renderer, line: &Line, order: &mut Order) {
+async fn speak(hub: &VoiceHub, voice: &Voice, line: &Line, order: &mut Order) {
+    let renderer = voice.renderer.as_ref();
     if !hub.followed(&line.run_id) {
         hub.logs.unfollowed(&line.run_id, line.seq);
         return;
     }
     let lag_by = line.arrived + Duration::from_millis(hub.cfg.max_lag_ms);
     if Instant::now() >= lag_by {
+        order.emit(hub, &line.run_id, skipped(line, 0, VoiceSkip::Late));
+        return;
+    }
+    // A renderer just started (a stream start swapped it) takes the line once it is up.
+    let mut st = renderer.state();
+    let up = st.wait_for(|s| !matches!(s, RendererState::Starting));
+    if tokio::time::timeout_at(lag_by, up).await.is_err() {
         order.emit(hub, &line.run_id, skipped(line, 0, VoiceSkip::Late));
         return;
     }
@@ -591,7 +828,12 @@ async fn speak(hub: &VoiceHub, renderer: &dyn Renderer, line: &Line, order: &mut
                 next = r.part + 1;
                 last_at = Instant::now();
                 let last = r.last;
-                order.emit(
+                let usage = voice.provider.map(|provider| Usage {
+                    provider,
+                    chars: r.chars,
+                    timings: r.timings,
+                });
+                order.emit_with(
                     hub,
                     &line.run_id,
                     VoiceFrame::Utterance {
@@ -606,6 +848,7 @@ async fn speak(hub: &VoiceHub, renderer: &dyn Renderer, line: &Line, order: &mut
                         pcm: r.pcm,
                         visemes: r.visemes,
                     },
+                    usage,
                 );
                 if last {
                     hub.line_spoke();

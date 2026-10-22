@@ -186,6 +186,102 @@ the machine's. Malakor's package names `malakor-a`, sid 52 of `malakor-voices.bi
 | `render_workers` | `3` | Engine runs the sidecar renders at once (`--workers`); on the warm engine, the loaded workers. |
 | `render_threads` | none | Each engine run's threads (`--threads`). Absent: 2 for the binary, 4 for the warm engine (measured below). |
 
+## Providers: Kokoro and ElevenLabs
+
+A character is spoken by one of two providers:
+
+- **`kokoro`** (the default): the local sidecar described in this guide.
+- **`elevenlabs`**: the ElevenLabs cloud API, one request per sentence
+  (`POST /v1/text-to-speech/{voice_id}/with-timestamps?output_format=pcm_24000`), split into
+  sentences by the sidecar's own rules. It sends no mouth shapes: the stage moves the mouth from
+  loudness.
+
+### The key
+
+The ElevenLabs key lives only in the daemon's environment, in the variable that
+`[voice.elevenlabs] api_key_env` names (default `ELEVENLABS_API_KEY`). It is never in a config
+file, a log, an RPC result or the console. The daemon reads it at each request and sends it only
+in the `xi-api-key` header.
+
+```toml
+[voice.elevenlabs]
+api_key_env = "ELEVENLABS_API_KEY"   # the env var's name, never the key
+model = "eleven_v4_turbo"            # used when the character's choice names no model
+base_url = "https://api.elevenlabs.io"
+timeout_ms = 20000                   # one request, at most
+```
+
+### Who speaks a character
+
+The effective choice is built field by field:
+
+1. the daemon's `[voice]` (the file's own kokoro fields);
+2. the package's `[voice]` over it (`provider`, the kokoro fields, and `[voice.elevenlabs]` with
+   `model` and `speed`);
+3. the operator's local override, `<data>/characters/<id>/voice.json` (gitignored), which wins.
+
+```json
+{
+  "provider": "elevenlabs",
+  "kokoro": { "voice": "malakor-a", "sid": 52 },
+  "elevenlabs": { "voice_id": "<a voice in your account>", "model": "eleven_v4_turbo", "speed": 1.08 }
+}
+```
+
+The override is written by the console (Characters > Voice, `voice.settings.set`) or by hand. Only
+the chosen provider's table is read; the other is kept, so switching back keeps its settings. An
+ElevenLabs `voice_id` normally lives only in the override, so sharing a package never shares it.
+Speeds must be 0.5 to 2.0 for Kokoro and 0.7 to 1.2 for ElevenLabs; an ElevenLabs voice without
+a speed speaks at 1.08. The kokoro `speed` is not passed to the sidecar: Kokoro Plus takes its
+speed per line, from the delivery.
+
+**A change takes effect at the next stream start.** Each run's `stream_start` resolves the
+streaming character's choice. When it differs from the voice that is speaking, the daemon replaces
+the renderer before the run's first line: it starts a new sidecar with the new arguments, or an
+ElevenLabs renderer. There is no daemon restart. At daemon start the voice is the one for
+`[sim] character`. The `/voice` status names the provider (`provider`) and the voice (`voice`:
+the Kokoro voice id, or the ElevenLabs voice's name).
+
+### Never a fallback
+
+A provider never falls back to another. When ElevenLabs refuses the key (401/403) the voice is
+`degraded` with "elevenlabs: key rejected"; a missing key is `degraded` with the env var's name.
+A network error or a timeout skips that line with `error`. Captions carry the show, and the
+status says why the voice is silent.
+
+### Delivery
+
+The brain's delivery cue (`[sarcasm 0.8 slow] ...`) reaches the provider:
+
+- **Kokoro Plus** turns it into speed, pauses, emotion blends and mild pitch (the sidecar).
+- **ElevenLabs** opens each sentence with an inline audio tag: menace `[menacing]`, glee
+  `[excited]`, deadpan `[deadpan]`, hushed `[whispers]`, outrage `[outraged]`, sarcasm
+  `[sarcastic]`, weary `[sighs]`, triumph `[proclaiming]`, tender `[softly]`. A neutral line, or
+  an intensity under 0.4, gets no tag. The pace has no tag: pauses are punctuation. The voice's
+  `speed` goes in `voice_settings`; a model that refuses it is asked without it, and the daemon
+  says so once on stderr.
+
+### Preview, bench and verify (the console)
+
+- `voice.settings.get {character}`: the package, override and effective choices, a label
+  ("ElevenLabs Malakor (crypt king alt1), eleven_v4_turbo", "Kokoro malakor-a (sid 52), fx
+  light") and each provider's readiness. The key state is `not_needed`, `missing`, `set`,
+  `verified` or `rejected`, never the key. Kokoro's readiness here checks the engine's files and
+  the voices file; `voice.verify` runs the whole `voice check`.
+- `voice.settings.set {character, choice}`: writes the override (atomic, at most 4 KB, only
+  inside `<data>`); `choice: null` clears it. An unknown character is `invalid_params`.
+- `voice.verify {provider}`: for ElevenLabs, one `GET /v1/user`. 401/403 is `rejected`; a
+  network error, a 429 or a key without account read permission leaves it `set`, with the
+  reason. The last verdict and its `checked_ms` stay in memory and come back in
+  `voice.settings.get`.
+- `voice.preview {character, text, delivery?}`: speaks one line, at most 400 characters, with
+  the character's effective choice. The text passes the brain's output gate first; a refused line
+  is `invalid_params` with the gate's reason. It renders through a renderer of its own (a second
+  sidecar for Kokoro), never the show's queue, one preview at a time (`busy` otherwise).
+- `voice.bench {character}`: renders the package's `voice/bench.toml` (`[[line]] id, text,
+  emotion, intensity, pace`) the same way, one line at a time. A line that fails carries its
+  `error`, and the rest go on. A package without the file is `not_found`.
+
 ## The sidecar
 
 ```
@@ -378,7 +474,7 @@ shadowrunr voice check
 ```
 
 ```
-[voice] is enabled (voice af_heart, sid 3)
+[voice] is enabled; malakor speaks with Kokoro malakor-a (sid 52), fx light
 item                   state    detail
 engine                 ok       bin\sherpa-onnx-offline-tts.exe in engine_dir
 kokoro model.onnx      ok       kokoro\model.onnx in engine_dir
@@ -395,6 +491,16 @@ voice: ready to speak, with mouth shapes
 `MISSING` (upper case) is an item the voice needs. `missing` (lower case) only costs the mouth
 shapes; the stage then moves the mouth from loudness. `--json` prints the items.
 
+The rows are for the provider `[sim] character` resolves to. For ElevenLabs they are the key's
+env var (set or missing, never its value), the `voice_id` and the model:
+
+```
+item              state    detail
+elevenlabs key    ok       ELEVENLABS_API_KEY is set
+elevenlabs voice  ok       voice_id <id>
+elevenlabs model  ok       eleven_v4_turbo, speed 1.08
+```
+
 | Exit | `voice check` |
 | --- | --- |
 | 0 | everything needed to speak is present (mouth shapes are optional) |
@@ -408,23 +514,27 @@ shadowrunr voice say "I am Malakor. Kneel before the ledger of doom, mortals. Yo
 ```
 
 ```
-sidecar ready in 865 ms, mouth shapes on
-part 0  at  1845 ms   1067 ms audio   10 visemes  I am Malakor.
-part 1  at  4047 ms   2382 ms audio   24 visemes  Kneel before the ledger of doom, mortals.
-part 2  at  6217 ms   1336 ms audio   16 visemes  Your socks are forfeit.
-3 part(s), 4785 ms of audio, 50 visemes, first part after 1845 ms, all in 6219 ms
+malakor speaks with Kokoro malakor-a (sid 52), fx light
+voice ready in 865 ms, mouth shapes on
+part 0  at  1845 ms   1067 ms audio   10 visemes   13 chars  I am Malakor.
+part 1  at  4047 ms   2382 ms audio   24 visemes   41 chars  Kneel before the ledger of doom, mortals.
+part 2  at  6217 ms   1336 ms audio   16 visemes   23 chars  Your socks are forfeit.
+3 part(s), 4785 ms of audio, 50 visemes, 77 chars, first part after 1845 ms, all in 6219 ms
 wrote <data>\voice\say-<ms>.wav
 ```
 
-This runs the sidecar once, without a daemon, whether or not `[voice] enabled` is set. Each
-sentence prints as it arrives: when it arrived after the `say`, its audio length, its mouth
-shapes and its text. `--out` with no path writes `<data>/voice/say-<ms>.wav`, and `--out PATH`
-writes to PATH.
+This speaks the line once, without a daemon, whether or not `[voice] enabled` is set, in the
+character's effective voice (`--character`, default `[sim] character`; `--provider kokoro|elevenlabs`
+picks the provider, with that provider's settings from the character's choice). The line passes
+the brain's output gate first, and may open with a delivery cue (`[menace 0.8 slow] Kneel.`).
+Each sentence prints as it arrives: when it arrived after the `say`, its audio length, its mouth
+shapes, the characters sent to the provider and its text. `--out` with no path writes
+`<data>/voice/say-<ms>.wav`, and `--out PATH` writes to PATH.
 
 | Exit | `voice say` |
 | --- | --- |
 | 0 | the whole line was spoken |
-| 1 | the sidecar did not start, or a sentence failed or timed out |
+| 1 | the voice did not start, the gate refused the line, or a sentence failed or timed out |
 | 2 | usage error |
 
 ### Measure with a replay
@@ -554,12 +664,17 @@ happen, on the session's stream clock (the transcript's `ts_ms` clock).
 
 | `event` | Written when | Keys |
 | --- | --- | --- |
-| `queued` | the line entered the voice's queue | `text` |
-| `rendered` | the daemon sent a sentence's `utterance` | `part`, `last`, `duration_ms`, `text` |
+| `queued` | the line entered the voice's queue | `text`, `provider`, `delivery` (when the line carried a cue) |
+| `rendered` | the daemon sent a sentence's `utterance` | `part`, `last`, `duration_ms`, `text`, `provider`, `chars`, `timings` |
 | `skipped` | the daemon skipped the line from `part` | `part`, `reason` (`late`, `queue_full`, `error`, `unfollowed`) |
 | `played` | the stage started playing a part | `part` |
 | `stage_dropped` | the stage dropped the whole line | `reason` (`stage_cap`) |
 | `face` | the stage changed the face it draws | `reason` (`rig`, `silhouette`); `seq` is 0 |
+
+**Usage.** `chars` is what the part sent to its provider, the unit ElevenLabs bills; sum it over
+a run's `rendered` lines for the stream's spend. Nothing caps it. `timings` says where the part's
+timing came from: `durations` (Kokoro's mouth timeline), `provider` (ElevenLabs' character
+timestamps came back; only that fact is logged, the mouth still follows loudness) or `none`.
 
 The log is a ledger: every `queued` line ends in its `rendered` parts (the last one with
 `last: true`) or in one `skipped`. `unfollowed` is the log's own reason, for a line whose run
