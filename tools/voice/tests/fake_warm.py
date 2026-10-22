@@ -9,7 +9,8 @@ Otherwise it answers ``0.1 s`` of a tone per word and, with ``--faced``, prints 
 before it. ``FAKE_WARM_LOAD=fail`` makes it fail its load. Every sentence appends its text to
 ``FAKE_ENGINE_LOG``, ``start``/``end`` lines to ``FAKE_ENGINE_SPANS``, and the worker's pid to
 ``FAKE_WARM_PIDS``, when those name files; each priority it is given (``urgent`` or ``below``)
-goes to ``<pid>.txt`` in the directory ``FAKE_WARM_PRIORITY`` names.
+goes to ``<pid>.txt`` in the directory ``FAKE_WARM_PRIORITY`` names. ``FAKE_WARM_REQUESTS`` gets
+each sentence request as it came, as JSON, so a test can see its ``sid`` and ``speed``.
 
 Per spawn, for the pool's supervision: ``FAKE_WARM_SPAWNS`` names a directory where each worker
 claims the next spawn number ``n`` by creating ``<n>.txt`` (holding its pid) before it loads.
@@ -105,6 +106,7 @@ def main(argv: list[str]) -> int:
         if "text" not in message:
             continue
         text = message["text"]
+        note("FAKE_WARM_REQUESTS", json.dumps(message, sort_keys=True))
         note("FAKE_ENGINE_LOG", text.strip())
         note("FAKE_WARM_PIDS", str(os.getpid()))
         note("FAKE_ENGINE_SPANS", f"start {text.strip()}")

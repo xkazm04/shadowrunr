@@ -16,3 +16,72 @@ bm_lewis = 0.4
 am_onyx = 0.45
 am_echo = 0.35
 bm_george = 0.2
+
+# Kokoro Plus: malakor-a's emotion blends, one per emotion of the delivery cue (the voice lab,
+# 2026-10-22). Each keeps malakor-a at 0.6 or more and leans toward one stock voice; it takes
+# the slot named by `sid` in the same voices file. Every lean but onyx raised the dry pitch, so
+# `pitch_correction` (semitones) puts the blend back in malakor-a's register: malakor-a's dry
+# median F0 over the blend's, on one probe sentence (n=1 render each; malakor-a 93.1 Hz).
+
+[emotions.menace]
+# Darker, heavier low end (92.0 Hz).
+malakor-a = 0.65
+am_onyx = 0.35
+sid = 50
+pitch_correction = 0.21
+
+[emotions.glee]
+# Bright, bouncy (102.7 Hz).
+malakor-a = 0.60
+am_puck = 0.40
+sid = 49
+pitch_correction = -1.70
+
+[emotions.deadpan]
+# A level British newsreader (104.5 Hz).
+malakor-a = 0.65
+bm_daniel = 0.35
+sid = 48
+pitch_correction = -1.99
+
+[emotions.hushed]
+# Breathy, close-mic (108.7 Hz). Kokoro has no whisper: this is a close, level read.
+malakor-a = 0.70
+af_nicole = 0.30
+sid = 47
+pitch_correction = -2.67
+
+[emotions.outrage]
+# Forceful, edgy (112.1 Hz).
+malakor-a = 0.60
+am_fenrir = 0.40
+sid = 46
+pitch_correction = -3.21
+
+[emotions.sarcasm]
+# An expressive storyteller (105.8 Hz).
+malakor-a = 0.65
+bm_fable = 0.35
+sid = 45
+pitch_correction = -2.22
+
+[emotions.weary]
+# Soft, low (100.3 Hz).
+malakor-a = 0.65
+am_echo = 0.35
+sid = 44
+pitch_correction = -1.29
+
+[emotions.triumph]
+# Declamatory (112.1 Hz).
+malakor-a = 0.60
+bm_george = 0.40
+sid = 43
+pitch_correction = -3.21
+
+[emotions.tender]
+# Warm (99.9 Hz).
+malakor-a = 0.65
+am_michael = 0.35
+sid = 42
+pitch_correction = -1.22
