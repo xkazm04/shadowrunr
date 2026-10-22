@@ -1640,7 +1640,11 @@
           "revision": 3,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/onair/ClipActions.tsx:73 The derived-clip approval surface requests a general attestation without the contract’s four explicit review checks, allowing approval without recording those checks.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:14fcb9b8c64f1b8b",
+          "evaluatedRevision": 3
         },
         {
           "subject": "data-video-art-direction",
@@ -5556,7 +5560,11 @@
           "revision": 3,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/window.rs:277 The cutter rejects recuts against duration bands explicitly documented as unmeasured craft defaults, making uncalibrated parameters into validators.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:14fcb9b8c64f1b8b",
+          "evaluatedRevision": 3
         },
         {
           "subject": "media-playback",

@@ -3166,6 +3166,68 @@
           "evidence": "characters/malakor/tones/unhinged-roastmaster.md:48 Theatrical is designated as the control, but the variant bet sheets lack quantitative hypotheses and explicit falsifiers or retirement thresholds."
         }
       ]
+    },
+    "12e5be0b-9811-4c5b-a7ec-8a57e204d016/platform-format-adaptation": {
+      "context": "clips-pipeline",
+      "subject": "platform-format-adaptation",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T03:15:42.834Z",
+      "worker": "ad4420a1-1b47-40b5-a0ad-5bc83ac311e0",
+      "techniques": [
+        {
+          "technique": "derived-short-contract",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/store.rs:294 Approval records a general context-and-caption attestation instead of the four explicit pass/fail checks, including an explicit final pointer to the parent."
+        },
+        {
+          "technique": "format-as-measured-template",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/window.rs:275 Recuts exceeding the band are refused, although lines 12–13 explicitly identify the bands as defaults rather than measurements."
+        },
+        {
+          "technique": "hook-shape-selection",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:21 The hook read scores whether an excerpt contains a hook; it does not select a subject-appropriate opening shape or require that hook at second zero."
+        },
+        {
+          "technique": "one-anchor-per-clip",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/scan.rs:507 Overlapping candidates merge on segment and duration alone, without checking that their beats retain one idea on one concrete anchor."
+        },
+        {
+          "technique": "sound-off-first-design",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/scan.rs:203 Captions retain speech-relative starts while voice-timed cuts may open 400 ms earlier, leaving opening frames without the required second-zero hook text."
+        }
+      ]
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/platform-format-adaptation": {
+      "context": "console-onair-page",
+      "subject": "platform-format-adaptation",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T03:15:42.834Z",
+      "worker": "ad4420a1-1b47-40b5-a0ad-5bc83ac311e0",
+      "techniques": [
+        {
+          "technique": "derived-short-contract",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/onair/ClipActions.tsx:47 Approval readiness requires the daemon allowance, signature and any override reason, without separate completeness, different-question, final-parent-pointer or setup-independence checks."
+        },
+        {
+          "technique": "hook-shape-selection",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/ClipDetail.tsx:179 This context displays an existing hook assessment; it does not write opening sentences or provide a hook picker."
+        },
+        {
+          "technique": "image-led-vs-narration-led",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:42 The console consumes rendered media for playback and review rather than setting script word budgets or handing scripts to frame planning."
+        }
+      ]
     }
   }
 }
