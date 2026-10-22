@@ -2755,6 +2755,43 @@
           "evidence": "apps/console/src/pages/onair/ClipDetail.tsx:132 This context displays stored intervals, pre-roll, duration bands and re-authoring flags; it does not choose or change clip boundaries."
         }
       ]
+    },
+    "7bbc93eb-a921-49ea-a5b3-128e66bd5e64/conversation-orchestration": {
+      "context": "stage-avatar-renderer",
+      "subject": "conversation-orchestration",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T01:07:49.524Z",
+      "worker": "87b06075-c674-410b-9987-061d49809181",
+      "techniques": [
+        {
+          "technique": "layered-avatar-state-machine",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/avatar/types.ts:18 The driver consumes this two-state vocabulary; its source follows voice playback or captions rather than generation start and terminal events."
+        }
+      ]
+    },
+    "438f47d8-694c-4986-92b2-bbba5af4a1c1/conversation-orchestration": {
+      "context": "brain-composition-memory",
+      "subject": "conversation-orchestration",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T01:07:49.524Z",
+      "worker": "87b06075-c674-410b-9987-061d49809181",
+      "techniques": [
+        {
+          "technique": "progress-beat-grammar",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:1131 The core reply is awaited before parse_reply processes its text; slow calls receive prepared stall lines rather than model-authored progress extracted from a live tail."
+        },
+        {
+          "technique": "recall-transparency",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/compose.rs:773 Retrieved viewer facts and episodes enter the model prompt, but the recall path and event contract provide no inspectable pre-answer disclosure or attached correction door."
+        }
+      ]
     }
   }
 }

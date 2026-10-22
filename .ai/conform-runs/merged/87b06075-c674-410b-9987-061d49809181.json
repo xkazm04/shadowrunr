@@ -1,0 +1,75 @@
+{
+ "schema": "conform-run/1",
+ "worker": "87b06075-c674-410b-9987-061d49809181",
+ "subject": "conversation-orchestration",
+ "evaluatedAt": "2026-10-22T01:07:49.524105+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "stage-avatar-renderer",
+   "subject": "conversation-orchestration",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/avatar/types.ts:18 The face distinguishes only idle and speaking, leaving an in-flight generation without a working state driven by the turn lifecycle.",
+   "techniques": [
+    {
+     "technique": "layered-avatar-state-machine",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/avatar/types.ts:18 The driver consumes this two-state vocabulary; its source follows voice playback or captions rather than generation start and terminal events."
+    }
+   ]
+  },
+  {
+   "context": "brain-composition-memory",
+   "subject": "conversation-orchestration",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-brain/src/lib.rs:996 The brain tracks and injects recalled memories internally without emitting an inspectable in-flight disclosure, preventing users from checking and correcting the grounding before the answer.",
+   "techniques": [
+    {
+     "technique": "progress-beat-grammar",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/lib.rs:1131 The core reply is awaited before parse_reply processes its text; slow calls receive prepared stall lines rather than model-authored progress extracted from a live tail."
+    },
+    {
+     "technique": "recall-transparency",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/compose.rs:773 Retrieved viewer facts and episodes enter the model prompt, but the recall path and event contract provide no inspectable pre-answer disclosure or attached correction door."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-22T01:07:49.524105+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "conversation-orchestration"
+   ],
+   "techniques": [
+    "layered-avatar-state-machine"
+   ],
+   "deviations": 1,
+   "context": "stage-avatar-renderer",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-22T01:07:49.524105+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "conversation-orchestration"
+   ],
+   "techniques": [
+    "progress-beat-grammar",
+    "recall-transparency"
+   ],
+   "deviations": 1,
+   "context": "brain-composition-memory",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

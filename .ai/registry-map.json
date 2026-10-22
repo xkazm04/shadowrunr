@@ -633,7 +633,11 @@
           "revision": 6,
           "changedAt": "2026-09-29",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-brain/src/lib.rs:996 The brain tracks and injects recalled memories internally without emitting an inspectable in-flight disclosure, preventing users from checking and correcting the grounding before the answer.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:f3ecee1630629b34",
+          "evaluatedRevision": 6
         },
         {
           "subject": "agent-runtime-assembly",
@@ -5123,7 +5127,11 @@
           "revision": 6,
           "changedAt": "2026-09-29",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/avatar/types.ts:18 The face distinguishes only idle and speaking, leaving an in-flight generation without a working state driven by the turn lifecycle.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:f3ecee1630629b34",
+          "evaluatedRevision": 6
         },
         {
           "subject": "quality-gates",
