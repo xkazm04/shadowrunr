@@ -1177,6 +1177,10 @@
       "additionalProperties": false,
       "description": "`[voice]`: each present field overrides the daemon's `[voice]` for this character.",
       "properties": {
+        "fx": {
+          "$ref": "#/$defs/VoiceFx",
+          "description": "The effect chain over each sentence."
+        },
         "sid": {
           "description": "The voice's verified speaker id.",
           "format": "uint32",
@@ -1190,6 +1194,10 @@
         },
         "voice": {
           "description": "TTS voice id, e.g. `af_heart`.",
+          "type": "string"
+        },
+        "voices_file": {
+          "description": "The voices file `sid` is read from, by name: a file in the daemon's `[voice] voices_dir`\n(`~/.shadowrunr/voices` by default), made on each machine from a committed recipe\n(`tools/voice/recipes`), never bundled. Absent: the model's own `voices.bin`.",
           "type": "string"
         }
       },
@@ -9845,6 +9853,26 @@
             "reason"
           ],
           "type": "object"
+        }
+      ]
+    },
+    "VoiceFx": {
+      "description": "The voice sidecar's effect chain (`tools/voice`, `--fx`): the same length out, so the mouth\ntimeline holds.",
+      "oneOf": [
+        {
+          "const": "none",
+          "description": "The engine's audio as it is.",
+          "type": "string"
+        },
+        {
+          "const": "light",
+          "description": "Pitch and formants a little down, light grit, a short crypt reverb.",
+          "type": "string"
+        },
+        {
+          "const": "heavy",
+          "description": "Further down, more grit, a doubled chest and a longer crypt.",
+          "type": "string"
         }
       ]
     },

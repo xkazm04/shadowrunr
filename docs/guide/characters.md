@@ -36,7 +36,7 @@ table or key means the engine's neutral default. An unknown key is an error.
 |---|---|---|
 | top level | `id` (the directory name), `name` (display name), `tagline`, `default_tone`, `foils`, `rails` | `tagline`, `foils` and `rails` empty |
 | `[identity]` | `name`, `title`, `address_words`, `reply_prefixes`, `patron`, `follower`, `researcher`, `sign_off`, `disclosure` | a neutral identity built from `name` (viewers, producer, researchers) |
-| `[voice]` | `voice`, `sid`, `speed` | the daemon's `[voice]` |
+| `[voice]` | `voice`, `sid`, `voices_file`, `fx` (`none`, `light` or `heavy`), `speed` | the daemon's `[voice]` |
 | `[avatar]` | `rig` (the rig spec in the package), `face` (`glow`, `cut` or `depth`) | the daemon's `[stage] avatar` |
 | `[ranks]` | a title per rank (`thrall` ... `dread_council`), `weights`, `thresholds`, `propose_min_rank` | the engine's titles and ladder (`segments/data/ranks.toml`) |
 | `[rules]` | `<rule-id> = true/false`: each rule's default | every rule file off |
@@ -159,9 +159,14 @@ would make it invalid is undone and refused with the issue named. The RPCs are i
 ## Voice, face and clips
 
 - **Voice.** The daemon's `[voice]` in `shadowrunr.toml` sets up the engine. The configured
-  character's (`[sim] character`) `[voice] voice` and `sid` override it field by field when the
-  daemon starts. `speed` is part of the schema but not applied yet: the voice sidecar has no
-  rate flag.
+  character's (`[sim] character`) `[voice] voice`, `sid`, `voices_file` and `fx` override it
+  field by field when the daemon starts. `voices_file` names a voices file by name only: it is
+  made on each machine from a recipe in the repo and found in the daemon's `[voice] voices_dir`
+  (`~/.shadowrunr/voices` by default), so the package never carries a path. A package whose
+  file is not there leaves the voice `degraded` with that reason, never speaking as another
+  voice. Malakor's is `malakor-a`, sid 52 of `malakor-voices.bin`, fx `light`
+  ([voice.md](voice.md#malakors-voice-the-blend-and-the-lich-chain) makes the file). `speed`
+  is part of the schema but not applied yet: the voice sidecar has no rate flag.
 - **Face renderer.** The configured character's `[avatar] face` overrides `[stage] avatar` in
   the stage URLs the daemon hands out.
 - **Face rig.** `/avatar/{file}` serves the rig of the character on air (the latest run in

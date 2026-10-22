@@ -10,8 +10,8 @@ lettered so the owner picks by ear, plus the stock ``af_heart`` as an unlettered
    once on the blended ones, and times each line on each voice at ``--threads``, the voices
    interleaved, the median of ``--reps``: the synthesis real-time factor.
 3. Renders each line on each blend with the face on, through a real warm worker
-   (:func:`.warm.serve` in a process of its own, only its voices file swapped for the blended
-   one: sherpa prints the token ids to its native stderr alone), works out the mouth shapes
+   (:func:`.warm.serve` in a process of its own, with ``--voices`` the blended file: sherpa
+   prints the token ids to its native stderr alone), works out the mouth shapes
    through the sidecar's own :class:`.sidecar.Faces` on the blended sid, and checks the timeline
    ends where the audio does.
 4. Runs :mod:`.fx` light and heavy over each blend's audio, timed, checking the length holds.
@@ -26,12 +26,10 @@ It needs the warm venv (sherpa_onnx, numpy, onnxruntime). Nothing here runs in t
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
 import os
 import random
 import statistics
-import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -129,20 +127,6 @@ def faced_render(worker: Any, line: str, faces: Faces) -> tuple[bytes, dict[str,
     return pcm, check
 
 
-def warm_child(argv: Sequence[str]) -> int:
-    """A warm worker (:func:`.warm.serve`, unchanged) reading ``--voices-file`` instead of the
-    engine dir's ``voices.bin``: sherpa prints the token ids only to its native stderr, which a
-    worker of its own hands back on its pipe, as in the sidecar."""
-    from . import engine, warm
-
-    if argv[:1] != ["--voices-file"] or len(argv) < 2:
-        print("bench: a warm child starts with --voices-file <file>", file=sys.stderr)
-        return 2
-    voices, rest = Path(argv[1]), list(argv[2:])
-    warm.paths_for = lambda d: dataclasses.replace(engine.paths_for(d), voices=voices)
-    return warm.serve(rest)
-
-
 def time_fx(pcm: bytes, preset: str, reps: int) -> tuple[bytes, float]:
     """The chain on one sentence: its output and the median seconds it took."""
     wet = fx.apply(pcm, preset)
@@ -168,7 +152,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     stock_paths = paths_for(engine_dir)
     meta = blend.build(stock_paths.voices, Path(args.recipe), Path(args.voices_out))
     blends = [(v["name"], int(v["sid"])) for v in meta["voices"]]
-    blend_paths = dataclasses.replace(stock_paths, voices=Path(args.voices_out))
+    blend_paths = paths_for(engine_dir, Path(args.voices_out))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -195,11 +179,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     fx_cost: dict[str, list[dict[str, Any]]] = {p: [] for p in PRESET_NAMES}
     wet: dict[tuple[str, str], list[bytes]] = {}
     for name, sid in blends:
-        python, _, _, *settings = warm.worker_argv(engine_dir, sid, args.threads, True)
-        argv = [
-            python, "-m", "shadowrunr_voice.bench", "--warm-child",
-            "--voices-file", str(blend_paths.voices), *settings,
-        ]  # fmt: skip
+        argv = warm.worker_argv(engine_dir, sid, args.threads, True, blend_paths.voices)
         worker = warm.Worker(argv, f"bench-{name}")
         worker.start()
         try:
@@ -246,9 +226,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    argv = list(sys.argv[1:] if argv is None else argv)
-    if argv[:1] == ["--warm-child"]:
-        return warm_child(argv[1:])
     parser = argparse.ArgumentParser(prog="shadowrunr_voice.bench")
     parser.add_argument("--engine-dir", default=os.environ.get("SHADOWRUNR_VOICE_ENGINE_DIR"))
     parser.add_argument("--durations", default=os.environ.get("SHADOWRUNR_VOICE_DURATIONS"))

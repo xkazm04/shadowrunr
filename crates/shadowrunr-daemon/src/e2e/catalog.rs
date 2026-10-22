@@ -254,7 +254,7 @@ async fn character_get_shows_the_v2_tables_and_validate_lists_issues() {
     let d: CharacterDetail = typed(&v);
     assert!(!has_null(&v), "{v}");
     assert_eq!(d.identity.as_ref().unwrap().follower.many, "minions");
-    assert_eq!(d.voice.as_ref().unwrap().sid, Some(3));
+    assert_eq!(d.voice.as_ref().unwrap().sid, Some(52));
     assert_eq!(d.avatar.as_ref().unwrap().face.as_deref(), Some("cut"));
     assert!(
         d.rank_overrides.is_none(),

@@ -61,6 +61,7 @@ from .engine import (
     paths_for,
     scale_silence,
     token_lines,
+    voices_problem,
 )
 
 __all__ = [
@@ -106,7 +107,9 @@ def missing_package() -> str | None:
     return None
 
 
-def worker_argv(engine_dir: Path, sid: int, threads: int, faced: bool) -> list[str]:
+def worker_argv(
+    engine_dir: Path, sid: int, threads: int, faced: bool, voices: Path | None = None
+) -> list[str]:
     """A worker's command line: this interpreter, the package's module, its settings."""
     argv = [
         sys.executable,
@@ -119,6 +122,8 @@ def worker_argv(engine_dir: Path, sid: int, threads: int, faced: bool) -> list[s
         "--threads",
         str(max(threads, 1)),
     ]
+    if voices is not None:
+        argv += ["--voices", str(voices)]
     if faced:
         argv.append("--faced")
     return argv
@@ -693,14 +698,18 @@ def serve(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--engine-dir", required=True)
     parser.add_argument("--sid", type=int, default=3)
     parser.add_argument("--threads", type=int, default=2)
+    parser.add_argument("--voices", default=None, help="a voices file other than kokoro/voices.bin")
     parser.add_argument("--faced", action="store_true", help="print token ids, keep pauses whole")
     args = parser.parse_args(argv)
     out = sys.stdout.buffer
     began = time.monotonic()
-    paths = paths_for(Path(args.engine_dir))
+    paths = paths_for(Path(args.engine_dir), Path(args.voices) if args.voices else None)
     missing = paths.missing(exe=False)
     if missing:
         _say(out, {"ready": False, "reason": f"{missing[0]} is missing from the engine dir"})
+        return 1
+    if paths.own_voices and (problem := voices_problem(paths, args.sid)) is not None:
+        _say(out, {"ready": False, "reason": problem})
         return 1
     try:
         import numpy as np

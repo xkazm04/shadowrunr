@@ -29,6 +29,14 @@ export type Stimulus = "message" | "silence" | "vote" | "wave";
  */
 export type Provenance = "measured" | "assumption";
 /**
+ * The voice sidecar's effect chain (`tools/voice`, `--fx`): the same length out, so the mouth
+ * timeline holds.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "VoiceFx".
+ */
+export type VoiceFx = "none" | "light" | "heavy";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "CharacterListResult".
  */
@@ -1510,6 +1518,7 @@ export interface TuningRow {
  * via the `definition` "CharacterVoice".
  */
 export interface CharacterVoice {
+  fx?: VoiceFx;
   /**
    * The voice's verified speaker id.
    */
@@ -1522,6 +1531,12 @@ export interface CharacterVoice {
    * TTS voice id, e.g. `af_heart`.
    */
   voice?: string;
+  /**
+   * The voices file `sid` is read from, by name: a file in the daemon's `[voice] voices_dir`
+   * (`~/.shadowrunr/voices` by default), made on each machine from a committed recipe
+   * (`tools/voice/recipes`), never bundled. Absent: the model's own `voices.bin`.
+   */
+  voices_file?: string;
 }
 /**
  * Params of a method that takes none: `{}`.

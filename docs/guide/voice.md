@@ -6,6 +6,10 @@ when its Python has sherpa-onnx (the warm engine), otherwise by `sherpa-onnx-off
 per sentence. Nothing is sent anywhere. The voice is optional and off by default. With it off, degraded or slow, the stream
 runs exactly as it does without one, and the brain never waits on audio.
 
+Malakor's own voice is an original blend of stock Kokoro voices, `malakor-a`, under a light
+lich effects chain. It is made on each machine from a recipe in the repo, and it is described in
+[Malakor's voice: the blend and the lich chain](#malakors-voice-the-blend-and-the-lich-chain).
+
 The pieces:
 
 | Piece | What it does |
@@ -149,6 +153,9 @@ engine_dir = "<engine dir: bin/ and kokoro/>"
 durations_model = "<kokoro durations subgraph .onnx; absent = no mouth shapes>"
 voice = "af_heart"
 sid = 3
+# voices_file = "<a blended voices file>"
+# voices_dir = "~/.shadowrunr/voices"
+# fx = "none"
 max_queue = 6
 max_lag_ms = 15000
 render_timeout_ms = 30000
@@ -165,6 +172,13 @@ render_workers = 3
 | `engine_dir` | none | The sherpa-onnx TTS home described above. |
 | `durations_model` | none | Kokoro's durations subgraph. Without it there are no mouth shapes. |
 | `voice`, `sid` | `af_heart`, `3` | The voice and its verified speaker id. A wrong sid speaks as somebody else. |
+| `voices_file` | none | The voices file `sid` is read from (`--voices`): a name in `voices_dir`, or an absolute path. Absent: the model's own `kokoro/voices.bin`. |
+| `voices_dir` | `~/.shadowrunr/voices` | Where a `voices_file` name is found. Relative paths resolve against this file's directory; `~/` is your home. |
+| `fx` | none | The effects chain over each sentence (`--fx`): `none`, `light` or `heavy`. |
+
+The character package's `[voice]` (`characters/<id>/character.toml`) overrides `voice`, `sid`,
+`voices_file` and `fx` field by field (`characters.md`); the rest, `voices_dir` included, are
+the machine's. Malakor's package names `malakor-a`, sid 52 of `malakor-voices.bin`, fx `light`.
 | `max_queue` | `6` | Lines waiting to render. Past this, the oldest is skipped (`queue_full`). |
 | `max_lag_ms` | `15000` | A line whose first audio cannot start this soon after its `say` is skipped (`late`). |
 | `render_timeout_ms` | `30000` | One sentence's render, at most. Past it, the line is skipped (`error`). |
@@ -175,15 +189,25 @@ render_workers = 3
 ## The sidecar
 
 ```
-python -m shadowrunr_voice --engine-dir <dir> [--durations <onnx>] --sid 3 --voice af_heart [--render-timeout-ms N] [--workers N] [--threads N] [--engine auto|warm|process]
+python -m shadowrunr_voice --engine-dir <dir> [--durations <onnx>] [--voices <file>] --sid 3 --voice af_heart [--fx none|light|heavy] [--render-timeout-ms N] [--workers N] [--threads N] [--engine auto|warm|process]
 ```
 
 The package is found from the `sidecar` directory (as the working directory, or on
 `PYTHONPATH`). It speaks JSON lines on stdio, one object per line:
 
-- First, `hello`: the protocol version, the voice, the sample rate (24000), whether mouth shapes
-  are on, and a `reason`: what is missing, then the engine in use. On the warm engine it comes
-  once every worker has loaded.
+- First, `hello`: the protocol version, the voice, the voices file's name (`voices`, never its
+  path), the `sid`, the `fx` preset, the sample rate (24000), whether mouth shapes are on, and a
+  `reason`: what is missing, then the engine in use. On the warm engine it comes once every
+  worker has loaded.
+- **The voices file.** `--voices` replaces `kokoro/voices.bin` for every reader of it: the warm
+  workers, the binary and the durations model behind the mouth shapes. A file that is missing,
+  is not the stock file's size, or lacks `--sid` among its speakers makes the voice dead: the
+  hello's `reason` says why (`the voices file malakor-voices.bin is missing`) and names no
+  engine, and every `say` fails with it. Nothing falls back to another voice.
+- **The effects chain.** `--fx light` or `heavy` runs `shadowrunr_voice.fx` over each sentence
+  after the pause cut and after its mouth shapes are worked out on the dry audio. The chain
+  keeps the sample count exactly, so the mouth timeline holds. It needs numpy; without it the
+  voice is dead too (`fx light needs numpy, which is not installed`), never silently dry.
 - For each `say`, the line is cut into sentences. A first sentence over about 120 characters is
   cut at a comma, so the first audio starts early. Each sentence is one render, and each
   sentence goes out as one `audio` message: mono PCM16 in base64, plus its mouth shapes in
@@ -262,18 +286,88 @@ The real-engine smoke test runs only when `SHADOWRUNR_VOICE_ENGINE_DIR` names th
 it checks the mouth shapes too when `SHADOWRUNR_VOICE_DURATIONS` names the durations subgraph and
 the interpreter has numpy and onnxruntime.
 
+## Malakor's voice: the blend and the lich chain
+
+Malakor speaks as `malakor-a`, an original voice: 0.6 of `am_onyx` and 0.4 of `bm_lewis`, two
+stock Kokoro v1.0 voices (Apache-2.0) mixed by weight, under the `light` effects chain. The
+owner picked it blind on 2026-10-22 from four lettered candidates (two blends, each with the
+`light` and `heavy` chains; `python -m shadowrunr_voice.bench`). No real person's voice is
+used, and nothing is cloned.
+
+**The blend.** Kokoro reads a voice as a table of style rows per speaker in `voices.bin` (raw
+float32, 53 speakers x 510 rows x 256). `python -m shadowrunr_voice.blend` writes a copy of the
+stock file with each blend of a recipe summed row by row into a slot of its own. sherpa-onnx
+refuses a voices file of any other size, so a blend replaces a speaker the show never uses:
+`malakor-a` takes sid 52 (`zm_yunyang`), and `malakor-b`, the other candidate, sid 51. The
+engine and the mouth shapes' durations model read the same file and the same sid, so the
+render speed and the mouth sync are those of any stock voice. The recipe is
+`tools/voice/recipes/malakor.toml`; the blended file is generated, local, and never committed.
+
+**The lich chain.** `light` drops the pitch 2.5 semitones and the formants to 0.92 in one
+spectral pass, adds a little `tanh` grit and a presence lift, a 0.9 s crypt reverb from an
+impulse generated from a fixed seed, then a compressor and a look-ahead limiter
+(`tools/voice/shadowrunr_voice/fx.py`). The same input always gives the same bytes, and the
+output has exactly as many samples as the input.
+
+**Making the voices file on a new machine.** From `tools/voice`, with any Python 3.11+ (the
+blend needs only the standard library):
+
+```
+python -m shadowrunr_voice.blend --voices <engine dir>/kokoro/voices.bin --recipe recipes/malakor.toml
+```
+
+It writes `~/.shadowrunr/voices/malakor-voices.bin` (the recipe's name plus `-voices.bin`)
+and `malakor-voices.bin.json` beside it, and prints each blend's sid and the output's sha256.
+`--out <file>` writes elsewhere; then point `[voice] voices_dir` (or `voices_file`) at it. The
+same stock file and recipe give the same bytes. From the stock kokoro-multi-lang-v1_0
+`voices.bin` (sha256 `8a77c0d3...`), `malakor.toml` makes a file of sha256 `71b97216...`
+(written twice, on 2026-10-21 and 2026-10-22, byte for byte the same). A file of another size
+or a missing one leaves the voice `degraded` with the reason; the daemon never falls back to
+another voice.
+
+**What it costs** (one 8-core host, CPU only, 4 threads per render, n = 5 timed renders of each
+of 3 lines, 2026-10-21): synthesis on `malakor-a` runs at RTF 0.27 to 0.28 against 0.25 to 0.29
+for `af_heart`; the `light` chain takes 37 to 134 ms for 3.7 to 10.2 s of audio (RTF 0.010 to
+0.013), in the sender, after the mouth shapes. Each line's mouth timeline ended exactly where its
+audio did. `malakor-a` speaks about 6 to 8% slower than `af_heart` (3.73 against 3.46 s on the
+short line).
+
+Replays of a 10-minute sandbox show (56 lines; `shadowrunr voice replay`, 3 warm workers,
+mouth shapes on; 2026-10-22, stock and `malakor-a` + `light` interleaved, n = 2 each, on a
+machine shared with other jobs):
+
+| Voice | Lines voiced | First audio p50 / p90 | Audio made |
+|---|---|---|---|
+| `af_heart` | 56/56, 56/56 | 2.0 / 2.8 s, 2.3 / 3.4 s | 391 s |
+| `malakor-a`, fx `light` | 56/56, 56/56 | 2.3 / 3.1 s, 3.2 / 4.0 s | 410 s |
+
+Driving the sidecar directly on the three bench lines (n = 5 each, interleaved, same day): the
+engine rendered at RTF 0.39 for `af_heart` and 0.37 for `malakor-a`, and from `say` to the
+line's last sentence (render, chain and send) took 0.31 against 0.29 of the line's audio at the
+median. The blend and the chain cost no measurable speed; the spread between runs is the
+machine's load.
+
+**The next step: fine-tuning.** The blend is the baseline. For production quality the next
+phase is fine-tuning an original designed voice (no cloning) if the blend proves not distinct
+enough; nothing for it is built yet.
+
 ## Disclosure
 
-While the voice is on, the stage shows "synthetic voice". The voice is Kokoro's stock `af_heart`
-(sid 3 of kokoro-multi-lang-v1_0). It is no real person's voice, and voice cloning is out of
-scope. Malakor is an original character.
+While the voice is on, the stage shows "synthetic voice". The voice is `malakor-a`, an original
+blend of stock Kokoro voices (kokoro-multi-lang-v1_0, Apache-2.0) under the lich effects chain
+(above). It is no real person's voice, and voice cloning is out of scope. Malakor is an original
+character.
 
 ## The daemon and the CLI
 
 With `[voice] enabled = true`, `shadowrunr daemon` starts one voice service. It spawns the
 sidecar (`python -m shadowrunr_voice` in `[voice] sidecar`) with arguments from `[voice]`:
-`--engine-dir`, `--durations` (when set), `--sid`, `--voice`, `--render-timeout-ms`,
-`--workers` and `--threads` (when set); the engine is the sidecar's `auto` choice. The
+`--engine-dir`, `--durations` (when set), `--voices` (the `voices_file`, when set), `--sid`,
+`--voice`, `--fx` (when set), `--render-timeout-ms`, `--workers` and `--threads` (when set);
+the engine is the sidecar's `auto` choice. Once the sidecar is ready the status `reason` starts
+with the voice its hello names, then the engine: `malakor-a (sid 52), fx light, voices
+malakor-voices.bin; engine: warm (3 workers loaded in 3.3 s)` (the fx is left out when it is
+`none`, and the file when it is the model's own `voices.bin`). The
 startup line ends with `(voice on)`. With the voice off, nothing is spawned and `/voice` says
 `off`.
 
@@ -417,7 +511,7 @@ also carries each line's outcome, as `outcomes`. A malformed `--arms`, `--baseli
 | `off` | `[voice] enabled = false` |
 | `starting` | the sidecar is loading (its `hello` has not arrived) |
 | `ready` | speaking; `visemes` says whether mouth shapes come with it, and `reason` says why not |
-| `degraded` | Kokoro's files are missing (nothing is spawned, and nothing retries until the config changes), the binary is missing and the sidecar's `hello` does not name the warm engine, the sidecar exited, or renders keep failing |
+| `degraded` | Kokoro's files are missing (nothing is spawned, and nothing retries until the config changes), the sidecar's `hello` names no engine because the voice cannot speak (its voices file is missing or the wrong size, or its fx needs numpy; the reason is the hello's, after the voice, and nothing retries), the binary is missing and the `hello` does not name the warm engine, the sidecar exited, or renders keep failing |
 
 When the sidecar exits, any line in flight is skipped from the part it reached. The sidecar
 restarts after 1 s, and the wait doubles on each exit up to 60 s. It restarts at most 3 times
