@@ -48,11 +48,11 @@ pub const MAX_INPUT_CHARS: usize = 2_000;
 /// The most candidates one `tone.variants` call asks for.
 pub const MAX_VARIANTS: u32 = 5;
 
-/// One Tone Lab write at a time, over every package: the read, edit, write and validation of a
-/// file never interleave with another.
-static WRITE_LOCK: Mutex<()> = Mutex::new(());
+/// One package write at a time (the Tone Lab's and the segment directions'), over every
+/// package: the read, edit, write and validation of a file never interleave with another.
+pub(crate) static WRITE_LOCK: Mutex<()> = Mutex::new(());
 
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, RpcError> + Send + 'static,
 ) -> Result<T, RpcError> {
     tokio::task::spawn_blocking(f)
@@ -60,13 +60,13 @@ async fn blocking<T: Send + 'static>(
         .map_err(|e| RpcError::internal(format!("tone task: {e}")))?
 }
 
-fn io(path: &Path, e: impl std::fmt::Display) -> RpcError {
+pub(crate) fn io(path: &Path, e: impl std::fmt::Display) -> RpcError {
     RpcError::io(format!("{}: {e}", path.display()))
 }
 
 /// `invalid_params` unless `path` resolves inside `root` (both canonicalised: a symlink or a
 /// junction out of the characters directory is refused).
-fn contained(root: &Path, path: &Path) -> Result<PathBuf, RpcError> {
+pub(crate) fn contained(root: &Path, path: &Path) -> Result<PathBuf, RpcError> {
     let root = root.canonicalize().map_err(|e| io(root, e))?;
     let real = path.canonicalize().map_err(|e| io(path, e))?;
     if real.starts_with(&root) {
@@ -121,7 +121,7 @@ fn bank_path(cfg: &Config, dir: &Path, tone: &str) -> Result<PathBuf, RpcError> 
     Ok(path)
 }
 
-fn read_text(path: &Path) -> Result<Option<String>, RpcError> {
+pub(crate) fn read_text(path: &Path) -> Result<Option<String>, RpcError> {
     match std::fs::read_to_string(path) {
         Ok(t) => Ok(Some(t)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -157,7 +157,12 @@ fn errors(issues: Vec<CharacterIssue>) -> Vec<CharacterIssue> {
 /// Write `text` to `path` (package-relative `file`), then validate the package. When the write
 /// adds an error the file is put back as it was (or removed) and the call fails with
 /// `invalid_params`, the new issues in `detail.issues`.
-fn write_validated(dir: &Path, path: &Path, file: &str, text: &str) -> Result<(), RpcError> {
+pub(crate) fn write_validated(
+    dir: &Path,
+    path: &Path,
+    file: &str,
+    text: &str,
+) -> Result<(), RpcError> {
     let before_issues = errors(character::validate(dir));
     let before_text = read_text(path)?;
     if let Some(parent) = path.parent() {

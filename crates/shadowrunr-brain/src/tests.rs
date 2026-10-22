@@ -2029,6 +2029,7 @@ fn golden_pkg() -> CharacterPackage {
         lines: Default::default(),
         exemplars: Vec::new(),
         directions: None,
+        segment_directions: Default::default(),
         persona: shadowrunr_types::character::Persona::neutral("Golden Lich"),
         tuning: Default::default(),
         manifest: Default::default(),

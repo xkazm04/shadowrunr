@@ -1139,6 +1139,14 @@ export interface RpcMethods {
     params: SandboxIdParams;
     result: SandboxStatus;
   };
+  "segments.directions.get": {
+    params: SegmentDirectionsGetParams;
+    result: SegmentDirections;
+  };
+  "segments.directions.set": {
+    params: SegmentDirectionsSetParams;
+    result: SegmentDirections;
+  };
   "segments.tables": {
     params: EmptyParams;
     result: SegmentTables;
@@ -3941,6 +3949,46 @@ export interface SandboxJudge {
  */
 export interface SandboxIdParams {
   session_id: string;
+}
+/**
+ * `segments.directions.get`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SegmentDirectionsGetParams".
+ */
+export interface SegmentDirectionsGetParams {
+  character: string;
+  segment_id: SegmentId;
+}
+/**
+ * `segments/<SEG-ID>.md` as it stands.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SegmentDirections".
+ */
+export interface SegmentDirections {
+  character: string;
+  segment_id: SegmentId;
+  /**
+   * Empty when the file does not exist.
+   */
+  text: string;
+  /**
+   * The file's last write; absent when the file does not exist.
+   */
+  updated_ms?: number;
+}
+/**
+ * `segments.directions.set`: replace `segments/<SEG-ID>.md` with `text`. An empty text
+ * leaves an empty file, which the brain ignores.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SegmentDirectionsSetParams".
+ */
+export interface SegmentDirectionsSetParams {
+  character: string;
+  segment_id: SegmentId;
+  text: string;
 }
 /**
  * `segments.tables`.

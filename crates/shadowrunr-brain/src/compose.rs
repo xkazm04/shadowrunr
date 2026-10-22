@@ -7,8 +7,9 @@
 //!   system prompt. With no brief and no directions it is byte-identical to the prefix before
 //!   either existed (pinned by a golden test).
 //! - The **per-turn block** goes at the top of the user message, in fixed order: segment
-//!   rules and state; rank and viewer briefing; working set; recalled facts and episodes
-//!   (fitted to budget); tonight's prepared material when the orchestrator chose some (fenced;
+//!   rules and state (with the owner's directions for the live segment when the package has
+//!   them; byte-absent otherwise); rank and viewer briefing; working set; recalled facts and
+//!   episodes (fitted to budget); tonight's prepared material when the orchestrator chose some (fenced;
 //!   byte-absent otherwise); the through-line; the case's next move (byte-absent otherwise); the
 //!   voice section (exemplars for the beat's situation and the worn-out phrases; byte-absent
 //!   otherwise); the picked chat; the output-format instruction.
@@ -43,6 +44,10 @@ pub const RULES_HEADING: &str = "# Additional rules (enabled by the operator)";
 
 /// Heading of the owner's directions (`directions.md`) in the stable prefix.
 pub const DIRECTIONS_HEADING: &str = "Directions from the owner";
+
+/// Heading of the owner's directions for the live segment (`segments/<SEG-ID>.md`) inside the
+/// per-turn segment section.
+pub const SEGMENT_DIRECTIONS_HEADING: &str = "Directions from the owner for this segment";
 
 /// Constitution + enabled optional rules (sorted by id) + tone + bible. Depends only on the
 /// package, so it never changes mid-stream.
@@ -758,6 +763,14 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
         seg.push('\n');
         seg.push_str(&line);
     }
+    // The owner's directions for this segment: per turn, so the stable prefix never moves
+    // with the segment; byte-absent without `segments/<SEG-ID>.md`.
+    if let Some(d) = t.pkg.segment_directions.get(&t.ctx.segment) {
+        seg.push_str("\n\n## ");
+        seg.push_str(SEGMENT_DIRECTIONS_HEADING);
+        seg.push('\n');
+        seg.push_str(d.trim());
+    }
     let seg_id = seg_wire(t.ctx.segment);
     section(&mut s, &format!("Segment {seg_id}"), &seg);
 
@@ -974,6 +987,7 @@ mod tests {
             lines: Default::default(),
             exemplars: Vec::new(),
             directions: None,
+            segment_directions: Default::default(),
             // Malakor's words: these tests pin his judged notes.
             persona: malakor_persona(),
             tuning: Default::default(),
@@ -1320,5 +1334,76 @@ Do name the target.
             ),
             bare
         );
+    }
+
+    fn turn_in(pkg: &CharacterPackage, segment: SegmentId) -> String {
+        let ctx = SegmentContext {
+            segment,
+            rules_prompt: "R".into(),
+            state_summary: "S".into(),
+            state: String::new(),
+            allowed_ops: Vec::new(),
+            ccv: 1,
+            elapsed_s: 1,
+            hexes: Vec::new(),
+        };
+        compose_turn(&TurnInputs {
+            ctx: &ctx,
+            briefing: &[],
+            working_set: "",
+            facts: &[],
+            procedurals: &[],
+            window: &[],
+            picked: &[],
+            pkg,
+            active_foil: None,
+            nonce: 7,
+            fresh_bit: false,
+            brief: None,
+            care_note: None,
+            material: None,
+            beat_note: None,
+            room_note: None,
+            agenda: None,
+            voice: None,
+            budget_chars: 260,
+            propose_min_rank: Rank::Warlock,
+            first_contacts: &HashSet::new(),
+            case: None,
+            repeat_ai: &HashSet::new(),
+            ai_answered: false,
+        })
+    }
+
+    #[test]
+    fn segment_directions_enter_only_their_segment_s_turn_and_never_the_prefix() {
+        let bare = pkg();
+        let mut p = pkg();
+        p.segment_directions.insert(
+            SegmentId::Seg02aHexmap,
+            "Pin a record before you name it.\n".into(),
+        );
+        // The prefix holds across segments: the directions are per turn.
+        assert_eq!(stable_prefix(&p), stable_prefix(&bare));
+        let live = turn_in(&p, SegmentId::Seg02aHexmap);
+        let seg = format!(
+            "# Segment SEG-02A\nR\n\nState: S\nViewers watching: 1. Segment time: 1s.\n\n## \
+             {SEGMENT_DIRECTIONS_HEADING}\nPin a record before you name it.\n\n# "
+        );
+        assert!(live.starts_with(&seg), "{live}");
+        // Another segment's turn is byte-identical to a package without the file.
+        let other = turn_in(&p, SegmentId::Seg01ImprovisedRoom);
+        assert!(!other.contains(SEGMENT_DIRECTIONS_HEADING));
+        assert_eq!(other, turn_in(&bare, SegmentId::Seg01ImprovisedRoom));
+    }
+
+    #[test]
+    fn without_segment_directions_the_turn_is_byte_identical() {
+        // The segment section as it was before segment directions existed.
+        let turn = turn_in(&pkg(), SegmentId::Seg02aHexmap);
+        assert!(turn.starts_with(
+            "# Segment SEG-02A\nR\n\nState: S\nViewers watching: 1. Segment time: 1s.\n\n# "
+        ));
+        assert!(!turn.contains(SEGMENT_DIRECTIONS_HEADING));
     }
 }

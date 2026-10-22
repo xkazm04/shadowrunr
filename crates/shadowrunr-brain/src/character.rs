@@ -12,7 +12,7 @@ pub use shadowrunr_types::catalog::{Situation, Stimulus};
 use shadowrunr_types::character::{
     unknown_placeholders, CharacterLines, CharacterManifest, Persona, Tuning, PLACEHOLDERS,
 };
-use shadowrunr_types::Rank;
+use shadowrunr_types::{Rank, SegmentId};
 
 use crate::rules::{resolve_rules, CharacterRule, RulesOverride};
 use crate::stall::StallBank;
@@ -174,6 +174,9 @@ pub struct CharacterPackage {
     pub exemplars: Vec<BankLine>,
     /// `directions.md`: the owner's do and don't list, when present.
     pub directions: Option<String>,
+    /// `segments/<SEG-ID>.md`: the owner's directions for one segment, read into that
+    /// segment's per-turn section while it is live. Empty files are left out.
+    pub segment_directions: BTreeMap<SegmentId, String>,
     /// `[identity]` resolved: the words the engine's own text is filled from.
     pub persona: Persona,
     /// `[tuning]` over the engine defaults.
@@ -653,6 +656,7 @@ pub fn load_character_with(
     } else {
         None
     };
+    let segment_directions = load_segment_directions(dir)?;
 
     Ok(CharacterPackage {
         id: meta.id.clone(),
@@ -672,11 +676,83 @@ pub fn load_character_with(
         lines,
         exemplars,
         directions,
+        segment_directions,
         persona,
         tuning,
         manifest: meta,
     })
 }
+
+/// The package dir of the segment directions files.
+pub const SEGMENT_DIRECTIONS_DIR: &str = "segments";
+
+/// The package-relative path of a segment's directions file, `segments/<SEG-ID>.md`.
+pub fn segment_directions_file(seg: SegmentId) -> String {
+    format!("{SEGMENT_DIRECTIONS_DIR}/{}.md", segment_wire(seg))
+}
+
+/// `SEG-01`, `SEG-02A`: the segment's wire name, which names its directions file.
+pub fn segment_wire(seg: SegmentId) -> String {
+    serde_json::to_value(seg)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+/// The segment a wire name (`SEG-02A`) names, if any.
+pub fn parse_segment_id(s: &str) -> Option<SegmentId> {
+    serde_json::from_value(serde_json::Value::String(s.to_string())).ok()
+}
+
+/// Every `segments/*.md` keyed by its segment. A file whose stem names no segment is an
+/// error; an empty one is left out. No dir is no directions.
+fn load_segment_directions(dir: &Path) -> Result<BTreeMap<SegmentId, String>, BrainError> {
+    let mut out = BTreeMap::new();
+    let seg_dir = dir.join(SEGMENT_DIRECTIONS_DIR);
+    if !seg_dir.is_dir() {
+        return Ok(out);
+    }
+    let entries = fs::read_dir(&seg_dir)
+        .map_err(|e| BrainError::Package(format!("{}: {e}", seg_dir.display())))?;
+    let mut paths: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && p.extension().and_then(|x| x.to_str()) == Some("md"))
+        .collect();
+    paths.sort();
+    for path in paths {
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string();
+        let Some(seg) = parse_segment_id(&stem) else {
+            return Err(issue(
+                &format!("{SEGMENT_DIRECTIONS_DIR}/{stem}.md"),
+                "",
+                // No ": " in the reason: `validate` splits the load error on it.
+                format!(
+                    "{stem:?} is not a segment id, so these directions are never read (the ids are {})",
+                    SEGMENT_IDS.iter().map(|s| segment_wire(*s)).collect::<Vec<_>>().join(", ")
+                ),
+            )
+            .into());
+        };
+        let text = read(&path)?;
+        if !text.trim().is_empty() {
+            out.insert(seg, text);
+        }
+    }
+    Ok(out)
+}
+
+/// Every segment id, in the contract's order.
+const SEGMENT_IDS: [SegmentId; 4] = [
+    SegmentId::Seg01ImprovisedRoom,
+    SegmentId::Seg02aHexmap,
+    SegmentId::Seg02bCartography,
+    SegmentId::Seg02bDependency,
+];
 
 const RANKS: [Rank; 6] = [
     Rank::Thrall,
@@ -1255,5 +1331,47 @@ mod tests {
         assert_eq!(pkg.persona.address_words, ["captain"]);
         assert_eq!(pkg.lines, LineBank::resolve(None, &pkg.persona));
         assert_eq!(pkg.tuning, Tuning::DEFAULT);
+    }
+
+    #[test]
+    fn segment_directions_load_by_segment_and_an_unknown_id_is_an_error() {
+        let d = keeper_with("id = \"k\"\nname = \"K\"\ndefault_tone = \"calm\"\n");
+        let pkg = load_character(d.path(), "").unwrap();
+        assert!(pkg.segment_directions.is_empty(), "no dir, no directions");
+        let seg = d.path().join(SEGMENT_DIRECTIONS_DIR);
+        fs::create_dir_all(&seg).unwrap();
+        fs::write(seg.join("SEG-02A.md"), "Pin it.\r\nThen name it.\r\n").unwrap();
+        fs::write(seg.join("SEG-01.md"), "  \n").unwrap();
+        fs::write(seg.join("notes.txt"), "not read").unwrap();
+        let pkg = load_character(d.path(), "").unwrap();
+        assert_eq!(
+            pkg.segment_directions.into_iter().collect::<Vec<_>>(),
+            vec![(
+                SegmentId::Seg02aHexmap,
+                "Pin it.\nThen name it.\n".to_string()
+            )],
+            "an empty file is left out"
+        );
+        assert!(validate_character(d.path()).is_empty());
+        assert_eq!(
+            segment_directions_file(SegmentId::Seg02aHexmap),
+            "segments/SEG-02A.md"
+        );
+        assert_eq!(
+            parse_segment_id("SEG-02B-I"),
+            Some(SegmentId::Seg02bCartography)
+        );
+        assert_eq!(parse_segment_id("seg-01"), None);
+
+        fs::write(seg.join("SEG-99.md"), "Lost.").unwrap();
+        assert!(load_character(d.path(), "").is_err());
+        let issues = validate_character(d.path());
+        assert_eq!(issues.len(), 1, "{issues:?}");
+        assert_eq!(issues[0].file, "segments/SEG-99.md");
+        assert_eq!(issues[0].key, "");
+        assert!(
+            issues[0].reason.contains("not a segment id") && issues[0].reason.contains("SEG-02A"),
+            "{issues:?}"
+        );
     }
 }

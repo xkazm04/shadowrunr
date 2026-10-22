@@ -12,11 +12,8 @@ export interface Seed {
   readonly source?: string;
 }
 
-/** Text to append to the directions draft; a new `key` appends again. */
-export interface Append {
-  readonly key: number;
-  readonly text: string;
-}
+/** Text to append to the directions draft (the shared editor's request). */
+export type { Append } from "../../kit/Directions";
 
 export interface LabProps {
   readonly character: string;

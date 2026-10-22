@@ -11,7 +11,6 @@
 .label { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .12em; text-transform: uppercase; color: var(--sr-color-text-mute); }
 .source { text-transform: none; letter-spacing: 0; font-family: var(--sr-font-sans); font-weight: var(--sr-weight-regular); }
 .field { width: 100%; min-height: 3.6rem; resize: vertical; font: var(--sr-size-small)/1.45 var(--sr-font-sans); padding: var(--sr-space-snug) var(--sr-space-compact); background: var(--sr-color-surface-field); color: var(--sr-color-text-ink); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); border-radius: var(--sr-radius-none); }
-.tall { min-height: 16rem; font-family: var(--sr-font-mono); }
 .actions { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact); align-items: center; }
 .list { list-style: none; padding: 0; margin: 0; }
 .item { display: flex; flex-direction: column; gap: var(--sr-space-tight); padding: var(--sr-space-near) 0; border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); }

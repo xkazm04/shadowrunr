@@ -1,5 +1,6 @@
 // segments/tables[/<SEG>[/<state>]]: the lifecycle flow, the portfolio (virtualised) and each segment's
-// table: states, transitions, allowed ops, commands and the handover clock (l2b.js `tables`).
+// table: states, transitions, allowed ops, commands and the handover clock (l2b.js `tables`). A
+// focused runnable segment also carries the owner's directions for it (Directions.tsx).
 import type { SegmentStatus, SegmentTableInfo, SegmentTables } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { pageRoute, RouteLink, useRouter } from "../../router";
@@ -7,6 +8,7 @@ import { Chip } from "../../ui/Chip";
 import { FilterTable, type Column } from "../../ui/FilterTable";
 import { Head, Section } from "../../ui/Section";
 import { StatePanel } from "../../ui/States";
+import { SegmentDirections } from "./Directions";
 import { useTables } from "./hooks";
 import styles from "./Layer2.module.css";
 import { LIFECYCLE, STATUS_TONE, statusCounts } from "./model";
@@ -42,7 +44,10 @@ function Body({ tables, focus, state }: { tables: SegmentTables; focus: string |
       <>
         {badState && <StatePanel state="invalid" title={`No state ${state} in ${focus}`} hint={`Its states: ${seg.states.join(", ")}. The card opens on ${seg.initial}.`} />}
         {seg ? (
-          <SegmentCard seg={seg} focused state={badState ? undefined : state} />
+          <>
+            <SegmentCard seg={seg} focused state={badState ? undefined : state} />
+            {seg.status !== "descoped" && <SegmentDirections segment={seg.id} title={seg.title} />}
+          </>
         ) : (
           <StatePanel state="invalid" title={`No segment ${focus} in the tables`} hint="Pick one from the portfolio below." />
         )}

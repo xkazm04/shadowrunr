@@ -21,6 +21,7 @@ foils/<foil>.md     optional SEG-01 guest foils (original parody archetypes, nev
 rules/<rule>.md     constitution rules, switched under [rules]; a rail is also listed in `rails`
 stalls.toml         optional: model-free lines spoken while the engine fleet fails
 situations.json     optional: the simulator's situation bank
+segments/<SEG-ID>.md  optional: the owner's directions for one segment (below)
 ```
 
 The brain reads `constitution.md`, the enabled rules, the active tone and `bible.md` as the
@@ -155,6 +156,35 @@ Every write is a text edit (a new `[[line]]` block appended, or one `status` lin
 your comments and layout survive. The package is validated after each write, and a write that
 would make it invalid is undone and refused with the issue named. The RPCs are in
 [docs/spec/contract.md](../spec/contract.md) (the Tone Lab appendix).
+
+## Segment directions
+
+Directions on behaviour go in `directions.md` and hold on every stream. Directions on how the
+character runs one segment go in `segments/<SEG-ID>.md`, one file per segment
+(`segments/SEG-01.md`, `segments/SEG-02A.md`). They belong to the package, not the engine: they
+are this host's way of running the segment, so another character runs the same segment its own
+way.
+
+While a segment is live, its file is read into that segment's section of every turn, under
+"Directions from the owner for this segment", after the segment's rules and state. Another
+segment's turn never sees it, and it never enters the stable prefix, so the prompt cache holds.
+An empty file is ignored; without the file the prompt is exactly what it was. A file whose name
+is not a segment id fails `character validate`.
+
+You write them in the console, and the daemon writes the file in the package. **It stays
+uncommitted until you commit it.**
+
+- **Segments page.** Open a segment (Segments, Segment tables, the segment). Under its table,
+  the Directions panel edits that segment's file for the character the daemon runs, or another
+  one you pick. Save writes the whole text.
+- **From Review.** In the Review player, beside where the line sits, **Direct this segment**
+  opens a side panel with the directions of the line's segment, the line quoted at the end as
+  `> L123 "line text"`. Turn the quote into a direction and save. **Direct behaviour** does the
+  same into `directions.md`. Nothing is saved until you press save; closing the panel drops the
+  draft.
+
+The package is validated after each write, and the file is limited to 20,000 characters. The
+RPCs are in [docs/spec/contract.md](../spec/contract.md) (the segment directions appendix).
 
 ## Voice, face and clips
 
