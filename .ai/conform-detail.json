@@ -3228,6 +3228,62 @@
           "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:42 The console consumes rendered media for playback and review rather than setting script word budgets or handing scripts to frame planning."
         }
       ]
+    },
+    "4acf582d-5403-4f36-b24c-fe00bacb3683/repository-landing-document": {
+      "context": "console-shell-router",
+      "subject": "repository-landing-document",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T03:33:33.791Z",
+      "techniques": [
+        {
+          "technique": "caption-carrying-figures",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/Poster.tsx:39 This renders an application motif, rather than a figure placed in a repository landing document."
+        },
+        {
+          "technique": "evidence-linked-badges",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/Chrome.tsx:17 The chrome displays live connection status, rather than a host-rendered README badge."
+        },
+        {
+          "technique": "host-metadata-is-a-second-document",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/package.json:3 This private application package does not define repository-host description, topics or homepage settings."
+        },
+        {
+          "technique": "input-channel-distinction",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/keyActions.ts:7 The context defines application keyboard actions, rather than shell-command and agent-instruction blocks in a landing document."
+        },
+        {
+          "technique": "landing-document-as-router",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/router/store.ts:80 This router changes browser navigation state; it does not route reader populations from repository prose."
+        },
+        {
+          "technique": "multi-surface-degradation",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/Spread.tsx:52 The spread mounts React content in the application, rather than syndicating a landing document across host and registry renderers."
+        },
+        {
+          "technique": "style-rule-ships-its-detector",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/package.json:12 The package configures source and CSS checks; the inspected context contains no house style guide for public prose."
+        },
+        {
+          "technique": "visual-text-cadence",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/Shell.tsx:160 The shell composes interactive application chrome, rather than prose runs in a repository front page."
+        }
+      ],
+      "withdrawn": {
+        "worker": "7d680ba5-cfd8-45d5-bac7-df5cf95628a5",
+        "state": "not-applicable",
+        "at": "2026-10-22T03:34:19.557031+00:00",
+        "reason": "reviewer (sonnet): The anchor apps/console/package.json:8 is only the \"preview\": \"vite preview\" script, which doesn't show that a landing document is absent; the technique anchors show what those files are, not that no README or badge exists, so the not-applicable rests on an incidental line."
+      }
     }
   }
 }

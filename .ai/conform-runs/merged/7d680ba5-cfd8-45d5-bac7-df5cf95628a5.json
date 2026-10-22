@@ -1,0 +1,39 @@
+{
+  "schema": "conform-run/1",
+  "worker": "7d680ba5-cfd8-45d5-bac7-df5cf95628a5",
+  "subject": "repository-landing-document",
+  "evaluatedAt": "2026-10-22T03:33:33.791528+00:00",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "pairs": [],
+  "declined": [
+    {
+      "subject": "repository-landing-document",
+      "context": "console-shell-router",
+      "reason": "withdrawn after review: reviewer (sonnet): The anchor apps/console/package.json:8 is only the \"preview\": \"vite preview\" script, which doesn't show that a landing document is absent; the technique anchors show what those files are, not that no README or badge exists, so the not-applicable rests on an incidental line."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-22T03:33:33.791528+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "repository-landing-document"
+      ],
+      "techniques": [
+        "caption-carrying-figures",
+        "evidence-linked-badges",
+        "host-metadata-is-a-second-document",
+        "input-channel-distinction",
+        "landing-document-as-router",
+        "multi-surface-degradation",
+        "style-rule-ships-its-detector",
+        "visual-text-cadence"
+      ],
+      "deviations": 0,
+      "context": "console-shell-router",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}
