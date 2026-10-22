@@ -1,0 +1,112 @@
+{
+ "schema": "conform-run/1",
+ "worker": "3b64ea9a-19ba-4c40-bca0-cbdcf484a77f",
+ "subject": "multi-provider-gateway-plane",
+ "evaluatedAt": "2026-10-22T01:51:09.094436+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "console-shell-router",
+   "subject": "multi-provider-gateway-plane",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/router/store.ts:80 The router changes browser pages, and searches for upstream, gateway and failover found no matches in apps/console, so this context does not implement a multi-provider gateway.",
+   "techniques": [
+    {
+     "technique": "adapter-direction-asymmetry",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/router/route.ts:46 This encodes browser navigation, without upstream request/response adapters."
+    },
+    {
+     "technique": "caller-scoped-normalization-strictness",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/router/route.ts:68 The published shape describes page navigation, not normalized upstream responses."
+    },
+    {
+     "technique": "exclusive-authorship-of-a-measured-decision",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/shell/keyActions.ts:46 An explicit keyboard action chooses a page; no measured upstream selector is involved."
+    },
+    {
+     "technique": "join-breadth-follows-the-wrong-match-cost",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/shell/Wall.tsx:89 The lookup compares local page identifiers, not catalog names against upstream inventory."
+    },
+    {
+     "technique": "named-members-over-a-uniform-collection",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/shell/MixerBus.tsx:26 The collection renders page links; it does not aggregate upstream inventories or probe results."
+    },
+    {
+     "technique": "one-typed-carrier-for-echoed-state",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/router/store.ts:70 The carried state is a local animation rectangle, not an upstream continuation token."
+    },
+    {
+     "technique": "per-provider-stream-framing",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/router/react.tsx:19 This subscribes to browser route state, without consuming provider byte streams."
+    },
+    {
+     "technique": "policy-verdict-in-the-status-space",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/shell/Shell.tsx:122 Rejected page paths trigger local navigation, without policy refusals crossing a status-based failover boundary."
+    },
+    {
+     "technique": "router-versus-candidate-failure",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/router/route.ts:61 Parsing failures return a browser route and reason; there is no upstream candidate sweep."
+    },
+    {
+     "technique": "strategy-tree-with-inherited-policy",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/router/route.ts:87 The hierarchy contains page segments, without candidate-selection strategies or inherited execution policy."
+    },
+    {
+     "technique": "upstream-identity-before-inventory",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/router/route.ts:7 The identities enumerate application pages; no shared-protocol upstream discovery occurs."
+    }
+   ],
+   "absenceTerms": [
+    "upstream",
+    "gateway",
+    "failover"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "multi-provider-gateway-plane",
+   "context": "daemon-core-rpc",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-22T01:51:09.094436+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "multi-provider-gateway-plane"
+   ],
+   "techniques": [
+    "adapter-direction-asymmetry",
+    "caller-scoped-normalization-strictness",
+    "exclusive-authorship-of-a-measured-decision",
+    "join-breadth-follows-the-wrong-match-cost",
+    "named-members-over-a-uniform-collection",
+    "one-typed-carrier-for-echoed-state",
+    "per-provider-stream-framing",
+    "policy-verdict-in-the-status-space",
+    "router-versus-candidate-failure",
+    "strategy-tree-with-inherited-policy",
+    "upstream-identity-before-inventory"
+   ],
+   "deviations": 0,
+   "context": "console-shell-router",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

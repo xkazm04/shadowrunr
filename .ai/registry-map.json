@@ -2254,7 +2254,11 @@
           "revision": 9,
           "changedAt": "2026-09-09",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/router/store.ts:80 The router changes browser pages, and searches for upstream, gateway and failover found no matches in apps/console, so this context does not implement a multi-provider gateway.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:f268193750c0a517",
+          "evaluatedRevision": 9
         }
       ],
       "governance": "governed"
