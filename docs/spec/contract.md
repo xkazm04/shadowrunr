@@ -332,9 +332,9 @@ runs/sim/<tournament_id>/
 
 Instrument identity: each run records `instrument_hash`, a hash of the character package
 files (with `directions.md`), the tone file and its line bank, segment tables and judge rubric.
-Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/12`
-(T1: the line bank and directions, the narrowed rails, the scaled judge and the tic check;
-`/10` is the evidence board).
+Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/13`
+(the case spoken in names; `/12` the case as an owned loop; `/11` T1: the line bank and
+directions, the narrowed rails, the scaled judge and the tic check; `/10` is the evidence board).
 
 Judge (T1). The rubric samples 24 streamer turns (`sample_turns`). Besides the binary
 `[[quality]]` facts (`humor_landed` kept for continuity), each sampled turn gets a 0-3 score
@@ -1434,17 +1434,32 @@ like a real case. It is never written live in a quiet moment.
   instead is skipped until another card is face up, so the case never loops on one move. The research, board and screen lines are
   read from the runtime's state summary today; a structured case state in `SegmentContext` is the
   planned replacement.
+- **The case in names.** Ids are machine handles; the audience sees named cards on the board and
+  titled records in the browser. In a segment whose context carries case cards, the turn shows
+  each card by its label as the board draws it (without the fictional marker) and each filed
+  record by its title, the id second in brackets (`Morrowgate Financial Conduct Office, regulator
+  [HEX-13]`, `... warning list, 2026 [DOC-04]`), in the state summary, the working set and the
+  case directive; the runtime's summary is unchanged (the case loop parses it as written). A line
+  after the segment's rules says to speak names and keep ids to action lines (`OP:`), and in
+  SEG-02A that the segment is The Investigation (or the case). The output gate (host and foil
+  lines) replaces a card or record id left in a spoken line with its spoken name from the live
+  catalog (the label up to its first comma; a record gets "the"), drops an id said beside the name
+  it stands for (`HEX-11 and lunarstake-help.example`, `the regulator (HEX-13)`), and says "that
+  card" or "that record" for an unknown one; no model call. Op lines never pass through it, and
+  an id in a chat command spelled out for viewers (`!hint HEX-05`) is kept.
 - **New moderation values.** Input rule `wave_repeat` (action `dropped`): a paste wave already
   answered this stream. Output rule `mechanism_leak` (action `removed` or `dropped`): a sentence
   describing the moderation machinery. A `persona_leak` or `character_break` line answering a
-  forged decree is recast as an in-character rebuttal.
+  forged decree is recast as an in-character rebuttal. Output rule `id_spoken` (action
+  `rewritten`): one card or record id the gate named in a spoken line, one record per id.
 - **Carried bait first.** A prompt-injection attempt carried from an earlier beat takes the
   beat's next slot after the safety picks, oldest first, ahead of fresh and ordinary carried
   chat, so he mocks it before it expires; still one injection a beat, one pick per viewer and
   the share and whale caps. The deterministic reason marks it `bait_first`.
-- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/12`: the case as an owned loop, the
+- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/13`: the case spoken in names, ids only
+  in op lines and a spoken id named by the gate (`/12`: the case as an owned loop, the
   stereotype bait and sincere sadness owned, every unpicked candidate recorded, the rank title in
-  the notes, a repeated "are you an AI" deflected (`/8`: owned requests, the through-line
+  the notes, a repeated "are you an AI" deflected; `/8`: owned requests, the through-line
   and the lag ceiling; `/7`: the map focus, the investigation's screen defaults and dwells, a record before the model's op that shows it; `/6`: the screens, runtime screen defaults and a returning research job
   opening its record; `/5`: carried bait picked first; `/4`:
   two picks a beat, gifts carried, chat held through the cold open, the situational notes, a

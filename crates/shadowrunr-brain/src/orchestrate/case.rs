@@ -23,7 +23,8 @@
 //!   next face-down card that was never searched; never a locked, spent or empty-searched one;
 //! - **show** a returned record that was never on screen.
 //!
-//! The directive names the op line exactly (the pin's card and relation are the model's to fill).
+//! The directive names the op line exactly (the pin's card and relation are the model's to fill),
+//! and names cards and records first with their ids in brackets ([`CaseNames`]): ids are for ops.
 //! A move the model declines is parked so the case never loops on it (the first voiced run asked
 //! for the same string eight times while the model put the record up instead each time,
 //! sbx-20261022-102618-10m): a string answered with its record on screen waits until another
@@ -39,6 +40,8 @@
 use std::collections::{HashMap, HashSet};
 
 use shadowrunr_types::{EvidenceGrade, Op, SegmentContext, TsMs};
+
+use crate::case_names::CaseNames;
 
 /// At least one beat in this long carries the case's next move while one is open (assumption:
 /// eight beats, so a 10-minute investigation makes about a dozen moves and the room keeps the
@@ -170,13 +173,16 @@ impl CaseMove {
         matches!(self, CaseMove::Reveal { .. } | CaseMove::Pin { .. })
     }
 
-    /// The per-turn directive, with the exact op line (`job` names a dispatch's job).
-    pub fn directive(&self, job: &str) -> String {
+    /// The per-turn directive, with the exact op line (`job` names a dispatch's job). Cards and
+    /// records are named first and their ids follow in brackets (`names`): ids are for the op.
+    pub fn directive(&self, job: &str, names: &CaseNames) -> String {
         let head = "Advance the case this beat, before any chat:";
+        let n = |id: &str| names.tagged(id);
         match self {
             CaseMove::Dispatch { hex, label, why } => format!(
-                "{head} send research to {hex} ({label}), {}. Say so in one short line, then put \
+                "{head} send research to {}, {}. Say so in one short line, by name, then put \
                  this action on its own line, exactly:\n{}",
+                n(hex),
                 match why {
                     Why::Lead => "the lead chat hinted most",
                     Why::Trail => "a card a returned record names",
@@ -188,9 +194,11 @@ impl CaseMove {
                 })
             ),
             CaseMove::Reveal { hex, grade, record } => format!(
-                "{head} the research on {hex} came back ({record}, {}). Turn the card face up at \
-                 that grade and say what the record shows in one short line{}; then put this \
-                 action on its own line, exactly:\n{}",
+                "{head} the research on {} came back ({}, {}). Turn the card face up at that \
+                 grade and say what the record shows in one short line{}; then put this action \
+                 on its own line, exactly:\n{}",
+                n(hex),
+                n(record),
                 grade_name(*grade),
                 if *grade == EvidenceGrade::Doc {
                     ""
@@ -207,16 +215,18 @@ impl CaseMove {
                 record,
                 face_up,
             } => format!(
-                "{head} {from} is face up with {record} on file and no string. Pin a string \
-                 between {from} and the face-up card {record} connects it to (one of: {}), citing \
-                 only what the record says, and name the link in one short line. The string reads \
+                "{head} {} is face up with {} on file and no string. Pin a string between that \
+                 card and the face-up card the record connects it to (one of: {}), citing only \
+                 what the record says, and name the link in one short line. The string reads \
                  as a sentence, from -> rel -> to: \"from\" is the card that acts (the regulator, \
                  the payer, the owner, the promoter), \"to\" the card it acts on. Put the action on \
-                 its own line, filled in:\nOP: \
+                 its own line, filled in with the cards' ids:\nOP: \
                  {{\"op\":\"pin_link\",\"from\":\"<card that acts>\",\"to\":\"<card acted on>\",\
                  \"rel\":\"<{RELATIONS}>\",\"record_id\":\"{record}\"}}\nIf it connects to none of \
-                 them, put {record} up instead:\n{}",
-                face_up.join(", "),
+                 them, put the record up instead:\n{}",
+                n(from),
+                n(record),
+                face_up.iter().map(|h| n(h)).collect::<Vec<_>>().join(", "),
                 op_line(&Op::ShowScreen {
                     screen: shadowrunr_types::ScreenId::Browser,
                     record_id: Some(record.clone()),
@@ -224,8 +234,9 @@ impl CaseMove {
                 })
             ),
             CaseMove::Show { record } => format!(
-                "{head} put {record} up on the browser and read from it in one short line; put \
-                 this action on its own line, exactly:\n{}",
+                "{head} put {} up on the browser and read from it in one short line; put this \
+                 action on its own line, exactly:\n{}",
+                n(record),
                 op_line(&Op::ShowScreen {
                     screen: shadowrunr_types::ScreenId::Browser,
                     record_id: Some(record.clone()),
@@ -681,11 +692,17 @@ impl CaseDesk {
 
     /// A beat carries `mv` with `face_up` cards up: its directive, staged (a failed beat rolls it
     /// back with the rest).
-    pub fn ask(&mut self, mv: &CaseMove, face_up: usize, now_ms: TsMs) -> String {
+    pub fn ask(
+        &mut self,
+        mv: &CaseMove,
+        face_up: usize,
+        names: &CaseNames,
+        now_ms: TsMs,
+    ) -> String {
         self.asks += 1;
         self.last_ask_ms = Some(now_ms);
         self.pending = Some((mv.clone(), face_up));
-        mv.directive(&format!("case-{}", self.asks))
+        mv.directive(&format!("case-{}", self.asks), names)
     }
 }
 
@@ -753,7 +770,7 @@ mod tests {
         );
         let mv = nm(&mut d, &c).unwrap();
         assert_eq!(mv.tag(), "dispatch HEX-03 (lead)");
-        let line = d.ask(&mv, 0, 0);
+        let line = d.ask(&mv, 0, &CaseNames::read(&c), 0);
         assert!(
             line.contains(
                 r#"OP: {"op":"dispatch_research","job_id":"case-1","brief":"HEX-03: what the records say about HEX-03 label"}"#
@@ -795,14 +812,19 @@ mod tests {
             "{filed}\nBoard: 2 cards face up, 0 strings. Open leads: HEX-01 (company) has a \
              returned record and no string."
         );
-        let mv = nm(&mut d, &ctx(four(false, false), &board)).unwrap();
+        let c = ctx(four(false, false), &board);
+        let mv = nm(&mut d, &c).unwrap();
         assert_eq!(mv.tag(), "pin HEX-01 by REP-01");
-        let line = mv.directive("x");
+        // Named first, the ids in brackets for the op line.
+        let line = mv.directive("x", &CaseNames::read(&c));
         assert!(
-            line.contains("between HEX-01 and the face-up card"),
+            line.contains("HEX-01 label [HEX-01] is face up with news [REP-01] on file"),
             "{line}"
         );
-        assert!(line.contains("connects it to (one of: HEX-02)"), "{line}");
+        assert!(
+            line.contains("connects it to (one of: HEX-02 label [HEX-02])"),
+            "{line}"
+        );
         // Nothing else open: a returned record never on screen; once shown, none.
         let quiet = format!(
             "{filed}\nScreen: browser on REP-01. Records on file, newest first: DOC-01, REP-01\n\
@@ -836,7 +858,7 @@ mod tests {
             record: "REP-01".into(),
         };
         assert!(d.due(&dispatch, 0), "the first move is due at once");
-        d.ask(&dispatch, 0, 0);
+        d.ask(&dispatch, 0, &CaseNames::default(), 0);
         assert!(!d.due(&dispatch, 5_000));
         assert!(d.due(&dispatch, CASE_RETRY_MS), "ignored: asked again");
         d.note_op(
@@ -873,7 +895,7 @@ mod tests {
         let c = ctx(cards(2), board);
         let mv = d.next_move(&c, 0).unwrap();
         assert_eq!(mv.tag(), "pin HEX-02 by CLM-01");
-        d.ask(&mv, 2, 0);
+        d.ask(&mv, 2, &CaseNames::read(&c), 0);
         // The model put the record up instead: the string waits; research is next.
         d.note_op(
             &Op::ShowScreen {
@@ -894,9 +916,9 @@ mod tests {
         let c = ctx(cards(2), "");
         let mv = d.next_move(&c, 10_000).unwrap();
         assert_eq!(mv.tag(), "dispatch HEX-03");
-        d.ask(&mv, 2, 10_000);
+        d.ask(&mv, 2, &CaseNames::read(&c), 10_000);
         assert_eq!(d.next_move(&c, 20_000).unwrap().tag(), "dispatch HEX-03");
-        d.ask(&mv, 2, 20_000);
+        d.ask(&mv, 2, &CaseNames::read(&c), 20_000);
         assert_eq!(d.next_move(&c, 30_000).unwrap().tag(), "dispatch HEX-04");
         assert_eq!(
             d.next_move(&c, 30_000 + CASE_BEAT_MS).unwrap().tag(),

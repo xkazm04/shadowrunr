@@ -41,6 +41,21 @@ fn section<'a>(prompt: &'a str, title: &str) -> Option<&'a str> {
     })
 }
 
+/// The ids a turn shows in brackets after each card's or record's name (`Name [HEX-01]`), in
+/// order.
+fn ids(text: &str) -> Vec<&str> {
+    text.split('[')
+        .skip(1)
+        .filter_map(|p| p.split_once(']').map(|(id, _)| id))
+        .filter(|id| id.contains('-') && !id.contains(' '))
+        .collect()
+}
+
+/// The first bracketed id in `text`.
+fn first_id(text: &str) -> Option<&str> {
+    ids(text).into_iter().next()
+}
+
 /// The picked chat of a prompt: (msg id, viewer name), from the fenced chat block.
 fn picks(prompt: &str) -> Vec<(String, String)> {
     let Some(chat) = section(prompt, "Chat") else {
@@ -82,14 +97,14 @@ impl CaseModel {
         let mut out: Vec<String> = Vec::new();
         if let Some(case) = section(prompt, "The case") {
             // The first op line, its blanks filled as a model would: the first card offered,
-            // and a relation.
+            // and a relation. Cards are named first with their ids in brackets (HEX-NAMES).
             let card = case
                 .split_once("connects it to (one of: ")
-                .and_then(|(_, r)| r.split([',', ')']).next())
+                .and_then(|(_, r)| first_id(r))
                 .unwrap_or_default();
             let from = case
-                .split_once("between ")
-                .and_then(|(_, r)| r.split(' ').next())
+                .split_once("before any chat: ")
+                .and_then(|(_, r)| first_id(r))
                 .unwrap_or_default();
             let op = case
                 .lines()
@@ -145,9 +160,9 @@ impl CaseModel {
                     .or_else(|| l.strip_prefix("fogged and open: "))
             })
             .unwrap_or_default();
-        let hex = fogged
-            .split(", ")
-            .find(|h| !h.is_empty() && !searched.contains(&format!("{h} ")))?;
+        let hex = ids(fogged)
+            .into_iter()
+            .find(|h| !searched.contains(&format!("[{h}]")))?;
         Some(format!(
             r#"OP: {{"op":"dispatch_research","job_id":"imp","brief":"{hex}: what is on file"}}"#
         ))

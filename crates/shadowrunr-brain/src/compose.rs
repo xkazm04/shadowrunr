@@ -23,6 +23,7 @@ use shadowrunr_types::reconcile::{
 };
 use shadowrunr_types::{Command, Rank, SegmentContext, SegmentId};
 
+use crate::case_names::{self, CaseNames};
 use crate::character::CharacterPackage;
 use crate::grammar::op_example;
 use crate::memory::store::scope_str;
@@ -748,10 +749,16 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
     let mut s = String::new();
 
     // 1. Segment rules + state.
+    // A case's cards and records are shown by name, id second; byte-identical without one.
+    let names = CaseNames::read(t.ctx);
     let mut seg = String::new();
     seg.push_str(t.ctx.rules_prompt.trim_end());
+    if let Some(rules) = case_names::rules_lines(t.ctx) {
+        seg.push('\n');
+        seg.push_str(&rules);
+    }
     seg.push_str("\n\nState: ");
-    seg.push_str(t.ctx.state_summary.trim_end());
+    seg.push_str(&names.prompt_text(t.ctx.state_summary.trim_end()));
     seg.push_str(&format!(
         "\nViewers watching: {}. Segment time: {}s.",
         t.ctx.ccv, t.ctx.elapsed_s
@@ -800,7 +807,7 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
     section(&mut s, &focus, &brief);
 
     // 3. Working set.
-    section(&mut s, "Working set", t.working_set);
+    section(&mut s, "Working set", &names.prompt_text(t.working_set));
 
     // 4. Recall: facts, habits, episodes (fitted).
     let mut recall = String::new();

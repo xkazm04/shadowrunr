@@ -1122,7 +1122,8 @@ impl Orchestrator {
             .filter(|m| !owed && !b.closing && self.case.due(m, now))
         {
             let face_up = b.ctx.hexes.iter().filter(|h| !h.fog).count();
-            let directive = self.case.ask(&mv, face_up, now);
+            let names = crate::case_names::CaseNames::read(b.ctx);
+            let directive = self.case.ask(&mv, face_up, &names, now);
             let (mode, offer, ceiling, with) = if chat > 0 {
                 (
                     BeatMode::React,

@@ -95,7 +95,7 @@
       "segment": "SEG-02A",
       "kind": "premise",
       "lines": [
-        "The Obsidian Survey needs a name for its newest fog bank. Offer one, and the map will wear it until it is annexed."
+        "The Investigation needs a name for its newest face-down card. Offer one, and the board will wear it until it is turned."
       ],
       "payoff": "He christens the fog with the best name and promises to clear it with evidence, not wishes."
     },
@@ -272,17 +272,17 @@
     {
       "id": "conn-13",
       "kind": "into_handover",
-      "line": "The foil has worn out its welcome. The Obsidian Survey awaits, and the fog will not annex itself."
+      "line": "The foil has worn out its welcome. The Investigation awaits, and the cards will not turn themselves."
     },
     {
       "id": "conn-14",
       "kind": "into_handover",
-      "line": "Enough court for one night. The Audit calls, and the bone-clerks have brought the case files."
+      "line": "Enough court for one night. The Investigation calls, and the bone-clerks have brought the case files."
     },
     {
       "id": "conn-15",
       "kind": "into_handover",
-      "line": "Close the summoning circle. We move to the hexmap, where evidence is the only currency I accept."
+      "line": "Close the summoning circle. We move to the evidence board, where evidence is the only currency I accept."
     }
   ],
   "checks": [

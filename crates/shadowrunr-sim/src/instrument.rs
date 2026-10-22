@@ -33,7 +33,7 @@ use crate::SimError;
 
 /// Bump when the simulator's or the judge's logic changes in a way that changes verdicts
 /// (prompt templates, verification rules, scheduling).
-pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/12";
+pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/13";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstrumentFile {
@@ -494,7 +494,8 @@ mod tests {
     /// `fixture` hashed with no brief and no experiment: the golden that both entries must
     /// leave untouched when absent. It moves with `SIM_LOGIC_VERSION` and with the entries
     /// every run carries (challenge-2026-10-21: `policy/platform-rules.json`, here `absent`,
-    /// moved it once without a logic bump) (`/12`: the case as an owned loop, the
+    /// moved it once without a logic bump) (`/13`: the case spoken in names, ids only in op
+    /// lines and a spoken id named by the gate, after `/12`: the case as an owned loop, the
     /// stereotype bait and sincere sadness owned, every unpicked candidate recorded, the rank
     /// title in the newcomer and sad notes, a repeated "are you an AI" deflected, after `/11`: the
     /// tone's line bank and the owner's directions in the prompt and the hash, the narrowed
@@ -509,7 +510,7 @@ mod tests {
     /// shows it, after `/6`: the screens, runtime screen defaults and a returning research job
     /// opening its record, after `/5`: carried bait picked first, after `/4`: two picks a beat,
     /// gifts and the cold open carried, the speech-aware say gap, a full-length session).
-    const PRE_BRIEF_HASH: &str = "03bbd97662d3401dca89fda3730ad70918ec75530aed966e14a8d0e083685355";
+    const PRE_BRIEF_HASH: &str = "ef3467c42c5f1a2d15f5e21bbb554ae5bc64b38e28befee68890449c7e8d4474";
 
     #[test]
     fn a_brief_joins_the_hash_only_when_present() {

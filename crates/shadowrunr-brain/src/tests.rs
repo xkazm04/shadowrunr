@@ -1314,22 +1314,102 @@ async fn the_alleged_gate_fires() {
     assert_eq!(
         says(&ev),
         vec![
-            "AetherYield allegedly moved the money through HEX-04!",
-            "HEX-02 is documented fact.",
+            "AetherYield allegedly moved the money through AetherYield!",
+            "Registry filing is documented fact.",
             "Allegedly the Grimfold wallet is theirs too.",
         ]
     );
+    // The qualifier reads the ids; the names are spoken after it (HEX-NAMES).
+    let id_spoken = || ("id_spoken".to_string(), None, "rewritten".to_string());
     assert_eq!(
         mods(&ev, ModStage::Output),
-        vec![("alleged:HEX-04".into(), None, "qualified".into())]
+        vec![
+            ("alleged:HEX-04".into(), None, "qualified".into()),
+            id_spoken(),
+            id_spoken(),
+        ]
     );
     // A grade revealed in the same beat counts for that beat's lines. (The next beat comes
     // once those three lines have aired: sooner, it would be a speech hold.)
     let ev = b.tick(12_000, Vec::new(), &c).await.unwrap();
     assert_eq!(
         says(&ev),
-        vec!["HEX-07 is allegedly the shell behind it all."]
+        vec!["That card is allegedly the shell behind it all."]
     );
+}
+
+/// HEX-NAMES, from the recorded show-3 lines: the prompt names cards and records first, the
+/// gate speaks a leftover id as its name, and the op line keeps its ids.
+#[tokio::test]
+async fn the_case_is_spoken_in_names_and_the_op_keeps_its_ids() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    engine.push(
+        Role::CoreThread,
+        Ok(
+            "Bone-clerks, to HEX-11 and lunarstake-help.example.\nDOC-04 pins the regulator to \
+            HEX-02.\nOP: {\"op\":\"dispatch_research\",\"job_id\":\"j\",\"brief\":\"HEX-11: the \
+            help desk\"}",
+        ),
+    );
+    let mut b = brain_with(dir.path(), Arc::new(engine), "names", tuning()).await;
+    let mut c = ctx(&["reveal_hex", "dispatch_research"]);
+    c.segment = SegmentId::Seg02aHexmap;
+    c.state_summary = "bone-clerk searches: HEX-13 1/2\ncase file (planted FICTIONAL demo \
+                       records): HEX-13 DOC-04 DOC: Morrowgate Financial Conduct Office warning \
+                       list, 2026 (fictional)\nfogged: HEX-02, HEX-11"
+        .into();
+    c.hexes = vec![
+        hex("HEX-02", "glimmerquay-yield.example", None),
+        hex("HEX-11", "lunarstake-help.example", None),
+        hex(
+            "HEX-13",
+            "Morrowgate Financial Conduct Office, regulator (fictional)",
+            Some(shadowrunr_types::EvidenceGrade::Doc),
+        ),
+    ];
+    for h in &mut c.hexes[..2] {
+        h.fog = true;
+    }
+    let ev = b.tick(1_000, Vec::new(), &c).await.unwrap();
+    let p = b.last_prompt().unwrap();
+    assert!(p.contains(case_names::NAMES_RULE), "{p}");
+    assert!(p.contains(case_names::INVESTIGATION_LINE), "{p}");
+    assert!(
+        p.contains("fogged: glimmerquay-yield.example [HEX-02], lunarstake-help.example [HEX-11]"),
+        "{p}"
+    );
+    assert!(
+        p.contains(
+            "Morrowgate Financial Conduct Office warning list, 2026 [DOC-04] DOC, on Morrowgate \
+             Financial Conduct Office, regulator [HEX-13]"
+        ),
+        "{p}"
+    );
+    assert_eq!(
+        says(&ev),
+        vec![
+            "Bone-clerks, to lunarstake-help.example.",
+            "The Morrowgate Financial Conduct Office warning list pins the regulator to \
+             glimmerquay-yield.example.",
+        ]
+    );
+    let rewrites = mods(&ev, ModStage::Output)
+        .into_iter()
+        .filter(|(r, _, a)| r == "id_spoken" && a == "rewritten")
+        .count();
+    assert_eq!(rewrites, 3);
+    let briefs: Vec<String> = ev
+        .iter()
+        .filter_map(|e| match e {
+            StreamEvent::Op {
+                op: Op::DispatchResearch { brief, .. },
+                ..
+            } => Some(brief.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(briefs, ["HEX-11: the help desk"]);
 }
 
 fn hex(
@@ -2864,7 +2944,7 @@ fn unavailable() -> EngineError {
 
 /// Fourteen lines different enough that the repetition guard lets each one through.
 const RECOVERED: [&str; 14] = [
-    "Back to the docket, minions: HEX-04 opens next.",
+    "Back to the docket, minions: the Grimfold wallet opens next.",
     "Grimwald, your grudge is filed under pettiness, subsection gravy.",
     "Tremble, mortal realm, for the poll is open.",
     "The bone-clerks return with soup stains and a verdict.",
