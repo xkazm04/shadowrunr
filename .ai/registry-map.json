@@ -775,7 +775,11 @@
           "revision": 13,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/data/config.ts:72 A malformed configured stage URL silently becomes the default stage URL, violating the requirement that a present malformed source stop resolution.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:85c48ec5bdb5581f",
+          "evaluatedRevision": 13
         },
         {
           "subject": "app-shell",
@@ -1221,7 +1225,11 @@
           "revision": 13,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src-tauri/src/endpoint.rs:82 An explicitly present empty daemon environment value bypasses validation and selects the default, contrary to the standard's absent-versus-malformed distinction.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:85c48ec5bdb5581f",
+          "evaluatedRevision": 13
         },
         {
           "subject": "release-pipeline",

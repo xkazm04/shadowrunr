@@ -1,0 +1,147 @@
+{
+ "schema": "conform-run/1",
+ "worker": "c0575900-b077-4768-8897-90845010636d",
+ "subject": "settings",
+ "evaluatedAt": "2026-10-22T04:13:58.155316+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "console-app-bootstrap",
+   "subject": "settings",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/data/config.ts:72 A malformed configured stage URL silently becomes the default stage URL, violating the requirement that a present malformed source stop resolution.",
+   "techniques": [
+    {
+     "technique": "applied-defaults-ledger",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/keys/keymap.ts:83 Bindings are constructed in code; the inspected keymap has no persisted user-editable collection whose deleted defaults could resurrect."
+    },
+    {
+     "technique": "config-backup-and-restore",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/config.ts:36 This configuration reader consumes query, environment and shell inputs; it does not overwrite an operator-owned settings file."
+    },
+    {
+     "technique": "cross-source-precedence-chain",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/data/config.ts:72 Although source precedence is documented, stageReplayUrl catches malformed configured URLs and silently substitutes the compiled default."
+    },
+    {
+     "technique": "inherited-default-override",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/app/main.tsx:9 The boot animation consults platform motion preference directly; this path has no stored user override or attach/detach operation."
+    },
+    {
+     "technique": "read-batching",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/app/compose.ts:13 Bootstrap configuration reads an in-process environment object and local browser inputs, without per-key storage or IPC round trips."
+    },
+    {
+     "technique": "save-experience",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/kit/OpenInStage.tsx:23 The stage control opens the resolved URL; it does not edit or save settings."
+    },
+    {
+     "technique": "typed-accessors",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/data/config.ts:39 The accessor returns unvalidated external strings as daemon URLs, including empty or malformed query/environment values."
+    }
+   ]
+  },
+  {
+   "context": "console-build-and-desktop-shell",
+   "subject": "settings",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src-tauri/src/endpoint.rs:82 An explicitly present empty daemon environment value bypasses validation and selects the default, contrary to the standard's absent-versus-malformed distinction.",
+   "techniques": [
+    {
+     "technique": "applied-defaults-ledger",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/scripts/check-bundle.mjs:54 The generated baseline records measurements, rather than shipped entries in a user-editable settings collection."
+    },
+    {
+     "technique": "config-backup-and-restore",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/scripts/check-bundle.mjs:57 The inspected tooling overwrites a reproducible measurement baseline, not the sole authoritative copy of operator settings."
+    },
+    {
+     "technique": "cross-source-precedence-chain",
+     "verdict": "deviation",
+     "evidence": "apps/console/src-tauri/src/endpoint.rs:82 Nonempty malformed values stop correctly, but a present empty environment value falls through to Default; successful provenance is also not surfaced by run()."
+    },
+    {
+     "technique": "in-place-document-patch",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/scripts/check-bundle.mjs:55 This serialized document is derived build output; preserving foreign operator settings and runtime observer identity is not its contract."
+    },
+    {
+     "technique": "inherited-default-override",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src-tauri/src/endpoint.rs:84 The endpoint fallback is a compiled constant resolved at boot, not a continuously followed upstream preference with a stored override."
+    },
+    {
+     "technique": "presence-decides-precedence",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src-tauri/src/endpoint.rs:3 These are separate configuration sources, rather than deprecated and current names within one source."
+    },
+    {
+     "technique": "read-batching",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src-tauri/src/endpoint.rs:81 Endpoint resolution performs one local environment lookup at boot; there is no settings-read fan-out across a storage or process boundary."
+    },
+    {
+     "technique": "typed-accessors",
+     "verdict": "conformant",
+     "evidence": "apps/console/src-tauri/src/endpoint.rs:148 The centralized endpoint parser validates scheme, origin shape, loopback host and port range before returning Endpoint; invalid nonempty inputs produce classified errors."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-22T04:13:58.155316+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "settings"
+   ],
+   "techniques": [
+    "applied-defaults-ledger",
+    "config-backup-and-restore",
+    "cross-source-precedence-chain",
+    "inherited-default-override",
+    "read-batching",
+    "save-experience",
+    "typed-accessors"
+   ],
+   "deviations": 1,
+   "context": "console-app-bootstrap",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-22T04:13:58.155316+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "settings"
+   ],
+   "techniques": [
+    "applied-defaults-ledger",
+    "config-backup-and-restore",
+    "cross-source-precedence-chain",
+    "in-place-document-patch",
+    "inherited-default-override",
+    "presence-decides-precedence",
+    "read-batching",
+    "typed-accessors"
+   ],
+   "deviations": 1,
+   "context": "console-build-and-desktop-shell",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}
