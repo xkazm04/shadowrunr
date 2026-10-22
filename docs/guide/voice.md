@@ -416,7 +416,7 @@ It writes `~/.shadowrunr/voices/malakor-voices.bin` (the recipe's name plus `-vo
 and `malakor-voices.bin.json` beside it, and prints each blend's sid and the output's sha256.
 `--out <file>` writes elsewhere; then point `[voice] voices_dir` (or `voices_file`) at it. The
 same stock file and recipe give the same bytes. From the stock kokoro-multi-lang-v1_0
-`voices.bin` (sha256 `8a77c0d3...`), `malakor.toml` makes a file of sha256 `71b97216...`
+`voices.bin` (sha256 `8a77c0d3...`), `malakor.toml` makes a file of sha256 `c79f4688...` (`71b97216...` before its `[emotions]` table, 2026-10-23); `malakor-a`'s slot 52 is the same bytes in both
 (written twice, on 2026-10-21 and 2026-10-22, byte for byte the same). A file of another size
 or a missing one leaves the voice `degraded` with the reason; the daemon never falls back to
 another voice.
@@ -446,6 +446,149 @@ machine's load.
 **The next step: fine-tuning.** The blend is the baseline. For production quality the next
 phase is fine-tuning an original designed voice (no cloning) if the blend proves not distinct
 enough; nothing for it is built yet.
+
+## Kokoro Plus: delivery on the local voice
+
+A line can carry a delivery cue (`[menace 0.8 slow] Minion. Come closer.`; the brain writes
+it, and it reaches the sidecar as `say.delivery {emotion, intensity, pace}`). The sidecar turns
+the cue into four levers Kokoro has. The levers come from the voice lab of 2026-10-22, where
+the owner compared a flat and a plus render of ten practice lines and chose plus. A `say`
+without a `delivery` renders exactly as before, byte for byte. Every voice that speaks has
+the levers: its hello says `"plus": true`, and its `reason` ends with a `plus (...)` clause.
+
+- **Speed.** Each line has one speed: 0.85 at slow pace, 1.0 at normal, 1.18 at fast, plus the
+  emotion's nudge from the table below. The result is kept between 0.6 and 1.6. The warm
+  worker, or the binary's `--speed`, renders at that speed, and the durations model behind
+  the mouth shapes runs at the same speed, so the mouth still matches the sound.
+- **Emotion voice.** At an intensity of 0.4 or more, the line is spoken by its emotion's
+  blend. Each blend is `malakor-a` at 0.6 or more, leaning toward one stock voice, and sits in
+  a slot of the same voices file. Below 0.4, and for `neutral`, the line keeps the base voice.
+- **Pauses.** Silence goes after every sentence but the last. At slow pace it also goes after
+  every clause (a comma, semicolon or colon followed by a space). The line is cut at those
+  places into parts, and each part is rendered and sent as an `audio` message of its own.
+  Short sentences are not folded together, so "Every. Single. Stream." is three beats.
+  Kokoro's own quiet at an edge next to a pause is cut down to 20 ms, as the lab did, so the
+  pause is the planned length. The silence goes in before the effects chain, so the crypt
+  reverb rings into it. The part's mouth shapes end in `sil` over the silence, and the
+  timeline still ends where the audio does.
+- **Pitch.** The emotion's semitones and the blend's register correction are added to the
+  chain's own shift (light: -2.5 st), all in its one STFT pass, so the length is kept. A total
+  below -4.0 st is held at -4.0: past that, the phase vocoder smears. The hello names the
+  emotions that can be held, once:
+  `pitch held at -4.0 st for deadpan, hushed, outrage, sarcasm, weary, triumph, tender`.
+  With `--fx none` there is no pitch lever.
+
+Pauses and semitones are given at full intensity and scale with it. They are the lab's values
+divided by the intensity its line was directed at, so the bench lines, which carry the lab's
+intensities, get the lab's values back. The nudge does not scale. An unknown emotion is
+`neutral`, and an unknown pace is `normal`. A missing intensity is 0.6, and an intensity
+outside 0 to 1 is clamped.
+
+| Emotion | Speed nudge | Semitones | Pause after a sentence | Pause after a clause (slow) |
+|---|---|---|---|---|
+| neutral | 0 | 0 | 150 ms | 150 ms |
+| menace | -0.05 | -1.25 | 560 ms | 375 ms |
+| glee | +0.05 | +1.65 | 145 ms | 135 ms |
+| deadpan | -0.05 | -0.85 | 415 ms | 250 ms |
+| hushed | +0.05 | 0 | 250 ms | 355 ms |
+| outrage | -0.10 | +1.0 | 205 ms | 150 ms |
+| sarcasm | 0 | +0.6 | 440 ms | 440 ms |
+| weary | 0 | -1.15 | 430 ms | 355 ms |
+| triumph | -0.04 | +1.2 | 275 ms | 200 ms |
+| tender | 0 | -0.5 | 540 ms | 665 ms |
+
+The table is `LEVERS` in `tools/voice/shadowrunr_voice/plus.py`. The daemon's log (stderr)
+gets one line per line with a delivery, for example
+`voice: plus menace 0.80 slow: sid 50, speed 0.80, pitch -0.79 st, pauses [448, 448, 448, 0]`.
+
+**The emotion blends.** The recipe's `[emotions]` table gives one blend per emotion: the base
+blend's name with its weight, a stock speaker with its weight, the slot (`sid`), and the
+`pitch_correction` in semitones that puts the blend back in `malakor-a`'s register. Every lean
+except onyx raised the dry pitch, by up to 3.2 st.
+
+```toml
+[emotions.menace]
+malakor-a = 0.65
+am_onyx = 0.35
+sid = 50
+pitch_correction = 0.21
+```
+
+| Emotion | sid (replaces) | Recipe | Pitch correction |
+|---|---|---|---|
+| menace | 50 (`zm_yunxi`) | 0.65 malakor-a + 0.35 am_onyx | +0.21 st |
+| glee | 49 (`zm_yunjian`) | 0.60 malakor-a + 0.40 am_puck | -1.70 st |
+| deadpan | 48 (`zf_xiaoyi`) | 0.65 malakor-a + 0.35 bm_daniel | -1.99 st |
+| hushed | 47 (`zf_xiaoxiao`) | 0.70 malakor-a + 0.30 af_nicole | -2.67 st |
+| outrage | 46 (`zf_xiaoni`) | 0.60 malakor-a + 0.40 am_fenrir | -3.21 st |
+| sarcasm | 45 (`zf_xiaobei`) | 0.65 malakor-a + 0.35 bm_fable | -2.22 st |
+| weary | 44 (`pm_santa`) | 0.65 malakor-a + 0.35 am_echo | -1.29 st |
+| triumph | 43 (`pm_alex`) | 0.60 malakor-a + 0.40 bm_george | -3.21 st |
+| tender | 42 (`pf_dora`) | 0.65 malakor-a + 0.35 am_michael | -1.22 st |
+
+An emotion blend must name exactly one of the recipe's `[voices]` blends, at 0.6 or more of
+the weight, and only emotions of the cue set (not `neutral`). The blend tool mixes the emotion
+from the base blend's row as just written, so the base slot does not change. The tool lists
+each emotion's `sid`, `base_sid` and `pitch_correction` under `emotions` in the `.json` beside
+the voices file. The sidecar reads them from there. It uses only the blends whose `base_sid`
+is its own `--sid`, because a blend of another voice would change who speaks. The voices file
+keeps its size, so the setup check (`shadowrunr voice check`) is unchanged.
+
+**Regenerating the voices file.** It is the same command as above, from `tools/voice`:
+
+```
+python -m shadowrunr_voice.blend --voices <engine dir>/kokoro/voices.bin --recipe recipes/malakor.toml
+```
+
+It prints the two voices and then one line per emotion
+(`emotion menace: sid 50 (replaces zm_yunxi) ..., pitch correction +0.21 st`). To replace a
+file in use, write to `--out <copy>` first, check it, keep the old file as `.bak`, then move
+the copy into place. The next stream start picks up the new file. On 2026-10-23 the result had
+sha256 `c79f4688...`, byte for byte the voice lab's own plus file. Its slot 52 (`malakor-a`,
+sha256 `bbb2e3ab...`) and slot 51 were the same bytes as before. Only slots 42 to 50 changed.
+
+**How close it is to the lab** (the ten bench lines of `characters/malakor/voice/bench.toml`
+through the sidecar: warm, 3 workers, mouth shapes on, `light`; n = 1 render per line,
+2026-10-23; measured with the lab's own YIN, pause and rate method). The lab notes that Kokoro
+moves by up to about 0.5 st between two renders of the same line, so treat 1 st or 0.3
+syllables per second as noise.
+
+| Line | Duration, lab / sidecar | Mean F0 | F0 range | Syllables per s | Pauses found |
+|---|---|---|---|---|---|
+| L01 menace | 8.42 / 8.42 s | 81.4 / 83.7 Hz | 7.5 / 7.3 st | 3.20 / 3.26 | 1.21 / 1.16 s |
+| L02 glee | 6.15 / 6.14 s | 103.5 / 97.8 Hz | 6.6 / 6.5 st | 4.19 / 4.27 | 0.16 / 0.15 s |
+| L03 deadpan | 7.95 / 6.81 s | 78.5 / 83.2 Hz | 5.5 / 7.0 st | 3.78 / 4.44 | 0.26 / 0.14 s |
+| L04 hushed | 5.92 / 5.41 s | 86.4 / 92.0 Hz | 7.1 / 7.5 st | 3.87 / 4.28 | 0.49 / 0.32 s |
+| L05 outrage | 5.56 / 5.66 s | 109.8 / 99.5 Hz | 8.2 / 9.1 st | 4.12 / 4.26 | 0.20 / 0.44 s |
+| L06 sarcasm | 7.14 / 8.14 s | 89.1 / 86.5 Hz | 10.1 / 8.1 st | 3.80 / 3.41 | 0.78 / 0.97 s |
+| L07 weary | 7.35 / 8.73 s | 80.3 / 89.2 Hz | 8.3 / 9.3 st | 4.06 / 3.58 | 0.45 / 0.84 s |
+| L08 triumph | 8.59 / 8.05 s | 94.0 / 93.4 Hz | 9.7 / 9.5 st | 3.54 / 3.87 | 0.39 / 0.47 s |
+| L09 tender | 9.63 / 10.76 s | 85.2 / 84.0 Hz | 7.8 / 7.5 st | 3.72 / 3.46 | 1.02 / 1.37 s |
+| L10 rapid | 7.10 / 5.95 s | 93.2 / 99.0 Hz | 6.9 / 8.1 st | 4.06 / 4.25 | 0.92 / 0 s |
+
+Where the productised levers differ from the lab's hand-made plans:
+
+- The lab's melody steps (a pitch per segment) are not reproduced. Without the climb, outrage
+  (L05) sits 1.7 st under the lab, and glee (L02) 1 st under it. Weary (L07) loses its
+  falling beats.
+- The -4.0 st hold lifts the lines whose lab total went past it: deadpan (-4.99 st in the lab),
+  hushed (-5.17), weary (-4.59). Those lines measure +1 to +1.8 st over the lab.
+- Clause pauses come only at slow pace. The lab also paused at deadpan's list commas (L03) and
+  hushed's "Between us," (L04), so those lines run 0.5 to 1.1 s shorter. Slow lines pause at
+  every clause, where the lab picked some, so L06, L07 and L09 run 1.0 to 1.4 s longer.
+- One cue per line: L10's 700 ms hard stop and slow smug tail are not available to a single
+  `glee fast` cue.
+
+**What it costs.** Nothing measurable. The ten lines with a delivery and the same ten without
+were run one after the other in the same warm session. First audio had a median of 664 ms
+with plus and 953 ms without (means 817 and 1094 ms). Plus is no slower, because its first
+part is a short sentence: short sentences are no longer folded into the first. Every part's
+mouth timeline ended exactly at its audio end, so the durations model ran at the render's
+speed and sid.
+
+**What it cannot do.** Kokoro has no whisper (hushed is a close, level read) and no
+intonation control inside a segment. Each part also gets Kokoro's phrase-final lengthening,
+so clause cuts slow a line a little beyond its speed.
 
 ## Disclosure
 
