@@ -1,5 +1,5 @@
 // characters/<id>/package/<tab>: one character's package, read once with character.get, under
-// the winner's six tabs, the v2 parameters and the Tone Lab.
+// the winner's six tabs, the v2 parameters, the Voice tab and the Tone Lab.
 import type { CharacterDetail } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
 import { useRpc } from "../../data";
@@ -15,6 +15,7 @@ import { allRoute, PKG_TABS, pkgRoute, type PkgTab, type ReviewRef } from "./rou
 import { RulesTab } from "./RulesTab";
 import { SituationsTab } from "./SituationsTab";
 import { ToneLab } from "./ToneLab";
+import { VoiceTab } from "./VoiceTab";
 
 export function PackagePage({ id, tab, situation, from }: { readonly id: string; readonly tab: PkgTab; readonly situation: string | undefined; readonly from?: ReviewRef | undefined }) {
   const router = useRouter();
@@ -52,6 +53,8 @@ function Body({ d, tab, situation, from }: { d: CharacterDetail; tab: PkgTab; si
       return <SituationsTab d={d} selected={situation} />;
     case "parameters":
       return <ParamsTab d={d} />;
+    case "voice":
+      return <VoiceTab d={d} />;
     case "tone-lab":
       return <ToneLab d={d} from={from} />;
   }

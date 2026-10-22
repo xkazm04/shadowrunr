@@ -13,6 +13,7 @@ export const PKG_TABS = [
   { id: "foils", label: "Foils" },
   { id: "situations", label: "Situations" },
   { id: "parameters", label: "Parameters" },
+  { id: "voice", label: "Voice" },
   { id: "tone-lab", label: "Tone Lab" },
 ] as const;
 

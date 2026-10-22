@@ -18,7 +18,7 @@ export function Layer2({ sub }: { readonly sub: readonly string[] }) {
         <PackagePage id={r.id} tab={r.tab} situation={r.situation} from={r.from} />
       ) : (
         <>
-          <StatePanel state="invalid" title={`There is no page at ${sub.join(" / ")}`} hint="All characters, and each character's package (constitution, optional rules, bible, tones, foils, situations, parameters, Tone Lab), are the pages here." />
+          <StatePanel state="invalid" title={`There is no page at ${sub.join(" / ")}`} hint="All characters, and each character's package (constitution, optional rules, bible, tones, foils, situations, parameters, voice, Tone Lab), are the pages here." />
           <RouteLink to={allRoute()} className={buttonClass("secondary", "compact")}>
             All characters
           </RouteLink>
