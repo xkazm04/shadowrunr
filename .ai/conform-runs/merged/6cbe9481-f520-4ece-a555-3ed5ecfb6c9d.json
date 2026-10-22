@@ -1,0 +1,97 @@
+{
+  "schema": "conform-run/1",
+  "worker": "6cbe9481-f520-4ece-a555-3ed5ecfb6c9d",
+  "subject": "module-design",
+  "evaluatedAt": "2026-10-22T01:27:47.870444+00:00",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "pairs": [
+    {
+      "context": "console-brain-page",
+      "subject": "module-design",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "apps/console/src/pages/brain/bands.test.tsx:24 The canvas test replacement bypasses checking with as never without documenting the invariant that makes the partial recorder sufficient, failing the standard's per-use invariant requirement.",
+      "techniques": [
+        {
+          "technique": "concurrency-at-the-edge",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/brain/useBrain.ts:55 Transcript acquisition stays in the React query driver, which passes arrived values to synchronous model functions."
+        },
+        {
+          "technique": "declarative-or-sequential",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/brain/engineModel.ts:130 summariseLedger uses explicit sequential accumulation for totals, route statistics, account statistics and run start times."
+        },
+        {
+          "technique": "io-free-core",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:157 Funnel and latency decisions consume ordinary event collections and return values without fetching, waiting or consulting ambient time."
+        },
+        {
+          "technique": "marked-unverifiable-region",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/brain/bands.test.tsx:24 The assertion bypasses the native context return type without stating at the use site which operations the consumer requires and why Recorder supplies them."
+        },
+        {
+          "technique": "mirror-type-at-the-edge",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/brainModel.test.ts:78 The model's inputs are directly constructible generated values, so its decisions do not require a host-minted input or a mirror conversion."
+        },
+        {
+          "technique": "module-depth",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:237 buildBrainModel hides lane grouping, pulse bounding, memory sampling and statistical aggregation behind three input collections and one display model."
+        }
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "module-design",
+      "context": "console-onair-page",
+      "reason": "withdrawn after review: reviewer (sonnet): The seat says LiveFeed 'silently' ignores seek, but player.ts:254 documents the no-op, FeedSnapshot exposes a `live` flag, and Layer1.tsx:96 disables the scrubber when `snap.live`, so this is a deliberate, surfaced capability limit rather than an undisclosed contract breach."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-22T01:27:47.870444+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "module-design"
+      ],
+      "techniques": [
+        "concurrency-at-the-edge",
+        "declarative-or-sequential",
+        "io-free-core",
+        "marked-unverifiable-region",
+        "mirror-type-at-the-edge",
+        "module-depth",
+        "seams-and-adapters"
+      ],
+      "deviations": 1,
+      "context": "console-onair-page",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "ts": "2026-10-22T01:27:47.870444+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "module-design"
+      ],
+      "techniques": [
+        "concurrency-at-the-edge",
+        "declarative-or-sequential",
+        "io-free-core",
+        "marked-unverifiable-region",
+        "mirror-type-at-the-edge",
+        "module-depth"
+      ],
+      "deviations": 1,
+      "context": "console-brain-page",
+      "via": "curator-multi:codex",
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}

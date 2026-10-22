@@ -1055,7 +1055,11 @@
           "revision": 18,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/brain/bands.test.tsx:24 The canvas test replacement bypasses checking with as never without documenting the invariant that makes the partial recorder sufficient, failing the standard's per-use invariant requirement.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:7c8008f2207b1946",
+          "evaluatedRevision": 18
         }
       ],
       "governance": "governed"

@@ -2792,6 +2792,98 @@
           "evidence": "crates/shadowrunr-brain/src/compose.rs:773 Retrieved viewer facts and episodes enter the model prompt, but the recall path and event contract provide no inspectable pre-answer disclosure or attached correction door."
         }
       ]
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/module-design": {
+      "context": "console-onair-page",
+      "subject": "module-design",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T01:27:47.870Z",
+      "techniques": [
+        {
+          "technique": "concurrency-at-the-edge",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/player.ts:166 Waiting until the next transcript event is the replay driver's coordination logic; view derivation remains synchronous."
+        },
+        {
+          "technique": "declarative-or-sequential",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/beats.ts:101 countsOf uses an explicit loop to compute several counters and time bounds together."
+        },
+        {
+          "technique": "io-free-core",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/view.ts:22 Overlay lifetime decisions receive schedule data and transcript time as values and return presentation data without reading a clock."
+        },
+        {
+          "technique": "marked-unverifiable-region",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/onair/ClipActions.tsx:119 The type assertion has no per-use statement of the invariant establishing the parameter shape; the neighboring comment explains lifecycle behavior instead."
+        },
+        {
+          "technique": "mirror-type-at-the-edge",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/player.test.ts:22 Playback logic can be constructed directly from ordinary events and injected services, so an unconstructible host input does not require a mirror here."
+        },
+        {
+          "technique": "module-depth",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/player.ts:65 ReplayPlayer accepts events and optional settings while hiding timeline advancement, event coalescing, clock anchoring, looping and timer cancellation."
+        },
+        {
+          "technique": "seams-and-adapters",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/onair/player.ts:255 Feed promises to put transcript time on screen, but LiveFeed makes seek a no-op; the standard calls for separating capabilities that adapters cannot all provide."
+        }
+      ],
+      "withdrawn": {
+        "worker": "6cbe9481-f520-4ece-a555-3ed5ecfb6c9d",
+        "state": "deviation",
+        "at": "2026-10-22T01:28:44.962900+00:00",
+        "reason": "reviewer (sonnet): The seat says LiveFeed 'silently' ignores seek, but player.ts:254 documents the no-op, FeedSnapshot exposes a `live` flag, and Layer1.tsx:96 disables the scrubber when `snap.live`, so this is a deliberate, surfaced capability limit rather than an undisclosed contract breach."
+      }
+    },
+    "c2325be4-a41e-48f5-9050-bb31c09bb12a/module-design": {
+      "context": "console-brain-page",
+      "subject": "module-design",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T01:27:47.870Z",
+      "worker": "6cbe9481-f520-4ece-a555-3ed5ecfb6c9d",
+      "techniques": [
+        {
+          "technique": "concurrency-at-the-edge",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/brain/useBrain.ts:55 Transcript acquisition stays in the React query driver, which passes arrived values to synchronous model functions."
+        },
+        {
+          "technique": "declarative-or-sequential",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/brain/engineModel.ts:130 summariseLedger uses explicit sequential accumulation for totals, route statistics, account statistics and run start times."
+        },
+        {
+          "technique": "io-free-core",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:157 Funnel and latency decisions consume ordinary event collections and return values without fetching, waiting or consulting ambient time."
+        },
+        {
+          "technique": "marked-unverifiable-region",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/brain/bands.test.tsx:24 The assertion bypasses the native context return type without stating at the use site which operations the consumer requires and why Recorder supplies them."
+        },
+        {
+          "technique": "mirror-type-at-the-edge",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/brainModel.test.ts:78 The model's inputs are directly constructible generated values, so its decisions do not require a host-minted input or a mirror conversion."
+        },
+        {
+          "technique": "module-depth",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:237 buildBrainModel hides lane grouping, pulse bounding, memory sampling and statistical aggregation behind three input collections and one display model."
+        }
+      ]
     }
   }
 }
