@@ -1,0 +1,125 @@
+{
+ "schema": "conform-run/1",
+ "worker": "d42ae65c-5fa1-47a6-af33-ab463f5524a4",
+ "subject": "music-video-production",
+ "evaluatedAt": "2026-10-22T02:09:25.648638+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "console-segments-page",
+   "subject": "music-video-production",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/segments/Tables.tsx:27 Complete-context searches found none of the listed music-video terms, and this page presents live-show lifecycle tables rather than producing picture for a finished song.",
+   "techniques": [
+    {
+     "technique": "coverage-across-the-phrase",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/SegmentCard.tsx:53 Displays the segment's permitted screens; no sung-phrase setups or generated-angle coverage were found."
+    },
+    {
+     "technique": "cut-rate-follows-the-section",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/model.ts:200 The timing display concerns show handovers; there is no song-section editing or cut-rate plan."
+    },
+    {
+     "technique": "form-follows-what-the-track-gives",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/Layer2.tsx:12 The available views concern operating segments and ranks, with no music-video treatment selection."
+    },
+    {
+     "technique": "segment-on-the-master-clock",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/counts.ts:6 Segments occupy programme lifecycle states; they are not generated clips requiring master-song offsets."
+    },
+    {
+     "technique": "track-map-before-treatment",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/hooks.ts:7 Loads runtime segment tables; no finished-track analysis or treatment workflow was found."
+    }
+   ],
+   "absenceTerms": [
+    "conditioning_audio",
+    "downbeat"
+   ]
+  },
+  {
+   "context": "segments-runtime",
+   "subject": "music-video-production",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-segments/Cargo.toml:3 Complete-context searches found none of the listed music-video terms, and this crate interprets interactive show segments rather than generating video against a finished song.",
+   "techniques": [
+    {
+     "technique": "coverage-across-the-phrase",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:25 Defines investigation presentation screens, with no phrase-conditioned camera setups."
+    },
+    {
+     "technique": "cut-rate-follows-the-section",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/src/runtime.rs:37 Screen changes use document dwell timing; no song-section energy, bar grid or editorial cut rate was found."
+    },
+    {
+     "technique": "form-follows-what-the-track-gives",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:27 The brief directs an interactive show opener, not a video form selected for a finished track."
+    },
+    {
+     "technique": "segment-on-the-master-clock",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/src/runtime.rs:2308 Measures elapsed show time for handover; no generated song segments, handles or synchronization offsets were found."
+    },
+    {
+     "technique": "track-map-before-treatment",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:8 Plans investigation states rather than musical sections, beats, energy or vocal activity."
+    }
+   ],
+   "absenceTerms": [
+    "conditioning_audio",
+    "downbeat"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-22T02:09:25.648638+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "music-video-production"
+   ],
+   "techniques": [
+    "coverage-across-the-phrase",
+    "cut-rate-follows-the-section",
+    "form-follows-what-the-track-gives",
+    "segment-on-the-master-clock",
+    "track-map-before-treatment"
+   ],
+   "deviations": 0,
+   "context": "console-segments-page",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-22T02:09:25.648638+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "music-video-production"
+   ],
+   "techniques": [
+    "coverage-across-the-phrase",
+    "cut-rate-follows-the-section",
+    "form-follows-what-the-track-gives",
+    "segment-on-the-master-clock",
+    "track-map-before-treatment"
+   ],
+   "deviations": 0,
+   "context": "segments-runtime",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

@@ -2950,6 +2950,78 @@
           "evidence": "apps/console/src/router/route.ts:7 The identities enumerate application pages; no shared-protocol upstream discovery occurs."
         }
       ]
+    },
+    "6dce940f-74f8-426d-8a02-ed09e53724ef/music-video-production": {
+      "context": "console-segments-page",
+      "subject": "music-video-production",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T02:09:25.648Z",
+      "worker": "d42ae65c-5fa1-47a6-af33-ab463f5524a4",
+      "techniques": [
+        {
+          "technique": "coverage-across-the-phrase",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/SegmentCard.tsx:53 Displays the segment's permitted screens; no sung-phrase setups or generated-angle coverage were found."
+        },
+        {
+          "technique": "cut-rate-follows-the-section",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/model.ts:200 The timing display concerns show handovers; there is no song-section editing or cut-rate plan."
+        },
+        {
+          "technique": "form-follows-what-the-track-gives",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/Layer2.tsx:12 The available views concern operating segments and ranks, with no music-video treatment selection."
+        },
+        {
+          "technique": "segment-on-the-master-clock",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/counts.ts:6 Segments occupy programme lifecycle states; they are not generated clips requiring master-song offsets."
+        },
+        {
+          "technique": "track-map-before-treatment",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/hooks.ts:7 Loads runtime segment tables; no finished-track analysis or treatment workflow was found."
+        }
+      ]
+    },
+    "5ca16ac4-6263-4c09-80d5-f32a969b16b6/music-video-production": {
+      "context": "segments-runtime",
+      "subject": "music-video-production",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T02:09:25.648Z",
+      "worker": "d42ae65c-5fa1-47a6-af33-ab463f5524a4",
+      "techniques": [
+        {
+          "technique": "coverage-across-the-phrase",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:25 Defines investigation presentation screens, with no phrase-conditioned camera setups."
+        },
+        {
+          "technique": "cut-rate-follows-the-section",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:37 Screen changes use document dwell timing; no song-section energy, bar grid or editorial cut rate was found."
+        },
+        {
+          "technique": "form-follows-what-the-track-gives",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:27 The brief directs an interactive show opener, not a video form selected for a finished track."
+        },
+        {
+          "technique": "segment-on-the-master-clock",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:2308 Measures elapsed show time for handover; no generated song segments, handles or synchronization offsets were found."
+        },
+        {
+          "technique": "track-map-before-treatment",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:8 Plans investigation states rather than musical sections, beats, energy or vocal activity."
+        }
+      ]
     }
   }
 }

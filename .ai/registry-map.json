@@ -2062,7 +2062,11 @@
           "revision": 2,
           "changedAt": "2026-10-07",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/Tables.tsx:27 Complete-context searches found none of the listed music-video terms, and this page presents live-show lifecycle tables rather than producing picture for a finished song.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:2d32bc9195341316",
+          "evaluatedRevision": 2
         },
         {
           "subject": "voice-io",
@@ -3406,7 +3410,11 @@
           "revision": 2,
           "changedAt": "2026-10-07",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:3 Complete-context searches found none of the listed music-video terms, and this crate interprets interactive show segments rather than generating video against a finished song.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:2d32bc9195341316",
+          "evaluatedRevision": 2
         },
         {
           "subject": "mcp-tools",
