@@ -3022,6 +3022,88 @@
           "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:8 Plans investigation states rather than musical sections, beats, energy or vocal activity."
         }
       ]
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/narrative-scroll-surface": {
+      "context": "console-simulator-page",
+      "subject": "narrative-scroll-surface",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T02:27:20.588Z",
+      "worker": "773876d4-10bf-4949-9dcf-bb818fd2a18a",
+      "techniques": [
+        {
+          "technique": "illustration-carries-the-claim",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/draw.ts:63 The grid encodes actual run health rather than illustrating an explanatory station's claim."
+        },
+        {
+          "technique": "motion-carries-the-mechanism",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/draw.ts:3 This is an input-driven data visualization, not an animation teaching process timing."
+        },
+        {
+          "technique": "no-orientation-tax",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/Layer1.tsx:29 The navigation offers operational destinations to a task-oriented user, not narrative stations."
+        },
+        {
+          "technique": "reveal-without-loss",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/Layer2.tsx:46 Content selection follows the routed tab, not scroll approach."
+        },
+        {
+          "technique": "scroll-bound-progression",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:73 Canvas redraws depend on data, geometry and hover rather than narrative station progress."
+        },
+        {
+          "technique": "sequence-as-spine",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/grid.ts:38 Cells represent peer run records, not ordered steps of an explanatory argument."
+        }
+      ]
+    },
+    "c2325be4-a41e-48f5-9050-bb31c09bb12a/narrative-scroll-surface": {
+      "context": "console-brain-page",
+      "subject": "narrative-scroll-surface",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T02:27:20.588Z",
+      "worker": "773876d4-10bf-4949-9dcf-bb818fd2a18a",
+      "techniques": [
+        {
+          "technique": "illustration-carries-the-claim",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Layer1.tsx:103 The plot displays measured memory history rather than a mockup supporting a narrative claim."
+        },
+        {
+          "technique": "motion-carries-the-mechanism",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:115 Pulse timing comes from ledger telemetry, which the technique explicitly excludes from authored mechanism explainers."
+        },
+        {
+          "technique": "no-orientation-tax",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Layer1.tsx:118 This opens an operational engine view rather than indexing an explanatory reading sequence."
+        },
+        {
+          "technique": "reveal-without-loss",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Preflight.tsx:22 Check details use an explicit disclosure control, not a scroll-triggered narrative reveal."
+        },
+        {
+          "technique": "scroll-bound-progression",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Plot.tsx:27 The canvas responds to size and drawing-input changes, not a station's reading position."
+        },
+        {
+          "technique": "sequence-as-spine",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:237 The model supplies parallel dashboard measurements rather than a page-level sequence of explanatory stations."
+        }
+      ]
     }
   }
 }

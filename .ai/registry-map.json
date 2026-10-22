@@ -1018,7 +1018,11 @@
           "revision": 3,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Layer2.tsx:47 Searches for narrative, spine and station found no context hits; these routed floors provide engine, transcript and health-check tools, so the explanatory-page precondition does not hold.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:e93abcf9f70a6c36",
+          "evaluatedRevision": 3
         },
         {
           "subject": "agent-browser-control",
@@ -2374,7 +2378,11 @@
           "revision": 3,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/Layer2.tsx:42 Searches for narrative, spine and station found no context hits; these tabs navigate operational tournament views, so the explanatory-page precondition does not hold.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:e93abcf9f70a6c36",
+          "evaluatedRevision": 3
         },
         {
           "subject": "prompt-assembly",
