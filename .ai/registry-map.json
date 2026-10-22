@@ -3099,7 +3099,11 @@
           "revision": 8,
           "changedAt": "2026-10-09",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/session.rs:4 Searches found no continuation, stop_gate, pending_stop or stagnation hits in this crate; its sessions exchange prompts and results with backend recovery without arming a task-completion loop.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:b0eabf78abd856a4",
+          "evaluatedRevision": 8
         }
       ],
       "governance": "governed"
@@ -5429,7 +5433,11 @@
           "revision": 8,
           "changedAt": "2026-10-09",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/stage/src/voice/report.ts:5 Searches found no continuation, stop_gate, pending_stop or stagnation hits in the voice directory; this client follows and reports playback without controlling agent turns.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:b0eabf78abd856a4",
+          "evaluatedRevision": 8
         }
       ],
       "governance": "governed"

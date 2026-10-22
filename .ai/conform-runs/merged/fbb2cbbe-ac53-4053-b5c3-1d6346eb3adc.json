@@ -1,0 +1,187 @@
+{
+ "schema": "conform-run/1",
+ "worker": "fbb2cbbe-ac53-4053-b5c3-1d6346eb3adc",
+ "subject": "session-continuation",
+ "evaluatedAt": "2026-10-22T03:56:56.333973+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "stage-voice-client",
+   "subject": "session-continuation",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/stage/src/voice/report.ts:5 Searches found no continuation, stop_gate, pending_stop or stagnation hits in the voice directory; this client follows and reports playback without controlling agent turns.",
+   "techniques": [
+    {
+     "technique": "advisory-guard-fail-mode",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:185 The guard reports malformed voice packets; it does not intercept agent stops or tool calls."
+    },
+    {
+     "technique": "boundary-applied-stop",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/player.ts:188 Stopping acts on queued audio sources; there are no reasoning iterations or tool batches."
+    },
+    {
+     "technique": "compaction-checkpoint",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/captions.ts:81 The retained context is caption timing for audio parts, with no model-context compaction boundary."
+    },
+    {
+     "technique": "continuation-as-state",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:35 The session subscribes to a run; it does not arm a task-completion condition."
+    },
+    {
+     "technique": "gate-state-lifetimes",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:109 This state measures voice health and audio backlog, not shared agent stop gates or verification phases."
+    },
+    {
+     "technique": "ordered-teardown",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:132 Teardown closes the voice transport; no continuation guards can refuse an operator stop."
+    },
+    {
+     "technique": "ordered-yield-composition",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/useVoice.ts:53 The local priority decision selects a face signal; it does not arbitrate competing agent continuation behaviours."
+    },
+    {
+     "technique": "sealed-stage-advance",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:186 No staged autonomous run is implemented; the inspected message handler processes voice status, utterances and skipped lines."
+    },
+    {
+     "technique": "single-loop-authority",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:200 Incoming utterances feed playback; no goal evaluator or competing continuation authority is present."
+    },
+    {
+     "technique": "stuck-loop-detection",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:216 Retries reconnect an unavailable socket; they are not repeated agent repair attempts."
+    }
+   ],
+   "absenceTerms": [
+    "continuation",
+    "pending_stop",
+    "stagnation"
+   ]
+  },
+  {
+   "context": "engine-llm-sessions",
+   "subject": "session-continuation",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-engine/src/session.rs:4 Searches found no continuation, stop_gate, pending_stop or stagnation hits in this crate; its sessions exchange prompts and results with backend recovery without arming a task-completion loop.",
+   "techniques": [
+    {
+     "technique": "advisory-guard-fail-mode",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/stream.rs:111 This parses subprocess output; it is not a registered boundary interceptor that can block the operator."
+    },
+    {
+     "technique": "boundary-applied-stop",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:252 The timeout bounds a subprocess read; this layer does not dispatch or record individual tool batches."
+    },
+    {
+     "technique": "compaction-checkpoint",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:576 The API mirror drops whole text exchanges; there is no summarizer-mediated continuation-control state to checkpoint."
+    },
+    {
+     "technique": "continuation-as-state",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:421 The session records an answered exchange and returns it; no keep-working mode is armed."
+    },
+    {
+     "technique": "gate-state-lifetimes",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:339 Each send establishes a transport deadline; there are no stop-gate counters or verification-phase resets."
+    },
+    {
+     "technique": "ordered-teardown",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:540 Close tears down a subprocess, with no persisted continuation-guard group to disarm."
+    },
+    {
+     "technique": "ordered-yield-composition",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/stream.rs:19 Result parsing defines transport completion; no candidate yield is offered to independently authored loop frames."
+    },
+    {
+     "technique": "sealed-stage-advance",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/config.rs:18 Roles select model routing and timeouts; they do not form an autonomous stage sequence."
+    },
+    {
+     "technique": "single-loop-authority",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/config.rs:134 Child customization is configurable, but this wrapper implements neither a custom continuation loop nor a host-goal evaluator adapter."
+    },
+    {
+     "technique": "stuck-loop-detection",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:374 The bounded retry recovers a failed backend process; it does not evaluate an agent's repeated repairs or progress."
+    }
+   ],
+   "absenceTerms": [
+    "continuation",
+    "pending_stop",
+    "stagnation"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-22T03:56:56.333973+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "session-continuation"
+   ],
+   "techniques": [
+    "advisory-guard-fail-mode",
+    "boundary-applied-stop",
+    "compaction-checkpoint",
+    "continuation-as-state",
+    "gate-state-lifetimes",
+    "ordered-teardown",
+    "ordered-yield-composition",
+    "sealed-stage-advance",
+    "single-loop-authority",
+    "stuck-loop-detection"
+   ],
+   "deviations": 0,
+   "context": "stage-voice-client",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-22T03:56:56.333973+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "session-continuation"
+   ],
+   "techniques": [
+    "advisory-guard-fail-mode",
+    "boundary-applied-stop",
+    "compaction-checkpoint",
+    "continuation-as-state",
+    "gate-state-lifetimes",
+    "ordered-teardown",
+    "ordered-yield-composition",
+    "sealed-stage-advance",
+    "single-loop-authority",
+    "stuck-loop-detection"
+   ],
+   "deviations": 0,
+   "context": "engine-llm-sessions",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}
