@@ -145,7 +145,8 @@ researcher = { one = "bone-clerk", many = "bone-clerks" }    # optional; {resear
 sign_off = "..."                    # the fleet-loss line
 disclosure = "Yes, I am an AI character: ..."               # the honest AI disclosure
 
-[voice]                             # each field set overrides the daemon's [voice]: voice, sid
+[voice]                             # each field set overrides the daemon's [voice]: voice, sid,
+                                    # voices_file (a blended voices file), fx (none|light|heavy)
                                     # (speed is read but not applied yet: the sidecar has no rate flag)
 [avatar]                            # face overrides [stage] avatar; rig names the package's rig spec
 
@@ -1474,7 +1475,10 @@ line); without it the stage uses its own tokens. File names are a single path se
 
 **The sidecar** (`tools/voice`, `python -m shadowrunr_voice`) is a daemon-private process
 speaking JSON lines on stdio:
-- Out, first: `{"type":"hello","protocol":1,"voice","sample_rate","visemes":bool,"reason"?}`.
+- Out, first: `{"type":"hello","protocol":1,"voice","sample_rate","visemes":bool,"voices","sid","fx","reason"?}`
+  (`voices` is the voices file's name, never its path). A hello whose `reason` names no
+  `engine:` is dead (for example a missing or wrong-size voices file): the daemon stops the
+  sidecar and reports the voice `degraded` with that reason, and never falls back to another voice.
 - In: `{"type":"say","id","text"}` and `{"type":"cancel","ids":[...]}`. `cancel` gets no
   reply: queued sentences of those ids are dropped and an in-flight render is killed, or, on the
   warm engine, finishes unheard and its result is discarded.
@@ -1530,9 +1534,11 @@ speaking JSON lines on stdio:
   - `file` is the absolute path of `recording.<ext>` in the session directory, with OBS's own
     container extension (`mp4` with OBS's default hybrid MP4, else `mkv`).
 
-**Disclosure:** while the voice is on, the stage shows "synthetic voice". The voice is Kokoro's
-stock `af_heart` (sid 3 of kokoro-multi-lang-v1_0). It is no real person's voice, and voice
-cloning is out of scope.
+**Disclosure:** while the voice is on, the stage shows "synthetic voice". Malakor's voice is an original
+blend of stock Kokoro voices (`malakor-a`: 0.6 `am_onyx` + 0.4 `bm_lewis`, written by
+`shadowrunr_voice.blend` from `tools/voice/recipes/malakor.toml` into sid 52 of a local voices
+file) with the light lich FX chain. It is no real person's voice, and voice cloning is out of
+scope.
 
 ## Appendix (screens and board): the streamer screen, its allow-lists and defaults, the evidence board
 
