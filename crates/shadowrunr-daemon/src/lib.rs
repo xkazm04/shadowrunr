@@ -25,6 +25,7 @@ pub mod review;
 pub mod rpc;
 pub mod runs;
 pub mod sandbox;
+pub mod segments_dir;
 pub mod server;
 pub mod tone;
 pub mod voice;

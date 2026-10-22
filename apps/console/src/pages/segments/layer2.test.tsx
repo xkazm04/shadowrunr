@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { mountPage, nodes, ok, settle, type Script } from "../../kit/testing";
+import { mountPage, nodes, ok, param, settle, type Script } from "../../kit/testing";
 import { Layer2 } from "./Layer2";
 import { genRanks, genReport, genTables } from "./testgen";
 
@@ -80,6 +80,45 @@ describe("segments/tables", () => {
     mount(["tables", "SEG-99"]);
     await settle();
     expect(screen.getByText("No segment SEG-99 in the tables")).toBeTruthy();
+  });
+
+  it("gives a focused segment the running character's directions, editable per character, saved only on Save", async () => {
+    const summary = (id: string, name: string) => ({ id, name, default_tone: "t", active_tone: "t", tones: ["t"], foils: [], rules_enabled: 0, rules_total: 0 });
+    const sets: string[] = [];
+    const m = mount(["tables", "SEG-02A"], (method, sent) => {
+      if (method === "character.list") return ok([summary("keeper", "Keeper Fen"), summary("malakor", "Arch-Lich Malakor")]);
+      if (method === "segments.directions.get") {
+        const character = param(sent, "character") ?? "";
+        return ok({ character, segment_id: "SEG-02A", text: character === "malakor" ? "- Pin a record before you name it.\n" : "" });
+      }
+      if (method === "segments.directions.set") {
+        sets.push(sent);
+        return ok({ character: "malakor", segment_id: "SEG-02A", text: "- Pin it, then name it.\n", updated_ms: 9 });
+      }
+      return base()(method, sent);
+    });
+    await settle(6);
+    const panel = role("segments-directions");
+    expect(panel?.textContent).toContain("How Arch-Lich Malakor runs Hexmap Investigation");
+    const text = () => document.querySelector<HTMLTextAreaElement>("[data-role='segments-directions-text']");
+    expect(text()?.value).toBe("- Pin a record before you name it.\n");
+    const save = () => screen.getByRole("button", { name: "Save segment directions" });
+    expect(save().hasAttribute("disabled")).toBe(true);
+    await act(async () => fireEvent.change(text() as HTMLTextAreaElement, { target: { value: "- Pin it, then name it." } }));
+    expect(sets).toHaveLength(0);
+    await act(async () => fireEvent.click(save()));
+    await settle(4);
+    expect(sets[0]).toContain(`"params":${JSON.stringify({ character: "malakor", segment_id: "SEG-02A", text: "- Pin it, then name it." })}`);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Keeper Fen" })));
+    await settle(4);
+    expect(text()?.value).toBe("");
+    expect(m.calls.filter((c) => c === "segments.directions.get").length).toBeGreaterThanOrEqual(2);
+    // A descoped segment never runs, so it takes no directions.
+    cleanup();
+    dispose?.();
+    mount(["tables", "SEG-02B-I"]);
+    await settle();
+    expect(role("segments-directions")).toBeNull();
   });
 
   it("shows the offline state when the daemon is down", async () => {

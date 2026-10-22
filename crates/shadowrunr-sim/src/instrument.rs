@@ -195,6 +195,12 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
     for (rel, p) in foils {
         files.push(file_entry(format!("character/foils/{rel}"), &p)?);
     }
+    // The owner's per-segment directions enter the turn while their segment is live.
+    let mut seg_dirs = Vec::new();
+    walk(&cd.join("segments"), "", &mut seg_dirs)?;
+    for (rel, p) in seg_dirs {
+        files.push(file_entry(format!("character/segments/{rel}"), &p)?);
+    }
     let mut rules = Vec::new();
     walk(&cd.join("rules"), "", &mut rules)?;
     for (rel, p) in rules {

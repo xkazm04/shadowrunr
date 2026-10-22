@@ -30,6 +30,9 @@ use crate::review::{
 use crate::sandbox::{
     SandboxIdParams, SandboxStartParams, SandboxStarted, SandboxStatus, SandboxStatusParams,
 };
+use crate::segment_directions::{
+    SegmentDirections, SegmentDirectionsGetParams, SegmentDirectionsSetParams,
+};
 use crate::tone::{
     ToneDirections, ToneDirectionsGetParams, ToneDirectionsSetParams, ToneInbox, ToneInboxParams,
     ToneLineWrite, ToneLines, ToneLinesAddParams, ToneLinesParams, ToneLinesSetStatusParams,
@@ -588,6 +591,8 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<ToneDirectionsSetParams, ToneDirections>("tone.directions.set");
     v.method::<ToneInboxParams, ToneInbox>("tone.inbox");
     v.method::<ToneReviewLineParams, ToneReviewItem>("tone.review_line");
+    v.method::<SegmentDirectionsGetParams, SegmentDirections>("segments.directions.get");
+    v.method::<SegmentDirectionsSetParams, SegmentDirections>("segments.directions.set");
 }
 
 /// Every method name, in table order.

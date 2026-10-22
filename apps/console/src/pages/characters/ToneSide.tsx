@@ -2,14 +2,14 @@
 // are bank candidates (add one as an approved line of its session's tone, or draft variants of
 // it); lines marked Flat or Too mean are direction suggestions (append the note to the
 // directions draft, or draft variants with it). The directions (tone.directions.get / .set):
-// directions.md as a plain text area, saved whole.
+// directions.md in the shared directions editor, saved whole.
 import { useState } from "react";
 import type { ToneReviewItem } from "@shadowrunr/contract";
 import { QueryView } from "../../kit";
-import { useMutation, useRpc, viewOfError, type DataError } from "../../data";
+import { BehaviourDirectionsEditor } from "../../kit/Directions";
+import { useMutation, useRpc, viewOfError } from "../../data";
 import { Button } from "../../ui/Button";
 import { Chip } from "../../ui/Chip";
-import { StatePanel } from "../../ui/States";
 import { toneLabel } from "./model";
 import styles from "./Layer2.module.css";
 import lab from "./ToneLab.module.css";
@@ -126,68 +126,15 @@ function Candidate({ i, reload, ...props }: LabProps & { i: ToneReviewItem; tone
 }
 
 export function ToneDirections(props: LabProps & { append: Append | undefined }) {
-  const q = useRpc("tone.directions.get", { character: props.character });
-  const save = useMutation("tone.directions.set");
-  const [draft, setDraft] = useState<string | undefined>(undefined);
-  const [failure, setFailure] = useState<DataError | undefined>(undefined);
-  const [saved, setSaved] = useState(false);
-  const text = draft ?? q.data?.text ?? "";
-  const dirty = draft !== undefined && draft !== q.data?.text;
-
-  // An appended suggestion lands in the draft once per request (state adjusted in render).
-  const [appended, setAppended] = useState<Append | undefined>(undefined);
-  if (props.append && props.append !== appended) {
-    setAppended(props.append);
-    const base = text.replace(/\s+$/, "");
-    setDraft(`${base}${base === "" ? "" : "\n"}- ${props.append.text}\n`);
-    setSaved(false);
-  }
-
-  const run = async () => {
-    setFailure(undefined);
-    const r = await save.run({ character: props.character, text });
-    if (!r.ok) return setFailure(r.error);
-    setDraft(undefined);
-    setSaved(true);
-    props.onWrote(r.value.file);
-    q.reload();
-  };
-
+  // A suggestion joins the do and don't list as one more item.
+  const append = props.append && { key: props.append.key, text: `- ${props.append.text}` };
   return (
     <section className={lab.panel} data-role="tone-lab-directions" aria-labelledby="tone-lab-directions">
       <h2 className={styles.secHead} id="tone-lab-directions">
         Directions
       </h2>
       <p className={styles.note}>The do and don&apos;t list, read with the tone on every stream (directions.md).</p>
-      <QueryView query={q}>
-        {() => (
-          <>
-            <textarea
-              className={`${lab.field} ${lab.tall}`}
-              aria-label="Directions"
-              value={text}
-              maxLength={20000}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                setSaved(false);
-              }}
-              data-role="tone-lab-directions-text"
-            />
-            <div className={lab.actions}>
-              <Button variant="ink" disabled={save.pending || !dirty} onClick={() => void run()} data-role="tone-lab-directions-save">
-                {save.pending ? "Saving…" : "Save directions"}
-              </Button>
-              {dirty && (
-                <Button size="compact" onClick={() => setDraft(undefined)}>
-                  Discard changes
-                </Button>
-              )}
-              {saved && !dirty && <span className={lab.ok}>Saved</span>}
-            </div>
-            {failure && <StatePanel state={viewOfError(failure).state} title={`Not saved · ${viewOfError(failure).title}`} hint={viewOfError(failure).hint} detail={`${failure.code}: ${failure.message}`} />}
-          </>
-        )}
-      </QueryView>
+      <BehaviourDirectionsEditor character={props.character} role="tone-lab-directions" append={append} onSaved={props.onWrote} />
     </section>
   );
 }

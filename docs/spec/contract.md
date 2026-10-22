@@ -111,6 +111,7 @@ bible.md            lore, want, long arc, running jokes
 tones/<variant>.md  one file per tone variant (tournament axis)
 lines/<variant>.toml  optional: the tone's line bank, exemplars by situation (below)
 directions.md       optional: the owner's do and don't list, read with the tone
+segments/<SEG-ID>.md  optional: the owner's directions for one segment, read while it is live
 foils/<foil>.md     SEG-01 guest foils: original parody archetypes, never real people
 rules/<rule>.md     constitution rules, listed under [rules]; a rail is also listed in rails
 stalls.toml         model-free stall lines for an engine outage (`lines = [...]`)
@@ -265,6 +266,14 @@ never count). Neither ever enters the stable prefix. These budgets are engine co
 
 `directions.md` goes into the stable prefix after the tone, under
 `# Directions from the owner`. Without the file the prefix is byte-identical to before.
+
+`segments/<SEG-ID>.md` (`SEG-01.md`, `SEG-02A.md`, ...) holds the owner's directions for one
+segment. While that segment is live they close its per-turn section, `# Segment <SEG-ID>`, under
+`## Directions from the owner for this segment`; they never enter the stable prefix, so the
+prefix and its cache hold across segments, and another segment's turn never sees them. An empty
+file is ignored, and without the file the turn is byte-identical to before. A file whose stem
+is not a `SegmentId` fails the load and `character validate` (`segments/<stem>.md: ... is not a
+segment id`); files other than `*.md` there are not read.
 
 A `source_ids` array that is empty or holds only `"assumption"` marks an assumption;
 `["c03","assumption"]` marks a figure extrapolated from a source.
@@ -1818,3 +1827,29 @@ ToneInbox      { candidates: [ToneReviewItem], suggestions: [ToneReviewItem] }
 - **`tone.review_line`.** The same item for any host line of a session ("Send to Tone Lab"),
   with its feedback when there is any. A line that is not a host `say` and a session of another
   character are `invalid_params`; a missing session is `not_found`.
+
+## Appendix (segment directions): the owner directs a segment, one file per segment
+
+The owner's notes on how a character runs one segment, written from the Segments page or from
+a Review line, live in the package as `segments/<SEG-ID>.md` (the character package above). The
+types live in `shadowrunr_types::segment_directions`.
+
+| method | params | result |
+|---|---|---|
+| `segments.directions.get` | `{ character, segment_id: SegmentId }` | `SegmentDirections` |
+| `segments.directions.set` | `{ character, segment_id: SegmentId, text }` | `SegmentDirections` |
+
+```
+SegmentDirections { character, segment_id: SegmentId, text, updated_ms? }   // text "" without the file; updated_ms: the file's mtime, omitted without it
+```
+
+- **Where it writes.** Only `<paths.characters>/<character>/segments/<SEG-ID>.md`, with the
+  Tone Lab's checks: `character` is a package id, the package dir and each existing target
+  (the `segments/` dir, the file) must resolve, symlinks followed, inside `paths.characters`.
+  `segment_id` is the closed `SegmentId` enum, so an unknown segment never parses
+  (`invalid_params`). The owner commits the file; the daemon never runs git.
+- **`segments.directions.set`.** Replaces the file with `text` (LF line ends, one trailing
+  newline; a blank text writes an empty file, which the brain ignores), at most 20,000
+  characters. The write goes through a temp file and a rename, then the package is validated as
+  `character validate` does; a write that adds an error is undone and refused like a Tone Lab
+  write. It shares the Tone Lab's one-write-at-a-time lock.

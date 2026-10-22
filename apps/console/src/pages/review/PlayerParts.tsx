@@ -1,9 +1,10 @@
-// The player's tag line, its side column (where, the judge on this line, every instance across
-// the session, the way to the timeline) and its done state.
+// The player's tag line, its side column (where, with the owner's Direct actions; the judge on
+// this line, every instance across the session, the way to the timeline) and its done state.
 import type { ReviewSession } from "@shadowrunr/contract";
 import { Button } from "../../ui/Button";
 import { Chip, ChipRow } from "../../ui/Chip";
 import type { Derived, SayLine } from "./derive";
+import { DirectActions } from "./Direct";
 import { segmentAt } from "./derive";
 import type { Feedback } from "./hooks";
 import { KIND_INK } from "./ink";
@@ -53,6 +54,7 @@ export function PlayerSide(props: {
           {fmtClock(x.t)}
           {seg ? ` · ${SEGMENT_NAME[seg] ?? "Segment"}` : ""} · line {x.line}
         </p>
+        <DirectActions rs={props.rs} say={x} />
       </div>
       <div>
         <h3 className={kit.sub}>Judge</h3>

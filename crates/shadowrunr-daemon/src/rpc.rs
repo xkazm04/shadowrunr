@@ -399,6 +399,12 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         }
         "tone.inbox" => ok(crate::tone::rpc_inbox(state, params(req.params)?).await?),
         "tone.review_line" => ok(crate::tone::rpc_review_line(state, params(req.params)?).await?),
+        "segments.directions.get" => {
+            ok(crate::segments_dir::rpc_get(state, params(req.params)?).await?)
+        }
+        "segments.directions.set" => {
+            ok(crate::segments_dir::rpc_set(state, params(req.params)?).await?)
+        }
         other => Err(RpcError::new(
             ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),
