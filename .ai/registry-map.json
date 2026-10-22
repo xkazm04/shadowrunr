@@ -3704,7 +3704,11 @@
           "revision": 10,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/clip.test.ts:31 The clip parser's top-level negative cases assert only rejection, so a rejection for the wrong reason passes despite the standard requiring a specific rejection oracle.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:d5ab12a92aba67c4",
+          "evaluatedRevision": 10
         }
       ],
       "governance": "governed"
@@ -5411,7 +5415,11 @@
           "revision": 10,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/voice/session.test.ts:181 The voiceBlocked tests cover four of eight Boolean combinations, leaving a cheaply enumerable space incomplete and overlapping rejection conditions untested.",
+          "evaluatedAt": "2026-10-22",
+          "evaluatedAgainst": "sha256-b2:d5ab12a92aba67c4",
+          "evaluatedRevision": 10
         },
         {
           "subject": "creator-voice-and-tone",

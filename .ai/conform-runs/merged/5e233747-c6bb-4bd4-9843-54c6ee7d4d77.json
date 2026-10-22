@@ -1,0 +1,75 @@
+{
+ "schema": "conform-run/1",
+ "worker": "5e233747-c6bb-4bd4-9843-54c6ee7d4d77",
+ "subject": "test-input-generation",
+ "evaluatedAt": "2026-10-22T04:30:15.299346+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "stage-voice-client",
+   "subject": "test-input-generation",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/voice/session.test.ts:181 The voiceBlocked tests cover four of eight Boolean combinations, leaving a cheaply enumerable space incomplete and overlapping rejection conditions untested.",
+   "techniques": [
+    {
+     "technique": "exhaustive-when-bounded",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/voice/session.test.ts:184 The three Boolean inputs yield eight combinations; lines 181\u2013184 test only four, and repository search found no other voiceBlocked tests."
+    },
+    {
+     "technique": "negative-space-generation",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/voice/frame.test.ts:66 The suite mutates accepted utterances one field at a time, checks field-specific rejection messages, and retains positive acceptance controls."
+    }
+   ]
+  },
+  {
+   "context": "stage-app",
+   "subject": "test-input-generation",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/clip.test.ts:31 The clip parser's top-level negative cases assert only rejection, so a rejection for the wrong reason passes despite the standard requiring a specific rejection oracle.",
+   "techniques": [
+    {
+     "technique": "negative-space-generation",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/clip.test.ts:32 Valid-fixture mutations and positive controls exist, but all top-level refusal assertions check only .ok and never the specific rejection message."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-22T04:30:15.299346+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-input-generation"
+   ],
+   "techniques": [
+    "exhaustive-when-bounded",
+    "negative-space-generation"
+   ],
+   "deviations": 1,
+   "context": "stage-voice-client",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  },
+  {
+   "ts": "2026-10-22T04:30:15.299346+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-input-generation"
+   ],
+   "techniques": [
+    "negative-space-generation"
+   ],
+   "deviations": 1,
+   "context": "stage-app",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

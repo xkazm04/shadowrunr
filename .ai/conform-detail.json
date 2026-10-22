@@ -3503,6 +3503,43 @@
           "evidence": "apps/console/src-tauri/src/endpoint.rs:148 The centralized endpoint parser validates scheme, origin shape, loopback host and port range before returning Endpoint; invalid nonempty inputs produce classified errors."
         }
       ]
+    },
+    "b2009d98-3f59-4c44-97e1-b3b93b65264c/test-input-generation": {
+      "context": "stage-voice-client",
+      "subject": "test-input-generation",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T04:30:15.299Z",
+      "worker": "5e233747-c6bb-4bd4-9843-54c6ee7d4d77",
+      "techniques": [
+        {
+          "technique": "exhaustive-when-bounded",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/voice/session.test.ts:184 The three Boolean inputs yield eight combinations; lines 181–184 test only four, and repository search found no other voiceBlocked tests."
+        },
+        {
+          "technique": "negative-space-generation",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/frame.test.ts:66 The suite mutates accepted utterances one field at a time, checks field-specific rejection messages, and retains positive acceptance controls."
+        }
+      ]
+    },
+    "e0e277e4-0b4e-4d04-8c33-29f0d59d2a67/test-input-generation": {
+      "context": "stage-app",
+      "subject": "test-input-generation",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-22",
+      "evaluatedTs": "2026-10-22T04:30:15.299Z",
+      "worker": "5e233747-c6bb-4bd4-9843-54c6ee7d4d77",
+      "techniques": [
+        {
+          "technique": "negative-space-generation",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/clip.test.ts:32 Valid-fixture mutations and positive controls exist, but all top-level refusal assertions check only .ok and never the specific rejection message."
+        }
+      ]
     }
   }
 }
