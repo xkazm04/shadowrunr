@@ -679,6 +679,19 @@ body {
   color: var(--bronze);
   border-color: #5c4b2a;
 }
+/* A vote line's outcome: counted (the runtime's own rule), refused by the poll, or no poll open. */
+.cmd-chip.vote-counted {
+  color: var(--verdigris);
+  border-color: var(--verdigris-dim);
+}
+.cmd-chip.vote-refused {
+  color: var(--blood);
+  border-color: #6a2a24;
+}
+.cmd-chip.vote-idle {
+  color: var(--dim);
+  border-color: #3a403c;
+}
 
 .heard-tag {
   flex-shrink: 0;
@@ -868,6 +881,26 @@ body {
   white-space: nowrap;
 }
 
+/* The ballot key the runtime counts (`!vote 2`), shown while the poll is open. */
+.vote-key {
+  flex-shrink: 0;
+  min-width: 22px;
+  margin-right: 8px;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid var(--verdigris-dim);
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+  color: var(--verdigris);
+}
+.vote-key + .vote-option {
+  flex: 1;
+  min-width: 0;
+}
+
 .vote-option {
   font-weight: 600;
   overflow: hidden;
@@ -966,6 +999,16 @@ body {
 
 .vote-legend span:last-child {
   margin-left: 6px;
+}
+
+.vote-call {
+  margin-left: auto;
+  margin-right: 12px;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--bone);
+  white-space: nowrap;
 }
 
 .vote-timer {

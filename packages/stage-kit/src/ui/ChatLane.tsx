@@ -1,8 +1,11 @@
-import type { ChatMsg, Command } from "@shadowrunr/contract";
+import type { ChatMsg, Command, Rank } from "@shadowrunr/contract";
 import { Sigil } from "../art/Sigil";
-import { RANK_COLOR } from "../lore";
+import { ballotOption, matchOption } from "../ballots";
+import { RANK_COLOR, RANK_TITLE } from "../lore";
 import { shownLane } from "../scene";
-import type { SceneState } from "../sceneModel";
+import type { Poll, SceneState } from "../sceneModel";
+import type { TsMs } from "../vocab";
+import { optionLabel } from "./VotePanel";
 
 export function commandLabel(c: Command): string {
   switch (c.cmd) {
@@ -16,6 +19,64 @@ export function commandLabel(c: Command): string {
       return "PROPOSAL";
     case "vote":
       return `VOTE ${c.option}`;
+  }
+}
+
+/** What became of a `!vote` line: counted for an option (with its 1-based key), or why not. */
+export type VoteOutcome =
+  | { kind: "counted"; key: number; option: string }
+  | { kind: "not_an_option" }
+  | { kind: "below_rank"; minRank: Rank }
+  | { kind: "no_open_poll" };
+
+/** The poll open at `ts` (opened at or before it, not yet closed), the latest if several. */
+export function pollOpenAt(scene: SceneState, ts: TsMs): Poll | null {
+  let best: Poll | null = null;
+  for (const p of Object.values(scene.polls)) {
+    if (p.openedAt > ts || (p.closedAt !== undefined && ts >= p.closedAt)) continue;
+    if (best === null || p.openedAt >= best.openedAt) best = p;
+  }
+  return best;
+}
+
+/**
+ * The outcome of a `!vote` line against the poll open at the line's time, decided by the
+ * runtime-pinned ballot rule (`ballots.ts`): the chip never counts a ballot the runtime drops.
+ * Null for a line that is not a `!vote`.
+ */
+export function voteOutcome(scene: SceneState, m: ChatMsg): VoteOutcome | null {
+  const c = m.command;
+  if (c?.cmd !== "vote") return null;
+  const poll = pollOpenAt(scene, m.ts_ms);
+  if (poll === null) return { kind: "no_open_poll" };
+  // Judged as at the line's time, when the poll was still open, even if it has closed since.
+  const open: Poll = { ...poll };
+  delete open.closedAt;
+  const option = ballotOption(open, { id: m.viewer.id, rank: m.viewer.rank }, c);
+  if (option !== null) return { kind: "counted", key: poll.options.indexOf(option) + 1, option };
+  if (matchOption(poll.options, c.option) === null) return { kind: "not_an_option" };
+  return { kind: "below_rank", minRank: poll.minRank };
+}
+
+/** The chip's tone: counted, refused by a rule of the poll, or with no poll to count it. */
+const VOTE_TONE: Record<VoteOutcome["kind"], string> = {
+  counted: "vote-counted",
+  not_an_option: "vote-refused",
+  below_rank: "vote-refused",
+  no_open_poll: "vote-idle",
+};
+
+/** The chip a vote line wears: what the runtime made of it, in the voter's own words. */
+export function voteLabel(o: VoteOutcome): string {
+  switch (o.kind) {
+    case "counted":
+      return `VOTE ${o.key} · ${optionLabel(o.option)}`;
+    case "not_an_option":
+      return "VOTE · not an option";
+    case "below_rank":
+      return `VOTE · below ${RANK_TITLE[o.minRank]}`;
+    case "no_open_poll":
+      return "VOTE · no open poll";
   }
 }
 
@@ -52,6 +113,7 @@ export function ChatLane({ scene, now, title = "The Minions" }: { scene: SceneSt
           const isDecree = scene.decrees.some((d) => d.msgId === id);
           const fresh = now - shownAt < 700;
           const text = bodyText(m);
+          const outcome = voteOutcome(scene, m);
           return (
             <div
               key={id}
@@ -66,7 +128,11 @@ export function ChatLane({ scene, now, title = "The Minions" }: { scene: SceneSt
                   <span className="chat-text purged-text">purged by the Warden</span>
                 ) : (
                   <>
-                    {m.command && <span className={`cmd-chip cmd-${m.command.cmd}`}>{commandLabel(m.command)}</span>}
+                    {m.command && (
+                      <span className={`cmd-chip cmd-${m.command.cmd}${outcome ? ` ${VOTE_TONE[outcome.kind]}` : ""}`}>
+                        {outcome ? voteLabel(outcome) : commandLabel(m.command)}
+                      </span>
+                    )}
                     {text && <span className="chat-text">{text}</span>}
                   </>
                 )}
