@@ -17,6 +17,8 @@
 //! mechanically; the verdict assembled programmatically.
 
 pub mod calibration;
+#[cfg(test)]
+mod case_flow;
 pub mod casefile;
 pub mod chat;
 pub mod decision;

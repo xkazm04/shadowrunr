@@ -323,7 +323,7 @@ runs/sim/<tournament_id>/
 
 Instrument identity: each run records `instrument_hash`, a hash of the character package
 files (with `directions.md`), the tone file and its line bank, segment tables and judge rubric.
-Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/11`
+Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/12`
 (T1: the line bank and directions, the narrowed rails, the scaled judge and the tic check;
 `/10` is the evidence board).
 
@@ -1275,8 +1275,8 @@ like a real case. It is never written live in a quiet moment.
     premise p-03", "react: question; wave of 9 acknowledged". Its wording is not a contract,
     except that a speech hold's reason starts with `speaking: N.N s queued`, and that a beat
     given a through-line directive (below) carries `pick-up after N s`, `pick-up: landed` or
-    `lead-in: <loop>` among its `; `-separated parts, and one answering an owned request
-    `owed: <msg ids>`.
+    `lead-in: <loop>` among its `; `-separated parts, one answering an owned request
+    `owed: <msg ids>`, and one carrying the case's next move (below) starts `case: <move>`.
 - **Speech pacing.** The brain keeps a speech clock: every line it puts on air (his lines, foil
   lines, stall and cover lines, the sign-off) advances `speaking_until` to
   `max(now, speaking_until) + chars / speech_cps × 1000 + line_pause_ms`. Silence is measured
@@ -1330,8 +1330,9 @@ like a real case. It is never written live in a quiet moment.
   not picked because of a hold, a safety beat, the cold-open filter or the pick ceiling is
   carried for up to 25 s from the drain of the speech queued when it arrived (at most 6)
   and competes in later beats; expiry writes an input moderation record, rule `carry`, action
-  `expired`, and a message the cap of 6 drops writes rule `carry`, action `capped`, so every
-  drop leaves a record. In the cold open a carried message is held: it never expires there, and its 25 s
+  `expired`, a message the cap of 6 drops writes rule `carry`, action `capped`, and a message
+  worth answering that a beat neither picked nor carried (a remark in a speech hold, say) writes
+  rule `carry`, action `dropped`, so every drop leaves a record. In the cold open a carried message is held: it never expires there, and its 25 s
   start from the drain of the first beat after the room opens ("carry until the room opens +
   25 s"); while the room fills, the cap of 6 keeps first contacts first, the oldest first, then
   the newest of the rest. A gift or a sub is boosted in the picker like a first contact. A
@@ -1343,24 +1344,33 @@ like a real case. It is never written live in a quiet moment.
   at least 20 s apart. These are read from the runtime's state summary today; a structured
   `SegmentContext` field is the planned replacement.
 - **Situational notes.** A plain picked message gets a one-line note beside it in the per-turn
-  chat when a newcomer (a first contact or a Thrall) asks what this is (say it is his livestream throne room,
-  the segment, and one way to join in), speaks of the Lord (dread and flattery; never say
+  chat when a newcomer (a first contact or a Thrall) asks what this is (welcome them by name and
+  their rank title, which the note names, a comic title only on top; say it is his livestream
+  throne room, the segment, and one way to join in), speaks of the Lord (dread and flattery; never say
   whether the Lord watches), announces a gift or a sub (thank them by name and rank; gifted subs also welcome the new
   subscribers), or is a
   `!propose` from below the proposing rank (not accepted; admire the ambition, explain rank and
   how to climb). Injection stand-ins, forged decrees, waves and safety picks get none. With
-  two picks, the answer format asks for one line per message of at most half the budget.
+  two picks, the answer format asks for one line per message of at most half the budget. The
+  chat instructions say each viewer's rank title is in the parentheses beside their name, and
+  that welcoming, thanking or comforting a viewer names that title (a comic title on top, never
+  instead).
 - **Owned requests.** A message that makes a situational ask a rule covers (a self-declared
   minor asking him to flirt, real steps to break into an account, "roast me" (not beside grief),
   an impression of a real person, hyping a real coin, where a real person lives, explicit
-  content, a sincere "are you a real person or an AI", any `!propose`; a fixed classifier, never
-  the model) is worth answering and is owned until answered, once per viewer and kind:
+  content, a sincere "are you a real person or an AI", bait for an "ironic" joke mocking a whole
+  ethnicity or group, a viewer who is sincerely sad (grief, a bad day; never a self-harm
+  disclosure, which the safety rail owns), a newcomer (a first contact or a Thrall) asking what
+  this is, any `!propose`; a fixed classifier, never the model)
+  is worth answering and is owned until answered, once per viewer and kind:
   - it is carried past the 25 s window, never capped, and dropped (rule `carry`, action
     `expired`) only 90 s after it first reached a beat;
   - it passes the cold-open filter like a first contact;
   - the picker takes one owed request a beat right after the safety picks, ahead of carried bait
     and fresh chat, within the pick ceiling and one pick per viewer but past the share and whale
     caps, so its viewer's later messages wait for it (the deterministic reason marks it `owed`);
+    sincere sadness goes ahead of every other owed kind, then the oldest first, so a sad regular
+    is answered first even in a raid;
   - while one waits, a beat holds for speech only while more than 8 s is queued, so it is
     answered within 20 s (`REQUEST_ANSWER_MS`, assumption);
   - a pick whose only answering line the pace gate dropped (`trimmed` or `lagged`: no aired
@@ -1368,8 +1378,16 @@ like a real case. It is never written live in a quiet moment.
     action `unaired`);
   - the answering line gets a one-line note per ask beside the message naming what to do with
     the request itself (deliver the harmless roast; mock the intrusion with no method; decline the
-    impression and offer a foil; refuse the coin, the address, explicit content), also beside an
-    injection stand-in or a forged decree. No note carries the payload.
+    impression and offer a foil; refuse the coin, the address, explicit content; never tell the
+    stereotype joke and turn the roast on the baiter's material; answer sincere sadness first, by
+    name and rank title, with a short sincere kindness and no roast, then carry on; say plainly he
+    is an AI, in his own words), also beside an injection stand-in or a forged decree. No note
+    carries the payload. A beat answering sincere sadness carries no voice exemplars;
+  - a sincere "are you an AI" from a viewer already answered this stream (or a wave asking it
+    after any answer) is not owed again: its note asks for one short in-character line that still
+    says it in a few words and points back to the answer, never a denial and never the full
+    disclosure again. The tone's line bank
+    carries several authored disclosure variants (`ai_question`).
 - **The through-line.** The orchestrator keeps a short agenda of open loops: research out (from
   the worker pool's job states), each vote open (from the state summary), each owed request,
   and a prepared bit whose payoff is still to come. A voiced beat outside the cold open, a
@@ -1385,6 +1403,28 @@ like a real case. It is never written live in a quiet moment.
   bridged longest ago (each at most once a minute), else his last line (at most once every
   30 s); then a bit off its spacing; generic filler only when none applies (`improvise`, reason
   `bridged from the agenda <loop>` or `bridged from the agenda thread`).
+- **The case.** In an investigation segment (the case's cards in `SegmentContext.hexes` and a case
+  op on the menu) "advance the case" is an open loop of the agenda. Its next move, from the
+  context: reveal a face-down card whose research came back with a record on file (at its
+  strongest record's grade, one step down after a `doc_requires_primary_source` refusal) unless
+  the pacing clock holds reveals; pin a string from a face-up card with a returned record and no
+  string to a face-up card that record names (by its label, in the research summary; any
+  face-up card when the record's text is unknown; the model picks the card and states the
+  relation, the string reading from the card that acts to the card it acts on); research, when none is out and no Plebiscite holds it, the lead chat hinted most,
+  else a face-down card a returned record names (the trail), else the next face-down card never
+  searched (never a locked, spent or empty-searched card, or one with records on file); show a
+  returned record never on screen. When a move is open and
+  `CASE_BEAT_MS` (40 s, assumption) passed since the last case op (15 s for a reveal or a string,
+  `CASE_PAYOFF_MS`), the next beat that is not a hold, a safety beat, a room event, the goodbye
+  or a beat with an owed request carries it: at most one pick (`react`, or `improvise` with no
+  chat), reason `case: <move>`, and a `# The case` section in the per-turn block (before the
+  voice section; byte-absent otherwise) with the exact op line (and, with a pick, a line asking
+  for its answer by name and rank title). A reply without a case op is
+  asked again after `CASE_RETRY_MS` (10 s, assumption); a move asked twice with no case op in
+  reply is skipped for `CASE_BEAT_MS`, and a string answered by putting its record on screen
+  instead is skipped until another card is face up, so the case never loops on one move. The research, board and screen lines are
+  read from the runtime's state summary today; a structured case state in `SegmentContext` is the
+  planned replacement.
 - **New moderation values.** Input rule `wave_repeat` (action `dropped`): a paste wave already
   answered this stream. Output rule `mechanism_leak` (action `removed` or `dropped`): a sentence
   describing the moderation machinery. A `persona_leak` or `character_break` line answering a
@@ -1393,8 +1433,10 @@ like a real case. It is never written live in a quiet moment.
   beat's next slot after the safety picks, oldest first, ahead of fresh and ordinary carried
   chat, so he mocks it before it expires; still one injection a beat, one pick per viewer and
   the share and whale caps. The deterministic reason marks it `bait_first`.
-- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/8`: owned requests, the through-line
-  and the lag ceiling (`/7`: the map focus, the investigation's screen defaults and dwells, a record before the model's op that shows it; `/6`: the screens, runtime screen defaults and a returning research job
+- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/12`: the case as an owned loop, the
+  stereotype bait and sincere sadness owned, every unpicked candidate recorded, the rank title in
+  the notes, a repeated "are you an AI" deflected (`/8`: owned requests, the through-line
+  and the lag ceiling; `/7`: the map focus, the investigation's screen defaults and dwells, a record before the model's op that shows it; `/6`: the screens, runtime screen defaults and a returning research job
   opening its record; `/5`: carried bait picked first; `/4`:
   two picks a beat, gifts carried, chat held through the cold open, the situational notes, a
   sandbox session that runs its full length, and a sim run's `max_say_gap_s` measured

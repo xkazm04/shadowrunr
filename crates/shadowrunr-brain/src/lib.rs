@@ -9,7 +9,8 @@
 //!    disclosures, room-scaled rate caps, injection tagging, flood/copypasta clusters); a
 //!    disclosure puts its viewer in care ([`care`]);
 //! 4. orchestrate and pick: [`orchestrate`] drops repeats of answered waves, decides the beat's
-//!    mode (cold open, react, bit, bridge, mixed, hold) and writes its `beat_plan`; the picker
+//!    mode (cold open, react, bit, bridge, mixed, hold; in an investigation, a beat that carries
+//!    the case's next move, [`orchestrate::case`]) and writes its `beat_plan`; the picker
 //!    then passes at most the plan's ceiling (safety-critical first, then one owed request;
 //!    deterministic, or `Role::ChatPicker` above a volume threshold). A hold ends the beat there,
 //!    and so does speech still queued on the speech clock past the lead ([`pace`]: a `speaking`
@@ -82,7 +83,8 @@ use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line};
 use moderation::{InputFilter, Policy, RemovedNames, CRISIS_BAN_RULE};
-use orchestrate::{requests::claims_authority, BeatInputs, BeatTxn, Orchestrator, ROLLED_BACK};
+use orchestrate::requests::{claims_authority, situational_asks, Ask};
+use orchestrate::{BeatInputs, BeatTxn, Orchestrator, ROLLED_BACK};
 use outgate::{GateCtx, Surface};
 use picker::{Pick, PickContext, Picker};
 use shadowrunr_types::prep::BeatMode;
@@ -611,7 +613,8 @@ impl Brain {
     fn collect_jobs(&mut self, now_ms: TsMs, ev: &mut Vec<StreamEvent>) -> Result<(), BrainError> {
         for u in self.pool.collect(&self.cfg.stream_id) {
             self.working.apply_job(&u, now_ms);
-            self.orch.note_job(&u.job_id, &u.brief, u.status.as_str());
+            self.orch
+                .note_job(&u.job_id, &u.brief, u.status.as_str(), u.status.summary());
             ev.push(StreamEvent::Job {
                 ts_ms: now_ms,
                 job_id: u.job_id.clone(),
@@ -936,6 +939,18 @@ impl Brain {
                 reason: pick.reason.clone(),
             });
         }
+        // Before the commit records this beat's asks: an "are you an AI" from a viewer already
+        // answered is a repeat (a deflection, not the disclosure again).
+        let ai_answered = self.orch.ai_answered();
+        let repeat_ai: HashSet<String> = pick
+            .chosen
+            .iter()
+            .filter(|c| {
+                situational_asks(&c.msg.text).contains(&Ask::AreYouAi)
+                    && self.orch.has_asked(&c.msg.viewer.id, Ask::AreYouAi)
+            })
+            .map(|c| c.msg.id.clone())
+            .collect();
         let beat_plan = self.orch.commit(&mut plan, &pick, now_ms);
         // Every message the carry cap dropped leaves a record.
         ev.extend(self.orch.take_capped(now_ms));
@@ -1064,9 +1079,10 @@ impl Brain {
             self.tuning.pace.budget_chars
         };
         // Exemplars for the beat's situation and the phrases worn out (never in a care beat).
-        let voice = compose::beat_situations(
+        let voice = compose::beat_situations_with(
             &pick.chosen,
             &pctx.first_contacts,
+            &repeat_ai,
             plan.room_note.as_deref(),
             care.as_deref(),
             self.working.research_open(),
@@ -1095,6 +1111,9 @@ impl Brain {
             budget_chars: budget,
             propose_min_rank: self.tuning.filter.propose_min_rank,
             first_contacts: &pctx.first_contacts,
+            case: plan.case.as_deref(),
+            repeat_ai: &repeat_ai,
+            ai_answered,
         });
         self.last_prompt = Some(prompt.clone());
 
@@ -1363,6 +1382,7 @@ impl Brain {
                         _ => {}
                     }
                     self.working.apply_op(&op, now_ms);
+                    self.orch.note_op(&op, now_ms);
                     turn.push(format!("[op {tag}]"));
                     debug_assert_eq!(op_tag(&op), tag);
                     ev.push(StreamEvent::Op { ts_ms: now_ms, op });
