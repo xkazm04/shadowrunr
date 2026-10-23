@@ -127,8 +127,8 @@ test("case 5: pnpm or python in a form the planner cannot parse -> exit 1 'unpar
   }
 });
 
-test("case 6: the repo as built -> exit 0, 21 lanes (18 web package-script + 3 Python; Rust not counted)", () => {
+test("case 6: the repo as built -> exit 0, 22 lanes (18 web package-script + 4 Python; Rust not counted)", () => {
   const r = check(repo, repoCi);
   assert.equal(r.status, 0, r.lines.join("\n"));
-  assert.equal(r.denominator, "21 lanes derived, 21 covered, 0 uncovered, 0 stale, 0 unparseable");
+  assert.equal(r.denominator, "22 lanes derived, 22 covered, 0 uncovered, 0 stale, 0 unparseable");
 });
