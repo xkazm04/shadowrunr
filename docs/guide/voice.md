@@ -1093,7 +1093,9 @@ emotion words it may add one gesture and an eye light, in any order:
 Two more faces sit behind `?avatar=` and `[avatar] face`. Since the avatar-3d blind lineup,
 `lich3d` is the default face: on the stage (`DEFAULT_FACE`), in the daemon (`[stage] avatar`) and
 in Malakor's `character.toml`. A character's own `[avatar] face` still overrides the daemon's.
-For now lich3d draws an opaque black square, so in the corner layout it covers what is behind it.
+lich3d draws on a transparent canvas: in the corner layout only the skull, the collar, the
+painted torso, the crown and their glow cover what is behind it, and the glow lights the
+content under it.
 `cut`, `glow`, `depth` and `relit` stay selectable.
 
 **`relit`** draws the rig as lit 2.5D cards on the depth map (run `tools/avatar/depth_map.py`
@@ -1131,9 +1133,20 @@ first, as for `depth`).
   - The jaw opens on its hinge, and the head turns to ±35° yaw and ±18° pitch.
   - Teal fire burns in each socket, and a point light per socket lights the bone.
   - The monocle is an emissive ring.
-- Around the head: a seeded crown of procedural crystals floats about it, and the rig's painted
-  torso stands behind it as a backdrop.
-- The look is finished with bloom.
+- Around the head: the portrait's crown.
+  - Its eleven shards stand where the rig spec's `shard_*` polygons put them
+    (`characters/malakor/rig/m8.spec.json`): a tall centre stone on the crown's axis touching
+    the skull, and pairs stepping smaller and lower to both sides.
+  - Each is projected through the lich camera onto its own depth plane, so at rest it covers
+    the painted shard. It follows the spec's share of the head's turn (the centre stone all of
+    it, the outer pairs half), so the crown parallaxes when he turns.
+  - The stones are faceted obsidian bipyramids, near black with grey-blue facet highlights and
+    a teal glow only in their lower part. They bob and rock slowly with the spec's float.
+  - `flare` pulses the teal cores, and `eyeLight` brightens them a little.
+- The rig's painted torso stands behind the head as a backdrop card.
+- The look is finished with bloom. The canvas stays transparent: where the face covers the
+  page, the scene and the bloom are tone mapped together; where it does not, the glow alone is
+  laid over the page. So the face looks the same over black, and its glow haloes over content.
 - A skull has no brow, so `brow` pitches the head and narrows or opens the eye fire.
 - Toggles:
   - `?lichlook=real` lights the bone smooth instead of painted.
@@ -1188,3 +1201,8 @@ clean:
 - Ready time grew from about 510 to 594 ms with the larger GLB.
 
 Rerun `frames.mjs` on a quiet machine before quoting a 1024 px cost.
+
+The transparent canvas and the portrait crown (2026-10-24) draw one call fewer per frame with
+bloom (31 against 32): the bloom's additive blend into the scene and the OutputPass became one
+pass that composes both. That day's bench had a dirty canary (relit at 1024 measured 2.5-4.9
+ms against its known 1.25), so its GPU times say no more than "not blown".

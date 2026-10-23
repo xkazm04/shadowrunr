@@ -1,8 +1,8 @@
 // The lich3d face (spark avatar-3d prototype B): Malakor's head as a true 3D skull in three.js.
 // The skull is the rig's `lich.glb` (WP-B1) or, until there is one, a procedural placeholder in the
 // same faceted style; the jaw opens on its hinge, eye fire burns in the sockets and lights the bone,
-// the monocle glows, a crown of procedural crystals floats about the head, the painted torso stands
-// behind it. Everything three.js is in this folder, so it lands in this variant's lazy chunk.
+// the monocle glows, the portrait's crown of obsidian shards floats about the head, the painted
+// torso stands behind it, and the canvas is transparent wherever none of it is drawn. Everything three.js is in this folder, so it lands in this variant's lazy chunk.
 //
 // Same seam as the other faces (`startFace`, variants.ts): `data-face` loading | ready |
 // unavailable, `data-face-loop` running | still, `data-form` rig (the GLB) | placeholder. It reads

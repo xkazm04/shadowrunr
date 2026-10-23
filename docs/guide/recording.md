@@ -79,17 +79,19 @@ stage_url = "http://localhost:5178"   # where the built stage is served
 
 ```toml
 [stage]
-avatar = "cut"   # "cut" (default), "glow" or "depth"
+avatar = "lich3d"   # "lich3d" (default), "cut", "glow", "depth" or "relit"
 ```
 
-The stage draws the face with one of three renderers (`?avatar=`, `apps/stage/DESIGN.md`).
+The stage draws the face with one of five renderers (`?avatar=`, `apps/stage/DESIGN.md`).
 `[stage] avatar` picks the one the daemon's stage URLs ask for: both the OBS browser source's URL
-and the sandbox's `stage_url` end in `&avatar=cut` (or `glow`, `depth`), and `recording.json`'s
-`stage_url` shows it. The default is `cut`, the owner's pick from the 2026-10-21 recorded show;
-the URL names it anyway, so a recording says which face it drew whatever the stage build's own
-default. Any other value is a config error. The OBS URL comes
-from the config `stream sandbox --record` loads, the sandbox's `stage_url` from the daemon's (read
-when it starts), so give both the same file. `stream sandbox --record` prints the URL OBS records.
+and the sandbox's `stage_url` end in `&avatar=lich3d` (or another face), and `recording.json`'s
+`stage_url` shows it. The default is `lich3d`, the owner's pick from the avatar-3d and
+lich3d-quality blind lineups (it was `cut` from the 2026-10-21 recorded show until then). The
+URL names it anyway, so a recording says which face it drew whatever the stage build's own
+default. A character's own `[avatar] face` overrides it. Any other value is a config error. The
+OBS URL comes from the config `stream sandbox --record` loads, the sandbox's `stage_url` from
+the daemon's (read when it starts), so give both the same file. `stream sandbox --record` prints
+the URL OBS records.
 
 ## Check OBS: `shadowrunr record check`
 

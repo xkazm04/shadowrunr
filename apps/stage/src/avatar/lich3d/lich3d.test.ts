@@ -4,6 +4,9 @@
 // the asset contract, the fallback decisions, the channel mapping, the crown's determinism and the
 // placeholder skull's nodes.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 
@@ -13,10 +16,11 @@ import { PERFORMANCE_REST, type PerformanceCue, type PerformanceDriver, type Per
 import { loadLichAsset } from "./asset";
 import { BROW_PITCH_DEG, COLLAR_PITCH, COLLAR_YAW, collarMotion, emptyFrame, leanShift, lichFrame, PITCH_MAX_DEG, YAW_MAX_DEG } from "./channels";
 import { checkLichMeta, chooseRenderer, chooseSkull, LICH_NODES, LICH_OPTIONAL_NODES, missingNodes, PLACEHOLDER_META } from "./contract";
-import { CROWN, crystalAt, crystalCrown } from "./crystals";
+import { CROWN, crystalAt, crystalCrown, FLOAT_GAIN, PORTRAIT_PX } from "./crystals";
 import { lichDriver } from "./index";
 import { paintRamp } from "./renderer";
 import { buildPlaceholderSkull } from "./skull";
+import { readJson } from "../../test-json";
 
 const DEG = Math.PI / 180;
 
@@ -205,15 +209,77 @@ describe("the paint ramp", () => {
 });
 
 describe("the crown", () => {
-  it("is eleven crystals where the rig's shards stood", () => {
+  // the committed rig spec: the shards' polygons, follow and float, in portrait px
+  type SpecShard = { name: string; region: { poly: [number, number][] }; follow: number; float: { amp: [number, number]; freq: number; rot_deg: number } };
+  const spec = readJson(readFileSync(fileURLToPath(new URL("../../../../../characters/malakor/rig/m8.spec.json", import.meta.url)), "utf8")) as {
+    width: number;
+    height: number;
+    elements: SpecShard[];
+  };
+  const shards = spec.elements.filter((e) => e.name.startsWith("shard_"));
+  const centroid = (poly: [number, number][]) => {
+    let a = 0;
+    let cx = 0;
+    let cy = 0;
+    poly.forEach(([x0, y0], i) => {
+      const [x1, y1] = poly[(i + 1) % poly.length]!;
+      const c = x0 * y1 - x1 * y0;
+      a += c;
+      cx += (x0 + x1) * c;
+      cy += (y0 + y1) * c;
+    });
+    return [cx / (3 * a), cy / (3 * a)] as const;
+  };
+
+  it("is the rig spec's shards: their centroids, extents, follow and float", () => {
+    expect(spec.width).toBe(PORTRAIT_PX);
+    expect(spec.height).toBe(PORTRAIT_PX);
+    expect(CROWN.map((s) => s.name).sort()).toEqual(shards.map((s) => s.name).sort());
+    for (const s of shards) {
+      const c = CROWN.find((x) => x.name === s.name)!;
+      const [cx, cy] = centroid(s.region.poly);
+      expect(Math.abs(c.cx - cx)).toBeLessThan(0.1);
+      expect(Math.abs(c.cy - cy)).toBeLessThan(0.1);
+      const xs = s.region.poly.map((p) => p[0]);
+      const ys = s.region.poly.map((p) => p[1]);
+      expect(c.polyLen).toBe(Math.max(...ys) - Math.min(...ys));
+      expect(c.polyWidth).toBe(Math.max(...xs) - Math.min(...xs));
+      expect(c.follow).toBe(s.follow);
+      expect([...c.amp, c.freq, c.rotDeg]).toEqual([...s.float.amp, s.float.freq, s.float.rot_deg]);
+    }
+  });
+
+  it("fans out: the centre stone tallest and on the axis, pairs stepping smaller, lower and back", () => {
+    const [centre, ...rest] = CROWN;
+    expect(centre!.name).toBe("shard_c");
+    expect(Math.abs(centre!.cx - PORTRAIT_PX / 2)).toBeLessThan(2);
+    for (const s of rest) {
+      expect(s.polyLen).toBeLessThan(centre!.polyLen);
+      expect(s.cy).toBeGreaterThan(centre!.cy);
+      expect(s.depth).toBeLessThan(centre!.depth);
+    }
+  });
+
+  it("is one faceted stone per shard, a unit tall, widest above its middle", () => {
     const crown = crystalCrown(11);
-    expect(crown).toHaveLength(11);
+    expect(crown).toHaveLength(CROWN.length);
     crown.forEach((c, i) => {
-      expect(Math.abs(c.x - CROWN[i]![0])).toBeLessThan(0.011);
-      expect(Math.abs(c.y - CROWN[i]![1])).toBeLessThan(0.011);
-      expect(c.positions.length).toBe(c.sides * 4 * 9);
+      expect(c.layout).toBe(CROWN[i]);
+      // four triangles a side: the lower point, two bands, the upper point
+      expect(c.positions.length).toBe(c.sides * 6 * 9);
       expect(c.positions.every(Number.isFinite)).toBe(true);
-      expect(Math.max(...c.positions.filter((_, k) => k % 3 === 1))).toBeCloseTo(0.5, 9);
+      const ys = c.positions.filter((_, k) => k % 3 === 1);
+      expect(Math.max(...ys)).toBeCloseTo(0.5, 9);
+      expect(Math.min(...ys)).toBeCloseTo(-0.5, 9);
+      // the widest ring stands above the middle: the long taper is below
+      let widest = 0;
+      let widestY = 0;
+      for (let k = 0; k < c.positions.length; k += 3) {
+        const r = Math.hypot(c.positions[k]!, c.positions[k + 2]!);
+        if (r > widest) [widest, widestY] = [r, c.positions[k + 1]!];
+      }
+      expect(widestY).toBeGreaterThan(0);
+      expect(c.length).toBeGreaterThan(c.width);
     });
   });
 
@@ -222,14 +288,22 @@ describe("the crown", () => {
     const b = crystalCrown(11);
     const c = crystalCrown(12);
     expect(a.map((x) => Array.from(x.positions))).toEqual(b.map((x) => Array.from(x.positions)));
-    expect(a.map((x) => [x.z, x.tilt, x.spin0])).toEqual(b.map((x) => [x.z, x.tilt, x.spin0]));
+    expect(a.map((x) => [x.tilt, x.turn0, x.phaseY])).toEqual(b.map((x) => [x.tilt, x.turn0, x.phaseY]));
     expect(Array.from(a[0]!.positions)).not.toEqual(Array.from(c[0]!.positions));
   });
 
-  it("stands still at its rest place when nothing is alive", () => {
+  it("stands still at its rest place when nothing is alive, and floats within its amplitude when alive", () => {
     const [c] = crystalCrown(11);
-    expect(crystalAt(c!, 0, 0)).toEqual({ y: c!.y, spin: c!.spin0 });
-    expect(crystalAt(c!, 3.7, 0).y).toBe(c!.y);
+    for (const t of [0, 3.7]) {
+      const f = crystalAt(c!, t, 0);
+      // (+0 or -0: a sine times nothing)
+      expect([Math.abs(f.dx), Math.abs(f.dy), f.roll, f.turn]).toEqual([0, 0, c!.tilt, c!.turn0]);
+    }
+    for (let t = 0; t < 20; t += 0.37) {
+      const f = crystalAt(c!, t, 1);
+      expect(Math.abs(f.dy)).toBeLessThanOrEqual(c!.layout.amp[1] * FLOAT_GAIN + 1e-9);
+      expect(Math.abs(f.roll - c!.tilt)).toBeLessThanOrEqual((c!.layout.rotDeg * Math.PI) / 180 + 1e-9);
+    }
   });
 });
 

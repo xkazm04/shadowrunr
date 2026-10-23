@@ -7,21 +7,23 @@
 // cavity darkening and teal/orange rims like the portrait, or `real`, smooth PBR), the optional
 // collar (the GLB's `collar` node, turned a fraction of the head's turn), the jaw on its hinge, an eye fire in
 // each socket (an additive flame card turned to the camera) with a teal point light inside that
-// lights the bone around it, the orange monocle ring with its own light, and the crown of
-// procedural crystals (dark, glossy, teal veins) floating about the head. Bloom picks up what
-// burns above its threshold (eye fire, monocle, veins), then ACES tone mapping to sRGB.
+// lights the bone around it, the orange monocle ring with its own light, and the crown: the
+// portrait's eleven obsidian shards in its fan (dark, faceted, a teal core low in each), each on its
+// depth plane and turning with its share of the head's turn. Bloom picks up what burns above its
+// threshold (eye fire, monocle, crystal cores), then ACES tone mapping to sRGB.
+//
+// The canvas is transparent (premultiplied): where nothing is drawn the page shows through, and
+// the glow is light over it (COMPOSE_FRAG), so in the corner the face covers only itself.
 
 import * as THREE from "three";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 import { contextLossGuard } from "../gl-kit";
 import { collarMotion, leanShift, type LichFrame } from "./channels";
 import type { LichMeta } from "./contract";
-import { crystalAt, crystalCrown, type CrystalSpec } from "./crystals";
+import { crystalAt, crystalCrown, PORTRAIT_PX, type CrystalSpec } from "./crystals";
 
 /** The head as loaded: a group holding the contract's nodes, and its numbers. */
 export interface LichAsset {
@@ -77,6 +79,8 @@ const MONOCLE_CANDELA = 0.025;
 /** A mesh with at least this many triangles is dense enough to draw smooth in the real look. */
 const DENSE_TRIS = 12000;
 const BLOOM = { strength: 0.55, radius: 0.35, threshold: 0.85 };
+/** How much the crystal cores follow the eye light (x1 + CORE_EYE per unit above the rig's own). */
+const CORE_EYE = 0.12;
 
 const FLAME_VERT = /* glsl */ `
 varying vec2 vUv;
@@ -115,6 +119,51 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+  // coverage as bright as the fire (its colour is added, its alpha laid over): on a transparent
+  // canvas the fire's halo past the bone is light over whatever is behind, not a dark card
+  gl_FragColor.a = clamp(max(gl_FragColor.r, max(gl_FragColor.g, gl_FragColor.b)), 0.0, 1.0);
+}`;
+
+const QUAD_VERT = /* glsl */ `
+precision highp float;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+attribute vec3 position;
+attribute vec2 uv;
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+/**
+ * The bloom path's last pass, for a transparent canvas. The scene target holds premultiplied linear
+ * colour (cleared to transparent black) and the bloom composite's texture the glow, which three's
+ * additive blend would have added as rgb x a. A pixel is its covered share `a` (the surface, with
+ * the glow on it, tone mapped and encoded as the opaque canvas did) and its uncovered rest (the
+ * glow alone, as light over the page: its alpha its brightest channel, so it never darkens what
+ * is behind more than it lights it). Opaque pixels come out exactly as before; over black,
+ * everything does.
+ */
+const COMPOSE_FRAG = /* glsl */ `
+precision highp float;
+uniform sampler2D tScene;
+uniform sampler2D tBloom;
+#include <tonemapping_pars_fragment>
+#include <colorspace_pars_fragment>
+varying vec2 vUv;
+vec3 finish(vec3 c) {
+  return sRGBTransferOETF(vec4(ACESFilmicToneMapping(c), 1.0)).rgb;
+}
+void main() {
+  vec4 s = texture2D(tScene, vUv);
+  vec4 g = texture2D(tBloom, vUv);
+  vec3 b = max(g.rgb * g.a, vec3(0.0));
+  float a = clamp(s.a, 0.0, 1.0);
+  vec3 glow = finish(b);
+  float ga = clamp(max(glow.r, max(glow.g, glow.b)), 0.0, 1.0);
+  vec3 surface = a > 0.0 ? finish(s.rgb / a + b) : vec3(0.0);
+  gl_FragColor = vec4(a * surface + (1.0 - a) * glow, a + (1.0 - a) * ga);
 }`;
 
 /**
@@ -185,33 +234,136 @@ function flameMaterial(seed: number): THREE.ShaderMaterial {
     },
     vertexShader: FLAME_VERT,
     fragmentShader: FLAME_FRAG,
-    blending: THREE.AdditiveBlending,
+    // the colour added as it always was; the alpha laid over, so the bone stays opaque
+    blending: THREE.CustomBlending,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.OneFactor,
+    blendSrcAlpha: THREE.OneFactor,
+    blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     transparent: true,
     depthWrite: false,
   });
 }
 
-/** Dark glossy stone with teal veins traced in its own space, brightest toward the base. */
-function crystalMaterial(env: THREE.Texture | null, vein: { value: number }): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({ color: 0x0d1317, roughness: 0.2, metalness: 0.55, flatShading: true, envMap: env, envMapIntensity: 0.45 });
+/**
+ * Obsidian: near-black glossy stone, faceted (flat normals), its facet edges catching the room
+ * light grey-blue; a teal glow in its lower part only (the portrait's veins), strongest at the
+ * base and on the facets turned away from the camera, with veins traced in the stone's own space.
+ * `core` scales the glow (flare, eye light).
+ */
+function crystalMaterial(env: THREE.Texture | null, core: { value: number }): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ color: 0x0b0e13, roughness: 0.22, metalness: 0.65, flatShading: true, envMap: env, envMapIntensity: 0.85 });
   m.onBeforeCompile = (shader) => {
-    shader.uniforms.uVein = vein;
-    shader.uniforms.uVeinColor = { value: new THREE.Color(0.1, 0.95, 0.78) };
+    shader.uniforms.uCore = core;
+    shader.uniforms.uCoreColor = { value: new THREE.Color(0.06, 0.95, 0.74) };
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vCrystal;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvCrystal = position;");
+      .replace("#include <common>", "#include <common>\nvarying vec3 vStone;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvStone = position;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vCrystal;\nuniform float uVein;\nuniform vec3 uVeinColor;")
+      .replace("#include <common>", "#include <common>\nvarying vec3 vStone;\nuniform float uCore;\nuniform vec3 uCoreColor;")
       .replace(
         "#include <emissivemap_fragment>",
         `#include <emissivemap_fragment>
-        float vn = sin(vCrystal.y * 7.0 + sin(vCrystal.x * 9.0 + vCrystal.z * 7.0) * 1.8 + sin(vCrystal.z * 11.0) * 0.6);
-        float vein = 1.0 - smoothstep(0.04, 0.22, abs(vn));
-        float base = smoothstep(0.1, -0.5, vCrystal.y);
-        totalEmissiveRadiance += uVeinColor * (vein * (0.3 + 0.7 * base) * 1.6 + base * base * 0.6) * uVein;`,
+        float sFace = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+        float sEdge = pow(1.0 - sFace, 2.0);
+        float sLow = smoothstep(0.05, -0.45, vStone.y);
+        float sVn = sin(vStone.y * 9.0 + sin(vStone.x * 11.0 + vStone.z * 7.0) * 1.5);
+        float sVein = 1.0 - smoothstep(0.1, 0.45, abs(sVn));
+        totalEmissiveRadiance += uCoreColor * sLow * sLow * (0.12 + 1.5 * sEdge + 0.35 * sVein) * 1.3 * uCore;
+        totalEmissiveRadiance += vec3(0.2, 0.25, 0.32) * sEdge * (1.0 - sLow) * 0.7;`,
       );
   };
   return m;
+}
+
+interface BloomPost {
+  render(scene: THREE.Scene, camera: THREE.Camera, strength: number): void;
+  setSize(w: number, h: number): void;
+  dispose(): void;
+}
+
+type Uniforms = Record<string, THREE.IUniform>;
+// UnrealBloomPass.BlurDirectionX / Y (not in its type declarations)
+const BLUR_X = new THREE.Vector2(1, 0);
+const BLUR_Y = new THREE.Vector2(0, 1);
+
+/**
+ * Bloom onto a transparent canvas. The scene goes into an MSAA half-float target cleared to
+ * transparent black (so it holds premultiplied colour and coverage); UnrealBloomPass's own
+ * materials extract, blur and composite the glow (its steps 1-3, run here because its last step
+ * would add the glow into the scene target and make it opaque); COMPOSE_FRAG puts both on the canvas.
+ */
+function createBloomPost(renderer: THREE.WebGLRenderer, w: number, h: number, samples: number): BloomPost {
+  const sceneRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples });
+  const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), BLOOM.strength, BLOOM.radius, BLOOM.threshold);
+  const quad = new FullScreenQuad();
+  const compose = new THREE.RawShaderMaterial({
+    name: "LichCompose",
+    uniforms: { tScene: { value: sceneRT.texture }, tBloom: { value: null }, toneMappingExposure: { value: renderer.toneMappingExposure } },
+    vertexShader: QUAD_VERT,
+    fragmentShader: COMPOSE_FRAG,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const high = bloom.highPassUniforms as Uniforms;
+  const clear = new THREE.Color();
+  const pass = (material: THREE.Material, target: THREE.WebGLRenderTarget | null) => {
+    quad.material = material;
+    renderer.setRenderTarget(target);
+    renderer.clear();
+    quad.render(renderer);
+  };
+  return {
+    render(scene, camera, strength) {
+      const oldAlpha = renderer.getClearAlpha();
+      renderer.getClearColor(clear);
+      renderer.setClearColor(0x000000, 0);
+      renderer.setRenderTarget(sceneRT);
+      renderer.render(scene, camera);
+      const autoClear = renderer.autoClear;
+      renderer.autoClear = false;
+      // 1. the bright areas
+      high.tDiffuse!.value = sceneRT.texture;
+      high.luminosityThreshold!.value = bloom.threshold;
+      pass(bloom.materialHighPassFilter, bloom.renderTargetBright);
+      // 2. blurred down the mips
+      let input = bloom.renderTargetBright;
+      for (let i = 0; i < bloom.nMips; i++) {
+        const blur = bloom.separableBlurMaterials[i]!;
+        const u = blur.uniforms as Uniforms;
+        u.colorTexture!.value = input.texture;
+        u.direction!.value = BLUR_X;
+        pass(blur, bloom.renderTargetsHorizontal[i]!);
+        u.colorTexture!.value = bloom.renderTargetsHorizontal[i]!.texture;
+        u.direction!.value = BLUR_Y;
+        pass(blur, bloom.renderTargetsVertical[i]!);
+        input = bloom.renderTargetsVertical[i]!;
+      }
+      // 3. the mips composited
+      const cu = bloom.compositeMaterial.uniforms as Uniforms;
+      cu.bloomStrength!.value = strength;
+      cu.bloomRadius!.value = bloom.radius;
+      cu.bloomTintColors!.value = bloom.bloomTintColors;
+      pass(bloom.compositeMaterial, bloom.renderTargetsHorizontal[0]!);
+      // 4. both onto the canvas
+      const ou = compose.uniforms as Uniforms;
+      ou.tBloom!.value = bloom.renderTargetsHorizontal[0]!.texture;
+      ou.toneMappingExposure!.value = renderer.toneMappingExposure;
+      pass(compose, null);
+      renderer.autoClear = autoClear;
+      renderer.setClearColor(clear, oldAlpha);
+    },
+    setSize(w, h) {
+      sceneRT.setSize(w, h);
+      bloom.setSize(w, h);
+    },
+    dispose() {
+      sceneRT.dispose();
+      bloom.dispose();
+      compose.dispose();
+      quad.dispose();
+    },
+  };
 }
 
 /** The face's world bounding box over the meshes under `o`. */
@@ -227,10 +379,12 @@ function meshBox(o: THREE.Object3D): THREE.Box3 {
 export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, opts: LichRendererOptions = {}): LichRenderer {
   const bloomOn = opts.bloom ?? true;
   const useTexture = opts.texture ?? true;
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !bloomOn, alpha: false, powerPreference: "high-performance" });
+  // a transparent canvas (premultiplied): only the head, the torso card, the crown and their glow
+  // cover what is behind the face
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !bloomOn, alpha: true, premultipliedAlpha: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(1);
   renderer.setSize(canvas.width, canvas.height, false);
-  renderer.setClearColor(0x000000, 1);
+  renderer.setClearColor(0x000000, 0);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -373,26 +527,34 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
   monocle.add(monocleLight);
   disposables.push(ringGeo, ringMat);
 
-  // ---- the crown, in skull-height units about the skull's centre, turning with the head
-  const crown = new THREE.Group();
-  crown.position.copy(pivot.worldToLocal(headC.clone()));
-  crown.scale.setScalar(headH);
-  pivot.add(crown);
-  const vein = { value: 1 };
-  const crystalMat = crystalMaterial(env, vein);
+  // ---- the crown: each portrait shard projected through the camera onto its depth plane, so at
+  // rest it covers the painted one; it turns about the neck with its share of the head's turn
+  const core = { value: 1 };
+  const crystalMat = crystalMaterial(env, core);
   disposables.push(crystalMat);
-  const crystals: { spec: CrystalSpec; mesh: THREE.Mesh }[] = crystalCrown(opts.seed ?? 11).map((spec) => {
+  const frameAt = 2 * camera.position.distanceTo(target) * Math.tan(THREE.MathUtils.degToRad(meta.camera.fov / 2));
+  const pxAt = frameAt / PORTRAIT_PX;
+  const crystals: { spec: CrystalSpec; holder: THREE.Group; mesh: THREE.Mesh; rest: THREE.Vector3; px: number }[] = crystalCrown(opts.seed ?? 11).map((spec) => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(spec.positions, 3));
-    geo.computeVertexNormals();
     disposables.push(geo);
+    // the shard's centre on the portrait's plane at the target, then along the camera's ray to its depth
+    const onCard = new THREE.Vector3((spec.cx - PORTRAIT_PX / 2) * pxAt, (PORTRAIT_PX / 2 - spec.cy) * pxAt, 0)
+      .applyQuaternion(camera.quaternion)
+      .add(target);
+    const ray = onCard.sub(camera.position);
+    const k = (headC.z + spec.layout.depth * headH - camera.position.z) / ray.z;
+    const at = camera.position.clone().addScaledVector(ray, k);
+    const px = pxAt * k;
     const mesh = new THREE.Mesh(geo, crystalMat);
-    mesh.position.set(spec.x, spec.y, spec.z);
-    mesh.scale.set(spec.width, spec.length, spec.width);
+    mesh.scale.set(spec.width * px, spec.length * px, spec.width * px * 0.8);
     mesh.rotation.order = "ZXY";
-    mesh.rotation.set(spec.lean, spec.spin0, spec.tilt);
-    crown.add(mesh);
-    return { spec, mesh };
+    const holder = new THREE.Group();
+    holder.rotation.order = "YXZ";
+    holder.position.copy(neckAt);
+    holder.add(mesh);
+    scene.add(holder);
+    return { spec, holder, mesh, rest: at.sub(neckAt), px };
   });
 
   // ---- lights on the bone: a warm key from the upper left, a cool fill, a teal rim from behind
@@ -423,6 +585,9 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
       blending: THREE.CustomBlending,
       blendSrc: THREE.SrcAlphaFactor,
       blendDst: THREE.OneMinusSrcAlphaFactor,
+      // its coverage, laid over (not squared): the card's own soft edge on a transparent canvas
+      blendSrcAlpha: THREE.OneFactor,
+      blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
       depthTest: false,
       depthWrite: false,
       toneMapped: false,
@@ -439,18 +604,10 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
   }
 
   // ---- post
-  let composer: EffectComposer | null = null;
-  let bloom: UnrealBloomPass | null = null;
-  const size = new THREE.Vector2(canvas.width, canvas.height);
-  if (bloomOn) {
-    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: opts.samples ?? 4 });
-    composer = new EffectComposer(renderer, rt);
-    composer.setPixelRatio(1);
-    composer.addPass(new RenderPass(scene, camera));
-    bloom = new UnrealBloomPass(size.clone(), BLOOM.strength, BLOOM.radius, BLOOM.threshold);
-    composer.addPass(bloom);
-    composer.addPass(new OutputPass());
-  }
+  // the scene into a premultiplied HDR target, UnrealBloomPass's own blur of it, and one pass that
+  // tone maps both onto the transparent canvas (COMPOSE_FRAG); no EffectComposer, whose additive
+  // blend and OutputPass would make every pixel the bloom touches opaque
+  const post = bloomOn ? createBloomPost(renderer, canvas.width, canvas.height, opts.samples ?? 4) : null;
 
   // ---- per frame
   const neckRest = neckAt.clone();
@@ -498,18 +655,22 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
     });
     monocleLight.intensity = MONOCLE_CANDELA * headH * headH * (1 + 0.5 * flare);
 
-    crown.rotation.y = Math.sin(crownClock * 0.25) * 0.12;
-    for (const { spec, mesh } of crystals) {
+    for (const { spec, holder, mesh, rest, px } of crystals) {
+      const share = spec.layout.follow;
+      holder.position.copy(pivot.position);
+      holder.rotation.set(f.pitch * share, f.yaw * share, f.roll * share);
+      holder.scale.setScalar(lean.scale);
       const at = crystalAt(spec, crownClock, f.float);
-      mesh.position.y = at.y;
-      mesh.rotation.y = at.spin;
+      mesh.position.set(rest.x + at.dx * px, rest.y - at.dy * px, rest.z);
+      mesh.rotation.set(0, at.turn, at.roll);
     }
-    vein.value = 1 + flare * 2.2 * (0.6 + 0.4 * Math.sin(f.t * 12));
+    // the cores pulse with a flare and burn a little with the eye light
+    core.value = (1 + flare * 2.2 * (0.6 + 0.4 * Math.sin(f.t * 12))) * (1 + CORE_EYE * (Math.max(f.eyeL, f.eyeR) - 1));
 
-    if (composer && bloom) {
-      bloom.strength = BLOOM.strength + 0.9 * flare;
-      composer.render();
+    if (post) {
+      post.render(scene, camera, BLOOM.strength + 0.9 * flare);
     } else {
+      renderer.setRenderTarget(null);
       renderer.render(scene, camera);
     }
   }
@@ -520,7 +681,7 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
       renderer.setSize(canvas.width, canvas.height, false);
       camera.aspect = canvas.width / Math.max(1, canvas.height);
       camera.updateProjectionMatrix();
-      composer?.setSize(canvas.width, canvas.height);
+      post?.setSize(canvas.width, canvas.height);
     },
     finish: () => renderer.getContext().finish(),
     get lost() {
@@ -543,10 +704,7 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
       }
       for (const d of disposables) d.dispose();
       env.dispose();
-      composer?.renderTarget1.dispose();
-      composer?.renderTarget2.dispose();
-      bloom?.dispose();
-      composer?.dispose();
+      post?.dispose();
       renderer.dispose();
     },
   };
