@@ -57,11 +57,12 @@ function withoutPythonJob(text) {
 
 const PYTHON_LANES = [
   "tools/avatar unittest test_depth_map test_learned_depth",
+  "tools/avatar3d unittest discover",
   "tools/rig unittest discover",
   "tools/voice unittest discover",
 ];
 
-test("case 1: the repo's lanes without a python job -> exit 1, exactly the three Python suites uncovered", () => {
+test("case 1: the repo's lanes without a python job -> exit 1, exactly the four Python suites uncovered", () => {
   const r = check(repo, withoutPythonJob(repoCi));
   assert.equal(r.status, 1, r.lines.join("\n"));
   assert.deepEqual([...r.uncovered].sort(), PYTHON_LANES);

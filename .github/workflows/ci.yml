@@ -137,9 +137,9 @@ jobs:
         run: pnpm -C apps/console build
 
   python:
-    name: python (voice, rig, avatar)
+    name: python (voice, rig, avatar, avatar3d)
     # tools/voice is stdlib-only (its tests drive a fake engine, never a model); tools/rig and
-    # tools/avatar need numpy and pillow. No model, engine binary or secret is fetched.
+    # tools/avatar need numpy and pillow; tools/avatar3d's tests need numpy only. No model, engine binary or secret is fetched.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -160,3 +160,6 @@ jobs:
       - name: avatar unittest
         working-directory: tools/avatar
         run: python -m unittest test_depth_map test_learned_depth
+      - name: avatar3d unittest
+        working-directory: tools/avatar3d
+        run: python -m unittest discover -t . -s tests
