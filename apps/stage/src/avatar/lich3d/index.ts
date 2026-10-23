@@ -11,7 +11,7 @@
 // it hands the canvas to the glow face, as the depth face does.
 //
 // Dev toggles in the page URL: `?lichtex=0` draws the flat bone instead of the GLB's texture,
-// `?lichbloom=0` draws without bloom.
+// `?lichbloom=0` draws without bloom, `?lichlook=real` lights the bone smooth instead of painted.
 
 import type { FrameProbe } from "../cut";
 import { createLookFollower, type LookFollower, type LookPose } from "../depth/look";
@@ -23,14 +23,15 @@ import type { Look, StartFaceOptions } from "../variants";
 import { loadBackdrop, loadLichAsset } from "./asset";
 import { emptyFrame, lichFrame } from "./channels";
 import { chooseRenderer } from "./contract";
-import { createLichRenderer, type LichRenderer, type LichRendererOptions } from "./renderer";
+import { createLichRenderer, type LichLook, type LichRenderer, type LichRendererOptions } from "./renderer";
 
 export type { FrameProbe };
 export type LichFaceOptions = StartFaceOptions & {
   probe?: FrameProbe;
-  /** Overrides the `?lichbloom=` / `?lichtex=` toggles (the bench). */
+  /** Overrides the `?lichbloom=` / `?lichtex=` / `?lichlook=` toggles (the bench). */
   bloom?: boolean;
   texture?: boolean;
+  look?: LichLook;
 };
 
 const AHEAD: Look = Object.freeze({ x: 0, y: 0 });
@@ -89,6 +90,12 @@ function backing(size: number): number {
 }
 
 /** A `?name=0` toggle in the page URL (on unless it says 0 or false). */
+/** `?lichlook=real|paint` (absent or anything else: paint). */
+function lookParam(): LichLook {
+  if (typeof location === "undefined") return "paint";
+  return new URLSearchParams(location.search).get("lichlook") === "real" ? "real" : "paint";
+}
+
 function toggle(name: string): boolean {
   if (typeof location === "undefined") return true;
   const v = new URLSearchParams(location.search).get(name);
@@ -148,7 +155,11 @@ export function startFace(opts: LichFaceOptions): FaceHandle {
     probe.end(performance.now() - t0);
   };
 
-  const rendererOptions: LichRendererOptions = { bloom: opts.bloom ?? toggle("lichbloom"), texture: opts.texture ?? toggle("lichtex") };
+  const rendererOptions: LichRendererOptions = {
+    bloom: opts.bloom ?? toggle("lichbloom"),
+    texture: opts.texture ?? toggle("lichtex"),
+    look: opts.look ?? lookParam(),
+  };
 
   Promise.all([loadLichAsset(opts.rigBase), loadBackdrop(opts.rigBase)])
     .then(([asset, backdrop]) => {

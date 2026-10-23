@@ -12,6 +12,10 @@
   2D rig, ``_l`` and ``_r`` are the image's left and right: ``eye_l`` has the smaller X.
 - ``monocle``: an empty at the monocle ring's centre, on the image's right eye (``eye_r``).
 - ``neck``: an empty at the head's pivot under the skull; head turns rotate about it.
+- ``collar`` (optional, the only optional node): the high collar and shoulders, a textured mesh
+  whose node translation is its pivot (at or near ``neck``); its vertices are relative to it.
+  The stage turns it a fraction of the head's turn. An asset without it draws the painted torso
+  alone. Absent means no node at all, never an empty one.
 
 The model faces +Z with +Y up, and is scaled so the skull and the closed jaw together are one
 unit tall. Units are metres in glTF's eyes; they mean nothing here beyond that scale.
@@ -22,7 +26,7 @@ unit tall. Units are metres in glTF's eyes; they mean nothing here beyond that s
      "jaw_open_rad": <max>, "eye_radius": <scene units>,
      "camera": {"fov": <deg, vertical>, "pos": [x, y, z], "target": [x, y, z]}}
 
-``tris`` counts the triangles of ``skull`` and ``jaw`` together. ``camera`` is the square
+``tris`` counts the triangles of every mesh (``skull``, ``jaw`` and ``collar`` when present). ``camera`` is the square
 (aspect 1) view whose render of the model best matches the portrait's framing of the head.
 
 Everything here is the standard library and numpy, so the stage's builders and the tests can run
@@ -44,9 +48,10 @@ from .glb import GlbError, read_glb
 NODE_NAMES = ("skull", "jaw", "eye_l", "eye_r", "monocle", "neck")
 MESH_NODES = ("skull", "jaw")
 EMPTY_NODES = ("eye_l", "eye_r", "monocle", "neck")
+OPTIONAL_MESH_NODES = ("collar",)
 VERSION = 1
-MAX_BYTES = 8 * 1024 * 1024
-MAX_TRIS = 40_000
+MAX_BYTES = 24 * 1024 * 1024
+MAX_TRIS = 120_000
 
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -124,13 +129,17 @@ def check_glb(data: bytes, rep: Report, max_bytes: int = MAX_BYTES, max_tris: in
     for want in NODE_NAMES:
         if names.count(want) != 1:
             rep.fail(f"lich.glb: node {want!r} appears {names.count(want)} times, expected once")
-    extra = sorted({str(n) for n in names} - set(NODE_NAMES))
+    for opt in OPTIONAL_MESH_NODES:
+        if names.count(opt) > 1:
+            rep.fail(f"lich.glb: node {opt!r} appears {names.count(opt)} times, expected at most once")
+    extra = sorted({str(n) for n in names} - set(NODE_NAMES) - set(OPTIONAL_MESH_NODES))
     if extra:
         rep.fail(f"lich.glb: unexpected nodes {extra}")
     if rep.errors:
         return
     by = g.nodes_by_name()
-    for name in NODE_NAMES:
+    present = NODE_NAMES + tuple(n for n in OPTIONAL_MESH_NODES if n in by)
+    for name in present:
         if names.index(name) not in scene:
             rep.fail(f"lich.glb: node {name!r} is not a root node of the scene")
         n = by[name]
@@ -139,7 +148,7 @@ def check_glb(data: bytes, rep: Report, max_bytes: int = MAX_BYTES, max_tris: in
     for name in EMPTY_NODES:
         if "mesh" in by[name]:
             rep.fail(f"lich.glb: {name!r} must be an empty, not a mesh")
-    for name in MESH_NODES:
+    for name in MESH_NODES + tuple(n for n in OPTIONAL_MESH_NODES if n in by):
         if "mesh" not in by[name]:
             rep.fail(f"lich.glb: {name!r} has no mesh")
     if rep.errors:
@@ -148,11 +157,17 @@ def check_glb(data: bytes, rep: Report, max_bytes: int = MAX_BYTES, max_tris: in
     t = {n: np.array(by[n].get("translation", [0.0, 0.0, 0.0]), float) for n in NODE_NAMES}
     skull_v, skull_f = g.mesh_arrays(by["skull"]["mesh"])
     jaw_v, jaw_f = g.mesh_arrays(by["jaw"]["mesh"])
-    tris = int(skull_f.shape[0] + jaw_f.shape[0])
+    pieces = [("skull", skull_v, skull_f), ("jaw", jaw_v, jaw_f)]
+    for opt in OPTIONAL_MESH_NODES:
+        if opt in by:
+            pieces.append((opt, *g.mesh_arrays(by[opt]["mesh"])))
+    tris = int(sum(f.shape[0] for _, _, f in pieces))
     rep.facts.update({"tris": tris, "skull_tris": int(skull_f.shape[0]), "jaw_tris": int(jaw_f.shape[0])})
+    if "collar" in by:
+        rep.facts["collar_tris"] = int(pieces[2][2].shape[0])
     if tris > max_tris:
         rep.fail(f"lich.glb: {tris} triangles, over the {max_tris} budget")
-    for name, v, f in (("skull", skull_v, skull_f), ("jaw", jaw_v, jaw_f)):
+    for name, v, f in pieces:
         if f.size == 0:
             rep.fail(f"lich.glb: {name!r} mesh is empty")
         elif f.max() >= v.shape[0] or f.min() < 0:

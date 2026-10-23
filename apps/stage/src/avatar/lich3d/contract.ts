@@ -12,6 +12,13 @@
 export const LICH_NODES = ["skull", "jaw", "eye_l", "eye_r", "monocle", "neck"] as const;
 export type LichNode = (typeof LICH_NODES)[number];
 
+/**
+ * Nodes a lich GLB may name: `collar`, the high collar and shoulders (a mesh whose origin is its
+ * pivot, near `neck`), turned a fraction of the head's turn. Absent means no node at all.
+ */
+export const LICH_OPTIONAL_NODES = ["collar"] as const;
+export type LichOptionalNode = (typeof LICH_OPTIONAL_NODES)[number];
+
 export type Vec3 = [number, number, number];
 
 export interface LichCamera {

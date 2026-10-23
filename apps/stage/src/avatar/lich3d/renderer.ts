@@ -36,7 +36,12 @@ export interface Backdrop {
   height: number;
 }
 
+/** How the bone is lit: `paint` banded like the portrait, `real` smooth (spark lich3d-quality). */
+export type LichLook = "paint" | "real";
+
 export interface LichRendererOptions {
+  /** The bone's look (default `paint`). */
+  look?: LichLook;
   /** Bloom on (the default) or off (a plain, antialiased draw). */
   bloom?: boolean;
   /** Use the GLB's own texture when it has one (the default); false draws the flat bone. */

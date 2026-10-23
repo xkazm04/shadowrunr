@@ -37,7 +37,8 @@ def box(lo, hi) -> tuple[np.ndarray, np.ndarray]:
 
 
 def lich_nodes(jaw_pivot=(0.0, -0.2, -0.05), jaw_box=((-0.3, -0.3, 0.0), (0.3, 0.0, 0.4)),
-               eyes=((-0.2, 0.1, 0.3), (0.2, 0.1, 0.3)), names=contract.NODE_NAMES) -> list[Node]:
+               eyes=((-0.2, 0.1, 0.3), (0.2, 0.1, 0.3)), names=contract.NODE_NAMES,
+               collar: bool = False) -> list[Node]:
     sv, sf = box((-0.4, -0.2, -0.5), (0.4, 0.5, 0.5))
     jv, jf = box(*jaw_box)
     uv = np.zeros((8, 2), np.float32)
@@ -53,7 +54,11 @@ def lich_nodes(jaw_pivot=(0.0, -0.2, -0.05), jaw_box=((-0.3, -0.3, 0.0), (0.3, 0
         "monocle": (eyes[1][0], eyes[1][1], eyes[1][2] + 0.05),
         "neck": (0.0, -0.3, -0.1),
     }
-    return [Node(n, where.get(n, (0.0, 0.0, 0.0)), meshes.get(n)) for n in names]
+    out = [Node(n, where.get(n, (0.0, 0.0, 0.0)), meshes.get(n)) for n in names]
+    if collar:
+        cv, cf = box((-0.6, -0.4, -0.3), (0.6, 0.0, 0.3))
+        out.append(Node("collar", (0.0, -0.3, -0.1), Mesh(cv, cf, uvs=uv, texture_png=PNG)))
+    return out
 
 
 def meta(**over) -> dict:
@@ -112,6 +117,17 @@ class ContractCheck(unittest.TestCase):
         rep = self.run_check(lich_nodes(names=names))
         self.assertTrue(any("'monocle'" in e for e in rep.errors), rep.errors)
         self.assertTrue(any("crown" in e for e in rep.errors), rep.errors)
+
+    def test_optional_collar_passes_and_counts(self):
+        rep = self.run_check(lich_nodes(collar=True), m=meta(tris=36))
+        self.assertTrue(rep.ok, rep.errors)
+        self.assertEqual(rep.facts["tris"], 36)
+        self.assertEqual(rep.facts["collar_tris"], 12)
+
+    def test_collar_must_be_a_mesh(self):
+        nodes = lich_nodes() + [Node("collar", (0.0, -0.3, -0.1), None)]
+        rep = self.run_check(nodes)
+        self.assertTrue(any("'collar' has no mesh" in e for e in rep.errors), rep.errors)
 
     def test_jaw_pivot_at_the_chin_is_caught(self):
         # Pivot at the bottom front: the jaw mesh rises above and behind its hinge.
