@@ -76,6 +76,11 @@ describe("the catalog", () => {
     expect(props.length).toBeLessThanOrEqual(24);
     for (const p of props) expect(p.length).toBeLessThanOrEqual(40);
     for (const r of s["required"] as string[]) expect(props).toContain(r);
+    // Athena refuses a whole manifest when any array parameter has no maxItems
+    // (athena-portable src/athena/contracts/manifest.py, HostManifest.validate).
+    for (const [p, ps] of Object.entries((s["properties"] ?? {}) as Record<string, Record<string, unknown>>)) {
+      if (ps["type"] === "array") expect(typeof ps["maxItems"], `${name}.${p}`).toBe("number");
+    }
   });
 
   it("offers show on every READ tool that has a view, and on no write", () => {

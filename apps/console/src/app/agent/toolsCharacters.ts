@@ -165,7 +165,7 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
         character: ID,
         tone: str("The tone variant id."),
         text: str("The line as the character says it."),
-        tags: { type: "array", items: { type: "string", enum: SITUATIONS }, minItems: 1, description: "Situations the line fits." },
+        tags: { type: "array", items: { type: "string", enum: SITUATIONS }, minItems: 1, maxItems: SITUATIONS.length, description: "Situations the line fits." },
         status: { type: "string", enum: STATUSES },
       },
       ["character", "tone", "text", "tags"],

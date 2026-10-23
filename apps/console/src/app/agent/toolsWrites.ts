@@ -15,7 +15,7 @@ export const WRITE_TOOLS: readonly ToolSpec[] = [
       {
         session_id: str("The sandbox session id."),
         line: int("The 1-based transcript line.", 1),
-        tags: { type: "array", items: { type: "string", enum: TAGS }, description: "Feedback tags; [] with no note clears." },
+        tags: { type: "array", items: { type: "string", enum: TAGS }, maxItems: TAGS.length, description: "Feedback tags; [] with no note clears." },
         note: str("A short note on the line.", { maxLength: 2000 }),
       },
       ["session_id", "line", "tags"],
