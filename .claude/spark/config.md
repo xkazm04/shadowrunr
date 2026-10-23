@@ -31,6 +31,9 @@ when a change touches the brain's beat or the opening (orchestrator, picker, seg
 when a change is judged by voice timing (lines voiced, late, first-audio latency):
 - compare runs with `shadowrunr voice replay` over each transcript, back to back under the same load, and run any live voiced check alone (no parallel builders). Promoted 2026-10-21: VOICE-P's first result and PACE's live run were both swamped by shared CPU (99%); only the replay pair gave a fair comparison.
 
+when apps/console/src/app/agent changed (the tools Athena drives):
+- the console's own catalog tests (result size at most 1,500 chars, capability-block footprint at most 5,000 chars), then from athena-portable `pnpm -C apps/desktop test:e2e:shadowrunr` (scripted, keyless) on the rebuilt `dist` and binary. Before claiming Athena-facing behaviour, also run `ATHENA_DESKTOP=1 pnpm -C apps/desktop test:e2e:desktop` (the real desktop app, live quota). Promoted 2026-10-23: the consumer's limits bit three times, and each was found only by running her: the manifest validator (maxItems), the 1,600-char result cap, and the 12,000-char capability block that cut where_am_i.
+
 builder:
 - the same three cargo commands, scoped with `-p <crate>` while iterating, then workspace-wide before reporting
 
