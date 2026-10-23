@@ -18,8 +18,7 @@ afterEach(() => {
 const LINKS: ModRule = { id: "no-links", name: "No links", kind: "pattern", pattern: "https?://", action: "delete", enabled: true };
 const SPAM: ModRule = { id: "spam", name: "Spam waves", kind: "plain", text: "copy-paste spam", action: "timeout", timeout_s: 600, enabled: true, strikes: { count: 3, window_s: 600, then: "ban" } };
 
-const decision = (o: Partial<ModDecision>): ModDecision & { kind: "decision" } => ({
-  kind: "decision",
+const decision = (o: Partial<ModDecision>): ModDecision => ({
   id: "d1",
   ts_ms: Date.UTC(2026, 9, 23, 20, 15),
   platform: "twitch",
@@ -32,6 +31,7 @@ const decision = (o: Partial<ModDecision>): ModDecision & { kind: "decision" } =
   executed: false,
   ...o,
 });
+const logged = (o: Partial<ModDecision>) => ({ kind: "decision", decision: decision(o) }) as const;
 
 interface Daemon {
   status: ModeratorStatus | "error";
@@ -50,10 +50,10 @@ function daemon(o: Partial<Daemon> = {}): Daemon & { script: Script } {
     status: { mode: "shadow", character: "malakor", platforms: [twitch], counts: { decisions: 12, executed: 0 } },
     rules: [LINKS, SPAM],
     log: [
-      decision({ id: "d3", action: "ban", mode: "armed", executed: true, viewer_id: "v3", viewer_name: "fictional_banned", line: "Begone, mortal." }),
-      decision({ id: "d2", action: "timeout", timeout_s: 600, mode: "armed", executed: false, error: "rate limited", rule_id: "gone-rule" }),
-      { kind: "unban", ts_ms: Date.UTC(2026, 9, 23, 20, 10), platform: "twitch", viewer_id: "v3", executed: true },
-      decision({ id: "d1", action: "ban" }),
+      logged({ id: "d3", action: "ban", mode: "armed", executed: true, viewer_id: "v3", viewer_name: "fictional_banned", line: "Begone, mortal." }),
+      logged({ id: "d2", action: "timeout", timeout_s: 600, mode: "armed", executed: false, error: "rate limited", rule_id: "gone-rule" }),
+      { kind: "unban", unban: { ts_ms: Date.UTC(2026, 9, 23, 20, 10), platform: "twitch", viewer_id: "v3", executed: true } },
+      logged({ id: "d1", action: "ban" }),
     ],
     sent: [],
     sets: [],
@@ -82,8 +82,8 @@ function daemon(o: Partial<Daemon> = {}): Daemon & { script: Script } {
       case "moderator.rules.test":
         return ok(d.test ?? { decisions: [], disclosure: false });
       case "moderator.unban": {
-        const u = { kind: "unban", ts_ms: Date.UTC(2026, 9, 23, 21), platform: "twitch", viewer_id: "v3", executed: true };
-        d.log = [u, ...d.log];
+        const u = { ts_ms: Date.UTC(2026, 9, 23, 21), platform: "twitch", viewer_id: "v3", executed: true };
+        d.log = [{ kind: "unban", unban: u }, ...d.log];
         return ok(u);
       }
       case "twitch.connect":

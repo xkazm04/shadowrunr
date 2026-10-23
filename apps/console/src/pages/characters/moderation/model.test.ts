@@ -31,14 +31,14 @@ describe("moderation model", () => {
   });
 
   it("reads log rows by their kind tag, and only executed bans and timeouts unban", () => {
-    const d = { kind: "decision", id: "d", ts_ms: 0, platform: "twitch", viewer_id: "v", viewer_name: "n", message_id: "m", rule_id: "r", action: "ban", mode: "armed", executed: true } as const;
-    const u = { kind: "unban", ts_ms: 0, platform: "twitch", viewer_id: "v", executed: true } as const;
-    expect(rowOf(d).kind).toBe("decision");
-    expect(rowOf(u).kind).toBe("unban");
+    const d = { id: "d", ts_ms: 0, platform: "twitch", viewer_id: "v", viewer_name: "n", message_id: "m", rule_id: "r", action: "ban", mode: "armed", executed: true } as const;
+    const u = { ts_ms: 0, platform: "twitch", viewer_id: "v", executed: true } as const;
+    expect(rowOf({ kind: "decision", decision: d })).toEqual({ kind: "decision", d });
+    expect(rowOf({ kind: "unban", unban: u })).toEqual({ kind: "unban", u });
     expect(canUnban(d)).toBe(true);
     expect(canUnban({ ...d, executed: false })).toBe(false);
     expect(canUnban({ ...d, action: "delete" })).toBe(false);
-    expect(armingText(1, [d, u])).toBe("In shadow: 1 would-be action, 1 ban. Arm the moderator?");
+    expect(armingText(1, [{ kind: "decision", decision: d }, { kind: "unban", unban: u }])).toBe("In shadow: 1 would-be action, 1 ban. Arm the moderator?");
     expect(armingText(0, undefined)).toBe("In shadow: 0 would-be actions, bans unknown. Arm the moderator?");
   });
 

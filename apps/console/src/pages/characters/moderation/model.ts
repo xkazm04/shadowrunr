@@ -150,15 +150,9 @@ export function upsert(rules: readonly ModRule[], rule: ModRule, replacing: stri
   return rules.map((r) => (r.id === replacing ? rule : r));
 }
 
-/** The wire's `kind` tag. The generated union omits it (the validator requires it), so read it here. */
-type Tagged = ModLogEntry & { readonly kind?: "decision" | "unban" };
 export type LogRow = { kind: "decision"; d: ModDecision } | { kind: "unban"; u: ModUnban };
 
-export function rowOf(e: ModLogEntry): LogRow {
-  const t = (e as Tagged).kind;
-  if (t === "unban" || (t === undefined && !("rule_id" in e))) return { kind: "unban", u: e as ModUnban };
-  return { kind: "decision", d: e as ModDecision };
-}
+export const rowOf = (e: ModLogEntry): LogRow => (e.kind === "unban" ? { kind: "unban", u: e.unban } : { kind: "decision", d: e.decision });
 
 /** Executed bans and timeouts can be lifted; nothing else can. */
 export const canUnban = (d: ModDecision): boolean => d.executed && (d.action === "ban" || d.action === "timeout");
