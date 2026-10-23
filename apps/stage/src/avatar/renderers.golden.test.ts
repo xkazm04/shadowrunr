@@ -1,4 +1,4 @@
-// A guard on the three WebGL face renderers (glow, cut, depth): a recording fake WebGL2 context
+// A guard on the WebGL face renderers (glow, cut, depth, and the avatar-3d relit face): a recording fake WebGL2 context
 // drives each over one fixture form and three fixed poses (plus a resize and a lost-and-restored
 // context), and the whole call stream - every uniform, every draw, every bind and upload - must
 // hash to what the renderers produced before their per-layer rules moved to layer-frame.ts and
@@ -21,6 +21,8 @@ import type { LookPose } from "./depth/look";
 import type { Pose } from "./driver";
 import { createGlowRenderer } from "./glow";
 import type { FormSpec, LayerImage, LoadedForm } from "./layers";
+import { PERFORMANCE_REST, type PerformancePose } from "./performance";
+import { createRelitRenderer } from "./relit/renderer";
 
 const UNRECORDED = new Set(["getExtension", "isContextLost", "getShaderInfoLog", "getProgramInfoLog"]);
 
@@ -148,6 +150,12 @@ const LOOKS: LookPose[] = [
   { yaw: -12, pitch: 3, eyeX: -4, eyeY: 1.5 },
 ];
 
+const PERFS: PerformancePose[] = [
+  PERFORMANCE_REST,
+  { eyeLight: 2.2, brow: -0.8, gestureYaw: 0.05, gesturePitch: -0.03, gestureRoll: 0.02, lean: 0.6, flare: 0.4 },
+  { eyeLight: 0.3, brow: 1, gestureYaw: -0.6, gesturePitch: 0.4, gestureRoll: -0.1, lean: -1, flare: 0 },
+];
+
 const field: DepthField = (() => {
   const z = new Float32Array(256 * 256);
   for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) z[y * 256 + x] = 100 - Math.abs(x - 128) * 0.5 - Math.abs(y - 100) * 0.1;
@@ -221,6 +229,14 @@ describe("the face renderers' call streams (guard: unchanged by the layer-frame 
     });
     expect(digest("depth", log)).toEqual(GOLDEN.depth);
   });
+
+  it("relit", async () => {
+    const log = await drive(async (c, r) => {
+      const g = await createRelitRenderer(c, form(), field, meta, r);
+      return { render: (p, i) => g.render(p, LOOKS[i]!, PERFS[i]!), resize: () => g.resize(), dispose: () => g.dispose() };
+    });
+    expect(digest("relit", log)).toEqual(GOLDEN.relit);
+  });
 });
 
 /** Captured on 94e5998, before the refactor. */
@@ -228,4 +244,6 @@ const GOLDEN = {
   glow: { calls: 2055, sha: "defc283277a710cc" },
   cut: { calls: 2012, sha: "605b02004ade47b6" },
   depth: { calls: 1680, sha: "1dfa5fbfedd1ecc1" },
+  /** Captured with the relit face (spark avatar-3d, WP-A). */
+  relit: { calls: 1754, sha: "3f9b5afd674909c9" },
 };
