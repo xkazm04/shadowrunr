@@ -34,6 +34,9 @@ when a change is judged by voice timing (lines voiced, late, first-audio latency
 when apps/console/src/app/agent changed (the tools Athena drives):
 - the console's own catalog tests (result size at most 1,500 chars, capability-block footprint at most 5,000 chars), then from athena-portable `pnpm -C apps/desktop test:e2e:shadowrunr` (scripted, keyless) on the rebuilt `dist` and binary. Before claiming Athena-facing behaviour, also run `ATHENA_DESKTOP=1 pnpm -C apps/desktop test:e2e:desktop` (the real desktop app, live quota). Promoted 2026-10-23: the consumer's limits bit three times, and each was found only by running her: the manifest validator (maxItems), the 1,600-char result cap, and the 12,000-char capability block that cut where_am_i.
 
+when a face's frame cost is judged (apps/stage/bench frames.mjs):
+- run a known-cost canary face (relit: 1.25 ms at 1024; cut: 0.49) in the same frames run, and read each config's best run. A run whose canary reads above its clean cost is contaminated: quote its figures as upper bounds, never as costs. Promoted 2026-10-23: avatar-3d's bench ran on a 25-62% busy machine, and lich3d-quality's canary read 3.0-4.4 ms in runs where the new asset never produced a clean 1024 result.
+
 builder:
 - the same three cargo commands, scoped with `-p <crate>` while iterating, then workspace-wide before reporting
 
@@ -89,6 +92,10 @@ builder:
 - 2026-10-23 (avatar-3d): a bench briefed to "run alone" still ran on a machine 25-62% busy (another session's find, vitest e2e, cargo). Instructing the builder does not quiet the machine. Record the machine's load per row (the bench does now), compare faces with each other only, and rerun absolutes on a quiet machine.
 - 2026-10-23 (avatar-3d): a workspace test failed on a contract method (`character.doc.get`) that the spark never touched. `main` had moved under a parallel session, and the shared CARGO_TARGET_DIR mixed the two trees. Merge the base into the spark branch before diagnosing a failure the spark's diff cannot explain.
 - 2026-10-23 (avatar-3d): a WebGL canvas reads back as zeros after compositing (no preserveDrawingBuffer). Smoke checks of a face compare element screenshots, not canvas pixels.
+- 2026-10-23 (lich3d-quality): an ML route's liveness includes its weights' gates and licences. TRELLIS.2 was offered and picked as the only route, then died at the gate: its pipeline pulls DINOv3 (gated, manual approval) and RMBG-2.0 (gated, non-commercial). The scout reads the route's pipeline config (`pipeline.json`, `from_pretrained` ids) and checks each weight's gate before the option reaches the operator.
+- 2026-10-23 (lich3d-quality): a P0 stub named a face option `look`, which already meant the gaze source in StartFaceOptions; the builder caught it and renamed it `lichLook`. Grep the options type an option joins before naming it in the contract.
+- 2026-10-23 (lich3d-quality): switching the default face is also a character change. `characters/malakor/character.toml` set `face = "cut"`, which overrides the daemon default, and an e2e test asserted it. The scout greps `characters/**` for any default the spark moves.
+- 2026-10-23 (lich3d-quality): a blind lineup needs its control arm recorded in the same run. clips.mjs gained `<face>@alt` with `--alt-rig-dir`, so the old asset sat in the lineup next to the new one, drawn by the same renderer.
 
 ## Question taste
 
@@ -96,3 +103,4 @@ builder:
 - 2026-10-23: the operator leans to autonomy and liveliness over the standard's caution (picked full-autonomy bans and a fresh LLM line per action against recommendations). Keep recommending the standard, but put the mitigations (shadow mode, audit, undo) into the option text so the override arrives already bounded.
 - 2026-10-23 (athena-copilot): the operator took every recommended option and every scope or test case offered (4 of 4 twice). For scope and coverage multiSelects, decide "all" by convention unless a case costs quota or time worth flagging.
 - 2026-10-23 (avatar-3d): the "decide all" convention holds for coverage, not for exploratory routes. Offered 4 technical directions, the operator chose 2 (the controllable ones: relit 2.5D, true 3D), and dropped the neural and video routes. Offered 4 judgement measures, the operator took 3 and deferred the live show. Keep asking which routes to explore.
+- 2026-10-23 (lich3d-quality): offered four quality routes, the operator picked the most ambitious one alone (TRELLIS.2) and dropped the low-risk rebuild, then took the fallback when asked. Put the fallback inside the ambitious option's text. The operator also dropped stream plumbing (the transparent background) and then chose to switch the default face anyway with the opaque box: treat plumbing as a separately asked item, never bundled into a look pass.
