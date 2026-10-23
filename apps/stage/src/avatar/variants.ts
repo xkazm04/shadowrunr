@@ -1,11 +1,12 @@
 // The face renderers the stage can draw. `glow` is the shipped rig renderer (`./runtime`); `cut`
 // (a 2.5D cut-out of the same rig) and `depth` (a depth-mesh head) are the streamer-screen
-// prototypes, each in its own folder behind the same `startFace` signature, loaded with `import()`
-// so a variant costs nothing until it is chosen.
+// prototypes; `relit` (lit 2.5D cards) and `lich3d` (a 3D skull) are the avatar-3d prototypes. Each
+// sits in its own folder behind the same `startFace` signature, loaded with `import()` so a variant
+// costs nothing until it is chosen.
 
 import type { FaceHandle, startFace as glowStartFace } from "./runtime";
 
-export const FACE_VARIANTS = ["glow", "cut", "depth"] as const;
+export const FACE_VARIANTS = ["glow", "cut", "depth", "relit", "lich3d"] as const;
 export type FaceVariant = (typeof FACE_VARIANTS)[number];
 
 /** The face drawn when nothing names one: the cut-out, the owner's pick from the 2026-10-21
@@ -41,5 +42,9 @@ export function loadVariant(variant: FaceVariant): Promise<StartFace> {
       return import("./cut").then((m) => m.startFace);
     case "depth":
       return import("./depth").then((m) => m.startFace);
+    case "relit":
+      return import("./relit").then((m) => m.startFace);
+    case "lich3d":
+      return import("./lich3d").then((m) => m.startFace);
   }
 }

@@ -32,7 +32,7 @@ export interface StageParams {
   voice: boolean;
   /** `?face=demo|rest|<viseme>`: drive the face from a scripted signal (dev builds only). */
   face: string | null;
-  /** `?avatar=cut|glow|depth`: which renderer draws the face (default cut; anything else is cut). */
+  /** `?avatar=cut|glow|depth|relit|lich3d`: which renderer draws the face (default cut; anything else is cut). */
   avatar: FaceVariant;
   /** `?rig=<http(s) url>`: the face rig's base (default: the daemon's `/avatar/` beside `ws`). */
   rig: string | null;

@@ -66,6 +66,10 @@ pub enum FaceVariant {
     Cut,
     /// The depth-mesh head.
     Depth,
+    /// Lit 2.5D cards (avatar-3d prototype A).
+    Relit,
+    /// The 3D skull (avatar-3d prototype B).
+    Lich3d,
 }
 
 impl FaceVariant {
@@ -76,6 +80,8 @@ impl FaceVariant {
             FaceVariant::Glow => "&avatar=glow",
             FaceVariant::Cut => "&avatar=cut",
             FaceVariant::Depth => "&avatar=depth",
+            FaceVariant::Relit => "&avatar=relit",
+            FaceVariant::Lich3d => "&avatar=lich3d",
         }
     }
 }
@@ -490,6 +496,8 @@ mod tests {
             ("glow", FaceVariant::Glow),
             ("cut", FaceVariant::Cut),
             ("depth", FaceVariant::Depth),
+            ("relit", FaceVariant::Relit),
+            ("lich3d", FaceVariant::Lich3d),
         ] {
             let cfg = Config::from_toml(&format!("[stage]\navatar = \"{name}\"\n"), root).unwrap();
             assert_eq!(cfg.stage.avatar, face);

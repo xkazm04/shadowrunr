@@ -20,6 +20,7 @@ import { createDriver, type Driver, type Pose } from "./driver";
 import { createGlowRenderer, type GlowRenderer } from "./glow";
 import { loadForm, type LoadedForm } from "./layers";
 import { frames, systemPrefersReduced, type Clock } from "./motion";
+import type { PerformanceSource } from "./performance";
 import { buildPlaceholder } from "./placeholder";
 import type { FaceSource } from "./types";
 import type { LookSource } from "./variants";
@@ -177,6 +178,8 @@ export function startFace(opts: {
   onDrawn?: (form: LoadedForm["form"] | null) => void;
   /** Where he looks; without it, straight out. */
   look?: LookSource;
+  /** How he performs beyond the mouth (eye light, brow, gestures); without it, at rest. */
+  performance?: PerformanceSource;
 }): FaceHandle {
   const { root, canvas, source } = opts;
   let disposed = false;
