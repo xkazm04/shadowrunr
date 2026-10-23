@@ -934,8 +934,8 @@ so they stay beside the rig.
 On the M8 rig, `analytic-v1` takes about 2 s. `learned-v1` takes about 6 s in all, of which
 the model step is about 1 s.
 
-To compare two maps on the same frames, use the lab in `apps/stage/lab/` (`depth.html`,
-`record.mjs`). It is a development harness and is not shipped.
+To compare faces, or depth maps, on the same frames, use the face bench in `apps/stage/bench/`
+(see "Benching a face" below). It is a development harness and is not shipped.
 
 ## The stage
 
@@ -996,6 +996,131 @@ source's audio in OBS as usual.
 Run `pnpm -C apps/stage dev` and add `?face=` to the URL:
 - `?face=demo` loops a scripted line;
 - `?face=rest` holds the face at rest;
-- `?face=aa` (or any other mouth shape: `oh`, `E`, `PP`, ...) holds that shape mid-speech.
+- `?face=aa` (or any other mouth shape: `oh`, `E`, `PP`, ...) holds that shape mid-speech;
+- `?face=bench` loops the 24 s bench script, which exercises every performance channel (below).
 
-This parameter does nothing in a production build.
+`?perf=<emotion>[:intensity][:gesture]` holds one performance cue, for screenshots: intensity
+defaults to 1 and the gesture to the emotion's own, for example `?face=rest&perf=outrage:1`.
+
+These parameters do nothing in a production build.
+
+### Performance channels
+
+Beyond his mouth, Malakor's face performs the line he is speaking: how bright his eye fire burns,
+where his brow sits, and a head gesture on a strong line. The channels live in
+`apps/stage/src/avatar/performance.ts`, and every face reads them the same way.
+
+| channel | range | rest |
+| --- | --- | --- |
+| `eyeLight` | 0 (out) .. 2.5 (blazing); 1 is the rig's own | 1 |
+| `brow` | -1 scowl .. 1 raised | 0 |
+| `gestureYaw` / `gesturePitch` / `gestureRoll` | radians, added to the head | 0 |
+| `lean` | -1 pulled back .. 1 toward the viewer | 0 |
+| `flare` | 0..1, a burst of eye fire that decays | 0 |
+
+**When a cue is set.** The stage keeps each host `say` event's `delivery` (the cue the model
+wrote, such as `[menace 0.8]`) by its seq. When the voice player starts that line's first
+sentence, the cue is set, so the face changes on the audio clock and not when the text arrives.
+With no voice under a line, the cue is set when its caption shows. A foil's lines never cue his
+face, and a line with no delivery is neutral at intensity 0.
+
+**The emotion table.** Intensity scales the distance from rest, so intensity 0 is rest for every
+emotion. A line at intensity 0.6 or more also plays its gesture.
+
+| emotion | eye light | brow | gesture (strong line) |
+| --- | --- | --- | --- |
+| neutral | 1.0 | 0 | none |
+| menace | 1.6 | -0.7 | glare |
+| glee | 1.5 | 0.4 | tilt |
+| deadpan | 0.8 | 0 | none |
+| hushed | 0.6 | 0.2 | lean_in |
+| outrage | 2.2 | -1 | recoil, then flare |
+| sarcasm | 1.1 | 0.5 | tilt |
+| weary | 0.5 | -0.2 | nod |
+| triumph | 2.0 | 0.3 | flare |
+| tender | 0.9 | 0.6 | lean_in |
+
+- Eye light and brow ease on damped springs. The fire flares up in about 120 ms and dies down
+  over about 400 ms.
+- A gesture plays once, as an envelope:
+  - **nod**: a chin dip, about 0.6 s;
+  - **tilt**: the head cocked, held, then straight, about 1.2 s;
+  - **lean_in**: toward the viewer;
+  - **recoil**: back and up, fast;
+  - **glare**: chin down, brow hard down, fire up;
+  - **flare**: a burst of eye fire decaying over about 0.8 s.
+- Under reduced motion the head gestures shrink to 30% and the light still changes.
+- `glow`, `cut` and `depth`:
+  - They add the gestures to the head and scale the eye lights by `eyeLight` and `flare`.
+  - The rig has no brow layer, so `brow` reshapes the eye fire instead: a scowl squashes and
+    drops it.
+  - They do not draw `lean`.
+- `relit` and `lich3d` draw every channel.
+
+### The 3D prototypes: `relit` and `lich3d`
+
+Two more faces sit behind `?avatar=` and `[avatar] face` while the owner compares them. The
+default stays `cut`.
+
+**`relit`** draws the rig as lit 2.5D cards on the depth map (run `tools/avatar/depth_map.py`
+first, as for `depth`).
+- Light:
+  - Normals come from the depth field.
+  - A key light is applied as a change from the art's own light, so the face at rest looks
+    exactly like the art.
+  - Each eye socket holds a teal point light that lights the brow, nose bridge and cheeks. Its
+    strength follows `eyeLight` and `flare`.
+  - The monocle is a glass card with its own orange light.
+- The jaw swings on a hinge.
+- `brow` moves a vertex band above the sockets. It reads, but mildly.
+- Yaw is clamped at ±22° and pitch at ±14°. From about 20° the cheek and temple streak, and at
+  28° the far socket collapses: this is the honest ceiling of a single painted portrait.
+
+**`lich3d`** draws a real 3D skull in three.js. three.js is loaded only when this face is chosen.
+- The head:
+  - The bone is `lich.glb` beside the rig, made offline from the portrait by `tools/avatar3d`
+    (see its README).
+  - Without it, the face draws a procedural placeholder skull and says why once in the console.
+- Motion and light:
+  - The jaw opens on its hinge, and the head turns to ±35° yaw and ±18° pitch.
+  - Teal fire burns in each socket, and a point light per socket lights the bone.
+  - The monocle is an emissive ring.
+- Around the head: a seeded crown of procedural crystals floats about it, and the rig's painted
+  torso stands behind it as a backdrop.
+- The look is finished with bloom.
+- A skull has no brow, so `brow` pitches the head and narrows or opens the eye fire.
+- Toggles: `?lichtex=0` draws flat bone, and `?lichbloom=0` turns bloom off. Bloom is about 90%
+  of the face's GPU cost.
+
+The asset is built offline on the GPU with TRELLIS (MIT code and weights). Part of TRELLIS's
+training data carries non-commercial terms, so judge that before a monetised stream. The stream
+itself never runs the model.
+
+### Benching a face
+
+`apps/stage/bench/` (its `README.md` has the commands) runs every face through its real
+`startFace` on the same input, the `?face=bench` script on an injected clock. It measures:
+- GPU and CPU time per frame, at 440 and 1024 px, using GPU timer queries. `gl.finish()` returns
+  at once in Chrome, so timing around it measures nothing.
+- The browser process tree's CPU, plus the GPU's utilisation and VRAM.
+- Cold time to `data-face="ready"`.
+- First-audio latency with each face open.
+
+It also renders an expressiveness sheet and frame-stepped blind clips lettered A-D, with the key
+in a separate file. Output goes to `runs/avatar-3d/bench/`. Run it alone, on a quiet machine:
+other load shows up in the CPU and voice figures, and each row records the machine's load
+beside it.
+
+First results (2026-10-23, RTX 4090, machine 25-62% busy from other work). GPU ms per frame, best
+run, 440 / 1024 px:
+
+| Face | 440 px | 1024 px |
+| --- | --- | --- |
+| cut | 0.25 | 0.49 |
+| relit | 0.62 | 1.25 |
+| lich3d without bloom | 0.15 | 0.40 |
+| lich3d with bloom | 0.63 | 3.9 |
+
+- The browser tree costs 6-15% of one core per face; lich3d with bloom is the highest.
+- No face measurably delayed the voice's first audio.
+- Head turn at a full look: cut 10°, depth 20°, relit 22°, lich3d 25° (lich3d can go to 35°).
