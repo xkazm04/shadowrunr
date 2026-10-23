@@ -10,6 +10,7 @@
 export const OTHER_ROUTES = [
   [/^src\/data\/contractDoor\.ts$/, "door"],
   [/^src\/shell\/GoToPalette\.tsx$/, "goto"],
+  [/^src\/app\/agent\/catalog\.ts$/, "agent"],
   [/^src\/pages\/characters\/moderation\/ModerationTab\.tsx$/, "characters.moderation"],
   [/(^|\/)contract\/src\/generated\/results\/\w+\.js$/, "door.result"],
 ];

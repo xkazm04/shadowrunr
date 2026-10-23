@@ -31,6 +31,9 @@
 .conn[data-summary="offline"] .dot { background: var(--sr-color-fail); }
 .conn[data-summary="offline"] { background: var(--sr-color-signal); }
 
+.drive { border-color: var(--sr-color-text-mute); box-shadow: none; color: var(--sr-color-text-mute); cursor: pointer; }
+.drive[aria-pressed="true"] { border-color: var(--sr-color-chrome-ink); background: var(--sr-color-signal); box-shadow: .2rem .2rem 0 var(--sr-color-chrome-ink); color: var(--sr-color-text-on-signal); }
+
 .wallBtn,
 .gotoBtn {
   display: flex;

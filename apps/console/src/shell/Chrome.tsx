@@ -1,4 +1,6 @@
+import { useSyncExternalStore } from "react";
 import { useConnection, type ConnectionSummary } from "../data";
+import { drive } from "../kit/athenaDrive";
 import styles from "./Chrome.module.css";
 
 const LABEL: Readonly<Record<ConnectionSummary, string>> = {
@@ -20,10 +22,22 @@ function ConnectionChip() {
   );
 }
 
+/** "Let Athena drive": rendered only inside Athena, where the page has a WebMCP registry. */
+function AthenaDrive() {
+  const on = useSyncExternalStore(drive.subscribe, drive.get);
+  if (drive.registry() === undefined) return null;
+  return (
+    <button type="button" className={`${styles.conn} ${styles.drive}`} data-role="athena-drive" aria-pressed={on} onClick={() => drive.set(!on)}>
+      {on ? "Athena driving" : "Athena"}
+    </button>
+  );
+}
+
 export function Chrome(props: { onWall: boolean; narrow: boolean; onToggleWall: () => void; onGoTo: () => void }) {
   return (
     <header className={styles.chrome} data-narrow={props.narrow}>
       <ConnectionChip />
+      <AthenaDrive />
       <button type="button" className={styles.gotoBtn} onClick={props.onGoTo} aria-keyshortcuts="Control+K">
         Go to · Ctrl K
       </button>
