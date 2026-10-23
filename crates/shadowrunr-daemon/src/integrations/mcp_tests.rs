@@ -132,7 +132,18 @@ async fn initialize_list_and_call_over_line_framing() {
             "get_reconcile_report",
             "list_plan_options",
             "list_directives",
-            "preflight"
+            "preflight",
+            "moderator_status",
+            "moderator_rules_list",
+            "moderator_rules_set",
+            "moderator_rules_test",
+            "moderator_mode_set",
+            "moderator_log",
+            "moderator_unban",
+            "twitch_connect",
+            "twitch_disconnect",
+            "moderator_character_get",
+            "moderator_character_set"
         ]
     );
     for t in tools {
@@ -234,7 +245,7 @@ async fn content_length_framing_like_the_personas_client() {
     c.send(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }))
         .await;
     let list = c.request("tools/list", json!({})).await;
-    assert_eq!(list["result"]["tools"].as_array().map(Vec::len), Some(8));
+    assert_eq!(list["result"]["tools"].as_array().map(Vec::len), Some(19));
     let page = c
         .tool(
             "list_runs",
@@ -588,4 +599,127 @@ async fn without_a_daemon_start_sim_runs_in_process() {
     tokio::time::timeout(Duration::from_secs(60), server.tools().wait_idle())
         .await
         .expect("the scripted run finishes");
+}
+
+// ── the moderator tools ──────────────────────────────────────────────────────────────────
+
+/// An MCP server with no daemon behind it; `mod_writes` is `[moderator] mcp_allow_writes`.
+fn start_mod(mod_writes: bool) -> (Client, tempfile::TempDir, Arc<McpServer>) {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut cfg = test_config(tmp.path(), repo().join("characters"));
+    cfg.daemon.port = closed_port();
+    cfg.moderator.mcp_allow_writes = mod_writes;
+    let factory: EngineFactory = Arc::new(|_: &Config| EngineHandle::scripted());
+    // The personas flag is on: it must not open the moderator's writes.
+    let (client, server) = serve(cfg, true, Framing::Lines, factory);
+    (client, tmp, server)
+}
+
+fn kys_rule() -> Value {
+    json!({ "id": "no-kys", "name": "telling people to die", "kind": "pattern",
+            "pattern": r"\bkys\b", "action": "timeout", "timeout_s": 600, "enabled": true })
+}
+
+#[tokio::test]
+async fn moderator_writes_are_refused_unless_allowed_and_reads_work() {
+    let (mut c, tmp, _s) = start_mod(false);
+    let writes = [
+        ("moderator_rules_set", json!({ "rules": [kys_rule()] })),
+        ("moderator_mode_set", json!({ "mode": "armed" })),
+        (
+            "moderator_unban",
+            json!({ "platform": "twitch", "viewer_id": "1" }),
+        ),
+        ("twitch_connect", json!({})),
+        ("twitch_disconnect", json!({})),
+        ("moderator_character_set", json!({ "name": "X" })),
+    ];
+    for (name, args) in writes {
+        let e = tool_error(&mut c, name, args).await;
+        assert_eq!(
+            e["error"]["detail"]["reason"], "writes_disabled",
+            "{name}: {e}"
+        );
+        assert!(
+            e["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("[moderator] mcp_allow_writes"),
+            "{e}"
+        );
+    }
+    let status = c.tool("moderator_status", json!({})).await;
+    assert_eq!(status["mode"], "shadow");
+    assert_eq!(status["platforms"][0]["platform"], "twitch");
+    let rules = c.tool("moderator_rules_list", json!({})).await;
+    assert!(
+        !rules["rules"].as_array().unwrap().is_empty(),
+        "seeded from the policy file"
+    );
+    let log = c.tool("moderator_log", json!({})).await;
+    assert_eq!(log["entries"], json!([]));
+    let test = c
+        .tool("moderator_rules_test", json!({ "text": "just kys" }))
+        .await;
+    assert_eq!(test["disclosure"], false);
+    assert_eq!(test["decisions"][0]["rule_id"], "self-harm-incitement");
+    assert!(!tmp
+        .path()
+        .join("data")
+        .join("moderator")
+        .join("state.json")
+        .exists());
+}
+
+#[tokio::test]
+async fn moderator_writes_without_a_daemon_land_in_process() {
+    let (mut c, _tmp, _s) = start_mod(true);
+    let set = c
+        .tool("moderator_rules_set", json!({ "rules": [kys_rule()] }))
+        .await;
+    assert_eq!(set["rules"][0]["id"], "no-kys");
+    let listed = c.tool("moderator_rules_list", json!({})).await;
+    assert_eq!(listed["rules"].as_array().unwrap().len(), 1);
+    let bad = tool_error(
+        &mut c,
+        "moderator_rules_set",
+        json!({ "rules": [{ "id": "broken", "name": "b", "kind": "pattern", "pattern": "(", "action": "delete", "enabled": true }] }),
+    )
+    .await;
+    assert_eq!(bad["error"]["code"], "invalid_params", "{bad}");
+    let mode = c
+        .tool("moderator_mode_set", json!({ "mode": "armed" }))
+        .await;
+    assert_eq!(mode["mode"], "armed");
+    let tw = tool_error(&mut c, "twitch_connect", json!({})).await;
+    assert_eq!(tw["error"]["detail"]["reason"], "no_daemon", "{tw}");
+    let ch = tool_error(&mut c, "moderator_character_set", json!({ "name": "X" })).await;
+    assert_eq!(ch["error"]["detail"]["reason"], "not_available", "{ch}");
+}
+
+#[tokio::test]
+async fn moderator_writes_go_to_the_running_daemon() {
+    let mut d = with_daemon(false, |c| {
+        c.moderator.mcp_allow_writes = true;
+        c.moderator.character = "malakor".into();
+    })
+    .await;
+    d.client
+        .tool("moderator_rules_set", json!({ "rules": [kys_rule()] }))
+        .await;
+    let mode = d
+        .client
+        .tool("moderator_mode_set", json!({ "mode": "armed" }))
+        .await;
+    assert_eq!(mode["mode"], "armed");
+    // The daemon's own hub holds the new list and mode.
+    assert_eq!(d.state.moderator.rules().rules[0].id, "no-kys");
+    assert_eq!(
+        d.state.moderator.mode(),
+        shadowrunr_types::moderation::ModMode::Armed
+    );
+    let ch = d.client.tool("moderator_character_get", json!({})).await;
+    assert_eq!(ch["id"], "malakor", "{ch}");
+    assert!(ch["name"].is_string(), "{ch}");
+    assert!(ch.get("files").is_none(), "only the identity fields: {ch}");
 }

@@ -144,7 +144,7 @@ impl McpServer {
             "protocolVersion": version,
             "capabilities": { "tools": { "listChanged": false } },
             "serverInfo": { "name": "shadowrunr", "version": env!("CARGO_PKG_VERSION") },
-            "instructions": "Shadowrunr OS: read simulated runs, transcripts, tournament results, Reconcile & Plan reports, directives and pre-flight. Paged tools return next_cursor while more follows.",
+            "instructions": "Shadowrunr OS: read simulated runs, transcripts, tournament results, Reconcile & Plan reports, directives and pre-flight; configure the chat moderator (moderator_* and twitch_* tools). Paged tools return next_cursor while more follows.",
         })
     }
 
@@ -231,13 +231,21 @@ impl McpServer {
 pub async fn run_stdio(cfg: Config) -> Result<(), String> {
     let settings = PersonasSettings::load(&cfg)?;
     let factory: EngineFactory = Arc::new(|c: &Config| EngineHandle::build(c, false));
+    let moderator_writes = cfg.moderator.mcp_allow_writes;
     let server = McpServer::new(cfg, settings.mcp_allow_writes, factory);
+    let mut writes = Vec::new();
+    if settings.mcp_allow_writes {
+        writes.push("start_sim");
+    }
+    if moderator_writes {
+        writes.push("moderator writes");
+    }
     eprintln!(
         "shadowrunr mcp: serving on stdio ({})",
-        if settings.mcp_allow_writes {
-            "start_sim enabled"
+        if writes.is_empty() {
+            "read-only".to_string()
         } else {
-            "read-only"
+            format!("{} enabled", writes.join(", "))
         }
     );
     let res = server

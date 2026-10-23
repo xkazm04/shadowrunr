@@ -3,8 +3,11 @@
 //! contract (`shadowrunr_types::schema::contract_schema`), with `$ref`s inlined and a few
 //! fields relaxed so an agent may omit them (`limit`, the sim spec's fields).
 //!
-//! Read-only by default. `start_sim` is the one write; it runs only with
-//! `[personas] mcp_allow_writes = true`, and uses the scripted engine unless `live: true`.
+//! Read-only by default. `start_sim` runs only with `[personas] mcp_allow_writes = true`, and
+//! uses the scripted engine unless `live: true`. The moderator's writes (`moderator_rules_set`,
+//! `moderator_mode_set`, `moderator_unban`, `twitch_*`, `moderator_character_set`) run only with
+//! `[moderator] mcp_allow_writes = true`; every moderator tool goes to the running daemon when
+//! one answers, so the live lane sees each write (docs/guide/moderator.md).
 //!
 //! `start_sim` and `preflight` go through a running daemon when one answers on
 //! `[daemon] port` ([`super::mcp_backend`]): its guards and its engine, never a second set
@@ -38,58 +41,158 @@ pub struct ToolDef {
     pub method: &'static str,
     pub description: &'static str,
     pub write: bool,
+    /// A moderator tool: its writes are gated by `[moderator] mcp_allow_writes`, and every call
+    /// goes to the running daemon when one answers.
+    pub moderator: bool,
 }
 
-pub const TOOLS: [ToolDef; 8] = [
+pub const TOOLS: [ToolDef; 19] = [
     ToolDef {
         name: "list_runs",
         method: "runs.page",
         description: "Simulated runs ordered by (tournament_id, run_id), one page at a time. Pass next_cursor back as cursor for the next page. limit defaults to 50 (max 500).",
         write: false,
+        moderator: false,
     },
     ToolDef {
         name: "get_transcript",
         method: "run.transcript",
         description: "One run's transcript (StreamEvents with their 1-based seq), paged: limit defaults to 200 (max 500); pass next_cursor back as cursor.",
         write: false,
+        moderator: false,
     },
     ToolDef {
         name: "get_tournament_results",
         method: "tournament.results",
         description: "A tournament's results.json: per-cell scores, judged and void counts.",
         write: false,
+        moderator: false,
     },
     ToolDef {
         name: "start_sim",
         method: "sim.start",
         description: "Start one text simulation in the background and return its run_id (read it later with get_transcript). Spec fields default to the [sim] config. Scripted engine (no quota) unless live is true. When a daemon is running the sim runs in it, and live must match the daemon's engine. Disabled unless [personas] mcp_allow_writes = true.",
         write: true,
+        moderator: false,
     },
     ToolDef {
         name: "get_reconcile_report",
         method: "reconcile.report",
         description: "A stored Reconcile & Plan report: findings, metrics and summary.",
         write: false,
+        moderator: false,
     },
     ToolDef {
         name: "list_plan_options",
         method: "plan.proposals",
         description: "The plan options proposed by a Reconcile & Plan report.",
         write: false,
+        moderator: false,
     },
     ToolDef {
         name: "list_directives",
         method: "directive.list",
         description: "The operator's directives (prevent / try) in three states: active (active: true, fed to streams), proposed (active: false, proposed: true; suggested by the Reconciler in lord.chat and not yet kept or dropped by the operator, so no stream reads it) and inactive (active: false, retired or dropped).",
         write: false,
+        moderator: false,
     },
     ToolDef {
         name: "preflight",
         method: "preflight.run",
         description: "Run the pre-flight checks (PF-01..PF-08, plus PF-09 when Personas activity is configured). Spends no quota.",
         write: false,
+        moderator: false,
+    },
+    ToolDef {
+        name: "moderator_status",
+        method: "moderator.status",
+        description: "The chat moderator at a glance: its mode (shadow = decide and log only, armed = act on chat), the moderator character, each chat platform's connection (Twitch: disconnected, connecting, connected or error, with the bot account and channel) and how many decisions it made and carried out since the daemon started.",
+        write: false,
+        moderator: true,
+    },
+    ToolDef {
+        name: "moderator_rules_list",
+        method: "moderator.rules.list",
+        description: "The moderator's whole rule list, in order. A pattern rule matches a term or regex at once (case-insensitive, on the text as written and normalised); a plain rule is a sentence a classifier model judges (\"no spoilers for the finale\"). Each rule has an action (delete, timeout with timeout_s, ban), optional strikes (after count hits in window_s the action becomes then) and enabled.",
+        write: false,
+        moderator: true,
+    },
+    ToolDef {
+        name: "moderator_rules_set",
+        method: "moderator.rules.set",
+        description: "Replace the whole moderator rule list (read it first with moderator_rules_list, edit, send every rule back). The first enabled pattern rule that matches wins; plain rules judge what no pattern took. An invalid rule refuses the whole write and names the rule; the old list stays. Applies to the next chat message. Ids are [a-z0-9-]; name is what the moderator's chat line mentions. Disabled unless [moderator] mcp_allow_writes = true.",
+        write: true,
+        moderator: true,
+    },
+    ToolDef {
+        name: "moderator_rules_test",
+        method: "moderator.rules.test",
+        description: "Try a sample chat message against the current rules: returns the decision the moderator would make (rule, action after strikes) or none, and disclosure: true when the message reads as a self-harm disclosure (never acted on). No side effects: nothing is logged, posted or done on the platform. Plain rules call the classifier model of the running daemon (with no daemon, only pattern rules are judged).",
+        write: false,
+        moderator: true,
+    },
+    ToolDef {
+        name: "moderator_mode_set",
+        method: "moderator.mode.set",
+        description: "Switch the moderator between shadow (decide and log what it would have done, touch nothing) and armed (delete, time out and ban on the platform, and post its line in chat). Start in shadow, review moderator_log, then arm. Disabled unless [moderator] mcp_allow_writes = true.",
+        write: true,
+        moderator: true,
+    },
+    ToolDef {
+        name: "moderator_log",
+        method: "moderator.log",
+        description: "The moderator's decisions and unbans, newest first: who, which message, which rule, the action, whether it was carried out (executed), the moderator's line and any platform error. limit defaults to 100 (max 1000).",
+        write: false,
+        moderator: true,
+    },
+    ToolDef {
+        name: "moderator_unban",
+        method: "moderator.unban",
+        description: "Lift a ban or timeout the moderator (or anyone) placed: give the platform and the viewer_id from moderator_log. The unban is appended to the log; executed is false with the error when the platform is not connected. Disabled unless [moderator] mcp_allow_writes = true.",
+        write: true,
+        moderator: true,
+    },
+    ToolDef {
+        name: "twitch_connect",
+        method: "twitch.connect",
+        description: "Log the moderator's Twitch bot account in: returns a verification_uri and a user_code. Open the link in a browser signed in as the bot account and enter the code before expires_s; the daemon then connects on its own (check moderator_status). Needs [twitch] client_id and channel in shadowrunr.toml and a running daemon. Disabled unless [moderator] mcp_allow_writes = true.",
+        write: true,
+        moderator: true,
+    },
+    ToolDef {
+        name: "twitch_disconnect",
+        method: "twitch.disconnect",
+        description: "Disconnect the moderator's Twitch bot and delete its stored login from the OS credential store; returns the moderator status. Needs a running daemon. Disabled unless [moderator] mcp_allow_writes = true.",
+        write: true,
+        moderator: true,
+    },
+    ToolDef {
+        name: "moderator_character_get",
+        method: "character.get",
+        description: "The moderator character ([moderator] character): its id, name, tagline and [identity] (the words its chat lines are written from).",
+        write: false,
+        moderator: true,
+    },
+    ToolDef {
+        name: "moderator_character_set",
+        method: "",
+        description: "Change the moderator character's name, tagline or [identity]. Not available yet: the daemon has no RPC that writes character.toml, so edit characters/<id>/character.toml by hand and restart the daemon. Disabled unless [moderator] mcp_allow_writes = true.",
+        write: true,
+        moderator: true,
     },
 ];
+
+/// The moderator character as `moderator_character_get` shows it: id, name, tagline and
+/// identity of a `character.get` detail (absent fields omitted).
+fn character_view(detail: &Value) -> Value {
+    let mut out = Map::new();
+    for k in ["id", "name", "tagline", "identity"] {
+        if let Some(v) = detail.get(k).filter(|v| !v.is_null()) {
+            out.insert(k.into(), v.clone());
+        }
+    }
+    Value::Object(out)
+}
 
 pub fn find(name: &str) -> Option<&'static ToolDef> {
     TOOLS.iter().find(|t| t.name == name)
@@ -164,6 +267,17 @@ impl Tools {
             Value::Object(o) => Value::Object(o),
             _ => return Err(RpcError::invalid("arguments must be an object").into()),
         };
+        if t.moderator {
+            if t.write && !self.cfg.moderator.mcp_allow_writes {
+                return Err(RpcError::new(
+                    ErrorCode::InvalidParams,
+                    format!("{name} is disabled: the moderator tools are read-only unless [moderator] mcp_allow_writes = true"),
+                )
+                .with_detail(json!({ "reason": "writes_disabled" }))
+                .into());
+            }
+            return Ok(self.moderator(t, args).await?);
+        }
         if t.write && !self.allow_writes {
             return Err(RpcError::new(
                 ErrorCode::InvalidParams,
@@ -202,6 +316,54 @@ impl Tools {
                 v
             }
             _ => self.rpc(s, t.method, args).await?,
+        })
+    }
+
+    /// A moderator tool. It goes to the running daemon when one answers, so the live lane sees
+    /// every write and the status carries its counts and connections; with no daemon the
+    /// rules, mode and log are read and written in-process (the same files), and the Twitch
+    /// tools refuse (the login and the lane live in the daemon).
+    async fn moderator(&self, t: &ToolDef, args: Value) -> Result<Value, RpcError> {
+        let (method, params) = match t.name {
+            "moderator_character_get" => (
+                "character.get",
+                json!({ "id": self.cfg.moderator.character }),
+            ),
+            "moderator_character_set" => {
+                return Err(RpcError::new(
+                    ErrorCode::Unavailable,
+                    format!(
+                        "moderator_character_set is not available yet: no daemon RPC writes character.toml; edit {} and restart the daemon",
+                        self.cfg
+                            .paths
+                            .characters
+                            .join(&self.cfg.moderator.character)
+                            .join("character.toml")
+                            .display()
+                    ),
+                )
+                .with_detail(json!({ "reason": "not_available" })))
+            }
+            _ => (t.method, args),
+        };
+        let v = if let Some(d) = super::mcp_backend::probe(self.cfg.daemon.port).await? {
+            d.call(method, params).await?
+        } else if t.name.starts_with("twitch_") {
+            return Err(RpcError::new(
+                ErrorCode::Unavailable,
+                format!(
+                    "{} needs the running daemon (shadowrunr daemon): the Twitch login and the moderation lane live there",
+                    t.name
+                ),
+            )
+            .with_detail(json!({ "reason": "no_daemon" })));
+        } else {
+            self.rpc(&self.scripted, method, params).await?
+        };
+        Ok(if t.name == "moderator_character_get" {
+            character_view(&v)
+        } else {
+            v
         })
     }
 

@@ -177,3 +177,18 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # (docs/guide/recording.md). Optional.
 # [stage]
 # avatar = "cut"   # the face renderer, the stage's ?avatar=: "cut" (default), "glow" or "depth"
+
+# The chat moderator: a second character that guards Twitch chat from its own bot account
+# (docs/guide/moderator.md). It starts in shadow mode (decide and log only); its rules, mode
+# and log live in <data>/moderator/.
+# [moderator]
+# character = "moderator"          # the package under characters/ with role = "moderator"
+# mcp_allow_writes = false         # true lets `shadowrunr mcp` change rules, mode, unban, login
+# classifier_batch_ms = 1500       # how long plain-language rules collect messages per call
+
+# The moderator's Twitch bot. The client id is public (a Twitch app registered as a public
+# client with the device-code flow); an empty client_id keeps Twitch off. The bot's tokens are
+# never here: they live only in the OS credential store (`twitch_connect` logs it in).
+# [twitch]
+# client_id = ""
+# channel = ""                     # the broadcaster's login: the channel the bot moderates

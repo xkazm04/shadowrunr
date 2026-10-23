@@ -71,6 +71,21 @@ fn add_prop(schema: &mut Value, name: &str, prop: Value) {
 
 /// A tool's `inputSchema`.
 pub fn input_schema(t: &ToolDef) -> Value {
+    match t.name {
+        // The character is `[moderator] character`: the agent names none.
+        "moderator_character_get" => return json!({ "type": "object", "properties": {} }),
+        "moderator_character_set" => {
+            return json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Display name." },
+                    "tagline": { "type": "string", "description": "One line under the name." },
+                    "identity": { "type": "object", "description": "The [identity] table of character.toml." }
+                }
+            })
+        }
+        _ => {}
+    }
     let mut s = params_schema(t.method);
     match t.name {
         "list_runs" => unrequire(&mut s, "limit"),
