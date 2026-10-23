@@ -51,6 +51,7 @@ describe("the roster", () => {
     expect(rosterKicker(11, 2000)).toBe("12 of 2,000");
     expect(shortName("Arch-Lich Malakor")).toBe("Malakor");
     expect(shortName("Warden Number 3")).toBe("Number");
+    expect(shortName("Clerk-Bailiff Vellum")).toBe("Vellum");
     expect(factsLine(malakorSummary())).toBe("5 tones · 5 foils · 2 of 2 optional rules on");
     expect(factsLine(malakorSummary({ tones: ["a"], foils: [], rules_total: 0, rules_enabled: 0 }))).toBe("1 tone · 0 foils");
     expect(toneLabel("weary-middle-manager")).toBe("Weary middle manager");

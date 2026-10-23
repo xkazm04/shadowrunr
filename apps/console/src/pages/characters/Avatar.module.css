@@ -9,3 +9,6 @@
 .crop :global(svg.mk) { display: block; width: 100%; height: auto; }
 
 .svg { display: block; }
+
+/* A 2D portrait fills the tile like the SVG avatar would, cropped, never stretched. */
+.portrait { display: block; aspect-ratio: 120 / 140; object-fit: cover; max-width: 100%; height: auto; }

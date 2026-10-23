@@ -47,7 +47,7 @@ export function rosterKicker(i: number, count: number): string {
   return `${n} of ${count.toLocaleString("en-US")}${i === 0 ? " · the first character" : ""}`;
 }
 
-const TITLES = /^(The|Sir|Dame|Lady|Sister|Brother|Baron|Captain|Madame|Professor|Warden|Countess|Grandmother|Arch-Lich) /;
+const TITLES = /^(The|Sir|Dame|Lady|Sister|Brother|Baron|Captain|Madame|Professor|Warden|Countess|Grandmother|Arch-Lich|Clerk-Bailiff) /;
 
 /** The roster tile's short name: titles dropped, first word kept (`Arch-Lich Malakor` → `Malakor`). */
 export function shortName(name: string): string {

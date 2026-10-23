@@ -993,7 +993,7 @@ mod tests {
         assert!(is_moderator(&pkg.manifest));
         assert!(pkg.tone_text.is_empty() && pkg.foils.is_empty() && pkg.rules.is_empty());
         assert!(pkg.manifest.rails.is_empty());
-        assert_eq!(pkg.persona.name, "Warden");
+        assert_eq!(pkg.persona.name, "Vellum");
         assert_eq!(pkg.persona.patron, "Lord of the Darkness");
         assert!(pkg.persona.disclosure.contains("AI"));
         // A host without its tone file is still an error.

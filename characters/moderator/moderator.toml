@@ -4,4 +4,4 @@
 
 # Posted when the model fails, times out or writes a line the output gate blocks. One line,
 # under 200 characters with the names filled, no emojis.
-fallback = "{viewer}, your message is struck from the record under the rule: {rule}. The Warden has entered it in the ledger."
+fallback = "{viewer}, your message is struck from the record under the rule: {rule}. Vellum has entered it in the ledger."

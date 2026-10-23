@@ -179,7 +179,7 @@ them. `[moderator] character` in `shadowrunr.toml` names the package (default `m
 | --- | --- |
 | `character.toml` | `id`, `name`, `role = "moderator"`, `tagline`, and `[identity]` (name, title, patron, follower words, sign-off, disclosure). `default_tone = "none"` is there only because the manifest schema requires the key. A moderator has no tones and no file is read for it. |
 | `constitution.md` | The moderator's rules. Every line prompt carries the whole file. It is terse and procedural, the straight man to the host. It never repeats, quotes or decodes the removed message, names only the rule, never threatens beyond the action taken, never mocks a protected group, never addresses a self-disclosure, and writes one line under 200 characters with no emojis and no @-mention except the actioned viewer. |
-| `bible.md` | The fiction: the Warden of the Ninth Dark, its Ledger and its Writs. The line prompt does not read it today; it is canon for whoever writes or renames the character. |
+| `bible.md` | The fiction and the look: Clerk-Bailiff Vellum of the Ninth Dark, its Ledger and its Writs. The line prompt does not read it today; it is canon for whoever writes or renames the character. |
 | `moderator.toml` | `fallback`: the model-free line (see below). |
 
 A moderator package needs no `tones/`, `foils/`, `segments/`, `rules/`, rails, ranks or
@@ -193,16 +193,19 @@ before a run file is written: a sim run, a sandbox session or a stream. The erro
 "... is a moderator package (role = "moderator"): it guards chat and cannot host a show". Point
 `[sim] character` at a host character instead.
 
-### Renaming it after the look is picked
+### Renaming it
 
-The shipped identity, "The Warden", is a placeholder until the operator picks the look (the
-Bailiff, the Gargoyle or the Familiar). To rename it:
+The identity is **Clerk-Bailiff Vellum**: the Ledger Clerk look of the Deadpan Bailiff, the
+owner's pick on 2026-10-23. Its 2D illustration is the console face
+(`apps/console/src/pages/characters/art/vellum.webp`). The realistic render is the modelling
+reference for a future stage avatar, kept locally in
+`data/avatar/portraits/mod-A2/portrait.jpg`, which is not committed. To rename it:
 
 1. In `character.toml`, set `name` (the display name, for example `"The Bailiff"`),
    `[identity] name` (the short name chat sees, for example `"Bailiff"`), and `title` if
    wanted. Rewrite `sign_off` and `disclosure` in the new voice. The disclosure must stay an
    honest "I am an AI character" line.
-2. Change the Warden's name in `constitution.md` and `bible.md` to the new one, and change the
+2. Change the name in `constitution.md` and `bible.md` to the new one, and change the
    fiction to fit the look if needed.
 3. Reword `moderator.toml` `fallback` if it names the old character.
 4. Keep `id = "moderator"` and the directory name. If you change them, set
@@ -216,7 +219,7 @@ Bailiff, the Gargoyle or the Familiar). To rename it:
 `moderator.toml`:
 
 ```toml
-fallback = "{viewer}, your message is struck from the record under the rule: {rule}. The Warden has entered it in the ledger."
+fallback = "{viewer}, your message is struck from the record under the rule: {rule}. Vellum has entered it in the ledger."
 ```
 
 `{viewer}` is the actioned viewer's display name and `{rule}` is the rule's name. The fallback

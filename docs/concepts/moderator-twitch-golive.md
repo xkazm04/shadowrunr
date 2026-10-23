@@ -6,7 +6,7 @@ Sizes are as in [leftovers.md](leftovers.md): **S** is focused, **M** takes abou
 
 ## The owner's part (one sitting)
 
-1. **Pick the moderator's look** from the 9 prompts in `.spark/Spark/moderator-prompts.md` (vault, not committed). The pick decides the identity text. The package ships as the placeholder "The Warden" (`characters/moderator/`).
+1. ~~Pick the moderator's look~~. Done 2026-10-23: **Clerk-Bailiff Vellum**, the Ledger Clerk look of the Deadpan Bailiff (`characters/moderator/`). The console face is `apps/console/src/pages/characters/art/vellum.webp`. The realistic render for a future stage avatar is kept locally in `data/avatar/portraits/mod-A2/portrait.jpg`. Name the bot account after it (for example `ClerkBailiffVellum`).
 2. **Register a Twitch developer app** at dev.twitch.tv:
    - client type **Public** (device-code flow, so no secret and no redirect server);
    - copy its client id.

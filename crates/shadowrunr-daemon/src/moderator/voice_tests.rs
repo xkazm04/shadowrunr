@@ -145,7 +145,7 @@ fn fallback_for(viewer: &str, rule: &str) -> String {
 fn the_package_loads_with_its_identity_constitution_and_fallback() {
     let tmp = tempfile::tempdir().unwrap();
     let v = warden(tmp.path());
-    assert_eq!(v.name, "Warden");
+    assert_eq!(v.name, "Vellum");
     assert!(v.constitution.contains("Never repeat, quote"));
     assert!(v.fallback.contains("{viewer}") && v.fallback.contains("{rule}"));
     let filled = fallback_for("SootGoblin24", "No spam");
@@ -169,7 +169,7 @@ fn a_missing_or_host_package_gives_the_neutral_voice_and_an_error() {
 async fn one_mod_voice_request_names_the_rule_and_viewer_never_the_message() {
     let d = decision(ModActionKind::Timeout, Some(600));
     let (line, seen) = line_with(
-        Script::Reply("Warden: SootGoblin24, a Writ of Silence: ten minutes, rule No spam."),
+        Script::Reply("Vellum: SootGoblin24, a Writ of Silence: ten minutes, rule No spam."),
         &d,
     )
     .await;
@@ -186,7 +186,7 @@ async fn one_mod_voice_request_names_the_rule_and_viewer_never_the_message() {
     assert!(req.prompt.contains("SootGoblin24"), "{}", req.prompt);
     assert!(req.prompt.contains("10 minutes"), "{}", req.prompt);
     assert!(req.prompt.contains("armed"), "{}", req.prompt);
-    assert!(req.system.contains("Warden") && req.system.contains("Never repeat"));
+    assert!(req.system.contains("Vellum") && req.system.contains("Never repeat"));
     for text in [&req.prompt, &req.system] {
         assert!(!text.contains(SENTINEL));
     }
@@ -224,7 +224,7 @@ async fn the_line_is_one_line_of_at_most_300_chars() {
     let d = decision(ModActionKind::Delete, None);
     let long: &'static str = Box::leak(
         format!(
-            "\n**Warden:** \"{}\"\nA second line that must go.",
+            "\n**Vellum:** \"{}\"\nA second line that must go.",
             "Entered in the ledger under No spam. ".repeat(20)
         )
         .into_boxed_str(),

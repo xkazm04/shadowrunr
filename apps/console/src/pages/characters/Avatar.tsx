@@ -1,10 +1,12 @@
-// Character faces. Malakor is drawn by stage-kit's one MalakorArt; every other character gets the
-// winner's generic printed avatar (sr-kit avatarSVG, 120x140), painted from a spec seeded by its
-// id. The colours are the illustration's own palette, kept exactly.
+// Character faces. Malakor is drawn by stage-kit's one MalakorArt; a character with a portrait
+// (the moderator) shows it in the same 120x140 tile; every other character gets the winner's
+// generic printed avatar (sr-kit avatarSVG, 120x140), painted from a spec seeded by its id. The
+// colours are the illustration's own palette, kept exactly.
 import { MalakorArt } from "@shadowrunr/stage-kit/ui";
 import type { ReactElement } from "react";
 import { cx } from "../../ui/cx";
 import styles from "./Avatar.module.css";
+import vellum from "./art/vellum.webp";
 import { avatarOf, type AvatarSpec } from "./model";
 
 const BONE = "#e7dcc3";
@@ -13,6 +15,11 @@ const INK = "#10110f";
 
 /** The character whose package carries bespoke art. */
 export const ART_CHARACTER = "malakor";
+
+/** 2D portraits (240x280, the tile's 120:140), by package id: the owner's picked illustrations. */
+const PORTRAITS: Readonly<Record<string, { src: string; alt: string }>> = {
+  moderator: { src: vellum, alt: "Clerk-Bailiff Vellum" },
+};
 
 const HEADS: readonly ReactElement[] = [
   <path key="h0" d="M60 18C34 18 22 40 24 62c1 14 8 22 16 28v14h40V90c8-6 15-14 16-28 2-22-10-44-36-44z" />,
@@ -114,6 +121,8 @@ function mark(a: AvatarSpec): ReactElement | null {
 
 /** The generic printed avatar for a character without bespoke art. */
 export function GenericAvatar({ id, className }: { readonly id: string; readonly className?: string }) {
+  const portrait = PORTRAITS[id];
+  if (portrait) return <img className={cx(styles.portrait, className)} src={portrait.src} alt={portrait.alt} width={120} height={140} />;
   const a = avatarOf(id);
   return (
     <svg className={className} viewBox="0 0 120 140" role="img" aria-label="Stylised avatar">
