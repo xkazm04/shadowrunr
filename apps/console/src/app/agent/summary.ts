@@ -1,6 +1,7 @@
 // Bounded summaries of the daemon's big answers: transcript events, a review session, a verdict
 // and a tournament's results. Nothing here dumps a transcript or a results file whole.
 import type { JudgeVerdict, ReviewSession, StreamEvent, TournamentResults } from "@shadowrunr/contract";
+import { fitBody, fitting, RESULT_BUDGET, sizeOf, withRoomFor } from "./tool";
 
 export const clip = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
 const secs = (ms: number): number => Math.round(ms / 100) / 10;
@@ -27,13 +28,18 @@ export function eventLine(e: StreamEvent, line: number): Record<string, unknown>
   }
 }
 
-/** Failed rules with the lines they cite; quality facts as true of n per dimension. */
-export function verdictSummary(v: JudgeVerdict): Record<string, unknown> {
+/** Rule states counted, and the failed rules with up to `lines` of the lines each cites. */
+function ruleFacts(v: JudgeVerdict, lines: number) {
   const states: Record<string, number> = {};
   for (const r of v.rules) states[r.state] = (states[r.state] ?? 0) + 1;
   const failed = v.rules
     .filter((r) => r.state === "fail")
-    .map((r) => ({ rule: r.rule, lines: (r.evidence ?? []).map(lineOf).filter((l) => l !== undefined).slice(0, 8) }));
+    .map((r) => ({ rule: r.rule, lines: (r.evidence ?? []).map(lineOf).filter((l) => l !== undefined).slice(0, lines) }));
+  return { states, failed };
+}
+
+/** Quality facts as true of n per dimension. */
+function qualityOf(v: JudgeVerdict): Record<string, string> {
   const quality: Record<string, string> = {};
   const tally = new Map<string, [number, number]>();
   for (const q of v.quality) {
@@ -41,17 +47,35 @@ export function verdictSummary(v: JudgeVerdict): Record<string, unknown> {
     tally.set(q.dimension, [t[0] + (q.value ? 1 : 0), t[1] + 1]);
   }
   for (const [d, [yes, n]] of tally) quality[d] = `${yes} of ${n}`;
-  return {
-    run_id: v.run_id,
-    judge_tier: v.judge_tier,
-    rule_states: states,
-    failed_rules: failed,
-    quality,
-    ...(v.notes === undefined ? {} : { notes: clip(v.notes, 600) }),
-  };
+  return quality;
 }
 
-/** A session in a screenful: its row, gate checks, verdict, mix, segments and the lines worth opening. */
+/**
+ * Failed rules with the lines they cite; quality facts as true of n per dimension; the notes in
+ * the room left. Within `budget`: cited lines drop from 8 to 4 per rule, then failed rules are
+ * cut, with a footer that says how many.
+ */
+export function verdictSummary(v: JudgeVerdict, budget = RESULT_BUDGET - 120): Record<string, unknown> {
+  const head = { run_id: v.run_id, judge_tier: v.judge_tier };
+  const quality = qualityOf(v);
+  let { states, failed } = ruleFacts(v, 8);
+  let body: Record<string, unknown> = { ...head, rule_states: states, failed_rules: failed, quality };
+  if (sizeOf(body) > budget) {
+    ({ states, failed } = ruleFacts(v, 4));
+    body = { ...head, rule_states: states, failed_rules: failed, quality };
+  }
+  if (sizeOf(body) > budget) {
+    const footer = `showing FEW of ${failed.length} failed rules`;
+    const kept = fitting(failed, budget - sizeOf({ ...body, failed_rules: [], failed_footer: footer }));
+    body = { ...head, rule_states: states, failed_rules: kept, failed_footer: footer.replace("FEW", String(kept.length)), quality };
+  }
+  return withRoomFor(body, "notes", v.notes, 600, budget);
+}
+
+/**
+ * A session in one answer: its row, gate checks, a brief verdict, mix, segments and the notable
+ * lines (failures, marks) as a bounded list the bind guard trims to fit.
+ */
 export function sessionSummary(rs: ReviewSession): Record<string, unknown> {
   const row = rs.row;
   const say = new Map<number, string>();
@@ -68,28 +92,53 @@ export function sessionSummary(rs: ReviewSession): Record<string, unknown> {
     }
   }
   for (const f of rs.feedback) mark(f.line, `marked ${f.tags.join(", ") || "note"}`);
-  const moments = [...notable.entries()]
-    .sort(([a], [b]) => a - b)
-    .slice(0, 10)
-    .map(([line, why]) => ({ line, why, text: clip(say.get(line) ?? "", 200) }));
-  return {
-    session_id: row.session_id,
-    started: new Date(row.started_ms).toISOString(),
-    minutes: row.minutes,
-    length_s: row.length_s,
-    pass: row.pass,
-    checks: row.checks.map((c) => ({ id: c.id, state: c.state, detail: clip(c.detail, 160) })),
-    events: rs.events.length,
-    host_lines: say.size,
-    marked: row.marked,
-    tagged: row.tagged,
-    mix: row.mix,
-    segments: rs.segments.map((s) => ({ segment: s.segment, from_s: s.from_s, to_s: s.to_s })),
-    ...(rs.verdict === undefined ? {} : { verdict: verdictSummary(rs.verdict) }),
-    moments,
-    moments_footer: `showing ${moments.length} of ${notable.size} notable lines; open_moment{session, line} opens one`,
-  };
+  const all = [...notable.entries()].sort(([a], [b]) => a - b);
+  // Richest first; each later form gives up detail so the notable lines keep their room.
+  const forms = [
+    { detail: 70, rules: 6, lines: 4, why: 80, text: 140 },
+    { detail: 70, rules: 6, lines: 4, why: 80, text: 70 },
+    { detail: 50, rules: 4, lines: 2, why: 60, text: 70 },
+    { detail: 40, rules: 3, lines: 0, why: 50, text: 0 },
+  ].map((f) => {
+    const items = all.slice(0, 10).map(([line, why]) => ({ line, why: clip(why.join("; "), f.why), ...(f.text > 0 && say.has(line) ? { text: clip(say.get(line) ?? "", f.text) } : {}) }));
+    const v = rs.verdict;
+    const facts = v === undefined ? undefined : ruleFacts(v, f.lines);
+    const failed = facts === undefined ? [] : facts.failed.slice(0, f.rules).map((r) => (f.lines > 0 ? r : r.rule));
+    return {
+      session_id: row.session_id,
+      started: new Date(row.started_ms).toISOString(),
+      minutes: row.minutes,
+      length_s: row.length_s,
+      pass: row.pass,
+      checks: row.checks.map((c) => (c.state === "pass" ? `${c.id}: pass` : `${c.id}: ${c.state}, ${clip(c.detail, f.detail)}`)),
+      events: rs.events.length,
+      host_lines: say.size,
+      marked: row.marked,
+      tagged: row.tagged,
+      mix: row.mix,
+      segments: rs.segments.map((s) => `${s.segment} ${s.from_s}-${s.to_s} s`),
+      ...(v === undefined || facts === undefined
+        ? {}
+        : { verdict: { judge_tier: v.judge_tier, rule_states: facts.states, failed_rules: failed, ...(facts.failed.length > failed.length ? { failed_footer: `showing ${failed.length} of ${facts.failed.length}` } : {}) } }),
+      moments: list(items, all.length),
+    };
+  });
+  // The first form that keeps at least four notable lines (or all of them) within the budget,
+  // leaving room for the view the tool adds.
+  const floor = Math.min(4, all.length);
+  for (const f of forms) {
+    const fitted = fitBody(f, RESULT_BUDGET - 80);
+    if (fitted !== undefined && (fitted["moments"] as { items: unknown[] }).items.length >= floor) return fitted;
+  }
+  return forms[forms.length - 1] ?? {};
 }
+
+const list = <T,>(items: readonly T[], total: number) => ({
+  items,
+  showing: items.length,
+  total,
+  footer: `showing ${items.length} of ${total} notable lines; open_moment{session, line} opens one`,
+});
 
 /** The tournament's totals, its worst rules over all cells and its cells, bounded. */
 export function tournamentSummary(r: TournamentResults, cells: number): Record<string, unknown> {

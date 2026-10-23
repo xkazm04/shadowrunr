@@ -96,7 +96,7 @@ export function toolsHere(route: Route): readonly string[] {
   switch (route.page) {
     case "characters":
       return deep && route.sub[0] !== "all"
-        ? ["get_character", "read_character_doc", "set_character_doc", "validate_character", "set_tone"]
+        ? ["get_character", "read_character_doc", "edit_character_doc", "set_character_doc", "validate_character", "set_tone"]
         : ["list_characters", "get_character", "read_character_doc"];
     case "review":
       return deep ? ["get_session", "open_moment", "leave_feedback", "list_sessions"] : ["list_sessions", "get_session", "start_sandbox"];

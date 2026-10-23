@@ -3,12 +3,9 @@
 import type { LineSituation, LineStatus } from "@shadowrunr/contract";
 import { allRoute, pkgRoute, type PkgTab } from "../../pages/characters/routes";
 import { encodeRoute, pageRoute } from "../../router";
+import { argDocOf as argDoc, changedChars, docPage, docPath, DOCS, occurrences, PAGE_CHARS } from "./docs";
 import { clip } from "./summary";
-import { argStr, bounded, fail, obj, SHOW, str, type ToolSpec } from "./tool";
-
-/** The documents character.doc.get/set accept (the daemon checks the same list). */
-const DOC = /^(constitution\.md|bible\.md|directions\.md|character\.toml|stalls\.toml|situations\.json|foils\/[a-z0-9_-]{1,40}\.md)$/;
-const DOCS = "constitution.md, bible.md, directions.md, character.toml, stalls.toml, situations.json or foils/<slug>.md";
+import { argInt, argStr, bounded, fail, fitBody, int, obj, RESULT_BUDGET, SHOW, str, withRoomFor, type ToolSpec } from "./tool";
 
 /** The package tab that shows a document. */
 export function tabOf(doc: string): PkgTab {
@@ -20,14 +17,9 @@ export function tabOf(doc: string): PkgTab {
   return "parameters";
 }
 
-function argDoc(input: Record<string, unknown>): string {
-  const doc = argStr(input, "doc");
-  if (!DOC.test(doc)) fail("invalid_params", `doc "${doc}" is not a package document; use ${DOCS}`);
-  return doc;
-}
-
 const ID = str("A character id, e.g. malakor (list_characters).");
-const DOC_ARG = str(`The package-relative document: ${DOCS}.`, { maxLength: 64 });
+const DOC_ARG = str(`The document: ${DOCS}.`, { maxLength: 64 });
+const DIGEST = str("The digest read_character_doc returned.", { maxLength: 80 });
 const SITUATIONS: readonly LineSituation[] = ["roast_request", "bait", "newcomer", "vote_loss", "gift", "ai_question", "quiet", "research_wait", "proposal", "patron", "flood", "general"];
 const STATUSES: readonly LineStatus[] = ["approved", "seed", "retired"];
 const withView = (body: Record<string, unknown>, view: string | undefined) => (view === undefined ? body : { ...body, view });
@@ -63,37 +55,42 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
     run: async (input, ctx) => {
       const id = argStr(input, "id");
       const c = await ctx.read("character.get", { id });
-      const docs = ["constitution.md", "bible.md", "directions.md", "character.toml", "stalls.toml", "situations.json", ...c.foils.map((f) => `foils/${f.id}.md`)];
-      return withView(
-        {
-          id: c.id,
-          name: c.name,
-          ...(c.tagline === undefined ? {} : { tagline: c.tagline }),
-          active_tone: c.active_tone,
-          default_tone: c.default_tone,
-          tones: c.tones.map((t) => t.id),
-          foils: c.foils.map((f) => ({ id: f.id, declared: f.declared })),
-          rules: c.rules.map((r) => ({ id: r.id, title: r.title, enabled: r.enabled })),
-          situations: bounded(c.situations.map((s) => s.id), 20),
-          constitution_preview: clip(c.constitution, 400),
-          files: c.files.map((f) => `${f.path} (${f.bytes} B)`),
-          docs: docs.filter((d) => DOC.test(d)),
-        },
-        ctx.show(input, pageRoute("characters", id, "package")),
-      );
+      // The names read_character_doc takes, as bare stems.
+      const docs = ["constitution", "bible", "directions", "character", "stalls", "situations", ...c.foils.map((f) => `foils/${f.id}`)];
+      const body = {
+        id: c.id,
+        name: c.name,
+        ...(c.tagline === undefined ? {} : { tagline: clip(c.tagline, 200) }),
+        active_tone: c.active_tone,
+        default_tone: c.default_tone,
+        tones: c.tones.map((t) => t.id),
+        foils: c.foils.map((f) => ({ id: f.id, declared: f.declared })),
+        rules: c.rules.map((r) => ({ id: r.id, title: r.title, enabled: r.enabled })),
+        situations: bounded(c.situations.map((s) => s.id), 20),
+        files: bounded(c.files.map((f) => `${f.path} (${f.bytes} B)`), 40),
+        docs: docs.filter((d) => docPath(d) !== undefined),
+      };
+      // The constitution's opening takes the room the rest leaves (up to 400 chars).
+      const view = ctx.show(input, pageRoute("characters", id, "package"));
+      return withView(withRoomFor(fitBody(body, RESULT_BUDGET - 80) ?? body, "constitution_preview", c.constitution, 400, RESULT_BUDGET - 80), view);
     },
   },
   {
     name: "read_character_doc",
     title: "Read a package document",
-    description: "Returns a package document's whole text and its digest; pass that digest as base_digest to set_character_doc. Shows the package tab for the document.",
+    description:
+      "Returns one page of a package document (about 1,200 chars, on a line) with its digest, total_chars and next_offset; the first page adds the outline, headings with offsets. Pass offset to read on. Shows its package tab.",
     cls: "READ",
-    input: obj({ id: ID, doc: DOC_ARG, show: SHOW }, ["id", "doc"]),
+    input: obj({ id: ID, doc: DOC_ARG, offset: int("The char offset to read from (default 0): next_offset, or an outline offset.", 0), limit: int(`The most chars of text (default and at most ${PAGE_CHARS}).`, 100, PAGE_CHARS), show: SHOW }, ["id", "doc"]),
     run: async (input, ctx) => {
       const id = argStr(input, "id");
       const doc = argDoc(input);
       const d = await ctx.read("character.doc.get", { id, doc });
-      return withView({ id: d.id, doc: d.doc, digest: d.digest, chars: d.text.length, text: d.text }, ctx.show(input, pkgRoute(id, tabOf(doc))));
+      const offset = argInt(input, "offset", 0, 0, Number.MAX_SAFE_INTEGER);
+      if (offset > d.text.length) fail("invalid_params", `offset ${offset} is past the end (${d.text.length} chars)`);
+      const view = ctx.show(input, pkgRoute(id, tabOf(doc)));
+      const chars = argInt(input, "limit", PAGE_CHARS, 100, PAGE_CHARS);
+      return docPage({ id: d.id, doc: d.doc, digest: d.digest, ...(view === undefined ? {} : { view }) }, d.text, offset, chars);
     },
   },
   {
@@ -115,7 +112,8 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
   {
     name: "set_character_doc",
     title: "Replace a package document",
-    description: "Replaces a package document whole. base_digest is the digest read_character_doc returned ('' for a new foil); a stale digest is refused as conflict, an invalid package is undone. Returns digests and the backup.",
+    description:
+      "Replaces a package document whole: for a new foil (base_digest '') or a small file. To change a long document use edit_character_doc. A stale digest is refused as conflict, an invalid package is undone. Returns digests.",
     cls: "GATED",
     input: obj(
       { id: ID, doc: DOC_ARG, text: str("The whole new text of the document."), base_digest: str("The digest from read_character_doc, or '' for a new file.") },
@@ -129,6 +127,49 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
       if (typeof text !== "string" || typeof base !== "string") fail("invalid_params", "text and base_digest must be strings");
       const r = await ctx.write("character.doc.set", { id, doc, text, base_digest: base });
       return { ...r, see: encodeRoute(pkgRoute(id, tabOf(doc))) };
+    },
+  },
+  {
+    name: "edit_character_doc",
+    title: "Edit a package document",
+    description:
+      "The way to change a long document: replaces find, exact text that occurs once, with replace. To insert, find an anchor sentence and replace it with anchor plus new text. base_digest is the digest read. Returns new digest, backup.",
+    cls: "GATED",
+    input: obj(
+      {
+        id: ID,
+        doc: DOC_ARG,
+        base_digest: DIGEST,
+        find: str("The exact text to replace; it must occur exactly once.", { minLength: 1, maxLength: 4000 }),
+        replace: str("The text that takes its place ('' deletes it).", { maxLength: 8000 }),
+      },
+      ["id", "doc", "base_digest", "find", "replace"],
+    ),
+    run: async (input, ctx) => {
+      const id = argStr(input, "id");
+      const doc = argDoc(input);
+      const base = argStr(input, "base_digest");
+      const find = argStr(input, "find");
+      const replace = input["replace"];
+      if (typeof replace !== "string") fail("invalid_params", "replace must be a string ('' deletes find)");
+      if (replace === find) fail("invalid_params", "replace is the same as find; nothing would change");
+      const d = await ctx.read("character.doc.get", { id, doc });
+      if (d.digest !== base) fail("conflict", `${doc} changed since ${base} (it is now ${d.digest}); read it again with read_character_doc and redo the edit`);
+      const at = occurrences(d.text, find);
+      if (at.length !== 1) {
+        fail("invalid_params", at.length === 0 ? `find occurs 0 times in ${doc}; copy the exact text from read_character_doc` : `find occurs ${at.length} times in ${doc}; add surrounding text so it occurs exactly once`);
+      }
+      const i = at[0] ?? 0;
+      const text = `${d.text.slice(0, i)}${replace}${d.text.slice(i + find.length)}`;
+      const r = await ctx.write("character.doc.set", { id, doc, text, base_digest: base });
+      return {
+        doc: r.doc,
+        digest: r.digest,
+        previous_digest: r.previous_digest,
+        ...(r.backup === undefined ? {} : { backup: r.backup }),
+        changed_chars: changedChars(find, replace),
+        see: encodeRoute(pkgRoute(id, tabOf(doc))),
+      };
     },
   },
   {

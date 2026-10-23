@@ -1,6 +1,7 @@
 // The GATED writes outside a character package: the operator's marks on a Review line, and the
 // sandbox session's start and stop.
 import type { FeedbackTag, SandboxStartParams } from "@shadowrunr/contract";
+import { clip } from "./summary";
 import { argInt, argStr, fail, int, obj, optStr, str, type ToolSpec } from "./tool";
 
 const TAGS: readonly FeedbackTag[] = ["landed", "flat", "too_mean", "broke_character", "off_tone", "great_roast", "repetitive", "wrong_tag"];
@@ -27,7 +28,9 @@ export const WRITE_TOOLS: readonly ToolSpec[] = [
       if (line < 1) fail("invalid_params", `"line" is required`);
       const note = optStr(input, "note");
       const r = await ctx.write("review.feedback.set", { session_id: argStr(input, "session_id"), line, tags, ...(note === undefined ? {} : { note }) });
-      return { saved: r };
+      // The note comes back clipped: Athena wrote it, and a 2,000-char echo would break the budget.
+      const { note: saved, ...rest } = r;
+      return { saved: { ...rest, ...(saved === undefined ? {} : { note: clip(saved, 300), note_chars: saved.length }) } };
     },
   },
   {

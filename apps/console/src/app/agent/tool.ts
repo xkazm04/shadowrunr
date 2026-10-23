@@ -53,6 +53,98 @@ export function bounded<T>(all: readonly T[], limit: number, from = 0, total = a
   return { items, showing: items.length, total, footer: `showing ${items.length} of ${total}${more}` };
 }
 
+// ---- the result budget ----
+
+/**
+ * The most JSON text one result may carry. Athena cuts every host tool result at 1,600 chars
+ * (athena-portable src/athena/lane/turn_frame.py RESULT_CAP), so a result is designed to fit
+ * under it with room to spare, and the cut never lands inside the JSON.
+ */
+export const RESULT_BUDGET = 1500;
+
+export const sizeOf = (body: unknown): number => JSON.stringify(body).length;
+
+type Rec = Record<string, unknown>;
+const isRec = (v: unknown): v is Rec => v !== null && typeof v === "object" && !Array.isArray(v);
+/** A bounded list: `items` with its footer, the shape every list answer carries. */
+const isList = (v: unknown): v is Rec & { items: unknown[] } => isRec(v) && Array.isArray(v["items"]) && typeof v["footer"] === "string";
+
+/**
+ * Fits a body to the budget by trimming its bounded lists (the body itself, or one a level
+ * down), longest first, and saying so in each trimmed list's footer. A list that pages by cursor
+ * loses its cursor, since the cursor would skip the trimmed items. Returns undefined when no
+ * trimming fits: the caller refuses rather than let the cut land mid-JSON.
+ */
+export function fitBody(body: Rec, budget = RESULT_BUDGET): Rec | undefined {
+  if (sizeOf(body) <= budget) return body;
+  const root: Rec = isList(body) ? { ...body, items: [...body.items] } : { ...body };
+  const lists: { list: Rec & { items: unknown[] }; was: number; cursor: boolean }[] = [];
+  if (isList(root)) lists.push({ list: root, was: root.items.length, cursor: false });
+  for (const [k, v] of Object.entries(root)) {
+    if (k === "items" || !isList(v)) continue;
+    const copy = { ...v, items: [...v.items] };
+    root[k] = copy;
+    lists.push({ list: copy, was: copy.items.length, cursor: false });
+  }
+  if (lists.length === 0) return undefined;
+  // No list can keep more items than fit the budget alone: cut there first, then pop.
+  for (const l of lists) {
+    let used = 0;
+    const keep = l.list.items.findIndex((it) => (used += sizeOf(it) + 1) > budget);
+    if (keep >= 0) l.list.items.length = keep + 1;
+  }
+  while (sizeOf(root) > budget) {
+    const l = lists.reduce((a, b) => (sizeOf(b.list.items) > sizeOf(a.list.items) ? b : a));
+    if (l.list.items.length === 0) return undefined;
+    l.list.items.pop();
+    const n = l.list.items.length;
+    if ("next_cursor" in l.list) {
+      delete l.list["next_cursor"];
+      l.cursor = true;
+    }
+    if ("showing" in l.list) l.list["showing"] = n;
+    const total = typeof l.list["total"] === "number" ? l.list["total"] : l.was;
+    const how = l.cursor ? `ask again with limit ${Math.max(1, n)} to page by cursor` : "ask for fewer or page on";
+    l.list["footer"] = `showing ${n} of ${total}; trimmed from ${l.was} to fit the result budget, ${how}`;
+  }
+  return root;
+}
+
+/** The longest prefix of `items` whose JSON array fits `room` chars. */
+export function fitting<T>(items: readonly T[], room: number): T[] {
+  const out: T[] = [];
+  let used = 2;
+  for (const it of items) {
+    used += sizeOf(it) + (out.length > 0 ? 1 : 0);
+    if (used > room) break;
+    out.push(it);
+  }
+  return out;
+}
+
+/** `text` clipped so that adding it under `key` keeps `body` within the budget (omitted if no room). */
+export function withRoomFor(body: Rec, key: string, text: string | undefined, max: number, budget = RESULT_BUDGET): Rec {
+  if (text === undefined) return body;
+  const room = budget - sizeOf({ ...body, [key]: "" });
+  let n = Math.min(max, text.length);
+  while (n > 0 && sizeOf(text.slice(0, n)) + 1 > room) n -= Math.max(1, Math.ceil(n / 10));
+  if (n < Math.min(40, text.length)) return body;
+  return { ...body, [key]: n >= text.length ? text : `${text.slice(0, n - 1)}…` };
+}
+
+/**
+ * The bind guard: a body over the budget is trimmed, or else a read is refused with what to ask
+ * instead. A write has already happened by then, so it is never reported as failed: it answers
+ * that it was done and that its answer was too long to show.
+ */
+export function guard(name: string, cls: ToolClass, body: Rec): Rec {
+  const fitted = fitBody(body);
+  if (fitted !== undefined) return fitted;
+  const why = `${name}'s answer is ${sizeOf(body)} chars, over the ${RESULT_BUDGET}-char result budget`;
+  if (cls !== "READ") return { done: true, footer: `${why}; read the result back with a read tool` };
+  return fail("too_large", `${why}; ask for less (a smaller limit, a later offset or a narrower id)`);
+}
+
 // ---- schemas ----
 
 export const obj = (properties: Readonly<Record<string, JsonSchema>>, required: readonly string[] = []): JsonSchema => ({
@@ -143,7 +235,7 @@ export function bind(spec: ToolSpec, deps: AgentDeps): AgentTool {
     ...FLAGS[spec.cls],
     async execute(input, options) {
       const body = await spec.run(input ?? {}, ctxOf(deps, options?.signal));
-      return out(body);
+      return out(guard(spec.name, spec.cls, body));
     },
   };
 }

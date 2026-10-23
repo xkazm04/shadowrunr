@@ -2,7 +2,7 @@
 // flags, a description inside her 240-char cut, a WebMCP-legal name and a closed schema.
 import { describe, expect, it } from "vitest";
 import { buildTools, SPECS } from "./catalog";
-import { APP_MAP } from "./appMap";
+import { MAP_MAX, MAP_TOPICS, mapAnswer } from "./appMap";
 import { fakes } from "./testkit";
 import { toolsHere } from "./where";
 import { PAGE_IDS, pageRoute, WALL } from "../../router";
@@ -29,6 +29,7 @@ const CLASS: Readonly<Record<string, ToolClass>> = {
   read_character_doc: "READ",
   validate_character: "READ",
   set_character_doc: "GATED",
+  edit_character_doc: "GATED",
   set_character_rules: "GATED",
   set_tone: "GATED",
   add_tone_line: "GATED",
@@ -101,7 +102,15 @@ describe("the catalog", () => {
     }
   });
 
-  it("keeps app_map under about 6 KB", () => {
-    expect(JSON.stringify(APP_MAP).length).toBeLessThan(6 * 1024);
+  it("is 28 tools, edit_character_doc among them", () => {
+    expect(tools).toHaveLength(28);
+  });
+
+  it("answers app_map as an index of every page and topic, each at or under MAP_MAX", () => {
+    const index = mapAnswer(undefined);
+    expect(Object.keys(index?.["pages"] as object)).toEqual(["wall", ...PAGE_IDS]);
+    expect(index?.["topics"]).toEqual(MAP_TOPICS);
+    for (const t of [undefined, ...MAP_TOPICS]) expect(JSON.stringify(mapAnswer(t)).length, String(t)).toBeLessThanOrEqual(MAP_MAX);
+    expect(mapAnswer("nowhere")).toBeUndefined();
   });
 });

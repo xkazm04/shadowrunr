@@ -3,6 +3,8 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewSessionRow, RunRow, StreamEvent } from "@shadowrunr/contract";
 import { bigSession, sessionRows } from "../../pages/review/fixture";
+import { malakorDetail } from "../../pages/characters/testgen";
+import { populationFor, simRunId } from "./sim";
 import { pkgRoute } from "../../pages/characters/routes";
 import { encodeRoute, pageRoute, WALL } from "../../router";
 import { transcriptRoute } from "../../router/brain";
@@ -15,19 +17,7 @@ function setup(script: Script, start = pageRoute("onair")) {
   return { ...f, tool: (name: string) => tools.get(name) };
 }
 
-const SIM_SPEC = {
-  audience_size: 30,
-  character: "malakor",
-  core_effort: "low",
-  core_tier: "haiku",
-  duration_s: 120,
-  population: "growing_channel",
-  run_id: "theatrical.haiku.SEG-01.a30.s1",
-  seed: 1,
-  segment: "SEG-01",
-  tone_variant: "theatrical",
-};
-const status = (mode: string) => ok({ accounts: [], api_fallback: false, fallbacks: [], fleet: { mode, since_ms: 0 }, routes: [] });
+const status = (mode: string, routes: unknown[] = []) => ok({ accounts: [], api_fallback: false, fallbacks: [], fleet: { mode, since_ms: 0 }, routes });
 
 describe("query", () => {
   it("refuses a method outside the read allowlist by name and never sends it", async () => {
@@ -50,18 +40,40 @@ describe("start_sim", () => {
   it("refuses unless the engine fleet is scripted, and never starts the run", async () => {
     for (const mode of ["primary", "degraded", "down"]) {
       const s = setup({ "engine.status": () => status(mode), "sim.start": () => ok({ run_id: "x" }) });
-      await expect(run(s.tool("start_sim"), { spec: SIM_SPEC })).rejects.toThrow(/^refused: .*live sims are out of scope/);
+      await expect(run(s.tool("start_sim"), {})).rejects.toThrow(/^refused: .*live sims are out of scope/);
       expect(s.sent).toEqual(["engine.status"]);
       expect(s.navs).toEqual([]);
     }
   });
 
-  it("starts a scripted run through mutate and shows the simulator", async () => {
-    const s = setup({ "engine.status": () => status("scripted"), "sim.start": () => ok({ run_id: SIM_SPEC.run_id }) });
-    const body = await run(s.tool("start_sim"), { spec: SIM_SPEC, judge: true });
-    expect(body).toMatchObject({ run_id: SIM_SPEC.run_id, view: "#/simulator" });
-    expect(s.writes).toEqual([{ method: "sim.start", params: { spec: SIM_SPEC, judge: true } }]);
+  it("starts with no args from the CLI's defaults and the character's active tone, and shows the simulator", async () => {
+    const s = setup({ "engine.status": () => status("scripted"), "character.get": () => ok(malakorDetail()), "sim.start": (p) => ok({ run_id: (p as { spec: { run_id: string } }).spec.run_id }) });
+    const body = await run(s.tool("start_sim"), {});
+    const spec = { run_id: "theatrical.sonnet.SEG-01.a30.s1", character: "malakor", tone_variant: "theatrical", core_tier: "sonnet", core_effort: "low", segment: "SEG-01", audience_size: 30, seed: 1, duration_s: 600, population: "growing_channel" };
+    expect(s.writes).toEqual([{ method: "sim.start", params: { spec, judge: false } }]);
+    expect(body).toMatchObject({ run_id: spec.run_id, spec_used: spec, view: "#/simulator" });
     expect(s.navs).toEqual(["#/simulator"]);
+  });
+
+  it("takes the core thread's route from engine.status and every flat arg", async () => {
+    const core = { role: "core_thread", tier: "haiku", effort: "medium", overridden: true, timeout_ms: 60_000 };
+    const s = setup({ "engine.status": () => status("scripted", [core]), "character.get": () => ok(malakorDetail()), "sim.start": () => ok({ run_id: "r" }) });
+    await run(s.tool("start_sim"), { tone: "unhinged-roastmaster", segment: "SEG-02A", audience_size: 3, seed: 2, judge: true });
+    expect(s.writes[0]?.params).toEqual({
+      spec: { run_id: "unhinged-roastmaster.haiku.SEG-02A.a3.s2", character: "malakor", tone_variant: "unhinged-roastmaster", core_tier: "haiku", core_effort: "medium", segment: "SEG-02A", audience_size: 3, seed: 2, duration_s: 600, population: "small_new_channel" },
+      judge: true,
+    });
+  });
+
+  it("refuses a tone the character does not have, naming the ones it has, and starts nothing", async () => {
+    const s = setup({ "engine.status": () => status("scripted"), "character.get": () => ok(malakorDetail()), "sim.start": () => ok({ run_id: "r" }) });
+    await expect(run(s.tool("start_sim"), { tone: "cheerful" })).rejects.toThrow(/^invalid_params: tone "cheerful" is not one of malakor's tones: deadpan-bureaucrat, gleeful-chaos, theatrical/);
+    expect(s.writes).toEqual([]);
+  });
+
+  it("picks the population nearest the audience on a log scale, as SimDefaults::population_for does", () => {
+    expect([3, 10, 30, 100, 300, 1].map(populationFor)).toEqual(["small_new_channel", "growing_channel", "growing_channel", "raid_moment", "raid_moment", "small_new_channel"]);
+    expect(simRunId("odd tone!", "opus", "SEG-01", 300, 4)).toBe("odd_tone_.opus.SEG-01.a300.s4");
   });
 });
 
@@ -93,7 +105,7 @@ describe("where_am_i", () => {
       title: "Bible",
       breadcrumbs: ["Season", "Characters", "Malakor", "Package", "Bible"],
       ids: { character: "malakor", tab: "bible" },
-      tools_here: ["get_character", "read_character_doc", "set_character_doc", "validate_character", "set_tone"],
+      tools_here: ["get_character", "read_character_doc", "edit_character_doc", "set_character_doc", "validate_character", "set_tone"],
     });
   });
 

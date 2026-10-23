@@ -4,7 +4,7 @@ import type { RunParams, RunsPageParams } from "@shadowrunr/contract";
 import { pageRoute } from "../../router";
 import { transcriptRoute } from "../../router/brain";
 import { clip, eventLine, sessionSummary, tournamentSummary, verdictSummary } from "./summary";
-import { argInt, argStr, bounded, fail, int, limit, obj, optStr, SHOW, str, type Ctx, type ToolSpec } from "./tool";
+import { argInt, argStr, bounded, fail, fitBody, int, limit, obj, optStr, RESULT_BUDGET, SHOW, sizeOf, str, type Ctx, type ToolSpec } from "./tool";
 
 const SESSION = str("A sandbox session id (list_sessions).");
 const RUN = str("A run id, or <tournament>/<run_id> when the id repeats across tournaments.");
@@ -18,6 +18,8 @@ function runParams(run: string): RunParams {
 async function session(ctx: Ctx, id: string) {
   return ctx.read("review.session", { session_id: id });
 }
+
+const clipText = (l: Record<string, unknown>, n: number) => (typeof l["text"] === "string" ? { ...l, text: clip(l["text"], n) } : l);
 
 const withView = (body: Record<string, unknown>, view: string | undefined) => (view === undefined ? body : { ...body, view });
 
@@ -75,12 +77,19 @@ export const RUN_TOOLS: readonly ToolSpec[] = [
       if (line < 1) fail("invalid_params", `"line" is required`);
       if (line > rs.events.length) fail("invalid_params", `line ${line} is past the end (${rs.events.length} lines)`);
       const from = Math.max(1, line - 3);
-      const around = rs.events.slice(from - 1, line + 3).map((e, i) => eventLine(e, from + i));
       const tag = rs.tags?.lines.find((t) => t.line === line);
       const fails = (rs.verdict?.rules ?? []).filter((r) => r.state === "fail" && (r.evidence ?? []).some((ref) => ref.endsWith(`#${line}`))).map((r) => r.rule);
       const marks = rs.feedback.filter((f) => f.line === line).map((f) => ({ tags: f.tags, ...(f.note === undefined ? {} : { note: clip(f.note, 300) }) }));
+      // The line itself keeps up to 400 chars; its neighbours shrink until the answer fits.
+      const at = (n: number) =>
+        rs.events.slice(from - 1, line + 3).map((e, i) => {
+          const l = eventLine(e, from + i);
+          return from + i === line ? l : clipText(l, n);
+        });
+      const body = (n: number) => ({ session_id: id, line, lines: at(n), ...(tag === undefined ? {} : { tag: { kind: tag.kind, target: tag.target, edge: tag.edge } }), fails, marks });
+      const fit = [200, 140, 100, 70, 45].map(body).find((b) => sizeOf(b) <= RESULT_BUDGET - 80) ?? body(30);
       return withView(
-        { session_id: id, line, lines: around, ...(tag === undefined ? {} : { tag: { kind: tag.kind, target: tag.target, edge: tag.edge } }), fails, marks },
+        fit,
         ctx.show(input, pageRoute("review", id, "timeline", String(line))),
       );
     },
@@ -135,9 +144,18 @@ export const RUN_TOOLS: readonly ToolSpec[] = [
       const run = argStr(input, "run");
       const events = await ctx.read("run.transcript", runParams(run));
       const from = argInt(input, "from", 1, 1, Number.MAX_SAFE_INTEGER);
-      const page = bounded(events, argInt(input, "limit", 20, 1, 100), from - 1);
-      const lines = page.items.map((e, i) => eventLine(e, from + i));
-      return withView({ run, ...page, items: lines }, ctx.show(input, transcriptRoute({ runId: run }, from > 1 ? from : undefined)));
+      const want = argInt(input, "limit", 20, 1, 100);
+      const page = bounded(events, want, from - 1);
+      // Long lines are clipped harder until at least 6 lines (or all asked for) fit the budget;
+      // the bind guard's trim then keeps what fits, and next_from says where to read on.
+      const at = (n: number) => ({ run, ...page, items: page.items.map((e, i) => clipText(eventLine(e, from + i), n)) });
+      const floor = Math.min(want, page.items.length, 6);
+      const fit = [400, 240, 160, 110, 80]
+        .map((n) => fitBody(at(n), RESULT_BUDGET - 120))
+        .find((b) => b !== undefined && (b["items"] as unknown[]).length >= floor);
+      const body = fit ?? fitBody(at(60), RESULT_BUDGET - 120) ?? at(60);
+      const next = from + (body["items"] as unknown[]).length;
+      return withView({ ...body, ...(next <= events.length ? { next_from: next } : {}) }, ctx.show(input, transcriptRoute({ runId: run }, from > 1 ? from : undefined)));
     },
   },
   {
