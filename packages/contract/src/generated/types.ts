@@ -232,12 +232,21 @@ export type ModelTier = "haiku" | "sonnet" | "opus";
  */
 export type EngineKind = ("claude_cli" | "anthropic_api" | "codex_cli" | "agy_cli" | "local_gemma") | "scripted";
 /**
- * One line of `decisions.jsonl`, and one row of `moderator.log`.
+ * One line of `decisions.jsonl`, and one row of `moderator.log`. Struct variants (not
+ * newtypes) so the generated TypeScript keeps the `kind` tag.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ModLogEntry".
  */
-export type ModLogEntry = ModDecision | ModUnban;
+export type ModLogEntry =
+  | {
+      decision: ModDecision;
+      kind: "decision";
+    }
+  | {
+      kind: "unban";
+      unban: ModUnban;
+    };
 /**
  * What the moderator does to a message's author.
  *

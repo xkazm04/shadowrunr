@@ -5,7 +5,7 @@
 "use strict";
 export const validate = validate968;
 const schema132 = {"properties":{"entries":{"description":"Newest first.","items":{"$ref":"#/$defs/ModLogEntry"},"type":"array"}},"required":["entries"],"type":"object"};
-const schema133 = {"description":"One line of `decisions.jsonl`, and one row of `moderator.log`.","oneOf":[{"$ref":"#/$defs/ModDecision","properties":{"kind":{"const":"decision","type":"string"}},"required":["kind"],"type":"object"},{"$ref":"#/$defs/ModUnban","properties":{"kind":{"const":"unban","type":"string"}},"required":["kind"],"type":"object"}],"type":"object","discriminator":{"propertyName":"kind"}};
+const schema133 = {"description":"One line of `decisions.jsonl`, and one row of `moderator.log`. Struct variants (not\nnewtypes) so the generated TypeScript keeps the `kind` tag.","oneOf":[{"properties":{"decision":{"$ref":"#/$defs/ModDecision"},"kind":{"const":"decision","type":"string"}},"required":["kind","decision"],"type":"object"},{"properties":{"kind":{"const":"unban","type":"string"},"unban":{"$ref":"#/$defs/ModUnban"}},"required":["kind","unban"],"type":"object"}],"type":"object","discriminator":{"propertyName":"kind"}};
 const schema134 = {"description":"One decision of the moderation lane.","properties":{"action":{"$ref":"#/$defs/ModActionKind","description":"The action after strike escalation."},"error":{"description":"Why the platform call failed.","type":"string"},"executed":{"description":"The platform call succeeded (always false in shadow mode and for `rules.test`).","type":"boolean"},"id":{"type":"string"},"line":{"description":"The moderator's chat line for this decision (posted when armed, logged in shadow).","type":"string"},"message_id":{"type":"string"},"mode":{"$ref":"#/$defs/ModMode"},"platform":{"$ref":"#/$defs/Platform"},"rule_id":{"type":"string"},"timeout_s":{"format":"uint32","minimum":0,"type":"integer"},"ts_ms":{"format":"int64","type":"integer"},"viewer_id":{"type":"string"},"viewer_name":{"type":"string"}},"required":["id","ts_ms","platform","viewer_id","viewer_name","message_id","rule_id","action","mode","executed"],"type":"object"};
 const schema135 = {"description":"What the moderator does to a message's author.","oneOf":[{"const":"delete","description":"Delete the message only.","type":"string"},{"const":"timeout","description":"Delete the message and time the author out for `timeout_s`.","type":"string"},{"const":"ban","description":"Delete the message and ban the author from the channel.","type":"string"}]};
 
@@ -587,27 +587,41 @@ const tag0 = data.kind;
 if(typeof tag0 == "string"){
 if(tag0 === "decision"){
 const _errs2 = errors;
-if(!(validate326(data, {instancePath,parentData,parentDataProperty,rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate326.errors : vErrors.concat(validate326.errors);
-errors = vErrors.length;
-}
 if(errors === _errs2){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((data.kind === undefined) && (missing0 = "kind")){
+if(((data.kind === undefined) && (missing0 = "kind")) || ((data.decision === undefined) && (missing0 = "decision"))){
 validate325.errors = [{instancePath,schemaPath:"#/oneOf/0/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
 else {
+if(data.decision !== undefined){
+const _errs4 = errors;
+if(!(validate326(data.decision, {instancePath:instancePath+"/decision",parentData:data,parentDataProperty:"decision",rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate326.errors : vErrors.concat(validate326.errors);
+errors = vErrors.length;
+}
+var valid2 = _errs4 === errors;
+}
+else {
+var valid2 = true;
+}
+if(valid2){
 if(data.kind !== undefined){
-let data0 = data.kind;
-if(typeof data0 !== "string"){
+let data1 = data.kind;
+const _errs5 = errors;
+if(typeof data1 !== "string"){
 validate325.errors = [{instancePath:instancePath+"/kind",schemaPath:"#/oneOf/0/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-if("decision" !== data0){
+if("decision" !== data1){
 validate325.errors = [{instancePath:instancePath+"/kind",schemaPath:"#/oneOf/0/properties/kind/const",keyword:"const",params:{allowedValue: "decision"},message:"must be equal to constant"}];
 return false;
+}
+var valid2 = _errs5 === errors;
+}
+else {
+var valid2 = true;
 }
 }
 }
@@ -618,44 +632,46 @@ return false;
 }
 }
 var props0 = {};
+props0.decision = true;
 props0.kind = true;
-props0.action = true;
-props0.error = true;
-props0.executed = true;
-props0.id = true;
-props0.line = true;
-props0.message_id = true;
-props0.mode = true;
-props0.platform = true;
-props0.rule_id = true;
-props0.timeout_s = true;
-props0.ts_ms = true;
-props0.viewer_id = true;
-props0.viewer_name = true;
 }
 else if(tag0 === "unban"){
-const _errs6 = errors;
-if(!(validate334(data, {instancePath,parentData,parentDataProperty,rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate334.errors : vErrors.concat(validate334.errors);
-errors = vErrors.length;
-}
-if(errors === _errs6){
+const _errs7 = errors;
+if(errors === _errs7){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing1;
-if((data.kind === undefined) && (missing1 = "kind")){
+if(((data.kind === undefined) && (missing1 = "kind")) || ((data.unban === undefined) && (missing1 = "unban"))){
 validate325.errors = [{instancePath,schemaPath:"#/oneOf/1/required",keyword:"required",params:{missingProperty: missing1},message:"must have required property '"+missing1+"'"}];
 return false;
 }
 else {
 if(data.kind !== undefined){
-let data1 = data.kind;
-if(typeof data1 !== "string"){
+let data2 = data.kind;
+const _errs9 = errors;
+if(typeof data2 !== "string"){
 validate325.errors = [{instancePath:instancePath+"/kind",schemaPath:"#/oneOf/1/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-if("unban" !== data1){
+if("unban" !== data2){
 validate325.errors = [{instancePath:instancePath+"/kind",schemaPath:"#/oneOf/1/properties/kind/const",keyword:"const",params:{allowedValue: "unban"},message:"must be equal to constant"}];
 return false;
+}
+var valid4 = _errs9 === errors;
+}
+else {
+var valid4 = true;
+}
+if(valid4){
+if(data.unban !== undefined){
+const _errs11 = errors;
+if(!(validate334(data.unban, {instancePath:instancePath+"/unban",parentData:data,parentDataProperty:"unban",rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate334.errors : vErrors.concat(validate334.errors);
+errors = vErrors.length;
+}
+var valid4 = _errs11 === errors;
+}
+else {
+var valid4 = true;
 }
 }
 }
@@ -668,11 +684,7 @@ return false;
 if(props0 !== true){
 props0 = props0 || {};
 props0.kind = true;
-props0.error = true;
-props0.executed = true;
-props0.platform = true;
-props0.ts_ms = true;
-props0.viewer_id = true;
+props0.unban = true;
 }
 }
 else {

@@ -5169,31 +5169,37 @@
       "type": "object"
     },
     "ModLogEntry": {
-      "description": "One line of `decisions.jsonl`, and one row of `moderator.log`.",
+      "description": "One line of `decisions.jsonl`, and one row of `moderator.log`. Struct variants (not\nnewtypes) so the generated TypeScript keeps the `kind` tag.",
       "oneOf": [
         {
-          "$ref": "#/$defs/ModDecision",
           "properties": {
+            "decision": {
+              "$ref": "#/$defs/ModDecision"
+            },
             "kind": {
               "const": "decision",
               "type": "string"
             }
           },
           "required": [
-            "kind"
+            "kind",
+            "decision"
           ],
           "type": "object"
         },
         {
-          "$ref": "#/$defs/ModUnban",
           "properties": {
             "kind": {
               "const": "unban",
               "type": "string"
+            },
+            "unban": {
+              "$ref": "#/$defs/ModUnban"
             }
           },
           "required": [
-            "kind"
+            "kind",
+            "unban"
           ],
           "type": "object"
         }

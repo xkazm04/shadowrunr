@@ -2024,7 +2024,7 @@ ModStrikes   { count, window_s, then: delete|timeout|ban, then_timeout_s? }
 ModDecision  { id, ts_ms, platform, viewer_id, viewer_name, message_id, rule_id, action,
                timeout_s?, mode: shadow|armed, executed, line?, error? }
 ModUnban     { ts_ms, platform, viewer_id, executed, error? }
-ModLogEntry  = { kind: "decision", ...ModDecision } | { kind: "unban", ...ModUnban }
+ModLogEntry  = { kind: "decision", decision: ModDecision } | { kind: "unban", unban: ModUnban }
 PlatformStatus { platform, state: disconnected|connecting|connected|error, bot_login?, channel?, detail? }
 ModeratorStatus { mode, character, platforms: [PlatformStatus], counts: { decisions, executed } }
 ```

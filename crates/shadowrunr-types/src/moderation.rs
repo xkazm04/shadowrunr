@@ -112,12 +112,13 @@ pub struct ModUnban {
     pub error: Option<String>,
 }
 
-/// One line of `decisions.jsonl`, and one row of `moderator.log`.
+/// One line of `decisions.jsonl`, and one row of `moderator.log`. Struct variants (not
+/// newtypes) so the generated TypeScript keeps the `kind` tag.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ModLogEntry {
-    Decision(ModDecision),
-    Unban(ModUnban),
+    Decision { decision: ModDecision },
+    Unban { unban: ModUnban },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
