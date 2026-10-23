@@ -563,6 +563,13 @@ export type Command =
 export type Emotion =
   "neutral" | "menace" | "glee" | "deadpan" | "hushed" | "outrage" | "sarcasm" | "weary" | "triumph" | "tender";
 /**
+ * A head gesture the face plays once, as the stage's performance channels define it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Gesture".
+ */
+export type Gesture = "nod" | "tilt" | "lean_in" | "recoil" | "glare" | "flare";
+/**
  * The pace a line is spoken at.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -3968,6 +3975,12 @@ export interface Viewer {
  */
 export interface Delivery {
   emotion: Emotion;
+  /**
+   * The eye light the face settles to for this line, 0.0..=2.5 (1.0 is the rig's own),
+   * clamped when read. Absent: the emotion's own level.
+   */
+  eye_light?: number;
+  gesture?: Gesture;
   intensity: number;
   pace: Pace;
 }

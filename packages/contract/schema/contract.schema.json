@@ -3197,6 +3197,17 @@
         "emotion": {
           "$ref": "#/$defs/Emotion"
         },
+        "eye_light": {
+          "description": "The eye light the face settles to for this line, 0.0..=2.5 (1.0 is the rig's own),\nclamped when read. Absent: the emotion's own level.",
+          "format": "float",
+          "maximum": 2.5,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "gesture": {
+          "$ref": "#/$defs/Gesture",
+          "description": "A head gesture for the face, played once when the line is heard."
+        },
         "intensity": {
           "format": "float",
           "maximum": 1.0,
@@ -4242,6 +4253,18 @@
           "type": "string"
         }
       ]
+    },
+    "Gesture": {
+      "description": "A head gesture the face plays once, as the stage's performance channels define it.",
+      "enum": [
+        "nod",
+        "tilt",
+        "lean_in",
+        "recoil",
+        "glare",
+        "flare"
+      ],
+      "type": "string"
     },
     "HandoverInfo": {
       "description": "SEG-01's handover clock rule.",

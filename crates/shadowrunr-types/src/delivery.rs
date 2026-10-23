@@ -3,6 +3,9 @@
 //! of the text, and carries it on `StreamEvent::Say`; the voice turns it into its provider's
 //! controls (Kokoro Plus speed, pauses and blends; ElevenLabs audio tags). The emotion set is
 //! closed, so a cue the voice cannot read never reaches it.
+//!
+//! The same cue may also direct the face: a [`Gesture`] and an eye-light level
+//! (`[menace 0.9 slow glare eyes 2] Kneel.`). The voice ignores both; the stage plays them.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -91,6 +94,51 @@ impl Pace {
     }
 }
 
+/// A head gesture the face plays once, as the stage's performance channels define it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Gesture {
+    Nod,
+    Tilt,
+    LeanIn,
+    Recoil,
+    Glare,
+    Flare,
+}
+
+impl Gesture {
+    /// Every gesture, in contract order.
+    pub const ALL: [Gesture; 6] = [
+        Self::Nod,
+        Self::Tilt,
+        Self::LeanIn,
+        Self::Recoil,
+        Self::Glare,
+        Self::Flare,
+    ];
+
+    /// The wire (and cue) word.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Nod => "nod",
+            Self::Tilt => "tilt",
+            Self::LeanIn => "lean_in",
+            Self::Recoil => "recoil",
+            Self::Glare => "glare",
+            Self::Flare => "flare",
+        }
+    }
+
+    /// The gesture a cue word names (case-insensitive); `None` outside the set.
+    pub fn parse(word: &str) -> Option<Self> {
+        let w = word.to_ascii_lowercase();
+        Self::ALL.into_iter().find(|g| g.as_str() == w)
+    }
+}
+
+/// The brightest eye light a cue may ask for (1.0 is the rig's own).
+pub const EYE_LIGHT_MAX: f32 = 2.5;
+
 /// The intensity a cue without one gets.
 pub const DEFAULT_INTENSITY: f32 = 0.6;
 
@@ -102,6 +150,19 @@ pub struct Delivery {
     #[schemars(range(min = 0.0, max = 1.0))]
     pub intensity: f32,
     pub pace: Pace,
+    /// A head gesture for the face, played once when the line is heard.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gesture: Option<Gesture>,
+    /// The eye light the face settles to for this line, 0.0..=2.5 (1.0 is the rig's own),
+    /// clamped when read. Absent: the emotion's own level.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "eye_clamped",
+        serialize_with = "eye_hundredths"
+    )]
+    #[schemars(range(min = 0.0, max = 2.5))]
+    pub eye_light: Option<f32>,
 }
 
 impl Delivery {
@@ -111,7 +172,36 @@ impl Delivery {
             emotion,
             intensity: clamp_intensity(intensity),
             pace,
+            gesture: None,
+            eye_light: None,
         }
+    }
+
+    /// This delivery with a face gesture.
+    pub fn with_gesture(mut self, gesture: Option<Gesture>) -> Self {
+        self.gesture = gesture;
+        self
+    }
+
+    /// This delivery with an eye light, clamped into 0.0..=2.5 (NaN: none).
+    pub fn with_eye_light(mut self, eye_light: Option<f32>) -> Self {
+        self.eye_light = eye_light.and_then(clamp_eye);
+        self
+    }
+}
+
+fn clamp_eye(e: f32) -> Option<f32> {
+    (!e.is_nan()).then(|| e.clamp(0.0, EYE_LIGHT_MAX))
+}
+
+fn eye_clamped<'de, D: Deserializer<'de>>(d: D) -> Result<Option<f32>, D::Error> {
+    Option::<f32>::deserialize(d).map(|o| o.and_then(clamp_eye))
+}
+
+fn eye_hundredths<S: Serializer>(e: &Option<f32>, s: S) -> Result<S::Ok, S::Error> {
+    match e {
+        Some(v) => s.serialize_f64((f64::from(*v) * 100.0).round() / 100.0),
+        None => s.serialize_none(),
     }
 }
 
@@ -184,6 +274,39 @@ mod tests {
         match serde_json::from_str::<crate::StreamEvent>(&plain).unwrap() {
             crate::StreamEvent::Say { delivery, .. } => assert_eq!(delivery, None),
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn face_fields_are_optional_and_clamped() {
+        let d = Delivery::new(Emotion::Menace, 0.9, Pace::Slow)
+            .with_gesture(Some(Gesture::LeanIn))
+            .with_eye_light(Some(1.8));
+        assert_eq!(
+            serde_json::to_string(&d).unwrap(),
+            r#"{"emotion":"menace","intensity":0.9,"pace":"slow","gesture":"lean_in","eye_light":1.8}"#
+        );
+        let hot: Delivery =
+            serde_json::from_str(r#"{"emotion":"glee","intensity":1,"pace":"fast","eye_light":9}"#)
+                .unwrap();
+        assert_eq!(hot.eye_light, Some(EYE_LIGHT_MAX));
+        assert_eq!(hot.gesture, None);
+        assert_eq!(
+            Delivery::new(Emotion::Glee, 1.0, Pace::Fast)
+                .with_eye_light(Some(f32::NAN))
+                .eye_light,
+            None
+        );
+        assert!(serde_json::from_str::<Delivery>(
+            r#"{"emotion":"glee","intensity":1,"pace":"fast","gesture":"wink"}"#
+        )
+        .is_err());
+        for g in Gesture::ALL {
+            assert_eq!(Gesture::parse(g.as_str()), Some(g));
+            assert_eq!(
+                serde_json::to_string(&g).unwrap(),
+                format!("\"{}\"", g.as_str())
+            );
         }
     }
 

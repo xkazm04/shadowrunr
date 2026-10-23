@@ -1901,13 +1901,21 @@ Optional fields are omitted, never `null`.
 ```
 Emotion   neutral | menace | glee | deadpan | hushed | outrage | sarcasm | weary | triumph | tender
 Pace      slow | normal | fast
-Delivery  { emotion: Emotion, intensity: number (0.0..=1.0, clamped when read), pace: Pace }
+Gesture   nod | tilt | lean_in | recoil | glare | flare
+Delivery  { emotion: Emotion, intensity: number (0.0..=1.0, clamped when read), pace: Pace,
+            gesture?: Gesture, eye_light?: number (0.0..=2.5, clamped when read) }
 ```
 
 - **The cue.** The model may open a spoken line with `[<emotion> <intensity> <pace>]`, e.g.
   `[sarcasm 0.8 slow] Oh, wonderful.` Partial cues are allowed: after the emotion, an intensity
   and a pace in either order, each optional (`[glee]` is intensity 0.6, pace normal). The brain
   parses the cue out of the text into `say.delivery`. Intensity is written to two decimals.
+- **Face words.** After the emotion words, a cue may name one gesture and an eye light,
+  `eyes <0..2.5>` (1 is the rig's own): `[menace 0.9 slow glare eyes 2] Kneel.` A bracket of
+  face words alone (`[glare]`, `[eyes 0.4]`) is a cue too, with emotion `neutral` at the
+  default intensity. They land in `delivery.gesture` and `delivery.eye_light`; the voice
+  ignores both, and the stage's face plays them when the line is heard. An explicit gesture
+  plays whatever the intensity, and replaces the emotion's own.
 - **Markup is stripped at the door.** Every other bracketed or asterisk span in a spoken line
   (`[laughs]`, `*sighs*`, a cue whose emotion is not in the set) is removed, and `**emphasis**`
   keeps its words. A line that was only markup is not spoken. Pauses are written as punctuation
