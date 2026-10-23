@@ -22,6 +22,7 @@ crates/shadowrunr-segments  segments, commands, rank ladder, votes, scoring
 crates/shadowrunr-sim       simulation engine and tournaments
 crates/shadowrunr-daemon    the `shadowrunr` binary (CLI + daemon)
 characters/                 character packages (Malakor first)
+docs/concepts               open items and the owner's review loop
 docs/research               feasibility research
 docs/spec                   contracts
 ```
