@@ -105,7 +105,7 @@ describe("where_am_i", () => {
       title: "Bible",
       breadcrumbs: ["Season", "Characters", "Malakor", "Package", "Bible"],
       ids: { character: "malakor", tab: "bible" },
-      tools_here: ["get_character", "read_character_doc", "edit_character_doc", "set_character_doc", "validate_character", "set_tone"],
+      tools_here: ["get_character", "read_character_doc", "edit_character_doc", "set_character_doc", "set_tone", "query"],
     });
   });
 
@@ -146,6 +146,16 @@ describe("show", () => {
     const s = setup({ "review.session": () => no("not_found", "no session sbx-9") });
     await expect(run(s.tool("get_session"), { session: "sbx-9" })).rejects.toThrow("not_found: no session sbx-9");
     expect(s.navs).toEqual([]);
+  });
+
+  it("get_session names the checks that held a failed session back, unmeasured included", async () => {
+    const rs = bigSession({ events: 40, minutes: 5, id: "sbx-f" });
+    const s = setup({ "review.session": () => ok(rs) });
+    const body = await run(s.tool("get_session"), { session: "sbx-f", show: false });
+    expect(body["pass"]).toBe(false);
+    expect(body["failed_because"]).toEqual(["say_gap: fail", "chaos: unmeasured", "judge: fail"]);
+    const passed = setup({ "review.session": () => ok({ ...rs, row: { ...rs.row, pass: true } }) });
+    expect(await run(passed.tool("get_session"), { session: "sbx-f", show: false })).not.toHaveProperty("failed_because");
   });
 
   it("open_moment shows the timeline line with three lines either side", async () => {

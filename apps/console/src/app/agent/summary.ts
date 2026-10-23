@@ -110,6 +110,9 @@ export function sessionSummary(rs: ReviewSession): Record<string, unknown> {
       minutes: row.minutes,
       length_s: row.length_s,
       pass: row.pass,
+      // A session passes only when every check passes; "unmeasured" is not a pass. Naming the checks
+      // that held it back answers "why did it fail" without reading the judge page.
+      ...(row.pass ? {} : { failed_because: row.checks.filter((c) => c.state !== "pass").map((c) => `${c.id}: ${c.state}`) }),
       checks: row.checks.map((c) => (c.state === "pass" ? `${c.id}: pass` : `${c.id}: ${c.state}, ${clip(c.detail, f.detail)}`)),
       events: rs.events.length,
       host_lines: say.size,

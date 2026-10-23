@@ -21,13 +21,10 @@ const CLASS: Readonly<Record<string, ToolClass>> = {
   get_verdict: "READ",
   list_tournaments: "READ",
   get_tournament: "READ",
-  ranks_table: "READ",
-  ledger_summary: "READ",
   query: "READ",
   list_characters: "READ",
   get_character: "READ",
   read_character_doc: "READ",
-  validate_character: "READ",
   set_character_doc: "GATED",
   edit_character_doc: "GATED",
   set_character_rules: "GATED",
@@ -102,8 +99,8 @@ describe("the catalog", () => {
     }
   });
 
-  it("is 28 tools, edit_character_doc among them", () => {
-    expect(tools).toHaveLength(28);
+  it("is 25 tools, edit_character_doc among them", () => {
+    expect(tools).toHaveLength(25);
   });
 
   it("answers app_map as an index of every page and topic, each at or under MAP_MAX", () => {
@@ -112,5 +109,79 @@ describe("the catalog", () => {
     expect(index?.["topics"]).toEqual(MAP_TOPICS);
     for (const t of [undefined, ...MAP_TOPICS]) expect(JSON.stringify(mapAnswer(t)).length, String(t)).toBeLessThanOrEqual(MAP_MAX);
     expect(mapAnswer("nowhere")).toBeUndefined();
+  });
+});
+
+// ---- the capability block's footprint ----
+// Athena lists every host tool as one line of her prompt's capability block, which holds at most
+// 12,000 chars; a page entry that would pass the bound is cut, and every one after it
+// (athena-portable src/athena/core/catalog.py render_capabilities, _capability_line,
+// _params_line(foreign=True), _foreign_enum, neutralise_text). This renders each line the way
+// she does.
+
+const PLAIN = /^[A-Za-z0-9_-]{1,40}$/;
+/** neutralise_text: whitespace runs to one space, trimmed, cut to `cap` with an ellipsis. */
+const neutralise = (text: string, cap: number): string => {
+  const kept = text.replace(/\s+/g, " ").trim();
+  return kept.length <= cap ? kept : `${kept.slice(0, cap - 1).trimEnd()}…`;
+};
+/** _quoted: a JSON string of the value's text, cut to PARAM_TEXT_CAP (40). */
+const quoted = (v: unknown): string => JSON.stringify(neutralise(typeof v === "string" ? v : JSON.stringify(v), 40));
+/** _foreign_enum: the first ENUM_SHOWN (12) values, then a count of the rest. */
+const foreignEnum = (values: readonly unknown[]): string => {
+  const shown = values.slice(0, 12).map(quoted).join(", ");
+  return values.length > 12 ? `[${shown}, +${values.length - 12} more]` : `[${shown}]`;
+};
+/** _params_line(foreign=True): `name?: type`, or an enum in place of the type. */
+const paramsLine = (schema: Record<string, unknown>): string => {
+  const props = (schema["properties"] ?? {}) as Record<string, Record<string, unknown>>;
+  const required = new Set((schema["required"] ?? []) as string[]);
+  return Object.entries(props)
+    .map(([name, sub]) => {
+      const kind = sub["type"] ?? "any";
+      const kindText = typeof kind === "string" && PLAIN.test(kind) ? kind : quoted(kind);
+      const e = sub["enum"];
+      const value = Array.isArray(e) && e.length > 0 ? foreignEnum(e) : kindText;
+      return `${PLAIN.test(name) ? name : quoted(name)}${required.has(name) ? "" : "?"}: ${value}`;
+    })
+    .join(", ");
+};
+/** _capability_line for a host entry: AUTO and GATED carry no cap suffix (a host tool is never READ). */
+export const capabilityLine = (name: string, description: string, schema: Record<string, unknown>): string =>
+  `- \`host.shadowrunr.${name}\`(${paramsLine(schema)}) — ${JSON.stringify(neutralise(description, 240))}`;
+
+/**
+ * The most chars our tools' lines may take, newlines included (the block charges each line its
+ * length plus one). 12,000 budget, minus the block's fixed header, class headings and footer
+ * (~1,160), minus Athena's core entries (790), minus the shell's DOM hands and tabs_read
+ * (~1,900), leaves ~8,150 for apps; 5,000 for this one keeps ~3,150 for core growth and a
+ * second app. Measured 2026-10-23 with Athena's renderer (measure_caps.py) on the desktop shell.
+ */
+const FOOTPRINT_MAX = 5000;
+
+describe("the capability block", () => {
+  const lines = tools.map((t) => [t.name, capabilityLine(t.name, t.description, t.inputSchema)] as const);
+
+  it("renders our tools in at most FOOTPRINT_MAX chars", () => {
+    const total = lines.reduce((n, [, l]) => n + l.length + 1, 0);
+    console.log(`capability footprint: ${total} of ${FOOTPRINT_MAX} chars over ${lines.length} tools`);
+    expect(total).toBeLessThanOrEqual(FOOTPRINT_MAX);
+  });
+
+  it("never lets Athena's 240-char cut or the 12-value enum cut fire", () => {
+    for (const t of tools) {
+      expect(neutralise(t.description, 240), t.name).toBe(t.description);
+      for (const [p, ps] of Object.entries((t.inputSchema["properties"] ?? {}) as Record<string, Record<string, unknown>>)) {
+        const e = ps["enum"];
+        if (Array.isArray(e)) expect(e.length, `${t.name}.${p}`).toBeLessThanOrEqual(12);
+      }
+    }
+  });
+
+  it("renders a line the way Athena's _capability_line does", () => {
+    const schema = { type: "object", properties: { minutes: { type: "integer", enum: [5, 10, 30] }, tone: { type: "string" } }, required: ["minutes"] };
+    expect(capabilityLine("x", "Says \"hi\".", schema)).toBe('- `host.shadowrunr.x`(minutes: ["5", "10", "30"], tone?: string) — "Says \\"hi\\"."');
+    const many = { type: "object", properties: { m: { type: "string", enum: Array.from({ length: 14 }, (_, i) => `v${i}`) } }, required: [] };
+    expect(capabilityLine("y", "d", many)).toContain('"v11", +2 more]');
   });
 });

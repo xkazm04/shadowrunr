@@ -96,16 +96,16 @@ export function toolsHere(route: Route): readonly string[] {
   switch (route.page) {
     case "characters":
       return deep && route.sub[0] !== "all"
-        ? ["get_character", "read_character_doc", "edit_character_doc", "set_character_doc", "validate_character", "set_tone"]
+        ? ["get_character", "read_character_doc", "edit_character_doc", "set_character_doc", "set_tone", "query"]
         : ["list_characters", "get_character", "read_character_doc"];
     case "review":
       return deep ? ["get_session", "open_moment", "leave_feedback", "list_sessions"] : ["list_sessions", "get_session", "start_sandbox"];
     case "simulator":
       return ["list_tournaments", "get_tournament", "list_runs", "get_verdict", "start_sim"];
     case "brain":
-      return ["get_transcript", "ledger_summary", "list_runs", "query"];
+      return ["get_transcript", "list_runs", "get_verdict", "query"];
     case "segments":
-      return ["ranks_table", "query", "go_to"];
+      return ["query", "app_map", "go_to"];
     case "reconcile":
       return ["query", "list_tournaments", "go_to"];
     case "onair":

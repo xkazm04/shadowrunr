@@ -10,7 +10,7 @@ export const WRITE_TOOLS: readonly ToolSpec[] = [
   {
     name: "leave_feedback",
     title: "Mark a Review line",
-    description: "Saves the operator's marks on one session line (review.feedback.set): tags and an optional note; the latest marks win, no tags and no note clears the line. Returns the saved row.",
+    description: "Marks one HOST line (Malakor's; others are refused) with tags (landed, flat, too_mean, broke_character, off_tone, great_roast, repetitive, wrong_tag) and/or a note; neither clears it.",
     cls: "GATED",
     input: obj(
       {
@@ -36,7 +36,7 @@ export const WRITE_TOOLS: readonly ToolSpec[] = [
   {
     name: "start_sandbox",
     title: "Start a sandbox session",
-    description: "Starts a wall-clock sandbox session of 5, 10 or 30 minutes on the daemon's engine, judged when it ends; optional seed and tone. Returns the session id and stage URL. Watch with query sandbox.status.",
+    description: "Starts a sandbox session, judged at the end. Returns session_id; watch it with query sandbox.status.",
     cls: "GATED",
     input: obj(
       {
@@ -60,7 +60,7 @@ export const WRITE_TOOLS: readonly ToolSpec[] = [
   {
     name: "stop_sandbox",
     title: "Stop the sandbox session",
-    description: "Stops the running sandbox session (the latest one sandbox.status reports): the closing window starts at once and the host signs off. Refuses when no session is running. Returns its status.",
+    description: "Stops the running sandbox session; the host signs off. Refused when none is running.",
     cls: "GATED",
     input: obj({}),
     run: async (_input, ctx) => {

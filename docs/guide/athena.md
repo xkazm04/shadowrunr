@@ -24,13 +24,24 @@ loaded, because it is a separate chunk (`agent` in `budgets/bundle.json`).
 2. Open the console in an Athena tab, at `http://localhost:<port>/` and not at `127.0.0.1`,
    because the daemon only admits browser origins on `http://localhost:*`. Add
    `?daemon=http://127.0.0.1:<port>` when the daemon is not on 7717.
-3. Register the console's origin in Athena. Until you do, Athena treats the app as a first
-   sighting and gates every tool, reads included. The page names itself with
-   `<meta name="athena:app" content="shadowrunr">`, `athena:app-name` "Shadowrunr OS" and
-   `athena:app-version` (the console's package version).
+3. Register the console's origin in Athena (Apps, "Address of the app to register"). Until you
+   do, Athena treats the app as a first sighting and gates every tool, reads included. The page
+   names itself with `<meta name="athena:app" content="shadowrunr">`, `athena:app-name`
+   "Shadowrunr OS" and `athena:app-version` (the console's package version).
 4. Click **Athena** beside the connection chip. It turns accented and reads **Athena driving**,
    and the tools are registered. Click it again to stop: one abort unregisters every tool at
    once, and Athena's next `list` shows none.
+5. **Trust the tools once more.** Athena trusts per origin AND per tool contract (her ADR 0100):
+   enabling an origin accepts the contracts its tabs list at that moment. Registering in step 3
+   happened while the toggle was off, so the tab listed nothing, and every tool now "appeared
+   after you trusted this app" and asks for approval, reads included. In Athena's ledger, open
+   **Origins** and press **Disable**, then **Enable** on `localhost:<port>`: reads become AUTO,
+   writes stay GATED. (Approving a tool's first call also accepts that one tool.) Do this again
+   whenever a console update changes a tool.
+
+The whole sequence, run against the real desktop app over CDP, is
+`athena-portable/apps/desktop/e2e/desktop/` (`ATHENA_DESKTOP=1 pnpm test:e2e:desktop`), and
+`athena-portable/apps/desktop/drive/` is the driver it uses.
 
 ## How she works it
 
@@ -38,8 +49,9 @@ loaded, because it is a separate chunk (`agent` in `budgets/bundle.json`).
   to 240 characters, so `where_am_i` and `app_map` carry the map. `where_am_i` returns the
   current hash, page, layer, title, breadcrumbs, the ids in view and `tools_here`, the 3 to 6
   tools that fit the page. `app_map{}` returns an index: one line per page (its purpose and an
-  example hash) and the topics. `app_map{topic}` returns one topic: `glossary`, `recipes`, or a
-  page id, which gives that page's route grammar and the tools that fit it.
+  example hash) and the topics. `app_map{topic}` returns one topic: `glossary`, `recipes`,
+  `query` (the read methods and their params), or a page id, which gives that page's route
+  grammar, its notes (the `start_sim` defaults among them) and the tools that fit it.
 - **She shows what she reads.** Every READ tool that has a view takes `show` (default true).
   On success it moves the console through the ordinary hash router, so breadcrumbs, motion and
   Esc behave as they do for you, and it returns `view`, the hash it showed. `show: false` reads
@@ -79,7 +91,7 @@ Classes, as Athena's gate reads the flags:
 | Tool | Class | What it does |
 |---|---|---|
 | `where_am_i{}` | READ | The current view, the ids in view and the tools that fit it |
-| `app_map{topic?}` | READ | The index of pages and topics; a topic is `glossary`, `recipes` or a page id (its route grammar) |
+| `app_map{topic?}` | READ | The index of pages and topics; a topic is `glossary`, `recipes`, `query` (its read methods and their params) or a page id (its route grammar and notes) |
 | `go_to{view}` | AUTO | Moves the console to a hash, checked by the router's decoder and the page grammar |
 | `list_sessions{limit?, show?}` | READ | Sandbox sessions, newest first (`review.sessions`) |
 | `get_session{session, show?}` | READ | One session summarised: checks, verdict, mix, notable lines (`review.session`) |
@@ -89,13 +101,10 @@ Classes, as Athena's gate reads the flags:
 | `get_verdict{run, show?}` | READ | The judge's verdict summarised (`run.verdict`) |
 | `list_tournaments{limit?, show?}` | READ | Tournaments, most recently updated first (`tournament.list`) |
 | `get_tournament{tournament, show?}` | READ | Results summarised: totals, worst rules, cells (`tournament.results`) |
-| `ranks_table{character?, show?}` | READ | The merged rank ladder (`ranks.table`) |
-| `ledger_summary{tournament?, run?, show?}` | READ | Engine calls, cost and routes (`ledger.summary`) |
-| `query{method, params?}` | READ | One read from the allowlist below |
+| `query{method, params?}` | READ | One read from the allowlist below; also the rank ladder, the engine ledger summary and a package's validation |
 | `list_characters{show?}` | READ | Every package (`character.list`) |
 | `get_character{id, show?}` | READ | A package summarised, not its text (`character.get`) |
 | `read_character_doc{id, doc, offset?, limit?, show?}` | READ | One page of a package document with its digest, plus its outline on the first page (`character.doc.get`) |
-| `validate_character{id, show?}` | READ | The package's issues (`character.validate`) |
 | `set_character_doc{id, doc, text, base_digest}` | GATED | Replaces a package document whole: a new foil or a small file (`character.doc.set`) |
 | `edit_character_doc{id, doc, base_digest, find, replace}` | GATED | Replaces one exact passage of a document, which is how a long one is changed (`character.doc.get`, then `.set`) |
 | `set_character_rules{character, id, enabled}` | GATED | Switches an optional rule (`character.rules.set`) |
@@ -111,11 +120,28 @@ Classes, as Athena's gate reads the flags:
 `reconcile.list`, `reconcile.report`, `reconcile.incidents`, `segments.tables`,
 `segments.directions.get`, `tone.directions.get`, `tone.lines.list`, `tone.inbox`,
 `tone.variants`, `prep.list`, `prep.get`, `clips.list`, `clips.get`, `sandbox.status`,
-`engine.status`, `ledger.page`, `review.feedback.list`, `runs.list`, `tournament.list`,
-`character.rules`, `moderator.status`, `moderator.rules.list`, `moderator.log` and
-`voice.settings.get`. Any other method is refused by name and never sent.
+`engine.status`, `ledger.page`, `ledger.summary`, `review.feedback.list`, `runs.list`,
+`tournament.list`, `ranks.table`, `character.rules`, `character.validate`,
+`moderator.status`, `moderator.rules.list`, `moderator.log` and `voice.settings.get`. Any other
+method is refused by name and never sent. The list is not in the tool's schema:
+`app_map{topic: "query"}` returns it, each method with its params.
 
-There are 28 tools: 17 READ, 2 AUTO and 9 GATED.
+The rank ladder, the engine ledger summary and package validation used to be their own tools
+(`ranks_table`, `ledger_summary`, `validate_character`). They are now reads under `query`:
+`ranks.table{character?}`, `ledger.summary{tournament_id?, run_id?}` and
+`character.validate{id}`. They return the daemon's answer, bounded, and do not move the console.
+
+There are 25 tools: 14 READ, 2 AUTO and 9 GATED.
+
+**The capability block.** Athena lists every page tool as one line of her prompt's capability
+block: its name, its parameters (`name?: type`, an enum as up to 12 values) and its quoted
+description. The block holds at most 12,000 characters, Athena's own entries and the shell's
+DOM hands included. A page tool that would pass the bound is left out, and so is every tool
+after it, and a name she cannot see is a name she says she does not have. So each description
+is one clause of what the tool returns plus the one constraint that matters, and the detail
+lives in `app_map` topics. `catalog.test.ts` renders every line the way Athena does and holds
+the catalog to 5,000 characters, which leaves room for the hands, core growth and a second
+app.
 
 ### Package documents
 

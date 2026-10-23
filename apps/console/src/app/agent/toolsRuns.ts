@@ -27,8 +27,7 @@ export const RUN_TOOLS: readonly ToolSpec[] = [
   {
     name: "list_sessions",
     title: "List sandbox sessions",
-    description:
-      "Returns finished sandbox sessions, newest first: id, start, minutes, lines, marked, pass, rule fails. Bounded (showing/total/footer). Shows #/review. Then get_session{session}.",
+    description: "Finished sandbox sessions, newest first: id, minutes, lines, pass, rule fails. Then get_session{session}.",
     cls: "READ",
     input: obj({ limit: limit(10, 50), show: SHOW }),
     run: async (input, ctx) => {
@@ -53,8 +52,7 @@ export const RUN_TOOLS: readonly ToolSpec[] = [
   {
     name: "get_session",
     title: "Summarise a session",
-    description:
-      "Returns one sandbox session summarised: gate checks, verdict (failed rules with lines), mix, segments and up to 10 notable lines (failures, marks). Shows #/review/<session>. Then open_moment.",
+    description: "A sandbox session summarised: checks, verdict, mix, notable lines. It passes only if every check does; failed_because names the rest.",
     cls: "READ",
     input: obj({ session: SESSION, show: SHOW }, ["session"]),
     run: async (input, ctx) => {
@@ -66,8 +64,7 @@ export const RUN_TOOLS: readonly ToolSpec[] = [
   {
     name: "open_moment",
     title: "Open a moment",
-    description:
-      "Returns one transcript line of a session with 3 lines either side, its tag, failing rules and the operator's marks. Shows #/review/<session>/timeline/<line>. Then leave_feedback.",
+    description: "One session line with 3 either side, its tag, failing rules and the operator's marks. Then leave_feedback.",
     cls: "READ",
     input: obj({ session: SESSION, line: int("The 1-based transcript line.", 1), show: SHOW }, ["session", "line"]),
     run: async (input, ctx) => {
@@ -97,8 +94,7 @@ export const RUN_TOOLS: readonly ToolSpec[] = [
   {
     name: "list_runs",
     title: "List sim runs",
-    description:
-      "Returns sim runs ordered by tournament and run id: spec (character, tone, tier, segment, audience, seed), verdict, red-line fails. Bounded; pass next_cursor as cursor. Shows #/simulator/runs.",
+    description: "Sim runs: spec, verdict, red-line fails. To page on, pass next_cursor back as cursor.",
     cls: "READ",
     input: obj({ limit: limit(15, 100), tournament: str("Only this tournament's runs."), cursor: str("next_cursor of the previous page."), show: SHOW }),
     run: async (input, ctx) => {
@@ -136,8 +132,7 @@ export const RUN_TOOLS: readonly ToolSpec[] = [
   {
     name: "get_transcript",
     title: "Read a run transcript",
-    description:
-      "Returns a window of a run's transcript (default 20 lines from line 1): speaker, text, chat, segment and moderation lines, with total lines. Shows #/brain/transcripts/<run>/<from>.",
+    description: "A window of a run's transcript, default 20 lines from line 1; next_from says where to read on.",
     cls: "READ",
     input: obj({ run: RUN, from: int("First line, 1-based (default 1).", 1), limit: limit(20, 100), show: SHOW }, ["run"]),
     run: async (input, ctx) => {
@@ -161,7 +156,7 @@ export const RUN_TOOLS: readonly ToolSpec[] = [
   {
     name: "get_verdict",
     title: "Read a run verdict",
-    description: "Returns the judge's verdict on a run: rule states, failed rules with the lines they cite, quality facts as true-of-n, notes. Shows #/simulator/verdicts/<run>. Then get_transcript.",
+    description: "The judge's verdict on a run: rule states, failed rules with the lines they cite, quality facts.",
     cls: "READ",
     input: obj({ run: RUN, show: SHOW }, ["run"]),
     run: async (input, ctx) => {
@@ -173,7 +168,7 @@ export const RUN_TOOLS: readonly ToolSpec[] = [
   {
     name: "list_tournaments",
     title: "List tournaments",
-    description: "Returns tournaments, most recently updated first: id, character, runs done of planned, judged, held share, red-line fails. Bounded. Shows #/simulator/tournaments. Then get_tournament.",
+    description: "Tournaments, newest first: id, character, runs done, judged, held, red-line fails.",
     cls: "READ",
     input: obj({ limit: limit(10, 50), show: SHOW }),
     run: async (input, ctx) => {
@@ -197,51 +192,13 @@ export const RUN_TOOLS: readonly ToolSpec[] = [
   {
     name: "get_tournament",
     title: "Summarise a tournament",
-    description: "Returns a tournament's results summarised: run, judged, failed and void counts, cost, its worst rules over all cells and up to 12 cells (tone, tier, segment, audience). Shows #/simulator/tournaments/<id>.",
+    description: "A tournament summarised: counts, cost, worst rules and up to 12 cells (tone, tier, segment, audience).",
     cls: "READ",
     input: obj({ tournament: str("A tournament id (list_tournaments)."), show: SHOW }, ["tournament"]),
     run: async (input, ctx) => {
       const id = argStr(input, "tournament");
       const r = await ctx.read("tournament.results", { tournament_id: id });
       return withView(tournamentSummary(r, 12), ctx.show(input, pageRoute("simulator", "tournaments", id)));
-    },
-  },
-  {
-    name: "ranks_table",
-    title: "Rank ladder",
-    description: "Returns the merged rank ladder of a character (the configured default when omitted): each rank's title, vote weight and gift threshold, and who may !propose. Shows #/segments/ranks.",
-    cls: "READ",
-    input: obj({ character: str("A character id; the configured default when omitted."), show: SHOW }),
-    run: async (input, ctx) => {
-      const character = optStr(input, "character");
-      const t = await ctx.read("ranks.table", character === undefined ? {} : { character });
-      const ranks = t.ranks.map((r) => ({ rank: r.rank, title: r.title, weight: r.weight, ...(r.min_gifted === undefined ? {} : { min_gifted: r.min_gifted }) }));
-      return withView({ character: t.character, propose_min_rank: t.propose_min_rank, ...bounded(ranks, ranks.length) }, ctx.show(input, pageRoute("segments", "ranks")));
-    },
-  },
-  {
-    name: "ledger_summary",
-    title: "Engine ledger summary",
-    description: "Returns the engine ledger summarised: calls, cost, errors, fallbacks and per role the calls, engines, tiers and p50 latency; the daemon's own ledger unless tournament or run is given. Shows #/brain/engine.",
-    cls: "READ",
-    input: obj({ tournament: str("Only this tournament's runs."), run: str("Only this run (with tournament when ids repeat)."), show: SHOW }),
-    run: async (input, ctx) => {
-      const tournament = optStr(input, "tournament");
-      const run = optStr(input, "run");
-      const s = await ctx.read("ledger.summary", { ...(tournament === undefined ? {} : { tournament_id: tournament }), ...(run === undefined ? {} : { run_id: run }) });
-      const routes = s.routes.map((r) => ({
-        role: r.role,
-        calls: r.calls,
-        errors: r.errors,
-        fallbacks: r.fallbacks,
-        engines: r.engines,
-        tiers: r.tiers,
-        ...(r.duration_p50_ms === undefined ? {} : { p50_ms: r.duration_p50_ms }),
-      }));
-      return withView(
-        { calls: s.calls, cost_usd: Math.round(s.cost_usd * 100) / 100, errors: s.errors, fallbacks: s.fallbacks, unrouted: s.unrouted, routes: bounded(routes, 20) },
-        ctx.show(input, pageRoute("brain", "engine")),
-      );
     },
   },
 ];

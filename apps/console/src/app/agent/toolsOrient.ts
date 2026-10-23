@@ -2,41 +2,12 @@
 // go_to, query and start_sim.
 import type { RpcMethod, SimStartParams } from "@shadowrunr/contract";
 import { isPageId, pageRoute, WALL } from "../../router";
-import { MAP_TOPICS, mapAnswer } from "./appMap";
+import { MAP_TOPICS, mapAnswer, QUERY_ALLOWLIST, TEXT_TOPICS } from "./appMap";
 import { buildSpec, coreRoute, MAX_AUDIENCE, SIM_DEFAULTS, SIM_SEGMENTS, SIM_TIERS } from "./sim";
 import { argInt, argStr, bounded, fail, int, obj, optStr, RESULT_BUDGET, sizeOf, str, type ToolSpec } from "./tool";
 import { checkRoute, describe, toolsHere } from "./where";
 
-/** The read methods `query` may send (design brief, Data & API). Nothing else is ever sent. */
-export const QUERY_ALLOWLIST: readonly RpcMethod[] = [
-  "plan.current",
-  "plan.proposals",
-  "directive.list",
-  "reconcile.list",
-  "reconcile.report",
-  "reconcile.incidents",
-  "segments.tables",
-  "segments.directions.get",
-  "tone.directions.get",
-  "tone.lines.list",
-  "tone.inbox",
-  "tone.variants",
-  "prep.list",
-  "prep.get",
-  "clips.list",
-  "clips.get",
-  "sandbox.status",
-  "engine.status",
-  "ledger.page",
-  "review.feedback.list",
-  "runs.list",
-  "tournament.list",
-  "character.rules",
-  "moderator.status",
-  "moderator.rules.list",
-  "moderator.log",
-  "voice.settings.get",
-];
+export { QUERY_ALLOWLIST };
 
 const isAllowed = (m: string): m is RpcMethod => (QUERY_ALLOWLIST as readonly string[]).includes(m);
 
@@ -56,8 +27,7 @@ export const ORIENT_TOOLS: readonly ToolSpec[] = [
   {
     name: "where_am_i",
     title: "Where am I",
-    description:
-      "Returns the console's current view: hash, page, layer, title, breadcrumbs, the ids in view (character, session, line, tab, run, tournament) and tools_here, the tools that fit it. Call first in a turn.",
+    description: "Where the console is: hash, page, title, the ids in view (character, session, line, run) and tools_here. Call first.",
     cls: "READ",
     input: obj({}),
     run: async (_input, ctx) => ({ ...describe(ctx.deps.router.getRoute()) }),
@@ -65,23 +35,21 @@ export const ORIENT_TOOLS: readonly ToolSpec[] = [
   {
     name: "app_map",
     title: "Console map",
-    description:
-      "With no topic: one line per page (purpose, example hash) and the topics. Call app_map{topic} for detail: a page id for its route grammar and tools, glossary (Malakor, foils, tones, sandbox vs sim...) or recipes.",
+    description: "The page index. topic: a page id (route grammar, notes, tools), glossary, recipes, or query (its read methods).",
     cls: "READ",
-    input: obj({ topic: str("glossary, recipes, or a page id; omit for the index.", { enum: MAP_TOPICS }) }),
+    input: obj({ topic: str(`One of ${MAP_TOPICS.join(", ")}; omit for the index.`, { maxLength: 64 }) }),
     run: async (input) => {
       const topic = optStr(input, "topic");
       const answer = mapAnswer(topic);
       if (answer === undefined) fail("invalid_params", `topic "${topic ?? ""}" is not one of ${MAP_TOPICS.join(", ")}`);
-      if (topic === undefined || topic === "glossary" || topic === "recipes") return answer;
+      if (topic === undefined || TEXT_TOPICS.includes(topic)) return answer;
       return { ...answer, tools_here: toolsHere(topic === "wall" || !isPageId(topic) ? WALL : pageRoute(topic)) };
     },
   },
   {
     name: "go_to",
     title: "Go to a view",
-    description:
-      "Moves the console to a hash such as #/review/<session>/timeline/12 (grammar in app_map). Refuses an invalid hash with its reason. Returns the new place like where_am_i.",
+    description: "Moves the console to a hash, e.g. #/review/<session>/timeline/12 (grammar in app_map). Returns the new place.",
     cls: "AUTO",
     input: obj({ view: str("The hash, e.g. #/characters/malakor/package/bible.", { maxLength: 512 }) }, ["view"]),
     run: async (input, ctx) => {
@@ -94,19 +62,18 @@ export const ORIENT_TOOLS: readonly ToolSpec[] = [
   {
     name: "query",
     title: "Read any allowlisted RPC",
-    description:
-      "Calls one read-only daemon RPC from the allowlist (plan, directives, reconcile, segments, tone, prep, clips, sandbox.status, engine.status, ledger.page, feedback, runs, moderator reads). Returns its result, lists bounded.",
+    description: "One read-only daemon RPC from the allowlist in app_map{topic: query}, e.g. ledger.summary. Lists come back bounded.",
     cls: "READ",
     input: obj(
       {
-        method: str("An allowlisted read method, e.g. tone.lines.list.", { enum: QUERY_ALLOWLIST }),
+        method: str("An allowlisted read method (app_map{topic: query}), e.g. tone.lines.list.", { maxLength: 64 }),
         params: { type: "object", description: "The method's params (see docs/spec/contract.md); {} when omitted." },
       },
       ["method"],
     ),
     run: async (input, ctx) => {
       const method = argStr(input, "method");
-      if (!isAllowed(method)) fail("refused", `${method} is not in the read allowlist; writes go only through the named tools`);
+      if (!isAllowed(method)) fail("refused", `${method} is not in the read allowlist (app_map{topic: query}); writes go only through the named tools`);
       const params = input["params"] ?? {};
       if (params === null || typeof params !== "object" || Array.isArray(params)) fail("invalid_params", "params must be an object");
       // The allowlist decides the method; the daemon's params check decides the params.
@@ -126,8 +93,7 @@ export const ORIENT_TOOLS: readonly ToolSpec[] = [
   {
     name: "start_sim",
     title: "Start a scripted text sim",
-    description:
-      "Starts one text sim on a scripted daemon (else refused) and shows #/simulator. Every arg optional: malakor, his active tone, SEG-01, audience 30, seed 1, tier from engine.status, 600 s. Returns run_id and spec_used.",
+    description: "Starts a text sim (scripted daemon only); all args optional, defaults in app_map{topic: simulator}. Returns run_id.",
     cls: "AUTO",
     input: obj({
       character: str(`A character id (default ${SIM_DEFAULTS.character}).`, { maxLength: 64 }),

@@ -28,7 +28,7 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
   {
     name: "list_characters",
     title: "List characters",
-    description: "Returns every character package: id, name, tagline, active and default tone, tones, foils and optional rules on of total. Shows #/characters/all. Then get_character{id}.",
+    description: "Every character package: id, name, active and default tone, tones, foils, rules on.",
     cls: "READ",
     input: obj({ show: SHOW }),
     run: async (input, ctx) => {
@@ -49,7 +49,7 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
   {
     name: "get_character",
     title: "Summarise a character",
-    description: "Returns a package summarised, not its full text: name, tones, foils, rules on/off, situations, files, and the documents read_character_doc can open. Shows #/characters/<id>/package.",
+    description: "A package summarised, not its text: tones, foils, rules, situations, files, and the docs read_character_doc opens.",
     cls: "READ",
     input: obj({ id: ID, show: SHOW }, ["id"]),
     run: async (input, ctx) => {
@@ -78,8 +78,7 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
   {
     name: "read_character_doc",
     title: "Read a package document",
-    description:
-      "Returns one page of a package document (about 1,200 chars, on a line) with its digest, total_chars and next_offset; the first page adds the outline, headings with offsets. Pass offset to read on. Shows its package tab.",
+    description: "One ~1,200-char page of a package doc with its digest and next_offset; page 1 adds the outline. Writes need the digest.",
     cls: "READ",
     input: obj({ id: ID, doc: DOC_ARG, offset: int("The char offset to read from (default 0): next_offset, or an outline offset.", 0), limit: int(`The most chars of text (default and at most ${PAGE_CHARS}).`, 100, PAGE_CHARS), show: SHOW }, ["id", "doc"]),
     run: async (input, ctx) => {
@@ -94,26 +93,9 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
     },
   },
   {
-    name: "validate_character",
-    title: "Validate a package",
-    description: "Validates a character package and returns its issues (file, key, reason, severity) with error and warning counts. Bounded. Shows #/characters/<id>/package.",
-    cls: "READ",
-    input: obj({ id: ID, show: SHOW }, ["id"]),
-    run: async (input, ctx) => {
-      const id = argStr(input, "id");
-      const issues = await ctx.read("character.validate", { id });
-      const errors = issues.filter((i) => i.severity === "error").length;
-      return withView(
-        { id, valid: errors === 0, errors, warnings: issues.length - errors, ...bounded(issues, 20) },
-        ctx.show(input, pageRoute("characters", id, "package")),
-      );
-    },
-  },
-  {
     name: "set_character_doc",
     title: "Replace a package document",
-    description:
-      "Replaces a package document whole: for a new foil (base_digest '') or a small file. To change a long document use edit_character_doc. A stale digest is refused as conflict, an invalid package is undone. Returns digests.",
+    description: "Replaces a package doc whole: a new foil (base_digest '') or a small file. A long doc: edit_character_doc.",
     cls: "GATED",
     input: obj(
       { id: ID, doc: DOC_ARG, text: str("The whole new text of the document."), base_digest: str("The digest from read_character_doc, or '' for a new file.") },
@@ -132,8 +114,7 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
   {
     name: "edit_character_doc",
     title: "Edit a package document",
-    description:
-      "The way to change a long document: replaces find, exact text that occurs once, with replace. To insert, find an anchor sentence and replace it with anchor plus new text. base_digest is the digest read. Returns new digest, backup.",
+    description: "Replaces find (exact text that occurs once) with replace. base_digest: the digest read_character_doc returned.",
     cls: "GATED",
     input: obj(
       {
@@ -175,7 +156,7 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
   {
     name: "set_character_rules",
     title: "Switch an optional rule",
-    description: "Switches one optional constitution rule on or off for a character (the operator's override; a rail stays on). Returns the rule list after the write.",
+    description: "Switches one optional constitution rule on or off (a rail stays on).",
     cls: "GATED",
     input: obj({ character: ID, id: str("The rule id (get_character rules)."), enabled: { type: "boolean" } }, ["character", "id", "enabled"]),
     run: async (input, ctx) => {
@@ -188,7 +169,7 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
   {
     name: "set_tone",
     title: "Set the active tone",
-    description: "Makes one tone variant the character's active tone for every stream (the operator's choice; default_tone stays in the package). Returns the character summary.",
+    description: "Makes a tone the character's active tone for every stream; default_tone stays in the package.",
     cls: "GATED",
     input: obj({ id: ID, tone: str("A tone variant id (get_character tones).") }, ["id", "tone"]),
     run: async (input, ctx) => {
@@ -199,7 +180,7 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
   {
     name: "add_tone_line",
     title: "Add a line to a tone bank",
-    description: "Appends a line to a tone's bank (lines/<tone>.toml) tagged with one or more situations, approved unless status says seed. The package is validated after. Returns the line and file.",
+    description: "Adds a line to a tone's bank, tagged with situations (e.g. roast_request, bait, general); approved unless status is seed.",
     cls: "GATED",
     input: obj(
       {
@@ -230,7 +211,7 @@ export const CHARACTER_TOOLS: readonly ToolSpec[] = [
   {
     name: "set_tone_line_status",
     title: "Set a bank line's status",
-    description: "Sets one bank line's status: approved, seed or retired (a retired line is never shown to the model). Line ids come from query tone.lines.list. Returns the line and file.",
+    description: "Sets one bank line's status. Line ids come from query tone.lines.list.",
     cls: "GATED",
     input: obj(
       { character: ID, tone: str("The tone variant id."), id: str("The line id (tone.lines.list)."), status: { type: "string", enum: STATUSES } },
