@@ -81,7 +81,7 @@ def _src(env: str, default: str) -> Path:
 # --- TRELLIS (microsoft/TRELLIS, MIT; weights microsoft/TRELLIS-image-large, MIT) ---------------
 
 
-def trellis_runner(weights: Path | None):
+def trellis_runner(weights: Path | None, steps: int = 25):
     os.environ.setdefault("ATTN_BACKEND", "xformers")
     os.environ.setdefault("SPCONV_ALGO", "native")
     _src("SHADOWRUNR_TRELLIS", "TRELLIS")
@@ -96,8 +96,8 @@ def trellis_runner(weights: Path | None):
             Image.open(image_path),
             seed=seed,
             formats=["mesh"],
-            sparse_structure_sampler_params={"steps": 25, "cfg_strength": 7.5},
-            slat_sampler_params={"steps": 25, "cfg_strength": 3.0},
+            sparse_structure_sampler_params={"steps": steps, "cfg_strength": 7.5},
+            slat_sampler_params={"steps": steps, "cfg_strength": 3.0},
         )
         m = out["mesh"][0]
         v = m.vertices.detach().float().cpu().numpy()
@@ -196,7 +196,8 @@ def sf3d_runner(weights: Path | None):
 RUNNERS = {"trellis": trellis_runner, "triposr": triposr_runner, "sf3d": sf3d_runner}
 
 
-def generate(model: str, work: Path, which: str, seeds: list[int], weights: Path | None) -> int:
+def generate(model: str, work: Path, which: str, seeds: list[int], weights: Path | None,
+             steps: int | None = None) -> int:
     import torch
 
     image = work / f"input_{which}.png"
@@ -204,11 +205,12 @@ def generate(model: str, work: Path, which: str, seeds: list[int], weights: Path
         raise SystemExit(f"{image} is missing: run prep first")
     t0 = time.time()
     with VramPeak() as load_peak:
-        run = RUNNERS[model](weights)
+        run = RUNNERS[model](weights, steps) if steps and model == "trellis" else RUNNERS[model](weights)
     load_s = time.time() - t0
     print(f"{model}: loaded in {load_s:.1f}s ({load_peak.mib} MiB)")
     for seed in seeds:
-        out = work / "cand" / f"{model}-{which}-s{seed}"
+        tag = f"-st{steps}" if steps and model == "trellis" and steps != 25 else ""
+        out = work / "cand" / f"{model}-{which}-s{seed}{tag}"
         out.mkdir(parents=True, exist_ok=True)
         torch.cuda.empty_cache()  # so each seed's device peak is its own, not the cache's growth
         torch.cuda.reset_peak_memory_stats()
@@ -222,6 +224,7 @@ def generate(model: str, work: Path, which: str, seeds: list[int], weights: Path
             "model": model,
             "input": which,
             "seed": seed,
+            **({"steps": steps} if steps else {}),
             "load_s": round(load_s, 1),
             "wall_s": round(wall, 1),
             # The device's peak during the run, and what other processes held before the load.

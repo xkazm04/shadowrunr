@@ -2,8 +2,8 @@
 """A small binary glTF 2.0 (GLB) writer and reader: numpy and the standard library only.
 
 The lich asset is a handful of named nodes (two meshes and four empties) and one texture, so the
-writer covers exactly that: triangle meshes with positions, normals, UVs and one base-colour PNG
-each, and nodes with a name, a translation and an optional mesh. The reader returns the parsed
+writer covers exactly that: triangle meshes with positions, normals, UVs and one base-colour image
+(PNG or JPEG) each, plus an optional tangent-space normal map, and nodes with a name, a translation and an optional mesh. The reader returns the parsed
 JSON, the binary chunk and accessor arrays, which is all ``--check`` and the tests need.
 """
 
@@ -37,8 +37,11 @@ class Mesh:
     faces: np.ndarray  # (m, 3) int
     normals: np.ndarray | None = None  # (n, 3)
     uvs: np.ndarray | None = None  # (n, 2), glTF convention: v grows downward
-    texture_png: bytes | None = None
+    texture_png: bytes | None = None  # the base-colour image's bytes (PNG, or JPEG: see texture_mime)
     material: str = "bone"
+    texture_mime: str = "image/png"
+    normal_texture: bytes | None = None  # optional tangent-space normal map (glTF normalTexture)
+    normal_mime: str = "image/png"
 
 
 @dataclass
@@ -84,6 +87,14 @@ class _Bin:
         return len(self.accessors) - 1
 
 
+def _texture(b: "_Bin", images: list, textures: list, tex_of: dict, raw: bytes, mime: str) -> int:
+    if raw not in tex_of:
+        images.append({"bufferView": b.view(raw), "mimeType": mime})
+        textures.append({"source": len(images) - 1, "sampler": 0})
+        tex_of[raw] = len(textures) - 1
+    return tex_of[raw]
+
+
 def write_glb(nodes: list[Node], generator: str = "shadowrunr-avatar3d") -> bytes:
     """Every node is a root node of scene 0, in the order given."""
     b = _Bin()
@@ -122,11 +133,11 @@ def write_glb(nodes: list[Node], generator: str = "shadowrunr-avatar3d") -> byte
             }
             if m.texture_png is not None and m.uvs is not None:
                 # Meshes that share an atlas share one image and one texture.
-                if m.texture_png not in tex_of:
-                    images.append({"bufferView": b.view(m.texture_png), "mimeType": "image/png"})
-                    textures.append({"source": len(images) - 1, "sampler": 0})
-                    tex_of[m.texture_png] = len(textures) - 1
-                mat["pbrMetallicRoughness"]["baseColorTexture"] = {"index": tex_of[m.texture_png]}
+                mat["pbrMetallicRoughness"]["baseColorTexture"] = {
+                    "index": _texture(b, images, textures, tex_of, m.texture_png, m.texture_mime)}
+                if m.normal_texture is not None:
+                    mat["normalTexture"] = {
+                        "index": _texture(b, images, textures, tex_of, m.normal_texture, m.normal_mime)}
             materials.append(mat)
             prim["material"] = len(materials) - 1
             meshes.append({"name": n.name, "primitives": [prim]})

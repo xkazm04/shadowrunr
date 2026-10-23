@@ -26,13 +26,16 @@ uniform mat4 mvp;
 in vec3 in_pos;
 in vec3 in_col;
 in vec2 in_uv;
+in vec3 in_nrm;
 out vec3 v_pos;
 out vec3 v_col;
 out vec2 v_uv;
+out vec3 v_nrm;
 void main() {
     v_pos = in_pos;
     v_col = in_col;
     v_uv = in_uv;
+    v_nrm = in_nrm;
     gl_Position = mvp * vec4(in_pos, 1.0);
 }
 """
@@ -43,14 +46,31 @@ uniform vec3 light;
 uniform vec3 eye;
 uniform float lit;
 uniform int use_tex;
+uniform int use_nrm;
 uniform sampler2D tex;
+uniform sampler2D nmap;
 in vec3 v_pos;
 in vec3 v_col;
 in vec2 v_uv;
+in vec3 v_nrm;
 out vec4 frag;
 void main() {
     vec3 n = normalize(cross(dFdx(v_pos), dFdy(v_pos)));
     if (dot(n, eye - v_pos) < 0.0) n = -n;
+    if (use_nrm == 1) {
+        // The smooth normal, bent by the tangent-space map in the frame the UVs imply (the one
+        // three.js rebuilds for a mesh without tangents).
+        vec3 N = normalize(v_nrm);
+        if (dot(N, eye - v_pos) < 0.0) N = -N;
+        vec3 dp1 = dFdx(v_pos), dp2 = dFdy(v_pos);
+        vec2 duv1 = dFdx(v_uv), duv2 = dFdy(v_uv);
+        vec3 dp2perp = cross(dp2, N), dp1perp = cross(N, dp1);
+        vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+        vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+        float inv = inversesqrt(max(max(dot(T, T), dot(B, B)), 1e-20));
+        vec3 nm = texture(nmap, v_uv).xyz * 2.0 - 1.0;
+        n = normalize(mat3(T * inv, B * inv, N) * nm);
+    }
     vec3 albedo = use_tex == 1 ? texture(tex, v_uv).rgb : v_col;
     float d = max(dot(n, normalize(light)), 0.0);
     float h = max(dot(n, normalize(eye - v_pos)), 0.0);
@@ -166,18 +186,21 @@ class Renderer:
             self._fbos[key] = self.ctx.framebuffer(col, dep)
         return self._fbos[key]
 
-    def _vao(self, prog, v, f, col=None, uv=None):
+    def _vao(self, prog, v, f, col=None, uv=None, nrm=None):
         tri = np.asarray(v, np.float32)[np.asarray(f).reshape(-1)]
         n = len(tri)
         c = np.ones((n, 3), np.float32) if col is None else np.asarray(col, np.float32)[np.asarray(f).reshape(-1)]
         t = np.zeros((n, 2), np.float32) if uv is None else np.asarray(uv, np.float32)[np.asarray(f).reshape(-1)]
-        buf = self.ctx.buffer(np.hstack([tri, c, t]).astype("f4").tobytes())
-        return self.ctx.vertex_array(prog, [(buf, "3f 3f 2f", "in_pos", "in_col", "in_uv")]), buf
+        nr = np.zeros((n, 3), np.float32) if nrm is None else np.asarray(nrm, np.float32)[np.asarray(f).reshape(-1)]
+        buf = self.ctx.buffer(np.hstack([tri, c, t, nr]).astype("f4").tobytes())
+        return self.ctx.vertex_array(prog, [(buf, "3f 3f 2f 3f", "in_pos", "in_col", "in_uv", "in_nrm")]), buf
 
     def draw(self, meshes, view, proj, eye, light=(-0.6, 0.8, 0.9), lit: float = 1.0,
              ssaa: int = 2, bg=(0.0, 0.0, 0.0)) -> tuple[np.ndarray, np.ndarray]:
         """``meshes``: dicts with ``v``, ``f`` and either ``c`` (per vertex) or ``uv`` + ``tex``
-        (an (h, w, 3) uint8 image, row 0 at the top as glTF stores it). Returns RGB uint8 and the
+        (an (h, w, 3) uint8 image, row 0 at the top as glTF stores it); a mesh with ``nmap`` (a
+        tangent-space normal image) and ``n`` (smooth vertex normals) is shaded through the map.
+        Returns RGB uint8 and the
         coverage mask, both ``size`` square."""
         s = self.size * ssaa
         fbo = self._fbo(s, s)
@@ -191,6 +214,8 @@ class Renderer:
         held = []
         for m in meshes:
             tex = None
+            ntex = None
+            self.prog["use_nrm"].value = 0
             if "tex" in m:
                 img = np.ascontiguousarray(m["tex"][::-1])  # GL row 0 is the bottom
                 tex = self.ctx.texture((img.shape[1], img.shape[0]), 3, img.astype("u1").tobytes())
@@ -200,12 +225,19 @@ class Renderer:
                 self.prog["use_tex"].value = 1
                 uv = np.asarray(m["uv"], np.float32).copy()
                 uv[:, 1] = 1 - uv[:, 1]
-                vao, buf = self._vao(self.prog, m["v"], m["f"], uv=uv)
+                if m.get("nmap") is not None and m.get("n") is not None:
+                    nimg = np.ascontiguousarray(m["nmap"][::-1])
+                    ntex = self.ctx.texture((nimg.shape[1], nimg.shape[0]), 3, nimg.astype("u1").tobytes())
+                    ntex.build_mipmaps()
+                    ntex.use(1)
+                    self.prog["nmap"].value = 1
+                    self.prog["use_nrm"].value = 1
+                vao, buf = self._vao(self.prog, m["v"], m["f"], uv=uv, nrm=m.get("n"))
             else:
                 self.prog["use_tex"].value = 0
                 vao, buf = self._vao(self.prog, m["v"], m["f"], col=m.get("c"))
             vao.render(self.mgl.TRIANGLES)
-            held += [vao, buf] + ([tex] if tex else [])
+            held += [vao, buf] + ([tex] if tex else []) + ([ntex] if ntex else [])
         raw = np.frombuffer(fbo.read(components=4), np.uint8).reshape(s, s, 4)[::-1]
         for h in held:
             h.release()

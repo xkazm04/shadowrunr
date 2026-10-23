@@ -30,7 +30,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import contract, fit, geom, prep, review
+from . import contract, fit, geom, prep, review, tex
 from .glb import Mesh, Node, write_glb
 from .render import Renderer, look_at, perspective, project
 
@@ -153,19 +153,53 @@ def dilate(img: np.ndarray, filled: np.ndarray, px: int = 8) -> np.ndarray:
     return out
 
 
-def bake(parts, tex_size, hi_v, hi_c, portrait_rgb, portrait_a, posmap, cover, view, proj, size, r):
-    """One atlas for both pieces. ``parts``: dicts with v, f, uv, cap (per face)."""
+# Boxes (x0, y0, x1, y1 in ``input_clean`` pixels) of lit bone with cracks and grain and no socket,
+# edge or stroke of paint in them: the cranium dome and forehead. The unseen bone is cut
+# from these.
+SWATCH_BOXES = ((540, 130, 650, 230), (345, 175, 470, 275))
+SWATCH_PX_PER_UNIT = 858.0  # input pixels per scene unit: the front's own scale (skull+jaw 1 unit)
+
+
+def bone_swatches(work: Path) -> list[np.ndarray]:
+    """The portrait's bone, cut into swatches (float 0..1), where the matte is fully opaque."""
+    from PIL import Image
+
+    img = np.asarray(Image.open(work / "input_clean2.png").convert("RGBA")).astype(np.float64) / 255
+    out = []
+    for x0, y0, x1, y1 in SWATCH_BOXES:
+        crop = img[y0:y1, x0:x1]
+        if crop[..., 3].min() > 0.98:
+            out.append(crop[..., :3])
+    if not out:
+        raise SystemExit("no bone swatch is fully opaque: SWATCH_BOXES does not fit this prep")
+    return out
+
+
+def bake(parts, tex_size, hi_v, hi_c, hi_f, portrait_rgb, portrait_a, posmap, cover, view, proj, size, r,
+         swatches=None, ao_strength=0.5, normals=True, log=_log):
+    """One atlas for both pieces. ``parts``: dicts with v, f, uv, cap (per face). Returns the
+    base-colour image, the tangent-space normal image (None when ``normals`` is off) and the share
+    of texels the portrait painted."""
     from scipy.spatial import cKDTree
 
     tree = cKDTree(hi_v)
     img = np.zeros((tex_size, tex_size, 3))
+    nimg = np.zeros((tex_size, tex_size, 3), np.uint8)
+    nimg[...] = (128, 128, 255)
     filled = np.zeros((tex_size, tex_size), bool)
     cam_eye = np.linalg.inv(view)[:3, 3]
+    hi_n = geom.vertex_normals(hi_v, hi_f).astype(np.float64) if normals or ao_strength > 0 else None
+    if ao_strength > 0:
+        cf = tex.cavity(hi_v, hi_n, k=10)
+        cw = tex.cavity(hi_v, hi_n, k=10, subsample=max(len(hi_v) // 12, 20000))
+        ao_hi = tex.cavity_factor(cf, cw, ao_strength)
+        log(f"bake: cavity term over {len(hi_v)} vertices (strength {ao_strength})")
+    detail = [tex.detail_map(sw) for sw in swatches] if swatches else []
     samples = []
     for p in parts:
         pos, face = r.bake_positions(p["v"], p["f"], p["uv"], tex_size)
         m = face >= 0
-        pts = pos[m]
+        pts = pos[m].astype(np.float64)
         fidx = face[m]
         fn = np.cross(p["v"][p["f"][:, 1]] - p["v"][p["f"][:, 0]], p["v"][p["f"][:, 2]] - p["v"][p["f"][:, 0]])
         fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
@@ -182,7 +216,19 @@ def bake(parts, tex_size, hi_v, hi_c, portrait_rgb, portrait_a, posmap, cover, v
         facing = np.einsum("ij,ij->i", n, to_cam)
         w = np.clip((facing - 0.15) / 0.35, 0, 1) * seen * portrait_a[yi, xi]
         port_c = portrait_rgb[yi, xi]
-        samples.append((model_c, port_c, w, m, p["cap"][fidx], pts[:, 2]))
+        ao = ao_hi[nn].mean(axis=1) if ao_strength > 0 else np.ones(len(pts))
+        if normals:
+            vn = geom.vertex_normals(p["v"], p["f"]).astype(np.float64)
+            tri = p["f"][fidx]
+            bary = tex.barycentric(pts, p["v"][tri[:, 0]], p["v"][tri[:, 1]], p["v"][tri[:, 2]])
+            n_surf = (vn[tri] * bary[..., None]).sum(axis=1)
+            tt, bb = tex.face_tangents(p["v"], p["f"], p["uv"])
+            n_hi = hi_n[nn[:, :3]].mean(axis=1)
+            n_hi /= np.maximum(np.linalg.norm(n_hi, axis=1, keepdims=True), 1e-12)
+            nt = tex.to_tangent_space(n_hi, n_surf, tt[fidx], bb[fidx])
+            nt[p["cap"][fidx]] = (0.0, 0.0, 1.0)
+            nimg[m] = tex.encode_normals(nt)
+        samples.append((model_c, port_c, w, m, p["cap"][fidx], pts[:, 2], pts, n, ao))
     # Match the model's colours to the portrait's on the points both see well.
     mc = np.concatenate([s[0][s[2] > 0.9] for s in samples])
     pc = np.concatenate([s[1][s[2] > 0.9] for s in samples])
@@ -194,21 +240,36 @@ def bake(parts, tex_size, hi_v, hi_c, portrait_rgb, portrait_a, posmap, cover, v
     bone = pc.mean(axis=0)
     all_l = np.concatenate([s[0].mean(axis=1)[s[5] < BACK_Z] for s in samples])
     l_mid, l_sd = float(np.median(all_l)), float(all_l.std()) + 1e-3
-    for model_c, port_c, w, m, cap, z in samples:
+    for model_c, port_c, w, m, cap, z, pts, n, ao in samples:
         lum = model_c.mean(axis=1)
-        back_c = bone[None, :] * np.clip(0.9 + 0.15 * (lum - l_mid) / l_sd, 0.6, 1.1)[:, None]
-        back = np.clip((BACK_Z - z) / 0.25, 0, 1) * (1 - w)
         model_c = np.clip(model_c * gain + off, 0, 1)
-        model_c = back[:, None] * back_c + (1 - back[:, None]) * model_c
+        back = np.clip((BACK_Z - z) / 0.25, 0, 1) * (1 - w)
+        if detail:
+            # Bone cut from the front, wherever the camera did not see and the model has bone.
+            synth = np.zeros((len(pts), 3))
+            for i, d in enumerate(detail):  # one swatch per equal share of the points (by index)
+                sel = np.arange(len(pts)) % len(detail) == i
+                synth[sel] = tex.synth_detail(d, pts[sel], n[sel], SWATCH_PX_PER_UNIT, seed=7 + i)
+            synth = np.clip(bone[None, :] * synth, 0, 1)
+            boned = np.clip((model_c.mean(axis=1) - 0.22) / 0.2, 0, 1)  # model says bone here (not a dark cavity)
+            unseen = np.maximum(boned, back)
+            model_c = unseen[:, None] * synth + (1 - unseen[:, None]) * model_c
+        else:
+            back_c = bone[None, :] * np.clip(0.9 + 0.15 * (lum - l_mid) / l_sd, 0.6, 1.1)[:, None]
+            model_c = back[:, None] * back_c + (1 - back[:, None]) * model_c
         c = w[:, None] * port_c + (1 - w[:, None]) * model_c
+        c = c * (1 + (ao[:, None] - 1) * (1 - 0.5 * w[:, None]))  # cavity: full on the unseen, half on the painted
         c[cap] = CAP_RGB
-        img[m] = c
+        img[m] = np.clip(c, 0, 1)
         filled |= m
     img = dilate(img, filled)
-    return (np.clip(img, 0, 1) * 255).round().astype(np.uint8), float(np.mean(np.concatenate([q[2] for q in samples]) > 0.5))
+    nimg = np.where(filled[..., None], nimg, np.array((128, 128, 255), np.uint8))
+    nimg = dilate(nimg.astype(np.float64), filled).round().astype(np.uint8) if normals else None
+    front = float(np.mean(np.concatenate([s[2] for s in samples]) > 0.5))
+    return (np.clip(img, 0, 1) * 255).round().astype(np.uint8), nimg, front
 
 
-def unwrap(parts):
+def unwrap(parts, resolution: int = 2048):
     import xatlas
 
     atlas = xatlas.Atlas()
@@ -217,7 +278,7 @@ def unwrap(parts):
     co = xatlas.ChartOptions()
     po = xatlas.PackOptions()
     po.padding = 4
-    po.resolution = 2048
+    po.resolution = resolution
     po.bilinear = True
     atlas.generate(co, po)
     out = []
@@ -228,12 +289,16 @@ def unwrap(parts):
     return out
 
 
-def png_bytes(img: np.ndarray) -> bytes:
+def image_bytes(img: np.ndarray, fmt: str = "png", quality: int = 92) -> tuple[bytes, str]:
+    """An (h, w, 3) uint8 image as PNG or JPEG bytes and its glTF mime type."""
     from PIL import Image
 
     buf = io.BytesIO()
+    if fmt == "jpeg":
+        Image.fromarray(img).save(buf, format="JPEG", quality=quality, subsampling=0, optimize=True)
+        return buf.getvalue(), "image/jpeg"
     Image.fromarray(img).save(buf, format="PNG", optimize=True)
-    return buf.getvalue()
+    return buf.getvalue(), "image/png"
 
 
 def jaw_rotate(v: np.ndarray, rad: float) -> np.ndarray:
@@ -255,7 +320,9 @@ def build(a: argparse.Namespace) -> int:
 
     portrait = np.asarray(Image.open(a.portrait).convert("RGB")).astype(np.float64) / 255
     size = portrait.shape[0]
-    layers = prep.skull_layers(a.rig, (portrait.shape[1], portrait.shape[0])).astype(np.float64) / 255
+    raw_layers = prep.skull_layers(a.rig, (portrait.shape[1], portrait.shape[0]))
+    # The rig's head layer keeps a smear of the monocle ring's fire: the bake must not read it.
+    layers = prep.desmear(raw_layers)[0].astype(np.float64) / 255
     matte = layers[..., 3]
     r = Renderer(size)
     pos, target, fov, iou = fit.fit_camera(r, v, f, matte, log=_log)
@@ -289,17 +356,36 @@ def build(a: argparse.Namespace) -> int:
         parts.append({"v": dv, "f": df, "cap": dcap})
     tris = sum(len(p["f"]) for p in parts)
     _log(f"decimate: skull {len(parts[0]['f'])} + jaw {len(parts[1]['f'])} = {tris} tris")
-    parts = unwrap(parts)
-    tex, front_share = bake(parts, a.tex, v, c, layers[..., :3], matte, posmap, cover,
-                            view, proj, size, r)
+    t1 = time.time()
+    parts = unwrap(parts, a.tex)
+    _log(f"unwrap: {time.time() - t1:.0f}s")
+    swatches = bone_swatches(a.work) if a.unseen == "synth" else None
+    atlas, nmap, front_share = bake(parts, a.tex, v, c, f, layers[..., :3], matte, posmap, cover,
+                                    view, proj, size, r, swatches=swatches, ao_strength=a.ao,
+                                    normals=a.normal)
+    base_png, base_mime = image_bytes(atlas, a.tex_format, a.jpeg_quality)
+    norm_png, norm_mime = (image_bytes(nmap, a.tex_format, 95) if nmap is not None else (None, "image/png"))
 
     skull_p, jaw_p = parts
-    nodes = [
-        Node("skull", (0.0, 0.0, 0.0), Mesh(skull_p["v"], skull_p["f"], geom.vertex_normals(skull_p["v"], skull_p["f"]),
-                                         skull_p["uv"], png_bytes(tex))),
-        Node("jaw", tuple(hinge), Mesh(jaw_p["v"] - hinge, jaw_p["f"], geom.vertex_normals(jaw_p["v"], jaw_p["f"]),
-                                       jaw_p["uv"], png_bytes(tex))),
-    ] + [Node(n, tuple(float(x) for x in anc[n])) for n in ("eye_l", "eye_r", "monocle", "neck")]
+
+    def mesh(p, rel=(0.0, 0.0, 0.0)):
+        return Mesh(p["v"] - rel, p["f"], geom.vertex_normals(p["v"], p["f"]), p["uv"], base_png,
+                    texture_mime=base_mime, normal_texture=norm_png, normal_mime=norm_mime)
+
+    nodes = [Node("skull", (0.0, 0.0, 0.0), mesh(skull_p)),
+             Node("jaw", tuple(hinge), mesh(jaw_p, hinge))]
+    nodes += [Node(n, tuple(float(x) for x in anc[n])) for n in ("eye_l", "eye_r", "monocle", "neck")]
+    collar = None
+    if a.collar != "none":
+        from . import collar as collar_mod
+
+        collar = collar_mod.make(a, r, v, f, view, proj, pos, target, size, portrait, _log)
+        if collar is not None:
+            nodes.append(Node("collar", tuple(float(x) for x in anc["neck"]),
+                              Mesh(collar["v"] - anc["neck"], collar["f"],
+                                   geom.vertex_normals(collar["v"], collar["f"]), collar["uv"],
+                                   collar["png"], texture_mime=collar["mime"])))
+            tris += len(collar["f"])
     data = write_glb(nodes)
     out = a.out or a.rig
     out.mkdir(parents=True, exist_ok=True)
@@ -315,30 +401,42 @@ def build(a: argparse.Namespace) -> int:
     }
     (out / "lich.json").write_text(json.dumps(lich, indent=1), encoding="utf-8")
     rep = contract.check(out / "lich.glb")
-    _log(f"export: {len(data)} bytes, camera IoU {iou:.3f}, portrait covers {front_share:.0%} of the atlas, "
+    _log(f"export: {len(data)} bytes, {tris} tris, camera IoU {iou:.3f}, portrait covers {front_share:.0%} of the atlas, "
          f"{time.time() - t0:.0f}s")
     for e in rep.errors:
         _log(f"error: {e}")
     if a.runs:
-        renders(a.runs, parts, tex, hinge, anc, lich, portrait, view, proj, size)
+        renders(a.runs, parts, atlas, hinge, anc, lich, portrait, view, proj, size, nmap, collar)
+        if nmap is not None:
+            from PIL import Image as _I
+
+            _I.fromarray(nmap).save(a.runs / "normal.png")
     return 0 if rep.ok else 1
 
 
-def renders(runs: Path, parts, tex, hinge, anc, lich, portrait, view, proj, size) -> None:
+def renders(runs: Path, parts, tex, hinge, anc, lich, portrait, view, proj, size, nmap=None, collar=None) -> None:
     from PIL import Image
 
     runs.mkdir(parents=True, exist_ok=True)
     skull, jaw = parts
 
-    def meshes(open_rad: float):
+    def meshes(open_rad: float, shaded: bool = False, with_collar: bool = True):
+        """The pieces for the review renderer; ``shaded`` bends the lighting through the normal map."""
         jv = jaw_rotate(jaw["v"] - hinge, open_rad) + hinge
-        return [{"v": skull["v"], "f": skull["f"], "uv": skull["uv"], "tex": tex},
-                {"v": jv, "f": jaw["f"], "uv": jaw["uv"], "tex": tex}]
+        out = []
+        for p, v in ((skull, skull["v"]), (jaw, jv)):
+            m = {"v": v, "f": p["f"], "uv": p["uv"], "tex": tex}
+            if shaded and nmap is not None:
+                m.update(nmap=nmap, n=geom.vertex_normals(p["v"], p["f"]))
+            out.append(m)
+        if collar is not None and with_collar:
+            out.append({"v": collar["v"], "f": collar["f"], "uv": collar["uv"], "tex": collar["img"]})
+        return out
 
     r = Renderer(size)
     eye = np.array(lich["camera"]["pos"])
     front, _ = r.draw(meshes(0.0), view, proj, eye=eye, light=eye + np.array([-1, 1.5, 0]), lit=0.0)
-    lit, _ = r.draw(meshes(0.0), view, proj, eye=eye, light=eye + np.array([-1, 1.5, 0]), lit=1.0)
+    lit, _ = r.draw(meshes(0.0, True), view, proj, eye=eye, light=eye + np.array([-1, 1.5, 0]), lit=1.0)
     side = np.concatenate([(portrait * 255).astype(np.uint8), front, lit], axis=1)
     Image.fromarray(side).save(runs / "front_vs_portrait.png")
     small = Renderer(512)
@@ -347,7 +445,7 @@ def renders(runs: Path, parts, tex, hinge, anc, lich, portrait, view, proj, size
         for yaw in (0, 35, 90):
             e = np.array([math.sin(math.radians(yaw)), 0.05, math.cos(math.radians(yaw))]) * 4.2
             tgt = np.array([0.0, -0.08, 0.0])
-            rgb, _ = small.draw(meshes(rad), look_at(e + tgt, tgt), perspective(22), eye=e + tgt,
+            rgb, _ = small.draw(meshes(rad, True), look_at(e + tgt, tgt), perspective(22), eye=e + tgt,
                                 light=e + np.array([-1, 1.5, 0.3]))
             frames.append(rgb)
     Image.fromarray(review.sheet(frames, 3)).save(runs / "jaw_closed_open.png")
@@ -372,7 +470,17 @@ def renders(runs: Path, parts, tex, hinge, anc, lich, portrait, view, proj, size
     hx, hy, _ = project(np.array([hinge]), view, proj, size)[0]
     img[int(hy) - 4 : int(hy) + 5, int(hx) - 4 : int(hx) + 5] = (255, 255, 0)
     Image.fromarray(img).save(runs / "anchors.png")
-    tt = review.turntable_frames(Renderer(384), meshes(0.0))
+    tt = review.turntable_frames(Renderer(384), meshes(0.0, True), **({"dist": 4.6, "target": (0.0, -0.3, 0.0)} if collar is not None else {}))
     Image.fromarray(review.sheet(tt, 4)).save(runs / "final_turntable.png")
+    # The lineup's side views: yaw -35 and +35 from the front, close, lit through the normal map.
+    big = Renderer(640)
+    yaws = []
+    for yaw in (-35, 35):
+        e = np.array([math.sin(math.radians(yaw)), 0.05, math.cos(math.radians(yaw))]) * 4.2
+        tgt = np.array([0.0, -0.08, 0.0])
+        rgb, _ = big.draw(meshes(0.0, True), look_at(e + tgt, tgt), perspective(fit.FOV + 2), eye=e + tgt,
+                          light=e + np.array([-1.5, 2.0, 0.5]))
+        yaws.append(rgb)
+    Image.fromarray(review.sheet(yaws, 2)).save(runs / "yaw35.png")
     Image.fromarray(tex).save(runs / "atlas.png")
     _log(f"renders: {runs}")
