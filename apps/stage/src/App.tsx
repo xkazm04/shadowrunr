@@ -17,7 +17,11 @@ import {
 } from "./source";
 import { LiveSession, type LiveStore } from "./live";
 import { FOLLOW, dvrFor, dvrReduce, liveView, type DvrAction, type DvrWindow } from "./dvr";
+import { performanceBox, type PerformanceSource } from "./avatar/performance";
 import type { FaceSource } from "./avatar/types";
+import type { LookSource } from "./avatar/variants";
+import { DeliveryFeed, usePerformanceFeed } from "./voice/delivery";
+import type { ScheduledPart } from "./voice/player";
 import { rigBaseUrl, voiceUrl } from "./voice/urls";
 import { pageStorage, readVoiceOn, voiceBlocked, writeVoiceOn } from "./voice/toggle";
 import { FaceMixer, useVoice } from "./voice/useVoice";
@@ -215,16 +219,29 @@ export function App() {
   const headless = typeof navigator !== "undefined" && navigator.webdriver === true;
   const blocked = voiceBlocked({ live, on: voiceOn, headless });
   const mixer = useMemo(() => new FaceMixer(), []);
-  const [demoFace, setDemoFace] = useState<FaceSource | null>(null);
+  // the face performs each host line's delivery when it is heard (voice/delivery.ts)
+  const perfBox = useMemo(() => performanceBox(), []);
+  const feed = useMemo(() => new DeliveryFeed(perfBox), [perfBox]);
+  const onStarted = useCallback((p: ScheduledPart) => void feed.started(p), [feed]);
+  const liveLines = useCallback(() => liveRef.current?.store ?? null, []);
+  // dev only: `?face=` scripts the face (`bench`: its performance and look too), `?perf=` holds a cue
+  const [demo, setDemo] = useState<{ face?: FaceSource; performance?: PerformanceSource; look?: LookSource } | null>(null);
   useEffect(() => {
     const mode = params.face;
-    if (!import.meta.env.DEV || !mode) return;
+    const perf = new URLSearchParams(window.location.search).get("perf");
+    if (!import.meta.env.DEV || (!mode && !perf)) return;
     void import("./avatar/demo").then((m) => {
-      if (m.isDemoMode(mode)) setDemoFace(m.demoSource(mode));
+      if (mode === "bench") {
+        const b = m.benchSources();
+        setDemo({ face: b.face, performance: b.performance, look: b.look });
+        return;
+      }
+      const held = m.parsePerf(perf);
+      setDemo({ ...(mode && m.isDemoMode(mode) ? { face: m.demoSource(mode) } : {}), ...(held ? { performance: m.heldPerformance(held) } : {}) });
     });
   }, [params.face]);
   const followRun = live ? liveRef.current?.store.runId || (params.run === "live" ? null : params.run) : null;
-  const voice = useVoice({ blocked, url: useMemo(() => voiceUrl(params.ws), [params.ws]), runId: followRun, mixer, broadcast: params.broadcast });
+  const voice = useVoice({ blocked, url: useMemo(() => voiceUrl(params.ws), [params.ws]), runId: followRun, mixer, broadcast: params.broadcast, onStarted });
   const voiceShown = blocked === null && voice.status.state === "ready";
   // the daemon serves the rig to replays too; without a daemon the face falls back to the placeholder
   const rigBase = useMemo(() => params.rig ?? rigBaseUrl(params.ws), [params.rig, params.ws]);
@@ -332,6 +349,7 @@ export function App() {
   // the DVR shows the estimated timing, since the voice is live audio
   const followsVoice = view?.followsVoice ?? true;
   const voiceCaption = followsVoice && voice.followsAudio && store?.runId ? voice.caption(store.runId, store.said, now) : undefined;
+  usePerformanceFeed({ feed, live: liveLines, events, scene, now: at, voiceCaption });
   const elapsed = live ? streamElapsed(scene, at) : null;
   const overlay = watch && (
     <>
@@ -371,7 +389,9 @@ export function App() {
             voice={voiceShown}
             {...(elapsed === null ? {} : { clock: fmtClock(elapsed) })}
             overlay={overlay}
-            face={demoFace ?? mixer}
+            face={demo?.face ?? mixer}
+            performance={demo?.performance ?? perfBox}
+            {...(demo?.look ? { look: demo.look } : {})}
             rigBase={rigBase}
             variant={params.avatar}
             onCaptionSpeaking={captionSpeaking}

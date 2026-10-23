@@ -37,8 +37,9 @@ import {
 } from "@shadowrunr/stage-kit/ui";
 import { Avatar } from "./avatar/Avatar";
 import { lookBox, lookFor } from "./avatar/look";
+import type { PerformanceSource } from "./avatar/performance";
 import type { FaceSource } from "./avatar/types";
-import { DEFAULT_FACE, type FaceVariant } from "./avatar/variants";
+import { DEFAULT_FACE, type FaceVariant, type LookSource } from "./avatar/variants";
 import { BOARD_LAYOUT_FRAME, FACE_PX, boardFrame, hexFrame, layoutRects, type Rect, type Region } from "./layouts";
 import { StandingCard, VoiceCaptionPanel, cardShowing, tickerActive } from "./OnAir";
 import type { VoiceCaptionView } from "./voice/captions";
@@ -77,6 +78,8 @@ export function Stage({
   onCaptionSpeaking,
   voiceCaption,
   onFace,
+  performance,
+  look: lookOverride,
 }: {
   scene: SceneState;
   now: number;
@@ -104,6 +107,10 @@ export function Stage({
   voiceCaption?: VoiceCaptionView | null;
   /** Hears which face the avatar slot draws. */
   onFace?: (state: FaceState) => void;
+  /** How he performs the line he is speaking (the stage's performance box). */
+  performance?: PerformanceSource;
+  /** Where he looks, overriding the layout's (the dev bench's scripted look). */
+  look?: LookSource;
 }) {
   const poll = visiblePoll(scene, now);
   const rects = layoutRects(scene.layout, { poll: poll !== null, foil: scene.foil !== null, back: scene.mapScreen });
@@ -171,7 +178,17 @@ export function Stage({
           <Silhouette speaking={speaking} small={corner} />
           {face && (
             <div className="avatar-stand" style={{ width: FACE_PX, height: FACE_PX, transform: `translate(-50%, -50%) scale(${faceScale.toFixed(4)})` }}>
-              <Avatar className="avatar-face" rigBase={rigBase} size={FACE_PX} source={face} variant={variant} look={look} label={host} {...(onFace ? { onFace } : {})} />
+              <Avatar
+                className="avatar-face"
+                rigBase={rigBase}
+                size={FACE_PX}
+                source={face}
+                variant={variant}
+                look={lookOverride ?? look}
+                label={host}
+                {...(onFace ? { onFace } : {})}
+                {...(performance ? { performance } : {})}
+              />
             </div>
           )}
           {voice && <div className="voice-label">{SYNTHETIC_VOICE}</div>}

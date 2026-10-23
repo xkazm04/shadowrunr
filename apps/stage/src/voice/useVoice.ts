@@ -10,6 +10,7 @@ import { VoiceCaptions, type SaidLine, type VoiceCaptionView } from "./captions"
 import type { VoiceHealth } from "./health";
 import { VOICE_ACTION_LABEL, type VoiceAction } from "./names";
 import { playoutOf, type PlayoutClock } from "./playout";
+import type { ScheduledPart } from "./player";
 import type { FaceState } from "./report";
 import type { VoiceSession, VoiceStatus } from "./session";
 import { audioRunning, sharedAudio, unlockAudio } from "./webaudio";
@@ -125,8 +126,17 @@ export function runVoiceAction(action: VoiceAction, session: { retryNow(): void 
  * the state for the controls; `blocked` (why it is off) shows as `off` with that reason. In the
  * broadcast view the audio is resumed unasked, at once and on every utterance (see webaudio.ts).
  */
-export function useVoice(opts: { blocked: string | null; url: string; runId: string | null; mixer: FaceMixer; broadcast: boolean }): VoiceView {
-  const { blocked, url, runId, mixer, broadcast } = opts;
+export function useVoice(opts: {
+  blocked: string | null;
+  url: string;
+  runId: string | null;
+  mixer: FaceMixer;
+  broadcast: boolean;
+  /** Hears each part as its audio starts (the face's performance cue is set on a line's part 0).
+   *  Keep it stable: a new one restarts the session. */
+  onStarted?: (p: ScheduledPart) => void;
+}): VoiceView {
+  const { blocked, url, runId, mixer, broadcast, onStarted } = opts;
   const [status, setStatus] = useState<VoiceStatus>({ state: "off" });
   const session = useRef<VoiceSession | null>(null);
   // the running session as render sees it (the ref is for callbacks; render reads this)
@@ -160,6 +170,7 @@ export function useVoice(opts: { blocked: string | null; url: string; runId: str
           onSkipped: heard.unvoiced,
           events: {
             scheduled: (p) => captions.scheduled(p),
+            started: (p) => onStarted?.(p),
             dropped: heard.unvoiced,
           },
         });
@@ -180,7 +191,7 @@ export function useVoice(opts: { blocked: string | null; url: string; runId: str
       setLiveSession(null);
     };
     // the run is followed by the effect below (a run change is a follow frame, not a reconnect)
-  }, [blocked, url, mixer, broadcast, captions]);
+  }, [blocked, url, mixer, broadcast, captions, onStarted]);
 
   useEffect(() => {
     session.current?.follow(runId);

@@ -6,10 +6,14 @@
 // otherwise hands the canvas to the glow face, saying once in the console which one is drawn:
 // with no WebGL2 (the glow face then shows the silhouette, as it does), with no rig (the
 // placeholder has no depth), or with no usable depth map.
+//
+// A `performance` cue plays on top of the look (`withPerformance`, ../performance.ts) and wakes the
+// loop as a look change does; the glow face it hands over to does the same.
 
 import { createDriver, type Driver, type Pose } from "../driver";
 import { loadForm, type LoadedForm } from "../layers";
 import { frames } from "../motion";
+import { onPerformanceChange, withPerformance } from "../performance";
 import { buildPlaceholder } from "../placeholder";
 import { calmNow, createFaceLoop, onLookChange, startFace as startGlow, type FaceHandle, type FaceLoop } from "../runtime";
 import type { Look, StartFaceOptions } from "../variants";
@@ -102,7 +106,7 @@ export function startFace(opts: StartFaceOptions): FaceHandle {
   };
 
   const lookNow = () => opts.look?.get() ?? AHEAD;
-  const driver = lookDriver(createDriver({ seed: 7 }), createLookFollower(), lookNow);
+  const driver = withPerformance(lookDriver(createDriver({ seed: 7 }), createLookFollower(), lookNow), opts.performance, { reduced: calmNow });
   let last: Pose = driver.rest();
   const draw = (pose: Pose) => {
     last = pose;
@@ -140,6 +144,7 @@ export function startFace(opts: StartFaceOptions): FaceHandle {
     cleanups.push(source.subscribe((signal) => driver.setSignal(signal) && l.wake()));
     // a still face runs no loop: a change of the look wakes it, and it reads the look per frame
     cleanups.push(onLookChange(opts.look, () => l.wake()));
+    cleanups.push(onPerformanceChange(opts.performance, () => l.wake()));
     if (typeof IntersectionObserver !== "undefined") {
       const io = new IntersectionObserver((entries) => {
         const e = entries[entries.length - 1];

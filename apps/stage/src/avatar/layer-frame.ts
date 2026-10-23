@@ -19,11 +19,19 @@
 //
 // Everything that moves by time is scaled by the pose's `activity`, so a settled face draws
 // exactly its rest frame. No allocation per frame: the caller hands in the frame to fill.
+//
+// **The performance** (performance.ts), when the pose carries one (`pose.perf`, hung there by
+// `withPerformance`): the eye lights' gain is scaled by its `eyeLight` and lifted by its `flare`
+// (every face's shaders draw an eye's bloom times its gain, so the bloom follows), and its `brow`
+// shapes the eye fire, since the rig has no brow layer of its own: a scowl squashes the light
+// toward its centre and drops it, a raised brow lifts it. Without one, or at PERFORMANCE_REST,
+// every number is exactly what it was.
 
 import type { Pose } from "./driver";
 import { EYE_PX } from "./cut/look";
 import { gapCentre, gapHalf } from "./glow-geom";
 import type { LayerSpec, RigSpec } from "./layers";
+import type { PerformedPose } from "./performance";
 
 type Aperture = NonNullable<RigSpec["aperture"]>;
 type Box = [number, number, number, number];
@@ -120,6 +128,14 @@ const smooth01 = (x: number) => {
 /** The light in the slit is not drawn under this lift, source px. */
 const MIN_LIFT = 0.2;
 
+/** An eye light's gain at a full flare, on top of its eye light: 1 + FLARE_GAIN. */
+export const FLARE_GAIN = 0.8;
+/** How far a full scowl squashes the eye light toward its centre (u_eye.z), and drops it (px). */
+export const BROW_SQUASH = 0.3;
+export const BROW_DROP_PX = 1.5;
+/** How far a fully raised brow lifts the eye light, source px. */
+export const BROW_LIFT_PX = 2;
+
 /** How far the hinged aperture opens, source px: the mouth's opening, a little wider with the voice. */
 export function apertureLift(ap: Aperture | undefined, pose: Pick<Pose, "open" | "voice">): number {
   return ap ? pose.open * (ap.open_frac ?? 0.15) * (ap.bottom - ap.top) * (0.75 + 0.35 * Math.min(1, pose.voice)) : 0;
@@ -150,7 +166,7 @@ export function describeLayer(spec: LayerSpec, kind: number, bb: Box, fi: number
 }
 
 /** Fill `out` with `draw` in `pose`, by the shared rules and `map`'s choices. Returns `out`. */
-export function layerFrame(draw: LayerDraw, pose: Pose, rig: FaceRig, map: FaceMapping, out: LayerFrame): LayerFrame {
+export function layerFrame(draw: LayerDraw, pose: PerformedPose, rig: FaceRig, map: FaceMapping, out: LayerFrame): LayerFrame {
   const l = draw.spec;
   const kind = draw.kind;
   const t = pose.t;
@@ -215,6 +231,17 @@ export function layerFrame(draw: LayerDraw, pose: Pose, rig: FaceRig, map: FaceM
     out.gaze[0] = rig.look ? rig.look.eyeX + gx : gx;
     out.gaze[1] = rig.look ? rig.look.eyeY + gy : gy;
     gain *= 1 + (l.voice_gain ?? 0.12) * voice; // the eyes warm while he speaks
+    const perf = pose.perf;
+    if (perf) {
+      // the performance: brighter or dimmer fire, a flare, the brow's shape (none at rest)
+      gain *= perf.eyeLight * (1 + FLARE_GAIN * perf.flare);
+      if (perf.brow < 0) {
+        out.eye[2] = Math.min(0.95, out.eye[2] - BROW_SQUASH * perf.brow);
+        out.gaze[1] -= BROW_DROP_PX * perf.brow;
+      } else if (perf.brow > 0) {
+        out.gaze[1] -= BROW_LIFT_PX * perf.brow;
+      }
+    }
   }
   out.gain = gain;
 
