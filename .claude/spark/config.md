@@ -72,3 +72,12 @@ builder:
 - 2026-10-21 (recorded-show): a validation config whose `[paths] data` pointed at a scratch dir recorded the placeholder face, and the clips cut from it inherited it. For anything on camera, confirm `/avatar/layers.json` returns 200 before recording; the `face` check is the gate.
 - 2026-10-21 (recorded-show): a priority rule decided between runs (carried bait first) ate the scarce answer slots of a voiced show (36 of 53 beats were speech holds). Judge a picker priority change on a voiced recorded run, and cap any "goes first" rule per time window.
 - 2026-10-21 (streamer-screen / four topics): editing the shared main checkout for a Director pre-commit (the board contract) reddened the whole-tree gates of a parallel session committing to main. Do every Director pre-commit in its own worktree and merge when green; never leave uncommitted edits in the shared checkout. Also: any SEG-02A feature needs a 10-minute validation run, a 5-minute sandbox never hands over.
+- 2026-10-23 (ai-moderator): json-schema-to-typescript drops properties that sit beside a `$ref`, so a serde internally-tagged enum with NEWTYPE variants generates TS without its tag. Wire enums tagged with `#[serde(tag = ...)]` use struct variants.
+- 2026-10-23 (ai-moderator): the Director wrote a capability into the contract (look-alike normalisation) from the registry's golden path, not from the code; the builder found the brain does less. Every "the lane does X with existing Y" claim in a contract is grepped before it is written.
+- 2026-10-23 (ai-moderator): Python `open(p, 'w')` on Windows writes CRLF; editing LF files that way churns the working copy. Use `newline=''` (or the Edit tool).
+- 2026-10-23 (ai-moderator): a new per-character console tab is also a route entry (`pages/characters/routes.ts` PKG_TABS), not only a PackagePage tab.
+
+## Question taste
+
+- 2026-10-23: for a new character's identity, the operator wants to choose by LOOK: offer image prompts (3 concepts x 3 looks) as the option rather than text concepts alone.
+- 2026-10-23: the operator leans to autonomy and liveliness over the standard's caution (picked full-autonomy bans and a fresh LLM line per action against recommendations). Keep recommending the standard, but put the mitigations (shadow mode, audit, undo) into the option text so the override arrives already bounded.
