@@ -297,6 +297,18 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
             let p: CharacterGetParams = params(req.params)?;
             ok(catalog::character_get(cfg, &p.id)?)
         }
+        "character.doc.get" => {
+            let _: shadowrunr_types::catalog::CharacterDocGetParams = params(req.params)?;
+            Err(RpcError::internal(
+                "character.doc.get is not implemented yet",
+            ))
+        }
+        "character.doc.set" => {
+            let _: shadowrunr_types::catalog::CharacterDocSetParams = params(req.params)?;
+            Err(RpcError::internal(
+                "character.doc.set is not implemented yet",
+            ))
+        }
         "character.validate" => {
             let p: CharacterValidateParams = params(req.params)?;
             let dir = catalog::character_dir(cfg, &p.id)?;

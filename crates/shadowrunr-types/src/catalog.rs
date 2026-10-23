@@ -120,6 +120,55 @@ pub struct CharacterRuleInfo {
     pub text: String,
 }
 
+/// `character.doc.get`: one package document by its package-relative path.
+///
+/// `doc` is one of `constitution.md`, `bible.md`, `directions.md`, `character.toml`,
+/// `stalls.toml`, `situations.json` or `foils/<slug>.md` (slug `[a-z0-9_-]{1,40}`); any other
+/// value is refused before any IO.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CharacterDocGetParams {
+    pub id: String,
+    pub doc: String,
+}
+
+/// `character.doc.get` result: the document's text and the digest a later write must name.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CharacterDoc {
+    pub id: String,
+    pub doc: String,
+    pub text: String,
+    /// `sha256:<lowercase hex>` of the file's bytes.
+    pub digest: String,
+}
+
+/// `character.doc.set`: replace one package document, refused unless the file still has
+/// `base_digest` (`""` only when the file does not exist yet, i.e. a new foil). The previous bytes
+/// are kept under `<data>/character-backups/<id>/`, and a write that leaves the package with an
+/// `error` issue is rolled back. The constitution is writable here because the caller is the
+/// operator's agent behind a per-edit approval, never the brain.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CharacterDocSetParams {
+    pub id: String,
+    pub doc: String,
+    pub text: String,
+    pub base_digest: String,
+}
+
+/// `character.doc.set` result.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CharacterDocSetResult {
+    pub id: String,
+    pub doc: String,
+    /// The new digest.
+    pub digest: String,
+    /// The digest the write replaced; `""` for a new file.
+    pub previous_digest: String,
+    /// Where the previous bytes were kept, relative to `[paths] data`, `/` separators; omitted for
+    /// a new file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backup: Option<String>,
+}
+
 /// `character.get`: the whole package as the operator sees it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CharacterDetail {

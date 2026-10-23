@@ -2063,3 +2063,30 @@ account logs in through Twitch's device-code flow. Its access and refresh tokens
 OS credential store (Windows Credential Manager, service `shadowrunr-twitch`). They are never in
 a file, a log, an error, an RPC result or the console. A refreshing token cannot follow the
 env-var-name rule, so this is the one exception to it.
+
+## Appendix (athena copilot): package documents for the operator's agent
+
+Athena (the operator's assistant, `docs/guide/athena.md`) shapes characters through the console's
+page tools, and two methods let her read and replace a whole package document. Types are
+`shadowrunr_types::catalog::{CharacterDocGetParams, CharacterDoc, CharacterDocSetParams,
+CharacterDocSetResult}`.
+
+| Method | Params | Result |
+|---|---|---|
+| `character.doc.get` | `{ "id", "doc" }` | `CharacterDoc` `{ id, doc, text, digest }` |
+| `character.doc.set` | `{ "id", "doc", "text", "base_digest" }` | `CharacterDocSetResult` `{ id, doc, digest, previous_digest, backup? }` |
+
+- **`doc`** is a package-relative path from a closed list: `constitution.md`, `bible.md`,
+  `directions.md`, `character.toml`, `stalls.toml`, `situations.json`, or `foils/<slug>.md`
+  with `slug` matching `[a-z0-9_-]{1,40}`. Anything else is `invalid_params` before any IO, and
+  the target must resolve inside `paths.characters` as the Tone Lab writes do.
+- **`digest`** is `sha256:<lowercase hex>` of the file's bytes. `set` is refused with `conflict`
+  unless the file still has `base_digest`; `""` means "the file must not exist" (a new foil).
+- **How it writes.** The previous bytes are copied to
+  `<data>/character-backups/<id>/<unix_ms>-<doc, "/" as "__">` (`backup`, relative to `[paths]
+  data`, omitted for a new file). The text is written through the Tone Lab path (temp file and
+  rename, one write at a time), then the package is validated. A write that adds an error is
+  undone and refused with `invalid_params`, the new issues in `detail.issues`.
+- **The constitution** is writable here although the brain never edits it: the caller is the
+  operator's own agent, and every one of these writes reaches the operator as an approval card
+  before it runs.
