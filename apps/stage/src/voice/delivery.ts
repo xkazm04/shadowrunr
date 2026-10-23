@@ -3,7 +3,7 @@
 //
 // The stage learns each host line's delivery by the `say` event's seq (foils' lines are not his
 // face's), and when the voice player starts that seq's part 0 the feed sets the performance box:
-// `box.cue(...cueFor(delivery))`. With no voice under a line (captions only, or a line the voice
+// `box.cue(...cueFor(delivery))`, with the gesture and eye light the cue may name. With no voice under a line (captions only, or a line the voice
 // will not sound) the cue is set when its caption shows. A host line without a delivery is neutral
 // at intensity 0, so the last line's emotion does not linger on the next.
 
@@ -82,8 +82,8 @@ export class DeliveryFeed {
   }
 
   private cue(delivery: Delivery | undefined) {
-    const c = cueFor(delivery);
-    this.box.cue(c.emotion, c.intensity, c.gesture ? { gesture: c.gesture } : undefined);
+    const { emotion, intensity, ...extra } = cueFor(delivery);
+    this.box.cue(emotion, intensity, extra.gesture !== undefined || extra.eyeLight !== undefined ? extra : undefined);
   }
 }
 

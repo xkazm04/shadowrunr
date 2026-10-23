@@ -90,6 +90,15 @@ class Cue(unittest.TestCase):
         self.assertEqual(parse_delivery({"emotion": "glee"}), Delivery("glee", 0.6, "normal"))
         self.assertEqual(parse_delivery({"pace": "brisk"}).pace, "normal")
 
+    def test_the_face_keys_are_accepted_and_ignored(self) -> None:
+        # The cue may direct the face (gesture, eye_light); the voice neither reads nor speaks them.
+        face = {"emotion": "menace", "intensity": 0.9, "pace": "slow"}
+        face.update(gesture="glare", eye_light=2.2)
+        self.assertEqual(parse_delivery(face), Delivery("menace", 0.9, "slow"))
+        alone = {"emotion": "neutral", "intensity": 0.6, "pace": "normal"}
+        alone.update(gesture="nod", eye_light=0.4)
+        self.assertEqual(parse_delivery(alone), Delivery("neutral", 0.6, "normal"))
+
     def test_no_delivery_is_none(self) -> None:
         for raw in (None, "menace", 5, [], ["menace"]):
             self.assertIsNone(parse_delivery(raw), raw)
@@ -489,6 +498,24 @@ class Speaking(unittest.TestCase):
         self.assertEqual(set(faces.durations.calls), {(0, 0.8)})  # type: ignore[attr-defined]
         asked = self.args.read_text(encoding="utf-8").splitlines()
         self.assertEqual([line.split(" ", 2)[:2] for line in asked], [["0", "0.8"]] * 3)
+
+    def test_a_delivery_s_face_keys_change_nothing_the_voice_does(self) -> None:
+        faces = Faces(FakeDurations(), {16: "ə", 50: " "}, 1)  # type: ignore[arg-type]
+        sidecar = self.sidecar(self.settings(), faces=faces)
+        text = "Kneel. Now."
+        plain = {"emotion": "menace", "intensity": 0.9, "pace": "slow"}
+        face = {**plain, "gesture": "glare", "eye_light": 2.2}
+        a = self.say(sidecar, "p", text, delivery=plain)
+        b = self.say(sidecar, "g", text, delivery=face)
+        self.assertEqual(
+            [(m["text"], m["pcm"], m["visemes"]) for m in a],
+            [(m["text"], m["pcm"], m["visemes"]) for m in b],
+        )
+        self.assertNotIn("glare", "".join(m["text"] for m in b))
+        asked = self.args.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(asked), 4)
+        self.assertEqual(sorted(asked[:2]), sorted(asked[2:]))  # parts render in parallel
+        self.assertFalse(any("glare" in line or "2.2" in line for line in asked), asked)
 
     def test_a_faint_or_unknown_emotion_keeps_the_base_voice(self) -> None:
         sidecar = self.sidecar(self.settings())

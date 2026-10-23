@@ -173,13 +173,23 @@ export const GESTURE_MIN = 0.6;
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 const clamp01 = (x: number) => clamp(Number.isFinite(x) ? x : 0, 0, 1);
 
-/** The cue fields for a line's delivery (absent: neutral, 0). A strong line gets its gesture. */
+const isGesture = (g: unknown): g is Gesture => typeof g === "string" && (GESTURES as readonly string[]).includes(g);
+
+/**
+ * The cue fields for a line's delivery (absent: neutral, 0). A strong line gets its emotion's
+ * gesture; a gesture the cue names (`delivery.gesture`, `[glare]`) plays whatever the intensity and
+ * replaces the emotion's own. `delivery.eye_light` (`eyes 2`) sets the eye light the line settles
+ * to, in place of the emotion's.
+ */
 export function cueFor(delivery: Delivery | undefined): Omit<PerformanceCue, "id"> {
   if (!delivery) return { emotion: "neutral", intensity: 0 };
   const intensity = clamp01(delivery.intensity);
   const row = EMOTION_TABLE[delivery.emotion] ?? EMOTION_TABLE.neutral;
   const cue: Omit<PerformanceCue, "id"> = { emotion: delivery.emotion, intensity };
-  if (row.gesture && intensity >= GESTURE_MIN) cue.gesture = row.gesture;
+  if (isGesture(delivery.gesture)) cue.gesture = delivery.gesture;
+  else if (row.gesture && intensity >= GESTURE_MIN) cue.gesture = row.gesture;
+  const eye = delivery.eye_light;
+  if (typeof eye === "number" && Number.isFinite(eye)) cue.eyeLight = clamp(eye, 0, 2.5);
   return cue;
 }
 

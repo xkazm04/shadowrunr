@@ -339,8 +339,8 @@ runs/sim/<tournament_id>/
 
 Instrument identity: each run records `instrument_hash`, a hash of the character package
 files (with `directions.md`), the tone file and its line bank, segment tables and judge rubric.
-Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/14`
-(the delivery cue; `/13` the case spoken in names; `/12` the case as an owned loop; `/11` T1: the line bank and
+Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/15`
+(face words in the delivery cue; `/14` the delivery cue; `/13` the case spoken in names; `/12` the case as an owned loop; `/11` T1: the line bank and
 directions, the narrowed rails, the scaled judge and the tic check; `/10` is the evidence board).
 
 Judge (T1). The rubric samples 24 streamer turns (`sample_turns`). Besides the binary
@@ -1465,7 +1465,8 @@ like a real case. It is never written live in a quiet moment.
   beat's next slot after the safety picks, oldest first, ahead of fresh and ordinary carried
   chat, so he mocks it before it expires; still one injection a beat, one pick per viewer and
   the share and whale caps. The deterministic reason marks it `bait_first`.
-- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/14`: a delivery cue asked for on each
+- **Instrument.** `SIM_LOGIC_VERSION` is `shadowrunr-sim/15`: the delivery cue may carry face
+  words, a gesture and `eyes <n>`, named in the prompt for strong lines (`/14`: a delivery cue asked for on each
   line, parsed off the spoken text with every other bracket and asterisk markup, and the speech
   clock scaled by the cued pace (`/13`: the case spoken in names, ids only in op lines and a
   spoken id named by the gate; `/12`: the case as an owned loop, the
@@ -1915,18 +1916,23 @@ Delivery  { emotion: Emotion, intensity: number (0.0..=1.0, clamped when read), 
   face words alone (`[glare]`, `[eyes 0.4]`) is a cue too, with emotion `neutral` at the
   default intensity. They land in `delivery.gesture` and `delivery.eye_light`; the voice
   ignores both, and the stage's face plays them when the line is heard. An explicit gesture
-  plays whatever the intensity, and replaces the emotion's own.
+  plays whatever the intensity, and replaces the emotion's own. An unknown word inside a cue
+  that opens with an emotion is ignored and the cue kept (`eyes` with no number is unknown); the
+  first gesture wins. A bracket that does not open with an emotion is a cue only when every
+  word in it is a face word (`[glare at them]` stays markup).
 - **Markup is stripped at the door.** Every other bracketed or asterisk span in a spoken line
   (`[laughs]`, `*sighs*`, a cue whose emotion is not in the set) is removed, and `**emphasis**`
   keeps its words. A line that was only markup is not spoken. Pauses are written as punctuation
   (an ellipsis or a dash).
 - **The prompt.** "How to answer" carries one instruction listing the emotions and the cue
-  format, asking for a cue on most lines and for no emotion more than two lines in a row. A
+  format, asking for a cue on most lines and for no emotion more than two lines in a row. It
+  also names the gestures and `eyes 0 to 2.5`, for strong lines only. A
   package's `[voice] delivery = false` leaves it out, and the turn is then byte-identical to one
   without cues.
 - **Variety is measured, not enforced.** A host line that makes more than two lines in a row
   cued with one emotion adds an output `moderation` record, rule `delivery_repeat`, action
-  `repeated`. A line with no cue ends the run.
+  `repeated`. A line with no cue ends the run. A face-only cue (neutral with a gesture or eye
+  light) neither extends nor ends it.
 - **Gated lines.** A line the output gate rewrote (recast, bleeped, a name withheld) speaks
   without its cue; a card or record id said as its name keeps it.
 - **The speech clock** divides by `speech_cps * pace_factor`: slow 0.72, normal 1.0, fast 1.04

@@ -1040,6 +1040,37 @@ emotion. A line at intensity 0.6 or more also plays its gesture.
 | triumph | 2.0 | 0.3 | flare |
 | tender | 0.9 | 0.6 | lean_in |
 
+**Face words in the cue.** The model can also direct the face from the cue itself. After the
+emotion words it may add one gesture and an eye light, in any order:
+
+| word | sets | example |
+| --- | --- | --- |
+| `nod`, `tilt`, `lean_in`, `recoil`, `glare`, `flare` | `delivery.gesture` | `[weary 0.4 nod] Fine.` |
+| `eyes <0..2.5>` | `delivery.eye_light` (1 is the rig's own; clamped) | `[hushed eyes 0.4] Listen.` |
+
+- `[menace 0.9 slow glare eyes 2] Kneel.` is spoken as "Kneel." with menace 0.9, slow. The face
+  glares and the fire settles at 2.0.
+- A cue of face words alone is a cue. `[glare] Kneel.` is neutral at intensity 0.6, normal pace,
+  with a glare. `[eyes 0.4] So small.` dims the fire.
+- **An explicit gesture always plays.** It plays whatever the intensity, even on a line at 0.2,
+  and it replaces the emotion's own gesture. `[outrage 1 lean_in]` leans in and does not recoil.
+- **An explicit eye light** replaces the emotion's level as the line's resting fire. A glare or a
+  flare still adds its burst on top, and the total is held under 2.5.
+- **Absent words change nothing.** A cue without face words performs from the emotion table
+  above.
+- **Unknown words are ignored and the cue is kept.** `[menace 0.9 wink]` is menace 0.9 with
+  glare, the emotion's own gesture on a strong line.
+- **A bracket that does not open with an emotion** is a cue only when every word in it is a face
+  word. `[glare at them]` and `[eyes]` are markup and are stripped, the same as `[laughs]`.
+- **The voice ignores both words.** Kokoro Plus and ElevenLabs speak and tag the line exactly as
+  they would without them. The sidecar receives the keys on `say.delivery` and drops them.
+- **The cue variety count.** A face-only cue (neutral with a gesture or eye light) is a face
+  direction, not an emotion choice. It neither extends nor ends the run that the
+  `delivery_repeat` count measures.
+- **What the model is told.** The prompt's delivery instruction names the six gestures and the
+  `eyes` level, with the `Kneel.` example, and asks for them only on a strong line. A package
+  with `[voice] delivery = false` gets none of it.
+
 - Eye light and brow ease on damped springs. The fire flares up in about 120 ms and dies down
   over about 400 ms.
 - A gesture plays once, as an envelope:

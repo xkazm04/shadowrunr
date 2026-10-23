@@ -18,7 +18,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use shadowrunr_types::character::Persona;
-use shadowrunr_types::delivery::Emotion;
+use shadowrunr_types::delivery::{Emotion, Gesture};
 use shadowrunr_types::reconcile::{
     Directive, DirectiveKind, NextStreamPlan, PlanSegment, StreamBrief,
 };
@@ -749,12 +749,16 @@ fn section(s: &mut String, title: &str, body: &str) {
 /// closed emotion set and the cue format the grammar parses ([`crate::grammar::spoken`]).
 pub fn delivery_instruction() -> String {
     let emotions: Vec<&str> = Emotion::ALL.iter().map(|e| e.as_str()).collect();
+    let gestures: Vec<&str> = Gesture::ALL.iter().map(|g| g.as_str()).collect();
     format!(
         "Open most lines with a delivery cue, [emotion intensity pace], e.g. [sarcasm 0.8 slow] \
          Oh, wonderful. Emotions: {}; intensity 0 to 1; pace slow, normal or fast. Vary it: \
-         never the same emotion more than two lines in a row. The cue is the only bracket: \
-         write pauses as ... or a dash.\n",
-        emotions.join(", ")
+         never the same emotion more than two lines in a row. On a strong line only, not every \
+         line, the cue may also move your face: one gesture ({}) and eyes 0 to 2.5, e.g. \
+         [menace 0.9 slow glare eyes 2] Kneel. The cue is the only bracket: write pauses as \
+         ... or a dash.\n",
+        emotions.join(", "),
+        gestures.join(", ")
     )
 }
 
@@ -1431,6 +1435,14 @@ Do name the target.
         assert!(instruction.contains(
             "neutral, menace, glee, deadpan, hushed, outrage, sarcasm, weary, triumph, tender"
         ));
+        // The face words, with one example the grammar parses into a gesture and eye light.
+        assert!(instruction.contains("one gesture (nod, tilt, lean_in, recoil, glare, flare)"));
+        assert!(instruction.contains("[menace 0.9 slow glare eyes 2] Kneel."));
+        let ex = crate::grammar::spoken("[menace 0.9 slow glare eyes 2] Kneel.");
+        assert_eq!(
+            ex.delivery.and_then(|d| d.gesture),
+            Some(shadowrunr_types::delivery::Gesture::Glare)
+        );
         let mut off = pkg();
         off.manifest.voice = Some(shadowrunr_types::character::CharacterVoice {
             delivery: Some(false),
@@ -1440,6 +1452,7 @@ Do name the target.
         // Byte-identical to the turn as it was before cues existed.
         assert_eq!(without, with.replacen(&instruction, "", 1));
         assert!(!without.contains("delivery cue"));
+        assert!(!without.contains("eyes 0 to 2.5"));
     }
 
     #[test]

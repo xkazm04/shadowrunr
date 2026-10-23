@@ -740,6 +740,27 @@ mod tests {
         r.cancel("r:9");
         in_rx.recv().await.unwrap();
         assert!(cued_rx.recv().await.is_none());
+        // A cue that directs the face carries it to the sidecar as additive keys (the
+        // sidecar's `parse_delivery` ignores them); the text stays the words alone.
+        let face = Utter {
+            text: "Kneel.".into(),
+            delivery: Some(
+                Delivery::new(Emotion::Menace, 0.9, Pace::Slow)
+                    .with_gesture(Some(shadowrunr_types::delivery::Gesture::Glare))
+                    .with_eye_light(Some(2.2)),
+            ),
+        };
+        let mut face_rx = r.say("r:10", &face);
+        let sent: serde_json::Value = serde_json::from_str(&in_rx.recv().await.unwrap()).unwrap();
+        assert_eq!(
+            sent,
+            serde_json::json!({"type":"say","id":"r:10","text":"Kneel.",
+                "delivery":{"emotion":"menace","intensity":0.9,"pace":"slow",
+                    "gesture":"glare","eye_light":2.2}})
+        );
+        r.cancel("r:10");
+        in_rx.recv().await.unwrap();
+        assert!(face_rx.recv().await.is_none());
 
         let mut hello = false;
         assert_eq!(

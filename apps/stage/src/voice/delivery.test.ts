@@ -5,9 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import type { StreamEvent } from "@shadowrunr/contract";
 import { initialScene, reduce } from "@shadowrunr/stage-kit";
+import { parseTranscript } from "@shadowrunr/stage-kit/parse";
 
 import { createClock } from "../avatar/motion";
-import { NEUTRAL_CUE, performanceBox, type PerformanceCue } from "../avatar/performance";
+import { createPerformanceDriver, NEUTRAL_CUE, performanceBox, type PerformanceCue } from "../avatar/performance";
 import { LiveStore } from "../live";
 import { DeliveryFeed, eventsOf, findSay, learnLines, silentCaption } from "./delivery";
 import type { Utterance } from "./frame";
@@ -119,5 +120,43 @@ describe("the performance feed", () => {
     expect(feed.captionShown(silentCaption(scene, 1400, undefined)!.key, said?.delivery)).toBe(false);
     expect(box.get()).toEqual({ id: 1, emotion: "triumph", intensity: 0.9, gesture: "flare" });
     expect(box.get()).not.toBe(NEUTRAL_CUE);
+  });
+
+  it("a replayed transcript whose cue directs the face drives the box to that gesture and eye light", () => {
+    // a short fictional transcript, as `transcript.jsonl` holds it: the brain parsed
+    // `[menace 0.9 slow glare eyes 2.2] Kneel.` and `[eyes 0.4] So small.` into these deliveries
+    const transcript = [
+      JSON.stringify(start),
+      '{"type":"say","ts_ms":1000,"speaker":"host","text":"Kneel.","delivery":{"emotion":"menace","intensity":0.9,"pace":"slow","gesture":"glare","eye_light":2.2}}',
+      '{"type":"say","ts_ms":4000,"speaker":"host","text":"So small.","delivery":{"emotion":"neutral","intensity":0.6,"pace":"normal","eye_light":0.4}}',
+    ].join("\n");
+    // through the replay's own door, so the schema accepts the face keys
+    const { events, errors } = parseTranscript(transcript);
+    expect(errors).toEqual([]);
+    expect(events).toHaveLength(3);
+
+    // the replay path: no voice, each caption cues its line as it goes on screen
+    const box = performanceBox();
+    const feed = new DeliveryFeed(box);
+    const scene = events.reduce(reduce, initialScene());
+    const shown = silentCaption(scene, 1200, undefined)!;
+    expect(feed.captionShown(shown.key, findSay(eventsOf(events), shown.saidAt!, shown.text)?.delivery)).toBe(true);
+    expect(box.get()).toEqual({ id: 1, emotion: "menace", intensity: 0.9, gesture: "glare", eyeLight: 2.2 });
+
+    // the face plays it: the glare's chin dips, and the fire settles at 2.2, not menace's 1.54
+    const face = createPerformanceDriver();
+    face.setCue(box.get());
+    let pitch = 0;
+    for (let i = 0; i < 24; i++) pitch = Math.max(pitch, face.step(1 / 60).gesturePitch);
+    expect(pitch).toBeGreaterThan(0);
+    for (let i = 0; i < 240; i++) face.step(1 / 60);
+    expect(face.settled).toBe(true);
+    expect(face.pose.eyeLight).toBeCloseTo(2.2, 6);
+
+    // the voiced path: the next line, cued when its part 0 is heard; eye light only, no gesture
+    const next = events[2];
+    feed.said("r", 3, next?.type === "say" ? next.delivery : undefined);
+    expect(feed.started({ runId: "r", seq: 3, part: 0 })).toBe(true);
+    expect(box.get()).toEqual({ id: 2, emotion: "neutral", intensity: 0.6, eyeLight: 0.4 });
   });
 });

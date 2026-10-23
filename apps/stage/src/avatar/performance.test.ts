@@ -67,6 +67,50 @@ describe("the emotion table", () => {
     expect(cueFor({ emotion: "outrage", intensity: 3, pace: "fast" })).toEqual({ emotion: "outrage", intensity: 1, gesture: "recoil" });
     expect(cueFor({ emotion: "deadpan", intensity: 1, pace: "slow" })).toEqual({ emotion: "deadpan", intensity: 1 });
   });
+
+  it("cueFor: a gesture the cue names plays whatever the intensity and replaces the emotion's own", () => {
+    expect(cueFor({ emotion: "menace", intensity: 0.2, pace: "slow", gesture: "glare" })).toEqual({ emotion: "menace", intensity: 0.2, gesture: "glare" });
+    expect(cueFor({ emotion: "deadpan", intensity: 0, pace: "normal", gesture: "nod" })).toEqual({ emotion: "deadpan", intensity: 0, gesture: "nod" });
+    // a strong outrage line asked to lean in leans in, not recoils
+    expect(cueFor({ emotion: "outrage", intensity: 1, pace: "fast", gesture: "lean_in" }).gesture).toBe("lean_in");
+    // a face-only cue (`[glare]`): neutral at the default intensity
+    expect(cueFor({ emotion: "neutral", intensity: 0.6, pace: "normal", gesture: "glare" })).toEqual({ emotion: "neutral", intensity: 0.6, gesture: "glare" });
+    // a word the stage does not know is no gesture: the emotion's own rule stands
+    const wink: string = "wink"; // a newer wire's word, as an older stage reads it
+    expect(cueFor({ emotion: "menace", intensity: 0.9, pace: "normal", gesture: wink as Gesture })).toEqual({ emotion: "menace", intensity: 0.9, gesture: "glare" });
+  });
+
+  it("cueFor: eye_light sets the cue's eye light, clamped, and overrides the emotion's", () => {
+    const c = cueFor({ emotion: "menace", intensity: 0.9, pace: "slow", gesture: "glare", eye_light: 2.2 });
+    expect(c).toEqual({ emotion: "menace", intensity: 0.9, gesture: "glare", eyeLight: 2.2 });
+    expect(cueTarget({ id: 1, ...c }).eyeLight).toBe(2.2);
+    expect(cueFor({ emotion: "weary", intensity: 1, pace: "slow", eye_light: 0.4 })).toEqual({ emotion: "weary", intensity: 1, gesture: "nod", eyeLight: 0.4 });
+    expect(cueFor({ emotion: "neutral", intensity: 0.6, pace: "normal", eye_light: 9 }).eyeLight).toBe(2.5);
+    expect(cueFor({ emotion: "neutral", intensity: 0.6, pace: "normal", eye_light: Number.NaN }).eyeLight).toBeUndefined();
+  });
+
+  it("cueFor: absent face fields leave the cue as it was", () => {
+    for (const e of EMOTIONS) {
+      for (const i of [0, 0.3, GESTURE_MIN, 1]) {
+        const c = cueFor({ emotion: e, intensity: i, pace: "normal" });
+        expect("eyeLight" in c).toBe(false);
+        const row = EMOTION_TABLE[e];
+        expect(c).toEqual({ emotion: e, intensity: i, ...(row.gesture && i >= GESTURE_MIN ? { gesture: row.gesture } : {}) });
+      }
+    }
+  });
+
+  it("the driver plays an explicit gesture on a faint line and settles to the cue's eye light", () => {
+    const d = createPerformanceDriver();
+    d.setCue({ id: 1, ...cueFor({ emotion: "menace", intensity: 0.2, pace: "slow", gesture: "glare", eye_light: 2.2 }) });
+    const mid = run(d, 0.4);
+    expect(mid.gesturePitch).toBeGreaterThan(0); // the glare's chin down
+    expect(mid.brow).toBeLessThan(EMOTION_TABLE.menace.brow * 0.2); // pulled toward its scowl
+    run(d, 3);
+    expect(d.settled).toBe(true);
+    expect(d.pose.eyeLight).toBeCloseTo(2.2, 6);
+    expect(d.pose.gesturePitch).toBe(0);
+  });
 });
 
 describe("the performance driver", () => {

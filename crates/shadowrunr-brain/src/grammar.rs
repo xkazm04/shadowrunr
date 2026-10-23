@@ -2,20 +2,23 @@
 //!
 //! ```text
 //! <plain text>          a spoken line (one Say per line), optionally opened by a delivery
-//!                       cue: [<emotion> <intensity> <pace>] text
+//!                       cue: [<emotion> <intensity> <pace> <gesture> eyes <n>] text
 //! OP: {json}            an action matching the contract's `Op`, allowed only if its tag is
 //!                       in the segment's `allowed_ops`
 //! NOTE: <candidate>     a memory candidate; becomes an episode, never a fact directly
 //! FOIL <id>: <text>     a line for the active foil
 //! ```
 //!
-//! A spoken line's cue is parsed out of its text into a [`Delivery`] ([`spoken`]). Vendor
+//! A spoken line's cue is parsed out of its text into a [`Delivery`] ([`spoken`]). Besides the
+//! emotion words a cue may direct the face: one gesture ([`Gesture`]) and an eye light
+//! (`eyes 2`), in any order after the emotion; a bracket of face words alone (`[glare]`,
+//! `[eyes 0.4]`) is a neutral cue. Vendor
 //! markup is not portable, so every other bracketed or asterisk span (`[laughs]`, `*sighs*`,
 //! a cue naming an emotion outside the set) is stripped at the door: the voice never reads it
 //! aloud.
 
 use serde_json::Value;
-use shadowrunr_types::delivery::{Delivery, Emotion, Pace, DEFAULT_INTENSITY};
+use shadowrunr_types::delivery::{Delivery, Emotion, Gesture, Pace, DEFAULT_INTENSITY};
 use shadowrunr_types::Op;
 
 /// A spoken line: the text as said, and the delivery cue it opened with.
@@ -196,21 +199,58 @@ pub fn parse_reply(
 
 /// The cue a line opens with (`[sarcasm 0.8 slow]`, or partial: `[glee]`, `[menace fast]`):
 /// the emotion first, then an intensity and a pace in either order, each optional (intensity
-/// [`DEFAULT_INTENSITY`], pace normal). `None` when the bracket does not open with an emotion
-/// of the set; words after the emotion that are neither are ignored.
+/// [`DEFAULT_INTENSITY`], pace normal). After the emotion the cue may also name one gesture and
+/// an eye light, `eyes <n>`, in any order (`[menace 0.9 slow glare eyes 2]`); the first gesture
+/// wins. Words after the emotion that are none of these are ignored and the cue is kept
+/// (`[menace 0.9 wink]` is menace 0.9). A bracket that opens with face words instead of an
+/// emotion is a face-only cue (neutral, default intensity, normal pace) only when every word in
+/// it is a face word (`[glare]`, `[eyes 0.4]`, `[nod eyes 1.5]`). `None` otherwise: the bracket
+/// is markup and is stripped.
 fn parse_cue(inner: &str) -> Option<Delivery> {
-    let mut words = inner.split_whitespace();
-    let emotion = Emotion::parse(words.next()?)?;
+    let words: Vec<&str> = inner.split_whitespace().collect();
+    let (emotion, rest) = match words.split_first() {
+        Some((first, rest)) => match Emotion::parse(first) {
+            Some(e) => (Some(e), rest),
+            None => (None, words.as_slice()),
+        },
+        None => return None,
+    };
     let mut intensity = DEFAULT_INTENSITY;
     let mut pace = Pace::Normal;
-    for w in words {
-        if let Ok(i) = w.parse::<f32>() {
-            intensity = i;
-        } else if let Some(p) = Pace::parse(w) {
-            pace = p;
+    let mut gesture: Option<Gesture> = None;
+    let mut eye_light: Option<f32> = None;
+    let mut face_only = true;
+    let mut it = rest.iter().peekable();
+    while let Some(w) = it.next() {
+        if w.eq_ignore_ascii_case("eyes") {
+            match it.peek().and_then(|n| n.parse::<f32>().ok()) {
+                Some(n) => {
+                    eye_light = Some(n);
+                    it.next();
+                }
+                None => face_only = false,
+            }
+        } else if let Some(g) = Gesture::parse(w) {
+            gesture = gesture.or(Some(g));
+        } else {
+            face_only = false;
+            if let Ok(i) = w.parse::<f32>() {
+                intensity = i;
+            } else if let Some(p) = Pace::parse(w) {
+                pace = p;
+            }
         }
     }
-    Some(Delivery::new(emotion, intensity, pace))
+    let emotion = match emotion {
+        Some(e) => e,
+        None if face_only && (gesture.is_some() || eye_light.is_some()) => Emotion::Neutral,
+        None => return None,
+    };
+    Some(
+        Delivery::new(emotion, intensity, pace)
+            .with_gesture(gesture)
+            .with_eye_light(eye_light),
+    )
 }
 
 /// `text` without markup: every `[...]` span and `*...*` span (an action) goes, with any stray
@@ -270,7 +310,9 @@ pub const DELIVERY_REPEATED: &str = "repeated";
 /// The most lines in a row the prompt asks to cue with one emotion.
 pub const MAX_EMOTION_RUN: u32 = 2;
 
-/// The run of the host's lines cued with one emotion. A line with no cue ends the run.
+/// The run of the host's lines cued with one emotion. A line with no cue ends the run. A
+/// neutral cue that directs the face (a gesture or an eye light, as `[glare]` parses) is a face
+/// direction, not an emotion choice: it neither extends nor ends the run.
 #[derive(Debug, Clone, Default)]
 pub struct CueRun {
     last: Option<Emotion>,
@@ -281,6 +323,11 @@ impl CueRun {
     /// Note the next spoken line's cue; true when it makes the run longer than
     /// [`MAX_EMOTION_RUN`].
     pub fn note(&mut self, delivery: Option<&Delivery>) -> bool {
+        if delivery.is_some_and(|d| {
+            d.emotion == Emotion::Neutral && (d.gesture.is_some() || d.eye_light.is_some())
+        }) {
+            return false;
+        }
         let emotion = delivery.map(|d| d.emotion);
         if emotion.is_some() && emotion == self.last {
             self.len += 1;
@@ -443,6 +490,123 @@ mod tests {
         .map(|d| run.note(d))
         .collect();
         assert_eq!(seen, vec![false, false, true, true, false, false, false]);
+    }
+
+    #[test]
+    fn a_cue_may_direct_the_face() {
+        assert_eq!(
+            said("[menace 0.9 slow glare eyes 2] Kneel."),
+            vec![Spoken {
+                text: "Kneel.".into(),
+                delivery: Some(
+                    Delivery::new(Emotion::Menace, 0.9, Pace::Slow)
+                        .with_gesture(Some(Gesture::Glare))
+                        .with_eye_light(Some(2.0))
+                ),
+            }]
+        );
+        // Order after the emotion is free; the first gesture wins; eyes are clamped.
+        assert_eq!(
+            said("[glee eyes 9 nod fast tilt 0.3] Ha!")[0].delivery,
+            Some(
+                Delivery::new(Emotion::Glee, 0.3, Pace::Fast)
+                    .with_gesture(Some(Gesture::Nod))
+                    .with_eye_light(Some(2.5))
+            )
+        );
+        assert_eq!(
+            said("[outrage LEAN_IN] What?")[0].delivery,
+            Some(
+                Delivery::new(Emotion::Outrage, DEFAULT_INTENSITY, Pace::Normal)
+                    .with_gesture(Some(Gesture::LeanIn))
+            )
+        );
+    }
+
+    #[test]
+    fn face_words_alone_are_a_neutral_cue() {
+        let neutral = Delivery::new(Emotion::Neutral, DEFAULT_INTENSITY, Pace::Normal);
+        assert_eq!(
+            said("[glare] Kneel."),
+            vec![Spoken {
+                text: "Kneel.".into(),
+                delivery: Some(neutral.with_gesture(Some(Gesture::Glare))),
+            }]
+        );
+        assert_eq!(
+            said("[eyes 0.4] So small.")[0],
+            Spoken {
+                text: "So small.".into(),
+                delivery: Some(neutral.with_eye_light(Some(0.4))),
+            }
+        );
+        assert_eq!(
+            said("[nod eyes 1.5] Yes.")[0].delivery,
+            Some(
+                neutral
+                    .with_gesture(Some(Gesture::Nod))
+                    .with_eye_light(Some(1.5))
+            )
+        );
+        // A bracket with any word that is not a face word stays markup and is stripped.
+        assert_eq!(
+            said("[glare at them] Kneel."),
+            vec![Spoken::plain("Kneel.")]
+        );
+        assert_eq!(said("[eyes] Kneel."), vec![Spoken::plain("Kneel.")]);
+        assert_eq!(
+            said("[eyes 0.4 slow] Kneel."),
+            vec![Spoken::plain("Kneel.")]
+        );
+        assert_eq!(said("[laughs] Kneel."), vec![Spoken::plain("Kneel.")]);
+    }
+
+    #[test]
+    fn an_unknown_word_in_a_cue_is_ignored_and_the_cue_kept() {
+        assert_eq!(
+            said("[menace 0.9 wink] Kneel."),
+            vec![Spoken {
+                text: "Kneel.".into(),
+                delivery: Some(Delivery::new(Emotion::Menace, 0.9, Pace::Normal)),
+            }]
+        );
+        // `eyes` without a number is an unknown word too.
+        assert_eq!(
+            said("[menace eyes glare] Kneel.")[0].delivery,
+            Some(
+                Delivery::new(Emotion::Menace, DEFAULT_INTENSITY, Pace::Normal)
+                    .with_gesture(Some(Gesture::Glare))
+            )
+        );
+    }
+
+    #[test]
+    fn a_face_only_cue_neither_extends_nor_ends_an_emotion_run() {
+        let n = Delivery::new(Emotion::Neutral, 0.5, Pace::Normal);
+        let g = Delivery::new(Emotion::Glee, 0.5, Pace::Normal);
+        let face = said("[glare] x")[0].delivery.unwrap();
+        let eyes = said("[eyes 2] x")[0].delivery.unwrap();
+        let mut run = CueRun::default();
+        // Face-only cues alone never trip the check.
+        let seen: Vec<bool> = [&face, &face, &eyes, &face]
+            .into_iter()
+            .map(|d| run.note(Some(d)))
+            .collect();
+        assert_eq!(seen, vec![false; 4]);
+        // Between two glee lines a face-only cue does not reset the run: the third glee trips.
+        let mut run = CueRun::default();
+        let seen: Vec<bool> = [&g, &face, &g, &g]
+            .into_iter()
+            .map(|d| run.note(Some(d)))
+            .collect();
+        assert_eq!(seen, vec![false, false, false, true]);
+        // An explicit neutral cue without face words still counts as before.
+        let mut run = CueRun::default();
+        let seen: Vec<bool> = [&n, &n, &n]
+            .into_iter()
+            .map(|d| run.note(Some(d)))
+            .collect();
+        assert_eq!(seen, vec![false, false, true]);
     }
 
     #[test]

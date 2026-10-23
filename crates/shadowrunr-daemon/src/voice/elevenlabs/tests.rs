@@ -246,6 +246,43 @@ async fn a_line_speaks_one_request_per_sentence_with_its_tag_speed_and_key() {
 }
 
 #[tokio::test]
+async fn a_delivery_s_face_direction_is_neither_spoken_nor_sent() {
+    let (base, seen) = fake().await;
+    let env = key_env(Some("good-key"));
+    let r = ElevenlabsRenderer::start(cfg(&base, &env, 5_000), spec("ok"), std::future::pending());
+    assert!(matches!(settled(&r).await, RendererState::Ready { .. }));
+    let plain = Delivery::new(Emotion::Menace, 0.9, Pace::Slow);
+    let face = plain
+        .with_gesture(Some(shadowrunr_types::delivery::Gesture::Glare))
+        .with_eye_light(Some(2.2));
+    assert_eq!(audio_tag(Some(&face)), audio_tag(Some(&plain)));
+    for (id, d) in [("l:p", plain), ("l:f", face)] {
+        let got = parts(
+            &r,
+            id,
+            Utter {
+                text: "Kneel.".into(),
+                delivery: Some(d),
+            },
+        )
+        .await;
+        assert!(
+            matches!(&got[..], [Part::Audio(a)] if a.text == "Kneel."),
+            "{got:?}"
+        );
+    }
+    let tts = seen.tts.lock().unwrap().clone();
+    assert_eq!(tts.len(), 2);
+    assert_eq!(
+        tts[0].2, tts[1].2,
+        "the same request with or without the face"
+    );
+    assert_eq!(tts[1].2["text"], "[menacing] Kneel.");
+    let body = tts[1].2.to_string();
+    assert!(!body.contains("glare") && !body.contains("eye"), "{body}");
+}
+
+#[tokio::test]
 async fn no_alignment_is_timings_none() {
     let (base, _) = fake().await;
     let env = key_env(Some("good-key"));
