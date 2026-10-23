@@ -11,10 +11,13 @@
 // unavailable, `data-face-loop` running | still, `data-form` rig | placeholder. `onFace` hears
 // `silhouette` on mount and `rig` once WebGL draws the daemon's real layer rig; the procedural
 // placeholder stays `silhouette` (the report to the daemon means "Malakor's real face").
+// `performance` (the cue for the line he is speaking: eye light, brow, gestures) reaches the face
+// the same way as the look: its change events wake it, and a new source object never restarts it.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { faceStateOf, type FaceState } from "../voice/report";
+import { performanceRelay, type PerformanceSource } from "./performance";
 import type { FaceSource } from "./types";
 import { DEFAULT_FACE, loadVariant, type FaceVariant, type Look, type LookSource } from "./variants";
 
@@ -36,11 +39,13 @@ export interface AvatarProps {
   look?: LookSource;
   /** The face's accessible name: the stream's host name (default "Host"). */
   label?: string;
+  /** How he performs the line he is speaking: a new cue wakes the face. Without it, at rest. */
+  performance?: PerformanceSource;
 }
 
 type Handle = { resize(size: number): void; dispose(): void };
 
-export function Avatar({ rigBase, size, source, className, onFace, variant = DEFAULT_FACE, look, label = "Host" }: AvatarProps) {
+export function Avatar({ rigBase, size, source, className, onFace, variant = DEFAULT_FACE, look, label = "Host", performance: perf }: AvatarProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const handleRef = useRef<Handle | null>(null);
@@ -60,6 +65,10 @@ export function Avatar({ rigBase, size, source, className, onFace, variant = DEF
     else tell(look?.get() ?? AHEAD);
     return look?.subscribe?.(tell);
   }, [look, lookListeners]);
+  // the performance, through one relay the face keeps: a new source is one more cue, not a restart
+  const performance = useMemo(() => performanceRelay(), []);
+  useEffect(() => performance.set(perf), [performance, perf]);
+  useEffect(() => () => performance.set(undefined), [performance]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -81,7 +90,7 @@ export function Avatar({ rigBase, size, source, className, onFace, variant = DEF
     loadVariant(variant).then(
       (startFace) => {
         if (cancelled) return;
-        handleRef.current = startFace({ root, canvas, rigBase, source, size: sizeRef.current, onDrawn: drawn, look: lookSource });
+        handleRef.current = startFace({ root, canvas, rigBase, source, size: sizeRef.current, onDrawn: drawn, look: lookSource, performance });
       },
       (error: unknown) => {
         drawn(null);
@@ -94,7 +103,7 @@ export function Avatar({ rigBase, size, source, className, onFace, variant = DEF
       handleRef.current?.dispose();
       handleRef.current = null;
     };
-  }, [rigBase, source, variant, lookListeners]);
+  }, [rigBase, source, variant, lookListeners, performance]);
 
   useEffect(() => {
     sizeRef.current = size;

@@ -8,11 +8,14 @@
 // the rig's own colours and a soft shadow on the page behind and beneath him (renderer.ts).
 //
 // The loop is the glow runtime's (`createFaceLoop`): one frame clock, no frames once settled. A
-// change of the `look` wakes it (`onLookChange`); nothing reads the look between frames.
+// change of the `look` wakes it (`onLookChange`); nothing reads the look between frames. A new
+// `performance` cue wakes it the same way (`onPerformanceChange`), and the eye lights and the head
+// gestures play on top of the look (`withPerformance`, ../performance.ts).
 
 import { createDriver, type Pose } from "../driver";
 import { loadForm, type LoadedForm } from "../layers";
 import { frames } from "../motion";
+import { onPerformanceChange, withPerformance } from "../performance";
 import { buildPlaceholder } from "../placeholder";
 import { calmNow, createFaceLoop, onLookChange, type FaceHandle, type FaceLoop } from "../runtime";
 import type { StartFaceOptions } from "../variants";
@@ -78,7 +81,7 @@ export function startFace(opts: CutFaceOptions): FaceHandle {
   }
 
   const clock = opts.clock ?? frames();
-  const driver = withLook(createDriver({ seed: 7 }), opts.look);
+  const driver = withPerformance(withLook(createDriver({ seed: 7 }), opts.look), opts.performance, { reduced: calmNow });
   let drawnForm: LoadedForm["form"] = "placeholder";
   let last: Pose = driver.rest();
   const probe = opts.probe;
@@ -131,6 +134,7 @@ export function startFace(opts: CutFaceOptions): FaceHandle {
         );
 
         cleanups.push(onLookChange(opts.look, () => l.wake()));
+        cleanups.push(onPerformanceChange(opts.performance, () => l.wake()));
 
         if (typeof IntersectionObserver !== "undefined") {
           const io = new IntersectionObserver((entries) => {

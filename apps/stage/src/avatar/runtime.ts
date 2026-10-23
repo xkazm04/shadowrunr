@@ -14,13 +14,18 @@
 // is answering) the eyes lead and the head follows (`withLook`, in the glow's units below). The
 // look is an event: a change wakes the loop, which runs until the head has arrived and stops; under
 // reduced motion it is one still frame at the new look. Nothing polls it.
+//
+// **How he performs.** With a `performance` (the stage's cue for the line he is speaking) the eye
+// light, the brow and the head gestures play on top (`withPerformance`, performance.ts). A new cue
+// wakes the loop like a look does; the loop sleeps again once the gesture has played and the light
+// has eased in. Under reduced motion the still frame carries the cue's light, with no gesture.
 
 import { withLook, type LookUnits } from "./cut/look";
 import { createDriver, type Driver, type Pose } from "./driver";
 import { createGlowRenderer, type GlowRenderer } from "./glow";
 import { loadForm, type LoadedForm } from "./layers";
 import { frames, systemPrefersReduced, type Clock } from "./motion";
-import type { PerformanceSource } from "./performance";
+import { onPerformanceChange, withPerformance, type PerformanceSource } from "./performance";
 import { buildPlaceholder } from "./placeholder";
 import type { FaceSource } from "./types";
 import type { LookSource } from "./variants";
@@ -210,7 +215,9 @@ export function startFace(opts: {
   }
 
   // without a look the driver is drawn as it always was; with one, it looks on top
-  const driver: Driver = opts.look ? withLook(createDriver({ seed: 7 }), opts.look, GLOW_LOOK) : createDriver({ seed: 7 });
+  const looking: Driver = opts.look ? withLook(createDriver({ seed: 7 }), opts.look, GLOW_LOOK) : createDriver({ seed: 7 });
+  // and with a performance, it performs on top of that
+  const driver = withPerformance(looking, opts.performance, { reduced: calmNow });
   let drawnForm: LoadedForm["form"] = "placeholder";
   let last: Pose = driver.rest();
   const draw = (pose: Pose) => {
@@ -259,6 +266,7 @@ export function startFace(opts: {
           }),
         );
         cleanups.push(onLookChange(opts.look, () => l.wake()));
+        cleanups.push(onPerformanceChange(opts.performance, () => l.wake()));
 
         if (typeof IntersectionObserver !== "undefined") {
           const io = new IntersectionObserver((entries) => {
