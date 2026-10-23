@@ -5,6 +5,8 @@ import type { ValidateFn } from "./validators.js";
 
 /** Every RPC method, sorted. */
 export const RPC_METHODS = [
+  "character.doc.get",
+  "character.doc.set",
   "character.get",
   "character.list",
   "character.rules",
@@ -107,6 +109,8 @@ export type ResultLoader<M extends RpcMethod> = () => Promise<ValidateFn<RpcResu
 
 /** The result validator loader of every method. */
 export const RESULT_LOADERS: { readonly [M in RpcMethod]: ResultLoader<M> } = {
+  "character.doc.get": () => import("./results/CharacterDoc.js").then((m) => m.validate),
+  "character.doc.set": () => import("./results/CharacterDocSetResult.js").then((m) => m.validate),
   "character.get": () => import("./results/CharacterDetail.js").then((m) => m.validate),
   "character.list": () => import("./results/CharacterListResult.js").then((m) => m.validate),
   "character.rules": () => import("./results/CharacterRulesResult.js").then((m) => m.validate),

@@ -10,7 +10,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::{
-    CharacterDetail, CharacterIssue, CharacterSummary, RankTableInfo, RuleState, SegmentTables,
+    CharacterDetail, CharacterDoc, CharacterDocGetParams, CharacterDocSetParams,
+    CharacterDocSetResult, CharacterIssue, CharacterSummary, RankTableInfo, RuleState,
+    SegmentTables,
 };
 use crate::clips::{
     ClipCandidate, ClipIdParams, ClipPublishReport, ClipRunRecording, ClipScanReport,
@@ -562,6 +564,8 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<CharacterGetParams, CharacterDetail>("character.get");
     v.method::<CharacterToneSetParams, CharacterSummary>("character.tone.set");
     v.method::<CharacterValidateParams, Vec<CharacterIssue>>("character.validate");
+    v.method::<CharacterDocGetParams, CharacterDoc>("character.doc.get");
+    v.method::<CharacterDocSetParams, CharacterDocSetResult>("character.doc.set");
     v.method::<EmptyParams, SegmentTables>("segments.tables");
     v.method::<RanksTableParams, RankTableInfo>("ranks.table");
     v.method::<LedgerPageParams, LedgerPage>("ledger.page");

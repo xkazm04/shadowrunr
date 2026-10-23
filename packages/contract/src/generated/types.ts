@@ -1029,6 +1029,14 @@ export type VoiceSkip = "late" | "queue_full" | "error";
  * Shadowrunr OS wire contract, generated from crates/shadowrunr-types. Do not edit; run `pnpm -C packages/contract generate`.
  */
 export interface RpcMethods {
+  "character.doc.get": {
+    params: CharacterDocGetParams;
+    result: CharacterDoc;
+  };
+  "character.doc.set": {
+    params: CharacterDocSetParams;
+    result: CharacterDocSetResult;
+  };
   "character.get": {
     params: CharacterGetParams;
     result: CharacterDetail;
@@ -1337,6 +1345,74 @@ export interface RpcMethods {
     params: VoiceVerifyParams;
     result: ProviderStatus;
   };
+}
+/**
+ * `character.doc.get`: one package document by its package-relative path.
+ *
+ * `doc` is one of `constitution.md`, `bible.md`, `directions.md`, `character.toml`,
+ * `stalls.toml`, `situations.json` or `foils/<slug>.md` (slug `[a-z0-9_-]{1,40}`); any other
+ * value is refused before any IO.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterDocGetParams".
+ */
+export interface CharacterDocGetParams {
+  doc: string;
+  id: string;
+}
+/**
+ * `character.doc.get` result: the document's text and the digest a later write must name.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterDoc".
+ */
+export interface CharacterDoc {
+  /**
+   * `sha256:<lowercase hex>` of the file's bytes.
+   */
+  digest: string;
+  doc: string;
+  id: string;
+  text: string;
+}
+/**
+ * `character.doc.set`: replace one package document, refused unless the file still has
+ * `base_digest` (`""` only when the file does not exist yet, i.e. a new foil). The previous bytes
+ * are kept under `<data>/character-backups/<id>/`, and a write that leaves the package with an
+ * `error` issue is rolled back. The constitution is writable here because the caller is the
+ * operator's agent behind a per-edit approval, never the brain.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterDocSetParams".
+ */
+export interface CharacterDocSetParams {
+  base_digest: string;
+  doc: string;
+  id: string;
+  text: string;
+}
+/**
+ * `character.doc.set` result.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterDocSetResult".
+ */
+export interface CharacterDocSetResult {
+  /**
+   * Where the previous bytes were kept, relative to `[paths] data`, `/` separators; omitted for
+   * a new file.
+   */
+  backup?: string;
+  /**
+   * The new digest.
+   */
+  digest: string;
+  doc: string;
+  id: string;
+  /**
+   * The digest the write replaced; `""` for a new file.
+   */
+  previous_digest: string;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema

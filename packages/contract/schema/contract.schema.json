@@ -619,6 +619,101 @@
       ],
       "type": "object"
     },
+    "CharacterDoc": {
+      "description": "`character.doc.get` result: the document's text and the digest a later write must name.",
+      "properties": {
+        "digest": {
+          "description": "`sha256:<lowercase hex>` of the file's bytes.",
+          "type": "string"
+        },
+        "doc": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "doc",
+        "text",
+        "digest"
+      ],
+      "type": "object"
+    },
+    "CharacterDocGetParams": {
+      "description": "`character.doc.get`: one package document by its package-relative path.\n\n`doc` is one of `constitution.md`, `bible.md`, `directions.md`, `character.toml`,\n`stalls.toml`, `situations.json` or `foils/<slug>.md` (slug `[a-z0-9_-]{1,40}`); any other\nvalue is refused before any IO.",
+      "properties": {
+        "doc": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "doc"
+      ],
+      "type": "object"
+    },
+    "CharacterDocSetParams": {
+      "description": "`character.doc.set`: replace one package document, refused unless the file still has\n`base_digest` (`\"\"` only when the file does not exist yet, i.e. a new foil). The previous bytes\nare kept under `<data>/character-backups/<id>/`, and a write that leaves the package with an\n`error` issue is rolled back. The constitution is writable here because the caller is the\noperator's agent behind a per-edit approval, never the brain.",
+      "properties": {
+        "base_digest": {
+          "type": "string"
+        },
+        "doc": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "doc",
+        "text",
+        "base_digest"
+      ],
+      "type": "object"
+    },
+    "CharacterDocSetResult": {
+      "description": "`character.doc.set` result.",
+      "properties": {
+        "backup": {
+          "description": "Where the previous bytes were kept, relative to `[paths] data`, `/` separators; omitted for\na new file.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "The new digest.",
+          "type": "string"
+        },
+        "doc": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "previous_digest": {
+          "description": "The digest the write replaced; `\"\"` for a new file.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "doc",
+        "digest",
+        "previous_digest"
+      ],
+      "type": "object"
+    },
     "CharacterGetParams": {
       "properties": {
         "id": {
@@ -11035,6 +11130,38 @@
   "additionalProperties": false,
   "description": "Shadowrunr OS wire contract, generated from crates/shadowrunr-types. Do not edit; run `pnpm -C packages/contract generate`.",
   "properties": {
+    "character.doc.get": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/CharacterDocGetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/CharacterDoc"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "character.doc.set": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/CharacterDocSetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/CharacterDocSetResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
     "character.get": {
       "additionalProperties": false,
       "properties": {
@@ -12269,6 +12396,8 @@
     }
   },
   "required": [
+    "character.doc.get",
+    "character.doc.set",
     "character.get",
     "character.list",
     "character.rules",

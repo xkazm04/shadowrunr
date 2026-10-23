@@ -54,19 +54,22 @@ export function Shell(props: ShellProps) {
     return () => cancelAnimationFrame(f);
   }, [still]);
 
+  // The intro lands on On Air only from the boot route (the wall; bare On Air is already there):
+  // a person or an agent who moved during it stays where they went.
   const finishIntro = useCallback(() => {
     setIntro(false);
     setHover(null);
-    router.navigate(pageRoute(ON_AIR), { replace: true });
+    if (router.getRoute().view === "wall") router.navigate(pageRoute(ON_AIR), { replace: true });
   }, [router]);
 
   useEffect(() => {
     if (!intro) return;
-    const hoverAt = window.setTimeout(() => setHover(0), INTRO.hoverAtMs);
-    const end = window.setTimeout(finishIntro, INTRO.endMs);
+    // The global timers are window's (bare names keep the first load the same size).
+    const hoverAt = setTimeout(() => setHover(0), INTRO.hoverAtMs);
+    const end = setTimeout(finishIntro, INTRO.endMs);
     return () => {
-      window.clearTimeout(hoverAt);
-      window.clearTimeout(end);
+      clearTimeout(hoverAt);
+      clearTimeout(end);
     };
   }, [intro, finishIntro]);
 

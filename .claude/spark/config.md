@@ -76,8 +76,13 @@ builder:
 - 2026-10-23 (ai-moderator): the Director wrote a capability into the contract (look-alike normalisation) from the registry's golden path, not from the code; the builder found the brain does less. Every "the lane does X with existing Y" claim in a contract is grepped before it is written.
 - 2026-10-23 (ai-moderator): Python `open(p, 'w')` on Windows writes CRLF; editing LF files that way churns the working copy. Use `newline=''` (or the Edit tool).
 - 2026-10-23 (ai-moderator): a new per-character console tab is also a route entry (`pages/characters/routes.ts` PKG_TABS), not only a PackagePage tab.
+- 2026-10-23 (athena-copilot): when one system's agent consumes another's tools, the CONSUMER's acceptance rules are contract terms: here, Athena's 1600-char result cap and a manifest validator that refuses the whole catalog when an array param lacks maxItems. The scout reported only the 240-char description cap, and both were found at the seam or in the live pilot. The scout must list the consumer's caps and validators, and the producer must test them at realistic fixture size.
+- 2026-10-23 (athena-copilot): a live pilot report (calls before content, cards, cost per case), run before and after a fix wave, turned a diagnosis from one run into a measured comparison (cost $5.66 to $4.22; start_sim from 4 failed calls to 1). Keep the per-case report for any agent-facing surface.
+- 2026-10-23 (athena-copilot): `git worktree remove` fails on Windows with "Filename too long" (node_modules). Use `cmd /c rd /s /q "\\?\<path>"` and then `git worktree prune`.
+- 2026-10-23 (athena-copilot): the console intro replaced the route with On Air even after a driver had navigated. Any agent or e2e that opens the console at the default route must open it with its target hash, or rely on f694b9d.
 
 ## Question taste
 
 - 2026-10-23: for a new character's identity, the operator wants to choose by LOOK: offer image prompts (3 concepts x 3 looks) as the option rather than text concepts alone.
 - 2026-10-23: the operator leans to autonomy and liveliness over the standard's caution (picked full-autonomy bans and a fresh LLM line per action against recommendations). Keep recommending the standard, but put the mitigations (shadow mode, audit, undo) into the option text so the override arrives already bounded.
+- 2026-10-23 (athena-copilot): the operator took every recommended option and every scope or test case offered (4 of 4 twice). For scope and coverage multiSelects, decide "all" by convention unless a case costs quota or time worth flagging.
