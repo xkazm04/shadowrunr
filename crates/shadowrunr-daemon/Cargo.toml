@@ -36,7 +36,9 @@ sha2 = "0.10.9"
 hmac = "0.12.1"
 regex = "1"
 # obs-websocket client (the recorder); already in the tree through axum's ws.
-tokio-tungstenite = "0.29.0"
+tokio-tungstenite = { version = "0.29.0", features = ["rustls-tls-webpki-roots"] }
+# The Twitch bot's tokens: Windows Credential Manager only (platform/twitch/store.rs).
+keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
 base64 = "0.22.1"
 
 [dev-dependencies]
