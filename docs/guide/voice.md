@@ -1059,8 +1059,11 @@ emotion. A line at intensity 0.6 or more also plays its gesture.
 
 ### The 3D prototypes: `relit` and `lich3d`
 
-Two more faces sit behind `?avatar=` and `[avatar] face` while the owner compares them. The
-default stays `cut`.
+Two more faces sit behind `?avatar=` and `[avatar] face`. Since the avatar-3d blind lineup,
+`lich3d` is the default face: on the stage (`DEFAULT_FACE`), in the daemon (`[stage] avatar`) and
+in Malakor's `character.toml`. A character's own `[avatar] face` still overrides the daemon's.
+For now lich3d draws an opaque black square, so in the corner layout it covers what is behind it.
+`cut`, `glow`, `depth` and `relit` stay selectable.
 
 **`relit`** draws the rig as lit 2.5D cards on the depth map (run `tools/avatar/depth_map.py`
 first, as for `depth`).
@@ -1081,6 +1084,18 @@ first, as for `depth`).
   - The bone is `lich.glb` beside the rig, made offline from the portrait by `tools/avatar3d`
     (see its README).
   - Without it, the face draws a procedural placeholder skull and says why once in the console.
+  - When the GLB has the optional `collar` node, the collar is drawn in front of the painted
+    torso card. It turns with the head at a quarter of the head's yaw and 15% of its pitch, about
+    its own pivot, and `lean` moves it with the head in full. A GLB without a collar draws as
+    before.
+- Two looks for the bone and the collar, picked by `?lichlook=`:
+  - `paint` (the default) follows the portrait's painted style. It has a banded light ramp with
+    three soft-edged steps, a strong warm key from above and in front, and deep cool shadows. The
+    texture's darks are pushed into cavities, and flat facets are kept. A teal rim sits on the eye
+    side and an orange one on the monocle side.
+  - `real` is smooth PBR. A dense mesh is shaded smooth, the GLB's `normalTexture` is used when
+    it has one, and the bone is rough (0.8) with a subtle environment.
+  - In both looks, the eye fire and the monocle still light the bone.
 - Motion and light:
   - The jaw opens on its hinge, and the head turns to ±35° yaw and ±18° pitch.
   - Teal fire burns in each socket, and a point light per socket lights the bone.
@@ -1089,12 +1104,17 @@ first, as for `depth`).
   torso stands behind it as a backdrop.
 - The look is finished with bloom.
 - A skull has no brow, so `brow` pitches the head and narrows or opens the eye fire.
-- Toggles: `?lichtex=0` draws flat bone, and `?lichbloom=0` turns bloom off. Bloom is about 90%
-  of the face's GPU cost.
+- Toggles:
+  - `?lichlook=real` lights the bone smooth instead of painted.
+  - `?lichtex=0` draws flat bone.
+  - `?lichbloom=0` turns bloom off. Bloom is most of the face's GPU cost.
 
 The asset is built offline on the GPU with TRELLIS (MIT code and weights). Part of TRELLIS's
 training data carries non-commercial terms, so judge that before a monetised stream. The stream
-itself never runs the model.
+itself never runs the model. Since the lich3d-quality pass, the asset is about 100k triangles
+(skull, jaw and a collar cut from a generated bust) with a 4096 atlas and a normal map, about
+14 MB. TRELLIS.2 was not used: its pipeline needs gated weights (DINOv3, and RMBG-2.0 under a
+non-commercial licence). `tools/avatar3d/README.md` says how to take that route.
 
 ### Benching a face
 
@@ -1107,7 +1127,9 @@ itself never runs the model.
 - First-audio latency with each face open.
 
 It also renders an expressiveness sheet and frame-stepped blind clips lettered A-D, with the key
-in a separate file. Output goes to `runs/avatar-3d/bench/`. Run it alone, on a quiet machine:
+in a separate file. lich3d runs as two faces, one per look: `lich3d` (paint) and `lich3d-real`.
+In the clips, a face written `lich3d@alt` records against a second rig (`--alt-rig-dir`), so an
+older asset can sit in the same lineup as the new one. Output goes to `runs/avatar-3d/bench/`. Run it alone, on a quiet machine:
 other load shows up in the CPU and voice figures, and each row records the machine's load
 beside it.
 
@@ -1124,3 +1146,14 @@ run, 440 / 1024 px:
 - The browser tree costs 6-15% of one core per face; lich3d with bloom is the highest.
 - No face measurably delayed the voice's first audio.
 - Head turn at a full look: cut 10°, depth 20°, relit 22°, lich3d 25° (lich3d can go to 35°).
+
+The lich3d-quality asset (2026-10-23, ~100k triangles, 4096 atlas and normal map, 14 MB) was
+benched on a machine the bench could not quiet. Most runs carried a 2-3 ms shared-queue wait that
+no face controls; relit read 3.0-4.4 ms at 1024 in the same runs. The figures that came through
+clean:
+- At 440 px (the corner) with bloom off, the new skull is 0.23 ms against the old skull's 0.10.
+- With bloom on, bloom still dominates.
+- At 1024 px the new skull produced no clean run, so its cost there is unmeasured, not small.
+- Ready time grew from about 510 to 594 ms with the larger GLB.
+
+Rerun `frames.mjs` on a quiet machine before quoting a 1024 px cost.

@@ -5,6 +5,7 @@
 // get the letters A..D in a random order; the key goes to its own folder.
 //
 //   node bench/clips.mjs [--faces cut,depth,relit,lich3d] [--from 4000] [--seconds 12] [--fps 30] [--ffmpeg ffmpeg]
+//                        [--alt-rig-dir <dir>]  (a face written `lich3d@alt` uses that rig: an older asset in the lineup)
 //
 // Writes <out>/clips/<L>-corner.mp4, <L>-host.mp4, lineup.mp4 (the corner clips, 2 x 2, letters
 // burned in, no names), lineup-host.mp4, and <out>/key/key.json (letter -> face).
@@ -45,8 +46,11 @@ function run(cmd, argv, input) {
 }
 
 /** Record one face at one framing to `file`: H.264, yuv420p, `fps`. */
-async function record(page, face, letter, size, file) {
-  const started = await page.evaluate((o) => window.__bench.start(o), { face, size, rig: rig.url, manual: true });
+async function record(page, spec, letter, size, file) {
+  const [face, which] = spec.split("@");
+  const from = which === "alt" ? altRig : rig;
+  if (!from) throw new Error(`${spec} needs --alt-rig-dir`);
+  const started = await page.evaluate((o) => window.__bench.start(o), { face, size, rig: from.url, manual: true });
   if (started.state !== "ready" || started.fellBack) throw new Error(`${face} did not start as itself: ${JSON.stringify(started)}`);
   const dt = 1000 / fps;
   await page.evaluate((o) => window.__bench.advance(o), { steps: Math.round(fromMs / dt), dt });
@@ -65,6 +69,7 @@ async function record(page, face, letter, size, file) {
 }
 
 const rig = await rigServer(s.rigDir, s.rigPort);
+const altRig = s.args["alt-rig-dir"] ? await rigServer(s.args["alt-rig-dir"], s.rigPort + 1) : null;
 const web = await devServer(s.port);
 let gpu = null;
 const made = [];
@@ -88,6 +93,7 @@ try {
   await gpu?.close();
   await web.close();
   await rig.close();
+  await altRig?.close();
 }
 
 // the lineups: A B / C D, the letters already burned into each clip
