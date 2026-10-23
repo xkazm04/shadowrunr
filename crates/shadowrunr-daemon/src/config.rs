@@ -61,14 +61,14 @@ pub struct StageConfig {
 pub enum FaceVariant {
     /// The glow rig.
     Glow,
-    /// The 2.5D cut-out, the stage's default (the owner's pick, 2026-10-21).
-    #[default]
+    /// The 2.5D cut-out (the stage's default from 2026-10-21 until the avatar-3d lineup).
     Cut,
     /// The depth-mesh head.
     Depth,
     /// Lit 2.5D cards (avatar-3d prototype A).
     Relit,
-    /// The 3D skull (avatar-3d prototype B).
+    /// The 3D skull, the stage's default (the owner's pick from the avatar-3d blind lineup).
+    #[default]
     Lich3d,
 }
 
@@ -486,11 +486,11 @@ mod tests {
     use shadowrunr_types::Role;
 
     #[test]
-    fn stage_avatar_defaults_to_cut_and_takes_the_three_faces() {
+    fn stage_avatar_defaults_to_lich3d_and_takes_every_face() {
         let root = Path::new("/repo");
         assert_eq!(
             Config::from_toml("", root).unwrap().stage.avatar,
-            FaceVariant::Cut
+            FaceVariant::Lich3d
         );
         for (name, face) in [
             ("glow", FaceVariant::Glow),
@@ -505,6 +505,7 @@ mod tests {
         assert!(Config::from_toml("[stage]\navatar = \"mesh\"\n", root).is_err());
         assert_eq!(FaceVariant::Glow.query(), "&avatar=glow");
         assert_eq!(FaceVariant::Cut.query(), "&avatar=cut");
+        assert_eq!(FaceVariant::Lich3d.query(), "&avatar=lich3d");
     }
 
     #[test]

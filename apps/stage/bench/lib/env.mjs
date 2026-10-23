@@ -325,7 +325,7 @@ export function faceConfigs(faces, sizes, withNoBloom = true) {
   for (const face of faces) {
     for (const size of sizes) {
       out.push({ face, size });
-      if (face === "lich3d" && withNoBloom) out.push({ face, size, bloom: false });
+      if (face.startsWith("lich3d") && withNoBloom) out.push({ face, size, bloom: false });
     }
   }
   return out;

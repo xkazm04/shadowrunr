@@ -9,9 +9,10 @@ import type { FaceHandle, startFace as glowStartFace } from "./runtime";
 export const FACE_VARIANTS = ["glow", "cut", "depth", "relit", "lich3d"] as const;
 export type FaceVariant = (typeof FACE_VARIANTS)[number];
 
-/** The face drawn when nothing names one: the cut-out, the owner's pick from the 2026-10-21
- * recorded show. `glow` stays selectable. */
-export const DEFAULT_FACE: FaceVariant = "cut";
+/** The face drawn when nothing names one: the 3D skull, the owner's pick from the avatar-3d blind
+ * lineup (spark lich3d-quality). It draws an opaque black square for now; `cut` (the previous
+ * default, the 2026-10-21 pick) and `glow` stay selectable. */
+export const DEFAULT_FACE: FaceVariant = "lich3d";
 
 /**
  * Where Malakor looks, relative to his own face box: `x` -1 (his box's left edge of the canvas

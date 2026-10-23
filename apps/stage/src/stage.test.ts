@@ -359,11 +359,11 @@ describe("source", () => {
     expect(readParams("?ws=javascript:alert(1)").ws).toBe("ws://127.0.0.1:7717/events");
     expect(readParams("?t=90&paused=1")).toMatchObject({ startAt: 90, paused: true });
     expect(readParams("?t=abc").startAt).toBe(0);
-    expect(readParams("").avatar).toBe("cut");
+    expect(readParams("").avatar).toBe("lich3d");
     expect(readParams("?avatar=glow").avatar).toBe("glow");
     expect(readParams("?avatar=cut").avatar).toBe("cut");
     expect(readParams("?avatar=depth").avatar).toBe("depth");
-    expect(readParams("?avatar=nope").avatar).toBe("cut");
+    expect(readParams("?avatar=nope").avatar).toBe("lich3d");
     expect(readParams("").rig).toBeNull();
     expect(readParams("?rig=http://127.0.0.1:7801/rig").rig).toBe("http://127.0.0.1:7801/rig/");
     expect(readParams("?rig=javascript:alert(1)").rig).toBeNull();

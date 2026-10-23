@@ -24,6 +24,8 @@ import { createRelitRenderer } from "../src/avatar/relit/renderer.ts";
 const DEG = 180 / Math.PI;
 const BG = "#060807";
 const FACES = ["cut", "depth", "relit", "lich3d"];
+/** lich3d in its two looks: `lich3d` paints, `lich3d-real` is the smooth PBR one. */
+const lichLookOf = (face) => (face === "lich3d-real" ? "real" : "paint");
 
 /** The rows: a label and what differs from rest (pose fields, a look, performance fields, or a gesture at its peak). */
 export const ROWS = [
@@ -49,6 +51,7 @@ export const LIMITS = {
   relit: { lookYaw: HEAD_YAW_MAX * RELIT_GAIN[0], lookPitch: HEAD_PITCH_MAX * RELIT_GAIN[1], capYaw: YAW_LIMIT, capPitch: PITCH_LIMIT },
   lich3d: { lookYaw: HEAD_YAW_MAX * LICH_GAIN, lookPitch: HEAD_PITCH_MAX * LICH_GAIN, capYaw: YAW_MAX_DEG, capPitch: PITCH_MAX_DEG },
 };
+LIMITS["lich3d-real"] = LIMITS.lich3d;
 
 /** The performance pose for a row: rest with its fields, or a gesture's real envelope at `at` s. */
 function perfFor(row) {
@@ -91,11 +94,13 @@ const DRAW = {
   },
 };
 
+DRAW["lich3d-real"] = DRAW.lich3d;
+
 async function makeRenderer(face, canvas, rig, form) {
   if (face === "cut") return { r: await createCutRenderer(canvas, form) };
-  if (face === "lich3d") {
+  if (face.startsWith("lich3d")) {
     const [asset, backdrop] = await Promise.all([loadLichAsset(rig), loadBackdrop(rig)]);
-    return { r: createLichRenderer(canvas, asset, { bloom: true, texture: true, backdrop }), asset };
+    return { r: createLichRenderer(canvas, asset, { bloom: true, texture: true, backdrop, look: lichLookOf(face) }), asset };
   }
   const { meta, field } = await fetchDepth(rig, form.spec.width, form.spec.height);
   if (face === "depth") return { r: await createDepthRenderer(canvas, form, field, meta) };

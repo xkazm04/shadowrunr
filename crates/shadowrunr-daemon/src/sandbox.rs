@@ -1055,7 +1055,7 @@ pub(crate) mod tests {
         assert!(started.session_id.ends_with("-5m"));
         assert_eq!(
             started.stage_url,
-            "http://localhost:5178/?run=live&broadcast=1&avatar=cut"
+            "http://localhost:5178/?run=live&broadcast=1&avatar=lich3d"
         );
         let end = until_ended(&st, &started.session_id).await;
         assert_eq!(end.state, SandboxState::Done);

@@ -3,7 +3,9 @@
 //
 // The scene, back to front: the rig's painted torso as a backdrop card (drawn first, never
 // occluding), then the head on a pivot at `neck`: the bone
-// (flat-shaded, rough, warm ivory, or the GLB's own texture), the jaw on its hinge, an eye fire in
+// (warm ivory or the GLB's own texture, in one of two looks: `paint`, a banded toon ramp with
+// cavity darkening and teal/orange rims like the portrait, or `real`, smooth PBR), the optional
+// collar (the GLB's `collar` node, turned a fraction of the head's turn), the jaw on its hinge, an eye fire in
 // each socket (an additive flame card turned to the camera) with a teal point light inside that
 // lights the bone around it, the orange monocle ring with its own light, and the crown of
 // procedural crystals (dark, glossy, teal veins) floating about the head. Bloom picks up what
@@ -17,7 +19,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 import { contextLossGuard } from "../gl-kit";
-import type { LichFrame } from "./channels";
+import { collarMotion, leanShift, type LichFrame } from "./channels";
 import type { LichMeta } from "./contract";
 import { crystalAt, crystalCrown, type CrystalSpec } from "./crystals";
 
@@ -72,6 +74,8 @@ const BONE = 0xc9b994;
 /** Candela at eye light 1, scaled by the skull's height (a unit skull). */
 const EYE_CANDELA = 0.05;
 const MONOCLE_CANDELA = 0.025;
+/** A mesh with at least this many triangles is dense enough to draw smooth in the real look. */
+const DENSE_TRIS = 12000;
 const BLOOM = { strength: 0.55, radius: 0.35, threshold: 0.85 };
 
 const FLAME_VERT = /* glsl */ `
@@ -112,6 +116,60 @@ void main() {
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
+
+/**
+ * The paint look's diffuse ramp: three soft-edged bands (deep shadow, mid, lit) along n.l, read by
+ * MeshToonMaterial. 128 texels wide, linear filtered, so the edge between bands is a few pixels of
+ * blend, not a hard line.
+ */
+export function paintRamp(): THREE.DataTexture {
+  const n = 128;
+  const data = new Uint8Array(n * 4);
+  const step = (x: number, at: number, w: number) => {
+    const t = Math.min(1, Math.max(0, (x - (at - w)) / (2 * w)));
+    return t * t * (3 - 2 * t);
+  };
+  for (let i = 0; i < n; i++) {
+    const x = i / (n - 1);
+    // n.l = 2x - 1: the terminator sits near x 0.5
+    const v = 0.07 + 0.38 * step(x, 0.5, 0.035) + 0.55 * step(x, 0.66, 0.035);
+    const b = Math.round(Math.min(1, v) * 255);
+    data.set([b, b, b, 255], i * 4);
+  }
+  const tex = new THREE.DataTexture(data, n, 1, THREE.RGBAFormat);
+  tex.minFilter = tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * The bone in the portrait's painted style: a banded toon ramp, the texture's darks pushed into
+ * cavities, the colour pushed warm and contrasty, a crisp teal rim on the eye side and an orange
+ * kiss on the monocle side. Lit by the same lights as the real look (eye and monocle included).
+ */
+function paintMaterial(map: THREE.Texture | null, vc: boolean, ramp: THREE.Texture, flat: boolean): THREE.MeshToonMaterial {
+  const m = new THREE.MeshToonMaterial({ color: map ? 0xf4ecdc : BONE, map, vertexColors: vc, gradientMap: ramp });
+  // (not a constructor parameter of the toon material, but the shader honours it)
+  (m as THREE.MeshToonMaterial & { flatShading: boolean }).flatShading = flat;
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <opaque_fragment>",
+      `float pLum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+      float pCav = smoothstep(0.08, 0.5, pLum);
+      outgoingLight *= mix(0.3, 1.0, pCav);
+      float pLit = dot(outgoingLight, vec3(0.3, 0.59, 0.11));
+      outgoingLight = mix(vec3(pLit), outgoingLight, 0.8);
+      outgoingLight *= 1.45 * vec3(1.04, 0.99, 0.93) * mix(vec3(0.78, 0.9, 1.18), vec3(1.0), smoothstep(0.04, 0.35, pLit));
+      float pFr = pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), 4.0);
+      float pSide = normalize(normal).x;
+      outgoingLight += vec3(0.08, 0.95, 0.78) * pFr * smoothstep(0.1, -0.6, pSide) * 0.6 * (0.3 + pCav);
+      outgoingLight += vec3(1.0, 0.45, 0.08) * pFr * smoothstep(0.1, 0.7, pSide) * 0.6 * (0.3 + pCav);
+      #include <opaque_fragment>`,
+    );
+  };
+  return m;
+}
 
 function flameMaterial(seed: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
@@ -216,6 +274,10 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
   const eyeR = node("eye_r");
   const monocle = node("monocle");
   const neckAt = node("neck").getWorldPosition(new THREE.Vector3());
+  // the optional collar stays a root node (its position is its pivot), off the head's pivot
+  const collar = root.getObjectByName("collar") ?? null;
+  const collarRest = collar ? collar.position.clone() : null;
+  if (collar) collar.rotation.order = "YXZ";
 
   const pivot = new THREE.Group();
   pivot.name = "head-pivot";
@@ -230,24 +292,45 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
   const headH = Math.max(1e-3, box.max.y - box.min.y);
   const headC = box.getCenter(new THREE.Vector3());
   const eyeR0 = meta.eye_radius;
-
-  // the bone: one material per (texture, vertex colour) the meshes need
-  const materials = new Map<string, THREE.MeshStandardMaterial>();
   const disposables: { dispose(): void }[] = [];
-  const boneFor = (mesh: THREE.Mesh): THREE.MeshStandardMaterial => {
+
+  // the bone: one material per (texture, normal map, vertex colour) the meshes need, in the look
+  const look: LichLook = opts.look ?? "paint";
+  const ramp = look === "paint" ? paintRamp() : null;
+  if (ramp) disposables.push(ramp);
+  const materials = new Map<string, THREE.MeshStandardMaterial | THREE.MeshToonMaterial>();
+  const boneFor = (mesh: THREE.Mesh) => {
     const old = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial | undefined;
     const map = useTexture && old && "map" in old ? old.map : null;
+    const normalMap = look === "real" && useTexture && old && "normalMap" in old ? old.normalMap : null;
     const vc = !!mesh.geometry.getAttribute("color");
-    const key = `${map ? map.uuid : "-"}:${vc}`;
+    // a dense mesh reads smooth in the real look; the paint look keeps its facets
+    const tris = (mesh.geometry.index ? mesh.geometry.index.count : mesh.geometry.getAttribute("position").count) / 3;
+    const smooth = look === "real" && tris >= DENSE_TRIS;
+    if (smooth && !mesh.geometry.getAttribute("normal")) mesh.geometry.computeVertexNormals();
+    const key = `${map ? map.uuid : "-"}:${normalMap ? normalMap.uuid : "-"}:${vc}:${smooth}`;
     let m = materials.get(key);
     if (!m) {
-      m = new THREE.MeshStandardMaterial({ color: map ? 0xf4ecdc : BONE, map, vertexColors: vc, roughness: 0.88, metalness: 0, flatShading: true, envMap: env, envMapIntensity: 0.18 });
+      m =
+        look === "paint"
+          ? paintMaterial(map, vc, ramp!, true)
+          : new THREE.MeshStandardMaterial({
+              color: map ? 0xf4ecdc : BONE,
+              map,
+              normalMap,
+              vertexColors: vc,
+              roughness: 0.8,
+              metalness: 0,
+              flatShading: !smooth,
+              envMap: env,
+              envMapIntensity: 0.25,
+            });
       materials.set(key, m);
     }
     return m;
   };
   const oldMaterials = new Set<THREE.Material>();
-  for (const part of [skull, jaw]) {
+  for (const part of collar ? [skull, jaw, collar] : [skull, jaw]) {
     part.traverse((c) => {
       const mesh = c as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -256,7 +339,7 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
     });
   }
   // the old materials go, but not the textures the new ones still use
-  const keptMaps = new Set([...materials.values()].map((m) => m.map).filter(Boolean));
+  const keptMaps = new Set([...materials.values()].flatMap((m) => [m.map, "normalMap" in m ? m.normalMap : null]).filter(Boolean));
   for (const m of oldMaterials) {
     for (const v of Object.values(m)) if (v instanceof THREE.Texture && !keptMaps.has(v)) v.dispose();
     m.dispose();
@@ -313,13 +396,14 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
   });
 
   // ---- lights on the bone: a warm key from the upper left, a cool fill, a teal rim from behind
-  const hemi = new THREE.HemisphereLight(0x8d9099, 0x16120e, 0.35);
-  const key = new THREE.DirectionalLight(0xffe7c8, 1.7);
-  key.position.set(-1.5, 2.1, 1.5);
-  const fill = new THREE.DirectionalLight(0x7090a8, 0.4);
+  const painted = look === "paint";
+  const hemi = painted ? new THREE.HemisphereLight(0x6f86b0, 0x1a1a2a, 0.5) : new THREE.HemisphereLight(0x8d9099, 0x16120e, 0.35);
+  const key = new THREE.DirectionalLight(painted ? 0xffe0b0 : 0xffe7c8, painted ? 3.2 : 1.7);
+  key.position.set(painted ? -0.7 : -1.5, painted ? 2.5 : 2.1, painted ? 1.8 : 1.5);
+  const fill = new THREE.DirectionalLight(0x7090a8, painted ? 0.25 : 0.4);
   fill.position.set(1.6, 0.1, 1.2);
-  const rim = new THREE.DirectionalLight(0x48ffd8, 0.9);
-  rim.position.set(0.3, 1.2, -2.0);
+  const rim = new THREE.DirectionalLight(0x48ffd8, painted ? 0.7 : 0.9);
+  rim.position.set(painted ? -1.2 : 0.3, 1.2, -2.0);
   scene.add(hemi, key, fill, rim);
 
   // ---- the painted torso: a card filling the portrait's frame at the head's depth, drawn first
@@ -384,8 +468,15 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
     crownClock += dt * f.float;
 
     pivot.rotation.set(f.pitch, f.yaw, f.roll);
-    pivot.position.set(neckRest.x, neckRest.y + 0.02 * f.lean * headH, neckRest.z + 0.12 * f.lean * headH);
-    pivot.scale.setScalar(1 + 0.05 * f.lean);
+    const lean = leanShift(f.lean, headH);
+    pivot.position.set(neckRest.x, neckRest.y + lean.y, neckRest.z + lean.z);
+    pivot.scale.setScalar(lean.scale);
+    if (collar && collarRest) {
+      const c = collarMotion(f, headH);
+      collar.rotation.set(c.pitch, c.yaw, 0);
+      collar.position.set(collarRest.x, collarRest.y + c.y, collarRest.z + c.z);
+      collar.scale.setScalar(c.scale);
+    }
     jaw.quaternion.copy(jawRest).multiply(jawQ.setFromAxisAngle(xAxis, f.jaw));
     pivot.updateMatrixWorld(true);
 
@@ -447,6 +538,7 @@ export function createLichRenderer(canvas: HTMLCanvasElement, asset: LichAsset, 
       });
       for (const m of materials.values()) {
         m.map?.dispose();
+        if ("normalMap" in m) m.normalMap?.dispose();
         m.dispose();
       }
       for (const d of disposables) d.dispose();

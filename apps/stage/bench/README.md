@@ -22,7 +22,7 @@ each measures the whole machine.
 
 ```
 node bench/run-all.mjs --repeat 3 [--shadowrunr <exe> --voice-config <toml> --rounds 3] [--skip clips]
-node bench/frames.mjs  [--faces cut,depth,relit,lich3d] [--sizes 440,1024] [--repeat 3] [--build]
+node bench/frames.mjs  [--faces cut,depth,relit,lich3d,lich3d-real] [--sizes 440,1024] [--repeat 3] [--build]
 node bench/process.mjs [--sizes 440,1024] [--seconds 60]
 node bench/ready.mjs   [--size 440] [--repeat 5]
 node bench/voice.mjs   --shadowrunr <exe> --voice-config <toml> [--rounds 2]

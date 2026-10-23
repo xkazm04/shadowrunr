@@ -11,10 +11,11 @@ import { createDriver, type Driver, type Pose } from "../driver";
 import { createLookFollower } from "../depth/look";
 import { PERFORMANCE_REST, type PerformanceCue, type PerformanceDriver, type PerformancePose } from "../performance";
 import { loadLichAsset } from "./asset";
-import { BROW_PITCH_DEG, emptyFrame, lichFrame, PITCH_MAX_DEG, YAW_MAX_DEG } from "./channels";
-import { checkLichMeta, chooseRenderer, chooseSkull, LICH_NODES, missingNodes, PLACEHOLDER_META } from "./contract";
+import { BROW_PITCH_DEG, COLLAR_PITCH, COLLAR_YAW, collarMotion, emptyFrame, leanShift, lichFrame, PITCH_MAX_DEG, YAW_MAX_DEG } from "./channels";
+import { checkLichMeta, chooseRenderer, chooseSkull, LICH_NODES, LICH_OPTIONAL_NODES, missingNodes, PLACEHOLDER_META } from "./contract";
 import { CROWN, crystalAt, crystalCrown } from "./crystals";
 import { lichDriver } from "./index";
+import { paintRamp } from "./renderer";
 import { buildPlaceholderSkull } from "./skull";
 
 const DEG = Math.PI / 180;
@@ -149,6 +150,57 @@ describe("the channel mapping", () => {
   it("survives NaN anywhere without a NaN out", () => {
     const f = lichFrame(pose({ yaw: NaN, open: NaN, blinkL: NaN, voice: NaN }), perf({ eyeLight: NaN, brow: NaN, flare: NaN }), { yaw: NaN, pitch: NaN, eyeX: NaN, eyeY: NaN }, 0.3, emptyFrame());
     for (const v of Object.values(f)) expect(Number.isFinite(v)).toBe(true);
+  });
+});
+
+describe("the collar", () => {
+  it("is optional: the required nodes do not name it", () => {
+    expect(LICH_OPTIONAL_NODES).toEqual(["collar"]);
+    expect((LICH_NODES as readonly string[]).includes("collar")).toBe(false);
+  });
+
+  it("turns yaw x0.25 and pitch x0.15 and does not move at rest", () => {
+    const rest = collarMotion(emptyFrame(), 1);
+    expect(rest).toEqual({ yaw: 0, pitch: 0, y: 0, z: 0, scale: 1 });
+    const m = collarMotion({ yaw: 0.6, pitch: -0.3, lean: 0 }, 1);
+    expect(m.yaw).toBeCloseTo(0.6 * COLLAR_YAW, 9);
+    expect(m.pitch).toBeCloseTo(-0.3 * COLLAR_PITCH, 9);
+    expect(COLLAR_YAW).toBe(0.25);
+    expect(COLLAR_PITCH).toBe(0.15);
+  });
+
+  it("follows the head's lean in full, scaled by the head's height", () => {
+    const m = collarMotion({ yaw: 0, pitch: 0, lean: 1 }, 1.4);
+    expect(m).toMatchObject({ yaw: 0, pitch: 0 });
+    expect(m.y).toBeCloseTo(0.02 * 1.4, 9);
+    expect(m.z).toBeCloseTo(0.12 * 1.4, 9);
+    expect(m.scale).toBeCloseTo(1.05, 9);
+    expect({ y: m.y, z: m.z, scale: m.scale }).toEqual(leanShift(1, 1.4));
+    expect(collarMotion({ yaw: 0, pitch: 0, lean: -1 }, 1).z).toBeLessThan(0);
+  });
+
+  it("stays inside a fraction of the head's own limits", () => {
+    const f = lichFrame(pose({ yaw: 90, pitch: 90 }), PERFORMANCE_REST, null, 0.3);
+    const m = collarMotion(f, 1);
+    expect(m.yaw).toBeCloseTo(YAW_MAX_DEG * DEG * COLLAR_YAW, 9);
+    expect(m.pitch).toBeCloseTo(PITCH_MAX_DEG * DEG * COLLAR_PITCH, 9);
+  });
+});
+
+describe("the paint ramp", () => {
+  it("rises monotonically in three soft steps from deep shadow to lit", () => {
+    const t = paintRamp();
+    const px = Array.from((t.image.data as Uint8Array).filter((_, i) => i % 4 === 0));
+    for (let i = 1; i < px.length; i++) expect(px[i]!).toBeGreaterThanOrEqual(px[i - 1]!);
+    expect(px[0]!).toBeLessThan(40);
+    expect(px.at(-1)!).toBe(255);
+    // plateaus: shadow, mid and lit each hold for several texels
+    const holds = (lo: number, hi: number) => px.filter((v) => v >= lo && v <= hi).length;
+    expect(holds(0, 40)).toBeGreaterThan(20);
+    expect(holds(100, 140)).toBeGreaterThan(8);
+    expect(holds(240, 255)).toBeGreaterThan(20);
+    // soft: no jump between neighbours larger than a third of the range
+    for (let i = 1; i < px.length; i++) expect(px[i]! - px[i - 1]!).toBeLessThan(85);
   });
 });
 

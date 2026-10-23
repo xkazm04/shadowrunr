@@ -105,10 +105,15 @@ async function start({ face, size, rig, bloom, manual = true }) {
 
   const mc = manual ? manualClock() : null;
   const sources = benchSources(mc ? mc.clock : undefined);
-  const startFace = await loadVariant(face);
+  // `lich3d-real` is the lich3d face in its real look, `lich3d` / `lich3d-paint` in its painted one
+  const variant = face.startsWith("lich3d") ? "lich3d" : face;
+  const startFace = await loadVariant(variant);
   const opts = { root, canvas, rigBase: rig, source: sources.face, size, look: sources.look, performance: sources.performance };
   if (mc) opts.clock = mc.clock;
-  if (face === "lich3d" && bloom !== undefined) opts.bloom = bloom;
+  if (variant === "lich3d") {
+    if (bloom !== undefined) opts.bloom = bloom;
+    opts.lichLook = face === "lich3d-real" ? "real" : "paint";
+  }
   const saidBefore = said.length;
   const t0 = performance.now();
   const handle = startFace(opts);

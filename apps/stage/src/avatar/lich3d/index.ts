@@ -31,7 +31,8 @@ export type LichFaceOptions = StartFaceOptions & {
   /** Overrides the `?lichbloom=` / `?lichtex=` / `?lichlook=` toggles (the bench). */
   bloom?: boolean;
   texture?: boolean;
-  look?: LichLook;
+  /** The bone look (not `look`: that is the gaze source of StartFaceOptions). */
+  lichLook?: LichLook;
 };
 
 const AHEAD: Look = Object.freeze({ x: 0, y: 0 });
@@ -158,7 +159,7 @@ export function startFace(opts: LichFaceOptions): FaceHandle {
   const rendererOptions: LichRendererOptions = {
     bloom: opts.bloom ?? toggle("lichbloom"),
     texture: opts.texture ?? toggle("lichtex"),
-    look: opts.look ?? lookParam(),
+    look: opts.lichLook ?? lookParam(),
   };
 
   Promise.all([loadLichAsset(opts.rigBase), loadBackdrop(opts.rigBase)])

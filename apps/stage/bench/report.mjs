@@ -45,7 +45,7 @@ for (const label of labels) {
   const runs = (frames?.runs ?? []).filter((r) => configLabel(r) === label);
   const p = (proc?.rows ?? []).find((r) => r.label === label);
   const first = runs[0] ?? p;
-  const face = `${first.face}${first.bloom === false ? " (no bloom)" : first.face === "lich3d" ? " (bloom)" : ""}`;
+  const face = `${first.face}${first.bloom === false ? " (no bloom)" : first.face.startsWith("lich3d") ? " (bloom)" : ""}`;
   const cpu = p?.cpuPctOfOneCore;
   lines.push(
     [

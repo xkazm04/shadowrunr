@@ -20,6 +20,8 @@
 // |                              | eye fire's shape (scowl = a narrow, wide slit; raised = tall)        |
 // | lean                         | the head comes toward the camera and grows a little (or pulls back)  |
 // | flare                        | bloom up, crystal veins pulse, eye fire spikes                       |
+// | (collar, if the GLB has one) | turns yaw x0.25 and pitch x0.15 about its pivot; `lean` moves it    |
+// |                              | with the head, in full                                               |
 // | history                      | ignored                                                              |
 
 import type { Pose } from "../driver";
@@ -115,4 +117,21 @@ export function lichFrame(pose: Pose, perf: PerformancePose, look: LichLook | nu
   out.flare = clamp(num(perf.flare), 0, 1);
   out.float = clamp(num(pose.activity), 0, 1);
   return out;
+}
+
+/** The collar's share of the head's yaw and pitch (it turns less: it is the shoulders). */
+export const COLLAR_YAW = 0.25;
+export const COLLAR_PITCH = 0.15;
+
+/** What `lean` does to the head about the neck: a lift, a push toward the camera and a swell. `headH` is the skull's height. */
+export function leanShift(lean: number, headH: number): { y: number; z: number; scale: number } {
+  return { y: 0.02 * lean * headH, z: 0.12 * lean * headH, scale: 1 + 0.05 * lean };
+}
+
+/**
+ * The collar's motion this frame, about its own pivot: a fraction of the head's yaw and pitch, and
+ * the head's whole `lean` shift. Radians, scene units.
+ */
+export function collarMotion(f: Pick<LichFrame, "yaw" | "pitch" | "lean">, headH: number): { yaw: number; pitch: number; y: number; z: number; scale: number } {
+  return { yaw: f.yaw * COLLAR_YAW, pitch: f.pitch * COLLAR_PITCH, ...leanShift(f.lean, headH) };
 }

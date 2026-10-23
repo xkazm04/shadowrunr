@@ -20,7 +20,7 @@ const configs = [];
 for (const face of s.faces) {
   for (const size of s.sizes) {
     configs.push({ face, size });
-    if (face === "lich3d") configs.push({ face, size, bloom: false });
+    if (face.startsWith("lich3d")) configs.push({ face, size, bloom: false });
   }
 }
 const label = (c) => `${c.face}-${c.size}${c.bloom === false ? "-nobloom" : ""}`;

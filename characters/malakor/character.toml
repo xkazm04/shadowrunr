@@ -44,7 +44,7 @@ fx = "light"
 
 [avatar]
 rig = "rig/m8.spec.json"
-face = "cut"
+face = "lich3d"
 
 # Rank titles as Malakor says them, lowest first (wire names in docs/spec/contract.md). The
 # ladder itself (weights, thresholds, `propose_min_rank`) is the engine default

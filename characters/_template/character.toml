@@ -111,9 +111,9 @@ disclosure = "Yes, I am an AI character, performed by a machine. The show goes o
 
 [avatar]
 # ? Which renderer draws the face on the stage (the daemon's [stage] avatar when absent)?
-# options: "glow" | "cut" | "depth"
-# default: "cut"
-# face = "cut"
+# options: "glow" | "cut" | "depth" | "relit" | "lich3d"
+# default: "lich3d"
+# face = "lich3d"
 
 # ? The rig spec, relative to the package.
 # options: free text (a path inside the package)

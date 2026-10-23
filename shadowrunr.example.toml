@@ -176,8 +176,8 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # The stage the daemon opens: the sandbox's stage URL and the OBS browser source
 # (docs/guide/recording.md). Optional.
 # [stage]
-# avatar = "cut"   # the face renderer, the stage's ?avatar=: "cut" (default), "glow", "depth",
-#                  or the avatar-3d prototypes "relit" and "lich3d"
+# avatar = "lich3d"   # the face renderer, the stage's ?avatar=: "lich3d" (default: the 3D skull,
+#                     an opaque black square for now), "cut", "glow", "depth" or "relit"
 
 # The chat moderator: a second character that guards Twitch chat from its own bot account
 # (docs/guide/moderator.md). It starts in shadow mode (decide and log only); its rules, mode
