@@ -535,6 +535,8 @@ pub(crate) fn prepare_in(
     if spec.duration_s == 0 {
         return Err(SimError::Spec("duration_s must be positive".into()));
     }
+    // A moderator package never hosts a show (sim, sandbox or stream).
+    shadowrunr_brain::require_host_dir(&character_dir(opts, &spec.character))?;
     let run_dir = run_dir.to_path_buf();
     std::fs::create_dir_all(&run_dir)
         .map_err(|e| SimError::Io(format!("{}: {e}", run_dir.display())))?;
@@ -2897,6 +2899,28 @@ pub(crate) mod tests {
         for (knob, o) in variants {
             assert_ne!(base(&o), h0, "{knob}");
         }
+    }
+
+    #[test]
+    fn a_moderator_package_cannot_start_a_show() {
+        let tmp = tempfile::tempdir().unwrap();
+        let opts = test_opts(&tmp.path().join("sim"));
+        let s = SimRunSpec {
+            character: "moderator".into(),
+            tone_variant: String::new(),
+            ..spec("mod-host", ModelTier::Haiku, 3, 60)
+        };
+        let out = tmp.path().join("out");
+        let engine: Arc<dyn Engine> = Arc::new(shadowrunr_engine::ScriptedEngine);
+        let err = prepare(&s, &out, engine, &opts)
+            .err()
+            .expect("refused")
+            .to_string();
+        assert!(err.contains("cannot host a show"), "{err}");
+        assert!(
+            !out.join("mod-host").exists(),
+            "refused before any run file"
+        );
     }
 
     #[test]

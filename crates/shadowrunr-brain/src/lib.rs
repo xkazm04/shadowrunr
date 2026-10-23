@@ -61,8 +61,9 @@ use shadowrunr_types::{
 };
 
 pub use character::{
-    load_character, load_character_with, parse_manifest, validate_character, CharacterPackage,
-    Foil, LineBank, PackageIssue, RankTitles, Situation, SituationBank, Stimulus,
+    is_moderator, load_character, load_character_with, parse_manifest, require_host,
+    require_host_dir, validate_character, CharacterPackage, Foil, LineBank, PackageIssue,
+    RankTitles, Situation, SituationBank, Stimulus,
 };
 pub use fleet::{FleetMode, FleetProbe};
 pub use memory::{
@@ -320,6 +321,8 @@ impl Brain {
         engine: Arc<dyn Engine>,
         tuning: BrainTuning,
     ) -> Result<Self, BrainError> {
+        // A moderator package never hosts a show.
+        character::require_host(&cfg.character.manifest)?;
         let store = MemoryStore::open(&cfg.memory_dir)?;
         let pkg = &cfg.character;
         let policy = Policy::load(&tuning.policy, &pkg.dir, &tuning.platforms)?

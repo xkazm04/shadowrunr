@@ -35,6 +35,19 @@ pub fn validate(dir: &Path) -> Vec<CharacterIssue> {
             severity: IssueSeverity::Error,
         })
         .collect();
+    // A moderator package carries its fallback line in `moderator.toml` (no `[lines]` key fits).
+    if out.is_empty() && is_moderator_package(dir) {
+        if let Err(e) = crate::moderator::voice::read_fallback(dir) {
+            let (file, rest) = e.split_once(": ").unwrap_or(("", e.as_str()));
+            let (key, reason) = rest.split_once(": ").unwrap_or(("", rest));
+            out.push(CharacterIssue {
+                file: file.to_string(),
+                key: key.to_string(),
+                reason: reason.to_string(),
+                severity: IssueSeverity::Error,
+            });
+        }
+    }
     for (rel, path) in text_files(dir) {
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
@@ -55,6 +68,14 @@ pub fn validate(dir: &Path) -> Vec<CharacterIssue> {
         }
     }
     out
+}
+
+/// Whether the package at `dir` says `role = "moderator"`.
+fn is_moderator_package(dir: &Path) -> bool {
+    std::fs::read_to_string(dir.join("character.toml"))
+        .ok()
+        .and_then(|t| parse_manifest(&t.replace("\r\n", "\n")).ok())
+        .is_some_and(|(m, _, _)| shadowrunr_brain::is_moderator(&m))
 }
 
 /// Whether `issues` holds an error (a warning alone passes).
@@ -563,6 +584,37 @@ mod tests {
         assert!(validate(&keeper()).is_empty(), "{:#?}", validate(&keeper()));
         let malakor = repo().join("characters").join("malakor");
         assert!(validate(&malakor).is_empty(), "{:#?}", validate(&malakor));
+        let moderator = repo().join("characters").join("moderator");
+        assert!(
+            validate(&moderator).is_empty(),
+            "{:#?}",
+            validate(&moderator)
+        );
+    }
+
+    #[test]
+    fn a_moderator_package_needs_its_fallback_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("moderator");
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = repo().join("characters").join("moderator");
+        for f in ["character.toml", "constitution.md", "bible.md"] {
+            std::fs::copy(src.join(f), dir.join(f)).unwrap();
+        }
+        let issues = validate(&dir);
+        assert!(has_errors(&issues), "{issues:#?}");
+        assert!(
+            issues.iter().any(|i| i.file == "moderator.toml"),
+            "{issues:#?}"
+        );
+        std::fs::write(dir.join("moderator.toml"), "fallback = \"{who} out\"\n").unwrap();
+        let issues = validate(&dir);
+        assert!(
+            issues.iter().any(|i| i.file == "moderator.toml"
+                && i.key == "fallback"
+                && i.reason.contains("who")),
+            "{issues:#?}"
+        );
     }
 
     #[test]

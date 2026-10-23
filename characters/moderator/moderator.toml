@@ -1,0 +1,7 @@
+# The moderator's model-free lines (read by the daemon's moderator voice; `[lines]` in
+# character.toml has no key for them). Placeholders: {viewer} is the actioned viewer's display
+# name, {rule} is the name of the rule they broke. Nothing else is filled.
+
+# Posted when the model fails, times out or writes a line the output gate blocks. One line,
+# under 200 characters with the names filled, no emojis.
+fallback = "{viewer}, your message is struck from the record under the rule: {rule}. The Warden has entered it in the ledger."

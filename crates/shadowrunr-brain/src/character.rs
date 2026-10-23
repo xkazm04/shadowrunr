@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 pub use shadowrunr_types::catalog::{Situation, Stimulus};
 use shadowrunr_types::character::{
-    unknown_placeholders, CharacterLines, CharacterManifest, Persona, Tuning, PLACEHOLDERS,
+    unknown_placeholders, CharacterLines, CharacterManifest, CharacterRole, Persona, Tuning,
+    PLACEHOLDERS,
 };
 use shadowrunr_types::{Rank, SegmentId};
 
@@ -556,6 +557,37 @@ fn is_safe_id(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// Whether a manifest is a moderator package (`role = "moderator"`): it guards the platform
+/// chat, needs no tones, foils or segments, and never hosts a show.
+pub fn is_moderator(m: &CharacterManifest) -> bool {
+    m.role == Some(CharacterRole::Moderator)
+}
+
+/// Refuses a package that cannot host a show (`role = "moderator"`). Every show start (a sim
+/// run, a sandbox session, a stream) passes through this before it builds a brain.
+pub fn require_host(m: &CharacterManifest) -> Result<(), BrainError> {
+    if is_moderator(m) {
+        return Err(BrainError::Package(format!(
+            "character {:?} is a moderator package (role = \"moderator\"): it guards chat and \
+             cannot host a show; start the show with a host character",
+            m.id
+        )));
+    }
+    Ok(())
+}
+
+/// [`require_host`] for the package at `dir`, read from its `character.toml`. A manifest that
+/// cannot be read or parsed passes: the package's own load reports that error.
+pub fn require_host_dir(dir: &Path) -> Result<(), BrainError> {
+    let Ok(text) = fs::read_to_string(dir.join(MANIFEST)) else {
+        return Ok(());
+    };
+    match parse_manifest(&text.replace("\r\n", "\n")) {
+        Ok((m, _, _)) => require_host(&m),
+        Err(_) => Ok(()),
+    }
+}
+
 /// Load `characters/<id>/` with the given tone variant. An empty `tone_variant` selects the
 /// package's `default_tone`. A missing tone file is an error. The operator's rule override is
 /// found by the repo convention ([`RulesOverride::Auto`]).
@@ -588,13 +620,17 @@ pub fn load_character_with(
         )));
     }
     let tone_path = dir.join("tones").join(format!("{tone}.md"));
-    if !tone_path.is_file() {
+    // A moderator package has no tones: its `default_tone` names none and no file is read.
+    let tone_text = if !tone_path.is_file() && is_moderator(&meta) {
+        String::new()
+    } else if !tone_path.is_file() {
         return Err(BrainError::Package(format!(
             "tone variant {tone:?} not found at {}",
             tone_path.display()
         )));
-    }
-    let tone_text = read(&tone_path)?;
+    } else {
+        read(&tone_path)?
+    };
 
     let bible_path = dir.join("bible.md");
     let bible = if bible_path.is_file() {
@@ -796,7 +832,8 @@ pub fn validate_character(dir: &Path) -> Vec<PackageIssue> {
         })
         .unwrap_or_default();
     tones.sort();
-    if !tones.contains(&meta.default_tone) {
+    // A moderator package needs no tones (it never hosts a show).
+    if !tones.contains(&meta.default_tone) && !is_moderator(&meta) {
         out.push(issue(
             MANIFEST,
             "default_tone",
@@ -940,6 +977,67 @@ mod tests {
             ),
             "{flat}"
         );
+    }
+
+    fn moderator_dir() -> PathBuf {
+        malakor_dir().join("..").join("moderator")
+    }
+
+    #[test]
+    fn a_moderator_package_validates_without_tones_foils_or_segments() {
+        let dir = moderator_dir();
+        assert!(!dir.join("tones").exists() && !dir.join("foils").exists());
+        let issues = validate_character(&dir);
+        assert!(issues.is_empty(), "{issues:?}");
+        let pkg = load_character_with(&dir, "", &RulesOverride::None).unwrap();
+        assert!(is_moderator(&pkg.manifest));
+        assert!(pkg.tone_text.is_empty() && pkg.foils.is_empty() && pkg.rules.is_empty());
+        assert!(pkg.manifest.rails.is_empty());
+        assert_eq!(pkg.persona.name, "Warden");
+        assert_eq!(pkg.persona.patron, "Lord of the Darkness");
+        assert!(pkg.persona.disclosure.contains("AI"));
+        // A host without its tone file is still an error.
+        let tmp = tempfile::tempdir().unwrap();
+        copy_tree(&dir, tmp.path());
+        let text = fs::read_to_string(tmp.path().join(MANIFEST))
+            .unwrap()
+            .replace("\r\n", "\n")
+            .replace("role = \"moderator\"\n", "");
+        fs::write(tmp.path().join(MANIFEST), text).unwrap();
+        assert!(validate_character(tmp.path())
+            .iter()
+            .any(|i| i.key == "default_tone"));
+        assert!(load_character_with(tmp.path(), "", &RulesOverride::None).is_err());
+    }
+
+    #[test]
+    fn a_moderator_package_is_refused_as_a_show_host() {
+        let pkg = load_character_with(&moderator_dir(), "", &RulesOverride::None).unwrap();
+        let err = require_host(&pkg.manifest).unwrap_err().to_string();
+        assert!(
+            err.contains("moderator") && err.contains("cannot host a show"),
+            "{err}"
+        );
+        assert!(require_host_dir(&moderator_dir()).is_err());
+        assert!(require_host_dir(&malakor_dir()).is_ok());
+        assert!(require_host_dir(&keeper_dir()).is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_brain_never_starts_on_a_moderator_package() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = crate::BrainConfig {
+            character: load_character_with(&moderator_dir(), "", &RulesOverride::None).unwrap(),
+            memory_dir: tmp.path().to_path_buf(),
+            stream_id: "s".into(),
+            core_tier: shadowrunr_types::ModelTier::Haiku,
+            pool_size: 1,
+        };
+        let err = crate::Brain::new(cfg, std::sync::Arc::new(shadowrunr_engine::ScriptedEngine))
+            .await
+            .err()
+            .expect("refused");
+        assert!(err.to_string().contains("cannot host a show"), "{err}");
     }
 
     #[test]
