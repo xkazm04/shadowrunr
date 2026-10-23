@@ -23,11 +23,13 @@ pub fn route(role: Role) -> (ModelTier, Effort, u64) {
         Role::Reconciler => (ModelTier::Opus, Effort::High, 600_000),
         Role::Clipper => (ModelTier::Haiku, Effort::Low, 60_000),
         Role::Tagger => (ModelTier::Haiku, Effort::Low, 60_000),
+        Role::ModClassifier => (ModelTier::Haiku, Effort::Low, 15_000),
+        Role::ModVoice => (ModelTier::Haiku, Effort::Low, 15_000),
     }
 }
 
 /// Every role, in contract order (for tables such as the daemon's `engine.status`).
-pub const ROLES: [Role; 10] = [
+pub const ROLES: [Role; 12] = [
     Role::CoreThread,
     Role::ChatPicker,
     Role::Planner,
@@ -38,6 +40,8 @@ pub const ROLES: [Role; 10] = [
     Role::Reconciler,
     Role::Clipper,
     Role::Tagger,
+    Role::ModClassifier,
+    Role::ModVoice,
 ];
 
 /// One row of the route override table. Absent fields keep the default.
@@ -266,7 +270,7 @@ mod tests {
         ] {
             assert_eq!(FallbackDriver::parse(d.name()), Some(d));
         }
-        assert_eq!(ROLES.len(), 10);
+        assert_eq!(ROLES.len(), 12);
     }
 
     #[test]

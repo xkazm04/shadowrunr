@@ -29,6 +29,9 @@ pub struct CharacterManifest {
     pub id: String,
     /// Display name, e.g. "Arch-Lich Malakor".
     pub name: String,
+    /// What the character does. Absent: a show host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<CharacterRole>,
     /// One line under the name in the operator app.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tagline: Option<String>,
@@ -68,6 +71,17 @@ pub struct CharacterManifest {
     /// Per-segment flavour appended to the segment's prompts (placeholders filled).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub segments: BTreeMap<SegmentId, SegmentFlavour>,
+}
+
+/// `role`: what a character package is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CharacterRole {
+    /// Hosts the show (the default).
+    #[default]
+    Host,
+    /// Guards the platform chat from its own bot account; needs no tones or segments.
+    Moderator,
 }
 
 /// `[identity]`: the words the engine's own text uses for this character. When the table is

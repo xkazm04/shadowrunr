@@ -414,6 +414,21 @@ pub async fn dispatch(state: &Arc<AppState>, req: RpcRequest) -> Result<Value, R
         "voice.verify" => ok(crate::voice::settings::verify(state, params(req.params)?).await?),
         "voice.preview" => ok(crate::voice::settings::preview(state, params(req.params)?).await?),
         "voice.bench" => ok(crate::voice::settings::bench(state, params(req.params)?).await?),
+        "moderator.status" => ok(crate::moderator::rpc_status(state).await?),
+        "moderator.rules.list" => ok(crate::moderator::rpc_rules_list(state).await?),
+        "moderator.rules.set" => {
+            ok(crate::moderator::rpc_rules_set(state, params(req.params)?).await?)
+        }
+        "moderator.rules.test" => {
+            ok(crate::moderator::rpc_rules_test(state, params(req.params)?).await?)
+        }
+        "moderator.mode.set" => {
+            ok(crate::moderator::rpc_mode_set(state, params(req.params)?).await?)
+        }
+        "moderator.log" => ok(crate::moderator::rpc_log(state, params(req.params)?).await?),
+        "moderator.unban" => ok(crate::moderator::rpc_unban(state, params(req.params)?).await?),
+        "twitch.connect" => ok(crate::moderator::rpc_twitch_connect(state).await?),
+        "twitch.disconnect" => ok(crate::moderator::rpc_twitch_disconnect(state).await?),
         other => Err(RpcError::new(
             ErrorCode::MethodNotFound,
             format!("unknown method {other:?}"),

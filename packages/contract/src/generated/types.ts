@@ -218,7 +218,9 @@ export type Role =
   | "judge"
   | "reconciler"
   | "clipper"
-  | "tagger";
+  | "tagger"
+  | "mod_classifier"
+  | "mod_voice";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "ModelTier".
@@ -229,6 +231,44 @@ export type ModelTier = "haiku" | "sonnet" | "opus";
  * via the `definition` "EngineKind".
  */
 export type EngineKind = ("claude_cli" | "anthropic_api" | "codex_cli" | "agy_cli" | "local_gemma") | "scripted";
+/**
+ * One line of `decisions.jsonl`, and one row of `moderator.log`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModLogEntry".
+ */
+export type ModLogEntry = ModDecision | ModUnban;
+/**
+ * What the moderator does to a message's author.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModActionKind".
+ */
+export type ModActionKind = "delete" | "timeout" | "ban";
+/**
+ * Whether decisions are carried out.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModMode".
+ */
+export type ModMode = "shadow" | "armed";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Platform".
+ */
+export type Platform = "twitch" | "youtube" | "kick" | "sim";
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PlatformState".
+ */
+export type PlatformState = "disconnected" | "connecting" | "connected" | "error";
+/**
+ * How a rule matches.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModRuleKind".
+ */
+export type ModRuleKind = "pattern" | "plain";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "OptionKind".
@@ -505,11 +545,6 @@ export type Command =
       cmd: "vote";
       option: string;
     };
-/**
- * This interface was referenced by `RpcMethods`'s JSON-Schema
- * via the `definition` "Platform".
- */
-export type Platform = "twitch" | "youtube" | "kick" | "sim";
 /**
  * The closed emotion set a cue may name.
  *
@@ -799,6 +834,13 @@ export type IneligibleReason = "hard_fail" | "unmeasured";
  */
 export type VoiceKeyState = "not_needed" | "missing" | "set" | "verified" | "rejected";
 /**
+ * `role`: what a character package is for.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "CharacterRole".
+ */
+export type CharacterRole = "host" | "moderator";
+/**
  * An owner act on a candidate; [`ClipCandidate::act_block`] says when it is allowed.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -1066,6 +1108,34 @@ export interface RpcMethods {
     params: LordChatParams;
     result: LordChatReply;
   };
+  "moderator.log": {
+    params: ModLogParams;
+    result: ModLog;
+  };
+  "moderator.mode.set": {
+    params: ModModeSetParams;
+    result: ModeratorStatus;
+  };
+  "moderator.rules.list": {
+    params: EmptyParams;
+    result: ModRules;
+  };
+  "moderator.rules.set": {
+    params: ModRulesSetParams;
+    result: ModRules;
+  };
+  "moderator.rules.test": {
+    params: ModRulesTestParams;
+    result: ModRulesTestResult;
+  };
+  "moderator.status": {
+    params: EmptyParams;
+    result: ModeratorStatus;
+  };
+  "moderator.unban": {
+    params: ModUnbanParams;
+    result: ModUnban;
+  };
   "plan.choose": {
     params: PlanChooseParams;
     result: NextStreamPlan;
@@ -1229,6 +1299,14 @@ export interface RpcMethods {
   "tournaments.page": {
     params: TournamentsPageParams;
     result: TournamentsPage;
+  };
+  "twitch.connect": {
+    params: EmptyParams;
+    result: TwitchConnect;
+  };
+  "twitch.disconnect": {
+    params: EmptyParams;
+    result: ModeratorStatus;
   };
   "voice.bench": {
     params: VoiceBenchParams;
@@ -2751,6 +2829,206 @@ export interface LordChatParams {
 export interface LordChatReply {
   directives_added: Directive[];
   reply: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModLogParams".
+ */
+export interface ModLogParams {
+  /**
+   * Newest first; default 100.
+   */
+  limit?: number;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModLog".
+ */
+export interface ModLog {
+  /**
+   * Newest first.
+   */
+  entries: ModLogEntry[];
+}
+/**
+ * One decision of the moderation lane.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModDecision".
+ */
+export interface ModDecision {
+  action: ModActionKind;
+  /**
+   * Why the platform call failed.
+   */
+  error?: string;
+  /**
+   * The platform call succeeded (always false in shadow mode and for `rules.test`).
+   */
+  executed: boolean;
+  id: string;
+  /**
+   * The moderator's chat line for this decision (posted when armed, logged in shadow).
+   */
+  line?: string;
+  message_id: string;
+  mode: ModMode;
+  platform: Platform;
+  rule_id: string;
+  timeout_s?: number;
+  ts_ms: number;
+  viewer_id: string;
+  viewer_name: string;
+}
+/**
+ * An unban, appended to the same log.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModUnban".
+ */
+export interface ModUnban {
+  error?: string;
+  executed: boolean;
+  platform: Platform;
+  ts_ms: number;
+  viewer_id: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModModeSetParams".
+ */
+export interface ModModeSetParams {
+  mode: ModMode;
+}
+/**
+ * `moderator.status`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModeratorStatus".
+ */
+export interface ModeratorStatus {
+  /**
+   * The moderator character's package id (`[moderator] character`).
+   */
+  character: string;
+  counts: ModCounts;
+  mode: ModMode;
+  platforms: PlatformStatus[];
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModCounts".
+ */
+export interface ModCounts {
+  decisions: number;
+  executed: number;
+}
+/**
+ * A chat platform connection as the moderator sees it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "PlatformStatus".
+ */
+export interface PlatformStatus {
+  /**
+   * The bot account's login, once known.
+   */
+  bot_login?: string;
+  /**
+   * The broadcaster channel the bot moderates.
+   */
+  channel?: string;
+  /**
+   * Why it is disconnected or in error ("no client_id configured").
+   */
+  detail?: string;
+  platform: Platform;
+  state: PlatformState;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModRules".
+ */
+export interface ModRules {
+  rules: ModRule[];
+}
+/**
+ * One operator rule. `pattern` is required for `kind = pattern`, `text` for `kind = plain`;
+ * `timeout_s` is required when `action = timeout`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModRule".
+ */
+export interface ModRule {
+  action: ModActionKind;
+  enabled: boolean;
+  /**
+   * Stable id, `[a-z0-9-]`.
+   */
+  id: string;
+  kind: ModRuleKind;
+  /**
+   * Short human name; the moderator's chat line names this, never the message text.
+   */
+  name: string;
+  pattern?: string;
+  strikes?: ModStrikes;
+  text?: string;
+  timeout_s?: number;
+}
+/**
+ * Escalation: after `count` hits of the same rule by the same viewer within `window_s`, the
+ * action becomes `then` (with `then_timeout_s` when `then` is a timeout).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModStrikes".
+ */
+export interface ModStrikes {
+  count: number;
+  then: ModActionKind;
+  then_timeout_s?: number;
+  window_s: number;
+}
+/**
+ * `moderator.rules.set`: replaces the whole list atomically.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModRulesSetParams".
+ */
+export interface ModRulesSetParams {
+  rules: ModRule[];
+}
+/**
+ * `moderator.rules.test`: screens one sample message with no side effects.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModRulesTestParams".
+ */
+export interface ModRulesTestParams {
+  text: string;
+  viewer_name?: string;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModRulesTestResult".
+ */
+export interface ModRulesTestResult {
+  /**
+   * Empty when no rule matched.
+   */
+  decisions: ModDecision[];
+  /**
+   * The message was read as a self-disclosure: no rule acts on it (live-safety-rails).
+   */
+  disclosure: boolean;
+}
+/**
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ModUnbanParams".
+ */
+export interface ModUnbanParams {
+  platform: Platform;
+  viewer_id: string;
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -4852,6 +5130,17 @@ export interface TournamentsPage {
   next_cursor?: string;
 }
 /**
+ * `twitch.connect`: the device-code login the operator completes in a browser.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "TwitchConnect".
+ */
+export interface TwitchConnect {
+  expires_s: number;
+  user_code: string;
+  verification_uri: string;
+}
+/**
  * `voice.bench`: render `characters/<id>/voice/bench.toml`.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -5112,6 +5401,7 @@ export interface CharacterManifest {
    */
   rails?: string[];
   ranks?: CharacterRanks;
+  role?: CharacterRole;
   /**
    * Optional constitution rules (`rules/<id>.md`), on or off by default.
    */

@@ -792,6 +792,10 @@
           "$ref": "#/$defs/CharacterRanks",
           "description": "Rank titles, and overrides of the engine's rank ladder (`segments/data/ranks.toml`)."
         },
+        "role": {
+          "$ref": "#/$defs/CharacterRole",
+          "description": "What the character does. Absent: a show host."
+        },
         "rules": {
           "additionalProperties": {
             "type": "boolean"
@@ -910,6 +914,21 @@
         }
       },
       "type": "object"
+    },
+    "CharacterRole": {
+      "description": "`role`: what a character package is for.",
+      "oneOf": [
+        {
+          "const": "host",
+          "description": "Hosts the show (the default).",
+          "type": "string"
+        },
+        {
+          "const": "moderator",
+          "description": "Guards the platform chat from its own bot account; needs no tones or segments.",
+          "type": "string"
+        }
+      ]
     },
     "CharacterRuleInfo": {
       "description": "An optional rule with its text (`character.get`).",
@@ -5031,6 +5050,315 @@
         }
       ]
     },
+    "ModActionKind": {
+      "description": "What the moderator does to a message's author.",
+      "oneOf": [
+        {
+          "const": "delete",
+          "description": "Delete the message only.",
+          "type": "string"
+        },
+        {
+          "const": "timeout",
+          "description": "Delete the message and time the author out for `timeout_s`.",
+          "type": "string"
+        },
+        {
+          "const": "ban",
+          "description": "Delete the message and ban the author from the channel.",
+          "type": "string"
+        }
+      ]
+    },
+    "ModCounts": {
+      "properties": {
+        "decisions": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "executed": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "decisions",
+        "executed"
+      ],
+      "type": "object"
+    },
+    "ModDecision": {
+      "description": "One decision of the moderation lane.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ModActionKind",
+          "description": "The action after strike escalation."
+        },
+        "error": {
+          "description": "Why the platform call failed.",
+          "type": "string"
+        },
+        "executed": {
+          "description": "The platform call succeeded (always false in shadow mode and for `rules.test`).",
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "line": {
+          "description": "The moderator's chat line for this decision (posted when armed, logged in shadow).",
+          "type": "string"
+        },
+        "message_id": {
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/ModMode"
+        },
+        "platform": {
+          "$ref": "#/$defs/Platform"
+        },
+        "rule_id": {
+          "type": "string"
+        },
+        "timeout_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ts_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "viewer_id": {
+          "type": "string"
+        },
+        "viewer_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ts_ms",
+        "platform",
+        "viewer_id",
+        "viewer_name",
+        "message_id",
+        "rule_id",
+        "action",
+        "mode",
+        "executed"
+      ],
+      "type": "object"
+    },
+    "ModLog": {
+      "properties": {
+        "entries": {
+          "description": "Newest first.",
+          "items": {
+            "$ref": "#/$defs/ModLogEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "type": "object"
+    },
+    "ModLogEntry": {
+      "description": "One line of `decisions.jsonl`, and one row of `moderator.log`.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ModDecision",
+          "properties": {
+            "kind": {
+              "const": "decision",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ModUnban",
+          "properties": {
+            "kind": {
+              "const": "unban",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ModLogParams": {
+      "properties": {
+        "limit": {
+          "description": "Newest first; default 100.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ModMode": {
+      "description": "Whether decisions are carried out.",
+      "oneOf": [
+        {
+          "const": "shadow",
+          "description": "Decide and log (\"would have\"), act on nothing, post nothing. The default.",
+          "type": "string"
+        },
+        {
+          "const": "armed",
+          "description": "Carry decisions out on the platform and post the moderator's line.",
+          "type": "string"
+        }
+      ]
+    },
+    "ModModeSetParams": {
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/ModMode"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    "ModRule": {
+      "description": "One operator rule. `pattern` is required for `kind = pattern`, `text` for `kind = plain`;\n`timeout_s` is required when `action = timeout`.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ModActionKind"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "description": "Stable id, `[a-z0-9-]`.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ModRuleKind"
+        },
+        "name": {
+          "description": "Short human name; the moderator's chat line names this, never the message text.",
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "strikes": {
+          "$ref": "#/$defs/ModStrikes"
+        },
+        "text": {
+          "type": "string"
+        },
+        "timeout_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "action",
+        "enabled"
+      ],
+      "type": "object"
+    },
+    "ModRuleKind": {
+      "description": "How a rule matches.",
+      "oneOf": [
+        {
+          "const": "pattern",
+          "description": "`pattern` is a term or regex, matched on normalised text (instant, no model).",
+          "type": "string"
+        },
+        {
+          "const": "plain",
+          "description": "`text` is a plain-language rule a classifier model judges (\"no spoilers\").",
+          "type": "string"
+        }
+      ]
+    },
+    "ModRules": {
+      "properties": {
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/ModRule"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "type": "object"
+    },
+    "ModRulesSetParams": {
+      "description": "`moderator.rules.set`: replaces the whole list atomically.",
+      "properties": {
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/ModRule"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "type": "object"
+    },
+    "ModRulesTestParams": {
+      "description": "`moderator.rules.test`: screens one sample message with no side effects.",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "viewer_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "ModRulesTestResult": {
+      "properties": {
+        "decisions": {
+          "description": "Empty when no rule matched.",
+          "items": {
+            "$ref": "#/$defs/ModDecision"
+          },
+          "type": "array"
+        },
+        "disclosure": {
+          "description": "The message was read as a self-disclosure: no rule acts on it (live-safety-rails).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "decisions",
+        "disclosure"
+      ],
+      "type": "object"
+    },
     "ModStage": {
       "oneOf": [
         {
@@ -5044,6 +5372,78 @@
           "type": "string"
         }
       ]
+    },
+    "ModStrikes": {
+      "description": "Escalation: after `count` hits of the same rule by the same viewer within `window_s`, the\naction becomes `then` (with `then_timeout_s` when `then` is a timeout).",
+      "properties": {
+        "count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "then": {
+          "$ref": "#/$defs/ModActionKind"
+        },
+        "then_timeout_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "window_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "count",
+        "window_s",
+        "then"
+      ],
+      "type": "object"
+    },
+    "ModUnban": {
+      "description": "An unban, appended to the same log.",
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "executed": {
+          "type": "boolean"
+        },
+        "platform": {
+          "$ref": "#/$defs/Platform"
+        },
+        "ts_ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "viewer_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ms",
+        "platform",
+        "viewer_id",
+        "executed"
+      ],
+      "type": "object"
+    },
+    "ModUnbanParams": {
+      "properties": {
+        "platform": {
+          "$ref": "#/$defs/Platform"
+        },
+        "viewer_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "platform",
+        "viewer_id"
+      ],
+      "type": "object"
     },
     "ModelCalls": {
       "description": "Calls one model served for an account.",
@@ -5070,6 +5470,35 @@
         "opus"
       ],
       "type": "string"
+    },
+    "ModeratorStatus": {
+      "description": "`moderator.status`.",
+      "properties": {
+        "character": {
+          "description": "The moderator character's package id (`[moderator] character`).",
+          "type": "string"
+        },
+        "counts": {
+          "$ref": "#/$defs/ModCounts",
+          "description": "Since the daemon started."
+        },
+        "mode": {
+          "$ref": "#/$defs/ModMode"
+        },
+        "platforms": {
+          "items": {
+            "$ref": "#/$defs/PlatformStatus"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "mode",
+        "character",
+        "platforms",
+        "counts"
+      ],
+      "type": "object"
     },
     "NextStreamPlan": {
       "properties": {
@@ -5547,6 +5976,43 @@
         "sim"
       ],
       "type": "string"
+    },
+    "PlatformState": {
+      "enum": [
+        "disconnected",
+        "connecting",
+        "connected",
+        "error"
+      ],
+      "type": "string"
+    },
+    "PlatformStatus": {
+      "description": "A chat platform connection as the moderator sees it.",
+      "properties": {
+        "bot_login": {
+          "description": "The bot account's login, once known.",
+          "type": "string"
+        },
+        "channel": {
+          "description": "The broadcaster channel the bot moderates.",
+          "type": "string"
+        },
+        "detail": {
+          "description": "Why it is disconnected or in error (\"no client_id configured\").",
+          "type": "string"
+        },
+        "platform": {
+          "$ref": "#/$defs/Platform"
+        },
+        "state": {
+          "$ref": "#/$defs/PlatformState"
+        }
+      },
+      "required": [
+        "platform",
+        "state"
+      ],
+      "type": "object"
     },
     "PreflightRunResult": {
       "items": {
@@ -6509,6 +6975,16 @@
         {
           "const": "tagger",
           "description": "Session review: types every Malakor line of a finished session (cheapest tier).",
+          "type": "string"
+        },
+        {
+          "const": "mod_classifier",
+          "description": "The chat moderator's plain-language rule classifier (cheapest tier, live lane).",
+          "type": "string"
+        },
+        {
+          "const": "mod_voice",
+          "description": "Writes the chat moderator's in-character line for each decision (live lane).",
           "type": "string"
         }
       ]
@@ -9683,6 +10159,28 @@
       ],
       "type": "object"
     },
+    "TwitchConnect": {
+      "description": "`twitch.connect`: the device-code login the operator completes in a browser.",
+      "properties": {
+        "expires_s": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "user_code": {
+          "type": "string"
+        },
+        "verification_uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "verification_uri",
+        "user_code",
+        "expires_s"
+      ],
+      "type": "object"
+    },
     "Usage": {
       "properties": {
         "cache_creation_tokens": {
@@ -10883,6 +11381,118 @@
       ],
       "type": "object"
     },
+    "moderator.log": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ModLogParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ModLog"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "moderator.mode.set": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ModModeSetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ModeratorStatus"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "moderator.rules.list": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ModRules"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "moderator.rules.set": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ModRulesSetParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ModRules"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "moderator.rules.test": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ModRulesTestParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ModRulesTestResult"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "moderator.status": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ModeratorStatus"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "moderator.unban": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/ModUnbanParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ModUnban"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
     "plan.choose": {
       "additionalProperties": false,
       "properties": {
@@ -11539,6 +12149,38 @@
       ],
       "type": "object"
     },
+    "twitch.connect": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/TwitchConnect"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
+    "twitch.disconnect": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "$ref": "#/$defs/EmptyParams"
+        },
+        "result": {
+          "$ref": "#/$defs/ModeratorStatus"
+        }
+      },
+      "required": [
+        "params",
+        "result"
+      ],
+      "type": "object"
+    },
     "voice.bench": {
       "additionalProperties": false,
       "properties": {
@@ -11643,6 +12285,13 @@
     "ledger.page",
     "ledger.summary",
     "lord.chat",
+    "moderator.log",
+    "moderator.mode.set",
+    "moderator.rules.list",
+    "moderator.rules.set",
+    "moderator.rules.test",
+    "moderator.status",
+    "moderator.unban",
     "plan.choose",
     "plan.current",
     "plan.proposals",
@@ -11684,6 +12333,8 @@
     "tournament.list",
     "tournament.results",
     "tournaments.page",
+    "twitch.connect",
+    "twitch.disconnect",
     "voice.bench",
     "voice.preview",
     "voice.settings.get",

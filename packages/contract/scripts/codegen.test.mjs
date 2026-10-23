@@ -110,6 +110,7 @@ describe("forAjv (tagged unions validate by their tag)", () => {
       "ClipActBlock(kind)",
       "Command(cmd)",
       "EngineError(kind)",
+      "ModLogEntry(kind)",
       "Op(op)",
       "StreamEvent(type)",
       "VoiceFrame(type)",

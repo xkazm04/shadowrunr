@@ -47,6 +47,10 @@ pub enum Role {
     Clipper,
     /// Session review: types every Malakor line of a finished session (cheapest tier).
     Tagger,
+    /// The chat moderator's plain-language rule classifier (cheapest tier, live lane).
+    ModClassifier,
+    /// Writes the chat moderator's in-character line for each decision (live lane).
+    ModVoice,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]

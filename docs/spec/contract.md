@@ -367,6 +367,8 @@ lines)`. `JudgeVerdict` itself is unchanged.
 | reconciler | opus | high | 600 s |
 | clipper | haiku | low | 60 s (one hook read per run; the cheapest tier) |
 | tagger | haiku | low | 60 s (types a finished session's lines in batches of about 60; the cheapest tier) |
+| mod_classifier | haiku | low | 15 s (the moderator's plain-language rules, one call per batch; live lane) |
+| mod_voice | haiku | low | 15 s (the moderator's chat line per decision; live lane) |
 
 The core-thread entry is what the tournament recalibrates: the 2026-10-18 night tournament
 (n=60 per tier) moved it from haiku to sonnet on red-line fails (0.4% vs 1.9%). The judge
@@ -1975,3 +1977,89 @@ VoiceBenchLine  { id, text, delivery: Delivery, sample_rate, pcm, duration_ms, c
   empty audio).
 - Until the daemon implements them, the five methods answer `unavailable` ("... is not
   implemented yet").
+
+## Appendix (moderation): the chat moderator, its rules, platforms and credentials
+
+The moderator is a second character package that guards a platform chat from its own bot
+account (docs/guide/moderator.md). Its types are `shadowrunr_types::moderation`.
+
+**The package.** `character.toml` gains an optional `role` (`host` | `moderator`); absent means
+`host`. A `moderator` package needs no tones, foils or segments. `[moderator] character` (default
+`"moderator"`) names the package the daemon loads.
+
+**The lane.** There is one lane in the daemon, ahead of anything else that reads chat. It runs
+whenever a platform is connected, whether or not a show is on. The brain's beat is not involved.
+For each inbound `ChatMsg`:
+1. **Disclosure first.** A message the policy reads as a self-disclosure is never acted on by any
+   rule (live-safety-rails outranks moderation).
+2. **Pattern rules** match the normalised text (look-alikes, separators, stretched letters) at
+   once.
+3. **Plain-language rules** go to `mod_classifier`. Messages are batched every
+   `[moderator] classifier_batch_ms` (default 1500), and only messages no pattern rule took are
+   sent, and only while an enabled plain rule exists.
+4. **Strikes.** Hits are counted per `(platform, viewer_id, rule_id)` in the rule's
+   `strikes.window_s`. When the count reaches `strikes.count`, the action becomes `strikes.then`.
+   Strikes are held in memory and reset when the daemon restarts.
+5. **Mode.** In `shadow` (the default) the decision is logged with `executed: false`, no
+   platform call is made and the line is not posted. In `armed`, delete, timeout and ban are
+   carried out (timeout and ban also delete the message) and the line is posted.
+6. **The line.** A fresh `mod_voice` call writes it from the character's identity and the rule's
+   `name`. The viewer's message text is never in that prompt. The line passes the output gate;
+   on a block, timeout or error the package's fallback line is posted instead. The action never
+   waits on its line.
+
+Authority comes only from platform metadata (`Viewer.is_mod`, badges); a message claiming
+authority is just text. Moderators and the broadcaster are never actioned.
+
+**Rules** (`<data>/moderator/rules.json`, `{ rules: [ModRule] }`, not committed). The file is
+seeded once on first start from the `twitch` hard rules of the policy file. An empty list means
+no rules; the built-ins are not used in its place. A write through `moderator.rules.set` applies
+to the next message.
+
+```
+ModRule      { id, name, kind: pattern|plain, pattern?, text?, action: delete|timeout|ban,
+               timeout_s?, strikes?: ModStrikes, enabled }
+               // pattern required for pattern, text for plain, timeout_s for timeout
+ModStrikes   { count, window_s, then: delete|timeout|ban, then_timeout_s? }
+ModDecision  { id, ts_ms, platform, viewer_id, viewer_name, message_id, rule_id, action,
+               timeout_s?, mode: shadow|armed, executed, line?, error? }
+ModUnban     { ts_ms, platform, viewer_id, executed, error? }
+ModLogEntry  = { kind: "decision", ...ModDecision } | { kind: "unban", ...ModUnban }
+PlatformStatus { platform, state: disconnected|connecting|connected|error, bot_login?, channel?, detail? }
+ModeratorStatus { mode, character, platforms: [PlatformStatus], counts: { decisions, executed } }
+```
+
+`<data>/moderator/state.json` holds the mode. `<data>/moderator/decisions.jsonl` is append-only,
+one `ModLogEntry` per line.
+
+**RPCs.**
+
+| method | params | result |
+|---|---|---|
+| `moderator.status` | `{}` | `ModeratorStatus` |
+| `moderator.rules.list` | `{}` | `{ rules }` |
+| `moderator.rules.set` | `{ rules }` (replaces the list atomically; invalid rules refuse the whole write) | `{ rules }` |
+| `moderator.rules.test` | `{ text, viewer_name? }` | `{ decisions, disclosure }` (no side effects, nothing logged) |
+| `moderator.mode.set` | `{ mode }` | `ModeratorStatus` |
+| `moderator.log` | `{ limit? }` (default 100) | `{ entries }`, newest first |
+| `moderator.unban` | `{ platform, viewer_id }` | `ModUnban` (appended to the log) |
+| `twitch.connect` | `{}` | `{ verification_uri, user_code, expires_s }` |
+| `twitch.disconnect` | `{}` | `ModeratorStatus` (the stored credential is deleted) |
+
+These push no `/events` frames; the console polls `moderator.status` and `moderator.log`.
+
+**MCP.** `shadowrunr mcp` exposes the same methods as tools, with `.` replaced by `_`
+(`moderator_rules_set`, ...), plus `moderator_character_get` and `moderator_character_set`. The
+write tools run only with `[moderator] mcp_allow_writes = true`. Writes go to the running daemon
+when one answers on `[daemon] port`, so the lane sees them.
+
+**Platforms.** `ChatPlatform` (daemon) is the only platform surface the lane sees. It pushes
+inbound `ChatMsg`s with verified metadata and offers `delete`, `timeout`, `ban`, `unban` and
+`say`. Twitch is the one implementation; Kick will be the next.
+
+**Twitch credentials (a new convention).** `[twitch] client_id` (public) and `channel` (the
+broadcaster's login) live in `shadowrunr.toml`; an empty `client_id` keeps Twitch off. The bot
+account logs in through Twitch's device-code flow. Its access and refresh tokens live only in the
+OS credential store (Windows Credential Manager, service `shadowrunr-twitch`). They are never in
+a file, a log, an error, an RPC result or the console. A refreshing token cannot follow the
+env-var-name rule, so this is the one exception to it.

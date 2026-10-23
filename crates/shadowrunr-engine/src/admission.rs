@@ -37,7 +37,11 @@ pub enum Lane {
 /// The lane of a role. Exhaustive on purpose: a new role must choose its line.
 pub fn lane(role: Role) -> Lane {
     match role {
-        Role::CoreThread | Role::ChatPicker | Role::Chatter => Lane::Live,
+        Role::CoreThread
+        | Role::ChatPicker
+        | Role::Chatter
+        | Role::ModClassifier
+        | Role::ModVoice => Lane::Live,
         Role::Planner
         | Role::Researcher
         | Role::Consolidator
@@ -208,7 +212,14 @@ mod tests {
     #[test]
     fn every_role_has_a_lane() {
         for r in crate::config::ROLES {
-            let want = matches!(r, Role::CoreThread | Role::ChatPicker | Role::Chatter);
+            let want = matches!(
+                r,
+                Role::CoreThread
+                    | Role::ChatPicker
+                    | Role::Chatter
+                    | Role::ModClassifier
+                    | Role::ModVoice
+            );
             assert_eq!(lane(r) == Lane::Live, want, "{r:?}");
         }
     }

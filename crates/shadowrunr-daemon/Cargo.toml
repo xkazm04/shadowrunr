@@ -22,6 +22,7 @@ shadowrunr-sim.workspace = true
 shadowrunr-reconcile.workspace = true
 shadowrunr-clips.workspace = true
 serde.workspace = true
+async-trait.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 clap = { version = "4.6.7", features = ["derive"] }

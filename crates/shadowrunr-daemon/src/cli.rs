@@ -1737,6 +1737,7 @@ async fn daemon_cmd(
     let state = server::AppState::new(cfg, engine);
     crate::integrations::activity::start_for_daemon(&state);
     let voice = crate::voice::start(&state);
+    crate::moderator::start(&state);
     let (addr, serve) = server::bind(state.clone(), port)
         .await
         .map_err(|e| format!("bind 127.0.0.1:{port}: {e}"))?;

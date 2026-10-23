@@ -48,6 +48,8 @@ pub struct AppState {
     pub sandbox: SandboxRegistry,
     /// Malakor's voice (`/voice`): idle until `voice::start`, and `off` unless enabled.
     pub voice: Arc<crate::voice::VoiceHub>,
+    /// The chat moderator: its lane and platforms (`moderator::start`).
+    pub moderator: Arc<crate::moderator::ModeratorHub>,
     shutdown: watch::Sender<bool>,
 }
 
@@ -63,6 +65,7 @@ impl AppState {
             engine.engine.clone(),
         );
         let voice = crate::voice::VoiceHub::new(cfg.voice.clone());
+        let moderator = crate::moderator::ModeratorHub::new(&cfg);
         Arc::new(Self {
             cfg: Arc::new(cfg),
             engine,
@@ -71,6 +74,7 @@ impl AppState {
             acks: AckBook::default(),
             sandbox: SandboxRegistry::default(),
             voice,
+            moderator,
             shutdown: watch::Sender::new(false),
         })
     }

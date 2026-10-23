@@ -38,6 +38,12 @@ pub struct FileConfig {
     /// `[stage]`: how the daemon opens the stage it hands out (sandbox and OBS URLs).
     #[serde(default)]
     pub stage: StageConfig,
+    /// `[moderator]`: the chat moderator (docs/guide/moderator.md).
+    #[serde(default)]
+    pub moderator: crate::moderator::ModeratorConfig,
+    /// `[twitch]`: the moderator's Twitch bot (client id and channel; tokens never here).
+    #[serde(default)]
+    pub twitch: crate::platform::twitch::TwitchConfig,
 }
 
 /// `[stage]`.
@@ -299,6 +305,10 @@ pub struct Config {
     pub record: crate::record::RecordConfig,
     /// `[stage]` (after [`Config::load`], with the configured character's `[avatar] face`).
     pub stage: StageConfig,
+    /// `[moderator]`.
+    pub moderator: crate::moderator::ModeratorConfig,
+    /// `[twitch]`.
+    pub twitch: crate::platform::twitch::TwitchConfig,
 }
 
 #[derive(Debug)]
@@ -426,6 +436,8 @@ impl Config {
             voice: fc.voice.resolved(root),
             record: fc.record,
             stage: fc.stage,
+            moderator: fc.moderator,
+            twitch: fc.twitch,
         }
     }
 

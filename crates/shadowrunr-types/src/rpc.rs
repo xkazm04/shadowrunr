@@ -17,6 +17,10 @@ use crate::clips::{
     ClipsApproveParams, ClipsFeedbackParams, ClipsListParams, ClipsPage, ClipsPublishParams,
     ClipsRecordingParams, ClipsRejectParams, ClipsScanParams,
 };
+use crate::moderation::{
+    ModLog, ModLogParams, ModModeSetParams, ModRules, ModRulesSetParams, ModRulesTestParams,
+    ModRulesTestResult, ModUnban, ModUnbanParams, ModeratorStatus, TwitchConnect,
+};
 use crate::prep::{PrepApproveParams, PrepGenerateParams, PrepIdParams, PrepSummary, StreamPrep};
 use crate::reconcile::{
     Directive, DirectiveKind, LordChatReply, NextStreamPlan, PlanOption, ReconcileReport,
@@ -602,6 +606,15 @@ pub fn visit_methods(v: &mut impl MethodVisitor) {
     v.method::<VoiceVerifyParams, ProviderStatus>("voice.verify");
     v.method::<VoicePreviewParams, VoicePreview>("voice.preview");
     v.method::<VoiceBenchParams, VoiceBench>("voice.bench");
+    v.method::<EmptyParams, ModeratorStatus>("moderator.status");
+    v.method::<EmptyParams, ModRules>("moderator.rules.list");
+    v.method::<ModRulesSetParams, ModRules>("moderator.rules.set");
+    v.method::<ModRulesTestParams, ModRulesTestResult>("moderator.rules.test");
+    v.method::<ModModeSetParams, ModeratorStatus>("moderator.mode.set");
+    v.method::<ModLogParams, ModLog>("moderator.log");
+    v.method::<ModUnbanParams, ModUnban>("moderator.unban");
+    v.method::<EmptyParams, TwitchConnect>("twitch.connect");
+    v.method::<EmptyParams, ModeratorStatus>("twitch.disconnect");
 }
 
 /// Every method name, in table order.
