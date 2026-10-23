@@ -1,0 +1,45 @@
+/* Characters, the moderator package's Moderation tab: connection, mode, rules, test box and log.
+   Its own module so the lazy chunk carries no css the rest of the page owns; the table, drawer,
+   chips, pills, switch and buttons come from ui/. */
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sr-space-section); align-items: start; margin-top: var(--sr-space-base); }
+.wide { grid-column: 1 / -1; }
+.panel { display: flex; flex-direction: column; gap: var(--sr-space-cozy); min-width: 0; }
+.panelHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--sr-space-near); border-bottom: var(--sr-stroke-heavy) solid var(--sr-color-text-ink); padding-bottom: var(--sr-space-snug); }
+.secHead { margin: 0; font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-heading); line-height: .95; text-transform: uppercase; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sr-space-near); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--sr-space-compact); align-items: center; }
+.note { margin: 0; font-size: var(--sr-size-small); color: var(--sr-color-text-note); }
+.dim { color: var(--sr-color-text-mute); }
+.mono { font-family: var(--sr-font-mono); }
+.ok,
+.err { font-size: var(--sr-size-small); }
+.ok { color: var(--sr-color-ok); }
+.err { color: var(--sr-color-fail); margin: 0; }
+
+.label { font-family: var(--sr-font-display); font-weight: var(--sr-weight-bold); font-size: var(--sr-size-caption); letter-spacing: .12em; text-transform: uppercase; color: var(--sr-color-text-mute); }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--sr-space-near); }
+.field { display: flex; flex-direction: column; gap: var(--sr-space-tick); min-width: 0; }
+.input,
+.area { font: var(--sr-size-small)/1.45 var(--sr-font-sans); padding: var(--sr-space-tick) var(--sr-space-compact); background: var(--sr-color-surface-field); color: var(--sr-color-text-ink); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); border-radius: var(--sr-radius-none); }
+.input.mono { font-family: var(--sr-font-mono); }
+.area { width: 100%; min-height: 4.5rem; resize: vertical; }
+.input::placeholder,
+.area::placeholder { color: var(--sr-color-text-mute); }
+
+.code { display: flex; flex-direction: column; gap: var(--sr-space-tight); border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); background: var(--sr-color-surface-card); padding: var(--sr-space-near) var(--sr-space-base); }
+.userCode { font-family: var(--sr-font-mono); font-size: var(--sr-size-heading); font-weight: var(--sr-weight-bold); letter-spacing: .2em; }
+.link { color: var(--sr-page-accent-text); font-family: var(--sr-font-mono); font-size: var(--sr-size-small); word-break: break-all; }
+
+.confirm { border: var(--sr-stroke-rule) solid var(--sr-color-text-ink); border-left: var(--sr-stroke-heavy) solid var(--sr-page-accent); background: var(--sr-color-surface-card); padding: var(--sr-space-near) var(--sr-space-base); display: flex; flex-direction: column; gap: var(--sr-space-tight); }
+.confirmText { margin: 0; font-size: var(--sr-size-small); }
+
+.list { list-style: none; padding: 0; margin: 0; }
+.item { display: flex; flex-direction: column; gap: var(--sr-space-tight); padding: var(--sr-space-near) 0; border-bottom: var(--sr-stroke-hair) solid var(--sr-color-line); }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sr-space-tight); font-size: var(--sr-size-caption); }
+.line { margin: 0; font-family: var(--sr-font-serif); font-style: italic; font-size: var(--sr-size-small); color: var(--sr-color-text-note); }
+.form { display: flex; flex-direction: column; gap: var(--sr-space-cozy); }
+
+@media (max-width: 68.75rem) {
+  .grid { grid-template-columns: 1fr; }
+}

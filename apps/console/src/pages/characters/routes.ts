@@ -15,6 +15,8 @@ export const PKG_TABS = [
   { id: "parameters", label: "Parameters" },
   { id: "voice", label: "Voice" },
   { id: "tone-lab", label: "Tone Lab" },
+  // Shown only on the moderator character's package (PackagePage asks moderator.status).
+  { id: "moderation", label: "Moderation" },
 ] as const;
 
 export type PkgTab = (typeof PKG_TABS)[number]["id"];

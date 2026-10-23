@@ -128,6 +128,12 @@ export const MUTATION_RULES: { readonly [M in RpcMethod]?: readonly Rule[] } = {
   // A key check is per provider, and every character's settings carry the provider rows.
   "voice.verify": ["voice.settings.get"],
   "review.tag": ["review.sessions", { method: "review.session", scope: sameId("session_id", "session_id") }],
+  // The moderator pushes no events; its status and log are polled, and its writes refetch them.
+  "moderator.rules.set": ["moderator.rules.list"],
+  "moderator.mode.set": ["moderator.status"],
+  "twitch.connect": ["moderator.status"],
+  "twitch.disconnect": ["moderator.status"],
+  "moderator.unban": ["moderator.log"],
 };
 
 const methodOf = (r: Rule): RpcMethod => (typeof r === "string" ? r : r.method);
