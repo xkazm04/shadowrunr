@@ -18,24 +18,24 @@
       }
     },
     "door.result": {
-      "js": 171465,
+      "js": 173189,
       "css": 0,
       "chunks": {
-        "../../packages/contract/src/generated/results/ReviewSession.js": 171465
+        "../../packages/contract/src/generated/results/ReviewSession.js": 173189
       }
     },
     "agent": {
-      "js": 42705,
+      "js": 40411,
       "css": 0,
       "chunks": {
-        "src/app/agent/catalog.ts": 42705
+        "src/app/agent/catalog.ts": 40411
       }
     },
     "door": {
-      "js": 133342,
+      "js": 135062,
       "css": 0,
       "chunks": {
-        "src/data/contractDoor.ts": 133342
+        "src/data/contractDoor.ts": 135062
       }
     },
     "brain.l1": {
