@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shadowrunr-avatar3d"
+version = "0.1.0"
+description = "Malakor's 3D head: the portrait made into a jawed, anchored skull GLB, offline."
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+# The contract check, the GLB reader/writer and the tests are numpy and the standard library.
+# The portrait, the generated meshes and every model's weights are the operator's files: never
+# committed and never downloaded by this package.
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+# The asset build: prep, orient, split, decimate, bake and render. All permissive licences
+# (Pillow HPND, SciPy BSD, trimesh MIT, fast-simplification MIT, xatlas MIT, moderngl MIT).
+build = ["pillow", "scipy", "trimesh", "fast-simplification", "xatlas", "moderngl"]
+
+[tool.setuptools]
+packages = ["shadowrunr_avatar3d"]
