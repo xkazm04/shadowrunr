@@ -1,0 +1,96 @@
+{
+ "schema": "conform-run/1",
+ "worker": "ca60c104-d835-4c02-8e95-41b14096912a",
+ "subject": "chat-transcript",
+ "evaluatedAt": "2026-10-23T21:12:48.220522+00:00",
+ "provider": "codex",
+ "model": "gpt-6.1-sol",
+ "pairs": [
+  {
+   "context": "console-ui-primitives",
+   "subject": "chat-transcript",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/ui/VirtualList.tsx:68 These primitives delegate row content to callers; context searches found only transcript virtualization references and no assistant, composer, streaming, interject, or queued behavior, leaving transcript contracts to consuming surfaces.",
+   "techniques": [
+    {
+     "technique": "composer-turn-queue",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/ui/Button.tsx:23 The native button forwards caller properties; submission intent and busy-turn behavior belong to its consumer."
+    },
+    {
+     "technique": "immutable-model-cached-layout",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/ui/VirtualList.tsx:68 The list delegates content rendering and owns no settled-message model or replacement lifecycle."
+    },
+    {
+     "technique": "inline-structured-rows",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/ui/Chip.tsx:14 Chip supplies generic presentation rather than a transcript event taxonomy or approval lifecycle."
+    },
+    {
+     "technique": "markdown-and-code-rendering",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/ui/Markdown.tsx:38 This renderer accepts parsed package-document blocks; checked callers use it for character documents rather than model-authored turns."
+    },
+    {
+     "technique": "progress-narration",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/ui/States.tsx:29 StatePanel presents page status; it does not consume working-turn events or retain a narration trail."
+    },
+    {
+     "technique": "transcript-scroll",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/ui/VirtualList.tsx:54 This is caller-requested navigation to a generic row, without ownership of conversation opening or streaming follow behavior."
+    },
+    {
+     "technique": "turn-metadata",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/ui/StatBand.tsx:19 StatBand displays caller-provided statistics and has no attachment to a machine turn or settlement predicate."
+    },
+    {
+     "technique": "turn-model",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/ui/VirtualList.tsx:45 The generic list accepts caller-defined keys; it neither creates turns nor reconciles their lifecycle."
+    },
+    {
+     "technique": "virtual-filtered-channel",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/ui/FilterTable.tsx:82 Filtering operates on supplied array snapshots, matching the technique's explicit static-list exception rather than its subscribed-channel precondition."
+    }
+   ],
+   "absenceTerms": [
+    "assistant",
+    "composer",
+    "streaming",
+    "interject",
+    "queued"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-23T21:12:48.220522+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "chat-transcript"
+   ],
+   "techniques": [
+    "composer-turn-queue",
+    "immutable-model-cached-layout",
+    "inline-structured-rows",
+    "markdown-and-code-rendering",
+    "progress-narration",
+    "transcript-scroll",
+    "turn-metadata",
+    "turn-model",
+    "virtual-filtered-channel"
+   ],
+   "deviations": 0,
+   "context": "console-ui-primitives",
+   "via": "curator-multi:codex",
+   "model": "gpt-6.1-sol"
+  }
+ ]
+}

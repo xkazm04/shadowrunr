@@ -450,3 +450,4 @@
 {"ts":"2026-10-23T19:40:00Z","bundle":"software-engineering","subjects":["talking-avatar"],"techniques":["paced-realtime-measurement","rig-parameter-contract"],"deviations":0}
 {"ts":"2026-10-23T19:52:44Z","bundle":"software-engineering","subjects":["docs-content-model","docs-sync"],"techniques":[],"deviations":0,"outcome":"missed","from":"consult-check"}
 {"ts":"2026-10-23T19:52:44Z","bundle":"media-generation","subjects":["ad-concept-development"],"techniques":[],"deviations":0,"outcome":"missed","from":"consult-check"}
+{"ts":"2026-10-23T21:12:48.220522+00:00","bundle":"software-engineering","subjects":["chat-transcript"],"techniques":["composer-turn-queue","immutable-model-cached-layout","inline-structured-rows","markdown-and-code-rendering","progress-narration","transcript-scroll","turn-metadata","turn-model","virtual-filtered-channel"],"deviations":0,"context":"console-ui-primitives","via":"curator-multi:codex","model":"gpt-6.1-sol"}

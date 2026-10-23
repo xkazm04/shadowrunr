@@ -3658,6 +3658,62 @@
         "at": "2026-10-22T21:57:31.967045+00:00",
         "reason": "reviewer (sonnet): The anchor config.toml:4 only shows the shared `target-dir`. The deviation rests on absence claims (no byte ceiling, pruner, cache-hit or timing instruments, no concurrency isolation) that I could not confirm from this context's files. Any such control would live in repo-wide CI or root tooling, whi"
       }
+    },
+    "435472ca-7ef4-4956-80d8-3dc82f215665/chat-transcript": {
+      "context": "console-ui-primitives",
+      "subject": "chat-transcript",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-23",
+      "evaluatedTs": "2026-10-23T21:12:48.220Z",
+      "worker": "ca60c104-d835-4c02-8e95-41b14096912a",
+      "techniques": [
+        {
+          "technique": "composer-turn-queue",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/ui/Button.tsx:23 The native button forwards caller properties; submission intent and busy-turn behavior belong to its consumer."
+        },
+        {
+          "technique": "immutable-model-cached-layout",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/ui/VirtualList.tsx:68 The list delegates content rendering and owns no settled-message model or replacement lifecycle."
+        },
+        {
+          "technique": "inline-structured-rows",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/ui/Chip.tsx:14 Chip supplies generic presentation rather than a transcript event taxonomy or approval lifecycle."
+        },
+        {
+          "technique": "markdown-and-code-rendering",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/ui/Markdown.tsx:38 This renderer accepts parsed package-document blocks; checked callers use it for character documents rather than model-authored turns."
+        },
+        {
+          "technique": "progress-narration",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/ui/States.tsx:29 StatePanel presents page status; it does not consume working-turn events or retain a narration trail."
+        },
+        {
+          "technique": "transcript-scroll",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/ui/VirtualList.tsx:54 This is caller-requested navigation to a generic row, without ownership of conversation opening or streaming follow behavior."
+        },
+        {
+          "technique": "turn-metadata",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/ui/StatBand.tsx:19 StatBand displays caller-provided statistics and has no attachment to a machine turn or settlement predicate."
+        },
+        {
+          "technique": "turn-model",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/ui/VirtualList.tsx:45 The generic list accepts caller-defined keys; it neither creates turns nor reconciles their lifecycle."
+        },
+        {
+          "technique": "virtual-filtered-channel",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/ui/FilterTable.tsx:82 Filtering operates on supplied array snapshots, matching the technique's explicit static-list exception rather than its subscribed-channel precondition."
+        }
+      ]
     }
   }
 }

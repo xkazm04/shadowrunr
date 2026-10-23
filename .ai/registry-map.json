@@ -2556,7 +2556,11 @@
           "revision": 5,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/ui/VirtualList.tsx:68 These primitives delegate row content to callers; context searches found only transcript virtualization references and no assistant, composer, streaming, interject, or queued behavior, leaving transcript contracts to consuming surfaces.",
+          "evaluatedAt": "2026-10-23",
+          "evaluatedAgainst": "sha256-b2:5b4e7d399a4d924e",
+          "evaluatedRevision": 5
         },
         {
           "subject": "test-harness",
