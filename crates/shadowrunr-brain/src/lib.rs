@@ -1252,6 +1252,11 @@ impl Brain {
         // the line pointing to help is never the one cut (theatrical.sonnet.SEG-02A.a3.s1 L92: the
         // budget trimmed the pointer and the aired line had warmth and no help).
         let crisis = pick.chosen.iter().any(|c| c.safety.is_some());
+        // A beat answering an owed request is not paced either: every ask the message carries
+        // gets its answer (sbx-20261024-220545-10m L57-L61: a newcomer's "what is this stream
+        // ... is the guy an AI", the "what this stream is" line trimmed).
+        let owed_beat = pick.chosen.iter().any(|c| pctx.owed.contains(&c.msg.id));
+        let unpaced = crisis || owed_beat;
         // The beat's speech budget: spoken lines past it go whole, the last first.
         let spoken_at: Vec<usize> = lines
             .iter()
@@ -1267,7 +1272,7 @@ impl Brain {
             })
             .collect();
         let mut over: Vec<usize> =
-            pace::over_budget(&lens, if crisis { usize::MAX } else { budget })
+            pace::over_budget(&lens, if unpaced { usize::MAX } else { budget })
                 .into_iter()
                 .map(|k| spoken_at[k])
                 .collect();
@@ -1298,7 +1303,7 @@ impl Brain {
             .collect();
         let texts: Vec<&str> = spoken.iter().map(|(_, t)| *t).collect();
         let behind = self.speech.queued_ms(self.on_air_ms(now_ms));
-        let late: Vec<usize> = if crisis {
+        let late: Vec<usize> = if unpaced {
             Vec::new()
         } else {
             pace::over_lag(&self.tuning.pace, &texts, behind)

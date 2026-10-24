@@ -39,8 +39,8 @@ use crate::moderation::Candidate;
 use crate::orchestrate::case::CASE_HEADING;
 use crate::orchestrate::requests::{
     asks_what_this_is, claims_authority, injection_hint, mentions_loss, propose_below_rank_note,
-    situational_asks, speaks_of_patron, with_rank, Ask, AI_REPEAT_NOTE, AUTHORITY_NOTE,
-    GIFT_CARE_NOTE, GIFT_NOTE, NEWCOMER_NOTE, PATRON_NOTE, PROPOSAL_NOTE,
+    several_asks_note, situational_asks, speaks_of_patron, with_rank, Ask, AI_REPEAT_NOTE,
+    AUTHORITY_NOTE, GIFT_CARE_NOTE, GIFT_NOTE, NEWCOMER_NOTE, PATRON_NOTE, PROPOSAL_NOTE,
 };
 use crate::util::one_line;
 use crate::working::{fitted_window, WindowItem, EPISODE_BUDGET_CHARS};
@@ -779,10 +779,17 @@ fn ask_note(c: &Candidate, t: &TurnInputs<'_>) -> String {
 /// the patron spoken of. Empty for most messages.
 fn situation_notes(c: &Candidate, t: &TurnInputs<'_>) -> String {
     let p = &t.pkg.persona;
-    let mut s = ask_note(c, t);
     // A newcomer: a first contact, or a Thrall (the room's stimulus chatter had spoken before
     // its "what is this stream", sbx-20261021-090938-5m, so first contact alone missed it).
     let newcomer = t.first_contacts.contains(&c.msg.id) || c.msg.viewer.rank == Rank::Thrall;
+    // Several asks in one message: each answered, the newcomer's "what is this" first.
+    let mut asks: Vec<Ask> = Vec::new();
+    if newcomer && asks_what_this_is(&c.msg.text) {
+        asks.push(Ask::WhatIsThis);
+    }
+    asks.extend(situational_asks(&c.msg.text));
+    let mut s = several_asks_note(&asks).unwrap_or_default();
+    s.push_str(&ask_note(c, t));
     if newcomer && asks_what_this_is(&c.msg.text) {
         let title = t.pkg.rank_titles.title(c.msg.viewer.rank);
         s.push_str(&with_rank(&p.fill(NEWCOMER_NOTE), &title));

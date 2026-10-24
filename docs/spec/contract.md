@@ -1398,7 +1398,9 @@ like a real case. It is never written live in a quiet moment.
   `tones/<tone>.toml` `budget_chars` replaces the default, never a budget a caller set itself,
   and moves no ceiling).
   - While more than `speech_lead_ms` of speech is queued, the beat is a `hold` with reason
-    `speaking: N.N s queued` and no core call. A safety beat runs at once, and its reply is never
+    `speaking: N.N s queued` and no core call. A beat answering an owed request is not paced
+    either, so every ask the message carries airs (a message with several asks gets the note
+    `<answer both, each in a clause: ...>`). A safety beat runs at once, and its reply is never
     paced: no line of it is trimmed or lagged, so the line pointing to help always airs; when none
     of his aired lines points to help (a crisis line, an emergency number, someone they trust),
     the engine's help line (`moderation::CRISIS_HELP_LINE`) airs after them, recorded as

@@ -367,9 +367,12 @@ async fn a_line_past_the_budget_costs_no_pick_its_answer_and_the_rest_wait_their
         )
         .await
         .unwrap();
-    // The sincere "are you an AI" is the owed request: the beat's one pick.
+    // The sincere "are you an AI" is the owed request: the beat's one pick. An owed beat is
+    // not paced (2026-10-25: every ask a request carries gets its answer), so both lines air;
+    // a plain chat beat's trim is pinned in `an_owed_newcomer_s_two_asks_both_air_whole_...`.
     assert_eq!(picked(&ev), ["m-m"], "{ev:?}");
-    assert_eq!(says(&ev).len(), 1, "the line past the budget went: {ev:?}");
+    assert_eq!(says(&ev).len(), 2, "an owed beat airs whole: {ev:?}");
+    assert!(mods(&ev, ModStage::Output).is_empty(), "{ev:?}");
     assert!(input_mods(&ev, crate::orchestrate::CARRY_RULE)
         .iter()
         .all(|(_, a)| a != crate::orchestrate::UNAIRED));

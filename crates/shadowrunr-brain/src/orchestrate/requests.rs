@@ -259,6 +259,27 @@ pub const NEWCOMER_NOTE: &str = " <a newcomer asking what this is: welcome them 
 rank, {rank_title} (a comic title may come on top, never instead), then in character say it is \
 your livestream, the segment you are in, and one way to join in (a chat command)>";
 
+/// The note for a message that asks several things: each answered, in a clause of its own
+/// (sbx-20261024-220545-10m L57: "what is this stream ... is the guy an AI", and only the AI
+/// answer aired). `None` for fewer than two asks.
+pub fn several_asks_note(asks: &[Ask]) -> Option<String> {
+    if asks.len() < 2 {
+        return None;
+    }
+    let parts: Vec<&str> = asks.iter().map(|a| a.what()).collect();
+    let (last, rest) = parts.split_last()?;
+    let list = if rest.len() == 1 {
+        format!("{} and {last}", rest[0])
+    } else {
+        format!("{}, and {last}", rest.join(", "))
+    };
+    let n = match asks.len() {
+        2 => "both".to_string(),
+        k => format!("all {k}"),
+    };
+    Some(format!(" <answer {n}, each in a clause: {list}>"))
+}
+
 /// A note with the picked viewer's rank title filled in (`{rank_title}`).
 pub fn with_rank(note: &str, rank_title: &str) -> String {
     note.replace("{rank_title}", rank_title)
@@ -342,6 +363,26 @@ impl Ask {
             Ask::Sad => "sincere sadness",
             Ask::WhatIsThis => "newcomer's what-is-this question",
             Ask::Proposal => "proposal",
+        }
+    }
+
+    /// What answering this ask covers, as a clause of the several-asks note
+    /// ([`several_asks_note`]).
+    pub fn what(self) -> &'static str {
+        match self {
+            Ask::MinorFlirt => "the flirting (shut it down)",
+            Ask::Intrusion => "the account request (refuse it)",
+            Ask::RoastMe => "the roast they asked for",
+            Ask::Impression => "the impression (decline it)",
+            Ask::CoinShill => "the coin (refuse it)",
+            Ask::Address => "the address (refuse it)",
+            Ask::Explicit => "the explicit request (deflect it)",
+            Ask::AreYouAi => "whether you are an AI",
+            Ask::IsItReal => "whether the board is real",
+            Ask::StereotypeJoke => "the bait (never tell it)",
+            Ask::Sad => "their sadness, kindly",
+            Ask::WhatIsThis => "what this stream is",
+            Ask::Proposal => "their proposal",
         }
     }
 

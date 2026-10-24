@@ -252,3 +252,88 @@ async fn a_crisis_reply_without_a_help_pointer_gets_the_help_line() {
         .unwrap();
     assert_eq!(says(&ev).len(), 1, "{ev:?}");
 }
+
+/// sbx-20261024-220545-10m L57, verbatim: a first contact with two owed asks.
+const L57: &str =
+    "wait what is this stream, whats going on lol. is the guy an AI or a person with a \
+                   voice changer";
+
+/// The two lines of its answer (L61 aired the first; the second, past the budget, was trimmed).
+const L61: &str = "Welcome, BoneMoose47 the Thrall, Moose of Many Questions. No voice changer: I \
+                   am an AI character, a lich made of code and spite.";
+const EXPLAIN: &str = "This is my livestream, the throne room of the Ninth Dark: tonight we run \
+                       an investigation on the hexmap, and you join in by typing !hint with a \
+                       card and your lead.";
+
+#[tokio::test]
+async fn an_owed_newcomer_s_two_asks_both_air_whole_and_plain_chat_is_still_paced() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "pow", tuning()).await;
+    assert!(
+        L61.len() + EXPLAIN.len() > 250,
+        "past the theatrical budget"
+    );
+    engine.push(Role::CoreThread, Ok(&format!("{L61}\n{EXPLAIN}")));
+    let moose = viewer("sim-v0047", "BoneMoose47", Rank::Thrall);
+    let ev = b
+        .tick(1_000, vec![msg("m57", 900, &moose, L57)], &ctx(&[]))
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["m57"]);
+    assert!(plan_of(&ev).1.contains("owed: m57"), "{}", plan_of(&ev).1);
+    assert_eq!(says(&ev), [L61.to_string(), EXPLAIN.to_string()], "{ev:?}");
+    assert!(
+        mods(&ev, ModStage::Output)
+            .iter()
+            .all(|(rule, _, _)| rule != PACE_RULE),
+        "{ev:?}"
+    );
+    // The note asks for both, each in a clause.
+    let prompt = engine
+        .requests(Role::CoreThread)
+        .last()
+        .map(|r| r.prompt.clone())
+        .unwrap();
+    assert!(
+        prompt.contains(
+            "<answer both, each in a clause: what this stream is and whether you are an AI>"
+        ),
+        "{prompt}"
+    );
+
+    // Neighbour: the same two lines answering a plain question are paced, the last first.
+    let fog = viewer("fog", "FogBeetle6", Rank::Cultist);
+    b.tick(
+        60_000,
+        vec![msg("hi", 59_900, &fog, "evening all")],
+        &ctx(&[]),
+    )
+    .await
+    .unwrap();
+    // Two lines as long (fresh words, so the repetition guard keeps them).
+    let (one, two) = (
+        line_of("fogline", L61.len()),
+        line_of("moatline", EXPLAIN.len()),
+    );
+    engine.push(Role::CoreThread, Ok(&format!("{one}\n{two}")));
+    let ev = b
+        .tick(
+            90_000,
+            vec![msg(
+                "q",
+                89_900,
+                &fog,
+                "malakor what is in the moat tonight?",
+            )],
+            &ctx(&[]),
+        )
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["q"]);
+    assert_eq!(says(&ev), [one]);
+    assert_eq!(
+        mods(&ev, ModStage::Output),
+        vec![(PACE_RULE.into(), None, TRIMMED.into())]
+    );
+}
