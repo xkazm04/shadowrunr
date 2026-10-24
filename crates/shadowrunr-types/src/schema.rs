@@ -96,6 +96,8 @@ fn wire_types(gen: &mut SchemaGenerator) {
     // The keys of `ClipActs`: the owner-act vocabulary, named on its own.
     gen.subschema_for::<crate::clips::ClipAct>();
     gen.subschema_for::<crate::prep::StreamPrep>();
+    gen.subschema_for::<crate::scene::Scene>();
+    gen.subschema_for::<crate::scene::SceneSummary>();
     gen.subschema_for::<crate::voice::VoiceFrame>();
     gen.subschema_for::<crate::voice::VoiceFollowFrame>();
     gen.subschema_for::<crate::voice::VoiceClientFrame>();

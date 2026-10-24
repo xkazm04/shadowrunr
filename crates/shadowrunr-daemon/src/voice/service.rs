@@ -863,6 +863,9 @@ async fn speak(hub: &VoiceHub, voice: &Voice, line: &Line, order: &mut Order) {
                         sample_rate: r.sample_rate,
                         pcm: r.pcm,
                         visemes: r.visemes,
+                        // WP-B: the guest's lines carry their speaker.
+                        speaker: None,
+                        foil: None,
                     },
                     usage,
                 );

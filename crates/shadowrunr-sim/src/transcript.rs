@@ -106,6 +106,8 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::SegmentStart { ts_ms, .. }
         | StreamEvent::SegmentEnd { ts_ms, .. }
         | StreamEvent::CaseOpen { ts_ms, .. }
+        | StreamEvent::SceneStart { ts_ms, .. }
+        | StreamEvent::SceneEnd { ts_ms, .. }
         | StreamEvent::RecordShown { ts_ms, .. }
         | StreamEvent::LinkPinned { ts_ms, .. }
         | StreamEvent::Chat { ts_ms, .. }
@@ -129,6 +131,8 @@ pub fn set_ts(ev: &mut StreamEvent, ts: TsMs) {
         | StreamEvent::SegmentStart { ts_ms, .. }
         | StreamEvent::SegmentEnd { ts_ms, .. }
         | StreamEvent::CaseOpen { ts_ms, .. }
+        | StreamEvent::SceneStart { ts_ms, .. }
+        | StreamEvent::SceneEnd { ts_ms, .. }
         | StreamEvent::RecordShown { ts_ms, .. }
         | StreamEvent::LinkPinned { ts_ms, .. }
         | StreamEvent::Picked { ts_ms, .. }
@@ -168,6 +172,13 @@ pub fn body(ev: &StreamEvent) -> String {
         ),
         StreamEvent::SegmentStart { segment, .. } => format!("segment_start {}", wire(segment)),
         StreamEvent::SegmentEnd { segment, .. } => format!("segment_end {}", wire(segment)),
+        StreamEvent::SceneStart {
+            scene_id,
+            title,
+            guest,
+            ..
+        } => format!("scene_start {scene_id} \"{title}\" guest={guest}"),
+        StreamEvent::SceneEnd { scene_id, .. } => format!("scene_end {scene_id}"),
         StreamEvent::CaseOpen { case, .. } => format!(
             "case_open {} \"{}\" hexes={} fictional={}",
             case.id,

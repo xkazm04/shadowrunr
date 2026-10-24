@@ -187,6 +187,19 @@ pub enum StreamEvent {
         ts_ms: TsMs,
         case: Case,
     },
+    /// SEG-03: a scene begins. Its lines follow as `say` events (guest lines as the foil).
+    SceneStart {
+        ts_ms: TsMs,
+        scene_id: String,
+        title: String,
+        /// Foil id of the guest.
+        guest: String,
+    },
+    /// SEG-03: the scene's last line was delivered (or the scene was cut short).
+    SceneEnd {
+        ts_ms: TsMs,
+        scene_id: String,
+    },
     Chat {
         ts_ms: TsMs,
         msg: ChatMsg,

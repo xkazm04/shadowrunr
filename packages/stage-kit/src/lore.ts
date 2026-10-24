@@ -52,6 +52,7 @@ export const SEGMENT_TITLE: Record<SegmentId, string> = {
   "SEG-02A": "The Investigation",
   "SEG-02B-I": "Cartography Legion (descoped)",
   "SEG-02B-II": "Dependency Doctrine (descoped)",
+  "SEG-03": "The Table Read",
 };
 
 export interface FoilInfo {

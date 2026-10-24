@@ -102,6 +102,7 @@ pub fn segment_name(id: SegmentId) -> &'static str {
         SegmentId::Seg02aHexmap => "SEG-02A",
         SegmentId::Seg02bCartography => "SEG-02B-I",
         SegmentId::Seg02bDependency => "SEG-02B-II",
+        SegmentId::Seg03TableRead => "SEG-03",
     }
 }
 

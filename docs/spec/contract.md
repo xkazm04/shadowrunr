@@ -89,7 +89,7 @@ Wire names that other components read verbatim:
 
 | Field | Values |
 |---|---|
-| `SegmentId` | `SEG-01`, `SEG-02A`, `SEG-02B-I` (descoped), `SEG-02B-II` (descoped) |
+| `SegmentId` | `SEG-01`, `SEG-02A`, `SEG-02B-I` (descoped), `SEG-02B-II` (descoped), `SEG-03` (Table Read) |
 | `Rank`, lowest first | `thrall`, `acolyte`, `cultist`, `warlock`, `lich`, `dread_council` |
 | `EvidenceGrade` | `DOC`, `REP`, `CLM`, `SPC` |
 | `ModelTier` | `haiku`, `sonnet`, `opus` |
@@ -2104,3 +2104,34 @@ CharacterDocSetResult}`.
 - **The constitution** is writable here although the brain never edits it: the caller is the
   operator's own agent, and every one of these writes reaches the operator as an approval card
   before it runs.
+
+## Appendix (SEG-03 Table Read): scenes, the scheduled guest, the guest's voice
+
+The host and a scheduled guest (a foil of the host's package) perform scenes the audience picks.
+One round is a ballot, the scene, then free talk; a run is up to three rounds.
+
+- **Scene files** live in `<data>/scenes/<guest>/<id>.toml`, never in the character package:
+  they are owner-authored and owner-local. Shape (`shadowrunr_types::scene::Scene`): `id` (the
+  file stem), `title`, `pitch` (the ballot line, at most 80 chars), `guest` (the foil id),
+  `status` (`draft` | `approved`), `notes` (talking points for the free talk), `fictional`
+  (omitted when false), and `[[line]]` rows. A line is `speaker` (`host` | `guest`) plus exactly
+  one of `text` (spoken as written) or, for the host only, `live` (a direction for a line the
+  host's core model writes when the scene starts) with a required `fallback` host line.
+- **`scene check`** reports `SceneProblem { line?, code, detail }` with codes `shape`,
+  `pitch_too_long`, `guest_unknown`, `gate_blocked`, `gate_recast`, `no_lines`,
+  `ends_on_guest`. Every fixed line runs the brain's output gate (guest lines on the foil
+  surface). A scene with a problem cannot be approved and never reaches a ballot; the gate runs
+  again on every line at play time (rails on every path).
+- **The prep** carries `table_read { guest, scenes: [1-3 scene ids] }`, omitted when the stream
+  plays no Table Read. With it, SEG-01 hands over to SEG-03 instead of SEG-02A, and the guest is
+  the active foil for the whole segment.
+- **Events.** `scene_start { scene_id, title, guest }` before the scene's first line,
+  `scene_end { scene_id }` after its last; the lines between are ordinary `say` events (the
+  guest's as `speaker: foil`, `foil: <guest>`). `BeatMode` gains `scene`.
+- **Turn rules.** Scripted guest lines are spoken as written. Outside a scene the guest's live
+  lines keep the one-sentence foil cap, and the host speaks after every guest turn; a scene
+  never ends on a guest line (`ends_on_guest`).
+- **Voice.** `VoiceFrame::Utterance` gains `speaker` (`foil` for the guest; omitted for the
+  host) and `foil`. Guest lines are voiced in the foil's own voice through the same FIFO as the
+  host's, so the two never overlap; a guest with no voice configured is shown as captions only.
+

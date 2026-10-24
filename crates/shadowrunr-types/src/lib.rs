@@ -24,6 +24,7 @@ pub mod results;
 pub mod review;
 pub mod rpc;
 pub mod sandbox;
+pub mod scene;
 pub mod schema;
 pub mod segment;
 pub mod segment_directions;

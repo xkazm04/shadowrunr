@@ -359,6 +359,8 @@ mod tests {
             duration_ms: 1,
             pcm: String::new(),
             visemes: Vec::new(),
+            speaker: None,
+            foil: None,
         })
     }
 

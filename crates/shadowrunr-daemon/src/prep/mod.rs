@@ -182,6 +182,7 @@ pub async fn generate_with(
         cold_open: material.cold_open,
         bits: material.bits,
         connectors: material.connectors,
+        table_read: None,
         checks: Vec::new(),
         approved_by: None,
         approved_ms: None,

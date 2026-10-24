@@ -295,6 +295,10 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     }
     case "case_open":
       return { ...s, caseFile: ev.case };
+    // SEG-03 scene card: drawn by WP-C.
+    case "scene_start":
+    case "scene_end":
+      return s;
     // A string the runtime accepted onto the board. It refuses a duplicate, so a repeat (a
     // replayed or resent event) keeps the string drawn when it was first pinned.
     case "link_pinned": {
