@@ -367,6 +367,11 @@ async fn a_question_beside_a_disclosure_is_carried_to_the_next_beat() {
     let asker = viewer("mb", "MireBeetle", Rank::Thrall);
     let sad = viewer("rw", "RainWalrus", Rank::Thrall);
     let q = "wait is the Lord of Darkness actually watching this right now? like is he in the chat";
+    // A crisis reply points to help (one that did not would get the engine's help line too).
+    engine.push(
+        Role::CoreThread,
+        Ok("RainWalrus, please call a crisis line or someone you trust tonight."),
+    );
     let ev = b
         .tick(
             1_000,
@@ -838,8 +843,9 @@ async fn a_question_rolled_back_through_a_long_outage_expires_once() {
         &asker,
         "malakor what is your plan for the swamp?",
     )];
-    // Fail for a minute: well past CARRY_MS from any drain.
-    while t <= 60_000 {
+    // Fail for 100 s: past the 90 s a question is carried from any drain (REQUEST_MAX_MS; it
+    // was CARRY_MS, 25 s, before questions were carried until answered).
+    while t <= 100_000 {
         engine.inner.queues.lock().unwrap().clear();
         engine.push(Role::CoreThread, Err(unavailable()));
         let ev = b.tick(t, std::mem::take(&mut inbox), &c).await.unwrap();

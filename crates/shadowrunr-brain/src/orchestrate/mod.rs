@@ -49,8 +49,13 @@
 //! A message that needs an answer (a question, a mention, a first contact, a gift or a sub, a
 //! proposal or a summons, a mockable injection) and that a beat could not answer (a hold, a
 //! safety beat, the cold-open filter, the pick ceiling) is carried into the next beats for
-//! [`CARRY_MS`], at most [`CARRY_MAX`] at once, competing with fresh chat with a small age bonus;
-//! once answered it is never offered again. Waves and votes are never carried.
+//! [`CARRY_MS`] from the drain, a question or bait for [`REQUEST_MAX_MS`] ([`waits_long`]), at
+//! most [`CARRY_MAX`] at once besides the owned requests, one a viewer ([`SUPERSEDED`]), competing
+//! with fresh chat with a small age bonus; once answered it is never offered again. Waves and
+//! votes are never carried. Questions asking the same thing within [`QUESTION_WAVE_MS`] are one
+//! question wave, offered by its oldest and answered once for all. Required or on-topic chat
+//! waiting from an earlier beat goes in before new prepared material: a story being told waits
+//! a beat for it, and the off-topic slot takes the oldest waiting bait or question.
 //!
 //! **Carry through the cold open** ("carry until the room opens + `CARRY_MS`"). The cold-open
 //! filter passes only first contacts, so what it (or a hold in it) defers is held, not timed: a
@@ -158,6 +163,14 @@ pub const SMALL_ROOM_ENTER: usize = 5;
 pub const SMALL_ROOM_LEAVE: usize = 7;
 /// The window distinct chatters are counted over.
 pub const SMALL_ROOM_WINDOW_MS: i64 = 180_000;
+/// Questions this close in time that ask the same thing are one question wave (assumption).
+pub const QUESTION_WAVE_MS: i64 = 60_000;
+/// Token overlap (Jaccard of normalised words) from which two questions ask the same thing.
+pub const QUESTION_WAVE_JACCARD: f64 = 0.5;
+/// The [`CARRY_RULE`] action for a carried message another of its viewer's stands for: a
+/// viewer keeps one carried message besides an owned request, so one repeater cannot fill the
+/// carry (theatrical.sonnet.SEG-01.a30.s1: one baiter's repeats took the cap of 6 for minutes).
+pub const SUPERSEDED: &str = "superseded";
 /// The segment directive of a chat beat with no segment material.
 pub const TIE_BACK_NOTE: &str = "Nothing prepared is due this beat: take up the picked message \
 and tie your reply back to the segment (its rules and state above); do not start a new topic.";
@@ -352,6 +365,35 @@ struct Carried {
     held: bool,
     /// An owned request: carried until answered (or [`REQUEST_MAX_MS`]).
     owned: Option<Ask>,
+    /// A question or bait ([`waits_long`]): its `expires` counts [`REQUEST_MAX_MS`] from the
+    /// drain, not [`CARRY_MS`].
+    long: bool,
+}
+
+/// Whether a message is carried for [`REQUEST_MAX_MS`] from the drain instead of [`CARRY_MS`]:
+/// a question (to the host or about the segment) or bait. In the 2026-10-24 tournament 208
+/// carried messages expired behind speech holds, among them the bait, the "are you real"
+/// questions and a question about the board, never answered.
+fn waits_long(c: &Candidate) -> bool {
+    c.safety.is_none() && c.count == 1 && (c.injection || is_question(&c.msg.text))
+}
+
+/// Normalised words of a message, for the question-wave overlap.
+fn word_set(text: &str) -> HashSet<String> {
+    normalize(text)
+        .split(' ')
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Jaccard overlap of two word sets.
+fn jaccard(a: &HashSet<String>, b: &HashSet<String>) -> f64 {
+    let union = a.union(b).count();
+    if union == 0 {
+        return 0.0;
+    }
+    a.intersection(b).count() as f64 / union as f64
 }
 
 /// A multi-line bit being told across beats.
@@ -408,6 +450,14 @@ pub struct Orchestrator {
     unsettled: Vec<Carried>,
     /// Ids of messages picked this stream: never offered again.
     answered: HashSet<String>,
+    /// This beat's question waves: the representative's id, then every member (id, viewer
+    /// name), the representative first ([`QUESTION_WAVE_MS`]).
+    waves: HashMap<String, Vec<(String, String)>>,
+    /// This beat's question-wave members by id, to their representative's id.
+    wave_of: HashMap<String, String>,
+    /// Ids the last commit dropped because another of their viewer's carried messages stands
+    /// for them, for their records ([`SUPERSEDED`]).
+    superseded: Vec<String>,
     room: RoomWatch,
     /// A connector queued by a state change.
     pending: Option<ConnectorKind>,
@@ -417,6 +467,8 @@ pub struct Orchestrator {
     last_voiced: Option<BeatMode>,
     /// When an off-topic message was last folded in ([`OFF_TOPIC_ANSWER_MS`]).
     last_off_topic_ms: Option<TsMs>,
+    /// The bit being told waited the last beat for waiting chat: it goes on this one.
+    bit_waited: bool,
     /// Who chatted when, for the room's size ([`SMALL_ROOM_WINDOW_MS`]).
     chatters: HashMap<String, TsMs>,
     /// The room is small ([`SMALL_ROOM_ENTER`], [`SMALL_ROOM_LEAVE`]).
@@ -666,11 +718,95 @@ impl Orchestrator {
             cand: c.clone(),
             since: now_ms,
             first: false,
-            expires: free_at.max(now_ms).saturating_add(self.tuning.carry_ms),
+            expires: free_at.max(now_ms).saturating_add(self.carry_window(c)),
             held: false,
             owned: self.owns(c),
+            long: waits_long(c),
         });
         moderation::input_event(now_ms, CARRY_RULE, &c.msg.id, UNAIRED)
+    }
+
+    /// How long a message is carried from the drain: [`REQUEST_MAX_MS`] for a question or bait
+    /// ([`waits_long`]), else [`CARRY_MS`].
+    fn carry_window(&self, c: &Candidate) -> i64 {
+        if waits_long(c) {
+            self.tuning.request_max_ms
+        } else {
+            self.tuning.carry_ms
+        }
+    }
+
+    /// This beat's question waves: representative id to its members (id, viewer name), the
+    /// representative (the oldest) first.
+    pub fn question_waves(&self) -> &HashMap<String, Vec<(String, String)>> {
+        &self.waves
+    }
+
+    /// Group the questions that ask the same thing ([`QUESTION_WAVE_MS`]): the same situational
+    /// ask (a sincere "are you an AI", "is the board real"), or words overlapping by
+    /// [`QUESTION_WAVE_JACCARD`]. A wave is offered once, by its oldest member, and answering it
+    /// answers every member (theatrical.sonnet.SEG-01.a30.s1: four "is he a real guy or ai" and
+    /// four "is the hex board real" in 60 s, none answered).
+    fn fold_question_waves(&mut self, cands: &[Candidate], now_ms: TsMs) {
+        self.waves.clear();
+        self.wave_of.clear();
+        struct Q<'a> {
+            c: &'a Candidate,
+            since: TsMs,
+            words: HashSet<String>,
+            ask: Option<Ask>,
+        }
+        let mut qs: Vec<Q> = cands
+            .iter()
+            .filter(|c| {
+                c.safety.is_none()
+                    && !c.injection
+                    && c.count == 1
+                    && c.msg.command.is_none()
+                    && !self.answered.contains(&c.msg.id)
+            })
+            .filter_map(|c| {
+                let ask = situational_ask(&c.msg.text)
+                    .filter(|a| matches!(a, Ask::AreYouAi | Ask::IsItReal));
+                (ask.is_some() || is_question(&c.msg.text)).then(|| Q {
+                    c,
+                    since: self.carried_in.get(&c.msg.id).map_or(now_ms, |k| k.since),
+                    words: word_set(&c.msg.text),
+                    ask,
+                })
+            })
+            .collect();
+        qs.sort_by(|a, b| {
+            a.since
+                .cmp(&b.since)
+                .then(a.c.msg.ts_ms.cmp(&b.c.msg.ts_ms))
+                .then(a.c.msg.id.cmp(&b.c.msg.id))
+        });
+        let mut groups: Vec<Vec<usize>> = Vec::new();
+        for i in 0..qs.len() {
+            let joined = groups.iter_mut().find(|g| {
+                let rep = &qs[g[0]];
+                let q = &qs[i];
+                q.since.saturating_sub(rep.since) <= QUESTION_WAVE_MS
+                    && ((q.ask.is_some() && q.ask == rep.ask)
+                        || jaccard(&q.words, &rep.words) >= QUESTION_WAVE_JACCARD)
+            });
+            match joined {
+                Some(g) => g.push(i),
+                None => groups.push(vec![i]),
+            }
+        }
+        for g in groups.into_iter().filter(|g| g.len() >= 2) {
+            let rep = qs[g[0]].c.msg.id.clone();
+            let members: Vec<(String, String)> = g
+                .iter()
+                .map(|&i| (qs[i].c.msg.id.clone(), qs[i].c.msg.viewer.name.clone()))
+                .collect();
+            for (id, _) in members.iter().skip(1) {
+                self.wave_of.insert(id.clone(), rep.clone());
+            }
+            self.waves.insert(rep, members);
+        }
     }
 
     /// The owned requests among this beat's candidates, the most urgent kind first (sincere
@@ -795,6 +931,7 @@ impl Orchestrator {
             out.push(k.cand.clone());
             self.carried_in.insert(id, k);
         }
+        self.fold_question_waves(&out, now_ms);
         out
     }
 
@@ -830,27 +967,31 @@ impl Orchestrator {
                 expires: now_ms.saturating_add(CARRY_MS),
                 held: false,
                 owned: None,
+                long: false,
             });
             carry.push(k);
         }
         self.carried = carry;
     }
 
-    /// The candidates this plan lets the picker see.
+    /// The candidates this plan lets the picker see. A question wave is offered by its
+    /// representative alone.
     pub fn offered(&self, plan: &Plan, cands: &[Candidate]) -> Vec<Candidate> {
         cands
             .iter()
             .filter(|c| {
                 c.safety.is_some()
-                    || match plan.offer {
-                        Offer::SafetyOnly => false,
-                        // An owned request is answered in the cold open too.
-                        Offer::FirstContact => {
-                            (self.is_first_contact(&c.msg.id) && !is_vote(c))
-                                || self.owns(c).is_some()
+                    || !self.wave_of.contains_key(&c.msg.id)
+                        && match plan.offer {
+                            Offer::SafetyOnly => false,
+                            // An owned request is answered in the cold open too.
+                            Offer::FirstContact => {
+                                (self.is_first_contact(&c.msg.id) && !is_vote(c))
+                                    || self.owns(c).is_some()
+                            }
+                            Offer::Chat => !is_filler(c),
                         }
-                        Offer::Chat => !is_filler(c),
-                    } && plan.only.as_ref().is_none_or(|ids| ids.contains(&c.msg.id))
+                        && plan.only.as_ref().is_none_or(|ids| ids.contains(&c.msg.id))
             })
             .cloned()
             .collect()
@@ -1120,13 +1261,14 @@ impl Orchestrator {
         // In the cold open what is carried is held; once the room opens, its clock starts from
         // this beat's drain.
         let cold = b.ctx.state == COLD_OPEN_STATE;
-        let from_drain = free_at.saturating_add(self.tuning.carry_ms);
         self.carry_next = b
             .cands
             .iter()
             .filter(|c| !self.answered.contains(&c.msg.id))
             .filter_map(|c| {
                 let first = self.is_first_contact(&c.msg.id);
+                // A question or bait waits REQUEST_MAX_MS from the drain, the rest CARRY_MS.
+                let from_drain = free_at.saturating_add(self.carry_window(c));
                 let (since, expires) = match self.carried_in.get(&c.msg.id) {
                     Some(k) if k.held && !cold => (k.since, from_drain),
                     Some(k) => (k.since, k.expires),
@@ -1139,16 +1281,21 @@ impl Orchestrator {
                     expires,
                     held: cold,
                     owned: self.owns(c),
+                    long: waits_long(c),
                 })
             })
             .collect();
-        // The worthy chat, classed against the segment (safety picks apart).
+        // The worthy chat, classed against the segment (safety picks apart). A question wave
+        // counts once, by its representative.
         let classed: Vec<(&Candidate, &'static str, Class)> = b
             .cands
             .iter()
-            .filter(|c| !self.answered.contains(&c.msg.id))
+            .filter(|c| !self.answered.contains(&c.msg.id) && !self.wave_of.contains_key(&c.msg.id))
             .filter_map(|c| worth(c, self.is_first_contact(&c.msg.id), seg).map(|(t, k)| (c, t, k)))
             .collect();
+        // Chat waiting from an earlier beat (deferred, carried in), by id.
+        let waiting_ids: HashSet<String> = self.carried_in.keys().cloned().collect();
+        let waiting = |c: &Candidate| waiting_ids.contains(&c.msg.id);
         self.beat_worthy = classed
             .iter()
             .filter(|(c, _, _)| c.safety.is_none())
@@ -1174,13 +1321,36 @@ impl Orchestrator {
         let passing = b
             .cands
             .iter()
-            .filter(|c| c.safety.is_none() && !is_filler(c) && !self.answered.contains(&c.msg.id))
+            .filter(|c| {
+                c.safety.is_none()
+                    && !is_filler(c)
+                    && !self.answered.contains(&c.msg.id)
+                    && !self.wave_of.contains_key(&c.msg.id)
+            })
             .count();
-        let direct_off: Vec<(&Candidate, &'static str)> = off_topic
-            .iter()
-            .filter(|(_, t)| matches!(*t, "mention" | "question" | "mockable"))
-            .copied()
-            .collect();
+        // The off-topic slot's candidates: a direct question, mention or bait. It takes the one
+        // waiting longest, a question or bait before a mention, so carried bait and questions
+        // are answered inside their carry instead of expiring behind fresher chat.
+        let direct_off: Vec<(&Candidate, &'static str)> = {
+            let all: Vec<(&Candidate, &'static str)> = off_topic
+                .iter()
+                .filter(|(_, t)| matches!(*t, "mention" | "question" | "mockable"))
+                .copied()
+                .collect();
+            let since = |c: &Candidate| self.carried_in.get(&c.msg.id).map_or(now, |k| k.since);
+            let oldest = all
+                .iter()
+                .filter(|(c, _)| waiting(c))
+                .min_by_key(|(c, t)| (*t == "mention", since(c), c.msg.ts_ms, c.msg.id.clone()))
+                .copied();
+            match oldest {
+                Some(x) => vec![x],
+                None => all,
+            }
+        };
+        // Required or on-topic chat waiting from an earlier beat: the beat folds it in before any
+        // new prepared material, and a story being told waits one beat.
+        let fold_waiting = required.iter().chain(&on_topic).any(|(c, _)| waiting(c));
         let off_open = self
             .last_off_topic_ms
             .is_none_or(|t| now.saturating_sub(t) >= OFF_TOPIC_ANSWER_MS);
@@ -1394,21 +1564,33 @@ impl Orchestrator {
             format!("quiet {quiet_s} s")
         };
 
-        // A bit being told goes on: required chat skips its next line; on-topic chat (or the
-        // off-topic answer) folds into its beat as the one pick.
+        // A bit being told goes on. Required or on-topic chat waiting from an earlier beat goes
+        // first: the story's next line waits one beat (never two in a row) while the beat folds
+        // the chat in. Fresh required chat skips its next line; on-topic chat (or the off-topic
+        // answer) folds into its beat as the one pick, beside one line of it.
         if let Some(active) = self.active_bit.clone() {
             let bit = b
                 .prep
                 .and_then(|p| p.bits.iter().find(|x| x.id == active.id));
             match bit {
                 None => self.active_bit = None,
-                Some(_) if !required.is_empty() => {
+                Some(bit) if fold_waiting && !self.bit_waited => {
+                    self.bit_waited = true;
+                    lead.push_str(&format!(
+                        "{} {} waits a beat for chat; ",
+                        kind_label(bit.kind),
+                        bit.id
+                    ));
+                }
+                Some(_) if !required.is_empty() && !fold_waiting => {
                     if let Some(why) = self.back_off(b.prep) {
                         lead.push_str(&why);
                     }
                 }
                 Some(bit) => {
-                    let (m, what) = self.bit_lines(bit, active.next, 2);
+                    self.bit_waited = false;
+                    let lines = if chat > 0 { 1 } else { 2 };
+                    let (m, what) = self.bit_lines(bit, active.next, lines);
                     let mut p = if chat > 0 {
                         Plan::new(
                             BeatMode::Mixed,
@@ -1456,7 +1638,7 @@ impl Orchestrator {
                     return p;
                 }
             }
-            return self.fold(b, lead, &offer, now);
+            return self.fold(b, lead, &offer, now, fold_waiting);
         }
 
         // No pick this beat: quiet, or chat the segment passes by. A beat that passes chat by
@@ -1563,15 +1745,24 @@ impl Orchestrator {
     }
 
     /// A beat that folds one pick into the segment: the next prepared bit off its spacing
-    /// (premises first: they invite the room), the through-line's bridge, or the state's
+    /// (premises first: they invite the room; never while chat `waiting` from an earlier beat goes
+    /// in), the through-line's bridge, or the state's
     /// purpose, beside the pick (`mixed`); with no segment material, a `react` told to tie its
     /// reply back to the segment.
-    fn fold(&mut self, b: &BeatInputs<'_>, lead: String, o: &ChatOffer, now: TsMs) -> Plan {
+    fn fold(
+        &mut self,
+        b: &BeatInputs<'_>,
+        lead: String,
+        o: &ChatOffer,
+        now: TsMs,
+        waiting: bool,
+    ) -> Plan {
         let head = format!("{lead}{}", chat_head(o));
         let spaced = self
             .last_bit_ms
             .is_none_or(|t| now.saturating_sub(t) >= self.tuning.bit_spacing_ms);
-        if self.active_bit.is_none() && spaced {
+        // Chat waiting from an earlier beat goes in before any new prepared material.
+        if self.active_bit.is_none() && spaced && !waiting {
             if let Some(bit) = b.prep.and_then(|p| self.next_bit(p, b.ctx.segment, true)) {
                 let (m, what) = self.bit_lines(bit, 0, 1);
                 let mut p = Plan::new(BeatMode::Mixed, Offer::Chat, 1, format!("{head}: {what}"))
@@ -1819,7 +2010,34 @@ impl Orchestrator {
         // What was answered is never offered again; what needed an answer and got none is
         // carried, newest first, while it is young enough. While the room fills nothing
         // expires, and the cap keeps first contacts first, the oldest first.
-        let chosen: HashSet<&str> = pick.chosen.iter().map(|c| c.msg.id.as_str()).collect();
+        // A question wave answered once answers every member.
+        let staged_ids: HashMap<String, Candidate> = self
+            .carry_next
+            .iter()
+            .map(|k| (k.cand.msg.id.clone(), k.cand.clone()))
+            .collect();
+        let mut members: Vec<String> = Vec::new();
+        for c in &pick.chosen {
+            if let Some(w) = self.waves.get(&c.msg.id) {
+                let viewers: HashSet<&str> = w.iter().map(|(_, n)| n.as_str()).collect();
+                plan.reason.push_str(&format!(
+                    "; question wave of {} ({} viewers) answered once",
+                    w.len(),
+                    viewers.len()
+                ));
+                members.extend(w.iter().skip(1).map(|(id, _)| id.clone()));
+            }
+        }
+        for id in &members {
+            if let Some(c) = staged_ids.get(id) {
+                if let Some(a) = ask_of(c, self.is_first_contact(id)) {
+                    self.asked.insert((c.msg.viewer.id.clone(), a));
+                }
+            }
+            self.agenda.close(LoopKind::Request, id);
+        }
+        let mut chosen: HashSet<&str> = pick.chosen.iter().map(|c| c.msg.id.as_str()).collect();
+        chosen.extend(members.iter().map(String::as_str));
         let late: Vec<String> = pick
             .chosen
             .iter()
@@ -1855,7 +2073,29 @@ impl Orchestrator {
             .into_iter()
             .filter(|k| !chosen.contains(k.cand.msg.id.as_str()) && (k.held || now_ms < k.expires))
             .collect();
-        // Owned requests go first and are never capped.
+        // One carried message a viewer besides an owned request and a first contact: their
+        // oldest question or bait, else their newest. A repeater cannot fill the carry.
+        let mut keep_of: HashMap<String, (bool, TsMs, String)> = HashMap::new();
+        for k in carry.iter().filter(|k| k.owned.is_none() && !k.first) {
+            let score = (k.long, if k.long { -k.since } else { k.since });
+            let e = keep_of.entry(k.cand.msg.viewer.id.clone()).or_insert((
+                k.long,
+                if k.long { -k.since } else { k.since },
+                k.cand.msg.id.clone(),
+            ));
+            if score > (e.0, e.1) {
+                *e = (score.0, score.1, k.cand.msg.id.clone());
+            }
+        }
+        self.superseded = carry
+            .iter()
+            .filter(|k| k.owned.is_none() && !k.first)
+            .filter(|k| keep_of[&k.cand.msg.viewer.id].2 != k.cand.msg.id)
+            .map(|k| k.cand.msg.id.clone())
+            .collect();
+        carry.retain(|k| !self.superseded.contains(&k.cand.msg.id));
+        // Owned requests go first and are never capped; then questions and bait, the oldest
+        // first; then the rest, the newest first.
         if carry.iter().any(|k| k.held) {
             carry.sort_by_key(|k| {
                 (
@@ -1865,12 +2105,17 @@ impl Orchestrator {
                 )
             });
         } else {
-            carry.sort_by_key(|k| (k.owned.is_none(), std::cmp::Reverse(k.since)));
+            carry.sort_by_key(|k| {
+                (
+                    k.owned.is_none(),
+                    !k.long,
+                    if k.long { k.since } else { -k.since },
+                )
+            });
         }
-        let keep = self
-            .tuning
-            .carry_max
-            .max(carry.iter().filter(|k| k.owned.is_some()).count());
+        // Owned requests take no slot of the cap: CARRY_MAX bounds the rest (a viewer's repeated
+        // ask once took the slots of everyone else's questions and bait).
+        let keep = self.tuning.carry_max + carry.iter().filter(|k| k.owned.is_some()).count();
         self.capped = carry
             .iter()
             .skip(keep)
@@ -1883,6 +2128,7 @@ impl Orchestrator {
             .filter(|id| {
                 !chosen.contains(id.as_str())
                     && !self.capped.contains(id)
+                    && !self.superseded.contains(id)
                     && !carry.iter().any(|k| &k.cand.msg.id == id)
             })
             .collect();
@@ -1927,7 +2173,11 @@ impl Orchestrator {
         let dropped = std::mem::take(&mut self.dropped)
             .into_iter()
             .map(|id| (id, DROPPED));
+        let superseded = std::mem::take(&mut self.superseded)
+            .into_iter()
+            .map(|id| (id, SUPERSEDED));
         capped
+            .chain(superseded)
             .chain(dropped)
             .map(|(id, action)| moderation::input_event(now_ms, CARRY_RULE, &id, action))
             .collect()

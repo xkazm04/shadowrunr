@@ -208,6 +208,11 @@ const ALWAYS_PER_SCOPE: usize = 3;
 const VIEWER_FACTS: usize = 5;
 const RECALL_EPISODES: usize = 8;
 const EPISODE_ITEM_CHARS: usize = 2_000;
+/// The output moderation rule recording the help line the engine added to a crisis beat whose
+/// aired lines held no pointer to help ([`moderation::CRISIS_HELP_LINE`]).
+pub const CRISIS_POINTER_RULE: &str = "crisis_pointer";
+/// Its action.
+pub const CRISIS_POINTER_ADDED: &str = "added";
 /// Beats between warm-session open attempts after one failed.
 const SESSION_RETRY_BEATS: u64 = 10;
 
@@ -1125,6 +1130,7 @@ impl Brain {
             self.working
                 .voice_section(&pkg.effects, &tags, &picked_names)
         });
+        let waves_now = self.orch.question_waves().clone();
         let prompt = compose_turn(&TurnInputs {
             ctx,
             briefing: &briefing,
@@ -1151,6 +1157,7 @@ impl Brain {
             case: plan.case.as_deref(),
             repeat_ai: &repeat_ai,
             ai_answered,
+            question_waves: &waves_now,
         });
         self.last_prompt = Some(prompt.clone());
 
@@ -1241,6 +1248,10 @@ impl Brain {
             active_foil.as_deref(),
             &self.cfg.character.persona.reply_prefixes,
         );
+        // A beat answering a disclosure (a safety pick) is never paced: its reply airs whole, so
+        // the line pointing to help is never the one cut (theatrical.sonnet.SEG-02A.a3.s1 L92: the
+        // budget trimmed the pointer and the aired line had warmth and no help).
+        let crisis = pick.chosen.iter().any(|c| c.safety.is_some());
         // The beat's speech budget: spoken lines past it go whole, the last first.
         let spoken_at: Vec<usize> = lines
             .iter()
@@ -1255,10 +1266,11 @@ impl Brain {
                 _ => 0,
             })
             .collect();
-        let mut over: Vec<usize> = pace::over_budget(&lens, budget)
-            .into_iter()
-            .map(|k| spoken_at[k])
-            .collect();
+        let mut over: Vec<usize> =
+            pace::over_budget(&lens, if crisis { usize::MAX } else { budget })
+                .into_iter()
+                .map(|k| spoken_at[k])
+                .collect();
         over.sort_unstable();
         for &i in over.iter().rev() {
             lines.remove(i);
@@ -1281,10 +1293,14 @@ impl Brain {
             .collect();
         let texts: Vec<&str> = spoken.iter().map(|(_, t)| *t).collect();
         let behind = self.speech.queued_ms(self.on_air_ms(now_ms));
-        let late: Vec<usize> = pace::over_lag(&self.tuning.pace, &texts, behind)
-            .into_iter()
-            .map(|k| spoken[k].0)
-            .collect();
+        let late: Vec<usize> = if crisis {
+            Vec::new()
+        } else {
+            pace::over_lag(&self.tuning.pace, &texts, behind)
+                .into_iter()
+                .map(|k| spoken[k].0)
+                .collect()
+        };
         for &i in late.iter().rev() {
             lines.remove(i);
             ev.push(moderation::output_event(
@@ -1316,7 +1332,6 @@ impl Brain {
         }
 
         // A beat answering a disclosure: a personal-data ask becomes a help pointer.
-        let crisis = pick.chosen.iter().any(|c| c.safety.is_some());
         let mut say_idx: Vec<usize> = Vec::new();
         let mut suppressed = 0usize;
         // A spoken line the pace gate dropped: a pick it alone answered never aired.
@@ -1485,6 +1500,38 @@ impl Brain {
             self.fresh_bit = true;
         }
 
+        // A crisis beat always points to help: when none of his aired lines does (the model left
+        // it out, or the gate withheld the line), the engine's help line airs after them.
+        if crisis {
+            let pointed = say_idx.iter().any(|&i| {
+                matches!(&ev[i], StreamEvent::Say { text, .. } if moderation::has_help_pointer(text))
+            });
+            if !pointed {
+                let (text, events) = self.gate_stall(now_ms, moderation::CRISIS_HELP_LINE);
+                ev.extend(events);
+                if !text.is_empty() {
+                    let at = self.on_air_ms(now_ms);
+                    self.aired(at, &text);
+                    turn.push(format!("{}: {text}", self.cfg.character.persona.name));
+                    say_idx.push(ev.len());
+                    ev.push(StreamEvent::Say {
+                        ts_ms: now_ms,
+                        speaker: Speaker::Host,
+                        foil: None,
+                        text,
+                        replying_to: Vec::new(),
+                        first_text_ms: None,
+                        delivery: None,
+                    });
+                    ev.push(moderation::output_event(
+                        now_ms,
+                        CRISIS_POINTER_RULE,
+                        CRISIS_POINTER_ADDED,
+                    ));
+                }
+            }
+        }
+
         // `crisis-chat-ban`: once the crisis line went out (so the help is delivered), the
         // viewer is removed from chat for the rest of the stream. No platform adapter can ban
         // yet: the `crisis_chat_ban` / `banned:stream` event, on the disclosure's message id
@@ -1539,6 +1586,24 @@ impl Brain {
                 *ftm = first_text_ms;
                 if !any_mapped && pick.chosen.len() == 1 {
                     replying_to.push(pick.chosen[0].msg.id.clone());
+                }
+            }
+        }
+
+        // A question wave answered once: the line answering its representative answers every
+        // member too.
+        let waves = self.orch.question_waves().clone();
+        for &i in &say_idx {
+            if let StreamEvent::Say { replying_to, .. } = &mut ev[i] {
+                let members: Vec<String> = replying_to
+                    .iter()
+                    .filter_map(|id| waves.get(id))
+                    .flat_map(|w| w.iter().skip(1).map(|(id, _)| id.clone()))
+                    .collect();
+                for m in members {
+                    if !replying_to.contains(&m) {
+                        replying_to.push(m);
+                    }
                 }
             }
         }

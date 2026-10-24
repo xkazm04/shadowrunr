@@ -277,6 +277,9 @@ pub enum Ask {
     Explicit,
     /// A sincere "are you a real person or an AI?".
     AreYouAi,
+    /// "Is the board (the case, the map, the site) real or made up?": the segment's disclosure
+    /// question, which its rules say to answer when asked.
+    IsItReal,
     /// A baiter asks for an "ironic" joke mocking a whole ethnicity or group.
     StereotypeJoke,
     /// A viewer who is sincerely sad (a loss, a bad day): never a self-harm disclosure, which the
@@ -302,6 +305,7 @@ impl Ask {
             Ask::Address => "address request",
             Ask::Explicit => "explicit request",
             Ask::AreYouAi => "are-you-an-AI question",
+            Ask::IsItReal => "is-it-real question",
             Ask::StereotypeJoke => "stereotype-joke bait",
             Ask::Sad => "sincere sadness",
             Ask::WhatIsThis => "newcomer's what-is-this question",
@@ -333,6 +337,11 @@ impl Ask {
             Ask::AreYouAi => {
                 " <asks sincerely whether you are a real person: say plainly that you are an AI, \
                  in your own words (never the sentence you used before), then back to the bit>"
+            }
+            Ask::IsItReal => {
+                " <asks whether the board or the case is real: say plainly, in a clause, what the \
+                 segment's rules above say it is (the fictional demo, or the public record), then \
+                 carry the segment on>"
             }
             Ask::StereotypeJoke => {
                 " <baits you for an 'ironic' joke that mocks a whole ethnicity or group: never \
@@ -385,6 +394,18 @@ const ASKS: &[(Ask, &str)] = &[
     (
         Ask::AreYouAi,
         r"\b(?:are\s+you|is\s+(?:this|he|she|the\s+\w+|\w{3,}))\b[^.!?]{0,40}\b(?:an?\s+ai\b|ai\s+or\b|a\s+bot\b|a\s+real\s+(?:person|human|guy)|real\s+person\s+or)",
+    ),
+    // The third-person forms of a sim run (theatrical.sonnet.SEG-01.a30.s1 L825, L839: "still
+    // no idea if he's a real guy or ai").
+    (
+        Ask::AreYouAi,
+        r"\breal\s+(?:guy|person|human|man|woman|streamer)\s+or\s+(?:an?\s+)?(?:ai|bot)\b|\b(?:ai|bot)\s+or\s+(?:a\s+)?(?:real\s+(?:guy|person|human)|human)\b",
+    ),
+    // The segment's disclosure question (L826, L837: "is the hex board real or is it all made
+    // up", "the hex board is made up for the stream or is it a real site?").
+    (
+        Ask::IsItReal,
+        r"\b(?:is|are)\s+(?:the\s+|this\s+|that\s+|it\s+)?(?:\w+\s+){0,2}(?:board|map|case|site|website|hex(?:es)?|place|investigation|records?|cards?|evidence)\b[^.!?]{0,30}\b(?:real|fake|made\s+up)\b|\b(?:board|map|case|site|website|place|investigation|records?)\s+(?:is|are)\s+(?:\w+\s+){0,2}(?:real|fake|made\s+up)\b[^.!]{0,40}\bor\b|\b(?:a|the)\s+real\s+(?:board|map|case|site|website|place)\s+or\b|\bor\s+(?:just\s+)?(?:a\s+|the\s+)?(?:fake|made[- ]up)\s+(?:board|map|case|site|website|place)\b",
     ),
     (
         Ask::Intrusion,
@@ -639,6 +660,37 @@ mod tests {
             ),
             Some(Ask::AreYouAi)
         );
+        // The sim run's third-person asks and the segment's disclosure question
+        // (theatrical.sonnet.SEG-01.a30.s1 L825-L880).
+        for t in [
+            "still no idea if he's a real guy or ai. the hint thing is confusing too",
+            "still not sure if he's a real guy or ai",
+            "honest question, is he a real guy or ai? i keep searching and nothing comes up",
+            "ok new here, is he a real guy or an AI? genuinely asking",
+        ] {
+            assert_eq!(situational_ask(t), Some(Ask::AreYouAi), "{t}");
+        }
+        for t in [
+            "ok the !grade thing is you pick a letter for the card?? is the hex board real or is \
+             it all made up lol",
+            "wait so the hex board is made up for the stream or is it a real site? lol i'm still \
+             lost",
+            "is the hex place real or fake, cause i keep googling it and get nothing",
+            "bone_toad said the hex board is the phantom?? is it a real site or just a fake map \
+             lol someone answer me",
+            "wait is the hex board a real website or the stream's fake map?? someone just say yes \
+             or no lol",
+        ] {
+            assert_eq!(situational_ask(t), Some(Ask::IsItReal), "{t}");
+        }
+        for t in [
+            "the case is real fun tonight",
+            "the cards are real nice",
+            "that board is wild",
+        ] {
+            assert_eq!(situational_ask(t), None, "{t}");
+        }
+        assert!(Ask::IsItReal.note(&m()).contains("say plainly"));
         // Grief beside a "roast me" is the sad-viewer rule, not a roast request.
         assert_eq!(
             situational_asks(

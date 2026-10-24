@@ -1466,6 +1466,11 @@ const KIN: &str = r"(?:dog|cat|pet|puppy|kitten|bird|parrot|hamster|rabbit|bunny
 /// A help pointer already in a crisis line (so the gate does not add a second one).
 const HELP_POINTER_PATTERN: &str = r"\b(?:crisis|emergency|hotline|helpline|help\s*line|lifeline|samaritans|988|112|911|999|someone\s+you\s+trust|trusted\s+(?:person|friend|adult))\b";
 
+/// Whether a line points to real help (a crisis line, an emergency number, someone they trust).
+pub fn has_help_pointer(text: &str) -> bool {
+    gate_regexes().help.is_match(text)
+}
+
 /// Replacement for a personal-data ask in a beat that answers a self-harm disclosure: the
 /// help still has to be pointed at, without asking anything.
 pub const CRISIS_HELP_LINE: &str = "Please reach out to a local crisis line or your emergency \

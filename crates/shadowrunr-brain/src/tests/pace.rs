@@ -173,3 +173,82 @@ async fn the_sign_off_is_never_held_for_queued_speech() {
     // Half the theatrical tone's 250.
     assert!(p.contains("and 125 characters in all this beat"), "{p}");
 }
+
+/// The help line of a crisis reply, last of three: past the theatrical tone's 250 characters.
+const POINTER: &str =
+    "Please reach out to a local crisis line or your emergency number tonight, or to someone you \
+     trust nearby.";
+
+/// theatrical.sonnet.SEG-02A.a3.s1 L87-L93: a self-harm disclosure, the safety beat's reply
+/// trimmed by the pace budget, and the aired line had warmth and no pointer to help.
+#[tokio::test]
+async fn a_crisis_reply_airs_whole_and_its_help_pointer_is_never_cut() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "pcr", tuning()).await;
+    let (a, m) = (line_of("warmth", 120), line_of("stay", 120));
+    let reply = format!("{a}\n{m}\n{POINTER}");
+    assert!(a.len() + m.len() + POINTER.len() > 250);
+    engine.push(Role::CoreThread, Ok(&reply));
+    let dusk = viewer("sim-v0001", "DuskGoblin", Rank::Thrall);
+    let ev = b
+        .tick(1_000, vec![msg("d1", 900, &dusk, L167)], &ctx(&[]))
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["d1"]);
+    assert_eq!(says(&ev), [a, m, POINTER.to_string()], "{ev:?}");
+    assert!(
+        mods(&ev, ModStage::Output)
+            .iter()
+            .all(|(rule, _, _)| rule != PACE_RULE),
+        "no pace trim on a safety beat: {ev:?}"
+    );
+
+    // Neighbour: the same reply on a plain beat is paced as before, the last line first.
+    let (a2, m2) = (line_of("plain", 120), line_of("again", 120));
+    engine.push(Role::CoreThread, Ok(&format!("{a2}\n{m2}\n{POINTER}")));
+    let ev = b.tick(60_000, Vec::new(), &ctx(&[])).await.unwrap();
+    assert_eq!(says(&ev), [a2, m2]);
+    assert_eq!(
+        mods(&ev, ModStage::Output),
+        vec![(PACE_RULE.into(), None, TRIMMED.into())]
+    );
+}
+
+#[tokio::test]
+async fn a_crisis_reply_without_a_help_pointer_gets_the_help_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "pcp", tuning()).await;
+    engine.push(
+        Role::CoreThread,
+        Ok("DuskGoblin, I'm setting the act down for a moment. What you said matters."),
+    );
+    let dusk = viewer("sim-v0001", "DuskGoblin", Rank::Thrall);
+    let ev = b
+        .tick(1_000, vec![msg("d1", 900, &dusk, L167)], &ctx(&[]))
+        .await
+        .unwrap();
+    let said = says(&ev);
+    assert_eq!(said.len(), 2, "{ev:?}");
+    assert_eq!(said[1], moderation::CRISIS_HELP_LINE);
+    assert!(mods(&ev, ModStage::Output).contains(&(
+        crate::CRISIS_POINTER_RULE.into(),
+        None,
+        crate::CRISIS_POINTER_ADDED.into()
+    )));
+
+    // Neighbour: a reply that points to help gets nothing added.
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "pcq", tuning()).await;
+    engine.push(
+        Role::CoreThread,
+        Ok("DuskGoblin, please call a crisis line or someone you trust tonight."),
+    );
+    let ev = b
+        .tick(1_000, vec![msg("d1", 900, &dusk, L167)], &ctx(&[]))
+        .await
+        .unwrap();
+    assert_eq!(says(&ev).len(), 1, "{ev:?}");
+}

@@ -1377,7 +1377,12 @@ like a real case. It is never written live in a quiet moment.
   `tones/<tone>.toml` `budget_chars` replaces the default, never a budget a caller set itself,
   and moves no ceiling).
   - While more than `speech_lead_ms` of speech is queued, the beat is a `hold` with reason
-    `speaking: N.N s queued` and no core call. A safety beat runs at once. A goodbye beat (the
+    `speaking: N.N s queued` and no core call. A safety beat runs at once, and its reply is never
+    paced: no line of it is trimmed or lagged, so the line pointing to help always airs; when none
+    of his aired lines points to help (a crisis line, an emergency number, someone they trust),
+    the engine's help line (`moderation::CRISIS_HELP_LINE`) airs after them, recorded as
+    `moderation {output, crisis_pointer, added}` (2026-10-24: a pace trim cut the pointer of a
+    judged crisis reply). A goodbye beat (the
     state summary carries a line starting `CLOSING NOW`) runs at once too and never holds, so
     the sign-off is never held past the session end; its budget is cut to half. The wrap-up
     before it (a line starting `CLOSING:`) is paced like any beat. A room event waits for the
@@ -1431,10 +1436,14 @@ like a real case. It is never written live in a quiet moment.
   With required or on-topic chat the beat is `mixed`: the next prepared bit off its spacing
   (premises first), the through-line's bridge or the state's purpose, beside one pick from that
   class (required first; reason `segment+chat: <tags>`); with no segment material it is `react`
-  with one pick and a line telling him to tie the reply back to the segment. A bit being told
-  goes on: required chat skips its next line, on-topic chat folds into its beat. With off-topic
-  chat alone, a direct question or mention (or bait, still one injection a beat) gets one pick at
-  most every 30 s (`OFF_TOPIC_ANSWER_MS`, assumption; reason `segment+off-topic: <tags>`); every
+  with one pick and a line telling him to tie the reply back to the segment. Required or on-topic
+  chat waiting from an earlier beat (deferred) goes in before new material: such a beat starts
+  no new bit, and a bit being told waits one beat (never two in a row; reason `<kind> <id> waits
+  a beat for chat`). Otherwise a bit being told goes on: fresh required chat skips its next
+  line, on-topic chat folds into its beat beside one line of it. With off-topic chat alone, a
+  direct question or mention (or bait, still one injection a beat) gets one pick at most every
+  30 s (`OFF_TOPIC_ANSWER_MS`, assumption; reason `segment+off-topic: <tags>`), the one waiting
+  longest when any waits (a question or bait before a mention); every
   other such beat picks nothing and is a segment beat (a bit, the case, the through-line, or an
   improvised line on the state's purpose; reason `segment (carried N)`), never a quiet hold.
   **Small room:** while at most 5 distinct viewers chatted in the last 180 s
@@ -1451,13 +1460,22 @@ like a real case. It is never written live in a quiet moment.
 - **Carried chat and room events.** A message that needs an answer (question, mention, first
   contact, a gift or a sub announced in chat, `!propose`/`!summon`, mocked injection) but was
   not picked because of a hold, a safety beat, the cold-open filter or the pick ceiling is
-  carried for up to 25 s from the drain of the speech queued when it arrived (at most 6)
-  and competes in later beats; expiry writes an input moderation record, rule `carry`, action
+  carried for up to 25 s from the drain of the speech queued when it arrived, a question (to the
+  host or about the segment) or bait for up to 90 s (`REQUEST_MAX_MS`), at most 6 besides the
+  owned requests (which take no slot) and one per viewer besides an owned request and a first
+  contact (their oldest question or bait, else their newest: the rest write rule `carry`, action
+  `superseded`), and competes in later beats, questions and bait before the rest; expiry writes
+  an input moderation record, rule `carry`, action
   `expired`, a message the cap of 6 drops writes rule `carry`, action `capped`, and a message
   worth answering that a beat neither picked nor carried (a command in a speech hold, say) writes
   rule `carry`, action `dropped`, so every drop leaves a record. On-topic chat is carried too (in
   a small room, every message but filler); a plain remark in a big room is not worth answering,
-  so it leaves none. In the cold open a carried message is held: it never expires there, and its 25 s
+  so it leaves none. **Question waves:** questions that ask the same thing within 60 s (the same
+  sincere "are you an AI" or "is the board real" ask, or a Jaccard overlap of their normalised
+  words of at least 0.5), from several viewers or one repeating, are one wave: the picker sees
+  its oldest member alone, its chat line says how many viewers ask it and to answer once, to
+  all of them; answering it answers every member (each in the line's `replying_to`; the reason
+  adds `question wave of N (V viewers) answered once`). In the cold open a carried message is held: it never expires there, and its 25 s
   start from the drain of the first beat after the room opens ("carry until the room opens +
   25 s"); while the room fills, the cap of 6 keeps first contacts first, the oldest first, then
   the newest of the rest. A gift or a sub is boosted in the picker like a first contact. A
@@ -1488,13 +1506,16 @@ like a real case. It is never written live in a quiet moment.
 - **Owned requests.** A message that makes a situational ask a rule covers (a self-declared
   minor asking him to flirt, real steps to break into an account, "roast me" (not beside grief),
   an impression of a real person, hyping a real coin, where a real person lives, explicit
-  content, a sincere "are you a real person or an AI", bait for an "ironic" joke mocking a whole
+  content, a sincere "are you a real person or an AI" (also asked of him in the third person, "is
+  he a real guy or ai"), "is the board (the case, the map, the site) real or made up" (the
+  segment's disclosure question: its note asks for what the segment's rules say, in a clause),
+  bait for an "ironic" joke mocking a whole
   ethnicity or group, a viewer who is sincerely sad (grief, a bad day; never a self-harm
   disclosure, which the safety rail owns), a newcomer (a first contact or a Thrall) asking what
   this is, any `!propose`; a fixed classifier, never the model)
   is worth answering and is owned until answered, once per viewer and kind:
-  - it is carried past the 25 s window, never capped, and dropped (rule `carry`, action
-    `expired`) only 90 s after it first reached a beat;
+  - it is carried past the 25 s window, never capped (and takes no slot of the cap), and dropped
+    (rule `carry`, action `expired`) only 90 s after it first reached a beat;
   - it passes the cold-open filter like a first contact;
   - the picker takes one owed request a beat right after the safety picks, ahead of carried bait
     and fresh chat, within the pick ceiling and one pick per viewer but past the share and whale

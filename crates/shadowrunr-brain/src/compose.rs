@@ -461,7 +461,14 @@ pub struct TurnInputs<'a> {
     /// A sincere "are you an AI" was answered earlier this stream: a wave asking it gets the
     /// deflection note.
     pub ai_answered: bool,
+    /// The beat's question waves ([`crate::orchestrate::Orchestrator::question_waves`]): a
+    /// picked representative is shown as the crowd's one question.
+    pub question_waves: &'a std::collections::HashMap<String, Vec<(String, String)>>,
 }
+
+/// How a picked question wave opens its chat line (`{n}` viewers asking the same thing).
+pub const QUESTION_WAVE_NOTE: &str = "<{n} {followers} ask the same thing; answer it once, to all \
+of them, without naming them one by one> ";
 
 /// The rule a self-harm disclosure invokes. A package that lists it under `rails` keeps it on
 /// whatever the operator override says.
@@ -784,7 +791,24 @@ fn chat_text(c: &Candidate, t: &TurnInputs<'_>) -> String {
     } else if c.safety.is_some() {
         one_line(&c.msg.text, 400)
     } else {
-        format!("{}{}", one_line(&c.msg.text, 400), situation_notes(c, t))
+        let crowd = t
+            .question_waves
+            .get(&c.msg.id)
+            .map(|w| {
+                let viewers: HashSet<&str> = w.iter().map(|(_, n)| n.as_str()).collect();
+                if viewers.len() >= 2 {
+                    p.fill(QUESTION_WAVE_NOTE)
+                        .replace("{n}", &viewers.len().to_string())
+                } else {
+                    String::new()
+                }
+            })
+            .unwrap_or_default();
+        format!(
+            "{crowd}{}{}",
+            one_line(&c.msg.text, 400),
+            situation_notes(c, t)
+        )
     }
 }
 
@@ -1138,6 +1162,7 @@ mod tests {
             case: None,
             repeat_ai: &HashSet::new(),
             ai_answered: false,
+            question_waves: &Default::default(),
         });
         assert!(
             turn.contains("at most about 2 sentences and 260 characters in all this beat"),
@@ -1289,6 +1314,7 @@ mod tests {
             case: None,
             repeat_ai: &HashSet::new(),
             ai_answered: false,
+            question_waves: &Default::default(),
         });
         assert!(
             chat_line(&turn, "lord").ends_with(&malakor_persona().fill(PATRON_NOTE)),
@@ -1460,6 +1486,7 @@ Do name the target.
             case: None,
             repeat_ai: &HashSet::new(),
             ai_answered: false,
+            question_waves: &Default::default(),
         })
     }
 
@@ -1581,6 +1608,7 @@ Do name the target.
             case: None,
             repeat_ai: &HashSet::new(),
             ai_answered: false,
+            question_waves: &Default::default(),
         });
         let chat = &turn[turn.find("# Chat\n").unwrap()..];
         assert!(

@@ -229,6 +229,7 @@ fn prompts(dir: &Path) -> Vec<(String, String, String)> {
             case: None,
             repeat_ai: &HashSet::new(),
             ai_answered: false,
+            question_waves: &Default::default(),
         });
         // The beat really carries what a voice section reacts to.
         assert!(turn.contains("What lands here:"), "{tone}: {turn}");

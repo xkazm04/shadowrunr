@@ -699,3 +699,67 @@ async fn a_newcomers_what_is_this_in_a_speech_hold_is_owned_not_dropped() {
         "{prompt}"
     );
 }
+
+#[tokio::test]
+async fn four_viewers_asking_real_or_ai_get_one_answer_that_answers_them_all() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "f3-wave", unpaced()).await;
+    let c = ctx(&[]);
+    let inbox: Vec<ChatMsg> = [
+        (
+            "q0",
+            "tomb_toad",
+            "is he a real guy or an AI? genuinely asking",
+        ),
+        (
+            "q1",
+            "BoneCandle",
+            "wait is malakor an actual ai or a real person?",
+        ),
+        (
+            "q2",
+            "AshenBeetle44",
+            "honest question, is this a real guy or ai",
+        ),
+        ("q3", "GrimKettle", "real person or bot? asking for real"),
+    ]
+    .iter()
+    .enumerate()
+    .map(|(i, (id, name, text))| {
+        msg(
+            id,
+            900 + i as i64,
+            &viewer(&format!("v{i}"), name, Rank::Thrall),
+            text,
+        )
+    })
+    .collect();
+    engine.push(
+        Role::CoreThread,
+        Ok("Four of you, one answer: I am an AI character, no human under the crown."),
+    );
+    let ev = b.tick(1_000, inbox, &c).await.unwrap();
+    assert_eq!(picked(&ev), ["q0"], "one pick for the wave");
+    let mut r = replies(&ev);
+    r.sort();
+    assert_eq!(r, ["q0", "q1", "q2", "q3"], "the answer answers them all");
+    let (_, reason) = plan_of(&ev);
+    assert!(
+        reason.contains("question wave of 4 (4 viewers) answered once"),
+        "{reason}"
+    );
+    let prompt = last_core_prompt(&engine);
+    assert!(
+        chat_line_of(&prompt, "q0").contains("<4 minions ask the same thing"),
+        "{prompt}"
+    );
+    for id in ["q1", "q2", "q3"] {
+        assert!(!prompt.contains(&format!("[{id}]")), "{prompt}");
+    }
+    // Answered: none of them is offered again.
+    for t in [6_000, 11_000, 16_000] {
+        let ev = b.tick(t, Vec::new(), &c).await.unwrap();
+        assert!(picked(&ev).is_empty(), "{:?}", picked(&ev));
+    }
+}

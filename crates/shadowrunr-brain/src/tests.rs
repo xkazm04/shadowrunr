@@ -2713,6 +2713,10 @@ async fn with_the_ban_rule_off_nobody_is_banned_and_care_still_applies() {
     assert!(!b.stable_prefix().contains("## Crisis chat ban"));
     let soot = viewer("sim-v0003", "SootGoblin24", Rank::Thrall);
     let c = ctx(&[]);
+    engine.push(
+        Role::CoreThread,
+        Ok("SootGoblin24, please call a crisis line or someone you trust tonight."),
+    );
     let ev = b
         .tick(1_000, vec![msg("d1", 900, &soot, L167)], &c)
         .await
