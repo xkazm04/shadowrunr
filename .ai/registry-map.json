@@ -3175,7 +3175,11 @@
           "revision": 9,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:213 The engine starts every Claude/codex/agy process in an isolated work_dir that defaults to a temp directory (config.rs:201), runs codex with a read-only sandbox, and never stages, commits, stashes or creates worktrees; a case-insensitive search of crates/shadowrunr-engine for worktree, stash, GIT_INDEX_FILE and 'git commit' found nothing, so the subject's precondition (sessions sharing one repo checkout and committing to it) does not hold here.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:de557423d4cf3016",
+          "evaluatedRevision": 9
         },
         {
           "subject": "session-continuation",

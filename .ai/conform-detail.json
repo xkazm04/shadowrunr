@@ -4994,6 +4994,37 @@
           "evidence": "crates/shadowrunr-types/Cargo.toml:12 The only async dependency is a trait-definition macro. There is no shared substrate, lock file or claim row in this crate."
         }
       ]
+    },
+    "4f625471-4451-4819-953d-10b381c13213/concurrent-vcs": {
+      "context": "engine-llm-sessions",
+      "subject": "concurrent-vcs",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T22:41:58.594Z",
+      "worker": "4c45a8f6-5add-4b4a-a344-c81c2482c4c1",
+      "techniques": [
+        {
+          "technique": "physical-isolation",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/config.rs:201 Spawned CLIs run in a temp work dir, not a repo checkout, so there is no tree to isolate with a worktree."
+        },
+        {
+          "technique": "isolated-index-commits",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/alt_cli.rs:65 codex runs with --sandbox read-only, and nothing in the context builds a commit, so it never touches a staging index."
+        },
+        {
+          "technique": "shared-resource-arbitration",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:186 The one shared scratch resource (the prompts dir) is written through a temp file named per process, then atomically renamed into a content-addressed path. That is the namespacing the technique asks for, even though no VCS is involved."
+        },
+        {
+          "technique": "commit-time-claim-guard",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/fleet.rs:358 Alt CLIs also start in the non-repo work_dir. The context has no commit path and no hook to guard."
+        }
+      ]
     }
   }
 }

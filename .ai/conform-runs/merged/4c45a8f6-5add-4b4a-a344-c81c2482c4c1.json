@@ -1,0 +1,65 @@
+{
+ "schema": "conform-run/1",
+ "worker": "4c45a8f6-5add-4b4a-a344-c81c2482c4c1",
+ "subject": "concurrent-vcs",
+ "evaluatedAt": "2026-10-24T22:41:58.594785+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "engine-llm-sessions",
+   "subject": "concurrent-vcs",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:213 The engine starts every Claude/codex/agy process in an isolated work_dir that defaults to a temp directory (config.rs:201), runs codex with a read-only sandbox, and never stages, commits, stashes or creates worktrees; a case-insensitive search of crates/shadowrunr-engine for worktree, stash, GIT_INDEX_FILE and 'git commit' found nothing, so the subject's precondition (sessions sharing one repo checkout and committing to it) does not hold here.",
+   "techniques": [
+    {
+     "technique": "physical-isolation",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/config.rs:201 Spawned CLIs run in a temp work dir, not a repo checkout, so there is no tree to isolate with a worktree."
+    },
+    {
+     "technique": "isolated-index-commits",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/alt_cli.rs:65 codex runs with --sandbox read-only, and nothing in the context builds a commit, so it never touches a staging index."
+    },
+    {
+     "technique": "shared-resource-arbitration",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:186 The one shared scratch resource (the prompts dir) is written through a temp file named per process, then atomically renamed into a content-addressed path. That is the namespacing the technique asks for, even though no VCS is involved."
+    },
+    {
+     "technique": "commit-time-claim-guard",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/fleet.rs:358 Alt CLIs also start in the non-repo work_dir. The context has no commit path and no hook to guard."
+    }
+   ],
+   "absenceTerms": [
+    "worktree",
+    "stash",
+    "GIT_INDEX_FILE",
+    "git commit"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T22:41:58.594785+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "concurrent-vcs"
+   ],
+   "techniques": [
+    "commit-time-claim-guard",
+    "isolated-index-commits",
+    "physical-isolation",
+    "shared-resource-arbitration"
+   ],
+   "deviations": 0,
+   "context": "engine-llm-sessions",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
