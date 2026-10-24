@@ -2059,7 +2059,11 @@
           "revision": 3,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/NoReport.tsx:11 The empty-state page reads the whole tournament collection through the limit-less, bare-array `tournament.list` (EmptyParams -> Vec<TournamentRow>, one row per sim directory, so it grows with every tournament run) and reduces all of it client-side to pick the newest, even though a paged `tournaments.page` exists; that read has no bound and no continuation.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:4ec15f52e99e1903",
+          "evaluatedRevision": 3
         }
       ],
       "governance": "governed"

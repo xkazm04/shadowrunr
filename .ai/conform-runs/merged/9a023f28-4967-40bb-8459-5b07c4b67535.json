@@ -1,0 +1,59 @@
+{
+ "schema": "conform-run/1",
+ "worker": "9a023f28-4967-40bb-8459-5b07c4b67535",
+ "subject": "bounded-enumeration",
+ "evaluatedAt": "2026-10-24T21:24:02.473385+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-reconcile-page",
+   "subject": "bounded-enumeration",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/reconcile/NoReport.tsx:11 The empty-state page reads the whole tournament collection through the limit-less, bare-array `tournament.list` (EmptyParams -> Vec<TournamentRow>, one row per sim directory, so it grows with every tournament run) and reduces all of it client-side to pick the newest, even though a paged `tournaments.page` exists; that read has no bound and no continuation.",
+   "techniques": [
+    {
+     "technique": "required-limit-breaks-unaware-clients",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/reconcile/NoReport.tsx:11 This is a limit-unaware full-list caller of a collection that keeps growing. The bare-array reply has no place for a continuation, so once a limit lands this caller will either fail or silently truncate. By contrast, Incidents.tsx:76 in the same context does it right: it pages on the daemon's `more`/`next_cursor` continuation, not on a short page."
+    },
+    {
+     "technique": "filter-after-return-under-limit",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/reconcile/Incidents.tsx:69 The only filter here is a `rule` facet the operator picks, applied as a server query predicate. Nothing hides keys per caller for access reasons, so the technique's precondition does not hold."
+    },
+    {
+     "technique": "declare-the-inconsistency",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/report_wire.rs:66 The paged collection (a stored report's incidents) is immutable, so no write can land mid-walk. The anchor is on the daemon side of the endpoint this context pages."
+    },
+    {
+     "technique": "deny-absorbs-and-lowest-limit-wins",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/rpc.rs:194 The ceiling is one fixed contract constant. No policy layer states list capabilities or ceilings that would need merging, and there is no recursive list verb."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T21:24:02.473385+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "bounded-enumeration"
+   ],
+   "techniques": [
+    "declare-the-inconsistency",
+    "deny-absorbs-and-lowest-limit-wins",
+    "filter-after-return-under-limit",
+    "required-limit-breaks-unaware-clients"
+   ],
+   "deviations": 1,
+   "context": "console-reconcile-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
