@@ -1,0 +1,127 @@
+{
+  "schema": "conform-run/1",
+  "worker": "13f6ea67-4be8-48ed-ad28-24908a0e78fb",
+  "subject": "talking-avatar",
+  "evaluatedAt": "2026-10-24T00:23:15.259392+00:00",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "pairs": [
+    {
+      "context": "daemon-voice-service",
+      "subject": "talking-avatar",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:120 spans() only filters out unknown viseme names and forwards everything else. Nothing checks span order, overlap, or that the timeline ends on the sentence's last sample (its own test forwards overlapping PP 0-40 / aa 40-90 after dropping 'zz'), so a malformed timeline reaches the stage instead of being dropped whole while the audio plays.",
+      "techniques": [
+        {
+          "technique": "per-sentence-face-sidecar",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:120 Timeline checks (order, ends on the last sample) are missing. Supervision conforms: doubling backoff from 1 s to 60 s that resets on hello (lines 45-46, 181), a bounded stderr tail, closing stdin with kill_on_drop, and a hello capability probe that reports ready with or without visemes."
+        }
+      ]
+    },
+    {
+      "context": "voice-sidecar",
+      "subject": "talking-avatar",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "tools/voice/shadowrunr_voice/sidecar.py:706 The sender thread runs the durations-model inference inline before it sends each sentence's audio. An exception releases the audio without visemes, but there is no deadline, so a slow or hung onnxruntime call holds the sentence indefinitely ('the face that holds the voice').",
+      "techniques": [
+        {
+          "technique": "per-sentence-face-sidecar",
+          "verdict": "deviation",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:706 No bounded wait on the mouth timeline. Other parts conform: the protocol owns the real stdio (__main__.py dup2), the face stack is optional with its reason in the hello, the silence cut is replayed in-process for byte-identical audio (engine.py scale_silence), and the process exits on stdin EOF."
+        },
+        {
+          "technique": "viseme-drive",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/visemes.py:19 Closures are protected, quiet gaps before PP/FF are absorbed, diphthongs split 60/40, an aspirate takes the next vowel's shape, and timing comes from the engine's durations. Gap: unknown phones fall back to 'E' (line 279) but are not counted."
+        }
+      ],
+      "registryProposal": "per-sentence-face-sidecar assumes the face's helper is a separate process from the voice. This repo computes the mouth timeline inside the voice process behind an optional numpy/onnxruntime import. The technique could say directly that the bounded-wait rule still applies when the timeline is produced in-process by an optional stack."
+    }
+  ],
+  "declined": [
+    {
+      "subject": "talking-avatar",
+      "context": "stage-avatar-renderer",
+      "reason": "evidence leans on cut/renderer.ts, which is not a tracked file"
+    },
+    {
+      "subject": "talking-avatar",
+      "context": "stage-voice-client",
+      "reason": "withdrawn after review: reviewer (sonnet): The frame.ts:64 deviation holds, but the technique note at player.ts:205 says the renderer owns the 35 ms lead and the producer reports true times, while player.ts:35 and :205 show the player itself adds VISEME_LEAD_MS in signalAt."
+    },
+    {
+      "subject": "talking-avatar",
+      "context": "avatar-rig-tools",
+      "reason": "withdrawn after review: reviewer (sonnet): split.py:180 shows only the light-mode clamped delta; I found no 'ground' fill for the face-sized head and torso or 'M8 spec' in the context files, and nothing at the anchor shows layers.json recording head geometry or a promote review, so the conformant claims rest on unconfirmed evidence."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-24T00:23:15.259392+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "talking-avatar"
+      ],
+      "techniques": [
+        "per-sentence-face-sidecar"
+      ],
+      "deviations": 1,
+      "context": "daemon-voice-service",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T00:23:15.259392+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "talking-avatar"
+      ],
+      "techniques": [
+        "per-sentence-face-sidecar",
+        "viseme-drive"
+      ],
+      "deviations": 1,
+      "context": "voice-sidecar",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T00:23:15.259392+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "talking-avatar"
+      ],
+      "techniques": [
+        "face-signal-across-surfaces",
+        "per-sentence-face-sidecar",
+        "rig-parameter-contract",
+        "viseme-drive"
+      ],
+      "deviations": 1,
+      "context": "stage-voice-client",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T00:23:15.259392+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "talking-avatar"
+      ],
+      "techniques": [
+        "motion-route-selection",
+        "neural-motion-retargeting",
+        "paced-realtime-measurement",
+        "single-image-layer-decomposition",
+        "viseme-drive"
+      ],
+      "deviations": 0,
+      "context": "avatar-rig-tools",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    }
+  ]
+}

@@ -5317,11 +5317,7 @@
           "confidence": "probable",
           "state": "deviation",
           "evidence": "apps/stage/src/voice/frame.ts:60 Malformed optional visemes reject the entire utterance and prevent its PCM from playing, contrary to discarding the face timeline while preserving audio.",
-          "evaluatedAt": "2026-10-21",
-          "evaluatedAgainst": "sha256-b2:f96c1d7ea0398677",
-          "evaluatedRevision": 3,
-          "revisionsBehind": 1,
-          "stale": true
+          "evaluatedAt": "2026-10-21"
         },
         {
           "subject": "prompt-assembly",
@@ -5720,12 +5716,11 @@
           "changedAt": "2026-10-21",
           "confidence": "strong",
           "state": "deviation",
-          "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:85 The daemon removes individual invalid shapes and forwards surviving spans without checking timeline ordering or its audio endpoint, allowing malformed timelines instead of discarding them whole.",
-          "evaluatedAt": "2026-10-21",
-          "evaluatedAgainst": "sha256-b2:f96c1d7ea0398677",
-          "evaluatedRevision": 3,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:120 spans() only filters out unknown viseme names and forwards everything else. Nothing checks span order, overlap, or that the timeline ends on the sentence's last sample (its own test forwards overlapping PP 0-40 / aa 40-90 after dropping 'zz'), so a malformed timeline reaches the stage instead of being dropped whole while the audio plays.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:72517c45ca8e4198",
+          "evaluatedRevision": 4,
+          "revisionsBehind": 1
         },
         {
           "subject": "agent-instruction-files",
@@ -5811,12 +5806,11 @@
           "changedAt": "2026-10-21",
           "confidence": "probable",
           "state": "deviation",
-          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:472 Mouth-shape inference runs synchronously before audio is sent, without a separate bounded face wait that releases the already-rendered sentence.",
-          "evaluatedAt": "2026-10-21",
-          "evaluatedAgainst": "sha256-b2:f96c1d7ea0398677",
-          "evaluatedRevision": 3,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:706 The sender thread runs the durations-model inference inline before it sends each sentence's audio. An exception releases the audio without visemes, but there is no deadline, so a slow or hung onnxruntime call holds the sentence indefinitely ('the face that holds the voice').",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:72517c45ca8e4198",
+          "evaluatedRevision": 4,
+          "revisionsBehind": 1
         },
         {
           "subject": "mcp-tools",

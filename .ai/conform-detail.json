@@ -2048,19 +2048,29 @@
       "subject": "talking-avatar",
       "bundle": "software-engineering",
       "state": "deviation",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T21:59:13.931Z",
-      "worker": "e76cc439-98be-40c3-91d1-edd797c29b60",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T00:23:15.259Z",
+      "worker": "13f6ea67-4be8-48ed-ad28-24908a0e78fb",
       "techniques": [
         {
           "technique": "per-sentence-face-sidecar",
           "verdict": "deviation",
-          "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:85 The filter_map drops only an invalid span; the remaining timeline is forwarded without order or final-sample validation, contrary to whole-timeline fallback."
+          "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:120 Timeline checks (order, ends on the last sample) are missing. Supervision conforms: doubling backoff from 1 s to 60 s that resets on hello (lines 45-46, 181), a bounded stderr tail, closing stdin with kill_on_drop, and a hello capability probe that reports ready with or without visemes."
         },
         {
           "technique": "single-image-layer-decomposition",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-daemon/src/voice/avatar.rs:48 The avatar endpoint serves prepared rig files; portrait decomposition happens outside this context."
+          "evidence": "crates/shadowrunr-daemon/src/voice/avatar.rs:48 The avatar endpoint serves prepared rig files; portrait decomposition happens outside this context.",
+          "carriedFrom": "2026-10-21"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:85 The daemon removes individual invalid shapes and forwards surviving spans without checking timeline ordering or its audio endpoint, allowing malformed timelines instead of discarding them whole.",
+          "evaluatedAt": "2026-10-21T21:59:13.931Z",
+          "worker": "e76cc439-98be-40c3-91d1-edd797c29b60",
+          "reason": "replaced by 13f6ea67-4be8-48ed-ad28-24908a0e78fb"
         }
       ]
     },
@@ -2069,19 +2079,29 @@
       "subject": "talking-avatar",
       "bundle": "software-engineering",
       "state": "deviation",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T21:59:13.931Z",
-      "worker": "e76cc439-98be-40c3-91d1-edd797c29b60",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T00:23:15.259Z",
+      "worker": "13f6ea67-4be8-48ed-ad28-24908a0e78fb",
       "techniques": [
         {
           "technique": "per-sentence-face-sidecar",
           "verdict": "deviation",
-          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:472 The sender calls face inference directly before sending PCM; exception handling does not provide a deadline for stalled inference."
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:706 No bounded wait on the mouth timeline. Other parts conform: the protocol owns the real stdio (__main__.py dup2), the face stack is optional with its reason in the hello, the silence cut is replayed in-process for byte-identical audio (engine.py scale_silence), and the process exits on stdin EOF."
         },
         {
           "technique": "viseme-drive",
-          "verdict": "deviation",
-          "evidence": "tools/voice/shadowrunr_voice/visemes.py:278 Unknown phones silently become E without being counted; the standard requires a counted neutral fallback."
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/visemes.py:19 Closures are protected, quiet gaps before PP/FF are absorbed, diphthongs split 60/40, an aspirate takes the next vowel's shape, and timing comes from the engine's durations. Gap: unknown phones fall back to 'E' (line 279) but are not counted."
+        }
+      ],
+      "registryProposal": "per-sentence-face-sidecar assumes the face's helper is a separate process from the voice. This repo computes the mouth timeline inside the voice process behind an optional numpy/onnxruntime import. The technique could say directly that the bounded-wait rule still applies when the timeline is produced in-process by an optional stack.",
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:472 Mouth-shape inference runs synchronously before audio is sent, without a separate bounded face wait that releases the already-rendered sentence.",
+          "evaluatedAt": "2026-10-21T21:59:13.931Z",
+          "worker": "e76cc439-98be-40c3-91d1-edd797c29b60",
+          "reason": "replaced by 13f6ea67-4be8-48ed-ad28-24908a0e78fb"
         }
       ]
     },
@@ -2090,26 +2110,45 @@
       "subject": "talking-avatar",
       "bundle": "software-engineering",
       "state": "deviation",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T21:59:13.931Z",
-      "worker": "e76cc439-98be-40c3-91d1-edd797c29b60",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T00:23:15.259Z",
       "techniques": [
-        {
-          "technique": "face-signal-across-surfaces",
-          "verdict": "conformant",
-          "evidence": "apps/stage/src/voice/player.ts:196 The local producer derives speaking and timeline selection from the scheduled audio interval, retains the timeline until playback ends and supplies its latest signal to subscribers."
-        },
         {
           "technique": "per-sentence-face-sidecar",
           "verdict": "deviation",
-          "evidence": "apps/stage/src/voice/frame.ts:60 An invalid optional timeline rejects otherwise valid audio; the required fallback preserves the sentence and removes its timeline."
+          "evidence": "apps/stage/src/voice/frame.ts:64 The audio is refused because of a face artifact. Span order is also never checked, although visemeAt's binary search assumes sorted spans."
+        },
+        {
+          "technique": "face-signal-across-surfaces",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/player.ts:206 The player that owns the audio clock produces the signal, at heard time (after output latency). The face keeps speaking until the scheduled buffer has played, and subscribe hands a new subscriber the last signal."
         },
         {
           "technique": "viseme-drive",
-          "verdict": "deviation",
-          "evidence": "apps/stage/src/voice/player.ts:198 The lookup adds a fixed 35 ms lead but never incorporates device output latency, which the technique explicitly requires."
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/player.ts:205 The renderer owns a 35 ms lead over the heard position; the producer reports true times."
+        },
+        {
+          "technique": "rig-parameter-contract",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/frame.ts:111 No timeline gives null (the mouth follows the level), not a zeroed shape."
         }
-      ]
+      ],
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "apps/stage/src/voice/frame.ts:60 Malformed optional visemes reject the entire utterance and prevent its PCM from playing, contrary to discarding the face timeline while preserving audio.",
+          "evaluatedAt": "2026-10-21T21:59:13.931Z",
+          "worker": "e76cc439-98be-40c3-91d1-edd797c29b60",
+          "reason": "replaced by 13f6ea67-4be8-48ed-ad28-24908a0e78fb"
+        }
+      ],
+      "withdrawn": {
+        "worker": "13f6ea67-4be8-48ed-ad28-24908a0e78fb",
+        "state": "deviation",
+        "at": "2026-10-24T00:23:55.996966+00:00",
+        "reason": "reviewer (sonnet): The frame.ts:64 deviation holds, but the technique note at player.ts:205 says the renderer owns the 35 ms lead and the producer reports true times, while player.ts:35 and :205 show the player itself adds VISEME_LEAD_MS in signalAt."
+      }
     },
     "12e5be0b-9811-4c5b-a7ec-8a57e204d016/video-assembly": {
       "context": "clips-pipeline",
@@ -3714,6 +3753,47 @@
           "evidence": "apps/console/src/ui/FilterTable.tsx:82 Filtering operates on supplied array snapshots, matching the technique's explicit static-list exception rather than its subscribed-channel precondition."
         }
       ]
+    },
+    "db707156-0bf7-4d53-8185-d054a78c0502/talking-avatar": {
+      "context": "avatar-rig-tools",
+      "subject": "talking-avatar",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T00:23:15.259Z",
+      "techniques": [
+        {
+          "technique": "single-image-layer-decomposition",
+          "verdict": "conformant",
+          "evidence": "tools/rig/shadowrunr_rig/split.py:180 Light-on-black variant, with a hand region spec refined by luminance ('lit'). The face-sized head and torso use a 'ground' fill rather than LaMa in the M8 spec, so no pale band. Rest-frame error and extremes are reviewed before promote."
+        },
+        {
+          "technique": "motion-route-selection",
+          "verdict": "conformant",
+          "evidence": "tools/avatar/learned_depth.py:17 Licences are audited per component: CC-BY-NC variants are excluded, and the models are operator-installed rather than bundled (LaMa is handled the same way, lama.py:2)."
+        },
+        {
+          "technique": "viseme-drive",
+          "verdict": "conformant",
+          "evidence": "tools/rig/README.md:97 The speaking element is drawn procedurally by the renderer, not from generated mouth frames."
+        },
+        {
+          "technique": "paced-realtime-measurement",
+          "verdict": "not-applicable",
+          "evidence": "tools/avatar/depth_map.py:23 Offline prep; pacing does not apply."
+        },
+        {
+          "technique": "neural-motion-retargeting",
+          "verdict": "not-applicable",
+          "evidence": "tools/avatar/learned_depth.py:2 The only learned model here is a depth model, not a motion model."
+        }
+      ],
+      "withdrawn": {
+        "worker": "13f6ea67-4be8-48ed-ad28-24908a0e78fb",
+        "state": "conformant",
+        "at": "2026-10-24T00:23:56.016490+00:00",
+        "reason": "reviewer (sonnet): split.py:180 shows only the light-mode clamped delta; I found no 'ground' fill for the face-sized head and torso or 'M8 spec' in the context files, and nothing at the anchor shows layers.json recording head geometry or a promote review, so the conformant claims rest on unconfirmed evidence."
+      }
     }
   }
 }
