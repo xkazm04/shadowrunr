@@ -1,0 +1,115 @@
+{
+  "schema": "conform-run/1",
+  "worker": "c8db7dfc-003c-4c5b-b52b-b69ae730bbb7",
+  "subject": "agent-memory",
+  "evaluatedAt": "2026-10-24T01:43:46.156229+00:00",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "pairs": [
+    {
+      "context": "console-review-page",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:49 The Review page only renders the daemon's session record and forwards operator marks to the daemon, so no store an agent recalls from is held here; a search of apps/console/src/pages/review for recall, belief, embedding, episod and provenance found nothing, and the only memory or consolidat hit is names.ts mapping the consolidator role to the display label \"Memory\".",
+      "techniques": [],
+      "absenceTerms": [
+        "recall",
+        "belief",
+        "embedding",
+        "episod",
+        "provenance"
+      ]
+    },
+    {
+      "context": "stage-kit-scene-engine",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evidence": "packages/stage-kit/src/sceneModel.ts:250 The stage kit's only 'memory' is ChatMemory, a capped cache of chat lines kept for the screen. It forgets the oldest lines that nothing on screen pins, and no model ever reads it. A search of packages/stage-kit for recall, belief, embedding, consolidat and episod found nothing, so the subject's pipeline of capture, distill and recall into an agent's context is absent here.",
+      "techniques": [],
+      "absenceTerms": [
+        "recall",
+        "belief",
+        "embedding",
+        "consolidat",
+        "episod"
+      ]
+    },
+    {
+      "context": "clips-pipeline",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evidence": "crates/shadowrunr-clips/src/lib.rs:8 The clip factory scores a finished transcript with a single stateless model call per run, plus signals that are measured mechanically. It keeps no agent memory: its store holds clip drafts and owner verdicts, not things an agent recalls. A search of crates/shadowrunr-clips and the daemon clips glue for belief, embedding and consolidat found nothing, and the clips crate has no memory or recall hits either.",
+      "techniques": [],
+      "absenceTerms": [
+        "belief",
+        "embedding",
+        "consolidat"
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "agent-memory",
+      "context": "daemon-show-prep-and-review",
+      "reason": "the seat returned unknown"
+    },
+    {
+      "subject": "agent-memory",
+      "context": "engine-llm-sessions",
+      "reason": "withdrawn after review: reviewer (sonnet): The anchor at session.rs:560 shows a capped 200-turn history that is replayed into the model on the API fallback, and the warm session also carries `--resume` context. That is the precondition (session state fed back into a model's context), so it does not show the precondition absent. I also could "
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-24T01:43:46.156229+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "agent-memory"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "console-review-page",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T01:43:46.156229+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "agent-memory"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "stage-kit-scene-engine",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T01:43:46.156229+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "agent-memory"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "engine-llm-sessions",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T01:43:46.156229+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "agent-memory"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "clips-pipeline",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    }
+  ]
+}

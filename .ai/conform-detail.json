@@ -223,16 +223,11 @@
       "context": "stage-kit-scene-engine",
       "subject": "agent-memory",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-19",
-      "evaluatedTs": "2026-10-19T09:14:21.374Z",
-      "techniques": [],
-      "withdrawn": {
-        "worker": "bf6cddb2-9505-4c38-89da-1c60e61d3152",
-        "state": "not-applicable",
-        "at": "2026-10-19T09:15:03.036034+00:00",
-        "reason": "reviewer (sonnet): The context holds an agent-memory-like component, `chatMemory.ts` (the scene's chat memory with bounded eviction, a keep-set and pruning of dependents in `scene.ts:103-116`), so the searches for recall, consolidat and episod used the wrong terms and the anchor `scene.ts:106` shows presence of a memo"
-      }
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T01:43:46.156Z",
+      "worker": "c8db7dfc-003c-4c5b-b52b-b69ae730bbb7",
+      "techniques": []
     },
     "976802f1-d558-4f08-a516-915d94ce8b8f/mcp-tools": {
       "context": "daemon-integrations",
@@ -4020,6 +4015,41 @@
           "evidence": "apps/stage/src/avatar/driver.test.ts:20 Face motion is asserted over a deterministic stepped frame clock (1/60 s steps, seeded generator), never over wall time."
         }
       ]
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/agent-memory": {
+      "context": "console-review-page",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T01:43:46.156Z",
+      "worker": "c8db7dfc-003c-4c5b-b52b-b69ae730bbb7",
+      "techniques": []
+    },
+    "4f625471-4451-4819-953d-10b381c13213/agent-memory": {
+      "context": "engine-llm-sessions",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T01:43:46.156Z",
+      "techniques": [],
+      "withdrawn": {
+        "worker": "c8db7dfc-003c-4c5b-b52b-b69ae730bbb7",
+        "state": "not-applicable",
+        "at": "2026-10-24T01:44:26.408899+00:00",
+        "reason": "reviewer (sonnet): The anchor at session.rs:560 shows a capped 200-turn history that is replayed into the model on the API fallback, and the warm session also carries `--resume` context. That is the precondition (session state fed back into a model's context), so it does not show the precondition absent. I also could "
+      }
+    },
+    "12e5be0b-9811-4c5b-a7ec-8a57e204d016/agent-memory": {
+      "context": "clips-pipeline",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T01:43:46.156Z",
+      "worker": "c8db7dfc-003c-4c5b-b52b-b69ae730bbb7",
+      "techniques": []
     }
   }
 }

@@ -3991,7 +3991,11 @@
           "revision": 51,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "packages/stage-kit/src/sceneModel.ts:250 The stage kit's only 'memory' is ChatMemory, a capped cache of chat lines kept for the screen. It forgets the oldest lines that nothing on screen pins, and no model ever reads it. A search of packages/stage-kit for recall, belief, embedding, consolidat and episod found nothing, so the subject's pipeline of capture, distill and recall into an agent's context is absent here.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:4f054116d66a9495",
+          "evaluatedRevision": 51
         },
         {
           "subject": "live-response-latency-budgeting",
@@ -5011,7 +5015,11 @@
           "revision": 51,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:49 The Review page only renders the daemon's session record and forwards operator marks to the daemon, so no store an agent recalls from is held here; a search of apps/console/src/pages/review for recall, belief, embedding, episod and provenance found nothing, and the only memory or consolidat hit is names.ts mapping the consolidator role to the display label \"Memory\".",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:4f054116d66a9495",
+          "evaluatedRevision": 51
         },
         {
           "subject": "fleet-orchestration",
@@ -5660,7 +5668,11 @@
           "revision": 51,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/lib.rs:8 The clip factory scores a finished transcript with a single stateless model call per run, plus signals that are measured mechanically. It keeps no agent memory: its store holds clip drafts and owner verdicts, not things an agent recalls. A search of crates/shadowrunr-clips and the daemon clips glue for belief, embedding and consolidat found nothing, and the clips crate has no memory or recall hits either.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:4f054116d66a9495",
+          "evaluatedRevision": 51
         },
         {
           "subject": "review-iteration-loops",
