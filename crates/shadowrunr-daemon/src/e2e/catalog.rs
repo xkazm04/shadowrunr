@@ -29,7 +29,7 @@ async fn character_list_and_get_expose_the_package() {
         "{:?}",
         m.tones
     );
-    assert_eq!(m.foils.len(), 5);
+    assert_eq!(m.foils.len(), 6);
     assert_eq!((m.rules_enabled, m.rules_total), (3, 3));
 
     let v = rpc(&addr, "character.get", json!({ "id": "malakor" })).await;
@@ -48,7 +48,7 @@ async fn character_list_and_get_expose_the_package() {
     assert!(d.bible.is_some());
     assert_eq!(d.tones.len(), m.tones.len());
     assert!(d.tones.iter().all(|t| !t.text.is_empty()));
-    assert_eq!(d.foils.len(), 5);
+    assert_eq!(d.foils.len(), 6);
     assert!(d.foils.iter().all(|f| f.declared));
     assert!(!d.situations.is_empty());
     // One parse: character.get serves the bank the brain loaded and validated.
@@ -116,7 +116,7 @@ async fn segments_tables_and_ranks_table_are_the_running_data() {
     let addr = start(test_config(tmp.path(), repo().join("characters"))).await;
 
     let t: SegmentTables = typed(&rpc(&addr, "segments.tables", json!({})).await);
-    assert_eq!(t.segments.len(), 4);
+    assert_eq!(t.segments.len(), 5);
     assert_eq!(t.op_tags.len(), 13);
     assert_eq!(t.command_names.len(), 5);
     let names: Vec<&str> = t.commands.iter().map(|c| c.name.as_str()).collect();

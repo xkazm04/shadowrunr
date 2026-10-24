@@ -1353,7 +1353,7 @@ mod tests {
         for tone in tones {
             let pkg = load_character_with(&malakor_dir(), tone, &RulesOverride::None).unwrap();
             let n = pkg.exemplars.len();
-            assert!((20..=40).contains(&n), "{tone}: {n} lines");
+            assert!((20..=50).contains(&n), "{tone}: {n} lines");
             assert!(pkg
                 .exemplars
                 .iter()

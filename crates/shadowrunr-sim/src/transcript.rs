@@ -100,6 +100,16 @@ pub fn read(path: &Path) -> Result<Vec<StreamEvent>, SimError> {
     Ok(out)
 }
 
+/// SEG-03: the id of a scene that started and has not ended, so a stream that stops mid-scene
+/// can close it with `scene_end` (contract: a scene cut short still ends).
+pub fn open_scene(events: &[StreamEvent]) -> Option<String> {
+    events.iter().rev().find_map(|e| match e {
+        StreamEvent::SceneEnd { .. } => Some(None),
+        StreamEvent::SceneStart { scene_id, .. } => Some(Some(scene_id.clone())),
+        _ => None,
+    })?
+}
+
 pub fn ts(ev: &StreamEvent) -> TsMs {
     match ev {
         StreamEvent::StreamStart { ts_ms, .. }

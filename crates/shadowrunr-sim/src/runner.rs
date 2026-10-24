@@ -828,6 +828,12 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
             &crate::ledger::read(&prep.run_dir.join("ledger.jsonl")).unwrap_or_default(),
         )
     });
+    if let Some(scene_id) = crate::transcript::open_scene(w.events()) {
+        w.push(StreamEvent::SceneEnd {
+            ts_ms: end_ms,
+            scene_id,
+        })?;
+    }
     w.push(StreamEvent::SegmentEnd {
         ts_ms: end_ms,
         segment: room.segment(),

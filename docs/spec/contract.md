@@ -345,8 +345,8 @@ directions, the narrowed rails, the scaled judge and the tic check; `/10` is the
 
 Judge (T1). The rubric samples 24 streamer turns (`sample_turns`). Besides the binary
 `[[quality]]` facts (`humor_landed` kept for continuity), each sampled turn gets a 0-3 score
-per `[[scaled]]` dimension (`surprise`, `irony`, `bite`, `specificity`, each with four
-anchors), in the reply's optional `scores` array (`{dimension, score, line, quote}`), verified
+per `[[scaled]]` dimension (`surprise`, `irony`, `bite`, `specificity`, and SEG-03's `honesty`:
+self-roast, saying the unsaid, opinions on the material; each with four anchors), in the reply's optional `scores` array (`{dimension, score, line, quote}`), verified
 like facts. The tic check is mechanical: the share of the streamer's lines that repeat a
 3-word phrase from one of his `tic_window` (20) lines before. `judge.json` gains `scores` and
 `tone: { scaled: [{dimension, mean?, n}], tic: {window, lines, with_tic, share?, worn} }`, and
@@ -945,7 +945,8 @@ apart; overlapping cuts merge when the union fits the band; the top 5 per stream
 marker label, Malakor's answer to a foil, or the beat's last line for a crowd peak). The cut
 opens 12 s (spoken) before it, snapped earlier to a line start, keeps at least the line the
 payoff answers, closes 1.5 s after the payoff and is held in its band: SEG-01
-`seg01-split-stage` 25-35 s, SEG-02A `seg02a-alleged` 45-60 s, otherwise 15-60 s. A short cut
+`seg01-split-stage` 25-35 s, SEG-02A `seg02a-alleged` 45-60 s, SEG-03 `seg03-two-shot` 20-45 s
+(one exchange: setup, payoff and the host's verdict), otherwise 15-60 s. A short cut
 takes the following lines, then earlier ones; a long one sheds pre-roll but never the setup,
 and when setup plus payoff cannot fit it is `needs_reauthoring` (never approved). On real
 timing the edges snap to what is heard: the cut opens up to 0.4 s before its first line but

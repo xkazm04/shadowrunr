@@ -855,6 +855,12 @@ impl Session {
             EndReason::Scheduled
         };
         let segment = self.log.segment;
+        if let Some(scene_id) = crate::transcript::open_scene(self.log.events()) {
+            self.log.push(StreamEvent::SceneEnd {
+                ts_ms: end_ms,
+                scene_id,
+            })?;
+        }
         self.log.push(StreamEvent::SegmentEnd {
             ts_ms: end_ms,
             segment,

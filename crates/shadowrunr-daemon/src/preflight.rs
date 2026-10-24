@@ -381,8 +381,26 @@ fn pf04_tables(cfg: &Config) -> Checked {
         },
         Err(_) => SegmentConfig::default(),
     };
+    // A segment that plays scenes (SEG-03) is optional: it starts only with a Table Read, which
+    // the configured character may not have (no guest foil). Prove it with the compiled-in
+    // fictional sample when the character can play it; otherwise say so, never red.
+    let mut unplayable = Vec::new();
     for &seg in &active {
-        if let Err(e) = SegmentRuntime::with_config(seg, config.clone()) {
+        let mut config = config.clone();
+        if shadowrunr_segments::table::segment_table(seg).is_ok_and(|t| t.plays_scenes()) {
+            match shadowrunr_segments::scenes::table_read_for(&cfg.paths.data, None, &config.foils)
+            {
+                Ok(tr) => config.table_read = Some(tr),
+                Err(e) => {
+                    unplayable.push(format!(
+                        "{} needs a guest ({e})",
+                        shadowrunr_sim::wire(&seg)
+                    ));
+                    continue;
+                }
+            }
+        }
+        if let Err(e) = SegmentRuntime::with_config(seg, config) {
             return rep(
                 "PF-04",
                 HealthState::Red,
@@ -432,9 +450,13 @@ fn pf04_tables(cfg: &Config) -> Checked {
         "PF-04",
         HealthState::Green,
         format!(
-            "{tables} tables valid; {} start; {} refused",
+            "{tables} tables valid; {} start; {} refused{}",
             names(&active),
-            names(&descoped)
+            names(&descoped),
+            unplayable
+                .iter()
+                .map(|u| format!("; {u}"))
+                .collect::<String>()
         ),
     )
 }
