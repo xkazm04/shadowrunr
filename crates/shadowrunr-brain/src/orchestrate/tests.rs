@@ -116,6 +116,7 @@ impl Room {
             closing: self.closing,
             names: &self.names,
             max_picks: crate::picker::PickerConfig::default().max_picks,
+            scene: None,
         });
         let offered = self.o.offered(&plan, &cands);
         let mut chosen: Vec<Candidate> = offered

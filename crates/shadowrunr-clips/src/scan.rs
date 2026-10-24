@@ -632,6 +632,8 @@ fn candidate(
             m
         })
         .collect();
+    // The evidence checklist is the investigation's: SEG-01's improv and SEG-03's original,
+    // fictional scenes make no claims about real entities.
     let mandatory = p.segment == Some(SegmentId::Seg02aHexmap);
     let evidence = if mandatory {
         evidence(stream, &p.cut, beat.ts_ms)

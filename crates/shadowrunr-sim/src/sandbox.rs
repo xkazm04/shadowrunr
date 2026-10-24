@@ -165,7 +165,8 @@ pub struct SandboxSpec {
     pub params: SandboxStartParams,
     pub planned_s: u32,
     pub tick_s: u32,
-    /// The segments in order: SEG-01, then SEG-02A on the fictional demo case.
+    /// The segments in order: SEG-01, then SEG-02A on the fictional demo case (SEG-03 when
+    /// the prep plans a table read).
     pub programme: Vec<SegmentId>,
     /// When SEG-01's handover clock fires (its `max_elapsed_s`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -242,10 +243,13 @@ impl Programme {
         })
     }
 
-    pub(crate) fn segments(&self) -> Vec<SegmentId> {
-        match self.handover_s {
-            Some(_) => vec![SegmentId::Seg01ImprovisedRoom, SegmentId::Seg02aHexmap],
-            None => vec![SegmentId::Seg01ImprovisedRoom],
+    /// SEG-01, then what its handover goes to: the Table Read when the prep plans one, else
+    /// the investigation.
+    pub(crate) fn segments(&self, table_read: bool) -> Vec<SegmentId> {
+        match (self.handover_s, table_read) {
+            (Some(_), true) => vec![SegmentId::Seg01ImprovisedRoom, SegmentId::Seg03TableRead],
+            (Some(_), false) => vec![SegmentId::Seg01ImprovisedRoom, SegmentId::Seg02aHexmap],
+            (None, _) => vec![SegmentId::Seg01ImprovisedRoom],
         }
     }
 
@@ -792,6 +796,7 @@ impl Session {
                         _ => None,
                     });
                     let jobs = runner::jobs_done(&evs);
+                    let scenes = runner::scenes_ended(&evs);
                     let staged = if ops.is_empty() {
                         Vec::new()
                     } else {
@@ -802,6 +807,11 @@ impl Session {
                     // After this beat's ops, so the model's own show_screen holds against them.
                     for job in jobs {
                         let ev = stage.job_done(&job, done);
+                        self.log.push_all(ev)?;
+                    }
+                    // A scene performed to its end moves the Table Read on.
+                    for id in scenes {
+                        let ev = stage.scene_ended(&id, done);
                         self.log.push_all(ev)?;
                     }
                     if let Some(reason) = sign_off {
@@ -1258,7 +1268,7 @@ pub async fn run_sandbox(
             params: run.params.clone(),
             planned_s: programme.planned_s,
             tick_s,
-            programme: programme.segments(),
+            programme: programme.segments(prep.table_read.is_some()),
             handover_s: programme.handover_s,
             chaos_window_s: programme
                 .chaos_ms

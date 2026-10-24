@@ -17,6 +17,11 @@ use crate::command::{normalize_hex, parse_command};
 use crate::evidence::{ResearchAllowlist, SourceAllowlist};
 use crate::ranks::RankTable;
 use crate::research::{target_hex, CaseFile};
+use crate::rounds::{
+    foil_name, Cue, RoundTimes, Rounds, BALLOT_STATE, CLOSING_STATE, INTRO_STATE, SCENE_STATE,
+    SCENE_TIMEOUT_RULE, SCENE_UP_PREFIX, TALK_STATE,
+};
+use crate::scenes::TableRead;
 use crate::table::{
     op_tag, screen_name, segment_name, segment_table, ArcRules, ColdOpenRule, GuardFacts,
     HandoverRule, SegmentTable, Trigger, COLD_OPEN_STATE,
@@ -90,6 +95,13 @@ pub struct SegmentConfig {
     pub tuning: Tuning,
     /// The package's per-segment flavour (`[segments."SEG-01"]`), appended to the prompts.
     pub flavour: BTreeMap<SegmentId, SegmentFlavour>,
+    /// The stream's Table Read (from the prep's `table_read`, or the fictional sample for a
+    /// run that starts in SEG-03): the guest and the playable scenes in ballot order. A segment
+    /// that plays scenes refuses to start without one; with one, a handover goes to the
+    /// segment that plays scenes ([`crate::scenes::table_read_for`]).
+    pub table_read: Option<TableRead>,
+    /// Overrides the scene rounds' clock (assumptions, [`RoundTimes::DEFAULT`]).
+    pub round_times: Option<RoundTimes>,
 }
 
 impl SegmentConfig {
@@ -287,6 +299,8 @@ enum PollKind {
     Foil,
     /// Opened by the runtime when a hex's searches run out: the audience picks its next move.
     Plebiscite,
+    /// Opened by the runtime between scene rounds: the audience picks the next scene.
+    Scene,
 }
 
 #[derive(Debug, Clone)]
@@ -345,6 +359,7 @@ impl Poll {
             PollKind::Crowd => "crowd poll",
             PollKind::Foil => "foil vote",
             PollKind::Plebiscite => "Plebiscite",
+            PollKind::Scene => "scene ballot",
         };
         format!(
             "open {kind} {}: \"{}\" | {tallies} | closes in {left} s | min rank {:?}",
@@ -497,6 +512,43 @@ fn grade_name(g: EvidenceGrade) -> &'static str {
     }
 }
 
+/// A Table Read the runtime can play: the guest is a declared foil, every scene is the guest's
+/// and has lines, and ids and titles are distinct (a ballot option is a title), at most
+/// `max_options` of them.
+fn check_table_read(
+    tr: &TableRead,
+    foils: &[String],
+    max_options: usize,
+) -> Result<(), SegmentError> {
+    let bad = |detail: String| Err(SegmentError::Config { detail });
+    if !foils.contains(&tr.guest) {
+        return bad(format!(
+            "the Table Read's guest {:?} is not a declared foil",
+            tr.guest
+        ));
+    }
+    if tr.scenes.len() > max_options {
+        return bad(format!(
+            "the Table Read has {} scenes, at most {max_options}",
+            tr.scenes.len()
+        ));
+    }
+    let mut ids = BTreeSet::new();
+    let mut titles = BTreeSet::new();
+    for s in &tr.scenes {
+        if s.guest != tr.guest || s.lines.is_empty() || s.title.trim().is_empty() {
+            return bad(format!(
+                "scene {:?} is not a playable scene for {}",
+                s.id, tr.guest
+            ));
+        }
+        if !ids.insert(s.id.as_str()) || !titles.insert(s.title.trim().to_lowercase()) {
+            return bad(format!("scene {:?}: ids and titles must be distinct", s.id));
+        }
+    }
+    Ok(())
+}
+
 pub struct SegmentRuntime {
     config: SegmentConfig,
     table: &'static SegmentTable,
@@ -582,6 +634,8 @@ pub struct SegmentRuntime {
     pre_echo: Vec<StreamEvent>,
     /// The strings pinned on the evidence board, in pinning order.
     links: Vec<PinnedLink>,
+    /// The scene rounds, while the segment plays scenes ([`crate::rounds`]).
+    rounds: Option<Rounds>,
 }
 
 impl SegmentRuntime {
@@ -623,6 +677,14 @@ impl SegmentRuntime {
                 detail: format!("cold open: {e}"),
             })?;
         }
+        if let Some(t) = &config.round_times {
+            t.check()
+                .map_err(|detail| SegmentError::Config { detail })?;
+        }
+        if let Some(tr) = &config.table_read {
+            check_table_read(tr, &config.foils, table.clock.max_poll_options)?;
+        }
+        let rounds = Self::rounds_for(table, &config)?;
         let case = config.case.clone().unwrap_or_else(demo_case);
         validate_case(&case)?;
         // The owner gate: a real case goes out live only once the owner approved it.
@@ -656,6 +718,9 @@ impl SegmentRuntime {
             returned: Vec::new(),
             pre_echo: Vec::new(),
             links: Vec::new(),
+            // The guest is the active foil for the whole segment.
+            active_foil: rounds.as_ref().map(|r| r.guest.clone()),
+            rounds,
             started_ms: config.start_ms,
             config,
             table,
@@ -672,7 +737,6 @@ impl SegmentRuntime {
             refused: Vec::new(),
             declined: Vec::new(),
             foil_vote_seq: 0,
-            active_foil: None,
             observer_foil: None,
             ccv_since: None,
             handover_pending_since: None,
@@ -705,6 +769,50 @@ impl SegmentRuntime {
                 self.screen = self.table.default_screen(&self.state);
             }
         }
+    }
+
+    /// The scene rounds of `table` when it plays scenes: the config's Table Read, or the
+    /// refusal to start without a playable scene.
+    fn rounds_for(
+        table: &SegmentTable,
+        config: &SegmentConfig,
+    ) -> Result<Option<Rounds>, SegmentError> {
+        if !table.plays_scenes() {
+            return Ok(None);
+        }
+        match &config.table_read {
+            Some(tr) if !tr.scenes.is_empty() => Ok(Some(Rounds::new(
+                tr,
+                config.round_times.unwrap_or_default(),
+            ))),
+            _ => Err(SegmentError::Config {
+                detail: format!(
+                    "{} ({}) plays scenes and has no playable scene: the Table Read needs at \
+                     least one approved, clean scene",
+                    segment_name(table.id),
+                    table.title
+                ),
+            }),
+        }
+    }
+
+    /// A handover goes to the table's target, or, when the stream has a Table Read, to the
+    /// segment among `switch_to` that plays scenes.
+    fn handover_target(&self, default: SegmentId) -> SegmentId {
+        if self
+            .config
+            .table_read
+            .as_ref()
+            .is_none_or(|t| t.scenes.is_empty())
+        {
+            return default;
+        }
+        self.table
+            .switch_to
+            .iter()
+            .copied()
+            .find(|s| segment_table(*s).is_ok_and(|t| t.plays_scenes() && !t.is_descoped()))
+            .unwrap_or(default)
     }
 
     fn startable_table(segment: SegmentId) -> Result<&'static SegmentTable, SegmentError> {
@@ -1032,11 +1140,14 @@ impl SegmentRuntime {
         }
     }
 
+    /// The handover rule in force: the config's thresholds over the table's, its target the
+    /// segment that plays scenes when the stream has a Table Read ([`Self::handover_target`]).
     fn handover_rule(&self) -> Option<HandoverRule> {
-        self.table
-            .clock
-            .handover
-            .map(|table_rule| self.config.handover.unwrap_or(table_rule))
+        self.table.clock.handover.map(|table_rule| {
+            let mut rule = self.config.handover.unwrap_or(table_rule);
+            rule.to = self.handover_target(rule.to);
+            rule
+        })
     }
 
     fn cold_open_rule(&self) -> Option<ColdOpenRule> {
@@ -1203,12 +1314,35 @@ impl SegmentRuntime {
                 }
                 self.fire(Trigger::FoilVoteClosed);
             }
+            PollKind::Scene => {
+                // The ballot puts its scene up: the winner, else the first tied (or the first
+                // left) in ballot order, and the host is told so. A ballot closed by the
+                // ceiling or a sign-off puts nothing up.
+                if resolve {
+                    let result = outcome(&poll.tallies());
+                    if let Some(r) = self.rounds.as_mut() {
+                        if let Some(i) = r.choose(&result) {
+                            r.last_ballot = Some((poll.id.clone(), result.clone(), i));
+                            r.cue(
+                                i,
+                                now_ms,
+                                Cue::Ballot {
+                                    poll_id: poll.id.clone(),
+                                    outcome: result,
+                                },
+                            );
+                            self.state = SCENE_STATE.to_string();
+                        }
+                    }
+                }
+            }
         }
         events
     }
 
     fn switch_to(&mut self, now_ms: TsMs, to: SegmentId) -> Result<Vec<StreamEvent>, SegmentError> {
         let table = Self::startable_table(to)?;
+        let rounds = Self::rounds_for(table, &self.config)?;
         let mut events = self.close_poll(now_ms, false);
         events.push(StreamEvent::SegmentEnd {
             ts_ms: now_ms,
@@ -1232,6 +1366,14 @@ impl SegmentRuntime {
         if let Some(foil) = self.active_foil.take() {
             self.observer_foil = Some(foil);
         }
+        // A segment that plays scenes has its guest as the active foil throughout.
+        if let Some(r) = &rounds {
+            if self.observer_foil.as_deref() == Some(r.guest.as_str()) {
+                self.observer_foil = None;
+            }
+            self.active_foil = Some(r.guest.clone());
+        }
+        self.rounds = rounds;
         Ok(events)
     }
 
@@ -1657,6 +1799,15 @@ impl SegmentRuntime {
             // An arc is the whole planned segment: it is not handed over midway.
             "switch_segment" if self.arc.is_some() => Err("arc_in_progress"),
             "sign_off" if self.sign_off_withheld() => Err("dossier_not_sealed"),
+            // Scene rounds run at least to their floor.
+            "sign_off"
+                if self
+                    .rounds
+                    .as_ref()
+                    .is_some_and(|r| self.elapsed_ms() < i64::from(r.times.floor_s) * 1000) =>
+            {
+                Err("segment_floor")
+            }
             _ => Ok(()),
         }
     }
@@ -1665,7 +1816,7 @@ impl SegmentRuntime {
         // A fleet-loss sign-off never waits for the seal.
         let fleet_lost = matches!(op, Op::SignOff { reason } if reason.starts_with("fleet_lost"));
         match self.availability(op_tag(op)) {
-            Err("dossier_not_sealed") if fleet_lost => {}
+            Err("dossier_not_sealed" | "segment_floor") if fleet_lost => {}
             Err(rule) => return Err(rule),
             Ok(()) => {}
         }
@@ -1903,6 +2054,21 @@ impl SegmentRuntime {
                 }
                 if Self::startable_table(*to).is_err() {
                     return Err("segment_descoped");
+                }
+                // A segment with a handover hands over to its target: tonight's Table Read
+                // when the prep has one, else the table's.
+                if let Some(rule) = self.handover_rule() {
+                    if *to != rule.to {
+                        return Err("not_the_handover");
+                    }
+                }
+                if Self::rounds_for(
+                    segment_table(*to).map_err(|_| "segment_descoped")?,
+                    &self.config,
+                )
+                .is_err()
+                {
+                    return Err("no_scenes");
                 }
                 let mut events = Vec::new();
                 if self.handover_pending_since.is_none() {
@@ -2282,6 +2448,7 @@ impl SegmentRuntime {
         events.extend(self.open_due_plebiscite(now_ms));
         events.extend(self.arc_tick(now_ms));
         events.extend(self.cold_open_tick(now_ms));
+        events.extend(self.rounds_tick(now_ms));
         let Some(rule) = self.handover_rule() else {
             return events;
         };
@@ -2333,6 +2500,239 @@ impl SegmentRuntime {
             }
         }
         events
+    }
+
+    // ----- scene rounds ----------------------------------------------------------------
+
+    /// The scene rounds' clock ([`crate::rounds`]): the intro and each free talk give way to
+    /// the next round, a ballot or a scene left past the ceiling closes the segment, and a
+    /// scene nobody performs ends after `scene_max_s`.
+    fn rounds_tick(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
+        let Some(r) = &self.rounds else {
+            return Vec::new();
+        };
+        let t = r.times;
+        let elapsed = self.elapsed_ms();
+        let ceiling = elapsed >= i64::from(t.ceiling_s) * 1000;
+        match self.state.as_str() {
+            INTRO_STATE if ceiling || elapsed >= i64::from(t.intro_s) * 1000 => {
+                self.next_round(now_ms)
+            }
+            TALK_STATE => {
+                let talked = r
+                    .talk_since
+                    .is_none_or(|s| now_ms - s >= i64::from(t.talk_s) * 1000);
+                let floor = elapsed >= i64::from(t.floor_s) * 1000;
+                if ceiling || (talked && (!r.left.is_empty() || floor)) {
+                    self.next_round(now_ms)
+                } else {
+                    Vec::new()
+                }
+            }
+            BALLOT_STATE if ceiling => {
+                let events = self.close_poll(now_ms, false);
+                self.state = CLOSING_STATE.to_string();
+                events
+            }
+            SCENE_STATE => {
+                let stale =
+                    r.up.as_ref()
+                        .filter(|(_, since, _)| now_ms - since >= i64::from(t.scene_max_s) * 1000)
+                        .map(|(i, _, _)| r.scenes[*i].id.clone());
+                match stale {
+                    Some(id) => {
+                        self.scene_ended(&id, now_ms);
+                        vec![moderation(
+                            now_ms,
+                            ModStage::Output,
+                            SCENE_TIMEOUT_RULE,
+                            None,
+                            format!("ended:{id}"),
+                        )]
+                    }
+                    None => Vec::new(),
+                }
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// The next round: a ballot over the scenes left (two or more), the last scene unvoted,
+    /// or, with none left or past the ceiling, the closing.
+    fn next_round(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
+        let Some(r) = &self.rounds else {
+            return Vec::new();
+        };
+        let ceiling = self.elapsed_ms() >= i64::from(r.times.ceiling_s) * 1000;
+        match r.left.as_slice() {
+            [] => {
+                self.state = CLOSING_STATE.to_string();
+                Vec::new()
+            }
+            _ if ceiling => {
+                self.state = CLOSING_STATE.to_string();
+                Vec::new()
+            }
+            [only] => {
+                let only = *only;
+                if let Some(r) = self.rounds.as_mut() {
+                    r.cue(only, now_ms, Cue::Unvoted);
+                }
+                self.state = SCENE_STATE.to_string();
+                Vec::new()
+            }
+            _ => self.open_scene_ballot(now_ms).into_iter().collect(),
+        }
+    }
+
+    /// Open the ballot over the scenes left: their titles in ballot order. Its `start_poll`
+    /// goes out like a host poll's, so the stage draws it unchanged. `None` while another
+    /// poll is open (the ballot waits for it).
+    fn open_scene_ballot(&mut self, now_ms: TsMs) -> Option<StreamEvent> {
+        if self.poll.is_some() || self.signed_off {
+            return None;
+        }
+        let host = self.host_title().to_string();
+        let r = self.rounds.as_mut()?;
+        r.ballots += 1;
+        let want = format!("scene-ballot-{}", r.ballots);
+        let options = r.left_titles();
+        let guest = foil_name(&r.guest);
+        let clock = &self.table.clock;
+        let secs = r
+            .times
+            .ballot_secs
+            .clamp(clock.poll_min_secs, clock.poll_max_secs);
+        let id = self.fresh_poll_id(&want);
+        let question = format!("Which scene shall the {host} and {guest} perform next?");
+        self.open_poll(Poll {
+            id: id.clone(),
+            question: question.clone(),
+            options: options.clone(),
+            min_rank: Rank::Thrall,
+            closes_ms: now_ms + i64::from(secs) * 1000,
+            kind: PollKind::Scene,
+            subject: None,
+            votes: BTreeMap::new(),
+        });
+        self.state = BALLOT_STATE.to_string();
+        Some(StreamEvent::Op {
+            ts_ms: now_ms,
+            op: Op::StartPoll {
+                poll_id: id,
+                question,
+                options,
+                min_rank: Rank::Thrall,
+                secs,
+            },
+        })
+    }
+
+    /// The brain performed the scene up to its last line (its `scene_end` event): the scene
+    /// leaves the ballot and free talk starts. A scene that is not the one up does nothing.
+    /// Returns the events it causes (none today; kept like [`Self::job_done`]).
+    pub fn scene_ended(&mut self, scene_id: &str, now_ms: TsMs) -> Vec<StreamEvent> {
+        self.observe(now_ms);
+        let ended = self
+            .rounds
+            .as_mut()
+            .is_some_and(|r| r.ended(scene_id, now_ms));
+        if ended && self.state == SCENE_STATE {
+            self.state = TALK_STATE.to_string();
+        }
+        Vec::new()
+    }
+
+    /// The scene the segment is performing or about to: its id, while one is up.
+    pub fn scene_up(&self) -> Option<&str> {
+        let r = self.rounds.as_ref()?;
+        r.up.as_ref().map(|(i, _, _)| r.scenes[*i].id.as_str())
+    }
+
+    /// Scenes played so far, by id, in order.
+    pub fn scenes_played(&self) -> Vec<&str> {
+        self.rounds.as_ref().map_or_else(Vec::new, |r| {
+            r.played.iter().map(|&i| r.scenes[i].id.as_str()).collect()
+        })
+    }
+
+    /// The state summary's Table Read block: the round, the scene up, the free talk's
+    /// material, the closing.
+    fn round_lines(&self) -> Vec<String> {
+        let Some(r) = &self.rounds else {
+            return Vec::new();
+        };
+        let (k, n) = r.round();
+        let mut lines = vec![format!(
+            "TABLE READ with {}: round {k} of {n}; scenes left: {}; played: {}",
+            r.guest,
+            r.quoted(&r.left),
+            r.quoted(&r.played)
+        )];
+        // How the scene up was chosen, while it is up: the room event the host announces
+        // before it starts.
+        if let (Some((id, result, i)), SCENE_STATE) = (&r.last_ballot, self.state.as_str()) {
+            let chosen = r.title(*i);
+            lines.push(match result {
+                PollOutcome::Winner(w) => format!("last poll {id} closed: winner {w}"),
+                PollOutcome::Tie { options, voters } => format!(
+                    "last poll {id} closed: TIE between {} ({voters} votes each): you break it \
+                     on air, and say you are breaking it, in favour of \"{chosen}\" (first in \
+                     the running order), which plays next",
+                    PollOutcome::tied(options)
+                ),
+                PollOutcome::NoVotes => format!(
+                    "last poll {id} closed: no votes: you choose \"{chosen}\" (first in the \
+                     running order), which plays next"
+                ),
+            });
+        }
+        let now = self.last_now_ms;
+        match self.state.as_str() {
+            SCENE_STATE => {
+                if let Some((i, _, how)) = &r.up {
+                    let s = &r.scenes[*i];
+                    let how = match how {
+                        Cue::Unvoted => "the last scene, unvoted",
+                        Cue::Ballot { .. } => "chosen by the ballot",
+                    };
+                    lines.push(format!(
+                        "{SCENE_UP_PREFIX}{} \"{}\" ({how}): it is performed now, its lines \
+                         scripted for you and {} and played by themselves; add nothing to it",
+                        s.id, s.title, r.guest
+                    ));
+                }
+            }
+            TALK_STATE => {
+                if let Some(&i) = r.played.last() {
+                    let s = &r.scenes[i];
+                    let left = r.talk_since.map_or(0, |t| {
+                        (i64::from(r.times.talk_s) * 1000 - (now - t)).max(0) / 1000
+                    });
+                    let points = if s.notes.is_empty() {
+                        "none written".to_string()
+                    } else {
+                        s.notes.join("; ")
+                    };
+                    let next = match r.left.len() {
+                        0 => "That was the last scene: the closing follows.",
+                        1 => "Then the last scene plays, unvoted.",
+                        _ => "Then the next ballot opens by itself.",
+                    };
+                    lines.push(format!(
+                        "FREE TALK after \"{}\" (about {left} s left): talking points: \
+                         {points}. {next}",
+                        s.title
+                    ));
+                }
+            }
+            CLOSING_STATE => lines.push(format!(
+                "The Table Read is over: thank {}, give your honest verdict, then sign_off.",
+                r.guest
+            )),
+            _ => {}
+        }
+        lines
     }
 
     // ----- context ---------------------------------------------------------------------
@@ -2410,6 +2810,28 @@ impl SegmentRuntime {
                     self.config.foils.join(", ")
                 ));
             }
+        }
+        if let (Some(rule), Some(tr)) = (self.handover_rule(), &self.config.table_read) {
+            if t.clock.handover.is_some_and(|h| h.to != rule.to) {
+                let title = segment_table(rule.to).map_or("", |s| s.title.as_str());
+                p.push_str(&format!(
+                    "\nTonight the handover goes to {} {title}, with {} as the guest.",
+                    segment_name(rule.to),
+                    tr.guest
+                ));
+            }
+        }
+        if let Some(r) = &self.rounds {
+            let order: Vec<String> = r
+                .scenes
+                .iter()
+                .map(|s| format!("\"{}\" ({})", s.title, s.pitch))
+                .collect();
+            p.push_str(&format!(
+                "\nTonight's guest: {}. Tonight's scenes, in running order: {}.",
+                r.guest,
+                order.join("; ")
+            ));
         }
         if t.allows_op("reveal_hex") {
             p.push_str(&format!(
@@ -2884,12 +3306,19 @@ impl SegmentRuntime {
         }
         if self.handover_pending_since.is_some() {
             if let Some(rule) = self.handover_rule() {
+                let lead = match segment_table(rule.to) {
+                    Ok(t) if t.plays_scenes() => {
+                        format!("announce the {} with tonight's guest", t.title)
+                    }
+                    _ => "let the foil dare you".to_string(),
+                };
                 lines.push(format!(
-                    "HANDOVER DUE: let the foil dare you, then emit switch_segment to {}",
+                    "HANDOVER DUE: {lead}, then emit switch_segment to {}",
                     segment_name(rule.to)
                 ));
             }
         }
+        lines.extend(self.round_lines());
         if self.table.allows_op("reveal_hex") {
             let revealed: Vec<String> = self
                 .case

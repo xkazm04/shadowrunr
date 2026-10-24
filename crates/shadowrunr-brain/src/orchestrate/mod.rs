@@ -39,6 +39,11 @@
 //! A vote that closed and a handover that fell due are room events ([`room`]): the next beat
 //! that is not a safety beat announces them, once, and expires the queued bit.
 //!
+//! **A scene** (SEG-03, [`crate::scene`]): while the brain performs a scene, every beat that is
+//! not a speech hold or a safety beat is a `scene` beat (no picks; chat is carried as in a
+//! hold). A scene the runtime just put up starts only once the room event that chose it (the
+//! ballot's result, its tie) has been announced.
+//!
 //! **Consume on delivery.** [`Orchestrator::plan`] and [`Orchestrator::commit`] decide a beat
 //! and stage what it consumes (picks answered, waves acknowledged, a bit or cold-open lines
 //! drawn, a connector used, room events taken, the through-line's pick-up). The brain opens a
@@ -206,6 +211,9 @@ pub struct BeatInputs<'a> {
     /// Lowercase names the character answers to.
     pub names: &'a [String],
     pub max_picks: usize,
+    /// A scene to perform ([`crate::scene`]): its id, and whether it is still to start (it
+    /// waits for a room event, such as the ballot's tie, to be announced first).
+    pub scene: Option<(&'a str, bool)>,
 }
 
 /// Which candidates the picker may see this beat.
@@ -904,6 +912,7 @@ impl Orchestrator {
         }
         let safety = b.cands.iter().any(|c| c.safety.is_some());
         if p.mode == BeatMode::Hold
+            || p.mode == BeatMode::Scene
             || safety
             || b.closing
             || b.ctx.state == COLD_OPEN_STATE
@@ -1070,6 +1079,20 @@ impl Orchestrator {
                 max,
                 format!("{lead}safety beat: {held}"),
             );
+        }
+
+        // A scene being performed takes the beat (chat is carried); one still to start waits
+        // for the room event that put it up (a ballot's result, its tie) to be announced.
+        if let Some((id, starting)) = b.scene {
+            if !(starting && self.room.has_pending()) {
+                let what = if starting { "starts" } else { "goes on" };
+                return Plan::new(
+                    BeatMode::Scene,
+                    Offer::SafetyOnly,
+                    0,
+                    format!("{lead}scene {id} {what}"),
+                );
+            }
         }
 
         // A closed vote or a handover due: announced now, once, over the queued bit.

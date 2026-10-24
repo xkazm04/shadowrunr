@@ -315,7 +315,20 @@ seeds = [1]
         // A case is for SEG-02A runs only.
         let bad = "id = \"x\"\ncharacter = \"malakor\"\nduration_s = 60\ncase = \"ABC-1\"\n[axes]\ntones = [\"theatrical\"]\ncore_tiers = [\"haiku\"]\nsegments = [\"SEG-01\"]\naudience_sizes = [3]\nseeds = [1]\n";
         assert!(Matrix::parse(bad).is_err());
+        assert!(Matrix::parse(&bad.replace("SEG-01", "SEG-03")).is_err());
         assert!(Matrix::parse(&bad.replace("SEG-01", "SEG-02A")).is_ok());
+        // A Table Read matrix: its runs are SEG-03 runs.
+        let seg03 = Matrix::parse(
+            &bad.replace("case = \"ABC-1\"\n", "")
+                .replace("[\"SEG-01\"]", "[\"SEG-03\", \"SEG-01\"]"),
+        )
+        .unwrap();
+        let segs: Vec<SegmentId> = seg03.specs().iter().map(|s| s.segment).collect();
+        assert_eq!(
+            segs,
+            [SegmentId::Seg03TableRead, SegmentId::Seg01ImprovisedRoom]
+        );
+        assert!(seg03.specs()[0].run_id.contains("SEG-03"));
         assert!(
             Matrix::parse(&bad.replace("SEG-01", "SEG-02A").replace("ABC-1", "bad id")).is_err()
         );

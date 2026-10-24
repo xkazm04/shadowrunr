@@ -20,7 +20,9 @@ allowed_ops = [
 # The main screen: the big-avatar room only (appendix (screens and board)).
 screens = ["host"]
 commands = ["summon", "propose", "vote"]
-switch_to = ["SEG-02A"]
+# The handover goes to `[clock.handover] to` (SEG-02A), or to the segment here that plays scenes
+# (SEG-03) when the stream prep carries a table read.
+switch_to = ["SEG-02A", "SEG-03"]
 
 rules_prompt = """
 SEGMENT SEG-01: THE IMPROVISED ROOM.
@@ -31,8 +33,9 @@ summon one with `!summon <foil>` and the weighted vote decides. A foil speaks at
 sentence per turn; you always have the last word.
 Run crowd games with polls, one poll at a time. {Followers} of Warlock rank and above may \
 `!propose` premises; lower ranks may vote with `!vote <option>`.
-When the handover comes, the foil dares you to prove one real case and the show moves to the \
-Hexmap Investigation.
+When the handover comes, the show moves to the segment the state summary names: into the Hexmap \
+Investigation, the foil dares you to prove one real case; into the Table Read, you bring on \
+tonight's guest.
 """
 
 # Clock rules. Every number is an ASSUMPTION (digest section 3, "Handover"; A/B pending).

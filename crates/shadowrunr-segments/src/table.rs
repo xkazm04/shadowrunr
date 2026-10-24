@@ -33,7 +33,7 @@ use shadowrunr_types::{Op, ScreenId, SegmentId, SegmentStatus};
 use crate::SegmentError;
 
 /// Compiled-in table sources, one per [`SegmentId`].
-pub const SEGMENT_TABLE_SOURCES: [(&str, &str); 4] = [
+pub const SEGMENT_TABLE_SOURCES: [(&str, &str); 5] = [
     ("seg-01.toml", include_str!("../data/segments/seg-01.toml")),
     (
         "seg-02a.toml",
@@ -47,6 +47,7 @@ pub const SEGMENT_TABLE_SOURCES: [(&str, &str); 4] = [
         "seg-02b-ii.toml",
         include_str!("../data/segments/seg-02b-ii.toml"),
     ),
+    ("seg-03.toml", include_str!("../data/segments/seg-03.toml")),
 ];
 
 /// Every `Op` tag (serde name) in the action grammar.
@@ -571,6 +572,23 @@ impl SegmentTable {
                 return Err(bad("arc: reveal_gap_pct is a percentage of one slot".into()));
             }
         }
+        // A table with a scene state plays scene rounds, which run the five round states.
+        if states.contains(crate::rounds::SCENE_STATE) {
+            if let Some(s) = crate::rounds::ROUND_STATES
+                .iter()
+                .find(|s| !states.contains(**s))
+            {
+                return Err(bad(format!(
+                    "a table that plays scenes needs the {s:?} state"
+                )));
+            }
+            if self.initial != crate::rounds::INTRO_STATE {
+                return Err(bad(format!(
+                    "a table that plays scenes starts in {:?}",
+                    crate::rounds::INTRO_STATE
+                )));
+            }
+        }
         if self.status == SegmentStatus::Descoped
             && (!self.allowed_ops.is_empty() || self.design_notes.is_none())
         {
@@ -647,6 +665,11 @@ impl SegmentTable {
 
     pub fn is_descoped(&self) -> bool {
         self.status == SegmentStatus::Descoped
+    }
+
+    /// The segment plays scene rounds ([`crate::rounds`]): its table has the scene state.
+    pub fn plays_scenes(&self) -> bool {
+        self.states.iter().any(|s| s == crate::rounds::SCENE_STATE)
     }
 
     /// The generic interpreter: first row matching (state, trigger, guard) wins.
@@ -735,7 +758,11 @@ mod tests {
     fn the_descoped_set_comes_from_the_tables() {
         assert_eq!(
             active_segments(),
-            vec![SegmentId::Seg01ImprovisedRoom, SegmentId::Seg02aHexmap]
+            vec![
+                SegmentId::Seg01ImprovisedRoom,
+                SegmentId::Seg02aHexmap,
+                SegmentId::Seg03TableRead
+            ]
         );
         assert_eq!(
             descoped_segments(),
@@ -757,9 +784,74 @@ mod tests {
             SegmentId::Seg02aHexmap,
             SegmentId::Seg02bCartography,
             SegmentId::Seg02bDependency,
+            SegmentId::Seg03TableRead,
         ] {
             assert!(ts.iter().any(|t| t.id == id), "{id:?}");
         }
+    }
+
+    #[test]
+    fn seg03_plays_scenes_on_the_host_screen_with_votes_only() {
+        let t = segment_table(SegmentId::Seg03TableRead).unwrap();
+        assert!(t.plays_scenes());
+        assert_eq!(t.status, SegmentStatus::Pilot);
+        assert_eq!(t.states, crate::rounds::ROUND_STATES);
+        assert_eq!(t.initial, crate::rounds::INTRO_STATE);
+        assert_eq!(t.screens, ["host"]);
+        assert_eq!(t.commands, ["vote"]);
+        // The ballot is the runtime's: the host opens no poll, and nothing is handed over.
+        for op in ["start_poll", "close_poll", "summon_foil", "switch_segment"] {
+            assert!(!t.allows_op(op), "{op}");
+        }
+        assert!(t.allows_op("sign_off"));
+        let p = t.rules_prompt.to_lowercase();
+        for want in [
+            "scheduled foil",
+            "!vote <title>",
+            "last word",
+            "one sentence per turn",
+            "roast yourself",
+            "say the unsaid",
+            "real opinion",
+        ] {
+            assert!(p.contains(want), "{want}: {p}");
+        }
+        for s in &t.states {
+            assert!(t.state_prompt(s).is_some(), "{s}");
+        }
+        // SEG-01 may hand over to it; nothing else plays scenes.
+        let one = segment_table(SegmentId::Seg01ImprovisedRoom).unwrap();
+        assert!(one.switch_to.contains(&SegmentId::Seg03TableRead));
+        assert_eq!(
+            tables()
+                .unwrap()
+                .iter()
+                .filter(|t| t.plays_scenes())
+                .map(|t| t.id)
+                .collect::<Vec<_>>(),
+            [SegmentId::Seg03TableRead]
+        );
+    }
+
+    #[test]
+    fn a_table_that_plays_scenes_needs_every_round_state() {
+        let src = SEGMENT_TABLE_SOURCES[4].1;
+        let missing = src.replace(
+            "states = [\"intro\", \"ballot\", \"scene\", \"talk\", \"closing\"]",
+            "states = [\"intro\", \"ballot\", \"scene\", \"closing\"]",
+        );
+        assert_ne!(missing, src);
+        // Without the talk state's rules too, so the round check is what refuses it.
+        let (a, b) = (
+            missing.find("[state_rules.talk]").unwrap(),
+            missing.find("[state_rules.closing]").unwrap(),
+        );
+        let missing = format!("{}{}", &missing[..a], &missing[b..]);
+        let e = SegmentTable::from_toml_str("x", &missing).unwrap_err();
+        assert!(e.to_string().contains("\"talk\""), "{e}");
+        let late = src.replace("initial = \"intro\"", "initial = \"ballot\"");
+        assert_ne!(late, src);
+        assert!(SegmentTable::from_toml_str("x", &late).is_err());
     }
 
     #[test]

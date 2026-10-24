@@ -269,12 +269,10 @@ pub struct ChatRoom {
 /// Directive handed to the chatter model this tick: index into `injections`.
 pub type Directives = Vec<usize>;
 
-/// Seconds at the start of a run kept clear of planted stimuli: SEG-01's cold open, up to its
-/// ceiling (the segment table's), at most half the run. Other segments start without one.
+/// Seconds at the start of a run kept clear of planted stimuli: the segment's cold open (SEG-01
+/// has one), up to its ceiling (the segment table's), at most half the run. A segment whose
+/// table has no cold open (SEG-02A, SEG-03) starts without one.
 pub fn cold_open_window_s(segment: SegmentId, duration_s: u32) -> u32 {
-    if segment != SegmentId::Seg01ImprovisedRoom {
-        return 0;
-    }
     segment_table(segment)
         .ok()
         .and_then(|t| t.clock.cold_open.as_ref())
@@ -1793,6 +1791,7 @@ mod tests {
         assert_eq!(cold_open_window_s(SegmentId::Seg01ImprovisedRoom, 900), 180);
         assert_eq!(cold_open_window_s(SegmentId::Seg01ImprovisedRoom, 300), 150);
         assert_eq!(cold_open_window_s(SegmentId::Seg02aHexmap, 900), 0);
+        assert_eq!(cold_open_window_s(SegmentId::Seg03TableRead, 900), 0);
         assert_eq!(remap(0, 180, 900, 900), 180);
         assert_eq!(remap(450, 180, 900, 900), 540);
         // Past the cold open and short of a 60 s closing guard.
