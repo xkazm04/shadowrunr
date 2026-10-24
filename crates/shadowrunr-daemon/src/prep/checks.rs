@@ -1,6 +1,8 @@
 //! The mechanical checks over a stream prep: a grounding check over the material as written,
 //! never another model pass. Every check is always present, `pass` or `fail`, with a detail
-//! that names what failed, so the owner sees why a prep cannot be approved.
+//! that names what failed, so the owner sees why a prep cannot be approved. The one exception
+//! is `table_read`: present exactly when the prep plans a SEG-03 Table Read (there is nothing
+//! to check without one, and a prep without one keeps the checks it always had).
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -25,6 +27,35 @@ pub struct CheckContext<'a> {
     pub policy: &'a Policy,
     /// Real people and channels from the operator's list (lowercase).
     pub real_names: &'a [String],
+    /// Where the `table_read` check reads the scenes and the prep character's foils. `None`:
+    /// a prep with a table read fails that check (a prep without one passes it either way).
+    pub scenes: Option<ScenePaths<'a>>,
+}
+
+/// `<data>` (its `scenes/<guest>/`) and the character packages (the prep character's foils).
+#[derive(Debug, Clone, Copy)]
+pub struct ScenePaths<'a> {
+    pub data: &'a Path,
+    pub characters: &'a Path,
+}
+
+/// The `table_read` check's problems (the check runs only with a table read).
+fn table_read(p: &StreamPrep, ctx: &CheckContext) -> Vec<Problem> {
+    let Some(plan) = &p.table_read else {
+        return Vec::new();
+    };
+    let Some(paths) = ctx.scenes else {
+        return vec![Problem::bare(
+            "the scenes cannot be read where these checks run".into(),
+        )];
+    };
+    let foils = crate::character::manifest(paths.characters, &p.character)
+        .map(|m| m.foils)
+        .unwrap_or_default();
+    crate::scenes::table_read_problems(plan, &p.character, paths.data, &foils, ctx.policy)
+        .into_iter()
+        .map(Problem::bare)
+        .collect()
 }
 
 /// `<policy>/real-names.txt`, lowercased; empty when absent.
@@ -466,7 +497,7 @@ fn assess(
         .collect();
 
     let n = all.len();
-    vec![
+    let mut out = vec![
         (
             "line_length",
             long,
@@ -500,7 +531,19 @@ fn assess(
             gated,
             format!("{n} lines pass the brain's output gate unchanged"),
         ),
-    ]
+    ];
+    if let Some(t) = &p.table_read {
+        out.push((
+            "table_read",
+            table_read(p, ctx),
+            format!(
+                "guest {}: {} scene(s), each approved and clean",
+                t.guest,
+                t.scenes.len()
+            ),
+        ));
+    }
+    out
 }
 
 /// Run every check over `p`. `dropped` lists what generation could not keep (a bit naming no

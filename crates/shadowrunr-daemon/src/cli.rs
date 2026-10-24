@@ -120,6 +120,10 @@ pub enum Command {
     /// for the owner's approval.
     #[command(subcommand)]
     Prep(crate::prep::cli::PrepCommand),
+    /// SEG-03 scenes in <data>/scenes/<guest>/: list them, check one, approve one for the
+    /// ballots.
+    #[command(subcommand)]
+    Scene(crate::scenes::SceneCommand),
     /// Malakor's local voice: probe the [voice] setup, speak one line through the sidecar, or
     /// replay a recorded run through it.
     #[command(subcommand)]
@@ -350,11 +354,27 @@ fn parse_tier(s: &str) -> Result<ModelTier, String> {
         .map_err(|_| format!("tier must be haiku, sonnet or opus, got {s:?}"))
 }
 
+/// The segments a run may start in, as the error names them: `SEG-01, SEG-02A or SEG-03`.
+fn active_segment_names() -> String {
+    let names: Vec<String> = shadowrunr_segments::active_segments()
+        .iter()
+        .map(shadowrunr_sim::wire)
+        .collect();
+    match names.split_last() {
+        None => "none (the segment tables do not load)".into(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+    }
+}
+
 fn parse_segment(s: &str) -> Result<SegmentId, String> {
     let seg: SegmentId = serde_json::from_value(serde_json::Value::String(s.to_ascii_uppercase()))
-        .map_err(|_| format!("segment must be SEG-01 or SEG-02A, got {s:?}"))?;
+        .map_err(|_| format!("segment must be {}, got {s:?}", active_segment_names()))?;
     if shadowrunr_segments::segment_is_descoped(seg) {
-        Err(format!("segment {s} is descoped"))
+        Err(format!(
+            "segment {s} is descoped (active: {})",
+            active_segment_names()
+        ))
     } else {
         Ok(seg)
     }
@@ -371,7 +391,7 @@ pub struct SimRunArgs {
     /// Core-thread tier: haiku | sonnet | opus.
     #[arg(long, value_parser = parse_tier)]
     pub tier: Option<ModelTier>,
-    /// SEG-01 | SEG-02A.
+    /// SEG-01 | SEG-02A | SEG-03 (the active segments).
     #[arg(long, value_parser = parse_segment)]
     pub segment: Option<SegmentId>,
     /// Audience size (3, 30, 300 are calibrated).
@@ -575,6 +595,7 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
         Command::Stream(StreamCommand::Check(a)) => Ok(ExitCode::from(check_cmd(&cfg, a).await)),
         Command::Review(ReviewCommand::Tag(a)) => Ok(ExitCode::from(review_tag_cmd(&cfg, a).await)),
         Command::Prep(c) => Ok(crate::prep::cli::run(&cfg, c).await),
+        Command::Scene(c) => Ok(crate::scenes::run(&cfg, c).await),
         Command::Voice(c) => Ok(ExitCode::from(crate::voice::cli::run(&cfg, c).await)),
         Command::Record(c) => Ok(ExitCode::from(crate::record::cli::run(&cfg, c).await)),
     }

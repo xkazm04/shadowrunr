@@ -5,6 +5,7 @@ use std::process::ExitCode;
 
 use shadowrunr_reconcile::{ReconcileConfig, Reconciler};
 use shadowrunr_types::prep::{BitKind, PrepCheckState, StreamPrep};
+use shadowrunr_types::scene::TableReadPlan;
 use shadowrunr_types::{Engine, ErrorCode};
 
 use super::revise::Revision;
@@ -21,7 +22,8 @@ pub const PREP_EXIT_CODES: &str = "Exit codes:
      engine or the store failed, the prep does not exist)
   2  usage error (a malformed id, an empty signature, a note naming no line, nothing to
      revise)
-  6  generate or revise staged a prep with a failed check (shown; it cannot be approved)";
+  6  generate or revise staged a prep with a failed check, or table-read left one failing
+     (shown; it cannot be approved)";
 
 /// Exit code: a staged prep failed a check.
 pub const EXIT_CHECK_FAILED: u8 = 6;
@@ -71,6 +73,29 @@ pub enum PrepCommand {
         /// Who approves.
         #[arg(long)]
         signature: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Plan SEG-03 (Table Read) on a staged prep: the scheduled guest (a foil of the prep's
+    /// character) and 1-3 approved scenes from <data>/scenes/<guest>/, in ballot order. The
+    /// checks run again; a failed `table_read` check holds the approval.
+    #[command(name = "table-read", after_help = PREP_EXIT_CODES)]
+    TableRead {
+        id: String,
+        /// The guest's foil id, e.g. `the-painter`.
+        #[arg(long, required_unless_present = "clear")]
+        guest: Option<String>,
+        /// Scene ids, comma-separated: `--scenes a,b,c`.
+        #[arg(
+            long,
+            value_delimiter = ',',
+            num_args = 1..,
+            required_unless_present = "clear"
+        )]
+        scenes: Vec<String>,
+        /// Remove the table read: SEG-01 hands over to SEG-02A again.
+        #[arg(long, conflicts_with_all = ["guest", "scenes"])]
+        clear: bool,
         #[arg(long)]
         json: bool,
     },
@@ -128,6 +153,13 @@ fn header(p: &StreamPrep) -> String {
         s.push_str(&format!(
             "approved by {by} at {}\n",
             shadowrunr_segments::cases::utc_iso(at)
+        ));
+    }
+    if let Some(t) = &p.table_read {
+        s.push_str(&format!(
+            "table read: {} with {}\n",
+            t.guest,
+            t.scenes.join(", ")
         ));
     }
     s
@@ -332,7 +364,7 @@ pub async fn revise_cmd(
 /// Every command but `generate` and `revise`, on the store.
 pub fn store_cmd(cfg: &Config, cmd: PrepCommand) -> u8 {
     let store = super::store(cfg);
-    let res: Result<(), RpcError> = (|| {
+    let res: Result<u8, RpcError> = (|| {
         match cmd {
             PrepCommand::Generate { .. } => {
                 return Err(RpcError::internal("generate runs through generate_cmd"))
@@ -392,11 +424,39 @@ pub fn store_cmd(cfg: &Config, cmd: PrepCommand) -> u8 {
                     println!("{} retired", p.prep_id);
                 }
             }
+            PrepCommand::TableRead {
+                id,
+                guest,
+                scenes,
+                clear,
+                json,
+            } => {
+                let plan = match (clear, guest) {
+                    (true, _) => None,
+                    (false, Some(guest)) => Some(TableReadPlan { guest, scenes }),
+                    (false, None) => {
+                        return Err(RpcError::invalid("--guest and --scenes, or --clear"))
+                    }
+                };
+                let p = super::set_table_read_in(cfg, &id, plan)?;
+                if json {
+                    print_json(&p);
+                } else {
+                    print!("{}", header(&p));
+                    if p.table_read.is_none() {
+                        println!("no table read: SEG-01 hands over to SEG-02A");
+                    }
+                    print!("{}", failed_checks(&p));
+                }
+                if !super::checks::failed(&p.checks).is_empty() {
+                    return Ok(EXIT_CHECK_FAILED);
+                }
+            }
         }
-        Ok(())
+        Ok(0)
     })();
     match res {
-        Ok(()) => 0,
+        Ok(code) => code,
         Err(e) => {
             eprintln!("error: {e}");
             exit_for(&e)

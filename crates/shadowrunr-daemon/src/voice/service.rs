@@ -2,8 +2,8 @@
 //! that `/voice` clients follow, and only those:
 //!
 //! - **Feeders.** The first client to follow a run starts a feeder on it: the same
-//!   `LiveRun::attach` that `/events` uses. Each `say` with `speaker: malakor` becomes a line
-//!   `<run_id>:<seq>`. A feeder reads the run's broadcast and never waits on anything, so the
+//!   `LiveRun::attach` that `/events` uses. Each host `say` becomes a line `<run_id>:<seq>`, and
+//!   so does each foil `say` whose foil has a voice ([`Voices::resolve_foil`]). A feeder reads the run's broadcast and never waits on anything, so the
 //!   brain never waits on the voice. A feeder that falls behind the broadcast reads what it
 //!   missed from the run's history, so no line is lost. When the run's last follower leaves,
 //!   its feeder stops and its waiting lines leave the queue.
@@ -29,13 +29,20 @@
 //!   voice that differs from the one speaking replaces its renderer before the run's first line:
 //!   the old one stops (its lines in flight end with it) and the new one starts. The status names
 //!   the provider and the voice. Nothing ever falls back to another provider.
+//! - **Foils (SEG-03's guest, a summoned SEG-01 foil).** A foil with a voice speaks through a
+//!   Kokoro renderer of its own, started the first time a run names the foil (`op summon_foil`,
+//!   `scene_start`, or its first `say`) and kept until no run is voiced. Its lines take the same
+//!   queue and the same turn order as the host's, so the two never overlap, and its utterances
+//!   carry `speaker: foil` and the foil id. A foil with no voice is shown as captions only: its
+//!   lines never enter the queue, and the log says so once per run. A foil's failures are not
+//!   the host's: they never turn the status `degraded`.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 
-use shadowrunr_types::event::Speaker;
+use shadowrunr_types::event::{Op, Speaker};
 use shadowrunr_types::voice::{VoiceFrame, VoiceSkip, VoiceState};
 use shadowrunr_types::voice_choice::{ProviderStatus, VoiceProvider};
 use shadowrunr_types::StreamEvent;
@@ -78,7 +85,25 @@ pub trait Voices: Send + Sync + 'static {
         spoken: &Spoken,
         stop: watch::Receiver<bool>,
     ) -> (Arc<dyn Renderer>, Option<JoinHandle<()>>);
+    /// The voice `foil` speaks with in `character`'s streams: `Ok(None)` when it has none (its
+    /// lines are captions only), an error saying why a configured one cannot be used.
+    fn resolve_foil(&self, _character: &str, _foil: &str) -> Result<Option<Spoken>, String> {
+        Ok(None)
+    }
 }
+
+/// A foil's renderer, kept while runs are voiced.
+struct FoilSlot {
+    key: String,
+    provider: VoiceProvider,
+    renderer: Arc<dyn Renderer>,
+    /// Dropping it stops the renderer.
+    stop: watch::Sender<bool>,
+    supervisor: Option<JoinHandle<()>>,
+}
+
+/// Warnings the hub keeps for tests and the status line, at most.
+const NOTES_KEPT: usize = 64;
 
 /// The renderer speaking now.
 #[derive(Default)]
@@ -118,6 +143,8 @@ pub struct Line {
     pub seq: u64,
     /// The text and its delivery cue, as the `say` carried them.
     pub utter: Utter,
+    /// The foil that speaks it; `None` for the host.
+    pub foil: Option<String>,
     /// When the `say` reached the daemon: the lag clock starts here.
     pub arrived: Instant,
 }
@@ -154,6 +181,12 @@ pub struct VoiceHub {
     pub(crate) verdicts: Mutex<HashMap<VoiceProvider, ProviderStatus>>,
     /// Each run's `voice.jsonl` (`log`): what went out, and what the stage reported.
     logs: VoiceLogs,
+    /// The foils' renderers, by foil id.
+    foils: Mutex<HashMap<String, FoilSlot>>,
+    /// `(run_id, foil)` already warned about as not voiced.
+    unvoiced: Mutex<HashSet<(String, String)>>,
+    /// The latest warnings, oldest first (also on stderr).
+    notes: Mutex<VecDeque<String>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -194,6 +227,9 @@ impl VoiceHub {
             preview: tokio::sync::Mutex::new(None),
             verdicts: Mutex::new(HashMap::new()),
             logs: VoiceLogs::default(),
+            foils: Mutex::new(HashMap::new()),
+            unvoiced: Mutex::new(HashSet::new()),
+            notes: Mutex::new(VecDeque::new()),
         })
     }
 
@@ -342,13 +378,126 @@ impl VoiceHub {
         lock(&self.current).provider
     }
 
-    /// Stop the renderer speaking now, and hand back its supervisor to wait on.
+    /// Stop the renderer speaking now and every foil's, and hand back a task that ends once
+    /// their supervisors have.
     pub fn stop_renderer(&self) -> Option<JoinHandle<()>> {
+        let mut tasks: Vec<JoinHandle<()>> = self.drop_foils();
         let mut c = lock(&self.current);
         if let Some(stop) = c.stop.take() {
             stop.send_replace(true);
         }
-        c.supervisor.take()
+        tasks.extend(c.supervisor.take());
+        drop(c);
+        match tasks.len() {
+            0 => None,
+            1 => tasks.pop(),
+            _ => Some(tokio::spawn(async move {
+                for t in tasks {
+                    let _ = t.await;
+                }
+            })),
+        }
+    }
+
+    /// Stop every foil's renderer; their supervisors, to wait on.
+    fn drop_foils(&self) -> Vec<JoinHandle<()>> {
+        let slots: Vec<FoilSlot> = lock(&self.foils).drain().map(|(_, s)| s).collect();
+        slots
+            .into_iter()
+            .filter_map(|s| {
+                s.stop.send_replace(true);
+                s.supervisor
+            })
+            .collect()
+    }
+
+    /// Stop the foils' renderers once no run is voiced but `leaving`.
+    fn release_foils(&self, leaving: &str) {
+        let busy = lock(&self.runs)
+            .iter()
+            .any(|(id, r)| id != leaving && r.feeder.as_ref().is_some_and(|f| !f.is_finished()));
+        if !busy {
+            drop(self.drop_foils());
+        }
+    }
+
+    /// Say something worth an operator's eye: on stderr, and kept for [`Self::notes`].
+    fn warn(&self, msg: String) {
+        eprintln!("voice: {msg}");
+        let mut n = lock(&self.notes);
+        n.push_back(msg);
+        while n.len() > NOTES_KEPT {
+            n.pop_front();
+        }
+    }
+
+    /// The latest warnings, oldest first.
+    pub fn notes(&self) -> Vec<String> {
+        lock(&self.notes).iter().cloned().collect()
+    }
+
+    /// Make sure `foil` can speak in `run_id` (streaming `character`): its renderer is started,
+    /// or replaced when its voice changed. `false` when it has no usable voice: its lines are
+    /// captions only, said once per run in the log.
+    pub fn foil_voiced(
+        self: &Arc<Self>,
+        run_id: &str,
+        character: Option<&str>,
+        foil: &str,
+    ) -> bool {
+        let resolved = match (self.voices.get(), character) {
+            (Some(v), Some(c)) => v.resolve_foil(c, foil),
+            (Some(_), None) => Err("the run named no character".into()),
+            (None, _) => Ok(None),
+        };
+        let spoken = match resolved {
+            Ok(Some(s)) => s,
+            other => {
+                let first = lock(&self.unvoiced).insert((run_id.to_string(), foil.to_string()));
+                if first {
+                    let why = match other {
+                        Err(why) => why,
+                        _ => "no voice is configured".into(),
+                    };
+                    self.warn(format!(
+                        "run {run_id}: {foil}'s lines are captions only ({why})"
+                    ));
+                }
+                return false;
+            }
+        };
+        if lock(&self.foils)
+            .get(foil)
+            .is_some_and(|s| s.key == spoken.key)
+        {
+            return true;
+        }
+        let Some(voices) = self.voices.get() else {
+            return false;
+        };
+        let (stop, stop_rx) = watch::channel(false);
+        let (renderer, supervisor) = voices.start(&spoken, stop_rx);
+        let old = lock(&self.foils).insert(
+            foil.to_string(),
+            FoilSlot {
+                key: spoken.key,
+                provider: spoken.provider,
+                renderer,
+                stop,
+                supervisor,
+            },
+        );
+        if let Some(old) = old {
+            old.stop.send_replace(true);
+        }
+        true
+    }
+
+    /// The renderer `foil` speaks through now, and its provider.
+    fn foil_speaking(&self, foil: &str) -> Option<(Arc<dyn Renderer>, Option<VoiceProvider>)> {
+        lock(&self.foils)
+            .get(foil)
+            .map(|s| (s.renderer.clone(), Some(s.provider)))
     }
 
     /// Stop every task (feeders, the worker and the status watcher).
@@ -471,6 +620,8 @@ impl VoiceHub {
             }
             runs.remove(run_id);
             drop(runs);
+            lock(&self.unvoiced).retain(|(r, _)| r != run_id);
+            self.release_foils(run_id);
             // Its waiting lines leave the queue, each with its end in the log.
             let gone = {
                 let mut q = lock(&self.queue);
@@ -512,12 +663,16 @@ impl VoiceHub {
     /// Queue a line (logged `queued`); past `max_queue` the oldest waiting line is skipped
     /// (`queue_full`).
     pub fn enqueue(&self, line: Line) {
+        let provider = match &line.foil {
+            Some(f) => self.foil_speaking(f).and_then(|(_, p)| p),
+            None => self.provider(),
+        };
         self.logs.queued(
             &line.run_id,
             line.seq,
             &line.utter.text,
             line.utter.delivery,
-            self.provider(),
+            provider,
         );
         let dropped = {
             let mut q = lock(&self.queue);
@@ -602,6 +757,43 @@ pub(crate) fn malakor_say(frame: &Frame) -> Option<Utter> {
     }
 }
 
+/// What a frame says about a foil: one of its lines, or that it is about to speak.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum FoilFrame {
+    /// A foil's `say`.
+    Say { foil: String, utter: Utter },
+    /// `op summon_foil` or `scene_start`: the foil speaks soon, so its voice warms now.
+    Coming(String),
+}
+
+/// A foil's line, or its summons or scene start, when the frame is one.
+pub(crate) fn foil_frame(frame: &Frame) -> Option<FoilFrame> {
+    if !(frame.contains("\"foil\"")
+        || frame.contains("\"scene_start\"")
+        || frame.contains("\"summon_foil\""))
+    {
+        return None;
+    }
+    match serde_json::from_str::<StreamEvent>(frame).ok()? {
+        StreamEvent::Say {
+            speaker: Speaker::Foil,
+            foil: Some(foil),
+            text,
+            delivery,
+            ..
+        } if !text.trim().is_empty() => Some(FoilFrame::Say {
+            foil,
+            utter: Utter { text, delivery },
+        }),
+        StreamEvent::SceneStart { guest, .. } => Some(FoilFrame::Coming(guest)),
+        StreamEvent::Op {
+            op: Op::SummonFoil { foil },
+            ..
+        } => Some(FoilFrame::Coming(foil)),
+        _ => None,
+    }
+}
+
 /// The character a `stream_start` frame names.
 pub(crate) fn stream_character(frame: &Frame) -> Option<String> {
     if !frame.contains("\"stream_start\"") {
@@ -613,9 +805,18 @@ pub(crate) fn stream_character(frame: &Frame) -> Option<String> {
     }
 }
 
-/// Queue each of the run's Malakor lines after `since`, until the run ends. The run's
-/// `stream_start` resolves its voice first (read from the run when it came before `since`).
+/// Queue each of the run's host and voiced foil lines after `since`, until the run ends; then
+/// the foils' renderers stop if no other run is voiced.
 async fn feed(hub: Weak<VoiceHub>, run: Arc<LiveRun>, since: u64) {
+    feed_run(hub.clone(), run.clone(), since).await;
+    if let Some(h) = hub.upgrade() {
+        h.release_foils(&run.run_id);
+    }
+}
+
+/// [`feed`]'s loop. The run's `stream_start` resolves its voice first (read from the run when
+/// it came before `since`).
+async fn feed_run(hub: Weak<VoiceHub>, run: Arc<LiveRun>, since: u64) {
     if since > 0 {
         if let (Some(h), Some(character)) = (hub.upgrade(), run.character()) {
             h.stream_start(&character);
@@ -629,14 +830,30 @@ async fn feed(hub: Weak<VoiceHub>, run: Arc<LiveRun>, since: u64) {
             }
             return true;
         }
-        let Some(utter) = malakor_say(f) else {
-            return true;
+        let (utter, foil) = match malakor_say(f) {
+            Some(utter) => (utter, None),
+            None => match foil_frame(f) {
+                Some(FoilFrame::Say { foil, utter }) => (utter, Some(foil)),
+                Some(FoilFrame::Coming(foil)) => {
+                    if let Some(h) = hub.upgrade() {
+                        h.foil_voiced(&run.run_id, run.character().as_deref(), &foil);
+                    }
+                    return true;
+                }
+                None => return true,
+            },
         };
         let Some(h) = hub.upgrade() else { return false };
+        if let Some(foil) = &foil {
+            if !h.foil_voiced(&run.run_id, run.character().as_deref(), foil) {
+                return true;
+            }
+        }
         h.enqueue(Line {
             run_id: run.run_id.clone(),
             seq,
             utter,
+            foil,
             arrived: Instant::now(),
         });
         true
@@ -704,8 +921,13 @@ async fn worker(
             () = &mut shutdown => return,
         };
         while flights.try_join_next().is_some() {}
-        // The renderer speaking when the line leaves the queue speaks all of it.
-        let Some((renderer, provider)) = hub.speaking() else {
+        // The renderer speaking when the line leaves the queue speaks all of it: the host's, or
+        // the line's foil's.
+        let speaking = match &line.foil {
+            Some(f) => hub.foil_speaking(f),
+            None => hub.speaking(),
+        };
+        let Some((renderer, provider)) = speaking else {
             continue;
         };
         let (done, next) = oneshot::channel();
@@ -714,7 +936,11 @@ async fn worker(
             since: None,
             held: Vec::new(),
         };
-        let voice = Voice { renderer, provider };
+        let voice = Voice {
+            renderer,
+            provider,
+            foil: line.foil.clone(),
+        };
         flights.spawn(fly(hub.clone(), voice, line, slot, order, done));
     }
 }
@@ -739,10 +965,27 @@ struct Installed {
     supervisor: Option<JoinHandle<()>>,
 }
 
-/// The renderer a line speaks through, and its provider (for the log).
+/// The renderer a line speaks through, its provider (for the log), and its foil (`None` for
+/// the host: only the host's lines count toward the status).
 struct Voice {
     renderer: Arc<dyn Renderer>,
     provider: Option<VoiceProvider>,
+    foil: Option<String>,
+}
+
+impl Voice {
+    fn spoke(&self, hub: &VoiceHub) {
+        if self.foil.is_none() {
+            hub.line_spoke();
+        }
+    }
+
+    fn failed(&self, hub: &VoiceHub, why: &str) {
+        match &self.foil {
+            None => hub.line_failed(why),
+            Some(f) => eprintln!("voice: {f}'s line failed: {why}"),
+        }
+    }
 }
 
 impl Order {
@@ -863,25 +1106,24 @@ async fn speak(hub: &VoiceHub, voice: &Voice, line: &Line, order: &mut Order) {
                         sample_rate: r.sample_rate,
                         pcm: r.pcm,
                         visemes: r.visemes,
-                        // WP-B: the guest's lines carry their speaker.
-                        speaker: None,
-                        foil: None,
+                        speaker: voice.foil.as_ref().map(|_| Speaker::Foil),
+                        foil: voice.foil.clone(),
                     },
                     usage,
                 );
                 if last {
-                    hub.line_spoke();
+                    voice.spoke(hub);
                     return;
                 }
             }
             Ok(Some(Part::Error { part, reason })) => {
                 order.emit(hub, &line.run_id, skipped(line, part, VoiceSkip::Error));
-                hub.line_failed(&reason);
+                voice.failed(hub, &reason);
                 return;
             }
             Ok(None) => {
                 order.emit(hub, &line.run_id, skipped(line, next, VoiceSkip::Error));
-                hub.line_failed("the renderer dropped the line");
+                voice.failed(hub, "the renderer dropped the line");
                 return;
             }
             Err(_) => {
@@ -890,10 +1132,13 @@ async fn speak(hub: &VoiceHub, voice: &Voice, line: &Line, order: &mut Order) {
                     order.emit(hub, &line.run_id, skipped(line, 0, VoiceSkip::Late));
                 } else {
                     order.emit(hub, &line.run_id, skipped(line, next, VoiceSkip::Error));
-                    hub.line_failed(&format!(
-                        "a sentence took longer than {} ms",
-                        hub.cfg.render_timeout_ms
-                    ));
+                    voice.failed(
+                        hub,
+                        &format!(
+                            "a sentence took longer than {} ms",
+                            hub.cfg.render_timeout_ms
+                        ),
+                    );
                 }
                 return;
             }

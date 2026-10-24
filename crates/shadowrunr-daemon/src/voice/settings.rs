@@ -222,21 +222,25 @@ pub fn label(cfg: &Config, choice: &VoiceChoice) -> String {
     }
 }
 
+/// What tells two Kokoro sidecars apart: the interpreter, the package and every argument.
+pub fn kokoro_key(v: &VoiceConfig) -> String {
+    format!(
+        "kokoro|{}|{}|{}",
+        v.python,
+        v.sidecar,
+        sidecar_args(v).join("\u{1f}")
+    )
+}
+
 /// The voice `choice` speaks with.
 pub fn spoken(cfg: &Config, choice: &VoiceChoice) -> Spoken {
     match choice.provider {
         VoiceProvider::Kokoro => {
             let v = kokoro_config(cfg, choice);
-            let key = format!(
-                "kokoro|{}|{}|{}",
-                v.python,
-                v.sidecar,
-                sidecar_args(&v).join("\u{1f}")
-            );
             Spoken {
                 provider: VoiceProvider::Kokoro,
                 voice: v.voice.clone(),
-                key,
+                key: kokoro_key(&v),
                 spec: Spec::Kokoro(Box::new(v)),
             }
         }
@@ -315,6 +319,10 @@ impl DaemonVoices {
 impl Voices for DaemonVoices {
     fn resolve(&self, character: &str) -> Option<Spoken> {
         Some(spoken_for(&self.cfg, character))
+    }
+
+    fn resolve_foil(&self, character: &str, foil: &str) -> Result<Option<Spoken>, String> {
+        super::foils::resolve(&self.cfg, character, foil)
     }
 
     fn start(
