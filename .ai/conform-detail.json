@@ -4796,6 +4796,26 @@
       "evaluatedTs": "2026-10-24T05:54:17.305Z",
       "worker": "a85bf011-b992-4c16-8527-8fa5c2a9aefc",
       "techniques": []
+    },
+    "20f1e644-e83b-481d-864f-cb15b9124d7e/cinematic-language": {
+      "context": "console-characters-page",
+      "subject": "cinematic-language",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T06:02:44.825Z",
+      "worker": "caf276de-640b-424e-b0ba-447194a3f3eb",
+      "techniques": []
+    },
+    "382c68f3-bc20-4cc7-8220-18aa850f7087/cinematic-language": {
+      "context": "character-package",
+      "subject": "cinematic-language",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T06:02:44.825Z",
+      "worker": "caf276de-640b-424e-b0ba-447194a3f3eb",
+      "techniques": []
     }
   }
 }

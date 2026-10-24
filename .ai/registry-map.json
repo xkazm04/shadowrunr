@@ -1405,7 +1405,11 @@
           "revision": 11,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/Avatar.tsx:19 The page only displays fixed art: hand-picked illustrations, stage-kit's MalakorArt SVG and seeded SVG avatars. It writes no image or video generation brief, so there are no shots, light, camera, lens or performance decisions to judge; a search of apps/console/src/pages/characters for close-up, lighting, lens, cinematic, shot list, dolly and depth of field found 0 hits.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:b0a6b6d577cdcffc",
+          "evaluatedRevision": 11
         },
         {
           "subject": "docs-content-model",
@@ -4765,7 +4769,11 @@
           "revision": 11,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "characters/malakor/rig/m8.spec.json:4 The package's only visual asset is a polygon face-rig spec measured on an existing portrait. Its other files are persona text for the dialogue brain and judge (constitution, bible, tones, foils, rules, situations), and none of them briefs a generated shot. A search of characters/malakor for close-up, lighting, lens, cinematic, shot list, dolly and depth of field found 0 hits; 'camera' appears only as an in-fiction prop (bible.md:22).",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:b0a6b6d577cdcffc",
+          "evaluatedRevision": 11
         },
         {
           "subject": "companion-identity",
