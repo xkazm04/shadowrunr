@@ -1,0 +1,155 @@
+{
+  "schema": "conform-run/1",
+  "worker": "29ec1313-c7e5-4e1b-93a5-1779d8ecb29c",
+  "subject": "eval-harness",
+  "evaluatedAt": "2026-10-24T03:49:10.289985+00:00",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "pairs": [
+    {
+      "context": "sim-instruments",
+      "subject": "eval-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "sim/rubric.toml:119 A model judges a 20-second dead-air threshold, though transcript timestamps make it mechanically checkable (the runner already records max_say_gap_s and the sandbox gates it), so the property carries judge drift and cost it never needed.",
+      "techniques": [
+        {
+          "technique": "assertion-vs-judgment",
+          "verdict": "deviation",
+          "evidence": "sim/rubric.toml:119 A checklist could hold this (timestamps). Likewise addresses_viewer_by_name_or_rank (line 107) is checkable against the known viewer names and rank titles. Both are on the judge side."
+        },
+        {
+          "technique": "judge-stability",
+          "verdict": "deviation",
+          "evidence": "sim/matrices/night.toml:12 Comparability is claimed from a shared tier alias. The judge is from the same model family as every core, and there is no disinterested-family judge, panel or anchor-set drift check."
+        },
+        {
+          "technique": "metric-role-contract",
+          "verdict": "deviation",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:11 The treatment/control A/B lists five metrics to compare and declares no optimized metric, thresholds or advance rule before the run."
+        },
+        {
+          "technique": "scenario-design",
+          "verdict": "conformant",
+          "evidence": "sim/rubric.toml:5 The rubric is a versioned part of the instrument, and series are never spliced across it."
+        },
+        {
+          "technique": "reliability-aggregation",
+          "verdict": "conformant",
+          "evidence": "sim/rubric.toml:9 Safety rules use the all-of-N bar that unattended live operation needs. Quality rates never gate."
+        },
+        {
+          "technique": "resolution-precondition",
+          "verdict": "conformant",
+          "evidence": "sim/matrices/roastmaster-vs-theatrical.toml:3 Overlapping intervals are treated as no order, and a dedicated comparison is scheduled instead of ranking."
+        },
+        {
+          "technique": "comparison-modes",
+          "verdict": "conformant",
+          "evidence": "sim/matrices/night-opus.toml:2 A judge change is marked as a discontinuity, not spliced into night.toml's series."
+        },
+        {
+          "technique": "selection-over-noise",
+          "verdict": "conformant",
+          "evidence": "sim/matrices/rate-cap-exemptions-control.toml:4 Both arms have the same N, the same seeds and the same day's instrument. No best-of-N is taken."
+        },
+        {
+          "technique": "eval-economics",
+          "verdict": "conformant",
+          "evidence": "sim/matrices/pilot.toml:1 Cadence is tiered (pilot, night, heavy) and every matrix declares a concurrency cap."
+        },
+        {
+          "technique": "treatment-election-rate",
+          "verdict": "not-applicable",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:4 The treatment is a pre-filter the harness applies, not a capability the candidate can decline."
+        },
+        {
+          "technique": "pairing-schedule",
+          "verdict": "not-applicable",
+          "evidence": "sim/matrices/heavy.toml:2 A full cross-product scored absolutely. There is no pairwise schedule."
+        }
+      ]
+    },
+    {
+      "context": "console-quality-gates",
+      "subject": "eval-harness",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evidence": "apps/console/fidelity/run.mjs:1 This context gates deterministic console code: a style-contract and texture comparison against a captured prototype, DOM and RPC counts at a 10x fixture, and bundle byte budgets. No non-deterministic system is scored. A search of apps/console/budgets, apps/console/fidelity and apps/console/src/perf for rubric, temperature, trials, judge_tier and pass_rate found nothing, so the subject belongs to test-harness here.",
+      "techniques": [],
+      "absenceTerms": [
+        "rubric",
+        "temperature",
+        "trials",
+        "judge_tier"
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "eval-harness",
+      "context": "sim-runner-judging",
+      "reason": "evidence leans on examples/run_matrix.rs, which is not a tracked file"
+    },
+    {
+      "subject": "eval-harness",
+      "context": "console-simulator-page",
+      "reason": "withdrawn after review: reviewer (sonnet): The claim that the heatmap shows mean quality with no n or noise beside it is contradicted: Heatmap.tsx has Runs and Judged columns plus a 'thin' chip for fewer than THIN_N judged runs, and the cell detail shows bounds on its RateBars. Only the absence of tier_decisions in apps/console/src held up."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-24T03:49:10.289985+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "eval-harness"
+      ],
+      "techniques": [
+        "assertion-vs-judgment",
+        "comparison-modes",
+        "eval-economics",
+        "judge-stability",
+        "metric-role-contract",
+        "pairing-schedule",
+        "reliability-aggregation",
+        "resolution-precondition",
+        "scenario-design",
+        "selection-over-noise",
+        "treatment-election-rate"
+      ],
+      "deviations": 1,
+      "context": "sim-instruments",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T03:49:10.289985+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "eval-harness"
+      ],
+      "techniques": [
+        "assertion-vs-judgment",
+        "comparison-modes",
+        "failure-signatures-beside-the-pass-rate",
+        "resolution-precondition"
+      ],
+      "deviations": 1,
+      "context": "console-simulator-page",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T03:49:10.289985+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "eval-harness"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "console-quality-gates",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    }
+  ]
+}

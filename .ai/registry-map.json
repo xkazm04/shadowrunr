@@ -4517,7 +4517,11 @@
           "revision": 37,
           "changedAt": "2026-09-29",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/fidelity/run.mjs:1 This context gates deterministic console code: a style-contract and texture comparison against a captured prototype, DOM and RPC counts at a 10x fixture, and bundle byte budgets. No non-deterministic system is scored. A search of apps/console/budgets, apps/console/fidelity and apps/console/src/perf for rubric, temperature, trials, judge_tier and pass_rate found nothing, so the subject belongs to test-harness here.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:7ccead00b7f92aba",
+          "evaluatedRevision": 37
         },
         {
           "subject": "sql-console",
@@ -4873,7 +4877,11 @@
           "revision": 37,
           "changedAt": "2026-09-29",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "sim/rubric.toml:119 A model judges a 20-second dead-air threshold, though transcript timestamps make it mechanically checkable (the runner already records max_say_gap_s and the sandbox gates it), so the property carries judge drift and cost it never needed.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:7ccead00b7f92aba",
+          "evaluatedRevision": 37
         },
         {
           "subject": "audience-absorption-at-scale",

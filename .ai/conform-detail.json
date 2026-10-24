@@ -833,30 +833,35 @@
       "subject": "eval-harness",
       "bundle": "software-engineering",
       "state": "unknown",
-      "evaluatedAt": "2026-10-19",
-      "evaluatedTs": "2026-10-19T21:44:02.041Z",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:49:10.289Z",
       "techniques": [
-        {
-          "technique": "assertion-vs-judgment",
-          "verdict": "conformant",
-          "evidence": "apps/console/src/pages/simulator/quote.ts:32 Quote occurrence is checked mechanically against transcript text, with separate cited-line, nearby and missing outcomes."
-        },
-        {
-          "technique": "comparison-modes",
-          "verdict": "deviation",
-          "evidence": "apps/console/src/pages/simulator/grid.ts:42 resultsHealth pools checks across every cell without separating instrument hashes; the mixed-hash warning in TournamentDetail does not prevent the pooled Held figure."
-        },
         {
           "technique": "resolution-precondition",
           "verdict": "deviation",
-          "evidence": "apps/console/src/pages/simulator/Heatmap.tsx:119 Every returned cell is ordered; confidence bounds and thin-sample labels do not gate the ranking on between-condition spread versus noise."
+          "evidence": "apps/console/src/pages/simulator/Heatmap.tsx:75 The sortable mean column has no SE or tie mark. grep finds no tier_decisions or tie_set in apps/console/src, though the contract carries them."
+        },
+        {
+          "technique": "assertion-vs-judgment",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/simulator/quote.ts:1 The operator's own mechanical check that each judge citation appears on its cited line."
+        },
+        {
+          "technique": "failure-signatures-beside-the-pass-rate",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/simulator/Heatmap.tsx:74 Not-provoked and not-evaluable counts sit beside rule fails, so an unmeasured check is never shown as a pass."
+        },
+        {
+          "technique": "comparison-modes",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:133 Cells carry their instrument identity, and the page warns before a comparison across instruments."
         }
       ],
       "withdrawn": {
-        "worker": "4d25b139-8816-4605-a03d-02ecd0d6dbd0",
+        "worker": "29ec1313-c7e5-4e1b-93a5-1779d8ecb29c",
         "state": "deviation",
-        "at": "2026-10-19T21:44:59.811481+00:00",
-        "reason": "reviewer (sonnet): cells.ts:52 `worstFirst` and Heatmap.tsx:119 are a labelled 'worst first' triage sort, keyed on rule fails, not-evaluable and not-provoked before mean quality, so the code does not show a published quality ranking that needs a noise check. The pooled-Held claim at grid.ts:42 is real, but it is a dif"
+        "at": "2026-10-24T03:51:25.614198+00:00",
+        "reason": "reviewer (sonnet): The claim that the heatmap shows mean quality with no n or noise beside it is contradicted: Heatmap.tsx has Runs and Judged columns plus a 'thin' chip for fewer than THIN_N judged runs, and the cell detail shows bounds on its RateBars. Only the absence of tier_decisions in apps/console/src held up."
       }
     },
     "435472ca-7ef4-4956-80d8-3dc82f215665/table": {
@@ -4302,6 +4307,82 @@
       "evaluatedAt": "2026-10-24",
       "evaluatedTs": "2026-10-24T03:25:09.906Z",
       "worker": "4e2b7996-5b22-4ec1-86cb-278fbd518948",
+      "techniques": []
+    },
+    "d6365504-acc7-4901-b7cf-569781f6644c/eval-harness": {
+      "context": "sim-instruments",
+      "subject": "eval-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:49:10.289Z",
+      "worker": "29ec1313-c7e5-4e1b-93a5-1779d8ecb29c",
+      "techniques": [
+        {
+          "technique": "assertion-vs-judgment",
+          "verdict": "deviation",
+          "evidence": "sim/rubric.toml:119 A checklist could hold this (timestamps). Likewise addresses_viewer_by_name_or_rank (line 107) is checkable against the known viewer names and rank titles. Both are on the judge side."
+        },
+        {
+          "technique": "judge-stability",
+          "verdict": "deviation",
+          "evidence": "sim/matrices/night.toml:12 Comparability is claimed from a shared tier alias. The judge is from the same model family as every core, and there is no disinterested-family judge, panel or anchor-set drift check."
+        },
+        {
+          "technique": "metric-role-contract",
+          "verdict": "deviation",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:11 The treatment/control A/B lists five metrics to compare and declares no optimized metric, thresholds or advance rule before the run."
+        },
+        {
+          "technique": "scenario-design",
+          "verdict": "conformant",
+          "evidence": "sim/rubric.toml:5 The rubric is a versioned part of the instrument, and series are never spliced across it."
+        },
+        {
+          "technique": "reliability-aggregation",
+          "verdict": "conformant",
+          "evidence": "sim/rubric.toml:9 Safety rules use the all-of-N bar that unattended live operation needs. Quality rates never gate."
+        },
+        {
+          "technique": "resolution-precondition",
+          "verdict": "conformant",
+          "evidence": "sim/matrices/roastmaster-vs-theatrical.toml:3 Overlapping intervals are treated as no order, and a dedicated comparison is scheduled instead of ranking."
+        },
+        {
+          "technique": "comparison-modes",
+          "verdict": "conformant",
+          "evidence": "sim/matrices/night-opus.toml:2 A judge change is marked as a discontinuity, not spliced into night.toml's series."
+        },
+        {
+          "technique": "selection-over-noise",
+          "verdict": "conformant",
+          "evidence": "sim/matrices/rate-cap-exemptions-control.toml:4 Both arms have the same N, the same seeds and the same day's instrument. No best-of-N is taken."
+        },
+        {
+          "technique": "eval-economics",
+          "verdict": "conformant",
+          "evidence": "sim/matrices/pilot.toml:1 Cadence is tiered (pilot, night, heavy) and every matrix declares a concurrency cap."
+        },
+        {
+          "technique": "treatment-election-rate",
+          "verdict": "not-applicable",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:4 The treatment is a pre-filter the harness applies, not a capability the candidate can decline."
+        },
+        {
+          "technique": "pairing-schedule",
+          "verdict": "not-applicable",
+          "evidence": "sim/matrices/heavy.toml:2 A full cross-product scored absolutely. There is no pairwise schedule."
+        }
+      ]
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/eval-harness": {
+      "context": "console-quality-gates",
+      "subject": "eval-harness",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:49:10.289Z",
+      "worker": "29ec1313-c7e5-4e1b-93a5-1779d8ecb29c",
       "techniques": []
     }
   }
