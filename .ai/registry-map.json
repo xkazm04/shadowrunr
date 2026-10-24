@@ -1508,7 +1508,11 @@
           "revision": 19,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/data/rpc.ts:54 The context's only backend is an HTTP POST to the daemon's /rpc (plus the /events socket), and a case-insensitive grep of apps/console/src/data for sql, INSERT INTO, transaction, sqlite and localStorage found no hits, so this layer owns no durable store, query language, rows or transaction boundary: the repository-over-a-store precondition of data-access does not hold here (the store lives daemon-side, e.g. crates/shadowrunr-brain/src/memory/store.rs).",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:2dba94be6400dea1",
+          "evaluatedRevision": 19
         },
         {
           "subject": "client-fetch-cache",
