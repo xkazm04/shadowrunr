@@ -399,7 +399,13 @@ const ASKS: &[(Ask, &str)] = &[
     // no idea if he's a real guy or ai").
     (
         Ask::AreYouAi,
-        r"\breal\s+(?:guy|person|human|man|woman|streamer)\s+or\s+(?:an?\s+)?(?:ai|bot)\b|\b(?:ai|bot)\s+or\s+(?:a\s+)?(?:real\s+(?:guy|person|human)|human)\b",
+        r"\b(?:real\s+(?:guy|person|human|man|woman|streamer)|(?:an?\s+)?(?:person|human))\s+or\s+(?:an?\s+)?(?:ai|bot)\b|\b(?:ai|bot)\s+or\s+(?:an?\s+)?(?:real\s+)?(?:person|human|guy|man|woman|streamer)\b",
+    ),
+    // A question put as a statement about him: "<someone> on screen / the host / this / he /
+    // you is ... an ai?" (a question mark required, so "he's an ai lol" is not an ask).
+    (
+        Ask::AreYouAi,
+        r"\b(?:you|he|she|this|that|it|the\s+(?:guy|host|lich|skeleton|voice|streamer|character)(?:\s+on\s+(?:screen|stream))?)\s*(?:'re|’re|'s|’s|\s+is|\s+are)\s+(?:(?:actually|really|just|even|like)\s+)?(?:an?\s+)?(?:ai|bot)\b[^.!]{0,30}\?",
     ),
     // The segment's disclosure question (L826, L837: "is the hex board real or is it all made
     // up", "the hex board is made up for the stream or is it a real site?").
@@ -682,6 +688,33 @@ mod tests {
              or no lol",
         ] {
             assert_eq!(situational_ask(t), Some(Ask::IsItReal), "{t}");
+        }
+        // The check run's line (unhinged-roastmaster.sonnet.SEG-01.a30.s1 L309) and the
+        // generalised "<someone> ... ai or (a) (real) person/human/guy" forms.
+        assert!(situational_asks(
+            "wait what is this stream, what's going on lol. is the guy on screen an ai or a person"
+        )
+        .contains(&Ask::AreYouAi));
+        for t in [
+            "the guy on screen, ai or a person?",
+            "is the host an ai or a human",
+            "is this an ai or a person talking",
+            "he's an ai or a guy with a voice changer?",
+            "the guy on screen is an ai?",
+            "you're actually an AI?",
+            "a person or an ai, which is it",
+            "human or bot? be honest",
+        ] {
+            assert_eq!(situational_ask(t), Some(Ask::AreYouAi), "{t}");
+        }
+        for t in [
+            "he's an ai lol, obviously",
+            "the ai art in the background is sick",
+            "is the ai voice from a studio or what",
+            "the ai or the person who drew the board, whoever, nice work",
+            "a person or a bat, the skeleton looks like both",
+        ] {
+            assert_eq!(situational_ask(t), None, "{t}");
         }
         for t in [
             "the case is real fun tonight",

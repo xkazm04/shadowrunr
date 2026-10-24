@@ -769,6 +769,15 @@ async fn a_wave_picked_in_a_failed_beat_is_not_acknowledged() {
             })
             .collect()
     };
+    // The pasters chatted before: their wave is no newcomers' wave (that one is carried and
+    // greeted by the next beat that speaks, so it would be acknowledged there).
+    let hello: Vec<ChatMsg> = (0..3)
+        .map(|i| {
+            let v = viewer(&format!("a{i}"), &format!("Pastera{i}"), Rank::Thrall);
+            msg(&format!("hi{i}"), 100 + i, &v, "evening all")
+        })
+        .collect();
+    b.tick(200, hello, &c).await.unwrap();
     engine.push(Role::CoreThread, Err(unavailable()));
     let ev = b.tick(1_000, wave("a", 900), &c).await.unwrap();
     assert_eq!(

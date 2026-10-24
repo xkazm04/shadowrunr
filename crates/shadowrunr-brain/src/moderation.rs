@@ -955,6 +955,20 @@ impl InputFilter {
             once.insert(msg.viewer.id.clone());
             return Some("sincere_question");
         }
+        // A situational ask a rule covers (the orchestrator owns it until answered): the cap must
+        // not drop it before it is seen (unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L1251,
+        // L1266: a newcomer's "is the treasury thing a real case or a bit?", dropped twice).
+        // Once a tick, and only while the viewer has not been answered lately, as above.
+        if !once.contains(&msg.viewer.id)
+            && self.unanswered_lately(&msg.viewer.id)
+            // Grief is the opt-5 experiment's exemption (`rate_cap_exemptions`), not this one.
+            && crate::orchestrate::requests::situational_asks(&msg.text)
+                .iter()
+                .any(|a| *a != crate::orchestrate::requests::Ask::Sad)
+        {
+            once.insert(msg.viewer.id.clone());
+            return Some("situational_ask");
+        }
         if self.cfg.rate_cap_exemptions {
             if matches!(msg.command, Some(Command::Propose { .. }))
                 && msg.viewer.rank >= self.cfg.propose_min_rank
@@ -2493,6 +2507,66 @@ mod tests {
         assert!(c.iter().any(|c| c.msg.id == "gift"));
         assert!(!dropped(&ev, "gift"));
         assert!(dropped(&ev, "plain"), "the neighbour stays capped");
+    }
+
+    #[test]
+    fn a_situational_ask_skips_the_rate_cap_once_but_grief_and_chatter_do_not() {
+        // unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L1251 and L1266: a chatty newcomer's "is
+        // the treasury thing a real case or a bit?" (no "you", so no sincere direct question)
+        // was dropped by the cap twice and never reached the orchestrator that owns it.
+        // A busy room (more than 5 chatters), as in the 300-viewer run: no small-room leniency.
+        let mut f = filter();
+        saturate(&mut f, "gloom");
+        let crowd: Vec<ChatMsg> = (0..6)
+            .map(|i| {
+                msg(
+                    &format!("o{i}"),
+                    14 + i as i64,
+                    &format!("other{i}"),
+                    "evening all",
+                )
+            })
+            .collect();
+        let (c, ev) = f.filter(
+            20,
+            [
+                msg(
+                    "real",
+                    11,
+                    "gloom",
+                    "lol is the treasury thing a real case or a bit? i keep seeing the word wallet",
+                ),
+                msg(
+                    "real2",
+                    12,
+                    "gloom",
+                    "and roast me hard while you are at it, no mercy",
+                ),
+                msg("plain", 13, "gloom", "the wallet bit is wild"),
+            ]
+            .into_iter()
+            .chain(crowd)
+            .collect(),
+            &Policy::builtin(),
+        );
+        assert!(c.iter().any(|c| c.msg.id == "real"), "{ev:?}");
+        assert!(!dropped(&ev, "real"));
+        assert!(dropped(&ev, "real2"), "once a tick: {ev:?}");
+        assert!(dropped(&ev, "plain"), "the neighbour stays capped");
+        // Grief stays the opt-5 experiment's exemption (off here).
+        let mut f = filter();
+        saturate(&mut f, "sad");
+        let (_, ev) = f.filter(
+            20,
+            vec![msg(
+                "g",
+                11,
+                "sad",
+                "my old dog died today, just here to be distracted",
+            )],
+            &Policy::builtin(),
+        );
+        assert!(dropped(&ev, "g"), "{ev:?}");
     }
 
     #[test]

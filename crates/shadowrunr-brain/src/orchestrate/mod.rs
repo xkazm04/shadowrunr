@@ -52,8 +52,9 @@
 //! [`CARRY_MS`] from the drain, a question or bait for [`REQUEST_MAX_MS`] ([`waits_long`]), at
 //! most [`CARRY_MAX`] at once besides the owned requests, one a viewer ([`SUPERSEDED`]), competing
 //! with fresh chat with a small age bonus; once answered it is never offered again. Waves and
-//! votes are never carried. Questions asking the same thing within [`QUESTION_WAVE_MS`] are one
-//! question wave, offered by its oldest and answered once for all. Required or on-topic chat
+//! votes are never carried, but for a newcomers' wave (a raid's greeting). Questions asking the
+//! same thing within [`QUESTION_WAVE_MS`] are one question wave, offered by its oldest and
+//! answered once for all. Required or on-topic chat
 //! waiting from an earlier beat goes in before new prepared material: a story being told waits
 //! a beat for it, and the off-topic slot takes the oldest waiting bait or question.
 //!
@@ -140,7 +141,7 @@ use crate::util::{fnv1a64, normalize, one_line, similarity};
 
 use agenda::{Agenda, BeatShape, LoopKind};
 use case::{CaseDesk, CaseMove, CASE_NOTE, CASE_WITH_CHAT};
-use requests::{asks_what_this_is, situational_ask, Ask, Rotation};
+use requests::{asks_what_this_is, situational_ask, situational_asks, Ask, Rotation};
 use room::RoomWatch;
 use shadowrunr_types::character::Tuning;
 
@@ -498,17 +499,29 @@ pub struct Orchestrator {
 /// this is makes one too: in a speech hold it was a plain remark and was dropped
 /// (sbx-20261022-102618-10m L272).
 fn ask_of(c: &Candidate, first: bool) -> Option<Ask> {
+    asks_of(c, first).into_iter().next()
+}
+
+/// Every situational ask a candidate makes, in [`requests::situational_asks`] order, then a
+/// newcomer's "what is this". One message may make several (unhinged-roastmaster.sonnet.SEG-01.
+/// a30.s1 L309: "what is this stream ... is the guy on screen an ai or a person" from a Thrall
+/// already told he is an AI: the AI ask was answered, the newcomer's was not, and with only the
+/// first ask considered the message was owned by nobody and superseded).
+fn asks_of(c: &Candidate, first: bool) -> Vec<Ask> {
     if c.count > 1 || c.safety.is_some() || is_vote(c) {
-        return None;
+        return Vec::new();
     }
     if matches!(c.msg.command, Some(Command::Propose { .. })) {
-        return Some(Ask::Proposal);
+        return vec![Ask::Proposal];
     }
-    situational_ask(&c.msg.text).or_else(|| {
-        ((first || c.msg.viewer.rank == shadowrunr_types::Rank::Thrall)
-            && asks_what_this_is(&c.msg.text))
-        .then_some(Ask::WhatIsThis)
-    })
+    let mut asks = situational_asks(&c.msg.text);
+    if (first || c.msg.viewer.rank == shadowrunr_types::Rank::Thrall)
+        && asks_what_this_is(&c.msg.text)
+        && !asks.contains(&Ask::WhatIsThis)
+    {
+        asks.push(Ask::WhatIsThis);
+    }
+    asks
 }
 
 /// What the live segment is about and how big the room is: the context [`worth`] classifies in.
@@ -572,9 +585,11 @@ fn is_filler(c: &Candidate) -> bool {
 
 /// Whether an unanswered message is carried: one that asks for an answer or feeds the segment
 /// (in a small room, every message but filler), never a wave, a vote, a plain remark or a safety
-/// pick (which is never left unanswered).
+/// pick (which is never left unanswered). A wave of newcomers (a raid's arrivals) is the
+/// exception: its greeting is owed, and an owned request taking the beat's one slot once left a
+/// raid ungreeted (unhinged-roastmaster.sonnet.SEG-01.a300.s1, 320 s). A wave of lone emotes is not.
 fn carries(c: &Candidate, first: bool, s: Seg<'_>) -> bool {
-    if c.count > 1 || c.safety.is_some() {
+    if c.safety.is_some() || (c.count > 1 && !(first && !is_bare_emote(&c.msg.text))) {
         return false;
     }
     match worth(c, first, s) {
@@ -701,8 +716,9 @@ impl Orchestrator {
     /// The ask a candidate makes that is owned: one per viewer and kind, so a viewer asking the
     /// same thing again after the answer is plain chat.
     fn owns(&self, c: &Candidate) -> Option<Ask> {
-        ask_of(c, self.is_first_contact(&c.msg.id))
-            .filter(|a| !self.asked.contains(&(c.msg.viewer.id.clone(), *a)))
+        asks_of(c, self.is_first_contact(&c.msg.id))
+            .into_iter()
+            .find(|a| !self.asked.contains(&(c.msg.viewer.id.clone(), *a)))
     }
 
     /// A pick whose answer never aired (the gate dropped the only line naming it): it is not
@@ -710,7 +726,7 @@ impl Orchestrator {
     /// [`UNAIRED`]).
     pub fn unaired(&mut self, c: &Candidate, now_ms: TsMs, free_at: TsMs) -> StreamEvent {
         self.answered.remove(&c.msg.id);
-        if let Some(a) = ask_of(c, self.is_first_contact(&c.msg.id)) {
+        for a in asks_of(c, self.is_first_contact(&c.msg.id)) {
             self.asked.remove(&(c.msg.viewer.id.clone(), a));
         }
         self.carried.retain(|k| k.cand.msg.id != c.msg.id);
@@ -2030,7 +2046,7 @@ impl Orchestrator {
         }
         for id in &members {
             if let Some(c) = staged_ids.get(id) {
-                if let Some(a) = ask_of(c, self.is_first_contact(id)) {
+                for a in asks_of(c, self.is_first_contact(id)) {
                     self.asked.insert((c.msg.viewer.id.clone(), a));
                 }
             }
@@ -2059,7 +2075,7 @@ impl Orchestrator {
             self.agenda.close(LoopKind::Request, id);
         }
         for c in &pick.chosen {
-            if let Some(a) = ask_of(c, self.is_first_contact(&c.msg.id)) {
+            for a in asks_of(c, self.is_first_contact(&c.msg.id)) {
                 self.asked.insert((c.msg.viewer.id.clone(), a));
             }
         }

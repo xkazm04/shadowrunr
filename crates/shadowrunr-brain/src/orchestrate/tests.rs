@@ -1785,3 +1785,148 @@ fn one_viewer_keeps_one_carried_message_and_the_rest_are_recorded() {
         "{records:?}"
     );
 }
+
+// ── Must-answer misses of the check run (runs/sim/rebalance-check-04104d57a4) ──
+
+/// unhinged-roastmaster.sonnet.SEG-01.a30.s1 L309, verbatim.
+const L309: &str =
+    "wait what is this stream, what's going on lol. is the guy on screen an ai or a person";
+
+#[test]
+fn a_newcomer_s_what_is_this_beside_an_answered_ai_question_is_still_owed() {
+    // BoneCandle (a Thrall) was told he is an AI at L87. At L309 the same viewer asks what the
+    // stream is and, again, whether he is an AI, while an older question of theirs waits: the
+    // message was owned by nobody (its first ask was answered) and superseded, never answered.
+    let mut room = Room::new();
+    regulars(&mut room, 8);
+    regular(&mut room, "bone");
+    let ai = msg(
+        "ai",
+        "bone",
+        "wait is this an AI or a guy with a voice changer? lol",
+    );
+    let (_, ids, _) = room.beat(5_000, "opening", None, vec![ai.clone()], vec![cand(&ai)]);
+    assert_eq!(ids, ["ai"]);
+    // Speech queued: an older question of theirs waits, then L309 arrives.
+    room.speaking_until = Some(60_000);
+    let older = msg(
+        "older",
+        "bone",
+        "ok so what do i do here? is there a vote lol",
+    );
+    room.beat(
+        10_000,
+        "opening",
+        None,
+        vec![older.clone()],
+        vec![cand(&older)],
+    );
+    let l309 = msg("l309", "bone", L309);
+    let (_, _, e, ev) = room.beat_in(
+        15_000,
+        &ctx("opening"),
+        None,
+        vec![l309.clone()],
+        vec![cand(&l309)],
+    );
+    assert!(
+        !ev.iter()
+            .any(|e| matches!(e, StreamEvent::Moderation { msg_id: Some(id), .. } if id == "l309")),
+        "not superseded: {ev:?}"
+    );
+    assert!(reason(&e).contains("deferred: l309"), "{}", reason(&e));
+    assert_eq!(room.o.owns(&cand(&l309)), Some(Ask::WhatIsThis));
+    // Answered when the speech drains, ahead of the older plain question.
+    let mut answered = None;
+    for t in (20_000..=80_000).step_by(5_000) {
+        let (_, ids, _) = room.beat(t, "opening", None, Vec::new(), Vec::new());
+        if ids.contains(&"l309".to_string()) {
+            answered = Some(t);
+            break;
+        }
+    }
+    assert!(
+        answered.is_some_and(|t| t - 15_000 <= REQUEST_MAX_MS),
+        "{answered:?}"
+    );
+    // Neighbour: a repeat of the answered AI question alone is still not owed.
+    let again = cand(&msg("again", "bone", "is he an ai or a person?"));
+    assert_eq!(room.o.owns(&again), None);
+}
+
+#[test]
+fn a_raid_wave_an_owned_request_outbid_is_greeted_next_beat() {
+    // unhinged-roastmaster.sonnet.SEG-01.a300.s1, 320 s: a raid arrived beside an owed request,
+    // the request took the beat's one slot, and the raid wave (never carried) was dropped.
+    let mut room = Room::new();
+    regulars(&mut room, 8);
+    regular(&mut room, "pigeon");
+    let req = msg("req", "pigeon", "roast me hard malakor, no mercy");
+    // The raid's paste wave, represented by its first arrival's message (as the input filter
+    // collapses it).
+    let mut raid = cand(&msg("r0", "raider0", "GRAVEYARDSHIFT RAID"));
+    raid.count = 6;
+    raid.viewers = 6;
+    let inbox: Vec<ChatMsg> = (0..6)
+        .map(|i| {
+            msg(
+                &format!("r{i}"),
+                &format!("raider{i}"),
+                "GRAVEYARDSHIFT RAID",
+            )
+        })
+        .chain([req.clone()])
+        .collect();
+    room.o.observe_inbox(&inbox);
+    // The harness picks the owed request first, as the picker does (owed ahead of the rest).
+    let cands = vec![cand(&req), raid];
+    let (p, ids, e, _) = {
+        // Bypass beat_in's observe_inbox (already observed above, with the raid's arrivals).
+        let now = 5_000;
+        let mut ev = Vec::new();
+        let cands = room.o.screen(now, cands, &mut ev);
+        let mut plan = room.o.plan(&BeatInputs {
+            now_ms: now,
+            ctx: &ctx("opening"),
+            cands: &cands,
+            prep: None,
+            speech_until_ms: None,
+            speech_lead_ms: crate::pace::PaceConfig::default().speech_lead_ms,
+            expected_latency_ms: 0,
+            closing: false,
+            names: &room.names,
+            max_picks: 2,
+            topic_words: &[],
+        });
+        let offered = room.o.offered(&plan, &cands);
+        let chosen: Vec<Candidate> = offered.into_iter().filter(|c| c.msg.id == "req").collect();
+        let ids: Vec<String> = chosen.iter().map(|c| c.msg.id.clone()).collect();
+        let pick = Pick {
+            chosen,
+            reason: String::new(),
+        };
+        let e = room.o.commit(&mut plan, &pick, now);
+        ev.extend(room.o.take_capped(now));
+        (plan, ids, e, ev)
+    };
+    assert_eq!(ids, ["req"], "{}", p.reason);
+    assert!(reason(&e).contains("deferred: r0"), "{}", reason(&e));
+    room.last_say = Some(5_000);
+    // The next beat greets the raid, once.
+    let (p, ids, e) = room.beat(10_000, "opening", None, Vec::new(), Vec::new());
+    assert_eq!(ids, ["r0"], "{}", p.reason);
+    assert!(
+        reason(&e).contains("wave of 6 acknowledged"),
+        "{}",
+        reason(&e)
+    );
+    // Neighbour: a wave of lone emotes is still never carried.
+    let mut room = Room::new();
+    regulars(&mut room, 8);
+    let mut w = cand(&msg("w", "newbie", "W"));
+    w.count = 7;
+    w.viewers = 7;
+    room.speaking_until = Some(20_000);
+    let (_, _, e) = room.beat(5_000, "opening", None, vec![w.msg.clone()], vec![w]);
+    assert!(!reason(&e).contains("deferred: w"), "{}", reason(&e));
+}
