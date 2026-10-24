@@ -1,0 +1,86 @@
+{
+ "schema": "conform-run/1",
+ "worker": "a85bf011-b992-4c16-8527-8fa5c2a9aefc",
+ "subject": "supply-chain",
+ "evaluatedAt": "2026-10-24T05:54:17.305259+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-build-and-desktop-shell",
+   "subject": "supply-chain",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src-tauri/Cargo.toml:12 The desktop shell is its own Cargo workspace with its own Cargo.lock. CI says it does not build this crate, and no advisory, license or source policy file reads that lockfile anywhere in the repo, so the tauri graph's risk is never evaluated against a standing policy.",
+   "techniques": [
+    {
+     "technique": "permission-manifest-scoping",
+     "verdict": "conformant",
+     "evidence": "apps/console/src-tauri/capabilities/default.json:5 The capability is attached only to the main window and grants core:default plus the opener for loopback URLs only (line 10). The runtime CSP is derived from one loopback origin, and a test checks it byte for byte against the CSP in tauri.conf.json (endpoint.rs:236), so the two copies of the allowlist are parity-checked."
+    },
+    {
+     "technique": "dependency-policy-gates",
+     "verdict": "deviation",
+     "evidence": "apps/console/src-tauri/Cargo.toml:22 Runtime deps (tauri, tauri-plugin-opener) resolve into a separate Cargo.lock. There is no deny.toml or cargo-deny/cargo-audit step anywhere, and ci.yml:51 says this workspace is not built."
+    },
+    {
+     "technique": "build-time-dependency-tier",
+     "verdict": "deviation",
+     "evidence": "apps/console/src-tauri/Cargo.toml:19 tauri-build runs through build.rs on developer machines (as do the @tauri-apps/cli and vite plugin devDependencies). The repo has no hand-kept build-time inventory (searched), and the build is not hermetic."
+    }
+   ]
+  },
+  {
+   "context": "character-package",
+   "subject": "supply-chain",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "characters/malakor/character.toml:1 The package is prose, TOML and JSON persona data that the engine reads. A recursive grep of characters/malakor found zero hits for dependencies, lockfile, license, advisory or deserializ, so there is no dependency graph, permission manifest, archive or loader here for the subject to govern.",
+   "techniques": [],
+   "absenceTerms": [
+    "dependencies",
+    "lockfile",
+    "license",
+    "advisory",
+    "deserializ"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "supply-chain",
+   "context": "segments-runtime",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-24T05:54:17.305259+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "supply-chain"
+   ],
+   "techniques": [
+    "build-time-dependency-tier",
+    "dependency-policy-gates",
+    "permission-manifest-scoping"
+   ],
+   "deviations": 1,
+   "context": "console-build-and-desktop-shell",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T05:54:17.305259+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "supply-chain"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "character-package",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

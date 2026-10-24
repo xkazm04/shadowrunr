@@ -4760,6 +4760,42 @@
       "evaluatedTs": "2026-10-24T05:44:55.193Z",
       "worker": "a93f2757-0188-41b1-bc43-f5760e399aff",
       "techniques": []
+    },
+    "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa/supply-chain": {
+      "context": "console-build-and-desktop-shell",
+      "subject": "supply-chain",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T05:54:17.305Z",
+      "worker": "a85bf011-b992-4c16-8527-8fa5c2a9aefc",
+      "techniques": [
+        {
+          "technique": "permission-manifest-scoping",
+          "verdict": "conformant",
+          "evidence": "apps/console/src-tauri/capabilities/default.json:5 The capability is attached only to the main window and grants core:default plus the opener for loopback URLs only (line 10). The runtime CSP is derived from one loopback origin, and a test checks it byte for byte against the CSP in tauri.conf.json (endpoint.rs:236), so the two copies of the allowlist are parity-checked."
+        },
+        {
+          "technique": "dependency-policy-gates",
+          "verdict": "deviation",
+          "evidence": "apps/console/src-tauri/Cargo.toml:22 Runtime deps (tauri, tauri-plugin-opener) resolve into a separate Cargo.lock. There is no deny.toml or cargo-deny/cargo-audit step anywhere, and ci.yml:51 says this workspace is not built."
+        },
+        {
+          "technique": "build-time-dependency-tier",
+          "verdict": "deviation",
+          "evidence": "apps/console/src-tauri/Cargo.toml:19 tauri-build runs through build.rs on developer machines (as do the @tauri-apps/cli and vite plugin devDependencies). The repo has no hand-kept build-time inventory (searched), and the build is not hermetic."
+        }
+      ]
+    },
+    "382c68f3-bc20-4cc7-8220-18aa850f7087/supply-chain": {
+      "context": "character-package",
+      "subject": "supply-chain",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T05:54:17.305Z",
+      "worker": "a85bf011-b992-4c16-8527-8fa5c2a9aefc",
+      "techniques": []
     }
   }
 }

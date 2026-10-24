@@ -1165,7 +1165,11 @@
           "revision": 6,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src-tauri/Cargo.toml:12 The desktop shell is its own Cargo workspace with its own Cargo.lock. CI says it does not build this crate, and no advisory, license or source policy file reads that lockfile anywhere in the repo, so the tauri graph's risk is never evaluated against a standing policy.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:f5666db1094acd9f",
+          "evaluatedRevision": 6
         },
         {
           "subject": "build-economics",
@@ -4809,7 +4813,11 @@
           "revision": 6,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "characters/malakor/character.toml:1 The package is prose, TOML and JSON persona data that the engine reads. A recursive grep of characters/malakor found zero hits for dependencies, lockfile, license, advisory or deserializ, so there is no dependency graph, permission manifest, archive or loader here for the subject to govern.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:f5666db1094acd9f",
+          "evaluatedRevision": 6
         },
         {
           "subject": "test-harness",
