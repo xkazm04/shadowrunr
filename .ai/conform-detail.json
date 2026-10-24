@@ -3727,52 +3727,50 @@
       "context": "console-build-and-desktop-shell",
       "subject": "build-economics",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-22",
-      "evaluatedTs": "2026-10-22T21:57:07.906Z",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T21:40:20.243Z",
+      "worker": "f0cdd183-8f06-40b0-9dfa-b324ae4222de",
       "techniques": [
         {
-          "technique": "build-measurement",
-          "verdict": "deviation",
-          "evidence": "apps/console/package.json:8 The build measures output bytes but provides no scenario-labeled build timer, process-tree memory sampler or build-cost baseline; searches found no accompanying instruments."
-        },
-        {
-          "technique": "cache-budgeting",
-          "verdict": "deviation",
-          "evidence": "apps/console/src-tauri/.cargo/config.toml:4 The desktop crate retains artifacts in the shared target directory; searches found no byte ceiling, routine enforcing pruner or cache-hit measurement for it."
-        },
-        {
           "technique": "capability-feature-gating",
-          "verdict": "not-applicable",
-          "evidence": "apps/console/src-tauri/src/lib.rs:2 The shell delegates application logic to a separate daemon; its inspected dependencies provide the window and opener, with no identified heavy optional in-process capability requiring a gate."
-        },
-        {
-          "technique": "compilation-unit-splitting",
-          "verdict": "not-applicable",
-          "evidence": "apps/console/src-tauri/Cargo.toml:4 The inspected native implementation is a small window bootstrap and endpoint resolver, with no identified huge compilation unit or large repeatedly instantiated generic body; frontend lazy chunks alone do not establish compilation-unit economics."
+          "verdict": "deviation",
+          "evidence": ".github/workflows/ci.yml:51 The cut itself follows the standard: Cargo.toml:10 removes the dependency edge so the root build pulls in no WebView toolchain. But CI explicitly does not build this crate, and grep found no other tauri/src-tauri build step in .github. That breaks the 'keeping the gated side alive' rule, which says every tier must be compiled routinely."
         },
         {
           "technique": "debug-artifact-economics",
           "verdict": "deviation",
-          "evidence": "apps/console/src-tauri/.cargo/config.toml:1 This explicitly selects shared mutable artifacts; the referenced policy permits concurrent builders and expected Cargo lock waits, whereas the technique requires separate directories for concurrent builds."
-        },
-        {
-          "technique": "declinable-capability-split",
-          "verdict": "not-applicable",
-          "evidence": "apps/console/src-tauri/Cargo.toml:8 The native crate is unpublished and the console package is private; no published consumer unit carrying a declinable capability was identified."
+          "evidence": "apps/console/src-tauri/Cargo.toml:12 This manifest is its own workspace root, so only its [profile] tables apply to the tauri dependency tree, and the 23-line file declares none. The large third-party graph (tauri, webview, plugins) therefore builds with Cargo's default full dev debuginfo instead of minimal/none. A repo-wide search for '[profile' / 'debug =' found no profile anywhere."
         },
         {
           "technique": "dev-variant-design",
           "verdict": "deviation",
-          "evidence": "apps/console/package.json:7 The shortest development command runs the browser frontend and desktop development is separately invoked through Tauri, but searches found no authoritative task routing, desktop-only blind-spot list or measured cost comparison for these development choices."
+          "evidence": "apps/console/vite.config.ts:5 The default variant is the lite one: `pnpm dev` is Vite in a browser with no Rust compile, and Tauri is opt-in. But the lite variant's blind spots are not written down where it is defined: no injected __SHADOWRUNR_DAEMON__ / --daemon resolution, no opener plugin, no pinned CSP. A search of *.md for 'plain browser|tauri dev|pnpm dev' found no routing table."
+        },
+        {
+          "technique": "compilation-unit-splitting",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/src/lib.rs:2 The crate is a thin shell (lib.rs plus endpoint.rs) with no huge compilation unit to split. Its one structural cut, its own workspace apart from the core crates, is already made."
+        },
+        {
+          "technique": "declinable-capability-split",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/Cargo.toml:8 The crate is not published, so no consumer exists who could inherit or decline obligations."
+        },
+        {
+          "technique": "build-measurement",
+          "verdict": "deviation",
+          "evidence": "apps/console/package.json:8 The build measures output bytes but provides no scenario-labeled build timer, process-tree memory sampler or build-cost baseline; searches found no accompanying instruments.",
+          "carriedFrom": "2026-10-22"
+        },
+        {
+          "technique": "cache-budgeting",
+          "verdict": "deviation",
+          "evidence": "apps/console/src-tauri/.cargo/config.toml:4 The desktop crate retains artifacts in the shared target directory; searches found no byte ceiling, routine enforcing pruner or cache-hit measurement for it.",
+          "carriedFrom": "2026-10-22"
         }
       ],
-      "withdrawn": {
-        "worker": "729bccfd-c3de-48c3-9013-87d21926712b",
-        "state": "deviation",
-        "at": "2026-10-22T21:57:31.967045+00:00",
-        "reason": "reviewer (sonnet): The anchor config.toml:4 only shows the shared `target-dir`. The deviation rests on absence claims (no byte ceiling, pruner, cache-hit or timing instruments, no concurrency isolation) that I could not confirm from this context's files. Any such control would live in repo-wide CI or root tooling, whi"
-      }
+      "registryProposal": "capability-feature-gating frames the build-time cut as a feature flag. Here the heavy capability is excluded by placing it in a separate build root (its own workspace), not a flag. The rot-watch duty applies just as strongly to that case, and the technique could say so explicitly: a separate-root exclusion is a gate with no flag and is equally easy to stop compiling."
     },
     "435472ca-7ef4-4956-80d8-3dc82f215665/chat-transcript": {
       "context": "console-ui-primitives",

@@ -1,0 +1,66 @@
+{
+ "schema": "conform-run/1",
+ "worker": "f0cdd183-8f06-40b0-9dfa-b324ae4222de",
+ "subject": "build-economics",
+ "evaluatedAt": "2026-10-24T21:40:20.243709+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-build-and-desktop-shell",
+   "subject": "build-economics",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": ".github/workflows/ci.yml:51 The heavy WebView/Tauri capability is correctly cut out of the default root-workspace build (Cargo.toml:10-12), but nothing routine compiles the far side of that cut, so a break in the desktop crate goes unseen until someone next pays to build it by hand.",
+   "techniques": [
+    {
+     "technique": "capability-feature-gating",
+     "verdict": "deviation",
+     "evidence": ".github/workflows/ci.yml:51 The cut itself follows the standard: Cargo.toml:10 removes the dependency edge so the root build pulls in no WebView toolchain. But CI explicitly does not build this crate, and grep found no other tauri/src-tauri build step in .github. That breaks the 'keeping the gated side alive' rule, which says every tier must be compiled routinely."
+    },
+    {
+     "technique": "debug-artifact-economics",
+     "verdict": "deviation",
+     "evidence": "apps/console/src-tauri/Cargo.toml:12 This manifest is its own workspace root, so only its [profile] tables apply to the tauri dependency tree, and the 23-line file declares none. The large third-party graph (tauri, webview, plugins) therefore builds with Cargo's default full dev debuginfo instead of minimal/none. A repo-wide search for '[profile' / 'debug =' found no profile anywhere."
+    },
+    {
+     "technique": "dev-variant-design",
+     "verdict": "deviation",
+     "evidence": "apps/console/vite.config.ts:5 The default variant is the lite one: `pnpm dev` is Vite in a browser with no Rust compile, and Tauri is opt-in. But the lite variant's blind spots are not written down where it is defined: no injected __SHADOWRUNR_DAEMON__ / --daemon resolution, no opener plugin, no pinned CSP. A search of *.md for 'plain browser|tauri dev|pnpm dev' found no routing table."
+    },
+    {
+     "technique": "compilation-unit-splitting",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src-tauri/src/lib.rs:2 The crate is a thin shell (lib.rs plus endpoint.rs) with no huge compilation unit to split. Its one structural cut, its own workspace apart from the core crates, is already made."
+    },
+    {
+     "technique": "declinable-capability-split",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src-tauri/Cargo.toml:8 The crate is not published, so no consumer exists who could inherit or decline obligations."
+    }
+   ],
+   "registryProposal": "capability-feature-gating frames the build-time cut as a feature flag. Here the heavy capability is excluded by placing it in a separate build root (its own workspace), not a flag. The rot-watch duty applies just as strongly to that case, and the technique could say so explicitly: a separate-root exclusion is a gate with no flag and is equally easy to stop compiling."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T21:40:20.243709+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "build-economics"
+   ],
+   "techniques": [
+    "capability-feature-gating",
+    "compilation-unit-splitting",
+    "debug-artifact-economics",
+    "declinable-capability-split",
+    "dev-variant-design"
+   ],
+   "deviations": 1,
+   "context": "console-build-and-desktop-shell",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
