@@ -1,0 +1,99 @@
+{
+ "schema": "conform-run/1",
+ "worker": "141542b2-209a-41c7-8bff-17cf0dcb0813",
+ "subject": "show-segment-format-design",
+ "evaluatedAt": "2026-10-24T04:20:17.923292+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "segments-runtime",
+   "subject": "show-segment-format-design",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:31 The foil's one-sentence allowance and the host's last word exist only as rules_prompt prose. SegmentTable has no guest-allowance field and nothing here cuts or reorders lines, so the cap is a wish, not a rule.",
+   "techniques": [
+    {
+     "technique": "guest-line-cap-host-last-word",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:31 The allowance is in prose only. No table field, no cut at the sentence boundary, no host-last scheduling in this crate. The repo-wide grep also found no foil cut in the brain's parse_reply/foil path."
+    },
+    {
+     "technique": "segment-as-state-table",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:82 Much of the table is strong: states, per-state allowed_ops/commands/screens, starting vs closing triggers (table.rs:144), named declines for closed commands, and a descoped status the runtime refuses. Two gaps remain. First, the cold-open prompt restates in prose the op closure that state_rules.cold_open allowed_ops (line 76) already enforces, which is the 'prose duplicating the table' failure. Second, validate() does not check that every state is reachable and has an exit, and the table declares no guest allowance and no premise deck. The earlier 'commands per segment, not per state' point is now fixed (StateRules.commands)."
+    },
+    {
+     "technique": "metric-gated-handover",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/src/table.rs:303 SEG-01 conforms: CCV is held over a sustain window (runtime.rs:2307), max_elapsed_s acts as a ceiling, a grace period lets the clock complete the switch itself (runtime.rs:2289), and the Handover event records its reason. But the handover is optional and SEG-02A declares none, so it ends only when the host switches or signs off ('format with no exit'). A missing CCV feed is also not recorded as signal-missing."
+    },
+    {
+     "technique": "quiet-room-premise-deck",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:28 The segment table declares no deck, and validation does not require one. Silence handling here is a prose instruction. A planner-written premise deck exists in other contexts (daemon prep, brain orchestrate), not in the format's own data."
+    },
+    {
+     "technique": "segment-portfolio-lifecycle",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-segments/src/portfolio.rs:61 The ladder is written as a table: consecutive-run retirement is checked first, so retirement beats promotion; there is no verdict below 3 runs; history is passed per stage; the flagship needs owner approval; thresholds are labelled assumptions. Caveat: the module is only re-exported (lib.rs:26). No production caller or SES computation was seen in this crate."
+    }
+   ]
+  },
+  {
+   "context": "console-segments-page",
+   "subject": "show-segment-format-design",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/segments/testgen.ts:10 The page's tests check its projection against a hand-written copy of the table and assert hand-picked strings, so a key added to the table later will not fail any check. That is the frozen-view risk the technique says only a walk over every declared key prevents.",
+   "techniques": [
+    {
+     "technique": "segment-as-state-table",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/segments/testgen.ts:10 The view itself is generated from the wire table, including per-state narrowing and reachability (model.ts stateView/reachable), and today it carries every key I could find. The check against the declaration, though, is a hand-copied fixture plus targeted assertions, not a walk over every key. Semantic sentences are also written beside the fields (SegmentCard.tsx:174)."
+    },
+    {
+     "technique": "metric-gated-handover",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/pages/segments/SegmentCard.tsx:148 The handover sustain, ceiling and grace are rendered from the rule's fields as a ruler. A segment with no handover rule is shown honestly as having no exit clock, not hidden."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T04:20:17.923292+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "show-segment-format-design"
+   ],
+   "techniques": [
+    "guest-line-cap-host-last-word",
+    "metric-gated-handover",
+    "quiet-room-premise-deck",
+    "segment-as-state-table",
+    "segment-portfolio-lifecycle"
+   ],
+   "deviations": 1,
+   "context": "segments-runtime",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T04:20:17.923292+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "show-segment-format-design"
+   ],
+   "techniques": [
+    "metric-gated-handover",
+    "segment-as-state-table"
+   ],
+   "deviations": 1,
+   "context": "console-segments-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

@@ -2155,7 +2155,11 @@
           "revision": 2,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/segments/testgen.ts:10 The page's tests check its projection against a hand-written copy of the table and assert hand-picked strings, so a key added to the table later will not fail any check. That is the frozen-view risk the technique says only a walk over every declared key prevents.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:70e3c3b3d2908095",
+          "evaluatedRevision": 2
         },
         {
           "subject": "docs-sync",
@@ -3343,12 +3347,11 @@
           "changedAt": "2026-10-21",
           "confidence": "probable",
           "state": "deviation",
-          "evidence": "crates/shadowrunr-segments/src/table.rs:276 The segment format data model specifies commands per segment rather than per state, omits mechanical guest allowances and premise decks, and permits segments without exit handover rules.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:2adaa7129ea57239",
-          "evaluatedRevision": 1,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:31 The foil's one-sentence allowance and the host's last word exist only as rules_prompt prose. SegmentTable has no guest-allowance field and nothing here cuts or reorders lines, so the cap is a wish, not a rule.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:70e3c3b3d2908095",
+          "evaluatedRevision": 2,
+          "revisionsBehind": 1
         },
         {
           "subject": "quality-gates",

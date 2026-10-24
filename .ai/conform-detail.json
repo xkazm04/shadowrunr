@@ -1137,34 +1137,43 @@
       "subject": "show-segment-format-design",
       "bundle": "media-generation",
       "state": "deviation",
-      "evaluatedAt": "2026-10-19",
-      "evaluatedTs": "2026-10-19T22:40:53.616Z",
-      "worker": "756e5a15-d7e7-41a6-8148-2d29dca792c0",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:20:17.923Z",
+      "worker": "141542b2-209a-41c7-8bff-17cf0dcb0813",
       "techniques": [
         {
           "technique": "guest-line-cap-host-last-word",
           "verdict": "deviation",
-          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:28 Foil turn allowance and host last word are stated only as prompt direction in rules_prompt rather than declared as a table field or mechanically enforced."
-        },
-        {
-          "technique": "metric-gated-handover",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:43 The investigation segment defines clock bounds but omits a handover rule entirely, leaving the segment without an exit condition."
-        },
-        {
-          "technique": "quiet-room-premise-deck",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:26 No prepared premise deck is declared or validated; silence is handled only by a generic prompt instruction to fire fresh premises."
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:31 The allowance is in prose only. No table field, no cut at the sentence boundary, no host-last scheduling in this crate. The repo-wide grep also found no foil cut in the brain's parse_reply/foil path."
         },
         {
           "technique": "segment-as-state-table",
           "verdict": "deviation",
-          "evidence": "crates/shadowrunr-segments/src/runtime.rs:875 Viewer commands disallowed by the segment table are silently discarded with a bare continue instead of receiving an in-world decline."
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:82 Much of the table is strong: states, per-state allowed_ops/commands/screens, starting vs closing triggers (table.rs:144), named declines for closed commands, and a descoped status the runtime refuses. Two gaps remain. First, the cold-open prompt restates in prose the op closure that state_rules.cold_open allowed_ops (line 76) already enforces, which is the 'prose duplicating the table' failure. Second, validate() does not check that every state is reachable and has an exit, and the table declares no guest allowance and no premise deck. The earlier 'commands per segment, not per state' point is now fixed (StateRules.commands)."
+        },
+        {
+          "technique": "metric-gated-handover",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/table.rs:303 SEG-01 conforms: CCV is held over a sustain window (runtime.rs:2307), max_elapsed_s acts as a ceiling, a grace period lets the clock complete the switch itself (runtime.rs:2289), and the Handover event records its reason. But the handover is optional and SEG-02A declares none, so it ends only when the host switches or signs off ('format with no exit'). A missing CCV feed is also not recorded as signal-missing."
+        },
+        {
+          "technique": "quiet-room-premise-deck",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:28 The segment table declares no deck, and validation does not require one. Silence handling here is a prose instruction. A planner-written premise deck exists in other contexts (daemon prep, brain orchestrate), not in the format's own data."
         },
         {
           "technique": "segment-portfolio-lifecycle",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-segments/src/portfolio.rs:70 Promotions and retirements are directly applied by next_status without presenting a proposal for owner confirmation."
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-segments/src/portfolio.rs:61 The ladder is written as a table: consecutive-run retirement is checked first, so retirement beats promotion; there is no verdict below 3 runs; history is passed per stage; the flagship needs owner approval; thresholds are labelled assumptions. Caveat: the module is only re-exported (lib.rs:26). No production caller or SES computation was seen in this crate."
+        }
+      ],
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/table.rs:276 The segment format data model specifies commands per segment rather than per state, omits mechanical guest allowances and premise decks, and permits segments without exit handover rules.",
+          "evaluatedAt": "2026-10-19T22:40:53.616Z",
+          "worker": "756e5a15-d7e7-41a6-8148-2d29dca792c0",
+          "reason": "replaced by 141542b2-209a-41c7-8bff-17cf0dcb0813"
         }
       ]
     },
@@ -4456,6 +4465,27 @@
           "technique": "capability-coverage-contract",
           "verdict": "not-applicable",
           "evidence": "apps/console/src-tauri/capabilities/default.json:9 This is a desktop-shell permission grant, not an agent capability that an instruction file should name."
+        }
+      ]
+    },
+    "6dce940f-74f8-426d-8a02-ed09e53724ef/show-segment-format-design": {
+      "context": "console-segments-page",
+      "subject": "show-segment-format-design",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:20:17.923Z",
+      "worker": "141542b2-209a-41c7-8bff-17cf0dcb0813",
+      "techniques": [
+        {
+          "technique": "segment-as-state-table",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/segments/testgen.ts:10 The view itself is generated from the wire table, including per-state narrowing and reachability (model.ts stateView/reachable), and today it carries every key I could find. The check against the declaration, though, is a hand-copied fixture plus targeted assertions, not a walk over every key. Semantic sentences are also written beside the fields (SegmentCard.tsx:174)."
+        },
+        {
+          "technique": "metric-gated-handover",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/segments/SegmentCard.tsx:148 The handover sustain, ceiling and grace are rendered from the rule's fields as a ruler. A segment with no handover rule is shown honestly as having no exit clock, not hidden."
         }
       ]
     }
