@@ -2821,7 +2821,11 @@
           "revision": 26,
           "changedAt": "2026-10-06",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/e2e/resilience.rs:129 After the panic frame, the test waits a fixed 200 ms and then asserts the run slot was released by restarting it, which is a stopwatch-based ordering claim. Line 36 likewise sleeps 100 ms to assume the subscription is registered. On a loaded runner these go red with no defect present.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "voice-io",
@@ -3157,7 +3161,11 @@
           "revision": 26,
           "changedAt": "2026-10-06",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/tests_scale.rs:372 The ignored real-tournament measurement returns early, and so passes as ok, whenever load_source fails. The cause can be missing data or a corrupt one. A `cargo test -- --ignored` run reports the prompt-size budget as held when nothing was measured.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "fleet-orchestration",
@@ -3621,7 +3629,11 @@
           "revision": 26,
           "changedAt": "2026-10-06",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/fixture.test.ts:116 The test's name claims demo.jsonl is reproducible from its generator, but it only asserts that the first line is stream_start and the last is stream_end. A hand edit or a stale regeneration anywhere in the middle stays green.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "demo-data-plane",
@@ -5239,7 +5251,11 @@
           "revision": 26,
           "changedAt": "2026-10-06",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/avatar/renderers.golden.test.ts:205 The renderers' recorded GL call streams are compared only as a truncated SHA-256 against constants. A failure gives no path to the first diverging call, and a re-baseline is a hash edit with no data diff to review. The prior stream is not stored; GOLDEN_DUMP writes only the current one.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "data-video-art-direction",

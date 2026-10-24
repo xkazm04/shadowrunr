@@ -1,0 +1,185 @@
+{
+ "schema": "conform-run/1",
+ "worker": "c587577c-e9f9-4654-b389-b8c8660cbc1a",
+ "subject": "test-harness",
+ "evaluatedAt": "2026-10-24T01:27:13.679777+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-app",
+   "subject": "test-harness",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/fixture.test.ts:116 The test's name claims demo.jsonl is reproducible from its generator, but it only asserts that the first line is stream_start and the last is stream_end. A hand edit or a stale regeneration anywhere in the middle stays green.",
+   "techniques": [
+    {
+     "technique": "unreached-decisions-pin-nothing",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/fixture.test.ts:116 The name promises a stronger guard than its assertions make. Deleting or altering any interior line of the fixture leaves it green."
+    },
+    {
+     "technique": "fixture-economics",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/fixture.test.ts:117 The derived fixture names its generator, but its freshness is never checked against it (no regenerate-and-compare). Seeded-data honesty is otherwise good: every event type is covered (line 52), the ops are held to the segment tables' allowed_ops, and the demo case is checked as a byte copy (line 125)."
+    },
+    {
+     "technique": "assert-the-schedule-not-the-stopwatch",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/live.test.ts:108 The live source's ack cadence, signal-lost slate and stall marks are driven by advanceTimersByTime rather than wall-clock waits."
+    },
+    {
+     "technique": "live-app-harness",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/App.tsx:345 The browser-automation probe is enabled by the runtime query flag ?debug=1 in the shipped bundle, not by a build-time switch. Compare App.tsx:232, where the face demo is gated by import.meta.env.DEV."
+    }
+   ]
+  },
+  {
+   "context": "reconcile-engine",
+   "subject": "test-harness",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-reconcile/src/tests_scale.rs:372 The ignored real-tournament measurement returns early, and so passes as ok, whenever load_source fails. The cause can be missing data or a corrupt one. A `cargo test -- --ignored` run reports the prompt-size budget as held when nothing was measured.",
+   "techniques": [
+    {
+     "technique": "unreached-decisions-pin-nothing",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-reconcile/src/tests_scale.rs:372 The test named weary_tournament_prompt_size can never reach its assertion yet still report green. It should skip loudly, or fail on a load error other than absence."
+    },
+    {
+     "technique": "fixture-economics",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-reconcile/src/tests_scale.rs:2 The 500-run scale cases use the cheapest fixture tier (in-memory synthetic runs). The hand-made t-fix fixture is read in place, never mutated."
+    },
+    {
+     "technique": "isolation-lanes",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-reconcile/src/tests.rs:295 Each test that writes gets a private TempDir, which is discarded whole on drop, so tests inherit nothing from each other or from previous runs."
+    }
+   ]
+  },
+  {
+   "context": "daemon-core-rpc",
+   "subject": "test-harness",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-daemon/src/e2e/resilience.rs:129 After the panic frame, the test waits a fixed 200 ms and then asserts the run slot was released by restarting it, which is a stopwatch-based ordering claim. Line 36 likewise sleeps 100 ms to assume the subscription is registered. On a loaded runner these go red with no defect present.",
+   "techniques": [
+    {
+     "technique": "assert-the-schedule-not-the-stopwatch",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/e2e/resilience.rs:129 The ordering (slot released before the restart) rests on a fixed sleep rather than an observed state or barrier. The 10 s and 60 s timeouts elsewhere (e.g. line 39) are proper loose, one-sided hang guards."
+    },
+    {
+     "technique": "fixture-economics",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/e2e/mod.rs:56 The checked-in sim fixture is copied byte-for-byte (no logic) into each test's tempdir. Tests mutate their private copy, and the copy is discarded whole."
+    },
+    {
+     "technique": "isolation-lanes",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/e2e/mod.rs:90 Each e2e daemon binds port 0, with its own runs and data dirs in a tempdir. This virtualises the port singleton so the e2e tests can run in parallel."
+    },
+    {
+     "technique": "live-app-harness",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/tests/cli.rs:31 The CLI tests drive the actual built shadowrunr binary from outside, with a config in a tempdir. They read results back from the files it wrote rather than trusting the exit code alone."
+    }
+   ]
+  },
+  {
+   "context": "stage-avatar-renderer",
+   "subject": "test-harness",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/avatar/renderers.golden.test.ts:205 The renderers' recorded GL call streams are compared only as a truncated SHA-256 against constants. A failure gives no path to the first diverging call, and a re-baseline is a hash edit with no data diff to review. The prior stream is not stored; GOLDEN_DUMP writes only the current one.",
+   "techniques": [
+    {
+     "technique": "approval-snapshots-with-guarded-update",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/avatar/renderers.golden.test.ts:205 This is a byte or hash comparison, not a structural one with a path. The snapshot's approval cannot be read in review. The record guard is right, though: the expected values are source constants (line 243), and GOLDEN_DUMP never rewrites them. This file is not in the context map's file list, but it guards this context's renderers."
+    },
+    {
+     "technique": "assert-the-schedule-not-the-stopwatch",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/avatar/driver.test.ts:20 Face motion is asserted over a deterministic stepped frame clock (1/60 s steps, seeded generator), never over wall time."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "test-harness",
+   "context": "console-quality-gates",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-24T01:27:13.679777+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-harness"
+   ],
+   "techniques": [
+    "assert-the-schedule-not-the-stopwatch",
+    "fixture-economics",
+    "live-app-harness",
+    "unreached-decisions-pin-nothing"
+   ],
+   "deviations": 1,
+   "context": "stage-app",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T01:27:13.679777+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-harness"
+   ],
+   "techniques": [
+    "fixture-economics",
+    "isolation-lanes",
+    "unreached-decisions-pin-nothing"
+   ],
+   "deviations": 1,
+   "context": "reconcile-engine",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T01:27:13.679777+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-harness"
+   ],
+   "techniques": [
+    "assert-the-schedule-not-the-stopwatch",
+    "fixture-economics",
+    "isolation-lanes",
+    "live-app-harness"
+   ],
+   "deviations": 1,
+   "context": "daemon-core-rpc",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T01:27:13.679777+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-harness"
+   ],
+   "techniques": [
+    "approval-snapshots-with-guarded-update",
+    "assert-the-schedule-not-the-stopwatch"
+   ],
+   "deviations": 1,
+   "context": "stage-avatar-renderer",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

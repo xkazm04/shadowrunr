@@ -3911,6 +3911,115 @@
           "evidence": "apps/console/src/pages/review/Layer1.tsx:21 The session wall maps all three gate states, including unmeasured, to their own visual class. The record type forces this mapping to be complete."
         }
       ]
+    },
+    "e0e277e4-0b4e-4d04-8c33-29f0d59d2a67/test-harness": {
+      "context": "stage-app",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T01:27:13.679Z",
+      "worker": "c587577c-e9f9-4654-b389-b8c8660cbc1a",
+      "techniques": [
+        {
+          "technique": "unreached-decisions-pin-nothing",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/fixture.test.ts:116 The name promises a stronger guard than its assertions make. Deleting or altering any interior line of the fixture leaves it green."
+        },
+        {
+          "technique": "fixture-economics",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/fixture.test.ts:117 The derived fixture names its generator, but its freshness is never checked against it (no regenerate-and-compare). Seeded-data honesty is otherwise good: every event type is covered (line 52), the ops are held to the segment tables' allowed_ops, and the demo case is checked as a byte copy (line 125)."
+        },
+        {
+          "technique": "assert-the-schedule-not-the-stopwatch",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/live.test.ts:108 The live source's ack cadence, signal-lost slate and stall marks are driven by advanceTimersByTime rather than wall-clock waits."
+        },
+        {
+          "technique": "live-app-harness",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/App.tsx:345 The browser-automation probe is enabled by the runtime query flag ?debug=1 in the shipped bundle, not by a build-time switch. Compare App.tsx:232, where the face demo is gated by import.meta.env.DEV."
+        }
+      ]
+    },
+    "ce601bf6-a98a-465f-8f19-3143e6483f8d/test-harness": {
+      "context": "reconcile-engine",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T01:27:13.679Z",
+      "worker": "c587577c-e9f9-4654-b389-b8c8660cbc1a",
+      "techniques": [
+        {
+          "technique": "unreached-decisions-pin-nothing",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/tests_scale.rs:372 The test named weary_tournament_prompt_size can never reach its assertion yet still report green. It should skip loudly, or fail on a load error other than absence."
+        },
+        {
+          "technique": "fixture-economics",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/tests_scale.rs:2 The 500-run scale cases use the cheapest fixture tier (in-memory synthetic runs). The hand-made t-fix fixture is read in place, never mutated."
+        },
+        {
+          "technique": "isolation-lanes",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/tests.rs:295 Each test that writes gets a private TempDir, which is discarded whole on drop, so tests inherit nothing from each other or from previous runs."
+        }
+      ]
+    },
+    "1f8d2348-1a2f-4c72-8dc0-e281a35b78d4/test-harness": {
+      "context": "daemon-core-rpc",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T01:27:13.679Z",
+      "worker": "c587577c-e9f9-4654-b389-b8c8660cbc1a",
+      "techniques": [
+        {
+          "technique": "assert-the-schedule-not-the-stopwatch",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/e2e/resilience.rs:129 The ordering (slot released before the restart) rests on a fixed sleep rather than an observed state or barrier. The 10 s and 60 s timeouts elsewhere (e.g. line 39) are proper loose, one-sided hang guards."
+        },
+        {
+          "technique": "fixture-economics",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/e2e/mod.rs:56 The checked-in sim fixture is copied byte-for-byte (no logic) into each test's tempdir. Tests mutate their private copy, and the copy is discarded whole."
+        },
+        {
+          "technique": "isolation-lanes",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/e2e/mod.rs:90 Each e2e daemon binds port 0, with its own runs and data dirs in a tempdir. This virtualises the port singleton so the e2e tests can run in parallel."
+        },
+        {
+          "technique": "live-app-harness",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/tests/cli.rs:31 The CLI tests drive the actual built shadowrunr binary from outside, with a config in a tempdir. They read results back from the files it wrote rather than trusting the exit code alone."
+        }
+      ]
+    },
+    "7bbc93eb-a921-49ea-a5b3-128e66bd5e64/test-harness": {
+      "context": "stage-avatar-renderer",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T01:27:13.679Z",
+      "worker": "c587577c-e9f9-4654-b389-b8c8660cbc1a",
+      "techniques": [
+        {
+          "technique": "approval-snapshots-with-guarded-update",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/avatar/renderers.golden.test.ts:205 This is a byte or hash comparison, not a structural one with a path. The snapshot's approval cannot be read in review. The record guard is right, though: the expected values are source constants (line 243), and GOLDEN_DUMP never rewrites them. This file is not in the context map's file list, but it guards this context's renderers."
+        },
+        {
+          "technique": "assert-the-schedule-not-the-stopwatch",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/avatar/driver.test.ts:20 Face motion is asserted over a deterministic stepped frame clock (1/60 s steps, seeded generator), never over wall time."
+        }
+      ]
     }
   }
 }
