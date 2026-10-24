@@ -3,7 +3,7 @@
 // own on-screen schedule (stage-kit `onScreen`), in transcript time, at any replay speed; this
 // file keeps only the presentation (trims, bar scale, the CSS delay derived from `since`).
 import type { ChatMsg, EvidenceGrade, Rank, SegmentId } from "@shadowrunr/contract";
-import { foilInfo, pollBars, shownLane, type SceneState } from "@shadowrunr/stage-kit";
+import { foilInfo, guestOf, pollBars, shownLane, type SceneState } from "@shadowrunr/stage-kit";
 import { captionOn, cardOn, decreeOn, foilLineOn, momentOn, pollOn, type Shown } from "@shadowrunr/stage-kit/ui";
 
 /** The winner keeps the last six chat lines on screen. */
@@ -138,13 +138,15 @@ export function captionView(scene: SceneState, position: number, _speed = 1): Ca
   const useFoil = f !== null && (c === null || f.id > c.id);
   const line = useFoil ? f : c;
   if (line === null) return null;
+  // a Table Read guest's line (SEG-03) is a caption, said under the guest's own name
+  const guest = useFoil ? null : (c?.foil ?? null);
   const text = line.text;
   const talkSecs = Math.min(5, Math.max(3, text.length / 17));
   return {
     key: `${useFoil ? "f" : "m"}${line.id}`,
-    foil: useFoil,
-    name: useFoil && f ? foilInfo(f.foil).name : "Arch-Lich Malakor",
-    role: useFoil ? "Guest foil" : "Lord’s envoy",
+    foil: useFoil || guest !== null,
+    name: useFoil && f ? foilInfo(f.foil).name : guest !== null ? foilInfo(guest).name : "Arch-Lich Malakor",
+    role: useFoil ? "Guest foil" : guest !== null ? "Table Read guest" : "Lord’s envoy",
     words: captionWords(text),
     talkSecs,
     talk: lifeOf({ since: line.at, until: line.at + talkSecs * 1000 }, position),
@@ -195,8 +197,10 @@ export function slateView(scene: SceneState, live: boolean): string | null {
   return null;
 }
 
+/** The foil beside him: the summoned one, or SEG-03's scheduled guest. */
 export function foilView(scene: SceneState): { id: string; name: string } | null {
-  return scene.foil ? { id: scene.foil.id, name: foilInfo(scene.foil.id).name } : null;
+  const id = scene.foil?.id ?? guestOf(scene);
+  return id ? { id, name: foilInfo(id).name } : null;
 }
 
 export function gradesOf(scene: SceneState): Readonly<Record<string, EvidenceGrade>> {

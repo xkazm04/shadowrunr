@@ -105,7 +105,7 @@ export function DirectionsEditor<T extends { readonly text: string }>(props: Dir
 
 // ── The two uses ─────────────────────────────────────────────────────
 
-const SEGMENT_IDS: readonly SegmentId[] = ["SEG-01", "SEG-02A", "SEG-02B-I", "SEG-02B-II"];
+const SEGMENT_IDS: readonly SegmentId[] = ["SEG-01", "SEG-02A", "SEG-02B-I", "SEG-02B-II", "SEG-03"];
 
 /** Whether `s` is a segment id the contract knows. */
 export const isSegmentId = (s: string | undefined): s is SegmentId => SEGMENT_IDS.includes(s as SegmentId);

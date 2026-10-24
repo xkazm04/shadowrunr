@@ -19,7 +19,7 @@ import { CAPTION_HOLD_MS, visibleWords, wordTimings } from "@shadowrunr/stage-ki
 
 import type { ScheduledPart } from "./player";
 
-/** One of Malakor's lines as the live feed said it, with the `say` event's seq. */
+/** One line as the live feed said it (Malakor's, or the Table Read guest's), with the `say` event's seq. */
 export interface SaidLine {
   /** The scene's caption id for it. */
   id: number;
@@ -28,6 +28,8 @@ export interface SaidLine {
   /** When it was said, on the stream clock (ms). */
   at: number;
   replyingTo: string[];
+  /** The guest's foil id for a guest line (SEG-03); absent: the host's. */
+  foil?: string;
 }
 
 /** No audio and no skip this long after the stage saw a line: it counts as unvoiced (seconds). */
@@ -38,7 +40,7 @@ export const UNVOICED_HOLD_MS = 1500;
 export const FADE_MS = 600;
 
 export interface VoiceCaptionView {
-  caption: { id: number; text: string; replyingTo: string[] };
+  caption: { id: number; text: string; replyingTo: string[]; foil?: string };
   /** Words revealed. */
   shown: number;
   opacity: number;
@@ -113,7 +115,8 @@ export class VoiceCaptions {
   }
 
   private candidate(s: SaidLine, l: Line | undefined, first: number, now: number): { v: VoiceCaptionView; start: number } | null {
-    const caption = { id: s.id, text: s.text, replyingTo: s.replyingTo };
+    const caption: VoiceCaptionView["caption"] = { id: s.id, text: s.text, replyingTo: s.replyingTo };
+    if (s.foil !== undefined) caption.foil = s.foil;
     const total = words(s.text).length;
     const parts = l ? [...l.parts.values()].sort((a, b) => a.part - b.part) : [];
     if (parts.length && parts[0]!.start <= now) {

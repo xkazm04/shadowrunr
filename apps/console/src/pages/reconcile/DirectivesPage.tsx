@@ -19,7 +19,7 @@ import { dateTime, outcomeIndex, VERDICT_RANK } from "./model";
 import { Button } from "../../ui/Button";
 
 /** Segments a directive may be scoped to (SEG-02B is descoped). */
-const SCOPES: readonly SegmentId[] = ["SEG-01", "SEG-02A"];
+const SCOPES: readonly SegmentId[] = ["SEG-01", "SEG-02A", "SEG-03"];
 
 type Facet = "active" | "broken" | "proposed" | "all" | "inactive";
 

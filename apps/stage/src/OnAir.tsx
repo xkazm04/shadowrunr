@@ -13,8 +13,8 @@
 import { useMemo } from "react";
 
 import type { SegmentId } from "@shadowrunr/contract";
-import { SEGMENT_TITLE, wordTimings, type Redaction, type SceneState } from "@shadowrunr/stage-kit";
-import { captionSize, cardOn, redactionAt, tickerOn } from "@shadowrunr/stage-kit/ui";
+import { SEGMENT_TITLE, foilInfo, wordTimings, type Redaction, type SceneState } from "@shadowrunr/stage-kit";
+import { captionSize, captionSpeaker, cardOn, redactionAt, tickerOn } from "@shadowrunr/stage-kit/ui";
 import type { VoiceCaptionView } from "./voice/captions";
 
 export { TICKER_LINGER_MS } from "@shadowrunr/stage-kit/ui";
@@ -36,15 +36,21 @@ const SUMMON: CommandRow = { cmd: "!summon", args: "<foil>", what: "Call a guest
 const VOTE: CommandRow = { cmd: "!vote", args: "<option>", what: "Vote in the open poll. Weight rises with rank." };
 const HINT: CommandRow = { cmd: "!hint", args: "<hex> <text>", what: "Nominate a lead on the board." };
 const GRADE: CommandRow = { cmd: "!grade", args: "<hex> <DOC|REP|CLM|SPC>", what: "Grade a hex. Jury advice, never proof." };
+const BALLOT: CommandRow = { cmd: "!vote", args: "<number>", what: "Pick the next scene when the ballot opens. Weight rises with rank." };
 
-/** The commands the room can use, per segment (none in a descoped one); `!vote` joins while a poll is open. */
+/** The commands the room can use, per segment (none in a descoped one); `!vote` joins while a poll
+ * is open. SEG-03's one command is the scene ballot's `!vote`. */
 export function standingCommands(segment: SegmentId | null): CommandRow[] {
   switch (segment) {
     case "SEG-01":
       return [PROPOSE, SUMMON];
     case "SEG-02A":
       return [HINT, GRADE];
-    default:
+    case "SEG-03":
+      return [BALLOT];
+    case "SEG-02B-I":
+    case "SEG-02B-II":
+    case null:
       return [];
   }
 }
@@ -52,7 +58,7 @@ export function standingCommands(segment: SegmentId | null): CommandRow[] {
 /** The card slot between explainer cards: the segment and what the room can do in it now. */
 export function StandingCard({ scene, poll }: { scene: SceneState; poll: boolean }) {
   const base = scene.layout === "boot" ? [] : standingCommands(scene.segment);
-  const rows = base.length && poll ? [...base, VOTE] : base;
+  const rows = base.length && poll && !base.some((r) => r.cmd === VOTE.cmd) ? [...base, VOTE] : base;
   if (!scene.segment || rows.length === 0) return null;
   return (
     <div className="standing">
@@ -89,18 +95,24 @@ export function VoiceCaptionPanel({
   now: number;
   compact: boolean;
   onAir: boolean;
-  /** Who says the line (the stream's host name); shown upper-cased. */
+  /** Who says a host line (the stream's host name); shown upper-cased. A guest line names its guest. */
   speaker?: string;
 }) {
   const text = view?.caption.text;
+  const foil = view?.caption.foil;
   const line = useMemo(() => (text === undefined ? null : wordTimings(text)), [text]);
   const redaction = redactionAt(redactions, now)?.value;
   return (
     <div className={`caption-panel${compact ? " compact" : ""}`}>
       {view && line && view.opacity > 0 && (
-        <div className="caption" key={view.caption.id} style={{ opacity: view.opacity, fontSize: captionSize(view.caption.text, compact) }}>
+        <div
+          className={`caption${foil === undefined ? "" : " guest"}`}
+          key={view.caption.id}
+          style={{ opacity: view.opacity, fontSize: captionSize(view.caption.text, compact), ...(foil === undefined ? {} : { ["--foil" as string]: foilInfo(foil).color }) }}
+          data-speaker={foil ?? "host"}
+        >
           <div className="caption-head">
-            <span className="speaker">{speaker.toUpperCase()}</span>
+            <span className="speaker">{captionSpeaker(view.caption, speaker).toUpperCase()}</span>
             {view.caption.replyingTo.slice(0, 3).map((n) => (
               <span className="reply-chip" key={n}>
                 ↳ {n}

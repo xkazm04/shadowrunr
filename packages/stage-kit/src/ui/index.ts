@@ -14,6 +14,7 @@ export * from "./JobTicker";
 export * from "./Overlays";
 export * from "./onScreen";
 export * from "./VotePanel";
+export * from "./TwoShot";
 export * from "../art/Sigil";
 export * from "../art/Silhouette";
 export * from "../art/MalakorArt";

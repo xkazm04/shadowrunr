@@ -154,7 +154,9 @@ export class LiveStore {
     this.scene = reduce(this.scene, f.event);
     const c = this.scene.caption;
     if (f.event.type === "say" && f.seq !== undefined && c && c !== caption) {
-      this.said = [...this.said, { id: c.id, seq: f.seq, text: c.text, at: c.at, replyingTo: c.replyingTo }].slice(-SAID_MAX);
+      const line: SaidLine = { id: c.id, seq: f.seq, text: c.text, at: c.at, replyingTo: c.replyingTo };
+      if (c.foil !== undefined) line.foil = c.foil;
+      this.said = [...this.said, line].slice(-SAID_MAX);
     }
     this.ring.push(f.event);
     this.keyframe();

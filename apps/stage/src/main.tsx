@@ -9,6 +9,7 @@ import "./styles.css";
 import "./screens.css";
 import "./board.css";
 import "./board-strings.css";
+import "./two-shot.css";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

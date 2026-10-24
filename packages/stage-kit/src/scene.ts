@@ -22,6 +22,7 @@ import {
   castGrade,
   defaultScreen,
   initialScene,
+  TWO_SHOT_SEGMENT,
   type Decree,
   type Caption,
   type Hint,
@@ -94,6 +95,11 @@ function showScreen(s: SceneState, screen: ScreenId, recordId: string | undefine
   const pendingScreen: SceneState["pendingScreen"] = { screen, at };
   if (recordId !== undefined) pendingScreen.recordId = recordId;
   return setScreen({ ...s, pendingScreen }, s.mapScreen, at, "screen");
+}
+
+/** Leaving the Table Read for another segment forgets its guest and any scene still on the card. */
+function leaveTableRead(prev: SceneState, to: SegmentId): Partial<SceneState> {
+  return to !== TWO_SHOT_SEGMENT && (prev.guest !== null || prev.sceneCard !== null) ? { guest: null, sceneCard: null } : {};
 }
 
 function addDecree(s: SceneState, d: Decree): Decree[] {
@@ -284,7 +290,7 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     case "segment_start": {
       // The segment_start that follows its handover keeps the screen the handover chose.
       const fresh = prev.segment !== ev.segment || prev.layout === "boot";
-      s = { ...s, segment: ev.segment, pendingSwitch: null };
+      s = { ...s, segment: ev.segment, pendingSwitch: null, ...leaveTableRead(prev, ev.segment) };
       if (!fresh) return s;
       return setScreen({ ...s, pendingScreen: null, mapFocus: null, mapScreen: "board" }, defaultScreen(ev.segment), at, "segment_start", ev.segment);
     }
@@ -295,10 +301,12 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     }
     case "case_open":
       return { ...s, caseFile: ev.case };
-    // SEG-03 scene card: drawn by WP-C.
+    // SEG-03: the scene's title card, from its first line to its last; the guest it names is the
+    // Table Read's guest. A `scene_end` for another scene (a resent or out-of-order event) keeps it.
     case "scene_start":
+      return { ...s, guest: ev.guest, sceneCard: { id: ev.scene_id, title: ev.title, guest: ev.guest, at } };
     case "scene_end":
-      return s;
+      return s.sceneCard?.id === ev.scene_id ? { ...s, sceneCard: null } : s;
     // A string the runtime accepted onto the board. It refuses a duplicate, so a repeat (a
     // replayed or resent event) keeps the string drawn when it was first pinned.
     case "link_pinned": {
@@ -314,7 +322,7 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
       return setScreen(openRecord({ ...s, pendingScreen: null }, ev.record.id), p.screen, at, "screen");
     }
     case "handover":
-      s = { ...s, segment: ev.to, pendingSwitch: null, pendingScreen: null, mapFocus: null, mapScreen: "board" };
+      s = { ...s, segment: ev.to, pendingSwitch: null, pendingScreen: null, mapFocus: null, mapScreen: "board", ...leaveTableRead(prev, ev.to) };
       return setScreen(s, defaultScreen(ev.to), at, "handover", ev.to, ev.reason);
     case "chat":
       return applyChat(s, ev.msg, at);
@@ -335,13 +343,18 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     }
     case "say": {
       const seq = s.seq + 1;
-      if (ev.speaker === "foil") {
-        const foil = ev.foil ?? s.foil?.id ?? "foil";
-        return { ...s, seq, foilLine: { id: seq, foil, text: ev.text, at } };
-      }
       const replyingTo = (ev.replying_to ?? [])
         .map((id) => s.chats.get(id)?.viewer.name)
         .filter((n): n is string => n !== undefined);
+      if (ev.speaker === "foil") {
+        const foil = ev.foil ?? s.guest ?? s.foil?.id ?? "foil";
+        s = { ...s, seq, foilLine: { id: seq, foil, text: ev.text, at } };
+        // SEG-01's foil speaks in its card's bubble; the Table Read's guest is half the two-shot
+        // and speaks in the caption, under its own name.
+        if (s.segment !== TWO_SHOT_SEGMENT) return s;
+        const caption: Caption = { id: seq, text: ev.text, at, replyingTo, foil };
+        return { ...s, guest: foil, caption, captions: enqueueCaption(s.captions, caption) };
+      }
       const caption: Caption = { id: seq, text: ev.text, at, replyingTo };
       return { ...s, seq, caption, captions: enqueueCaption(s.captions, caption) };
     }

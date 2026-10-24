@@ -4,11 +4,15 @@
 // The face is drawn at one size (FACE_PX) and scaled to its region with a CSS transform, so a
 // handover glides it from the host room's big box into the corner on the compositor: the canvas
 // never re-allocates mid-move, and the transform runs on the same 0.95 s curve as the region.
+//
+// SEG-03 (the Table Read) draws the host room as a two-shot: his face left, the guest's portrait
+// right, a name plate under each, the scene's title band under both. Who speaks is read off the
+// caption (twoShot.ts): a guest line lights the guest's glow and never moves his mouth.
 
 import { useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 
 import type { Case } from "@shadowrunr/contract";
-import { captionAt, isContentScreen, mapFocusOf, type MapModel, type SceneState } from "@shadowrunr/stage-kit";
+import { captionAt, guestOf, isContentScreen, isTwoShot, mapFocusOf, type MapModel, type SceneState } from "@shadowrunr/stage-kit";
 import {
   BrowserWindow,
   CaptionPanel,
@@ -21,6 +25,10 @@ import {
   ExplainerCard,
   FoilCard,
   GradeTallyPanel,
+  GuestShot,
+  HostPlate,
+  SceneTitleCard,
+  guestPortraitFile,
   HexInspector,
   Hexmap,
   Intro,
@@ -41,7 +49,8 @@ import type { PerformanceSource } from "./avatar/performance";
 import type { FaceSource } from "./avatar/types";
 import { DEFAULT_FACE, type FaceVariant, type LookSource } from "./avatar/variants";
 import { BOARD_LAYOUT_FRAME, FACE_PX, boardFrame, hexFrame, layoutRects, type Rect, type Region } from "./layouts";
-import { StandingCard, VoiceCaptionPanel, cardShowing, tickerActive } from "./OnAir";
+import { StandingCard, VoiceCaptionPanel, cardShowing, standingCommands, tickerActive } from "./OnAir";
+import { speakersNow } from "./twoShot";
 import type { VoiceCaptionView } from "./voice/captions";
 import { SYNTHETIC_VOICE } from "./voice/names";
 import type { FaceState } from "./voice/report";
@@ -55,10 +64,26 @@ function RegionBox({ name, rect, children }: { name: Region; rect: Rect; childre
   );
 }
 
-function isSpeaking(caption: ReturnType<typeof captionAt>, now: number): boolean {
-  if (!caption) return false;
-  const e = now - caption.at;
-  return e >= 0 && e <= caption.spokenMs + 300;
+/** The guest's raster portrait beside the host's rig on the daemon, if one is there. */
+function portraitUrl(rigBase: string | null, guest: string | null): string | null {
+  if (rigBase === null || guest === null) return null;
+  try {
+    return new URL(guestPortraitFile(guest), rigBase).href;
+  } catch {
+    return null;
+  }
+}
+
+/** The chat lane's title: the room the segment makes of the chat. */
+export function chatTitle(scene: Pick<SceneState, "segment">): string {
+  switch (scene.segment) {
+    case "SEG-02A":
+      return "Conscripted auditors";
+    case "SEG-03":
+      return "The audience";
+    default:
+      return "The minions";
+  }
 }
 
 export function Stage({
@@ -113,13 +138,26 @@ export function Stage({
   look?: LookSource;
 }) {
   const poll = visiblePoll(scene, now);
-  const rects = layoutRects(scene.layout, { poll: poll !== null, foil: scene.foil !== null, back: scene.mapScreen });
+  const twoShot = isTwoShot(scene);
+  const explainer = cardShowing(scene, now);
+  const rects = layoutRects(scene.layout, {
+    poll: poll !== null,
+    foil: scene.foil !== null,
+    back: scene.mapScreen,
+    twoShot,
+    scene: scene.sceneCard !== null,
+    // the two-shot's column holds the card under the vote: an explainer, or the standing card between polls
+    card: explainer || (poll === null && standingCommands(scene.segment).length > 0),
+  });
   if (!tickerActive(scene, now)) rects.ticker = { ...rects.ticker, hidden: true };
   // The streamer layout: Malakor cut out in the corner, the content behind him.
   const corner = isContentScreen(scene.layout);
   // Captions queue under a burst: the one showing now, not simply the latest line said.
   const caption = captionAt(scene, now);
-  const speaking = voiceCaption === undefined ? isSpeaking(caption, now) : (voiceCaption?.speaking ?? false);
+  // his face speaks only his own lines; a guest line lights the guest's glow (twoShot.ts)
+  const who = speakersNow(caption, voiceCaption, now);
+  const speaking = who.host;
+  const guest = twoShot ? guestOf(scene) : null;
   useEffect(() => onCaptionSpeaking?.(speaking), [speaking, onCaptionSpeaking]);
   const faceScale = Math.min(rects.avatar.w, rects.avatar.h) / FACE_PX;
   const look = useMemo(() => lookBox(), []);
@@ -192,8 +230,17 @@ export function Stage({
             </div>
           )}
           {voice && <div className="voice-label">{SYNTHETIC_VOICE}</div>}
-          {!corner && !broadcast && <div className="avatar-note">avatar slot · face rig or procedural placeholder</div>}
+          {twoShot && <HostPlate name={host} speaking={speaking} />}
+          {!corner && !broadcast && !twoShot && <div className="avatar-note">avatar slot · face rig or procedural placeholder</div>}
         </div>
+      </RegionBox>
+
+      <RegionBox name="guest" rect={rects.guest}>
+        {twoShot && <GuestShot guest={guest} speaking={guest !== null && who.guest === guest} src={portraitUrl(rigBase, guest)} />}
+      </RegionBox>
+
+      <RegionBox name="scene" rect={rects.scene}>
+        {twoShot && <SceneTitleCard card={scene.sceneCard} now={now} />}
       </RegionBox>
 
       <RegionBox name="caption" rect={rects.caption}>
@@ -225,11 +272,11 @@ export function Stage({
       </RegionBox>
 
       <RegionBox name="chat" rect={rects.chat}>
-        <ChatLane scene={scene} now={now} title={scene.segment === "SEG-02A" ? "Conscripted auditors" : "The minions"} />
+        <ChatLane scene={scene} now={now} title={chatTitle(scene)} />
       </RegionBox>
 
       <RegionBox name="card" rect={rects.card}>
-        {cardShowing(scene, now) ? (
+        {explainer ? (
           <ExplainerCard card={scene.card} now={now} />
         ) : content ? null : (
           <StandingCard scene={scene} poll={poll !== null && poll.closedAt === undefined} />

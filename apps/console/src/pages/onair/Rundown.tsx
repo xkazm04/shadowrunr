@@ -34,6 +34,7 @@ const FACETS = {
     { id: "all", label: "All" },
     { id: "SEG-01", label: "SEG-01" },
     { id: "SEG-02A", label: "SEG-02A" },
+    { id: "SEG-03", label: "SEG-03" },
   ],
   initial: "all",
   predicate: (r: RunRow, f: SegFacet) => f === "all" || r.spec.segment === f,

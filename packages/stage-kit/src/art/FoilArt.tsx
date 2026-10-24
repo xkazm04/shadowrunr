@@ -1,4 +1,4 @@
-// The five guest foils as flat screenprints, 120x140 (the Poster Wall's art.js `foil`).
+// The guest foils as flat screenprints, 120x140 (the Poster Wall's art.js `foil`).
 // Original parody archetypes, never real people. Colours are the illustration palette, kept
 // exactly. An unknown foil id draws nothing (the caller shows the name instead).
 
@@ -85,12 +85,40 @@ const COIN_PROPHET = (
   </>
 );
 
+// The Table Read's guest (SEG-03): an original pompous watercolourist. A tilted beret, a raised
+// chin, brows knitted in offence, a clean-shaven pursed mouth, a cravat, a palette and a brush.
+const PAINTER = (
+  <>
+    <path d="M18 140C22 106 40 98 60 98s38 8 42 42Z" fill={BONE} />
+    <path d="M18 140C22 106 40 98 60 98s38 8 42 42" fill="none" stroke={INK} strokeWidth="2.5" />
+    <path d="M48 100l12 7 12-7-2 13-10-5-10 5Z" fill={EMB} stroke={INK} strokeWidth="2" />
+    <ellipse cx="60" cy="68" rx="24" ry="28" fill={SKIN} />
+    <path d="M36 62Q34 84 46 92M84 62Q86 84 74 92" stroke="#8d8576" strokeWidth="5" fill="none" strokeLinecap="round" />
+    <ellipse cx="54" cy="42" rx="33" ry="12" fill={EMB} transform="rotate(-12 54 42)" />
+    <path d="M24 50Q52 40 84 36" stroke={INK} strokeWidth="2.5" fill="none" />
+    <path d="M50 30l1-9" stroke={INK} strokeWidth="3" strokeLinecap="round" />
+    <path d="M43 58l11 4M77 58l-11 4" stroke={INK} strokeWidth="3.5" strokeLinecap="round" />
+    <circle cx="50" cy="67" r="2.8" fill={INK} />
+    <circle cx="70" cy="67" r="2.8" fill={INK} />
+    <path d="M60 68l-3 9h6" stroke={INK} strokeWidth="2.5" fill="none" strokeLinejoin="round" />
+    <path d="M52 87Q60 82 68 87" stroke={INK} strokeWidth="3" fill="none" strokeLinecap="round" />
+    <path d="M6 116c0-12 14-20 30-18s22 10 18 20-12 6-16 12-30 4-32-14Z" fill={OCH} stroke={INK} strokeWidth="2.5" />
+    <circle cx="20" cy="112" r="3.5" fill={INK} />
+    <circle cx="30" cy="106" r="4" fill={EMB} />
+    <circle cx="42" cy="108" r="4" fill={VERDL} />
+    <circle cx="44" cy="119" r="4" fill={BONE} />
+    <path d="M96 138L110 94" stroke={INK} strokeWidth="4" strokeLinecap="round" />
+    <path d="M108 94l5-12 2 13Z" fill={VERD} stroke={INK} strokeWidth="1.5" />
+  </>
+);
+
 const FOILS: Readonly<Record<string, ReactElement>> = {
   "the-disruptor": DISRUPTOR,
   "the-life-coach": LIFE_COACH,
   "the-has-been-hero": HAS_BEEN_HERO,
   "the-inspector": INSPECTOR,
   "the-coin-prophet": COIN_PROPHET,
+  "the-painter": PAINTER,
 };
 
 /** The foil ids that have art, in the winner's order. */

@@ -145,7 +145,7 @@ export function FoilsTab({ d }: { d: CharacterDetail }) {
   const foils = useMemo(() => d.foils.map((f) => ({ f, name: foilName(f), doc: readFoil(f.text) })), [d.foils]);
   return (
     <>
-      <Head kicker={KICKER} title="Foils" lede="Guest characters for SEG-01. Original parody archetypes, never real people. A foil speaks at most one sentence per turn; the character always has the last word." />
+      <Head kicker={KICKER} title="Foils" lede="Guest characters for SEG-01, and the scheduled guest of SEG-03's Table Read. Original parody archetypes, never real people. A foil speaks at most one sentence per turn; the character always has the last word." />
       {foils.length === 0 ? (
         <EmptyState title="No foils yet" hint="Add foils/<id>.md and list the id in character.toml to make it summonable." />
       ) : (
