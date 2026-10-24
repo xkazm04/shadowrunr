@@ -1,91 +1,84 @@
-# Fictional sample scene for SEG-03 (Table Read), guest the-painter. Original material only:
-# no real person, show, painter, gallery or academy.
+# Fictional sample scene for SEG-03 (Table Read), guest the-painter (Adalwulf Hinkel). Original
+# material only: a cartoon episode in the classic shape (a scheme, a town that goes along, an
+# absurd escalation, the host's honest closing speech). No real person, show, place or event.
 id = "the-commission"
-title = "The Commission"
-pitch = "Malakor commissions a portrait. The Painter paints himself in and Malakor out."
+title = "The Painting Engine"
+pitch = "The village buys a machine that paints lemons. Hinkel's new nemesis: a toaster."
 guest = "the-painter"
 status = "approved"
 fictional = true
 notes = [
-    "Was the lemon composition or a cry for help? Ask chat, and give your own verdict.",
-    "Honest question: is the portrait better without Malakor in it? Answer it truthfully, even if it hurts.",
-    "Hills are extra: who in chat has paid the most absurd hidden fee, and for what?",
+    "The machine's lemon was objectively better. Say so, then ask chat whether better is the point.",
+    "Hinkel's tantrum peaked at 'it does not even suffer'. Was that the best line of the scene, or the saddest?",
+    "The village loved the machine for one afternoon. Name a thing chat loved for exactly one afternoon.",
 ]
 
 [[line]]
 speaker = "host"
-text = "Painter. The Lord's annual report needs a portrait of me. Dignified. Menacing. Under budget."
+text = "Big news from the village below the Spire, minions. The council has bought a Painting Engine."
 
 [[line]]
 speaker = "guest"
-text = "Under budget is not a style, it is an insult. My fee is two hundred gold and full creative control."
+text = "A what?"
 
 [[line]]
 speaker = "host"
-text = "Twenty gold, and you paint what is in front of you."
+text = "It's a brass box. You put in a coin and say a word, and it paints the word. I said 'lemon'. It painted a lemon."
 
 [[line]]
 speaker = "guest"
-text = "Forty gold, and I paint what is in front of me spiritually."
+text = "Show me. Show me this lemon. ... Hm. The shadow is on the correct side. Disgusting."
 
 [[line]]
 speaker = "host"
-text = "Deal. I already regret it. Where do I sit?"
+text = "The village has ordered four hundred lemons. They're hanging them in every window."
 
 [[line]]
 speaker = "guest"
-text = "On the stool. Lower. Lower. Now hold this lemon, and look at it like it owes you money."
+text = "Forty years, Bone Man. Forty years I painted that lemon. The box did it in a sneeze. Gustav, we are annexing the box."
 
 [[line]]
 speaker = "host"
-text = "Why am I holding a lemon in the Lord's annual report?"
+text = "You can't annex a box. It's bolted to the town square."
 
 [[line]]
 speaker = "guest"
-text = "Composition. Without the lemon you are a skeleton on a stool. With the lemon, you are a question."
+text = "Then I decree that the box is a toaster. Decree number nine: all toasters must paint badly, as is tradition."
 
 [[line]]
 speaker = "host"
-text = "Three hours later. My arm has fallen off. It is on the floor, still holding the lemon. Can I see it yet?"
+text = "It just painted your decree. Framed. With a better signature than yours."
 
 [[line]]
 speaker = "guest"
-text = "Not yet. I have made small revisions. You were distracting from the lemon, so I painted you smaller."
+text = "That is it. That is it! It does not even suffer! Art is suffering! Where is its rejection letter? Where is its forty years of postcards? It has never once been told 'please stop'!"
 
 [[line]]
 speaker = "host"
-text = "How much smaller?"
+live = "Say the unsaid about Hinkel's meltdown: his real complaint is that the machine skipped the suffering he thinks earned him something, and part of him is right and part of him is just jealous. Then give your own honest opinion on whether a perfect lemon nobody struggled for is worth less."
+fallback = "Let's be honest. He's not angry that it paints well. He's angry it never had to want anything. And I hate to say it, but he's half right. The other half is jealousy, and I recognise it, because I felt it when the box painted my skull."
 
 [[line]]
 speaker = "guest"
-text = "You are now in the background, behind a hill. The hill is also mine. I signed it."
+text = "I will paint against it. A duel. My lemon against its lemon. The village will judge."
 
 [[line]]
 speaker = "host"
-live = "React honestly to the finished portrait: say plainly what everyone can see (he painted himself into the middle and you out of it), then admit one true and petty reason it bothers you."
-fallback = "Let's just say it: that's a self-portrait. He's in the middle, I'm a smudge behind a hill, and the worst part is that it's the best painting of me ever made."
+text = "The village has already gone home. They got bored of the box after lunch."
 
 [[line]]
 speaker = "guest"
-text = "It is not a self-portrait. It is a portrait of a man who is very good at portraits. There is a difference."
+text = "Bored? Of perfection? After one afternoon?"
 
 [[line]]
 speaker = "host"
-text = "There's a caption. 'Malakor, artist's interpretation.' The interpretation is that I'm not there."
+text = "Four hundred lemons in four hundred windows. Turns out nobody looks at a lemon when everybody has one."
 
 [[line]]
 speaker = "guest"
-text = "Absence is the most menacing presence. Also, that will be eighty gold."
+text = "So I have won. By default. I accept. Gustav, the speech."
 
 [[line]]
 speaker = "host"
-text = "We said forty!"
-
-[[line]]
-speaker = "guest"
-text = "Forty for the painting, forty for the hill. Hills are extra. Everyone knows hills are extra."
-
-[[line]]
-speaker = "host"
-live = "The closing turn: what we learned today, honestly. Decide whether you pay, give one real opinion on which of the Painter's moves was the best scheme and why, and own your part in it."
-fallback = "What did we learn? Never commission an artist with a grudge and a hill. I'm paying the eighty, because I posed for three hours with a lemon and I'd rather not admit that was free."
+live = "The closing speech in your own words: what the village's one-afternoon love affair with the box says about how fast everyone gets bored of what was impossible yesterday, honestly, including you. End on a dry line about Hinkel's victory."
+fallback = "You know what I realised tonight? The box didn't beat Hinkel. Boredom beat the box. The village wanted a miracle until it got four hundred of them, and that's on us, not the box. So yes, Hinkel won. By being the only lemon nobody had."

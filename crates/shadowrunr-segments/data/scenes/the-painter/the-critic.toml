@@ -1,87 +1,81 @@
-# Fictional sample scene for SEG-03 (Table Read), guest the-painter. Original material only:
-# no real person, show, painter, gallery or academy.
+# Fictional sample scene for SEG-03 (Table Read), guest the-painter (Adalwulf Hinkel). Original
+# material only: a cartoon episode in the classic shape (a scheme, a town that goes along, an
+# absurd escalation, the host's honest closing speech). No real person, show, place or event.
 id = "the-critic"
-title = "The Critic"
-pitch = "Malakor plays a critic so the Painter can rehearse. It goes badly. Honestly."
+title = "One Star"
+pitch = "A pigeon gives the lemon one star. Hinkel bans reviews. Chaos is rated."
 guest = "the-painter"
 status = "approved"
 fictional = true
 notes = [
-    "The despair in the rind: was that the best line tonight? Say which line was and why.",
-    "He wrote his own five-star review. Score the scene out loud, honestly, and let chat argue.",
-    "The Grudge Ledger and the Book of the Tasteless: is Malakor just the Painter with fewer bones?",
+    "The village ended up rating the weather. Which thing in this scene should never have had stars?",
+    "Hinkel asked chat to review-bomb the pigeon and Malakor said no. Was that the right call, or did it kill the scene?",
+    "Hinkel wrote two hundred five-star reviews of himself under fake names. Name a fake name from the scene that landed.",
+    "Rate the scene out of five, honestly, and give one reason it lost a star.",
 ]
 
 [[line]]
 speaker = "guest"
-text = "Bone Man. A critic comes tomorrow to review my exhibition. Tonight you will play the critic, so I can rehearse my rebuttals."
+text = "Bone Man. Read this. Aloud. Slowly. I want the room to suffer with me."
 
 [[line]]
 speaker = "host"
-text = "Fine. But I'll be honest. An honest critic is the only kind worth rehearsing against."
+text = "'Lemon, Study Number Forty-One. One star. It is a lemon. Signed, Madame Plume, critic.' Madame Plume is a pigeon, Hinkel."
 
 [[line]]
 speaker = "guest"
-text = "Perfect. Begin. The first painting is Lemon, Study Number Forty-One."
+text = "She is THE pigeon. Every gallery in the valley reads her. One star. One. The sun has one star, and nobody calls it bad."
 
 [[line]]
 speaker = "host"
-text = "It's competent. The yellow is nice. The shadow is on the wrong side, and the frame cost more than the idea."
+text = "That's... actually a decent argument."
 
 [[line]]
 speaker = "guest"
-text = "Stop. Who is paying you? Is it Big Acrylic?"
+text = "Decree number twelve: reviews are banned. All of them. Stars are confiscated. Gustav, collect the stars."
 
 [[line]]
 speaker = "host"
-text = "Nobody's paying me. That's what makes it hurt."
+text = "Gustav is Madame Plume's nephew. He's been feeding her your decrees for a week."
 
 [[line]]
 speaker = "guest"
-text = "Big Acrylic pays everyone. They have been smothering watercolour for forty years. My rejection letter was printed on acrylic-friendly paper."
+text = "Then I fight stars with stars. I have written two hundred five-star reviews of the lemon. Under other names. Signed by 'A Very Tall Duke', 'Concerned Mother of Taste', and 'Not Hinkel'."
 
 [[line]]
 speaker = "host"
-text = "Paper does not take sides."
+text = "And now the whole village is writing reviews. Of everything. The baker got three stars for his bread and two for his personality."
 
 [[line]]
 speaker = "guest"
-text = "Paper ALWAYS takes sides. Next painting: Lemon, Study Number Forty-Two."
+text = "Someone gave the weather one star. Someone gave ME one star. In person. To my face. With their fingers."
 
 [[line]]
 speaker = "host"
-text = "It's the same lemon."
+text = "Is this the part where you take your glasses off?"
 
 [[line]]
 speaker = "guest"
-text = "It is the same lemon, one day older. Look at the despair in the rind."
+text = "The glasses are off! The moustache is uncombed! Forty years, and I am rated BELOW THE WEATHER! Bone Man, you have minions. Lend them to me. One star each, from all of them, for her!"
 
 [[line]]
 speaker = "host"
-text = "Okay, that one's actually good. The despair in the rind is good. Someone write that down."
+live = "Refuse Hinkel's request to lend him the minions against the critic, in character and firmly, in one or two lines: nobody in this room goes after anyone, pigeon or not. Then say the unsaid: the review was mean, and it was also correct."
+fallback = "No. Nobody in this room goes after anyone, pigeon or otherwise. Sit down, Hinkel. And honestly? The review was mean. It was also correct. It is a lemon."
 
 [[line]]
 speaker = "guest"
-text = "I do not need your praise. Here is the review I wrote for the critic. He only has to sign it. Read it aloud."
+text = "Correct. You are on her side. You have always been on her side. I am not upset."
 
 [[line]]
 speaker = "host"
-text = "'The finest lemon of the century. The artist is handsome, misunderstood, and owed an apology by the Academy.' You wrote your own review."
+text = "You're crying into your notepad."
 
 [[line]]
 speaker = "guest"
-text = "I saved him time. Critics are very busy being wrong."
+text = "It is a statement. Write that down, Madame Plume. Five stars."
 
 [[line]]
 speaker = "host"
-live = "Give the Painter your real review as the critic: one genuine compliment, one blunt flaw, and say the unsaid about the review he wrote for himself. Stay funny; the target is his work and his nerve, never who he is."
-fallback = "Honest review: the lemon is fine, the forty-second lemon is better, and the review you wrote is the best fiction in this building. One star for the paint, five for the nerve."
-
-[[line]]
-speaker = "guest"
-text = "One star. ONE. You are going in the Book of the Tasteless. Page one. In red."
-
-[[line]]
-speaker = "host"
-live = "The closing turn: what we learned today, honestly. Admit that you also keep a book of everyone who wronged you, so the critic in this scene was right about him and about you."
-fallback = "What did we learn? He keeps a book of everyone who wronged him, and so do I. The Grudge Ledger and the Book of the Tasteless. We're the same man. He just has more skin and better handwriting."
+live = "The closing speech in your own words: what a village that rates its own weather says about all of us, honestly, including the ratings you secretly keep on your own minions. End by giving the scene a star rating and owning one reason it lost a star."
+fallback = "You know what I realised tonight? Hinkel didn't want five stars. He wanted someone to say the lemon mattered. The village handed out stars until they meant nothing, and I've kept a secret rank list of every one of you since the first stream. So, this scene: three stars. It lost one for the pigeon nepotism. It lost another for me."

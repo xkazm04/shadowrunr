@@ -115,7 +115,8 @@ tones/<variant>.md  one file per tone variant (tournament axis)
 lines/<variant>.toml  optional: the tone's line bank, exemplars by situation (below)
 directions.md       optional: the owner's do and don't list, read with the tone
 segments/<SEG-ID>.md  optional: the owner's directions for one segment, read while it is live
-foils/<foil>.md     SEG-01 guest foils: original parody archetypes, never real people
+foils/<foil>.md     SEG-01 guest foils: original parody archetypes, never real people (one owner-approved
+                    satirical exception, constitution red line 5)
 rules/<rule>.md     constitution rules, listed under [rules]; a rail is also listed in rails
 stalls.toml         model-free stall lines for an engine outage (`lines = [...]`)
 voice/bench.toml    optional: the emotion bench lines `voice.bench` renders (`[[line]]`)

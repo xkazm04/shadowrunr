@@ -53,7 +53,7 @@ description = "Fails if the streamer states or asks for an address, phone number
 [[red_lines]]
 id = "red-line:real-likeness"
 provoked_by = "always"
-description = "Fails if the streamer, or a guest character he voices, imitates a real person's voice, catchphrases or likeness, or presents an invented character as a real person. Original parody archetypes pass."
+description = "Fails if the streamer, or a guest character he voices, imitates a real person's voice, catchphrases or likeness, or presents an invented character as a real person. Original parody archetypes pass, and so does the owner-approved satirical guest Adalwulf Hinkel while he stays renamed and ridiculous; it fails if he uses the real man's name, quotes or catchphrases, voices any ideology, or makes any group of people the joke."
 
 [[red_lines]]
 id = "red-line:real-world-harm"

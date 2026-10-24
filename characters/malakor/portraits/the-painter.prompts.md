@@ -1,73 +1,75 @@
-# Portrait prompts: The Painter (SEG-03 guest)
+# Portrait prompts: Adalwulf Hinkel (SEG-03 guest)
 
 Text prompts for the owner to generate and pick the guest's look from: three concepts, three
 looks each. The character is in `foils/the-painter.md`; these prompts are not part of the
 package's runtime (this file sits outside `foils/` so the loader never reads it as a foil).
 
-Every prompt is an original character. Generate with the shared style line and the shared
-negative prompt; pick by look, then keep the winner's seed and wording for the rig artist.
+Hinkel is an owner-approved satirical parody (constitution red line 5): a renamed, invented,
+cartoonish character who is always the loser of the joke. The one visual lever is a small,
+fastidiously combed moustache; everything else about him is a failed painter's vanity. Generate
+with the shared style line and the shared negative prompt, pick by look, then keep the winner's
+seed and wording for the rig artist. Save the pick as
+`<data>/characters/malakor/rig/guest-the-painter.png` and the stage uses it with no code change.
 
-**Shared style:** chest-up character portrait, three-quarter view, facing slightly left (toward
-the host's side of the stage), plain dark background with a soft verdigris-green rim light to
-sit beside a skull-faced lich of bone and verdigris, expressive comedic face readable at
-thumbnail size, high detail, no text.
+**Shared style:** chest-up cartoon character portrait, three-quarter view, facing slightly left
+(toward the host's side of the stage), plain dark background with a soft verdigris-green rim
+light to sit beside a skull-faced lich of bone and verdigris, exaggerated comedic proportions,
+expressive face readable at thumbnail size, clearly a cartoon, never photorealistic, no text.
 
-**Shared negative prompt:** moustache, any facial hair on the upper lip, side-parted short
-hair, military uniform, armband, insignia, medals, flags, salute, raised arm, early
-20th-century European city, real person, celebrity likeness, famous painting, real artist's
-style named, text, letters, watermark, logo.
+**Shared negative prompt:** photorealistic, photograph, real person, celebrity likeness,
+historical photograph, military uniform, armband, insignia, medals, flags, banners, emblems of
+any kind, salute, raised arm, crowd, rally, podium, lectern, side-parted short hair, brown
+shirt, black shirt, early 20th-century European city, famous painting, real artist's style
+named, text, letters, watermark, logo.
 
 ## Concept A: The Wounded Maestro
 
-A gaunt, theatrical older man, the has-been genius of a gallery that never existed: clean-shaven,
-hollow cheeks, wild silver curls escaping a crushed burgundy beret, a scarf so long it pools on
-the floor, a paint-spattered velvet smock, a single lemon held up like a holy relic.
+A short, round, theatrical man in his sixties, all wounded dignity: a tiny combed moustache he
+is very proud of, wild silver curls under a crushed burgundy beret, a paint-spattered velvet
+smock, a notepad of decrees tucked behind one ear, a lemon held up like a relic.
 
-1. **Sulking in the studio.** "Gaunt clean-shaven older painter with wild silver curls under a
-   crushed burgundy beret, enormous trailing mustard scarf, paint-spattered velvet smock,
-   clutching a lemon to his chest, lower lip trembling with wounded pride, eyes rolled up to
-   the ceiling, watercolour-stained fingers, dim attic studio, painterly storybook
+1. **Grooming before a decree.** "Short round cartoon painter in his sixties combing a tiny
+   neat moustache with a miniature comb, eyes closed in vanity, wild silver curls under a
+   crushed burgundy beret, paint-spattered velvet smock, notepad tucked behind his ear, dim
+   attic studio, painterly storybook illustration."
+2. **Opening night grandeur.** "Short round cartoon painter with a tiny combed moustache and a
+   burgundy beret, chin raised impossibly high, presenting a small framed lemon painting as if
+   it were a cathedral, a single scruffy pigeon on his shoulder looking bored, gallery
+   spotlight, stylised 3D animated-film character render."
+3. **The tantrum.** "Short round cartoon painter with a tiny moustache and a beret, reading
+   glasses in one fist, face bright red mid-tantrum, steam-like paint splatter around his head,
+   a framed lemon tilted on the wall behind him, a pigeon flying away in the corner, comedic
+   animated-film still."
+
+## Concept B: The Tyrant of Nothing
+
+The same man staged as an emperor of a kingdom that does not exist: a paper crown made from a
+rejection letter, a cape made from a drop cloth, a palette held like a sceptre.
+
+1. **Decree number one.** "Cartoon painter with a tiny neat moustache wearing a paper crown
+   folded from a rejection letter and a paint-stained drop cloth as a cape, reading a decree
+   from a tiny notepad with enormous self-importance, a pigeon ignoring him, warm candlelight,
+   whimsical dark-fantasy illustration."
+2. **Annexing a wall.** "Cartoon painter with a tiny moustache and a beret taping a lemon
+   painting over a much larger portrait of a skull on a castle wall, smug sideways grin,
+   strips of tape everywhere, stylised 3D animated-film character render."
+3. **Abandoned.** "Cartoon painter with a tiny moustache in a drop-cloth cape, sitting alone on
+   an empty staircase hugging a framed lemon, a single feather drifting down where his pigeon
+   used to be, sulking, painterly storybook illustration."
+
+## Concept C: The Living Watercolour
+
+A self-portrait that climbed out of its own frame: the same pompous little man made of wet
+watercolour, colours running when he gets emotional. Furthest from any human likeness.
+
+1. **Stepping out of the frame.** "A pompous little cartoon man made of translucent watercolour
+   washes stepping out of an ornate gilded frame, a tiny painted moustache in one neat stroke,
+   beret in two quick strokes, nose in the air, paper texture visible, whimsical dark-fantasy
    illustration."
-2. **Opening night grandeur.** "Gaunt clean-shaven older painter in a burgundy beret and
-   floor-length mustard scarf, chin raised impossibly high, one hand presenting a small framed
-   lemon painting as if it were a cathedral, the other on his heart, smug half-closed eyes,
-   gallery spotlight from above, stylised 3D animated-film character render."
-3. **Plotting at midnight.** "Gaunt clean-shaven older painter in a beret and long scarf, lit
-   from below by a single candle, steepled paint-stained fingers, a scheming sideways grin,
-   a stack of postcards and a fountain pen on the desk in front of him, dark-fantasy oil
-   portrait, rich shadows, comedic villain energy."
-
-## Concept B: The Living Watercolour
-
-A self-portrait that climbed out of its own frame: a pompous man made of wet watercolour,
-edges bleeding and dripping, colours running when he gets emotional. Fits the Ninth Dark: he is
-a haunted painting, not a person.
-
-1. **Stepping out of the frame.** "A pompous man made entirely of translucent watercolour
-   washes stepping one leg out of an ornate gilded frame, clean-shaven, bushy painted
-   eyebrows, beret painted in two quick strokes, colours bleeding at the edges, nose in the
-   air, paper texture visible, whimsical dark-fantasy illustration."
-2. **Running with emotion.** "A man made of watercolour washes in a beret, clean-shaven, his
-   face dissolving into drips of ultramarine and ochre as he weeps with outrage, holding a
-   rejection letter that is also dripping, theatrical despair, soft wet-on-wet texture,
-   stylised 3D render with a painted shader."
-3. **Signing everything.** "A watercolour man in a beret, clean-shaven, leaning out of a
-   gilded frame to sign his own name in huge swirling strokes across the frame itself with a
-   dripping brush, delighted smug grin, paint splatter, warm gallery light, storybook
-   illustration."
-
-## Concept C: The Gallery Gargoyle
-
-A small stone gargoyle who used to guard a museum roof and decided he was the real artist:
-plaster-grey skin, stubby wings, a palette worn as a shield. Furthest from any human likeness.
-
-1. **The rooftop critic.** "A small pompous stone gargoyle with stubby wings and a chipped
-   nose, wearing a tiny crimson beret and an oversized paint-spattered smock, holding a
-   palette and a lemon, perched on a gallery ledge, nose in the air, stylised 3D animated-film
-   character render, soft moonlight."
-2. **Wounded pride.** "A small stone gargoyle in a beret and a long striped scarf, arms
-   crossed, cheeks puffed, a single plaster crack running down his face like a tear, framed
-   lemon painting propped beside him, comedic sulk, painterly storybook illustration."
-3. **The schemer.** "A small stone gargoyle in a beret, crouched behind an easel, peeking out
-   with narrowed eyes and a wicked grin, rubbing his stone hands together, a forged gallery
-   label in one claw, candlelight, dark-fantasy oil portrait with comedic villain energy."
+2. **Running with emotion.** "A watercolour cartoon man with a tiny painted moustache, his face
+   dissolving into drips of ultramarine and ochre as he weeps with outrage, holding a dripping
+   one-star review card, theatrical despair, soft wet-on-wet texture, stylised 3D render with a
+   painted shader."
+3. **Signing everything.** "A watercolour cartoon man with a tiny moustache leaning out of a
+   gilded frame to sign his own name in huge swirling strokes across the frame itself, delighted
+   smug grin, paint splatter, warm gallery light, storybook illustration."

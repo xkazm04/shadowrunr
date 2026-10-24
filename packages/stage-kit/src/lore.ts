@@ -94,11 +94,12 @@ export const FOILS: Record<string, FoilInfo> = {
     tagline: "Solves every case instantly, and wrongly.",
     color: "#b8c4a0",
   },
-  // The Table Read's pilot guest (SEG-03). The display name stands until the owner picks a look.
+  // The Table Read's pilot guest (SEG-03): an owner-approved satirical parody, renamed, always the
+  // loser of the joke (characters/malakor/foils/the-painter.md).
   "the-painter": {
     id: "the-painter",
-    name: "The Painter",
-    tagline: "A watercolourist the academy rejected. The critics are all in on it.",
+    name: "Adalwulf Hinkel",
+    tagline: "Failed watercolourist, tyrant of nothing. His army is one pigeon.",
     color: "#d98fd0",
   },
 };

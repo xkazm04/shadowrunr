@@ -101,6 +101,7 @@ const PAINTER = (
     <circle cx="50" cy="67" r="2.8" fill={INK} />
     <circle cx="70" cy="67" r="2.8" fill={INK} />
     <path d="M60 68l-3 9h6" stroke={INK} strokeWidth="2.5" fill="none" strokeLinejoin="round" />
+    <path d="M55.5 79.5h9v4.5h-9Z" fill={INK} />
     <path d="M52 87Q60 82 68 87" stroke={INK} strokeWidth="3" fill="none" strokeLinecap="round" />
     <path d="M6 116c0-12 14-20 30-18s22 10 18 20-12 6-16 12-30 4-32-14Z" fill={OCH} stroke={INK} strokeWidth="2.5" />
     <circle cx="20" cy="112" r="3.5" fill={INK} />

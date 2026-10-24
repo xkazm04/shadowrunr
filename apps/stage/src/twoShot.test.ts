@@ -149,7 +149,7 @@ describe("whose mouth moves", () => {
     expect(html).toMatch(/class="guest-shot speaking"/);
     expect(html).toMatch(/class="host-plate"/);
     expect(html).toContain('data-speaker="the-painter"');
-    expect(html).toContain("THE PAINTER");
+    expect(html).toContain("ADALWULF HINKEL");
 
     // then his own line: his mouth moves, the guest rests
     audio.currentTime = h!.start + 0.5;
@@ -185,8 +185,8 @@ describe("the SEG-03 stretch on the canvas", () => {
     expect(html).toContain('data-role="host-plate"');
     expect(html).toContain('data-role="scene-card"');
     expect(html).toContain("The Gallery");
-    expect(html).toMatch(/starring <b>The Painter<\/b>/);
-    expect(html).toContain("THE PAINTER");
+    expect(html).toMatch(/starring <b>Adalwulf Hinkel<\/b>/);
+    expect(html).toContain("ADALWULF HINKEL");
   });
 
   it("names the host under his own lines", () => {

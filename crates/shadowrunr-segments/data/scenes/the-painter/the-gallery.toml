@@ -1,92 +1,93 @@
-# Fictional sample scene for SEG-03 (Table Read), guest the-painter. Original material only:
-# no real person, show, painter, gallery or academy.
+# Fictional sample scene for SEG-03 (Table Read), guest the-painter (Adalwulf Hinkel). Original
+# material only: a cartoon episode in the classic shape (a scheme, a town that goes along, an
+# absurd escalation, the host's honest closing speech). No real person, show, place or event.
 id = "the-gallery"
-title = "The Gallery"
-pitch = "The Painter hangs his lemon over Malakor's portrait and sells tickets to it."
+title = "The Hinkel Wing"
+pitch = "Hinkel annexes Malakor's portrait wall, then the hallway, then the whole Spire."
 guest = "the-painter"
 status = "approved"
 fictional = true
 notes = [
-    "Who won the wall, the lemon or the portrait? Put it to chat, then say honestly if they got it wrong.",
-    "Own it: the real joke of the scene is how much Malakor cares about a portrait of himself.",
-    "The Academy's one reply, 'please stop', is framed as his best review. Which bad review would chat frame?",
-    "Name the line that died in this scene and say why it died.",
+    "The annexation went hallway, staircase, privy. Which step was the funniest, and which was one too many?",
+    "Own it: Malakor was angrier about losing a wall of his own portraits than about anything else in the scene.",
+    "Gustav the pigeon deserted twice. Should the pigeon get his own scene? Ask chat, then say honestly if that is a good idea.",
+    "Certificates of having looked: name the thing in real life everyone paid for and nobody owns.",
 ]
 
 [[line]]
 speaker = "host"
-text = "Welcome to the Spire's gallery, minions. Eleven centuries of portraits. All of me. All flattering. All paid for, eventually."
+text = "Welcome to the Spire's gallery, minions. Eleven centuries of portraits. All of me. All flattering."
 
 [[line]]
 speaker = "guest"
-text = "And on the far wall, the only real art in this building: Lemon, Study Number Forty-One. By me."
+text = "Correction. As of this morning, this wall belongs to the Hinkel Wing. I have annexed it."
 
 [[line]]
 speaker = "host"
-text = "That wall had my portrait on it this morning. Where is my portrait?"
+text = "You can't annex a wall, Hinkel. You put a lemon on it and taped a notepad underneath."
 
 [[line]]
 speaker = "guest"
-text = "Behind the lemon, where it belongs. Art is a hierarchy, Bone Man, and the lemon outranks you."
+text = "Decree number one: the wall is mine. Decree number two: the hallway is also mine. Gustav, guard the hallway. No. Gustav, stand near the hallway."
 
 [[line]]
 speaker = "host"
-text = "It's a yellow oval. The light comes from the left and the shadow is also on the left."
+text = "Your pigeon just left."
 
 [[line]]
 speaker = "guest"
-text = "The shadow is a statement! The shadow goes where the critics cannot follow!"
+text = "Gustav is scouting. Decree number three: anyone who looks at the lemon must buy a Certificate of Having Looked. Twelve gold."
 
 [[line]]
 speaker = "host"
-text = "That's not a statement, that's a mistake with a frame on it."
+text = "What does the certificate give you?"
 
 [[line]]
 speaker = "guest"
-text = "The Academy said the same thing forty years ago. I have sent them a strongly worded postcard every week since. Two thousand postcards."
+text = "Proof. That you looked. It is the future of art, Bone Man. You do not own the painting. You own the looking."
 
 [[line]]
 speaker = "host"
-text = "And did they ever answer?"
+text = "And how many have you sold?"
 
 [[line]]
 speaker = "guest"
-text = "Once. It said 'please stop'. I had it framed. It is my best review."
+text = "Forty. To the gargoyles. They are now very invested in the lemon. They have started guarding it. They are biting people."
 
 [[line]]
 speaker = "host"
-text = "Okay, I respect the postcards. Now take the lemon off my wall."
+live = "Say the unsaid: the whole Spire is paying for receipts of a lemon and defending it with teeth, and nobody, including you, wants to be the one to admit it is a lemon. Then admit the petty truth that you are mostly upset because the gargoyles never guarded your portraits."
+fallback = "Let's be honest. Forty gargoyles bought proof they looked at a lemon, and now they bite to protect it. And I'm not angry about the lemon. I'm angry nobody ever bit anyone for my portraits."
 
 [[line]]
 speaker = "guest"
-text = "Impossible. I have sold tickets. Twelve gold a head, and three tickets are already gone."
+text = "Then a critic came. A pigeon. She said the lemon was 'fine'. FINE. Do you know what fine means, Bone Man?"
 
 [[line]]
 speaker = "host"
-text = "Sold to whom? The gallery is empty."
+text = "Here we go. He's taking his glasses off."
 
 [[line]]
 speaker = "guest"
-text = "To me. Three times. A true artist supports the arts."
+text = "Fine is what you say about soup! I gave that lemon forty years! I combed my moustache for that lemon! I am not upset. I am simply annexing the staircase."
 
 [[line]]
 speaker = "host"
-live = "Say the unsaid about the Painter's scheme: he is the only buyer, the only fan and the only visitor, and somehow he is still winning. Then admit one true, petty thing about your own vanity that his scheme exposes."
-fallback = "Let's be honest. He bought three tickets to his own lemon, and that's still better attendance than my portrait got in three centuries. I hate that I'm jealous of a fruit."
+text = "You can't annex the staircase, you're standing on it."
 
 [[line]]
 speaker = "guest"
-text = "Also, I have replaced the label under your portrait. Read it, Bone Man. Aloud."
+text = "Then I annex the privy. The last free room. Gustav, hold the privy. Gustav? Gustav has joined the critic."
 
 [[line]]
 speaker = "host"
-text = "'Anonymous skeleton. Artist unknown. Value: one lemon, approximately.' You forged the label on my own face."
+text = "So the empire is one wall, half a hallway, and a privy with no pigeon."
 
 [[line]]
 speaker = "guest"
-text = "When the Academy does it, it is cruelty. When I do it, it is curating."
+text = "It is a wing. Every great gallery starts with a wing."
 
 [[line]]
 speaker = "host"
-live = "The closing turn: what we learned today, honestly. Give one real opinion on the scene's best and worst moment, and own that the scene was really about your vanity, not his lemon."
-fallback = "What did we learn? The lemon is bad, the label is good, and I care far more about a painting of my own skull than a lich should. Mostly that last one."
+live = "The closing speech, in your own words: what tonight's little empire of lemons says about all of us, honestly, including you and your eleven centuries of self-portraits. End by giving the wall back to yourself, a little ashamed."
+fallback = "You know what I realised tonight? Hinkel didn't want a gallery. He wanted someone to look. So do the gargoyles, so does chat, and so do I, with eleven centuries of my own face on that wall. Anyway. The wall is mine again. The lemon can have the privy."
