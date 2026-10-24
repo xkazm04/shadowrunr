@@ -36,6 +36,7 @@ when apps/console/src/app/agent changed (the tools Athena drives):
 
 when a face's frame cost is judged (apps/stage/bench frames.mjs):
 - run a known-cost canary face (relit: 1.25 ms at 1024; cut: 0.49) in the same frames run, and read each config's best run. A run whose canary reads above its clean cost is contaminated: quote its figures as upper bounds, never as costs. Promoted 2026-10-23: avatar-3d's bench ran on a 25-62% busy machine, and lich3d-quality's canary read 3.0-4.4 ms in runs where the new asset never produced a clean 1024 result.
+- before starting one: `BENCH_PLAYWRIGHT` set to the scratch Playwright install, free memory and the GPU's `gpuBefore` utilisation checked (`nvidia-smi`); above a few percent the canary will not come clean, so ask the owner for a quieted window (Personas desktop, WebView2, other sessions closed) instead of spending the run. Promoted 2026-10-24: the third spark with 1024 px unmeasured (avatar-3d, lich3d-quality, avatar-next), and avatar-next lost one run to the memory reaper (first logged 2026-10-18) and one to the unset env var.
 
 builder:
 - the same three cargo commands, scoped with `-p <crate>` while iterating, then workspace-wide before reporting
@@ -96,6 +97,9 @@ builder:
 - 2026-10-23 (lich3d-quality): a P0 stub named a face option `look`, which already meant the gaze source in StartFaceOptions; the builder caught it and renamed it `lichLook`. Grep the options type an option joins before naming it in the contract.
 - 2026-10-23 (lich3d-quality): switching the default face is also a character change. `characters/malakor/character.toml` set `face = "cut"`, which overrides the daemon default, and an e2e test asserted it. The scout greps `characters/**` for any default the spark moves.
 - 2026-10-23 (lich3d-quality): a blind lineup needs its control arm recorded in the same run. clips.mjs gained `<face>@alt` with `--alt-rig-dir`, so the old asset sat in the lineup next to the new one, drawn by the same renderer.
+- 2026-10-24 (avatar-next): the eye-light channel shipped in avatar-3d with a dead hop: delivery.ts dropped `eyeLight` before the performance box, found only when WP-C wired the cue. Liveness rule 2 covers each hop of a render pipeline, not only queries: test a new channel at its last consumer (the box), not at the producer.
+- 2026-10-24 (avatar-next): the console door budget overflowed after the contract grew and was raised in a separate commit after the merge. The Gates already demand it in the same change; run `pnpm -C apps/console build` in the Director's contract P0 worktree, before fan-out.
+- 2026-10-24 (avatar-next): a plan that puts the live run last, to validate everything at once, left it exposed to the owner's ship-and-wrap cut; the prompt change (sim/15) shipped without the live-behaviour gate's smoke run. Run the live smoke as soon as the brain change lands, before the visual items.
 
 ## Question taste
 
@@ -104,3 +108,4 @@ builder:
 - 2026-10-23 (athena-copilot): the operator took every recommended option and every scope or test case offered (4 of 4 twice). For scope and coverage multiSelects, decide "all" by convention unless a case costs quota or time worth flagging.
 - 2026-10-23 (avatar-3d): the "decide all" convention holds for coverage, not for exploratory routes. Offered 4 technical directions, the operator chose 2 (the controllable ones: relit 2.5D, true 3D), and dropped the neural and video routes. Offered 4 judgement measures, the operator took 3 and deferred the live show. Keep asking which routes to explore.
 - 2026-10-23 (lich3d-quality): offered four quality routes, the operator picked the most ambitious one alone (TRELLIS.2) and dropped the low-risk rebuild, then took the fallback when asked. Put the fallback inside the ambitious option's text. The operator also dropped stream plumbing (the transparent background) and then chose to switch the default face anyway with the opaque box: treat plumbing as a separately asked item, never bundled into a look pass.
+- 2026-10-24 (avatar-next): offered a five-step order, the operator took it whole ("all steps in your recommended order") and later shipped before the voiced live show ran, the third spark to defer it. Treat the live show as the item most likely to be cut: schedule it early, or ask explicitly whether ship waits for it.
