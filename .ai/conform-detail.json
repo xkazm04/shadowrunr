@@ -5190,6 +5190,37 @@
           "evidence": "packages/contract/package.json:21 Every dependency is an exact pin with resolution left on. A grep for overrides, --no-deps and peerDependencyRules in the root package.json and pnpm-workspace.yaml found nothing, so no unsatisfiable set or resolution bypass exists."
         }
       ]
+    },
+    "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa/deployment-contract": {
+      "context": "console-build-and-desktop-shell",
+      "subject": "deployment-contract",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T23:53:36.887Z",
+      "worker": "e422ae1a-52d6-4efb-8c9c-379111b16e6d",
+      "techniques": [
+        {
+          "technique": "platform-build-parity",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/tauri.conf.json:9 The only second builder is the Tauri CLI, and it runs the package's own `pnpm build` task. No hosted builder exists that could resolve differently."
+        },
+        {
+          "technique": "cache-immutability-licensing",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/vite.config.ts:10 Vite emits hashed assets, but they are served from the embedded app bundle. No host sends cache-lifetime headers to clients."
+        },
+        {
+          "technique": "environment-promotion",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/tauri.conf.json:8 There is a local dev server and nothing else: no preview or production environment ladder for the console."
+        },
+        {
+          "technique": "deploy-gate-coupling",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/Cargo.toml:8 Nothing deploys the console on push, so there is no deploy/verify race to couple."
+        }
+      ]
     }
   }
 }

@@ -1225,7 +1225,11 @@
           "revision": 4,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src-tauri/tauri.conf.json:10 The console's web build is put into a local Tauri desktop bundle and talks only to a localhost daemon, so no hosting platform builds or serves it; I searched apps/console (gitignore-respecting) for vercel, netlify, wrangler, Cache-Control and deploy and found nothing, so the subject's precondition (deploying through a hosting platform) does not hold.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:0aecb9f382210cdc",
+          "evaluatedRevision": 4
         },
         {
           "subject": "settings",
