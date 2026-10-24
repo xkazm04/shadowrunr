@@ -1184,7 +1184,11 @@
           "revision": 7,
           "changedAt": "2026-09-06",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": ".github/workflows/ci.yml:51 The heavy WebView/Tauri capability is correctly cut out of the default root-workspace build (Cargo.toml:10-12), but nothing routine compiles the far side of that cut, so a break in the desktop crate goes unseen until someone next pays to build it by hand.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:2dc0e92ddb23f674",
+          "evaluatedRevision": 7
         },
         {
           "subject": "invariant-placement",
