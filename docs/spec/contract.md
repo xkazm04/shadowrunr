@@ -1552,7 +1552,9 @@ like a real case. It is never written live in a quiet moment.
   and answering it answers them all. A message whose every ask was already answered for its
   viewer is a `repeat`: off-topic (never required, never on-topic, whatever its topic words or
   the room's size), so at most the off-topic slot's point-back (a repeated "are you an AI" once
-  took a whole beat each time):
+  took a whole beat each time); the one exception is a newcomer's "what is this", owed again at
+  most once a minute (`WHAT_IS_THIS_REASK_MS`, 60 s, assumption) after its last answer, since
+  asking again means the answer did not land:
   - it is carried past the 25 s window, never capped (and takes no slot of the cap), and dropped
     (rule `carry`, action `expired`) only 90 s after it first reached a beat;
   - it passes the cold-open filter like a first contact;

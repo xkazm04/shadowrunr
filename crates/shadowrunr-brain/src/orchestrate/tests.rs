@@ -2023,3 +2023,64 @@ fn an_answered_ai_question_asked_again_is_a_repeat_never_a_request() {
         "neither the topic word nor the small room makes a repeat the segment's"
     );
 }
+
+#[test]
+fn a_newcomer_still_asking_what_this_is_a_minute_after_the_answer_is_owed_again() {
+    // sbx-20261024-212929-10m: MurkOtter (a Thrall) at 257.8 s, answered as the newcomer's
+    // question at 265.7 s; at 344.0 s (L320) "wait what is this stream" became a repeat and
+    // expired at L368, failing `situation:newcomer-what-is-this`.
+    let mut room = Room::new();
+    regulars(&mut room, 8);
+    regular(&mut room, "murk");
+    let first = msg(
+        "m00261-77",
+        "murk",
+        "wait are we spamming someone's stream now?? what is going on lol",
+    );
+    let (_, ids, _) = room.beat(
+        265_000,
+        "opening",
+        None,
+        vec![first.clone()],
+        vec![cand(&first)],
+    );
+    assert_eq!(ids, ["m00261-77"]);
+    // Neighbour: asked again inside the window, a repeat.
+    let soon = msg("soon", "murk", "wait what is going on lol");
+    room.beat(290_000, "opening", None, Vec::new(), Vec::new());
+    assert_eq!(room.o.owns(&cand(&soon)), None);
+    // L320, 79 s after the answer: owed again, and answered.
+    let l320 = msg(
+        "m00344-92",
+        "murk",
+        "wait what is this stream, whats going on lol",
+    );
+    let (_, ids, e) = room.beat(
+        345_000,
+        "opening",
+        None,
+        vec![l320.clone()],
+        vec![cand(&l320)],
+    );
+    assert_eq!(ids, ["m00344-92"], "{}", reason(&e));
+    assert!(reason(&e).contains("request"), "{}", reason(&e));
+    // At most once a window: right after, a repeat again.
+    let again = msg("again", "murk", "what is this stream lol");
+    room.beat(360_000, "opening", None, Vec::new(), Vec::new());
+    assert_eq!(room.o.owns(&cand(&again)), None);
+    // The AI repeat rule is unchanged: an answered AI question is a repeat however late.
+    let ai = msg(
+        "ai",
+        "murk",
+        "wait is this an AI or a guy with a voice changer",
+    );
+    let (_, ids, _) = room.beat(370_000, "opening", None, vec![ai.clone()], vec![cand(&ai)]);
+    assert_eq!(ids, ["ai"]);
+    room.beat(700_000, "opening", None, Vec::new(), Vec::new());
+    let ai2 = cand(&msg(
+        "ai2",
+        "murk",
+        "is this an ai or a guy with a voice changer",
+    ));
+    assert_eq!(room.o.owns(&ai2), None);
+}

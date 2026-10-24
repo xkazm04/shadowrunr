@@ -164,6 +164,12 @@ pub const SMALL_ROOM_ENTER: usize = 5;
 pub const SMALL_ROOM_LEAVE: usize = 7;
 /// The window distinct chatters are counted over.
 pub const SMALL_ROOM_WINDOW_MS: i64 = 180_000;
+/// A newcomer's "what is this" answered this long ago is owed again: the answer did not land.
+/// sbx-20261024-212929-10m: MurkOtter's "are we spamming someone's stream now?? what is going
+/// on lol" (257.8 s) was answered as the newcomer's question at 265.7 s, and the real "wait
+/// what is this stream, whats going on lol" at 344.0 s (78 s later) became a repeat and expired.
+/// The director asked for 120 s; that would not have reached this line, so 60 s (assumption).
+pub const WHAT_IS_THIS_REASK_MS: i64 = 60_000;
 /// Questions this close in time that ask the same thing are one question wave (assumption).
 pub const QUESTION_WAVE_MS: i64 = 60_000;
 /// Token overlap (Jaccard of normalised words) from which two questions ask the same thing.
@@ -493,6 +499,11 @@ pub struct Orchestrator {
     case_next: Option<CaseMove>,
     /// (viewer, ask) answered this stream: that viewer's same ask is no longer owned.
     asked: HashSet<(String, Ask)>,
+    /// When each (viewer, ask) was last answered: a newcomer's "what is this" is owed again
+    /// [`WHAT_IS_THIS_REASK_MS`] after.
+    asked_at: HashMap<(String, Ask), TsMs>,
+    /// The beat being screened and planned (for [`Self::owns`]).
+    now_ms: TsMs,
     /// The character's tuning: the carry, hold, bit and request timings (the constants above
     /// are their engine defaults).
     tuning: Tuning,
@@ -737,7 +748,16 @@ impl Orchestrator {
     fn owns(&self, c: &Candidate) -> Option<Ask> {
         asks_of(c, self.is_first_contact(&c.msg.id))
             .into_iter()
-            .find(|a| !self.asked.contains(&(c.msg.viewer.id.clone(), *a)))
+            .find(|a| {
+                let k = (c.msg.viewer.id.clone(), *a);
+                !self.asked.contains(&k)
+                    // A newcomer still asking what this is after the answer: it did not land.
+                    || (*a == Ask::WhatIsThis
+                        && self
+                            .asked_at
+                            .get(&k)
+                            .is_some_and(|t| self.now_ms.saturating_sub(*t) >= WHAT_IS_THIS_REASK_MS))
+            })
     }
 
     /// A pick whose answer never aired (the gate dropped the only line naming it): it is not
@@ -911,6 +931,7 @@ impl Orchestrator {
         cands: Vec<Candidate>,
         ev: &mut Vec<StreamEvent>,
     ) -> Vec<Candidate> {
+        self.now_ms = now_ms;
         let mut out: Vec<(String, Candidate)> = Vec::with_capacity(cands.len());
         for c in cands {
             let norm = normalize(&c.msg.text);
@@ -1188,6 +1209,7 @@ impl Orchestrator {
     /// through-line: the open loops are brought up to date, and a voiced beat outside the cold
     /// open, safety, a room event and the goodbye gets its pick-up and lead-in ([`agenda`]).
     pub fn plan(&mut self, b: &BeatInputs<'_>) -> Plan {
+        self.now_ms = b.now_ms;
         self.case_next = self.case.next_move(b.ctx, b.now_ms);
         let case_loop: Vec<(String, String)> = self
             .case_next
@@ -2103,6 +2125,7 @@ impl Orchestrator {
             if let Some(c) = staged_ids.get(id) {
                 for a in asks_of(c, self.is_first_contact(id)) {
                     self.asked.insert((c.msg.viewer.id.clone(), a));
+                    self.asked_at.insert((c.msg.viewer.id.clone(), a), now_ms);
                 }
             }
             self.agenda.close(LoopKind::Request, id);
@@ -2132,6 +2155,7 @@ impl Orchestrator {
         for c in &pick.chosen {
             for a in asks_of(c, self.is_first_contact(&c.msg.id)) {
                 self.asked.insert((c.msg.viewer.id.clone(), a));
+                self.asked_at.insert((c.msg.viewer.id.clone(), a), now_ms);
             }
         }
         let staged = std::mem::take(&mut self.carry_next);
