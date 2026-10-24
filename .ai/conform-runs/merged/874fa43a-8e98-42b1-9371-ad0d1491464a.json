@@ -1,0 +1,17 @@
+{
+ "schema": "conform-run/1",
+ "worker": "874fa43a-8e98-42b1-9371-ad0d1491464a",
+ "subject": "repository-landing-document",
+ "evaluatedAt": "2026-10-24T06:36:58.933074+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "repository-landing-document",
+   "context": "console-shell-router",
+   "reason": "absence contradicted: apps/console/src/pages/characters/Params.module.css:19 contains 'badge' (6 hit(s) in the context's directories)"
+  }
+ ],
+ "consults": []
+}
