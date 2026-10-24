@@ -1299,7 +1299,11 @@
           "revision": 14,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/characters/AllPage.tsx:97 The 'What a character is' anatomy (lines 86-94, last changed 2026-10-18) lists 7 package entries and omits stalls.toml (added 2026-10-20), directions.md and lines/ (2026-10-21; the Tone Lab on this same page writes them), so the package definition the page shows fell behind the changes that grew the package.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:fd96220db75846a1",
+          "evaluatedRevision": 14
         },
         {
           "subject": "agent-browser-control",
@@ -2155,7 +2159,11 @@
           "revision": 14,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/segments/Commands.tsx:85 The table above derives each command's rank gate from segments.tables (c.min_rank), but this note restates the result as fixed prose ('every other command is open to every rank'), so the day a second command gains a min_rank the page contradicts itself with no check.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:fd96220db75846a1",
+          "evaluatedRevision": 14
         }
       ],
       "governance": "governed"

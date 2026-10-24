@@ -1,0 +1,111 @@
+{
+  "schema": "conform-run/1",
+  "worker": "758b2de9-2cef-41fe-8c2c-37af31358a9f",
+  "subject": "docs-sync",
+  "evaluatedAt": "2026-10-24T02:41:41.121108+00:00",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "pairs": [
+    {
+      "context": "console-characters-page",
+      "subject": "docs-sync",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "apps/console/src/pages/characters/AllPage.tsx:97 The 'What a character is' anatomy (lines 86-94, last changed 2026-10-18) lists 7 package entries and omits stalls.toml (added 2026-10-20), directions.md and lines/ (2026-10-21; the Tone Lab on this same page writes them), so the package definition the page shows fell behind the changes that grew the package.",
+      "techniques": [
+        {
+          "technique": "same-change-enforcement",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/characters/AllPage.tsx:97 The commits that added stalls.toml (e5fb4d8), directions.md (0c71c1d) and the Tone Lab (a5c3368) did not update the hand-written tree, while characters/malakor has all of them."
+        },
+        {
+          "technique": "dated-corrections",
+          "verdict": "conformant",
+          "evidence": "docs/concepts/moderator-twitch-golive.md:9 The superseded item stays visible (struck through) with the date and the resolution naming this page's portrait file."
+        }
+      ]
+    },
+    {
+      "context": "console-segments-page",
+      "subject": "docs-sync",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "apps/console/src/pages/segments/Commands.tsx:85 The table above derives each command's rank gate from segments.tables (c.min_rank), but this note restates the result as fixed prose ('every other command is open to every rank'), so the day a second command gains a min_rank the page contradicts itself with no check.",
+      "techniques": [
+        {
+          "technique": "named-duplication-points",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/segments/Commands.tsx:85 A literal copy of a fact the rows already carry. It could be computed from rows.filter(minRank) or asserted, and it is neither."
+        },
+        {
+          "technique": "source-doc-mapping",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/segments/model.ts:109 The command table prose is derived from the runtime parser's own table rather than declared by hand."
+        }
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "docs-sync",
+      "context": "console-review-page",
+      "reason": "evidence leans on keys/keymap.ts, which is not a tracked file"
+    },
+    {
+      "subject": "docs-sync",
+      "context": "console-reconcile-page",
+      "reason": "evidence leans on app/agent/appMap.ts, which is not a tracked file"
+    },
+    {
+      "subject": "docs-sync",
+      "context": "console-app-bootstrap",
+      "reason": "withdrawn after review: reviewer (sonnet): The cited leftovers.md:86 is a docs file outside this context's code. It already says the console start is 'in owner-review-loop.md now', so it doesn't plainly read as open debt. I couldn't check the commits 937eb1b and 918a54b or the same-day timing, because git was off-limits."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-24T02:41:41.121108+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "docs-sync"
+      ],
+      "techniques": [
+        "dated-corrections",
+        "same-change-enforcement"
+      ],
+      "deviations": 1,
+      "context": "console-characters-page",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T02:41:41.121108+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "docs-sync"
+      ],
+      "techniques": [
+        "doc-rot-detection"
+      ],
+      "deviations": 1,
+      "context": "console-app-bootstrap",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T02:41:41.121108+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "docs-sync"
+      ],
+      "techniques": [
+        "named-duplication-points",
+        "source-doc-mapping"
+      ],
+      "deviations": 1,
+      "context": "console-segments-page",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    }
+  ]
+}

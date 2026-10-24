@@ -4109,6 +4109,69 @@
         "at": "2026-10-24T02:23:10.025850+00:00",
         "reason": "reviewer (sonnet): The anchor is only a header comment in Player.tsx, and the page does play recorded speech: WatchPane.tsx:47 renders a `<video controls>` on the session recording, and the line text at WatchPane.tsx:50 refers to when speech is heard, with an A/V offset. The searched terms (AudioContext, speechSynthes"
       }
+    },
+    "20f1e644-e83b-481d-864f-cb15b9124d7e/docs-sync": {
+      "context": "console-characters-page",
+      "subject": "docs-sync",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T02:41:41.121Z",
+      "worker": "758b2de9-2cef-41fe-8c2c-37af31358a9f",
+      "techniques": [
+        {
+          "technique": "same-change-enforcement",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/characters/AllPage.tsx:97 The commits that added stalls.toml (e5fb4d8), directions.md (0c71c1d) and the Tone Lab (a5c3368) did not update the hand-written tree, while characters/malakor has all of them."
+        },
+        {
+          "technique": "dated-corrections",
+          "verdict": "conformant",
+          "evidence": "docs/concepts/moderator-twitch-golive.md:9 The superseded item stays visible (struck through) with the date and the resolution naming this page's portrait file."
+        }
+      ]
+    },
+    "6be461ec-15e2-4963-b858-4712c7c675e8/docs-sync": {
+      "context": "console-app-bootstrap",
+      "subject": "docs-sync",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T02:41:41.121Z",
+      "techniques": [
+        {
+          "technique": "doc-rot-detection",
+          "verdict": "deviation",
+          "evidence": "docs/concepts/leftovers.md:86 The claim went stale when athena.md gained the console start command. No scan exists to flag it."
+        }
+      ],
+      "withdrawn": {
+        "worker": "758b2de9-2cef-41fe-8c2c-37af31358a9f",
+        "state": "deviation",
+        "at": "2026-10-24T02:42:02.893420+00:00",
+        "reason": "reviewer (sonnet): The cited leftovers.md:86 is a docs file outside this context's code. It already says the console start is 'in owner-review-loop.md now', so it doesn't plainly read as open debt. I couldn't check the commits 937eb1b and 918a54b or the same-day timing, because git was off-limits."
+      }
+    },
+    "6dce940f-74f8-426d-8a02-ed09e53724ef/docs-sync": {
+      "context": "console-segments-page",
+      "subject": "docs-sync",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T02:41:41.121Z",
+      "worker": "758b2de9-2cef-41fe-8c2c-37af31358a9f",
+      "techniques": [
+        {
+          "technique": "named-duplication-points",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/segments/Commands.tsx:85 A literal copy of a fact the rows already carry. It could be computed from rows.filter(minRank) or asserted, and it is neither."
+        },
+        {
+          "technique": "source-doc-mapping",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/segments/model.ts:109 The command table prose is derived from the runtime parser's own table rather than declared by hand."
+        }
+      ]
     }
   }
 }
