@@ -4333,7 +4333,11 @@
           "revision": 16,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-types/Cargo.toml:3 The crate is serde/schemars wire types plus pure predicates and a schema-export example; a search of every tracked file under crates/shadowrunr-types for Mutex, RwLock, Atomic, in_flight, idempot, single_flight, fencing, lease, Semaphore and tokio found zero hits, and its dependencies (serde, serde_json, thiserror, async-trait, schemars) carry no sync or runtime primitive, so no operation here acquires, releases or races a guard.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ccc991958e998a93",
+          "evaluatedRevision": 16
         },
         {
           "subject": "generated-output-grading",

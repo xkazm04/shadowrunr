@@ -4963,6 +4963,37 @@
         }
       ],
       "registryProposal": "trigger-wiring assumes the pipeline can run at the consumer's dev or build door, but here the input lives in another toolchain (Rust/cargo) and the artifact is tier-2 gated. The technique should say whether, for cross-toolchain boundary contracts, a lockstep gate on the input side (a cargo test) plus the CI drift gate satisfies it, or whether a freshness stamp checked by the JS build is still required."
+    },
+    "3b37a94d-3e69-4c44-8598-301f66448d9a/concurrency-guards": {
+      "context": "types-crate",
+      "subject": "concurrency-guards",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T22:30:12.503Z",
+      "worker": "a9ef3686-69a2-454b-857b-66fd5ccbba16",
+      "techniques": [
+        {
+          "technique": "atomic-file-publish",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/examples/export-schema.rs:26 Writes in place, but only as a developer-run codegen step into committed contract schema files (driven by packages/contract scripts); no process polls the file while it is written. If a live reader is ever added, this becomes a deviation (no write-temp-then-rename)."
+        },
+        {
+          "technique": "single-flight-primitives",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/engine.rs:161 Only a trait signature; &mut self makes the borrow checker serialize sends per warm session. No keyed in-flight registry is defined or needed in this crate; the implementations live in engine crates."
+        },
+        {
+          "technique": "idempotency-by-design",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/clips.rs:652 A pure status predicate the store, renderer and uploader call. Whether the publish write is conditional or replay-safe is decided at those write sites, which are outside this context."
+        },
+        {
+          "technique": "cross-process-exclusion",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/Cargo.toml:12 The only async dependency is a trait-definition macro. There is no shared substrate, lock file or claim row in this crate."
+        }
+      ]
     }
   }
 }
