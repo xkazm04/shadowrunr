@@ -4587,6 +4587,63 @@
       "evaluatedTs": "2026-10-24T04:51:36.597Z",
       "worker": "40903e7a-dd9f-49ad-96a1-047e8159aa71",
       "techniques": []
+    },
+    "cba93863-0123-4867-be4e-770e6d0516b4/agent-runtime-assembly": {
+      "context": "daemon-show-prep-and-review",
+      "subject": "agent-runtime-assembly",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T05:08:18.164Z",
+      "techniques": [
+        {
+          "technique": "indeterminate-closure-on-interruption",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/sandbox.rs:705 status_from_disk sets SandboxState::Failed (line 721) whenever session.json is missing. It never checks whether error.json exists (written by the failure path at line 696), so a run killed mid-session and a run that recorded its own failure look the same."
+        },
+        {
+          "technique": "guard-input-custody",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/casework.rs:50 The Researcher agent's fetch allowlist is either compiled in or set in the operator's shadowrunr.toml. The agent itself only gets WebFetch(domain:...) rules (fetch_rules, line 239), so it cannot write its own guard."
+        },
+        {
+          "technique": "nested-run-is-not-its-parent",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/review/tagger.rs:296 The daemon starts the tagger after the judge; the agent run does not start it. It gets its own role and correlation id, and the session id is carried as a field. No agent run here starts another agent run."
+        }
+      ],
+      "withdrawn": {
+        "worker": "5188041e-2e8c-4d81-bb1a-059b9dadca2f",
+        "state": "deviation",
+        "at": "2026-10-24T05:08:51.272218+00:00",
+        "reason": "reviewer (sonnet): The anchor crates/shadowrunr-daemon/src/sandbox.rs is not one of this context's 12 registry-map paths (only e2e/sandbox.rs is), so the verdict is about code outside this context, even though status_from_disk does set Failed whenever session.json is missing and never checks error.json."
+      }
+    },
+    "3b37a94d-3e69-4c44-8598-301f66448d9a/agent-runtime-assembly": {
+      "context": "types-crate",
+      "subject": "agent-runtime-assembly",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T05:08:18.164Z",
+      "techniques": [
+        {
+          "technique": "indeterminate-closure-on-interruption",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-types/src/sandbox.rs:81 The technique says to add the status when the vocabulary lacks it. SandboxState has no value meaning the outcome is unknown."
+        },
+        {
+          "technique": "substituted-result-attribution",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-types/src/engine.rs:115 EngineReply names the engine, account and model that actually answered, plus fallback_reason, so a fallback names its real producer."
+        }
+      ],
+      "withdrawn": {
+        "worker": "5188041e-2e8c-4d81-bb1a-059b9dadca2f",
+        "state": "deviation",
+        "at": "2026-10-24T05:08:51.299168+00:00",
+        "reason": "reviewer (sonnet): The anchor crates/shadowrunr-types/src/sandbox.rs is not one of this context's 12 registry-map paths (the list ends at reconcile.rs), so the verdict is about code outside this context, even though SandboxState at line 81 does have no indeterminate or interrupted value."
+      }
     }
   }
 }
