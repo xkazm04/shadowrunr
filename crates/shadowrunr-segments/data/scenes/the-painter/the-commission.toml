@@ -1,17 +1,91 @@
-# Fictional sample scene (WP-D writes the content). Original material only.
+# Fictional sample scene for SEG-03 (Table Read), guest the-painter. Original material only:
+# no real person, show, painter, gallery or academy.
 id = "the-commission"
 title = "The Commission"
-pitch = "Placeholder pitch for the-commission."
+pitch = "Malakor commissions a portrait. The Painter paints himself in and Malakor out."
 guest = "the-painter"
 status = "approved"
 fictional = true
-notes = ["placeholder talking point"]
-
-[[line]]
-speaker = "guest"
-text = "Placeholder guest line."
+notes = [
+    "Was the lemon composition or a cry for help? Ask chat, and give your own verdict.",
+    "Honest question: is the portrait better without Malakor in it? Answer it truthfully, even if it hurts.",
+    "Hills are extra: who in chat has paid the most absurd hidden fee, and for what?",
+]
 
 [[line]]
 speaker = "host"
-live = "react honestly to the guest's line"
-fallback = "Placeholder host fallback."
+text = "Painter. The Lord's annual report needs a portrait of me. Dignified. Menacing. Under budget."
+
+[[line]]
+speaker = "guest"
+text = "Under budget is not a style, it is an insult. My fee is two hundred gold and full creative control."
+
+[[line]]
+speaker = "host"
+text = "Twenty gold, and you paint what is in front of you."
+
+[[line]]
+speaker = "guest"
+text = "Forty gold, and I paint what is in front of me spiritually."
+
+[[line]]
+speaker = "host"
+text = "Deal. I already regret it. Where do I sit?"
+
+[[line]]
+speaker = "guest"
+text = "On the stool. Lower. Lower. Now hold this lemon, and look at it like it owes you money."
+
+[[line]]
+speaker = "host"
+text = "Why am I holding a lemon in the Lord's annual report?"
+
+[[line]]
+speaker = "guest"
+text = "Composition. Without the lemon you are a skeleton on a stool. With the lemon, you are a question."
+
+[[line]]
+speaker = "host"
+text = "Three hours later. My arm has fallen off. It is on the floor, still holding the lemon. Can I see it yet?"
+
+[[line]]
+speaker = "guest"
+text = "Not yet. I have made small revisions. You were distracting from the lemon, so I painted you smaller."
+
+[[line]]
+speaker = "host"
+text = "How much smaller?"
+
+[[line]]
+speaker = "guest"
+text = "You are now in the background, behind a hill. The hill is also mine. I signed it."
+
+[[line]]
+speaker = "host"
+live = "React honestly to the finished portrait: say plainly what everyone can see (he painted himself into the middle and you out of it), then admit one true and petty reason it bothers you."
+fallback = "Let's just say it: that's a self-portrait. He's in the middle, I'm a smudge behind a hill, and the worst part is that it's the best painting of me ever made."
+
+[[line]]
+speaker = "guest"
+text = "It is not a self-portrait. It is a portrait of a man who is very good at portraits. There is a difference."
+
+[[line]]
+speaker = "host"
+text = "There's a caption. 'Malakor, artist's interpretation.' The interpretation is that I'm not there."
+
+[[line]]
+speaker = "guest"
+text = "Absence is the most menacing presence. Also, that will be eighty gold."
+
+[[line]]
+speaker = "host"
+text = "We said forty!"
+
+[[line]]
+speaker = "guest"
+text = "Forty for the painting, forty for the hill. Hills are extra. Everyone knows hills are extra."
+
+[[line]]
+speaker = "host"
+live = "The closing turn: what we learned today, honestly. Decide whether you pay, give one real opinion on which of the Painter's moves was the best scheme and why, and own your part in it."
+fallback = "What did we learn? Never commission an artist with a grudge and a hill. I'm paying the eighty, because I posed for three hours with a lemon and I'd rather not admit that was free."

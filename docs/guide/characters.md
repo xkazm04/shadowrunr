@@ -17,7 +17,7 @@ character.toml      the manifest: id, name, tones, foils, rules and the v2 table
 constitution.md     IMMUTABLE: identity, awareness, red lines (the brain never edits it)
 bible.md            optional: lore, wants, the long arc, running jokes
 tones/<variant>.md  one file per tone variant; `default_tone` names one
-foils/<foil>.md     optional SEG-01 guest foils (original parody archetypes, never real people)
+foils/<foil>.md     optional guest foils for SEG-01 and SEG-03 (original parody archetypes, never real people)
 rules/<rule>.md     constitution rules, switched under [rules]; a rail is also listed in `rails`
 stalls.toml         optional: model-free lines spoken while the engine fleet fails
 situations.json     optional: the simulator's situation bank
@@ -186,6 +186,69 @@ uncommitted until you commit it.**
 
 The package is validated after each write, and the file is limited to 20,000 characters. The
 RPCs are in [docs/spec/contract.md](../spec/contract.md) (the segment directions appendix).
+
+## Guests and scenes (SEG-03 Table Read)
+
+In SEG-03 the host performs short scenes with a scheduled guest, chat picks each scene from a
+ballot, and the two talk it over after every scene. The wire format is in
+[docs/spec/contract.md](../spec/contract.md) (the SEG-03 Table Read appendix).
+
+**The guest is a foil.** Write `foils/<id>.md` like any other foil (an original parody
+archetype: who they are, their function, signature bits, how they talk, and their red lines),
+and list the id in `character.toml` `foils`. Only a declared foil can be a guest: the stream
+prep names it in `table_read.guest`, and it stays the active foil for the whole segment, so it
+is also summonable in SEG-01. Its lines are voiced in the foil's own voice when one is
+configured, else shown as captions. Malakor's first guest is `the-painter`.
+
+**Scene files live outside the package**, in `<data>/scenes/<guest>/<id>.toml`, one file per
+scene. They are your own material, kept on your machine and never committed. The repo ships
+three fictional samples for `the-painter` in `crates/shadowrunr-segments/data/scenes/` to copy
+from.
+
+```toml
+id = "the-tasting"                  # the file name without .toml
+title = "The Tasting"
+pitch = "The guest judges Malakor's soup. The soup judges back."   # the ballot line, at most 80 chars
+guest = "the-painter"               # a declared foil, and the folder the file sits in
+status = "approved"                 # draft | approved: only approved scenes reach a ballot
+fictional = true                    # omit when false
+notes = ["Was the soup the real villain?", "Which line died, and why?"]   # free-talk points
+
+[[line]]
+speaker = "guest"
+text = "I have tasted your soup, Bone Man. It is a cry for help."
+
+[[line]]
+speaker = "host"
+text = "It's bone broth. Everything I make is bone broth."
+
+[[line]]
+speaker = "guest"
+text = "Then everything you make is a cry for help."
+
+[[line]]
+speaker = "host"
+live = "the closing turn: what we learned, honestly"   # written by the host's model at scene start
+fallback = "What did we learn? The soup was fine. I was the problem. I'm usually the problem."
+```
+
+A line is `speaker` (`host` or `guest`) plus exactly one of `text`, spoken as written, or (host
+only) `live`, a direction the host's model fulfils when the scene starts, with a `fallback`
+host line spoken when that call fails or is late. Write scenes that alternate host and guest,
+end on the host, and keep one or two live slots for the moments the host's own take pays off
+(the closing "what did we learn" turn, a reaction to the guest's worst idea).
+
+**The scene checks.** `shadowrunr scene check` reports every problem with its line: `shape` (a
+line without exactly one of `text` and `live`, a `live` without a `fallback`, a guest `live`
+line, an id that is not the file name, a guest that is not the folder), `pitch_too_long`,
+`guest_unknown` (not a declared foil), `no_lines`, `ends_on_guest`, and `gate_blocked` or
+`gate_recast` when the output gate would block or recast a fixed line (guest lines are checked
+as the foil). A scene with any problem cannot be approved and never reaches a ballot, and the
+gate runs again on every line when the scene plays.
+
+**How the host plays it.** `segments/SEG-03.md` holds the owner's directions for the segment
+(Malakor's: the straight man in the scenes, the honest critic of his own show between them, the
+guest kept short outside a scene, the host with the last word).
 
 ## Voice, face and clips
 

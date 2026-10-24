@@ -1,17 +1,92 @@
-# Fictional sample scene (WP-D writes the content). Original material only.
+# Fictional sample scene for SEG-03 (Table Read), guest the-painter. Original material only:
+# no real person, show, painter, gallery or academy.
 id = "the-gallery"
 title = "The Gallery"
-pitch = "Placeholder pitch for the-gallery."
+pitch = "The Painter hangs his lemon over Malakor's portrait and sells tickets to it."
 guest = "the-painter"
 status = "approved"
 fictional = true
-notes = ["placeholder talking point"]
-
-[[line]]
-speaker = "guest"
-text = "Placeholder guest line."
+notes = [
+    "Who won the wall, the lemon or the portrait? Put it to chat, then say honestly if they got it wrong.",
+    "Own it: the real joke of the scene is how much Malakor cares about a portrait of himself.",
+    "The Academy's one reply, 'please stop', is framed as his best review. Which bad review would chat frame?",
+    "Name the line that died in this scene and say why it died.",
+]
 
 [[line]]
 speaker = "host"
-live = "react honestly to the guest's line"
-fallback = "Placeholder host fallback."
+text = "Welcome to the Spire's gallery, minions. Eleven centuries of portraits. All of me. All flattering. All paid for, eventually."
+
+[[line]]
+speaker = "guest"
+text = "And on the far wall, the only real art in this building: Lemon, Study Number Forty-One. By me."
+
+[[line]]
+speaker = "host"
+text = "That wall had my portrait on it this morning. Where is my portrait?"
+
+[[line]]
+speaker = "guest"
+text = "Behind the lemon, where it belongs. Art is a hierarchy, Bone Man, and the lemon outranks you."
+
+[[line]]
+speaker = "host"
+text = "It's a yellow oval. The light comes from the left and the shadow is also on the left."
+
+[[line]]
+speaker = "guest"
+text = "The shadow is a statement! The shadow goes where the critics cannot follow!"
+
+[[line]]
+speaker = "host"
+text = "That's not a statement, that's a mistake with a frame on it."
+
+[[line]]
+speaker = "guest"
+text = "The Academy said the same thing forty years ago. I have sent them a strongly worded postcard every week since. Two thousand postcards."
+
+[[line]]
+speaker = "host"
+text = "And did they ever answer?"
+
+[[line]]
+speaker = "guest"
+text = "Once. It said 'please stop'. I had it framed. It is my best review."
+
+[[line]]
+speaker = "host"
+text = "Okay, I respect the postcards. Now take the lemon off my wall."
+
+[[line]]
+speaker = "guest"
+text = "Impossible. I have sold tickets. Twelve gold a head, and three tickets are already gone."
+
+[[line]]
+speaker = "host"
+text = "Sold to whom? The gallery is empty."
+
+[[line]]
+speaker = "guest"
+text = "To me. Three times. A true artist supports the arts."
+
+[[line]]
+speaker = "host"
+live = "Say the unsaid about the Painter's scheme: he is the only buyer, the only fan and the only visitor, and somehow he is still winning. Then admit one true, petty thing about your own vanity that his scheme exposes."
+fallback = "Let's be honest. He bought three tickets to his own lemon, and that's still better attendance than my portrait got in three centuries. I hate that I'm jealous of a fruit."
+
+[[line]]
+speaker = "guest"
+text = "Also, I have replaced the label under your portrait. Read it, Bone Man. Aloud."
+
+[[line]]
+speaker = "host"
+text = "'Anonymous skeleton. Artist unknown. Value: one lemon, approximately.' You forged the label on my own face."
+
+[[line]]
+speaker = "guest"
+text = "When the Academy does it, it is cruelty. When I do it, it is curating."
+
+[[line]]
+speaker = "host"
+live = "The closing turn: what we learned today, honestly. Give one real opinion on the scene's best and worst moment, and own that the scene was really about your vanity, not his lemon."
+fallback = "What did we learn? The lemon is bad, the label is good, and I care far more about a painting of my own skull than a lich should. Mostly that last one."

@@ -1,17 +1,87 @@
-# Fictional sample scene (WP-D writes the content). Original material only.
+# Fictional sample scene for SEG-03 (Table Read), guest the-painter. Original material only:
+# no real person, show, painter, gallery or academy.
 id = "the-critic"
 title = "The Critic"
-pitch = "Placeholder pitch for the-critic."
+pitch = "Malakor plays a critic so the Painter can rehearse. It goes badly. Honestly."
 guest = "the-painter"
 status = "approved"
 fictional = true
-notes = ["placeholder talking point"]
+notes = [
+    "The despair in the rind: was that the best line tonight? Say which line was and why.",
+    "He wrote his own five-star review. Score the scene out loud, honestly, and let chat argue.",
+    "The Grudge Ledger and the Book of the Tasteless: is Malakor just the Painter with fewer bones?",
+]
 
 [[line]]
 speaker = "guest"
-text = "Placeholder guest line."
+text = "Bone Man. A critic comes tomorrow to review my exhibition. Tonight you will play the critic, so I can rehearse my rebuttals."
 
 [[line]]
 speaker = "host"
-live = "react honestly to the guest's line"
-fallback = "Placeholder host fallback."
+text = "Fine. But I'll be honest. An honest critic is the only kind worth rehearsing against."
+
+[[line]]
+speaker = "guest"
+text = "Perfect. Begin. The first painting is Lemon, Study Number Forty-One."
+
+[[line]]
+speaker = "host"
+text = "It's competent. The yellow is nice. The shadow is on the wrong side, and the frame cost more than the idea."
+
+[[line]]
+speaker = "guest"
+text = "Stop. Who is paying you? Is it Big Acrylic?"
+
+[[line]]
+speaker = "host"
+text = "Nobody's paying me. That's what makes it hurt."
+
+[[line]]
+speaker = "guest"
+text = "Big Acrylic pays everyone. They have been smothering watercolour for forty years. My rejection letter was printed on acrylic-friendly paper."
+
+[[line]]
+speaker = "host"
+text = "Paper does not take sides."
+
+[[line]]
+speaker = "guest"
+text = "Paper ALWAYS takes sides. Next painting: Lemon, Study Number Forty-Two."
+
+[[line]]
+speaker = "host"
+text = "It's the same lemon."
+
+[[line]]
+speaker = "guest"
+text = "It is the same lemon, one day older. Look at the despair in the rind."
+
+[[line]]
+speaker = "host"
+text = "Okay, that one's actually good. The despair in the rind is good. Someone write that down."
+
+[[line]]
+speaker = "guest"
+text = "I do not need your praise. Here is the review I wrote for the critic. He only has to sign it. Read it aloud."
+
+[[line]]
+speaker = "host"
+text = "'The finest lemon of the century. The artist is handsome, misunderstood, and owed an apology by the Academy.' You wrote your own review."
+
+[[line]]
+speaker = "guest"
+text = "I saved him time. Critics are very busy being wrong."
+
+[[line]]
+speaker = "host"
+live = "Give the Painter your real review as the critic: one genuine compliment, one blunt flaw, and say the unsaid about the review he wrote for himself. Stay funny; the target is his work and his nerve, never who he is."
+fallback = "Honest review: the lemon is fine, the forty-second lemon is better, and the review you wrote is the best fiction in this building. One star for the paint, five for the nerve."
+
+[[line]]
+speaker = "guest"
+text = "One star. ONE. You are going in the Book of the Tasteless. Page one. In red."
+
+[[line]]
+speaker = "host"
+live = "The closing turn: what we learned today, honestly. Admit that you also keep a book of everyone who wronged you, so the critic in this scene was right about him and about you."
+fallback = "What did we learn? He keeps a book of everyone who wronged him, and so do I. The Grudge Ledger and the Book of the Tasteless. We're the same man. He just has more skin and better handwriting."

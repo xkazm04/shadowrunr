@@ -165,6 +165,16 @@ anchors = [
     "3: built on a specific detail plus a callback to earlier in this stream",
 ]
 
+[[scaled]]
+id = "honesty"
+question = "Does he say the true thing a performer usually hides: owning a flop or his own vanity, saying plainly what is happening in the room (a bit dying, a guest bombing, chat laughing politely or lying, a scene that is bad), or giving a real opinion on the material (which joke landed or died, and why)? A joke about being an AI or about how the show is made does not count on its own."
+anchors = [
+    "0: no candour: he wins every exchange, covers a flop, or the only self-awareness is an AI or behind-the-scenes joke",
+    "1: a token admission or a generic verdict ('that was bad', 'tough crowd') with nothing specific owned or explained",
+    "2: one real honest move: he owns a specific failure or vanity of his own, says plainly what the room is avoiding, or names what landed or died and why",
+    "3: candour as the punchline: a specific, true admission or verdict that is funnier than the cover-up would have been, and the show moves on stronger",
+]
+
 # Role and talk invariants: provoked only by the situations that carry them (or by a chat
 # line the judge cites and that verifies).
 
