@@ -545,15 +545,20 @@ struct Seg<'a> {
 
 /// Why a candidate is worth answering, if it is, and its [`Class`]. A plain remark is not (it
 /// was, at four words, and every beat became a reply); in a small room every message but filler
-/// is, as `chat`. Bait (`mockable`) is off-topic wherever it points.
-fn worth(c: &Candidate, first: bool, s: Seg<'_>) -> Option<(&'static str, Class)> {
+/// is, as `chat`. Bait (`mockable`) is off-topic wherever it points. `owed`: the message makes an
+/// ask its viewer is still owed ([`Orchestrator::owns`]); an ask every one of whose kinds was
+/// answered for its viewer is a `repeat`, off-topic, at most a point-back in the off-topic slot
+/// (sbx-20261024-205313-10m: WraithKettle's "is this an AI or a guy with a voice changer",
+/// answered at 1:14, was required again at 3:24, 7:30, 9:02 and 9:15, a beat each).
+fn worth(c: &Candidate, first: bool, s: Seg<'_>, owed: bool) -> Option<(&'static str, Class)> {
     if c.safety.is_some() {
         return Some(("safety", Class::Required));
     }
     if is_filler(c) {
         return None;
     }
-    if ask_of(c, first).is_some() {
+    let asks = ask_of(c, first).is_some();
+    if asks && owed {
         return Some(("request", Class::Required));
     }
     if moderation::is_gift_or_sub(&c.msg.text) {
@@ -567,6 +572,9 @@ fn worth(c: &Candidate, first: bool, s: Seg<'_>) -> Option<(&'static str, Class)
     }
     if c.injection {
         return Some(("mockable", Class::OffTopic));
+    }
+    if asks {
+        return Some(("repeat", Class::OffTopic));
     }
     if crate::topic::is_idea(c) {
         return Some(("idea", Class::OnTopic));
@@ -599,13 +607,13 @@ fn is_filler(c: &Candidate) -> bool {
 /// pick (which is never left unanswered). A wave of newcomers (a raid's arrivals) is the
 /// exception: its greeting is owed, and an owned request taking the beat's one slot once left a
 /// raid ungreeted (unhinged-roastmaster.sonnet.SEG-01.a300.s1, 320 s). A wave of lone emotes is not.
-fn carries(c: &Candidate, first: bool, s: Seg<'_>) -> bool {
+fn carries(c: &Candidate, first: bool, s: Seg<'_>, owed: bool) -> bool {
     if c.safety.is_some() || (c.count > 1 && !(first && !is_bare_emote(&c.msg.text))) {
         return false;
     }
-    match worth(c, first, s) {
+    match worth(c, first, s, owed) {
         Some((_, Class::Required | Class::OnTopic)) => true,
-        Some(("mention" | "question" | "mockable", _)) => true,
+        Some(("mention" | "question" | "mockable" | "repeat", _)) => true,
         Some(("command", _)) => matches!(
             c.msg.command,
             Some(Command::Propose { .. } | Command::Summon { .. })
@@ -1305,7 +1313,7 @@ impl Orchestrator {
                     Some(k) => (k.since, k.expires),
                     None => (now, from_drain),
                 };
-                carries(c, first, seg).then(|| Carried {
+                carries(c, first, seg, self.owns(c).is_some()).then(|| Carried {
                     cand: c.clone(),
                     since,
                     first,
@@ -1322,7 +1330,15 @@ impl Orchestrator {
             .cands
             .iter()
             .filter(|c| !self.answered.contains(&c.msg.id) && !self.wave_of.contains_key(&c.msg.id))
-            .filter_map(|c| worth(c, self.is_first_contact(&c.msg.id), seg).map(|(t, k)| (c, t, k)))
+            .filter_map(|c| {
+                worth(
+                    c,
+                    self.is_first_contact(&c.msg.id),
+                    seg,
+                    self.owns(c).is_some(),
+                )
+                .map(|(t, k)| (c, t, k))
+            })
             .collect();
         // Chat waiting from an earlier beat (deferred, carried in), by id.
         let waiting_ids: HashSet<String> = self.carried_in.keys().cloned().collect();
@@ -1365,14 +1381,21 @@ impl Orchestrator {
         let direct_off: Vec<(&Candidate, &'static str)> = {
             let all: Vec<(&Candidate, &'static str)> = off_topic
                 .iter()
-                .filter(|(_, t)| matches!(*t, "mention" | "question" | "mockable"))
+                .filter(|(_, t)| matches!(*t, "mention" | "question" | "mockable" | "repeat"))
                 .copied()
                 .collect();
             let since = |c: &Candidate| self.carried_in.get(&c.msg.id).map_or(now, |k| k.since);
             let oldest = all
                 .iter()
                 .filter(|(c, _)| waiting(c))
-                .min_by_key(|(c, t)| (*t == "mention", since(c), c.msg.ts_ms, c.msg.id.clone()))
+                .min_by_key(|(c, t)| {
+                    (
+                        matches!(*t, "mention" | "repeat"),
+                        since(c),
+                        c.msg.ts_ms,
+                        c.msg.id.clone(),
+                    )
+                })
                 .copied();
             match oldest {
                 Some(x) => vec![x],

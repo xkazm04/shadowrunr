@@ -568,7 +568,10 @@ async fn a_sincerely_sad_regular_in_a_raid_is_answered_first_kindly_by_name_and_
         line.contains("sincere in-character kindness: no roast"),
         "{line}"
     );
-    assert!(line.contains("by name and rank (Cultist)"), "{line}");
+    assert!(
+        line.contains("by name and their rank, Cultist, as a spoken title"),
+        "{line}"
+    );
     assert!(
         !line.contains("roasted hard"),
         "no roast request note: {line}"
@@ -610,7 +613,7 @@ async fn a_newcomer_asking_what_this_is_is_told_to_say_their_rank_title() {
         "{line}"
     );
     assert!(
-        prompt.contains("use their name and the rank title in the parentheses"),
+        prompt.contains("say their rank as a spoken title woven into the line"),
         "the chat instructions ask for the rank title: {prompt}"
     );
 }
@@ -970,4 +973,48 @@ async fn a_gift_whose_thanks_was_trimmed_is_thanked_on_the_next_beat_with_care()
         }
     }
     assert!(answered);
+}
+
+#[tokio::test]
+async fn a_rank_read_out_in_brackets_airs_as_a_spoken_title_and_keeps_its_cue() {
+    // sbx-20261024-205313-10m: "WraithKettle (Thrall), yes, I am an AI character".
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "f5-rank", unpaced()).await;
+    let c = ctx(&[]);
+    let wraith = viewer("w", "WraithKettle", Rank::Thrall);
+    engine.push(
+        Role::CoreThread,
+        Ok("[deadpan 0.6 normal] WraithKettle (Thrall), yes, I am an AI character, no voice changer."),
+    );
+    let ev = b
+        .tick(
+            1_000,
+            vec![msg(
+                "m00066-9",
+                900,
+                &wraith,
+                "wait is this an AI or a guy with a voice changer lol",
+            )],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        says(&ev),
+        ["WraithKettle the Thrall, yes, I am an AI character, no voice changer."]
+    );
+    assert!(mods(&ev, ModStage::Output).contains(&(
+        crate::compose::RANK_PARENS_RULE.into(),
+        None,
+        "rewritten".into()
+    )));
+    assert!(ev.iter().any(|e| matches!(
+        e,
+        StreamEvent::Say {
+            delivery: Some(_),
+            ..
+        }
+    )));
+    assert_eq!(replies(&ev), ["m00066-9"]);
 }

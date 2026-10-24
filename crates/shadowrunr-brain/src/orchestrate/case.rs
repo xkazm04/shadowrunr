@@ -61,7 +61,7 @@ pub const CASE_NOTE: &str = "(No chat to answer this beat: make the case move ab
 /// first: the pace budget drops lines from the end, and a case beat's second line, the thanks for
 /// a gift, was the one trimmed (unhinged-roastmaster.sonnet.SEG-02A.a3.s1 L190-L195).
 pub const CASE_WITH_CHAT: &str = "Answer the picked message below first, in its own short line, \
-by name and rank title; then speak the case move.";
+by what they said; then speak the case move.";
 /// The ops a case move may use: a segment offers the loop only with one of them on its menu
 /// and the case's cards in its context.
 const CASE_OPS: &[&str] = &["dispatch_research", "reveal_hex", "pin_link", "show_screen"];

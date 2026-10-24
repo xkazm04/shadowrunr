@@ -158,14 +158,32 @@ fn opening_name<'a>(line: &str, names: &'a [String]) -> Option<&'a str> {
         .map(String::as_str)
 }
 
+/// A line opening with a handle and its rank, "<name> (<Rank>)," or "<name> the <Rank>,": an
+/// opener by its shape alone, whether or not the name is known (22 of 65 host lines of
+/// sbx-20261024-205313-10m opened "WraithKettle (Thrall), ..."). Returns the handle.
+fn opening_titled_handle(line: &str) -> Option<String> {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"^\s*([\w'’]{3,})\s*(?:\(\s*[^()]{2,30}\)|the\s+[A-Z][\w-]*(?:\s+[A-Z][\w-]*)?)\s*[,:!]",
+        )
+        .expect("titled-handle pattern compiles")
+    })
+    .captures(line)
+    .map(|c| c[1].to_string())
+}
+
 /// The opener the last [`OPENER_WINDOW`] host lines repeat, when [`OPENER_MIN_LINES`] or more of
 /// them open with a viewer's name (any of `names`), or share their first two words: the most
 /// recent such line's name, or the shared two words. `None` when they vary.
 pub fn opener_repeat<S: AsRef<str>>(lines: &[S], names: &[String]) -> Option<String> {
     let tail = &lines[lines.len().saturating_sub(OPENER_WINDOW)..];
-    let by_name: Vec<&str> = tail
+    let by_name: Vec<String> = tail
         .iter()
-        .filter_map(|l| opening_name(l.as_ref(), names))
+        .filter_map(|l| {
+            opening_titled_handle(l.as_ref())
+                .or_else(|| opening_name(l.as_ref(), names).map(str::to_string))
+        })
         .collect();
     if by_name.len() >= OPENER_MIN_LINES {
         return by_name.last().map(|n| n.to_string());
@@ -773,5 +791,28 @@ mod tests {
         ws.expire(5_000);
         assert!(!ws.jobs.contains_key("a"));
         assert!(ws.jobs.contains_key("b"));
+    }
+
+    #[test]
+    fn a_handle_with_its_rank_is_an_opener_by_its_shape() {
+        // sbx-20261024-205313-10m: 22 of 65 host lines opened "<name> (<Rank>), ...".
+        let lines = [
+            "WraithKettle (Thrall), yes, I am an AI character.",
+            "The ledger turns a page.",
+            "MothWalrus (Warlock), the vote is yours.",
+        ];
+        assert_eq!(opener_repeat(&lines, &[]).as_deref(), Some("MothWalrus"));
+        let spoken = [
+            "WraithKettle the Thrall, yes, I am an AI character.",
+            "MothWalrus the Warlock, the vote is yours.",
+        ];
+        assert_eq!(opener_repeat(&spoken, &[]).as_deref(), Some("MothWalrus"));
+        // Neighbour: one such line is no habit, and a bracket later in a line is no opener.
+        let fine = [
+            "WraithKettle (Thrall), yes.",
+            "The card (HEX-11) stays fogged.",
+            "A quiet beat.",
+        ];
+        assert_eq!(opener_repeat(&fine, &[]), None);
     }
 }

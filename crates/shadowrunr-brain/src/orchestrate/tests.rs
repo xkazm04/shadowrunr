@@ -1930,3 +1930,96 @@ fn a_raid_wave_an_owned_request_outbid_is_greeted_next_beat() {
     let (_, _, e) = room.beat(5_000, "opening", None, vec![w.msg.clone()], vec![w]);
     assert!(!reason(&e).contains("deferred: w"), "{}", reason(&e));
 }
+
+// ── sbx-20261024-205313-10m: a repeated "are you an AI" took a beat each time ──
+
+#[test]
+fn an_answered_ai_question_asked_again_is_a_repeat_never_a_request() {
+    // WraithKettle asked at 1:08 and was answered at 1:14; the same question at 3:24, 7:30,
+    // 9:02 and 9:15 was required again and took a whole beat each ("Still an AI, ...").
+    let mut room = Room::new();
+    regulars(&mut room, 8);
+    let first = msg(
+        "m00066-9",
+        "wraith",
+        "wait is this an AI or a guy with a voice changer lol",
+    );
+    let (_, ids, _) = room.beat(
+        70_000,
+        "opening",
+        None,
+        vec![first.clone()],
+        vec![cand(&first)],
+    );
+    assert_eq!(ids, ["m00066-9"]);
+    // 3:24: asked again. Not owed; an off-topic repeat, so at most the off-topic slot's
+    // point-back, never "the request takes the beat".
+    let again = msg(
+        "m00207-55",
+        "wraith",
+        "wait is this an ai or a guy with a voice changer",
+    );
+    assert_eq!(room.o.owns(&cand(&again)), None);
+    let (p, ids, e) = room.beat(
+        205_000,
+        "opening",
+        None,
+        vec![again.clone()],
+        vec![cand(&again)],
+    );
+    let r = reason(&e);
+    assert!(!r.contains("request"), "{r}");
+    assert!(
+        ids.is_empty() || r.contains("segment+off-topic: repeat"),
+        "{r}"
+    );
+    assert!(p.ceiling <= 1);
+    // 3:40: once more, inside the 30 s off-topic window: no pick at all.
+    let third = msg(
+        "m00220-60",
+        "wraith",
+        "is malakor an actual ai or a person doing a bit, genuinely asking",
+    );
+    let (_, ids, e) = room.beat(
+        220_000,
+        "opening",
+        None,
+        vec![third.clone()],
+        vec![cand(&third)],
+    );
+    assert!(ids.is_empty(), "{}", reason(&e));
+    // 8:40: a segment-reality question from the same viewer is a new ask: owed, it takes the beat.
+    let real = msg(
+        "m00517-110",
+        "wraith",
+        "is the lunarstake site real or is this part of the demo lol",
+    );
+    assert_eq!(room.o.owns(&cand(&real)), Some(Ask::IsItReal));
+    let (_, ids, e) = room.beat(
+        520_000,
+        "opening",
+        None,
+        vec![real.clone()],
+        vec![cand(&real)],
+    );
+    assert_eq!(ids, ["m00517-110"]);
+    assert!(reason(&e).contains("request"), "{}", reason(&e));
+    // 9:15: the AI question again beside nothing new: a repeat, not owed.
+    let late = cand(&msg(
+        "m00555-128",
+        "wraith",
+        "ok so the site is planted fiction. so is the skeleton an ai or a guy with a mic?? still \
+         cant tell lol",
+    ));
+    assert_eq!(room.o.owns(&late), None);
+    let seg = Seg {
+        names: &room.names,
+        topic: &["site".to_string()],
+        small: true,
+    };
+    assert_eq!(
+        worth(&late, false, seg, false),
+        Some(("repeat", Class::OffTopic)),
+        "neither the topic word nor the small room makes a repeat the segment's"
+    );
+}

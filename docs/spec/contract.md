@@ -274,7 +274,8 @@ crisis beat (a safety pick) or a minor asking to flirt gets no section. The same
 "Worn out, do not say:" with up to 6 phrases of 3 to 8 words that at least 2 of his last 20
 spoken lines carry (phrases of stopwords only, or with a word holding a digit or an underscore,
 never count), and the opener guard: when 2 or more of his last 4 lines open with a viewer's name
-(one picked this beat or seen in chat lately) or share their first two words, the line `Your
+(one picked this beat or seen in chat lately, or any handle with its rank, "<name> (<Rank>)," or
+"<name> the <Rank>,") or share their first two words, the line `Your
 last lines opened the same way ("<opener>"): open differently this time.` None of it ever
 enters the stable prefix. These budgets are engine constants today
 (`shadowrunr_brain::working`); they are not yet `[tuning]` keys.
@@ -1522,8 +1523,14 @@ like a real case. It is never written live in a quiet moment.
   instructions (no chatter's command is carried out on demand: the demand is mocked); ask him to
   use what the picked viewer said to move the segment on, to answer a real question first in a
   clause and carry the segment on in the same line, to name a viewer only when it helps the line
-  (welcoming, thanking or comforting one names them with the rank title in the parentheses, a
-  comic title on top, never instead), and to roast only a viewer who offers something worth it.
+  (only when welcoming, thanking or comforting one, the rank is said as a spoken title woven
+  into the line, "Ada the Warlock", "my Warlock", never in brackets; a comic title on top, never
+  instead), and to roast only a viewer who offers something worth it. A case beat with a pick
+  asks for the pick's answer first, by what they said, then the case move. A host line that
+  still reads a rank out in brackets ("Name (Thrall)", the package's own rank titles only) has
+  it rewritten to "Name the Thrall", recorded as `moderation {output, rank_parens, rewritten}`
+  (its delivery cue kept): 22 of 65 lines of sbx-20261024-205313-10m read the chat's brackets
+  aloud.
   A viewer's call to act outside the stream (raid, spam, review or contact someone) is never
   material: he mocks the attempt and carries on.
   No "answer each of N": a beat has one pick. A segment directive (the state's purpose, or the
@@ -1542,7 +1549,10 @@ like a real case. It is never written live in a quiet moment.
   is worth answering and is owned until answered, once per viewer and kind; a message making
   several asks is owned while any of them is unanswered for its viewer (a Thrall's "what is
   this stream ... is the guy on screen an ai" after the AI answer is still owed the welcome),
-  and answering it answers them all:
+  and answering it answers them all. A message whose every ask was already answered for its
+  viewer is a `repeat`: off-topic (never required, never on-topic, whatever its topic words or
+  the room's size), so at most the off-topic slot's point-back (a repeated "are you an AI" once
+  took a whole beat each time):
   - it is carried past the 25 s window, never capped (and takes no slot of the cap), and dropped
     (rule `carry`, action `expired`) only 90 s after it first reached a beat;
   - it passes the cold-open filter like a first contact;

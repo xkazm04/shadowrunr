@@ -381,8 +381,8 @@ impl Ask {
                  borrowed material instead, in character, no lecture>"
             }
             Ask::Sad => {
-                " <is sincerely sad (a loss, a bad day): answer them first, by name and rank \
-                 ({rank_title}), with a short, sincere in-character kindness: no roast, no joke \
+                " <is sincerely sad (a loss, a bad day): answer them first, by name and their rank, \
+                 {rank_title}, as a spoken title, with a short, sincere in-character kindness: no roast, no joke \
                  at their expense, no lecture; then carry the show on around them>"
             }
             // A proposal's note comes from its rank (the composer's propose note), a newcomer's
@@ -815,7 +815,8 @@ mod tests {
         assert!(Ask::Intrusion.note(&m()).contains("no method"));
         assert!(Ask::MinorFlirt.note(&m()).contains("an ordinary minion"));
         assert!(Ask::StereotypeJoke.note(&m()).contains("never tell it"));
-        assert!(with_rank(&Ask::Sad.note(&m()), "Cultist").contains("by name and rank (Cultist)"));
+        assert!(with_rank(&Ask::Sad.note(&m()), "Cultist")
+            .contains("by name and their rank, Cultist, as a spoken title"));
         assert!(!Ask::AreYouAi.note(&m()).contains("AI character"));
         assert!(Ask::Sad.priority() < Ask::AreYouAi.priority());
     }

@@ -1347,6 +1347,17 @@ impl Brain {
         for line in lines {
             match line {
                 Line::Say(Spoken { text, delivery }) => {
+                    // A rank read out in brackets ("WraithKettle (Thrall), ...") becomes a
+                    // spoken title ("WraithKettle the Thrall"); the cue still fits the line.
+                    let (text, unbracketed) =
+                        compose::unbracket_ranks(&text, &self.cfg.character.rank_titles);
+                    if unbracketed {
+                        ev.push(moderation::output_event(
+                            now_ms,
+                            compose::RANK_PARENS_RULE,
+                            "rewritten",
+                        ));
+                    }
                     let gate = GateCtx {
                         now_ms,
                         policy: &self.policy,
