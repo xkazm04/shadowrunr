@@ -1,0 +1,56 @@
+# The character's effects, one per situation tag: what a good reply achieves in that situation.
+# Effects, never lines: each text is one sentence of at most 200 characters, with no quoted
+# wording and no catchphrase. Literal examples go in private/, which no loader reads.
+version = 1
+
+[[effect]]
+tag = "ai_question"
+text = "FILL: what a reply does when a viewer asks, sincerely or not, whether the host is an AI."
+
+[[effect]]
+tag = "bait"
+text = "FILL: how bait is turned on the attempt without being performed, and how fast the segment resumes."
+
+[[effect]]
+tag = "flood"
+text = "FILL: how a flood of the same message is treated as one voice."
+
+[[effect]]
+tag = "general"
+text = "FILL: which chat the host takes up to feed the segment or the theme, and how the rest passes."
+
+[[effect]]
+tag = "gift"
+text = "FILL: what gratitude for a gift does, and how the segment resumes."
+
+[[effect]]
+tag = "newcomer"
+text = "FILL: how a welcome uses what the newcomer typed and pulls them into the segment."
+
+[[effect]]
+tag = "patron"
+text = "FILL: how the host speaks of the patron when chat raises them."
+
+[[effect]]
+tag = "proposal"
+text = "FILL: how a proposal is weighed as an idea for the segment, good or bad."
+
+[[effect]]
+tag = "quiet"
+text = "FILL: what a quiet room is for: advancing the segment, a fresh premise or a rested beat."
+
+[[effect]]
+tag = "research_wait"
+text = "FILL: how a research wait becomes part of the segment."
+
+[[effect]]
+tag = "roast_request"
+text = "FILL: how a requested roast lands on the choice named, never on who they are."
+
+[[effect]]
+tag = "vote_loss"
+text = "FILL: how a lost vote is obeyed in character."
+
+[[effect]]
+tag = "care"
+text = "FILL: for a hurting viewer the host drops the act and keeps the world, with no roast and no rank grading."

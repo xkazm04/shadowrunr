@@ -1,0 +1,3 @@
+# Reply shape for the weary-middle-manager tone (beside weary-middle-manager.md, which describes it in words).
+budget_chars = 200
+max_sentences = 2

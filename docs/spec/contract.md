@@ -110,8 +110,11 @@ Chat commands:
 character.toml      the manifest (v2, below): id, name, default tone, foils, identity words,
                     voice, avatar, ranks, rules, line bank, tuning, segment flavour
 constitution.md     IMMUTABLE: identity, awareness, red lines (the brain never edits it)
-bible.md            lore, want, long arc, running jokes
+bible.md            lore, want, long arc, running jokes: effects and behaviour, never lines
 tones/<variant>.md  one file per tone variant (tournament axis)
+tones/<variant>.toml  optional: the tone's reply shape, `budget_chars` and `max_sentences` (below)
+effects.toml        optional: one effect per situation tag (below)
+private/            optional: operator material (literal examples); no loader reads it
 lines/<variant>.toml  optional: the tone's line bank, exemplars by situation (below)
 directions.md       optional: the owner's do and don't list, read with the tone
 segments/<SEG-ID>.md  optional: the owner's directions for one segment, read while it is live
@@ -271,6 +274,33 @@ spoken lines carry (phrases of stopwords only, or with a word holding a digit or
 never count). Neither ever enters the stable prefix. These budgets are engine constants today
 (`shadowrunr_brain::working`); they are not yet `[tuning]` keys.
 
+`tones/<variant>.toml`, the tone's reply shape, beside its `tones/<variant>.md`. Exactly two
+keys: `budget_chars` (integer 80..=400, the tone's per-beat character budget; the engine
+default is 260) and `max_sentences` (integer 1..=4, sentences per beat). Tones should differ.
+
+```toml
+budget_chars = 140
+max_sentences = 2
+```
+
+`effects.toml`: what a good reply achieves in each situation, as effects rather than lines.
+One `[[effect]]` per tag, the line bank's situation tags (above) plus `care` (a viewer in care:
+the host drops the act and keeps the world, no roast, no rank grading). `text` is one sentence
+of at most 200 characters with no quoted line and no catchphrase.
+
+```toml
+version = 1
+
+[[effect]]
+tag = "newcomer"
+text = "A welcome lands when it uses what the newcomer actually typed and pulls them into what the segment is doing right now."
+```
+
+`private/` holds operator material: literal sample lines, catchphrases and fixed gag wordings
+kept for reference (`bible-examples.md`, `tone-examples.md`, a `README.md`). No loader reads
+it and nothing in it reaches a prompt: a quoted sample in a file the brain reads is aired as
+the joke, so the bible, the tones and the constitution describe effects and keep examples here.
+
 `directions.md` goes into the stable prefix after the tone, under
 `# Directions from the owner`. Without the file the prefix is byte-identical to before.
 
@@ -338,9 +368,13 @@ runs/sim/<tournament_id>/
 ```
 
 Instrument identity: each run records `instrument_hash`, a hash of the character package
-files (with `directions.md`), the tone file and its line bank, segment tables and judge rubric.
-Results from different hashes are never merged. `SIM_LOGIC_VERSION` is `shadowrunr-sim/15`
-(face words in the delivery cue; `/14` the delivery cue; `/13` the case spoken in names; `/12` the case as an owned loop; `/11` T1: the line bank and
+files (with `directions.md`, and `effects.toml` when there is one), the tone file and its
+`tones/<tone>.toml` when there is one, segment tables and judge rubric. The line bank
+(`lines/<tone>.toml`) no longer joins it, since the brain no longer shows it to the model, and
+`private/` never does. Results from different hashes are never merged. `SIM_LOGIC_VERSION` is
+`shadowrunr-sim/16` (the rebalance: the right name and rank, `serves_the_segment`, a dropped
+bait not provoked, the focus measures, the shape files hashed and the line bank not; `/15` face
+words in the delivery cue; `/14` the delivery cue; `/13` the case spoken in names; `/12` the case as an owned loop; `/11` T1: the line bank and
 directions, the narrowed rails, the scaled judge and the tic check; `/10` is the evidence board).
 
 Judge (T1). The rubric samples 24 streamer turns (`sample_turns`). Besides the binary

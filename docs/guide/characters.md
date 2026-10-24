@@ -15,8 +15,11 @@ character package section). This guide covers how to make a package and what eac
 ```
 character.toml      the manifest: id, name, tones, foils, rules and the v2 tables below
 constitution.md     IMMUTABLE: identity, awareness, red lines (the brain never edits it)
-bible.md            optional: lore, wants, the long arc, running jokes
+bible.md            optional: lore, wants, the long arc, running jokes, as effects, never lines
 tones/<variant>.md  one file per tone variant; `default_tone` names one
+tones/<variant>.toml  optional: the tone's reply shape (`budget_chars`, `max_sentences`)
+effects.toml        optional: one effect per situation tag, what a good reply achieves
+private/            optional: operator material (literal examples); no loader reads it
 foils/<foil>.md     optional SEG-01 guest foils (original parody archetypes, never real people)
 rules/<rule>.md     constitution rules, switched under [rules]; a rail is also listed in `rails`
 stalls.toml         optional: model-free lines spoken while the engine fleet fails
@@ -26,7 +29,10 @@ segments/<SEG-ID>.md  optional: the owner's directions for one segment (below)
 ```
 
 The brain reads `constitution.md`, the enabled rules, the active tone and `bible.md` as the
-stable prefix of every prompt. The operator's choices (the active tone, rule overrides) live in
+stable prefix of every prompt, whole, so they describe effects and behaviour rather than
+lines: a quoted sample there is aired as the joke. Literal examples belong in `private/`,
+which nothing loads. The formats of `effects.toml` and `tones/<variant>.toml` are in the
+contract. The operator's choices (the active tone, rule overrides) live in
 `<data>/characters/<id>/`, never in the package.
 
 ## `character.toml`

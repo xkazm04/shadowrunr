@@ -1,7 +1,9 @@
 # Bible: FILL: Display Name
 
 Working canon for the brain, the planner and the writers. The constitution outranks this file:
-where they disagree, the constitution wins. Everything here is original fiction.
+where they disagree, the constitution wins. Everything here is original fiction. Describe
+effects and behaviour, never lines: a quoted sample here is aired as the joke. Literal examples
+go in `private/bible-examples.md`, which no loader reads.
 
 ## The world
 
@@ -18,11 +20,13 @@ person.
 
 ## How the character treats each rank
 
-FILL: one line per rank title in `[ranks]`, lowest first.
+FILL: one line per rank title in `[ranks]`, lowest first: how the rank tints a reply, never a
+template per rank and never the first thing said.
 
 ## Running jokes
 
-FILL: three to five recurring bits the character can return to.
+FILL: three to five recurring bits, each stated as an effect used only when tonight's events
+call for it (when X happens tonight, the effect is Y). Never on a timer, never a catchphrase.
 
 ## Their tools
 

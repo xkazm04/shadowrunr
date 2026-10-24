@@ -1,0 +1,3 @@
+# Reply shape for the gleeful-chaos tone (beside gleeful-chaos.md, which describes it in words).
+budget_chars = 180
+max_sentences = 3

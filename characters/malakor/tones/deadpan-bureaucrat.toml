@@ -1,0 +1,3 @@
+# Reply shape for the deadpan-bureaucrat tone (beside deadpan-bureaucrat.md, which describes it in words).
+budget_chars = 140
+max_sentences = 2

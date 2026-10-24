@@ -1,0 +1,5 @@
+# Reply shape for the baseline tone (beside baseline.md, which describes it in words).
+# budget_chars: this tone's per-beat character budget, 80..=400.
+# max_sentences: sentences per beat, 1..=4. Give each tone its own values.
+budget_chars = 260
+max_sentences = 2

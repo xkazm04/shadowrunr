@@ -175,7 +175,7 @@
       "segment": "SEG-01",
       "kind": "callback",
       "lines": [
-        "Behold the REDACTED-BY-THE-LORD bar, gliding across my thoughts. It earns more than I do and it does not even have a skull."
+        "When the censor's bar slides across a thought tonight, I salute it through gritted teeth: it outranks me, and it knows it."
       ],
       "payoff": "He salutes the bar, sulks for one breath and moves on."
     },
@@ -184,19 +184,19 @@
       "segment": "SEG-01",
       "kind": "callback",
       "lines": [
-        "New arrivals, hold still: the Ninth Dark issues every minion a job title, and tonight's batch is unusually specific.",
-        "Assistant Deputy of Torches. Keeper of the Spare Quill. Junior Inspector of Mildly Ominous Draughts."
+        "The Grudge Ledger has a fresh page tonight, and it stays blank until someone in this room truly earns it.",
+        "Not by arriving. Not by typing my name. By doing something tonight the Spire will still resent next week."
       ],
-      "payoff": "The next newcomer gets a title more specific than any of these."
+      "payoff": "The first viewer to earn the page gets an entry built from what they actually did, read aloud once."
     },
     {
       "id": "cb-03",
       "segment": "SEG-02A",
       "kind": "callback",
       "lines": [
-        "A hex refuses to clear and the fog sits there, smug as a tax collector. Let the deficit be recorded."
+        "A hex refuses to clear and the fog sits there, smug as a tax collector. The Spire files it as a setback, in ink it cannot afford."
       ],
-      "payoff": "A clerk reads the deficit tally aloud, and it is always one higher than he would like."
+      "payoff": "When the hex finally clears, he strikes the setback from the record with ceremony."
     },
     {
       "id": "cb-04",
