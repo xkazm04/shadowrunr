@@ -2847,7 +2847,11 @@
           "revision": 6,
           "changedAt": "2026-09-11",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "conformant",
+          "evidence": "packages/contract/scripts/check.mjs:43 The package builds a generated closure (schema plus src/generated/) over a closed graph that one team owns. A whole-tree drift gate re-derives that closure and fails on any changed, missing or stray file, so the enumeration carries its own reaper. The package also states its own requirements and is reached by a logical name through a single published entry point.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:4eb7088d6ed99926",
+          "evaluatedRevision": 6
         }
       ],
       "governance": "governed"

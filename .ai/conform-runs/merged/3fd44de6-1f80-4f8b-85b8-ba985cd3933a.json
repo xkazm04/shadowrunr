@@ -1,0 +1,77 @@
+{
+ "schema": "conform-run/1",
+ "worker": "3fd44de6-1f80-4f8b-85b8-ba985cd3933a",
+ "subject": "dependency-declaration",
+ "evaluatedAt": "2026-10-24T23:39:23.743043+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "contract-package",
+   "subject": "dependency-declaration",
+   "bundle": "software-engineering",
+   "state": "conformant",
+   "evidence": "packages/contract/scripts/check.mjs:43 The package builds a generated closure (schema plus src/generated/) over a closed graph that one team owns. A whole-tree drift gate re-derives that closure and fails on any changed, missing or stray file, so the enumeration carries its own reaper. The package also states its own requirements and is reached by a logical name through a single published entry point.",
+   "techniques": [
+    {
+     "technique": "progressive-resolution",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/check.mjs:43 The graph is closed (Rust types from one team), so enumeration is honest. The artifact names what regenerates it (BANNER, codegen.mjs:25), and a currency check runs as a CI step ('contract drift'), where a regeneration that produces a diff counts as a failure."
+    },
+    {
+     "technique": "declaration-invariants",
+     "verdict": "conformant",
+     "evidence": "packages/contract/package.json:17 Locality holds: the unit declares its own runtime requirement, pinned exactly, in a manifest it owns. Consumers (console, stage, stage-kit) each add one line, '@shadowrunr/contract: workspace:*', and do not restate ajv. No merged manifest has to be regenerated."
+    },
+    {
+     "technique": "logical-name-or-address",
+     "verdict": "conformant",
+     "evidence": "packages/contract/package.json:7 Consumers refer to a logical name ('@shadowrunr/contract'), and the composer (the workspace) resolves it. 'exports' publishes only '.', and a repo grep for '@shadowrunr/contract/' deep imports found none. Inside the package, references to its own parts are relative addresses (door.ts:9 './generated/meta'), which is the right choice for internals."
+    },
+    {
+     "technique": "vendored-copy-loses-composition",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/codegen.mjs:151 Each results/<Def>.js is an ajv-standalone module compiled from its def's closure alone (codegen.mjs:8), so shared sub-validators are copied privately into each module. The modules have no imports and hold no state (pure validators), which is the 'small, stateless, stable' case where the trade pays. Every file carries the GENERATED banner, and the eager module avoids a duplicate StreamEvent emission on purpose."
+    },
+    {
+     "technique": "declaration-cost-floor",
+     "verdict": "conformant",
+     "evidence": "packages/contract/package.json:7 This shares an anchor with logical-name-or-address, so it counts as one piece of evidence. The package exports source directly, with no prepublish build. Adding it is one workspace line for consumers that already use a TS-capable bundler. Codegen is a producer-side step, gated by check, not a consumer price."
+    },
+    {
+     "technique": "attachment-coherence",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/package.json:3 The package is private and assembled only inside this workspace, so no third-party assembler can exist. No behaviour is attached to foreign types: forAjv only adds a discriminator to the package's own schema defs."
+    },
+    {
+     "technique": "unsatisfiable-set-empirical-gate",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/package.json:21 Every dependency is an exact pin with resolution left on. A grep for overrides, --no-deps and peerDependencyRules in the root package.json and pnpm-workspace.yaml found nothing, so no unsatisfiable set or resolution bypass exists."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T23:39:23.743043+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "dependency-declaration"
+   ],
+   "techniques": [
+    "attachment-coherence",
+    "declaration-cost-floor",
+    "declaration-invariants",
+    "logical-name-or-address",
+    "progressive-resolution",
+    "unsatisfiable-set-empirical-gate",
+    "vendored-copy-loses-composition"
+   ],
+   "deviations": 0,
+   "context": "contract-package",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

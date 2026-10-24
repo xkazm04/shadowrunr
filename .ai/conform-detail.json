@@ -5144,6 +5144,52 @@
           "evidence": "shadowrunr.example.toml:81 Plain TOML with no evaluated expressions. Derived values are written as literals with a comment, so there is no hatch and no trust boundary to state."
         }
       ]
+    },
+    "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0/dependency-declaration": {
+      "context": "contract-package",
+      "subject": "dependency-declaration",
+      "bundle": "software-engineering",
+      "state": "conformant",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T23:39:23.743Z",
+      "worker": "3fd44de6-1f80-4f8b-85b8-ba985cd3933a",
+      "techniques": [
+        {
+          "technique": "progressive-resolution",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/check.mjs:43 The graph is closed (Rust types from one team), so enumeration is honest. The artifact names what regenerates it (BANNER, codegen.mjs:25), and a currency check runs as a CI step ('contract drift'), where a regeneration that produces a diff counts as a failure."
+        },
+        {
+          "technique": "declaration-invariants",
+          "verdict": "conformant",
+          "evidence": "packages/contract/package.json:17 Locality holds: the unit declares its own runtime requirement, pinned exactly, in a manifest it owns. Consumers (console, stage, stage-kit) each add one line, '@shadowrunr/contract: workspace:*', and do not restate ajv. No merged manifest has to be regenerated."
+        },
+        {
+          "technique": "logical-name-or-address",
+          "verdict": "conformant",
+          "evidence": "packages/contract/package.json:7 Consumers refer to a logical name ('@shadowrunr/contract'), and the composer (the workspace) resolves it. 'exports' publishes only '.', and a repo grep for '@shadowrunr/contract/' deep imports found none. Inside the package, references to its own parts are relative addresses (door.ts:9 './generated/meta'), which is the right choice for internals."
+        },
+        {
+          "technique": "vendored-copy-loses-composition",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/codegen.mjs:151 Each results/<Def>.js is an ajv-standalone module compiled from its def's closure alone (codegen.mjs:8), so shared sub-validators are copied privately into each module. The modules have no imports and hold no state (pure validators), which is the 'small, stateless, stable' case where the trade pays. Every file carries the GENERATED banner, and the eager module avoids a duplicate StreamEvent emission on purpose."
+        },
+        {
+          "technique": "declaration-cost-floor",
+          "verdict": "conformant",
+          "evidence": "packages/contract/package.json:7 This shares an anchor with logical-name-or-address, so it counts as one piece of evidence. The package exports source directly, with no prepublish build. Adding it is one workspace line for consumers that already use a TS-capable bundler. Codegen is a producer-side step, gated by check, not a consumer price."
+        },
+        {
+          "technique": "attachment-coherence",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/package.json:3 The package is private and assembled only inside this workspace, so no third-party assembler can exist. No behaviour is attached to foreign types: forAjv only adds a discriminator to the package's own schema defs."
+        },
+        {
+          "technique": "unsatisfiable-set-empirical-gate",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/package.json:21 Every dependency is an exact pin with resolution left on. A grep for overrides, --no-deps and peerDependencyRules in the root package.json and pnpm-workspace.yaml found nothing, so no unsatisfiable set or resolution bypass exists."
+        }
+      ]
     }
   }
 }
