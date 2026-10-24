@@ -741,6 +741,14 @@ impl Session {
             let ev = stage.ingest_chat(now, &msgs);
             self.log.push_all(ev)?;
 
+            let goodbye_now = goodbye(
+                now,
+                deadline,
+                stopped_ms.is_some(),
+                self.tuning.closing_now_s,
+            );
+            // The runtime cannot see the schedule: the goodbye lifts a Table Read's floor.
+            stage.set_stream_ending(goodbye_now);
             let mut ctx = stage.context(ccv, (now / 1000) as u32);
             if closing {
                 ctx.state_summary.push('\n');
@@ -753,12 +761,7 @@ impl Session {
                 ));
             }
             // The session runs its planned length: no sign-off before the goodbye.
-            if !goodbye(
-                now,
-                deadline,
-                stopped_ms.is_some(),
-                self.tuning.closing_now_s,
-            ) {
+            if !goodbye_now {
                 ctx.allowed_ops.retain(|o| o != "sign_off");
             }
             let mut done = now;

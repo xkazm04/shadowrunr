@@ -93,6 +93,9 @@ pub trait Stage: Send {
     fn is_signed_off(&self) -> Option<bool> {
         None
     }
+    /// The host loop's goodbye window is open (or not): the stream is at its planned end. The
+    /// real runtime then lets a Table Read sign off before its floor.
+    fn set_stream_ending(&mut self, _ending: bool) {}
 }
 
 #[async_trait]
@@ -223,6 +226,9 @@ impl Stage for SegmentRuntime {
     }
     fn is_signed_off(&self) -> Option<bool> {
         Some(SegmentRuntime::is_signed_off(self))
+    }
+    fn set_stream_ending(&mut self, ending: bool) {
+        SegmentRuntime::set_stream_ending(self, ending);
     }
     fn open_poll(&self) -> Option<Option<(String, Vec<String>)>> {
         Some(self.open_poll_id().map(|id| {

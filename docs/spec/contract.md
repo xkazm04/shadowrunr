@@ -2131,7 +2131,19 @@ One round is a ballot, the scene, then free talk; a run is up to three rounds.
   guest's as `speaker: foil`, `foil: <guest>`). `BeatMode` gains `scene`.
 - **Turn rules.** Scripted guest lines are spoken as written. Outside a scene the guest's live
   lines keep the one-sentence foil cap, and the host speaks after every guest turn; a scene
-  never ends on a guest line (`ends_on_guest`).
+  never ends on a guest line (`ends_on_guest`). The pace budget keeps the guest's line and the
+  host's answer ahead of other lines; a guest line left unanswered or squeezed out gets a short
+  host close (moderation `guest_turn` / `closed`). Care beats and scene asides are the host's
+  alone (`guest_turn` / `host_only`).
+- **During a scene.** A sincerely sad viewer or a disclosure gets a care beat at the next line
+  boundary, then the scene resumes; a raid, gift or sub gets one short host aside (at most one
+  per 30 s), and the `beat_plan` reason reads "scene <id> paused for ...". Carried chat does not
+  expire while a scene plays: its carry window restarts at `scene_end`.
+- **Cues.** The intro beat introduces the guest and the vote; the first talk beat after a scene
+  carries the scene's `notes`. Each fires once.
+- **Clock.** `switch_segment` is refused before the floor (20 min), and so is `sign_off` unless
+  the host loop has signalled the stream's end (`SegmentRuntime::set_stream_ending`; the sandbox
+  sets it in its goodbye window).
 - **Voice.** `VoiceFrame::Utterance` gains `speaker` (`foil` for the guest; omitted for the
   host) and `foil`. Guest lines are voiced in the foil's own voice through the same FIFO as the
   host's, so the two never overlap; a guest with no voice configured is shown as captions only.

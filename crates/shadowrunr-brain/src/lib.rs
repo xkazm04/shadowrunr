@@ -1293,7 +1293,14 @@ impl Brain {
         .into_iter()
         .flatten()
         .reduce(|a, b| format!("{a}\n{b}"));
-        let budget = if closing {
+        // SEG-03's guest sits out a beat the host speaks alone: an aside or a care beat in a
+        // scene, and any beat answering a disclosure or a sincerely sad viewer.
+        let host_only = guest_on.is_some()
+            && (plan.host_only
+                || pick.chosen.iter().any(|c| {
+                    c.safety.is_some() || situational_asks(&c.msg.text).contains(&Ask::Sad)
+                }));
+        let budget = if closing || plan.short {
             pace::closing_budget(self.tuning.pace.budget_chars)
         } else if queued_ms > self.tuning.pace.speech_lead_ms {
             // Composed ahead (lookahead or an owed request): what fits under the lag ceiling.
@@ -1326,7 +1333,7 @@ impl Brain {
             window: &window,
             picked: &pick.chosen,
             pkg,
-            active_foil: active_foil.as_deref(),
+            active_foil: active_foil.as_deref().filter(|_| !host_only),
             nonce,
             fresh_bit,
             brief: self.brief.as_ref(),
@@ -1342,6 +1349,7 @@ impl Brain {
             case: plan.case.as_deref(),
             repeat_ai: &repeat_ai,
             ai_answered,
+            guest_turns: guest_on.is_some() && !host_only,
         });
         self.last_prompt = Some(prompt.clone());
 
@@ -1432,36 +1440,62 @@ impl Brain {
             active_foil.as_deref(),
             &self.cfg.character.persona.reply_prefixes,
         );
-        // SEG-03's guest outside a scene: one sentence a turn, and the host after every one.
+        // SEG-03's guest outside a scene: one sentence a turn, and the host after every one
+        // (a beat the host speaks alone drops its lines).
+        let close = scene::GUEST_CLOSES[(self.ticks as usize) % scene::GUEST_CLOSES.len()];
         if let Some(g) = &guest_on {
-            scene::guest_turns(&mut lines, g, now_ms, &mut ev);
+            if host_only {
+                let before = lines.len();
+                lines.retain(|l| !matches!(l, Line::Foil { foil, .. } if foil == g));
+                for _ in lines.len()..before {
+                    ev.push(moderation::output_event(
+                        now_ms,
+                        scene::GUEST_TURN_RULE,
+                        scene::HOST_ONLY,
+                    ));
+                }
+            } else {
+                scene::guest_turns(&mut lines, g, Some(close), now_ms, &mut ev);
+            }
         }
-        // The beat's speech budget: spoken lines past it go whole, the last first.
-        let spoken_at: Vec<usize> = lines
-            .iter()
-            .enumerate()
-            .filter(|(_, l)| matches!(l, Line::Say(_) | Line::Foil { .. }))
-            .map(|(i, _)| i)
-            .collect();
-        let lens: Vec<usize> = spoken_at
-            .iter()
-            .map(|&i| match &lines[i] {
-                Line::Say(Spoken { text: t, .. }) | Line::Foil { text: t, .. } => t.chars().count(),
-                _ => 0,
-            })
-            .collect();
-        let mut over: Vec<usize> = pace::over_budget(&lens, budget)
-            .into_iter()
-            .map(|k| spoken_at[k])
-            .collect();
-        over.sort_unstable();
-        for &i in over.iter().rev() {
-            lines.remove(i);
-            ev.push(moderation::output_event(
-                now_ms,
-                pace::PACE_RULE,
-                pace::TRIMMED,
-            ));
+        // The beat's speech budget: spoken lines past it go whole, the last first; a guest's
+        // turn and the host's answer to it are kept ahead of the rest.
+        let fitted = match (&guest_on, host_only) {
+            (Some(g), false) => {
+                scene::fit_guest_exchange(&mut lines, g, close, budget, now_ms, &mut ev)
+            }
+            _ => None,
+        };
+        let mut over: Vec<usize> = Vec::new();
+        if fitted.is_none() {
+            let spoken_at: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| matches!(l, Line::Say(_) | Line::Foil { .. }))
+                .map(|(i, _)| i)
+                .collect();
+            let lens: Vec<usize> = spoken_at
+                .iter()
+                .map(|&i| match &lines[i] {
+                    Line::Say(Spoken { text: t, .. }) | Line::Foil { text: t, .. } => {
+                        t.chars().count()
+                    }
+                    _ => 0,
+                })
+                .collect();
+            over = pace::over_budget(&lens, budget)
+                .into_iter()
+                .map(|k| spoken_at[k])
+                .collect();
+            over.sort_unstable();
+            for &i in over.iter().rev() {
+                lines.remove(i);
+                ev.push(moderation::output_event(
+                    now_ms,
+                    pace::PACE_RULE,
+                    pace::TRIMMED,
+                ));
+            }
         }
         // The lag ceiling: a line queued so far behind that the voice would skip it goes here.
         let spoken: Vec<(usize, &str)> = lines
@@ -1487,6 +1521,10 @@ impl Brain {
                 pace::PACE_RULE,
                 pace::LAGGED,
             ));
+        }
+        // A lagged answer never leaves the guest with the last word.
+        if let (Some(g), false) = (&guest_on, late.is_empty()) {
+            scene::guest_turns(&mut lines, g, None, now_ms, &mut ev);
         }
         let first_text_ms = reply.first_text_ms;
         // The keyless ScriptedEngine echoes a constant line by design (harness plumbing);
@@ -1515,7 +1553,7 @@ impl Brain {
         let mut say_idx: Vec<usize> = Vec::new();
         let mut suppressed = 0usize;
         // A spoken line the pace gate dropped: a pick it alone answered never aired.
-        let lost = !over.is_empty() || !late.is_empty();
+        let lost = !over.is_empty() || fitted.is_some_and(|n| n > 0) || !late.is_empty();
         for line in lines {
             match line {
                 Line::Say(Spoken { text, delivery }) => {

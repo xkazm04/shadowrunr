@@ -22,7 +22,15 @@
 //!   turn record, like stall lines: the model did not write the fixed ones.
 //!
 //! Outside a scene the guest is the active foil for the whole segment, and its turns keep the
-//! foil rules ([`guest_turns`]): one sentence a turn, and the host speaks after every one.
+//! foil rules ([`guest_turns`]): one sentence a turn, and the host speaks after every one. The
+//! prompt tells the model the turn order (host, guest, host: the guest's line right after his
+//! first line, answered by his next). The beat's speech budget keeps the exchange
+//! ([`fit_guest_exchange`]): other lines go first, a host answer too long to fit gives way to a
+//! short close ([`GUEST_CLOSES`]), and a guest line nobody answered is closed the same way
+//! when it is the beat's only one, never left as the last word (registry technique
+//! guest-line-cap-host-last-word). sbx-20261024-194036-10m: the guest never spoke outside the
+//! scene; its three lines (04:31, 05:08, 05:46) were cut by the pace budget, written after the
+//! host's chat answers. A care beat or a scene aside is the host's alone ([`HOST_ONLY`]).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -51,6 +59,20 @@ pub const GUEST_TURN_RULE: &str = "guest_turn";
 pub const TRIMMED: &str = "trimmed";
 /// Its action for a guest line no host line followed: dropped (the host has the last word).
 pub const LAST_WORD: &str = "last_word";
+/// Its action for a guest turn closed by a short host line ([`GUEST_CLOSES`]): the guest's
+/// only line in the beat had no answer, or its answer did not fit the budget.
+pub const CLOSED: &str = "closed";
+/// Its action for a guest line dropped from a beat the host speaks alone (a care beat, a
+/// scene aside).
+pub const HOST_ONLY: &str = "host_only";
+/// The host's short closes for a guest turn his own answer did not reach (engine defaults,
+/// character-neutral; the beat rotates through them).
+pub const GUEST_CLOSES: &[&str] = &[
+    "Noted. Overruled.",
+    "Thank you. That will do.",
+    "Bold words. Wrong, but bold.",
+    "Lovely. Moving on.",
+];
 
 /// The scene the state summary puts up, by id.
 pub fn scene_up(summary: &str) -> Option<&str> {
@@ -284,9 +306,17 @@ pub fn first_sentence(text: &str) -> &str {
 
 /// The guest's turn rules outside a scene: each of `guest`'s lines is cut to its first
 /// sentence, and a guest line with no host line after it (before the next guest line or the
-/// end of the reply) is dropped, so the host speaks after every guest turn. Each change leaves
-/// a [`GUEST_TURN_RULE`] record.
-pub fn guest_turns(lines: &mut Vec<Line>, guest: &str, now_ms: TsMs, ev: &mut Vec<StreamEvent>) {
+/// end of the reply) is dropped, so the host speaks after every guest turn; when it is the
+/// reply's only guest line and a `close` is given, a host line closes it instead
+/// ([`CLOSED`]), so the guest is not dropped every time the model writes it last. Each change
+/// leaves a [`GUEST_TURN_RULE`] record.
+pub fn guest_turns(
+    lines: &mut Vec<Line>,
+    guest: &str,
+    close: Option<&str>,
+    now_ms: TsMs,
+    ev: &mut Vec<StreamEvent>,
+) {
     for l in lines.iter_mut() {
         if let Line::Foil { foil, text } = l {
             if foil == guest {
@@ -312,10 +342,82 @@ pub fn guest_turns(lines: &mut Vec<Line>, guest: &str, now_ms: TsMs, ev: &mut Ve
             drop.push(k);
         }
     }
+    let guests = lines.iter().filter(|l| is_guest(l)).count();
+    if let (Some(close), [k], 1) = (close, drop.as_slice(), guests) {
+        lines.insert(k + 1, Line::Say(Spoken::plain(close)));
+        ev.push(output_event(now_ms, GUEST_TURN_RULE, CLOSED));
+        return;
+    }
     for &k in drop.iter().rev() {
         lines.remove(k);
         ev.push(output_event(now_ms, GUEST_TURN_RULE, LAST_WORD));
     }
+}
+
+/// The beat's speech budget (`budget` characters) with the guest's turn kept: the beat's
+/// first line, the guest's first turn and the host line answering it stay; the other spoken
+/// lines go, the last first (each a [`crate::pace::PACE_RULE`] / `trimmed` record). Still
+/// over, the answer gives way to `close` when that is shorter ([`CLOSED`]); still over, the
+/// exchange goes too, unless the guest's line is the beat's first. `None` when the reply has
+/// no answered guest turn (the plain budget rule applies); else how many spoken lines were
+/// dropped or replaced (a pick only they answered did not air).
+pub fn fit_guest_exchange(
+    lines: &mut Vec<Line>,
+    guest: &str,
+    close: &str,
+    budget: usize,
+    now_ms: TsMs,
+    ev: &mut Vec<StreamEvent>,
+) -> Option<usize> {
+    let spoken: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| matches!(l, Line::Say(_) | Line::Foil { .. }))
+        .map(|(i, _)| i)
+        .collect();
+    let gp = (0..spoken.len().saturating_sub(1)).find(|&j| {
+        matches!(&lines[spoken[j]], Line::Foil { foil, .. } if foil == guest)
+            && matches!(&lines[spoken[j + 1]], Line::Say(_))
+    })?;
+    let len = |l: &Line| match l {
+        Line::Say(Spoken { text, .. }) | Line::Foil { text, .. } => text.chars().count(),
+        _ => 0,
+    };
+    let mut lens: Vec<usize> = spoken.iter().map(|&i| len(&lines[i])).collect();
+    let mut total: usize = lens.iter().sum();
+    let mut gone: Vec<usize> = Vec::new();
+    for j in (1..spoken.len()).rev() {
+        if total <= budget {
+            break;
+        }
+        if j == gp || j == gp + 1 {
+            continue;
+        }
+        total -= lens[j];
+        gone.push(j);
+    }
+    let mut changed = 0;
+    let close_len = close.chars().count();
+    if total > budget && close_len < lens[gp + 1] {
+        total = total - lens[gp + 1] + close_len;
+        lens[gp + 1] = close_len;
+        lines[spoken[gp + 1]] = Line::Say(Spoken::plain(close));
+        ev.push(output_event(now_ms, GUEST_TURN_RULE, CLOSED));
+        changed += 1;
+    }
+    if total > budget && gp > 0 {
+        gone.extend([gp, gp + 1]);
+    }
+    gone.sort_unstable();
+    for &j in gone.iter().rev() {
+        lines.remove(spoken[j]);
+        ev.push(output_event(
+            now_ms,
+            crate::pace::PACE_RULE,
+            crate::pace::TRIMMED,
+        ));
+    }
+    Some(changed + gone.len())
 }
 
 #[cfg(test)]
@@ -354,7 +456,7 @@ mod tests {
             foil("Ha."),
         ];
         let mut ev = Vec::new();
-        guest_turns(&mut lines, "the-painter", 0, &mut ev);
+        guest_turns(&mut lines, "the-painter", Some("Noted."), 0, &mut ev);
         let kept: Vec<String> = lines
             .iter()
             .map(|l| match l {

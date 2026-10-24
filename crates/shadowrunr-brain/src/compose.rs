@@ -452,7 +452,20 @@ pub struct TurnInputs<'a> {
     /// A sincere "are you an AI" was answered earlier this stream: a wave asking it gets the
     /// deflection note.
     pub ai_answered: bool,
+    /// The active foil is a guest on stage with him (SEG-03 outside a scene): the answer
+    /// format spells out the turn order ([`GUEST_TURN_ORDER`]).
+    pub guest_turns: bool,
 }
+
+/// The turn order for a guest on stage (`{guest}` is its foil id): its one-sentence line comes
+/// right after his first line and is answered by his next, so the budget's cut (last lines
+/// first) never takes the exchange (sbx-20261024-194036-10m: written after his chat answers,
+/// the guest's three lines were all cut).
+pub const GUEST_TURN_ORDER: &str = "Tonight's guest, {guest}, is on stage with you: in most \
+beats give it one turn, one sentence on its FOIL line. Turn order: your first line, then the \
+guest's line, then your answer to it, and only then anything else. The guest never speaks \
+twice in a row and never has the last word, and its line and your answer share the budget \
+above, so keep both short.\n";
 
 /// The rule a self-harm disclosure invokes. A package that lists it under `rails` keeps it on
 /// whatever the operator override says.
@@ -976,6 +989,9 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
     }
     if let Some(f) = t.active_foil {
         fmt.push_str(&format!("Lines for the active foil: FOIL {f}: <text>\n"));
+        if t.guest_turns {
+            fmt.push_str(&GUEST_TURN_ORDER.replace("{guest}", f));
+        }
     }
     fmt.push_str(&t.pkg.persona.fill(
         "Memory candidates (not spoken): NOTE: <what is worth remembering, with the {follower} \
@@ -1085,6 +1101,7 @@ mod tests {
             case: None,
             repeat_ai: &HashSet::new(),
             ai_answered: false,
+            guest_turns: false,
         });
         assert!(
             turn.contains("at most about 2 sentences and 260 characters in all this beat"),
@@ -1235,6 +1252,7 @@ mod tests {
             case: None,
             repeat_ai: &HashSet::new(),
             ai_answered: false,
+            guest_turns: false,
         });
         assert!(
             chat_line(&turn, "lord").ends_with(&malakor_persona().fill(PATRON_NOTE)),
@@ -1400,6 +1418,7 @@ Do name the target.
             case: None,
             repeat_ai: &HashSet::new(),
             ai_answered: false,
+            guest_turns: false,
         })
     }
 

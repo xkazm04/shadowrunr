@@ -604,6 +604,9 @@ pub struct SegmentRuntime {
     seen: HashSet<String>,
     seen_order: VecDeque<String>,
     signed_off: bool,
+    /// The host says the stream is at its planned end (its goodbye window,
+    /// [`Self::set_stream_ending`]): a Table Read's floor no longer holds `sign_off` back.
+    stream_ending: bool,
     /// The multi-act arc, when the stream is planned long enough (SEG-02A).
     arc: Option<ArcPlan>,
     /// Elapsed ms of every fog-lifting reveal under the arc, in order (the reveal pacing).
@@ -753,6 +756,7 @@ impl SegmentRuntime {
             seen: HashSet::new(),
             seen_order: VecDeque::new(),
             signed_off: false,
+            stream_ending: false,
             arc,
             reveals: Vec::new(),
             voted: BTreeSet::new(),
@@ -946,6 +950,16 @@ impl SegmentRuntime {
 
     pub fn is_signed_off(&self) -> bool {
         self.signed_off
+    }
+
+    /// The host's signal that the stream is at its planned end (the goodbye window, where it
+    /// asks for the goodbye and the `sign_off`). The runtime cannot see the stream's schedule,
+    /// only its own segment clock, so the host loop that owns the schedule says so every beat.
+    /// While it holds, a Table Read's floor ([`crate::rounds`]) no longer refuses `sign_off`:
+    /// the floor keeps the segment from being abandoned early, not the stream from ending on
+    /// time.
+    pub fn set_stream_ending(&mut self, ending: bool) {
+        self.stream_ending = ending;
     }
 
     /// What fills the broadcast's main screen now.
@@ -1799,12 +1813,14 @@ impl SegmentRuntime {
             // An arc is the whole planned segment: it is not handed over midway.
             "switch_segment" if self.arc.is_some() => Err("arc_in_progress"),
             "sign_off" if self.sign_off_withheld() => Err("dossier_not_sealed"),
-            // Scene rounds run at least to their floor.
-            "sign_off"
-                if self
-                    .rounds
-                    .as_ref()
-                    .is_some_and(|r| self.elapsed_ms() < i64::from(r.times.floor_s) * 1000) =>
+            // Scene rounds run at least to their floor: no switching away before it, and no
+            // sign-off unless the host says the stream itself is ending.
+            "sign_off" | "switch_segment"
+                if !(tag == "sign_off" && self.stream_ending)
+                    && self
+                        .rounds
+                        .as_ref()
+                        .is_some_and(|r| self.elapsed_ms() < i64::from(r.times.floor_s) * 1000) =>
             {
                 Err("segment_floor")
             }

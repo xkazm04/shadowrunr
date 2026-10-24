@@ -16,8 +16,13 @@
 //! - [`TALK_STATE`]: free talk about the scene for `talk_s`; the last one lasts until the floor.
 //! - [`CLOSING_STATE`]: the host wraps up and signs off.
 //!
-//! `sign_off` is refused before the floor (`segment_floor`); at the ceiling the round in
-//! progress ends after its scene and the segment closes.
+//! The floor (`floor_s`) keeps the segment from being abandoned early: `switch_segment` is
+//! refused before it (`segment_floor`), and so is `sign_off`, unless the host says the stream
+//! itself is at its planned end ([`crate::SegmentRuntime::set_stream_ending`], the goodbye
+//! window): a stream scheduled to end before the floor still signs off on time
+//! (sbx-20261024-194036-10m: SEG-03 began at 04:03 of a 10-minute show, and three sign-offs in
+//! the goodbye were refused). At the ceiling the round in progress ends after its scene and
+//! the segment closes.
 //!
 //! The timings are ASSUMPTIONS, uncalibrated, and the config may override them
 //! ([`RoundTimes`]). Free talk is 5 minutes, the middle of the format's 4-6: three rounds of a
@@ -66,7 +71,8 @@ pub struct RoundTimes {
     pub ballot_secs: u32,
     /// Free talk after each scene.
     pub talk_s: u32,
-    /// `sign_off` is refused before this, and the last talk lasts until it.
+    /// `switch_segment` is refused before this, and `sign_off` too unless the stream is
+    /// ending; the last talk lasts until it.
     pub floor_s: u32,
     /// From here no new round starts: the segment closes after the scene in progress.
     pub ceiling_s: u32,

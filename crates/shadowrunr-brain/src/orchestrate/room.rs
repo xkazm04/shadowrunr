@@ -7,6 +7,15 @@
 //! runtime writes into `state_summary`: `open crowd poll p1: "…" | …`, `last poll p1 closed:
 //! …`, `foil vote f1 closed: TIE …`, `PLEBISCITE on h3 decided: …`, `active foil: …` and
 //! `HANDOVER DUE: …`. A wording change there silences an announcement; it never repeats one.
+//!
+//! **Cues** (SEG-03 Table Read): a state's opening job is queued once, like a room event, so
+//! it is not lost to the chat a beat answers. In the `intro` state the `TABLE READ with
+//! <guest>:` line cues the guest's introduction and the vote; a `FREE TALK after "<title>"`
+//! line cues the first talk beat after that scene with its talking points (the scene's
+//! `notes`, which the runtime writes into that line). A cue stands even on the watch's first
+//! beat (it is a job, not news), takes at most one pick ([`CUE_PICKS`]) so the cue has room,
+//! and lapses unannounced once its state is over (sbx-20261024-194036-10m: the intro and the
+//! first free talk answered chat only, never the guest, the vote or the scene).
 
 use std::collections::{HashMap, HashSet};
 
@@ -23,7 +32,19 @@ pub struct RoomEvent {
     pub note: String,
     /// The prepared connector that fits it, if any.
     pub connector: Option<ConnectorKind>,
+    /// A cue: the segment state it belongs to (it lapses once the state is over), and so at
+    /// most [`CUE_PICKS`] picks beside it. `None` for a room event.
+    pub cue_state: Option<String>,
 }
+
+/// The state summary line of a Table Read (`TABLE READ with <guest>: round …`).
+pub const TABLE_READ_PREFIX: &str = "TABLE READ with ";
+/// The state summary line of the free talk after a scene (`FREE TALK after "<title>" …`).
+pub const FREE_TALK_PREFIX: &str = "FREE TALK after \"";
+/// The Table Read's opening state, whose beat introduces the guest and the vote.
+pub const INTRO_STATE: &str = "intro";
+/// The most chat a cue's beat answers beside it.
+pub const CUE_PICKS: usize = 1;
 
 /// What the state text said about votes and the handover, beat to beat.
 #[derive(Debug, Default, Clone)]
@@ -65,6 +86,39 @@ fn act(result: &str) -> &'static str {
     }
 }
 
+/// The intro's cue: bring the guest on and explain the vote.
+fn intro_cue(guest: &str, state: &str) -> RoomEvent {
+    let name = guest.replace(['-', '_'], " ");
+    RoomEvent {
+        label: "table read intro".into(),
+        note: format!(
+            "CUE: the Table Read opens now. Bring tonight's guest on: introduce {} by name and \
+             who they are (their sheet is under Active foil above), let them say one line, and \
+             explain the vote: chat picks each scene with `!vote <title>`, you two perform it, \
+             then you talk about it honestly.",
+            one_line(&name, 60)
+        ),
+        connector: None,
+        cue_state: Some(state.to_string()),
+    }
+}
+
+/// The first free talk beat's cue: open it from the scene's talking points.
+fn talk_cue(title: &str, line: &str, state: &str) -> RoomEvent {
+    RoomEvent {
+        label: "free talk opens".into(),
+        note: format!(
+            "CUE: the scene \"{}\" just ended. Open the free talk from its talking points now: \
+             take one, give your honest verdict on the scene (what landed, what died, and why) \
+             and put it to chat. {}",
+            one_line(title, 120),
+            one_line(line, 700)
+        ),
+        connector: None,
+        cue_state: Some(state.to_string()),
+    }
+}
+
 impl RoomWatch {
     /// Read one beat's state; queue what newly happened.
     pub fn observe(&mut self, state: &str, summary: &str) {
@@ -74,6 +128,7 @@ impl RoomWatch {
         let mut active_foil: Option<&str> = None;
         let mut handover_line: Option<&str> = None;
         let mut found: Vec<(String, RoomEvent)> = Vec::new();
+        let mut cues: Vec<(String, RoomEvent)> = Vec::new();
         self.open.clear();
         for line in summary.lines().map(str::trim) {
             if let Some(rest) = line.strip_prefix("open ") {
@@ -103,6 +158,7 @@ impl RoomWatch {
                                 act(result)
                             ),
                             connector: None,
+                            cue_state: None,
                         },
                     ));
                 }
@@ -119,6 +175,7 @@ impl RoomWatch {
                                 one_line(result, 300)
                             ),
                             connector: None,
+                            cue_state: None,
                         },
                     ));
                 }
@@ -140,8 +197,17 @@ impl RoomWatch {
                             act(line)
                         ),
                         connector: None,
+                        cue_state: None,
                     },
                 ));
+            } else if let Some(rest) = line.strip_prefix(TABLE_READ_PREFIX) {
+                if state == INTRO_STATE {
+                    let guest = rest.split(':').next().unwrap_or(rest).trim();
+                    cues.push((format!("table-read-intro {guest}"), intro_cue(guest, state)));
+                }
+            } else if let Some(rest) = line.strip_prefix(FREE_TALK_PREFIX) {
+                let title = rest.split('"').next().unwrap_or(rest);
+                cues.push((format!("free-talk {title}"), talk_cue(title, line, state)));
             } else if let Some(f) = line.strip_prefix("active foil: ") {
                 active_foil = Some(f);
             } else if line.starts_with("HANDOVER DUE") {
@@ -168,6 +234,7 @@ impl RoomWatch {
                             one_line(foil, 80)
                         ),
                         connector: None,
+                        cue_state: None,
                     },
                 ));
             }
@@ -175,6 +242,14 @@ impl RoomWatch {
         self.open_foil_vote = open_foil;
         for (key, ev) in found {
             if self.announced.insert(key) && !first {
+                self.pending.push(ev);
+            }
+        }
+        // A cue lapses with its state; a new one stands even on the first beat.
+        self.pending
+            .retain(|e| e.cue_state.as_deref().is_none_or(|s| s == state));
+        for (key, ev) in cues {
+            if self.announced.insert(key) {
                 self.pending.push(ev);
             }
         }
@@ -186,14 +261,19 @@ impl RoomWatch {
                 label: "handover due".into(),
                 note: format!("ROOM EVENT: {what}. Bridge to it now, in your own voice."),
                 connector: Some(ConnectorKind::IntoHandover),
+                cue_state: None,
             });
         }
         self.handover_due = due;
     }
 
-    /// The announcements owed, taken once.
-    pub fn take(&mut self) -> Vec<RoomEvent> {
-        std::mem::take(&mut self.pending)
+    /// The announcements owed, taken once; without `cues`, the cues stay pending.
+    pub fn take(&mut self, cues: bool) -> Vec<RoomEvent> {
+        let (taken, kept) = std::mem::take(&mut self.pending)
+            .into_iter()
+            .partition(|e| cues || e.cue_state.is_none());
+        self.pending = kept;
+        taken
     }
 
     pub fn has_pending(&self) -> bool {

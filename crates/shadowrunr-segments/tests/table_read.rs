@@ -324,6 +324,39 @@ fn a_ballot_with_no_votes_puts_up_the_first_scene_and_a_stale_scene_ends_itself(
     assert_eq!(rt.scenes_played(), ["the-gallery"]);
 }
 
+/// sbx-20261024-194036-10m: SEG-03 began at 04:03 of a 10-minute show; in the goodbye (09:48,
+/// 09:53, 09:58) every `sign_off` was refused for the floor (`op_not_allowed:sign_off`), and
+/// the stream ended without one. The floor holds the segment, not the stream's end.
+#[test]
+fn the_stream_ending_lifts_the_floor_for_sign_off_and_only_then() {
+    let mut rt = seg03();
+    // Free talk after the first scene, five and a half minutes before the floor.
+    run(&mut rt, 1_000, 31_000);
+    rt.scene_ended("the-gallery", 32_000);
+    assert_eq!(rt.state(), "talk");
+    let sign_off = || Op::SignOff {
+        reason: "the hour is done".into(),
+    };
+    // Neighbour: before the goodbye the floor still refuses it.
+    let evs = rt.apply_ops(33_000, &[sign_off()]);
+    assert!(evs.iter().any(
+        |e| matches!(e, StreamEvent::Moderation { stage: ModStage::Output, rule, .. } if rule == "segment_floor")
+    ));
+    assert!(!rt.is_signed_off());
+    assert!(!rt
+        .context(10, 0)
+        .allowed_ops
+        .contains(&"sign_off".to_string()));
+    // The host opens its goodbye window: sign_off is offered and taken.
+    rt.set_stream_ending(true);
+    assert!(rt
+        .context(10, 0)
+        .allowed_ops
+        .contains(&"sign_off".to_string()));
+    rt.apply_ops(34_000, &[sign_off()]);
+    assert!(rt.is_signed_off());
+}
+
 #[test]
 fn past_the_ceiling_no_new_round_starts() {
     let mut c = cfg(Some(table_read()));
