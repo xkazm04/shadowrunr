@@ -4498,7 +4498,11 @@
           "revision": 1,
           "changedAt": "2026-09-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "docs/guide/cli.md:25 The repo's own config format (shadowrunr.toml) is a settings file: fixed top-level tables each deserialized into a typed struct the consumer already knows how to build, so the subject's precondition (the file decides which objects exist and the consumer asks for them by id) doesn't hold. Searching the context files and the whole repo found no reserved directive keys (`_target_ =`, `_disabled_ =`), no generic `instantiate(` and no `cycle detected` resolver. The other configs here (Cargo, pnpm, tsconfig, ESLint) are third-party formats the repo consumes, not ones it defines.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:eb9279efa181d8c8",
+          "evaluatedRevision": 2
         }
       ],
       "governance": "governed"

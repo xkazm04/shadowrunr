@@ -5103,6 +5103,47 @@
           "evidence": "apps/console/src/data/index.ts:7 This code has no keep-watching rationale or idea framing to judge."
         }
       ]
+    },
+    "70f40362-0fe0-4f05-90cf-b95538e20c74/declarative-object-graph-configs": {
+      "context": "workspace-tooling-and-policy",
+      "subject": "declarative-object-graph-configs",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T23:27:23.596Z",
+      "worker": "0e77e67c-e499-456c-960e-40ef7dc2dcb9",
+      "techniques": [
+        {
+          "technique": "directive-key-namespace",
+          "verdict": "not-applicable",
+          "evidence": "docs/guide/cli.md:26 A fixed set of top-level sections, each handled by its own branch, with no generic instantiator. The technique's 'when not to use' clause covers this exactly."
+        },
+        {
+          "technique": "sigil-grammar-over-schema",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:52 Every value is a literal leaf (a path, number or label). There is no reference syntax, so a sigil would only add escaping cost."
+        },
+        {
+          "technique": "reference-resolution-with-cycle-detection",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:71 These names point at presets built into the code, not at other nodes in the file. Values never reference each other, so there is nothing to resolve and no cycle is possible."
+        },
+        {
+          "technique": "merge-vs-override-marking",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:80 There is one config file, and the only layering is a CLI flag overriding a file value, which is source precedence for settings rather than composing files."
+        },
+        {
+          "technique": "textual-macro-prepass",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:3 A single-file format with no includes or fragment splicing, so no relative ids are needed."
+        },
+        {
+          "technique": "escape-hatch-expressions",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:81 Plain TOML with no evaluated expressions. Derived values are written as literals with a comment, so there is no hatch and no trust boundary to state."
+        }
+      ]
     }
   }
 }
