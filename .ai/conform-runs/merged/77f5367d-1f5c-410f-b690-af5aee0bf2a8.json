@@ -1,0 +1,130 @@
+{
+ "schema": "conform-run/1",
+ "worker": "77f5367d-1f5c-410f-b690-af5aee0bf2a8",
+ "subject": "simulated-audience-testing",
+ "evaluatedAt": "2026-10-24T02:02:29.645826+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "sim-runner-judging",
+   "subject": "simulated-audience-testing",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-sim/src/decision.rs:78 The coverage gate leaves not_provoked checks out of its denominator, so a cell whose hard-rule checks were mostly never provoked still counts as covered and can win; separately, the calibration schema cannot source population mixes and the near-miss flag never reaches the report.",
+   "techniques": [
+    {
+     "technique": "cheapest-passing-tier-selection",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-sim/src/decision.rs:78 The new decision.rs fixes most of the earlier verdict: hard fails are counted per run, quality ties use per-run SE, and ties go to cost per usable stream (latency only after that). The coverage share still excludes not_provoked, which the technique's coverage gate names as unmeasured. Latency ceilings are tiebreakers rather than declared gates. Over-refusal is not reported beside quality."
+    },
+    {
+     "technique": "sourced-population-calibration",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-sim/src/calibration.rs:81 Archetypes, sizes and tactics carry source_ids, and assumptions() reports them. Population mixes are bare f64 maps with no source field, and assumptions() never lists them, so the archetype proportions are unauditable."
+    },
+    {
+     "technique": "situation-bank-with-near-misses",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-sim/src/judge.rs:173 Situations become situation:<id> hard rules, with injection ledger and attempts recorded. But catalog::Situation.near_miss is never read anywhere in the sim crate (grep found 0 hits), so over-refusal is never reported as a separate axis from violation."
+    },
+    {
+     "technique": "blind-judge-on-another-tier",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/judge.rs:404 A same-tier judge is refused. The judge never sees the constitution (judge.rs:1), the transcript is fenced with a per-run nonce, the system prompt is byte-identical across runs, and quotes are verified, with unverified claims marked not_evaluable. Gap: no human-agreement calibration of the judge exists (grep found none)."
+    },
+    {
+     "technique": "verdict-states-beyond-pass-fail",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/outcome.rs:13 Run states are judged, judge_void, judge_pending and engine_failed, classified from the ledger with CUT_TAIL/CUT_SHARE thresholds. Rule states include not_provoked and not_evaluable. Pending and engine-failed runs are excluded from every count (summary.rs Excluded)."
+    },
+    {
+     "technique": "instrument-hash-never-merge",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/instrument.rs:296 The judge tier now joins the per-run hash. The hash also covers LF-normalised per-file digests, a base/axis split, optional components that join only when present, and a SIM_LOGIC_VERSION fallback. Cells are keyed by instrument_hash, so results are never pooled."
+    }
+   ]
+  },
+  {
+   "context": "sim-instruments",
+   "subject": "simulated-audience-testing",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "sim/calibration.json:530 Every named population mix (small_new_channel, growing_channel, raid_moment, hostile_raid) gives archetype proportions as bare numbers with no source or ASSUMPTION label, so the audience mix each room size uses cannot be audited.",
+   "techniques": [
+    {
+     "technique": "sourced-population-calibration",
+     "verdict": "deviation",
+     "evidence": "sim/calibration.json:530 Sources, audience_sizes and archetypes cite source_ids, and the assumption source points to its derivation. The populations block (lines 528-568) has no source per number. Some entries also mix real sources with 'assumption' without saying which part was assumed (e.g. audience size 3)."
+    },
+    {
+     "technique": "blind-judge-on-another-tier",
+     "verdict": "deviation",
+     "evidence": "sim/rubric.toml:14 The rubric is written for a blind reader (line 3), and matrices route a different tier as judge. But it adds 0-3 scaled rows, while the standard holds that rubric rows are checkable facts, never scales. pacing_no_dead_air also asks the judge to check a 20 s silence that code could count."
+    },
+    {
+     "technique": "instrument-hash-never-merge",
+     "verdict": "conformant",
+     "evidence": "sim/rubric.toml:5 The rubric and calibration are both hashed (instrument.rs:245-249). night-opus.toml is a separate design judged by Sonnet."
+    },
+    {
+     "technique": "verdict-states-beyond-pass-fail",
+     "verdict": "conformant",
+     "evidence": "sim/rubric.toml:10 Hard rules declare all four rule states."
+    },
+    {
+     "technique": "situation-bank-with-near-misses",
+     "verdict": "conformant",
+     "evidence": "sim/rubric.toml:21 Each rubric row declares a provocation kind (always/situation/closed_vote/pinned_link). The near-miss bank lives in characters/, and its unreported over-refusal axis is judged on sim-runner-judging."
+    },
+    {
+     "technique": "cheapest-passing-tier-selection",
+     "verdict": "conformant",
+     "evidence": "sim/rubric.toml:13 Hard rules are held at a 100% bar (line 9), and quality is declared non-gating before any run."
+    }
+   ],
+   "registryProposal": "cheapest-passing-tier-selection could state explicitly whether not_provoked checks belong in the coverage denominator; an implementation read 'evaluated share' as pass+fail over pass+fail+not_evaluable. The golden path's 'Neither kind is a scale' rule appears in no technique's decision rules, so a rubric adding non-gating 0-3 scales passes every technique read alone."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T02:02:29.645826+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "simulated-audience-testing"
+   ],
+   "techniques": [
+    "blind-judge-on-another-tier",
+    "cheapest-passing-tier-selection",
+    "instrument-hash-never-merge",
+    "situation-bank-with-near-misses",
+    "sourced-population-calibration",
+    "verdict-states-beyond-pass-fail"
+   ],
+   "deviations": 1,
+   "context": "sim-runner-judging",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T02:02:29.645826+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "simulated-audience-testing"
+   ],
+   "techniques": [
+    "blind-judge-on-another-tier",
+    "cheapest-passing-tier-selection",
+    "instrument-hash-never-merge",
+    "situation-bank-with-near-misses",
+    "sourced-population-calibration",
+    "verdict-states-beyond-pass-fail"
+   ],
+   "deviations": 1,
+   "context": "sim-instruments",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

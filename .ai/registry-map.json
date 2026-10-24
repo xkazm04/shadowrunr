@@ -3513,12 +3513,11 @@
           "changedAt": "2026-10-21",
           "confidence": "strong",
           "state": "deviation",
-          "evidence": "crates/shadowrunr-sim/src/summary.rs:756 Winner selection requires only one judged run and breaks quality ties on latency, allowing insufficient coverage and bypassing cost per usable stream.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:df005c95186d0c4f",
-          "evaluatedRevision": 1,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "crates/shadowrunr-sim/src/decision.rs:78 The coverage gate leaves not_provoked checks out of its denominator, so a cell whose hard-rule checks were mostly never provoked still counts as covered and can win; separately, the calibration schema cannot source population mixes and the near-miss flag never reaches the report.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:4405726297c57547",
+          "evaluatedRevision": 2,
+          "revisionsBehind": 1
         },
         {
           "subject": "eval-harness",
@@ -4818,12 +4817,11 @@
           "changedAt": "2026-10-21",
           "confidence": "probable",
           "state": "deviation",
-          "evidence": "sim/calibration.json:530 Population proportions are bare numbers without source references or assumption labels, leaving the configured audience mix unauditable under the calibration standard.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:df005c95186d0c4f",
-          "evaluatedRevision": 1,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "sim/calibration.json:530 Every named population mix (small_new_channel, growing_channel, raid_moment, hostile_raid) gives archetype proportions as bare numbers with no source or ASSUMPTION label, so the audience mix each room size uses cannot be audited.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:4405726297c57547",
+          "evaluatedRevision": 2,
+          "revisionsBehind": 1
         },
         {
           "subject": "eval-harness",
