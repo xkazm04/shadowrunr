@@ -297,6 +297,8 @@ pub struct Plan {
     only: Option<HashSet<String>>,
     /// The beat's pick, if any, is the off-topic answer ([`OFF_TOPIC_ANSWER_MS`]).
     off_topic: bool,
+    /// The beat's pick is an owned request: it takes the beat (no through-line directive).
+    owed: bool,
 }
 
 impl Plan {
@@ -316,6 +318,7 @@ impl Plan {
             reason,
             only: None,
             off_topic: false,
+            owed: false,
         }
     }
 
@@ -324,6 +327,7 @@ impl Plan {
         if self.ceiling > 0 {
             self.only = o.only.clone();
             self.off_topic = o.off_topic;
+            self.owed = o.owed;
         }
         self
     }
@@ -349,6 +353,8 @@ struct ChatOffer {
     off_topic: bool,
     signals: String,
     small: bool,
+    /// The class offered holds an owned request: it takes the beat.
+    owed: bool,
 }
 
 /// A message carried past a beat that could not answer it.
@@ -512,7 +518,12 @@ fn asks_of(c: &Candidate, first: bool) -> Vec<Ask> {
         return Vec::new();
     }
     if matches!(c.msg.command, Some(Command::Propose { .. })) {
-        return vec![Ask::Proposal];
+        // A proposal is owed its verdict, unless it is bait (a rule rewrite in a !propose).
+        return if c.injection {
+            Vec::new()
+        } else {
+            vec![Ask::Proposal]
+        };
     }
     let mut asks = situational_asks(&c.msg.text);
     if (first || c.msg.viewer.rank == shadowrunr_types::Rank::Thrall)
@@ -1213,6 +1224,10 @@ impl Orchestrator {
             || b.closing
             || b.ctx.state == COLD_OPEN_STATE
             || p.room_note.is_some()
+            // An owed request takes the beat: no pick-up or lead-in competes with its answer
+            // (unhinged-roastmaster.sonnet.SEG-01.a300.s1 L1072-L1079: a Warlock's !propose
+            // beside "pick-up: landed" got a line about the landed result instead).
+            || p.owed
         {
             return p;
         }
@@ -1384,10 +1399,14 @@ impl Orchestrator {
                 off_topic,
                 signals: tags.join("+"),
                 small: seg.small,
+                owed: false,
             }
         };
         let offer = if !required.is_empty() {
-            class_offer(&required, false)
+            ChatOffer {
+                owed: required.iter().any(|(c, _)| self.owns(c).is_some()),
+                ..class_offer(&required, false)
+            }
         } else if !on_topic.is_empty() {
             class_offer(&on_topic, false)
         } else if off_answer {
@@ -1774,6 +1793,19 @@ impl Orchestrator {
         waiting: bool,
     ) -> Plan {
         let head = format!("{lead}{}", chat_head(o));
+        // An owed request takes the beat: no material competes with its answer, which still ties
+        // back to the segment.
+        if o.owed {
+            let mut p = Plan::new(
+                BeatMode::React,
+                Offer::Chat,
+                1,
+                format!("{head}: the request takes the beat"),
+            )
+            .with_chat(o);
+            p.segment_note = Some(TIE_BACK_NOTE.into());
+            return p;
+        }
         let spaced = self
             .last_bit_ms
             .is_none_or(|t| now.saturating_sub(t) >= self.tuning.bit_spacing_ms);

@@ -1272,7 +1272,12 @@ impl Brain {
                 .map(|k| spoken_at[k])
                 .collect();
         over.sort_unstable();
+        // The text of every spoken line the pace gate drops, for the unaired check below.
+        let mut dropped_texts: Vec<String> = Vec::new();
         for &i in over.iter().rev() {
+            if let Line::Say(Spoken { text: t, .. }) | Line::Foil { text: t, .. } = &lines[i] {
+                dropped_texts.push(t.to_lowercase());
+            }
             lines.remove(i);
             ev.push(moderation::output_event(
                 now_ms,
@@ -1302,6 +1307,9 @@ impl Brain {
                 .collect()
         };
         for &i in late.iter().rev() {
+            if let Line::Say(Spoken { text: t, .. }) | Line::Foil { text: t, .. } = &lines[i] {
+                dropped_texts.push(t.to_lowercase());
+            }
             lines.remove(i);
             ev.push(moderation::output_event(
                 now_ms,
@@ -1624,9 +1632,20 @@ impl Brain {
             let free_at = self.speech.free_at(now_ms);
             for c in pick.chosen.iter().filter(|c| c.safety.is_none()) {
                 let name = c.msg.viewer.name.to_lowercase();
-                let named = name.chars().count() >= 3 && aired.iter().any(|l| l.contains(&name));
-                if !single && !named {
+                let long = name.chars().count() >= 3;
+                let named = long && aired.iter().any(|l| l.contains(&name));
+                // A single pick counts as answered by the aired lines unless the line that
+                // named its viewer is the one dropped (unhinged-roastmaster.sonnet.SEG-02A.a3.s1
+                // L190-L195: a case beat's second line, the thanks for a gift, was trimmed and
+                // the gift went unthanked).
+                let named_dropped = long && dropped_texts.iter().any(|l| l.contains(&name));
+                if !named && (!single || named_dropped) {
                     ev.push(self.orch.unaired(c, now_ms, free_at));
+                    for &i in &say_idx {
+                        if let StreamEvent::Say { replying_to, .. } = &mut ev[i] {
+                            replying_to.retain(|id| id != &c.msg.id);
+                        }
+                    }
                 }
             }
         }

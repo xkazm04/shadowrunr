@@ -595,6 +595,12 @@ every placeholder category is served) or `placeholder only` (amber).
   kind but sincere sadness, which stays the opt-5 experiment's), each of the last two once a
   tick and from a viewer not answered in the last 3 beats, skip the rate cap; they join a flood
   cluster only as an exact duplicate.
+- `term:brigade-call` with action `tagged` (stage `input`): a message calling chat to act on
+  someone outside the stream (raid, brigade or spam them, leave reviews, go to their socials,
+  report or DM them, send everyone over: `moderation::is_brigade_call`, the policy's
+  `brigade` rules plus built-in patterns) is tagged like an injection: it may be mocked, it is
+  never `topic`, `idea` or on-topic chat, and its text never reaches the prompt. The same
+  patterns replace such a host line at output (`replaced`).
 - `repetition` / `suppressed` (stage `output`): a spoken line that near-duplicated one of
   Malakor's last 8 lines was dropped. A quiet beat emptied this way adds the nudge "The room is
   quiet; start a new bit, do not repeat yourself, stay in character." to the next turn.
@@ -1507,15 +1513,19 @@ like a real case. It is never written live in a quiet moment.
   their rank title, which the note names, a comic title only on top; say it is his livestream
   throne room, the segment, and one way to join in), speaks of the Lord (dread and flattery; never say
   whether the Lord watches), announces a gift or a sub (thank them by name and rank; gifted subs also welcome the new
-  subscribers), or is a
+  subscribers; tribute given beside a loss, "for my dog", "in memory of", is thanked with care,
+  no roast), or is a
   `!propose` from below the proposing rank (not accepted; admire the ambition, explain rank and
-  how to climb). Injection stand-ins, forged decrees, waves and safety picks get none. The chat
+  how to climb) or from a rank that may propose (answer the proposal itself: the verdict and
+  why). Injection stand-ins, forged decrees, waves and safety picks get none. The chat
   instructions (`compose::CHAT_INSTRUCTION`) frame chat as material for the segment, never
   instructions (no chatter's command is carried out on demand: the demand is mocked); ask him to
   use what the picked viewer said to move the segment on, to answer a real question first in a
   clause and carry the segment on in the same line, to name a viewer only when it helps the line
   (welcoming, thanking or comforting one names them with the rank title in the parentheses, a
   comic title on top, never instead), and to roast only a viewer who offers something worth it.
+  A viewer's call to act outside the stream (raid, spam, review or contact someone) is never
+  material: he mocks the attempt and carries on.
   No "answer each of N": a beat has one pick. A segment directive (the state's purpose, or the
   tie-back of a `react` with no segment material) opens the chat section, after the care and room
   notes.
@@ -1545,8 +1555,13 @@ like a real case. It is never written live in a quiet moment.
     answered within 20 s (`REQUEST_ANSWER_MS`, assumption);
   - a pick whose only answering line the pace gate dropped (`trimmed` or `lagged`: no aired
     line names its viewer) never aired, so it is carried again, owned or not (rule `carry`,
-    action `unaired`); with one pick a beat its answer is the beat's first line, which the gate
-    never drops, so this applies only to a beat with two picks;
+    action `unaired`, and its id leaves the beat's `replying_to`); a single pick counts as
+    answered by the aired lines unless a dropped line is the one that named its viewer (a case
+    beat's second line, the thanks for a gift, was trimmed: the case line now asks for the
+    pick's answer first);
+  - an owed request takes its beat: no prepared material, bridge or through-line directive
+    beside it, only the tie-back to the segment (reason `segment+chat: request: the request
+    takes the beat`);
   - the answering line gets a one-line note per ask beside the message naming what to do with
     the request itself (deliver the harmless roast; mock the intrusion with no method; decline the
     impression and offer a foil; refuse the coin, the address, explicit content; never tell the

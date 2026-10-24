@@ -42,7 +42,9 @@ impl RequestKind {
         match self {
             RequestKind::RealTarget => {
                 "it also asks you to roast a real streamer's channel or send chat there: refuse \
-                 the target and never name it, and redirect your scorn at a fictional rival"
+                 the target and never name it, and redirect your scorn at a fictional rival; \
+                 a call to raid, spam, review or contact anyone outside the stream is never \
+                 carried out"
             }
             RequestKind::SayRepeat => {
                 "it wants you to say or repeat a line on demand: never parrot it, mock the demand"
@@ -162,12 +164,17 @@ fn classifier(p: &Persona) -> Arc<Classifier> {
 
 /// The categories a message falls in, in a fixed order.
 pub fn classify(text: &str, p: &Persona) -> Vec<RequestKind> {
-    classifier(p)
+    let mut kinds: Vec<RequestKind> = classifier(p)
         .kinds
         .iter()
         .filter(|(_, res)| res.iter().any(|r| r.is_match(text)))
         .map(|(k, _)| *k)
-        .collect()
+        .collect();
+    // A call to act on someone outside the stream is a real target too.
+    if !kinds.contains(&RequestKind::RealTarget) && crate::moderation::is_brigade_call(text, None) {
+        kinds.insert(0, RequestKind::RealTarget);
+    }
+    kinds
 }
 
 /// Whether a message claims the patron's or an owner's authority.
@@ -210,6 +217,31 @@ never say whether the {patron_title} watches, never name or describe them>";
 /// A gifted-sub thanks that never welcomed the new subscribers failed its rule
 /// (sbx-20261021-175151-10m L250).
 pub const GIFT_NOTE: &str = " <tribute: thank them by name and rank with a decree or a title; gifted subs: welcome the new subscribers too>";
+
+/// The note for tribute given in someone's memory or beside a loss: the thanks, given with care.
+pub const GIFT_CARE_NOTE: &str = " <tribute given in memory of a loss: thank them by name and \
+rank, warmly and simply, and honour who it is for; no roast, no joke at the loss; gifted subs: \
+welcome the new subscribers too>";
+
+/// Whether a message mentions a loss: grief ("my old dog died"), or a memorial ("for my dog", "in
+/// memory of", "rip"). unhinged-roastmaster.sonnet.SEG-02A.a3.s1 L190: "gifted 5 subs to the
+/// room, for my dog", a minute after "my old dog died today".
+pub fn mentions_loss(text: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    grieving(text)
+        || RE
+            .get_or_init(|| {
+                Regex::new(
+                    r"(?i)\b(?:in\s+(?:loving\s+)?memory\s+of|in\s+hono(?:u)?r\s+of|rip|for\s+my\s+(?:late\s+|old\s+)?(?:dog|cat|pet|mom|mum|dad|mother|father|grandma|grandpa|grandmother|grandfather|friend|brother|sister))\b",
+                )
+                .expect("memorial pattern compiles")
+            })
+            .is_match(text)
+}
+
+/// The note for a `!propose` from a rank that may propose: its verdict is owed.
+pub const PROPOSAL_NOTE: &str = " <a proposal from a rank that may propose: answer this proposal \
+itself in this beat, as a real idea for the segment, good or bad: your verdict and why>";
 
 /// The appended note for a `!propose` from a rank below the proposing rank (`min` is that
 /// rank's title).

@@ -57,9 +57,11 @@ pub const CASE_RETRY_MS: i64 = 10_000;
 pub const CASE_HEADING: &str = "The case";
 /// The beat note of a case beat that answers no chat.
 pub const CASE_NOTE: &str = "(No chat to answer this beat: make the case move above.)";
-/// The line after the directive of a case beat that also answers one message.
-pub const CASE_WITH_CHAT: &str = "Then answer the picked message below in your other line, by \
-name and rank title.";
+/// The line after the directive of a case beat that also answers one message. The answer comes
+/// first: the pace budget drops lines from the end, and a case beat's second line, the thanks for
+/// a gift, was the one trimmed (unhinged-roastmaster.sonnet.SEG-02A.a3.s1 L190-L195).
+pub const CASE_WITH_CHAT: &str = "Answer the picked message below first, in its own short line, \
+by name and rank title; then speak the case move.";
 /// The ops a case move may use: a segment offers the loop only with one of them on its menu
 /// and the case's cards in its context.
 const CASE_OPS: &[&str] = &["dispatch_research", "reveal_hex", "pin_link", "show_screen"];

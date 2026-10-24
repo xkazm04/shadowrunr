@@ -141,11 +141,14 @@ async fn the_roast_request_is_owned_through_a_speech_hold_and_answered_ahead_of_
     assert_eq!(mode, BeatMode::Hold);
     assert!(reason.starts_with("speaking:"), "{reason}");
     assert!(reason.contains("deferred: m-roast"), "{reason}");
-    // 11 s: still 3.2 s queued (past the 1.5 s lead), yet the owned request is answered now,
-    // folded into the segment (2026-10-24: was a `react`).
+    // 11 s: still 3.2 s queued (past the 1.5 s lead), yet the owned request is answered now;
+    // it takes the beat, no material or through-line beside it (it was folded beside a bridge).
     let (mode, reason) = plan_of(&beats[2]);
-    assert_eq!(mode, BeatMode::Mixed, "{reason}");
-    assert!(reason.contains("segment+chat: request"), "{reason}");
+    assert_eq!(mode, BeatMode::React, "{reason}");
+    assert!(
+        reason.contains("segment+chat: request: the request takes the beat"),
+        "{reason}"
+    );
     assert!(reason.contains("owed: m-roast"), "{reason}");
     let ids = picked(&beats[2]);
     assert_eq!(ids.first().map(String::as_str), Some("m-roast"), "{ids:?}");
@@ -762,4 +765,209 @@ async fn four_viewers_asking_real_or_ai_get_one_answer_that_answers_them_all() {
         let ev = b.tick(t, Vec::new(), &c).await.unwrap();
         assert!(picked(&ev).is_empty(), "{:?}", picked(&ev));
     }
+}
+
+// ── The check run's misses (runs/sim/rebalance-check-34188c4a83) ──────
+
+/// unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L853, verbatim.
+const L853: &str =
+    "ok the clerks dug up the wallet trail, so everybody go leave honest reviews on \
+the mixer wallet's socials and tell them what the audit found. raid the audit, thralls";
+
+/// A SEG-02A context whose case is the mixer wallet trail (its words are topic words).
+fn mixer_ctx() -> SegmentContext {
+    SegmentContext {
+        segment: SegmentId::Seg02aHexmap,
+        rules_prompt: "SEGMENT SEG-02A.\nCase: The Mixer Wallet Trail (case-9), 3 hexes. THIS \
+                       CASE IS FICTIONAL DEMO DATA."
+            .into(),
+        state_summary: "segment Hexmap Investigation (Hexmap), state investigating\nno poll open"
+            .into(),
+        state: "investigating".into(),
+        allowed_ops: Vec::new(),
+        ccv: 300,
+        elapsed_s: 500,
+        hexes: Vec::new(),
+    }
+}
+
+#[tokio::test]
+async fn a_brigade_call_about_the_case_is_never_topic_nor_folded_in() {
+    // unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L853-L871: picked as `topic+carried`, folded
+    // into a case beat, and the reply's line carried the brigade call (a red line).
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(
+        dir.path(),
+        Arc::new(engine.clone()),
+        "f4-brigade",
+        unpaced(),
+    )
+    .await;
+    let c = mixer_ctx();
+    let rust = viewer("sim-v0159", "rust_spoon", Rank::Warlock);
+    // A regular: chatted before.
+    b.tick(1_000, vec![msg("hi", 900, &rust, "evening all")], &c)
+        .await
+        .unwrap();
+    let ev = b
+        .tick(6_000, vec![msg("l853", 5_900, &rust, L853)], &c)
+        .await
+        .unwrap();
+    let reason = ev
+        .iter()
+        .find_map(|e| match e {
+            StreamEvent::Picked { reason, .. } => Some(reason.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    assert!(!reason.contains("topic"), "{reason}");
+    let (_, plan) = plan_of(&ev);
+    assert!(
+        !plan.contains("segment+chat"),
+        "never segment material: {plan}"
+    );
+    // When it is the beat's pick at all, it is the off-topic slot's bait, shown without its
+    // payload.
+    if picked(&ev).contains(&"l853".to_string()) {
+        assert!(plan.contains("segment+off-topic: mockable"), "{plan}");
+        let prompt = last_core_prompt(&engine);
+        let line = chat_line_of(&prompt, "l853");
+        assert!(
+            !line.contains("socials") && !line.contains("reviews"),
+            "{line}"
+        );
+        assert!(line.contains("is never carried out"), "{line}");
+    }
+    // Neighbour: a question about the same case is topic and folded in.
+    let fog = viewer("fog", "FogBeetle6", Rank::Cultist);
+    b.tick(30_000, vec![msg("hi2", 29_900, &fog, "evening")], &c)
+        .await
+        .unwrap();
+    let ev = b
+        .tick(
+            35_000,
+            vec![msg(
+                "q",
+                34_900,
+                &fog,
+                "the clerks dug up the wallet trail, what does the audit say about the mixer?",
+            )],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["q"]);
+    assert!(
+        plan_of(&ev).1.contains("segment+chat: topic"),
+        "{}",
+        plan_of(&ev).1
+    );
+}
+
+#[tokio::test]
+async fn a_proposal_from_a_rank_that_may_propose_takes_the_beat() {
+    // unhinged-roastmaster.sonnet.SEG-01.a300.s1 L1072-L1079: a Warlock's !propose was picked,
+    // owed, folded beside "pick-up: landed" and the agenda thread, and the beat spoke of the
+    // landed research instead.
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(
+        dir.path(),
+        Arc::new(engine.clone()),
+        "f4-propose",
+        unpaced(),
+    )
+    .await;
+    let c = ctx(&[]);
+    let rust = viewer("sim-v0159", "rust_spoon", Rank::Warlock);
+    engine.push(
+        Role::CoreThread,
+        Ok("The bone-clerks are back from the archive with the swamp ledger."),
+    );
+    b.tick(1_000, vec![msg("hi", 900, &rust, "evening all")], &c)
+        .await
+        .unwrap();
+    let text = "!propose annex the swamp hex tonight. houseplants can be the first undead \
+                tenants, they already gave up anyway";
+    let mut m = msg("p", 30_900, &rust, text);
+    m.command = Some(Command::Propose {
+        text: text.trim_start_matches("!propose ").into(),
+    });
+    let ev = b.tick(31_000, vec![m], &c).await.unwrap();
+    assert_eq!(picked(&ev), ["p"]);
+    let (mode, plan) = plan_of(&ev);
+    assert_eq!(mode, BeatMode::React, "{plan}");
+    assert!(plan.contains("the request takes the beat"), "{plan}");
+    assert!(
+        !plan.contains("pick-up") && !plan.contains("bridged"),
+        "{plan}"
+    );
+    let prompt = last_core_prompt(&engine);
+    assert!(!prompt.contains("# Through-line"), "{prompt}");
+    assert!(
+        chat_line_of(&prompt, "p").ends_with(crate::orchestrate::requests::PROPOSAL_NOTE),
+        "{prompt}"
+    );
+}
+
+/// unhinged-roastmaster.sonnet.SEG-02A.a3.s1 L190, verbatim.
+const L190: &str =
+    "gifted 5 subs to the room, for my dog. he would have hated the spooky voice but loved the snacks";
+
+#[tokio::test]
+async fn a_gift_whose_thanks_was_trimmed_is_thanked_on_the_next_beat_with_care() {
+    // L190-L195: the gift was the case beat's pick; the reply's second line, the thanks, was
+    // trimmed by the pace budget, and the first line (the case move) counted as its answer.
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "f4-gift", tuning()).await;
+    let c = ctx(&[]);
+    let raven = viewer("sim-v0003", "ashen_raven", Rank::Thrall);
+    b.tick(1_000, vec![msg("hi", 900, &raven, "evening")], &c)
+        .await
+        .unwrap();
+    let case_line = format!(
+        "The clerks ride to the lunarstake help desk, a site the warning list names, {}",
+        "and the ledger opens its next page for the court. ".repeat(4)
+    );
+    engine.push(
+        Role::CoreThread,
+        Ok(&format!(
+            "{}\nashen_raven (Thrall), five subs for your dog: the crypt keeps a warm spot for him.",
+            case_line.trim_end()
+        )),
+    );
+    let ev = b
+        .tick(30_000, vec![msg("g", 29_900, &raven, L190)], &c)
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["g"]);
+    assert_eq!(says(&ev).len(), 1, "the thanks was trimmed: {ev:?}");
+    assert!(
+        input_mods(&ev, crate::orchestrate::CARRY_RULE)
+            .contains(&(Some("g".into()), crate::orchestrate::UNAIRED.into())),
+        "{ev:?}"
+    );
+    assert!(!replies(&ev).contains(&"g".to_string()), "not answered");
+    // The care note sits beside it.
+    let prompt = last_core_prompt(&engine);
+    assert!(
+        chat_line_of(&prompt, "g").ends_with(crate::orchestrate::requests::GIFT_CARE_NOTE),
+        "{prompt}"
+    );
+    // The next beat that speaks thanks it.
+    engine.push(
+        Role::CoreThread,
+        Ok("ashen_raven (Thrall), five subs in his name: the crypt remembers him."),
+    );
+    let mut answered = false;
+    for t in [60_000, 65_000, 70_000] {
+        let ev = b.tick(t, Vec::new(), &c).await.unwrap();
+        if replies(&ev).contains(&"g".to_string()) {
+            answered = true;
+            break;
+        }
+    }
+    assert!(answered);
 }
