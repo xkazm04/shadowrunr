@@ -4253,6 +4253,56 @@
         "at": "2026-10-24T03:08:13.279028+00:00",
         "reason": "reviewer (sonnet): The anchor packages/tokens/package.json:12 is the \"generate\" script line, not a dependency declaration. It does not show the precondition is absent, so the anchor is incidental."
       }
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/sql-console": {
+      "context": "console-quality-gates",
+      "subject": "sql-console",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:25:09.906Z",
+      "worker": "4e2b7996-5b22-4ec1-86cb-278fbd518948",
+      "techniques": []
+    },
+    "9b2fb27b-e4c5-4300-a214-7f5518a08b44/sql-console": {
+      "context": "console-data-layer",
+      "subject": "sql-console",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:25:09.906Z",
+      "worker": "4e2b7996-5b22-4ec1-86cb-278fbd518948",
+      "techniques": []
+    },
+    "435472ca-7ef4-4956-80d8-3dc82f215665/sql-console": {
+      "context": "console-ui-primitives",
+      "subject": "sql-console",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:25:09.906Z",
+      "worker": "4e2b7996-5b22-4ec1-86cb-278fbd518948",
+      "techniques": []
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/sql-console": {
+      "context": "console-simulator-page",
+      "subject": "sql-console",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:25:09.906Z",
+      "worker": "4e2b7996-5b22-4ec1-86cb-278fbd518948",
+      "techniques": []
+    },
+    "c2325be4-a41e-48f5-9050-bb31c09bb12a/sql-console": {
+      "context": "console-brain-page",
+      "subject": "sql-console",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:25:09.906Z",
+      "worker": "4e2b7996-5b22-4ec1-86cb-278fbd518948",
+      "techniques": []
     }
   }
 }

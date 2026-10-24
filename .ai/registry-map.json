@@ -956,7 +956,11 @@
           "revision": 1,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Runs.tsx:45 The brain page shows runs and ledger entries through named, paged daemon RPCs; its only 'select' hits are an HTML <select> element and the word 'Select' in a hint, not SQL; a case-insensitive search of apps/console/src/pages/brain for sql, information_schema, safe_mode/safeMode and dialect found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:60a26f15745fd8c1",
+          "evaluatedRevision": 1
         },
         {
           "subject": "bounded-enumeration",
@@ -1537,7 +1541,11 @@
           "revision": 1,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/data/rpc.ts:30 The data layer calls named daemon RPC methods (for example tournaments.page and ledger.page) on the application's own daemon and never sends user-typed SQL to an external database; a case-insensitive search of apps/console/src/data for sql, information_schema, safe_mode/safeMode and dialect found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:60a26f15745fd8c1",
+          "evaluatedRevision": 1
         },
         {
           "subject": "test-harness",
@@ -2374,7 +2382,11 @@
           "revision": 1,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:22 The simulator page reads tournament data through named, paged daemon RPCs and has no console for user-written SQL; a case-insensitive search of apps/console/src/pages/simulator for sql, information_schema, safe_mode/safeMode and dialect found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:60a26f15745fd8c1",
+          "evaluatedRevision": 1
         },
         {
           "subject": "eval-harness",
@@ -2604,7 +2616,11 @@
           "revision": 1,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/ui/FilterTable.tsx:1 The primitives are generic display widgets (a filter table, chips, pills, a virtual list) with no SQL editor, query runner or result-grid NULL contract for a foreign engine; a case-insensitive search of apps/console/src/ui for sql, information_schema, safe_mode/safeMode and dialect found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:60a26f15745fd8c1",
+          "evaluatedRevision": 1
         }
       ],
       "governance": "governed"
@@ -4517,7 +4533,11 @@
           "revision": 1,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/fidelity/run.mjs:7 This context is a style-fidelity, bundle-budget and perf-count harness for the operator console, and it has no SQL editor, executor or schema browser; a case-insensitive search of apps/console/budgets, apps/console/fidelity and apps/console/src/perf for sql, information_schema, safe_mode/safeMode and dialect found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:60a26f15745fd8c1",
+          "evaluatedRevision": 1
         },
         {
           "subject": "image-prompt-composition",

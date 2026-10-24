@@ -1,0 +1,143 @@
+{
+ "schema": "conform-run/1",
+ "worker": "4e2b7996-5b22-4ec1-86cb-278fbd518948",
+ "subject": "sql-console",
+ "evaluatedAt": "2026-10-24T03:25:09.906201+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-quality-gates",
+   "subject": "sql-console",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/fidelity/run.mjs:7 This context is a style-fidelity, bundle-budget and perf-count harness for the operator console, and it has no SQL editor, executor or schema browser; a case-insensitive search of apps/console/budgets, apps/console/fidelity and apps/console/src/perf for sql, information_schema, safe_mode/safeMode and dialect found nothing.",
+   "techniques": [],
+   "absenceTerms": [
+    "sql",
+    "information_schema",
+    "safeMode",
+    "dialect"
+   ]
+  },
+  {
+   "context": "console-data-layer",
+   "subject": "sql-console",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/data/rpc.ts:30 The data layer calls named daemon RPC methods (for example tournaments.page and ledger.page) on the application's own daemon and never sends user-typed SQL to an external database; a case-insensitive search of apps/console/src/data for sql, information_schema, safe_mode/safeMode and dialect found nothing.",
+   "techniques": [],
+   "absenceTerms": [
+    "sql",
+    "information_schema",
+    "safeMode",
+    "dialect"
+   ]
+  },
+  {
+   "context": "console-ui-primitives",
+   "subject": "sql-console",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/ui/FilterTable.tsx:1 The primitives are generic display widgets (a filter table, chips, pills, a virtual list) with no SQL editor, query runner or result-grid NULL contract for a foreign engine; a case-insensitive search of apps/console/src/ui for sql, information_schema, safe_mode/safeMode and dialect found nothing.",
+   "techniques": [],
+   "absenceTerms": [
+    "sql",
+    "information_schema",
+    "safeMode",
+    "dialect"
+   ]
+  },
+  {
+   "context": "console-simulator-page",
+   "subject": "sql-console",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/simulator/data.ts:22 The simulator page reads tournament data through named, paged daemon RPCs and has no console for user-written SQL; a case-insensitive search of apps/console/src/pages/simulator for sql, information_schema, safe_mode/safeMode and dialect found nothing.",
+   "techniques": [],
+   "absenceTerms": [
+    "sql",
+    "information_schema",
+    "safeMode",
+    "dialect"
+   ]
+  },
+  {
+   "context": "console-brain-page",
+   "subject": "sql-console",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/brain/Runs.tsx:45 The brain page shows runs and ledger entries through named, paged daemon RPCs; its only 'select' hits are an HTML <select> element and the word 'Select' in a hint, not SQL; a case-insensitive search of apps/console/src/pages/brain for sql, information_schema, safe_mode/safeMode and dialect found nothing.",
+   "techniques": [],
+   "absenceTerms": [
+    "sql",
+    "information_schema",
+    "safeMode",
+    "dialect"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T03:25:09.906201+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "sql-console"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-quality-gates",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T03:25:09.906201+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "sql-console"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-data-layer",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T03:25:09.906201+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "sql-console"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-ui-primitives",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T03:25:09.906201+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "sql-console"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-simulator-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T03:25:09.906201+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "sql-console"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-brain-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
