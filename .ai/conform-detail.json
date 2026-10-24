@@ -4658,6 +4658,108 @@
           "evidence": "apps/stage/src/voice/captions.ts:1 Speech is directed upstream, in the daemon or sidecar. The stage plays and displays it, timing captions on real audio duration rather than a word count."
         }
       ]
+    },
+    "cba93863-0123-4867-be4e-770e6d0516b4/fleet-orchestration": {
+      "context": "daemon-show-prep-and-review",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T05:44:55.193Z",
+      "worker": "a93f2757-0188-41b1-bc43-f5760e399aff",
+      "techniques": [
+        {
+          "technique": "durable-fleet-state",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/sandbox.rs:721 Recovery honesty: a session found after a restart with no terminal record gets the self-reported Failed label. SandboxState has no lost or unknown member, and error.json is never consulted."
+        },
+        {
+          "technique": "absent-status-passthrough",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/sandbox.rs:705 A missing record gets a definite state (failed) when it should be passed through as unknown or interrupted. A Stopped session's session.json also reads back as Done."
+        },
+        {
+          "technique": "session-registry",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/sandbox.rs:68 Identity comes from a second-resolution timestamp plus the length. Ids can recur, which is why start must move an existing dir aside. The closed vocabulary (Running/Closing/Judging/Done/Failed/Stopped) has no lost member, and set_state writes status directly with no transition door."
+        },
+        {
+          "technique": "parallel-dispatch",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/sandbox.rs:353 One session at a time, never beside a live sim run. The slot is claimed at one door under the lock."
+        },
+        {
+          "technique": "completion-claim-verification",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/sandbox.rs:568 A judge result that is pending, void, or decided zero hard checks becomes Unmeasured, never a pass. That is the three-valued verdict."
+        },
+        {
+          "technique": "inherited-state-provenance",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/sandbox.rs:375 A new session never inherits a predecessor's artifacts. The old dir is moved aside under a dated attempt tag, which keeps it as history."
+        },
+        {
+          "technique": "result-harvest",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/review/tagger.rs:365 The tagger fans out batches (PARALLEL_BATCHES) and accounts for every input line, tagged or untagged. engine_down separates total failure from partial failure."
+        }
+      ]
+    },
+    "ce601bf6-a98a-465f-8f19-3143e6483f8d/fleet-orchestration": {
+      "context": "reconcile-engine",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T05:44:55.193Z",
+      "worker": "a93f2757-0188-41b1-bc43-f5760e399aff",
+      "techniques": [
+        {
+          "technique": "result-harvest",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/runs.rs:216 loaded + excluded does not account for the whole roster. A Failed run with no transcript (shadowrunr-sim runner.rs write_error after a prepare failure) vanishes, even though Excluded claims to count what was left out."
+        },
+        {
+          "technique": "absent-status-passthrough",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/runs.rs:164 A run with no terminal record is counted as incomplete, with no guess about whether it is alive or dead."
+        },
+        {
+          "technique": "completion-claim-verification",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:1 The Reconciler's claims are checked parent-side in code (refs must resolve to real transcript lines, diffs are fenced away from constitution.md) before anything is stored."
+        },
+        {
+          "technique": "inherited-state-provenance",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/runs.rs:161 Earlier attempts' outputs are recognised as history and counted, never mixed into the live results."
+        },
+        {
+          "technique": "soft-budget-under-the-hard-cap",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/src/budget.rs:43 This is a token budget for one synthesis prompt, not a stopping rule for a model-driven loop."
+        }
+      ]
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/fleet-orchestration": {
+      "context": "console-review-page",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T05:44:55.193Z",
+      "worker": "a93f2757-0188-41b1-bc43-f5760e399aff",
+      "techniques": []
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/fleet-orchestration": {
+      "context": "console-onair-page",
+      "subject": "fleet-orchestration",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T05:44:55.193Z",
+      "worker": "a93f2757-0188-41b1-bc43-f5760e399aff",
+      "techniques": []
     }
   }
 }

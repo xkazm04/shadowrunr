@@ -1749,8 +1749,12 @@
           "revision": 28,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 2
+          "state": "not-applicable",
+          "priorNotApplicable": 2,
+          "evidence": "apps/console/src/pages/onair/Dispatch.tsx:1 On Air's \"dispatch\" is the in-world plan text Malakor receives, not fleet dispatch. The page only plays back runs (runs.page) and acts on clips, and starts no sessions. A case-insensitive search of apps/console/src/pages/onair for fleet, worker, harvest, hibernat and spawn found no hits.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:93bd71853ab468b1",
+          "evaluatedRevision": 28
         },
         {
           "subject": "agent-browser-control",
@@ -3225,8 +3229,12 @@
           "revision": 28,
           "changedAt": "2026-10-15",
           "confidence": "strong",
-          "state": "unknown",
-          "priorNotApplicable": 2
+          "state": "deviation",
+          "priorNotApplicable": 2,
+          "evidence": "crates/shadowrunr-reconcile/src/runs.rs:216 run_dirs drops every tournament run dir that has no transcript before it classifies or counts anything. A run whose prepare step failed (the sim writes only error.json, so it classifies as Failed, an is_result class) is neither loaded nor counted in Excluded, so it falls off the roster with no trace.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:93bd71853ab468b1",
+          "evaluatedRevision": 28
         },
         {
           "subject": "quality-gates",
@@ -5096,8 +5104,12 @@
           "revision": 28,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 2
+          "state": "not-applicable",
+          "priorNotApplicable": 2,
+          "evidence": "apps/console/src/pages/review/Layer1.tsx:54 The Review page is a read-only wall over finished sandbox session records. It dispatches, supervises and harvests nothing. A case-insensitive search of apps/console/src/pages/review for harvest, hibernat, worker, spawn and heartbeat found no hits. The only fleet hit, in buckets.ts, is the engine-health mark type FleetHealth, which is display, not orchestration.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:93bd71853ab468b1",
+          "evaluatedRevision": 28
         },
         {
           "subject": "mcp-tools",
@@ -6160,8 +6172,12 @@
           "revision": 28,
           "changedAt": "2026-10-15",
           "confidence": "strong",
-          "state": "unknown",
-          "priorNotApplicable": 2
+          "state": "deviation",
+          "priorNotApplicable": 2,
+          "evidence": "crates/shadowrunr-daemon/src/sandbox.rs:721 status_from_disk reports any sandbox session dir without session.json as Failed. A session cut off by a daemon restart (no error.json, nothing self-reported) therefore reads the same as one that wrote its own error.json, which merges lost-at-recovery into self-reported failure.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:93bd71853ab468b1",
+          "evaluatedRevision": 28
         },
         {
           "subject": "agent-runtime-assembly",
