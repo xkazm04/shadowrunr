@@ -2059,7 +2059,11 @@
           "revision": 3,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/NoReport.tsx:11 The empty-state page reads the whole tournament collection through the limit-less, bare-array `tournament.list` (EmptyParams -> Vec<TournamentRow>, one row per sim directory, so it grows with every tournament run) and reduces all of it client-side to pick the newest, even though a paged `tournaments.page` exists; that read has no bound and no continuation.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:4ec15f52e99e1903",
+          "evaluatedRevision": 3
         }
       ],
       "governance": "governed"
@@ -4516,7 +4520,11 @@
           "revision": 4,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/budgets/perf.json:2 This context is a set of build-time and test-time quality instruments (fixed DOM/RPC/draw/commit count budgets checked in jsdom, plus a style-contract 'fidelity' harness against a prototype); it renders no visual surface with runtime cost knobs, so a client-side measured fidelity tier has nothing to govern here. A search of apps/console/budgets, apps/console/fidelity and apps/console/src/perf for requestIdleCallback, hardwareConcurrency, deviceMemory and fidelityTier found nothing. The only 'tier' hits are contest rank tiers (contest.ts:182) and the model core_tier field, and 'fidelity' here means visual parity with the winning prototype, not a runtime tier.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:02a551a058d8874c",
+          "evaluatedRevision": 5
         },
         {
           "subject": "agent-instruction-files",

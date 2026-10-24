@@ -4823,6 +4823,59 @@
       "evaluatedTs": "2026-10-24T06:02:44.825Z",
       "worker": "caf276de-640b-424e-b0ba-447194a3f3eb",
       "techniques": []
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/adaptive-fidelity-tiers": {
+      "context": "console-quality-gates",
+      "subject": "adaptive-fidelity-tiers",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T21:06:21.380Z",
+      "worker": "5183ce7b-22be-4a02-a64a-4c6de95b075d",
+      "techniques": [
+        {
+          "technique": "measured-not-declared-capability",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/budgets/perf.json:2 The budgets are fixed counts taken at test time on a fixture. They are not runtime device capability checks, and nothing here reads a user-agent or a core count."
+        },
+        {
+          "technique": "measurement-settle-budget",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/budgets/perf.json:31 This draw budget asserts there is no frame loop at all, so there is no per-frame probe in this context that would need a settle deadline."
+        }
+      ],
+      "registryProposal": "The registry map matched this context to the subject on the token 'fidelity', but here 'fidelity' means a style-contract parity harness against a prototype, not a runtime quality tier. Consider down-weighting 'fidelity' as a matching token when no frame-time or tier vocabulary appears alongside it."
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/bounded-enumeration": {
+      "context": "console-reconcile-page",
+      "subject": "bounded-enumeration",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T21:24:02.473Z",
+      "worker": "9a023f28-4967-40bb-8459-5b07c4b67535",
+      "techniques": [
+        {
+          "technique": "required-limit-breaks-unaware-clients",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/NoReport.tsx:11 This is a limit-unaware full-list caller of a collection that keeps growing. The bare-array reply has no place for a continuation, so once a limit lands this caller will either fail or silently truncate. By contrast, Incidents.tsx:76 in the same context does it right: it pages on the daemon's `more`/`next_cursor` continuation, not on a short page."
+        },
+        {
+          "technique": "filter-after-return-under-limit",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/Incidents.tsx:69 The only filter here is a `rule` facet the operator picks, applied as a server query predicate. Nothing hides keys per caller for access reasons, so the technique's precondition does not hold."
+        },
+        {
+          "technique": "declare-the-inconsistency",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/report_wire.rs:66 The paged collection (a stored report's incidents) is immutable, so no write can land mid-walk. The anchor is on the daemon side of the endpoint this context pages."
+        },
+        {
+          "technique": "deny-absorbs-and-lowest-limit-wins",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:194 The ceiling is one fixed contract constant. No policy layer states list capabilities or ceilings that would need merging, and there is no recursive list verb."
+        }
+      ]
     }
   }
 }
