@@ -5077,6 +5077,32 @@
           "evidence": "apps/console/src/data/testing.ts:88 The tests script the transport. There's no store engine whose real behavior a test would have to exercise."
         }
       ]
+    },
+    "9b2fb27b-e4c5-4300-a214-7f5518a08b44/data-video-virality": {
+      "context": "console-data-layer",
+      "subject": "data-video-virality",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T23:15:34.254Z",
+      "worker": "7fb131d2-8933-4aea-8b38-2d60c720aa8a",
+      "techniques": [
+        {
+          "technique": "continuity-gate",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/layer.ts:1 No dataset-granularity or idea triage happens here; the module only wires RPC, cache and the event stream."
+        },
+        {
+          "technique": "accelerator-events",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/index.ts:9 The only 'events' here are daemon events that drive cache invalidation, not dated on-screen annotation events for a chart video."
+        },
+        {
+          "technique": "path-over-conclusion",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/index.ts:7 This code has no keep-watching rationale or idea framing to judge."
+        }
+      ]
     }
   }
 }

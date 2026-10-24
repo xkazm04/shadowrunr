@@ -1633,7 +1633,11 @@
           "revision": 4,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/data/layer.ts:1 This context is the console's transport and cache plumbing (RPC client, query cache, /events socket, invalidation, React bindings); case-insensitive searches of all 24 files in apps/console/src/data/ for virality, chart race, bar race, narration, accelerator, precedent, saturation, continuity, recogniz, backlog, video, chart, idea and dataset found no hits, so the subject's precondition (choosing and scoring narration-free data-video ideas) does not hold here.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:857308a4204852e8",
+          "evaluatedRevision": 7
         }
       ],
       "governance": "governed"
