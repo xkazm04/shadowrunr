@@ -1265,7 +1265,11 @@
           "revision": 31,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src-tauri/capabilities/default.json:4 Here \"capabilities\" means Tauri window permissions, not agent capabilities, and \"check\" means bundle/size/token-ref scripts; rg (also with -uu) for CLAUDE.md, AGENTS.md and \"instruction file\" over apps/console, apps/console/scripts and apps/console/src-tauri found nothing, so this context has no agent instruction file to judge.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:25b61236a62604b0",
+          "evaluatedRevision": 31
         }
       ],
       "governance": "governed"
@@ -2699,7 +2703,11 @@
           "revision": 31,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "packages/contract/src/generated/types.ts:1 Here \"generated\" means TypeScript wire types produced from the Rust JSON Schema, not a machine-owned block inside an agent instruction file; rg (also with -uu) for CLAUDE.md, AGENTS.md and \"instruction file\" over packages/contract found nothing, so the subject's precondition (a repo-owned file a harness loads into an agent's context) doesn't hold.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:25b61236a62604b0",
+          "evaluatedRevision": 31
         },
         {
           "subject": "repo-manifest-standard",
@@ -4501,7 +4509,11 @@
           "revision": 31,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/fidelity/run.mjs:36 No agent instruction file exists in this context: rg (also with -uu) for CLAUDE.md, AGENTS.md and \"instruction file\" over apps/console/budgets, apps/console/fidelity and apps/console/src/perf found nothing; the only harness-adjacent hit (\".claude/\" in run.mjs:18/35) is the fidelity gate running a Python script out of the git-ignored contest skill directory, so it uses the skill as a script library and writes no instructions for an agent. The map's match came from the tokens harness/contract/budget, which here mean a test harness, a style contract and size budgets.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:25b61236a62604b0",
+          "evaluatedRevision": 31
         },
         {
           "subject": "eval-harness",
@@ -5822,7 +5834,11 @@
           "revision": 31,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/mod.rs:5 The voice module is a Rust TTS hub (sidecar over stdio, WebSocket VoiceFrames, voice.jsonl log, avatar rig serving); rg (also with -uu) for CLAUDE.md, AGENTS.md and \"instruction file\" over crates/shadowrunr-daemon/src/voice found nothing, so the context holds no file a coding harness would inject. The match came from the generic tokens file/service/files.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:25b61236a62604b0",
+          "evaluatedRevision": 31
         },
         {
           "subject": "creator-voice-and-tone",

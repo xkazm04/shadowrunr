@@ -4384,6 +4384,80 @@
       "evaluatedTs": "2026-10-24T03:49:10.289Z",
       "worker": "29ec1313-c7e5-4e1b-93a5-1779d8ecb29c",
       "techniques": []
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/agent-instruction-files": {
+      "context": "console-quality-gates",
+      "subject": "agent-instruction-files",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:00:33.745Z",
+      "worker": "c92a4e16-1ab5-4a9b-bcd1-9098eb09e201",
+      "techniques": [
+        {
+          "technique": "sibling-floor-ownership",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/fidelity/run.mjs:35 The skill dir is read as a source of scripts by a Node gate, not loaded as part of an agent's always-on floor; this context has no installed capabilities to audit."
+        },
+        {
+          "technique": "enforcement-demotion",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/fidelity/run.mjs:14 The context is itself a deterministic gate (fidelity/budgets), but there's no prose rule here being moved into it; whether CLAUDE.md names this gate is a repo-level question (see notes)."
+        }
+      ]
+    },
+    "7496ad34-8f7b-4407-8b8a-a60c44c91d85/agent-instruction-files": {
+      "context": "daemon-voice-service",
+      "subject": "agent-instruction-files",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:00:33.745Z",
+      "worker": "c92a4e16-1ab5-4a9b-bcd1-9098eb09e201",
+      "techniques": [
+        {
+          "technique": "write-back-sink-class",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/mod.rs:13 voice.jsonl is a runtime log the daemon writes; no instruction file tells an agent to append to it, so it isn't an outbound sink in this subject's sense."
+        }
+      ]
+    },
+    "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0/agent-instruction-files": {
+      "context": "contract-package",
+      "subject": "agent-instruction-files",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:00:33.745Z",
+      "worker": "c92a4e16-1ab5-4a9b-bcd1-9098eb09e201",
+      "techniques": [
+        {
+          "technique": "machine-owned-regions",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/src/generated/types.ts:2 This is a fully generated code file that names its generator, not a fenced region in a hand-written instruction file, so the technique doesn't govern it (though it follows the same regenerate-only pattern)."
+        },
+        {
+          "technique": "capability-coverage-contract",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/package.json:10 Package scripts are capabilities, but whether an instruction file names them is about the root CLAUDE.md, not this context's code."
+        }
+      ]
+    },
+    "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa/agent-instruction-files": {
+      "context": "console-build-and-desktop-shell",
+      "subject": "agent-instruction-files",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:00:33.745Z",
+      "worker": "c92a4e16-1ab5-4a9b-bcd1-9098eb09e201",
+      "techniques": [
+        {
+          "technique": "capability-coverage-contract",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/capabilities/default.json:9 This is a desktop-shell permission grant, not an agent capability that an instruction file should name."
+        }
+      ]
     }
   }
 }
