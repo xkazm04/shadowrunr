@@ -1962,41 +1962,59 @@
       "subject": "live-response-latency-budgeting",
       "bundle": "media-generation",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-20",
-      "evaluatedTs": "2026-10-20T21:40:42.128Z",
-      "worker": "3e4135fb-2ac7-45fc-a1ad-8a07bc1ab83c",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:35:21.158Z",
       "techniques": [
         {
-          "technique": "dual-lane-fast-voice-slow-beats",
-          "verdict": "not-applicable",
-          "evidence": "packages/stage-kit/src/scene.ts:296 Consumes job status events for display; it does not execute planning or generation lanes."
+          "technique": "fleet-loss-grace-signoff",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/ui/Overlays.tsx:150 Treats sign_off.reason as text for the audience, but the brain puts its machine cause code in that field. The end state is otherwise designed: EndCard 'THE SPIRE GOES DARK' (line 174) replaces a frozen frame, and fleet_lost is its own EndReason (vocab.ts:32). Line 160/184 also shows 'transmission ended · fleet lost'."
         },
         {
           "technique": "first-word-budget-decomposition",
           "verdict": "not-applicable",
-          "evidence": "packages/stage-kit/src/playback.ts:43 Playback applies existing events; it does not run the chat-to-generated-reply pipeline."
-        },
-        {
-          "technique": "fleet-loss-grace-signoff",
-          "verdict": "not-applicable",
-          "evidence": "packages/stage-kit/src/scene.ts:357 Records an upstream sign-off instruction; it does not detect route failures or decide the grace window."
-        },
-        {
-          "technique": "in-character-stalling",
-          "verdict": "not-applicable",
-          "evidence": "packages/stage-kit/src/scene.ts:250 Caption text comes from the supplied speech event; this reducer does not select host lines during generation waits."
+          "evidence": "packages/stage-kit/src/timing.ts:1 stage-kit folds and replays events that were already generated and estimates caption timing from text. No stage of the chat-to-speech path runs here."
         },
         {
           "technique": "latency-class-per-role",
           "verdict": "not-applicable",
-          "evidence": "packages/stage-kit/src/scene.ts:207 Copies the reported tier into scene metadata without assigning model routes, reasoning effort or timeouts."
+          "evidence": "packages/stage-kit/src/vocab.ts:29 Lists tiers only so they can be displayed. stage-kit calls no model, so it has no roles, timeouts or effort settings."
+        },
+        {
+          "technique": "dual-lane-fast-voice-slow-beats",
+          "verdict": "not-applicable",
+          "evidence": "packages/stage-kit/src/scene.ts:296 Consumes job status events for display; it does not execute planning or generation lanes.",
+          "carriedFrom": "2026-10-20"
+        },
+        {
+          "technique": "in-character-stalling",
+          "verdict": "not-applicable",
+          "evidence": "packages/stage-kit/src/scene.ts:250 Caption text comes from the supplied speech event; this reducer does not select host lines during generation waits.",
+          "carriedFrom": "2026-10-20"
         },
         {
           "technique": "say-gap-ceiling",
           "verdict": "not-applicable",
-          "evidence": "packages/stage-kit/src/timing.ts:93 Calculates caption fading from estimated line duration; it does not judge pacing or control host utterances."
+          "evidence": "packages/stage-kit/src/timing.ts:93 Calculates caption fading from estimated line duration; it does not judge pacing or control host utterances.",
+          "carriedFrom": "2026-10-20"
         }
-      ]
+      ],
+      "registryProposal": "fleet-loss-grace-signoff could require the sign-off event to carry the infrastructure cause and the audience-facing line in separate fields. A single 'reason' field gets read as a cause by the producer and as copy by the renderer, and that leaks the machinery on air even when both sides look correct on their own.",
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "packages/stage-kit/src/sceneModel.ts:39 Searches found no latency, say_gap or stall matches in this context; it models and replays supplied events, so generating timely host responses is outside its responsibility.",
+          "evaluatedAt": "2026-10-20T21:40:42.128Z",
+          "worker": "3e4135fb-2ac7-45fc-a1ad-8a07bc1ab83c",
+          "reason": "replaced by 8e353232-c834-444d-bf58-2683a9cd1474"
+        }
+      ],
+      "withdrawn": {
+        "worker": "8e353232-c834-444d-bf58-2683a9cd1474",
+        "state": "deviation",
+        "at": "2026-10-24T04:36:09.651962+00:00",
+        "reason": "reviewer (sonnet): The code facts check out (Overlays.tsx:150 prints o.reason, and brain lib.rs:819 sends 'fleet_lost: …'), but the subject is latency budgeting. The same evidence says the context runs no part of the chat-to-speech path, and I could not confirm that the technique covers end-card wording, so the deviat"
+      }
     },
     "e0fa3d2a-a070-4dbd-9551-517f0c58b0b8/live-response-latency-budgeting": {
       "context": "stage-kit-overlays",
@@ -4488,6 +4506,37 @@
           "evidence": "apps/console/src/pages/segments/SegmentCard.tsx:148 The handover sustain, ceiling and grace are rendered from the rule's fields as a ruler. A segment with no handover rule is shown honestly as having no exit clock, not hidden."
         }
       ]
+    },
+    "e0e277e4-0b4e-4d04-8c33-29f0d59d2a67/live-response-latency-budgeting": {
+      "context": "stage-app",
+      "subject": "live-response-latency-budgeting",
+      "bundle": "media-generation",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:35:21.158Z",
+      "techniques": [
+        {
+          "technique": "fleet-loss-grace-signoff",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/slates.test.ts:46 The technique requires an ending that is honest without exposing the machinery. The app's own test locks in an infrastructure cause code on the broadcast canvas (rendered with broadcast: true)."
+        },
+        {
+          "technique": "say-gap-ceiling",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/live.ts:21 The stage measures silence on the event feed (stalled_ms in its acks), not gaps between host utterances. The host's say-gap ceiling and watchdog belong to the brain and the sim."
+        },
+        {
+          "technique": "in-character-stalling",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/Slates.tsx:32 The slates cover a lost link between stage and daemon, not slow work in the host's own generation, which is what this technique covers. Stalling lines are voiced by the brain."
+        }
+      ],
+      "withdrawn": {
+        "worker": "8e353232-c834-444d-bf58-2683a9cd1474",
+        "state": "deviation",
+        "at": "2026-10-24T04:36:09.683791+00:00",
+        "reason": "reviewer (sonnet): The slates.test.ts:46 and Stage.tsx:251 facts are accurate, but the verdict's own technique anchors (live.ts:21, Slates.tsx:32) say the stage does not do host-generation latency work. An end card that shows a cause code is not a latency-budgeting requirement I could find, so the deviation is unsuppo"
+      }
     }
   }
 }

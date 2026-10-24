@@ -1,0 +1,60 @@
+{
+  "schema": "conform-run/1",
+  "worker": "8e353232-c834-444d-bf58-2683a9cd1474",
+  "subject": "live-response-latency-budgeting",
+  "evaluatedAt": "2026-10-24T04:35:21.158370+00:00",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "pairs": [],
+  "declined": [
+    {
+      "subject": "live-response-latency-budgeting",
+      "context": "stage-voice-client",
+      "reason": "conformant with fewer than two techniques shown realized"
+    },
+    {
+      "subject": "live-response-latency-budgeting",
+      "context": "stage-kit-scene-engine",
+      "reason": "withdrawn after review: reviewer (sonnet): The code facts check out (Overlays.tsx:150 prints o.reason, and brain lib.rs:819 sends 'fleet_lost: …'), but the subject is latency budgeting. The same evidence says the context runs no part of the chat-to-speech path, and I could not confirm that the technique covers end-card wording, so the deviat"
+    },
+    {
+      "subject": "live-response-latency-budgeting",
+      "context": "stage-app",
+      "reason": "withdrawn after review: reviewer (sonnet): The slates.test.ts:46 and Stage.tsx:251 facts are accurate, but the verdict's own technique anchors (live.ts:21, Slates.tsx:32) say the stage does not do host-generation latency work. An end card that shows a cause code is not a latency-budgeting requirement I could find, so the deviation is unsuppo"
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-24T04:35:21.158370+00:00",
+      "bundle": "media-generation",
+      "subjects": [
+        "live-response-latency-budgeting"
+      ],
+      "techniques": [
+        "first-word-budget-decomposition",
+        "fleet-loss-grace-signoff",
+        "latency-class-per-role"
+      ],
+      "deviations": 1,
+      "context": "stage-kit-scene-engine",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T04:35:21.158370+00:00",
+      "bundle": "media-generation",
+      "subjects": [
+        "live-response-latency-budgeting"
+      ],
+      "techniques": [
+        "fleet-loss-grace-signoff",
+        "in-character-stalling",
+        "say-gap-ceiling"
+      ],
+      "deviations": 1,
+      "context": "stage-app",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    }
+  ]
+}

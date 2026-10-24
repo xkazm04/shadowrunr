@@ -3745,8 +3745,8 @@
           "revision": 2,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 2
+          "priorNotApplicable": 2,
+          "state": "unknown"
         },
         {
           "subject": "test-input-generation",
@@ -4055,11 +4055,7 @@
           "confidence": "probable",
           "state": "not-applicable",
           "evidence": "packages/stage-kit/src/sceneModel.ts:39 Searches found no latency, say_gap or stall matches in this context; it models and replays supplied events, so generating timely host responses is outside its responsibility.",
-          "evaluatedAt": "2026-10-20",
-          "evaluatedAgainst": "sha256-b2:86997f9644956258",
-          "evaluatedRevision": 1,
-          "revisionsBehind": 1,
-          "stale": true
+          "evaluatedAt": "2026-10-20"
         }
       ],
       "governance": "governed"
