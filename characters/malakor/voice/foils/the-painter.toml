@@ -1,0 +1,22 @@
+# The guest's own voice when the-painter sits in Malakor's streams (SEG-03 Table Read, or a
+# SEG-01 summons). Always a Kokoro sidecar of its own, whatever provider Malakor speaks with.
+#
+# the-painter-a is a blend of stock kokoro-multi-lang-v1_0 voices (Apache-2.0), no cloning:
+# tools/voice/recipes/the-painter.toml. Make the file once with
+#   python -m shadowrunr_voice.blend --voices <engine dir>/kokoro/voices.bin \
+#       --recipe tools/voice/recipes/the-painter.toml
+# which writes ~/.shadowrunr/voices/the-painter-voices.bin (the blend takes sid 52 there).
+#
+# No blend on this machine? Override it locally, without touching this file, in
+# <data>/characters/malakor/voice/foils/the-painter.toml with a stock voice:
+#   voice = "bm_fable"
+#   sid = 25
+#   voices_file = ""        # "" = the model's own kokoro/voices.bin
+#
+# Keys: voice (a label; default the foil id), sid (required), voices_file, fx (none | light |
+# heavy; default none: Malakor's crypt reverb is his alone), workers (the sidecar's engine runs;
+# default 1). Engine paths, timeouts and the interpreter are the daemon's [voice].
+
+voice = "the-painter-a"
+sid = 52
+voices_file = "the-painter-voices.bin"

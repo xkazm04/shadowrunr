@@ -1,0 +1,28 @@
+# The-painter's blend candidates (SEG-03's pilot guest): stock kokoro-multi-lang-v1_0 voices
+# only (Apache-2.0), mixed by weight with shadowrunr_voice.blend. No real person's voice, no
+# cloning. The brief: a pompous, nasal, slightly theatrical older male, clearly apart from
+# Malakor's malakor-a (am_onyx + bm_lewis, the deepest blend, 93 Hz).
+#
+# So no am_onyx and no bm_lewis here: the painter sits well above Malakor's register, on the
+# British storytellers. bm_fable is the expressive storyteller (the theatre), bm_george the
+# declamatory read (the pomp, 145 Hz), and a little am_santa adds age; -b trades the age for
+# im_nicola's continental vowels.
+#
+# Rendered median pitch, one probe line, the sherpa binary, 4 threads (2026-10-24, n=1 render
+# each): malakor-a 92.0 Hz, the-painter-a 141.2 Hz (7.5 semitones above Malakor), the-painter-b
+# 127.0 Hz; stock bm_fable 122.4 Hz, bm_george 148.1 Hz. Weights are normalised to sum to 1. Each blend takes a Mandarin
+# male slot (zm_*) of its own the-painter-voices.bin, counting down from sid 52, unless it sets
+# `sid`: the-painter-a is sid 52 there, which characters/malakor/voice/foils/the-painter.toml
+# names.
+
+[voices.the-painter-a]
+# The pompous storyteller, a little aged.
+bm_fable = 0.5
+bm_george = 0.3
+am_santa = 0.2
+
+[voices.the-painter-b]
+# Brighter and more continental; no age.
+bm_george = 0.45
+im_nicola = 0.35
+bm_fable = 0.2

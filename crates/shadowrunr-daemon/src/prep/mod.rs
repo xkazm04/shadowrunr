@@ -6,8 +6,11 @@
 //! - [`planner`]: the `planner` role's input, prompt and reply parsing. The plan's text is
 //!   fenced as untrusted data.
 //! - [`checks`]: the mechanical checks (lengths, counts, real names, links, callbacks to earlier
-//!   streams, segments, duplicates, the brain's output gate). A failed check stays on the
-//!   staged prep and holds its approval, with no override.
+//!   streams, segments, duplicates, the brain's output gate, and SEG-03's table read: its
+//!   guest is a foil of the prep's character and each of its 1-3 scenes is approved and
+//!   clean). A failed check stays on the staged prep and holds its approval, with no override.
+//! - The table read (`table_read`) is the owner's, never the planner's: `prep table-read` sets
+//!   it on a staged prep ([`set_table_read_in`]) and the checks run again.
 //! - [`rules`]: the prep rules (counts, lines per kind, payoffs, connector kinds), held once;
 //!   the prompt, the reply schema, the checks and the guide's check table render from them.
 //! - [`revise`]: `prep revise`, a staged prep's findings and the owner's notes answered with
@@ -55,6 +58,14 @@ pub fn store(cfg: &Config) -> PrepStore {
     PrepStore::new(&cfg.paths.data)
 }
 
+/// Where this config's `table_read` check reads.
+pub fn scene_paths(cfg: &Config) -> checks::ScenePaths<'_> {
+    checks::ScenePaths {
+        data: &cfg.paths.data,
+        characters: &cfg.paths.characters,
+    }
+}
+
 /// The checks over `p` with this config's policy and real-names list.
 pub fn check(
     cfg: &Config,
@@ -68,6 +79,7 @@ pub fn check(
         &checks::CheckContext {
             policy: &policy,
             real_names: &real_names,
+            scenes: Some(scene_paths(cfg)),
         },
         dropped,
     ))
@@ -226,6 +238,7 @@ pub async fn revise_with(
         &checks::CheckContext {
             policy: &policy,
             real_names: &real_names,
+            scenes: Some(scene_paths(cfg)),
         },
     );
     if findings.is_empty() && notes.is_empty() {
@@ -319,6 +332,36 @@ pub fn approve_in(
             &checks::CheckContext {
                 policy: &policy,
                 real_names: &real_names,
+                scenes: Some(scene_paths(cfg)),
+            },
+            &checks::Dropped::default(),
+        )
+    })
+}
+
+/// Set (or with `None`, clear) the SEG-03 table read of the staged prep `id`, then run every
+/// check again over it. The planner never writes it: this is the owner's. Refused (`conflict`)
+/// unless the prep is staged; a failed `table_read` check then holds its approval.
+pub fn set_table_read_in(
+    cfg: &Config,
+    id: &str,
+    plan: Option<shadowrunr_types::scene::TableReadPlan>,
+) -> Result<StreamPrep, RpcError> {
+    if let Some(t) = &plan {
+        runs::check_id("guest", &t.guest)?;
+        for s in &t.scenes {
+            runs::check_id("scene", s)?;
+        }
+    }
+    let policy = crate::clips::policy(cfg)?;
+    let real_names = checks::load_real_names(&cfg.paths.policy);
+    store(cfg).set_table_read(id, plan, |p| {
+        checks::run(
+            p,
+            &checks::CheckContext {
+                policy: &policy,
+                real_names: &real_names,
+                scenes: Some(scene_paths(cfg)),
             },
             &checks::Dropped::default(),
         )
