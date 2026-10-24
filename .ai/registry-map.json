@@ -4516,7 +4516,11 @@
           "revision": 4,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/budgets/perf.json:2 This context is a set of build-time and test-time quality instruments (fixed DOM/RPC/draw/commit count budgets checked in jsdom, plus a style-contract 'fidelity' harness against a prototype); it renders no visual surface with runtime cost knobs, so a client-side measured fidelity tier has nothing to govern here. A search of apps/console/budgets, apps/console/fidelity and apps/console/src/perf for requestIdleCallback, hardwareConcurrency, deviceMemory and fidelityTier found nothing. The only 'tier' hits are contest rank tiers (contest.ts:182) and the model core_tier field, and 'fidelity' here means visual parity with the winning prototype, not a runtime tier.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:02a551a058d8874c",
+          "evaluatedRevision": 5
         },
         {
           "subject": "agent-instruction-files",

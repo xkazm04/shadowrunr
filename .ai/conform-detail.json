@@ -4823,6 +4823,28 @@
       "evaluatedTs": "2026-10-24T06:02:44.825Z",
       "worker": "caf276de-640b-424e-b0ba-447194a3f3eb",
       "techniques": []
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/adaptive-fidelity-tiers": {
+      "context": "console-quality-gates",
+      "subject": "adaptive-fidelity-tiers",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T21:06:21.380Z",
+      "worker": "5183ce7b-22be-4a02-a64a-4c6de95b075d",
+      "techniques": [
+        {
+          "technique": "measured-not-declared-capability",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/budgets/perf.json:2 The budgets are fixed counts taken at test time on a fixture. They are not runtime device capability checks, and nothing here reads a user-agent or a core count."
+        },
+        {
+          "technique": "measurement-settle-budget",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/budgets/perf.json:31 This draw budget asserts there is no frame loop at all, so there is no per-frame probe in this context that would need a settle deadline."
+        }
+      ],
+      "registryProposal": "The registry map matched this context to the subject on the token 'fidelity', but here 'fidelity' means a style-contract parity harness against a prototype, not a runtime quality tier. Consider down-weighting 'fidelity' as a matching token when no frame-time or tier vocabulary appears alongside it."
     }
   }
 }
