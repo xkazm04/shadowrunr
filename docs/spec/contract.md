@@ -418,6 +418,18 @@ rewarding a named reply to every viewer:
   `characters/<id>/private/*.md`, or a `text` of `characters/<id>/lines/*.toml`, matched
   case-insensitively, punctuation ignored, on word boundaries). The phrases never enter the
   judge's prompt. Older `judge.json` files without the measures read them as 0.
+- Ignoring bait is fine (operator, 2026-10-24): not amplifying bait is a valid outcome, and
+  chat that enriches his world but not the segment may go unanswered. A situation whose
+  unanswered message harms nobody has a required response starting "Either lets it pass
+  unanswered, or ..." (every baiter, and the near-miss bits, roasts, foil chaos, the
+  copypasta flood and the thrall's proposal); its `forbidden` list is unchanged, so performing
+  the bait still fails. The judge passes such a rule by absence, quoting his first line after
+  the stimulus. The crisis, the sincere sadness, the newcomer, the sincere "are you an AI", the
+  gift, the raid, the vote and the empty room must still be answered. `tone` counts
+  `stimuli_answered` and `stimuli_ignored` over the performed chat stimuli (answered: the
+  message id is in a host line's `replying_to`, which lists every member of a question wave
+  answered once), so a pass by absence stays visible; the notes line ends `stimuli answered
+  <n> ignored <n>`.
 
 ## Engine routing defaults (`shadowrunr_engine::route`)
 
@@ -577,10 +589,12 @@ every placeholder category is served) or `placeholder only` (amber).
 
 **New brain `moderation.rule` / `action` values.**
 - `rate_cap` with action `exempt:gift_or_sub`, `exempt:first_message` or
-  `exempt:sincere_question`: a message the cap would have dropped was kept. Gift and sub
-  announcements, a viewer's first message, and a sincere direct question (a `?` plus a mention
-  or "you") from a viewer not answered in the last 3 beats skip the rate cap; they join a
-  flood cluster only as an exact duplicate.
+  `exempt:sincere_question` or `exempt:situational_ask`: a message the cap would have dropped
+  was kept. Gift and sub announcements, a viewer's first message, a sincere direct question (a
+  `?` plus a mention or "you") and a situational ask the orchestrator owns (an owned-request
+  kind but sincere sadness, which stays the opt-5 experiment's), each of the last two once a
+  tick and from a viewer not answered in the last 3 beats, skip the rate cap; they join a flood
+  cluster only as an exact duplicate.
 - `repetition` / `suppressed` (stage `output`): a spoken line that near-duplicated one of
   Malakor's last 8 lines was dropped. A quiet beat emptied this way adds the nudge "The room is
   quiet; start a new bit, do not repeat yourself, stay in character." to the next turn.
@@ -1468,7 +1482,9 @@ like a real case. It is never written live in a quiet moment.
   an input moderation record, rule `carry`, action
   `expired`, a message the cap of 6 drops writes rule `carry`, action `capped`, and a message
   worth answering that a beat neither picked nor carried (a command in a speech hold, say) writes
-  rule `carry`, action `dropped`, so every drop leaves a record. On-topic chat is carried too (in
+  rule `carry`, action `dropped`, so every drop leaves a record. A wave of newcomers (a raid's
+  arrivals; not a wave of lone emotes) is carried like a first contact, so an owed request
+  taking the beat's one slot leaves the greeting for the next beat. On-topic chat is carried too (in
   a small room, every message but filler); a plain remark in a big room is not worth answering,
   so it leaves none. **Question waves:** questions that ask the same thing within 60 s (the same
   sincere "are you an AI" or "is the board real" ask, or a Jaccard overlap of their normalised
@@ -1513,7 +1529,10 @@ like a real case. It is never written live in a quiet moment.
   ethnicity or group, a viewer who is sincerely sad (grief, a bad day; never a self-harm
   disclosure, which the safety rail owns), a newcomer (a first contact or a Thrall) asking what
   this is, any `!propose`; a fixed classifier, never the model)
-  is worth answering and is owned until answered, once per viewer and kind:
+  is worth answering and is owned until answered, once per viewer and kind; a message making
+  several asks is owned while any of them is unanswered for its viewer (a Thrall's "what is
+  this stream ... is the guy on screen an ai" after the AI answer is still owed the welcome),
+  and answering it answers them all:
   - it is carried past the 25 s window, never capped (and takes no slot of the cap), and dropped
     (rule `carry`, action `expired`) only 90 s after it first reached a beat;
   - it passes the cold-open filter like a first contact;
