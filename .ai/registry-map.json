@@ -2771,7 +2771,11 @@
           "revision": 6,
           "changedAt": "2026-09-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/contract/scripts/codegen.mjs:220 generate() builds every file in memory but then deletes the committed results/ folder and rewrites each file in place with writeFile (truncate-on-open), so an interrupted `pnpm -C packages/contract generate` leaves fewer or zero-byte committed artifacts. That is exactly the delete-then-repopulate failure generator-failure-isolation names, where the fix is a staged write and atomic swap.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:9a082bd05760516a",
+          "evaluatedRevision": 6
         },
         {
           "subject": "trust-base",

@@ -4916,6 +4916,53 @@
         }
       ],
       "registryProposal": "The golden path's precondition is relationship editing, but the subject gets matched to canvas-drawn small multiples with no edges, like this tile grid. graph-layout's 'derive the slot from identity' rule clashes with a chronological 'latest N' window, where an ordinal slot deliberately encodes recency. The technique could name this case: a recency grid either accepts a re-seat on each arrival as its stated policy, or reserves an arrival slot. Either way it should be declared, not inherited by accident."
+    },
+    "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0/codegen": {
+      "context": "contract-package",
+      "subject": "codegen",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T22:16:09.741Z",
+      "worker": "6ed1ce90-e4dd-40d9-a16e-b4514aad3a6e",
+      "techniques": [
+        {
+          "technique": "generator-failure-isolation",
+          "verdict": "deviation",
+          "evidence": "packages/contract/scripts/codegen.mjs:220 Delete-then-repopulate of results/ followed by in-place writeFile (line 223) into src/generated; no temp-path + rename / directory swap, so an interrupt leaves a partial committed set. The cargo export (execFileSync) also has no time budget."
+        },
+        {
+          "technique": "commit-vs-derive-policy",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/check.mjs:44 The boundary type contract sits in tier 2: committed, with a lockstep drift gate whose failure message is the regeneration command, which is the canonical case for that tier."
+        },
+        {
+          "technique": "drift-gating",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/check.mjs:35 Check mode reuses the same generate() code path into a temp dir, diffs the whole generated tree (changed/missing/not-generated, so orphans and new files are covered) plus the schema, and exits 1 with the file names. Hosted in CI (see notes)."
+        },
+        {
+          "technique": "generated-file-hygiene",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/codegen.mjs:24 The generator emits a banner on every file saying it is generated, naming the generator, the source and the rebuild command (line 25). Output is deterministic (sorted names, LF normalisation), and eslint ignores **/generated/**. Gaps: no linguist-generated marker for collapsing diffs in review, and in validators.js the banner comes after @ts-nocheck/eslint-disable."
+        },
+        {
+          "technique": "task-registry-design",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/scripts/generate.mjs:17 This context has one generator writing one output root, so no in-context registry is needed. Whether the repo-wide generator population (tokens + contract) needs a registry is a question for a repo-level judgment."
+        },
+        {
+          "technique": "post-merge-regeneration",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/scripts/codegen.mjs:3 Output is a pure function of the schema with no positional references into sources, so unrelated edits do not churn it; the drift check on the change is the right regime."
+        },
+        {
+          "technique": "trigger-wiring",
+          "verdict": "deviation",
+          "evidence": "packages/contract/package.json:10 Regeneration is manual only. No dev, build or test door in this package (or in the consuming vite dev/build) runs generate, and no build asserts freshness. Staleness is caught only after the fact by the Rust schema_drift test and the CI check, never healed ambiently."
+        }
+      ],
+      "registryProposal": "trigger-wiring assumes the pipeline can run at the consumer's dev or build door, but here the input lives in another toolchain (Rust/cargo) and the artifact is tier-2 gated. The technique should say whether, for cross-toolchain boundary contracts, a lockstep gate on the input side (a cargo test) plus the CI drift gate satisfies it, or whether a freshness stamp checked by the JS build is still required."
     }
   }
 }
