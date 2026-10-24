@@ -1004,50 +1004,57 @@
       "subject": "companion-identity",
       "bundle": "software-engineering",
       "state": "unknown",
-      "evaluatedAt": "2026-10-19",
-      "evaluatedTs": "2026-10-19T22:27:02.397Z",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T06:16:30.771Z",
       "techniques": [
         {
           "technique": "anchored-identity-diffs",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/brain/Layer2.tsx:50 The viewer renders transcript lines, not proposed identity edits."
+          "evidence": "apps/console/src/pages/brain/Layer2.tsx:50 The viewer renders transcript lines, not proposed identity edits.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "brain-adoption-consent",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/brain/useBrain.ts:40 The page loads daemon tournament data rather than discovering a companion brain."
+          "evidence": "apps/console/src/pages/brain/useBrain.ts:40 The page loads daemon tournament data rather than discovering a companion brain.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "capability-exercise-ledger",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/brain/Engine.tsx:112 This ledger records engine calls, not capabilities asserted in a companion's self-description."
+          "evidence": "apps/console/src/pages/brain/Engine.tsx:112 This ledger records engine calls, not capabilities asserted in a companion's self-description.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "constitution-self-model-split",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/brain/Layer1.tsx:134 The page visualizes simulation activity rather than authoring identity documents."
+          "evidence": "apps/console/src/pages/brain/Layer1.tsx:134 The page visualizes simulation activity rather than authoring identity documents.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "disk-truth-db-index",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/brain/brainModel.ts:237 The local model derives display metrics; it does not persist a durable self."
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:237 The local model derives display metrics; it does not persist a durable self.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "one-mind-many-mouths",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/brain/Viewer.tsx:116 Selecting a run for inspection does not create another conversational channel or partition companion memory."
+          "evidence": "apps/console/src/pages/brain/Viewer.tsx:116 Selecting a run for inspection does not create another conversational channel or partition companion memory.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "operator-profile-synthesis",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/brain/brainModel.ts:183 These are operational funnel counts, not inferred operator traits."
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:183 These are operational funnel counts, not inferred operator traits.",
+          "carriedFrom": "2026-10-19"
         }
       ],
       "withdrawn": {
-        "worker": "df9a740c-b1f1-4cd2-b16d-a634bda4edf9",
+        "worker": "0fec1128-b3a8-41a2-8da4-39ebb80c939f",
         "state": "not-applicable",
-        "at": "2026-10-19T22:27:38.454348+00:00",
-        "reason": "reviewer (sonnet): The not-applicable anchor Layer2.tsx:13 is only the FLOORS type declaration, which does not show that identity or adoption constructs are absent. The 'constitution, adoption' grep was also narrow for this subject."
+        "at": "2026-10-24T06:16:46.981911+00:00",
+        "reason": "reviewer (sonnet): The anchor (brainModel.ts:135) is the doc comment on memoryCurve, so it sits in the context but doesn't show that identity documents are absent. The grep claim does hold for the listed terms (constitution, self-model, consent, bible, profile and identity matched nothing), but the verdict rests on th"
       }
     },
     "382c68f3-bc20-4cc7-8220-18aa850f7087/companion-identity": {
