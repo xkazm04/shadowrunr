@@ -1,0 +1,38 @@
+# SEG-03 honest register A/B (2026-10-24): the owner found Malakor "a little too safe"; the
+# default tone gained the honest register (owning his flops, saying the unsaid, real opinions
+# on the material) in tones/unhinged-roastmaster.md, its line bank (ur-32..ur-47),
+# directions.md and segments/SEG-03.md. The judge's `honesty` dimension (sim/rubric.toml)
+# measures it; SEG-01 runs check that it transfers outside the Table Read. Sonnet core only.
+#
+# A matrix compares tones by name, not commits, so before and after are two runs of this same
+# matrix on one tree with the same rubric (the rubric is part of the instrument hash, so both
+# arms must be judged with the one that carries `honesty`):
+#   after:  the tree as committed.
+#   before: the same tree in a scratch worktree, with the register taken out: the three files
+#           restored from the commit before it landed (b737b35),
+#             git checkout b737b35 -- characters/malakor/tones/unhinged-roastmaster.md
+#               characters/malakor/lines/unhinged-roastmaster.toml characters/malakor/directions.md
+#           and the "honest critic of your own show" bullet deleted from segments/SEG-03.md.
+# The foil, the scenes, bible.md, the rest of SEG-03.md and the rubric are identical in both
+# arms; the two arms land in two tournament directories (their base hashes differ). Compare
+# the honesty, surprise and bite means, humor_landed, edge_without_cruelty and every red line.
+# SEG-03 runs need the sim to play a Table Read (guest the-painter, the three sample scenes).
+# 1 tone x sonnet x 2 segments x 2 audience sizes x 2 seeds = 8 runs per arm, 16 in all.
+id = "seg03-honest"
+character = "malakor"
+duration_s = 600
+tick_s = 5
+core_effort = "low"
+concurrency = 4
+judge_tiers = ["opus", "sonnet"]
+featured_every_ticks = 1
+max_featured = 8
+population = "small_new_channel"
+populations = { "3" = "small_new_channel", "30" = "growing_channel" }
+
+[axes]
+tones = ["unhinged-roastmaster"]
+core_tiers = ["sonnet"]
+segments = ["SEG-03", "SEG-01"]
+audience_sizes = [3, 30]
+seeds = [1, 2]
