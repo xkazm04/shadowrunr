@@ -14,6 +14,10 @@
 // behind what is playing, so a stage that fell behind catches up instead of talking ever later.
 // A line that has started is never cut, and the newest line is kept. A new run starts afresh.
 //
+// **Whose mouth.** A guest's utterance (`speaker: foil`, SEG-03) plays through the same FIFO, so
+// the two voices never overlap, but it never moves Malakor's mouth: while it sounds his signal
+// rests, and `foilAt` names the guest heard instead (the two-shot lights the guest's glow).
+//
 // **Told as it happens.** `PlayerEvents` hears each part as it is scheduled (and rescheduled when
 // the cap closes a gap), as its audio starts, and each whole line the cap drops: the captions
 // follow the first, and the daemon is told the other two (`report.ts`).
@@ -75,6 +79,8 @@ export interface ScheduledPart {
   last: boolean;
   start: number;
   duration: number;
+  /** The guest's foil id when the guest speaks it (absent: the host's line). */
+  foil?: string;
 }
 
 /** What the player tells its owner as it happens. Every hook is optional. */
@@ -95,6 +101,8 @@ interface Entry {
   last: boolean;
   /** Its start has been told (`PlayerEvents.started`). */
   told: boolean;
+  /** The guest's foil id for a guest utterance; null: the host's own voice. */
+  foil: string | null;
   generation: number;
   buffer: BufferLike;
   visemes: Utterance["visemes"];
@@ -170,6 +178,7 @@ export class VoicePlayer implements FaceSource {
       text: u.text,
       last: u.last,
       told: false,
+      foil: u.speaker === "foil" ? (u.foil ?? "foil") : null,
       generation: ++this.generation,
       buffer,
       visemes: u.visemes,
@@ -200,11 +209,23 @@ export class VoicePlayer implements FaceSource {
     this.listeners.clear();
   }
 
-  /** The face signal at heard time `now` (context seconds): the mouth at `now` plus its lead. */
+  /** The utterance under heard time `now` plus the mouth's lead, if any. */
+  private at(now: number): Entry | undefined {
+    const t = now + VISEME_LEAD_MS / 1000;
+    return this.queue.find((x) => x.start <= t && t < x.start + x.buffer.duration);
+  }
+
+  /** The guest heard at `now` (context seconds): its foil id while a guest utterance sounds, else null. */
+  foilAt(now: number): string | null {
+    return this.at(now)?.foil ?? null;
+  }
+
+  /** The face signal at heard time `now` (context seconds): the mouth at `now` plus its lead. A
+   * guest's utterance is not his: his face rests under it. */
   signalAt(now: number): FaceSignal {
     const t = now + VISEME_LEAD_MS / 1000;
-    const e = this.queue.find((x) => x.start <= t && t < x.start + x.buffer.duration);
-    if (!e) return RESTING;
+    const e = this.at(now);
+    if (!e || e.foil !== null) return RESTING;
     const ms = Math.max(0, (t - e.start) * 1000);
     const level = Math.min(1, Math.max(0, this.audio.level()));
     return { phase: "speaking", level: Math.round(level * 100) / 100, viseme: visemeAt(e.visemes, ms), open: 0, generation: e.generation };
@@ -318,5 +339,7 @@ export class VoicePlayer implements FaceSource {
 }
 
 function part(e: Entry): ScheduledPart {
-  return { runId: e.runId, seq: e.seq, part: e.part, text: e.text, last: e.last, start: e.start, duration: e.buffer.duration };
+  const p: ScheduledPart = { runId: e.runId, seq: e.seq, part: e.part, text: e.text, last: e.last, start: e.start, duration: e.buffer.duration };
+  if (e.foil !== null) p.foil = e.foil;
+  return p;
 }

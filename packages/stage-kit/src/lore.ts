@@ -94,6 +94,13 @@ export const FOILS: Record<string, FoilInfo> = {
     tagline: "Solves every case instantly, and wrongly.",
     color: "#b8c4a0",
   },
+  // The Table Read's pilot guest (SEG-03). The display name stands until the owner picks a look.
+  "the-painter": {
+    id: "the-painter",
+    name: "The Painter",
+    tagline: "A watercolourist the academy rejected. The critics are all in on it.",
+    color: "#d98fd0",
+  },
 };
 
 export function foilInfo(id: string): FoilInfo {

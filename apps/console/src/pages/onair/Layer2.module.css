@@ -31,6 +31,7 @@ button.num:hover { color: var(--sr-page-accent-text, var(--sr-color-signal-deep)
 .tlBar button { display: flex; flex-basis: 0; align-items: center; min-width: var(--sr-space-section); padding: 0 var(--sr-space-compact); border: 0; background: var(--sr-color-text-mute); color: var(--sr-color-surface-paper); font: inherit; cursor: pointer; }
 .tlBar button[data-seg="SEG-01"] { background: var(--sr-page-overprint, var(--sr-color-ok)); }
 .tlBar button[data-seg="SEG-02A"] { background: var(--sr-color-signal); color: var(--sr-color-surface-void); }
+.tlBar button[data-seg="SEG-03"] { background: var(--sr-color-foil); color: var(--sr-color-surface-void); }
 .tlBar button:focus-visible { outline: var(--sr-stroke-rule) solid var(--sr-color-text-ink); outline-offset: var(--sr-stroke-rule); }
 .tlBar b { font-family: var(--sr-font-display); font-size: var(--sr-size-body); letter-spacing: .06em; }
 

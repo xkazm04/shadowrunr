@@ -37,7 +37,7 @@ const label = (route: Route, labelOf: LabelOf): string =>
     .map((c) => c.label)
     .join(" / ");
 
-/** On Air's segment ids: SEG-01, SEG-02A. */
+/** On Air's segment ids: SEG-01, SEG-02A, SEG-03. */
 const SEGMENT_ID = /^SEG-\d+[A-Z]?$/i;
 /** A pasted console URL (`http://127.0.0.1:1420/#/...`, `tauri://localhost/#/...`). */
 const URL_WITH_HASH = /^[a-z][\w+.-]*:\/\/[^#\s]*#/i;

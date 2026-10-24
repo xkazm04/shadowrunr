@@ -62,6 +62,9 @@ export function parseVoiceFrame(text: string): Parsed<VoiceFrame> {
       if (typeof raw.last !== "boolean") return bad("last");
       const v = spans(raw.visemes);
       if (!v) return bad("visemes");
+      // `speaker` is omitted for the host; `foil` names the guest whose voice this is (SEG-03).
+      if (raw.speaker !== undefined && raw.speaker !== "foil" && raw.speaker !== "host") return bad("speaker");
+      if (!optStr(raw.foil)) return bad("foil");
       const f: Utterance = {
         type: "utterance",
         id: raw.id as string,
@@ -75,6 +78,8 @@ export function parseVoiceFrame(text: string): Parsed<VoiceFrame> {
         pcm: raw.pcm as string,
       };
       if (v.length) f.visemes = v;
+      if (raw.speaker === "foil" || raw.speaker === "host") f.speaker = raw.speaker;
+      if (typeof raw.foil === "string") f.foil = raw.foil;
       return { ok: true, value: f };
     }
     case "skipped": {

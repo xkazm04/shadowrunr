@@ -15,7 +15,8 @@ import styles from "./Layer1.module.css";
 import type { Feed, FeedSnapshot } from "./player";
 import { Screen, type RundownPill } from "./Screen";
 
-const LIVE_SEGMENTS = ["SEG-01", "SEG-02A"] as const;
+/** The segments a stream plays: SEG-01, then SEG-02A or (with a prep table_read) SEG-03. */
+const LIVE_SEGMENTS = ["SEG-01", "SEG-02A", "SEG-03"] as const;
 
 export function pillsOf(tables: SegmentTables | undefined): { pills: RundownPill[]; descoped: number } {
   const pills = LIVE_SEGMENTS.map((id) => ({ id, title: tables?.segments.find((s) => s.id === id)?.title ?? "" }));

@@ -27,7 +27,8 @@ describe("copies stay in sync with their sources", () => {
   });
 
   it("FOILS covers every foil file in characters/malakor/foils", () => {
-    const files = readdirSync(join(repo, "characters", "malakor", "foils")).filter((f) => f.endsWith(".md"));
+    // A foil is `<id>.md`; a companion such as `<id>.prompts.md` (portrait prompts) is not one.
+    const files = readdirSync(join(repo, "characters", "malakor", "foils")).filter((f) => /^[a-z0-9-]+\.md$/.test(f));
     expect(Object.keys(FOILS).sort()).toEqual(files.map((f) => f.replace(/\.md$/, "")).sort());
   });
 });

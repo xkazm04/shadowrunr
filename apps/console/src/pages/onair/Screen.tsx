@@ -24,7 +24,7 @@ import {
   voteView,
 } from "./view";
 
-/** The rundown pills: the two live segments, then a count of the descoped ones. */
+/** The rundown pills: the live segments, then a count of the descoped ones. */
 export interface RundownPill {
   readonly id: SegmentId;
   readonly title: string;
@@ -112,7 +112,7 @@ export function Screen(props: ScreenProps) {
       <div className={styles.scrMid}>
         <div className={styles.scrRoom} data-role="onair-room">
           <div className={styles.rmT}>The Audience Chamber</div>
-          <div className={styles.rmS}>SEG-01 · {props.pills.find((p) => p.id === "SEG-01")?.title ?? "Improvised Room"}</div>
+          <div className={styles.rmS}>{seg === "SEG-03" ? `SEG-03 · ${props.pills.find((p) => p.id === "SEG-03")?.title || "The Table Read"}` : `SEG-01 · ${props.pills.find((p) => p.id === "SEG-01")?.title ?? "Improvised Room"}`}</div>
         </div>
         <RouteLink to={pageRoute("segments", "tables", "SEG-02A")} className={`${styles.scrHex} ${styles.hot}`} aria-label="The investigation hexmap: segment tables, SEG-02A, grades DOC to SPC" data-role="onair-hex">
           <div className={styles.hxT}>

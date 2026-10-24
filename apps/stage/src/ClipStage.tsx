@@ -3,7 +3,7 @@
 // The composition mirrors the clip factory's poster frame (crates/shadowrunr-clips render.rs):
 // a header band (ALLEGED + grade badge + case title for claim-bearing clips, else the segment
 // and its foil), the evidence board (or the hexmap of an older transcript) or the avatar in the
-// middle, the exact transcript captions in the
+// middle (with the Table Read's guest beside him in a SEG-03 cut), the exact transcript captions in the
 // lower third, the citation strip, and the AI disclosure with the clip's provenance.
 //
 // `&record=1` freezes the wall clock: `window.__clip.seek(ms)` sets the frame and resolves once
@@ -12,8 +12,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { buildMap, foilInfo, GRADE, mapFocusOf, Timeline } from "@shadowrunr/stage-kit";
-import { boardLayoutFor, EvidenceBoard, FoilCard, Hexmap, Silhouette } from "@shadowrunr/stage-kit/ui";
+import { buildMap, foilInfo, GRADE, guestOf, mapFocusOf, Timeline } from "@shadowrunr/stage-kit";
+import { boardLayoutFor, EvidenceBoard, FoilCard, GuestShot, Hexmap, Silhouette } from "@shadowrunr/stage-kit/ui";
 import { captionAt, captionPage, PAGE_CHARS, VIEWER_PAGE_CHARS, CLIP_H, CLIP_W, headerModel, parseClip, readClipParams, shortSource, speakerLabel, type ClipGrade, type ClipInput } from "./clip";
 import { BOARD_LAYOUT_FRAME } from "./layouts";
 import { fetchText } from "./source";
@@ -75,9 +75,13 @@ export function ClipStage({ clip, now }: { clip: ClipInput; now: number }) {
   const revealKey = scene.revealOrder.join(",");
   const map = useMemo(() => buildMap(clip.case, revealKey ? revealKey.split(",") : []), [clip.case, revealKey]);
   const boardLayout = useMemo(() => boardLayoutFor(map, clip.case, BOARD_LAYOUT_FRAME), [map, clip.case]);
-  const head = headerModel(clip, scene.foil?.id ?? null);
+  // SEG-03: the Table Read's guest stands beside him (its captions name it by foil id)
+  const guest = guestOf(scene);
+  const head = headerModel(clip, guest ?? scene.foil?.id ?? null);
   const cap = captionAt(clip.captions, now);
   const speaking = cap !== null && cap.caption.speaker === "malakor" && cap.words < cap.total;
+  const guestSpeaking = guest !== null && cap !== null && cap.caption.speaker === guest && cap.words < cap.total;
+  // only the investigation (and a claim-bearing cut) has a map; SEG-01 and SEG-03 cut on the avatar
   const hexmap = clip.case !== null && (clip.segment === "SEG-02A" || clip.header !== null);
   const words = cap ? cap.caption.text.split(/\s+/).filter(Boolean) : [];
   // A long line is shown a page at a time: the page holding the word being spoken, so every
@@ -117,10 +121,16 @@ export function ClipStage({ clip, now }: { clip: ClipInput; now: number }) {
             <div className="clip-sil">
               <Silhouette speaking={speaking} />
             </div>
-            {scene.foil && (
-              <div className="clip-foil" style={{ ["--foil" as string]: foilInfo(scene.foil.id).color }}>
-                <FoilCard scene={scene} now={now} />
+            {guest !== null ? (
+              <div className="clip-foil clip-guest" style={{ ["--foil" as string]: foilInfo(guest).color }}>
+                <GuestShot guest={guest} speaking={guestSpeaking} />
               </div>
+            ) : (
+              scene.foil && (
+                <div className="clip-foil" style={{ ["--foil" as string]: foilInfo(scene.foil.id).color }}>
+                  <FoilCard scene={scene} now={now} />
+                </div>
+              )
             )}
           </div>
         )}

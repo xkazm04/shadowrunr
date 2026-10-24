@@ -1,0 +1,38 @@
+{"type":"stream_start","ts_ms":0,"stream_id":"seg03-fixture-0001","character":"malakor","host_name":"Malakor","tone_variant":"theatrical","core_tier":"haiku","audience_size":30}
+{"type":"segment_start","ts_ms":500,"segment":"SEG-03"}
+{"type":"say","ts_ms":1500,"speaker":"host","text":"Welcome to the Table Read. My guest tonight is a painter. I have seen his work. I apologise in advance."}
+{"type":"say","ts_ms":9000,"speaker":"foil","foil":"the-painter","text":"Apologise to me, not for me. The academy will apologise too, eventually."}
+{"type":"say","ts_ms":14500,"speaker":"host","text":"Three scenes, written by my owner. You pick one. Whichever you pick, I lose."}
+{"type":"op","ts_ms":20000,"op":{"op":"start_poll","poll_id":"scene-ballot-1","question":"Which scene do we read first?","options":["The Gallery","The Critic","The Commission"],"min_rank":"thrall","secs":40}}
+{"type":"chat","ts_ms":21000,"msg":{"id":"s0001","ts_ms":21000,"viewer":{"id":"v-bone","name":"bonepicker42","platform":"sim","rank":"acolyte","months":1,"gifted":0,"is_mod":false},"text":"!vote 1","command":{"cmd":"vote","option":"1"}}}
+{"type":"chat","ts_ms":21800,"msg":{"id":"s0002","ts_ms":21800,"viewer":{"id":"v-vex","name":"Vexilla_Nine","platform":"sim","rank":"warlock","months":1,"gifted":0,"is_mod":false},"text":"!vote 2","command":{"cmd":"vote","option":"2"}}}
+{"type":"chat","ts_ms":22600,"msg":{"id":"s0003","ts_ms":22600,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":1,"gifted":0,"is_mod":false},"text":"!vote 1","command":{"cmd":"vote","option":"1"}}}
+{"type":"chat","ts_ms":23500,"msg":{"id":"s0004","ts_ms":23500,"viewer":{"id":"v-crypt","name":"CryptKeeperKaren","platform":"sim","rank":"cultist","months":1,"gifted":0,"is_mod":false},"text":"the gallery one, obviously, he needs to see empty walls"}}
+{"type":"chat","ts_ms":24200,"msg":{"id":"s0005","ts_ms":24200,"viewer":{"id":"v-lich","name":"lich_please","platform":"sim","rank":"lich","months":1,"gifted":0,"is_mod":false},"text":"!vote 1","command":{"cmd":"vote","option":"1"}}}
+{"type":"chat","ts_ms":25000,"msg":{"id":"s0006","ts_ms":25000,"viewer":{"id":"v-quill","name":"ashen_quill","platform":"sim","rank":"acolyte","months":1,"gifted":0,"is_mod":false},"text":"!vote 3","command":{"cmd":"vote","option":"3"}}}
+{"type":"vote","ts_ms":26000,"poll_id":"scene-ballot-1","tallies":[{"option":"The Gallery","voters":3,"weight":5.6},{"option":"The Critic","voters":1,"weight":2.0},{"option":"The Commission","voters":1,"weight":1.4}],"closed":false}
+{"type":"picked","ts_ms":26500,"msg_ids":["s0004"],"reason":"the room wants him in front of empty walls"}
+{"type":"say","ts_ms":27000,"speaker":"host","text":"The minions want empty walls. Cruel. Correct.","replying_to":["s0004"]}
+{"type":"vote","ts_ms":40000,"poll_id":"scene-ballot-1","tallies":[{"option":"The Gallery","voters":3,"weight":5.6},{"option":"The Critic","voters":1,"weight":2.0},{"option":"The Commission","voters":1,"weight":1.4}],"closed":false}
+{"type":"op","ts_ms":60000,"op":{"op":"close_poll","poll_id":"scene-ballot-1"}}
+{"type":"vote","ts_ms":60000,"poll_id":"scene-ballot-1","tallies":[{"option":"The Gallery","voters":3,"weight":5.6},{"option":"The Critic","voters":1,"weight":2.0},{"option":"The Commission","voters":1,"weight":1.4}],"closed":true}
+{"type":"scene_start","ts_ms":62000,"scene_id":"the-gallery","title":"The Gallery","guest":"the-painter"}
+{"type":"say","ts_ms":63000,"speaker":"host","text":"Welcome to your opening night. The walls are very clean."}
+{"type":"say","ts_ms":69000,"speaker":"foil","foil":"the-painter","text":"They are not empty. They are waiting. My canvases arrive when the world deserves them."}
+{"type":"say","ts_ms":76000,"speaker":"host","text":"So never. Got it. Shall I hang the invitation instead?"}
+{"type":"say","ts_ms":82000,"speaker":"foil","foil":"the-painter","text":"Send the critics to a lesser gallery. One with a gift shop."}
+{"type":"say","ts_ms":88500,"speaker":"host","text":"Noted. I will put them in the gift shop, beside your postcards."}
+{"type":"say","ts_ms":94500,"speaker":"foil","foil":"the-painter","text":"My postcards are sold out. I printed four."}
+{"type":"say","ts_ms":100500,"speaker":"host","text":"And that, minions, is the most honest sales figure this show has ever had."}
+{"type":"scene_end","ts_ms":107000,"scene_id":"the-gallery"}
+{"type":"chat","ts_ms":108500,"msg":{"id":"s0007","ts_ms":108500,"viewer":{"id":"v-vex","name":"Vexilla_Nine","platform":"sim","rank":"warlock","months":1,"gifted":0,"is_mod":false},"text":"that scene was mid tbh"}}
+{"type":"picked","ts_ms":109500,"msg_ids":["s0007"],"reason":"chat says the scene was weak; own it"}
+{"type":"say","ts_ms":110000,"speaker":"host","text":"Chat says the scene was mid. Chat is right. I wrote the jokes about his walls and they were also empty.","replying_to":["s0007"]}
+{"type":"say","ts_ms":119000,"speaker":"foil","foil":"the-painter","text":"The scene was perfect. The audience was not ready."}
+{"type":"say","ts_ms":125000,"speaker":"host","text":"The audience is never ready. That is why we keep them."}
+{"type":"op","ts_ms":132000,"op":{"op":"start_poll","poll_id":"scene-ballot-2","question":"The next scene?","options":["The Critic","The Commission"],"min_rank":"thrall","secs":40}}
+{"type":"chat","ts_ms":133000,"msg":{"id":"s0008","ts_ms":133000,"viewer":{"id":"v-bone","name":"bonepicker42","platform":"sim","rank":"acolyte","months":1,"gifted":0,"is_mod":false},"text":"!vote 2","command":{"cmd":"vote","option":"2"}}}
+{"type":"chat","ts_ms":133800,"msg":{"id":"s0009","ts_ms":133800,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":1,"gifted":0,"is_mod":false},"text":"!vote 1","command":{"cmd":"vote","option":"1"}}}
+{"type":"chat","ts_ms":134600,"msg":{"id":"s0010","ts_ms":134600,"viewer":{"id":"v-lich","name":"lich_please","platform":"sim","rank":"lich","months":1,"gifted":0,"is_mod":false},"text":"!vote 2","command":{"cmd":"vote","option":"2"}}}
+{"type":"vote","ts_ms":136000,"poll_id":"scene-ballot-2","tallies":[{"option":"The Critic","voters":1,"weight":1.0},{"option":"The Commission","voters":2,"weight":3.6}],"closed":false}
+{"type":"stream_end","ts_ms":150000,"reason":"sim_complete"}

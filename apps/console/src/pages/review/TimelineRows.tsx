@@ -18,7 +18,10 @@ const GATE_TONE: Readonly<Record<GateMarkId, Tone>> = { care: "fail", persona: "
 const GATES: readonly Exclude<GateMarkId, "judge_fail">[] = ["care", "persona", "alleged"];
 
 export function segmentClass(seg: SegmentId | string | undefined): string | undefined {
-  return seg === "SEG-01" ? styles.segImprov : seg === "SEG-02A" ? styles.segInvestigation : seg ? styles.segOther : undefined;
+  if (seg === "SEG-01") return styles.segImprov;
+  if (seg === "SEG-02A") return styles.segInvestigation;
+  if (seg === "SEG-03") return styles.segTableRead;
+  return seg ? styles.segOther : undefined;
 }
 
 export function TimelineHead() {

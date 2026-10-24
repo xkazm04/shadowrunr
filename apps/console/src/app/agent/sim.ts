@@ -17,8 +17,9 @@ export const SIM_DEFAULTS = {
   populations: { 3: "small_new_channel", 30: "growing_channel", 300: "raid_moment" } as Readonly<Record<number, string>>,
 } as const;
 
-/** The segments a sim may run: the descoped SEG-02B-I and -II are refused by the daemon. */
-export const SIM_SEGMENTS: readonly SegmentId[] = ["SEG-01", "SEG-02A"];
+/** The segments a sim may run: the descoped SEG-02B-I and -II are refused by the daemon. SEG-03
+ * plays the shipped fictional sample scenes when the run has no prep. */
+export const SIM_SEGMENTS: readonly SegmentId[] = ["SEG-01", "SEG-02A", "SEG-03"];
 export const SIM_TIERS: readonly ModelTier[] = ["haiku", "sonnet", "opus"];
 /** The largest calibrated audience (3, 30 and 300 are calibrated). */
 export const MAX_AUDIENCE = 300;

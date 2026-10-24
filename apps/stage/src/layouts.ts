@@ -8,6 +8,10 @@
 // everything left of the right column, Malakor stands cut out over its bottom-left corner, the
 // caption is a lower third from his right edge to the content's, and decrees and cards float in
 // the content's top-right (on the board, in a lane the acts leave free).
+//
+// SEG-03's Table Read draws the host room as a two-shot (`flags.twoShot`): Malakor on the left, the
+// guest's portrait on the right where the card and decrees stood, the scene's title band under the
+// two of them, and the explainer card moved into the right column above the chat.
 
 import { isContentScreen, type BoardFrame, type HexFrame, type LayoutId, type MapScreen } from "@shadowrunr/stage-kit";
 
@@ -36,6 +40,8 @@ export const REGIONS = [
   "inspector",
   "tally",
   "ticker",
+  "guest",
+  "scene",
 ] as const;
 export type Region = (typeof REGIONS)[number];
 
@@ -44,6 +50,12 @@ export interface LayoutFlags {
   foil: boolean;
   /** The map the desk shows behind the browser window (absent: the board). */
   back?: MapScreen;
+  /** SEG-03 on the host screen: the two-shot (ignored on the content screens). */
+  twoShot?: boolean;
+  /** The two-shot's scene title band is up (a scene is playing). */
+  scene?: boolean;
+  /** The two-shot's card slot has something to show (an explainer, or the standing card). */
+  card?: boolean;
 }
 
 export const GUTTER = 32;
@@ -58,6 +70,12 @@ const STACK_GAP = 16;
 export const FACE_PX = 560;
 /** The host room's avatar box. */
 const HOST_AVATAR: Rect = { x: 64, y: TOP + 8, w: FACE_PX, h: 612 };
+/** The two-shot: his box, a little shorter so the scene band fits under both halves. */
+export const TWO_SHOT_HOST: Rect = { x: 64, y: TOP + 8, w: FACE_PX, h: 552 };
+/** The guest's half: where the host room's card and decrees stand, as tall as his. */
+export const TWO_SHOT_GUEST: Rect = { x: 652, y: TOP + 8, w: 632, h: 552 };
+/** The scene's title band under the two halves, above the caption. */
+export const SCENE_BAND: Rect = { x: 64, y: TWO_SHOT_HOST.y + TWO_SHOT_HOST.h + 12, w: 1220, h: 68 };
 /** His corner on the content screens: bottom-left, the box's bottom on the canvas's bottom edge
  * (the rig's torso is cut off at its box's bottom, like a streamer's cut-out). */
 export const CORNER_AVATAR: Rect = { x: 16, y: 1080 - 448, w: 448, h: 448 };
@@ -137,6 +155,8 @@ function contentRects(layout: "board" | "hexmap" | "browser" | "desk", flags: La
     board: layout === "board" ? CONTENT : back === "board" ? DESK_MAP : hide(CONTENT),
     hexmap: layout === "hexmap" ? CONTENT : back === "hexmap" ? DESK_MAP : hide(CONTENT),
     browser: browser ?? hide(DESK_BROWSER),
+    guest: hide(TWO_SHOT_GUEST),
+    scene: hide(SCENE_BAND),
     observer: flags.foil ? observer : hide(observer),
     decrees,
     card,
@@ -156,6 +176,26 @@ function contentRects(layout: "board" | "hexmap" | "browser" | "desk", flags: La
   };
 }
 
+/** SEG-03's host room: the two-shot. The foil card is the guest's half, so it never shows. */
+function twoShotRects(r: Record<Region, Rect>, flags: LayoutFlags): Record<Region, Rect> {
+  return {
+    ...r,
+    avatar: TWO_SHOT_HOST,
+    guest: TWO_SHOT_GUEST,
+    scene: flags.scene ? SCENE_BAND : hide(SCENE_BAND),
+    decrees: hide(r.decrees),
+    foil: hide(r.foil),
+    ...(column(
+      [
+        { region: "vote", h: 300, show: flags.poll },
+        { region: "card", h: 240, show: flags.card ?? false },
+        { region: "chat", h: 0, show: true },
+      ],
+      TOP,
+    ) as Record<"vote" | "card" | "chat", Rect>),
+  };
+}
+
 export function layoutRects(layout: LayoutId, flags: LayoutFlags): Record<Region, Rect> {
   const topbar: Rect = { x: GUTTER, y: 24, w: 1920 - 2 * GUTTER, h: 60 };
   if (isContentScreen(layout)) return contentRects(layout, flags, topbar);
@@ -169,6 +209,8 @@ export function layoutRects(layout: LayoutId, flags: LayoutFlags): Record<Region
     hexmap: hide({ x: 360, y: 200, w: 900, h: 600 }),
     board: hide({ x: 360, y: 200, w: 900, h: 600 }),
     browser: hide(DESK_BROWSER),
+    guest: hide(TWO_SHOT_GUEST),
+    scene: hide(SCENE_BAND),
     inspector: hide({ x: RIGHT_X, y: TOP, w: RIGHT_W, h: 214 }),
     tally: hide({ x: RIGHT_X, y: TOP + 230, w: RIGHT_W, h: 214 }),
     observer: hide({ x: RIGHT_X, y: TOP, w: 340, h: 96 }),
@@ -184,8 +226,9 @@ export function layoutRects(layout: LayoutId, flags: LayoutFlags): Record<Region
   };
   if (off) {
     for (const k of REGIONS) if (k !== "topbar") r[k] = hide(r[k]);
+    return r;
   }
-  return r;
+  return flags.twoShot ? twoShotRects(r, flags) : r;
 }
 
 /** `r` in the coordinates of the box `inside` (its top-left at 0, 0). */
