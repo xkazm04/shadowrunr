@@ -5070,8 +5070,8 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "priorNotApplicable": 5,
+          "state": "unknown"
         },
         {
           "subject": "hitl-approval",

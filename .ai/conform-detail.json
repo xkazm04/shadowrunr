@@ -4094,6 +4094,21 @@
       "evaluatedTs": "2026-10-24T01:43:46.156Z",
       "worker": "c8db7dfc-003c-4c5b-b52b-b69ae730bbb7",
       "techniques": []
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/voice-io": {
+      "context": "console-review-page",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T02:22:53.809Z",
+      "techniques": [],
+      "withdrawn": {
+        "worker": "82f57343-6e05-40e2-a9ab-617d52882406",
+        "state": "not-applicable",
+        "at": "2026-10-24T02:23:10.025850+00:00",
+        "reason": "reviewer (sonnet): The anchor is only a header comment in Player.tsx, and the page does play recorded speech: WatchPane.tsx:47 renders a `<video controls>` on the session recording, and the line text at WatchPane.tsx:50 refers to when speech is heard, with an A/V offset. The searched terms (AudioContext, speechSynthes"
+      }
     }
   }
 }
