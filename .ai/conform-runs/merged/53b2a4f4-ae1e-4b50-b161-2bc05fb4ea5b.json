@@ -1,0 +1,88 @@
+{
+ "schema": "conform-run/1",
+ "worker": "53b2a4f4-ae1e-4b50-b161-2bc05fb4ea5b",
+ "subject": "review-iteration-loops",
+ "evaluatedAt": "2026-10-24T02:54:36.508744+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "daemon-show-prep-and-review",
+   "subject": "review-iteration-loops",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-daemon/src/prep/revise.rs:231 The prep revision engine's reply schema has only an `ops` field. The planner cannot refuse a note with a reason or list a target it considered and left alone. A note or finding that draws no operation simply disappears from revision.json, which makes 'untouched' look the same as 'forgotten'. The apply step does refuse illegal ops with reasons, but that is a different thing from the engine refusing a note.",
+   "techniques": [
+    {
+     "technique": "edit-plan-over-regeneration",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/prep/mod.rs:196 Revise returns an edit plan (rewrite/cut/insert) on named targets, each with a required why. The result is staged as a new prep and the base is never changed."
+    },
+    {
+     "technique": "refusal-as-valid-outcome",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/prep/revise.rs:231 refused_ops with reasons exist at the apply layer (mod.rs:277), and a second op on the same target is refused as 'target already edited'. What is missing is any note-level refusal field and any explicitly-unchanged list."
+    },
+    {
+     "technique": "note-taxonomy-focus-scope-order",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/prep/revise.rs:32 Owner notes have a target but are free text only. There is no focus/scope/order kind, so the planner has to infer the register and has no minimal operation per kind."
+    },
+    {
+     "technique": "scope-vs-preference-signals",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/prep/revise.rs:309 Precedence holds: a descoped segment is refused in shared apply code before staging. But the refusal does not name the scoping surface or the action that would bring the segment back, which the technique's decision rule requires."
+    },
+    {
+     "technique": "critique-carries-its-fix",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/prep/checks.rs:267 Check findings are located precisely and they block approval, then go to the automated planner with no proposed repair. Two things soften this: apply() limits ops to the named targets, and the result is gated again."
+    },
+    {
+     "technique": "follow-up-that-can-kill-a-fact",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/case_cli.rs:62 The corrections log has subtractive verbs (factual correction, grade downgrade) plus case retract, appended as new events over the research. They propagate forward because an open correction blocks clip publishing (case_cli.rs:241). There is no automated deepen queue and no 'unanswered' state."
+    },
+    {
+     "technique": "gate-record-outlives-the-media",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/prep/store.rs:1 Prep approvals sit beside light text material on one machine and nothing is culled at decision time, so the technique's 'when not to use' applies."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "review-iteration-loops",
+   "context": "console-review-page",
+   "reason": "evidence leans on tone/inbox.rs, which is not a tracked file"
+  },
+  {
+   "subject": "review-iteration-loops",
+   "context": "clips-pipeline",
+   "reason": "evidence leans on types/clips.rs, which is not a tracked file"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-24T02:54:36.508744+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "review-iteration-loops"
+   ],
+   "techniques": [
+    "critique-carries-its-fix",
+    "edit-plan-over-regeneration",
+    "follow-up-that-can-kill-a-fact",
+    "gate-record-outlives-the-media",
+    "note-taxonomy-focus-scope-order",
+    "refusal-as-valid-outcome",
+    "scope-vs-preference-signals"
+   ],
+   "deviations": 1,
+   "context": "daemon-show-prep-and-review",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

@@ -6057,7 +6057,11 @@
           "revision": 11,
           "changedAt": "2026-10-15",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/prep/revise.rs:231 The prep revision engine's reply schema has only an `ops` field. The planner cannot refuse a note with a reason or list a target it considered and left alone. A note or finding that draws no operation simply disappears from revision.json, which makes 'untouched' look the same as 'forgotten'. The apply step does refuse illegal ops with reasons, but that is a different thing from the engine refusing a note.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:a3bbc2c5b531b8d5",
+          "evaluatedRevision": 11
         },
         {
           "subject": "fleet-orchestration",
