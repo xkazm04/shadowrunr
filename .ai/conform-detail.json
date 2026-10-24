@@ -3794,6 +3794,46 @@
         "at": "2026-10-24T00:23:56.016490+00:00",
         "reason": "reviewer (sonnet): split.py:180 shows only the light-mode clamped delta; I found no 'ground' fill for the face-sized head and torso or 'M8 spec' in the context files, and nothing at the anchor shows layers.json recording head geometry or a promote review, so the conformant claims rest on unconfirmed evidence."
       }
+    },
+    "68cf95a7-438b-4ed9-930d-c19201eb0610/mcp-tools": {
+      "context": "voice-sidecar",
+      "subject": "mcp-tools",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T00:40:15.778Z",
+      "worker": "f8463246-6d75-4435-969c-e09fe69fd63b",
+      "techniques": []
+    },
+    "9b2fb27b-e4c5-4300-a214-7f5518a08b44/mcp-tools": {
+      "context": "console-data-layer",
+      "subject": "mcp-tools",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T00:40:15.778Z",
+      "worker": "f8463246-6d75-4435-969c-e09fe69fd63b",
+      "techniques": []
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/mcp-tools": {
+      "context": "console-review-page",
+      "subject": "mcp-tools",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T00:40:15.778Z",
+      "worker": "f8463246-6d75-4435-969c-e09fe69fd63b",
+      "techniques": []
+    },
+    "db707156-0bf7-4d53-8185-d054a78c0502/mcp-tools": {
+      "context": "avatar-rig-tools",
+      "subject": "mcp-tools",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T00:40:15.778Z",
+      "worker": "f8463246-6d75-4435-969c-e09fe69fd63b",
+      "techniques": []
     }
   }
 }

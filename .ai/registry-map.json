@@ -1460,7 +1460,11 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/data/rpc.ts:1 The data layer is the console's typed RPC/websocket client to the daemon, an operator UI channel that no model reads as a tool surface; a grep of apps/console/src/data for mcp, inputSchema, tools/call and modelcontextprotocol found nothing (the console's agent tool code sits in apps/console/src/app/agent, outside this context).",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ed8e615f51454325",
+          "evaluatedRevision": 34
         },
         {
           "subject": "data-access",
@@ -5024,7 +5028,11 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/review/EngineCalls.tsx:1 The review page only renders the daemon's session record (it shows the engine-call ledger but neither serves nor consumes tools); a grep of apps/console/src/pages/review for mcp, inputSchema, tools/call and modelcontextprotocol found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ed8e615f51454325",
+          "evaluatedRevision": 34
         },
         {
           "subject": "voice-io",
@@ -5826,7 +5834,11 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:2 The sidecar speaks a private say/audio/cancel JSON-lines protocol to the daemon that no model reads, which the golden path puts outside this subject as generic RPC between services; a grep of tools/voice for mcp, inputSchema, tools/call and modelcontextprotocol found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ed8e615f51454325",
+          "evaluatedRevision": 34
         },
         {
           "subject": "prompt-assembly",
@@ -5944,7 +5956,11 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "tools/rig/shadowrunr_rig/__main__.py:2 These are offline image-processing command-line tools an operator runs by hand, with no tool protocol and no model caller; a grep of tools/rig and tools/avatar for mcp, inputSchema, tools/call and modelcontextprotocol found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ed8e615f51454325",
+          "evaluatedRevision": 34
         },
         {
           "subject": "prompt-assembly",
