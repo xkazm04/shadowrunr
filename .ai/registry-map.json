@@ -3274,7 +3274,11 @@
           "revision": 11,
           "changedAt": "2026-10-14",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/stats.rs:8 Every rate in the report (answered, pick and answer rates, quality pass rates) is refused only when n = 0, so 1-of-2 is published as 0.5 and 0-of-3 as a rate. That is below any sample floor, and lib.rs:774 then prints segment SES means to two decimals with no floor, so a single segment_end can set the number.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:b702c58e785c6c51",
+          "evaluatedRevision": 11
         },
         {
           "subject": "agent-memory",

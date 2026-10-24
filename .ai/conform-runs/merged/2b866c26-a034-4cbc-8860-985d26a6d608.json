@@ -1,0 +1,78 @@
+{
+ "schema": "conform-run/1",
+ "worker": "2b866c26-a034-4cbc-8860-985d26a6d608",
+ "subject": "measurement-honesty",
+ "evaluatedAt": "2026-10-24T06:26:25.816951+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "reconcile-engine",
+   "subject": "measurement-honesty",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-reconcile/src/stats.rs:8 Every rate in the report (answered, pick and answer rates, quality pass rates) is refused only when n = 0, so 1-of-2 is published as 0.5 and 0-of-3 as a rate. That is below any sample floor, and lib.rs:774 then prints segment SES means to two decimals with no floor, so a single segment_end can set the number.",
+   "techniques": [
+    {
+     "technique": "minimum-sample-floors",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-reconcile/src/stats.rs:8 No stated floor anywhere in the rate family. The rate carries n and a Wilson / rule-of-three 95% bound (which satisfies count-carries-predicate), but values below the floor are still produced and charted. The tests assert rate(1,2)=0.5. The summary renders SES {v:.2} and chat/min to more precision than small samples support."
+    },
+    {
+     "technique": "unmeasurable-vs-zero",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-reconcile/src/cells.rs:124 Not-provoked and not-evaluable checks are kept out of both pass and fail counts instead of being treated as passes. An axis that cannot be found is the UNKNOWN \"?\" value, not a guess, and per_min and rate return None, not 0, when there is no denominator."
+    },
+    {
+     "technique": "renormalize-over-present",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-reconcile/src/metrics.rs:261 Means are taken only over the values present (SES only when Some, participation only when audience > 0) and come back as absent when nothing was present. ses_n is published with ses_mean. poll_participation_mean does not disclose how many polls had a known audience."
+    },
+    {
+     "technique": "incomplete-not-verdict",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-reconcile/src/runs.rs:275 engine_failed, judge_pending, moved-aside copy and incomplete runs are classified at load time, kept out of the analysis, and counted with reasons in Excluded, which goes into both the report and its summary. A source with no results is an error, not an empty report. There is no threshold on what fraction of runs succeeded: one result among many failed runs still produces a report, with a disclosure note."
+    },
+    {
+     "technique": "co-published-numbers-must-reconcile",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-reconcile/src/cells.rs:3 Every table reads one tally, and directive outcomes use the same function as the simulator's results.json. Tests (metrics.rs:611 summary_hard_rule_count_matches_the_tone_table, tone_findings_carry_no_directive_checks) assert that numbers published together agree. One weak point: stats.rs:11 clamps k.min(n), which silently turns an impossible k>n into a rate instead of blocking on it."
+    },
+    {
+     "technique": "unelidable-measurement",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-reconcile/src/metrics.rs:407 The crate does not host or time any work. It only reads durations from ledger rows the engine recorded elsewhere."
+    },
+    {
+     "technique": "the-baseline-is-the-untouched-path",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-reconcile/src/budget.rs:3 The token estimator only sizes the prompt. No saving or reduction is claimed against a baseline."
+    }
+   ],
+   "registryProposal": "minimum-sample-floors could say how it relates to publishing an interval: this crate reports every k-of-n with n and a 95% Wilson / rule-of-three bound instead of a floor. That fixes the precision problem but not the problem of a coarse classification flipping on one more observation, and the technique does not currently say whether a published bound can stand in for the floor."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T06:26:25.816951+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "measurement-honesty"
+   ],
+   "techniques": [
+    "co-published-numbers-must-reconcile",
+    "incomplete-not-verdict",
+    "minimum-sample-floors",
+    "renormalize-over-present",
+    "the-baseline-is-the-untouched-path",
+    "unelidable-measurement",
+    "unmeasurable-vs-zero"
+   ],
+   "deviations": 1,
+   "context": "reconcile-engine",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
