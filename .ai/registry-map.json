@@ -4963,7 +4963,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/review/Judge.tsx:58 The Judge tab counts every rule, including the contract's not_provoked and not_evaluable states, as a rule it checked, and shows 'No rule failed' without ever showing the rules that could not be evaluated; a search of the review page found no reference to not_evaluable or not_provoked except as a tone name in Layer2. A judge that could evaluate almost nothing therefore reads as clean.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "docs-sync",
@@ -5584,7 +5588,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/store.rs:268 A single free-text override_reason accepts every unmeasured check on the clip at once (for example injection_reply, handles_in_picture and a real case's no_open_correction together), so one waiver silences findings it never named instead of one waiver per finding.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "platform-format-adaptation",

@@ -1,0 +1,139 @@
+{
+ "schema": "conform-run/1",
+ "worker": "41748219-7658-4d6e-acc1-d2cc44e826ac",
+ "subject": "quality-gates",
+ "evaluatedAt": "2026-10-24T01:04:13.906746+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "clips-pipeline",
+   "subject": "quality-gates",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-clips/src/store.rs:268 A single free-text override_reason accepts every unmeasured check on the clip at once (for example injection_reply, handles_in_picture and a real case's no_open_correction together), so one waiver silences findings it never named instead of one waiver per finding.",
+   "techniques": [
+    {
+     "technique": "waiver-names-its-finding",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-clips/src/store.rs:268 The override's only condition is that some reason is present. Its reach is every unmeasured check, and the operator cannot waive one check and keep another holding. Failed checks are correctly unwaivable."
+    },
+    {
+     "technique": "advancement-evidence-fields",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/store.rs:283 The approval record keeps the exact checks that were overridden, plus the signature and the time, so the record shows which obligation was waived and does not leave a blank."
+    },
+    {
+     "technique": "unmeasurable-criteria",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/gate.rs:3 A missing case store or an unreadable corrections log becomes Unmeasured, which holds the clip. A fictional case is NotApplicable, because that absence is a fact about the subject."
+    },
+    {
+     "technique": "gate-liveness",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/gate.rs:217 A policy with no brigade rule produces Unmeasured rather than a clean pass, so the gate checks that its instrument exists before it reports a result. tests.rs:363 also seeds known violations and asserts they fail."
+    },
+    {
+     "technique": "severity-by-construction",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/gate.rs:444 Hold status comes directly from any Fail or Unmeasured state. Approval is refused on Fail through act_block, and publish is refused unless the clip is approved, so the exit path is real."
+    },
+    {
+     "technique": "policy-projection",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/store.rs:101 The store refuses through the same act_block statement that produces the `acts` the console reads, so the console and the enforcement share one policy enumeration."
+    },
+    {
+     "technique": "refusal-names-a-reachable-remedy",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/store.rs:270 The refusal names each blocking check and the remedy, and the CLI exposes that remedy as --override (clips_cli.rs:90)."
+    },
+    {
+     "technique": "self-reported-gate-inputs",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/gate.rs:146 The personal_data check reads the line text itself as well as the output gate's moderation records, so it does not rely only on records the pipeline wrote."
+    },
+    {
+     "technique": "blocking-by-input-determinism",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/gate.rs:81 The exclusion verdicts are a pure function of the stream record, the cut and the local policy. No external feed can change them."
+    }
+   ]
+  },
+  {
+   "context": "console-review-page",
+   "subject": "quality-gates",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/review/Judge.tsx:58 The Judge tab counts every rule, including the contract's not_provoked and not_evaluable states, as a rule it checked, and shows 'No rule failed' without ever showing the rules that could not be evaluated; a search of the review page found no reference to not_evaluable or not_provoked except as a tone name in Layer2. A judge that could evaluate almost nothing therefore reads as clean.",
+   "techniques": [
+    {
+     "technique": "unmeasurable-criteria",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/review/Judge.tsx:58 Skipped and unevaluable rules are neither shown nor counted on this page. The standard requires a skip to be visible on every surface."
+    },
+    {
+     "technique": "policy-projection",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/pages/review/Layer1.tsx:21 The session wall maps all three gate states, including unmeasured, to their own visual class. The record type forces this mapping to be complete."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "quality-gates",
+   "context": "reconcile-engine",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "quality-gates",
+   "context": "stage-avatar-renderer",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "quality-gates",
+   "context": "stage-voice-client",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-10-24T01:04:13.906746+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "quality-gates"
+   ],
+   "techniques": [
+    "advancement-evidence-fields",
+    "blocking-by-input-determinism",
+    "gate-liveness",
+    "policy-projection",
+    "refusal-names-a-reachable-remedy",
+    "self-reported-gate-inputs",
+    "severity-by-construction",
+    "unmeasurable-criteria",
+    "waiver-names-its-finding"
+   ],
+   "deviations": 1,
+   "context": "clips-pipeline",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-10-24T01:04:13.906746+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "quality-gates"
+   ],
+   "techniques": [
+    "policy-projection",
+    "unmeasurable-criteria"
+   ],
+   "deviations": 1,
+   "context": "console-review-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

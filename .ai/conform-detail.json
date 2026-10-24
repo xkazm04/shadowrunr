@@ -3834,6 +3834,83 @@
       "evaluatedTs": "2026-10-24T00:40:15.778Z",
       "worker": "f8463246-6d75-4435-969c-e09fe69fd63b",
       "techniques": []
+    },
+    "12e5be0b-9811-4c5b-a7ec-8a57e204d016/quality-gates": {
+      "context": "clips-pipeline",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T01:04:13.906Z",
+      "worker": "41748219-7658-4d6e-acc1-d2cc44e826ac",
+      "techniques": [
+        {
+          "technique": "waiver-names-its-finding",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/store.rs:268 The override's only condition is that some reason is present. Its reach is every unmeasured check, and the operator cannot waive one check and keep another holding. Failed checks are correctly unwaivable."
+        },
+        {
+          "technique": "advancement-evidence-fields",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/store.rs:283 The approval record keeps the exact checks that were overridden, plus the signature and the time, so the record shows which obligation was waived and does not leave a blank."
+        },
+        {
+          "technique": "unmeasurable-criteria",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/gate.rs:3 A missing case store or an unreadable corrections log becomes Unmeasured, which holds the clip. A fictional case is NotApplicable, because that absence is a fact about the subject."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/gate.rs:217 A policy with no brigade rule produces Unmeasured rather than a clean pass, so the gate checks that its instrument exists before it reports a result. tests.rs:363 also seeds known violations and asserts they fail."
+        },
+        {
+          "technique": "severity-by-construction",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/gate.rs:444 Hold status comes directly from any Fail or Unmeasured state. Approval is refused on Fail through act_block, and publish is refused unless the clip is approved, so the exit path is real."
+        },
+        {
+          "technique": "policy-projection",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/store.rs:101 The store refuses through the same act_block statement that produces the `acts` the console reads, so the console and the enforcement share one policy enumeration."
+        },
+        {
+          "technique": "refusal-names-a-reachable-remedy",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/store.rs:270 The refusal names each blocking check and the remedy, and the CLI exposes that remedy as --override (clips_cli.rs:90)."
+        },
+        {
+          "technique": "self-reported-gate-inputs",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/gate.rs:146 The personal_data check reads the line text itself as well as the output gate's moderation records, so it does not rely only on records the pipeline wrote."
+        },
+        {
+          "technique": "blocking-by-input-determinism",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/gate.rs:81 The exclusion verdicts are a pure function of the stream record, the cut and the local policy. No external feed can change them."
+        }
+      ]
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/quality-gates": {
+      "context": "console-review-page",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T01:04:13.906Z",
+      "worker": "41748219-7658-4d6e-acc1-d2cc44e826ac",
+      "techniques": [
+        {
+          "technique": "unmeasurable-criteria",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/review/Judge.tsx:58 Skipped and unevaluable rules are neither shown nor counted on this page. The standard requires a skip to be visible on every surface."
+        },
+        {
+          "technique": "policy-projection",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/review/Layer1.tsx:21 The session wall maps all three gate states, including unmeasured, to their own visual class. The record type forces this mapping to be complete."
+        }
+      ]
     }
   }
 }
