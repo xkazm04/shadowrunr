@@ -5546,7 +5546,11 @@
           "revision": 5,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/stage/src/voice/captions.ts:1 The stage only plays audio that is already rendered, times captions and the face to the heard clock, and maps the delivery cue to the avatar face. It does no casting, script adaptation, tone profiling or rate budgeting: searching apps/stage/src/voice for wpm, pronunciation, bookend and voice_profile found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:750a2ae7e033a1e6",
+          "evaluatedRevision": 5
         },
         {
           "subject": "session-continuation",
@@ -5867,7 +5871,11 @@
           "revision": 5,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/voice/elevenlabs.rs:482 Every sentence gets an inline audio tag such as [sarcastic] for whatever ElevenLabs model the voice choice names, and nothing checks whether that model honours the tag or speaks it aloud; the returned alignment is only tested for being non-empty, so the 'cue read out loud' failure that spoken-delivery-direction says must be checked goes unseen.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:750a2ae7e033a1e6",
+          "evaluatedRevision": 5
         }
       ],
       "governance": "governed"
@@ -5983,7 +5991,11 @@
           "revision": 5,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "tools/voice/shadowrunr_voice/engine.py:154 The sidecar only gives Kokoro the model's stock US-English lexicon, so a recurring show's invented names and handles (Malakor, phylactery, chat usernames) are said however espeak guesses each time, with no recorded ruling per series; the technique requires a pronunciation ledger, and the repo's own design digest asks for a `world_lexicon.json`, which `git ls-files` does not contain.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:750a2ae7e033a1e6",
+          "evaluatedRevision": 5
         },
         {
           "subject": "multi-speaker-speech-production",
