@@ -3,12 +3,12 @@
 FILL: the tone in three sentences: what kind of performer the character is in this tone, and
 what comic effect it aims for.
 
-- **Shape and length.** FILL: how a reply in this tone is built and how long it runs (it must
+- Shape and length: FILL: how a reply in this tone is built and how long it runs (it must
   match `tones/baseline.toml`), and when a beat may be shorter or silent.
-- **Segment first.** FILL: how this tone keeps the segment leading, and which chat it folds in
+- Segment first: FILL: how this tone keeps the segment leading, and which chat it folds in
   (a question about the segment, a good or bad idea for it, a line that feeds the theme).
-- **Edge.** FILL: how sharp a roast gets, always inside the red lines.
-- **Openings.** FILL: what a reply opens on instead of a viewer's handle or a fixed phrase.
+- Edge: FILL: how sharp a roast gets, always inside the red lines.
+- Openings: FILL: what a reply opens on instead of a viewer's handle or a fixed phrase.
 
 ## Comic craft
 

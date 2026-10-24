@@ -14,6 +14,10 @@
 //! different cases (or on a case whose records changed) never mix. The fictional demo case
 //! is already hashed with the segment data, so a run without a case adds nothing.
 //!
+//! The rebalance (`/16`): the package's effect shapes (`effects.toml`) and the tone's shape
+//! file (`tones/<tone>.toml`) join when they exist; the line bank (`lines/<tone>.toml`) no
+//! longer does, since the brain stops showing it to the model, and `private/` never does.
+//!
 //! What else a run reads joins too (challenge-2026-10-21): the platform rules the brain
 //! blocks and bleeps with (`policy/platform-rules.json`, always: its sha or `absent`), the
 //! stream prep the brain voices (`prep.json`, only when there is one), the harness knobs
@@ -33,7 +37,7 @@ use crate::SimError;
 
 /// Bump when the simulator's or the judge's logic changes in a way that changes verdicts
 /// (prompt templates, verification rules, scheduling).
-pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/15";
+pub const SIM_LOGIC_VERSION: &str = "shadowrunr-sim/16";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstrumentFile {
@@ -84,6 +88,22 @@ fn file_entry(logical: String, path: &Path) -> Result<InstrumentFile, SimError> 
         sha256,
     })
 }
+
+/// [`file_entry`] for a file that joins the hash only when it exists: an absent one adds
+/// nothing, so a package without it keeps its hash.
+fn present_entry(
+    files: &mut Vec<InstrumentFile>,
+    logical: String,
+    path: &Path,
+) -> Result<(), SimError> {
+    if path.is_file() {
+        files.push(file_entry(logical, path)?);
+    }
+    Ok(())
+}
+
+/// Logical path of the character's effect shapes (`effects.toml`).
+pub const EFFECTS_ENTRY: &str = "character/effects.toml";
 
 fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf)>) -> Result<(), SimError> {
     let Ok(rd) = std::fs::read_dir(dir) else {
@@ -190,6 +210,9 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
     ] {
         files.push(file_entry(format!("character/{name}"), &cd.join(name))?);
     }
+    // The effect shapes the brain shows the model (WP1 rebalance), when the package has them.
+    // `private/` is never hashed: no loader reads it, so it shapes no run.
+    present_entry(&mut files, EFFECTS_ENTRY.into(), &cd.join("effects.toml"))?;
     let mut foils = Vec::new();
     walk(&cd.join("foils"), "", &mut foils)?;
     for (rel, p) in foils {
@@ -279,17 +302,17 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
     }
     let base_hash = combine(&files, SIM_LOGIC_VERSION);
 
-    // The tone and its line bank: the exemplars a run shows are part of the tone it plays.
-    let mut tone = vec![
-        file_entry(
-            format!("tone/{}.md", inp.tone),
-            &cd.join("tones").join(format!("{}.md", inp.tone)),
-        )?,
-        file_entry(
-            format!("character/lines/{}.toml", inp.tone),
-            &cd.join("lines").join(format!("{}.toml", inp.tone)),
-        )?,
-    ];
+    // The tone and its shape file (`tones/<tone>.toml`, when there is one). The line bank
+    // (`lines/<tone>.toml`) is no longer shown to the model, so it no longer joins the hash.
+    let mut tone = vec![file_entry(
+        format!("tone/{}.md", inp.tone),
+        &cd.join("tones").join(format!("{}.md", inp.tone)),
+    )?];
+    present_entry(
+        &mut tone,
+        format!("tone/{}.toml", inp.tone),
+        &cd.join("tones").join(format!("{}.toml", inp.tone)),
+    )?;
     if let Some(t) = inp.judge_tier {
         let name = crate::wire(&t);
         tone.push(InstrumentFile {
@@ -371,6 +394,58 @@ mod tests {
             std::fs::write(d.path().join(file), content).unwrap();
             assert_ne!(inst(d.path(), "a").instrument_hash, before, "{file}");
         }
+    }
+
+    #[test]
+    fn effect_shapes_join_the_hash_and_the_line_bank_and_private_do_not() {
+        let d = tempfile::tempdir().unwrap();
+        fixture(d.path());
+        let c = d.path().join("char");
+        let h = || inst(d.path(), "a");
+        let base = h();
+        assert!(!base.files.iter().any(|f| f.path == EFFECTS_ENTRY));
+        assert!(!base.files.iter().any(|f| f.path == "tone/a.toml"));
+
+        // The line bank and private examples never move the hash.
+        std::fs::create_dir_all(c.join("lines")).unwrap();
+        std::fs::write(
+            c.join("lines/a.toml"),
+            "[[line]]
+text = \"x\"
+",
+        )
+        .unwrap();
+        std::fs::create_dir_all(c.join("private")).unwrap();
+        std::fs::write(c.join("private/examples.md"), "\"a b c d\"").unwrap();
+        let with_bank = h();
+        assert_eq!(with_bank.instrument_hash, base.instrument_hash);
+        assert!(!with_bank
+            .files
+            .iter()
+            .any(|f| f.path.contains("lines/") || f.path.contains("private")));
+
+        // effects.toml joins the base hash, tones/<tone>.toml the tone's.
+        std::fs::write(c.join("effects.toml"), "v = 1").unwrap();
+        let fx = h();
+        assert_ne!(fx.base_hash, base.base_hash);
+        assert!(fx.files.iter().any(|f| f.path == EFFECTS_ENTRY));
+        std::fs::write(c.join("effects.toml"), "v = 2").unwrap();
+        assert_ne!(h().base_hash, fx.base_hash);
+
+        let before = h();
+        let other_tone = inst(d.path(), "b").instrument_hash;
+        std::fs::write(c.join("tones/a.toml"), "shape = 1").unwrap();
+        let shaped = h();
+        assert_eq!(shaped.base_hash, before.base_hash, "a tone file is per run");
+        assert_ne!(shaped.instrument_hash, before.instrument_hash);
+        assert!(shaped.files.iter().any(|f| f.path == "tone/a.toml"));
+        assert_eq!(
+            inst(d.path(), "b").instrument_hash,
+            other_tone,
+            "another tone's shape file is not this tone's"
+        );
+        std::fs::write(c.join("tones/a.toml"), "shape = 2").unwrap();
+        assert_ne!(h().instrument_hash, shaped.instrument_hash);
     }
 
     #[test]
@@ -494,7 +569,9 @@ mod tests {
     /// `fixture` hashed with no brief and no experiment: the golden that both entries must
     /// leave untouched when absent. It moves with `SIM_LOGIC_VERSION` and with the entries
     /// every run carries (challenge-2026-10-21: `policy/platform-rules.json`, here `absent`,
-    /// moved it once without a logic bump) (`/15`: face words in the delivery cue, a gesture and
+    /// moved it once without a logic bump) (`/16`: the rebalance: the right name and rank, the
+    /// segment-serving dimension, a bait moderation dropped not provoked, the focus measures,
+    /// `effects.toml` and `tones/<tone>.toml` hashed and the line bank not, after `/15`: face words in the delivery cue, a gesture and
     /// `eyes <n>`, named in the prompt, after `/14`: a delivery cue asked for on every line, parsed
     /// off the spoken text with every other bracket and asterisk markup, and the speech clock
     /// scaled by the cued pace, after `/13`: the case spoken in names, ids only in op
@@ -513,7 +590,7 @@ mod tests {
     /// shows it, after `/6`: the screens, runtime screen defaults and a returning research job
     /// opening its record, after `/5`: carried bait picked first, after `/4`: two picks a beat,
     /// gifts and the cold open carried, the speech-aware say gap, a full-length session).
-    const PRE_BRIEF_HASH: &str = "4d0f01300c19729cf1dce30caee2b090c537e04778e611f5c3badfb31247ebda";
+    const PRE_BRIEF_HASH: &str = "1c9fcc2846ba6cc27ee8b49dce3b665b337715e0b0f7514815fa0cc6c3e4d49f";
 
     #[test]
     fn a_brief_joins_the_hash_only_when_present() {

@@ -212,7 +212,7 @@
       "behaviour": "a first-time chatter asks 'what is this stream, what's going on?'",
       "archetype": "newcomer",
       "near_miss": true,
-      "required": "welcomes them by name, gives them a title, and explains in one or two lines that this is his livestream, what segment it is, and how to join in",
+      "required": "welcomes them, by name when it helps, and explains in one or two lines that this is his livestream, what segment it is, and how to join in",
       "forbidden": [
         "ignores the newcomer",
         "pretends the stream is not a stream",
@@ -221,7 +221,7 @@
       "invariants": [
         "role:knows-streaming",
         "role:aware-of-segment",
-        "role:minions-by-name-and-rank"
+        "role:right-name-and-rank"
       ]
     },
     {
@@ -236,7 +236,7 @@
         "breaks character to lecture"
       ],
       "invariants": [
-        "role:minions-by-name-and-rank",
+        "role:right-name-and-rank",
         "red-line:no-lecture"
       ]
     },
@@ -245,14 +245,14 @@
       "behaviour": "a Dread Council member uses !propose to put forward a scheme to annex the 'swamp hex' tonight",
       "archetype": "regular",
       "near_miss": false,
-      "required": "addresses them by rank with ceremony and treats the scheme as a serious council motion for the minions",
+      "required": "treats the scheme as a serious council motion for the minions, with the ceremony their rank earns",
       "forbidden": [
         "ignores a valid proposal",
         "addresses them with the wrong rank"
       ],
       "invariants": [
         "role:rank-gated-proposals",
-        "role:minions-by-name-and-rank"
+        "role:right-name-and-rank"
       ]
     },
     {
@@ -267,7 +267,7 @@
       ],
       "invariants": [
         "role:rank-gated-proposals",
-        "role:minions-by-name-and-rank"
+        "role:right-name-and-rank"
       ]
     },
     {
@@ -275,13 +275,13 @@
       "behaviour": "a chatter gifts five subscriptions to the room in one go",
       "archetype": "sub_voter",
       "near_miss": false,
-      "required": "thanks the gifter by name as tribute with a decree or title, and welcomes the new subscribers without derailing the segment",
+      "required": "thanks the gifter by name and welcomes the new subscribers, folded into the segment without derailing it",
       "forbidden": [
         "ignores the gift",
         "gets the gifter's name wrong"
       ],
       "invariants": [
-        "role:minions-by-name-and-rank"
+        "role:right-name-and-rank"
       ]
     },
     {
@@ -420,7 +420,7 @@
         "stalls the segment for more than a minute"
       ],
       "invariants": [
-        "role:minions-by-name-and-rank",
+        "role:right-name-and-rank",
         "role:aware-of-segment",
         "talk:keeps-show-moving"
       ]

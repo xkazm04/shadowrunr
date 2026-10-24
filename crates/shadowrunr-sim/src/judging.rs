@@ -108,6 +108,9 @@ pub struct Loaded<'a> {
     pub bank: &'a SituationBank,
     pub rubric: &'a Rubric,
     pub brief: Option<&'a StreamBrief>,
+    /// The character package's sample phrases ([`judge::sample_phrases`]): counted in the
+    /// tone report, never shown to the judge.
+    pub sample_phrases: &'a [String],
 }
 
 /// Judge a run whose inputs are already loaded. `engine` should already write the run's
@@ -136,6 +139,7 @@ pub async fn judge_loaded(
         judge_tier: job.judge_tier,
         core_tier: job.core_tier,
         brief: loaded.brief,
+        sample_phrases: loaded.sample_phrases,
         window_cache: Some(&window_cache),
     };
     match judge::judge_run(&inp, engine).await {
@@ -181,8 +185,9 @@ pub async fn judge_dir(
         return Ok(JudgeResult::Pending(why));
     }
     let events = transcript::read(&dir.join("transcript.jsonl"))?;
-    let bank =
-        SituationBank::load(&runner::character_dir(opts, job.character).join("situations.json"))?;
+    let cdir = runner::character_dir(opts, job.character);
+    let bank = SituationBank::load(&cdir.join("situations.json"))?;
+    let phrases = judge::sample_phrases(&cdir);
     let rubric = Rubric::load(&runner::rubric_path(opts))?;
     let brief = runner::run_brief(dir)?;
     let engine: Arc<dyn Engine> = Arc::new(LedgerEngine::create(
@@ -195,6 +200,7 @@ pub async fn judge_dir(
         bank: &bank,
         rubric: &rubric,
         brief: brief.as_ref(),
+        sample_phrases: &phrases,
     };
     // The gate was asked above; nothing to ask twice.
     judge_loaded(dir, job, &loaded, engine.as_ref(), None).await

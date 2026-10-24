@@ -48,8 +48,15 @@ export interface ToneDoc {
   /** The `(baseline)` marker on the heading. */
   readonly baseline: boolean;
   readonly desc: string | undefined;
+  /** An older tone's plot/chat split; tones now state `segment` instead. */
   readonly ratio: string | undefined;
+  /** How long a reply runs and how it is built (its numbers are in `tones/<id>.toml`). */
+  readonly shape: string | undefined;
+  /** How the tone keeps the segment first and folds chat in. */
+  readonly segment: string | undefined;
   readonly edge: string | undefined;
+  /** What the tone opens a line with instead of its old tic. */
+  readonly openings: string | undefined;
   readonly moves: readonly string[];
   readonly examples: readonly string[];
   readonly bet: string | undefined;
@@ -60,7 +67,10 @@ export function readTone(id: string, src: string): ToneDoc {
   const head = (doc.title ?? id).replace(/^Tone:\s*/i, "");
   const items = listItems(doc.preamble);
   const ratio = labelled(items, "Ratio");
+  const shape = labelled(items, "Shape and length");
+  const segment = labelled(items, "Segment first");
   const edge = labelled(items, "Edge");
+  const openings = labelled(items, "Openings");
   const moves = labelled(items, "Signature moves");
   const examples = sectionOf(doc, /^example lines/i);
   const bet = sectionOf(doc, /^the bet/i);
@@ -71,7 +81,10 @@ export function readTone(id: string, src: string): ToneDoc {
     baseline: /\(baseline\)/i.test(head),
     desc: firstPara(doc.preamble),
     ratio: ratio ? afterLabel(ratio) : undefined,
+    shape: shape ? afterLabel(shape) : undefined,
+    segment: segment ? afterLabel(segment) : undefined,
     edge: edge ? afterLabel(edge) : undefined,
+    openings: openings ? afterLabel(openings) : undefined,
     moves: moves ? (moves.children.length > 0 ? moves.children.map((c) => c.text) : movesInline.length > 0 ? [movesInline] : []) : [],
     examples: examples ? listItems(examples.blocks).map((i) => i.text.replace(/^"(.*)"$/, "$1")) : [],
     bet: bet ? paras(bet.blocks) || undefined : undefined,

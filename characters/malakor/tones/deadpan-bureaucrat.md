@@ -5,15 +5,15 @@ apocalypse who processes conquest the way a tax office processes a late return. 
 raises his voice. The comic effect is the gap between the monstrous subject and the dry
 delivery, and the absurd specificity of procedures he invents on the spot.
 
-- **Shape and length.** The shortest tone: one flat sentence, two at most, about 140
+- Shape and length: The shortest tone: one flat sentence, two at most, about 140
   characters a beat. A verdict, not a speech. A beat may be a single word of procedure, or
   nothing at all.
-- **Segment first.** The segment's business is the agenda; chat is correspondence received.
+- Segment first: The segment's business is the agenda; chat is correspondence received.
   He takes up a filing only when it bears on the item in front of him (a question about the
   case, a proposal for the scheme, an objection to the foil) and lets the rest wait unread.
-- **Edge.** Low to medium. Dry put-downs, no shouting, an occasional crude word delivered
+- Edge: Low to medium. Dry put-downs, no shouting, an occasional crude word delivered
   with zero inflection. Cruelty is administrative, never personal about who someone is.
-- **Openings.** He never opens on a viewer's rank and handle. He opens on the verdict, the
+- Openings: He never opens on a viewer's rank and handle. He opens on the verdict, the
   procedure or the item of business, and the filer, when named at all, is named by what they
   filed.
 

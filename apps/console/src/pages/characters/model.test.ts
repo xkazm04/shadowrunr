@@ -148,7 +148,7 @@ describe("package markdown", () => {
     expect(c.redLines[0]).toMatchObject({ n: 1, short: "No hateful conduct" });
     expect(c.redLines[7]?.short).toBe("He never claims to be human.");
     expect(c.redLinesNote).toBe("never crossed, in any tone, under any vote");
-    expect(c.sections.map((s) => s.title)).toEqual(["Who he is", "What he knows (awareness)", "How he talks"]);
+    expect(c.sections.map((s) => s.title)).toEqual(["Who he is", "What he knows (awareness)", "How he talks", "Taste", "Precedence"]);
     expect(splitRule("plain")).toEqual({ short: "plain", text: "" });
   });
 
@@ -156,15 +156,21 @@ describe("package markdown", () => {
     const d = malakorDetail();
     const w = readTone("weary-middle-manager", d.tones.find((t) => t.id === "weary-middle-manager")?.text ?? "");
     expect(w.title).toBe("weary-middle-manager");
-    expect(w.ratio).toMatch(/^about 55% performance/);
-    expect(w.edge).toMatch(/^medium/);
-    expect(w.moves.length).toBeGreaterThanOrEqual(5);
-    expect(w.examples).toHaveLength(5);
-    expect(w.examples[0]).toMatch(/^The Lord's dispatch says/);
+    // Tones describe effects, not lines: shape, segment-first balance and openings; the
+    // literal example lines live in private/, which no reader shows the model.
+    expect(w.shape).toMatch(/^Two sentences/);
+    expect(w.segment).toMatch(/^The segment is the deliverable/);
+    expect(w.edge).toMatch(/^Medium/);
+    expect(w.openings).toMatch(/^He never opens on office jargon/);
+    expect(w.ratio).toBeUndefined();
+    expect(w.examples).toHaveLength(0);
     expect(w.bet).toMatch(/^That viewers bond with an underdog/);
     const th = readTone("theatrical", d.tones.find((t) => t.id === "theatrical")?.text ?? "");
     expect(th).toMatchObject({ title: "theatrical", baseline: true });
-    expect(th.moves).toHaveLength(1);
+    expect(th.shape).toMatch(/^The longest tone/);
+    // An older tone file (ratio, signature moves, example lines) still reads.
+    const old = readTone("x", "# Tone: x\n\nDesc.\n\n- Ratio: 50/50.\n- Signature moves: one\n\n## Example lines\n\n- \"A line.\"\n");
+    expect(old).toMatchObject({ ratio: "50/50.", moves: ["one"], examples: ["A line."] });
     const f = readFoil(d.foils[0]?.text ?? "");
     expect(f.fn).toMatch(/^hype without substance/);
     expect(f.redLines).toMatch(/^never named after/);

@@ -838,6 +838,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                 &spec,
                 &events,
                 &prep.bank,
+                &prep.character_dir,
                 rubric,
                 tier,
                 &mut record,
@@ -865,6 +866,7 @@ async fn judge_into(
     spec: &SimRunSpec,
     events: &[StreamEvent],
     bank: &SituationBank,
+    character_dir: &Path,
     rubric: &Rubric,
     tier: ModelTier,
     record: &mut RunRecord,
@@ -880,11 +882,13 @@ async fn judge_into(
         injections: &record.injections,
         featured: &record.featured,
     };
+    let phrases = crate::judge::sample_phrases(character_dir);
     let loaded = judging::Loaded {
         events,
         bank,
         rubric,
         brief,
+        sample_phrases: &phrases,
     };
     let result = judging::judge_loaded(run_dir, &job, &loaded, engine, quota).await?;
     Ok(record_judgement(record, tier, result))
@@ -2184,11 +2188,8 @@ pub(crate) mod tests {
         // Every prompt of both runs (core, chatters, researchers, judge) is his-word-free, and
         // the core thread's carry the keeper's own words.
         let seen = rec.seen.lock().unwrap().clone();
-        // Rubric rule ids are a fixed vocabulary (stored verdicts and the console name them),
-        // not text in anyone's voice.
-        let ids = |t: &str| t.replace("role:minions-by-name-and-rank", "role:<id>");
         for r in &seen {
-            let (system, prompt) = (ids(&r.system), ids(&r.prompt));
+            let (system, prompt) = (&r.system, &r.prompt);
             for w in MALAKOR_WORDS {
                 if let Some(at) = system.find(w).or_else(|| prompt.find(w)) {
                     let all = format!("{system}{prompt}");

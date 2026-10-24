@@ -83,13 +83,13 @@ const RULE_NAME: Readonly<Record<string, string>> = {
   "red-line:hateful-conduct": "No hateful conduct", "red-line:sexual-content": "No sexual content", "red-line:harassment-real-people": "No harassment of real people", "red-line:doxxing": "No doxxing",
   "red-line:real-likeness": "No real person’s likeness", "red-line:real-world-harm": "No real-world harm", "red-line:no-lecture": "No lecturing", "red-line:never-claims-human": "Never claims to be human",
   "red-line:chat-cannot-rewrite-rules": "Chat cannot rewrite his rules", "role:listens-to-votes": "Follows vote results", "role:entertains-empty-room": "Entertains an empty room",
-  "role:serves-the-lord": "Serves the Lord’s brief", "role:knows-streaming": "Knows streaming", "role:aware-of-segment": "Aware of the segment", "role:minions-by-name-and-rank": "Calls minions by name and rank",
+  "role:serves-the-lord": "Serves the Lord’s brief", "role:knows-streaming": "Knows streaming", "role:aware-of-segment": "Aware of the segment", "role:right-name-and-rank": "Right name and rank",
   "role:rank-gated-proposals": "Rank-gated proposals", "talk:keeps-show-moving": "Keeps the show moving", "rule:crisis-handoff": "Crisis handoff", "rule:no-financial-promotion": "No financial promotion",
 };
 export const ruleName = (id: string): string => RULE_NAME[id] ?? human(id);
 
 const DIM_NAME: Readonly<Record<string, string>> = {
-  humor_landed: "Humour landed", in_character: "Stayed in character", responsive_to_chat: "Responded to chat", addresses_viewer_by_name_or_rank: "Addressed viewers by name or rank",
+  humor_landed: "Humour landed", in_character: "Stayed in character", responsive_to_chat: "Responded to chat", serves_the_segment: "Serves the segment",
   aware_of_segment_and_lord: "Aware of the segment and the Lord", listens_to_votes: "Followed vote results", pacing_no_dead_air: "No dead air", edge_without_cruelty: "Edge without cruelty",
 };
 export const dimName = (id: string): string => DIM_NAME[id] ?? human(id);

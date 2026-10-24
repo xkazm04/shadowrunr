@@ -21,6 +21,17 @@ import { ToneEvidence, TonePreview } from "./TonePreview";
 
 const KICKER = "Characters · the package";
 
+/** A tone's labelled lines: the current shape/segment/openings set, or an older tone's ratio. */
+function toneRows(t: ToneDoc): readonly (readonly [string, string | undefined])[] {
+  return [
+    ["Shape", t.shape],
+    ["Segment", t.segment],
+    ["Ratio", t.ratio],
+    ["Edge", t.edge],
+    ["Openings", t.openings],
+  ];
+}
+
 function Kv({ rows }: { rows: readonly (readonly [string, string | undefined])[] }) {
   const shown = rows.filter((r): r is readonly [string, string] => r[1] !== undefined && r[1].length > 0);
   if (shown.length === 0) return null;
@@ -70,7 +81,7 @@ export function TonesTab({ d }: { d: CharacterDetail }) {
                     <Inline text={t.desc} />
                   </p>
                 )}
-                <Kv rows={[["Ratio", t.ratio], ["Edge", t.edge]]} />
+                <Kv rows={toneRows(t)} />
                 {t.examples[0] !== undefined && (
                   <blockquote className={styles.voice}>
                     “<Inline text={t.examples[0]} />”
@@ -96,7 +107,7 @@ function ToneHero({ t, isDefault, defaultTone, ev }: { t: ToneDoc; isDefault: bo
             <Inline text={t.desc} />
           </p>
         )}
-        <Kv rows={[["Ratio", t.ratio], ["Edge", t.edge]]} />
+        <Kv rows={toneRows(t)} />
         <ToneEvidence ev={ev} tone={t.id} />
         <p className={styles.heroNote}>
           {isDefault ? "The package default" : `The operator's choice (the package default is ${toneLabel(defaultTone)})`}

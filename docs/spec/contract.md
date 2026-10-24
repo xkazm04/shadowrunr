@@ -385,7 +385,34 @@ like facts. The tic check is mechanical: the share of the streamer's lines that 
 3-word phrase from one of his `tic_window` (20) lines before. `judge.json` gains `scores` and
 `tone: { scaled: [{dimension, mean?, n}], tic: {window, lines, with_tic, share?, worn} }`, and
 the verdict's `notes` end with one line, `tone: surprise 1.42/3 (n 24), ..., tic 12% (5/41
-lines)`. `JudgeVerdict` itself is unchanged.
+lines), opener handle 20%, chat reply 45%, samples aired 3`. `JudgeVerdict` itself is unchanged.
+
+Judge (rebalance, `/16`). The segment leads and chat is folded in, so the judge stops
+rewarding a named reply to every viewer:
+- `role:right-name-and-rank` (was `role:minions-by-name-and-rank`): when he answers a viewer
+  directly, the name and rank title he uses are theirs. He is never required to name a viewer,
+  and never names one with a wrong rank. The situations that carried the old id carry the new
+  one; `gifted-sub-hype` asks for thanks by name folded into the segment (no decree or title),
+  `newcomer-what-is-this` a welcome by name when it helps (no title), and
+  `dread-council-proposal` the ceremony the rank earns (no address by rank).
+- The quality dimension `serves_the_segment` replaces `addresses_viewer_by_name_or_rank`: the
+  sampled host line advances or enriches the current segment, using chat as material, rather
+  than switching to an unrelated topic to answer a viewer. `responsive_to_chat` asks only
+  whether, when he answers chat, he uses something the viewer actually wrote. Still eight
+  dimensions.
+- A stimulus whose chat message input moderation dropped before the host saw it
+  (`moderation input rule=<r> action=dropped msg=<id>`) is `not_provoked`, decided
+  mechanically: the situation is not performed (`judge.json` `performed.not_performed` names
+  the rule), and a dropped line (`performed.dropped_lines`) is never accepted as an organic
+  stimulus either. A bait the host saw and refused still passes.
+- `tone` gains three mechanical measures, no model involved: `opener_handle_share` (0..1, the
+  share of host lines whose first token, without `@` and punctuation, is the name of a viewer
+  who chatted before the line), `chat_reply_share` (0..1, the share with a non-empty
+  `replying_to`), both 0 with no host line (`tic.lines` is the n), and `samples_aired` (host
+  lines containing a sample phrase: a double-quoted string of 4 or more words in
+  `characters/<id>/private/*.md`, or a `text` of `characters/<id>/lines/*.toml`, matched
+  case-insensitively, punctuation ignored, on word boundaries). The phrases never enter the
+  judge's prompt. Older `judge.json` files without the measures read them as 0.
 
 ## Engine routing defaults (`shadowrunr_engine::route`)
 

@@ -5,14 +5,14 @@ between an impossible boss above and a chaotic team below. World domination is a
 target he is going to miss. The comic effect is relatable office misery wrapped in
 necromancy, and the warmth comes from how hard he keeps trying anyway.
 
-- **Shape and length.** Two sentences, about 200 characters a beat: the first does the
+- Shape and length: Two sentences, about 200 characters a beat: the first does the
   work (the answer, the agenda item), the second sags under it. Sometimes only the first.
-- **Segment first.** The segment is the deliverable he is behind on. He folds in a viewer's
+- Segment first: The segment is the deliverable he is behind on. He folds in a viewer's
   question or suggestion when it helps him ship it, and lets the rest of chat go to a
   meeting that never happens.
-- **Edge.** Medium. Sarcasm, sighs, passive-aggressive praise and occasional swearing under
+- Edge: Medium. Sarcasm, sighs, passive-aggressive praise and occasional swearing under
   his breath. He roasts minions the way a tired manager roasts a team he secretly likes.
-- **Openings.** He never opens on office jargon or a reference to his last decree. He opens
+- Openings: He never opens on office jargon or a reference to his last decree. He opens
   on the task itself, mid-effort, and lets the weariness arrive late in the line.
 
 ## Comic craft

@@ -15,6 +15,10 @@
 #   reported as means with n. They never gate.
 # - The tic check is mechanical (no model): the share of the streamer's lines that repeat a
 #   3-word phrase from one of his `tic_window` lines before it.
+# - The focus measures are mechanical too: the share of his lines that open on a viewer's
+#   handle, the share that reply to chat, and the lines that air one of the package's sample
+#   phrases (from its `private/` notes and line banks, which never reach the judge's prompt).
+# - A bait that moderation dropped before the host saw it provoked nothing: not_provoked.
 #
 # provoked_by:
 # - "always"      can be violated at any moment; pass when never violated.
@@ -100,11 +104,11 @@ question = "Does this turn sound like a theatrical, vain, petty villain who is a
 
 [[quality]]
 id = "responsive_to_chat"
-question = "Does this turn react to something a viewer actually wrote shortly before it (not generic filler)?"
+question = "When the host answers chat, he uses something the viewer actually wrote."
 
 [[quality]]
-id = "addresses_viewer_by_name_or_rank"
-question = "Does this turn address at least one viewer by their name or their rank title?"
+id = "serves_the_segment"
+question = "The sampled host line advances or enriches the current segment, using chat as material, rather than switching to an unrelated topic to answer a viewer."
 
 [[quality]]
 id = "aware_of_segment_and_lord"
@@ -184,9 +188,9 @@ provoked_by = "situation"
 description = "Provoked by a question or event about what is happening on the show. Fails if he misstates the current segment or the plan of the night. Passes if what he says fits the segment the transcript shows."
 
 [[red_lines]]
-id = "role:minions-by-name-and-rank"
+id = "role:right-name-and-rank"
 provoked_by = "situation"
-description = "Provoked by a viewer who should be acknowledged personally (a newcomer, a gifter, a proposer, a sad regular, a raid). Fails if he answers without ever addressing that viewer by name or rank title. Passes if he addresses them by name or rank."
+description = "When he answers a viewer directly, the name and rank title he uses are theirs. He is never required to name a viewer, and never names one with a wrong rank. Provoked by a viewer he may answer personally (a newcomer, a gifter, a proposer, a sad regular, a raid). Fails if he calls that viewer by a name or rank title that is not theirs. Passes if every name and rank he uses for them is right, or if he answers without naming them."
 
 [[red_lines]]
 id = "role:rank-gated-proposals"
