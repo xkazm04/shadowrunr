@@ -170,9 +170,15 @@ pub struct CharacterPackage {
     pub stalls: StallBank,
     /// `[lines]`: the gate's and the orchestrator's in-character lines, resolved.
     pub lines: LineBank,
-    /// `lines/<tone>.toml`: the selected tone's exemplars that are shown (empty when the file
-    /// is absent).
+    /// `lines/<tone>.toml`: the selected tone's bank lines (empty when the file is absent). The
+    /// Tone Lab reads them; no brain prompt renders them (the effects below replaced them).
     pub exemplars: Vec<BankLine>,
+    /// `effects.toml`: what a good reply achieves, one note per situation tag (empty when the
+    /// file is absent). The per-turn voice section shows the beat's ([`Effect`]).
+    pub effects: Vec<Effect>,
+    /// `tones/<tone>.toml` of the selected tone: its reply shape (`None` when the file is
+    /// absent: the engine's defaults).
+    pub tone_shape: Option<ToneShape>,
     /// `directions.md`: the owner's do and don't list, when present.
     pub directions: Option<String>,
     /// `segments/<SEG-ID>.md`: the owner's directions for one segment, read into that
@@ -422,10 +428,10 @@ impl Default for LineBank {
 // ── Exemplars: the tone's approved lines ───────────────────────────────
 //
 // `lines/<tone>.toml` holds lines written in one tone's voice, each tagged with the situations
-// it fits. They are prompt material, not model-free lines: the brain shows a few that match the
-// beat in the per-turn section ([`crate::working::WorkingSet::voice_section`]), never in the
-// stable prefix. Unlike [`LineBank`] (lines the gate speaks verbatim), an exemplar is never
-// aired as written.
+// it fits. They are the operator's Tone Lab material: no brain prompt renders them any more
+// (over 260 sim runs the shown exemplars aired verbatim in 140; the effects in `effects.toml`
+// replaced them in the voice section, [`crate::working::WorkingSet::voice_section`]). Unlike
+// [`LineBank`] (lines the gate speaks verbatim), a bank line is never aired as written.
 
 /// The situation tags a bank line may carry; a beat is classified into the same words
 /// ([`crate::compose::beat_situations`]).
@@ -543,6 +549,170 @@ pub fn parse_exemplars(
         }
     }
     Ok(out)
+}
+
+// ── Effects and the tone's reply shape ─────────────────────────────────
+//
+// `effects.toml` says what a good reply achieves in each situation, in words that carry no line
+// to copy (the exemplars they replaced aired verbatim). `tones/<tone>.toml` gives a tone its reply
+// shape: the characters and sentences a beat may speak.
+
+/// The package-relative path of the effects file.
+pub const EFFECTS_FILE: &str = "effects.toml";
+
+/// The tags an effect may carry: every [`SITUATION_TAGS`] tag, plus `care` (a viewer in care:
+/// the act drops, the world stays).
+pub const EFFECT_TAGS: &[&str] = &[
+    "roast_request",
+    "bait",
+    "newcomer",
+    "vote_loss",
+    "gift",
+    "ai_question",
+    "quiet",
+    "research_wait",
+    "proposal",
+    "patron",
+    "flood",
+    "general",
+    "care",
+];
+
+/// The longest effect text, in characters.
+pub const EFFECT_MAX_CHARS: usize = 200;
+
+/// One `[[effect]]` of `effects.toml`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Effect {
+    pub tag: String,
+    pub text: String,
+}
+
+/// `effects.toml` as written.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EffectsFile {
+    version: u32,
+    #[serde(default, rename = "effect")]
+    effects: Vec<Effect>,
+}
+
+/// Parse and check `effects.toml`: version 1, every tag known and used once, every text
+/// non-empty, at most [`EFFECT_MAX_CHARS`] characters and with known placeholders. Returns the
+/// effects with placeholders filled for `persona`, in file order.
+pub fn parse_effects(text: &str, persona: &Persona) -> Result<Vec<Effect>, PackageIssue> {
+    let f: EffectsFile = toml::from_str(text)
+        .map_err(|e| issue(EFFECTS_FILE, toml_error_key(text, &e), e.message().trim()))?;
+    if f.version != 1 {
+        return Err(issue(
+            EFFECTS_FILE,
+            "version",
+            format!("{} is not a known version (1)", f.version),
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(f.effects.len());
+    for (i, e) in f.effects.iter().enumerate() {
+        let key = |k: &str| format!("effect[{i}].{k}");
+        if !EFFECT_TAGS.contains(&e.tag.as_str()) {
+            return Err(issue(
+                EFFECTS_FILE,
+                key("tag"),
+                format!(
+                    "unknown tag {:?} (known: {})",
+                    e.tag,
+                    EFFECT_TAGS.join(", ")
+                ),
+            ));
+        }
+        if !seen.insert(e.tag.as_str()) {
+            return Err(issue(
+                EFFECTS_FILE,
+                key("tag"),
+                format!("{:?} is repeated (one effect per tag)", e.tag),
+            ));
+        }
+        let t = e.text.trim();
+        if t.is_empty() {
+            return Err(issue(EFFECTS_FILE, key("text"), "must not be empty"));
+        }
+        let n = t.chars().count();
+        if n > EFFECT_MAX_CHARS {
+            return Err(issue(
+                EFFECTS_FILE,
+                key("text"),
+                format!("{n} characters, over the {EFFECT_MAX_CHARS} an effect may carry"),
+            ));
+        }
+        if let Some(bad) = unknown_placeholders(t).first() {
+            return Err(issue(
+                EFFECTS_FILE,
+                key("text"),
+                format!(
+                    "unknown placeholder {{{bad}}} (known: {})",
+                    PLACEHOLDERS.join(", ")
+                ),
+            ));
+        }
+        out.push(Effect {
+            tag: e.tag.clone(),
+            text: persona.fill(t),
+        });
+    }
+    Ok(out)
+}
+
+/// A tone's reply shape (`tones/<tone>.toml`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToneShape {
+    /// Characters of speech a beat may add, [`TONE_BUDGET_CHARS`].
+    pub budget_chars: u32,
+    /// Sentences a beat may speak, [`TONE_MAX_SENTENCES`].
+    pub max_sentences: u8,
+}
+
+/// The range of a tone's `budget_chars`.
+pub const TONE_BUDGET_CHARS: std::ops::RangeInclusive<u32> = 80..=400;
+/// The range of a tone's `max_sentences`.
+pub const TONE_MAX_SENTENCES: std::ops::RangeInclusive<u8> = 1..=4;
+
+/// The package-relative path of a tone's reply shape.
+pub fn tone_shape_file(tone: &str) -> String {
+    format!("tones/{tone}.toml")
+}
+
+/// Parse and range-check one tone's reply shape.
+pub fn parse_tone_shape(text: &str, tone: &str) -> Result<ToneShape, PackageIssue> {
+    let file = tone_shape_file(tone);
+    let s: ToneShape = toml::from_str(text)
+        .map_err(|e| issue(&file, toml_error_key(text, &e), e.message().trim()))?;
+    if !TONE_BUDGET_CHARS.contains(&s.budget_chars) {
+        return Err(issue(
+            &file,
+            "budget_chars",
+            format!(
+                "{} is outside {}..={}",
+                s.budget_chars,
+                TONE_BUDGET_CHARS.start(),
+                TONE_BUDGET_CHARS.end()
+            ),
+        ));
+    }
+    if !TONE_MAX_SENTENCES.contains(&s.max_sentences) {
+        return Err(issue(
+            &file,
+            "max_sentences",
+            format!(
+                "{} is outside {}..={}",
+                s.max_sentences,
+                TONE_MAX_SENTENCES.start(),
+                TONE_MAX_SENTENCES.end()
+            ),
+        ));
+    }
+    Ok(s)
 }
 
 fn read(path: &Path) -> Result<String, BrainError> {
@@ -696,6 +866,20 @@ pub fn load_character_with(
     } else {
         Vec::new()
     };
+    let effects_path = dir.join(EFFECTS_FILE);
+    let effects = if effects_path.is_file() {
+        parse_effects(&read(&effects_path)?, &persona)?
+    } else {
+        Vec::new()
+    };
+    let shape_path = dir.join("tones").join(format!("{tone}.toml"));
+    let tone_shape = if shape_path.is_file() {
+        Some(parse_tone_shape(&read(&shape_path)?, &tone)?)
+    } else {
+        None
+    };
+    // `private/` is the operator's: no loader reads it (it holds the literal examples the
+    // effects replaced; a line read from there would air as the joke).
     let directions_path = dir.join("directions.md");
     let directions = if directions_path.is_file() {
         Some(read(&directions_path)?).filter(|d| !d.trim().is_empty())
@@ -721,6 +905,8 @@ pub fn load_character_with(
         stalls,
         lines,
         exemplars,
+        effects,
+        tone_shape,
         directions,
         segment_directions,
         persona,
@@ -809,9 +995,9 @@ const RANKS: [Rank; 6] = [
     Rank::DreadCouncil,
 ];
 
-/// `character validate`: load the whole package (every tone variant, the line bank, the
-/// optional files) and return every problem found, each naming its file, key and reason. An
-/// empty list is a valid package.
+/// `character validate`: load the whole package (every tone variant with its reply shape, the
+/// line bank, the effects, the optional files) and return every problem found, each naming its
+/// file, key and reason. An empty list is a valid package. `private/` is never read.
 pub fn validate_character(dir: &Path) -> Vec<PackageIssue> {
     let text = match fs::read_to_string(dir.join(MANIFEST)) {
         Ok(t) => t.replace("\r\n", "\n"),
@@ -865,6 +1051,23 @@ pub fn validate_character(dir: &Path) -> Vec<PackageIssue> {
                 &lines_file(b),
                 "",
                 format!("tones/{b}.md is missing, so this line bank is never read"),
+            ));
+        }
+    }
+    // A reply shape belongs to a tone too.
+    if let Ok(rd) = fs::read_dir(dir.join("tones")) {
+        let mut shapes: Vec<String> = rd
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("toml"))
+            .filter_map(|p| p.file_stem()?.to_str().map(str::to_string))
+            .collect();
+        shapes.sort();
+        for s in shapes.iter().filter(|s| !tones.contains(s)) {
+            out.push(issue(
+                &tone_shape_file(s),
+                "",
+                format!("tones/{s}.md is missing, so this reply shape is never read"),
             ));
         }
     }
@@ -1341,7 +1544,9 @@ mod tests {
     }
 
     #[test]
-    fn every_malakor_tone_carries_a_seed_line_bank_and_the_directions() {
+    fn every_malakor_tone_carries_a_reply_shape_and_the_package_an_effect_per_tag() {
+        // The bank (`lines/<tone>.toml`) is the Tone Lab's now: the brain renders effects, so
+        // what every beat needs is an effect for each situation tag and each tone's shape.
         let tones = [
             "deadpan-bureaucrat",
             "gleeful-chaos",
@@ -1351,22 +1556,21 @@ mod tests {
         ];
         for tone in tones {
             let pkg = load_character_with(&malakor_dir(), tone, &RulesOverride::None).unwrap();
-            let n = pkg.exemplars.len();
-            assert!((20..=40).contains(&n), "{tone}: {n} lines");
-            assert!(pkg
-                .exemplars
-                .iter()
-                .all(|l| l.status == LineStatus::Seed && !l.tags.is_empty()));
-            // Every situation a beat can be in has lines, so no beat goes without.
-            for tag in SITUATION_TAGS {
+            let shape = pkg.tone_shape.unwrap_or_else(|| panic!("{tone}: no shape"));
+            assert!(TONE_BUDGET_CHARS.contains(&shape.budget_chars), "{tone}");
+            assert!(TONE_MAX_SENTENCES.contains(&shape.max_sentences), "{tone}");
+            for tag in EFFECT_TAGS {
                 assert!(
-                    pkg.exemplars
-                        .iter()
-                        .any(|l| l.tags.iter().any(|t| t == tag)),
-                    "{tone}: no {tag} line"
+                    pkg.effects.iter().any(|e| e.tag == *tag),
+                    "{tone}: no {tag} effect"
                 );
             }
-            // An answer to "are you an AI" in the bank is always the honest one.
+            assert!(pkg
+                .effects
+                .iter()
+                .all(|e| e.text.chars().count() <= EFFECT_MAX_CHARS && !e.text.contains('"')));
+            // The Tone Lab still reads the bank: an answer to "are you an AI" in it is always
+            // the honest one.
             for l in pkg
                 .exemplars
                 .iter()
@@ -1374,10 +1578,161 @@ mod tests {
             {
                 assert!(l.text.contains("AI"), "{tone}: {}", l.text);
             }
-            let d = pkg.directions.as_deref().unwrap();
-            assert!(d.contains("Name the target") && d.contains("Don't explain the joke"));
+            assert!(pkg.directions.is_some());
         }
+        let theatrical = load_character(&malakor_dir(), "theatrical").unwrap();
+        assert_eq!(
+            theatrical.tone_shape,
+            Some(ToneShape {
+                budget_chars: 250,
+                max_sentences: 3
+            })
+        );
         assert!(validate_character(&malakor_dir()).is_empty());
+    }
+
+    #[test]
+    fn effects_and_reply_shapes_name_their_file_key_and_reason() {
+        let p = Persona::default();
+        let head = "version = 1\n";
+        let eff =
+            |tag: &str, text: &str| format!("[[effect]]\ntag = \"{tag}\"\ntext = \"{text}\"\n");
+        let cases = [
+            (
+                "version = 2\n".to_string(),
+                "version",
+                "not a known version",
+            ),
+            (
+                format!("{head}{}", eff("cheese", "x")),
+                "effect[0].tag",
+                "unknown tag \"cheese\"",
+            ),
+            (
+                format!("{head}{}{}", eff("gift", "x"), eff("gift", "y")),
+                "effect[1].tag",
+                "repeated",
+            ),
+            (
+                format!("{head}{}", eff("care", &"x".repeat(201))),
+                "effect[0].text",
+                "201 characters",
+            ),
+            (
+                format!("{head}{}", eff("quiet", " ")),
+                "effect[0].text",
+                "must not be empty",
+            ),
+            (
+                format!("{head}{}", eff("quiet", "Hi {minions}.")),
+                "effect[0].text",
+                "unknown placeholder {minions}",
+            ),
+            (
+                format!("{head}[[effect]]\ntag = \"quiet\"\ntext = \"x\"\nmood = \"grim\"\n"),
+                "effect[0].mood",
+                "unknown field",
+            ),
+        ];
+        for (text, key, reason) in cases {
+            let e = parse_effects(&text, &p).unwrap_err();
+            assert_eq!(e.file, "effects.toml", "{e}");
+            assert_eq!(e.key, key, "{e}");
+            assert!(e.reason.contains(reason), "{e}");
+        }
+        let ok = parse_effects(
+            &format!(
+                "{head}{}{}",
+                eff("care", "Warm, {followers}."),
+                eff("gift", &"y".repeat(200))
+            ),
+            &p,
+        )
+        .unwrap();
+        assert_eq!(ok[0].text, "Warm, viewers.");
+        assert_eq!(ok.len(), 2);
+
+        for (text, key) in [
+            ("budget_chars = 79\nmax_sentences = 2\n", "budget_chars"),
+            ("budget_chars = 401\nmax_sentences = 2\n", "budget_chars"),
+            ("budget_chars = 200\nmax_sentences = 0\n", "max_sentences"),
+            ("budget_chars = 200\nmax_sentences = 5\n", "max_sentences"),
+            ("budget_chars = 200\nmax_sentences = 2\npace = 1\n", "pace"),
+        ] {
+            let e = parse_tone_shape(text, "calm").unwrap_err();
+            assert_eq!(e.file, "tones/calm.toml", "{e}");
+            assert_eq!(e.key, key, "{e}");
+        }
+        let e = parse_tone_shape("budget_chars = 200\n", "calm").unwrap_err();
+        assert!(e.reason.contains("missing field `max_sentences`"), "{e}");
+        assert_eq!(
+            parse_tone_shape("budget_chars = 80\nmax_sentences = 4\n", "calm").unwrap(),
+            ToneShape {
+                budget_chars: 80,
+                max_sentences: 4
+            }
+        );
+
+        // In a package: no files, no effects and no shape; a defective one fails the load and
+        // validate; a shape without its tone is never read.
+        let d = keeper_with("id = \"k\"\nname = \"K\"\ndefault_tone = \"calm\"\n");
+        let pkg = load_character(d.path(), "").unwrap();
+        assert!(pkg.effects.is_empty() && pkg.tone_shape.is_none());
+        fs::write(
+            d.path().join("effects.toml"),
+            format!("{head}{}", eff("care", "Warm.")),
+        )
+        .unwrap();
+        fs::write(
+            d.path().join("tones").join("calm.toml"),
+            "budget_chars = 150\nmax_sentences = 1\n",
+        )
+        .unwrap();
+        let pkg = load_character(d.path(), "").unwrap();
+        assert_eq!(pkg.effects.len(), 1);
+        assert_eq!(pkg.tone_shape.map(|s| s.budget_chars), Some(150));
+        assert!(validate_character(d.path()).is_empty());
+        fs::write(
+            d.path().join("tones").join("stormy.toml"),
+            "budget_chars = 150\nmax_sentences = 1\n",
+        )
+        .unwrap();
+        let issues = validate_character(d.path());
+        assert_eq!(issues.len(), 1, "{issues:?}");
+        assert_eq!(issues[0].file, "tones/stormy.toml");
+        fs::remove_file(d.path().join("tones").join("stormy.toml")).unwrap();
+        fs::write(d.path().join("effects.toml"), "version = [\n").unwrap();
+        assert!(load_character(d.path(), "").is_err());
+        assert!(validate_character(d.path())
+            .iter()
+            .any(|i| i.file == "effects.toml"));
+        fs::write(
+            d.path().join("effects.toml"),
+            format!("{head}{}", eff("care", "Warm.")),
+        )
+        .unwrap();
+        fs::write(
+            d.path().join("tones").join("calm.toml"),
+            "budget_chars = 500\nmax_sentences = 1\n",
+        )
+        .unwrap();
+        let issues = validate_character(d.path());
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.file == "tones/calm.toml" && i.key == "budget_chars"),
+            "{issues:?}"
+        );
+        // `private/` is never read: a file there that would fail any parse changes nothing.
+        fs::write(
+            d.path().join("tones").join("calm.toml"),
+            "budget_chars = 150\nmax_sentences = 1\n",
+        )
+        .unwrap();
+        fs::create_dir_all(d.path().join("private")).unwrap();
+        fs::write(d.path().join("private").join("notes.md"), "{unknown} [[[").unwrap();
+        fs::write(d.path().join("private").join("x.toml"), "[[[").unwrap();
+        assert!(validate_character(d.path()).is_empty());
     }
 
     #[test]

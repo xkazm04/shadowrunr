@@ -387,7 +387,9 @@ async fn a_question_beside_a_disclosure_is_carried_to_the_next_beat() {
     let ev = b.tick(6_000, Vec::new(), &c).await.unwrap();
     assert_eq!(picked(&ev), ["q1"]);
     let (mode, _, _, reason) = one_plan(&ev);
-    assert_eq!(mode, BeatMode::React);
+    // Folded into the segment beside the through-line (2026-10-24: was a `react`).
+    assert_eq!(mode, BeatMode::Mixed, "{reason}");
+    assert!(reason.contains("segment+chat: "), "{reason}");
     assert!(reason.contains("carried over: q1 (5 s)"), "{reason}");
     assert!(b
         .last_prompt()

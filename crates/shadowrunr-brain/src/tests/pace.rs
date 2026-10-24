@@ -109,11 +109,12 @@ async fn lines_past_the_budget_are_dropped_whole_last_first_with_a_record() {
     let (a, m, z) = (
         line_of("alpha", 120),
         line_of("beta", 120),
-        line_of("gamma", 30),
+        line_of("gamma", 70),
     );
     engine.push(Role::CoreThread, Ok(&format!("{a}\n{m}\n{z}")));
     let ev = b.tick(1_000, Vec::new(), &ctx(&[])).await.unwrap();
-    // 270 characters against 260: the last line goes, whole.
+    // 310 characters against the theatrical tone's 250 (`tones/theatrical.toml`): the last
+    // line goes, whole.
     assert_eq!(says(&ev), [a.clone(), m.clone()]);
     assert_eq!(
         mods(&ev, ModStage::Output),
@@ -121,12 +122,12 @@ async fn lines_past_the_budget_are_dropped_whole_last_first_with_a_record() {
     );
     let p = b.last_prompt().unwrap();
     assert!(
-        p.contains("at most about 2 sentences and 260 characters in all this beat"),
+        p.contains("at most 3 sentences and 250 characters in all this beat"),
         "{p}"
     );
 
     // A first line over the budget on its own stays: a beat always says something.
-    let big = line_of("delta", 300);
+    let big = line_of("delta", 320);
     let tail = line_of("epsilon", 40);
     engine.push(Role::CoreThread, Ok(&format!("{big}\n{tail}")));
     let ev = b.tick(30_000, Vec::new(), &ctx(&[])).await.unwrap();
@@ -169,5 +170,6 @@ async fn the_sign_off_is_never_held_for_queued_speech() {
     )));
     // The closing beat's budget is cut, so the goodbye queues little.
     let p = b.last_prompt().unwrap();
-    assert!(p.contains("and 130 characters in all this beat"), "{p}");
+    // Half the theatrical tone's 250.
+    assert!(p.contains("and 125 characters in all this beat"), "{p}");
 }

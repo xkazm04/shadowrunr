@@ -43,6 +43,7 @@ pub mod picker;
 pub mod pool;
 pub mod rules;
 pub mod stall;
+pub mod topic;
 pub mod util;
 pub mod working;
 
@@ -319,10 +320,11 @@ impl Brain {
     pub async fn new_with(
         cfg: BrainConfig,
         engine: Arc<dyn Engine>,
-        tuning: BrainTuning,
+        mut tuning: BrainTuning,
     ) -> Result<Self, BrainError> {
         // A moderator package never hosts a show.
         character::require_host(&cfg.character.manifest)?;
+        tuning.pace = pace::with_tone_shape(tuning.pace, cfg.character.tone_shape);
         let store = MemoryStore::open(&cfg.memory_dir)?;
         let pkg = &cfg.character;
         let policy = Policy::load(&tuning.policy, &pkg.dir, &tuning.platforms)?
@@ -894,6 +896,17 @@ impl Brain {
         let core_ms = self.cover.as_ref().and(self.latency.median());
         let lead_ms = pace::lookahead_lead(&self.tuning.pace, core_ms);
         let queued_ms = self.speech.queued_ms(now_ms);
+        // What the segment is about right now: the orchestrator's on-topic class and the
+        // picker's `topic` score read the same words.
+        let poll_options = self
+            .working
+            .active_poll
+            .as_ref()
+            .map(|p| p.options.clone())
+            .unwrap_or_default();
+        let topic_words = topic::topic_words(ctx, &poll_options);
+        self.working
+            .note_viewers(cands.iter().map(|c| c.msg.viewer.name.as_str()));
         // What the beat consumes stands only once its core call is delivered.
         let txn = self.orch.begin();
         let mut plan = self.orch.plan(&BeatInputs {
@@ -908,6 +921,7 @@ impl Brain {
             closing,
             names: &self.names,
             max_picks: self.picker.config().max_picks,
+            topic_words: &topic_words,
         });
         let cands = self.orch.offered(&plan, &cands);
         let viewer_ids: Vec<String> = {
@@ -920,12 +934,7 @@ impl Brain {
         };
         let pctx = PickContext {
             regulars: self.store.viewers_with_facts(&viewer_ids)?,
-            poll_options: self
-                .working
-                .active_poll
-                .as_ref()
-                .map(|p| p.options.clone())
-                .unwrap_or_default(),
+            poll_options,
             names: self.names.clone(),
             first_contacts: cands
                 .iter()
@@ -943,6 +952,7 @@ impl Brain {
                 .map(|c| c.msg.id.clone()),
             carried: self.orch.carried_ages(now_ms),
             owed: self.orch.owed(&cands, now_ms),
+            topic_words,
         };
         let corr = format!("{}:pick:{}", self.cfg.stream_id, self.ticks);
         let pick = self
@@ -1095,8 +1105,14 @@ impl Brain {
         } else {
             self.tuning.pace.budget_chars
         };
-        // Exemplars for the beat's situation and the phrases worn out (never in a care beat).
-        let voice = compose::beat_situations_with(
+        // The effects for the beat's situation, the phrases worn out and the opener guard (a
+        // care beat gets the care effect alone, a crisis beat none of it).
+        let picked_names: Vec<String> = pick
+            .chosen
+            .iter()
+            .map(|c| c.msg.viewer.name.clone())
+            .collect();
+        let voice = compose::beat_effect_tags(
             &pick.chosen,
             &pctx.first_contacts,
             &repeat_ai,
@@ -1105,7 +1121,10 @@ impl Brain {
             self.working.research_open(),
             &pkg.persona,
         )
-        .and_then(|tags| self.working.voice_section(&pkg.exemplars, &tags, nonce));
+        .and_then(|tags| {
+            self.working
+                .voice_section(&pkg.effects, &tags, &picked_names)
+        });
         let prompt = compose_turn(&TurnInputs {
             ctx,
             briefing: &briefing,
@@ -1125,6 +1144,7 @@ impl Brain {
             room_note: plan.room_note.as_deref(),
             agenda: plan.agenda.as_deref(),
             voice: voice.as_deref(),
+            segment_note: plan.segment_note.as_deref(),
             budget_chars: budget,
             propose_min_rank: self.tuning.filter.propose_min_rank,
             first_contacts: &pctx.first_contacts,

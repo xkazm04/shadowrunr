@@ -1,29 +1,35 @@
 //! Operational memory: the in-memory working set (jobs, the open poll, the active foil,
-//! recent lines not to repeat, the exemplars shown and the tics heard) with a time-to-live,
+//! recent lines not to repeat, the tics heard and the viewer names seen) with a time-to-live,
 //! and the episode window fitted to a character budget by bisection.
 //!
 //! The voice section follows the registry's `on-stream-persona-continuity` technique
 //! `anti-repetition-window`: a model's prior pulls a live persona toward its own most-used
 //! phrases, so the window of recent output is checked every beat and a phrase heard twice is
-//! named as worn out. Exemplars rotate under the same rule: one shown is not shown again within
-//! [`EXEMPLAR_WINDOW`] beats, so the bank widens the voice instead of narrowing it.
+//! named as worn out, and an opener repeated (a viewer's handle first, or the same first two
+//! words) is named too. It carries no example line: the package's effects (`effects.toml`) say
+//! what a reply should achieve instead. Exemplars shown there aired verbatim in 140 of 260 sim
+//! runs; an effect gives the model nothing to copy.
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use shadowrunr_types::{Op, TsMs};
 
-use crate::character::BankLine;
+use crate::character::Effect;
 use crate::pool::{JobStatus, JobUpdate};
-use crate::util::{fnv1a64, one_line};
+use crate::util::one_line;
 
 /// Entries untouched for this long leave the working set.
 pub const WORKING_SET_TTL_MS: i64 = 3_600_000;
 const RECENT_LINES: usize = 12;
 
-/// Exemplars shown in one beat's voice section.
-pub const EXEMPLARS_PER_BEAT: usize = 3;
-/// Beats before an exemplar may be shown again.
-pub const EXEMPLAR_WINDOW: usize = 8;
+/// Effects shown in one beat's voice section.
+pub const EFFECTS_PER_BEAT: usize = 3;
+/// Host lines the opener guard reads, newest last.
+pub const OPENER_WINDOW: usize = 4;
+/// The opener guard speaks once this many of them open the same way.
+pub const OPENER_MIN_LINES: usize = 2;
+/// Viewer names the working set remembers for the opener guard.
+const VIEWER_NAMES: usize = 400;
 /// Spoken lines the tic detector reads, newest last.
 pub const TIC_WINDOW: usize = 20;
 /// A phrase is a tic once this many of those lines carry it.
@@ -124,10 +130,58 @@ pub fn worn_phrases<S: AsRef<str>>(lines: &[S], min_lines: usize, max: usize) ->
     kept.into_iter().take(max).map(|(p, _)| p).collect()
 }
 
-/// Heading of the voice section's exemplars (the per-turn block, never the prefix).
-pub const VOICE_LINES_HEADING: &str = "Lines in your voice (do not reuse verbatim):";
+/// Heading of the voice section's effects (the per-turn block, never the prefix).
+pub const EFFECTS_HEADING: &str = "What lands here:";
 /// Heading of the worn-out phrases.
 pub const WORN_OUT_HEADING: &str = "Worn out, do not say:";
+
+/// The opener guard's line, `{opener}` filled ([`opener_repeat`]).
+pub const OPENER_GUARD: &str =
+    "Your last lines opened the same way (\"{opener}\"): open differently this time.";
+
+/// The viewer name a line opens with: `names` (any case) at its very start, followed by a
+/// non-name character or the end.
+fn opening_name<'a>(line: &str, names: &'a [String]) -> Option<&'a str> {
+    let l = line.trim_start().to_lowercase();
+    names
+        .iter()
+        .filter(|n| n.chars().count() >= 3)
+        .filter(|n| {
+            let n = n.to_lowercase();
+            l.starts_with(&n)
+                && !l[n.len()..]
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphanumeric() || c == '_')
+        })
+        .max_by_key(|n| n.len())
+        .map(String::as_str)
+}
+
+/// The opener the last [`OPENER_WINDOW`] host lines repeat, when [`OPENER_MIN_LINES`] or more of
+/// them open with a viewer's name (any of `names`), or share their first two words: the most
+/// recent such line's name, or the shared two words. `None` when they vary.
+pub fn opener_repeat<S: AsRef<str>>(lines: &[S], names: &[String]) -> Option<String> {
+    let tail = &lines[lines.len().saturating_sub(OPENER_WINDOW)..];
+    let by_name: Vec<&str> = tail
+        .iter()
+        .filter_map(|l| opening_name(l.as_ref(), names))
+        .collect();
+    if by_name.len() >= OPENER_MIN_LINES {
+        return by_name.last().map(|n| n.to_string());
+    }
+    let firsts: Vec<String> = tail
+        .iter()
+        .map(|l| phrase_words(l.as_ref()))
+        .filter(|w| w.len() >= 2)
+        .map(|w| format!("{} {}", w[0], w[1]))
+        .collect();
+    firsts
+        .iter()
+        .rev()
+        .find(|f| firsts.iter().filter(|g| g == f).count() >= OPENER_MIN_LINES)
+        .cloned()
+}
 /// Finished research results the prompt lists under "Earlier results", newest kept. A long
 /// investigation dispatches dozens of jobs inside the TTL; the segment's state summary keeps
 /// the case file's findings, so older summaries only cost prompt.
@@ -164,8 +218,8 @@ pub struct WorkingSet {
     poll_shown: Option<String>,
     /// The last [`TIC_WINDOW`] spoken lines, whole, for the tic detector.
     heard: VecDeque<String>,
-    /// The exemplar ids shown in each of the last [`EXEMPLAR_WINDOW`] voice sections.
-    shown: VecDeque<Vec<String>>,
+    /// Viewer names seen in chat lately, newest last, for the opener guard.
+    viewer_names: VecDeque<String>,
     ttl_ms: i64,
 }
 
@@ -184,70 +238,67 @@ impl WorkingSet {
             recent_lines: VecDeque::new(),
             poll_shown: None,
             heard: VecDeque::new(),
-            shown: VecDeque::new(),
+            viewer_names: VecDeque::new(),
             ttl_ms,
         }
     }
 
-    /// The beat's voice section: up to [`EXEMPLARS_PER_BEAT`] bank lines matching `situations`
-    /// (taken in turn from each tag, in order), none shown in the last [`EXEMPLAR_WINDOW`]
-    /// sections, then the phrases worn out in the recent spoken lines. `key` varies the choice
-    /// between equal candidates. `None` when there is nothing to show.
+    /// Remember the names of viewers seen in chat (the opener guard's handles), newest last.
+    pub fn note_viewers<'a>(&mut self, names: impl IntoIterator<Item = &'a str>) {
+        for n in names {
+            let n = n.trim();
+            if n.chars().count() < 3 {
+                continue;
+            }
+            if let Some(i) = self.viewer_names.iter().position(|x| x == n) {
+                self.viewer_names.remove(i);
+            }
+            self.viewer_names.push_back(n.to_string());
+        }
+        while self.viewer_names.len() > VIEWER_NAMES {
+            self.viewer_names.pop_front();
+        }
+    }
+
+    /// The beat's voice section: the effects of up to [`EFFECTS_PER_BEAT`] of `situations` (in
+    /// order, each tag's one effect), then the phrases worn out in the recent spoken lines, then
+    /// the opener guard when the last host lines opened the same way ([`opener_repeat`]; a
+    /// viewer's name from `names` or the working set's own, or the same first two words).
+    /// `None` when there is nothing to show.
     pub fn voice_section(
         &mut self,
-        bank: &[BankLine],
+        effects: &[Effect],
         situations: &[&str],
-        key: u64,
+        names: &[String],
     ) -> Option<String> {
-        let recent: HashSet<&str> = self.shown.iter().flatten().map(String::as_str).collect();
-        let order = |l: &BankLine| fnv1a64(format!("{key}:{}", l.id).as_bytes());
-        let mut pools: Vec<Vec<&BankLine>> = situations
+        let chosen: Vec<&Effect> = situations
             .iter()
-            .map(|tag| {
-                let mut p: Vec<&BankLine> = bank
-                    .iter()
-                    .filter(|l| l.tags.iter().any(|t| t == tag))
-                    .filter(|l| !recent.contains(l.id.as_str()))
-                    .collect();
-                p.sort_by_key(|l| order(l));
-                p.reverse();
-                p
-            })
+            .filter_map(|tag| effects.iter().find(|e| e.tag == *tag))
+            .take(EFFECTS_PER_BEAT)
             .collect();
-        let mut chosen: Vec<&BankLine> = Vec::new();
-        while chosen.len() < EXEMPLARS_PER_BEAT && pools.iter().any(|p| !p.is_empty()) {
-            for p in pools.iter_mut() {
-                while let Some(l) = p.pop() {
-                    if !chosen.iter().any(|c| c.id == l.id) {
-                        chosen.push(l);
-                        break;
-                    }
-                }
-                if chosen.len() == EXEMPLARS_PER_BEAT {
-                    break;
-                }
-            }
-        }
-        self.shown
-            .push_back(chosen.iter().map(|l| l.id.clone()).collect());
-        while self.shown.len() > EXEMPLAR_WINDOW {
-            self.shown.pop_front();
-        }
-        let worn = worn_phrases(self.heard.make_contiguous(), TIC_MIN_LINES, TIC_MAX_SHOWN);
-        if chosen.is_empty() && worn.is_empty() {
+        let heard: Vec<String> = self.heard.iter().cloned().collect();
+        let worn = worn_phrases(&heard, TIC_MIN_LINES, TIC_MAX_SHOWN);
+        let mut all_names: Vec<String> = names.to_vec();
+        all_names.extend(self.viewer_names.iter().cloned());
+        let opener = opener_repeat(&heard, &all_names);
+        if chosen.is_empty() && worn.is_empty() && opener.is_none() {
             return None;
         }
         let mut s = String::new();
         if !chosen.is_empty() {
-            s.push_str(VOICE_LINES_HEADING);
+            s.push_str(EFFECTS_HEADING);
             s.push('\n');
-            for l in &chosen {
-                s.push_str(&format!("- \"{}\"\n", one_line(&l.text, 300)));
+            for e in &chosen {
+                s.push_str(&format!("- {}\n", one_line(&e.text, 300)));
             }
         }
         if !worn.is_empty() {
             let quoted: Vec<String> = worn.iter().map(|p| format!("\"{p}\"")).collect();
             s.push_str(&format!("{WORN_OUT_HEADING} {}\n", quoted.join(", ")));
+        }
+        if let Some(o) = opener {
+            s.push_str(&OPENER_GUARD.replace("{opener}", &one_line(&o, 60)));
+            s.push('\n');
         }
         Some(s)
     }
@@ -567,63 +618,92 @@ mod tests {
         assert!(at("job-12") < at("job-19"), "oldest kept first");
     }
 
-    fn bank_line(id: &str, tags: &[&str]) -> BankLine {
-        BankLine {
-            id: id.into(),
-            status: Default::default(),
-            tags: tags.iter().map(|t| t.to_string()).collect(),
-            text: format!("line {id}"),
+    fn effect(tag: &str) -> Effect {
+        Effect {
+            tag: tag.into(),
+            text: format!("the {tag} effect"),
         }
-    }
-
-    /// The ids a voice section shows, in order.
-    fn shown_ids(section: &str) -> Vec<String> {
-        section
-            .lines()
-            .filter_map(|l| l.strip_prefix("- \"line "))
-            .map(|l| l.trim_end_matches('"').to_string())
-            .collect()
     }
 
     #[test]
-    fn exemplars_match_the_situation_and_rest_for_the_window() {
-        let mut bank: Vec<BankLine> = (0..12)
-            .map(|i| bank_line(&format!("r{i}"), &["roast_request"]))
+    fn effects_follow_the_situation_order_at_most_three_and_quote_no_line() {
+        let effects: Vec<Effect> = ["general", "newcomer", "gift", "bait", "care"]
+            .iter()
+            .map(|t| effect(t))
             .collect();
-        bank.extend((0..4).map(|i| bank_line(&format!("n{i}"), &["newcomer"])));
-        bank.extend((0..20).map(|i| bank_line(&format!("g{i}"), &["general"])));
         let mut ws = WorkingSet::default();
-        // Taken in turn from each tag, most specific first.
         let s = ws
-            .voice_section(&bank, &["roast_request", "newcomer", "general"], 1)
+            .voice_section(&effects, &["bait", "gift", "newcomer", "general"], &[])
             .unwrap();
-        assert!(s.starts_with(VOICE_LINES_HEADING), "{s}");
-        let first = shown_ids(&s);
-        assert_eq!(first.len(), EXEMPLARS_PER_BEAT);
-        assert!(
-            first[0].starts_with('r') && first[1].starts_with('n') && first[2].starts_with('g')
+        assert_eq!(
+            s,
+            format!(
+                "{EFFECTS_HEADING}\n- the bait effect\n- the gift effect\n- the newcomer effect\n"
+            )
         );
-        // None comes back inside the window, whatever the key.
-        let mut seen: Vec<String> = first.clone();
-        for beat in 1..EXEMPLAR_WINDOW {
-            let s = ws
-                .voice_section(&bank, &["newcomer", "general"], beat as u64)
-                .unwrap();
-            for id in shown_ids(&s) {
-                assert!(!seen.contains(&id), "{id} repeated at beat {beat}");
-                seen.push(id);
-            }
-        }
-        // Four newcomer lines and a window of eight: the newcomer pool ran dry and general
-        // lines filled the beat.
-        assert_eq!(seen.iter().filter(|id| id.starts_with('n')).count(), 4);
-        // Past the window, the first beat's lines are free again.
-        let s = ws.voice_section(&bank, &["roast_request"], 99).unwrap();
-        assert_eq!(shown_ids(&s).len(), EXEMPLARS_PER_BEAT);
-        // No bank, no tics: no section.
+        // A tag without an effect is skipped; the same effects every beat (no rotation).
+        let s = ws.voice_section(&effects, &["quiet", "care"], &[]).unwrap();
+        assert_eq!(s, format!("{EFFECTS_HEADING}\n- the care effect\n"));
+        // No effects, no tics, no repeated opener: no section.
         assert!(WorkingSet::default()
-            .voice_section(&[], &["quiet"], 0)
+            .voice_section(&[], &["quiet"], &[])
             .is_none());
+    }
+
+    #[test]
+    fn a_repeated_opener_is_named_handle_or_first_two_words() {
+        // The shape of the 3-hour run: every reply opened "rune_turnip, Dread Council,".
+        let names = vec!["rune_turnip".to_string(), "Grimwald".to_string()];
+        let lines = [
+            "A fine night for it.",
+            "rune_turnip, Dread Council, the moat is yours.",
+            "Grimwald! You again.",
+            "The ledger waits.",
+        ];
+        assert_eq!(opener_repeat(&lines, &names).as_deref(), Some("Grimwald"));
+        // Two handles out of the last four, whatever the handles.
+        assert_eq!(
+            opener_repeat(&lines[..3], &names).as_deref(),
+            Some("Grimwald")
+        );
+        // A name inside a longer word is no opener ("Grimwaldo"), and one handle is not a habit.
+        let one = [
+            "Grimwaldo rises.",
+            "rune_turnip, hello.",
+            "Quiet now.",
+            "Then the vote.",
+        ];
+        assert_eq!(opener_repeat(&one, &names), None);
+        // The same first two words, without any names.
+        let same = [
+            "My lord, the ledger.",
+            "Fine.",
+            "My lord, the moat.",
+            "Next.",
+        ];
+        assert_eq!(opener_repeat(&same, &[]).as_deref(), Some("my lord"));
+        // Only the last four lines count.
+        let old = ["My lord, a.", "My lord, b.", "c d", "e f", "g h", "i j"];
+        assert_eq!(opener_repeat(&old, &[]), None);
+
+        // In the voice section, from the lines he spoke and the names seen in chat.
+        let mut ws = WorkingSet::default();
+        ws.note_viewers(["rune_turnip", "x"]);
+        for l in [
+            "rune_turnip, Dread Council, the throne is yours.",
+            "A pause.",
+            "rune_turnip, Dread Council, again?",
+        ] {
+            ws.remember_line(l);
+        }
+        let s = ws.voice_section(&[], &["general"], &[]).unwrap();
+        assert!(
+            s.ends_with(
+                "Your last lines opened the same way (\"rune_turnip\"): open differently this \
+                 time.\n"
+            ),
+            "{s}"
+        );
     }
 
     #[test]
@@ -642,8 +722,21 @@ mod tests {
         ] {
             ws.remember_line(l);
         }
-        let s = ws.voice_section(&[], &["general"], 0).unwrap();
-        let worn = s.strip_prefix(WORN_OUT_HEADING).unwrap();
+        let s = ws.voice_section(&[], &["general"], &[]).unwrap();
+        let mut section = s.lines();
+        let worn = section
+            .next()
+            .unwrap()
+            .strip_prefix(WORN_OUT_HEADING)
+            .unwrap();
+        // The last four lines open "GloomCandle95, Under-Butler" twice: the opener guard.
+        assert_eq!(
+            section.next(),
+            Some(
+                "Your last lines opened the same way (\"gloomcandle95 under\"): open differently \
+                 this time."
+            )
+        );
         // The longest common phrase, not its 3-word parts; a viewer's name with digits is
         // never a tic; a phrase of stopwords only ("it is a") is grammar.
         assert!(worn.contains("\"and my rules stay sealed\""), "{s}");

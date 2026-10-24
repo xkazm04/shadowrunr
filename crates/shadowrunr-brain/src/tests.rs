@@ -1132,8 +1132,8 @@ async fn a_whale_is_capped_in_the_picker() {
         }
         let ev = b.tick(t + 1_000, inbox, &c).await.unwrap();
         let ids = picked(&ev);
-        // A full ceiling every beat: `max_picks` is 2.
-        assert_eq!(ids.len(), 2, "beat {beat}: {ids:?}");
+        // A full ceiling every beat: the orchestrator folds one pick into each.
+        assert_eq!(ids.len(), 1, "beat {beat}: {ids:?}");
         let n = ids.iter().filter(|i| i.starts_with("wh")).count();
         assert!(n <= 1, "one pick per viewer per beat: {ids:?}");
         whale_beats += n;
@@ -1178,10 +1178,41 @@ async fn llm_picker_above_threshold_is_constrained() {
             &format!("distinct message {i} {}", "q".repeat(i as usize)),
         ));
     }
-    let ev = b.tick(1_000, inbox, &ctx(&[])).await.unwrap();
-    assert_eq!(picked(&ev), vec!["a0".to_string(), "c5".to_string()]);
+    let ev = b.tick(1_000, inbox.clone(), &ctx(&[])).await.unwrap();
+    // The orchestrator folds one pick into the beat (2026-10-24: the segment leads).
+    assert_eq!(picked(&ev), vec!["a0".to_string()]);
     let req = &engine.requests(Role::ChatPicker)[0];
     assert!(req.json_schema.is_some());
+    assert!(
+        req.system.contains("prefer messages about it"),
+        "{}",
+        req.system
+    );
+
+    // The picker's own constraints under a ceiling of two: one pick per viewer (a1 is Ava's
+    // second), an invented id ignored, the next listed one taken.
+    engine.push(
+        Role::ChatPicker,
+        Ok(r#"{"picks":[{"msg_id":"a0","reason":"funny"},{"msg_id":"a1","reason":"same viewer"},{"msg_id":"ghost","reason":"invented"},{"msg_id":"c5","reason":"question"}]}"#),
+    );
+    let cands: Vec<moderation::Candidate> = inbox
+        .into_iter()
+        .map(|m| moderation::Candidate {
+            msg: m,
+            count: 1,
+            viewers: 1,
+            injection: false,
+            safety: None,
+        })
+        .collect();
+    let mut p = picker::Picker::new(PickerConfig {
+        llm_threshold: 10,
+        ..PickerConfig::default()
+    });
+    let pick = p
+        .pick_upto(&cands, &picker::PickContext::default(), &engine, "c", 2)
+        .await;
+    assert_eq!(pick.ids(), ["a0", "c5"], "{}", pick.reason);
 }
 
 #[tokio::test]
@@ -1554,7 +1585,8 @@ async fn a_failed_beat_is_no_turn_record_and_the_beat_that_answers_its_picks_is_
     let c = ctx(&[]);
     let a = viewer("a", "Alba", Rank::Cultist);
     let z = viewer("z", "Zed", Rank::Cultist);
-    // Beat 1: two picks, and the engine times out.
+    // Beat 1: one pick (the orchestrator folds one a beat), the other carried, and the engine
+    // times out.
     b.tick(
         1_000,
         vec![
@@ -1565,14 +1597,23 @@ async fn a_failed_beat_is_no_turn_record_and_the_beat_that_answers_its_picks_is_
     )
     .await
     .unwrap();
-    // Beat 1 aired nothing, so it is no turn: its picks are carried. Beat 2 answers them;
-    // beat 3 sees beat 2 as ONE turn, the picks and the answer together.
-    b.tick(6_000, Vec::new(), &c).await.unwrap();
-    b.tick(11_000, Vec::new(), &c).await.unwrap();
+    // Beat 1 aired nothing, so it is no turn: its pick is carried again beside the other. Beat
+    // 2 answers one; beat 3 sees beat 2 as ONE turn, the pick and the answer together, and
+    // answers the other.
+    let ev2 = b.tick(6_000, Vec::new(), &c).await.unwrap();
+    let ev3 = b.tick(11_000, Vec::new(), &c).await.unwrap();
     let p = last_core_prompt(&engine);
     assert_eq!(p.matches("[this-stream-").count(), 1, "{p}");
-    assert!(p.contains("[this-stream-1] Alba"), "{p}");
+    let first = if picked(&ev2) == ["m1"] {
+        "Alba"
+    } else {
+        "Zed"
+    };
+    assert!(p.contains(&format!("[this-stream-1] {first}")), "{p}");
     assert!(p.contains("Malakor: Bow before me."), "{p}");
+    let mut both: Vec<String> = [picked(&ev2), picked(&ev3)].concat();
+    both.sort();
+    assert_eq!(both, ["m1", "m2"], "both carried picks are answered");
 }
 
 #[tokio::test]
@@ -2108,6 +2149,8 @@ fn golden_pkg() -> CharacterPackage {
         stalls: Default::default(),
         lines: Default::default(),
         exemplars: Vec::new(),
+        effects: Vec::new(),
+        tone_shape: None,
         directions: None,
         segment_directions: Default::default(),
         persona: shadowrunr_types::character::Persona::neutral("Golden Lich"),
@@ -3382,10 +3425,10 @@ async fn outgate_a_note_never_writes_a_disclosure_into_memory() {
     );
 }
 
-// ── T1: the voice section (exemplars, worn-out phrases) ────────────────
+// ── T1: the voice section (effects, worn-out phrases, the opener guard) ─
 
 #[tokio::test]
-async fn a_roast_request_gets_matching_exemplars_in_the_turn_and_never_in_the_prefix() {
+async fn a_roast_request_gets_its_effect_in_the_turn_and_no_bank_line_anywhere() {
     let dir = tempfile::tempdir().unwrap();
     let engine = FakeEngine::new();
     let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "voice", tuning()).await;
@@ -3406,19 +3449,30 @@ async fn a_roast_request_gets_matching_exemplars_in_the_turn_and_never_in_the_pr
     let p = b.last_prompt().unwrap().to_string();
     let voice = &p[p.find(&format!("# {}", compose::VOICE_HEADING)).expect(&p)..];
     let voice = &voice[..voice.find("# Chat").unwrap()];
-    assert!(voice.contains(working::VOICE_LINES_HEADING), "{voice}");
+    // The effect of the beat's situation, first; no example line (they aired verbatim in 140
+    // of 260 sim runs).
+    assert!(voice.contains(working::EFFECTS_HEADING), "{voice}");
     let roast = pkg
-        .exemplars
+        .effects
         .iter()
-        .filter(|l| l.tags.iter().any(|t| t == "roast_request"));
+        .find(|e| e.tag == "roast_request")
+        .unwrap();
+    let general = pkg.effects.iter().find(|e| e.tag == "general").unwrap();
     assert!(
-        roast.into_iter().any(|l| voice.contains(&l.text)),
+        voice.contains(&format!("{}\n- {}\n", working::EFFECTS_HEADING, roast.text)),
         "{voice}"
     );
-    // The prefix carries the owner's directions and no bank line, so its cache holds.
+    assert!(voice.contains(&general.text), "{voice}");
+    // Neither the turn nor the prefix carries a bank line, and the prefix holds for the cache.
     let prefix = b.stable_prefix();
     assert!(prefix.contains(&format!("# {}", compose::DIRECTIONS_HEADING)));
-    assert!(pkg.exemplars.iter().all(|l| !prefix.contains(&l.text)));
+    for l in &pkg.exemplars {
+        assert!(
+            !prefix.contains(&l.text) && !p.contains(&l.text),
+            "{}",
+            l.text
+        );
+    }
     let core = engine.requests(Role::CoreThread);
     assert!(core.iter().all(|r| r.system == prefix));
 }

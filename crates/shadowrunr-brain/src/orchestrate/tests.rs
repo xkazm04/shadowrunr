@@ -68,6 +68,8 @@ struct Room {
     /// Speech queued on the speech clock until then (the brain's `aired` lines).
     speaking_until: Option<TsMs>,
     closing: bool,
+    /// The segment's topic words this beat.
+    topic: Vec<String>,
 }
 
 impl Room {
@@ -78,6 +80,7 @@ impl Room {
             last_say: None,
             speaking_until: None,
             closing: false,
+            topic: Vec::new(),
         }
     }
 
@@ -116,6 +119,7 @@ impl Room {
             closing: self.closing,
             names: &self.names,
             max_picks: crate::picker::PickerConfig::default().max_picks,
+            topic_words: &self.topic,
         });
         let offered = self.o.offered(&plan, &cands);
         let mut chosen: Vec<Candidate> = offered
@@ -426,7 +430,10 @@ fn a_room_change_expires_the_queued_bit() {
 }
 
 #[test]
-fn a_thin_room_after_a_run_of_reacts_gets_a_mixed_beat_and_a_poll_state_a_bridge() {
+fn chat_folds_into_the_segment_one_pick_a_beat_and_a_poll_state_a_bridge() {
+    // Was: a thin room got a bit beside its one pick only after three reacts in a row. Now
+    // every chat beat advances the segment: a premise beside the first pick, the back-to-chat
+    // connector after it, and with nothing prepared due a react told to tie back.
     let prep = sample_prep();
     let mut room = Room::new();
     let mut modes = Vec::new();
@@ -444,18 +451,37 @@ fn a_thin_room_after_a_run_of_reacts_gets_a_mixed_beat_and_a_poll_state_a_bridge
             vec![cand(&m)],
         );
         modes.push(p.mode);
-        if p.mode == BeatMode::Mixed {
-            assert_eq!(ids.len(), 1);
-            assert!(p.material.is_some() && p.bit_id.is_some(), "{}", p.reason);
+        assert_eq!(ids.len(), 1, "{}", p.reason);
+        assert_eq!(p.ceiling, 1, "{}", p.reason);
+        match i {
+            0 => {
+                assert!(
+                    p.reason
+                        .starts_with("small-room segment+chat: first contact: premise "),
+                    "{}",
+                    p.reason
+                );
+                assert!(p.material.is_some() && p.bit_id.is_some(), "{}", p.reason);
+            }
+            1 => assert!(p.reason.contains("back_to_chat"), "{}", p.reason),
+            _ => {
+                assert!(
+                    p.reason
+                        .starts_with("small-room segment+chat: mention: no segment material"),
+                    "{}",
+                    p.reason
+                );
+                assert_eq!(p.segment_note.as_deref(), Some(TIE_BACK_NOTE));
+            }
         }
     }
     assert_eq!(
         modes,
         [
+            BeatMode::Mixed,
+            BeatMode::Bridge,
             BeatMode::React,
-            BeatMode::React,
-            BeatMode::React,
-            BeatMode::Mixed
+            BeatMode::React
         ]
     );
     let p = quiet(&mut room, 30_000, "foil_vote", Some(&prep));
@@ -629,9 +655,11 @@ fn expired(ev: &[StreamEvent], id: &str) -> bool {
     })
 }
 
-/// Two fresh first contacts that fill a beat's ceiling ahead of anything carried.
+/// A fresh first contact that fills a beat's ceiling (one pick, required chat first) ahead of
+/// anything carried. (Two, before the ceiling became one: the second was carried and the carry
+/// cap, not the clock, then dropped the oldest.)
 fn fresh_pair(tag: &str) -> (Vec<ChatMsg>, Vec<Candidate>) {
-    let inbox: Vec<ChatMsg> = (0..2)
+    let inbox: Vec<ChatMsg> = (0..1)
         .map(|i| {
             msg(
                 &format!("{tag}-{i}"),
@@ -1117,4 +1145,287 @@ fn an_owned_request_passes_the_cold_open_filter_and_is_never_capped() {
         .collect();
     assert_eq!(capped.len(), 2, "{ev:?}");
     assert!(!format!("{capped:?}").contains("\"r2\""), "{capped:?}");
+}
+
+// ── The segment leads (2026-10-24 rebalance) ──────────────────────────
+
+/// `n` regulars (seen before, so never first contacts) named `v0..`.
+fn regulars(room: &mut Room, n: usize) {
+    for i in 0..n {
+        regular(room, &format!("v{i}"));
+    }
+}
+
+/// A SEG-02A context whose rules name the case.
+fn case_ctx() -> SegmentContext {
+    SegmentContext {
+        segment: SegmentId::Seg02aHexmap,
+        rules_prompt: "SEGMENT SEG-02A.\nCase: The Lantern Guild Swindle (case-7), 3 hexes. THIS \
+                       CASE IS FICTIONAL DEMO DATA."
+            .into(),
+        state_summary: "segment Hexmap Investigation (Hexmap), state investigating\nno poll open"
+            .into(),
+        state: "investigating".into(),
+        allowed_ops: Vec::new(),
+        ccv: 40,
+        elapsed_s: 300,
+        hexes: Vec::new(),
+    }
+}
+
+#[test]
+fn a_busy_room_of_off_topic_chat_gets_segment_beats_and_one_off_topic_answer_per_30_s() {
+    // The diagnosis: 260 sim runs turned every segment into a roast show, 46% of lines opening
+    // with a viewer's handle. Twenty regulars chat remarks and remarks to the host by name.
+    let prep = sample_prep();
+    let mut room = Room::new();
+    regulars(&mut room, 20);
+    let mut answered: Vec<TsMs> = Vec::new();
+    let mut modes: Vec<BeatMode> = Vec::new();
+    for k in 0..36i64 {
+        let t = 5_000 * (k + 1);
+        let inbox: Vec<ChatMsg> = (0..8i64)
+            .map(|j| {
+                let v = format!("v{}", (k * 8 + j) % 20);
+                let text = if j % 2 == 0 {
+                    format!("malakor you look tired {j}")
+                } else {
+                    format!("my soup went cold, round {k}")
+                };
+                msg(&format!("m{k}-{j}"), &v, &text)
+            })
+            .collect();
+        let cands: Vec<Candidate> = inbox.iter().map(cand).collect();
+        let (p, ids, e) = room.beat(t, "opening", Some(&prep), inbox, cands);
+        assert!(!room.o.small_room(), "twenty chatters");
+        assert!(ids.len() <= 1, "{ids:?}");
+        assert_ne!(p.mode, BeatMode::Hold, "the segment goes on: {}", p.reason);
+        let r = reason(&e);
+        if ids.is_empty() {
+            assert!(r.starts_with("segment (carried "), "{r}");
+        } else {
+            assert!(r.starts_with("segment+off-topic: mention"), "{r}");
+            answered.push(t);
+        }
+        modes.push(p.mode);
+    }
+    assert!(
+        !answered.is_empty(),
+        "a direct remark is still answered now and then"
+    );
+    assert!(
+        answered
+            .windows(2)
+            .all(|w| w[1] - w[0] >= OFF_TOPIC_ANSWER_MS),
+        "at most one off-topic answer per 30 s: {answered:?}"
+    );
+    assert!(answered.len() <= 7, "{answered:?}");
+    // The segment's own material carries the beats between: its prepared bits.
+    assert!(modes.contains(&BeatMode::Bit), "{modes:?}");
+}
+
+#[test]
+fn a_question_about_the_case_is_folded_in_as_the_one_pick() {
+    let mut room = Room::new();
+    regulars(&mut room, 8);
+    let c = case_ctx();
+    room.topic = crate::topic::topic_words(&c, &[]);
+    assert!(
+        room.topic.contains(&"lantern".to_string()),
+        "{:?}",
+        room.topic
+    );
+    let mut inbox: Vec<ChatMsg> = (1..8)
+        .map(|i| {
+            msg(
+                &format!("off{i}"),
+                &format!("v{i}"),
+                "malakor are you even awake rn?",
+            )
+        })
+        .collect();
+    inbox.push(msg("q", "v0", "wait who actually runs the lantern guild?"));
+    let cands: Vec<Candidate> = inbox.iter().map(cand).collect();
+    let (p, ids, e, _) = room.beat_in(5_000, &c, None, inbox, cands);
+    assert_eq!(ids, ["q"], "{}", p.reason);
+    assert_eq!(p.ceiling, 1);
+    assert!(
+        reason(&e).starts_with("segment+chat: topic"),
+        "{}",
+        reason(&e)
+    );
+}
+
+#[test]
+fn a_gift_is_always_folded_in() {
+    let prep = sample_prep();
+    let mut room = Room::new();
+    regulars(&mut room, 10);
+    let c = case_ctx();
+    room.topic = crate::topic::topic_words(&c, &[]);
+    let mut inbox = vec![
+        msg("q", "v0", "who runs the lantern guild?"),
+        msg("idea", "v1", "what if the guild is a front for the goblins"),
+        msg("g", "v9", "gifting 5 subs to the minions"),
+    ];
+    inbox.extend((2..8).map(|i| msg(&format!("m{i}"), &format!("v{i}"), "malakor hi?")));
+    let cands: Vec<Candidate> = inbox.iter().map(cand).collect();
+    let (p, ids, e, _) = room.beat_in(5_000, &c, Some(&prep), inbox, cands);
+    assert_eq!(ids, ["g"], "required chat first: {}", p.reason);
+    assert!(reason(&e).contains("segment+chat: gift"), "{}", reason(&e));
+    // The next beat folds in the on-topic chat it carried.
+    let (_, ids, _, _) = room.beat_in(10_000, &c, Some(&prep), Vec::new(), Vec::new());
+    assert!(ids == ["q"] || ids == ["idea"], "{ids:?}");
+
+    // Mid-story, a gift skips the story's next line and is the pick.
+    let mut prep2 = sample_prep();
+    prep2.bits.retain(|b| b.id == "s-01");
+    let mut room = Room::new();
+    regulars(&mut room, 10);
+    let mut t = 0;
+    loop {
+        t += 5_000;
+        if quiet(&mut room, t, "opening", Some(&prep2))
+            .bit_id
+            .as_deref()
+            == Some("s-01")
+        {
+            break;
+        }
+    }
+    let g = msg("g2", "v3", "just subbed for 3 months, take my tribute");
+    let (p, ids, _) = room.beat(
+        t + 5_000,
+        "opening",
+        Some(&prep2),
+        vec![g.clone()],
+        vec![cand(&g)],
+    );
+    assert_eq!(ids, ["g2"], "{}", p.reason);
+    assert!(
+        p.reason
+            .contains("room answered story s-01: line 3 skipped"),
+        "{}",
+        p.reason
+    );
+}
+
+#[test]
+fn on_topic_chat_folds_into_the_bit_being_told() {
+    let mut prep = sample_prep();
+    prep.bits.retain(|b| b.id == "s-01");
+    let mut room = Room::new();
+    regulars(&mut room, 10);
+    let mut t = 0;
+    loop {
+        t += 5_000;
+        if quiet(&mut room, t, "opening", Some(&prep))
+            .bit_id
+            .as_deref()
+            == Some("s-01")
+        {
+            break;
+        }
+    }
+    // A big room, so only the topic makes this on-topic.
+    room.topic = vec!["ghosts".into()];
+    let inbox: Vec<ChatMsg> = (0..8)
+        .map(|i| {
+            let text = if i == 0 {
+                "did the ghosts really sue you?"
+            } else {
+                "malakor you are so old lol"
+            };
+            msg(&format!("m{i}"), &format!("v{i}"), text)
+        })
+        .collect();
+    let cands: Vec<Candidate> = inbox.iter().map(cand).collect();
+    let (p, ids, _) = room.beat(t + 5_000, "opening", Some(&prep), inbox, cands);
+    assert_eq!(p.mode, BeatMode::Mixed, "{}", p.reason);
+    assert_eq!(ids, ["m0"]);
+    assert!(
+        p.reason
+            .starts_with("segment+chat: topic: story s-01 lines 3-4/4"),
+        "the story goes on, no line skipped: {}",
+        p.reason
+    );
+}
+
+#[test]
+fn a_small_room_gets_every_message_answered_one_a_beat() {
+    let mut room = Room::new();
+    regulars(&mut room, 3);
+    // Three regulars, plain remarks: in a big room none would be worth a beat.
+    let inbox = vec![
+        msg("a", "v0", "the soup in my kitchen went cold"),
+        msg("b", "v1", "my cat is watching with me tonight"),
+        msg("c", "v2", "rainy evening over here"),
+    ];
+    let cands: Vec<Candidate> = inbox.iter().map(cand).collect();
+    let (p, ids, e) = room.beat(5_000, "opening", None, inbox, cands);
+    assert!(room.o.small_room());
+    assert_eq!(ids.len(), 1, "{}", p.reason);
+    assert!(
+        reason(&e).starts_with("small-room segment+chat: chat"),
+        "{}",
+        reason(&e)
+    );
+    let mut answered: Vec<String> = ids;
+    for t in [10_000, 15_000, 20_000] {
+        let (_, ids, _) = room.beat(t, "opening", None, Vec::new(), Vec::new());
+        assert!(ids.len() <= 1, "{ids:?}");
+        answered.extend(ids);
+    }
+    answered.sort();
+    assert_eq!(answered, ["a", "b", "c"], "all three within three beats");
+
+    // Hysteresis: six chatters keep the room small, seven end it; it is small again once the
+    // window holds five or fewer.
+    for (k, v) in ["v3", "v4", "v5"].iter().enumerate() {
+        let m = msg(&format!("x{k}"), v, "hello all");
+        room.beat(
+            25_000 + 1_000 * k as i64,
+            "opening",
+            None,
+            vec![m.clone()],
+            vec![cand(&m)],
+        );
+    }
+    assert!(room.o.small_room(), "six chatters: still small");
+    let m = msg("x9", "v6", "hello all");
+    room.beat(30_000, "opening", None, vec![m.clone()], vec![cand(&m)]);
+    assert!(!room.o.small_room(), "seven chatters: not small");
+    let m = msg("late", "v0", "still here");
+    room.beat(
+        30_000 + SMALL_ROOM_WINDOW_MS,
+        "opening",
+        None,
+        vec![m.clone()],
+        vec![cand(&m)],
+    );
+    assert!(room.o.small_room(), "the window holds one chatter");
+}
+
+#[test]
+fn a_bare_remark_never_makes_a_beat_in_a_big_room() {
+    let mut room = Room::new();
+    regulars(&mut room, 10);
+    let inbox: Vec<ChatMsg> = (0..8)
+        .map(|i| {
+            msg(
+                &format!("r{i}"),
+                &format!("v{i}"),
+                &format!("my evening walk went fine, part {i}"),
+            )
+        })
+        .collect();
+    let cands: Vec<Candidate> = inbox.iter().map(cand).collect();
+    let (p, ids, e) = room.beat(5_000, "opening", None, inbox, cands);
+    assert!(ids.is_empty(), "{}", p.reason);
+    assert!(
+        reason(&e).starts_with("segment (carried 8)"),
+        "{}",
+        reason(&e)
+    );
+    assert_eq!(p.mode, BeatMode::Improvise);
 }

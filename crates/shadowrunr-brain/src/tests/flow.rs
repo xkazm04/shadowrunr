@@ -141,9 +141,11 @@ async fn the_roast_request_is_owned_through_a_speech_hold_and_answered_ahead_of_
     assert_eq!(mode, BeatMode::Hold);
     assert!(reason.starts_with("speaking:"), "{reason}");
     assert!(reason.contains("deferred: m-roast"), "{reason}");
-    // 11 s: still 3.2 s queued (past the 1.5 s lead), yet the owned request is answered now.
+    // 11 s: still 3.2 s queued (past the 1.5 s lead), yet the owned request is answered now,
+    // folded into the segment (2026-10-24: was a `react`).
     let (mode, reason) = plan_of(&beats[2]);
-    assert_eq!(mode, BeatMode::React, "{reason}");
+    assert_eq!(mode, BeatMode::Mixed, "{reason}");
+    assert!(reason.contains("segment+chat: request"), "{reason}");
     assert!(reason.contains("owed: m-roast"), "{reason}");
     let ids = picked(&beats[2]);
     assert_eq!(ids.first().map(String::as_str), Some("m-roast"), "{ids:?}");
@@ -307,7 +309,9 @@ async fn a_pause_is_picked_up_and_a_research_wait_is_led_into() {
         .await
         .unwrap();
     let (mode, reason) = plan_of(&ev);
-    assert_eq!(mode, BeatMode::React);
+    // The question folds into the segment: the through-line's open loop beside it.
+    assert_eq!(mode, BeatMode::Mixed, "{reason}");
+    assert!(reason.contains("segment+chat: "), "{reason}");
     assert!(reason.contains("pick-up after"), "{reason}");
     assert!(reason.contains("lead-in: research r1"), "{reason}");
     let p = b.last_prompt().unwrap();
@@ -331,23 +335,22 @@ async fn a_pause_is_picked_up_and_a_research_wait_is_led_into() {
 }
 
 #[tokio::test]
-async fn a_pick_whose_only_line_was_trimmed_is_carried_again_and_answered() {
+async fn a_line_past_the_budget_costs_no_pick_its_answer_and_the_rest_wait_their_beat() {
+    // Was: two picks a beat, the second's line trimmed, the pick carried again ("unaired").
+    // With one pick a beat the answer is the beat's first line, which the gate never drops;
+    // the message the beat did not pick is carried and answered on a later beat.
     let dir = tempfile::tempdir().unwrap();
     let engine = FakeEngine::new();
     let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "fu", tuning()).await;
     let c = ctx(&[]);
     let a = viewer("a", "AshenCandle", Rank::Thrall);
     let m = viewer("m", "MothCandle", Rank::Thrall);
-    // Two picks; the second line (answering MothCandle) is past the 260-character budget.
-    let first = format!(
-        "AshenCandle, {}",
-        "the circle stays shut to the living. ".repeat(6)
-    );
+    let tail = format!("And {}", "the circle stays shut to the living. ".repeat(8));
     engine.push(
         Role::CoreThread,
         Ok(&format!(
-            "{}\nMothCandle, I am an AI character, and the Ledger says hello.",
-            first.trim_end()
+            "MothCandle, I am an AI character, and the Ledger says hello.\n{}",
+            tail.trim_end()
         )),
     );
     let ev = b
@@ -361,18 +364,26 @@ async fn a_pick_whose_only_line_was_trimmed_is_carried_again_and_answered() {
         )
         .await
         .unwrap();
-    assert_eq!(picked(&ev).len(), 2, "{ev:?}");
-    let unaired: Vec<_> = input_mods(&ev, crate::orchestrate::CARRY_RULE)
-        .into_iter()
-        .filter(|(_, a)| a == crate::orchestrate::UNAIRED)
-        .collect();
-    assert_eq!(unaired, [(Some("m-m".to_string()), "unaired".to_string())]);
-    // The next beat that speaks answers it.
-    engine.push(Role::CoreThread, Ok("MothCandle, an AI character, yes."));
+    // The sincere "are you an AI" is the owed request: the beat's one pick.
+    assert_eq!(picked(&ev), ["m-m"], "{ev:?}");
+    assert_eq!(says(&ev).len(), 1, "the line past the budget went: {ev:?}");
+    assert!(input_mods(&ev, crate::orchestrate::CARRY_RULE)
+        .iter()
+        .all(|(_, a)| a != crate::orchestrate::UNAIRED));
+    assert!(
+        plan_of(&ev).1.contains("deferred: m-a"),
+        "{}",
+        plan_of(&ev).1
+    );
+    // A later beat that speaks answers the other.
+    engine.push(
+        Role::CoreThread,
+        Ok("AshenCandle, no billionaires in my crypt."),
+    );
     let mut answered = false;
     for t in [6_000, 11_000, 16_000, 21_000] {
         let ev = b.tick(t, Vec::new(), &c).await.unwrap();
-        if picked(&ev).iter().any(|i| i == "m-m") {
+        if picked(&ev).iter().any(|i| i == "m-a") {
             answered = true;
             break;
         }
@@ -444,7 +455,7 @@ async fn the_stereotype_bait_in_a_speech_hold_is_owned_and_mocked_never_told() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_remark_a_speech_hold_drops_leaves_a_record() {
+async fn a_remark_in_a_small_room_is_carried_through_a_speech_hold() {
     let dir = tempfile::tempdir().unwrap();
     let engine = FakeEngine::new();
     let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "f2-drop", tuning()).await;
@@ -458,7 +469,10 @@ async fn a_remark_a_speech_hold_drops_leaves_a_record() {
     )
     .await
     .unwrap();
-    // A plain remark (worth answering, never carried) during the hold.
+    // A plain remark during the hold: in a small room (one chatter) every message is the
+    // segment's material, carried until a beat can take it (it was dropped with a record, and
+    // in a big room a plain remark is no longer worth a beat at all).
+    assert!(b.orch.small_room());
     let ev = b
         .tick(
             3_000,
@@ -474,8 +488,11 @@ async fn a_remark_a_speech_hold_drops_leaves_a_record() {
         .unwrap();
     assert_eq!(plan_of(&ev).0, BeatMode::Hold);
     assert!(!vanished(&ev, "m-remark"), "{ev:?}");
-    assert!(input_mods(&ev, crate::orchestrate::CARRY_RULE)
-        .contains(&(Some("m-remark".into()), crate::orchestrate::DROPPED.into())));
+    assert!(
+        plan_of(&ev).1.contains("deferred: m-remark"),
+        "{}",
+        plan_of(&ev).1
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -553,10 +570,23 @@ async fn a_sincerely_sad_regular_in_a_raid_is_answered_first_kindly_by_name_and_
         !line.contains("roasted hard"),
         "no roast request note: {line}"
     );
+    // Beside grief the voice section carries the care effect alone: no roast material.
+    let care = malakor_package()
+        .effects
+        .into_iter()
+        .find(|e| e.tag == "care")
+        .unwrap();
+    let voice = &prompt[prompt.find("# Your voice").expect(&prompt)..];
+    let voice = &voice[..voice.find("# Chat").unwrap()];
     assert!(
-        !prompt.contains("# Your voice"),
-        "no roast exemplars beside grief: {prompt}"
+        voice.contains(&format!(
+            "{}\n- {}\n",
+            crate::working::EFFECTS_HEADING,
+            care.text
+        )),
+        "{voice}"
     );
+    assert_eq!(voice.matches("\n- ").count(), 1, "{voice}");
 }
 
 #[tokio::test]
@@ -577,7 +607,7 @@ async fn a_newcomer_asking_what_this_is_is_told_to_say_their_rank_title() {
         "{line}"
     );
     assert!(
-        prompt.contains("say that rank title too"),
+        prompt.contains("use their name and the rank title in the parentheses"),
         "the chat instructions ask for the rank title: {prompt}"
     );
 }

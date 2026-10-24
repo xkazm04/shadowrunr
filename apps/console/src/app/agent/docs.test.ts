@@ -30,8 +30,11 @@ describe("doc names", () => {
   it("sends the stem as the daemon's path, and refuses anything else with the legal values", async () => {
     const s = setup({ "character.doc.get": docGet("# Constitution") });
     await run(s.tool("read_character_doc"), { id: "malakor", doc: "constitution", show: false });
-    await expect(run(s.tool("read_character_doc"), { id: "malakor", doc: "tones/theatrical" })).rejects.toThrow(/^invalid_params: doc "tones\/theatrical" is not a package document; use constitution, bible, directions, character, stalls, situations \(extension optional\) or foils\/<slug>/);
+    await expect(run(s.tool("read_character_doc"), { id: "malakor", doc: "tones/theatrical" })).rejects.toThrow(/^invalid_params: doc "tones\/theatrical" is not a package document; use constitution, bible, directions, character, stalls, situations \(extension optional\), foils\/<slug> or private\/<slug>/);
     expect(s.sent).toEqual(["character.doc.get"]);
+    // The operator's private examples are a package document too (never sent to the host).
+    await run(s.tool("read_character_doc"), { id: "malakor", doc: "private/bible-examples", show: false });
+    expect(s.sent).toEqual(["character.doc.get", "character.doc.get"]);
   });
 });
 

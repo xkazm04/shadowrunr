@@ -645,7 +645,7 @@
       "type": "object"
     },
     "CharacterDocGetParams": {
-      "description": "`character.doc.get`: one package document by its package-relative path.\n\n`doc` is one of `constitution.md`, `bible.md`, `directions.md`, `character.toml`,\n`stalls.toml`, `situations.json` or `foils/<slug>.md` (slug `[a-z0-9_-]{1,40}`); any other\nvalue is refused before any IO.",
+      "description": "`character.doc.get`: one package document by its package-relative path.\n\n`doc` is one of `constitution.md`, `bible.md`, `directions.md`, `character.toml`,\n`stalls.toml`, `situations.json`, `foils/<slug>.md` or `private/<slug>.md` (slug\n`[a-z0-9_-]{1,40}`); any other value is refused before any IO.",
       "properties": {
         "doc": {
           "type": "string"

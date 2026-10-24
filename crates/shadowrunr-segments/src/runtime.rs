@@ -2420,8 +2420,9 @@ impl SegmentRuntime {
             ));
             if self.case.fictional {
                 p.push_str(
-                    " THIS CASE IS FICTIONAL DEMO DATA: say so when asked and never present \
-                     it as a real investigation.",
+                    " THIS CASE IS FICTIONAL DEMO DATA: say so once when the case opens and \
+                     again whenever a viewer asks, never in every reply, and never present it \
+                     as a real investigation.",
                 );
             } else {
                 p.push_str(
@@ -2516,7 +2517,8 @@ impl SegmentRuntime {
             match &self.case_file {
                 Some(f) if f.fictional => p.push_str(
                     " The case file holds planted FICTIONAL demo records: quote them as the \
-                     demo's records, never as real findings.",
+                     demo's records, never as real findings; the demo is named when the case \
+                     opens and when a viewer asks, not with every quote.",
                 ),
                 Some(_) => p.push_str(&self.fill(
                     " The {researchers} read the case's public records, staged off-stream from \

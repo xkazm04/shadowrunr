@@ -251,6 +251,17 @@ impl Agenda {
     /// ago (each at most once per [`BRIDGE_COOLDOWN_MS`]), else build on his last line (at most
     /// once per [`THREAD_COOLDOWN_MS`]). Returns the material and its reason fragment.
     pub fn bridge(&mut self, now_ms: TsMs) -> Option<(String, String)> {
+        self.bridge_with(now_ms, false)
+    }
+
+    /// [`Self::bridge`] for a beat that also folds in one chat message (`with_chat`): the same
+    /// loop or thread, framed as the segment the pick feeds.
+    pub fn bridge_with(&mut self, now_ms: TsMs, with_chat: bool) -> Option<(String, String)> {
+        let frame = if with_chat {
+            "Through-line (fold the chat below into it)"
+        } else {
+            "Through-line (no chat this beat)"
+        };
         let pick = self
             .loops
             .iter_mut()
@@ -264,8 +275,8 @@ impl Agenda {
             l.bridged_ms = Some(now_ms);
             return Some((
                 format!(
-                    "Through-line (no chat this beat): advance this open loop: {}. Say what it \
-                     will bring or set up its payoff, in a new way; unchanged news is not news.\n",
+                    "{frame}: advance this open loop: {}. Say what it will bring or set up its \
+                     payoff, in a new way; unchanged news is not news.\n",
                     l.label
                 ),
                 format!("agenda {}", l.label),
@@ -281,8 +292,8 @@ impl Agenda {
         self.last_thread_ms = Some(now_ms);
         Some((
             format!(
-                "Through-line (no chat this beat): build on your last line (\"{}\"): take it one \
-                 step further, a new detail or a consequence, not a repeat.\n",
+                "{frame}: build on your last line (\"{}\"): take it one step further, a new \
+                 detail or a consequence, not a repeat.\n",
                 gist(line)
             ),
             "agenda thread".to_string(),

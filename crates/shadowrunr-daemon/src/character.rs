@@ -23,8 +23,14 @@ pub const TEMPLATE_ID: &str = "_template";
 /// Text files `validate` scans for [`FILL_MARKER`].
 const TEXT_EXTENSIONS: [&str; 3] = ["toml", "md", "json"];
 
-/// `character validate`: every error the brain's loader finds (`file: key: reason`), then a
-/// warning for each value that still holds [`FILL_MARKER`].
+/// The package dir of the operator's private notes: no loader reads it, so `validate` neither
+/// loads nor scans it (a placeholder there never reaches the show).
+pub const PRIVATE_DIR: &str = "private";
+
+/// `character validate`: every error the brain's loader finds (`file: key: reason`; the loader
+/// reads `effects.toml` and each tone's `tones/<tone>.toml` too), then a warning for each value
+/// that still holds [`FILL_MARKER`] (an `[[effect]]` named by its index, `effect[2].text`).
+/// `private/` is skipped.
 pub fn validate(dir: &Path) -> Vec<CharacterIssue> {
     let mut out: Vec<CharacterIssue> = validate_character(dir)
         .into_iter()
@@ -48,7 +54,11 @@ pub fn validate(dir: &Path) -> Vec<CharacterIssue> {
             });
         }
     }
-    for (rel, path) in text_files(dir) {
+    let private = format!("{PRIVATE_DIR}/");
+    for (rel, path) in text_files(dir)
+        .into_iter()
+        .filter(|(rel, _)| !rel.starts_with(&private))
+    {
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };
@@ -129,18 +139,28 @@ fn text_files(dir: &Path) -> Vec<(String, PathBuf)> {
 }
 
 /// The dotted key of every TOML value holding [`FILL_MARKER`] (comments are skipped; a line
-/// inside a multi-line array names the array's key).
+/// inside a multi-line array names the array's key; a value in the n-th `[[name]]` table is
+/// `name[n].key`, counted from 0).
 fn toml_fill_keys(text: &str) -> Vec<String> {
     let mut table = String::new();
     let mut array_key: Option<String> = None;
     let mut out: Vec<String> = Vec::new();
+    let mut seen_arrays: std::collections::HashMap<String, usize> = Default::default();
     for line in text.lines() {
         let t = line.trim();
         if t.starts_with('#') || t.is_empty() {
             continue;
         }
         if array_key.is_none() && t.starts_with('[') && !t.contains('=') {
-            table = t.trim_matches(['[', ']']).trim().to_string();
+            let name = t.trim_matches(['[', ']']).trim().to_string();
+            table = if t.starts_with("[[") {
+                let n = seen_arrays.entry(name.clone()).or_insert(0);
+                let key = format!("{name}[{n}]");
+                *n += 1;
+                key
+            } else {
+                name
+            };
             continue;
         }
         let key = match (&array_key, t.split_once('=')) {
@@ -552,6 +572,52 @@ mod tests {
             ]
         );
         assert_eq!(line_fill_keys("a\nFILL: b\nc"), ["line 2"]);
+        // An array of tables names each entry by its index.
+        let t = "version = 1\n[[effect]]\ntag = \"gift\"\ntext = \"FILL: a\"\n[[effect]]\n\
+                 tag = \"bait\"\ntext = \"done\"\n[[effect]]\ntag = \"care\"\n\
+                 text = \"FILL: c\"\n";
+        assert_eq!(toml_fill_keys(t), ["effect[0].text", "effect[2].text"]);
+    }
+
+    #[test]
+    fn the_template_s_effects_shape_and_private_notes_are_accounted_for() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (dir, issues) = new_character(tmp.path(), "nova", &template()).unwrap();
+        assert!(!has_errors(&issues), "{issues:#?}");
+        // Every effect of the template is a placeholder, named by its index.
+        let effects: Vec<&str> = issues
+            .iter()
+            .filter(|i| i.file == "effects.toml")
+            .map(|i| i.key.as_str())
+            .collect();
+        assert_eq!(effects.len(), 13, "{effects:?}");
+        assert!(effects.contains(&"effect[0].text") && effects.contains(&"effect[12].text"));
+        // The tone's reply shape is loaded and checked: out of range is an error.
+        let pkg = shadowrunr_brain::load_character(&dir, "").unwrap();
+        assert!(pkg.tone_shape.is_some(), "the template ships a reply shape");
+        let shape = dir.join("tones").join("baseline.toml");
+        std::fs::write(&shape, "budget_chars = 20\nmax_sentences = 2\n").unwrap();
+        let issues = validate(&dir);
+        assert!(
+            issues.iter().any(|i| i.severity == IssueSeverity::Error
+                && i.file == "tones/baseline.toml"
+                && i.key == "budget_chars"),
+            "{issues:#?}"
+        );
+        std::fs::write(&shape, "budget_chars = 200\nmax_sentences = 2\n").unwrap();
+        // private/ is the operator's: no load, no placeholder warning, whatever it holds.
+        std::fs::write(dir.join("private").join("x.md"), "FILL: later\n{nope}\n").unwrap();
+        std::fs::write(dir.join("private").join("y.toml"), "[[[").unwrap();
+        let issues = validate(&dir);
+        assert!(!has_errors(&issues), "{issues:#?}");
+        assert!(
+            issues.iter().all(|i| !i.file.starts_with("private/")),
+            "{issues:#?}"
+        );
+        // The leak check still reads private/ (the template's README is scanned below).
+        assert!(text_files(&template())
+            .iter()
+            .any(|(rel, _)| rel == "private/README.md"));
     }
 
     #[test]

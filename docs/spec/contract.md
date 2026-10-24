@@ -265,13 +265,18 @@ Situation tags: `roast_request`, `bait`, `newcomer`, `vote_loss`, `gift`, `ai_qu
 shown. Each beat the brain classifies its picks into these tags (a roast ask, an injection or a
 refused ask, tribute, `!propose`, the patron spoken of, a first contact or a Thrall, a paste
 wave, a closed vote in the room events; then `general` with chat or `quiet` without, and
-`research_wait` while research is out). A beat with a viewer in care or in distress, or a minor
-asking to flirt, gets no bank lines. Up to 3 lines matching the tags (taken in turn from each
-tag) go into the per-turn block under `# Your voice` as "Lines in your voice (do not reuse
-verbatim):", and a line shown is not shown again within 8 beats. The same section lists
+`research_wait` while research is out). The bank is the Tone Lab's: no brain prompt shows a
+bank line (2026-10-24: over 260 sim runs the lines shown as "Lines in your voice" aired
+verbatim in 140). Instead the per-turn block's `# Your voice` section carries, under "What
+lands here:", the `effects.toml` text (below) of up to 3 of the beat's tags in that order; a
+beat with a viewer in care, or a viewer sincerely sad, gets the `care` effect alone, and a
+crisis beat (a safety pick) or a minor asking to flirt gets no section. The same section lists
 "Worn out, do not say:" with up to 6 phrases of 3 to 8 words that at least 2 of his last 20
 spoken lines carry (phrases of stopwords only, or with a word holding a digit or an underscore,
-never count). Neither ever enters the stable prefix. These budgets are engine constants today
+never count), and the opener guard: when 2 or more of his last 4 lines open with a viewer's name
+(one picked this beat or seen in chat lately) or share their first two words, the line `Your
+last lines opened the same way ("<opener>"): open differently this time.` None of it ever
+enters the stable prefix. These budgets are engine constants today
 (`shadowrunr_brain::working`); they are not yet `[tuning]` keys.
 
 `tones/<variant>.toml`, the tone's reply shape, beside its `tones/<variant>.md`. Exactly two
@@ -1346,13 +1351,18 @@ like a real case. It is never written live in a quiet moment.
   within a floor and a ceiling of seconds.
 - `beat_plan {ts_ms, mode, bit_id?, picks, reason}` is written once per beat, after `picked` and
   before the beat's lines. No `beat_plan` is written on the sign-off beat or after it.
-  - `mode`: `cold_open` (a story beat or the gathering open), `react`, `bit` (prepared material),
-    `bridge` (a connector line), `mixed` (a bit line plus one pick), `hold` (nothing said: the
+  - `mode`: `cold_open` (a story beat or the gathering open), `react` (one pick with no segment
+    material due, told to tie back to the segment; or a room event or the case beside a pick),
+    `bit` (prepared material), `bridge` (a connector line), `mixed` (segment material, a bit
+    line, the through-line or the state's purpose, plus one pick), `hold` (nothing said: the
     last line is recent, never two holds in a row; or his speech is still queued, see below),
-    `improvise` (a quiet beat with nothing prepared that fits).
+    `improvise` (a beat with no pick and nothing prepared that fits).
   - `reason` is for a reviewer to read, e.g. "room filling: cold open lines 1-2/6", "quiet 10 s:
-    premise p-03", "react: question; wave of 9 acknowledged". Its wording is not a contract,
-    except that a speech hold's reason starts with `speaking: N.N s queued`, and that a beat
+    premise p-03", "segment+chat: question+topic: premise p-01", "segment (carried 4): story s-01
+    lines 1-2/4". Its wording is not a contract, except that a speech hold's reason starts with
+    `speaking: N.N s queued`, a beat folding chat into the segment's starts `segment+chat:
+    <tags>` (`segment+off-topic: <tags>` for the off-topic answer, below), a beat passing chat
+    by starts `segment (carried N)`, both after `small-room ` in a small room, and that a beat
     given a through-line directive (below) carries `pick-up after N s`, `pick-up: landed` or
     `lead-in: <loop>` among its `; `-separated parts, one answering an owned request
     `owed: <msg ids>`, and one carrying the case's next move (below) starts `case: <move>`.
@@ -1363,7 +1373,9 @@ like a real case. It is never written live in a quiet moment.
   silence means nobody is speaking. The defaults are tuning values in `BrainTuning.pace`:
   `speech_cps` 18 (measured: Kokoro `af_heart` speaks about 18.3 characters a second; a
   character's `[tuning] speech_cps` replaces it, Malakor's 17 for `malakor-a`, measured),
-  `line_pause_ms` 250, `speech_lead_ms` 1500 and `budget_chars` 260 (assumptions).
+  `line_pause_ms` 250, `speech_lead_ms` 1500 and `budget_chars` 260 (assumptions; the tone's
+  `tones/<tone>.toml` `budget_chars` replaces the default, never a budget a caller set itself,
+  and moves no ceiling).
   - While more than `speech_lead_ms` of speech is queued, the beat is a `hold` with reason
     `speaking: N.N s queued` and no core call. A safety beat runs at once. A goodbye beat (the
     state summary carries a line starting `CLOSING NOW`) runs at once too and never holds, so
@@ -1374,7 +1386,8 @@ like a real case. It is never written live in a quiet moment.
   - Carried chat expires 25 s after the speech queued when it arrived has aired ("carry from the
     drain"), so pacing never silently expires a question. Chat carried through the cold open
     expires 25 s after the drain of the first beat once the room opens (see below).
-  - The per-turn prompt asks for at most about 2 sentences and `budget_chars` characters. The
+  - The per-turn prompt asks for at most the tone's `max_sentences` sentences (about 2 without a
+    reply shape) and `budget_chars` characters. The
     output gate keeps a beat's spoken lines (his and the foils') within the budget by dropping
     whole lines, the last first, never the first line: each one dropped writes
     `moderation {output, pace_budget, trimmed}`. Prepared material gets the same budget; a long
@@ -1401,17 +1414,50 @@ like a real case. It is never written live in a quiet moment.
   The runtime never picks a winner on a tie: the summary says "TIE between A and B (n votes
   each): you break it, and say you are breaking it". A tied foil vote summons nobody; a tied
   jury gives no grade; a tied crowd poll counts every tied hex option as that hex's vote.
-- **Picks.** A beat answers at most 2 messages (`PickerConfig.max_picks`; it was 3, and under
-  the 260-character budget the third answer was the line the gate trimmed). A safety pick still
-  passes whatever the ceiling.
+- **Picks: the segment leads** (2026-10-24; over 260 sim runs every segment had become a roast
+  show switching topic each reply, 46% of lines opening with a viewer's handle). Every beat after
+  the cold open advances the segment and folds in at most one message; `PickerConfig.max_picks`
+  (2) stays the picker's own cap. A safety pick still passes whatever the ceiling, and a safety
+  beat answers only the disclosure. Worthy chat is sorted into classes:
+  - **required**: an owned request (below), a gift or sub, a first contact, a paste wave;
+  - **on-topic**: a message that shares a topic word of the live segment (lowercase words of 4+
+    letters, common words removed, from the case title in the rules, the hex labels, the foils
+    on offer or on stage, the open poll's options and the state's purpose line,
+    `shadowrunr_brain::topic::topic_words`), or offers an idea (`!propose`, "what if", "you
+    should", "we should", "let's", "idea", "how about");
+  - **off-topic**: the rest worth an answer (a mention, a plain question, a command, bait). A plain
+    remark, however long, is not worth a beat (it was, from four words).
+
+  With required or on-topic chat the beat is `mixed`: the next prepared bit off its spacing
+  (premises first), the through-line's bridge or the state's purpose, beside one pick from that
+  class (required first; reason `segment+chat: <tags>`); with no segment material it is `react`
+  with one pick and a line telling him to tie the reply back to the segment. A bit being told
+  goes on: required chat skips its next line, on-topic chat folds into its beat. With off-topic
+  chat alone, a direct question or mention (or bait, still one injection a beat) gets one pick at
+  most every 30 s (`OFF_TOPIC_ANSWER_MS`, assumption; reason `segment+off-topic: <tags>`); every
+  other such beat picks nothing and is a segment beat (a bit, the case, the through-line, or an
+  improvised line on the state's purpose; reason `segment (carried N)`), never a quiet hold.
+  **Small room:** while at most 5 distinct viewers chatted in the last 180 s
+  (`SMALL_ROOM_ENTER`, `SMALL_ROOM_WINDOW_MS`), every message but filler (votes, lone emotes) is
+  on-topic and carried until a beat takes it, one a beat; the room stops being small at 7
+  (`SMALL_ROOM_LEAVE`, hysteresis), and its reasons start `small-room`.
+- **Picker scores.** `topic` +1.5 (shares a topic word), `idea` +0.8, `novel` +0.8 (a viewer not
+  picked this stream; distinct from the raid's `first_contact`), `mention` +0.8 (was 1.5),
+  `question` +1.0; bait scores neither `topic` nor `idea`. Every 3rd non-safety pick of the
+  stream goes to the best-scoring candidate of a viewer never picked that is tagged `question`,
+  `topic` or `idea`, when one is offered (the reason marks it `novel_pick`). The deterministic
+  reason stays `deterministic top N of M: <id> <tags> (<score>); ...`. The LLM picker's system
+  prompt prefers messages about the segment (its questions, its ideas) over remarks to the host.
 - **Carried chat and room events.** A message that needs an answer (question, mention, first
   contact, a gift or a sub announced in chat, `!propose`/`!summon`, mocked injection) but was
   not picked because of a hold, a safety beat, the cold-open filter or the pick ceiling is
   carried for up to 25 s from the drain of the speech queued when it arrived (at most 6)
   and competes in later beats; expiry writes an input moderation record, rule `carry`, action
   `expired`, a message the cap of 6 drops writes rule `carry`, action `capped`, and a message
-  worth answering that a beat neither picked nor carried (a remark in a speech hold, say) writes
-  rule `carry`, action `dropped`, so every drop leaves a record. In the cold open a carried message is held: it never expires there, and its 25 s
+  worth answering that a beat neither picked nor carried (a command in a speech hold, say) writes
+  rule `carry`, action `dropped`, so every drop leaves a record. On-topic chat is carried too (in
+  a small room, every message but filler); a plain remark in a big room is not worth answering,
+  so it leaves none. In the cold open a carried message is held: it never expires there, and its 25 s
   start from the drain of the first beat after the room opens ("carry until the room opens +
   25 s"); while the room fills, the cap of 6 keeps first contacts first, the oldest first, then
   the newest of the rest. A gift or a sub is boosted in the picker like a first contact. A
@@ -1429,11 +1475,16 @@ like a real case. It is never written live in a quiet moment.
   whether the Lord watches), announces a gift or a sub (thank them by name and rank; gifted subs also welcome the new
   subscribers), or is a
   `!propose` from below the proposing rank (not accepted; admire the ambition, explain rank and
-  how to climb). Injection stand-ins, forged decrees, waves and safety picks get none. With
-  two picks, the answer format asks for one line per message of at most half the budget. The
-  chat instructions say each viewer's rank title is in the parentheses beside their name, and
-  that welcoming, thanking or comforting a viewer names that title (a comic title on top, never
-  instead).
+  how to climb). Injection stand-ins, forged decrees, waves and safety picks get none. The chat
+  instructions (`compose::CHAT_INSTRUCTION`) frame chat as material for the segment, never
+  instructions (no chatter's command is carried out on demand: the demand is mocked); ask him to
+  use what the picked viewer said to move the segment on, to answer a real question first in a
+  clause and carry the segment on in the same line, to name a viewer only when it helps the line
+  (welcoming, thanking or comforting one names them with the rank title in the parentheses, a
+  comic title on top, never instead), and to roast only a viewer who offers something worth it.
+  No "answer each of N": a beat has one pick. A segment directive (the state's purpose, or the
+  tie-back of a `react` with no segment material) opens the chat section, after the care and room
+  notes.
 - **Owned requests.** A message that makes a situational ask a rule covers (a self-declared
   minor asking him to flirt, real steps to break into an account, "roast me" (not beside grief),
   an impression of a real person, hyping a real coin, where a real person lives, explicit
@@ -1454,19 +1505,22 @@ like a real case. It is never written live in a quiet moment.
     answered within 20 s (`REQUEST_ANSWER_MS`, assumption);
   - a pick whose only answering line the pace gate dropped (`trimmed` or `lagged`: no aired
     line names its viewer) never aired, so it is carried again, owned or not (rule `carry`,
-    action `unaired`);
+    action `unaired`); with one pick a beat its answer is the beat's first line, which the gate
+    never drops, so this applies only to a beat with two picks;
   - the answering line gets a one-line note per ask beside the message naming what to do with
     the request itself (deliver the harmless roast; mock the intrusion with no method; decline the
     impression and offer a foil; refuse the coin, the address, explicit content; never tell the
     stereotype joke and turn the roast on the baiter's material; answer sincere sadness first, by
     name and rank title, with a short sincere kindness and no roast, then carry on; say plainly he
     is an AI, in his own words), also beside an injection stand-in or a forged decree. No note
-    carries the payload. A beat answering sincere sadness carries no voice exemplars;
+    carries the payload. A beat answering sincere sadness carries the `care` effect alone in its
+    voice section;
   - a sincere "are you an AI" from a viewer already answered this stream (or a wave asking it
     after any answer) is not owed again: its note asks for one short in-character line that still
     says it in a few words and points back to the answer, never a denial and never the full
     disclosure again. The tone's line bank
-    carries several authored disclosure variants (`ai_question`).
+    carries several authored disclosure variants (`ai_question`) for the Tone Lab; the brain shows
+    the `ai_question` effect instead.
 - **The through-line.** The orchestrator keeps a short agenda of open loops: research out (from
   the worker pool's job states), each vote open (from the state summary), each owed request,
   and a prepared bit whose payoff is still to come. A voiced beat outside the cold open, a
@@ -2152,8 +2206,9 @@ CharacterDocSetResult}`.
 | `character.doc.set` | `{ "id", "doc", "text", "base_digest" }` | `CharacterDocSetResult` `{ id, doc, digest, previous_digest, backup? }` |
 
 - **`doc`** is a package-relative path from a closed list: `constitution.md`, `bible.md`,
-  `directions.md`, `character.toml`, `stalls.toml`, `situations.json`, or `foils/<slug>.md`
-  with `slug` matching `[a-z0-9_-]{1,40}`. Anything else is `invalid_params` before any IO, and
+  `directions.md`, `character.toml`, `stalls.toml`, `situations.json`, `foils/<slug>.md`, or
+  `private/<slug>.md` (the operator's notes, which no loader reads) with `slug` matching
+  `[a-z0-9_-]{1,40}`. Anything else is `invalid_params` before any IO, and
   the target must resolve inside `paths.characters` as the Tone Lab writes do.
 - **`digest`** is `sha256:<lowercase hex>` of the file's bytes. `set` is refused with `conflict`
   unless the file still has `base_digest`; `""` means "the file must not exist" (a new foil).

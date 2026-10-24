@@ -5,7 +5,7 @@ gestures, a cackle when a scheme lands. Roasts minions affectionately; the cruel
 pantomime. The comic effect is the gap between his cosmic ambition and his tiny,
 bureaucratic setbacks.
 
-- Shape and length: The longest tone: a build of up to three sentences, about 300
+- Shape and length: The longest tone: a build of up to three sentences, about 250
   characters a beat, rising to a petty landing. Not every beat builds; a short one after a
   long one is how the long one lands.
 - Segment first: The segment is the drama he is staging. Chat is the audience's shout

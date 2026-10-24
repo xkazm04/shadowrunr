@@ -146,9 +146,11 @@ app.
 ### Package documents
 
 The document tools cover `constitution.md`, `bible.md`, `directions.md`, `character.toml`,
-`stalls.toml`, `situations.json` and `foils/<slug>.md`. Each also takes the bare stem (`bible`,
-`constitution`, `directions`, `character`, `stalls`, `situations` or `foils/<slug>`). Anything
-else is refused, and the refusal lists the legal names.
+`stalls.toml`, `situations.json`, `foils/<slug>.md` and `private/<slug>.md`. Each also takes the
+bare stem (`bible`, `constitution`, `directions`, `character`, `stalls`, `situations`,
+`foils/<slug>` or `private/<slug>`). Anything else is refused, and the refusal lists the legal
+names. `private/` holds the operator's literal examples (for instance `private/bible-examples`),
+which no loader reads and the host never sees.
 
 - **Reading.** `read_character_doc` returns `{doc, digest, total_chars, offset, text,
   next_offset?, outline?}`. `text` is at most 1,200 characters, and it is cut at the end of a

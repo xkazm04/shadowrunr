@@ -11,17 +11,40 @@
 //!   only when the deck is empty. Without a prep: gathering lines [`GATHERING_SPACING_MS`]
 //!   apart; between them a hold, or a short aside (no welcome) where a hold would let the
 //!   silence pass [`HOLD_GAP_MS`].
-//! - **After it**, per beat: `react` when chat is worth answering; `bit` when the room is quiet
-//!   (a prepared bit for the current segment, shuffled, never repeated in the stream); `bridge`
-//!   for a connector line between the two (into a bit, back to chat, into a poll or a handover);
-//!   `mixed` (a short bit line and one pick) after a run of reacts in a thin room; `hold` when
-//!   there is nothing worth saying and the last line is recent. Without a prep there is no bit,
-//!   bridge, mixed or hold: a quiet beat is improvised as before.
+//! - **After it, the segment leads** (the operator, 2026-10-24: "main focus are the segments,
+//!   chats after careful pick to compliment them ... it should never turn to a roast show
+//!   switching topic each reply"; over 260 sim runs 46% of lines opened with a viewer's handle).
+//!   Every beat advances the segment and folds in at most one chat message. The worthy chat is
+//!   sorted into three classes:
+//!   - **required**: an owned request (a situational ask, "what is this"), a gift, a first
+//!     contact, a wave (safety beats are their own, unchanged);
+//!   - **on-topic**: a message sharing a topic word of the live segment
+//!     ([`crate::topic::topic_words`]: the case, its hexes, the foils, the open poll, the state's
+//!     purpose), or an idea for it (`!propose`, "what if", "we should", ...);
+//!   - **off-topic**: the rest that is worth an answer (a mention, a plain question, a command,
+//!     bait). A plain remark, however long, is not worth a beat of its own.
 //!
-//! Rules: a bit is offered once and marked used; the room answering a bit skips its next line;
-//! a raid, a safety pick or a segment change expires the queued bit and connector; a safety beat
-//! never voices prepared material and offers only the safety pick. Votes and lone emotes never
-//! fill a pick, and a wave once answered is not picked again this stream.
+//!   With required or on-topic chat the beat is `mixed`: segment material (the next prepared bit
+//!   off its spacing, the through-line's bridge, or the state's purpose) plus one pick from that
+//!   class, required first; reason `segment+chat: <tags>`. With no segment material it is `react`
+//!   with one pick and a directive to tie the reply back to the segment. With off-topic chat
+//!   alone, a direct question or mention (or bait) gets one pick at most every
+//!   [`OFF_TOPIC_ANSWER_MS`] (reason `segment+off-topic: <tags>`), and every other beat is a
+//!   segment beat with no pick (`bit`, `improvise`; reason `segment (carried N)`), never a hold.
+//!   A quiet room gets `bit` (a prepared bit for the current segment, shuffled, never repeated in
+//!   the stream), `bridge` (a connector into a bit, back to chat, into a poll or a handover),
+//!   `hold` when the last line is recent, or an improvised line. Without a prep there is no bit,
+//!   bridge or hold: a quiet beat is improvised (on the state's purpose when it has one).
+//! - **Small room** (the streaming standard's size-tiered picking): while at most
+//!   [`SMALL_ROOM_ENTER`] distinct viewers chatted in the last [`SMALL_ROOM_WINDOW_MS`], every
+//!   message but filler counts as on-topic and is carried until answered, one a beat; the mode
+//!   ends at [`SMALL_ROOM_LEAVE`] chatters (hysteresis). Its reasons start `small-room`.
+//!
+//! Rules: a bit is offered once and marked used; required chat arriving mid-bit skips its next
+//! line (on-topic chat folds into the bit's beat instead); a raid, a safety pick or a segment
+//! change expires the queued bit and connector; a safety beat never voices prepared material and
+//! offers only the safety pick. Votes and lone emotes never fill a pick, and a wave once answered
+//! is not picked again this stream.
 //!
 //! A message that needs an answer (a question, a mention, a first contact, a gift or a sub, a
 //! proposal or a summons, a mockable injection) and that a beat could not answer (a hold, a
@@ -89,9 +112,9 @@
 //! bait and a sincerely sad regular both did, in speech holds).
 //!
 //! The thresholds are assumptions to tune against sandbox runs, not measurements:
-//! [`QUIET_BIT_MS`], [`BIT_SPACING_MS`], [`HOLD_GAP_MS`], [`THIN_REACT_STREAK`],
-//! [`THIN_ROOM_MAX`], [`RAID_FIRST_CONTACTS`], [`CARRY_MS`], [`CARRY_MAX`],
-//! [`GATHERING_SPACING_MS`], [`REQUEST_ANSWER_MS`], [`REQUEST_LEAD_MS`], [`REQUEST_MAX_MS`].
+//! [`QUIET_BIT_MS`], [`BIT_SPACING_MS`], [`HOLD_GAP_MS`], [`RAID_FIRST_CONTACTS`], [`CARRY_MS`],
+//! [`CARRY_MAX`], [`GATHERING_SPACING_MS`], [`REQUEST_ANSWER_MS`], [`REQUEST_LEAD_MS`],
+//! [`REQUEST_MAX_MS`], [`OFF_TOPIC_ANSWER_MS`], [`SMALL_ROOM_ENTER`], [`SMALL_ROOM_LEAVE`].
 
 pub mod agenda;
 pub mod case;
@@ -126,10 +149,21 @@ pub const BIT_SPACING_MS: i64 = Tuning::DEFAULT.bit_spacing_ms;
 /// A quiet beat may hold only while his last line is younger than this: with 5 s beats the
 /// next one speaks well under the 15 s say-gap ceiling (assumption).
 pub const HOLD_GAP_MS: i64 = Tuning::DEFAULT.hold_gap_ms;
-/// Reacts in a row after which a thin room gets a bit line alongside its one pick.
-pub const THIN_REACT_STREAK: u32 = 3;
-/// A room is thin when at most this many messages are worth answering.
-pub const THIN_ROOM_MAX: usize = 1;
+/// A direct off-topic question or mention (or bait) gets one folded pick at most this often
+/// (assumption: one beat in six).
+pub const OFF_TOPIC_ANSWER_MS: i64 = 30_000;
+/// The room is small at this many distinct chatters or fewer: every message counts as on-topic.
+pub const SMALL_ROOM_ENTER: usize = 5;
+/// A small room stops being one at this many distinct chatters (hysteresis).
+pub const SMALL_ROOM_LEAVE: usize = 7;
+/// The window distinct chatters are counted over.
+pub const SMALL_ROOM_WINDOW_MS: i64 = 180_000;
+/// The segment directive of a chat beat with no segment material.
+pub const TIE_BACK_NOTE: &str = "Nothing prepared is due this beat: take up the picked message \
+and tie your reply back to the segment (its rules and state above); do not start a new topic.";
+/// The segment directive that advances the current state's purpose (`{purpose}` filled).
+pub const PURPOSE_NOTE: &str = "Advance the segment this beat, toward the state's purpose: \
+{purpose}";
 /// First contacts in one beat that count as a raid (the room changed).
 pub const RAID_FIRST_CONTACTS: usize = 5;
 /// A message this close to an acknowledged wave is that wave again.
@@ -140,8 +174,6 @@ const PASTER_SIMILARITY: f64 = 0.6;
 const PASTER_MIN_CHARS: usize = 40;
 /// Two story lines are voiced together when they fit in this many characters.
 const TWO_LINES_MAX_CHARS: usize = 220;
-/// Words from which a plain remark is worth answering.
-const REMARK_MIN_WORDS: usize = 4;
 /// How long a message a beat could not answer is carried into the next beats (assumption:
 /// two to five beats, so the answer still reads as one to the asker).
 pub const CARRY_MS: i64 = Tuning::DEFAULT.carry_ms;
@@ -206,6 +238,9 @@ pub struct BeatInputs<'a> {
     /// Lowercase names the character answers to.
     pub names: &'a [String],
     pub max_picks: usize,
+    /// The live segment's topic words ([`crate::topic::topic_words`]): chat sharing one is
+    /// on-topic.
+    pub topic_words: &'a [String],
 }
 
 /// Which candidates the picker may see this beat.
@@ -240,7 +275,14 @@ pub struct Plan {
     pub agenda: Option<String>,
     /// The case's next move for this beat ([`case`]), if it carries one.
     pub case: Option<String>,
+    /// The segment directive for this beat (the state's purpose, a tie-back), chat or no chat.
+    pub segment_note: Option<String>,
     pub reason: String,
+    /// The one class of chat this beat may pick from (required, on-topic, or the direct
+    /// off-topic messages), by id; `None` offers what [`Offer`] lets through.
+    only: Option<HashSet<String>>,
+    /// The beat's pick, if any, is the off-topic answer ([`OFF_TOPIC_ANSWER_MS`]).
+    off_topic: bool,
 }
 
 impl Plan {
@@ -256,9 +298,43 @@ impl Plan {
             speaking: false,
             agenda: None,
             case: None,
+            segment_note: None,
             reason,
+            only: None,
+            off_topic: false,
         }
     }
+
+    /// This plan offering the beat's chat class ([`ChatOffer`]) under its ceiling.
+    fn with_chat(mut self, o: &ChatOffer) -> Self {
+        if self.ceiling > 0 {
+            self.only = o.only.clone();
+            self.off_topic = o.off_topic;
+        }
+        self
+    }
+}
+
+/// Where a worthy message stands against the segment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Class {
+    /// Owed whatever the segment: safety, a request, a gift, a first contact, a wave.
+    Required,
+    /// About the live segment: it shares a topic word or offers an idea (in a small room,
+    /// everything but filler).
+    OnTopic,
+    /// Worth an answer, but not about the segment: one every [`OFF_TOPIC_ANSWER_MS`] at most.
+    OffTopic,
+}
+
+/// The chat a beat may fold in: its ceiling (0 or 1), the class offered, and its tags.
+#[derive(Debug, Clone, Default)]
+struct ChatOffer {
+    ceiling: usize,
+    only: Option<HashSet<String>>,
+    off_topic: bool,
+    signals: String,
+    small: bool,
 }
 
 /// A message carried past a beat that could not answer it.
@@ -339,7 +415,12 @@ pub struct Orchestrator {
     last_mode: Option<BeatMode>,
     /// The last mode that was not a hold (what the room last heard).
     last_voiced: Option<BeatMode>,
-    react_streak: u32,
+    /// When an off-topic message was last folded in ([`OFF_TOPIC_ANSWER_MS`]).
+    last_off_topic_ms: Option<TsMs>,
+    /// Who chatted when, for the room's size ([`SMALL_ROOM_WINDOW_MS`]).
+    chatters: HashMap<String, TsMs>,
+    /// The room is small ([`SMALL_ROOM_ENTER`], [`SMALL_ROOM_LEAVE`]).
+    small_room: bool,
     last_segment: Option<shadowrunr_types::SegmentId>,
     last_state: Option<String>,
     /// Since when no chat was worth answering.
@@ -378,35 +459,58 @@ fn ask_of(c: &Candidate, first: bool) -> Option<Ask> {
     })
 }
 
-/// Why a candidate is worth answering, if it is.
-fn worth(c: &Candidate, first: bool, names: &[String]) -> Option<&'static str> {
+/// What the live segment is about and how big the room is: the context [`worth`] classifies in.
+#[derive(Clone, Copy)]
+struct Seg<'a> {
+    names: &'a [String],
+    topic: &'a [String],
+    small: bool,
+}
+
+/// Why a candidate is worth answering, if it is, and its [`Class`]. A plain remark is not (it
+/// was, at four words, and every beat became a reply); in a small room every message but filler
+/// is, as `chat`. Bait (`mockable`) is off-topic wherever it points.
+fn worth(c: &Candidate, first: bool, s: Seg<'_>) -> Option<(&'static str, Class)> {
     if c.safety.is_some() {
-        return Some("safety");
+        return Some(("safety", Class::Required));
     }
     if is_filler(c) {
         return None;
     }
     if ask_of(c, first).is_some() {
-        Some("request")
-    } else if moderation::is_gift_or_sub(&c.msg.text) {
-        Some("gift")
-    } else if first {
-        Some("first contact")
-    } else if c.count > 1 {
-        Some("wave")
-    } else if mentions(&c.msg.text, names) {
+        return Some(("request", Class::Required));
+    }
+    if moderation::is_gift_or_sub(&c.msg.text) {
+        return Some(("gift", Class::Required));
+    }
+    if first {
+        return Some(("first contact", Class::Required));
+    }
+    if c.count > 1 {
+        return Some(("wave", Class::Required));
+    }
+    if c.injection {
+        return Some(("mockable", Class::OffTopic));
+    }
+    if crate::topic::is_idea(c) {
+        return Some(("idea", Class::OnTopic));
+    }
+    if crate::topic::shares_topic(&c.msg.text, s.topic) {
+        return Some(("topic", Class::OnTopic));
+    }
+    let base = if mentions(&c.msg.text, s.names) {
         Some("mention")
     } else if is_question(&c.msg.text) {
         Some("question")
     } else if c.msg.command.is_some() {
         Some("command")
-    } else if c.injection {
-        Some("mockable")
-    } else if normalize(&c.msg.text).split(' ').count() >= REMARK_MIN_WORDS {
-        Some("remark")
     } else {
         None
+    };
+    if s.small {
+        return Some((base.unwrap_or("chat"), Class::OnTopic));
     }
+    base.map(|b| (b, Class::OffTopic))
 }
 
 /// Never fills a pick: a vote (the segment counts it) or a lone emote.
@@ -414,20 +518,37 @@ fn is_filler(c: &Candidate) -> bool {
     c.safety.is_none() && (is_vote(c) || (c.count == 1 && is_bare_emote(&c.msg.text)))
 }
 
-/// Whether an unanswered message is carried: one that asks for an answer, never a wave, a
-/// vote, a remark or a safety pick (which is never left unanswered).
-fn carries(c: &Candidate, first: bool, names: &[String]) -> bool {
+/// Whether an unanswered message is carried: one that asks for an answer or feeds the segment
+/// (in a small room, every message but filler), never a wave, a vote, a plain remark or a safety
+/// pick (which is never left unanswered).
+fn carries(c: &Candidate, first: bool, s: Seg<'_>) -> bool {
     if c.count > 1 || c.safety.is_some() {
         return false;
     }
-    match worth(c, first, names) {
-        Some("request" | "gift" | "first contact" | "mention" | "question" | "mockable") => true,
-        Some("command") => matches!(
+    match worth(c, first, s) {
+        Some((_, Class::Required | Class::OnTopic)) => true,
+        Some(("mention" | "question" | "mockable", _)) => true,
+        Some(("command", _)) => matches!(
             c.msg.command,
             Some(Command::Propose { .. } | Command::Summon { .. })
         ),
         _ => false,
     }
+}
+
+/// The reason head of a beat that folds in chat: `segment+chat: <tags>` (`segment+off-topic`
+/// for the off-topic answer), after `small-room ` in a small room.
+fn chat_head(o: &ChatOffer) -> String {
+    format!(
+        "{}{}: {}",
+        if o.small { "small-room " } else { "" },
+        if o.off_topic {
+            "segment+off-topic"
+        } else {
+            "segment+chat"
+        },
+        o.signals
+    )
 }
 
 fn kind_label(k: BitKind) -> &'static str {
@@ -729,10 +850,37 @@ impl Orchestrator {
                                 || self.owns(c).is_some()
                         }
                         Offer::Chat => !is_filler(c),
-                    }
+                    } && plan.only.as_ref().is_none_or(|ids| ids.contains(&c.msg.id))
             })
             .cloned()
             .collect()
+    }
+
+    /// Whether the room is small this beat ([`SMALL_ROOM_ENTER`]).
+    pub fn small_room(&self) -> bool {
+        self.small_room
+    }
+
+    /// Count this beat's chatters (fresh messages, not carried ones) and settle the room's size,
+    /// with hysteresis: small at [`SMALL_ROOM_ENTER`] or fewer, not small from
+    /// [`SMALL_ROOM_LEAVE`].
+    fn note_chatters(&mut self, cands: &[Candidate], now: TsMs) {
+        for c in cands
+            .iter()
+            .filter(|c| !self.carried_in.contains_key(&c.msg.id))
+        {
+            self.chatters.insert(c.msg.viewer.id.clone(), now);
+        }
+        self.chatters
+            .retain(|_, t| now.saturating_sub(*t) < SMALL_ROOM_WINDOW_MS);
+        let n = self.chatters.len();
+        if self.small_room {
+            if n >= SMALL_ROOM_LEAVE {
+                self.small_room = false;
+            }
+        } else if n <= SMALL_ROOM_ENTER {
+            self.small_room = true;
+        }
     }
 
     /// The queued intent a changed room expires: the bit being told and a queued connector.
@@ -920,7 +1068,8 @@ impl Orchestrator {
         let d = self.agenda.directives(BeatShape {
             now_ms: b.now_ms,
             expected_gap_ms,
-            quiet: p.ceiling == 0,
+            // A beat passing chat by answers none, but its room is not quiet.
+            quiet: p.ceiling == 0 && !b.cands.iter().any(|c| c.safety.is_none() && !is_filler(c)),
             bit_continues: self.active_bit.is_some(),
         });
         if !d.tags.is_empty() {
@@ -933,6 +1082,7 @@ impl Orchestrator {
     fn decide(&mut self, b: &BeatInputs<'_>) -> Plan {
         self.beats += 1;
         let now = b.now_ms;
+        self.note_chatters(b.cands, now);
         let seg_changed = self.last_segment.is_some_and(|s| s != b.ctx.segment);
         self.last_segment = Some(b.ctx.segment);
         let prev_state = self.last_state.replace(b.ctx.state.clone());
@@ -943,6 +1093,11 @@ impl Orchestrator {
             .cands
             .iter()
             .any(|c| !self.answered.contains(&c.msg.id) && self.owns(c).is_some());
+        let seg = Seg {
+            names: b.names,
+            topic: b.topic_words,
+            small: self.small_room,
+        };
 
         let mut lead = String::new();
         let why_changed = if seg_changed {
@@ -977,7 +1132,7 @@ impl Orchestrator {
                     Some(k) => (k.since, k.expires),
                     None => (now, from_drain),
                 };
-                carries(c, first, b.names).then(|| Carried {
+                carries(c, first, seg).then(|| Carried {
                     cand: c.clone(),
                     since,
                     first,
@@ -987,22 +1142,76 @@ impl Orchestrator {
                 })
             })
             .collect();
-        let worthy: Vec<&'static str> = b
+        // The worthy chat, classed against the segment (safety picks apart).
+        let classed: Vec<(&Candidate, &'static str, Class)> = b
             .cands
             .iter()
-            .filter_map(|c| worth(c, self.is_first_contact(&c.msg.id), b.names))
+            .filter(|c| !self.answered.contains(&c.msg.id))
+            .filter_map(|c| worth(c, self.is_first_contact(&c.msg.id), seg).map(|(t, k)| (c, t, k)))
             .collect();
-        self.beat_worthy = b
-            .cands
+        self.beat_worthy = classed
             .iter()
-            .filter(|c| c.safety.is_none() && !self.answered.contains(&c.msg.id))
-            .filter(|c| worth(c, self.is_first_contact(&c.msg.id), b.names).is_some())
-            .map(|c| c.msg.id.clone())
+            .filter(|(c, _, _)| c.safety.is_none())
+            .map(|(c, _, _)| c.msg.id.clone())
             .collect();
-        if !worthy.is_empty() || self.quiet_since.is_none() {
+        let of = |k: Class| -> Vec<(&Candidate, &'static str)> {
+            classed
+                .iter()
+                .filter(|(c, _, kk)| *kk == k && c.safety.is_none())
+                .map(|(c, t, _)| (*c, *t))
+                .collect()
+        };
+        let required = of(Class::Required);
+        let on_topic = of(Class::OnTopic);
+        let off_topic = of(Class::OffTopic);
+        let fold = !required.is_empty() || !on_topic.is_empty();
+        // Off-topic chat is not the segment's: it never resets the quiet a bit waits for.
+        if fold || safety || self.quiet_since.is_none() {
             self.quiet_since = Some(now);
         }
         let quiet_ms = now.saturating_sub(self.quiet_since.unwrap_or(now));
+        // Chat this beat passes by (no pick takes it): what a segment beat's reason counts.
+        let passing = b
+            .cands
+            .iter()
+            .filter(|c| c.safety.is_none() && !is_filler(c) && !self.answered.contains(&c.msg.id))
+            .count();
+        let direct_off: Vec<(&Candidate, &'static str)> = off_topic
+            .iter()
+            .filter(|(_, t)| matches!(*t, "mention" | "question" | "mockable"))
+            .copied()
+            .collect();
+        let off_open = self
+            .last_off_topic_ms
+            .is_none_or(|t| now.saturating_sub(t) >= OFF_TOPIC_ANSWER_MS);
+        let off_answer = !fold && !direct_off.is_empty() && off_open;
+        let class_offer = |xs: &[(&Candidate, &'static str)], off_topic: bool| {
+            let mut tags: Vec<&str> = Vec::new();
+            for (_, t) in xs {
+                if !tags.contains(t) {
+                    tags.push(t);
+                }
+            }
+            ChatOffer {
+                ceiling: 1,
+                only: Some(xs.iter().map(|(c, _)| c.msg.id.clone()).collect()),
+                off_topic,
+                signals: tags.join("+"),
+                small: seg.small,
+            }
+        };
+        let offer = if !required.is_empty() {
+            class_offer(&required, false)
+        } else if !on_topic.is_empty() {
+            class_offer(&on_topic, false)
+        } else if off_answer {
+            class_offer(&direct_off, true)
+        } else {
+            ChatOffer {
+                small: seg.small,
+                ..ChatOffer::default()
+            }
+        };
         let gap_ms = b.speech_until_ms.map(|t| now.saturating_sub(t).max(0));
         // The goodbye beat always speaks: a quiet hold there would cost the sign-off.
         let may_hold = gap_ms.is_some_and(|g| g < self.tuning.hold_gap_ms)
@@ -1046,16 +1255,8 @@ impl Orchestrator {
         }
 
         let max = b.max_picks;
-        let chat = if worthy.is_empty() { 0 } else { max };
-        let signals = {
-            let mut s: Vec<&str> = Vec::new();
-            for w in &worthy {
-                if !s.contains(w) {
-                    s.push(w);
-                }
-            }
-            s.join("+")
-        };
+        let chat = offer.ceiling;
+        let signals = offer.signals.clone();
 
         // A safety beat answers the disclosure alone: the rest of the room is carried.
         if safety {
@@ -1094,7 +1295,8 @@ impl Orchestrator {
                 Offer::Chat,
                 chat,
                 format!("{lead}announce {labels}{with}"),
-            );
+            )
+            .with_chat(&offer);
             p.room_note = Some(
                 events
                     .iter()
@@ -1124,7 +1326,7 @@ impl Orchestrator {
             let face_up = b.ctx.hexes.iter().filter(|h| !h.fog).count();
             let names = crate::case_names::CaseNames::read(b.ctx);
             let directive = self.case.ask(&mv, face_up, &names, now);
-            let (mode, offer, ceiling, with) = if chat > 0 {
+            let (mode, offer_kind, ceiling, with) = if chat > 0 {
                 (
                     BeatMode::React,
                     Offer::Chat,
@@ -1136,10 +1338,11 @@ impl Orchestrator {
             };
             let mut p = Plan::new(
                 mode,
-                offer,
+                offer_kind,
                 ceiling,
                 format!("{lead}case: {}{with}", mv.tag()),
-            );
+            )
+            .with_chat(&offer);
             p.case = Some(if ceiling == 0 {
                 directive
             } else {
@@ -1153,7 +1356,7 @@ impl Orchestrator {
             return p;
         }
 
-        // A queued connector, with any chat worth answering.
+        // A queued connector, with the beat's one pick when it has one.
         if let Some(kind) = self.pending.take() {
             let line = if kind == ConnectorKind::IntoRoom {
                 self.handoff_done = true;
@@ -1172,7 +1375,8 @@ impl Orchestrator {
                         connector_label(kind),
                         b.ctx.state
                     ),
-                );
+                )
+                .with_chat(&offer);
                 p.material = Some(format!(
                     "Connector ({}):\n- {}\n",
                     connector_label(kind),
@@ -1182,26 +1386,45 @@ impl Orchestrator {
             }
         }
 
-        // A bit being told: the room answering it skips its next line; else it goes on.
+        // What a beat with no pick says it passed by: the chat it carries, else the quiet.
+        let quiet_s = quiet_ms / 1000;
+        let label = if passing > 0 {
+            format!("segment (carried {passing})")
+        } else {
+            format!("quiet {quiet_s} s")
+        };
+
+        // A bit being told goes on: required chat skips its next line; on-topic chat (or the
+        // off-topic answer) folds into its beat as the one pick.
         if let Some(active) = self.active_bit.clone() {
             let bit = b
                 .prep
                 .and_then(|p| p.bits.iter().find(|x| x.id == active.id));
             match bit {
                 None => self.active_bit = None,
-                Some(_) if !worthy.is_empty() => {
+                Some(_) if !required.is_empty() => {
                     if let Some(why) = self.back_off(b.prep) {
                         lead.push_str(&why);
                     }
                 }
                 Some(bit) => {
                     let (m, what) = self.bit_lines(bit, active.next, 2);
-                    let mut p = Plan::new(
-                        BeatMode::Bit,
-                        Offer::SafetyOnly,
-                        0,
-                        format!("{lead}quiet {} s: {what}", quiet_ms / 1000),
-                    );
+                    let mut p = if chat > 0 {
+                        Plan::new(
+                            BeatMode::Mixed,
+                            Offer::Chat,
+                            1,
+                            format!("{lead}{}: {what}", chat_head(&offer)),
+                        )
+                        .with_chat(&offer)
+                    } else {
+                        Plan::new(
+                            BeatMode::Bit,
+                            Offer::SafetyOnly,
+                            0,
+                            format!("{lead}{label}: {what}"),
+                        )
+                    };
                     p.bit_id = Some(bit.id.clone());
                     p.material = Some(m);
                     self.last_bit_ms = Some(now);
@@ -1210,37 +1433,22 @@ impl Orchestrator {
             }
         }
 
-        if !worthy.is_empty() {
-            let answerable = worthy.iter().filter(|w| **w != "safety").count();
-            let thin = answerable <= THIN_ROOM_MAX && self.react_streak >= THIN_REACT_STREAK;
-            if thin && self.active_bit.is_none() {
-                if let Some(bit) = b.prep.and_then(|p| self.next_bit(p, b.ctx.segment, true)) {
-                    let (m, what) = self.bit_lines(bit, 0, 1);
-                    let mut p = Plan::new(
-                        BeatMode::Mixed,
-                        Offer::Chat,
-                        1,
-                        format!(
-                            "{lead}{} reacts in a thin room: {what} with one pick ({signals})",
-                            self.react_streak
-                        ),
-                    );
-                    p.bit_id = Some(bit.id.clone());
-                    p.material = Some(m);
-                    self.last_bit_ms = Some(now);
-                    return p;
-                }
-            }
+        if chat > 0 {
             let after_bit = self.bit_ended;
-            if after_bit && matches!(self.last_voiced, Some(BeatMode::Bit | BeatMode::Mixed)) {
+            // The off-topic answer never bridges back to chat: it answers, then the segment goes on.
+            if after_bit
+                && !offer.off_topic
+                && matches!(self.last_voiced, Some(BeatMode::Bit | BeatMode::Mixed))
+            {
                 if let Some(line) = self.connector(b.prep, ConnectorKind::BackToChat) {
                     self.bit_ended = false;
                     let mut p = Plan::new(
                         BeatMode::Bridge,
                         Offer::Chat,
-                        max,
+                        1,
                         format!("{lead}bridge back_to_chat after a bit ({signals})"),
-                    );
+                    )
+                    .with_chat(&offer);
                     p.material = Some(format!(
                         "Connector (back_to_chat):\n- {}\n",
                         one_line(&line, 400)
@@ -1248,16 +1456,12 @@ impl Orchestrator {
                     return p;
                 }
             }
-            return Plan::new(
-                BeatMode::React,
-                Offer::Chat,
-                max,
-                format!("{lead}react: {signals}"),
-            );
+            return self.fold(b, lead, &offer, now);
         }
 
-        // Quiet.
-        let quiet_s = quiet_ms / 1000;
+        // No pick this beat: quiet, or chat the segment passes by. A beat that passes chat by
+        // never holds: the segment goes on.
+        let may_hold = may_hold && passing == 0;
         if let Some(prep) = b.prep {
             let spaced = self
                 .last_bit_ms
@@ -1275,7 +1479,7 @@ impl Orchestrator {
                                 BeatMode::Bridge,
                                 Offer::SafetyOnly,
                                 0,
-                                format!("{lead}quiet {quiet_s} s: bridge into_bit, {what}"),
+                                format!("{lead}{label}: bridge into_bit, {what}"),
                             );
                             p.material = Some(format!(
                                 "Connector (into_bit):\n- {}\n{m}",
@@ -1288,7 +1492,7 @@ impl Orchestrator {
                                 BeatMode::Bit,
                                 Offer::SafetyOnly,
                                 0,
-                                format!("{lead}quiet {quiet_s} s: {what}"),
+                                format!("{lead}{label}: {what}"),
                             );
                             p.material = Some(m);
                             p
@@ -1309,13 +1513,14 @@ impl Orchestrator {
             }
         }
         // Nothing prepared is due: bridge from the agenda (an open loop, else his last line),
-        // then a bit off its spacing, and only then generic filler.
+        // then a bit off its spacing, and only then an improvised line (on the state's purpose
+        // when it has one).
         if let Some((note, what)) = self.agenda.bridge(now) {
             let mut p = Plan::new(
                 BeatMode::Improvise,
                 Offer::SafetyOnly,
                 0,
-                format!("{lead}quiet {quiet_s} s: bridged from the {what}"),
+                format!("{lead}{label}: bridged from the {what}"),
             );
             p.note = Some(format!(
                 "(No chat to answer this beat.) {note}Never beg, never complain about the \
@@ -1332,7 +1537,7 @@ impl Orchestrator {
                         BeatMode::Bit,
                         Offer::SafetyOnly,
                         0,
-                        format!("{lead}quiet {quiet_s} s, nothing else open: {what}"),
+                        format!("{lead}{label}, nothing else open: {what}"),
                     );
                     p.bit_id = Some(bit.id.clone());
                     p.material = Some(m);
@@ -1345,12 +1550,69 @@ impl Orchestrator {
         } else {
             "no prep"
         };
-        Plan::new(
+        let mut p = Plan::new(
             BeatMode::Improvise,
             Offer::SafetyOnly,
             0,
-            format!("{lead}quiet {quiet_s} s, {why}: improvised"),
+            format!("{lead}{label}, {why}: improvised"),
+        );
+        if let Some(purpose) = crate::topic::state_purpose(b.ctx) {
+            p.segment_note = Some(PURPOSE_NOTE.replace("{purpose}", &one_line(&purpose, 300)));
+        }
+        p
+    }
+
+    /// A beat that folds one pick into the segment: the next prepared bit off its spacing
+    /// (premises first: they invite the room), the through-line's bridge, or the state's
+    /// purpose, beside the pick (`mixed`); with no segment material, a `react` told to tie its
+    /// reply back to the segment.
+    fn fold(&mut self, b: &BeatInputs<'_>, lead: String, o: &ChatOffer, now: TsMs) -> Plan {
+        let head = format!("{lead}{}", chat_head(o));
+        let spaced = self
+            .last_bit_ms
+            .is_none_or(|t| now.saturating_sub(t) >= self.tuning.bit_spacing_ms);
+        if self.active_bit.is_none() && spaced {
+            if let Some(bit) = b.prep.and_then(|p| self.next_bit(p, b.ctx.segment, true)) {
+                let (m, what) = self.bit_lines(bit, 0, 1);
+                let mut p = Plan::new(BeatMode::Mixed, Offer::Chat, 1, format!("{head}: {what}"))
+                    .with_chat(o);
+                p.bit_id = Some(bit.id.clone());
+                p.material = Some(m);
+                self.last_bit_ms = Some(now);
+                return p;
+            }
+        }
+        if let Some((note, what)) = self.agenda.bridge_with(now, true) {
+            let mut p = Plan::new(
+                BeatMode::Mixed,
+                Offer::Chat,
+                1,
+                format!("{head}: bridged from the {what}"),
+            )
+            .with_chat(o);
+            p.segment_note = Some(note.trim_end().to_string());
+            return p;
+        }
+        if let Some(purpose) = crate::topic::state_purpose(b.ctx) {
+            let mut p = Plan::new(
+                BeatMode::Mixed,
+                Offer::Chat,
+                1,
+                format!("{head}: the state's purpose"),
+            )
+            .with_chat(o);
+            p.segment_note = Some(PURPOSE_NOTE.replace("{purpose}", &one_line(&purpose, 300)));
+            return p;
+        }
+        let mut p = Plan::new(
+            BeatMode::React,
+            Offer::Chat,
+            1,
+            format!("{head}: no segment material, tied back"),
         )
+        .with_chat(o);
+        p.segment_note = Some(TIE_BACK_NOTE.into());
+        p
     }
 
     fn plan_cold_open(
@@ -1532,7 +1794,14 @@ impl Orchestrator {
     /// the `beat_plan` record.
     pub fn commit(&mut self, plan: &mut Plan, pick: &Pick, now_ms: TsMs) -> StreamEvent {
         if plan.mode == BeatMode::Mixed && pick.chosen.is_empty() {
-            plan.mode = BeatMode::Bit;
+            plan.mode = if plan.bit_id.is_some() {
+                BeatMode::Bit
+            } else {
+                BeatMode::Improvise
+            };
+        }
+        if plan.off_topic && pick.chosen.iter().any(|c| c.safety.is_none()) {
+            self.last_off_topic_ms = Some(now_ms);
         }
         for c in pick
             .chosen
@@ -1627,12 +1896,12 @@ impl Orchestrator {
                 .push_str(&format!("; deferred: {}", fresh.join(", ")));
         }
         self.carried = carry;
-        match plan.mode {
-            BeatMode::React => self.react_streak += 1,
-            BeatMode::Hold => {}
-            _ => self.react_streak = 0,
-        }
-        if plan.bit_id.is_none() && matches!(plan.mode, BeatMode::React | BeatMode::Bridge) {
+        if plan.bit_id.is_none()
+            && matches!(
+                plan.mode,
+                BeatMode::React | BeatMode::Bridge | BeatMode::Mixed
+            )
+        {
             self.bit_ended = false;
         }
         self.last_mode = Some(plan.mode);

@@ -126,6 +126,22 @@ impl PaceConfig {
     }
 }
 
+/// `cfg` with the tone's reply shape (`tones/<tone>.toml`) applied: its `budget_chars` replaces
+/// the engine default [`PaceConfig::default`]'s; a budget the caller set itself (a test's
+/// unpaced run, say) stands. No ceiling moves: the lag ceiling and the lookahead budget still
+/// bound what a beat composed behind queued speech may add ([`lookahead_budget`], [`over_lag`]).
+pub fn with_tone_shape(
+    mut cfg: PaceConfig,
+    shape: Option<crate::character::ToneShape>,
+) -> PaceConfig {
+    if let Some(s) = shape {
+        if cfg.budget_chars == PaceConfig::default().budget_chars {
+            cfg.budget_chars = s.budget_chars as usize;
+        }
+    }
+    cfg
+}
+
 /// When the speech already put on air ends.
 #[derive(Debug, Clone, Default)]
 pub struct SpeechClock {

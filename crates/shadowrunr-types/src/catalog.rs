@@ -123,8 +123,8 @@ pub struct CharacterRuleInfo {
 /// `character.doc.get`: one package document by its package-relative path.
 ///
 /// `doc` is one of `constitution.md`, `bible.md`, `directions.md`, `character.toml`,
-/// `stalls.toml`, `situations.json` or `foils/<slug>.md` (slug `[a-z0-9_-]{1,40}`); any other
-/// value is refused before any IO.
+/// `stalls.toml`, `situations.json`, `foils/<slug>.md` or `private/<slug>.md` (slug
+/// `[a-z0-9_-]{1,40}`); any other value is refused before any IO.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CharacterDocGetParams {
     pub id: String,

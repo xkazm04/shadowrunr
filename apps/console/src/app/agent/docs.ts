@@ -4,8 +4,8 @@
 import { fail, RESULT_BUDGET, sizeOf } from "./tool";
 
 /** The documents character.doc.get/set accept (the daemon checks the same list). */
-export const DOC = /^(constitution\.md|bible\.md|directions\.md|character\.toml|stalls\.toml|situations\.json|foils\/[a-z0-9_-]{1,40}\.md)$/;
-export const DOCS = "constitution, bible, directions, character, stalls, situations (extension optional) or foils/<slug>";
+export const DOC = /^(constitution\.md|bible\.md|directions\.md|character\.toml|stalls\.toml|situations\.json|(foils|private)\/[a-z0-9_-]{1,40}\.md)$/;
+export const DOCS = "constitution, bible, directions, character, stalls, situations (extension optional), foils/<slug> or private/<slug>";
 
 /** The six named documents by their bare stem. */
 const STEMS: Readonly<Record<string, string>> = {
@@ -20,7 +20,7 @@ const STEMS: Readonly<Record<string, string>> = {
 /** A doc name as Athena may write it, as the daemon's package-relative path; undefined if not one. */
 export function docPath(raw: string): string | undefined {
   const s = raw.trim();
-  const doc = STEMS[s] ?? (/^foils\/[a-z0-9_-]{1,40}$/.test(s) ? `${s}.md` : s);
+  const doc = STEMS[s] ?? (/^(foils|private)\/[a-z0-9_-]{1,40}$/.test(s) ? `${s}.md` : s);
   return DOC.test(doc) ? doc : undefined;
 }
 

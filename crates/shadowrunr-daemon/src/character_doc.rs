@@ -25,7 +25,8 @@ use crate::rpc::RpcError;
 use crate::server::AppState;
 use crate::tone::{self, contained, io, write_validated, WRITE_LOCK};
 
-/// The package documents the operator's agent may read and replace, besides `foils/<slug>.md`.
+/// The package documents the operator's agent may read and replace, besides `foils/<slug>.md`
+/// and `private/<slug>.md` ([`SLUG_DIRS`]).
 pub const DOCS: [&str; 6] = [
     "constitution.md",
     "bible.md",
@@ -35,33 +36,40 @@ pub const DOCS: [&str; 6] = [
     "situations.json",
 ];
 
-/// The package dir holding the foils.
-const FOILS_DIR: &str = "foils";
-/// The longest foil slug.
+/// The package dirs whose `<slug>.md` documents the agent may read and replace: the foils, and
+/// the operator's private notes (`private/`: the literal examples no loader reads, kept for the
+/// operator and Athena).
+pub const SLUG_DIRS: [&str; 2] = ["foils", "private"];
+/// The longest slug.
 const MAX_SLUG: usize = 40;
 /// The backups dir under `[paths] data`.
 const BACKUPS_DIR: &str = "character-backups";
 
+/// The slug dir `doc` lives in (`foils`, `private`), when it is `<dir>/<slug>.md` with a plain
+/// slug. Pure: no IO.
+fn slug_dir(doc: &str) -> Option<&'static str> {
+    SLUG_DIRS.iter().copied().find(|d| {
+        doc.strip_prefix(d)
+            .and_then(|rest| rest.strip_prefix('/'))
+            .and_then(|rest| rest.strip_suffix(".md"))
+            .is_some_and(|slug| {
+                !slug.is_empty()
+                    && slug.len() <= MAX_SLUG
+                    && slug.bytes().all(|b| {
+                        b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-'
+                    })
+            })
+    })
+}
+
 /// `invalid_params` unless `doc` is on the closed list. Pure: no IO.
 fn check_doc(doc: &str) -> Result<(), RpcError> {
-    if DOCS.contains(&doc) {
+    if DOCS.contains(&doc) || slug_dir(doc).is_some() {
         return Ok(());
     }
-    if let Some(slug) = doc
-        .strip_prefix("foils/")
-        .and_then(|rest| rest.strip_suffix(".md"))
-    {
-        let plain = !slug.is_empty()
-            && slug.len() <= MAX_SLUG
-            && slug
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-');
-        if plain {
-            return Ok(());
-        }
-    }
     Err(RpcError::invalid(format!(
-        "doc {doc:?} must be one of {} or foils/<slug>.md (slug [a-z0-9_-]{{1,{MAX_SLUG}}})",
+        "doc {doc:?} must be one of {}, foils/<slug>.md or private/<slug>.md (slug \
+         [a-z0-9_-]{{1,{MAX_SLUG}}})",
         DOCS.join(", ")
     )))
 }
@@ -84,9 +92,9 @@ fn target(cfg: &Config, id: &str, doc: &str) -> Result<(PathBuf, PathBuf), RpcEr
     for part in doc.split('/') {
         path.push(part);
     }
-    if let Some(slug_dir) = doc.strip_prefix("foils/").map(|_| dir.join(FOILS_DIR)) {
-        if slug_dir.exists() {
-            contained(&cfg.paths.characters, &slug_dir)?;
+    if let Some(sub) = slug_dir(doc).map(|d| dir.join(d)) {
+        if sub.exists() {
+            contained(&cfg.paths.characters, &sub)?;
         }
     }
     if path.exists() {
@@ -294,6 +302,51 @@ mod tests {
         let rel = w.backup.unwrap();
         assert!(rel.starts_with("character-backups/malakor/"), "{rel}");
         assert!(rel.ends_with("-foils__the-inspector.md"), "{rel}");
+    }
+
+    #[test]
+    fn a_private_note_round_trips_through_the_digest_flow_like_a_foil() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (cfg, dir) = setup(tmp.path());
+        let doc = "private/tone-examples.md";
+        let cur = get(&cfg, &get_p(doc)).unwrap();
+        let raw = std::fs::read(dir.join("private").join("tone-examples.md")).unwrap();
+        assert_eq!(cur.digest, digest(&raw));
+        let text = format!("{}\n- One more line for the operator.\n", cur.text);
+        let w = set(&cfg, &set_p(doc, &text, &cur.digest)).unwrap();
+        assert_eq!(w.previous_digest, cur.digest);
+        assert!(
+            w.backup
+                .as_deref()
+                .is_some_and(|b| b.ends_with("-private__tone-examples.md")),
+            "{:?}",
+            w.backup
+        );
+        assert_eq!(get(&cfg, &get_p(doc)).unwrap().text, text);
+        // A stale digest is a conflict; a new note takes "".
+        let e = set(&cfg, &set_p(doc, "x\n", &cur.digest)).unwrap_err();
+        assert_eq!(e.code, ErrorCode::Conflict, "{e}");
+        let w = set(&cfg, &set_p("private/new-notes.md", "Notes.\n", "")).unwrap();
+        assert_eq!(w.backup, None);
+        // The note never reaches the package's validation: the loader never reads private/.
+        assert!(!crate::character::has_errors(&crate::character::validate(
+            &dir
+        )));
+        // The same slug rule as the foils.
+        for bad in [
+            "private/README.md",
+            "private/../bible.md",
+            "private/a/b.md",
+            "private/.md",
+            "private/a.txt",
+            "privates/a.md",
+        ] {
+            let e = get(&cfg, &get_p(bad)).unwrap_err();
+            assert_eq!(e.code, ErrorCode::InvalidParams, "get {bad:?}: {e}");
+        }
+        assert_eq!(slug_dir("private/a-1_b.md"), Some("private"));
+        assert_eq!(slug_dir("foils/a.md"), Some("foils"));
+        assert_eq!(slug_dir("bible.md"), None);
     }
 
     #[test]

@@ -427,7 +427,8 @@ async fn a_busy_seg02a_run_still_works_the_case() {
         assert!(t - last <= CASE_BEAT_MS + 5_000, "{last} -> {t}: {beats:?}");
         last = t;
     }
-    // Every case beat still answered one message, and its prompt named the move.
+    // A case beat folds in at most one message (segment-led beats: off-topic chat is answered
+    // once per 30 s at most), and its prompt named the move.
     for (t, _) in &beats {
         let picks = ev
             .iter()
@@ -436,7 +437,7 @@ async fn a_busy_seg02a_run_still_works_the_case() {
                 _ => None,
             })
             .unwrap();
-        assert_eq!(picks, 1, "case beat at {t}");
+        assert!(picks <= 1, "case beat at {t} took {picks} picks");
     }
     assert!(run.prompts.iter().any(|p| p.contains("\n# The case\n")));
     // No refusals of the moves it was handed.
