@@ -4218,6 +4218,41 @@
           "evidence": "crates/shadowrunr-daemon/src/prep/store.rs:1 Prep approvals sit beside light text material on one machine and nothing is culled at decision time, so the technique's 'when not to use' applies."
         }
       ]
+    },
+    "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0/self-describing-model-packages": {
+      "context": "contract-package",
+      "subject": "self-describing-model-packages",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:07:51.456Z",
+      "worker": "12305c6c-1bc2-4c4e-9a73-b1a982e53c4e",
+      "techniques": []
+    },
+    "fc878bef-2e53-416c-83f0-0b62db46a8b4/self-describing-model-packages": {
+      "context": "stage-kit-scene-engine",
+      "subject": "self-describing-model-packages",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:07:51.456Z",
+      "worker": "12305c6c-1bc2-4c4e-9a73-b1a982e53c4e",
+      "techniques": []
+    },
+    "df38dcc3-a71c-4397-abb5-4fe4681cfccb/self-describing-model-packages": {
+      "context": "tokens-package",
+      "subject": "self-describing-model-packages",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T03:07:51.456Z",
+      "techniques": [],
+      "withdrawn": {
+        "worker": "12305c6c-1bc2-4c4e-9a73-b1a982e53c4e",
+        "state": "not-applicable",
+        "at": "2026-10-24T03:08:13.279028+00:00",
+        "reason": "reviewer (sonnet): The anchor packages/tokens/package.json:12 is the \"generate\" script line, not a dependency declaration. It does not show the precondition is absent, so the anchor is incidental."
+      }
     }
   }
 }

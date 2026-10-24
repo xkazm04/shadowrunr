@@ -2642,7 +2642,11 @@
           "revision": 1,
           "changedAt": "2026-09-03",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "packages/contract/package.json:17 The package's only runtime dependency is a JSON-Schema validator for the daemon wire format; a search of packages/contract for onnx, safetensors, torchscript, checkpoint and tensor found nothing, so no trained-model package is authored, exported or validated here.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:d22f4172adbc5004",
+          "evaluatedRevision": 1
         },
         {
           "subject": "ipc-contract",
@@ -3982,7 +3986,11 @@
           "revision": 1,
           "changedAt": "2026-09-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "packages/stage-kit/package.json:18 Stage-kit depends only on the workspace contract and tokens packages plus React, and a search of packages/stage-kit for onnx, safetensors, torchscript, checkpoint and tensor found nothing; its 'scene model' is a UI state model, not a trained model package.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:d22f4172adbc5004",
+          "evaluatedRevision": 1
         },
         {
           "subject": "agent-memory",

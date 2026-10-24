@@ -1,0 +1,90 @@
+{
+  "schema": "conform-run/1",
+  "worker": "12305c6c-1bc2-4c4e-9a73-b1a982e53c4e",
+  "subject": "self-describing-model-packages",
+  "evaluatedAt": "2026-10-24T03:07:51.456476+00:00",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "pairs": [
+    {
+      "context": "contract-package",
+      "subject": "self-describing-model-packages",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evidence": "packages/contract/package.json:17 The package's only runtime dependency is a JSON-Schema validator for the daemon wire format; a search of packages/contract for onnx, safetensors, torchscript, checkpoint and tensor found nothing, so no trained-model package is authored, exported or validated here.",
+      "techniques": [],
+      "absenceTerms": [
+        "onnx",
+        "safetensors",
+        "torchscript",
+        "checkpoint",
+        "tensor"
+      ]
+    },
+    {
+      "context": "stage-kit-scene-engine",
+      "subject": "self-describing-model-packages",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evidence": "packages/stage-kit/package.json:18 Stage-kit depends only on the workspace contract and tokens packages plus React, and a search of packages/stage-kit for onnx, safetensors, torchscript, checkpoint and tensor found nothing; its 'scene model' is a UI state model, not a trained model package.",
+      "techniques": [],
+      "absenceTerms": [
+        "onnx",
+        "safetensors",
+        "torchscript",
+        "checkpoint",
+        "tensor"
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "self-describing-model-packages",
+      "context": "workspace-tooling-and-policy",
+      "reason": "the seat returned unknown"
+    },
+    {
+      "subject": "self-describing-model-packages",
+      "context": "tokens-package",
+      "reason": "withdrawn after review: reviewer (sonnet): The anchor packages/tokens/package.json:12 is the \"generate\" script line, not a dependency declaration. It does not show the precondition is absent, so the anchor is incidental."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-10-24T03:07:51.456476+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "self-describing-model-packages"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "contract-package",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T03:07:51.456476+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "self-describing-model-packages"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "stage-kit-scene-engine",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-10-24T03:07:51.456476+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "self-describing-model-packages"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "tokens-package",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    }
+  ]
+}
