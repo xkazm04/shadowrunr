@@ -2138,9 +2138,16 @@ One round is a ballot, the scene, then free talk; a run is up to three rounds.
 - **During a scene.** A sincerely sad viewer or a disclosure gets a care beat at the next line
   boundary, then the scene resumes; a raid, gift or sub gets one short host aside (at most one
   per 30 s), and the `beat_plan` reason reads "scene <id> paused for ...". Carried chat does not
-  expire while a scene plays: its carry window restarts at `scene_end`.
+  expire while a scene plays: its carry window restarts at `scene_end`. Mid-scene, a raid is 5
+  first contacts within 20 s; an aside always airs a line (an engine line, `scene_aside` /
+  `fallback`, when the model's cannot).
+- **Closes and the last word.** The host's engine-written closes after a guest line rotate from a
+  bank, never twice in a row, and are never taken by the repetition guard; the guest's line airs
+  only if the host line after it does. The brain's active foil follows the runtime's
+  `active foil:` line, so a foil the runtime summons (a SEG-01 vote) can speak at once.
 - **Cues.** The intro beat introduces the guest and the vote; the first talk beat after a scene
-  carries the scene's `notes`. Each fires once.
+  carries the scene's `notes`. Each fires once and leads its beat: chat answers come after it
+  (`cue_lead` / `chat_after`).
 - **Clock.** `switch_segment` is refused before the floor (20 min), and so is `sign_off` unless
   the host loop has signalled the stream's end (`SegmentRuntime::set_stream_ending`; the sandbox
   sets it in its goodbye window).

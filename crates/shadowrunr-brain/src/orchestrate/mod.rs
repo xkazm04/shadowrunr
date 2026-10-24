@@ -120,7 +120,7 @@ pub mod room;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use shadowrunr_types::prep::{BeatMode, BitKind, ConnectorKind, PrepBit, StreamPrep};
 use shadowrunr_types::{ChatMsg, Command, SegmentContext, StreamEvent, TsMs};
@@ -152,6 +152,9 @@ pub const THIN_REACT_STREAK: u32 = 3;
 pub const THIN_ROOM_MAX: usize = 1;
 /// First contacts in one beat that count as a raid (the room changed).
 pub const RAID_FIRST_CONTACTS: usize = 5;
+/// During a scene, first contacts arriving across beats this close together count toward a
+/// raid (assumption: a raid lands over two or three 5 s beats).
+pub const RAID_WINDOW_MS: i64 = 20_000;
 /// A message this close to an acknowledged wave is that wave again.
 const WAVE_SIMILARITY: f64 = 0.8;
 /// Two pastes this close are one wave; never pick several pasters.
@@ -274,6 +277,11 @@ pub struct Plan {
     pub host_only: bool,
     /// One short line: the beat speaks at half budget (a scene aside).
     pub short: bool,
+    /// A scene aside (`Some(raid)`: whether it is for a raid): it airs a line whatever the
+    /// repetition guard says, an engine line when the model's cannot air.
+    pub aside: Option<bool>,
+    /// A cue leads the beat: chat answers go after the cue's lines.
+    pub lead_cue: bool,
     pub reason: String,
 }
 
@@ -292,6 +300,8 @@ impl Plan {
             case: None,
             host_only: false,
             short: false,
+            aside: None,
+            lead_cue: false,
             reason,
         }
     }
@@ -398,6 +408,8 @@ pub struct Orchestrator {
     scene_raid: Option<usize>,
     /// When the last scene aside was planned.
     last_aside_ms: Option<TsMs>,
+    /// First contacts that arrived during the scene, by beat, inside [`RAID_WINDOW_MS`].
+    scene_arrivals: VecDeque<(TsMs, usize)>,
 }
 
 /// The situational ask an owned request makes: a single message (never a wave or a safety
@@ -1017,10 +1029,27 @@ impl Orchestrator {
         // A raid during a scene is owed an aside, even when it lands in a speech hold; once
         // the scene is over the room is greeted as usual.
         let in_scene = b.scene.is_some();
+        // A raid spread over a few beats counts too: its first contacts inside
+        // RAID_WINDOW_MS (sbx-20261024-203548-10m: 3, 3 and 1 a beat, never 5 in one).
         if !in_scene {
             self.scene_raid = None;
-        } else if raid {
-            self.scene_raid = Some(self.scene_raid.unwrap_or(0).max(self.first.len()));
+            self.scene_arrivals.clear();
+        } else {
+            if !self.first.is_empty() {
+                self.scene_arrivals.push_back((now, self.first.len()));
+            }
+            while self
+                .scene_arrivals
+                .front()
+                .is_some_and(|(t, _)| now.saturating_sub(*t) > RAID_WINDOW_MS)
+            {
+                self.scene_arrivals.pop_front();
+            }
+            let arrived: usize = self.scene_arrivals.iter().map(|(_, n)| n).sum();
+            if raid || arrived >= RAID_FIRST_CONTACTS {
+                self.scene_raid = Some(self.scene_raid.unwrap_or(0).max(arrived));
+                self.scene_arrivals.clear();
+            }
         }
 
         self.room.observe(&b.ctx.state, &b.ctx.state_summary);
@@ -1197,6 +1226,7 @@ impl Orchestrator {
             if chat == 0 {
                 p.note = Some(ANNOUNCE_NOTE.into());
             }
+            p.lead_cue = events.iter().any(|e| e.cue_state.is_some());
             if let Some((k, line)) = connector {
                 p.material = Some(format!(
                     "Connector ({}):\n- {}\n",
@@ -1508,6 +1538,7 @@ impl Orchestrator {
         p.note = Some(ANNOUNCE_NOTE.into());
         p.host_only = true;
         p.short = true;
+        p.aside = Some(raid.is_some());
         Some(p)
     }
 

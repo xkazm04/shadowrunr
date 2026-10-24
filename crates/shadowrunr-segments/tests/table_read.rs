@@ -457,6 +457,40 @@ fn seg01_hands_over_to_seg03_with_a_table_read_and_to_seg02a_without() {
     assert_eq!(segment_starts(&evs), [SegmentId::Seg02aHexmap]);
 }
 
+/// sbx-20261024-203548-10m: SEG-01's foil vote went to the Inspector. With a table read
+/// planned, SEG-01 still has no foil until one is summoned, its summons work as without one,
+/// and the guest takes the stage only when SEG-03 starts.
+#[test]
+fn the_guest_takes_the_stage_only_at_seg03s_start() {
+    let mut rt = seg01(Some(table_read()));
+    assert_eq!(rt.active_foil(), None);
+    assert!(!rt.context(10, 0).state_summary.contains("active foil:"));
+    let evs = rt.apply_ops(
+        1_000,
+        &[Op::SummonFoil {
+            foil: "the-disruptor".into(),
+        }],
+    );
+    assert!(
+        !evs.iter()
+            .any(|e| matches!(e, StreamEvent::Moderation { .. })),
+        "{evs:?}"
+    );
+    assert_eq!(rt.active_foil(), Some("the-disruptor"));
+    assert!(rt
+        .context(10, 0)
+        .state_summary
+        .contains("active foil: the-disruptor"));
+    rt.tick(60_000, 10);
+    rt.apply_ops(
+        61_000,
+        &[Op::SwitchSegment {
+            to: SegmentId::Seg03TableRead,
+        }],
+    );
+    assert_eq!(rt.active_foil(), Some(GUEST));
+}
+
 #[test]
 fn the_clock_switches_into_seg03_after_the_grace() {
     let mut rt = seg01(Some(table_read()));

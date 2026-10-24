@@ -45,6 +45,11 @@ pub const FREE_TALK_PREFIX: &str = "FREE TALK after \"";
 pub const INTRO_STATE: &str = "intro";
 /// The most chat a cue's beat answers beside it.
 pub const CUE_PICKS: usize = 1;
+/// How a cue's beat is ordered: the cue first, chat after it. The brain backs it up by
+/// moving chat answers after the cue's lines (`scene::cue_leads`), so the budget's cut takes
+/// the chat, never the cue (sbx-20261024-203548-10m 09:16: a forged order took the line).
+pub const CUE_LEADS: &str = "Lead with this: your first line does it, and any chat answer comes \
+                             only after it, in your last line.";
 
 /// What the state text said about votes and the handover, beat to beat.
 #[derive(Debug, Default, Clone)]
@@ -95,7 +100,7 @@ fn intro_cue(guest: &str, state: &str) -> RoomEvent {
             "CUE: the Table Read opens now. Bring tonight's guest on: introduce {} by name and \
              who they are (their sheet is under Active foil above), let them say one line, and \
              explain the vote: chat picks each scene with `!vote <title>`, you two perform it, \
-             then you talk about it honestly.",
+             then you talk about it honestly. {CUE_LEADS}",
             one_line(&name, 60)
         ),
         connector: None,
@@ -110,7 +115,7 @@ fn talk_cue(title: &str, line: &str, state: &str) -> RoomEvent {
         note: format!(
             "CUE: the scene \"{}\" just ended. Open the free talk from its talking points now: \
              take one, give your honest verdict on the scene (what landed, what died, and why) \
-             and put it to chat. {}",
+             and put it to chat. {CUE_LEADS} {}",
             one_line(title, 120),
             one_line(line, 700)
         ),

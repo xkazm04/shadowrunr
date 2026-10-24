@@ -65,14 +65,54 @@ pub const CLOSED: &str = "closed";
 /// Its action for a guest line dropped from a beat the host speaks alone (a care beat, a
 /// scene aside).
 pub const HOST_ONLY: &str = "host_only";
-/// The host's short closes for a guest turn his own answer did not reach (engine defaults,
-/// character-neutral; the beat rotates through them).
+/// The host's closes for a guest turn his own answer did not reach (engine defaults,
+/// character-neutral). The brain rotates through them so none comes twice in a row, and the
+/// repetition guard never takes one (sbx-20261024-203548-10m: a close suppressed as a repeat
+/// left the guest the last word five times); a close that still cannot air takes the guest's
+/// line with it.
 pub const GUEST_CLOSES: &[&str] = &[
     "Noted. Overruled.",
     "Thank you. That will do.",
     "Bold words. Wrong, but bold.",
     "Lovely. Moving on.",
+    "A fascinating opinion. Denied.",
+    "I will pretend I did not hear that.",
+    "Put that on a postcard and never send it.",
+    "Enough from the cheap seats.",
 ];
+/// The output record of a scene aside whose model line could not air: an engine line spoke.
+pub const ASIDE_RULE: &str = "scene_aside";
+/// The host's engine lines for a raid aside, when the model's line cannot air.
+pub const ASIDE_RAID_LINES: &[&str] = &[
+    "Hold the scene: a raid just landed. Welcome to the show, all of you, sit anywhere.",
+    "One moment, the doors burst open: a raid! Welcome, newcomers, the scene resumes for you.",
+    "A raid, mid-scene! Welcome in, all of you. Watch closely, there will be a test.",
+];
+/// The host's engine lines for a gift aside (`{name}`: the giver).
+pub const ASIDE_GIFT_LINES: &[&str] = &[
+    "Hold the scene: {name}, thank you for the gift. Noted, and treasured.",
+    "One moment of gratitude, {name}: that gift is seen, and it is magnificent.",
+    "The scene can wait a breath: {name}, thank you. Generosity, in my house.",
+];
+/// The engine's aside line for a raid (`raid`) and/or a gift from `gifter`, picked by `key`.
+pub fn aside_line(raid: bool, gifter: Option<&str>, key: &str) -> String {
+    let pick = |set: &[&str]| -> String {
+        let h = crate::util::fnv1a64(key.as_bytes());
+        set[(h % set.len() as u64) as usize].to_string()
+    };
+    let gift = gifter.map(|n| pick(ASIDE_GIFT_LINES).replace("{name}", n));
+    match (raid, gift) {
+        (true, Some(g)) => format!("{} {g}", pick(ASIDE_RAID_LINES)),
+        (true, None) => pick(ASIDE_RAID_LINES),
+        (false, Some(g)) => g,
+        (false, None) => "Hold the scene a moment: the room just changed, and I saw it.".into(),
+    }
+}
+
+/// The output record of a cue beat whose chat answers were moved after the cue's lines.
+pub const CUE_RULE: &str = "cue_lead";
+/// Its action.
+pub const CHAT_AFTER: &str = "chat_after";
 
 /// The scene the state summary puts up, by id.
 pub fn scene_up(summary: &str) -> Option<&str> {
@@ -352,6 +392,55 @@ pub fn guest_turns(
         lines.remove(k);
         ev.push(output_event(now_ms, GUEST_TURN_RULE, LAST_WORD));
     }
+}
+
+/// A cue leads its beat: the host's lines that answer a picked viewer (they name one of
+/// `names`) move after the beat's other spoken lines, so the budget's cut (last lines first)
+/// takes the chat answer, never the cue. A host line answering the guest (right after a
+/// `guest` line) stays put. Returns whether anything moved.
+pub fn cue_leads(lines: &mut Vec<Line>, names: &[String], guest: Option<&str>) -> bool {
+    let names: Vec<String> = names
+        .iter()
+        .map(|n| n.to_lowercase())
+        .filter(|n| n.chars().count() >= 3)
+        .collect();
+    let mut is_chat: Vec<bool> = Vec::with_capacity(lines.len());
+    let mut after_guest = false;
+    for l in lines.iter() {
+        let chat = match l {
+            Line::Say(Spoken { text, .. }) if !after_guest => {
+                let t = text.to_lowercase();
+                names.iter().any(|n| t.contains(n.as_str()))
+            }
+            _ => false,
+        };
+        if matches!(l, Line::Say(_) | Line::Foil { .. }) {
+            after_guest = matches!(l, Line::Foil { foil, .. } if Some(foil.as_str()) == guest);
+        }
+        is_chat.push(chat);
+    }
+    // Something else must be spoken to lead with, and a chat answer must come before it.
+    let first_other = lines
+        .iter()
+        .zip(&is_chat)
+        .position(|(l, c)| !c && matches!(l, Line::Say(_) | Line::Foil { .. }));
+    let first_chat = is_chat.iter().position(|c| *c);
+    let (Some(o), Some(c)) = (first_other, first_chat) else {
+        return false;
+    };
+    if c > o && is_chat[o..].iter().skip_while(|c| !**c).all(|c| *c) {
+        return false;
+    }
+    let mut chat: Vec<Line> = Vec::new();
+    for (l, c) in std::mem::take(lines).into_iter().zip(is_chat) {
+        if c {
+            chat.push(l);
+        } else {
+            lines.push(l);
+        }
+    }
+    lines.extend(chat);
+    true
 }
 
 /// The beat's speech budget (`budget` characters) with the guest's turn kept: the beat's
