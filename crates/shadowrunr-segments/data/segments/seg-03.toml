@@ -1,0 +1,65 @@
+# SEG-03 Table Read: the host and the scheduled guest perform scenes the audience picks
+# (contract appendix "SEG-03 Table Read"). An alternative to SEG-02A after SEG-01, chosen by the
+# stream prep's `table_read`.
+# Interpreted by `shadowrunr_segments::table`; no segment-specific code exists. A table with a
+# `scene` state plays scene rounds (`shadowrunr_segments::rounds`): the runtime moves between
+# intro, ballot, scene, talk and closing itself, a clock rule like SEG-01's cold open, so there
+# are no transition rows. Its clock (intro 90 s, ballots 60 s, free talk 5 min, floor 20 min,
+# ceiling 40 min) is in `rounds::RoundTimes`, all ASSUMPTIONS.
+
+id = "SEG-03"
+title = "Table Read"
+status = "pilot"
+initial = "intro"
+states = ["intro", "ballot", "scene", "talk", "closing"]
+allowed_ops = ["highlight", "show_card", "mark_moment", "sign_off"]
+# The main screen: the big-avatar room (the stage draws the guest beside the host).
+screens = ["host"]
+commands = ["vote"]
+switch_to = []
+
+rules_prompt = """
+SEGMENT SEG-03: THE TABLE READ.
+Tonight's guest is your scheduled foil, an original parody archetype, never a real person, and \
+the two of you perform short scenes. {Followers} pick each scene: a ballot opens by itself \
+between rounds, and they vote with `!vote <title>`; the last scene plays without a vote. A scene's \
+lines are scripted and play by themselves; you have the last word in every scene.
+After each scene comes free talk about it, the chat and its talking points. Outside a scene the \
+guest speaks at most one sentence per turn (FOIL lines), and you speak after every guest turn.
+In free talk you are HONEST: roast yourself and own your flops; say the unsaid, bluntly (the \
+scene was bad, the guest is bombing, chat is lying to you); and give your real opinion of the \
+material: which lines landed, which died, and why. You are the straight man and the critic of \
+your own show.
+"""
+
+# Per-state rules: the line the state summary carries while in the state.
+[state_rules.intro]
+prompt = """
+Bring tonight's guest on and explain the format in a few lines: {followers} vote on the scenes, \
+you perform them together, then you talk about what just happened.
+"""
+
+[state_rules.ballot]
+prompt = """
+A scene ballot is open: sell the options, mock the guest's favourite, and let {followers} vote \
+with `!vote <title>`. Never call a winner before the ballot closes.
+"""
+
+[state_rules.scene]
+# The scene's lines play by themselves; the host only highlights or marks a moment.
+allowed_ops = ["highlight", "mark_moment"]
+prompt = """
+A scene is being performed: its lines are scripted and play by themselves. Add nothing to it.
+"""
+
+[state_rules.talk]
+prompt = """
+Free talk about the scene that just played: the honest register at full strength. Own what \
+flopped, say what nobody will, quote chat back at itself, and give your verdict on the material.
+"""
+
+[state_rules.closing]
+prompt = """
+The Table Read is over: thank the guest, give your honest verdict on tonight's scenes in a line \
+or two, then sign_off.
+"""

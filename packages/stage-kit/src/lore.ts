@@ -52,6 +52,7 @@ export const SEGMENT_TITLE: Record<SegmentId, string> = {
   "SEG-02A": "The Investigation",
   "SEG-02B-I": "Cartography Legion (descoped)",
   "SEG-02B-II": "Dependency Doctrine (descoped)",
+  "SEG-03": "The Table Read",
 };
 
 export interface FoilInfo {
@@ -92,6 +93,14 @@ export const FOILS: Record<string, FoilInfo> = {
     name: "The Inspector",
     tagline: "Solves every case instantly, and wrongly.",
     color: "#b8c4a0",
+  },
+  // The Table Read's pilot guest (SEG-03): an owner-approved satirical parody, renamed, always the
+  // loser of the joke (characters/malakor/foils/the-painter.md).
+  "the-painter": {
+    id: "the-painter",
+    name: "Adalwulf Hinkel",
+    tagline: "Failed watercolourist, tyrant of nothing. His army is one pigeon.",
+    color: "#d98fd0",
   },
 };
 

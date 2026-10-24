@@ -195,6 +195,24 @@ class Build(unittest.TestCase):
         picked = next(b for b in blends if b.name == "malakor-a")
         self.assertEqual((picked.sid, picked.recipe()), (52, {"am_onyx": 0.6, "bm_lewis": 0.4}))
 
+    def test_the_painter_s_recipe_is_its_own_voice_in_sid_52(self) -> None:
+        import tomllib
+
+        recipes = Path(__file__).resolve().parent.parent / "recipes"
+        painter = assign_slots(
+            load_recipes(tomllib.loads((recipes / "the-painter.toml").read_text(encoding="utf-8")))
+        )
+        self.assertEqual([b.name for b in painter], ["the-painter-a", "the-painter-b"])
+        # characters/malakor/voice/foils/the-painter.toml speaks the-painter-a from sid 52.
+        picked = painter[0]
+        self.assertEqual(picked.sid, 52)
+        self.assertAlmostEqual(sum(w for _, w in picked.weights), 1.0)
+        # Clearly apart from Malakor: none of malakor-a's inputs.
+        malakor = load_recipes(tomllib.loads((recipes / "malakor.toml").read_text(encoding="utf-8")))
+        host = set(next(b for b in malakor if b.name == "malakor-a").recipe())
+        for b in painter:
+            self.assertFalse(host & set(b.recipe()), b.name)
+
     def test_without_out_the_file_goes_to_the_voices_folder_by_the_recipe_s_name(self) -> None:
         folder = self.dir / "home-voices"
         self.assertEqual(default_out(self.recipe, folder), folder / "malakor-voices.bin")

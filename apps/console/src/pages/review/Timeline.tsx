@@ -133,7 +133,7 @@ export function Timeline(props: TabProps) {
         </span>
         <PillGroup options={SIZE_OPTIONS} value={String(size)} onChange={(s) => resize(Number(s))} label="One row is" />
         <span className={styles.key}>
-          <span className={styles.label}>Band</span> <i className={`${styles.sw} ${styles.segImprov}`} /> Improv room <i className={`${styles.sw} ${styles.segInvestigation}`} /> Investigation ·{" "}
+          <span className={styles.label}>Band</span> <i className={`${styles.sw} ${styles.segImprov}`} /> Improv room <i className={`${styles.sw} ${styles.segInvestigation}`} /> Investigation <i className={`${styles.sw} ${styles.segTableRead}`} /> Table read ·{" "}
           <i className={`${styles.dot} ${styles.voted} ${styles.keyDot}`} /> you gave feedback
         </span>
       </div>

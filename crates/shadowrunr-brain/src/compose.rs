@@ -464,11 +464,24 @@ pub struct TurnInputs<'a> {
     /// The beat's question waves ([`crate::orchestrate::Orchestrator::question_waves`]): a
     /// picked representative is shown as the crowd's one question.
     pub question_waves: &'a std::collections::HashMap<String, Vec<(String, String)>>,
+    /// The active foil is a guest on stage with him (SEG-03 outside a scene): the answer
+    /// format spells out the turn order ([`GUEST_TURN_ORDER`]).
+    pub guest_turns: bool,
 }
 
 /// How a picked question wave opens its chat line (`{n}` viewers asking the same thing).
 pub const QUESTION_WAVE_NOTE: &str = "<{n} {followers} ask the same thing; answer it once, to all \
 of them, without naming them one by one> ";
+
+/// The turn order for a guest on stage (`{guest}` is its foil id): its one-sentence line comes
+/// right after his first line and is answered by his next, so the budget's cut (last lines
+/// first) never takes the exchange (sbx-20261024-194036-10m: written after his chat answers,
+/// the guest's three lines were all cut).
+pub const GUEST_TURN_ORDER: &str = "Tonight's guest, {guest}, is on stage with you: in most \
+beats give it one turn, one sentence on its FOIL line. Turn order: your first line, then the \
+guest's line, then your answer to it, and only then anything else. The guest never speaks \
+twice in a row and never has the last word, and its line and your answer share the budget \
+above, so keep both short.\n";
 
 /// The rule a self-harm disclosure invokes. A package that lists it under `rails` keeps it on
 /// whatever the operator override says.
@@ -1100,6 +1113,9 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
     }
     if let Some(f) = t.active_foil {
         fmt.push_str(&format!("Lines for the active foil: FOIL {f}: <text>\n"));
+        if t.guest_turns {
+            fmt.push_str(&GUEST_TURN_ORDER.replace("{guest}", f));
+        }
     }
     fmt.push_str(&t.pkg.persona.fill(
         "Memory candidates (not spoken): NOTE: <what is worth remembering, with the {follower} \
@@ -1213,6 +1229,7 @@ mod tests {
             repeat_ai: &HashSet::new(),
             ai_answered: false,
             question_waves: &Default::default(),
+            guest_turns: false,
         });
         assert!(
             turn.contains("at most about 2 sentences and 260 characters in all this beat"),
@@ -1365,6 +1382,7 @@ mod tests {
             repeat_ai: &HashSet::new(),
             ai_answered: false,
             question_waves: &Default::default(),
+            guest_turns: false,
         });
         assert!(
             chat_line(&turn, "lord").ends_with(&malakor_persona().fill(PATRON_NOTE)),
@@ -1539,6 +1557,7 @@ Do name the target.
             repeat_ai: &HashSet::new(),
             ai_answered: false,
             question_waves: &Default::default(),
+            guest_turns: false,
         })
     }
 
@@ -1661,6 +1680,7 @@ Do name the target.
             repeat_ai: &HashSet::new(),
             ai_answered: false,
             question_waves: &Default::default(),
+            guest_turns: false,
         });
         let chat = &turn[turn.find("# Chat\n").unwrap()..];
         assert!(

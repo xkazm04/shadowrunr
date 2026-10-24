@@ -68,6 +68,26 @@
 //! A vote that closed and a handover that fell due are room events ([`room`]): the next beat
 //! that is not a safety beat announces them, once, and expires the queued bit.
 //!
+//! **A scene** (SEG-03, [`crate::scene`]): while the brain performs a scene, every beat that is
+//! not a speech hold or a safety beat is a `scene` beat (no picks; chat is carried as in a
+//! hold). A scene the runtime just put up starts only once the room event that chose it (the
+//! ballot's result, its tie) has been announced. The scene gives way at a line boundary (the
+//! next beat that is not a speech hold), then resumes where it stopped:
+//! - to a **care beat**: a safety pick (as anywhere), or a sincerely sad viewer's owned request
+//!   ([`Ask::Sad`]), answered alone (host only). It resumes rather than ends: the care rules
+//!   ([`crate::care`]) forbid joking about the viewer and what they shared, not comedy, and the
+//!   scene's lines never touch chat (its live slots were written at its start, with no chat);
+//! - to **one short aside** for a room event: a raid seen during the scene (sticky across the
+//!   speech holds, where it usually lands) or a gift or sub, with those picks only, host only,
+//!   at half budget, at most one per [`SCENE_ASIDE_SPACING_MS`] so a busy room cannot stall it
+//!   (sbx-20261024-194036-10m: five gifted subs and a raid during "The Gallery" got nothing,
+//!   and their messages expired).
+//!
+//! What a scene beat (or a hold during one) carries is held like the cold open's: it never
+//! expires while the scene plays, the cap keeps first contacts and gifts first, and its
+//! [`CARRY_MS`] starts from the drain of the first beat after the scene, so free talk can
+//! answer it.
+//!
 //! **Consume on delivery.** [`Orchestrator::plan`] and [`Orchestrator::commit`] decide a beat
 //! and stage what it consumes (picks answered, waves acknowledged, a bit or cold-open lines
 //! drawn, a connector used, room events taken, the through-line's pick-up). The brain opens a
@@ -129,7 +149,7 @@ pub mod room;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use shadowrunr_types::prep::{BeatMode, BitKind, ConnectorKind, PrepBit, StreamPrep};
 use shadowrunr_types::{ChatMsg, Command, SegmentContext, StreamEvent, TsMs};
@@ -186,6 +206,9 @@ pub const PURPOSE_NOTE: &str = "Advance the segment this beat, toward the state'
 {purpose}";
 /// First contacts in one beat that count as a raid (the room changed).
 pub const RAID_FIRST_CONTACTS: usize = 5;
+/// During a scene, first contacts arriving across beats this close together count toward a
+/// raid (assumption: a raid lands over two or three 5 s beats).
+pub const RAID_WINDOW_MS: i64 = 20_000;
 /// A message this close to an acknowledged wave is that wave again.
 const WAVE_SIMILARITY: f64 = 0.8;
 /// Two pastes this close are one wave; never pick several pasters.
@@ -234,6 +257,9 @@ pub const ASIDE_NOTE: &str = "(The room is still gathering. One short in-charact
 boast, a grievance or an observation about your lair. No welcome, no premise, no poll, no call \
 to action, no count.)";
 
+/// At most one scene aside per this long (assumption: a 90-180 s scene gets two at most).
+pub const SCENE_ASIDE_SPACING_MS: i64 = 30_000;
+
 /// The beat note when a room event is announced and no chat is picked.
 pub const ANNOUNCE_NOTE: &str = "(No chat to answer this beat: make the announcement above.)";
 
@@ -261,6 +287,9 @@ pub struct BeatInputs<'a> {
     /// The live segment's topic words ([`crate::topic::topic_words`]): chat sharing one is
     /// on-topic.
     pub topic_words: &'a [String],
+    /// A scene to perform ([`crate::scene`]): its id, and whether it is still to start (it
+    /// waits for a room event, such as the ballot's tie, to be announced first).
+    pub scene: Option<(&'a str, bool)>,
 }
 
 /// Which candidates the picker may see this beat.
@@ -272,6 +301,10 @@ enum Offer {
     FirstContact,
     /// Everything but filler (votes, lone emotes).
     Chat,
+    /// A care beat in a scene: safety picks and sincerely sad viewers' owned requests.
+    Care,
+    /// A scene aside: safety picks, gifts, and (in a raid) first contacts.
+    Aside { raid: bool },
 }
 
 /// The orchestrator's decision for one beat.
@@ -297,6 +330,15 @@ pub struct Plan {
     pub case: Option<String>,
     /// The segment directive for this beat (the state's purpose, a tie-back), chat or no chat.
     pub segment_note: Option<String>,
+    /// The host alone speaks this beat (a care beat or an aside in a scene): no guest line.
+    pub host_only: bool,
+    /// One short line: the beat speaks at half budget (a scene aside).
+    pub short: bool,
+    /// A scene aside (`Some(raid)`: whether it is for a raid): it airs a line whatever the
+    /// repetition guard says, an engine line when the model's cannot air.
+    pub aside: Option<bool>,
+    /// A cue leads the beat: chat answers go after the cue's lines.
+    pub lead_cue: bool,
     pub reason: String,
     /// The one class of chat this beat may pick from (required, on-topic, or the direct
     /// off-topic messages), by id; `None` offers what [`Offer`] lets through.
@@ -321,6 +363,10 @@ impl Plan {
             agenda: None,
             case: None,
             segment_note: None,
+            host_only: false,
+            short: false,
+            aside: None,
+            lead_cue: false,
             reason,
             only: None,
             off_topic: false,
@@ -509,6 +555,12 @@ pub struct Orchestrator {
     tuning: Tuning,
     /// The character's recast lines and forged-decree rebuttals.
     lines: LineBank,
+    /// A raid seen while a scene plays (its first contacts), owed one aside.
+    scene_raid: Option<usize>,
+    /// When the last scene aside was planned.
+    last_aside_ms: Option<TsMs>,
+    /// First contacts that arrived during the scene, by beat, inside [`RAID_WINDOW_MS`].
+    scene_arrivals: VecDeque<(TsMs, usize)>,
 }
 
 /// The situational ask an owned request makes: a single message (never a wave or a safety
@@ -976,10 +1028,16 @@ impl Orchestrator {
                 continue;
             }
             // An owned request is carried until answered, up to REQUEST_MAX_MS.
-            let expired = match k.owned {
-                Some(_) => now_ms.saturating_sub(k.since) >= self.tuning.request_max_ms,
-                None => !k.held && now_ms >= k.expires,
-            };
+            // Nothing held (the cold open, a scene) expires; after it, an owned request gets
+            // at least its fresh carry window.
+            let expired = !k.held
+                && match k.owned {
+                    Some(_) => {
+                        now_ms.saturating_sub(k.since) >= self.tuning.request_max_ms
+                            && now_ms >= k.expires
+                    }
+                    None => now_ms >= k.expires,
+                };
             if expired {
                 ev.push(moderation::input_event(now_ms, CARRY_RULE, &id, "expired"));
                 continue;
@@ -1046,6 +1104,16 @@ impl Orchestrator {
                                     || self.owns(c).is_some()
                             }
                             Offer::Chat => !is_filler(c),
+                            Offer::Care => {
+                                !self.answered.contains(&c.msg.id) && self.owns(c) == Some(Ask::Sad)
+                            }
+                            Offer::Aside { raid } => {
+                                !self.answered.contains(&c.msg.id)
+                                    && (moderation::is_gift_or_sub(&c.msg.text)
+                                        || (raid
+                                            && self.is_first_contact(&c.msg.id)
+                                            && !is_vote(c)))
+                            }
                         }
                         && plan.only.as_ref().is_none_or(|ids| ids.contains(&c.msg.id))
             })
@@ -1250,6 +1318,7 @@ impl Orchestrator {
         }
         let safety = b.cands.iter().any(|c| c.safety.is_some());
         if p.mode == BeatMode::Hold
+            || p.mode == BeatMode::Scene
             || safety
             || b.closing
             || b.ctx.state == COLD_OPEN_STATE
@@ -1316,12 +1385,38 @@ impl Orchestrator {
                 lead = format!("room changed ({why}): {gone} expired; ");
             }
         }
+        // A raid during a scene is owed an aside, even when it lands in a speech hold; once
+        // the scene is over the room is greeted as usual.
+        let in_scene = b.scene.is_some();
+        // A raid spread over a few beats counts too: its first contacts inside
+        // RAID_WINDOW_MS (sbx-20261024-203548-10m: 3, 3 and 1 a beat, never 5 in one).
+        if !in_scene {
+            self.scene_raid = None;
+            self.scene_arrivals.clear();
+        } else {
+            if !self.first.is_empty() {
+                self.scene_arrivals.push_back((now, self.first.len()));
+            }
+            while self
+                .scene_arrivals
+                .front()
+                .is_some_and(|(t, _)| now.saturating_sub(*t) > RAID_WINDOW_MS)
+            {
+                self.scene_arrivals.pop_front();
+            }
+            let arrived: usize = self.scene_arrivals.iter().map(|(_, n)| n).sum();
+            if raid || arrived >= RAID_FIRST_CONTACTS {
+                self.scene_raid = Some(self.scene_raid.unwrap_or(0).max(arrived));
+                self.scene_arrivals.clear();
+            }
+        }
 
         self.room.observe(&b.ctx.state, &b.ctx.state_summary);
         let free_at = b.speech_until_ms.map_or(now, |u| u.max(now));
-        // In the cold open what is carried is held; once the room opens, its clock starts from
-        // this beat's drain.
+        // In the cold open and in a scene what is carried is held; after either, its clock
+        // starts from this beat's drain.
         let cold = b.ctx.state == COLD_OPEN_STATE;
+        let held = cold || in_scene;
         self.carry_next = b
             .cands
             .iter()
@@ -1331,7 +1426,7 @@ impl Orchestrator {
                 // A question or bait waits REQUEST_MAX_MS from the drain, the rest CARRY_MS.
                 let from_drain = free_at.saturating_add(self.carry_window(c));
                 let (since, expires) = match self.carried_in.get(&c.msg.id) {
-                    Some(k) if k.held && !cold => (k.since, from_drain),
+                    Some(k) if k.held && !held => (k.since, from_drain),
                     Some(k) => (k.since, k.expires),
                     None => (now, from_drain),
                 };
@@ -1340,7 +1435,7 @@ impl Orchestrator {
                     since,
                     first,
                     expires,
-                    held: cold,
+                    held,
                     owned: self.owns(c),
                     long: waits_long(c),
                 })
@@ -1523,8 +1618,30 @@ impl Orchestrator {
             );
         }
 
-        // A closed vote or a handover due: announced now, once, over the queued bit.
-        let events = self.room.take();
+        // A scene being performed takes the beat (chat is carried); one still to start waits
+        // for the room event that put it up (a ballot's result, its tie) to be announced.
+        if let Some((id, starting)) = b.scene {
+            if !(starting && self.room.has_pending()) {
+                if let Some(p) = self.scene_break(b, id, &lead) {
+                    return p;
+                }
+                let what = if starting { "starts" } else { "goes on" };
+                return Plan::new(
+                    BeatMode::Scene,
+                    Offer::SafetyOnly,
+                    0,
+                    format!("{lead}scene {id} {what}"),
+                );
+            }
+        }
+
+        // A closed vote or a handover due: announced now, once, over the queued bit. A cue
+        // waits while a sincerely sad viewer is owed an answer: no showmanship beside it.
+        let sad = b
+            .cands
+            .iter()
+            .any(|c| !self.answered.contains(&c.msg.id) && self.owns(c) == Some(Ask::Sad));
+        let events = self.room.take(!sad);
         if !events.is_empty() {
             let labels: Vec<&str> = events.iter().map(|e| e.label.as_str()).collect();
             let labels = labels.join(" and ");
@@ -1540,10 +1657,16 @@ impl Orchestrator {
             } else {
                 (BeatMode::Bridge, String::new())
             };
+            // A cue keeps room for itself: at most CUE_PICKS beside it.
+            let ceiling = if events.iter().any(|e| e.cue_state.is_some()) {
+                chat.min(room::CUE_PICKS)
+            } else {
+                chat
+            };
             let mut p = Plan::new(
                 mode,
                 Offer::Chat,
-                chat,
+                ceiling,
                 format!("{lead}announce {labels}{with}"),
             )
             .with_chat(&offer);
@@ -1557,6 +1680,7 @@ impl Orchestrator {
             if chat == 0 {
                 p.note = Some(ANNOUNCE_NOTE.into());
             }
+            p.lead_cue = events.iter().any(|e| e.cue_state.is_some());
             if let Some((k, line)) = connector {
                 p.material = Some(format!(
                     "Connector ({}):\n- {}\n",
@@ -1899,6 +2023,73 @@ impl Orchestrator {
         p
     }
 
+    /// What interrupts the scene this beat, at a line boundary: a care beat for a sincerely sad
+    /// viewer, else one short aside for a raid or a gift, spaced [`SCENE_ASIDE_SPACING_MS`].
+    /// `None`: the scene goes on.
+    fn scene_break(&mut self, b: &BeatInputs<'_>, id: &str, lead: &str) -> Option<Plan> {
+        let now = b.now_ms;
+        let open = |c: &&Candidate| c.safety.is_none() && !self.answered.contains(&c.msg.id);
+        if b.cands
+            .iter()
+            .filter(open)
+            .any(|c| self.owns(c) == Some(Ask::Sad))
+        {
+            let mut p = Plan::new(
+                BeatMode::React,
+                Offer::Care,
+                1,
+                format!(
+                    "{lead}scene {id} paused for a care beat (sincere sadness); it resumes after"
+                ),
+            );
+            p.host_only = true;
+            return Some(p);
+        }
+        let gifts = b
+            .cands
+            .iter()
+            .filter(open)
+            .filter(|c| moderation::is_gift_or_sub(&c.msg.text))
+            .count();
+        let raid = self.scene_raid;
+        let spaced = self
+            .last_aside_ms
+            .is_none_or(|t| now.saturating_sub(t) >= SCENE_ASIDE_SPACING_MS);
+        if (gifts == 0 && raid.is_none()) || !spaced {
+            return None;
+        }
+        self.scene_raid = None;
+        self.last_aside_ms = Some(now);
+        let mut what: Vec<String> = Vec::new();
+        if let Some(n) = raid {
+            what.push(format!("a raid: {n} new viewers arrived at once"));
+        }
+        if gifts > 0 {
+            what.push("a gift or a sub (in chat below)".into());
+        }
+        let what = what.join(", and ");
+        let ceiling = usize::from(raid.is_some()) + usize::from(gifts > 0);
+        let mut p = Plan::new(
+            BeatMode::React,
+            Offer::Aside {
+                raid: raid.is_some(),
+            },
+            ceiling,
+            format!("{lead}scene {id} paused for one aside ({what}); it resumes next beat"),
+        );
+        p.room_note = Some(format!(
+            "SCENE PAUSED FOR ONE ASIDE: mid-scene, {what}. Break off for one short line in your \
+             own voice that acknowledges it (thank whoever gave by name; welcome the raiders), \
+             then stop: the scene resumes by itself next beat. No guest line, and nothing more \
+             of the scene."
+        ));
+        p.note = Some(ANNOUNCE_NOTE.into());
+        p.host_only = true;
+        p.short = true;
+        p.aside = Some(raid.is_some());
+        Some(p)
+    }
+
     fn plan_cold_open(
         &mut self,
         b: &BeatInputs<'_>,
@@ -2168,10 +2359,13 @@ impl Orchestrator {
             .into_iter()
             .filter(|k| !chosen.contains(k.cand.msg.id.as_str()) && (k.held || now_ms < k.expires))
             .collect();
-        // One carried message a viewer besides an owned request and a first contact: their
+        // One carried message a viewer besides an owned request, a first contact and a gift: their
         // oldest question or bait, else their newest. A repeater cannot fill the carry.
+        let deduped = |k: &Carried| {
+            k.owned.is_none() && !k.first && !moderation::is_gift_or_sub(&k.cand.msg.text)
+        };
         let mut keep_of: HashMap<String, (bool, TsMs, String)> = HashMap::new();
-        for k in carry.iter().filter(|k| k.owned.is_none() && !k.first) {
+        for k in carry.iter().filter(|k| deduped(k)) {
             let score = (k.long, if k.long { -k.since } else { k.since });
             let e = keep_of.entry(k.cand.msg.viewer.id.clone()).or_insert((
                 k.long,
@@ -2184,19 +2378,21 @@ impl Orchestrator {
         }
         self.superseded = carry
             .iter()
-            .filter(|k| k.owned.is_none() && !k.first)
+            .filter(|k| deduped(k))
             .filter(|k| keep_of[&k.cand.msg.viewer.id].2 != k.cand.msg.id)
             .map(|k| k.cand.msg.id.clone())
             .collect();
         carry.retain(|k| !self.superseded.contains(&k.cand.msg.id));
-        // Owned requests go first and are never capped; then questions and bait, the oldest
-        // first; then the rest, the newest first.
+        // Owned requests go first and are never capped. While held (the cold open, a scene),
+        // first contacts and gifts come next, the oldest first, then the newest of the rest;
+        // otherwise questions and bait, the oldest first, then the rest, the newest first.
         if carry.iter().any(|k| k.held) {
             carry.sort_by_key(|k| {
+                let owed = k.first || moderation::is_gift_or_sub(&k.cand.msg.text);
                 (
                     k.owned.is_none(),
-                    !k.first,
-                    if k.first { k.since } else { -k.since },
+                    !owed,
+                    if owed { k.since } else { -k.since },
                 )
             });
         } else {

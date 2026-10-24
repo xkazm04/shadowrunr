@@ -10,7 +10,8 @@
 //!    disclosure puts its viewer in care ([`care`]);
 //! 4. orchestrate and pick: [`orchestrate`] drops repeats of answered waves, decides the beat's
 //!    mode (cold open, react, bit, bridge, mixed, hold; in an investigation, a beat that carries
-//!    the case's next move, [`orchestrate::case`]) and writes its `beat_plan`; the picker
+//!    the case's next move, [`orchestrate::case`]; in a Table Read, the next lines of the scene
+//!    up, performed without a core call, [`scene`]) and writes its `beat_plan`; the picker
 //!    then passes at most the plan's ceiling (safety-critical first, then one owed request;
 //!    deterministic, or `Role::ChatPicker` above a volume threshold). A hold ends the beat there,
 //!    and so does speech still queued on the speech clock past the lead ([`pace`]: a `speaking`
@@ -42,6 +43,7 @@ pub mod pace;
 pub mod picker;
 pub mod pool;
 pub mod rules;
+pub mod scene;
 pub mod stall;
 pub mod topic;
 pub mod util;
@@ -55,6 +57,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use shadowrunr_types::character::Tuning;
+use shadowrunr_types::scene::{Scene, SceneSpeaker};
 use shadowrunr_types::{
     Case, ChatMsg, Engine, EngineError, EngineKind, EngineReply, EngineRequest, EpisodeKind,
     FactScope, FleetHealth, ModelTier, Op, Role, SegmentContext, Speaker, StreamEvent, TsMs,
@@ -295,6 +298,17 @@ pub struct Brain {
     cover: Option<tokio::sync::mpsc::UnboundedSender<StreamEvent>>,
     /// The approved stream prep the orchestrator voices ([`Brain::set_prep`]).
     prep: Option<shadowrunr_types::prep::StreamPrep>,
+    /// SEG-03: the stream's guest and scenes ([`Brain::set_table_read`]).
+    table_read: Option<(String, Vec<Scene>)>,
+    /// The scene being performed ([`scene`]).
+    playing: Option<scene::Playing>,
+    /// Scenes performed to their end this stream: never performed again.
+    scenes_done: HashSet<String>,
+    /// The host's closes for a guest turn, rotated so none comes twice in a row.
+    guest_closes: orchestrate::requests::Rotation,
+    /// A scene beat's speech budget: the operator's, before the tone's reply shape (a script
+    /// plays at one pace whatever the tone).
+    scene_budget: usize,
     /// Decides each beat's mode ([`orchestrate`]).
     orch: Orchestrator,
     /// When this beat started, on the tokio clock (for [`Brain::on_air_ms`]).
@@ -329,6 +343,7 @@ impl Brain {
     ) -> Result<Self, BrainError> {
         // A moderator package never hosts a show.
         character::require_host(&cfg.character.manifest)?;
+        let scene_budget = tuning.pace.budget_chars;
         tuning.pace = pace::with_tone_shape(tuning.pace, cfg.character.tone_shape);
         let store = MemoryStore::open(&cfg.memory_dir)?;
         let pkg = &cfg.character;
@@ -366,6 +381,11 @@ impl Brain {
             session_retry_tick: 0,
             cover: None,
             prep: None,
+            table_read: None,
+            playing: None,
+            scenes_done: HashSet::new(),
+            guest_closes: Default::default(),
+            scene_budget,
             orch: Orchestrator::new(salt)
                 .with_character(tuning.tuning, cfg.character.lines.clone()),
             beat_clock: tokio::time::Instant::now(),
@@ -475,6 +495,19 @@ impl Brain {
     /// The stream's prep, if one was set.
     pub fn prep(&self) -> Option<&shadowrunr_types::prep::StreamPrep> {
         self.prep.as_ref()
+    }
+
+    /// SEG-03: the stream's scheduled guest (a foil id) and its playable scenes, as the
+    /// segment runtime got them (`shadowrunr_segments::table_read_for`). The brain performs
+    /// the scene the state summary puts up ([`scene`]) and, while the summary names the guest
+    /// as the active foil, keeps it as the active foil (`FOIL <guest>:` lines).
+    pub fn set_table_read(&mut self, guest: String, scenes: Vec<Scene>) {
+        self.table_read = Some((guest, scenes));
+    }
+
+    /// The scene being performed, by id.
+    pub fn scene_playing(&self) -> Option<&str> {
+        self.playing.as_ref().map(|p| p.scene.id.as_str())
     }
 
     /// A live host's cover channel: while a core call is still running once the host has been
@@ -805,6 +838,191 @@ impl Brain {
         ev.push(moderation::output_event(now_ms, STALL_RULE, "spoke"));
     }
 
+    /// A foil's line goes on air: its repetition window, the turn record, its reading time on
+    /// the speech clock and its `say`.
+    fn air_foil(
+        &mut self,
+        now_ms: TsMs,
+        foil: String,
+        out: String,
+        turn: &mut Vec<String>,
+        ev: &mut Vec<StreamEvent>,
+    ) {
+        self.foil_spoken.push_back(out.clone());
+        while self.foil_spoken.len() > REPEAT_WINDOW {
+            self.foil_spoken.pop_front();
+        }
+        turn.push(format!("{foil}: {out}"));
+        // The stage shows a foil's line: it takes reading time.
+        self.aired(self.on_air_ms(now_ms), &out);
+        ev.push(StreamEvent::Say {
+            ts_ms: now_ms,
+            speaker: Speaker::Foil,
+            foil: Some(foil),
+            text: out,
+            replying_to: Vec::new(),
+            first_text_ms: None,
+            delivery: None,
+        });
+    }
+
+    /// One of the Table Read's scenes, by id.
+    fn find_scene(&self, id: &str) -> Option<&Scene> {
+        self.table_read
+            .as_ref()
+            .and_then(|(_, scenes)| scenes.iter().find(|s| s.id == id))
+    }
+
+    /// One scene beat ([`scene`]): `scene_start` on its first beat (and the live slots'
+    /// prefetch), then its next lines up to the beat's speech budget, each through the output
+    /// gate, then `scene_end` after its last. No core call of its own; the lines stay out of
+    /// the turn record and the repetition guard. Returns what it played, for the `beat_plan`.
+    async fn scene_beat(&mut self, now_ms: TsMs, id: &str, ev: &mut Vec<StreamEvent>) -> String {
+        let guest = self
+            .table_read
+            .as_ref()
+            .map(|(g, _)| g.clone())
+            .unwrap_or_default();
+        let mut p = match self.playing.take() {
+            Some(p) => p,
+            None => {
+                let Some(scene) = self.find_scene(id).cloned() else {
+                    return "no such scene".into();
+                };
+                ev.push(scene::scene_start(now_ms, &scene, &guest));
+                let budget = self.scene_budget;
+                let mut template = self.core_template();
+                template.correlation_id =
+                    Some(format!("{}:scene:{}", self.cfg.stream_id, scene.id));
+                let fetch = scene::spawn_prefetch(
+                    self.engine.clone(),
+                    template,
+                    scene.clone(),
+                    self.cfg.character.persona.name.clone(),
+                    guest.clone(),
+                    self.cfg.character.persona.reply_prefixes.clone(),
+                    budget,
+                );
+                let p = scene::Playing::new(scene);
+                match fetch {
+                    Some((rx, task)) => p.with_prefetch(rx, task),
+                    None => p,
+                }
+            }
+        };
+        // In simulated time a live slot's turn waits for its call (reproducible runs); on a
+        // live host one not back yet speaks its fallback.
+        let wait = self.cover.is_none();
+        let budget = self.scene_budget;
+        let from = p.next;
+        let mut used = 0usize;
+        let mut spoken = 0usize;
+        while p.next < p.scene.lines.len() {
+            let i = p.next;
+            let line = p.scene.lines[i].clone();
+            let (text, mut fell_back) = match (&line.text, &line.live) {
+                (Some(t), _) => (t.clone(), false),
+                (None, Some(_)) => match p.live_text(i, wait).await.flatten() {
+                    Some(t) => (t, false),
+                    None => (line.fallback.clone().unwrap_or_default(), true),
+                },
+                _ => {
+                    p.next += 1;
+                    continue;
+                }
+            };
+            // Whole lines only, and always at least one a beat.
+            let len = text.chars().count();
+            if spoken > 0 && used + len > budget {
+                break;
+            }
+            let surface = match line.speaker {
+                SceneSpeaker::Host => Surface::Spoken,
+                SceneSpeaker::Guest => Surface::Foil,
+            };
+            let (mut out, mut events) = self.gate_scene_line(now_ms, surface, &text);
+            // A live line the gate blocks speaks its fallback, through the gate too.
+            if out.is_none() && line.live.is_some() && !fell_back {
+                if let Some(f) = &line.fallback {
+                    let (o, e) = self.gate_scene_line(now_ms, surface, f);
+                    events.extend(e);
+                    out = o;
+                    fell_back = true;
+                }
+            }
+            ev.extend(events);
+            p.next += 1;
+            let Some(out) = out else {
+                ev.push(moderation::output_event(
+                    now_ms,
+                    scene::SCENE_RULE,
+                    scene::SKIPPED,
+                ));
+                continue;
+            };
+            if fell_back {
+                ev.push(moderation::output_event(
+                    now_ms,
+                    scene::SCENE_RULE,
+                    scene::FALLBACK,
+                ));
+            }
+            self.aired(self.on_air_ms(now_ms), &out);
+            let (speaker, foil) = match line.speaker {
+                SceneSpeaker::Host => (Speaker::Host, None),
+                SceneSpeaker::Guest => (Speaker::Foil, Some(guest.clone())),
+            };
+            ev.push(StreamEvent::Say {
+                ts_ms: now_ms,
+                speaker,
+                foil,
+                text: out,
+                replying_to: Vec::new(),
+                first_text_ms: None,
+                delivery: None,
+            });
+            used += len;
+            spoken += 1;
+        }
+        let total = p.scene.lines.len();
+        let what = format!("lines {}-{} of {total}", from + 1, p.next);
+        if p.next >= total {
+            ev.push(StreamEvent::SceneEnd {
+                ts_ms: now_ms,
+                scene_id: p.scene.id.clone(),
+            });
+            self.scenes_done.insert(p.scene.id.clone());
+        } else {
+            self.playing = Some(p);
+        }
+        what
+    }
+
+    /// A scene line through the output gate: the text as aired (`None` when blocked) and the
+    /// records it fired. Recast host lines are spoken as recast; a blocking term's canned
+    /// replacement is not the scene's line, so it counts as blocked. No repetition guard: the
+    /// model did not write the line.
+    fn gate_scene_line(
+        &mut self,
+        now_ms: TsMs,
+        surface: Surface,
+        text: &str,
+    ) -> (Option<String>, Vec<StreamEvent>) {
+        let gate = GateCtx {
+            now_ms,
+            policy: &self.policy,
+            hexes: &self.hexes,
+            names: &self.case_names,
+            crisis: false,
+            removed: &self.removed_names,
+            recent: &[],
+        };
+        let orch = &mut self.orch;
+        let g = outgate::pass(surface, text, &gate, &mut |t| orch.recast(false, t));
+        let blocked = scene::blocked_by_term(&g.events);
+        (g.text.filter(|_| !blocked), g.events)
+    }
+
     fn sign_off_events(&mut self, now_ms: TsMs) -> Vec<StreamEvent> {
         let grace = self.tuning.fleet_grace_s;
         // Every spoken line goes through the output gate, the package's sign-off included.
@@ -877,6 +1095,36 @@ impl Brain {
             self.hexes = ctx.hexes.iter().map(HexInfo::from).collect();
             self.case_names = CaseNames::read(ctx);
         }
+        // The foil the runtime names as active is the brain's active foil too (its FOIL lines
+        // parse): a foil vote's winner, which the runtime summons itself, is on stage from the
+        // next beat, not only once the model repeats the summon (sbx-20261024-194036-10m and
+        // sbx-20261024-203548-10m: the Inspector won SEG-01's vote and never spoke a line).
+        if let Some(f) = scene::summary_foil(&ctx.state_summary) {
+            let known = self.cfg.character.foil_ids.iter().any(|id| id == f);
+            if known && self.working.active_foil.as_deref() != Some(f) {
+                self.working.active_foil = Some(f.to_string());
+            }
+        }
+        // SEG-03: while the runtime names the Table Read's guest as the active foil, its turn
+        // rules apply.
+        let guest_on: Option<String> = self
+            .table_read
+            .as_ref()
+            .map(|(g, _)| g.clone())
+            .filter(|g| scene::summary_foil(&ctx.state_summary) == Some(g.as_str()));
+        if let Some(g) = &guest_on {
+            if self.working.active_foil.as_deref() != Some(g.as_str()) {
+                self.working.active_foil = Some(g.clone());
+            }
+        }
+        // The scene being performed, or the one the runtime just put up.
+        let scene_cue: Option<(String, bool)> = match &self.playing {
+            Some(p) => Some((p.scene.id.clone(), false)),
+            None => scene::scene_up(&ctx.state_summary)
+                .filter(|id| !self.scenes_done.contains(*id))
+                .filter(|id| self.find_scene(id).is_some())
+                .map(|id| (id.to_string(), true)),
+        };
         self.ticks += 1;
         self.working.expire(now_ms);
         self.collect_jobs(now_ms, &mut ev)?;
@@ -927,6 +1175,7 @@ impl Brain {
             names: &self.names,
             max_picks: self.picker.config().max_picks,
             topic_words: &topic_words,
+            scene: scene_cue.as_ref().map(|(id, s)| (id.as_str(), *s)),
         });
         let cands = self.orch.offered(&plan, &cands);
         let viewer_ids: Vec<String> = {
@@ -988,9 +1237,17 @@ impl Brain {
         ev.extend(self.orch.take_capped(now_ms));
         let plan_at = ev.len();
         ev.push(beat_plan);
-        if plan.mode == BeatMode::Hold {
+        if plan.mode == BeatMode::Hold || plan.mode == BeatMode::Scene {
             self.filter
                 .note_answered(pick.chosen.iter().map(|c| c.msg.viewer.id.as_str()));
+            if plan.mode == BeatMode::Scene {
+                if let Some((id, _)) = &scene_cue {
+                    let what = self.scene_beat(now_ms, id, &mut ev).await;
+                    if let StreamEvent::BeatPlan { reason, .. } = &mut ev[plan_at] {
+                        reason.push_str(&format!(": {what}"));
+                    }
+                }
+            }
             if self
                 .ticks
                 .is_multiple_of(u64::from(self.tuning.episode_every_ticks.max(1)))
@@ -1097,7 +1354,16 @@ impl Brain {
         .into_iter()
         .flatten()
         .reduce(|a, b| format!("{a}\n{b}"));
-        let budget = if closing {
+        // SEG-03's guest sits out a beat the host speaks alone: an aside or a care beat in a
+        // scene, and any beat answering a disclosure or a sincerely sad viewer.
+        let host_only = guest_on.is_some()
+            && (plan.host_only
+                || pick.chosen.iter().any(|c| {
+                    c.safety.is_some() || situational_asks(&c.msg.text).contains(&Ask::Sad)
+                }));
+        // What the beat plan says about its lines, before `plan` is reused below.
+        let (aside, lead_cue) = (plan.aside, plan.lead_cue);
+        let budget = if closing || plan.short {
             pace::closing_budget(self.tuning.pace.budget_chars)
         } else if queued_ms > self.tuning.pace.speech_lead_ms {
             // Composed ahead (lookahead or an owed request): what fits under the lag ceiling.
@@ -1140,7 +1406,7 @@ impl Brain {
             window: &window,
             picked: &pick.chosen,
             pkg,
-            active_foil: active_foil.as_deref(),
+            active_foil: active_foil.as_deref().filter(|_| !host_only),
             nonce,
             fresh_bit,
             brief: self.brief.as_ref(),
@@ -1158,6 +1424,7 @@ impl Brain {
             repeat_ai: &repeat_ai,
             ai_answered,
             question_waves: &waves_now,
+            guest_turns: guest_on.is_some() && !host_only,
         });
         self.last_prompt = Some(prompt.clone());
 
@@ -1257,39 +1524,109 @@ impl Brain {
         // ... is the guy an AI", the "what this stream is" line trimmed).
         let owed_beat = pick.chosen.iter().any(|c| pctx.owed.contains(&c.msg.id));
         let unpaced = crisis || owed_beat;
-        // The beat's speech budget: spoken lines past it go whole, the last first.
-        let spoken_at: Vec<usize> = lines
-            .iter()
-            .enumerate()
-            .filter(|(_, l)| matches!(l, Line::Say(_) | Line::Foil { .. }))
-            .map(|(i, _)| i)
-            .collect();
-        let lens: Vec<usize> = spoken_at
-            .iter()
-            .map(|&i| match &lines[i] {
-                Line::Say(Spoken { text: t, .. }) | Line::Foil { text: t, .. } => t.chars().count(),
-                _ => 0,
-            })
-            .collect();
-        let mut over: Vec<usize> =
-            pace::over_budget(&lens, if unpaced { usize::MAX } else { budget })
+        // SEG-03's guest outside a scene: one sentence a turn, and the host after every one
+        // (a beat the host speaks alone drops its lines).
+        let close: &'static str = self.guest_closes.choose(
+            scene::GUEST_CLOSES,
+            &format!("{}:{}:close", self.salt, self.ticks),
+        );
+        if let Some(g) = &guest_on {
+            if host_only {
+                let before = lines.len();
+                lines.retain(|l| !matches!(l, Line::Foil { foil, .. } if foil == g));
+                for _ in lines.len()..before {
+                    ev.push(moderation::output_event(
+                        now_ms,
+                        scene::GUEST_TURN_RULE,
+                        scene::HOST_ONLY,
+                    ));
+                }
+            } else {
+                scene::guest_turns(&mut lines, g, Some(close), now_ms, &mut ev);
+            }
+        }
+        // A cue leads its beat: the chat answers go after its lines, so the budget cuts them.
+        if lead_cue {
+            let names: Vec<String> = pick
+                .chosen
+                .iter()
+                .map(|c| c.msg.viewer.name.clone())
+                .collect();
+            if scene::cue_leads(&mut lines, &names, guest_on.as_deref()) {
+                ev.push(moderation::output_event(
+                    now_ms,
+                    scene::CUE_RULE,
+                    scene::CHAT_AFTER,
+                ));
+            }
+        }
+        // The spoken lines' text, lowercased, for the unaired check below.
+        let spoken_texts = |lines: &[Line]| -> Vec<String> {
+            lines
+                .iter()
+                .filter_map(|l| match l {
+                    Line::Say(Spoken { text: t, .. }) | Line::Foil { text: t, .. } => {
+                        Some(t.to_lowercase())
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+        let before_pace = spoken_texts(&lines);
+        // The beat's speech budget: spoken lines past it go whole, the last first; a guest's
+        // turn and the host's answer to it are kept ahead of the rest. An unpaced beat airs whole.
+        let paced_budget = if unpaced { usize::MAX } else { budget };
+        let fitted = match (&guest_on, host_only) {
+            (Some(g), false) => {
+                scene::fit_guest_exchange(&mut lines, g, close, paced_budget, now_ms, &mut ev)
+            }
+            _ => None,
+        };
+        let mut over: Vec<usize> = Vec::new();
+        if fitted.is_none() {
+            let spoken_at: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| matches!(l, Line::Say(_) | Line::Foil { .. }))
+                .map(|(i, _)| i)
+                .collect();
+            let lens: Vec<usize> = spoken_at
+                .iter()
+                .map(|&i| match &lines[i] {
+                    Line::Say(Spoken { text: t, .. }) | Line::Foil { text: t, .. } => {
+                        t.chars().count()
+                    }
+                    _ => 0,
+                })
+                .collect();
+            over = pace::over_budget(&lens, paced_budget)
                 .into_iter()
                 .map(|k| spoken_at[k])
                 .collect();
-        over.sort_unstable();
-        // The text of every spoken line the pace gate drops, for the unaired check below.
-        let mut dropped_texts: Vec<String> = Vec::new();
-        for &i in over.iter().rev() {
-            if let Line::Say(Spoken { text: t, .. }) | Line::Foil { text: t, .. } = &lines[i] {
-                dropped_texts.push(t.to_lowercase());
+            over.sort_unstable();
+            for &i in over.iter().rev() {
+                lines.remove(i);
+                ev.push(moderation::output_event(
+                    now_ms,
+                    pace::PACE_RULE,
+                    pace::TRIMMED,
+                ));
             }
-            lines.remove(i);
-            ev.push(moderation::output_event(
-                now_ms,
-                pace::PACE_RULE,
-                pace::TRIMMED,
-            ));
         }
+        // The text of every spoken line the pace gate drops (or the guest's close replaced).
+        let mut dropped_texts: Vec<String> = {
+            let mut kept = spoken_texts(&lines);
+            before_pace
+                .into_iter()
+                .filter(|t| match kept.iter().position(|k| k == t) {
+                    Some(at) => {
+                        kept.swap_remove(at);
+                        false
+                    }
+                    None => true,
+                })
+                .collect()
+        };
         // The lag ceiling: a line queued so far behind that the voice would skip it goes here.
         let spoken: Vec<(usize, &str)> = lines
             .iter()
@@ -1322,6 +1659,10 @@ impl Brain {
                 pace::LAGGED,
             ));
         }
+        // A lagged answer never leaves the guest with the last word.
+        if let (Some(g), false) = (&guest_on, late.is_empty()) {
+            scene::guest_turns(&mut lines, g, None, now_ms, &mut ev);
+        }
         let first_text_ms = reply.first_text_ms;
         // The keyless ScriptedEngine echoes a constant line by design (harness plumbing);
         // guarding it would silence every scripted run.
@@ -1348,10 +1689,29 @@ impl Brain {
         let mut say_idx: Vec<usize> = Vec::new();
         let mut suppressed = 0usize;
         // A spoken line the pace gate dropped: a pick it alone answered never aired.
-        let lost = !over.is_empty() || !late.is_empty();
+        let lost = !over.is_empty() || fitted.is_some_and(|n| n > 0) || !late.is_empty();
+        // The guest's line waits for the host line after it: it airs with that line, and goes
+        // with it when that line cannot air (the host has the last word).
+        let mut held_guest: Option<(String, String)> = None;
+        let drop_guest = |held: &mut Option<(String, String)>, ev: &mut Vec<StreamEvent>| {
+            if held.take().is_some() {
+                ev.push(moderation::output_event(
+                    now_ms,
+                    scene::GUEST_TURN_RULE,
+                    scene::LAST_WORD,
+                ));
+            }
+        };
         for line in lines {
             match line {
                 Line::Say(Spoken { text, delivery }) => {
+                    // The engine's close is not model output: the repetition guard never takes
+                    // it, and it never counts against the model's lines.
+                    let is_close = guest_on.is_some() && text == close;
+                    // A close with no guest line before it (the gate took that) closes nothing.
+                    if is_close && held_guest.is_none() {
+                        continue;
+                    }
                     // A rank read out in brackets ("WraithKettle (Thrall), ...") becomes a
                     // spoken title ("WraithKettle the Thrall"); the cue still fits the line.
                     let (text, unbracketed) =
@@ -1370,7 +1730,11 @@ impl Brain {
                         names: &self.case_names,
                         crisis,
                         removed: &self.removed_names,
-                        recent: if guard_repeats { &[&self.spoken] } else { &[] },
+                        recent: if guard_repeats && !is_close {
+                            &[&self.spoken]
+                        } else {
+                            &[]
+                        },
                     };
                     let orch = &mut self.orch;
                     // A recast line fits the beat: a rebuttal when it answered a forged decree.
@@ -1388,8 +1752,12 @@ impl Brain {
                     ev.extend(g.events);
                     suppressed += usize::from(g.repeated);
                     let Some(out) = g.text else {
+                        drop_guest(&mut held_guest, &mut ev);
                         continue;
                     };
+                    if let Some((foil, text)) = held_guest.take() {
+                        self.air_foil(now_ms, foil, text, &mut turn, &mut ev);
+                    }
                     // More than two lines in a row cued with one emotion: recorded, not enforced.
                     if self.cue_run.note(delivery.as_ref()) {
                         ev.push(moderation::output_event(
@@ -1398,9 +1766,11 @@ impl Brain {
                             grammar::DELIVERY_REPEATED,
                         ));
                     }
-                    self.spoken.push_back(out.clone());
-                    while self.spoken.len() > REPEAT_WINDOW {
-                        self.spoken.pop_front();
+                    if !is_close {
+                        self.spoken.push_back(out.clone());
+                        while self.spoken.len() > REPEAT_WINDOW {
+                            self.spoken.pop_front();
+                        }
                     }
                     self.working.remember_line(&out);
                     self.orch.spoke(&out);
@@ -1438,22 +1808,13 @@ impl Brain {
                     let Some(out) = g.text else {
                         continue;
                     };
-                    self.foil_spoken.push_back(out.clone());
-                    while self.foil_spoken.len() > REPEAT_WINDOW {
-                        self.foil_spoken.pop_front();
+                    if guest_on.as_deref() == Some(foil.as_str()) {
+                        // Two guest lines in a row: the first had no answer.
+                        drop_guest(&mut held_guest, &mut ev);
+                        held_guest = Some((foil, out));
+                    } else {
+                        self.air_foil(now_ms, foil, out, &mut turn, &mut ev);
                     }
-                    turn.push(format!("{foil}: {out}"));
-                    // The stage shows a foil's line: it takes reading time.
-                    self.aired(self.on_air_ms(now_ms), &out);
-                    ev.push(StreamEvent::Say {
-                        ts_ms: now_ms,
-                        speaker: Speaker::Foil,
-                        foil: Some(foil),
-                        text: out,
-                        replying_to: Vec::new(),
-                        first_text_ms: None,
-                        delivery: None,
-                    });
                 }
                 Line::Op { tag, op } => {
                     let mut op = op.0;
@@ -1516,6 +1877,51 @@ impl Brain {
                 Line::Rejected { rule, .. } => {
                     ev.push(moderation::output_event(now_ms, &rule, "rejected"));
                 }
+            }
+        }
+        drop_guest(&mut held_guest, &mut ev);
+
+        // A scene aside always acknowledges its room event: when the model's line could not
+        // air (the repetition guard took it), an engine line speaks
+        // (sbx-20261024-203548-10m 09:03: the second aside aired nothing).
+        if let (Some(raid), true) = (aside, say_idx.is_empty()) {
+            let gifter = pick
+                .chosen
+                .iter()
+                .find(|c| moderation::is_gift_or_sub(&c.msg.text))
+                .map(|c| c.msg.viewer.name.clone());
+            let key = format!("{}:{}:aside", self.salt, self.ticks);
+            let line = scene::aside_line(raid, gifter.as_deref(), &key);
+            let gate = GateCtx {
+                now_ms,
+                policy: &self.policy,
+                hexes: &self.hexes,
+                names: &self.case_names,
+                crisis,
+                removed: &self.removed_names,
+                recent: &[],
+            };
+            let g = outgate::pass(Surface::Spoken, &line, &gate, &mut |t| t.to_string());
+            ev.extend(g.events);
+            if let Some(out) = g.text {
+                ev.push(moderation::output_event(
+                    now_ms,
+                    scene::ASIDE_RULE,
+                    scene::FALLBACK,
+                ));
+                turn.push(format!("{}: {out}", self.cfg.character.persona.name));
+                let at = self.on_air_ms(now_ms);
+                self.speech.say_paced(at, &out, None, &self.tuning.pace);
+                say_idx.push(ev.len());
+                ev.push(StreamEvent::Say {
+                    ts_ms: now_ms,
+                    speaker: Speaker::Host,
+                    foil: None,
+                    text: out,
+                    replying_to: Vec::new(),
+                    first_text_ms: None,
+                    delivery: None,
+                });
             }
         }
 

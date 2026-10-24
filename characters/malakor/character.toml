@@ -4,7 +4,7 @@
 id = "malakor"
 name = "Arch-Lich Malakor"
 default_tone = "unhinged-roastmaster"
-foils = ["the-disruptor", "the-life-coach", "the-has-been-hero", "the-inspector", "the-coin-prophet"]
+foils = ["the-disruptor", "the-life-coach", "the-has-been-hero", "the-inspector", "the-coin-prophet", "the-painter"]
 # Rails: rules no operator override can switch off. The crisis handoff is done on every path;
 # how it is delivered lives in rules/crisis-handoff.md, whether it fires is not a toggle. A rail
 # needs its rules/<id>.md and `<id> = true` under [rules]; `character rules --disable` refuses it.

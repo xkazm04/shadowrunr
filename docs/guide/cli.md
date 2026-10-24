@@ -429,6 +429,9 @@ Every command works on the store directly; no daemon is needed.
   and stays staged. Refused (exit 1) unless the base is staged, or when the reply echoes the
   fence token (nothing staged); a usage error (exit 2) when a note names no line of the base or
   there is nothing to revise.
+- `prep table-read <id> --guest <foil> --scenes a,b,c` (or `--clear`): plan a SEG-03 Table
+  Read on a staged prep: the scheduled guest and 1-3 scenes from `<data>/scenes/<guest>/`, in
+  ballot order. The checks run again; exit 6 when `table_read` (or another check) fails.
 - `prep list [--json]`: newest first, with status, bit count and failed checks.
 - `prep show <id> [--json]`: the whole material and every check; a revised prep also prints
   `revised from <base>: N ops` with each operation's target and why, and each refusal.
@@ -451,6 +454,7 @@ The checks (each `pass` or `fail`, with a detail naming the line):
 | `segments` | a bit is for a segment that does not exist or is descoped |
 | `duplicates` | a line (ignoring case, spacing and end punctuation) or an id repeats |
 | `output_gate` | the brain's output gate (the platform term rules, character and persona guards, personal-data asks) would change a line |
+| `table_read` | (only with a table read) the guest is not a foil of the prep's character; not 1-3 scenes; a scene is repeated, missing from `<data>/scenes/<guest>/`, a draft, or has a shape or gate problem |
 
 Which prep a run uses:
 
@@ -490,6 +494,31 @@ revised from prep-20261020-180000: 1 ops
   rewrite cb-02: sharper turn, same running gag
 $ shadowrunr prep approve prep-20261020-181500 --signature owner
 ```
+
+## Scenes: `shadowrunr scene ...`
+
+SEG-03 (the Table Read) plays owner-authored scenes from `<data>/scenes/<guest>/<id>.toml`
+(format: [characters.md](characters.md), "Guests and scenes"). They are owner-local and never
+committed. A stream plays a Table Read when its approved prep plans one (`prep table-read`);
+SEG-01 then hands over to SEG-03 instead of SEG-02A.
+
+- `scene list [--guest <foil>] [--json]`: every scene with its status, line and live-slot
+  counts and its problems.
+- `scene check <guest>/<id> [--json]`: the shape check plus the brain's output gate over every
+  fixed line, live-slot fallback, title and pitch. A term rule that blocks gives
+  `gate_blocked`, any other rule that fires `gate_recast`. Exit 6 when there is a problem.
+- `scene approve <guest>/<id> [--json]`: refused (exit 1) while the scene has a problem;
+  otherwise changes only the file's `status` value to `approved`, keeping its formatting.
+
+Exit codes: 0 done, 1 refused or failed, 2 usage error, 6 the check found a problem.
+
+A run without a planned Table Read (`sim run --segment SEG-03`, a sandbox with no prep plan)
+plays the compiled-in fictional sample: guest `the-painter`, three scenes. Each round is a
+ballot of the scenes left (`!vote <n|title>`, 60 s), the scene, then 5 minutes of free talk;
+the last scene plays without a vote; a tie or an empty ballot plays the first in plan order and
+the host announces he broke it. Live slots are written when the scene starts; a late or failed
+one speaks its `fallback`, and a line the gate blocks is skipped. The segment runs at least 20
+minutes and starts no new round after 40. With no playable scene the run refuses and says why.
 
 ## `shadowrunr daemon [--port 7717] [--scripted]`
 

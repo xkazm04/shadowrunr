@@ -1,0 +1,218 @@
+/* SEG-03, the Table Read's two-shot (layouts.ts twoShotRects, stage-kit ui/TwoShot.tsx): the
+   guest's half with its portrait, glow and name plate, the host's name plate, the scene's title
+   band, and a guest's caption in the guest's colour. `--foil` is the guest's colour (lore.ts). */
+
+.region-guest,
+.region-scene {
+  z-index: 3;
+}
+
+/* ─── The guest's half ───────────────────────────────────────────────────── */
+
+.guest-shot {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: radial-gradient(ellipse 60% 55% at 50% 46%, color-mix(in srgb, var(--foil, #555) 16%, transparent), transparent 72%);
+  animation: summon 1.2s var(--move) both;
+}
+
+.guest-shot.empty {
+  animation: none;
+  background: none;
+  border: 1px dashed var(--panel-edge);
+}
+
+.guest-glow {
+  position: absolute;
+  inset: 6% 12% 16%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--foil) 55%, transparent), transparent 70%);
+  opacity: 0;
+  filter: blur(18px);
+  transition: opacity 0.25s ease-out;
+  pointer-events: none;
+}
+
+.guest-shot.speaking .guest-glow {
+  opacity: 1;
+  animation: guest-talk 0.42s ease-in-out infinite alternate;
+}
+
+.guest-portrait {
+  position: relative;
+  width: 72%;
+  height: 84%;
+  margin-bottom: 40px;
+}
+
+.guest-portrait .foil-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--foil);
+  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.55));
+}
+
+/* A raster portrait (the daemon's guest-<foil>.png) covers the SVG once it has loaded. */
+.guest-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 0.4s ease-out;
+}
+
+.guest-image.ready {
+  opacity: 1;
+}
+
+.guest-portrait[data-portrait="image"] .foil-art {
+  visibility: hidden;
+}
+
+/* ─── Name plates ────────────────────────────────────────────────────────── */
+
+.guest-plate,
+.host-plate {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 22px 7px;
+  border-radius: 8px;
+  background: rgba(8, 11, 10, 0.9);
+  border: 1px solid var(--panel-edge);
+  white-space: nowrap;
+  transition:
+    border-color 0.25s,
+    box-shadow 0.25s;
+}
+
+.guest-plate {
+  border-color: color-mix(in srgb, var(--foil, #555) 55%, var(--panel-edge));
+}
+
+.guest-name,
+.host-plate-name {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--foil, var(--bone));
+}
+
+.host-plate-name {
+  color: var(--verdigris);
+}
+
+.guest-sub,
+.host-plate-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+}
+
+.guest-shot.speaking .guest-plate {
+  box-shadow: 0 0 22px color-mix(in srgb, var(--foil) 45%, transparent);
+}
+
+.host-plate.speaking {
+  border-color: var(--verdigris-dim);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--verdigris) 35%, transparent);
+}
+
+/* In the two-shot the voice disclosure sits above his plate. */
+.region-avatar .voice-label:has(~ .host-plate) {
+  bottom: 84px;
+}
+
+/* ─── The scene's title band ─────────────────────────────────────────────── */
+
+.scene-card {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 0 26px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(8, 11, 10, 0.94), rgba(8, 11, 10, 0.7));
+  border: 1px solid color-mix(in srgb, var(--foil) 45%, var(--panel-edge));
+  overflow: hidden;
+  animation: rise 0.6s var(--move) both;
+}
+
+.scene-card.fresh {
+  box-shadow: 0 0 34px color-mix(in srgb, var(--foil) 40%, transparent);
+}
+
+.scene-kicker {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.scene-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 32px;
+  color: var(--bone);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scene-starring {
+  flex: none;
+  font-size: 18px;
+  color: var(--dim);
+}
+
+.scene-starring b {
+  font-family: var(--display);
+  color: var(--foil);
+}
+
+/* ─── A guest's caption ──────────────────────────────────────────────────── */
+
+.caption.guest {
+  border-left-color: var(--foil);
+}
+
+.caption.guest .speaker,
+.caption.guest .w.em {
+  color: var(--foil);
+}
+
+/* ─── A SEG-03 clip: the guest beside the silhouette ─────────────────────── */
+
+.clip-guest .guest-shot {
+  height: 100%;
+}
+
+@keyframes guest-talk {
+  from {
+    transform: scale(0.96);
+  }
+  to {
+    transform: scale(1.04);
+  }
+}

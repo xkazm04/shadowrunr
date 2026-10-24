@@ -21,6 +21,7 @@
 pub mod avatar;
 pub mod cli;
 pub mod elevenlabs;
+pub mod foils;
 pub mod log;
 pub mod probe;
 pub mod renderer;

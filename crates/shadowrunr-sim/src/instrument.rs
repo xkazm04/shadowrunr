@@ -187,6 +187,9 @@ pub struct InstrumentInputs<'a> {
     pub case: Option<(&'a str, &'a str)>,
     /// The stream prep the brain voices, when it has one: joins the base hash as `prep.json`.
     pub prep: Option<&'a StreamPrep>,
+    /// The owner's scene folder the prep's table read plays from (`<data>/scenes/<guest>`),
+    /// when it has one: each file joins the base hash as `scenes/<guest>/<file>`.
+    pub scenes_dir: Option<(&'a str, &'a Path)>,
     /// Harness knobs that shape the run, `(name, value)`: each joins the base hash as
     /// `harness/<name>`.
     pub harness: &'a [(&'a str, String)],
@@ -294,6 +297,13 @@ pub fn compute(inp: &InstrumentInputs<'_>) -> Result<Instrument, SimError> {
             sha256: prep_digest(p),
         });
     }
+    if let Some((guest, dir)) = inp.scenes_dir {
+        let mut scenes = Vec::new();
+        walk(dir, "", &mut scenes)?;
+        for (rel, p) in scenes {
+            files.push(file_entry(format!("scenes/{guest}/{rel}"), &p)?);
+        }
+    }
     for (name, value) in inp.harness {
         files.push(InstrumentFile {
             path: format!("{HARNESS_PREFIX}{name}"),
@@ -360,6 +370,7 @@ mod tests {
             experiments: &[],
             case: None,
             prep: None,
+            scenes_dir: None,
             harness: &[],
             judge_tier: None,
         })
@@ -477,6 +488,7 @@ text = \"x\"
                 experiments: &[],
                 case: None,
                 prep: None,
+                scenes_dir: None,
                 harness: &[],
                 judge_tier: None,
             })
@@ -520,6 +532,7 @@ text = \"x\"
             experiments: &[],
             case: None,
             prep: None,
+            scenes_dir: None,
             harness: &[],
             judge_tier: None,
         })
@@ -560,6 +573,7 @@ text = \"x\"
             experiments: &[],
             case: None,
             prep: None,
+            scenes_dir: None,
             harness: &[],
             judge_tier: None,
         })
@@ -709,6 +723,7 @@ text = \"x\"
             experiments: &["rate_cap_exemptions"],
             case: None,
             prep: None,
+            scenes_dir: None,
             harness: &[],
             judge_tier: None,
         })

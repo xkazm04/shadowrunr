@@ -120,6 +120,7 @@ impl Room {
             names: &self.names,
             max_picks: crate::picker::PickerConfig::default().max_picks,
             topic_words: &self.topic,
+            scene: None,
         });
         let offered = self.o.offered(&plan, &cands);
         let mut chosen: Vec<Candidate> = offered
@@ -1897,6 +1898,7 @@ fn a_raid_wave_an_owned_request_outbid_is_greeted_next_beat() {
             names: &room.names,
             max_picks: 2,
             topic_words: &[],
+            scene: None,
         });
         let offered = room.o.offered(&plan, &cands);
         let chosen: Vec<Candidate> = offered.into_iter().filter(|c| c.msg.id == "req").collect();

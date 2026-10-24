@@ -3,7 +3,8 @@
 //! 2. `segments.ingest_chat`;
 //! 3. `brain.tick(now, inbox, &segments.context(ccv, elapsed))`;
 //! 4. `segments.apply_ops(ops from the brain's events)`, then `segments.job_done` for each
-//!    research job the brain reports done (the runtime may open its record on screen);
+//!    research job the brain reports done (the runtime may open its record on screen), then
+//!    `segments.scene_ended` for each scene it performed to its end (SEG-03);
 //! 5. `segments.tick`;
 //! 6. append everything to `transcript.jsonl`.
 //!
@@ -18,8 +19,11 @@ use serde::{Deserialize, Serialize};
 use shadowrunr_brain::{
     load_character, parse_manifest, Brain, BrainConfig, BrainTuning, FilterConfig, PaceConfig,
 };
+use shadowrunr_segments::scenes::scenes_dir;
 use shadowrunr_segments::RankTable;
-use shadowrunr_segments::{SegmentConfig, SegmentRuntime, StagedCase, StreamKind};
+use shadowrunr_segments::{
+    segment_table, table_read_for, SegmentConfig, SegmentRuntime, StagedCase, StreamKind, TableRead,
+};
 use shadowrunr_types::character::{CharacterManifest, Persona, Tuning};
 use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::Rank;
@@ -73,6 +77,11 @@ pub trait Stage: Send {
     fn job_done(&mut self, _job_id: &str, _now_ms: TsMs) -> Vec<StreamEvent> {
         Vec::new()
     }
+    /// The brain performed a scene to its end (its `scene_end` event). The real runtime moves
+    /// the Table Read on to its free talk.
+    fn scene_ended(&mut self, _scene_id: &str, _now_ms: TsMs) -> Vec<StreamEvent> {
+        Vec::new()
+    }
     fn tick(&mut self, now_ms: TsMs, ccv: u32) -> Vec<StreamEvent>;
     /// The authoritative open poll `(id, options)` when the stage can tell (`Some(None)` =
     /// no poll open); `None` when it cannot, and the room tracks polls from ops instead.
@@ -84,6 +93,9 @@ pub trait Stage: Send {
     fn is_signed_off(&self) -> Option<bool> {
         None
     }
+    /// The host loop's goodbye window is open (or not): the stream is at its planned end. The
+    /// real runtime then lets a Table Read sign off before its floor.
+    fn set_stream_ending(&mut self, _ending: bool) {}
 }
 
 #[async_trait]
@@ -170,6 +182,16 @@ pub(crate) fn beat_events(brain: Vec<StreamEvent>, stage: Vec<StreamEvent>) -> V
     out
 }
 
+/// The ids of the scenes the brain performed to their end in `evs` (`scene_end`), in order.
+pub(crate) fn scenes_ended(evs: &[StreamEvent]) -> Vec<String> {
+    evs.iter()
+        .filter_map(|e| match e {
+            StreamEvent::SceneEnd { scene_id, .. } => Some(scene_id.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 /// The ids of the jobs the brain reports done in `evs`, in order.
 pub(crate) fn jobs_done(evs: &[StreamEvent]) -> Vec<String> {
     evs.iter()
@@ -196,11 +218,17 @@ impl Stage for SegmentRuntime {
     fn job_done(&mut self, job_id: &str, now_ms: TsMs) -> Vec<StreamEvent> {
         SegmentRuntime::job_done(self, job_id, now_ms)
     }
+    fn scene_ended(&mut self, scene_id: &str, now_ms: TsMs) -> Vec<StreamEvent> {
+        SegmentRuntime::scene_ended(self, scene_id, now_ms)
+    }
     fn tick(&mut self, now_ms: TsMs, ccv: u32) -> Vec<StreamEvent> {
         SegmentRuntime::tick(self, now_ms, ccv)
     }
     fn is_signed_off(&self) -> Option<bool> {
         Some(SegmentRuntime::is_signed_off(self))
+    }
+    fn set_stream_ending(&mut self, ending: bool) {
+        SegmentRuntime::set_stream_ending(self, ending);
     }
     fn open_poll(&self) -> Option<Option<(String, Vec<String>)>> {
         Some(self.open_poll_id().map(|id| {
@@ -346,6 +374,8 @@ pub(crate) struct Prepared {
     pub brief: Option<StreamBrief>,
     /// The staged real case the run audits (SEG-02A), loaded for a private simulation.
     pub case: Option<StagedCase>,
+    /// The Table Read the run plays (SEG-03, or SEG-01's handover with a prep plan).
+    pub table_read: Option<TableRead>,
 }
 
 /// `<run_dir>/judge-windows/`: the windowed judge's stored window replies (a re-judge after an
@@ -428,6 +458,11 @@ fn instrument_with(
     brief: Option<&StreamBrief>,
     case: Option<&StagedCase>,
 ) -> Result<Instrument, SimError> {
+    let prep = stream_prep_for(opts, character);
+    let guest = prep
+        .and_then(|p| p.table_read.as_ref())
+        .map(|t| t.guest.as_str());
+    let scenes = guest.map(|g| (g, scenes_dir(&opts.data_dir).join(g)));
     instrument::compute(&InstrumentInputs {
         character_dir: &character_dir(opts, character),
         tone,
@@ -437,10 +472,31 @@ fn instrument_with(
         brief,
         experiments: &opts.experiments(),
         case: case.map(|c| (c.case.id.as_str(), c.content_sha256.as_str())),
-        prep: stream_prep_for(opts, character),
+        prep,
+        scenes_dir: scenes.as_ref().map(|(g, d)| (*g, d.as_path())),
         harness: &harness_knobs(opts),
         judge_tier,
     })
+}
+
+/// The Table Read a run of `segment` plays, if any: the prep's plan (its playable scenes from
+/// `<data>/scenes/<guest>/`), or, for a run that starts in a segment that plays scenes without
+/// one, the compiled-in fictional sample. A segment that plays scenes with no playable scene,
+/// or a prep plan with none, refuses the run with the reason.
+pub(crate) fn table_read_for_run(
+    opts: &SimOptions,
+    character: &str,
+    segment: SegmentId,
+    foils: &[String],
+) -> Result<Option<TableRead>, SimError> {
+    let plan = stream_prep_for(opts, character).and_then(|p| p.table_read.as_ref());
+    let plays = segment_table(segment).is_ok_and(|t| t.plays_scenes());
+    if plan.is_none() && !plays {
+        return Ok(None);
+    }
+    table_read_for(&opts.data_dir, plan, foils)
+        .map(Some)
+        .map_err(|e| SimError::Spec(format!("table read: {e}")))
 }
 
 /// The brain's chat pre-filter for a run: the defaults, plus the opt-5 rate-cap experiment
@@ -485,6 +541,7 @@ pub(crate) fn segment_config(prep: &Prepared) -> Result<SegmentConfig, SimError>
         persona: prep.persona.clone(),
         tuning: prep.tuning,
         flavour: prep.manifest.segments.clone(),
+        table_read: prep.table_read.clone(),
         ..SegmentConfig::default()
     })
 }
@@ -555,6 +612,9 @@ pub(crate) fn prepare_in(
         ));
     }
     let case = opts.staged_case()?;
+    let (manifest, persona, tuning) = character_meta(&cdir, &spec.character);
+    // A segment that plays scenes refuses to start without a playable one, before any call.
+    let table_read = table_read_for_run(opts, &spec.character, spec.segment, &manifest.foils)?;
     let instrument = instrument_with(
         opts,
         &spec.character,
@@ -575,7 +635,6 @@ pub(crate) fn prepare_in(
         &spec.run_id,
     )?);
     let engine: Arc<dyn Engine> = ledger.clone();
-    let (manifest, persona, tuning) = character_meta(&cdir, &spec.character);
     Ok(Prepared {
         spec: spec.clone(),
         run_dir,
@@ -598,6 +657,7 @@ pub(crate) fn prepare_in(
         character_dir: cdir,
         brief,
         case,
+        table_read,
     })
 }
 
@@ -715,6 +775,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                     .collect();
                 let sign_off = ops.iter().any(|o| matches!(o, Op::SignOff { .. }));
                 let done = jobs_done(&evs);
+                let scenes = scenes_ended(&evs);
                 let staged = if ops.is_empty() {
                     Vec::new()
                 } else {
@@ -729,6 +790,12 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                 // After this beat's ops, so the model's own show_screen holds against them.
                 for job in done {
                     let ev = stage.job_done(&job, now);
+                    room.observe(t, &ev);
+                    w.push_all(ev)?;
+                }
+                // A scene performed to its end moves the Table Read on.
+                for id in scenes {
+                    let ev = stage.scene_ended(&id, now);
                     room.observe(t, &ev);
                     w.push_all(ev)?;
                 }
@@ -767,6 +834,12 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
             &crate::ledger::read(&prep.run_dir.join("ledger.jsonl")).unwrap_or_default(),
         )
     });
+    if let Some(scene_id) = crate::transcript::open_scene(w.events()) {
+        w.push(StreamEvent::SceneEnd {
+            ts_ms: end_ms,
+            scene_id,
+        })?;
+    }
     w.push(StreamEvent::SegmentEnd {
         ts_ms: end_ms,
         segment: room.segment(),
@@ -957,6 +1030,9 @@ pub(crate) async fn build_brain(
     if let Some(stream_prep) = stream_prep_for(opts, &prep.spec.character) {
         brain.set_prep(stream_prep.clone());
     }
+    if let Some(tr) = &prep.table_read {
+        brain.set_table_read(tr.guest.clone(), tr.scenes.clone());
+    }
     Ok(brain)
 }
 
@@ -1063,6 +1139,9 @@ pub async fn judge_existing(
     write_json(&run_dir.join("run.json"), &record)?;
     Ok(v)
 }
+
+#[cfg(test)]
+mod table_read_tests;
 
 #[cfg(test)]
 pub(crate) mod tests {

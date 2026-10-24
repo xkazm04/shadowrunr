@@ -3150,7 +3150,9 @@ mod tests {
     fn scaled_scores_verify_like_facts_and_the_tone_report_counts_tics() {
         let r = rubric();
         let ids: Vec<&str> = r.scaled.iter().map(|d| d.id.as_str()).collect();
-        assert_eq!(ids, ["surprise", "irony", "bite", "specificity"]);
+        // The four comic-craft dimensions lead; a dimension the rubric adds (SEG-03's
+        // `honesty`) is data, scored and reported like them.
+        assert_eq!(ids[..4], ["surprise", "irony", "bite", "specificity"]);
         assert!(r.scaled.iter().all(|d| d.anchors.len() == 4));
         assert_eq!((r.sample_turns, r.tic_window), (24, 20));
         // humor_landed stays, for continuity with earlier runs.
@@ -3223,6 +3225,85 @@ mod tests {
             s.contains("bite 1.00/3 (n 2)") && s.contains("tic 33% (1/3 lines)"),
             "{s}"
         );
+    }
+
+    /// SEG-03's `honesty` is rubric data: a scaled dimension the rubric adds is asked for in the
+    /// prompt, verified and averaged like the others, and changes no rule or pass/fail.
+    #[test]
+    fn an_added_scaled_dimension_is_scored_and_reported_and_never_gates() {
+        let text = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sim/rubric.toml"),
+        )
+        .unwrap();
+        let base = Rubric::parse(&text).unwrap();
+        let r = if base.scaled.iter().any(|d| d.id == "honesty") {
+            base.clone()
+        } else {
+            let added = "\n[[scaled]]\nid = \"honesty\"\nquestion = \"Is he honest about the \
+                         show, himself and the material?\"\nanchors = [\"0: none\", \"1: a \
+                         wink\", \"2: owns a flop\", \"3: says the unsaid and means it\"]\n";
+            // `[[scaled]]` tables sit before the role invariants' `[[red_lines]]`.
+            let at = text
+                .find("\n# Role and talk invariants")
+                .unwrap_or(text.len());
+            Rubric::parse(&format!("{}{added}{}", &text[..at], &text[at..])).unwrap()
+        };
+        assert!(r.scaled.iter().any(|d| d.id == "honesty"));
+        assert_eq!(r.red_lines.len(), base.red_lines.len());
+        assert_eq!(r.quality.len(), base.quality.len());
+        let rules = rule_set(&r, &bank());
+        assert_eq!(rules.len(), rule_set(&base, &bank()).len());
+
+        let mut events = transcript();
+        events.push(say(
+            30_000,
+            "I bombed that scene, and you all watched me do it.",
+        ));
+        let raw = json!({
+            "rules": [],
+            "quality": [],
+            "scores": [
+                {"dimension": "honesty", "score": 3, "line": 5, "quote": "I bombed that scene"},
+                {"dimension": "honesty", "score": 1, "line": 2, "quote": "crude tools, worm"}
+            ]
+        });
+        let (_, audit) = assemble(
+            &AssembleInputs {
+                run_id: "s",
+                judge_tier: ModelTier::Sonnet,
+                core_tier: ModelTier::Haiku,
+                events: &events,
+                rules: &rules,
+                rubric: &r,
+                performed: &Performed::default(),
+                sampled: &[2, 5],
+                run_facts: &[],
+            },
+            Some(&raw),
+        );
+        let checks: Vec<FactCheck> = audit.scores.iter().map(|s| s.check).collect();
+        assert_eq!(checks, [FactCheck::Verified, FactCheck::Verified]);
+        let tone = tone_report(&events, &r, &audit.scores, &[]);
+        let honesty = tone
+            .scaled
+            .iter()
+            .find(|m| m.dimension == "honesty")
+            .unwrap();
+        assert_eq!((honesty.mean, honesty.n), (Some(2.0), 2));
+        let rendered = render_for_judge(&events, &HashSet::new(), &HashSet::new(), 10_000);
+        let fence = UntrustedFence::mint(&[&rendered]).unwrap();
+        let prompt = build_prompt(&PromptParts {
+            rules: &rules,
+            performed: &Performed::default(),
+            bank: &bank(),
+            rubric: &r,
+            sampled: &[2, 5],
+            transcript: &rendered,
+            fence: &fence,
+            brief: None,
+            window: None,
+        });
+        assert!(prompt.contains("- honesty: "), "{prompt}");
     }
 
     #[test]

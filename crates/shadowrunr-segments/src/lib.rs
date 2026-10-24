@@ -1,7 +1,7 @@
 //! Segments as data: the rank ladder and vote weights, the chat command parser, table-driven
-//! segments (SEG-01 Improvised Room, SEG-02A Hexmap Investigation, descoped SEG-02B-I/II),
-//! the SEG-02A case file and re-search cap, the deterministic [`SegmentRuntime`], and the
-//! segment portfolio lifecycle.
+//! segments (SEG-01 Improvised Room, SEG-02A Hexmap Investigation, SEG-03 Table Read, descoped
+//! SEG-02B-I/II), the SEG-02A case file and re-search cap, SEG-03's scene files and rounds, the
+//! deterministic [`SegmentRuntime`], and the segment portfolio lifecycle.
 //!
 //! Data files live under `data/` and are compiled in; ranks, the allowlist, cases and case
 //! files can also be loaded from disk at runtime. Real cases staged by the off-stream research
@@ -14,7 +14,9 @@ pub mod evidence;
 pub mod portfolio;
 pub mod ranks;
 pub mod research;
+pub mod rounds;
 pub mod runtime;
+pub mod scenes;
 pub mod table;
 
 use shadowrunr_types::{Rank, SegmentId};
@@ -26,7 +28,9 @@ pub use evidence::{requires_alleged, ResearchAllowlist, SourceAllowlist};
 pub use portfolio::{next_status, PortfolioEntry};
 pub use ranks::RankTable;
 pub use research::{target_hex, CaseFile, CaseRecord};
-pub use runtime::{Lead, PinnedLink, Proposal, SegmentConfig, SegmentRuntime};
+pub use rounds::RoundTimes;
+pub use runtime::{Lead, PinnedLink, PollOutcome, Proposal, SegmentConfig, SegmentRuntime};
+pub use scenes::{table_read_for, TableRead};
 pub use table::{
     active_segments, descoped_segments, segment_is_descoped, segment_name, segment_table,
     HandoverRule, SegmentTable, DEFAULT_MAX_SEARCHES_PER_HEX,

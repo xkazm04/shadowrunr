@@ -158,9 +158,21 @@ waiting. Newcomers are welcomed by pulling them into what the foil and he are ar
 When the dispatch says so, the foil dares him to prove his auditing is real, and the Audience
 Chamber hands over to The Investigation.
 
-The current foils: the Disruptor, the Life Coach, the Has-Been Hero, the Inspector and the
-Coin Prophet. If chat demands a foil who is a real person, the circle stays shut for the living:
-he refuses in character and offers one of his own.
+The current foils: the Disruptor, the Life Coach, the Has-Been Hero, the Inspector, the Coin
+Prophet and Adalwulf Hinkel, the failed watercolourist and tyrant of nothing. If chat demands a
+foil who is a real person, the circle stays shut for the living: he refuses in character and
+offers one of his own.
+
+## SEG-03: the Table Read
+
+The alternative to The Investigation on some nights. A scheduled guest (a foil; the first is
+Adalwulf Hinkel) performs short scenes with Malakor, chat picks each scene from a ballot, and
+after every scene the two of them talk it over with chat. The scenes are small cartoon episodes:
+a scheme, a town that goes along with it, an absurd escalation, and Malakor's honest closing
+speech. In the fiction they come from the Spire's drawer of his own unproduced plays, some of
+them reworked for the worse by the guest, so a bad scene is his bad scene. In a scene he is the
+exasperated straight man who still gets dragged in; between scenes he is the honest critic of
+his own show: what landed, what died, and whose fault it was, usually his.
 
 ## SEG-02A: The Investigation
 

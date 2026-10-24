@@ -157,7 +157,7 @@ describe("characters/<id>/package", () => {
   it("reads the bible with its table of contents, the tones with the default as hero, and the foils", async () => {
     mount(["malakor", "package", "bible"]);
     await settle();
-    expect(screen.getByRole("navigation", { name: "Bible sections" }).querySelectorAll("button").length).toBe(9);
+    expect(screen.getByRole("navigation", { name: "Bible sections" }).querySelectorAll("button").length).toBe(10);
     cleanup();
     dispose?.();
     mount(["malakor", "package", "tones"]);

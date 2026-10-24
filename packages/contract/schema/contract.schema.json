@@ -147,6 +147,11 @@
           "const": "improvise",
           "description": "A quiet beat with nothing prepared that fits: the host fills it in his own words.",
           "type": "string"
+        },
+        {
+          "const": "scene",
+          "description": "SEG-03: the next lines of the scene being performed.",
+          "type": "string"
         }
       ]
     },
@@ -7910,6 +7915,165 @@
       },
       "type": "object"
     },
+    "Scene": {
+      "description": "A scene file (`<data>/scenes/<guest>/<id>.toml`).",
+      "properties": {
+        "fictional": {
+          "type": "boolean"
+        },
+        "guest": {
+          "description": "The foil id that plays the guest.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Kebab-case, unique within the guest's folder; equals the file stem.",
+          "type": "string"
+        },
+        "line": {
+          "items": {
+            "$ref": "#/$defs/SceneLine"
+          },
+          "type": "array"
+        },
+        "notes": {
+          "description": "Talking points for the free talk after the scene.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pitch": {
+          "description": "The ballot line, at most 80 chars.",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SceneStatus"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "pitch",
+        "guest",
+        "status",
+        "line"
+      ],
+      "type": "object"
+    },
+    "SceneLine": {
+      "description": "One line of a scene: fixed `text`, or (host only) a live slot with a `live` direction and\na `fallback` line. Exactly one of `text` and `live` is set; `scene check` enforces it.",
+      "properties": {
+        "fallback": {
+          "description": "Spoken when the live slot's call fails or times out. Required with `live`.",
+          "type": "string"
+        },
+        "live": {
+          "description": "What the host's live line must do, e.g. \"the closing speech: what we learned today\".",
+          "type": "string"
+        },
+        "speaker": {
+          "$ref": "#/$defs/SceneSpeaker"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "speaker"
+      ],
+      "type": "object"
+    },
+    "SceneProblem": {
+      "description": "One problem `scene check` found. A scene with any problem cannot be approved and never\nreaches a ballot.",
+      "properties": {
+        "code": {
+          "description": "Stable code: `shape`, `pitch_too_long`, `guest_unknown`, `gate_blocked`, `gate_recast`,\n`no_lines`, `ends_on_guest`.",
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "line": {
+          "description": "0-based line index; omitted for a whole-scene problem.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "type": "object"
+    },
+    "SceneSpeaker": {
+      "description": "Who speaks a scene line. The guest is the stream's scheduled foil.",
+      "enum": [
+        "host",
+        "guest"
+      ],
+      "type": "string"
+    },
+    "SceneStatus": {
+      "description": "Whether a scene may go on a ballot.",
+      "enum": [
+        "draft",
+        "approved"
+      ],
+      "type": "string"
+    },
+    "SceneSummary": {
+      "description": "One row of `scene.list` / the `scene list` CLI.",
+      "properties": {
+        "fictional": {
+          "type": "boolean"
+        },
+        "guest": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lines": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "live_slots": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pitch": {
+          "type": "string"
+        },
+        "problems": {
+          "items": {
+            "$ref": "#/$defs/SceneProblem"
+          },
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/SceneStatus"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "guest",
+        "title",
+        "pitch",
+        "status",
+        "lines",
+        "live_slots"
+      ],
+      "type": "object"
+    },
     "ScreenId": {
       "description": "What fills the broadcast's main screen. `host` is the big-avatar room; the others put the\ncontent full-size with Malakor cut out in the bottom-left corner.",
       "oneOf": [
@@ -8131,6 +8295,11 @@
         {
           "const": "SEG-02B-II",
           "description": "Descoped (kept in the plan): Dependency Doctrine.",
+          "type": "string"
+        },
+        {
+          "const": "SEG-03",
+          "description": "Table Read: the host and a scheduled guest perform scenes the audience picks.",
           "type": "string"
         }
       ]
@@ -8919,6 +9088,59 @@
           "type": "object"
         },
         {
+          "description": "SEG-03: a scene begins. Its lines follow as `say` events (guest lines as the foil).",
+          "properties": {
+            "guest": {
+              "description": "Foil id of the guest.",
+              "type": "string"
+            },
+            "scene_id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "scene_start",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "scene_id",
+            "title",
+            "guest"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "SEG-03: the scene's last line was delivered (or the scene was cut short).",
+          "properties": {
+            "scene_id": {
+              "type": "string"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "scene_end",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
           "properties": {
             "msg": {
               "$ref": "#/$defs/ChatMsg"
@@ -9353,6 +9575,10 @@
         },
         "status": {
           "$ref": "#/$defs/PrepStatus"
+        },
+        "table_read": {
+          "$ref": "#/$defs/TableReadPlan",
+          "description": "SEG-03: the scheduled guest and the scenes for its ballots. Omitted when the stream\nplays no Table Read; SEG-01 then hands over to SEG-02A."
         }
       },
       "required": [
@@ -9456,6 +9682,27 @@
         "incidents",
         "tone_cells",
         "rule_failures"
+      ],
+      "type": "object"
+    },
+    "TableReadPlan": {
+      "description": "The stream prep's SEG-03 plan: the scheduled guest and up to three scenes for its ballots.",
+      "properties": {
+        "guest": {
+          "description": "Foil id of the guest.",
+          "type": "string"
+        },
+        "scenes": {
+          "description": "1-3 scene ids from `<data>/scenes/<guest>/`, in ballot order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "guest",
+        "scenes"
       ],
       "type": "object"
     },
@@ -10691,6 +10938,10 @@
               "minimum": 0,
               "type": "integer"
             },
+            "foil": {
+              "description": "The foil id when `speaker` is `foil`.",
+              "type": "string"
+            },
             "id": {
               "description": "`<run_id>:<seq>:<part>`: unique per run.",
               "type": "string"
@@ -10722,6 +10973,10 @@
               "format": "uint64",
               "minimum": 0,
               "type": "integer"
+            },
+            "speaker": {
+              "$ref": "#/$defs/Speaker",
+              "description": "`foil` for a guest's line; omitted for the host."
             },
             "text": {
               "description": "This sentence's text, as spoken.",

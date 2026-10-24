@@ -22,7 +22,7 @@ export type EventType = StreamEvent["type"];
 type Exhaustive<U, L extends readonly U[]> = [U] extends [L[number]] ? true : false;
 const exhaustive = <U>() => <L extends readonly U[]>(list: L & (Exhaustive<U, L> extends true ? unknown : never)): L => list;
 
-export const SEGMENT_IDS = exhaustive<SegmentId>()(["SEG-01", "SEG-02A", "SEG-02B-I", "SEG-02B-II"] as const);
+export const SEGMENT_IDS = exhaustive<SegmentId>()(["SEG-01", "SEG-02A", "SEG-02B-I", "SEG-02B-II", "SEG-03"] as const);
 /** Lowest first. */
 export const RANKS = exhaustive<Rank>()(["thrall", "acolyte", "cultist", "warlock", "lich", "dread_council"] as const);
 export const EVIDENCE_GRADES = exhaustive<EvidenceGrade>()(["DOC", "REP", "CLM", "SPC"] as const);
@@ -52,6 +52,8 @@ export const EVENT_TYPES = exhaustive<EventType>()([
   "segment_start",
   "segment_end",
   "case_open",
+  "scene_start",
+  "scene_end",
   "chat",
   "picked",
   "say",

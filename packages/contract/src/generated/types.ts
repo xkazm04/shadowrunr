@@ -13,7 +13,7 @@ export type Rank = "thrall" | "acolyte" | "cultist" | "warlock" | "lich" | "drea
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "SegmentId".
  */
-export type SegmentId = ("SEG-01" | "SEG-02A") | "SEG-02B-I" | "SEG-02B-II";
+export type SegmentId = ("SEG-01" | "SEG-02A") | "SEG-02B-I" | "SEG-02B-II" | "SEG-03";
 /**
  * How a situation is performed (`situations.json` `stimulus`).
  *
@@ -412,6 +412,21 @@ export type StreamEvent =
       type: "case_open";
     }
   | {
+      /**
+       * Foil id of the guest.
+       */
+      guest: string;
+      scene_id: string;
+      title: string;
+      ts_ms: number;
+      type: "scene_start";
+    }
+  | {
+      scene_id: string;
+      ts_ms: number;
+      type: "scene_end";
+    }
+  | {
       msg: ChatMsg;
       ts_ms: number;
       type: "chat";
@@ -679,7 +694,7 @@ export type ModStage = "input" | "output";
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "BeatMode".
  */
-export type BeatMode = "cold_open" | "react" | "bit" | "bridge" | "mixed" | "hold" | "improvise";
+export type BeatMode = "cold_open" | "react" | "bit" | "bridge" | "mixed" | "hold" | "improvise" | "scene";
 /**
  * The brain's fleet mode as recorded by [`StreamEvent::Health`].
  *
@@ -929,6 +944,20 @@ export type FaceState = "rig" | "silhouette";
  */
 export type FactScope = "viewer" | "character" | "world" | "case";
 /**
+ * Who speaks a scene line. The guest is the stream's scheduled foil.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SceneSpeaker".
+ */
+export type SceneSpeaker = "host" | "guest";
+/**
+ * Whether a scene may go on a ballot.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SceneStatus".
+ */
+export type SceneStatus = "draft" | "approved";
+/**
  * Anything `/events` may push: an enveloped event (after a `since` subscribe), an error frame, or a bare StreamEvent (legacy mode).
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -983,6 +1012,10 @@ export type VoiceFrame =
   | {
       duration_ms: number;
       /**
+       * The foil id when `speaker` is `foil`.
+       */
+      foil?: string;
+      /**
        * `<run_id>:<seq>:<part>`: unique per run.
        */
       id: string;
@@ -1004,6 +1037,7 @@ export type VoiceFrame =
        * The `say` event's seq in its run (contract § event resume).
        */
       seq: number;
+      speaker?: Speaker;
       /**
        * This sentence's text, as spoken.
        */
@@ -3239,6 +3273,7 @@ export interface StreamPrep {
   plan_report?: string;
   prep_id: string;
   status: PrepStatus;
+  table_read?: TableReadPlan;
 }
 /**
  * One prepared bit, for one segment.
@@ -3296,6 +3331,22 @@ export interface Connector {
   id: string;
   kind: ConnectorKind;
   line: string;
+}
+/**
+ * The stream prep's SEG-03 plan: the scheduled guest and up to three scenes for its ballots.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "TableReadPlan".
+ */
+export interface TableReadPlan {
+  /**
+   * Foil id of the guest.
+   */
+  guest: string;
+  /**
+   * 1-3 scene ids from `<data>/scenes/<guest>/`, in ballot order.
+   */
+  scenes: string[];
 }
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
@@ -5740,6 +5791,89 @@ export interface Fact {
 export interface RpcRequest {
   method: string;
   params?: unknown;
+}
+/**
+ * A scene file (`<data>/scenes/<guest>/<id>.toml`).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "Scene".
+ */
+export interface Scene {
+  fictional?: boolean;
+  /**
+   * The foil id that plays the guest.
+   */
+  guest: string;
+  /**
+   * Kebab-case, unique within the guest's folder; equals the file stem.
+   */
+  id: string;
+  line: SceneLine[];
+  /**
+   * Talking points for the free talk after the scene.
+   */
+  notes?: string[];
+  /**
+   * The ballot line, at most 80 chars.
+   */
+  pitch: string;
+  status: SceneStatus;
+  title: string;
+}
+/**
+ * One line of a scene: fixed `text`, or (host only) a live slot with a `live` direction and
+ * a `fallback` line. Exactly one of `text` and `live` is set; `scene check` enforces it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SceneLine".
+ */
+export interface SceneLine {
+  /**
+   * Spoken when the live slot's call fails or times out. Required with `live`.
+   */
+  fallback?: string;
+  /**
+   * What the host's live line must do, e.g. "the closing speech: what we learned today".
+   */
+  live?: string;
+  speaker: SceneSpeaker;
+  text?: string;
+}
+/**
+ * One problem `scene check` found. A scene with any problem cannot be approved and never
+ * reaches a ballot.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SceneProblem".
+ */
+export interface SceneProblem {
+  /**
+   * Stable code: `shape`, `pitch_too_long`, `guest_unknown`, `gate_blocked`, `gate_recast`,
+   * `no_lines`, `ends_on_guest`.
+   */
+  code: string;
+  detail: string;
+  /**
+   * 0-based line index; omitted for a whole-scene problem.
+   */
+  line?: number;
+}
+/**
+ * One row of `scene.list` / the `scene list` CLI.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SceneSummary".
+ */
+export interface SceneSummary {
+  fictional?: boolean;
+  guest: string;
+  id: string;
+  lines: number;
+  live_slots: number;
+  pitch: string;
+  problems?: SceneProblem[];
+  status: SceneStatus;
+  title: string;
 }
 /**
  * What the segment runtime tells the brain each tick. Produced by

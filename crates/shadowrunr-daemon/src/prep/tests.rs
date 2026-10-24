@@ -461,6 +461,7 @@ fn each_check_names_what_it_caught() {
     let ctx = CheckContext {
         policy: &policy,
         real_names: &names,
+        scenes: None,
     };
     let run = |edit: &dyn Fn(&mut StreamPrep)| {
         let mut p = sample_prep();
@@ -765,7 +766,8 @@ fn a_premise_without_a_payoff_fails_shape() {
     assert!(detail.contains("prem-01"), "{detail}");
 }
 
-/// Guard: the tightened gate keeps the shipped sample green on all nine checks.
+/// Guard: the tightened gate keeps the shipped sample green on all nine checks (it plans no
+/// table read, so `table_read` is not among them).
 #[test]
 fn the_shipped_sample_still_passes_all_nine_checks() {
     let checks = sample_checks(&|_| {});
@@ -959,6 +961,7 @@ async fn a_count_shortfall_is_an_insert_slot_the_plan_can_fill() {
     let ctx = CheckContext {
         policy: &policy,
         real_names: &[],
+        scenes: None,
     };
     let found = checks::findings(&base, &ctx);
     let slot = found.iter().find(|f| f.check == "counts").unwrap();
@@ -1189,4 +1192,194 @@ fn the_cli_parses_revise_with_notes() {
         }
         other => panic!("{other:?}"),
     }
+}
+
+// ── SEG-03: the table read ─────────────────────────────────────────────
+
+/// A two-line scene of `the-disruptor` (a foil Malakor declares) in `<data>/scenes/`.
+fn put_scene(cfg: &Config, id: &str, status: &str, guest_line: &str) {
+    let path = crate::scenes::scene_path(&cfg.paths.data, "the-disruptor", id);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &path,
+        format!(
+            "id = \"{id}\"\ntitle = \"T\"\npitch = \"P\"\nguest = \"the-disruptor\"\n\
+             status = \"{status}\"\nfictional = true\n\n[[line]]\nspeaker = \"guest\"\n\
+             text = \"{guest_line}\"\n\n[[line]]\nspeaker = \"host\"\ntext = \"Sit.\"\n"
+        ),
+    )
+    .unwrap();
+}
+
+fn table_read_cmd(id: &str, guest: &str, scenes: &[&str]) -> PrepCommand {
+    PrepCommand::TableRead {
+        id: id.into(),
+        guest: Some(guest.into()),
+        scenes: scenes.iter().map(|s| s.to_string()).collect(),
+        clear: false,
+        json: false,
+    }
+}
+
+/// SEG-03's acceptance: a table read naming an unapproved scene, or a scene with a
+/// gate-blocked line, fails `table_read` and holds the approval; a clean one passes and the
+/// owner approves.
+#[tokio::test]
+async fn a_table_read_with_an_unapproved_or_gated_scene_holds_the_approval() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    put_scene(&cfg, "clean", "approved", "Chaos reigns.");
+    put_scene(&cfg, "drafty", "draft", "Chaos reigns.");
+    put_scene(&cfg, "gated", "approved", "Mail me at chaos@example.com.");
+    let base = stage_base(&cfg, &|_| {});
+    assert!(
+        base.checks.iter().all(|c| c.id != "table_read"),
+        "no table read, no table_read check"
+    );
+
+    let run = |cmd| prep_cli::store_cmd(&cfg, cmd);
+    for (scene, why) in [("drafty", "is a draft"), ("gated", "gate_blocked")] {
+        assert_eq!(
+            run(table_read_cmd(&base.prep_id, "the-disruptor", &[scene])),
+            EXIT_CHECK_FAILED
+        );
+        let p = store(&cfg).load(&base.prep_id).unwrap();
+        assert_eq!(checks::failed(&p.checks), ["table_read"]);
+        assert!(
+            detail(&p, "table_read").contains(why),
+            "{}",
+            detail(&p, "table_read")
+        );
+        let e = approve_in(&cfg, &p.prep_id, "owner", T0 + 1).unwrap_err();
+        assert_eq!(e.code, ErrorCode::Conflict);
+    }
+
+    // A guest that is not the character's foil, and too many scenes.
+    assert_eq!(
+        run(table_read_cmd(&base.prep_id, "the-painter-x", &["clean"])),
+        EXIT_CHECK_FAILED
+    );
+    let p = store(&cfg).load(&base.prep_id).unwrap();
+    assert!(detail(&p, "table_read").contains("not a foil of malakor"));
+    assert_eq!(
+        run(table_read_cmd(
+            &base.prep_id,
+            "the-disruptor",
+            &["clean", "clean", "drafty", "gated"]
+        )),
+        EXIT_CHECK_FAILED
+    );
+
+    // Clean: every check passes, the plan is stored and the owner approves.
+    assert_eq!(
+        run(table_read_cmd(&base.prep_id, "the-disruptor", &["clean"])),
+        0
+    );
+    let p = store(&cfg).load(&base.prep_id).unwrap();
+    assert!(checks::failed(&p.checks).is_empty(), "{:?}", p.checks);
+    assert_eq!(
+        p.table_read,
+        Some(shadowrunr_types::scene::TableReadPlan {
+            guest: "the-disruptor".into(),
+            scenes: vec!["clean".into()],
+        })
+    );
+    let stored: Value = serde_json::from_str(
+        &std::fs::read_to_string(store(&cfg).root().join(&p.prep_id).join("prep.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        stored["table_read"],
+        json!({"guest": "the-disruptor", "scenes": ["clean"]})
+    );
+    let ok = approve_in(&cfg, &p.prep_id, "owner", T0 + 2).unwrap();
+    assert_eq!(ok.status, PrepStatus::Approved);
+
+    // An approved prep's table read is fixed; the scene turning bad after approval is caught
+    // the next time the checks run (a new prep's approval).
+    assert_eq!(
+        run(PrepCommand::TableRead {
+            id: p.prep_id.clone(),
+            guest: None,
+            scenes: Vec::new(),
+            clear: true,
+            json: false,
+        }),
+        1
+    );
+}
+
+#[tokio::test]
+async fn a_scene_changed_after_the_table_read_was_set_fails_at_approval() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg(tmp.path());
+    put_scene(&cfg, "clean", "approved", "Chaos reigns.");
+    let base = stage_base(&cfg, &|_| {});
+    let run = |cmd| prep_cli::store_cmd(&cfg, cmd);
+    assert_eq!(
+        run(table_read_cmd(&base.prep_id, "the-disruptor", &["clean"])),
+        0
+    );
+    // The owner edits the scene back to a draft: approval re-runs the checks and holds.
+    put_scene(&cfg, "clean", "draft", "Chaos reigns.");
+    let e = approve_in(&cfg, &base.prep_id, "owner", T0 + 1).unwrap_err();
+    assert_eq!(e.code, ErrorCode::Conflict);
+    assert!(e.message.contains("table_read"), "{}", e.message);
+    // Clearing the table read lets it through.
+    assert_eq!(
+        run(PrepCommand::TableRead {
+            id: base.prep_id.clone(),
+            guest: None,
+            scenes: Vec::new(),
+            clear: true,
+            json: false,
+        }),
+        0
+    );
+    let p = store(&cfg).load(&base.prep_id).unwrap();
+    assert_eq!(p.table_read, None);
+    assert_eq!(p.checks.len(), 9);
+    assert!(approve_in(&cfg, &p.prep_id, "owner", T0 + 2).is_ok());
+}
+
+#[test]
+fn the_cli_parses_table_read() {
+    use crate::cli::{Cli, Command};
+    let parse = |args: &[&str]| Cli::try_parse_from([&["shadowrunr", "prep"], args].concat());
+    match parse(&[
+        "table-read",
+        "prep-20261020-000000",
+        "--guest",
+        "the-painter",
+        "--scenes",
+        "a,b,c",
+    ])
+    .unwrap()
+    .command
+    {
+        Command::Prep(PrepCommand::TableRead {
+            guest,
+            scenes,
+            clear,
+            ..
+        }) => {
+            assert_eq!(guest.as_deref(), Some("the-painter"));
+            assert_eq!(scenes, ["a", "b", "c"]);
+            assert!(!clear);
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(parse(&["table-read", "prep-20261020-000000", "--clear"]).is_ok());
+    assert!(
+        parse(&["table-read", "prep-20261020-000000", "--guest", "x"]).is_err(),
+        "--scenes is required"
+    );
+    assert!(parse(&[
+        "table-read",
+        "prep-20261020-000000",
+        "--clear",
+        "--guest",
+        "x"
+    ])
+    .is_err());
 }

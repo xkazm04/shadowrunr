@@ -979,11 +979,12 @@ fn load_segment_directions(dir: &Path) -> Result<BTreeMap<SegmentId, String>, Br
 }
 
 /// Every segment id, in the contract's order.
-const SEGMENT_IDS: [SegmentId; 4] = [
+const SEGMENT_IDS: [SegmentId; 5] = [
     SegmentId::Seg01ImprovisedRoom,
     SegmentId::Seg02aHexmap,
     SegmentId::Seg02bCartography,
     SegmentId::Seg02bDependency,
+    SegmentId::Seg03TableRead,
 ];
 
 const RANKS: [Rank; 6] = [

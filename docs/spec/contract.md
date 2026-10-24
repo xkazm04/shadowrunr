@@ -89,7 +89,7 @@ Wire names that other components read verbatim:
 
 | Field | Values |
 |---|---|
-| `SegmentId` | `SEG-01`, `SEG-02A`, `SEG-02B-I` (descoped), `SEG-02B-II` (descoped) |
+| `SegmentId` | `SEG-01`, `SEG-02A`, `SEG-02B-I` (descoped), `SEG-02B-II` (descoped), `SEG-03` (Table Read) |
 | `Rank`, lowest first | `thrall`, `acolyte`, `cultist`, `warlock`, `lich`, `dread_council` |
 | `EvidenceGrade` | `DOC`, `REP`, `CLM`, `SPC` |
 | `ModelTier` | `haiku`, `sonnet`, `opus` |
@@ -118,7 +118,8 @@ private/            optional: operator material (literal examples); no loader re
 lines/<variant>.toml  optional: the tone's line bank, exemplars by situation (below)
 directions.md       optional: the owner's do and don't list, read with the tone
 segments/<SEG-ID>.md  optional: the owner's directions for one segment, read while it is live
-foils/<foil>.md     SEG-01 guest foils: original parody archetypes, never real people
+foils/<foil>.md     SEG-01 guest foils: original parody archetypes, never real people (one owner-approved
+                    satirical exception, constitution red line 5)
 rules/<rule>.md     constitution rules, listed under [rules]; a rail is also listed in rails
 stalls.toml         model-free stall lines for an engine outage (`lines = [...]`)
 voice/bench.toml    optional: the emotion bench lines `voice.bench` renders (`[[line]]`)
@@ -385,8 +386,8 @@ directions, the narrowed rails, the scaled judge and the tic check; `/10` is the
 
 Judge (T1). The rubric samples 24 streamer turns (`sample_turns`). Besides the binary
 `[[quality]]` facts (`humor_landed` kept for continuity), each sampled turn gets a 0-3 score
-per `[[scaled]]` dimension (`surprise`, `irony`, `bite`, `specificity`, each with four
-anchors), in the reply's optional `scores` array (`{dimension, score, line, quote}`), verified
+per `[[scaled]]` dimension (`surprise`, `irony`, `bite`, `specificity`, and SEG-03's `honesty`:
+self-roast, saying the unsaid, opinions on the material; each with four anchors), in the reply's optional `scores` array (`{dimension, score, line, quote}`), verified
 like facts. The tic check is mechanical: the share of the streamer's lines that repeat a
 3-word phrase from one of his `tic_window` (20) lines before. `judge.json` gains `scores` and
 `tone: { scaled: [{dimension, mean?, n}], tic: {window, lines, with_tic, share?, worn} }`, and
@@ -1032,7 +1033,8 @@ apart; overlapping cuts merge when the union fits the band; the top 5 per stream
 marker label, Malakor's answer to a foil, or the beat's last line for a crowd peak). The cut
 opens 12 s (spoken) before it, snapped earlier to a line start, keeps at least the line the
 payoff answers, closes 1.5 s after the payoff and is held in its band: SEG-01
-`seg01-split-stage` 25-35 s, SEG-02A `seg02a-alleged` 45-60 s, otherwise 15-60 s. A short cut
+`seg01-split-stage` 25-35 s, SEG-02A `seg02a-alleged` 45-60 s, SEG-03 `seg03-two-shot` 20-45 s
+(one exchange: setup, payoff and the host's verdict), otherwise 15-60 s. A short cut
 takes the following lines, then earlier ones; a long one sheds pre-roll but never the setup,
 and when setup plus payoff cannot fit it is `needs_reauthoring` (never approved). On real
 timing the edges snap to what is heard: the cut opens up to 0.4 s before its first line but
@@ -2289,3 +2291,53 @@ CharacterDocSetResult}`.
 - **The constitution** is writable here although the brain never edits it: the caller is the
   operator's own agent, and every one of these writes reaches the operator as an approval card
   before it runs.
+
+## Appendix (SEG-03 Table Read): scenes, the scheduled guest, the guest's voice
+
+The host and a scheduled guest (a foil of the host's package) perform scenes the audience picks.
+One round is a ballot, the scene, then free talk; a run is up to three rounds.
+
+- **Scene files** live in `<data>/scenes/<guest>/<id>.toml`, never in the character package:
+  they are owner-authored and owner-local. Shape (`shadowrunr_types::scene::Scene`): `id` (the
+  file stem), `title`, `pitch` (the ballot line, at most 80 chars), `guest` (the foil id),
+  `status` (`draft` | `approved`), `notes` (talking points for the free talk), `fictional`
+  (omitted when false), and `[[line]]` rows. A line is `speaker` (`host` | `guest`) plus exactly
+  one of `text` (spoken as written) or, for the host only, `live` (a direction for a line the
+  host's core model writes when the scene starts) with a required `fallback` host line.
+- **`scene check`** reports `SceneProblem { line?, code, detail }` with codes `shape`,
+  `pitch_too_long`, `guest_unknown`, `gate_blocked`, `gate_recast`, `no_lines`,
+  `ends_on_guest`. Every fixed line runs the brain's output gate (guest lines on the foil
+  surface). A scene with a problem cannot be approved and never reaches a ballot; the gate runs
+  again on every line at play time (rails on every path).
+- **The prep** carries `table_read { guest, scenes: [1-3 scene ids] }`, omitted when the stream
+  plays no Table Read. With it, SEG-01 hands over to SEG-03 instead of SEG-02A, and the guest is
+  the active foil for the whole segment.
+- **Events.** `scene_start { scene_id, title, guest }` before the scene's first line,
+  `scene_end { scene_id }` after its last; the lines between are ordinary `say` events (the
+  guest's as `speaker: foil`, `foil: <guest>`). `BeatMode` gains `scene`.
+- **Turn rules.** Scripted guest lines are spoken as written. Outside a scene the guest's live
+  lines keep the one-sentence foil cap, and the host speaks after every guest turn; a scene
+  never ends on a guest line (`ends_on_guest`). The pace budget keeps the guest's line and the
+  host's answer ahead of other lines; a guest line left unanswered or squeezed out gets a short
+  host close (moderation `guest_turn` / `closed`). Care beats and scene asides are the host's
+  alone (`guest_turn` / `host_only`).
+- **During a scene.** A sincerely sad viewer or a disclosure gets a care beat at the next line
+  boundary, then the scene resumes; a raid, gift or sub gets one short host aside (at most one
+  per 30 s), and the `beat_plan` reason reads "scene <id> paused for ...". Carried chat does not
+  expire while a scene plays: its carry window restarts at `scene_end`. Mid-scene, a raid is 5
+  first contacts within 20 s; an aside always airs a line (an engine line, `scene_aside` /
+  `fallback`, when the model's cannot).
+- **Closes and the last word.** The host's engine-written closes after a guest line rotate from a
+  bank, never twice in a row, and are never taken by the repetition guard; the guest's line airs
+  only if the host line after it does. The brain's active foil follows the runtime's
+  `active foil:` line, so a foil the runtime summons (a SEG-01 vote) can speak at once.
+- **Cues.** The intro beat introduces the guest and the vote; the first talk beat after a scene
+  carries the scene's `notes`. Each fires once and leads its beat: chat answers come after it
+  (`cue_lead` / `chat_after`).
+- **Clock.** `switch_segment` is refused before the floor (20 min), and so is `sign_off` unless
+  the host loop has signalled the stream's end (`SegmentRuntime::set_stream_ending`; the sandbox
+  sets it in its goodbye window).
+- **Voice.** `VoiceFrame::Utterance` gains `speaker` (`foil` for the guest; omitted for the
+  host) and `foil`. Guest lines are voiced in the foil's own voice through the same FIFO as the
+  host's, so the two never overlap; a guest with no voice configured is shown as captions only.
+

@@ -95,9 +95,13 @@ export interface LiveLines {
   ring: EventsAt;
 }
 
-/** Learn every live host line's delivery by its seq that the feed does not know yet. */
+/** Learn every live host line's delivery by its seq that the feed does not know yet. A guest's line
+ * (SEG-03) is never learned, so its audio starting cues nothing on his face. */
 export function learnLines(feed: DeliveryFeed, live: LiveLines): void {
-  for (const line of live.said) if (!feed.knows(live.runId, line.seq)) feed.said(live.runId, line.seq, findSay(live.ring, line.at, line.text)?.delivery);
+  for (const line of live.said) {
+    if (line.foil !== undefined || feed.knows(live.runId, line.seq)) continue;
+    feed.said(live.runId, line.seq, findSay(live.ring, line.at, line.text)?.delivery);
+  }
 }
 
 /**
@@ -111,10 +115,11 @@ export function silentCaption(
 ): { key: string; id: number; saidAt?: number; text: string } | null {
   if (voiceCaption === undefined) {
     const c = captionAt(scene, now);
-    if (!c) return null;
+    // a guest's caption is not his line: it cues nothing on his face
+    if (!c || c.foil !== undefined) return null;
     return { key: `c:${c.id}:${c.saidAt}`, id: c.id, saidAt: c.saidAt, text: c.text };
   }
-  if (voiceCaption && !voiceCaption.voiced && voiceCaption.speaking) return { key: `v:${voiceCaption.caption.id}`, id: voiceCaption.caption.id, text: voiceCaption.caption.text };
+  if (voiceCaption && voiceCaption.caption.foil === undefined && !voiceCaption.voiced && voiceCaption.speaking) return { key: `v:${voiceCaption.caption.id}`, id: voiceCaption.caption.id, text: voiceCaption.caption.text };
   return null;
 }
 

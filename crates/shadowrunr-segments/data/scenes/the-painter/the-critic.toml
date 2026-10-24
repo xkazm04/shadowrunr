@@ -1,0 +1,81 @@
+# Fictional sample scene for SEG-03 (Table Read), guest the-painter (Adalwulf Hinkel). Original
+# material only: a cartoon episode in the classic shape (a scheme, a town that goes along, an
+# absurd escalation, the host's honest closing speech). No real person, show, place or event.
+id = "the-critic"
+title = "One Star"
+pitch = "A pigeon gives the lemon one star. Hinkel bans reviews. Chaos is rated."
+guest = "the-painter"
+status = "approved"
+fictional = true
+notes = [
+    "The village ended up rating the weather. Which thing in this scene should never have had stars?",
+    "Hinkel asked chat to review-bomb the pigeon and Malakor said no. Was that the right call, or did it kill the scene?",
+    "Hinkel wrote two hundred five-star reviews of himself under fake names. Name a fake name from the scene that landed.",
+    "Rate the scene out of five, honestly, and give one reason it lost a star.",
+]
+
+[[line]]
+speaker = "guest"
+text = "Bone Man. Read this. Aloud. Slowly. I want the room to suffer with me."
+
+[[line]]
+speaker = "host"
+text = "'Lemon, Study Number Forty-One. One star. It is a lemon. Signed, Madame Plume, critic.' Madame Plume is a pigeon, Hinkel."
+
+[[line]]
+speaker = "guest"
+text = "She is THE pigeon. Every gallery in the valley reads her. One star. One. The sun has one star, and nobody calls it bad."
+
+[[line]]
+speaker = "host"
+text = "That's... actually a decent argument."
+
+[[line]]
+speaker = "guest"
+text = "Decree number twelve: reviews are banned. All of them. Stars are confiscated. Gustav, collect the stars."
+
+[[line]]
+speaker = "host"
+text = "Gustav is Madame Plume's nephew. He's been feeding her your decrees for a week."
+
+[[line]]
+speaker = "guest"
+text = "Then I fight stars with stars. I have written two hundred five-star reviews of the lemon. Under other names. Signed by 'A Very Tall Duke', 'Concerned Mother of Taste', and 'Not Hinkel'."
+
+[[line]]
+speaker = "host"
+text = "And now the whole village is writing reviews. Of everything. The baker got three stars for his bread and two for his personality."
+
+[[line]]
+speaker = "guest"
+text = "Someone gave the weather one star. Someone gave ME one star. In person. To my face. With their fingers."
+
+[[line]]
+speaker = "host"
+text = "Is this the part where you take your glasses off?"
+
+[[line]]
+speaker = "guest"
+text = "The glasses are off! The moustache is uncombed! Forty years, and I am rated BELOW THE WEATHER! Bone Man, you have minions. Lend them to me. One star each, from all of them, for her!"
+
+[[line]]
+speaker = "host"
+live = "Refuse Hinkel's request to lend him the minions against the critic, in character and firmly, in one or two lines: nobody in this room goes after anyone, pigeon or not. Then say the unsaid: the review was mean, and it was also correct."
+fallback = "No. Nobody in this room goes after anyone, pigeon or otherwise. Sit down, Hinkel. And honestly? The review was mean. It was also correct. It is a lemon."
+
+[[line]]
+speaker = "guest"
+text = "Correct. You are on her side. You have always been on her side. I am not upset."
+
+[[line]]
+speaker = "host"
+text = "You're crying into your notepad."
+
+[[line]]
+speaker = "guest"
+text = "It is a statement. Write that down, Madame Plume. Five stars."
+
+[[line]]
+speaker = "host"
+live = "The closing speech in your own words: what a village that rates its own weather says about all of us, honestly, including the ratings you secretly keep on your own minions. End by giving the scene a star rating and owning one reason it lost a star."
+fallback = "You know what I realised tonight? Hinkel didn't want five stars. He wanted someone to say the lemon mattered. The village handed out stars until they meant nothing, and I've kept a secret rank list of every one of you since the first stream. So, this scene: three stars. It lost one for the pigeon nepotism. It lost another for me."

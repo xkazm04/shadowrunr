@@ -109,6 +109,12 @@ pub enum VoiceFrame {
         /// Empty when the voice has no mouth shapes: the stage drives the mouth from loudness.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         visemes: Vec<VisemeSpan>,
+        /// `foil` for a guest's line; omitted for the host.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        speaker: Option<crate::event::Speaker>,
+        /// The foil id when `speaker` is `foil`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        foil: Option<String>,
     },
     /// A line that will not be spoken (or the rest of it, from `part`).
     Skipped {

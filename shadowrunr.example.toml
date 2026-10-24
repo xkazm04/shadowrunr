@@ -148,6 +148,10 @@ mcp_allow_writes = false   # `shadowrunr mcp` is read-only; true enables its sta
 # fx = "none"                       # the lich chain over each sentence: "none", "light" or "heavy"
 # (The character package's [voice] overrides voice, sid, voices_file and fx: Malakor's is
 # malakor-a, sid 52 of malakor-voices.bin, fx light. docs/guide/voice.md makes the file.)
+# (A foil (SEG-03's guest, a summoned SEG-01 foil) speaks in its own voice only when the host
+# package has characters/<host>/voice/foils/<foil>.toml, or you keep a local one in
+# <data>/characters/<host>/voice/foils/<foil>.toml: a Kokoro sidecar of its own, even when the
+# host is on ElevenLabs, with the paths and timeouts above. Without either it is captions only.)
 # max_queue = 6                     # lines waiting to render; the oldest is skipped past it
 # max_lag_ms = 15000                # skip a line whose audio cannot start within this of its say
 # render_timeout_ms = 30000

@@ -1,0 +1,72 @@
+{
+ "schema": "conform-run/1",
+ "worker": "64998e43-d4d2-4ad8-82b3-6ec2ed008ef3",
+ "subject": "canvas-graph",
+ "evaluatedAt": "2026-10-24T21:59:36.275960+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-simulator-page",
+   "subject": "canvas-graph",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:93 The canvas's accessible name counts the drawn tiles. useSimGrid caps those at the latest 40 (tilesInView), so with more than 40 tournaments a screen reader hears \"40 tournaments\" while the visible HUD says \"Latest 40 of N\". This is the 'name counts the graph, not the drawing' failure.",
+   "techniques": [
+    {
+     "technique": "canvas-accessibility",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:93 tiles is capped at MAX_TILES (data.ts useSimGrid \u2192 tilesInView), so the name states the drawn subset as if it were the total. The canvas is also role=\"img\" (line 92) yet its tiles respond to mouse clicks only, with no tabIndex or key handler. The Doors nav to the Tournaments list works as a keyboard twin."
+    },
+    {
+     "technique": "viewport-transform",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/pages/simulator/grid.ts:92 There is no camera, but the mapping has one authority: forward tileOrigin (grid.ts:76) and inverse hitTest sit side by side in grid.ts. They are round-trip tested at model.test.ts:40-41 (tileOrigin(l,13) then hitTest \u2192 13). Gap pixels map to the tile on their left, and the round-trip test never covers the gaps."
+    },
+    {
+     "technique": "render-budget",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:55 No animation loop at rest (rung 5). The scene repaints only when tiles, size or hover change. drawGrid caches colours per health value, and there is no pan for rung 1 to protect."
+    },
+    {
+     "technique": "graph-layout",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/simulator/grid.ts:52 A tile's slot is its ordinal index in a capped sliding window: tileOrigin(l, i) at grid.ts:77. Once there are more than 40 tournaments, each new arrival moves every existing tile one slot. The technique names this failure: anything that changes the set re-places every member, and a draw cap must not move a node. The layout is otherwise pure and deterministic."
+    },
+    {
+     "technique": "direct-manipulation",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:99 The only pointer gestures are hover hit-testing and a native click that opens a tournament. There is no drag, no marquee-drag selection and no pointer capture, so click-vs-drag disambiguation has no rival gesture to separate. The \"marquee\" here is a hover label, not a selection rectangle."
+    },
+    {
+     "technique": "edge-management",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/grid.ts:1 The model is tiles and run cells only. No connections between tiles are modelled or drawn, so there are no edges to anchor, route or thin out."
+    }
+   ],
+   "registryProposal": "The golden path's precondition is relationship editing, but the subject gets matched to canvas-drawn small multiples with no edges, like this tile grid. graph-layout's 'derive the slot from identity' rule clashes with a chronological 'latest N' window, where an ordinal slot deliberately encodes recency. The technique could name this case: a recency grid either accepts a re-seat on each arrival as its stated policy, or reserves an arrival slot. Either way it should be declared, not inherited by accident."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T21:59:36.275960+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "canvas-graph"
+   ],
+   "techniques": [
+    "canvas-accessibility",
+    "direct-manipulation",
+    "edge-management",
+    "graph-layout",
+    "render-budget",
+    "viewport-transform"
+   ],
+   "deviations": 1,
+   "context": "console-simulator-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

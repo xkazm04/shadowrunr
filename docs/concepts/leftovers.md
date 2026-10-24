@@ -46,6 +46,11 @@ The five that buy the most next:
 | An act opening doesn't move the board's focus; the act card still says "Now open on the map". | `crates/shadowrunr-segments/src/runtime.rs` | S |
 | No rule makes the latest poll winner the next reveal. | `runtime.rs` (ties and crowd votes are done) | S |
 | Bait priority has no cap per window, only one injection per beat. | `crates/shadowrunr-brain/src/picker.rs` | S |
+| **SEG-03 (Table Read) follow-ups** (2026-10-24, smoke runs `sbx-20261024-*-10m`): the judge scores scripted scene lines on chat facts (`responsive_to_chat`), which drops the quality mean; exclude `scene_start`..`scene_end` lines from chat facts. The guest spoke only in the intro in the last run, none in the short post-scene talk. Honesty measured 0.42-0.64/3; the A/B (`sim/matrices/seg03-honest.toml`) has not run. The SEG-01 handover can fall due seconds after a foil is summoned. | `crates/shadowrunr-sim/src/judge.rs`; `crates/shadowrunr-brain/src/scene.rs` | M |
+| SEG-03 clips still reframe on the host's face and can crop the guest out of the two-shot. | `crates/shadowrunr-clips/src/window.rs` | S |
+| The reconcile planner's plan and directive schemas offer only SEG-01/SEG-02A (deliberate: SEG-03 needs a prep's `table_read`). | `crates/shadowrunr-reconcile/src/synth.rs` | S |
+| Owned requests drop when their 25 s carry window ends, not after the intended 90 s. | `crates/shadowrunr-brain/src/orchestrate/mod.rs` (commit filter) | S |
+| The ledger's `cost_usd` is the CLI's running `total_cost_usd` per warm session, so summed costs overcount (about 3x in the SEG-03 smoke runs). | `crates/shadowrunr-engine/src/stream.rs:215` | S |
 
 ## Behaviour and tone
 

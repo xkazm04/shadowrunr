@@ -1184,7 +1184,11 @@
           "revision": 7,
           "changedAt": "2026-09-06",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": ".github/workflows/ci.yml:51 The heavy WebView/Tauri capability is correctly cut out of the default root-workspace build (Cargo.toml:10-12), but nothing routine compiles the far side of that cut, so a break in the desktop crate goes unseen until someone next pays to build it by hand.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:2dc0e92ddb23f674",
+          "evaluatedRevision": 7
         },
         {
           "subject": "invariant-placement",
@@ -2059,7 +2063,11 @@
           "revision": 3,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/NoReport.tsx:11 The empty-state page reads the whole tournament collection through the limit-less, bare-array `tournament.list` (EmptyParams -> Vec<TournamentRow>, one row per sim directory, so it grows with every tournament run) and reduces all of it client-side to pick the newest, even though a paged `tournaments.page` exists; that read has no bound and no continuation.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:4ec15f52e99e1903",
+          "evaluatedRevision": 3
         }
       ],
       "governance": "governed"
@@ -2529,7 +2537,11 @@
           "revision": 6,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:93 The canvas's accessible name counts the drawn tiles. useSimGrid caps those at the latest 40 (tilesInView), so with more than 40 tournaments a screen reader hears \"40 tournaments\" while the visible HUD says \"Latest 40 of N\". This is the 'name counts the graph, not the drawing' failure.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:98dcec8d04236b95",
+          "evaluatedRevision": 6
         }
       ],
       "governance": "governed"
@@ -2759,7 +2771,11 @@
           "revision": 6,
           "changedAt": "2026-09-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/contract/scripts/codegen.mjs:220 generate() builds every file in memory but then deletes the committed results/ folder and rewrites each file in place with writeFile (truncate-on-open), so an interrupted `pnpm -C packages/contract generate` leaves fewer or zero-byte committed artifacts. That is exactly the delete-then-repopulate failure generator-failure-isolation names, where the fix is a staged write and atomic swap.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:9a082bd05760516a",
+          "evaluatedRevision": 6
         },
         {
           "subject": "trust-base",
@@ -3159,7 +3175,11 @@
           "revision": 9,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:213 The engine starts every Claude/codex/agy process in an isolated work_dir that defaults to a temp directory (config.rs:201), runs codex with a read-only sandbox, and never stages, commits, stashes or creates worktrees; a case-insensitive search of crates/shadowrunr-engine for worktree, stash, GIT_INDEX_FILE and 'git commit' found nothing, so the subject's precondition (sessions sharing one repo checkout and committing to it) does not hold here.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:de557423d4cf3016",
+          "evaluatedRevision": 9
         },
         {
           "subject": "session-continuation",
@@ -3332,7 +3352,11 @@
           "revision": 10,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/Cargo.toml:3 The crate analyses simulated stream runs and mechanically checks what an LLM proposes (evidence refs in verify.rs, character diffs in check_diff). It is not a program that grades a repository against a published, declared standard. A case-insensitive search of crates/shadowrunr-reconcile for conformance, conformant, checker and severity returned 0 hits, so the subject's precondition (building a conformance checker for a repository standard) does not hold here.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:58a3b7c0b9efb42c",
+          "evaluatedRevision": 10
         }
       ],
       "governance": "governed"
@@ -4317,7 +4341,11 @@
           "revision": 16,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-types/Cargo.toml:3 The crate is serde/schemars wire types plus pure predicates and a schema-export example; a search of every tracked file under crates/shadowrunr-types for Mutex, RwLock, Atomic, in_flight, idempot, single_flight, fencing, lease, Semaphore and tokio found zero hits, and its dependencies (serde, serde_json, thiserror, async-trait, schemars) carry no sync or runtime primitive, so no operation here acquires, releases or races a guard.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ccc991958e998a93",
+          "evaluatedRevision": 16
         },
         {
           "subject": "generated-output-grading",
@@ -4516,7 +4544,11 @@
           "revision": 4,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/budgets/perf.json:2 This context is a set of build-time and test-time quality instruments (fixed DOM/RPC/draw/commit count budgets checked in jsdom, plus a style-contract 'fidelity' harness against a prototype); it renders no visual surface with runtime cost knobs, so a client-side measured fidelity tier has nothing to govern here. A search of apps/console/budgets, apps/console/fidelity and apps/console/src/perf for requestIdleCallback, hardwareConcurrency, deviceMemory and fidelityTier found nothing. The only 'tier' hits are contest rank tiers (contest.ts:182) and the model core_tier field, and 'fidelity' here means visual parity with the winning prototype, not a runtime tier.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:02a551a058d8874c",
+          "evaluatedRevision": 5
         },
         {
           "subject": "agent-instruction-files",

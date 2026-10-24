@@ -34,6 +34,7 @@
 .band { align-self: stretch; }
 .segImprov { background: var(--sr-review-kind-show); }
 .segInvestigation { background: var(--sr-review-kind-title); }
+.segTableRead { background: var(--sr-color-foil); }
 .segOther { background: var(--sr-color-line); }
 
 .dots { display: flex; flex-wrap: nowrap; gap: var(--sr-space-tick); align-items: center; min-width: 0; overflow: hidden; }

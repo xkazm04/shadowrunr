@@ -75,13 +75,24 @@ pub struct Band {
 }
 
 /// SEG-01 split-stage 25-35 s; SEG-02A 45-60 s (the cut must also show its source and
-/// grade); anything else 15-60 s.
+/// grade); SEG-03 20-45 s; anything else 15-60 s.
+///
+/// SEG-03's cut is one exchange of a scene or its free talk: the guest's setup, the payoff and
+/// the host's verdict on it. Three or four short scripted lines run about 20 s at the measured
+/// 18 characters a second, so that is the floor; a back-and-forth of a few more lines, or the
+/// host's honest take after the scene, still fits a short by 45 s. ASSUMPTION, uncalibrated
+/// until SEG-03 clips are reviewed.
 pub fn band_for(seg: Option<SegmentId>) -> Band {
     match seg {
         Some(SegmentId::Seg01ImprovisedRoom) => Band {
             min_ms: 25_000,
             max_ms: 35_000,
             style: "seg01-split-stage",
+        },
+        Some(SegmentId::Seg03TableRead) => Band {
+            min_ms: 20_000,
+            max_ms: 45_000,
+            style: "seg03-two-shot",
         },
         Some(SegmentId::Seg02aHexmap) => Band {
             min_ms: 45_000,

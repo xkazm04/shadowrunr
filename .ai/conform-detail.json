@@ -3727,52 +3727,50 @@
       "context": "console-build-and-desktop-shell",
       "subject": "build-economics",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-22",
-      "evaluatedTs": "2026-10-22T21:57:07.906Z",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T21:40:20.243Z",
+      "worker": "f0cdd183-8f06-40b0-9dfa-b324ae4222de",
       "techniques": [
         {
-          "technique": "build-measurement",
-          "verdict": "deviation",
-          "evidence": "apps/console/package.json:8 The build measures output bytes but provides no scenario-labeled build timer, process-tree memory sampler or build-cost baseline; searches found no accompanying instruments."
-        },
-        {
-          "technique": "cache-budgeting",
-          "verdict": "deviation",
-          "evidence": "apps/console/src-tauri/.cargo/config.toml:4 The desktop crate retains artifacts in the shared target directory; searches found no byte ceiling, routine enforcing pruner or cache-hit measurement for it."
-        },
-        {
           "technique": "capability-feature-gating",
-          "verdict": "not-applicable",
-          "evidence": "apps/console/src-tauri/src/lib.rs:2 The shell delegates application logic to a separate daemon; its inspected dependencies provide the window and opener, with no identified heavy optional in-process capability requiring a gate."
-        },
-        {
-          "technique": "compilation-unit-splitting",
-          "verdict": "not-applicable",
-          "evidence": "apps/console/src-tauri/Cargo.toml:4 The inspected native implementation is a small window bootstrap and endpoint resolver, with no identified huge compilation unit or large repeatedly instantiated generic body; frontend lazy chunks alone do not establish compilation-unit economics."
+          "verdict": "deviation",
+          "evidence": ".github/workflows/ci.yml:51 The cut itself follows the standard: Cargo.toml:10 removes the dependency edge so the root build pulls in no WebView toolchain. But CI explicitly does not build this crate, and grep found no other tauri/src-tauri build step in .github. That breaks the 'keeping the gated side alive' rule, which says every tier must be compiled routinely."
         },
         {
           "technique": "debug-artifact-economics",
           "verdict": "deviation",
-          "evidence": "apps/console/src-tauri/.cargo/config.toml:1 This explicitly selects shared mutable artifacts; the referenced policy permits concurrent builders and expected Cargo lock waits, whereas the technique requires separate directories for concurrent builds."
-        },
-        {
-          "technique": "declinable-capability-split",
-          "verdict": "not-applicable",
-          "evidence": "apps/console/src-tauri/Cargo.toml:8 The native crate is unpublished and the console package is private; no published consumer unit carrying a declinable capability was identified."
+          "evidence": "apps/console/src-tauri/Cargo.toml:12 This manifest is its own workspace root, so only its [profile] tables apply to the tauri dependency tree, and the 23-line file declares none. The large third-party graph (tauri, webview, plugins) therefore builds with Cargo's default full dev debuginfo instead of minimal/none. A repo-wide search for '[profile' / 'debug =' found no profile anywhere."
         },
         {
           "technique": "dev-variant-design",
           "verdict": "deviation",
-          "evidence": "apps/console/package.json:7 The shortest development command runs the browser frontend and desktop development is separately invoked through Tauri, but searches found no authoritative task routing, desktop-only blind-spot list or measured cost comparison for these development choices."
+          "evidence": "apps/console/vite.config.ts:5 The default variant is the lite one: `pnpm dev` is Vite in a browser with no Rust compile, and Tauri is opt-in. But the lite variant's blind spots are not written down where it is defined: no injected __SHADOWRUNR_DAEMON__ / --daemon resolution, no opener plugin, no pinned CSP. A search of *.md for 'plain browser|tauri dev|pnpm dev' found no routing table."
+        },
+        {
+          "technique": "compilation-unit-splitting",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/src/lib.rs:2 The crate is a thin shell (lib.rs plus endpoint.rs) with no huge compilation unit to split. Its one structural cut, its own workspace apart from the core crates, is already made."
+        },
+        {
+          "technique": "declinable-capability-split",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/Cargo.toml:8 The crate is not published, so no consumer exists who could inherit or decline obligations."
+        },
+        {
+          "technique": "build-measurement",
+          "verdict": "deviation",
+          "evidence": "apps/console/package.json:8 The build measures output bytes but provides no scenario-labeled build timer, process-tree memory sampler or build-cost baseline; searches found no accompanying instruments.",
+          "carriedFrom": "2026-10-22"
+        },
+        {
+          "technique": "cache-budgeting",
+          "verdict": "deviation",
+          "evidence": "apps/console/src-tauri/.cargo/config.toml:4 The desktop crate retains artifacts in the shared target directory; searches found no byte ceiling, routine enforcing pruner or cache-hit measurement for it.",
+          "carriedFrom": "2026-10-22"
         }
       ],
-      "withdrawn": {
-        "worker": "729bccfd-c3de-48c3-9013-87d21926712b",
-        "state": "deviation",
-        "at": "2026-10-22T21:57:31.967045+00:00",
-        "reason": "reviewer (sonnet): The anchor config.toml:4 only shows the shared `target-dir`. The deviation rests on absence claims (no byte ceiling, pruner, cache-hit or timing instruments, no concurrency isolation) that I could not confirm from this context's files. Any such control would live in repo-wide CI or root tooling, whi"
-      }
+      "registryProposal": "capability-feature-gating frames the build-time cut as a feature flag. Here the heavy capability is excluded by placing it in a separate build root (its own workspace), not a flag. The rot-watch duty applies just as strongly to that case, and the technique could say so explicitly: a separate-root exclusion is a gate with no flag and is equally easy to stop compiling."
     },
     "435472ca-7ef4-4956-80d8-3dc82f215665/chat-transcript": {
       "context": "console-ui-primitives",
@@ -4823,6 +4821,226 @@
       "evaluatedTs": "2026-10-24T06:02:44.825Z",
       "worker": "caf276de-640b-424e-b0ba-447194a3f3eb",
       "techniques": []
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/adaptive-fidelity-tiers": {
+      "context": "console-quality-gates",
+      "subject": "adaptive-fidelity-tiers",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T21:06:21.380Z",
+      "worker": "5183ce7b-22be-4a02-a64a-4c6de95b075d",
+      "techniques": [
+        {
+          "technique": "measured-not-declared-capability",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/budgets/perf.json:2 The budgets are fixed counts taken at test time on a fixture. They are not runtime device capability checks, and nothing here reads a user-agent or a core count."
+        },
+        {
+          "technique": "measurement-settle-budget",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/budgets/perf.json:31 This draw budget asserts there is no frame loop at all, so there is no per-frame probe in this context that would need a settle deadline."
+        }
+      ],
+      "registryProposal": "The registry map matched this context to the subject on the token 'fidelity', but here 'fidelity' means a style-contract parity harness against a prototype, not a runtime quality tier. Consider down-weighting 'fidelity' as a matching token when no frame-time or tier vocabulary appears alongside it."
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/bounded-enumeration": {
+      "context": "console-reconcile-page",
+      "subject": "bounded-enumeration",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T21:24:02.473Z",
+      "worker": "9a023f28-4967-40bb-8459-5b07c4b67535",
+      "techniques": [
+        {
+          "technique": "required-limit-breaks-unaware-clients",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/NoReport.tsx:11 This is a limit-unaware full-list caller of a collection that keeps growing. The bare-array reply has no place for a continuation, so once a limit lands this caller will either fail or silently truncate. By contrast, Incidents.tsx:76 in the same context does it right: it pages on the daemon's `more`/`next_cursor` continuation, not on a short page."
+        },
+        {
+          "technique": "filter-after-return-under-limit",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/Incidents.tsx:69 The only filter here is a `rule` facet the operator picks, applied as a server query predicate. Nothing hides keys per caller for access reasons, so the technique's precondition does not hold."
+        },
+        {
+          "technique": "declare-the-inconsistency",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/report_wire.rs:66 The paged collection (a stored report's incidents) is immutable, so no write can land mid-walk. The anchor is on the daemon side of the endpoint this context pages."
+        },
+        {
+          "technique": "deny-absorbs-and-lowest-limit-wins",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:194 The ceiling is one fixed contract constant. No policy layer states list capabilities or ceilings that would need merging, and there is no recursive list verb."
+        }
+      ]
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/canvas-graph": {
+      "context": "console-simulator-page",
+      "subject": "canvas-graph",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T21:59:36.275Z",
+      "worker": "64998e43-d4d2-4ad8-82b3-6ec2ed008ef3",
+      "techniques": [
+        {
+          "technique": "canvas-accessibility",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:93 tiles is capped at MAX_TILES (data.ts useSimGrid → tilesInView), so the name states the drawn subset as if it were the total. The canvas is also role=\"img\" (line 92) yet its tiles respond to mouse clicks only, with no tabIndex or key handler. The Doors nav to the Tournaments list works as a keyboard twin."
+        },
+        {
+          "technique": "viewport-transform",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/simulator/grid.ts:92 There is no camera, but the mapping has one authority: forward tileOrigin (grid.ts:76) and inverse hitTest sit side by side in grid.ts. They are round-trip tested at model.test.ts:40-41 (tileOrigin(l,13) then hitTest → 13). Gap pixels map to the tile on their left, and the round-trip test never covers the gaps."
+        },
+        {
+          "technique": "render-budget",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:55 No animation loop at rest (rung 5). The scene repaints only when tiles, size or hover change. drawGrid caches colours per health value, and there is no pan for rung 1 to protect."
+        },
+        {
+          "technique": "graph-layout",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/simulator/grid.ts:52 A tile's slot is its ordinal index in a capped sliding window: tileOrigin(l, i) at grid.ts:77. Once there are more than 40 tournaments, each new arrival moves every existing tile one slot. The technique names this failure: anything that changes the set re-places every member, and a draw cap must not move a node. The layout is otherwise pure and deterministic."
+        },
+        {
+          "technique": "direct-manipulation",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:99 The only pointer gestures are hover hit-testing and a native click that opens a tournament. There is no drag, no marquee-drag selection and no pointer capture, so click-vs-drag disambiguation has no rival gesture to separate. The \"marquee\" here is a hover label, not a selection rectangle."
+        },
+        {
+          "technique": "edge-management",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/grid.ts:1 The model is tiles and run cells only. No connections between tiles are modelled or drawn, so there are no edges to anchor, route or thin out."
+        }
+      ],
+      "registryProposal": "The golden path's precondition is relationship editing, but the subject gets matched to canvas-drawn small multiples with no edges, like this tile grid. graph-layout's 'derive the slot from identity' rule clashes with a chronological 'latest N' window, where an ordinal slot deliberately encodes recency. The technique could name this case: a recency grid either accepts a re-seat on each arrival as its stated policy, or reserves an arrival slot. Either way it should be declared, not inherited by accident."
+    },
+    "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0/codegen": {
+      "context": "contract-package",
+      "subject": "codegen",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T22:16:09.741Z",
+      "worker": "6ed1ce90-e4dd-40d9-a16e-b4514aad3a6e",
+      "techniques": [
+        {
+          "technique": "generator-failure-isolation",
+          "verdict": "deviation",
+          "evidence": "packages/contract/scripts/codegen.mjs:220 Delete-then-repopulate of results/ followed by in-place writeFile (line 223) into src/generated; no temp-path + rename / directory swap, so an interrupt leaves a partial committed set. The cargo export (execFileSync) also has no time budget."
+        },
+        {
+          "technique": "commit-vs-derive-policy",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/check.mjs:44 The boundary type contract sits in tier 2: committed, with a lockstep drift gate whose failure message is the regeneration command, which is the canonical case for that tier."
+        },
+        {
+          "technique": "drift-gating",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/check.mjs:35 Check mode reuses the same generate() code path into a temp dir, diffs the whole generated tree (changed/missing/not-generated, so orphans and new files are covered) plus the schema, and exits 1 with the file names. Hosted in CI (see notes)."
+        },
+        {
+          "technique": "generated-file-hygiene",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/codegen.mjs:24 The generator emits a banner on every file saying it is generated, naming the generator, the source and the rebuild command (line 25). Output is deterministic (sorted names, LF normalisation), and eslint ignores **/generated/**. Gaps: no linguist-generated marker for collapsing diffs in review, and in validators.js the banner comes after @ts-nocheck/eslint-disable."
+        },
+        {
+          "technique": "task-registry-design",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/scripts/generate.mjs:17 This context has one generator writing one output root, so no in-context registry is needed. Whether the repo-wide generator population (tokens + contract) needs a registry is a question for a repo-level judgment."
+        },
+        {
+          "technique": "post-merge-regeneration",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/scripts/codegen.mjs:3 Output is a pure function of the schema with no positional references into sources, so unrelated edits do not churn it; the drift check on the change is the right regime."
+        },
+        {
+          "technique": "trigger-wiring",
+          "verdict": "deviation",
+          "evidence": "packages/contract/package.json:10 Regeneration is manual only. No dev, build or test door in this package (or in the consuming vite dev/build) runs generate, and no build asserts freshness. Staleness is caught only after the fact by the Rust schema_drift test and the CI check, never healed ambiently."
+        }
+      ],
+      "registryProposal": "trigger-wiring assumes the pipeline can run at the consumer's dev or build door, but here the input lives in another toolchain (Rust/cargo) and the artifact is tier-2 gated. The technique should say whether, for cross-toolchain boundary contracts, a lockstep gate on the input side (a cargo test) plus the CI drift gate satisfies it, or whether a freshness stamp checked by the JS build is still required."
+    },
+    "3b37a94d-3e69-4c44-8598-301f66448d9a/concurrency-guards": {
+      "context": "types-crate",
+      "subject": "concurrency-guards",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T22:30:12.503Z",
+      "worker": "a9ef3686-69a2-454b-857b-66fd5ccbba16",
+      "techniques": [
+        {
+          "technique": "atomic-file-publish",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/examples/export-schema.rs:26 Writes in place, but only as a developer-run codegen step into committed contract schema files (driven by packages/contract scripts); no process polls the file while it is written. If a live reader is ever added, this becomes a deviation (no write-temp-then-rename)."
+        },
+        {
+          "technique": "single-flight-primitives",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/engine.rs:161 Only a trait signature; &mut self makes the borrow checker serialize sends per warm session. No keyed in-flight registry is defined or needed in this crate; the implementations live in engine crates."
+        },
+        {
+          "technique": "idempotency-by-design",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/clips.rs:652 A pure status predicate the store, renderer and uploader call. Whether the publish write is conditional or replay-safe is decided at those write sites, which are outside this context."
+        },
+        {
+          "technique": "cross-process-exclusion",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/Cargo.toml:12 The only async dependency is a trait-definition macro. There is no shared substrate, lock file or claim row in this crate."
+        }
+      ]
+    },
+    "4f625471-4451-4819-953d-10b381c13213/concurrent-vcs": {
+      "context": "engine-llm-sessions",
+      "subject": "concurrent-vcs",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T22:41:58.594Z",
+      "worker": "4c45a8f6-5add-4b4a-a344-c81c2482c4c1",
+      "techniques": [
+        {
+          "technique": "physical-isolation",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/config.rs:201 Spawned CLIs run in a temp work dir, not a repo checkout, so there is no tree to isolate with a worktree."
+        },
+        {
+          "technique": "isolated-index-commits",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/alt_cli.rs:65 codex runs with --sandbox read-only, and nothing in the context builds a commit, so it never touches a staging index."
+        },
+        {
+          "technique": "shared-resource-arbitration",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:186 The one shared scratch resource (the prompts dir) is written through a temp file named per process, then atomically renamed into a content-addressed path. That is the namespacing the technique asks for, even though no VCS is involved."
+        },
+        {
+          "technique": "commit-time-claim-guard",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-engine/src/fleet.rs:358 Alt CLIs also start in the non-repo work_dir. The context has no commit path and no hook to guard."
+        }
+      ]
+    },
+    "ce601bf6-a98a-465f-8f19-3143e6483f8d/conformance-checking": {
+      "context": "reconcile-engine",
+      "subject": "conformance-checking",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T22:52:17.574Z",
+      "worker": "79edc813-8082-4ac7-b63d-39cab2019d48",
+      "techniques": [
+        {
+          "technique": "declared-then-proven",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:1 This verification checks LLM output against transcripts. It is not a check of declared repository claims, so there is no presence/shape/execution ladder over a contract."
+        }
+      ]
     }
   }
 }

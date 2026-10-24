@@ -295,6 +295,28 @@ impl PrepStore {
         Ok(p)
     }
 
+    /// Set (or clear) a staged prep's table read and keep the checks `recheck` gives. Refused
+    /// (`conflict`) unless the prep is staged: an approved prep's material is fixed.
+    pub fn set_table_read(
+        &self,
+        id: &str,
+        plan: Option<shadowrunr_types::scene::TableReadPlan>,
+        recheck: impl Fn(&StreamPrep) -> Vec<PrepCheck>,
+    ) -> Result<StreamPrep, RpcError> {
+        let _lock = self.lock()?;
+        let mut p = self.load(id)?;
+        if p.status != PrepStatus::Staged {
+            return Err(conflict(format!(
+                "prep {id} is {}, not staged: only a staged prep's table read is set",
+                status_name(p.status)
+            )));
+        }
+        p.table_read = plan;
+        p.checks = recheck(&p);
+        self.save(&p)?;
+        Ok(p)
+    }
+
     /// Retire a staged or approved prep: no stream uses it again.
     pub fn retire(&self, id: &str) -> Result<StreamPrep, RpcError> {
         let _lock = self.lock()?;

@@ -176,7 +176,7 @@ mod tests {
         assert_eq!(e.text, "");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "");
         let pkg = shadowrunr_brain::load_character(&dir, "").unwrap();
-        assert!(pkg.segment_directions.is_empty());
+        assert!(!pkg.segment_directions.contains_key(&seg));
         let leftovers: Vec<_> = std::fs::read_dir(dir.join("segments"))
             .unwrap()
             .filter_map(|e| e.ok())
@@ -203,7 +203,7 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(e.code, ErrorCode::InvalidParams);
-        assert!(!dir.join("segments").exists());
+        assert!(!dir.join("segments").join("SEG-01.md").exists());
     }
 
     #[test]

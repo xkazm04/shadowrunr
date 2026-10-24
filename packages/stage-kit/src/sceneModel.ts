@@ -35,9 +35,33 @@ export function mapFocusOf(s: Pick<SceneState, "layout" | "mapFocus" | "activeRe
 }
 
 /** The screen a segment opens on. The runtime sends its own `show_screen` too; this default keeps
- * transcripts without one drawable. */
+ * transcripts without one drawable. SEG-01 and SEG-03 (the Table Read's two-shot) open on the host
+ * room; the descoped segments never play. */
 export function defaultScreen(segment: SegmentId): ScreenId {
-  return segment === "SEG-02A" ? "board" : "host";
+  switch (segment) {
+    case "SEG-02A":
+      return "board";
+    case "SEG-01":
+    case "SEG-03":
+    case "SEG-02B-I":
+    case "SEG-02B-II":
+      return "host";
+  }
+}
+
+/** The segment that draws the host room as a two-shot: the host and the scheduled guest. */
+export const TWO_SHOT_SEGMENT: SegmentId = "SEG-03";
+
+/** Whether the canvas draws the Table Read's two-shot now (SEG-03 on the host screen). */
+export function isTwoShot(s: Pick<SceneState, "segment" | "layout">): boolean {
+  return s.segment === TWO_SHOT_SEGMENT && s.layout === "host";
+}
+
+/** The Table Read's guest (a foil id): from `scene_start`, a guest line, or the summoned foil. Null
+ * outside SEG-03, and before the segment has named one. */
+export function guestOf(s: Pick<SceneState, "segment" | "guest" | "foil">): string | null {
+  if (s.segment !== TWO_SHOT_SEGMENT) return null;
+  return s.guest ?? s.foil?.id ?? null;
 }
 
 export interface Transition {
@@ -67,6 +91,8 @@ export interface Caption {
   at: TsMs;
   /** Display names of the chatters this line answers. */
   replyingTo: string[];
+  /** The guest's foil id when the Table Read's guest said it (SEG-03); absent: the host's line. */
+  foil?: string;
 }
 
 /** A caption on the stage's caption queue: `at` is when it shows, `saidAt` when it was said. */
@@ -80,6 +106,15 @@ export interface FoilLine {
   id: number;
   foil: string;
   text: string;
+  at: TsMs;
+}
+
+/** SEG-03: the scene playing, from its `scene_start` until its `scene_end` (the title card). */
+export interface SceneCard {
+  id: string;
+  title: string;
+  /** The guest's foil id. */
+  guest: string;
   at: TsMs;
 }
 
@@ -247,6 +282,10 @@ export interface SceneState {
   captions: ScheduledCaption[];
   foil: { id: string; since: TsMs } | null;
   foilLine: FoilLine | null;
+  /** SEG-03: the Table Read's guest, from the latest `scene_start` or guest line (null outside it). */
+  guest: string | null;
+  /** SEG-03: the scene playing (null between scenes and outside the segment). */
+  sceneCard: SceneCard | null;
   /** Remembered chat lines by id, oldest first (at most CHAT_MEMORY_MAX + CHAT_EVICT_SLACK). */
   chats: ChatMemory;
   /** Most recent chat message ids, newest last: every line received, judged or not. The screen
@@ -329,6 +368,8 @@ export function initialScene(): SceneState {
     captions: [],
     foil: null,
     foilLine: null,
+    guest: null,
+    sceneCard: null,
     chats: ChatMemory.EMPTY,
     lane: [],
     judged: { to: null, prev: null, open: null, closedAt: null },

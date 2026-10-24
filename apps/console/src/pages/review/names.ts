@@ -27,7 +27,7 @@ export const FEEDBACK: readonly (readonly [FeedbackTag, string])[] = [
 export const FEEDBACK_NAME: Readonly<Record<FeedbackTag, string>> = Object.fromEntries(FEEDBACK) as Record<FeedbackTag, string>;
 
 export const TIER_NAME: Readonly<Record<ModelTier, string>> = { haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" };
-export const SEGMENT_NAME: Readonly<Record<string, string>> = { "SEG-01": "Improv room", "SEG-02A": "Investigation" };
+export const SEGMENT_NAME: Readonly<Record<string, string>> = { "SEG-01": "Improv room", "SEG-02A": "Investigation", "SEG-03": "Table read" };
 
 /** What a timeline row's show column says about an event: show ops, handovers, engine health. */
 export type ShowMarkId = "poll" | "poll_closed" | "reveal" | "foil_in" | "foil_out" | "card" | "sign_off" | "handover" | "engine_down" | "engine_degraded" | "engine_back";

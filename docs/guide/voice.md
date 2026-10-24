@@ -447,6 +447,32 @@ machine's load.
 phase is fine-tuning an original designed voice (no cloning) if the blend proves not distinct
 enough; nothing for it is built yet.
 
+## A foil's voice (the SEG-03 guest)
+
+A guest foil speaks in its own voice when the host package has
+`voice/foils/<foil>.toml`; a local `<data>/characters/<host>/voice/foils/<foil>.toml`
+overrides it key by key. Keys: `sid` (required), `voice` (a label, default the foil id),
+`voices_file` (`""` = the model's own `kokoro/voices.bin`), `fx` (`none` | `light` | `heavy`,
+default `none`: the crypt reverb is Malakor's alone) and `workers` (default 1).
+
+- The foil runs a Kokoro sidecar of its own, started when a run first names it (a summons, a
+  `scene_start` or its first line) and stopped when nothing is voiced. It stays on Kokoro even
+  when the host speaks with ElevenLabs.
+- Its lines go through the same queue as the host's, so the two never overlap. Utterances
+  carry `speaker: "foil"` and `foil`; the stage lights the guest's portrait and never moves
+  Malakor's mouth for them.
+- A foil with no voice file is captions only, with one warning per run.
+
+The painter's blend (stock Kokoro voices only, no cloning):
+
+```
+python -m shadowrunr_voice.blend --voices <engine>/kokoro/voices.bin --recipe tools/voice/recipes/the-painter.toml
+```
+
+writes `~/.shadowrunr/voices/the-painter-voices.bin` (`the-painter-a` at sid 52, about 141 Hz
+against Malakor's 92 Hz on one probe line, 2026-10-24). Without it, set a stock voice locally:
+`voice = "bm_fable"`, `sid = 25`, `voices_file = ""`.
+
 ## Kokoro Plus: delivery on the local voice
 
 A line can carry a delivery cue (`[menace 0.8 slow] Minion. Come closer.`; the brain writes

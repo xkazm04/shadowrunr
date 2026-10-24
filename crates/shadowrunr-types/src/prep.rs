@@ -106,6 +106,10 @@ pub struct StreamPrep {
     pub cold_open: ColdOpen,
     pub bits: Vec<PrepBit>,
     pub connectors: Vec<Connector>,
+    /// SEG-03: the scheduled guest and the scenes for its ballots. Omitted when the stream
+    /// plays no Table Read; SEG-01 then hands over to SEG-02A.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_read: Option<crate::scene::TableReadPlan>,
     pub checks: Vec<PrepCheck>,
     /// Set on approval.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -165,6 +169,8 @@ pub enum BeatMode {
     Hold,
     /// A quiet beat with nothing prepared that fits: the host fills it in his own words.
     Improvise,
+    /// SEG-03: the next lines of the scene being performed.
+    Scene,
 }
 
 #[cfg(test)]

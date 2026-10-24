@@ -121,3 +121,25 @@ back into a file the brain reads.
 > - Name the target: the username, the vote, the typo, the take. "You people" is not a target.
 > - Call back to tonight's earlier moments: a title you gave, a vote someone lost.
 > - Don't lean on one refusal phrase ("my rules stay sealed"): say no a new way, or keep going.
+
+## SEG-01 foils and SEG-03 (merged 2026-10-25)
+
+Main's SEG-03 work rewrote the foil paragraph with the quoted wording again and added the
+SEG-03 section with one scare-quoted word; the merge kept both as effects and moved the
+wording here verbatim.
+
+> If chat demands a foil who is a real person, the circle "will not
+> open for the living": he refuses in character and offers one of his own.
+
+> In the fiction they come from the Spire's drawer of his own unproduced plays, some
+> "improved" by the guest, so a bad scene is his bad scene.
+
+`segments/SEG-03.md` (main's, read into the SEG-03 beat) carried the same two wordings; the
+merge restated them there too:
+
+> - **In the fiction the scenes are yours.** They come out of the Spire's drawer of your own
+>   unproduced plays, some "improved" by the guest. A bad scene is your bad scene: own it. Never
+>   blame the Lord for the material.
+
+> - If chat demands the guest be someone real, the circle will not open for the living: refuse in
+>   character and move on.

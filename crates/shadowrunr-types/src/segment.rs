@@ -19,6 +19,9 @@ pub enum SegmentId {
     /// Descoped (kept in the plan): Dependency Doctrine.
     #[serde(rename = "SEG-02B-II")]
     Seg02bDependency,
+    /// Table Read: the host and a scheduled guest perform scenes the audience picks.
+    #[serde(rename = "SEG-03")]
+    Seg03TableRead,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]

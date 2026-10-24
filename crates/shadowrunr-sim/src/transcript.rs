@@ -100,12 +100,24 @@ pub fn read(path: &Path) -> Result<Vec<StreamEvent>, SimError> {
     Ok(out)
 }
 
+/// SEG-03: the id of a scene that started and has not ended, so a stream that stops mid-scene
+/// can close it with `scene_end` (contract: a scene cut short still ends).
+pub fn open_scene(events: &[StreamEvent]) -> Option<String> {
+    events.iter().rev().find_map(|e| match e {
+        StreamEvent::SceneEnd { .. } => Some(None),
+        StreamEvent::SceneStart { scene_id, .. } => Some(Some(scene_id.clone())),
+        _ => None,
+    })?
+}
+
 pub fn ts(ev: &StreamEvent) -> TsMs {
     match ev {
         StreamEvent::StreamStart { ts_ms, .. }
         | StreamEvent::SegmentStart { ts_ms, .. }
         | StreamEvent::SegmentEnd { ts_ms, .. }
         | StreamEvent::CaseOpen { ts_ms, .. }
+        | StreamEvent::SceneStart { ts_ms, .. }
+        | StreamEvent::SceneEnd { ts_ms, .. }
         | StreamEvent::RecordShown { ts_ms, .. }
         | StreamEvent::LinkPinned { ts_ms, .. }
         | StreamEvent::Chat { ts_ms, .. }
@@ -129,6 +141,8 @@ pub fn set_ts(ev: &mut StreamEvent, ts: TsMs) {
         | StreamEvent::SegmentStart { ts_ms, .. }
         | StreamEvent::SegmentEnd { ts_ms, .. }
         | StreamEvent::CaseOpen { ts_ms, .. }
+        | StreamEvent::SceneStart { ts_ms, .. }
+        | StreamEvent::SceneEnd { ts_ms, .. }
         | StreamEvent::RecordShown { ts_ms, .. }
         | StreamEvent::LinkPinned { ts_ms, .. }
         | StreamEvent::Picked { ts_ms, .. }
@@ -168,6 +182,13 @@ pub fn body(ev: &StreamEvent) -> String {
         ),
         StreamEvent::SegmentStart { segment, .. } => format!("segment_start {}", wire(segment)),
         StreamEvent::SegmentEnd { segment, .. } => format!("segment_end {}", wire(segment)),
+        StreamEvent::SceneStart {
+            scene_id,
+            title,
+            guest,
+            ..
+        } => format!("scene_start {scene_id} \"{title}\" guest={guest}"),
+        StreamEvent::SceneEnd { scene_id, .. } => format!("scene_end {scene_id}"),
         StreamEvent::CaseOpen { case, .. } => format!(
             "case_open {} \"{}\" hexes={} fictional={}",
             case.id,

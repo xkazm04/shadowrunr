@@ -23,6 +23,7 @@ export const SEGMENT_NAME: Readonly<Record<SegmentId, string>> = {
   "SEG-02A": "Investigation",
   "SEG-02B-I": "Bounty hunt, part one",
   "SEG-02B-II": "Bounty hunt, part two",
+  "SEG-03": "Table read",
 };
 
 export const PROVENANCE_NAME: Readonly<Record<Provenance, string>> = { measured: "Measured", assumption: "Assumption" };

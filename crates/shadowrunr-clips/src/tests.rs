@@ -1810,3 +1810,21 @@ async fn a_rescan_keeps_the_owner_s_recut() {
     assert_eq!(again.source.line_from, y.source.line_from);
     assert_eq!(again.history, y.history, "untouched by the rescan");
 }
+
+#[test]
+fn seg03_cuts_one_exchange_and_carries_no_evidence_checklist() {
+    use shadowrunr_types::SegmentId;
+    let b = band_for(Some(SegmentId::Seg03TableRead));
+    assert_eq!(
+        (b.min_ms, b.max_ms, b.style),
+        (20_000, 45_000, "seg03-two-shot")
+    );
+    // Every segment has its own band; none is the default.
+    for s in [
+        SegmentId::Seg01ImprovisedRoom,
+        SegmentId::Seg02aHexmap,
+        SegmentId::Seg03TableRead,
+    ] {
+        assert_ne!(band_for(Some(s)).style, "default", "{s:?}");
+    }
+}

@@ -51,6 +51,7 @@
 .band { position: absolute; top: 0; height: 40%; background: var(--sr-color-text-mute); pointer-events: none; z-index: 1; }
 .band[data-seg="SEG-01"] { background: var(--sr-page-overprint, var(--sr-color-ok)); }
 .band[data-seg="SEG-02A"] { background: var(--sr-color-signal); }
+.band[data-seg="SEG-03"] { background: var(--sr-color-foil); }
 .tick { position: absolute; top: -.25rem; bottom: -.25rem; width: var(--sr-stroke-rule); background: var(--sr-page-type); pointer-events: none; z-index: 2; }
 @keyframes progress { from { transform: scaleX(var(--from, 0)); } to { transform: scaleX(1); } }
 

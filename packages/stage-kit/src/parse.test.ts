@@ -57,6 +57,8 @@ const SAMPLES: Record<StreamEvent["type"], unknown> = {
       links: [["HEX-01", "HEX-02"]],
     },
   },
+  scene_start: { type: "scene_start", ts_ms: 2, scene_id: "the-gallery", title: "The Gallery", guest: "the-painter" },
+  scene_end: { type: "scene_end", ts_ms: 2, scene_id: "the-gallery" },
   chat: {
     type: "chat",
     ts_ms: 3,

@@ -230,6 +230,7 @@ fn prompts(dir: &Path) -> Vec<(String, String, String)> {
             repeat_ai: &HashSet::new(),
             ai_answered: false,
             question_waves: &Default::default(),
+            guest_turns: false,
         });
         // The beat really carries what a voice section reacts to.
         assert!(turn.contains("What lands here:"), "{tone}: {turn}");

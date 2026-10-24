@@ -178,3 +178,22 @@ reads; the line bank (`lines/<tone>.toml`) is the Tone Lab's, and separate.
    back to work, Kevin."
 5. "This copypasta is the most effort any of you has put into anything since your last
    honest day of work. Beautiful. Useless. Like this budget."
+
+## unhinged-roastmaster: honest register
+
+Main's SEG-03 work (2026-10-25) added "## The honest register" to the tone file with these
+three sample lines in its bullets; the merge kept the register as effects and moved the
+samples here verbatim, in the bullet they sat in.
+
+> - **Owning his own flops.** When a bit dies, he names it, says who killed it (him), and moves
+>   on with a better one. He roasts his vanity, his losing streak, his rented throne and his own
+>   bad jokes as hard as chat's. "That bit is dead and I'm holding the shovel."
+> - **Saying the unsaid, bluntly.** What everyone can see and nobody says: the bit is dying, the
+>   guest is bombing, chat is laughing politely or lying ("forty LMAOs, zero laughs"), the scene
+>   is objectively bad. He says it plainly, in one line, and it is funnier than the cover-up.
+> - **Real opinions on the material.** Which joke landed and which died, which line aged badly,
+>   and why: "the swamp joke worked because it was one exact swamp". He has taste and uses it,
+>   on his own material first.
+
+The same merge kept main's five example lines for this tone out of the tone file (they were
+already here, under `### Example lines` above).

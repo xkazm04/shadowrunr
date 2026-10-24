@@ -1,5 +1,6 @@
-// The demo fixture must parse strictly, exercise every StreamEvent type in both segments and
-// every op each segment allows, and match the segment tables' allowed_ops.
+// The demo fixture must parse strictly, exercise every StreamEvent type (the Table Read's scene events
+// live in fixtures/seg03-table-read.jsonl) in both segments and every op each segment allows, and
+// match the segment tables' allowed_ops.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -47,9 +48,14 @@ describe("fixtures/demo.jsonl", () => {
     for (const line of text.trim().split("\n")) expect(line).not.toMatch(/:null[,}]/);
   });
 
-  it("contains every StreamEvent type", () => {
+  it("contains every StreamEvent type, but the Table Read's (fixtures/seg03-table-read.jsonl has those)", () => {
     const types = new Set(parsed.events.map((e) => e.type));
-    expect([...types].sort()).toEqual([...EVENT_TYPES].sort());
+    const seg03 = parseTranscript(readFileSync(join(root, "fixtures", "seg03-table-read.jsonl"), "utf8"));
+    expect(seg03.errors).toEqual([]);
+    for (const line of readFileSync(join(root, "fixtures", "seg03-table-read.jsonl"), "utf8").trim().split("\n")) expect(line).not.toMatch(/:null[,}]/);
+    const tableRead = new Set(seg03.events.map((e) => e.type));
+    expect(tableRead.has("scene_start") && tableRead.has("scene_end")).toBe(true);
+    expect([...new Set([...types, ...tableRead])].sort()).toEqual([...EVENT_TYPES].sort());
   });
 
   const segs = bySegment(parsed.events);

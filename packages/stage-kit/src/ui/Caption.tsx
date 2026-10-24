@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { foilInfo } from "../lore";
 import type { Caption as CaptionT, Redaction } from "../sceneModel";
 import { captionOpacity, visibleWords, wordTimings } from "../timing";
 import { redactionAt } from "./onScreen";
@@ -18,6 +19,11 @@ export function KineticText({ text, elapsed, className }: { text: string; elapse
       ))}
     </span>
   );
+}
+
+/** Who a caption names: the guest by its display name for a guest line (SEG-03), else `host`. */
+export function captionSpeaker(caption: { foil?: string | undefined }, host: string): string {
+  return caption.foil === undefined ? host : foilInfo(caption.foil).name;
 }
 
 export function captionSize(text: string, compact: boolean): number {
@@ -40,7 +46,7 @@ export function CaptionPanel({
   compact: boolean;
   /** The broadcast view: a redaction says that it happened, not which rule fired. */
   onAir?: boolean;
-  /** Who says the line (the stream's host name); shown upper-cased. */
+  /** Who says a host line (the stream's host name); shown upper-cased. A guest line names its guest. */
   speaker?: string;
 }) {
   const line = useMemo(() => (caption ? wordTimings(caption.text) : null), [caption]);
@@ -51,9 +57,14 @@ export function CaptionPanel({
   return (
     <div className={`caption-panel${compact ? " compact" : ""}`}>
       {caption && opacity > 0 && (
-        <div className="caption" key={caption.id} style={{ opacity, fontSize: captionSize(caption.text, compact) }}>
+        <div
+          className={`caption${caption.foil === undefined ? "" : " guest"}`}
+          key={caption.id}
+          style={{ opacity, fontSize: captionSize(caption.text, compact), ...(caption.foil === undefined ? {} : { ["--foil" as string]: foilInfo(caption.foil).color }) }}
+          data-speaker={caption.foil ?? "host"}
+        >
           <div className="caption-head">
-            <span className="speaker">{speaker.toUpperCase()}</span>
+            <span className="speaker">{captionSpeaker(caption, speaker).toUpperCase()}</span>
             {caption.replyingTo.slice(0, 3).map((n) => (
               <span className="reply-chip" key={n}>
                 ↳ {n}
