@@ -1144,8 +1144,12 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "not-applicable",
+          "priorNotApplicable": 3,
+          "evidence": "apps/console/vite.config.ts:6 This context is build tooling (Vite and vitest config, bundle/size/token check scripts) plus the Tauri window crate, and contains no model call or prompt; searching apps/console for max_tokens, compaction, systemPrompt, system_prompt and 'context window' found nothing ('prompt' does appear elsewhere under apps/console/src pages, outside this context's files).",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "supply-chain",
@@ -4999,8 +5003,12 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "strong",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "not-applicable",
+          "priorNotApplicable": 3,
+          "evidence": "apps/console/src/pages/review/EngineCalls.tsx:1 The review page only reads the daemon's model-call ledger after the fact (role, model, duration, cost, error) and never builds, sizes, compacts or sends a prompt; searching apps/console for max_tokens, compaction, systemPrompt, system_prompt and 'context window' found nothing, and the only 'prompt' hits in the review directory are moderation labels for prompt-injection in names.ts, which belong to prompt-safety and not to assembly.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "video-assembly",
@@ -5222,8 +5230,12 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "not-applicable",
+          "priorNotApplicable": 3,
+          "evidence": "apps/stage/src/avatar/Avatar.tsx:1 This context is a WebGL2 face renderer (shaders, pose driver, visemes) with no model call anywhere in it; searching apps/stage/src for prompt, max_tokens, compaction and 'context window' found nothing, so there is no prompt to assemble or budget.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "live-system-demo-film",
@@ -5422,8 +5434,12 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "not-applicable",
+          "priorNotApplicable": 3,
+          "evidence": "apps/stage/src/voice/session.ts:1 The voice client plays audio the sidecar has already rendered and sends playback reports back over a WebSocket, and no language-model prompt passes through it; searching apps/stage/src for prompt, max_tokens, compaction and 'context window' found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "live-system-demo-film",
@@ -5947,8 +5963,12 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "not-applicable",
+          "priorNotApplicable": 3,
+          "evidence": "tools/voice/pyproject.toml:8 The sidecar is a text-to-speech engine (Kokoro via sherpa-onnx) that takes say/cancel JSON lines and splits text into sentences, with no LLM dependency and no prompt; searching tools/voice for prompt, max_tokens, compaction and 'context window' found nothing.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "creator-voice-and-tone",

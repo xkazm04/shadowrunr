@@ -4537,6 +4537,56 @@
         "at": "2026-10-24T04:36:09.683791+00:00",
         "reason": "reviewer (sonnet): The slates.test.ts:46 and Stage.tsx:251 facts are accurate, but the verdict's own technique anchors (live.ts:21, Slates.tsx:32) say the stage does not do host-generation latency work. An end card that shows a cause code is not a latency-budgeting requirement I could find, so the deviation is unsuppo"
       }
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/prompt-assembly": {
+      "context": "console-review-page",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:51:36.597Z",
+      "worker": "40903e7a-dd9f-49ad-96a1-047e8159aa71",
+      "techniques": []
+    },
+    "7bbc93eb-a921-49ea-a5b3-128e66bd5e64/prompt-assembly": {
+      "context": "stage-avatar-renderer",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:51:36.597Z",
+      "worker": "40903e7a-dd9f-49ad-96a1-047e8159aa71",
+      "techniques": []
+    },
+    "b2009d98-3f59-4c44-97e1-b3b93b65264c/prompt-assembly": {
+      "context": "stage-voice-client",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:51:36.597Z",
+      "worker": "40903e7a-dd9f-49ad-96a1-047e8159aa71",
+      "techniques": []
+    },
+    "68cf95a7-438b-4ed9-930d-c19201eb0610/prompt-assembly": {
+      "context": "voice-sidecar",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:51:36.597Z",
+      "worker": "40903e7a-dd9f-49ad-96a1-047e8159aa71",
+      "techniques": []
+    },
+    "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa/prompt-assembly": {
+      "context": "console-build-and-desktop-shell",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T04:51:36.597Z",
+      "worker": "40903e7a-dd9f-49ad-96a1-047e8159aa71",
+      "techniques": []
     }
   }
 }
