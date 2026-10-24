@@ -3352,7 +3352,11 @@
           "revision": 10,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/Cargo.toml:3 The crate analyses simulated stream runs and mechanically checks what an LLM proposes (evidence refs in verify.rs, character diffs in check_diff). It is not a program that grades a repository against a published, declared standard. A case-insensitive search of crates/shadowrunr-reconcile for conformance, conformant, checker and severity returned 0 hits, so the subject's precondition (building a conformance checker for a repository standard) does not hold here.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:58a3b7c0b9efb42c",
+          "evaluatedRevision": 10
         }
       ],
       "governance": "governed"

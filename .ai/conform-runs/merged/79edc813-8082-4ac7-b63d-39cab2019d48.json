@@ -1,0 +1,47 @@
+{
+ "schema": "conform-run/1",
+ "worker": "79edc813-8082-4ac7-b63d-39cab2019d48",
+ "subject": "conformance-checking",
+ "evaluatedAt": "2026-10-24T22:52:17.574971+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "reconcile-engine",
+   "subject": "conformance-checking",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-reconcile/Cargo.toml:3 The crate analyses simulated stream runs and mechanically checks what an LLM proposes (evidence refs in verify.rs, character diffs in check_diff). It is not a program that grades a repository against a published, declared standard. A case-insensitive search of crates/shadowrunr-reconcile for conformance, conformant, checker and severity returned 0 hits, so the subject's precondition (building a conformance checker for a repository standard) does not hold here.",
+   "techniques": [
+    {
+     "technique": "declared-then-proven",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-reconcile/src/verify.rs:1 This verification checks LLM output against transcripts. It is not a check of declared repository claims, so there is no presence/shape/execution ladder over a contract."
+    }
+   ],
+   "absenceTerms": [
+    "conformance",
+    "conformant",
+    "checker",
+    "severity"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T22:52:17.574971+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "conformance-checking"
+   ],
+   "techniques": [
+    "declared-then-proven"
+   ],
+   "deviations": 0,
+   "context": "reconcile-engine",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
