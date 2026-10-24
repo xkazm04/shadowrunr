@@ -15,6 +15,7 @@ pub mod portfolio;
 pub mod ranks;
 pub mod research;
 pub mod runtime;
+pub mod scenes;
 pub mod table;
 
 use shadowrunr_types::{Rank, SegmentId};
