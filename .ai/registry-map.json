@@ -2537,7 +2537,11 @@
           "revision": 6,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:93 The canvas's accessible name counts the drawn tiles. useSimGrid caps those at the latest 40 (tilesInView), so with more than 40 tournaments a screen reader hears \"40 tournaments\" while the visible HUD says \"Latest 40 of N\". This is the 'name counts the graph, not the drawing' failure.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:98dcec8d04236b95",
+          "evaluatedRevision": 6
         }
       ],
       "governance": "governed"
