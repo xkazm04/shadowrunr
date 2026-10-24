@@ -1,0 +1,17 @@
+# Fictional sample scene (WP-D writes the content). Original material only.
+id = "the-gallery"
+title = "The Gallery"
+pitch = "Placeholder pitch for the-gallery."
+guest = "the-painter"
+status = "approved"
+fictional = true
+notes = ["placeholder talking point"]
+
+[[line]]
+speaker = "guest"
+text = "Placeholder guest line."
+
+[[line]]
+speaker = "host"
+live = "react honestly to the guest's line"
+fallback = "Placeholder host fallback."
