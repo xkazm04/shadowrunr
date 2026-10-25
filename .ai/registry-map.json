@@ -5266,7 +5266,11 @@
           "revision": 22,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Judge.tsx:44 The Review page is a look back at sandbox sessions that have already finished: the judge's verdict, the moderation records and the operator's line marks all come after the session ran, and nothing on the page waits for a human decision before an action happens. A case-insensitive grep of apps/console/src/pages/review/ for approv, consent, escalat and unattended found nothing, so the subject's gate machinery (trigger, pause state, continuation) has nothing here to govern.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:52d7f3cfb87a79d9",
+          "evaluatedRevision": 22
         }
       ],
       "governance": "governed"

@@ -5460,6 +5460,47 @@
           "evidence": "crates/shadowrunr-types/src/catalog.rs:144 This is a digest-guarded write of an owned package document, not consent to an import of foreign entities."
         }
       ]
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/hitl-approval": {
+      "context": "console-review-page",
+      "subject": "hitl-approval",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:20:57.313Z",
+      "worker": "b993b67f-a6b8-445a-a7cc-2e0434523215",
+      "techniques": [
+        {
+          "technique": "gate-state-machines",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Layer2.tsx:40 The 'gates' here are automated moderation stages, shown after they acted. The page has no human-driven gate state."
+        },
+        {
+          "technique": "review-queues",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:15 A failed feedback write stays on screen with a retry, which matches the 'write must land' idea. But the marks are annotations, not verdicts on pending items, so this is not an approval queue."
+        },
+        {
+          "technique": "resume-after-decision",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:49 Saving a mark resumes nothing: there is no paused work waiting on it, so there is no continuation to design."
+        },
+        {
+          "technique": "fail-loud-classification-default",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Layer2.tsx:125 An unmeasured check is shown as not-evaluable rather than passed, which is in the spirit of the rule. But no severity classifier routes pending items here."
+        },
+        {
+          "technique": "oracle-before-gate",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Moderation.tsx:46 Moderation is listed as past records. Nothing on the page arms a gate over machine output, so there is no gate to need an oracle."
+        },
+        {
+          "technique": "truncated-verdict-space",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Judge.tsx:44 The judge grades a session after it ends. Its pass/fail admits nothing past a trust boundary in this context."
+        }
+      ]
     }
   }
 }
