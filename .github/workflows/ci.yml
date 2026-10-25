@@ -86,7 +86,7 @@ jobs:
   coverage:
     name: coverage (rust line ratchet)
     # Windows, like the rust job: the baseline in coverage/baseline.json was measured there, and
-    # cfg(windows) code counts. Only the root cargo workspace; JS coverage is not measured yet.
+    # cfg(windows) code counts. Only the root cargo workspace; JS coverage is the web job.
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -147,6 +147,19 @@ jobs:
         run: node --test scripts/coverage-ratchet-js.test.mjs
       - name: min-tests (zero-test floor) test
         run: node --test scripts/min-tests.test.mjs
+
+      - name: apps/console coverage report
+        run: pnpm -C apps/console exec vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary
+      - name: apps/stage coverage report
+        run: pnpm -C apps/stage exec vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary
+      - name: packages/contract coverage report
+        run: pnpm -C packages/contract exec vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary
+      - name: packages/stage-kit coverage report
+        run: pnpm -C packages/stage-kit exec vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary
+      - name: packages/tokens coverage report
+        run: pnpm -C packages/tokens exec vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary
+      - name: coverage ratchet (js)
+        run: node scripts/coverage-ratchet-js.mjs --check
 
       - name: tokens drift
         run: pnpm -C packages/tokens check
