@@ -182,7 +182,11 @@ export function classify(cmd, wd) {
   const words = cmd.split(/\s+/);
   if (/^pnpm install( --frozen-lockfile)?$/.test(cmd)) return { kind: "setup" };
   if (/^python3? -m pip install( [\w.=<>-]+)+$/.test(cmd)) return { kind: "setup" };
-  let m = cmd.match(/^pnpm -C (\S+) (?:run )?([\w:-]+)$/);
+  // The per-package coverage report scripts/coverage-ratchet-js.mjs reads: not a gate lane, but it
+  // must name a real workspace package (plan() marks it stale otherwise).
+  let m = cmd.match(/^pnpm -C (\S+) exec vitest run --coverage --coverage\.provider=v8 --coverage\.reporter=json-summary$/);
+  if (m) return { kind: "coverage", dir: posix(m[1]).replace(/^\.\/|\/$/g, "") };
+  m = cmd.match(/^pnpm -C (\S+) (?:run )?([\w:-]+)$/);
   if (m) {
     const dir = posix(m[1]).replace(/^\.\/|\/$/g, "");
     return { kind: "pnpm", dir, script: m[2], id: `${dir} ${m[2]}` };
@@ -255,6 +259,10 @@ export function plan(root, workflowText) {
   for (const { cmd, wd } of workflowCommands(workflowText)) {
     const c = classify(cmd, wd);
     if (c.kind === "ignored" || c.kind === "setup") continue;
+    if (c.kind === "coverage") {
+      if (!packages.has(c.dir)) stale.push(`${c.dir} coverage`);
+      continue;
+    }
     if (c.kind === "unparseable") {
       unparseable.push(wd === "." ? cmd : `${cmd} (in ${wd})`);
       continue;

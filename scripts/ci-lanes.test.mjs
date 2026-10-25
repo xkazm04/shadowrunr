@@ -110,6 +110,24 @@ test("case 4: a step for a package that does not exist -> exit 1 naming it stale
   assert.match(r.stale[0], /^packages\/gone test\b/);
 });
 
+const COV = "exec vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary";
+const BUILD = "          pnpm -C apps/stage build\n";
+
+test("case 4a: a per-package coverage step for a real package is understood, not unparseable", () => {
+  const ci = replaced(fixtureCi, BUILD, BUILD + "          pnpm -C apps/stage " + COV + "\n");
+  const r = check(fixtureTree, ci);
+  assert.equal(r.status, 0);
+  assert.deepEqual(r.unparseable, []);
+  assert.deepEqual(r.stale, []);
+});
+
+test("case 4a2: a coverage step for a package that does not exist -> stale", () => {
+  const ci = replaced(fixtureCi, BUILD, BUILD + "          pnpm -C packages/gone " + COV + "\n");
+  const r = check(fixtureTree, ci);
+  assert.equal(r.status, 1);
+  assert.match(r.stale[0], /^packages\/gone coverage/);
+});
+
 test("case 4b: a python step in a folder with no suite, or naming a missing module -> stale", () => {
   const ci = replaced(fixtureCi, "run: python -m unittest test_a test_b", "run: python -m unittest test_a test_b test_c");
   const r = check(fixtureTree, ci);
