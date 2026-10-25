@@ -1926,43 +1926,43 @@
       "context": "types-crate",
       "subject": "ipc-contract",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-20",
-      "evaluatedTs": "2026-10-20T21:30:09.228Z",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:36:27.202Z",
+      "worker": "5acbeee3-b63e-4efd-84a6-62f7e58ef39f",
       "techniques": [
-        {
-          "technique": "drift-gates",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-types/tests/schema_drift.rs:10 Tests only files returned by export_files() instead of diffing the schema directory, ignoring untracked files and the downstream contract package."
-        },
-        {
-          "technique": "casing-and-naming",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-types/src/chat.rs:50 Wire casing is not declared once globally; types declare conflicting per-type casing annotations like UPPERCASE, lowercase, and snake_case."
-        },
-        {
-          "technique": "command-registration",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-types/src/rpc.rs:4 Documentation claims the daemon's dispatch test reads visit_methods to prevent skew, but no automated dispatch parity test exists."
-        },
         {
           "technique": "generated-type-contracts",
           "verdict": "conformant",
-          "evidence": "crates/shadowrunr-types/src/schema.rs:52 Acts as the single authoring authority, generating draft 2020-12 JSON Schema for domain shapes and binding RPC method parameters and results."
+          "evidence": "crates/shadowrunr-types/src/schema.rs:208 The engine authors the types. They become one committed JSON Schema marked do-not-edit, with one regeneration command, and a method -> {params,result} binding table (`RpcMethods`) is generated with it. Gap: the non-method types in `wire_types()` are listed by hand, so a type can be serialized without the contract describing it."
+        },
+        {
+          "technique": "drift-gates",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-types/tests/schema_drift.rs:8 The cargo test rebuilds the schema in-process and compares it with the committed file read from disk (CRLF-normalized). A missing or untracked file panics, and output is one monolithic file, so no orphans can hide inside it. The test does not take an inventory of the schema directory, so a stray extra file there would go unseen. The second hop (schema -> TS) is gated in packages/contract, outside this context."
         },
         {
           "technique": "error-shape-mapping",
           "verdict": "conformant",
-          "evidence": "crates/shadowrunr-types/src/error.rs:14 Defines a closed 10-code error taxonomy, structured ErrorBody, ErrorEnvelope, and legacy code mapping."
+          "evidence": "crates/shadowrunr-types/src/error.rs:14 Closed list of ten codes (`ALL`) in a `{error:{code,message,detail?}}` envelope (error.rs:111). Both go out through the schema export, and the legacy names are kept apart in `from_legacy` (error.rs:78). Weak spot: there is no `forbidden` class, and `forbidden_origin` is folded into `invalid_params` with the difference carried only in `detail.reason`."
+        },
+        {
+          "technique": "command-registration",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:542 One method table feeds both the schema's name set and `method_names()` (rpc.rs:625), and the daemon's dispatch-parity test reads `method_names()`. An unknown method has its own code, `MethodNotFound` (error.rs:21), so the near side need not detect it from message text."
+        },
+        {
+          "technique": "casing-and-naming",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:268 Field names are native snake_case, and the enum value exceptions are listed in contract.md. But strict decoding (`deny_unknown_fields`, e.g. catalog.rs:76) is used only on character/config manifests, never on RPC params types, so mis-cased optional params arrive as None without any error. Enum casing is also set per type (snake_case/lowercase/UPPERCASE) rather than in one place."
+        },
+        {
+          "technique": "call-wrapping",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/Cargo.toml:3 This crate holds types only and has no call sites. The single call wrapper and its timeout classes belong on the console side."
         }
       ],
-      "registryProposal": "When the engine crate defines an authoritative method visitor table like visit_methods, the standard should specify how registration parity tests in consuming crates (like daemon dispatch) can be co-located or verified without circular dependencies.",
-      "withdrawn": {
-        "worker": "c023aae1-f4d4-4e69-abb2-abada6da98e7",
-        "state": "deviation",
-        "at": "2026-10-20T21:30:35.788956+00:00",
-        "reason": "reviewer (sonnet): The technique claim that no automated dispatch parity test exists is false: crates/shadowrunr-daemon/src/e2e/catalog.rs:163 `every_contract_method_is_dispatched` iterates `method_names()` and asserts none returns method_not_found."
-      }
+      "registryProposal": "casing-and-naming says to configure the wire casing in 'a global serializer setting, not per-type annotations', but serde has no crate-wide rename setting. In a serde-authored contract, per-type `rename_all` on enums is forced, so the technique should name the substitute: a test or lint asserting that every enum carries the declared casing."
     },
     "fc878bef-2e53-416c-83f0-0b62db46a8b4/live-response-latency-budgeting": {
       "context": "stage-kit-scene-engine",
@@ -5041,6 +5041,529 @@
           "evidence": "crates/shadowrunr-reconcile/src/verify.rs:1 This verification checks LLM output against transcripts. It is not a check of declared repository claims, so there is no presence/shape/execution ladder over a contract."
         }
       ]
+    },
+    "9b2fb27b-e4c5-4300-a214-7f5518a08b44/data-access": {
+      "context": "console-data-layer",
+      "subject": "data-access",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T23:02:10.673Z",
+      "worker": "d693ca88-ce18-4ee4-b202-5f7f46c39e35",
+      "techniques": [
+        {
+          "technique": "layering-rules",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/rpc.ts:54 The only thing this module 'owns' is the RPC transport, not a query language; the one-module-owns-the-statements rule has nothing to govern here."
+        },
+        {
+          "technique": "row-mapping",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/door.ts:2 There is one decode seam (the contract door), but it decodes RPC reply bodies, not store rows; the corrupt-row policy belongs to the daemon's store."
+        },
+        {
+          "technique": "transactions-and-units-of-work",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/layer.ts:95 A mutation is one RPC call; any unit of work and its transaction boundary are daemon-side."
+        },
+        {
+          "technique": "batching-and-n-plus-one",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/paged.ts:292 useRpcMany fans out one call per params entry, which looks like N+1 at the client. But there's no store here; whether a set-shaped endpoint exists is a design question for the daemon's RPC surface."
+        },
+        {
+          "technique": "repo-testing",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/testing.ts:88 The tests script the transport. There's no store engine whose real behavior a test would have to exercise."
+        }
+      ]
+    },
+    "9b2fb27b-e4c5-4300-a214-7f5518a08b44/data-video-virality": {
+      "context": "console-data-layer",
+      "subject": "data-video-virality",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T23:15:34.254Z",
+      "worker": "7fb131d2-8933-4aea-8b38-2d60c720aa8a",
+      "techniques": [
+        {
+          "technique": "continuity-gate",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/layer.ts:1 No dataset-granularity or idea triage happens here; the module only wires RPC, cache and the event stream."
+        },
+        {
+          "technique": "accelerator-events",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/index.ts:9 The only 'events' here are daemon events that drive cache invalidation, not dated on-screen annotation events for a chart video."
+        },
+        {
+          "technique": "path-over-conclusion",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/index.ts:7 This code has no keep-watching rationale or idea framing to judge."
+        }
+      ]
+    },
+    "70f40362-0fe0-4f05-90cf-b95538e20c74/declarative-object-graph-configs": {
+      "context": "workspace-tooling-and-policy",
+      "subject": "declarative-object-graph-configs",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T23:27:23.596Z",
+      "worker": "0e77e67c-e499-456c-960e-40ef7dc2dcb9",
+      "techniques": [
+        {
+          "technique": "directive-key-namespace",
+          "verdict": "not-applicable",
+          "evidence": "docs/guide/cli.md:26 A fixed set of top-level sections, each handled by its own branch, with no generic instantiator. The technique's 'when not to use' clause covers this exactly."
+        },
+        {
+          "technique": "sigil-grammar-over-schema",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:52 Every value is a literal leaf (a path, number or label). There is no reference syntax, so a sigil would only add escaping cost."
+        },
+        {
+          "technique": "reference-resolution-with-cycle-detection",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:71 These names point at presets built into the code, not at other nodes in the file. Values never reference each other, so there is nothing to resolve and no cycle is possible."
+        },
+        {
+          "technique": "merge-vs-override-marking",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:80 There is one config file, and the only layering is a CLI flag overriding a file value, which is source precedence for settings rather than composing files."
+        },
+        {
+          "technique": "textual-macro-prepass",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:3 A single-file format with no includes or fragment splicing, so no relative ids are needed."
+        },
+        {
+          "technique": "escape-hatch-expressions",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:81 Plain TOML with no evaluated expressions. Derived values are written as literals with a comment, so there is no hatch and no trust boundary to state."
+        }
+      ]
+    },
+    "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0/dependency-declaration": {
+      "context": "contract-package",
+      "subject": "dependency-declaration",
+      "bundle": "software-engineering",
+      "state": "conformant",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T23:39:23.743Z",
+      "worker": "3fd44de6-1f80-4f8b-85b8-ba985cd3933a",
+      "techniques": [
+        {
+          "technique": "progressive-resolution",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/check.mjs:43 The graph is closed (Rust types from one team), so enumeration is honest. The artifact names what regenerates it (BANNER, codegen.mjs:25), and a currency check runs as a CI step ('contract drift'), where a regeneration that produces a diff counts as a failure."
+        },
+        {
+          "technique": "declaration-invariants",
+          "verdict": "conformant",
+          "evidence": "packages/contract/package.json:17 Locality holds: the unit declares its own runtime requirement, pinned exactly, in a manifest it owns. Consumers (console, stage, stage-kit) each add one line, '@shadowrunr/contract: workspace:*', and do not restate ajv. No merged manifest has to be regenerated."
+        },
+        {
+          "technique": "logical-name-or-address",
+          "verdict": "conformant",
+          "evidence": "packages/contract/package.json:7 Consumers refer to a logical name ('@shadowrunr/contract'), and the composer (the workspace) resolves it. 'exports' publishes only '.', and a repo grep for '@shadowrunr/contract/' deep imports found none. Inside the package, references to its own parts are relative addresses (door.ts:9 './generated/meta'), which is the right choice for internals."
+        },
+        {
+          "technique": "vendored-copy-loses-composition",
+          "verdict": "conformant",
+          "evidence": "packages/contract/scripts/codegen.mjs:151 Each results/<Def>.js is an ajv-standalone module compiled from its def's closure alone (codegen.mjs:8), so shared sub-validators are copied privately into each module. The modules have no imports and hold no state (pure validators), which is the 'small, stateless, stable' case where the trade pays. Every file carries the GENERATED banner, and the eager module avoids a duplicate StreamEvent emission on purpose."
+        },
+        {
+          "technique": "declaration-cost-floor",
+          "verdict": "conformant",
+          "evidence": "packages/contract/package.json:7 This shares an anchor with logical-name-or-address, so it counts as one piece of evidence. The package exports source directly, with no prepublish build. Adding it is one workspace line for consumers that already use a TS-capable bundler. Codegen is a producer-side step, gated by check, not a consumer price."
+        },
+        {
+          "technique": "attachment-coherence",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/package.json:3 The package is private and assembled only inside this workspace, so no third-party assembler can exist. No behaviour is attached to foreign types: forAjv only adds a discriminator to the package's own schema defs."
+        },
+        {
+          "technique": "unsatisfiable-set-empirical-gate",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/package.json:21 Every dependency is an exact pin with resolution left on. A grep for overrides, --no-deps and peerDependencyRules in the root package.json and pnpm-workspace.yaml found nothing, so no unsatisfiable set or resolution bypass exists."
+        }
+      ]
+    },
+    "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa/deployment-contract": {
+      "context": "console-build-and-desktop-shell",
+      "subject": "deployment-contract",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-24",
+      "evaluatedTs": "2026-10-24T23:53:36.887Z",
+      "worker": "e422ae1a-52d6-4efb-8c9c-379111b16e6d",
+      "techniques": [
+        {
+          "technique": "platform-build-parity",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/tauri.conf.json:9 The only second builder is the Tauri CLI, and it runs the package's own `pnpm build` task. No hosted builder exists that could resolve differently."
+        },
+        {
+          "technique": "cache-immutability-licensing",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/vite.config.ts:10 Vite emits hashed assets, but they are served from the embedded app bundle. No host sends cache-lifetime headers to clients."
+        },
+        {
+          "technique": "environment-promotion",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/tauri.conf.json:8 There is a local dev server and nothing else: no preview or production environment ladder for the console."
+        },
+        {
+          "technique": "deploy-gate-coupling",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/Cargo.toml:8 Nothing deploys the console on push, so there is no deploy/verify race to couple."
+        }
+      ]
+    },
+    "df38dcc3-a71c-4397-abb5-4fe4681cfccb/design-tokens": {
+      "context": "tokens-package",
+      "subject": "design-tokens",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:07:52.859Z",
+      "worker": "799220d9-30d7-4015-b4fd-f85e7b49b256",
+      "techniques": [
+        {
+          "technique": "cross-language-token-parity",
+          "verdict": "conformant",
+          "evidence": "packages/tokens/scripts/generate.mjs:4 Strategy 1. tokens.css and tokens.ts are both generated from tokens.source.json and carry a GENERATED FILE do-not-edit header. A --check drift gate is tested to fail on a seeded edit (tokens.test.ts:131)."
+        },
+        {
+          "technique": "token-enforcement",
+          "verdict": "deviation",
+          "evidence": "packages/tokens/src/tokens.test.ts:144 Membership is gated and zero input is fatal (generate.mjs:266 exits 2 when there are no roles). But the per-page palette test only checks that each role is present in hex format. No gate recomputes contrast for the type/face or text-on-* pairings; a grep for contrast found no code hit."
+        },
+        {
+          "technique": "motion-tokens",
+          "verdict": "deviation",
+          "evidence": "packages/tokens/REJECTED.md:96 No duration ladder exists. Easings are role-named (move/settle/slam). Reduced motion is only MEDIA.reducedMotion (tokens.ts:445), which means honoring it in each component instead of rebinding the vocabulary."
+        },
+        {
+          "technique": "token-taxonomy",
+          "verdict": "deviation",
+          "evidence": "packages/tokens/tokens.source.json:430 Value-named roles (text-verdigris, text-apricot, text-bone, text-ash) put the colour in the name. Type is tokenised as loose size and weight roles, not recipes (REJECTED.md says line heights are not tokenised). The rest of the two-layer design is sound: primitives stay in the JSON, roles need a one-sentence description, and orphan primitives fail the build."
+        },
+        {
+          "technique": "theme-architecture",
+          "verdict": "conformant",
+          "evidence": "packages/tokens/scripts/generate.mjs:109 Per-page palettes are complete binding sets scoped to [data-page] with one shared pageRole vocabulary. The generator fails when a page is missing a role or adds an unknown one. There is no light/dark/system model, so the three-state rules do not apply."
+        },
+        {
+          "technique": "density-and-scale-axes",
+          "verdict": "not-applicable",
+          "evidence": "packages/tokens/tokens.source.json:295 There is no user-set density, text-scale or brightness axis. The only scaling is the root size following the viewport. Because that root is a px clamp, it also overrides the platform's default-font-size preference, which matters if a text-scale axis is added later."
+        }
+      ],
+      "registryProposal": "The contrast-floor clause in token-enforcement and the golden path assumes light/dark themes. It should state that scoped per-section palettes (here a page's face/type pair under [data-page]) count as themes for that gate."
+    },
+    "20f1e644-e83b-481d-864f-cb15b9124d7e/docs-content-model": {
+      "context": "console-characters-page",
+      "subject": "docs-content-model",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:17:10.344Z",
+      "worker": "2df65da7-52d7-4a30-8c82-828cbcf9a9ed",
+      "techniques": [
+        {
+          "technique": "catalog-referential-invariants",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/PackagePage.tsx:27 Each package's prose arrives inside one RPC detail object. No topic table is split from a lazily loaded body map, so there is no record-to-body mapping to assert."
+        },
+        {
+          "technique": "derived-navigation-projection",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/routes.ts:8 The tab list is a fixed set of view types over one package's fields (constitution, rules, bible, and so on). It is not a navigation list over a topic catalog that could drift."
+        },
+        {
+          "technique": "draft-visibility-gating",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/PackagePage.tsx:30 The only filter is role-based: the Moderation tab shows only on the moderator's package. It has nothing to do with draft readiness, and the address still resolves, rendering an explanatory EmptyState instead of a 404."
+        },
+        {
+          "technique": "per-topic-freshness-metadata",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/DocTabs.tsx:21 The constitution body is a bare markdown string field. There is no topic record that could carry review date, checked-against version or watched-sources fields."
+        },
+        {
+          "technique": "product-location-mapping",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/packageDocs.ts:101 Package documents define the character's behaviour. They do not describe product features located elsewhere, so there is no product area to map."
+        }
+      ]
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/document-text-extraction": {
+      "context": "console-simulator-page",
+      "subject": "document-text-extraction",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:31:16.802Z",
+      "worker": "7cf070f0-d64d-4716-902d-4f013fedc225",
+      "techniques": [
+        {
+          "technique": "unreadable-region-refusal",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:31 The data layer folds paged daemon rows into tiles. No document regions exist that could be unreadable."
+        },
+        {
+          "technique": "extraction-yield-bands",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/quote.ts:23 The quote check matches a judge quote against structured transcript events. It is not a yield measure over extracted document text."
+        },
+        {
+          "technique": "context-decided-escaping",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/quote.ts:9 Strings are only folded for matching. The page has no converter that emits Markdown or other markup from document text."
+        },
+        {
+          "technique": "structural-amplification-caps",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:9 The only cap here is the daemon's page size. No container reader with repeat or reference constructs exists in this context."
+        }
+      ]
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/embedded-preview": {
+      "context": "console-onair-page",
+      "subject": "embedded-preview",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:38:19.303Z",
+      "worker": "d8cb468b-b624-4284-95da-9c5a7804d710",
+      "techniques": [
+        {
+          "technique": "cross-frame-protocol",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:5 No frame message channel exists. The preview is direct component composition."
+        },
+        {
+          "technique": "origin-validation",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:5 No inbound or outbound messages cross a frame, so there is no origin to check. In this context 'origin' only appears as the CSS property transform-origin."
+        }
+      ]
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/evidence-bound-visuals": {
+      "context": "console-onair-page",
+      "subject": "evidence-bound-visuals",
+      "bundle": "media-generation",
+      "state": "conformant",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:46:18.573Z",
+      "worker": "e4b7c7fe-6a1d-473c-b51b-62d4c151d53b",
+      "techniques": [
+        {
+          "technique": "precision-limit-propagation",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/ScreenHex.tsx:63 Each hex's grade sets its fill through CSS data-g, so visual authority follows the grade. Elsewhere scores always carry 'weights unmeasured' and unmeasured signals are never drawn as zero."
+        },
+        {
+          "technique": "figure-must-cite-a-fact",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/ClipDetail.tsx:71 Every claim hex is shown with its grade and sources, and as 'ungraded' or 'no source' when they are missing, so it is never presented as owned. The rejecting validator lives in the daemon's clip gate. This context only shows that gate's result (ClipDetail.tsx:38)."
+        },
+        {
+          "technique": "epistemic-draw-routing",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:122 Every checkable element (hex ids, grades, vote bars, captions, labels) is drawn deterministically from scene data. The character art is code SVG from stage-kit (MalakorArt), and no generated plate or generated text appears anywhere."
+        },
+        {
+          "technique": "performer-claims-need-a-person",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:167 The lower-third plate always carries an 'AI character' mark next to the speaker's name, and ClipDetail reports whether the burnt-in AI disclosure is on each render."
+        },
+        {
+          "technique": "screenshots-claim-a-record",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:157 The chat pane is the product's own system with a simulated state, and the 'simulated' mark sits on the frame itself, not in a caption that can be dropped."
+        },
+        {
+          "technique": "footage-claims-a-camera",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/clipModel.ts:84 Clips are cuts of a stylised animated stage, not photoreal capture-register footage. Their origin (recording or re-drawn) is still labelled in the UI."
+        }
+      ]
+    },
+    "3b37a94d-3e69-4c44-8598-301f66448d9a/generated-output-grading": {
+      "context": "types-crate",
+      "subject": "generated-output-grading",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:56:21.163Z",
+      "worker": "5631acdb-7fe3-4576-b6ab-5e7736b69efe",
+      "techniques": [
+        {
+          "technique": "unconditional-fail-criteria",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/clips.rs:96 The veto-tier idea is present, but it gates a deterministic clip render (privacy, disclosure, citation), not a generated image."
+        },
+        {
+          "technique": "vision-model-grading-schema",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/results.rs:86 The only machine judge typed here grades simulated text transcripts. There is no vision grader."
+        },
+        {
+          "technique": "regrade-without-regenerate",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/results.rs:247 A text-transcript analog exists (a resume re-judges runs whose judge call failed), but no rendered images are graded."
+        },
+        {
+          "technique": "trial-matrix-design",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/results.rs:17 The matrix crosses tone, core tier, segment and audience size for LLM show simulations. It has no image-generator or style candidates."
+        }
+      ],
+      "registryProposal": "The sim tournament types (results.rs) apply several of this subject's laws to LLM-generated text: hard-rule vetoes, unmeasured is not pass, cost per usable stream, judge-mismatch cells reported beside the ranking rather than in it, and re-judging without re-simulating on resume. These laws are not specific to images. They could be shared with llm-agent/eval-harness rather than living only under visual-generation."
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/image-prompt-composition": {
+      "context": "console-quality-gates",
+      "subject": "image-prompt-composition",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:02:25.440Z",
+      "worker": "91831e6b-7523-4b49-b66e-a2811a0cfe1a",
+      "techniques": []
+    },
+    "3b37a94d-3e69-4c44-8598-301f66448d9a/import-normalization": {
+      "context": "types-crate",
+      "subject": "import-normalization",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:12:16.301Z",
+      "worker": "c7d0be70-0e13-4b46-9165-334e80d8a6c7",
+      "techniques": [
+        {
+          "technique": "format-detection",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/catalog.rs:72 There is one parse type per in-house format with a fixed spec, so there is no set of candidate foreign formats to fingerprint."
+        },
+        {
+          "technique": "overlay-merge-absence-semantics",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/character.rs:209 This is an in-house config override layered on engine defaults, not an import overlay of foreign material. Absence semantics are stated here, but the import precondition does not hold."
+        },
+        {
+          "technique": "review-before-commit",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/catalog.rs:144 This is a digest-guarded write of an owned package document, not consent to an import of foreign entities."
+        }
+      ]
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/hitl-approval": {
+      "context": "console-review-page",
+      "subject": "hitl-approval",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:20:57.313Z",
+      "worker": "b993b67f-a6b8-445a-a7cc-2e0434523215",
+      "techniques": [
+        {
+          "technique": "gate-state-machines",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Layer2.tsx:40 The 'gates' here are automated moderation stages, shown after they acted. The page has no human-driven gate state."
+        },
+        {
+          "technique": "review-queues",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:15 A failed feedback write stays on screen with a retry, which matches the 'write must land' idea. But the marks are annotations, not verdicts on pending items, so this is not an approval queue."
+        },
+        {
+          "technique": "resume-after-decision",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:49 Saving a mark resumes nothing: there is no paused work waiting on it, so there is no continuation to design."
+        },
+        {
+          "technique": "fail-loud-classification-default",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Layer2.tsx:125 An unmeasured check is shown as not-evaluable rather than passed, which is in the spirit of the rule. But no severity classifier routes pending items here."
+        },
+        {
+          "technique": "oracle-before-gate",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Moderation.tsx:46 Moderation is listed as past records. Nothing on the page arms a gate over machine output, so there is no gate to need an oracle."
+        },
+        {
+          "technique": "truncated-verdict-space",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Judge.tsx:44 The judge grades a session after it ends. Its pass/fail admits nothing past a trust boundary in this context."
+        }
+      ]
+    },
+    "c2325be4-a41e-48f5-9050-bb31c09bb12a/live-chat-moderation-and-anti-bait": {
+      "context": "console-brain-page",
+      "subject": "live-chat-moderation-and-anti-bait",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:32:26.055Z",
+      "worker": "090929ad-d47a-4b5f-ac74-7822d16d5935",
+      "techniques": [
+        {
+          "technique": "path-independent-output-gate",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Viewer.tsx:80 Transcript text is shown only to the operator in the console detail pane. It is not a spoken or broadcast path, so this context has no door for an output gate to sit at. The broadcast stage is a separate surface."
+        },
+        {
+          "technique": "injection-as-tag-not-payload",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:169 The context only counts pre-filter outcomes (dropped/collapsed) that are already recorded. It builds no host prompt, so it cannot decide whether a tag or a payload reaches one."
+        },
+        {
+          "technique": "persistence-penalty",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Instruments.tsx:90 The funnel shows aggregate counts past moderation. Per-viewer standing and picker down-weighting live in the daemon picker/moderator, not here."
+        }
+      ]
+    },
+    "382c68f3-bc20-4cc7-8220-18aa850f7087/live-safety-rails": {
+      "context": "character-package",
+      "subject": "live-safety-rails",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:39:54.380Z",
+      "worker": "5af17599-157a-483e-bebf-9732f86897c0",
+      "techniques": [
+        {
+          "technique": "crisis-handoff-one-kind-line",
+          "verdict": "conformant",
+          "evidence": "characters/malakor/rules/crisis-handoff.md:3 The bit is dropped, the line is one short sentence, the pointer is generic, and he never asks where they are or for details. It is declared a rail that can't be toggled off (character.toml:11 rails = [\"crisis-handoff\"]). The fixed core line itself lives in the engine (moderation.rs CRISIS_HELP_LINE), not in this package."
+        },
+        {
+          "technique": "care-state-after-disclosure",
+          "verdict": "deviation",
+          "evidence": "characters/malakor/rules/crisis-handoff.md:3 'For a long while' is a timed window, not 'at least the rest of the stream'. The sealing of absence and allusion for the whole stream exists only in the optional, owner-toggleable crisis-chat-ban rule (characters/malakor/rules/crisis-chat-ban.md:3). The package does not raise the engine's 1800 s default."
+        },
+        {
+          "technique": "sincere-ai-disclosure-then-return",
+          "verdict": "conformant",
+          "evidence": "characters/malakor/character.toml:30 There is a fixed disclosure line that leads with the plain fact and then returns to the show. The comment on line 29 makes the output gate disclosure-aware: a persona leak is replaced with this line, not with an in-character deflection. Constitution red line 8 (constitution.md:58) sits above tone. The situation bank tests the pair: a sincere ask (situations.json:183) and a near-miss taunt (situations.json:196)."
+        },
+        {
+          "technique": "no-crowd-action",
+          "verdict": "conformant",
+          "evidence": "characters/malakor/bible.md:176 The rule is absolute, and the grievance gets an outlet (bible.md:178: findings go to the authorities through the Lord, off stream). Constitution red line 3 says he 'never sends chat after anyone'. Situation roast-real-streamer forbids repeating the channel name as a target (situations.json:102)."
+        },
+        {
+          "technique": "real-people-boundary",
+          "verdict": "conformant",
+          "evidence": "characters/malakor/constitution.md:47 Personal data is never solicited, not even to help (line 49). Only public entities from public records are named, with 'alleged' used below documented (lines 45-46). There are no real voices or likenesses, foils are parody archetypes, and the circle 'will not open for the living' (bible.md:143-144, 193). Private names raised in chat are not repeated (bible.md:179)."
+        }
+      ],
+      "registryProposal": "real-people-boundary prescribes 'an unmistakable invented parody of a type (not a person)'. This package carries one owner-approved exception (constitution.md:50-53, foils/the-painter.md): a renamed satirical parody of a deceased historical dictator, in the Chaplin tradition, never using his name, words or voice. The technique does not say whether renamed satire of a dead historical figure that passes the clip test counts as impersonation. It should say so explicitly, rather than leaving every consumer to choose between 'type only' and the clip test."
     }
   }
 }

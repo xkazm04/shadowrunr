@@ -1014,7 +1014,11 @@
           "revision": 2,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Viewer.tsx:4 This context is an operator-only console that reads recorded transcripts and ledgers after the fact. It composes no host speech, builds no host prompt, and draws nothing on the broadcast canvas, so the subject's precondition (a generated host reading live chat) does not hold here. A search of apps/console/src/pages/brain for deflect/inject/bait/penalt found nothing. The only moderation code is a counter of input-stage moderation outcomes (brainModel.ts:169) for the picker funnel.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:86ca3bd8344844c1",
+          "evaluatedRevision": 2
         },
         {
           "subject": "narrative-scroll-surface",
@@ -1225,7 +1229,11 @@
           "revision": 4,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src-tauri/tauri.conf.json:10 The console's web build is put into a local Tauri desktop bundle and talks only to a localhost daemon, so no hosting platform builds or serves it; I searched apps/console (gitignore-respecting) for vercel, netlify, wrangler, Cache-Control and deploy and found nothing, so the subject's precondition (deploying through a hosting platform) does not hold.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:0aecb9f382210cdc",
+          "evaluatedRevision": 4
         },
         {
           "subject": "settings",
@@ -1429,7 +1437,11 @@
           "revision": 2,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/DocTabs.tsx:74 The 'docs' here are one character package's own markdown files (constitution.md, bible.md, rules/<id>.md), served by the daemon as plain string fields of CharacterDetail and shown in an operator console. There is no published documentation catalog with category/topic records, body map, sitemap or search index. A search of the context's directory for sitemap, topic, catalog, lastReviewed and checked_against found nothing. ('draft' does appear, but only as Tone Lab line drafts, which are unrelated.)",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:74839e7c9eeb3728",
+          "evaluatedRevision": 4
         }
       ],
       "governance": "governed"
@@ -1508,7 +1520,11 @@
           "revision": 19,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/data/rpc.ts:54 The context's only backend is an HTTP POST to the daemon's /rpc (plus the /events socket), and a case-insensitive grep of apps/console/src/data for sql, INSERT INTO, transaction, sqlite and localStorage found no hits, so this layer owns no durable store, query language, rows or transaction boundary: the repository-over-a-store precondition of data-access does not hold here (the store lives daemon-side, e.g. crates/shadowrunr-brain/src/memory/store.rs).",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:2dba94be6400dea1",
+          "evaluatedRevision": 19
         },
         {
           "subject": "client-fetch-cache",
@@ -1629,7 +1645,11 @@
           "revision": 4,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/data/layer.ts:1 This context is the console's transport and cache plumbing (RPC client, query cache, /events socket, invalidation, React bindings); case-insensitive searches of all 24 files in apps/console/src/data/ for virality, chart race, bar race, narration, accelerator, precedent, saturation, continuity, recogniz, backlog, video, chart, idea and dataset found no hits, so the subject's precondition (choosing and scoring narration-free data-video ideas) does not hold here.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:857308a4204852e8",
+          "evaluatedRevision": 7
         }
       ],
       "governance": "governed"
@@ -1745,7 +1765,11 @@
           "revision": 9,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "conformant",
+          "evidence": "apps/console/src/pages/onair/ScreenHex.tsx:63 The On Air screen draws the case map in vector code from the scene's records, and each hex's evidence grade (DOC/REP/CLM/SPC) goes into the render as its fill and label, so a grade is never removed in the frame; around it the screen labels its synthetic parts on the frame itself (AI character, simulated viewers, fictional demo case) and uses no generated plates or directed arrows.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:a3b657bb0d44f7d8",
+          "evaluatedRevision": 9
         },
         {
           "subject": "fleet-orchestration",
@@ -1819,7 +1843,11 @@
           "revision": 2,
           "changedAt": "2026-09-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:5 The On Air screen preview is built by composing first-party stage-kit React components inside the console's own tree. A case-insensitive search for iframe, postMessage, contentWindow and event.origin/targetOrigin found nothing in apps/console/src or anywhere under apps/. With no guest app behind its own server, no frame and no cross-frame bridge, the subject's precondition does not hold (the golden path excludes same-origin first-party embeds by name).",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:a6e12ae70d42efcc",
+          "evaluatedRevision": 2
         },
         {
           "subject": "stream-moment-capture",
@@ -2521,7 +2549,11 @@
           "revision": 2,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:4 The simulator page only reads typed tournament, run and transcript rows from the daemon over the shared contract and never takes in an uploaded byte container. A case-insensitive search of its files for pdf, ocr, docx, unreadable and extract found nothing, and no package.json in the repo declares pdf-parse, pdfjs, tesseract or mammoth, so the subject's precondition (turning documents into text) does not hold here.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:ee97c74f3f5e0c28",
+          "evaluatedRevision": 2
         },
         {
           "subject": "canvas-graph",
@@ -2839,7 +2871,11 @@
           "revision": 6,
           "changedAt": "2026-09-11",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "conformant",
+          "evidence": "packages/contract/scripts/check.mjs:43 The package builds a generated closure (schema plus src/generated/) over a closed graph that one team owns. A whole-tree drift gate re-derives that closure and fails on any changed, missing or stray file, so the enumeration carries its own reaper. The package also states its own requirements and is reached by a logical name through a single published entry point.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:4eb7088d6ed99926",
+          "evaluatedRevision": 6
         }
       ],
       "governance": "governed"
@@ -4138,7 +4174,11 @@
           "revision": 7,
           "changedAt": "2026-09-24",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/tokens/REJECTED.md:96 The package has no duration ladder, and reduced motion is exported only as a raw media query for each component to check. Motion therefore has no closed vocabulary and no token-layer reduced-motion rebinding. Separately, brain-canvas role names carry colour words and no contrast floor is gated over the page palettes.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:165125b7a54d0de3",
+          "evaluatedRevision": 7
         },
         {
           "subject": "self-describing-model-packages",
@@ -4289,7 +4329,11 @@
           "revision": 6,
           "changedAt": "2026-08-31",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:268 The RPC params types (RunFilter, RunParams, RunsPageParams and the rest in rpc.rs) have no `deny_unknown_fields` and are all-optional, and the daemon decodes them with plain `serde_json::from_value`, so a mis-cased key such as `{\"filter\":{\"toneVariant\":\"x\"}}` quietly turns into `None` and `runs.page` comes back unfiltered: the silent-null failure that casing-and-naming says to refuse at development-time boundaries.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:c9cce81ffdd6456a",
+          "evaluatedRevision": 6
         },
         {
           "subject": "import-normalization",
@@ -4305,7 +4349,11 @@
           "revision": 1,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/catalog.rs:72 The crate only declares the product's own wire and package formats (situations.json, character.toml v2, RPC/event types, all specified in docs/spec/contract.md). That is the golden path's 'you control both ends' exclusion. A search of crates/shadowrunr-types for foreign, fingerprint, lossy, loss_ledger and detect_format found nothing; 'import' matches only 'importance' in memory.rs. So no foreign-format detection, adapter, IR or loss ledger lives here.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:4981ff0ea8a59c1b",
+          "evaluatedRevision": 1
         },
         {
           "subject": "trust-base",
@@ -4361,7 +4409,11 @@
           "revision": 11,
           "changedAt": "2026-09-20",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/clips.rs:473 The only visual output this crate types is a clip render. It is either trimmed from the show's own recording or re-drawn by the deterministic stage, so no generative image model, vision grader or generator comparison exists here for the subject to govern; I searched the crate for image, png, diffusion, vision_model and text_to_image and got zero hits.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:a433b5aafd6813f5",
+          "evaluatedRevision": 11
         }
       ],
       "governance": "governed"
@@ -4490,7 +4542,11 @@
           "revision": 1,
           "changedAt": "2026-09-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "docs/guide/cli.md:25 The repo's own config format (shadowrunr.toml) is a settings file: fixed top-level tables each deserialized into a typed struct the consumer already knows how to build, so the subject's precondition (the file decides which objects exist and the consumer asks for them by id) doesn't hold. Searching the context files and the whole repo found no reserved directive keys (`_target_ =`, `_disabled_ =`), no generic `instantiate(` and no `cycle detected` resolver. The other configs here (Cargo, pnpm, tsconfig, ESLint) are third-party formats the repo consumes, not ones it defines.",
+          "evaluatedAt": "2026-10-24",
+          "evaluatedAgainst": "sha256-b2:eb9279efa181d8c8",
+          "evaluatedRevision": 2
         }
       ],
       "governance": "governed"
@@ -4624,7 +4680,11 @@
           "revision": 14,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/fidelity/texture.py:6 This context measures computed CSS styles, the CSS-gradient print texture, bundle bytes and DOM/commit counts of the console against a hand-built prototype, and composes no image-generation prompt; a case-insensitive search of its files for negative_prompt/negativePrompt, diffusion, txt2img, image_prompt/imagePrompt, style_block and reference_image found nothing, and the only 'prompt' hit (contest.ts rules_prompt) is a segment's LLM rules text copied through from contest data, not an image prompt.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:d254a22feb4a9423",
+          "evaluatedRevision": 14
         },
         {
           "subject": "quality-gates",
@@ -4736,7 +4796,11 @@
           "revision": 2,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "characters/malakor/rules/crisis-handoff.md:3 The package's crisis rail gets the handoff line right but only promises care 'for a long while afterwards', carried by a per-turn care note, instead of a care state that lasts at least the rest of the stream; the package sets no care_window_s override, so it inherits the engine's 30-minute window, which is the exact lapse the technique names as a failure.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:1e0067bcd2638872",
+          "evaluatedRevision": 2
         },
         {
           "subject": "on-stream-persona-continuity",
@@ -5214,7 +5278,11 @@
           "revision": 22,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Judge.tsx:44 The Review page is a look back at sandbox sessions that have already finished: the judge's verdict, the moderation records and the operator's line marks all come after the session ran, and nothing on the page waits for a human decision before an action happens. A case-insensitive grep of apps/console/src/pages/review/ for approv, consent, escalat and unattended found nothing, so the subject's gate machinery (trigger, pause state, continuation) has nothing here to govern.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:52d7f3cfb87a79d9",
+          "evaluatedRevision": 22
         }
       ],
       "governance": "governed"

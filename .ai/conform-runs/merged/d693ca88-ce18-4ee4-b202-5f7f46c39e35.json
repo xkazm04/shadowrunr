@@ -1,0 +1,72 @@
+{
+ "schema": "conform-run/1",
+ "worker": "d693ca88-ce18-4ee4-b202-5f7f46c39e35",
+ "subject": "data-access",
+ "evaluatedAt": "2026-10-24T23:02:10.673534+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-data-layer",
+   "subject": "data-access",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/data/rpc.ts:54 The context's only backend is an HTTP POST to the daemon's /rpc (plus the /events socket), and a case-insensitive grep of apps/console/src/data for sql, INSERT INTO, transaction, sqlite and localStorage found no hits, so this layer owns no durable store, query language, rows or transaction boundary: the repository-over-a-store precondition of data-access does not hold here (the store lives daemon-side, e.g. crates/shadowrunr-brain/src/memory/store.rs).",
+   "techniques": [
+    {
+     "technique": "layering-rules",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/rpc.ts:54 The only thing this module 'owns' is the RPC transport, not a query language; the one-module-owns-the-statements rule has nothing to govern here."
+    },
+    {
+     "technique": "row-mapping",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/door.ts:2 There is one decode seam (the contract door), but it decodes RPC reply bodies, not store rows; the corrupt-row policy belongs to the daemon's store."
+    },
+    {
+     "technique": "transactions-and-units-of-work",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/layer.ts:95 A mutation is one RPC call; any unit of work and its transaction boundary are daemon-side."
+    },
+    {
+     "technique": "batching-and-n-plus-one",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/paged.ts:292 useRpcMany fans out one call per params entry, which looks like N+1 at the client. But there's no store here; whether a set-shaped endpoint exists is a design question for the daemon's RPC surface."
+    },
+    {
+     "technique": "repo-testing",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/testing.ts:88 The tests script the transport. There's no store engine whose real behavior a test would have to exercise."
+    }
+   ],
+   "absenceTerms": [
+    "sql",
+    "INSERT INTO",
+    "transaction",
+    "sqlite",
+    "localStorage"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T23:02:10.673534+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "data-access"
+   ],
+   "techniques": [
+    "batching-and-n-plus-one",
+    "layering-rules",
+    "repo-testing",
+    "row-mapping",
+    "transactions-and-units-of-work"
+   ],
+   "deviations": 0,
+   "context": "console-data-layer",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

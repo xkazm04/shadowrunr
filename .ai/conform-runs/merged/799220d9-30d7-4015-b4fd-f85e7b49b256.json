@@ -1,0 +1,72 @@
+{
+ "schema": "conform-run/1",
+ "worker": "799220d9-30d7-4015-b4fd-f85e7b49b256",
+ "subject": "design-tokens",
+ "evaluatedAt": "2026-10-25T00:07:52.859589+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "tokens-package",
+   "subject": "design-tokens",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "packages/tokens/REJECTED.md:96 The package has no duration ladder, and reduced motion is exported only as a raw media query for each component to check. Motion therefore has no closed vocabulary and no token-layer reduced-motion rebinding. Separately, brain-canvas role names carry colour words and no contrast floor is gated over the page palettes.",
+   "techniques": [
+    {
+     "technique": "cross-language-token-parity",
+     "verdict": "conformant",
+     "evidence": "packages/tokens/scripts/generate.mjs:4 Strategy 1. tokens.css and tokens.ts are both generated from tokens.source.json and carry a GENERATED FILE do-not-edit header. A --check drift gate is tested to fail on a seeded edit (tokens.test.ts:131)."
+    },
+    {
+     "technique": "token-enforcement",
+     "verdict": "deviation",
+     "evidence": "packages/tokens/src/tokens.test.ts:144 Membership is gated and zero input is fatal (generate.mjs:266 exits 2 when there are no roles). But the per-page palette test only checks that each role is present in hex format. No gate recomputes contrast for the type/face or text-on-* pairings; a grep for contrast found no code hit."
+    },
+    {
+     "technique": "motion-tokens",
+     "verdict": "deviation",
+     "evidence": "packages/tokens/REJECTED.md:96 No duration ladder exists. Easings are role-named (move/settle/slam). Reduced motion is only MEDIA.reducedMotion (tokens.ts:445), which means honoring it in each component instead of rebinding the vocabulary."
+    },
+    {
+     "technique": "token-taxonomy",
+     "verdict": "deviation",
+     "evidence": "packages/tokens/tokens.source.json:430 Value-named roles (text-verdigris, text-apricot, text-bone, text-ash) put the colour in the name. Type is tokenised as loose size and weight roles, not recipes (REJECTED.md says line heights are not tokenised). The rest of the two-layer design is sound: primitives stay in the JSON, roles need a one-sentence description, and orphan primitives fail the build."
+    },
+    {
+     "technique": "theme-architecture",
+     "verdict": "conformant",
+     "evidence": "packages/tokens/scripts/generate.mjs:109 Per-page palettes are complete binding sets scoped to [data-page] with one shared pageRole vocabulary. The generator fails when a page is missing a role or adds an unknown one. There is no light/dark/system model, so the three-state rules do not apply."
+    },
+    {
+     "technique": "density-and-scale-axes",
+     "verdict": "not-applicable",
+     "evidence": "packages/tokens/tokens.source.json:295 There is no user-set density, text-scale or brightness axis. The only scaling is the root size following the viewport. Because that root is a px clamp, it also overrides the platform's default-font-size preference, which matters if a text-scale axis is added later."
+    }
+   ],
+   "registryProposal": "The contrast-floor clause in token-enforcement and the golden path assumes light/dark themes. It should state that scoped per-section palettes (here a page's face/type pair under [data-page]) count as themes for that gate."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-25T00:07:52.859589+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "design-tokens"
+   ],
+   "techniques": [
+    "cross-language-token-parity",
+    "density-and-scale-axes",
+    "motion-tokens",
+    "theme-architecture",
+    "token-enforcement",
+    "token-taxonomy"
+   ],
+   "deviations": 1,
+   "context": "tokens-package",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

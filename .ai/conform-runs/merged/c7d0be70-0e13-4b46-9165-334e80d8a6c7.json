@@ -1,0 +1,60 @@
+{
+ "schema": "conform-run/1",
+ "worker": "c7d0be70-0e13-4b46-9165-334e80d8a6c7",
+ "subject": "import-normalization",
+ "evaluatedAt": "2026-10-25T01:12:16.301817+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "types-crate",
+   "subject": "import-normalization",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-types/src/catalog.rs:72 The crate only declares the product's own wire and package formats (situations.json, character.toml v2, RPC/event types, all specified in docs/spec/contract.md). That is the golden path's 'you control both ends' exclusion. A search of crates/shadowrunr-types for foreign, fingerprint, lossy, loss_ledger and detect_format found nothing; 'import' matches only 'importance' in memory.rs. So no foreign-format detection, adapter, IR or loss ledger lives here.",
+   "techniques": [
+    {
+     "technique": "format-detection",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/catalog.rs:72 There is one parse type per in-house format with a fixed spec, so there is no set of candidate foreign formats to fingerprint."
+    },
+    {
+     "technique": "overlay-merge-absence-semantics",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/character.rs:209 This is an in-house config override layered on engine defaults, not an import overlay of foreign material. Absence semantics are stated here, but the import precondition does not hold."
+    },
+    {
+     "technique": "review-before-commit",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/catalog.rs:144 This is a digest-guarded write of an owned package document, not consent to an import of foreign entities."
+    }
+   ],
+   "absenceTerms": [
+    "foreign",
+    "fingerprint",
+    "lossy",
+    "loss_ledger",
+    "detect_format"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-25T01:12:16.301817+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "import-normalization"
+   ],
+   "techniques": [
+    "format-detection",
+    "overlay-merge-absence-semantics",
+    "review-before-commit"
+   ],
+   "deviations": 0,
+   "context": "types-crate",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

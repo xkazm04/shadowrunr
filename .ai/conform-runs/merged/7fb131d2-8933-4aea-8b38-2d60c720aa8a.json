@@ -1,0 +1,60 @@
+{
+ "schema": "conform-run/1",
+ "worker": "7fb131d2-8933-4aea-8b38-2d60c720aa8a",
+ "subject": "data-video-virality",
+ "evaluatedAt": "2026-10-24T23:15:34.254323+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-data-layer",
+   "subject": "data-video-virality",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/data/layer.ts:1 This context is the console's transport and cache plumbing (RPC client, query cache, /events socket, invalidation, React bindings); case-insensitive searches of all 24 files in apps/console/src/data/ for virality, chart race, bar race, narration, accelerator, precedent, saturation, continuity, recogniz, backlog, video, chart, idea and dataset found no hits, so the subject's precondition (choosing and scoring narration-free data-video ideas) does not hold here.",
+   "techniques": [
+    {
+     "technique": "continuity-gate",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/layer.ts:1 No dataset-granularity or idea triage happens here; the module only wires RPC, cache and the event stream."
+    },
+    {
+     "technique": "accelerator-events",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/index.ts:9 The only 'events' here are daemon events that drive cache invalidation, not dated on-screen annotation events for a chart video."
+    },
+    {
+     "technique": "path-over-conclusion",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/index.ts:7 This code has no keep-watching rationale or idea framing to judge."
+    }
+   ],
+   "absenceTerms": [
+    "virality",
+    "narration",
+    "precedent",
+    "saturation",
+    "video"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-24T23:15:34.254323+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "data-video-virality"
+   ],
+   "techniques": [
+    "accelerator-events",
+    "continuity-gate",
+    "path-over-conclusion"
+   ],
+   "deviations": 0,
+   "context": "console-data-layer",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
