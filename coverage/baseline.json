@@ -1,0 +1,15 @@
+{
+  "command": "cargo llvm-cov --workspace --json --summary-only",
+  "toolchain": "1.97.1",
+  "tolerance": 0.1,
+  "crates": {
+    "shadowrunr-brain": 95.53,
+    "shadowrunr-clips": 75.06,
+    "shadowrunr-daemon": 85.47,
+    "shadowrunr-engine": 87.02,
+    "shadowrunr-reconcile": 92.31,
+    "shadowrunr-segments": 94.33,
+    "shadowrunr-sim": 95.54,
+    "shadowrunr-types": 98.83
+  }
+}
