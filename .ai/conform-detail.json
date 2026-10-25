@@ -5351,6 +5351,47 @@
           "evidence": "apps/console/src/pages/onair/Screen.tsx:5 No inbound or outbound messages cross a frame, so there is no origin to check. In this context 'origin' only appears as the CSS property transform-origin."
         }
       ]
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/evidence-bound-visuals": {
+      "context": "console-onair-page",
+      "subject": "evidence-bound-visuals",
+      "bundle": "media-generation",
+      "state": "conformant",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:46:18.573Z",
+      "worker": "e4b7c7fe-6a1d-473c-b51b-62d4c151d53b",
+      "techniques": [
+        {
+          "technique": "precision-limit-propagation",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/ScreenHex.tsx:63 Each hex's grade sets its fill through CSS data-g, so visual authority follows the grade. Elsewhere scores always carry 'weights unmeasured' and unmeasured signals are never drawn as zero."
+        },
+        {
+          "technique": "figure-must-cite-a-fact",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/ClipDetail.tsx:71 Every claim hex is shown with its grade and sources, and as 'ungraded' or 'no source' when they are missing, so it is never presented as owned. The rejecting validator lives in the daemon's clip gate. This context only shows that gate's result (ClipDetail.tsx:38)."
+        },
+        {
+          "technique": "epistemic-draw-routing",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:122 Every checkable element (hex ids, grades, vote bars, captions, labels) is drawn deterministically from scene data. The character art is code SVG from stage-kit (MalakorArt), and no generated plate or generated text appears anywhere."
+        },
+        {
+          "technique": "performer-claims-need-a-person",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:167 The lower-third plate always carries an 'AI character' mark next to the speaker's name, and ClipDetail reports whether the burnt-in AI disclosure is on each render."
+        },
+        {
+          "technique": "screenshots-claim-a-record",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:157 The chat pane is the product's own system with a simulated state, and the 'simulated' mark sits on the frame itself, not in a caption that can be dropped."
+        },
+        {
+          "technique": "footage-claims-a-camera",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/clipModel.ts:84 Clips are cuts of a stylised animated stage, not photoreal capture-register footage. Their origin (recording or re-drawn) is still labelled in the UI."
+        }
+      ]
     }
   }
 }

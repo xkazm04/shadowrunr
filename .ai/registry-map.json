@@ -1761,7 +1761,11 @@
           "revision": 9,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "conformant",
+          "evidence": "apps/console/src/pages/onair/ScreenHex.tsx:63 The On Air screen draws the case map in vector code from the scene's records, and each hex's evidence grade (DOC/REP/CLM/SPC) goes into the render as its fill and label, so a grade is never removed in the frame; around it the screen labels its synthetic parts on the frame itself (AI character, simulated viewers, fictional demo case) and uses no generated plates or directed arrows.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:a3b657bb0d44f7d8",
+          "evaluatedRevision": 9
         },
         {
           "subject": "fleet-orchestration",
