@@ -1,0 +1,9 @@
+{
+  "command": "cargo llvm-cov --workspace --json --summary-only",
+  "toolchain": "fixture",
+  "tolerance": 0.1,
+  "crates": {
+    "alpha": 80,
+    "beta": 90
+  }
+}

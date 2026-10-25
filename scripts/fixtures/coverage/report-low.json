@@ -1,0 +1,41 @@
+{
+  "type": "llvm.coverage.json.export",
+  "version": "2.0.1",
+  "data": [
+    {
+      "files": [
+        {
+          "filename": "/work/crates/alpha/src/a.rs",
+          "summary": {
+            "lines": {
+              "count": 60,
+              "covered": 50,
+              "percent": 83.33333333333334
+            }
+          }
+        },
+        {
+          "filename": "/work/crates/alpha/src/b.rs",
+          "summary": {
+            "lines": {
+              "count": 40,
+              "covered": 20,
+              "percent": 50
+            }
+          }
+        },
+        {
+          "filename": "/work/crates/beta/src/lib.rs",
+          "summary": {
+            "lines": {
+              "count": 50,
+              "covered": 45,
+              "percent": 90
+            }
+          }
+        }
+      ],
+      "totals": {}
+    }
+  ]
+}
