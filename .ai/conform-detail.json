@@ -5434,6 +5434,32 @@
       "evaluatedTs": "2026-10-25T01:02:25.440Z",
       "worker": "91831e6b-7523-4b49-b66e-a2811a0cfe1a",
       "techniques": []
+    },
+    "3b37a94d-3e69-4c44-8598-301f66448d9a/import-normalization": {
+      "context": "types-crate",
+      "subject": "import-normalization",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:12:16.301Z",
+      "worker": "c7d0be70-0e13-4b46-9165-334e80d8a6c7",
+      "techniques": [
+        {
+          "technique": "format-detection",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/catalog.rs:72 There is one parse type per in-house format with a fixed spec, so there is no set of candidate foreign formats to fingerprint."
+        },
+        {
+          "technique": "overlay-merge-absence-semantics",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/character.rs:209 This is an in-house config override layered on engine defaults, not an import overlay of foreign material. Absence semantics are stated here, but the import precondition does not hold."
+        },
+        {
+          "technique": "review-before-commit",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/catalog.rs:144 This is a digest-guarded write of an owned package document, not consent to an import of foreign entities."
+        }
+      ]
     }
   }
 }

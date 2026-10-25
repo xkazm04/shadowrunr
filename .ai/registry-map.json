@@ -4341,7 +4341,11 @@
           "revision": 1,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/catalog.rs:72 The crate only declares the product's own wire and package formats (situations.json, character.toml v2, RPC/event types, all specified in docs/spec/contract.md). That is the golden path's 'you control both ends' exclusion. A search of crates/shadowrunr-types for foreign, fingerprint, lossy, loss_ledger and detect_format found nothing; 'import' matches only 'importance' in memory.rs. So no foreign-format detection, adapter, IR or loss ledger lives here.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:4981ff0ea8a59c1b",
+          "evaluatedRevision": 1
         },
         {
           "subject": "trust-base",
