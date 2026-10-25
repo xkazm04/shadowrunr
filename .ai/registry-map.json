@@ -1835,7 +1835,11 @@
           "revision": 2,
           "changedAt": "2026-09-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:5 The On Air screen preview is built by composing first-party stage-kit React components inside the console's own tree. A case-insensitive search for iframe, postMessage, contentWindow and event.origin/targetOrigin found nothing in apps/console/src or anywhere under apps/. With no guest app behind its own server, no frame and no cross-frame bridge, the subject's precondition does not hold (the golden path excludes same-origin first-party embeds by name).",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:a6e12ae70d42efcc",
+          "evaluatedRevision": 2
         },
         {
           "subject": "stream-moment-capture",

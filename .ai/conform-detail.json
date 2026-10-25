@@ -5330,6 +5330,27 @@
           "evidence": "apps/console/src/pages/simulator/data.ts:9 The only cap here is the daemon's page size. No container reader with repeat or reference constructs exists in this context."
         }
       ]
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/embedded-preview": {
+      "context": "console-onair-page",
+      "subject": "embedded-preview",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:38:19.303Z",
+      "worker": "d8cb468b-b624-4284-95da-9c5a7804d710",
+      "techniques": [
+        {
+          "technique": "cross-frame-protocol",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:5 No frame message channel exists. The preview is direct component composition."
+        },
+        {
+          "technique": "origin-validation",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:5 No inbound or outbound messages cross a frame, so there is no origin to check. In this context 'origin' only appears as the CSS property transform-origin."
+        }
+      ]
     }
   }
 }
