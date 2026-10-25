@@ -5424,6 +5424,16 @@
         }
       ],
       "registryProposal": "The sim tournament types (results.rs) apply several of this subject's laws to LLM-generated text: hard-rule vetoes, unmeasured is not pass, cost per usable stream, judge-mismatch cells reported beside the ranking rather than in it, and re-judging without re-simulating on resume. These laws are not specific to images. They could be shared with llm-agent/eval-harness rather than living only under visual-generation."
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/image-prompt-composition": {
+      "context": "console-quality-gates",
+      "subject": "image-prompt-composition",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:02:25.440Z",
+      "worker": "91831e6b-7523-4b49-b66e-a2811a0cfe1a",
+      "techniques": []
     }
   }
 }

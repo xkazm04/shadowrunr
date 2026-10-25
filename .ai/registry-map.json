@@ -4668,7 +4668,11 @@
           "revision": 14,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/fidelity/texture.py:6 This context measures computed CSS styles, the CSS-gradient print texture, bundle bytes and DOM/commit counts of the console against a hand-built prototype, and composes no image-generation prompt; a case-insensitive search of its files for negative_prompt/negativePrompt, diffusion, txt2img, image_prompt/imagePrompt, style_block and reference_image found nothing, and the only 'prompt' hit (contest.ts rules_prompt) is a segment's LLM rules text copied through from contest data, not an image prompt.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:d254a22feb4a9423",
+          "evaluatedRevision": 14
         },
         {
           "subject": "quality-gates",
