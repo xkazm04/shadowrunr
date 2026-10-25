@@ -74,13 +74,14 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: cargo test
-        run: cargo test --workspace
+        # min-tests: cargo exits 0 on zero tests, so a floor (set below the current 1315) fails an emptied lane.
+        run: node scripts/min-tests.mjs --min 1000 -- cargo test --workspace
       - name: console shell cargo fmt
         run: cargo fmt --manifest-path apps/console/src-tauri/Cargo.toml --all -- --check
       - name: console shell cargo clippy
         run: cargo clippy --manifest-path apps/console/src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: console shell cargo test
-        run: cargo test --manifest-path apps/console/src-tauri/Cargo.toml
+        run: node scripts/min-tests.mjs --min 5 -- cargo test --manifest-path apps/console/src-tauri/Cargo.toml
 
   coverage:
     name: coverage (rust line ratchet)
@@ -142,6 +143,8 @@ jobs:
         run: node --test scripts/ci-lanes.test.mjs
       - name: coverage ratchet test
         run: node --test scripts/coverage-ratchet.test.mjs
+      - name: min-tests (zero-test floor) test
+        run: node --test scripts/min-tests.test.mjs
 
       - name: tokens drift
         run: pnpm -C packages/tokens check

@@ -26,7 +26,7 @@ skills:
 # Commands that exist in this repo (verified 2026-10-18).
 capabilities:
   build: "cargo build --workspace && cargo build --manifest-path apps/console/src-tauri/Cargo.toml && pnpm -r run build"
-  test: "cargo test --workspace && cargo test --manifest-path apps/console/src-tauri/Cargo.toml && pnpm -r run test"
+  test: "node scripts/min-tests.mjs --min 1000 -- cargo test --workspace && node scripts/min-tests.mjs --min 5 -- cargo test --manifest-path apps/console/src-tauri/Cargo.toml && pnpm -r run test"
   lint: "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --manifest-path apps/console/src-tauri/Cargo.toml --all -- --check && cargo clippy --manifest-path apps/console/src-tauri/Cargo.toml --all-targets -- -D warnings && pnpm -r run lint"
   typecheck: "pnpm -r run typecheck"
   # Rust line coverage per crate of the root workspace, ratcheted against coverage/baseline.json

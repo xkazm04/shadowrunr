@@ -205,6 +205,45 @@ export function classify(cmd, wd) {
   return { kind: "unparseable" };
 }
 
+const ZERO_FLAG = /pass-?with-?no-?tests|pass_with_no_tests/i;
+
+/**
+ * Lanes that could pass having run zero tests: a package script or vitest/vite config that sets
+ * passWithNoTests, and a `node --test` target (package script or workflow run line) that is a
+ * glob or a file that does not exist. (vitest, python unittest and node --test on a missing file
+ * already exit non-zero on zero tests; cargo is held by scripts/min-tests.mjs.)
+ */
+export function zeroRisks(root, workflowText) {
+  const risks = [];
+  const nodeTargets = (cmd) => {
+    const out = [];
+    for (const part of cmd.split(/&&|;|\|\|/)) {
+      const m = part.trim().match(/^node\s+--test\s+(.+)$/);
+      if (m) out.push(...m[1].split(/\s+/).filter((w) => !w.startsWith("-")).map(unquote));
+    }
+    return out;
+  };
+  const checkTargets = (cmd, base, where) => {
+    for (const t of nodeTargets(cmd)) {
+      if (/[*?[{]/.test(t)) risks.push(`${where}: node --test glob \`${t}\` passes on zero matches`);
+      else if (!existsSync(join(root, base, t))) risks.push(`${where}: node --test target \`${t}\` does not exist`);
+    }
+  };
+  for (const dir of workspacePackages(root)) {
+    for (const [name, cmd] of Object.entries(scriptsOf(root, dir))) {
+      if (ZERO_FLAG.test(cmd)) risks.push(`${dir} ${name}: passes with no tests`);
+      checkTargets(cmd, dir, `${dir} ${name}`);
+    }
+    for (const f of readdirSync(join(root, dir))) {
+      if (/^(vite|vitest)\.config\./.test(f) && ZERO_FLAG.test(readFileSync(join(root, dir, f), "utf8"))) {
+        risks.push(`${dir}/${f}: passWithNoTests set`);
+      }
+    }
+  }
+  for (const { cmd, wd } of workflowCommands(workflowText)) checkTargets(cmd, wd, `ci.yml \`${cmd}\``);
+  return risks;
+}
+
 /** The whole plan: derived lanes against what the workflow schedules. */
 export function plan(root, workflowText) {
   const derived = deriveLanes(root);
@@ -234,7 +273,7 @@ export function plan(root, workflowText) {
   }
   const covered = derived.filter((id) => scheduled.has(id));
   const uncovered = derived.filter((id) => !scheduled.has(id));
-  return { derived, covered, uncovered, stale, unparseable };
+  return { derived, covered, uncovered, stale, unparseable, zero: zeroRisks(root, workflowText) };
 }
 
 export function report(result) {
@@ -242,15 +281,16 @@ export function report(result) {
   for (const id of result.uncovered) out.push(`uncovered lane: ${id}`);
   for (const id of result.stale) out.push(`stale lane: ${id} (no such workspace package, script or suite)`);
   for (const cmd of result.unparseable) out.push(`unparseable lane: ${cmd}`);
+  for (const r of result.zero) out.push(`zero-test risk: ${r}`);
   out.push(
     `${result.derived.length} lanes derived, ${result.covered.length} covered, ` +
       `${result.uncovered.length} uncovered, ${result.stale.length} stale, ` +
-      `${result.unparseable.length} unparseable`,
+      `${result.unparseable.length} unparseable, ${result.zero.length} zero-test risks`,
   );
   return out;
 }
 
-export const failed = (r) => r.uncovered.length + r.stale.length + r.unparseable.length > 0;
+export const failed = (r) => r.uncovered.length + r.stale.length + r.unparseable.length + r.zero.length > 0;
 
 function main(argv) {
   const arg = (name) => {

@@ -33,6 +33,7 @@ function check(root, workflowText) {
       uncovered: named("uncovered lane: "),
       stale: named("stale lane: "),
       unparseable: named("unparseable lane: "),
+      zero: named("zero-test risk: "),
       denominator: lines.at(-1),
     };
   } finally {
@@ -73,7 +74,7 @@ test("case 1: the repo's lanes without a python job -> exit 1, exactly the four 
 test("fixture baseline: every lane covered -> exit 0 with its denominator", () => {
   const r = check(fixtureTree, fixtureCi);
   assert.equal(r.status, 0, r.lines.join("\n"));
-  assert.equal(r.denominator, "8 lanes derived, 8 covered, 0 uncovered, 0 stale, 0 unparseable");
+  assert.equal(r.denominator, "8 lanes derived, 8 covered, 0 uncovered, 0 stale, 0 unparseable, 0 zero-test risks");
 });
 
 test("case 2: the stage-kit lint step deleted -> exit 1 naming packages/stage-kit lint", () => {
@@ -81,7 +82,7 @@ test("case 2: the stage-kit lint step deleted -> exit 1 naming packages/stage-ki
   const r = check(fixtureTree, ci);
   assert.equal(r.status, 1);
   assert.deepEqual(r.uncovered, ["packages/stage-kit lint"]);
-  assert.equal(r.denominator, "8 lanes derived, 7 covered, 1 uncovered, 0 stale, 0 unparseable");
+  assert.equal(r.denominator, "8 lanes derived, 7 covered, 1 uncovered, 0 stale, 0 unparseable, 0 zero-test risks");
 });
 
 test("case 3: apps/stage gains a lint script, ci.yml unchanged -> exit 1 naming apps/stage lint", () => {
@@ -123,12 +124,58 @@ test("case 5: pnpm or python in a form the planner cannot parse -> exit 1 'unpar
     const r = check(fixtureTree, ci);
     assert.equal(r.status, 1, line);
     assert.deepEqual(r.unparseable, [line]);
-    assert.match(r.denominator, / 1 unparseable$/);
+    assert.match(r.denominator, / 1 unparseable, 0 zero-test risks$/);
   }
 });
 
 test("case 6: the repo as built -> exit 0, 22 lanes (18 web package-script + 4 Python; Rust not counted)", () => {
   const r = check(repo, repoCi);
   assert.equal(r.status, 0, r.lines.join("\n"));
-  assert.equal(r.denominator, "22 lanes derived, 22 covered, 0 uncovered, 0 stale, 0 unparseable");
+  assert.equal(r.denominator, "22 lanes derived, 22 covered, 0 uncovered, 0 stale, 0 unparseable, 0 zero-test risks");
+});
+
+/** A scratch copy of the fixture tree, with one package.json script rewritten. */
+function withScript(pkgDir, name, cmd, fn) {
+  const dir = mkdtempSync(join(tmpdir(), "ci-lanes-tree-"));
+  try {
+    cpSync(fixtureTree, dir, { recursive: true });
+    const file = join(dir, pkgDir, "package.json");
+    const pkg = JSON.parse(readFileSync(file, "utf8"));
+    pkg.scripts[name] = cmd;
+    writeFileSync(file, JSON.stringify(pkg));
+    return fn(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("case 7: a test script with passWithNoTests can pass on zero -> exit 1 'zero-test risk'", () => {
+  for (const cmd of ["vitest run --passWithNoTests", "vitest run --pass-with-no-tests"]) {
+    const r = withScript("apps/stage", "test", cmd, (root) => check(root, fixtureCi));
+    assert.equal(r.status, 1, cmd);
+    assert.deepEqual(r.zero, ["apps/stage test: passes with no tests"]);
+  }
+});
+
+test("case 8: a node --test glob or a missing file in a package script -> exit 1 'zero-test risk'", () => {
+  const glob = withScript("apps/stage", "lint", "node --test scripts/*.test.mjs", (root) => check(root, fixtureCi));
+  assert.equal(glob.status, 1);
+  assert.match(glob.zero[0], /node --test glob `scripts\/\*\.test\.mjs` passes on zero matches/);
+  const missing = withScript("apps/stage", "lint", "eslint src && node --test scripts/gone.test.mjs", (root) => check(root, fixtureCi));
+  assert.equal(missing.status, 1);
+  assert.match(missing.zero[0], /target `scripts\/gone\.test\.mjs` does not exist/);
+});
+
+test("case 9: a workflow node --test step naming a missing file or a glob -> exit 1", () => {
+  for (const line of ["node --test scripts/nope.test.mjs", "node --test scripts/*.test.mjs"]) {
+    const anchor = "        run: node scripts/ci-lanes.mjs --check";
+    const ci = replaced(fixtureCi, anchor, [anchor, "      - name: odd", `        run: ${line}`].join("\n"));
+    const r = check(fixtureTree, ci);
+    assert.equal(r.status, 1, line);
+    assert.equal(r.zero.length, 1, line);
+  }
+});
+
+test("case 10: the repo's own node --test steps and scripts name files that exist (no zero-test risk)", () => {
+  assert.deepEqual(check(repo, repoCi).zero, []);
 });
