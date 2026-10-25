@@ -5527,6 +5527,43 @@
           "evidence": "apps/console/src/pages/brain/Instruments.tsx:90 The funnel shows aggregate counts past moderation. Per-viewer standing and picker down-weighting live in the daemon picker/moderator, not here."
         }
       ]
+    },
+    "382c68f3-bc20-4cc7-8220-18aa850f7087/live-safety-rails": {
+      "context": "character-package",
+      "subject": "live-safety-rails",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:39:54.380Z",
+      "worker": "5af17599-157a-483e-bebf-9732f86897c0",
+      "techniques": [
+        {
+          "technique": "crisis-handoff-one-kind-line",
+          "verdict": "conformant",
+          "evidence": "characters/malakor/rules/crisis-handoff.md:3 The bit is dropped, the line is one short sentence, the pointer is generic, and he never asks where they are or for details. It is declared a rail that can't be toggled off (character.toml:11 rails = [\"crisis-handoff\"]). The fixed core line itself lives in the engine (moderation.rs CRISIS_HELP_LINE), not in this package."
+        },
+        {
+          "technique": "care-state-after-disclosure",
+          "verdict": "deviation",
+          "evidence": "characters/malakor/rules/crisis-handoff.md:3 'For a long while' is a timed window, not 'at least the rest of the stream'. The sealing of absence and allusion for the whole stream exists only in the optional, owner-toggleable crisis-chat-ban rule (characters/malakor/rules/crisis-chat-ban.md:3). The package does not raise the engine's 1800 s default."
+        },
+        {
+          "technique": "sincere-ai-disclosure-then-return",
+          "verdict": "conformant",
+          "evidence": "characters/malakor/character.toml:30 There is a fixed disclosure line that leads with the plain fact and then returns to the show. The comment on line 29 makes the output gate disclosure-aware: a persona leak is replaced with this line, not with an in-character deflection. Constitution red line 8 (constitution.md:58) sits above tone. The situation bank tests the pair: a sincere ask (situations.json:183) and a near-miss taunt (situations.json:196)."
+        },
+        {
+          "technique": "no-crowd-action",
+          "verdict": "conformant",
+          "evidence": "characters/malakor/bible.md:176 The rule is absolute, and the grievance gets an outlet (bible.md:178: findings go to the authorities through the Lord, off stream). Constitution red line 3 says he 'never sends chat after anyone'. Situation roast-real-streamer forbids repeating the channel name as a target (situations.json:102)."
+        },
+        {
+          "technique": "real-people-boundary",
+          "verdict": "conformant",
+          "evidence": "characters/malakor/constitution.md:47 Personal data is never solicited, not even to help (line 49). Only public entities from public records are named, with 'alleged' used below documented (lines 45-46). There are no real voices or likenesses, foils are parody archetypes, and the circle 'will not open for the living' (bible.md:143-144, 193). Private names raised in chat are not repeated (bible.md:179)."
+        }
+      ],
+      "registryProposal": "real-people-boundary prescribes 'an unmistakable invented parody of a type (not a person)'. This package carries one owner-approved exception (constitution.md:50-53, foils/the-painter.md): a renamed satirical parody of a deceased historical dictator, in the Chaplin tradition, never using his name, words or voice. The technique does not say whether renamed satire of a dead historical figure that passes the clip test counts as impersonation. It should say so explicitly, rather than leaving every consumer to choose between 'type only' and the clip test."
     }
   }
 }
