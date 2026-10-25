@@ -32,3 +32,6 @@ dist/
 
 # bp product blueprint: machine-local scan store (adopt-bp)
 .ai/lens-scan/
+# per-package vitest coverage output (the root coverage/ holds the committed baselines)
+/apps/*/coverage/
+/packages/*/coverage/
