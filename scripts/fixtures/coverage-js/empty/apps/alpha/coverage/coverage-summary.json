@@ -1,0 +1,11 @@
+{
+  "_note": "simulated fixture, not a real run",
+  "total": {
+    "lines": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  }
+}

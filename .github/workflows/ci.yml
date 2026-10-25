@@ -143,6 +143,8 @@ jobs:
         run: node --test scripts/ci-lanes.test.mjs
       - name: coverage ratchet test
         run: node --test scripts/coverage-ratchet.test.mjs
+      - name: coverage ratchet test (js)
+        run: node --test scripts/coverage-ratchet-js.test.mjs
       - name: min-tests (zero-test floor) test
         run: node --test scripts/min-tests.test.mjs
 

@@ -1,0 +1,6 @@
+{
+  "_note": "simulated fixture",
+  "command": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary",
+  "tolerance": 0.1,
+  "packages": {}
+}
