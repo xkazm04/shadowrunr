@@ -18,9 +18,14 @@
 //! - **pin** a string from a face-up card with a returned record and no string to a face-up card
 //!   that record names (the model chooses among them and states the relation, citing only what
 //!   the record says); with the record's text unknown, to any face-up card it connects to;
-//! - **dispatch** research when none is out: the lead chat hinted most (`!hint`), else a
-//!   face-down card a returned record names (the trail: the next string's other end), else the
-//!   next face-down card that was never searched; never a locked, spent or empty-searched one;
+//! - **dispatch** research when none is out: the card a closed crowd poll chose, else the lead
+//!   chat hinted most (`!hint`), else a face-down card a returned record names (the trail: the
+//!   next string's other end), else the next face-down card that was never searched; never a
+//!   locked, spent or empty-searched one;
+//! - while a crowd poll whose options name cards is open, it is deciding the next card: no
+//!   research goes out and none of its cards is turned until it closes, then its winner is
+//!   searched first (sbx-20261024-233255-10m L380: a trail dispatch to the card leading the
+//!   vote, which then lost);
 //! - **show** a returned record that was never on screen.
 //!
 //! The directive names the op line exactly (the pin's card and relation are the model's to fill),
@@ -103,6 +108,8 @@ pub enum Why {
     Trail,
     /// The next face-down card never searched.
     Next,
+    /// The card a closed crowd poll chose.
+    Vote,
 }
 
 /// The name a record would use for a card: its label up to a parenthesis or a comma
@@ -162,6 +169,7 @@ impl CaseMove {
                     Why::Lead => " (lead)",
                     Why::Trail => " (trail)",
                     Why::Next => "",
+                    Why::Vote => " (vote)",
                 }
             ),
             CaseMove::Reveal { hex, grade, .. } => format!("reveal {hex} {}", grade_name(*grade)),
@@ -189,6 +197,7 @@ impl CaseMove {
                     Why::Lead => "the lead chat hinted most",
                     Why::Trail => "a card a returned record names",
                     Why::Next => "the next face-down card",
+                    Why::Vote => "the card chat voted for",
                 },
                 op_line(&Op::DispatchResearch {
                     job_id: job.to_string(),
@@ -274,6 +283,24 @@ struct View {
     refused: String,
     /// A Plebiscite holds research.
     plebiscite: bool,
+    /// The cards an open crowd poll's options name: the poll is deciding the next card, so no
+    /// research goes out and none of them is turned until it closes.
+    polled: Vec<String>,
+    /// The card the last closed crowd poll's winner names: the next research follows it.
+    poll_won: Option<String>,
+}
+
+/// The cards `text` names, by id or by the name a record would use ([`core_label`]), in the
+/// case's order.
+fn cards_named(text: &str, hexes: &[shadowrunr_types::Hex]) -> Vec<String> {
+    let lower = text.to_lowercase();
+    hexes
+        .iter()
+        .filter(|h| {
+            text.contains(h.id.as_str()) || core_label(&h.label).is_some_and(|c| lower.contains(&c))
+        })
+        .map(|h| h.id.clone())
+        .collect()
 }
 
 /// The ids in a `, `-separated list that are cards of the case (the first word of each part).
@@ -302,7 +329,15 @@ impl View {
         let mut leads: Vec<(u32, String)> = Vec::new();
         for line in ctx.state_summary.lines() {
             let l = line.trim();
-            if let Some(rest) = l.strip_prefix("fogged and open: ") {
+            if let Some(rest) = l.strip_prefix("open crowd poll ") {
+                // `open crowd poll p1: "<question>" | <option> = <weight> (<n> votes), ... |`
+                let options = rest.split(" | ").nth(1).unwrap_or_default();
+                v.polled = cards_named(options, &ctx.hexes);
+            } else if let Some(rest) = l.strip_prefix("last poll ") {
+                if let Some((_, winner)) = rest.split_once("closed: winner ") {
+                    v.poll_won = cards_named(winner, &ctx.hexes).into_iter().next();
+                }
+            } else if let Some(rest) = l.strip_prefix("fogged and open: ") {
                 open_in_arc = Some(cards_in(rest, &known));
             } else if let Some(rest) = l.strip_prefix("LOCKED until act ") {
                 if let Some((_, list)) = rest.split_once(": ") {
@@ -564,7 +599,10 @@ impl CaseDesk {
         if menu("reveal_hex") && !v.reveal_waiting {
             let mut seen: Vec<&str> = Vec::new();
             for (hex, _, _) in &v.records {
-                if seen.contains(&hex.as_str()) || !open.contains(hex.as_str()) {
+                if seen.contains(&hex.as_str())
+                    || !open.contains(hex.as_str())
+                    || v.polled.contains(hex)
+                {
                     continue;
                 }
                 seen.push(hex);
@@ -625,7 +663,11 @@ impl CaseDesk {
             }
         }
         // Research on a lead, else the next face-down card.
-        if menu("dispatch_research") && self.out.is_empty() && !v.plebiscite {
+        // An open poll on the cards decides the next one: research waits for its close
+        // (sbx-20261024-233255-10m L380: a trail dispatch to the card leading the poll, which
+        // then lost).
+        if menu("dispatch_research") && self.out.is_empty() && !v.plebiscite && v.polled.is_empty()
+        {
             let fresh = |h: &str| {
                 fogged.contains(h)
                     && open.contains(h)
@@ -644,6 +686,11 @@ impl CaseDesk {
                     }
                 }
             }
+            let won = v
+                .poll_won
+                .iter()
+                .filter(|h| fresh(h))
+                .map(|h| (h, Why::Vote));
             let leads = v.leads.iter().filter(|h| fresh(h)).map(|h| (h, Why::Lead));
             let trail = trail.iter().filter(|h| fresh(h)).map(|h| (h, Why::Trail));
             let next = v
@@ -652,7 +699,7 @@ impl CaseDesk {
                 .filter(|h| fresh(h) && !v.searched.contains(h.as_str()))
                 .map(|h| (h, Why::Next));
             let mut seen: HashSet<&String> = HashSet::new();
-            for (hex, why) in leads.chain(trail).chain(next) {
+            for (hex, why) in won.chain(leads).chain(trail).chain(next) {
                 if !seen.insert(hex) {
                     continue;
                 }
@@ -752,6 +799,64 @@ mod tests {
             elapsed_s: 60,
             hexes,
         }
+    }
+
+    /// sbx-20261024-233255-10m L361-L381: the host opened "Which card do we turn next?" on
+    /// three cards; with it still open the case dispatched research on its trail to the card
+    /// leading it ("the clerks ride to Mirecrown Trust now"), and another card won the vote.
+    #[test]
+    fn an_open_poll_on_the_cards_holds_the_case_and_its_winner_is_searched_next() {
+        let labelled = |id: &str, label: &str, fog: bool| Hex {
+            label: label.into(),
+            ..hex(id, fog)
+        };
+        let hexes = vec![
+            labelled("HEX-03", "Ashpetal Holdings Ltd (fictional)", false),
+            labelled("HEX-05", "Treasury wallet demo-0001 (fictional)", true),
+            labelled("HEX-06", "Lanternwick Partners, promoter (fictional)", true),
+            labelled("HEX-08", "Mirecrown Trust (fictional)", true),
+        ];
+        let mut d = CaseDesk::default();
+        // HEX-03's research came back naming Mirecrown Trust: the trail.
+        d.note_job("case-3", "queued", None);
+        d.note_job(
+            "case-3",
+            "done",
+            Some(
+                "HEX-03 (Ashpetal Holdings Ltd (fictional)): 1 planted FICTIONAL demo record(s) \
+                 on file. DOC-02 [DOC] The Morrowgate registry (fictional) lists Ashpetal \
+                 Holdings Ltd (fictional) as incorporated in 2025 with Mirecrown Trust \
+                 (fictional) as its sole shareholder.",
+            ),
+        );
+        let dispatched = |mv: &Option<CaseMove>, to: &str, how: Why| matches!(mv, Some(CaseMove::Dispatch { hex, why, .. }) if hex == to && *why == how);
+        // Neighbour: no poll open, the trail goes to Mirecrown Trust.
+        let quiet = ctx(hexes.clone(), "no poll open\nScreen: board.");
+        let mv = nm(&mut d, &quiet);
+        assert!(dispatched(&mv, "HEX-08", Why::Trail), "{mv:?}");
+        // L361: the poll is open (as the runtime writes it): no research, no turn of its cards.
+        let open = ctx(
+            hexes.clone(),
+            "open crowd poll p1: \"Which card do we turn next?\" | Mirecrown Trust = 2.0 (2 \
+             votes), Treasury wallet demo-0001 = 0.0 (0 votes), Lanternwick Partners, promoter = \
+             1.0 (1 votes) | closes in 20 s | min rank Thrall\nScreen: board.",
+        );
+        let mv = nm(&mut d, &open);
+        assert!(
+            !matches!(
+                mv,
+                Some(CaseMove::Dispatch { .. } | CaseMove::Reveal { .. })
+            ),
+            "{mv:?}"
+        );
+        // L407: it closed; Lanternwick won, and its card is searched next, ahead of the trail.
+        let closed = ctx(
+            hexes,
+            "no poll open\nlast poll p1 closed: winner Lanternwick Partners, promoter\nScreen: \
+             board.",
+        );
+        let mv = nm(&mut d, &closed);
+        assert!(dispatched(&mv, "HEX-06", Why::Vote), "{mv:?}");
     }
 
     #[test]

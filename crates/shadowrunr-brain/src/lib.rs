@@ -310,7 +310,10 @@ pub struct Brain {
     /// plays at one pace whatever the tone).
     scene_budget: usize,
     /// Decides each beat's mode ([`orchestrate`]).
-    orch: Orchestrator,
+    /// Boxed: the orchestrator is the largest part of the brain, and a debug build moving the
+    /// brain by value through the sim runner's frames ran the main thread's stack out with 88
+    /// bytes more of it.
+    orch: Box<Orchestrator>,
     /// When this beat started, on the tokio clock (for [`Brain::on_air_ms`]).
     beat_clock: tokio::time::Instant,
     hexes: Vec<HexInfo>,
@@ -386,8 +389,9 @@ impl Brain {
             scenes_done: HashSet::new(),
             guest_closes: Default::default(),
             scene_budget,
-            orch: Orchestrator::new(salt)
-                .with_character(tuning.tuning, cfg.character.lines.clone()),
+            orch: Box::new(
+                Orchestrator::new(salt).with_character(tuning.tuning, cfg.character.lines.clone()),
+            ),
             beat_clock: tokio::time::Instant::now(),
             hexes: Vec::new(),
             case_names: CaseNames::default(),
@@ -1207,6 +1211,7 @@ impl Brain {
             carried: self.orch.carried_ages(now_ms),
             owed: self.orch.owed(&cands, now_ms),
             topic_words,
+            greet: self.orch.raid_greeting(&cands),
         };
         let corr = format!("{}:pick:{}", self.cfg.stream_id, self.ticks);
         let pick = self

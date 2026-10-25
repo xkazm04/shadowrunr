@@ -347,6 +347,23 @@ pub enum Ask {
 }
 
 impl Ask {
+    /// Bait: a request for what he never does (real harm, a real person's likeness or address,
+    /// a coin, explicit content, a stereotype). Its refusal is the note when it is picked, but
+    /// it is never owed: an owed ask goes ahead of the room, and bait must never buy a beat
+    /// (sbx-20261024-233255-10m L251: an owed hacking request took the handover beat's one
+    /// pick, and the raid waiting beside it was never greeted).
+    pub fn is_bait(self) -> bool {
+        matches!(
+            self,
+            Ask::Intrusion
+                | Ask::Impression
+                | Ask::CoinShill
+                | Ask::Address
+                | Ask::Explicit
+                | Ask::StereotypeJoke
+        )
+    }
+
     /// A short label for the `beat_plan` reason and the agenda.
     pub fn label(self) -> &'static str {
         match self {

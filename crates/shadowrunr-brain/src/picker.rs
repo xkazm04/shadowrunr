@@ -105,6 +105,11 @@ pub struct PickContext {
     /// The live segment's topic words ([`crate::topic::topic_words`]): a message sharing one
     /// scores `topic`.
     pub topic_words: Vec<String>,
+    /// A raid still waiting for its greeting: the one arrival that greets it
+    /// ([`crate::orchestrate::Orchestrator::raid_greeting`]). It goes ahead of the owed
+    /// requests, after safety (sbx-20261024-233255-10m L251: an owed request took the handover
+    /// beat's one pick and the raid beside it was never greeted).
+    pub greet: Option<String>,
 }
 
 /// Every this many non-safety picks, one goes to a viewer never picked this stream.
@@ -426,6 +431,14 @@ impl Picker {
             .collect()
     }
 
+    /// The waiting raid's greeting ([`PickContext::greet`]), when it is a candidate.
+    fn greet(cands: &[Candidate], ctx: &PickContext) -> Option<usize> {
+        let id = ctx.greet.as_ref()?;
+        cands
+            .iter()
+            .position(|c| &c.msg.id == id && c.safety.is_none() && !is_vote(c))
+    }
+
     /// Carried bait (bait first): candidates tagged as injection attempts that an earlier
     /// beat carried, oldest first.
     fn carried_bait(cands: &[Candidate], ctx: &PickContext) -> Vec<usize> {
@@ -447,6 +460,9 @@ impl Picker {
     /// penalties do not apply to them. They still use up slots of the beat. A vote is never
     /// chosen: the segment counts it.
     ///
+    /// Then `greet` (a waiting raid's greeting, [`PickContext::greet`]) takes the next slot,
+    /// within the beat's cap, one injection per beat and one pick per viewer.
+    ///
     /// Then at most [`OWED_PER_BEAT`] of `owed` (the orchestrator's owned requests) take the next
     /// slots, whether or not `order` lists them, within the beat's cap, one injection per beat
     /// and one pick per viewer, but past the share and whale caps: a request must not wait on
@@ -463,7 +479,7 @@ impl Picker {
         &self,
         cands: &[Candidate],
         order: &[usize],
-        owed: &[usize],
+        (greet, owed): (Option<usize>, &[usize]),
         bait: &[usize],
         novel: Option<usize>,
         max: usize,
@@ -479,6 +495,16 @@ impl Picker {
                 injection_taken |= c.injection;
                 chosen.push(i);
             }
+        }
+        if let Some(i) = greet.filter(|&i| {
+            chosen.len() < max
+                && !chosen.contains(&i)
+                && !viewers.contains(cands[i].msg.viewer.id.as_str())
+                && !(cands[i].injection && injection_taken)
+        }) {
+            viewers.insert(cands[i].msg.viewer.id.as_str());
+            injection_taken |= cands[i].injection;
+            chosen.push(i);
         }
         let mut owed_taken = 0;
         for &i in owed {
@@ -660,7 +686,9 @@ impl Picker {
         let owed = Self::owed(cands, ctx);
         let bait = Self::carried_bait(cands, ctx);
         let novel = self.novelty(cands, &ranked);
-        let (chosen_idx, novel_taken) = self.constrain(cands, &order, &owed, &bait, novel, max);
+        let greet = Self::greet(cands, ctx);
+        let (chosen_idx, novel_taken) =
+            self.constrain(cands, &order, (greet, &owed), &bait, novel, max);
         let reason = if chosen_idx.is_empty() {
             "deterministic: nothing to answer".to_string()
         } else {
@@ -673,7 +701,9 @@ impl Picker {
                     } else {
                         r.2.join("+")
                     };
-                    if owed.contains(i) {
+                    if greet == Some(*i) {
+                        why.push_str("+greet");
+                    } else if owed.contains(i) {
                         why.push_str("+owed");
                     } else if bait.first() == Some(i) {
                         why.push_str("+bait_first");
@@ -832,7 +862,9 @@ impl Picker {
         let owed = Self::owed(cands, ctx);
         let bait = Self::carried_bait(cands, ctx);
         let novel = self.novelty(cands, &ranked);
-        let (chosen_idx, novel_taken) = self.constrain(cands, &order, &owed, &bait, novel, max);
+        let greet = Self::greet(cands, ctx);
+        let (chosen_idx, novel_taken) =
+            self.constrain(cands, &order, (greet, &owed), &bait, novel, max);
         if let Some(n) = novel_taken.filter(|n| !order.contains(n)) {
             reasons.push(format!("{} novelty pick", cands[n].msg.id));
         }
@@ -842,7 +874,9 @@ impl Picker {
         {
             reasons.push(format!("{} carried bait first", cands[*i].msg.id));
         }
-        if chosen_idx.is_empty() {
+        // Nothing usable from the model: the deterministic pick, whatever the rules ahead of the
+        // score order (safety, a raid's greeting, the owed) already took.
+        if chosen_idx.is_empty() || order.is_empty() {
             let why = unusable
                 .take()
                 .unwrap_or_else(|| "no pick from the pool".to_string());

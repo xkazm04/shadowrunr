@@ -2088,11 +2088,21 @@ async fn l230_the_coin_bait_in_a_three_viewer_room_is_picked() {
         "{:?}",
         mods(&ev, ModStage::Input)
     );
+    // Bait is never owed (sbx-20261024-233255-10m L251), so in a small room it may wait
+    // behind the room's own chat: it is picked or carried, never lost.
+    let reason = ev
+        .iter()
+        .find_map(|e| match e {
+            StreamEvent::BeatPlan { reason, .. } => Some(reason.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
     assert!(
-        picked(&ev).contains(&"l230".to_string()),
-        "{:?}",
+        picked(&ev).contains(&"l230".to_string()) || reason.contains("l230"),
+        "{:?} {reason}",
         picked(&ev)
     );
+    assert!(!reason.contains("owed: l230"), "{reason}");
 }
 
 #[tokio::test]

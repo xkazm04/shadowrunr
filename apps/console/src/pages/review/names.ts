@@ -100,7 +100,7 @@ const OP_NAME: Readonly<Record<string, string>> = {
 };
 const REFUSAL_REASON: Readonly<Record<string, string>> = {
   foil_already_active: "that foil is already on stage", unknown_msg: "the message does not exist", duplicate_poll_id: "the poll name was taken", no_such_poll: "no such poll is open",
-  poll_already_open: "a poll is already open", reveal_not_due: "the reveal was not due yet", not_in_state: "not allowed at that point of the show", already_revealed: "already revealed",
+  poll_already_open: "a poll is already open", poll_deciding: "an open poll is deciding that card", reveal_not_due: "the reveal was not due yet", not_in_state: "not allowed at that point of the show", already_revealed: "already revealed",
   op_not_allowed: "not allowed in this segment", no_active_foil: "no foil is on stage", act_locked: "that act has not opened",
 };
 

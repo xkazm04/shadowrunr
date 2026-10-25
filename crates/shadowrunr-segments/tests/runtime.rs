@@ -3009,3 +3009,50 @@ fn the_cases_acts_name_the_arc_and_stage_its_cards() {
         .rules_prompt
         .contains("Act II Frozen withdrawals and the money trail"));
 }
+
+/// sbx-20261024-233255-10m L361-L381: with "Which card do we turn next?" open on three cards,
+/// a `dispatch_research` on one of them (the card leading the vote) went out, and another card
+/// won. Research on a card an open crowd poll lists waits for the close.
+#[test]
+fn research_on_a_card_an_open_poll_lists_waits_for_the_close() {
+    let mut rt = seg02a();
+    let vote = Op::StartPoll {
+        poll_id: "p1".into(),
+        question: "Which card do we turn next?".into(),
+        options: vec![
+            "Mirecrown Trust".into(),
+            "Treasury wallet demo-0001".into(),
+            "Lanternwick Partners, promoter".into(),
+        ],
+        min_rank: Rank::Thrall,
+        secs: 60,
+    };
+    assert!(rejections(&rt.apply_ops(0, &[vote])).is_empty());
+    let evs = rt.apply_ops(
+        42_000,
+        &[research(
+            "case-4",
+            "HEX-08: what the records say about Mirecrown Trust (fictional)",
+        )],
+    );
+    assert_eq!(rejections(&evs)[0].1, "poll_deciding");
+    assert_eq!(rt.searches("HEX-08"), 0);
+    let summary = rt.context(30, 42).state_summary;
+    assert!(summary.contains("poll_deciding"), "{summary}");
+    // Neighbour: a card the poll does not list is still searched.
+    let evs = rt.apply_ops(
+        43_000,
+        &[research("r2", "HEX-03: who owns Ashpetal Holdings Ltd")],
+    );
+    assert!(rejections(&evs).is_empty(), "{:?}", rejections(&evs));
+    // The poll closes: its cards may be searched again.
+    rt.tick(61_000, 30);
+    let evs = rt.apply_ops(
+        62_000,
+        &[research(
+            "case-5",
+            "HEX-06: what the records say about Lanternwick Partners, promoter",
+        )],
+    );
+    assert!(rejections(&evs).is_empty(), "{:?}", rejections(&evs));
+}

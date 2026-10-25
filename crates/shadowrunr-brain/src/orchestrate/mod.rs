@@ -561,6 +561,12 @@ pub struct Orchestrator {
     last_aside_ms: Option<TsMs>,
     /// First contacts that arrived during the scene, by beat, inside [`RAID_WINDOW_MS`].
     scene_arrivals: VecDeque<(TsMs, usize)>,
+    /// First contacts outside a scene, by beat, inside [`RAID_WINDOW_MS`]: their ids.
+    arrivals: VecDeque<(TsMs, Vec<String>)>,
+    /// A raid outside a scene still owed its greeting: its arrivals' ids, to when they came.
+    /// Cleared once one of them is answered (one greeting serves the raid); an arrival older
+    /// than [`REQUEST_MAX_MS`] lapses.
+    raid_waiting: HashMap<String, TsMs>,
 }
 
 /// The situational ask an owned request makes: a single message (never a wave or a safety
@@ -577,18 +583,17 @@ fn ask_of(c: &Candidate, first: bool) -> Option<Ask> {
 /// already told he is an AI: the AI ask was answered, the newcomer's was not, and with only the
 /// first ask considered the message was owned by nobody and superseded).
 fn asks_of(c: &Candidate, first: bool) -> Vec<Ask> {
-    if c.count > 1 || c.safety.is_some() || is_vote(c) {
+    // Bait is never owed, whatever ask it matches: an injection or a brigade call (tagged at
+    // input), or a request for what he never does ([`Ask::is_bait`]).
+    if c.count > 1 || c.safety.is_some() || is_vote(c) || c.injection {
         return Vec::new();
     }
     if matches!(c.msg.command, Some(Command::Propose { .. })) {
-        // A proposal is owed its verdict, unless it is bait (a rule rewrite in a !propose).
-        return if c.injection {
-            Vec::new()
-        } else {
-            vec![Ask::Proposal]
-        };
+        // A proposal is owed its verdict (bait in a !propose returned above).
+        return vec![Ask::Proposal];
     }
     let mut asks = situational_asks(&c.msg.text);
+    asks.retain(|a| !a.is_bait());
     if (first || c.msg.viewer.rank == shadowrunr_types::Rank::Thrall)
         && asks_what_this_is(&c.msg.text)
         && !asks.contains(&Ask::WhatIsThis)
@@ -633,7 +638,7 @@ fn worth(c: &Candidate, first: bool, s: Seg<'_>, owed: bool) -> Option<(&'static
     if c.count > 1 {
         return Some(("wave", Class::Required));
     }
-    if c.injection {
+    if is_bait(c) {
         return Some(("mockable", Class::OffTopic));
     }
     if asks {
@@ -658,6 +663,12 @@ fn worth(c: &Candidate, first: bool, s: Seg<'_>, owed: bool) -> Option<(&'static
         return Some((base.unwrap_or("chat"), Class::OnTopic));
     }
     base.map(|b| (b, Class::OffTopic))
+}
+
+/// Bait: an injection or a brigade call (tagged at input), or a request for what he never does
+/// ([`Ask::is_bait`]). Off-topic (`mockable`) wherever it points, and never owed.
+fn is_bait(c: &Candidate) -> bool {
+    c.injection || situational_asks(&c.msg.text).iter().any(|a| a.is_bait())
 }
 
 /// Never fills a pick: a vote (the segment counts it) or a lone emote.
@@ -793,6 +804,66 @@ impl Orchestrator {
     /// Stop carrying a viewer's messages (they were removed from chat).
     pub fn forget_viewer(&mut self, viewer_id: &str) {
         self.carried.retain(|k| k.cand.msg.viewer.id != viewer_id);
+    }
+
+    /// Track a raid outside a scene: this beat's first contacts join the window's, and once
+    /// [`RAID_FIRST_CONTACTS`] arrived inside [`RAID_WINDOW_MS`] (in one beat, or spread over a
+    /// few) every one of them waits for the raid's greeting ([`Orchestrator::raid_greeting`]).
+    fn track_raid(&mut self, now: TsMs, raid: bool) {
+        if !self.first.is_empty() {
+            let mut ids: Vec<String> = self.first.iter().cloned().collect();
+            ids.sort();
+            self.arrivals.push_back((now, ids));
+        }
+        while self
+            .arrivals
+            .front()
+            .is_some_and(|(t, _)| now.saturating_sub(*t) > RAID_WINDOW_MS)
+        {
+            self.arrivals.pop_front();
+        }
+        let arrived: usize = self.arrivals.iter().map(|(_, ids)| ids.len()).sum();
+        if raid || arrived >= RAID_FIRST_CONTACTS {
+            for (t, ids) in self.arrivals.drain(..) {
+                for id in ids {
+                    self.raid_waiting.entry(id).or_insert(t);
+                }
+            }
+        }
+        self.raid_waiting
+            .retain(|_, t| now.saturating_sub(*t) <= REQUEST_MAX_MS);
+    }
+
+    /// The arrival that greets a raid still waiting for its greeting, among `cands`: its largest
+    /// wave (the crowd greeted once, with its count), else its oldest line that is not a lone
+    /// emote or bait. The picker takes it ahead of the owed requests
+    /// ([`crate::picker::PickContext::greet`]); `None` while a sincerely sad viewer is owed.
+    pub fn raid_greeting(&self, cands: &[Candidate]) -> Option<String> {
+        // A sincerely sad viewer is answered first, kindly; the raid is greeted after.
+        if cands.iter().any(|c| {
+            c.safety.is_none()
+                && !self.answered.contains(&c.msg.id)
+                && self.owns(c) == Some(Ask::Sad)
+        }) {
+            return None;
+        }
+        cands
+            .iter()
+            .filter(|c| {
+                self.raid_waiting.contains_key(&c.msg.id)
+                    && c.safety.is_none()
+                    && !is_filler(c)
+                    && !is_bait(c)
+                    && !self.answered.contains(&c.msg.id)
+            })
+            .max_by_key(|c| {
+                (
+                    c.viewers.max(1),
+                    std::cmp::Reverse(c.msg.ts_ms),
+                    std::cmp::Reverse(c.msg.id.clone()),
+                )
+            })
+            .map(|c| c.msg.id.clone())
     }
 
     /// The ask a candidate makes that is owned: one per viewer and kind, so a viewer asking the
@@ -1409,6 +1480,10 @@ impl Orchestrator {
                 self.scene_raid = Some(self.scene_raid.unwrap_or(0).max(arrived));
                 self.scene_arrivals.clear();
             }
+        }
+
+        if !in_scene {
+            self.track_raid(now, raid);
         }
 
         self.room.observe(&b.ctx.state, &b.ctx.state_summary);
@@ -2338,6 +2413,9 @@ impl Orchestrator {
         if !late.is_empty() {
             plan.reason
                 .push_str(&format!("; carried over: {}", late.join(", ")));
+        }
+        if chosen.iter().any(|id| self.raid_waiting.contains_key(*id)) {
+            self.raid_waiting.clear();
         }
         self.answered.extend(chosen.iter().map(|s| s.to_string()));
         for id in &chosen {

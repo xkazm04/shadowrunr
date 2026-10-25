@@ -1969,6 +1969,18 @@ impl SegmentRuntime {
                 if target.is_some_and(|i| self.hex_locked(i)) {
                     return Err("act_locked");
                 }
+                // An open crowd poll listing the card is deciding it: research waits for the
+                // close (sbx-20261024-233255-10m L381: the clerks rode to the card leading the
+                // vote with twenty seconds left, and another card won).
+                if let (Some(i), Some(p)) = (target, &self.poll) {
+                    if p.kind == PollKind::Crowd
+                        && p.options
+                            .iter()
+                            .any(|o| target_hex(&self.case, o) == Some(i))
+                    {
+                        return Err("poll_deciding");
+                    }
+                }
                 if let Some(i) = target {
                     let hex = self.case.hexes[i].id.clone();
                     if self.searches(&hex) >= self.table.clock.max_searches_per_hex {
