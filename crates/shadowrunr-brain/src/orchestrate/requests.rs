@@ -213,15 +213,27 @@ pub const AUTHORITY_NOTE: &str =
 pub const PATRON_NOTE: &str = " <speaks of the {patron_title}: answer with dread and flattery; \
 never say whether the {patron_title} watches, never name or describe them>";
 
-/// The appended note for a gift or a sub announced in chat.
+/// The appended note for a gift or a sub announced in chat (a template: [`gift_note`] fills it).
 /// A gifted-sub thanks that never welcomed the new subscribers failed its rule
-/// (sbx-20261021-175151-10m L250).
-pub const GIFT_NOTE: &str = " <tribute: thank them by name and rank with a decree or a title; gifted subs: welcome the new subscribers too>";
+/// (sbx-20261021-175151-10m L250). The handle is spelled out because "by name" lost to the
+/// directions' "not by their handle": tuning-c01dab17/after-v2
+/// unhinged-roastmaster.sonnet.SEG-02A.a30.s1 L335 thanked "a Dread Council member" and never
+/// said rune_turnip.
+pub const GIFT_NOTE: &str = " <tribute: thank them by their handle, {handle}, said as written \
+(tribute is the one place a handle is owed; a rank alone is not a name), and their rank, \
+{rank_title}, with a decree or a title; gifted subs: welcome the new subscribers too>";
 
 /// The note for tribute given in someone's memory or beside a loss: the thanks, given with care.
-pub const GIFT_CARE_NOTE: &str = " <tribute given in memory of a loss: thank them by name and \
-rank, warmly and simply, and honour who it is for; no roast, no joke at the loss; gifted subs: \
-welcome the new subscribers too>";
+pub const GIFT_CARE_NOTE: &str = " <tribute given in memory of a loss: thank them by their \
+handle, {handle}, said as written, and their rank, {rank_title}, warmly and simply, and honour \
+who it is for; no roast, no joke at the loss; gifted subs: welcome the new subscribers too>";
+
+/// The tribute note for a gift from `handle`, of rank `rank_title`: [`GIFT_CARE_NOTE`] beside a
+/// loss, else [`GIFT_NOTE`].
+pub fn gift_note(care: bool, handle: &str, rank_title: &str) -> String {
+    let note = if care { GIFT_CARE_NOTE } else { GIFT_NOTE };
+    with_rank(&note.replace("{handle}", handle), rank_title)
+}
 
 /// Whether a message mentions a loss: grief ("my old dog died"), or a memorial ("for my dog", "in
 /// memory of", "rip"). unhinged-roastmaster.sonnet.SEG-02A.a3.s1 L190: "gifted 5 subs to the

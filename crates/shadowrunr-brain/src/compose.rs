@@ -38,9 +38,9 @@ use crate::moderation::is_gift_or_sub;
 use crate::moderation::Candidate;
 use crate::orchestrate::case::CASE_HEADING;
 use crate::orchestrate::requests::{
-    asks_what_this_is, claims_authority, injection_hint, mentions_loss, propose_below_rank_note,
-    several_asks_note, situational_asks, speaks_of_patron, with_rank, Ask, AI_REPEAT_NOTE,
-    AUTHORITY_NOTE, GIFT_CARE_NOTE, GIFT_NOTE, NEWCOMER_NOTE, PATRON_NOTE, PROPOSAL_NOTE,
+    asks_what_this_is, claims_authority, gift_note, injection_hint, mentions_loss,
+    propose_below_rank_note, several_asks_note, situational_asks, speaks_of_patron, with_rank, Ask,
+    AI_REPEAT_NOTE, AUTHORITY_NOTE, NEWCOMER_NOTE, PATRON_NOTE, PROPOSAL_NOTE,
 };
 use crate::util::one_line;
 use crate::working::{fitted_window, WindowItem, EPISODE_BUDGET_CHARS};
@@ -809,11 +809,11 @@ fn situation_notes(c: &Candidate, t: &TurnInputs<'_>) -> String {
     }
     if is_gift_or_sub(&c.msg.text) {
         // Tribute given beside a loss is thanked with care, never roasted.
-        s.push_str(if mentions_loss(&c.msg.text) {
-            GIFT_CARE_NOTE
-        } else {
-            GIFT_NOTE
-        });
+        s.push_str(&gift_note(
+            mentions_loss(&c.msg.text),
+            &c.msg.viewer.name,
+            &t.pkg.rank_titles.title(c.msg.viewer.rank),
+        ));
     }
     if matches!(c.msg.command, Some(Command::Propose { .. })) {
         if c.msg.viewer.rank < t.propose_min_rank {
@@ -1423,7 +1423,10 @@ mod tests {
             chat_line(&turn, "warlock").ends_with(PROPOSAL_NOTE),
             "{turn}"
         );
-        assert!(chat_line(&turn, "gift").ends_with(GIFT_NOTE), "{turn}");
+        assert!(
+            chat_line(&turn, "gift").ends_with(&gift_note(false, "Vgift", "Acolyte")),
+            "{turn}"
+        );
         assert!(
             !chat_line(&turn, "land").contains(" <"),
             "a landlord is not the Lord"
@@ -1726,11 +1729,83 @@ Do name the target.
     }
 
     #[test]
+    fn a_gift_note_spells_out_the_gifters_handle_and_rank() {
+        // tuning-c01dab17/after-v2 unhinged-roastmaster.sonnet.SEG-02A.a30.s1 L331-L335: a case
+        // beat with a gift pick thanked "a Dread Council member" and never said the handle, as
+        // "by name" lost to "name the target by what they said, not by their handle".
+        let ctx = SegmentContext {
+            segment: SegmentId::Seg02aHexmap,
+            rules_prompt: "R".into(),
+            state_summary: "S".into(),
+            state: String::new(),
+            allowed_ops: Vec::new(),
+            ccv: 1,
+            elapsed_s: 1,
+            hexes: Vec::new(),
+        };
+        let mut gift = picked(
+            "gift",
+            Rank::DreadCouncil,
+            "gifting 5 subs to the room. the crypt needs more minions (simulated)",
+            None,
+        );
+        gift.msg.viewer.name = "rune_turnip".into();
+        let mut care = picked("care", Rank::Thrall, "gifted 5 subs, for my dog", None);
+        care.msg.viewer.name = "ashen_raven".into();
+        let pkg = pkg();
+        let picks = [gift, care];
+        let turn = compose_turn(&TurnInputs {
+            ctx: &ctx,
+            briefing: &[],
+            working_set: "",
+            facts: &[],
+            procedurals: &[],
+            window: &[],
+            picked: &picks,
+            pkg: &pkg,
+            active_foil: None,
+            nonce: 1,
+            fresh_bit: false,
+            brief: None,
+            care_note: None,
+            material: None,
+            beat_note: None,
+            room_note: None,
+            agenda: None,
+            voice: None,
+            segment_note: None,
+            budget_chars: 240,
+            propose_min_rank: Rank::Warlock,
+            first_contacts: &HashSet::new(),
+            case: None,
+            repeat_ai: &HashSet::new(),
+            ai_answered: false,
+            question_waves: &Default::default(),
+            guest_turns: false,
+        });
+        let line = chat_line(&turn, "gift");
+        assert!(
+            line.contains("thank them by their handle, rune_turnip, said as written"),
+            "{line}"
+        );
+        assert!(line.contains("a rank alone is not a name"), "{line}");
+        assert!(line.contains("their rank, Dread Council"), "{line}");
+        assert!(line.contains("welcome the new subscribers"), "{line}");
+        let line = chat_line(&turn, "care");
+        assert!(
+            line.contains("by their handle, ashen_raven, said as written"),
+            "{line}"
+        );
+        assert!(line.contains("no roast, no joke at the loss"), "{line}");
+        assert!(!line.contains('{'), "every placeholder filled: {line}");
+    }
+
+    #[test]
     fn no_instruction_asks_for_the_rank_in_brackets() {
         // sbx-20261024-205313-10m: 22 of 65 host lines said "Name (Thrall), ...", read off "the
         // rank title in the parentheses" (zero in every pre-rebalance transcript).
         use crate::orchestrate::case::CASE_WITH_CHAT;
-        use crate::orchestrate::requests::{GIFT_CARE_NOTE, PROPOSAL_NOTE};
+        use crate::orchestrate::requests::{GIFT_CARE_NOTE, GIFT_NOTE, PROPOSAL_NOTE};
         let p = malakor_persona();
         let mut texts: Vec<(String, String)> = vec![
             ("CHAT_INSTRUCTION".into(), p.fill(CHAT_INSTRUCTION)),

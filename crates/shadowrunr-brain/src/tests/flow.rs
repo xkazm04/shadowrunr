@@ -1078,7 +1078,11 @@ async fn a_gift_whose_thanks_was_trimmed_is_thanked_on_the_next_beat_with_care()
     // The care note sits beside it.
     let prompt = last_core_prompt(&engine);
     assert!(
-        chat_line_of(&prompt, "g").ends_with(crate::orchestrate::requests::GIFT_CARE_NOTE),
+        chat_line_of(&prompt, "g").ends_with(&crate::orchestrate::requests::gift_note(
+            true,
+            "ashen_raven",
+            "Thrall"
+        )),
         "{prompt}"
     );
     // The next beat that speaks thanks it.
