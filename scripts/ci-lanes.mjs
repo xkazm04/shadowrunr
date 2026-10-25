@@ -7,8 +7,9 @@
 //     gate script it declares, out of {check, typecheck, test, lint, build};
 //   - every Python suite under tools/*: a `tests/` folder holding test_*.py -> `unittest discover`,
 //     otherwise top-level test_*.py -> `unittest <those modules>`.
-// Rust lanes are NOT derived: the cargo workspace is one job of three fixed commands (fmt, clippy,
-// test) that already covers every crate, so `cargo` run lines are ignored here.
+// Rust lanes are NOT derived: the `rust` job is fixed commands (fmt, clippy, test) for the root
+// cargo workspace plus the same three for apps/console/src-tauri (its own workspace, via
+// --manifest-path), so `cargo` run lines are ignored here.
 //
 // Scheduled lanes are read from the workflow's `run:` lines (with each step's
 // `working-directory:`). Any line that invokes pnpm or python in a form this planner does not know

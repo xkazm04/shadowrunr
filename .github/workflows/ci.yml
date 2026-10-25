@@ -16,7 +16,8 @@
 # and every tools/* Python suite, and fails when one is not scheduled below, when a step names a
 # package, script or suite that does not exist, or when it cannot parse a pnpm/python run line.
 # Adding a gate script to a package therefore means adding its step here. Rust lanes are the one
-# fixed `rust` job and are not part of that count.
+# fixed `rust` job (root workspace plus the apps/console/src-tauri workspace) and are not part
+# of that count.
 
 name: ci
 
@@ -48,7 +49,10 @@ jobs:
   rust:
     name: rust (fmt, clippy, test)
     # Windows-first: the CLI spawns child processes with CREATE_NO_WINDOW and the console ships
-    # as a Windows Tauri app. apps/console/src-tauri is its own Cargo workspace and is not built.
+    # as a Windows Tauri app. apps/console/src-tauri is its own Cargo workspace, so it gets the
+    # same three gates as separate `console shell` steps via --manifest-path. No frontend build
+    # is needed first: these are debug builds, where tauri's generate_context! points at devUrl
+    # and does not require frontendDist (../dist) to exist. A release or `tauri build` would.
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -60,12 +64,23 @@ jobs:
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt,clippy
           rustup default "$RUST_TOOLCHAIN"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # The console shell is a second Cargo workspace with its own lockfile and target dir.
+          workspaces: |
+            .
+            apps/console/src-tauri
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: cargo test
         run: cargo test --workspace
+      - name: console shell cargo fmt
+        run: cargo fmt --manifest-path apps/console/src-tauri/Cargo.toml --all -- --check
+      - name: console shell cargo clippy
+        run: cargo clippy --manifest-path apps/console/src-tauri/Cargo.toml --all-targets -- -D warnings
+      - name: console shell cargo test
+        run: cargo test --manifest-path apps/console/src-tauri/Cargo.toml
 
   web:
     name: web (tokens, contract, packages, stage, console)
