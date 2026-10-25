@@ -4329,7 +4329,11 @@
           "revision": 6,
           "changedAt": "2026-08-31",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:268 The RPC params types (RunFilter, RunParams, RunsPageParams and the rest in rpc.rs) have no `deny_unknown_fields` and are all-optional, and the daemon decodes them with plain `serde_json::from_value`, so a mis-cased key such as `{\"filter\":{\"toneVariant\":\"x\"}}` quietly turns into `None` and `runs.page` comes back unfiltered: the silent-null failure that casing-and-naming says to refuse at development-time boundaries.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:c9cce81ffdd6456a",
+          "evaluatedRevision": 6
         },
         {
           "subject": "import-normalization",

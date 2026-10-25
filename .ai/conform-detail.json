@@ -1926,43 +1926,43 @@
       "context": "types-crate",
       "subject": "ipc-contract",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-20",
-      "evaluatedTs": "2026-10-20T21:30:09.228Z",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:36:27.202Z",
+      "worker": "5acbeee3-b63e-4efd-84a6-62f7e58ef39f",
       "techniques": [
-        {
-          "technique": "drift-gates",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-types/tests/schema_drift.rs:10 Tests only files returned by export_files() instead of diffing the schema directory, ignoring untracked files and the downstream contract package."
-        },
-        {
-          "technique": "casing-and-naming",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-types/src/chat.rs:50 Wire casing is not declared once globally; types declare conflicting per-type casing annotations like UPPERCASE, lowercase, and snake_case."
-        },
-        {
-          "technique": "command-registration",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-types/src/rpc.rs:4 Documentation claims the daemon's dispatch test reads visit_methods to prevent skew, but no automated dispatch parity test exists."
-        },
         {
           "technique": "generated-type-contracts",
           "verdict": "conformant",
-          "evidence": "crates/shadowrunr-types/src/schema.rs:52 Acts as the single authoring authority, generating draft 2020-12 JSON Schema for domain shapes and binding RPC method parameters and results."
+          "evidence": "crates/shadowrunr-types/src/schema.rs:208 The engine authors the types. They become one committed JSON Schema marked do-not-edit, with one regeneration command, and a method -> {params,result} binding table (`RpcMethods`) is generated with it. Gap: the non-method types in `wire_types()` are listed by hand, so a type can be serialized without the contract describing it."
+        },
+        {
+          "technique": "drift-gates",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-types/tests/schema_drift.rs:8 The cargo test rebuilds the schema in-process and compares it with the committed file read from disk (CRLF-normalized). A missing or untracked file panics, and output is one monolithic file, so no orphans can hide inside it. The test does not take an inventory of the schema directory, so a stray extra file there would go unseen. The second hop (schema -> TS) is gated in packages/contract, outside this context."
         },
         {
           "technique": "error-shape-mapping",
           "verdict": "conformant",
-          "evidence": "crates/shadowrunr-types/src/error.rs:14 Defines a closed 10-code error taxonomy, structured ErrorBody, ErrorEnvelope, and legacy code mapping."
+          "evidence": "crates/shadowrunr-types/src/error.rs:14 Closed list of ten codes (`ALL`) in a `{error:{code,message,detail?}}` envelope (error.rs:111). Both go out through the schema export, and the legacy names are kept apart in `from_legacy` (error.rs:78). Weak spot: there is no `forbidden` class, and `forbidden_origin` is folded into `invalid_params` with the difference carried only in `detail.reason`."
+        },
+        {
+          "technique": "command-registration",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:542 One method table feeds both the schema's name set and `method_names()` (rpc.rs:625), and the daemon's dispatch-parity test reads `method_names()`. An unknown method has its own code, `MethodNotFound` (error.rs:21), so the near side need not detect it from message text."
+        },
+        {
+          "technique": "casing-and-naming",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:268 Field names are native snake_case, and the enum value exceptions are listed in contract.md. But strict decoding (`deny_unknown_fields`, e.g. catalog.rs:76) is used only on character/config manifests, never on RPC params types, so mis-cased optional params arrive as None without any error. Enum casing is also set per type (snake_case/lowercase/UPPERCASE) rather than in one place."
+        },
+        {
+          "technique": "call-wrapping",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/Cargo.toml:3 This crate holds types only and has no call sites. The single call wrapper and its timeout classes belong on the console side."
         }
       ],
-      "registryProposal": "When the engine crate defines an authoritative method visitor table like visit_methods, the standard should specify how registration parity tests in consuming crates (like daemon dispatch) can be co-located or verified without circular dependencies.",
-      "withdrawn": {
-        "worker": "c023aae1-f4d4-4e69-abb2-abada6da98e7",
-        "state": "deviation",
-        "at": "2026-10-20T21:30:35.788956+00:00",
-        "reason": "reviewer (sonnet): The technique claim that no automated dispatch parity test exists is false: crates/shadowrunr-daemon/src/e2e/catalog.rs:163 `every_contract_method_is_dispatched` iterates `method_names()` and asserts none returns method_not_found."
-      }
+      "registryProposal": "casing-and-naming says to configure the wire casing in 'a global serializer setting, not per-type annotations', but serde has no crate-wide rename setting. In a serde-authored contract, per-type `rename_all` on enums is forced, so the technique should name the substitute: a test or lint asserting that every enum carries the declared casing."
     },
     "fc878bef-2e53-416c-83f0-0b62db46a8b4/live-response-latency-budgeting": {
       "context": "stage-kit-scene-engine",
