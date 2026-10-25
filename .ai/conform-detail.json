@@ -5392,6 +5392,38 @@
           "evidence": "apps/console/src/pages/onair/clipModel.ts:84 Clips are cuts of a stylised animated stage, not photoreal capture-register footage. Their origin (recording or re-drawn) is still labelled in the UI."
         }
       ]
+    },
+    "3b37a94d-3e69-4c44-8598-301f66448d9a/generated-output-grading": {
+      "context": "types-crate",
+      "subject": "generated-output-grading",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:56:21.163Z",
+      "worker": "5631acdb-7fe3-4576-b6ab-5e7736b69efe",
+      "techniques": [
+        {
+          "technique": "unconditional-fail-criteria",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/clips.rs:96 The veto-tier idea is present, but it gates a deterministic clip render (privacy, disclosure, citation), not a generated image."
+        },
+        {
+          "technique": "vision-model-grading-schema",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/results.rs:86 The only machine judge typed here grades simulated text transcripts. There is no vision grader."
+        },
+        {
+          "technique": "regrade-without-regenerate",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/results.rs:247 A text-transcript analog exists (a resume re-judges runs whose judge call failed), but no rendered images are graded."
+        },
+        {
+          "technique": "trial-matrix-design",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/results.rs:17 The matrix crosses tone, core tier, segment and audience size for LLM show simulations. It has no image-generator or style candidates."
+        }
+      ],
+      "registryProposal": "The sim tournament types (results.rs) apply several of this subject's laws to LLM-generated text: hard-rule vetoes, unmeasured is not pass, cost per usable stream, judge-mismatch cells reported beside the ranking rather than in it, and re-judging without re-simulating on resume. These laws are not specific to images. They could be shared with llm-agent/eval-harness rather than living only under visual-generation."
     }
   }
 }

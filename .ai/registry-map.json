@@ -4397,7 +4397,11 @@
           "revision": 11,
           "changedAt": "2026-09-20",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/clips.rs:473 The only visual output this crate types is a clip render. It is either trimmed from the show's own recording or re-drawn by the deterministic stage, so no generative image model, vision grader or generator comparison exists here for the subject to govern; I searched the crate for image, png, diffusion, vision_model and text_to_image and got zero hits.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:a433b5aafd6813f5",
+          "evaluatedRevision": 11
         }
       ],
       "governance": "governed"
