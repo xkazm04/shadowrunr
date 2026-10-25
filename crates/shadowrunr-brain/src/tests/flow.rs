@@ -847,6 +847,75 @@ fn mixer_ctx() -> SegmentContext {
     }
 }
 
+/// unhinged-roastmaster.sonnet.SEG-02A.a30.s1 (tuning-e65e3ee0, instrument d3ad7663) L594-L597:
+/// a brigade call tagged at input was deferred and never answered, and the judge failed
+/// `seg02a-raid-subject`. A sincere ask beside it keeps the beat's pick; the call gets the
+/// character's refusal as one engine line after the beat's own, once.
+#[tokio::test]
+async fn a_tagged_brigade_call_beside_an_owed_ask_is_refused_on_air_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "f4-refuse", unpaced()).await;
+    let c = mixer_ctx();
+    let rust = viewer("sim-v0159", "rust_spoon", Rank::Warlock);
+    let wraith = viewer("w", "WraithKettle", Rank::Thrall);
+    b.tick(
+        1_000,
+        vec![
+            msg("hi", 900, &rust, "evening all"),
+            msg("hi2", 900, &wraith, "evening"),
+        ],
+        &c,
+    )
+    .await
+    .unwrap();
+    engine.push(
+        Role::CoreThread,
+        Ok("[deadpan 0.6 normal] WraithKettle, yes, I am an AI character, no voice changer."),
+    );
+    let ev = b
+        .tick(
+            6_000,
+            vec![
+                msg("ai", 5_800, &wraith, "is this an AI or a real guy?"),
+                msg("l853", 5_900, &rust, L853),
+            ],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["ai"], "{}", plan_of(&ev).1);
+    let refused = &b.cfg.character.lines.brigade_refused;
+    let said = says(&ev);
+    assert_eq!(said.len(), 2, "{said:?}");
+    assert!(said[1].starts_with("rust_spoon, "), "{said:?}");
+    assert!(
+        said[1].to_lowercase().ends_with(&refused.to_lowercase()),
+        "{said:?}"
+    );
+    assert_eq!(replies(&ev), ["ai", "l853"]);
+    assert!(mods(&ev, ModStage::Output).contains(&(
+        moderation::BRIGADE_CALL_RULE.into(),
+        None,
+        moderation::BRIGADE_REFUSED.into()
+    )));
+    // Answered once: the call is gone, and the same caller's next one is plain bait.
+    for t in [12_000, 18_000] {
+        let ev = b.tick(t, Vec::new(), &c).await.unwrap();
+        assert!(!picked(&ev).contains(&"l853".to_string()));
+        assert!(!says(&ev).iter().any(|s| s.contains("no one's door")));
+    }
+    let ev = b
+        .tick(24_000, vec![msg("l853b", 23_900, &rust, L853)], &c)
+        .await
+        .unwrap();
+    assert!(
+        !says(&ev).iter().any(|s| s.starts_with("rust_spoon, my")),
+        "{:?}",
+        says(&ev)
+    );
+}
+
 #[tokio::test]
 async fn a_brigade_call_about_the_case_is_never_topic_nor_folded_in() {
     // unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L853-L871: picked as `topic+carried`, folded

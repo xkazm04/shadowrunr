@@ -1145,6 +1145,14 @@ impl Brain {
             ev.push(care_event(now_ms, &c.msg.id, how.as_str()));
         }
         let cands = self.orch.screen(now_ms, cands, &mut ev);
+        // Every brigade call is owed one refusal, a call arriving in a hold too
+        // ([`Orchestrator::brigade_refusal`]).
+        let brigade_calls: Vec<moderation::Candidate> = cands
+            .iter()
+            .filter(|c| c.injection && moderation::is_brigade_call(&c.msg.text, Some(&self.policy)))
+            .cloned()
+            .collect();
+        self.orch.note_brigade_calls(&brigade_calls, now_ms);
         // The goodbye beat is never held and speaks at half budget; the wrap-up before it is
         // paced like any beat.
         let closing = pace::is_closing_now(&ctx.state_summary);
@@ -1924,6 +1932,50 @@ impl Brain {
                     foil: None,
                     text: out,
                     replying_to: Vec::new(),
+                    first_text_ms: None,
+                    delivery: None,
+                });
+            }
+        }
+
+        // A brigade call the picks left unanswered is refused on air, in one fixed line after the
+        // beat's own (never in a crisis, a sincerely sad viewer's beat, an aside or the goodbye).
+        let sad = pick
+            .chosen
+            .iter()
+            .any(|c| situational_asks(&c.msg.text).contains(&Ask::Sad));
+        let refusal = if crisis || sad || aside.is_some() || closing {
+            None
+        } else {
+            self.orch.brigade_refusal(&pick.chosen, now_ms)
+        };
+        if let Some((line, ids)) = refusal {
+            let gate = GateCtx {
+                now_ms,
+                policy: &self.policy,
+                hexes: &self.hexes,
+                names: &self.case_names,
+                crisis,
+                removed: &self.removed_names,
+                recent: &[],
+            };
+            let g = outgate::pass(Surface::Spoken, &line, &gate, &mut |t| t.to_string());
+            ev.extend(g.events);
+            if let Some(out) = g.text {
+                ev.push(moderation::output_event(
+                    now_ms,
+                    moderation::BRIGADE_CALL_RULE,
+                    moderation::BRIGADE_REFUSED,
+                ));
+                turn.push(format!("{}: {out}", self.cfg.character.persona.name));
+                let at = self.on_air_ms(now_ms);
+                self.speech.say_paced(at, &out, None, &self.tuning.pace);
+                ev.push(StreamEvent::Say {
+                    ts_ms: now_ms,
+                    speaker: Speaker::Host,
+                    foil: None,
+                    text: out,
+                    replying_to: ids,
                     first_text_ms: None,
                     delivery: None,
                 });

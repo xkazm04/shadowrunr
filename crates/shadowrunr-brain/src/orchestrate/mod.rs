@@ -567,6 +567,13 @@ pub struct Orchestrator {
     /// Cleared once one of them is answered (one greeting serves the raid); an arrival older
     /// than [`REQUEST_MAX_MS`] lapses.
     raid_waiting: HashMap<String, TsMs>,
+    /// Viewers whose brigade call was refused this stream ([`Self::brigade_refusal`]): a later
+    /// call of theirs is plain bait, owed nothing.
+    brigade_refused: HashSet<String>,
+    /// Brigade calls owed their refusal, with when they were noted ([`Self::note_brigade_calls`]).
+    /// Kept apart from the carry: a call superseded there by its viewer's older bait is still
+    /// owed.
+    brigade_owed: Vec<(TsMs, Candidate)>,
 }
 
 /// The situational ask an owned request makes: a single message (never a wave or a safety
@@ -1002,6 +1009,74 @@ impl Orchestrator {
             .collect();
         v.sort();
         v.into_iter().map(|(_, _, id)| id.to_string()).collect()
+    }
+
+    /// Note this beat's brigade calls (tagged at input: a call for chat to act on someone outside
+    /// the stream, [`moderation::is_brigade_call`]), on every beat, a hold included: each is owed
+    /// one refusal ([`Self::brigade_refusal`]) unless its viewer was refused already.
+    pub fn note_brigade_calls(&mut self, calls: &[Candidate], now_ms: TsMs) {
+        for c in calls {
+            let id = &c.msg.id;
+            if c.safety.is_some()
+                || self.answered.contains(id)
+                || self.brigade_refused.contains(&c.msg.viewer.id)
+                || self.brigade_owed.iter().any(|(_, o)| &o.msg.id == id)
+            {
+                continue;
+            }
+            self.brigade_owed.push((now_ms, c.clone()));
+        }
+    }
+
+    /// The refusal owed to the brigade calls noted ([`Self::note_brigade_calls`]) that no pick
+    /// answered: the character's fixed line ([`LineBank::brigade_refused`]) addressed to their
+    /// viewers by name, and their ids. A tagged call is bait and never owed a pick ([`asks_of`]):
+    /// it waited for the off-topic slot, and in a hold the carry superseded it by its viewer's
+    /// older bait (unhinged-roastmaster.sonnet.SEG-02A.a30.s1, tuning-e65e3ee0 L594/L597:
+    /// tagged, deferred, never answered, and the judge failed `seg02a-raid-subject`;
+    /// tuning-c01dab17 a300 L898/L904: tagged, superseded the same beat). Now each is owed one
+    /// short engine line on the next voiced beat: it takes no pick and no beat of its own, so no
+    /// sincere ask loses its place to it. A picked call is answered by the model (its hint says
+    /// to refuse the target); either way its viewer is owed nothing more this stream. A refused
+    /// call counts as answered and leaves the carry; one owed past [`REQUEST_MAX_MS`] lapses.
+    pub fn brigade_refusal(
+        &mut self,
+        picked: &[Candidate],
+        now_ms: TsMs,
+    ) -> Option<(String, Vec<String>)> {
+        let max = self.tuning.request_max_ms;
+        let owed = std::mem::take(&mut self.brigade_owed);
+        let mut ids: Vec<String> = Vec::new();
+        let mut names: Vec<String> = Vec::new();
+        for (at, c) in owed {
+            if picked.iter().any(|p| p.msg.id == c.msg.id) {
+                self.brigade_refused.insert(c.msg.viewer.id.clone());
+                continue;
+            }
+            if self.answered.contains(&c.msg.id) || now_ms.saturating_sub(at) > max {
+                continue;
+            }
+            if self.brigade_refused.insert(c.msg.viewer.id.clone()) {
+                names.push(c.msg.viewer.name.clone());
+            }
+            ids.push(c.msg.id.clone());
+        }
+        if names.is_empty() {
+            return None;
+        }
+        self.answered.extend(ids.iter().cloned());
+        self.carried.retain(|k| !ids.contains(&k.cand.msg.id));
+        let line = &self.lines.brigade_refused;
+        let mut chars = line.chars();
+        let line = match chars.next() {
+            Some(f) => format!("{}{}", f.to_lowercase(), chars.as_str()),
+            None => String::new(),
+        };
+        let who = match names.split_last() {
+            Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+            _ => names[0].clone(),
+        };
+        Some((format!("{who}, {line}"), ids))
     }
 
     /// A background job changed state: research out opens a loop, a finished one lands.

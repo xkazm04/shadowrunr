@@ -575,6 +575,9 @@ const INJECTION_PATTERNS: &[&str] = &[
 /// The term rule id a brigade call fires under, on input (tagged) and output (replaced): the
 /// policy's `brigade-call` rule (`policy/platform-rules.json`) and these built-in patterns.
 pub const BRIGADE_CALL_RULE: &str = "brigade-call";
+/// The output action of the engine line that refuses a tagged brigade call on air
+/// ([`crate::orchestrate::Orchestrator::brigade_refusal`]).
+pub const BRIGADE_REFUSED: &str = "refused";
 
 /// A call for chat to act on someone outside the stream: raid, brigade or spam them, leave
 /// reviews, go to their socials, report or DM them, send everyone over. The built-in half of
