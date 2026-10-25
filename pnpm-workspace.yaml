@@ -3,3 +3,10 @@ packages:
   - "packages/*"
 allowBuilds:
   unrs-resolver: false
+# pnpm 11 defaults to verifyDepsBeforeRun: install, so `pnpm run`/`-r run` runs `pnpm install` (and a
+# modules-dir purge) when node_modules looks stale. In a worktree node_modules is a junction to the
+# main checkout's, so that check aborts (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY) and the JS gate
+# checks nothing, and with a TTY it would purge the main checkout. `warn` keeps the check but never
+# installs. A real lockfile mismatch still fails loudly: CI runs `pnpm install --frozen-lockfile`
+# (ci.yml, web job) before any lane.
+verifyDepsBeforeRun: warn
