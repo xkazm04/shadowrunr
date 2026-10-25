@@ -23,7 +23,10 @@ skills:
   - spark
   - contest
 
-# Commands that exist in this repo (verified 2026-10-18).
+# Commands that exist in this repo (verified 2026-10-18; full gate re-run green on main 123d4fe+ 2026-10-25).
+# Run them in a worktree as written: pnpm-workspace.yaml sets verifyDepsBeforeRun: warn, so pnpm never
+# installs or purges the junctioned node_modules. Never run a plain `pnpm install` or set CI=true there.
+# The test capability wraps cargo in scripts/min-tests.mjs so a lane that runs zero tests fails.
 capabilities:
   build: "cargo build --workspace && cargo build --manifest-path apps/console/src-tauri/Cargo.toml && pnpm -r run build"
   test: "node scripts/min-tests.mjs --min 1000 -- cargo test --workspace && node scripts/min-tests.mjs --min 5 -- cargo test --manifest-path apps/console/src-tauri/Cargo.toml && pnpm -r run test"
