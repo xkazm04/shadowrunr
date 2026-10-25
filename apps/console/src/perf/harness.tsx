@@ -1,7 +1,7 @@
 // The perf harness (test-only): mounts a page on the real data layer, door and router with the
 // data layer's own doubles, like kit/testing's mountPage, and also exposes what the counts need:
 // the manual timers (idle ticks), the live socket, and a React <Profiler> commit counter.
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import { Profiler, type ReactNode } from "react";
 import BUDGETS_JSON from "../../budgets/perf.json";
 import { contractDoor } from "../data/contractDoor";
@@ -44,10 +44,29 @@ export function line<T>(table: Readonly<Record<string, T>>, name: string): T {
   return l;
 }
 
-export function mountPerf(ui: ReactNode, script: Script, hash: string) {
+export interface MountOptions {
+  /** Real milliseconds every scripted reply is held back: a stand-in for a slow or loaded machine. */
+  readonly latencyMs?: number;
+}
+
+export function mountPerf(ui: ReactNode, script: Script, hash: string, opts: MountOptions = {}) {
   window.location.hash = hash;
   const router = createHashRouter(window);
-  const fetch = scriptedFetch((method, sent) => script(method, typeof sent === "string" ? sent : ""));
+  const scripted = scriptedFetch((method, sent) => script(method, typeof sent === "string" ? sent : ""));
+  let pending = 0;
+  // The scripted fetch with a reply counter (and the optional delay), so a count can wait for
+  // every request to be answered instead of guessing from a still window.
+  const fetch = Object.assign(
+    (...args: Parameters<typeof scripted>): ReturnType<typeof scripted> => {
+      pending += 1;
+      const done = () => void (pending -= 1);
+      const reply = scripted(...args);
+      const held = opts.latencyMs ? reply.then((r) => new Promise<typeof r>((go) => setTimeout(() => go(r), opts.latencyMs))) : reply;
+      held.then(done, done);
+      return held;
+    },
+    { calls: scripted.calls },
+  );
   const sockets = fakeSockets();
   const timers = manualTimers();
   const layer = createDataLayer({ baseUrl: "http://127.0.0.1:7717", door: contractDoor, fetch, socket: sockets.factory, timers });
@@ -63,6 +82,8 @@ export function mountPerf(ui: ReactNode, script: Script, hash: string) {
   );
   return {
     calls: fetch.calls,
+    /** Requests sent and not yet answered. */
+    pending: () => pending,
     timers,
     layer,
     socket: () => sockets.last(),
@@ -81,16 +102,42 @@ export function mountPerf(ui: ReactNode, script: Script, hash: string) {
 
 export type Mounted = ReturnType<typeof mountPerf>;
 
-/** Settles until the call log and the DOM hold still for three rounds (or `max` rounds pass). */
-export async function quiet(m: Pick<Mounted, "calls">, max = 200): Promise<void> {
+/**
+ * Settles until the call log and the DOM hold still for three rounds (or `max` rounds pass). A
+ * round with a request still unanswered never counts as still, so a slow reply cannot pass for a
+ * settled screen.
+ */
+export async function quiet(m: Pick<Mounted, "calls"> & Partial<Pick<Mounted, "pending">>, max = 200): Promise<void> {
   let last = "";
   let still = 0;
   for (let i = 0; i < max && still < 3; i++) {
     await settle(1);
     const now = `${m.calls.length}:${nodes()}`;
-    still = now === last ? still + 1 : 0;
+    still = now === last && (m.pending?.() ?? 0) === 0 ? still + 1 : 0;
     last = now;
   }
+}
+
+/**
+ * On Air's replay plays on the wall clock (REPLAY_SPEED), so a count taken while it plays depends
+ * on how far a slow or fast machine got: the scene runs from 206 nodes at the first event to the
+ * high 260s once the cards and captions are up. This pauses it and walks the scrubber a page (30 s
+ * of the run) at a time from the first event to the last, and returns the largest count seen: the
+ * worst scene the screen can hold, the same on every machine.
+ */
+export async function replayPeak(): Promise<number> {
+  const pause = [...document.querySelectorAll("button")].find((b) => b.textContent === "Pause");
+  if (pause) await act(async () => void fireEvent.click(pause));
+  const bar = document.querySelector("[data-role='onair-progress']");
+  if (!bar) throw new Error("replayPeak: no replay scrubber on screen");
+  const key = (k: string) => act(async () => void fireEvent.keyDown(bar, { key: k }));
+  await key("Home");
+  let peak = nodes();
+  for (let guard = 0; guard < 10_000 && bar.getAttribute("aria-valuenow") !== bar.getAttribute("aria-valuemax"); guard++) {
+    await key("PageUp");
+    peak = Math.max(peak, nodes());
+  }
+  return peak;
 }
 
 /** Idle: `ticks` one-second ticks of the data layer's timers plus real time for window timers. */

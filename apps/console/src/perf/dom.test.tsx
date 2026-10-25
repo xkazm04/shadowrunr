@@ -8,7 +8,7 @@ import { Recorder } from "../pages/brain/testgen";
 import { session } from "../pages/reconcile/session";
 import { Layer1 as ReviewL1 } from "../pages/review/Layer1";
 import { reviewRows10x, reviewScript } from "./fixture";
-import { BUDGETS, line, mountPerf, quiet, type Mounted } from "./harness";
+import { BUDGETS, line, mountPerf, quiet, type MountOptions, type Mounted } from "./harness";
 import { LAYER1, LAYER2, type Named } from "./pages";
 
 let mounted: Mounted | undefined;
@@ -24,14 +24,15 @@ afterEach(() => {
 });
 
 /** Mounts, settles, and checks the DOM count against its line; returns the count. */
-async function gate({ name, probe }: Named): Promise<number> {
+async function gate({ name, probe }: Named, opts: MountOptions = {}, budget = line(BUDGETS.dom, name).max): Promise<number> {
   probe.before?.();
-  mounted = mountPerf(probe.ui(), probe.script(), probe.hash);
+  mounted = mountPerf(probe.ui(), probe.script(), probe.hash, opts);
   await quiet(mounted, 400);
   if (probe.ready) expect(probe.ready(), `${name}: the 10x content did not arrive`).toBe(true);
-  const n = nodes();
-  console.info(`perf dom ${name}: ${n} nodes (max ${line(BUDGETS.dom, name).max})`);
-  expect(n, `${name}: DOM nodes at 10x`).toBeLessThanOrEqual(line(BUDGETS.dom, name).max);
+  expect(mounted.pending(), `${name}: requests still unanswered`).toBe(0);
+  const n = await (probe.count ?? (async () => nodes()))();
+  console.info(`perf dom ${name}: ${n} nodes (max ${budget})`);
+  expect(n, `${name}: DOM nodes at 10x`).toBeLessThanOrEqual(budget);
   return n;
 }
 
@@ -41,6 +42,30 @@ describe("DOM nodes per layer 1 at 10x", () => {
 
 describe("DOM nodes per main layer-2 list at 10x", () => {
   for (const l of LAYER2) it(`${l.name}: ${l.probe.what}`, () => gate(l).then(() => undefined), l.probe.timeout);
+});
+
+describe("the count does not depend on the machine's speed", () => {
+  // Every reply is held 40 ms of real time, so each layer settles on a slower clock than the
+  // plain run; the settled count must be the same node for node. On Air also plays its replay on
+  // the wall clock, which is what this guards.
+  for (const name of ["onair.l1", "segments.l1", "reconcile.l1"]) {
+    it(`${name}: counts the same with every reply delayed`, async () => {
+      const l = LAYER1.find((x) => x.name === name);
+      if (!l) throw new Error(`no layer-1 probe ${name}`);
+      const plain = await gate(l);
+      mounted?.dispose();
+      mounted = undefined;
+      cleanup();
+      const slow = await gate(l, { latencyMs: 40 });
+      expect(slow, `${name}: the loaded count differs`).toBe(plain);
+    }, 120_000);
+  }
+
+  it("still fails a layer that really exceeds its line", async () => {
+    const l = LAYER1.find((x) => x.name === "onair.l1");
+    if (!l) throw new Error("no onair.l1 probe");
+    await expect(gate(l, {}, 100)).rejects.toThrow(/DOM nodes at 10x/);
+  }, 120_000);
 });
 
 describe("review's session wall is virtualised", () => {

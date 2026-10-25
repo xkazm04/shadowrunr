@@ -39,7 +39,7 @@ import {
   simGrid,
   simScript,
 } from "./fixture";
-import type { Line, RpcLine } from "./harness";
+import { replayPeak, type Line, type RpcLine } from "./harness";
 
 export interface Probe {
   /** What the probe holds at 10x, for the test title. */
@@ -50,6 +50,8 @@ export interface Probe {
   readonly hash: string;
   /** True once the 10x content arrived (a count over an empty page proves nothing). */
   readonly ready?: () => boolean;
+  /** The count for a screen the wall clock keeps moving (a playing replay): its worst state, not a moment. */
+  readonly count?: () => Promise<number>;
   /** Page-local state to seed before mounting. */
   readonly before?: () => void;
   readonly timeout?: number;
@@ -71,7 +73,7 @@ const text = (re: RegExp) => () => re.test(document.body.textContent ?? "");
 
 export const PERF_PAGES = {
   onair: {
-    l1: { what: "the newest of 48k runs, a 100k-line transcript", ui: () => <OnAirL1 active />, script: () => onairScript(), hash: "#/onair", ready: text(/Replay 4×/), timeout: 120_000 },
+    l1: { what: "the newest of 48k runs, a 100k-line transcript", ui: () => <OnAirL1 active />, script: () => onairScript(), hash: "#/onair", ready: text(/Replay 4×/), count: replayPeak, timeout: 120_000 },
     l2: {
       rundown: { what: "a 500-run page of 48k runs", ui: () => <OnAirL2 sub={["rundown"]} />, script: () => onairScript([]), hash: "#/onair/rundown", ready: text(/500 of 500/) },
     },
