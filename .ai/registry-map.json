@@ -1014,7 +1014,11 @@
           "revision": 2,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Viewer.tsx:4 This context is an operator-only console that reads recorded transcripts and ledgers after the fact. It composes no host speech, builds no host prompt, and draws nothing on the broadcast canvas, so the subject's precondition (a generated host reading live chat) does not hold here. A search of apps/console/src/pages/brain for deflect/inject/bait/penalt found nothing. The only moderation code is a counter of input-stage moderation outcomes (brainModel.ts:169) for the picker funnel.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:86ca3bd8344844c1",
+          "evaluatedRevision": 2
         },
         {
           "subject": "narrative-scroll-surface",

@@ -5501,6 +5501,32 @@
           "evidence": "apps/console/src/pages/review/Judge.tsx:44 The judge grades a session after it ends. Its pass/fail admits nothing past a trust boundary in this context."
         }
       ]
+    },
+    "c2325be4-a41e-48f5-9050-bb31c09bb12a/live-chat-moderation-and-anti-bait": {
+      "context": "console-brain-page",
+      "subject": "live-chat-moderation-and-anti-bait",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T01:32:26.055Z",
+      "worker": "090929ad-d47a-4b5f-ac74-7822d16d5935",
+      "techniques": [
+        {
+          "technique": "path-independent-output-gate",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Viewer.tsx:80 Transcript text is shown only to the operator in the console detail pane. It is not a spoken or broadcast path, so this context has no door for an output gate to sit at. The broadcast stage is a separate surface."
+        },
+        {
+          "technique": "injection-as-tag-not-payload",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:169 The context only counts pre-filter outcomes (dropped/collapsed) that are already recorded. It builds no host prompt, so it cannot decide whether a tag or a payload reaches one."
+        },
+        {
+          "technique": "persistence-penalty",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Instruments.tsx:90 The funnel shows aggregate counts past moderation. Per-viewer standing and picker down-weighting live in the daemon picker/moderator, not here."
+        }
+      ]
     }
   }
 }
