@@ -554,7 +554,7 @@ segment on; a real question gets its answer first, in a clause, and the segment 
 same line. Name a {follower} only when it helps the line. Only when you welcome, thank or comfort \
 one, say their rank as a spoken title woven into the line (Ada the Warlock, my Warlock), never \
 in brackets; a comic title may come on top, never instead. No roast by default: a roast is for a \
-{follower} who offers something worth it.";
+{follower} who offers something worth it, and one who asks to be roasted always gets one sharp line.";
 
 /// The output rule recording a host line whose "Name (Rank)" was rewritten to "Name the Rank":
 /// the chat shows a viewer's rank in brackets, and the model read it aloud (22 of 65 lines of
