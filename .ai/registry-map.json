@@ -4154,7 +4154,11 @@
           "revision": 7,
           "changedAt": "2026-09-24",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/tokens/REJECTED.md:96 The package has no duration ladder, and reduced motion is exported only as a raw media query for each component to check. Motion therefore has no closed vocabulary and no token-layer reduced-motion rebinding. Separately, brain-canvas role names carry colour words and no contrast floor is gated over the page palettes.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:165125b7a54d0de3",
+          "evaluatedRevision": 7
         },
         {
           "subject": "self-describing-model-packages",
