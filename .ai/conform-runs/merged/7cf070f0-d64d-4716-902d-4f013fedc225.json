@@ -1,0 +1,65 @@
+{
+ "schema": "conform-run/1",
+ "worker": "7cf070f0-d64d-4716-902d-4f013fedc225",
+ "subject": "document-text-extraction",
+ "evaluatedAt": "2026-10-25T00:31:16.802678+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-simulator-page",
+   "subject": "document-text-extraction",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/simulator/data.ts:4 The simulator page only reads typed tournament, run and transcript rows from the daemon over the shared contract and never takes in an uploaded byte container. A case-insensitive search of its files for pdf, ocr, docx, unreadable and extract found nothing, and no package.json in the repo declares pdf-parse, pdfjs, tesseract or mammoth, so the subject's precondition (turning documents into text) does not hold here.",
+   "techniques": [
+    {
+     "technique": "unreadable-region-refusal",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/data.ts:31 The data layer folds paged daemon rows into tiles. No document regions exist that could be unreadable."
+    },
+    {
+     "technique": "extraction-yield-bands",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/quote.ts:23 The quote check matches a judge quote against structured transcript events. It is not a yield measure over extracted document text."
+    },
+    {
+     "technique": "context-decided-escaping",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/quote.ts:9 Strings are only folded for matching. The page has no converter that emits Markdown or other markup from document text."
+    },
+    {
+     "technique": "structural-amplification-caps",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/data.ts:9 The only cap here is the daemon's page size. No container reader with repeat or reference constructs exists in this context."
+    }
+   ],
+   "absenceTerms": [
+    "pdf",
+    "ocr",
+    "docx",
+    "unreadable"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-25T00:31:16.802678+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "document-text-extraction"
+   ],
+   "techniques": [
+    "context-decided-escaping",
+    "extraction-yield-bands",
+    "structural-amplification-caps",
+    "unreadable-region-refusal"
+   ],
+   "deviations": 0,
+   "context": "console-simulator-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

@@ -2537,7 +2537,11 @@
           "revision": 2,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:4 The simulator page only reads typed tournament, run and transcript rows from the daemon over the shared contract and never takes in an uploaded byte container. A case-insensitive search of its files for pdf, ocr, docx, unreadable and extract found nothing, and no package.json in the repo declares pdf-parse, pdfjs, tesseract or mammoth, so the subject's precondition (turning documents into text) does not hold here.",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:ee97c74f3f5e0c28",
+          "evaluatedRevision": 2
         },
         {
           "subject": "canvas-graph",

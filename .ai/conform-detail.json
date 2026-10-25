@@ -5299,6 +5299,37 @@
           "evidence": "apps/console/src/pages/characters/packageDocs.ts:101 Package documents define the character's behaviour. They do not describe product features located elsewhere, so there is no product area to map."
         }
       ]
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/document-text-extraction": {
+      "context": "console-simulator-page",
+      "subject": "document-text-extraction",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:31:16.802Z",
+      "worker": "7cf070f0-d64d-4716-902d-4f013fedc225",
+      "techniques": [
+        {
+          "technique": "unreadable-region-refusal",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:31 The data layer folds paged daemon rows into tiles. No document regions exist that could be unreadable."
+        },
+        {
+          "technique": "extraction-yield-bands",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/quote.ts:23 The quote check matches a judge quote against structured transcript events. It is not a yield measure over extracted document text."
+        },
+        {
+          "technique": "context-decided-escaping",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/quote.ts:9 Strings are only folded for matching. The page has no converter that emits Markdown or other markup from document text."
+        },
+        {
+          "technique": "structural-amplification-caps",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:9 The only cap here is the daemon's page size. No container reader with repeat or reference constructs exists in this context."
+        }
+      ]
     }
   }
 }
