@@ -1433,7 +1433,11 @@
           "revision": 2,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/DocTabs.tsx:74 The 'docs' here are one character package's own markdown files (constitution.md, bible.md, rules/<id>.md), served by the daemon as plain string fields of CharacterDetail and shown in an operator console. There is no published documentation catalog with category/topic records, body map, sitemap or search index. A search of the context's directory for sitemap, topic, catalog, lastReviewed and checked_against found nothing. ('draft' does appear, but only as Tone Lab line drafts, which are unrelated.)",
+          "evaluatedAt": "2026-10-25",
+          "evaluatedAgainst": "sha256-b2:74839e7c9eeb3728",
+          "evaluatedRevision": 4
         }
       ],
       "governance": "governed"

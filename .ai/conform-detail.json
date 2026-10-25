@@ -5263,6 +5263,42 @@
         }
       ],
       "registryProposal": "The contrast-floor clause in token-enforcement and the golden path assumes light/dark themes. It should state that scoped per-section palettes (here a page's face/type pair under [data-page]) count as themes for that gate."
+    },
+    "20f1e644-e83b-481d-864f-cb15b9124d7e/docs-content-model": {
+      "context": "console-characters-page",
+      "subject": "docs-content-model",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-25",
+      "evaluatedTs": "2026-10-25T00:17:10.344Z",
+      "worker": "2df65da7-52d7-4a30-8c82-828cbcf9a9ed",
+      "techniques": [
+        {
+          "technique": "catalog-referential-invariants",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/PackagePage.tsx:27 Each package's prose arrives inside one RPC detail object. No topic table is split from a lazily loaded body map, so there is no record-to-body mapping to assert."
+        },
+        {
+          "technique": "derived-navigation-projection",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/routes.ts:8 The tab list is a fixed set of view types over one package's fields (constitution, rules, bible, and so on). It is not a navigation list over a topic catalog that could drift."
+        },
+        {
+          "technique": "draft-visibility-gating",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/PackagePage.tsx:30 The only filter is role-based: the Moderation tab shows only on the moderator's package. It has nothing to do with draft readiness, and the address still resolves, rendering an explanatory EmptyState instead of a 404."
+        },
+        {
+          "technique": "per-topic-freshness-metadata",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/DocTabs.tsx:21 The constitution body is a bare markdown string field. There is no topic record that could carry review date, checked-against version or watched-sources fields."
+        },
+        {
+          "technique": "product-location-mapping",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/packageDocs.ts:101 Package documents define the character's behaviour. They do not describe product features located elsewhere, so there is no product area to map."
+        }
+      ]
     }
   }
 }
