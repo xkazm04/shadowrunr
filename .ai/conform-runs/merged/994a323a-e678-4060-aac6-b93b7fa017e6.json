@@ -1,0 +1,72 @@
+{
+ "schema": "conform-run/1",
+ "worker": "994a323a-e678-4060-aac6-b93b7fa017e6",
+ "subject": "multi-speaker-speech-production",
+ "evaluatedAt": "2026-10-26T22:05:52.669381+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "voice-sidecar",
+   "subject": "multi-speaker-speech-production",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "tools/voice/shadowrunr_voice/text.py:4 The sidecar is the live runtime speak path: one character voice (one --sid per process), with sentences split to get the first audio out fast. The golden path says this kind of path belongs to the voice-I/O subject, not to offline multi-speaker script production. Searching tools/voice for stale, render_key, consent, seam, scene, continuity and pronunciation found no hits. The only 'lexicon' is Kokoro's stock lexicon-us-en.txt file, not a per-world dictionary.",
+   "techniques": [
+    {
+     "technique": "chunk-boundary-continuity",
+     "verdict": "not-applicable",
+     "evidence": "tools/voice/shadowrunr_voice/text.py:4 Lines are split for latency (first audio early), not because a script is longer than the engine's cap. The technique's 'When not to use it' section says latency chunking of a reply is a runtime concern owned elsewhere."
+    },
+    {
+     "technique": "line-addressed-re-render",
+     "verdict": "not-applicable",
+     "evidence": "tools/voice/shadowrunr_voice/sidecar.py:7 Each say is a live line: it is rendered, streamed and forgotten. There is no stored script, no render record and no reviewed clip to protect from regeneration."
+    },
+    {
+     "technique": "voice-asset-model-generation-binding",
+     "verdict": "not-applicable",
+     "evidence": "tools/voice/shadowrunr_voice/__main__.py:57 One voice per process, chosen at launch from the operator's local Kokoro voices file (stock or blended). There is no cast of cloned voices to carry across vendor engine generations."
+    },
+    {
+     "technique": "inline-direction-dialect",
+     "verdict": "not-applicable",
+     "evidence": "tools/voice/shadowrunr_voice/plus.py:2 Direction comes in as a separate structured parameter {emotion, intensity, pace} and is mapped to speed, blend, pause and pitch levers. Nothing is inline in the text. The technique's 'When not to use it' section excludes engines that take direction as a separate parameter."
+    },
+    {
+     "technique": "world-lexicon-as-pronunciation-dictionary",
+     "verdict": "not-applicable",
+     "evidence": "tools/voice/shadowrunr_voice/engine.py:154 The only lexicon is the engine's stock US-English file, passed through when it exists. There is no versioned per-world lexicon, and no script revision whose blast radius would need computing."
+    }
+   ],
+   "absenceTerms": [
+    "stale",
+    "render_key",
+    "consent",
+    "seam",
+    "pronunciation"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-26T22:05:52.669381+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "multi-speaker-speech-production"
+   ],
+   "techniques": [
+    "chunk-boundary-continuity",
+    "inline-direction-dialect",
+    "line-addressed-re-render",
+    "voice-asset-model-generation-binding",
+    "world-lexicon-as-pronunciation-dictionary"
+   ],
+   "deviations": 0,
+   "context": "voice-sidecar",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

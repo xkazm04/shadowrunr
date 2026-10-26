@@ -5564,6 +5564,42 @@
         }
       ],
       "registryProposal": "real-people-boundary prescribes 'an unmistakable invented parody of a type (not a person)'. This package carries one owner-approved exception (constitution.md:50-53, foils/the-painter.md): a renamed satirical parody of a deceased historical dictator, in the Chaplin tradition, never using his name, words or voice. The technique does not say whether renamed satire of a dead historical figure that passes the clip test counts as impersonation. It should say so explicitly, rather than leaving every consumer to choose between 'type only' and the clip test."
+    },
+    "68cf95a7-438b-4ed9-930d-c19201eb0610/multi-speaker-speech-production": {
+      "context": "voice-sidecar",
+      "subject": "multi-speaker-speech-production",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-26",
+      "evaluatedTs": "2026-10-26T22:05:52.669Z",
+      "worker": "994a323a-e678-4060-aac6-b93b7fa017e6",
+      "techniques": [
+        {
+          "technique": "chunk-boundary-continuity",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/text.py:4 Lines are split for latency (first audio early), not because a script is longer than the engine's cap. The technique's 'When not to use it' section says latency chunking of a reply is a runtime concern owned elsewhere."
+        },
+        {
+          "technique": "line-addressed-re-render",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:7 Each say is a live line: it is rendered, streamed and forgotten. There is no stored script, no render record and no reviewed clip to protect from regeneration."
+        },
+        {
+          "technique": "voice-asset-model-generation-binding",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/__main__.py:57 One voice per process, chosen at launch from the operator's local Kokoro voices file (stock or blended). There is no cast of cloned voices to carry across vendor engine generations."
+        },
+        {
+          "technique": "inline-direction-dialect",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/plus.py:2 Direction comes in as a separate structured parameter {emotion, intensity, pace} and is mapped to speed, blend, pause and pitch levers. Nothing is inline in the text. The technique's 'When not to use it' section excludes engines that take direction as a separate parameter."
+        },
+        {
+          "technique": "world-lexicon-as-pronunciation-dictionary",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/engine.py:154 The only lexicon is the engine's stock US-English file, passed through when it exists. There is no versioned per-world lexicon, and no script revision whose blast radius would need computing."
+        }
+      ]
     }
   }
 }
