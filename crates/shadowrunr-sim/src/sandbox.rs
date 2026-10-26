@@ -1337,7 +1337,7 @@ pub async fn run_sandbox(
             spec.seed,
             run_opts.hooks.rank,
         )?;
-        let mut room = ChatRoom::new(
+        let mut room = ChatRoom::with_propose_min_rank(
             pop,
             RoomConfig {
                 cal: &prep.cal,
@@ -1353,6 +1353,11 @@ pub async fn run_sandbox(
                 persona: prep.persona.clone(),
                 closing_s: prep.tuning.closing_s,
             },
+            // The same rank table the runner seats a `!propose` stimulus by.
+            prep.manifest
+                .ranks
+                .propose_min_rank
+                .unwrap_or(SegmentConfig::default().ranks.propose_min_rank),
         );
         if let Some(window) = programme.chaos_ms {
             keep_stimuli_out_of(&mut room.injections, window, spec.duration_s);
@@ -1513,6 +1518,7 @@ pub async fn judge_session(
 mod tests {
     use super::*;
     use crate::runner::tests::{judge_calls, reply, test_opts, Blocked, FakeEngine, JudgeFails};
+    use crate::situations::SituationBank;
 
     /// Plays the host for the real brain: a line every beat, the switch when the handover is
     /// due, and a sign-off once the goodbye is asked (`CLOSING NOW`: the last 15 s, or the
@@ -1684,6 +1690,95 @@ mod tests {
             } => Some(*ts_ms),
             _ => None,
         })
+    }
+
+    fn copy_package(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap() {
+            let e = e.unwrap();
+            let p = e.path();
+            if p.is_dir() {
+                // The private directory is never copied, let alone loaded.
+                if e.file_name() != "private" {
+                    copy_package(&p, &to.join(e.file_name()));
+                }
+            } else {
+                std::fs::copy(&p, to.join(e.file_name())).unwrap();
+            }
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_sandbox_proposal_stimulus_is_performed_by_a_rank_that_may_propose() {
+        // The sandbox seated its room with the builtin rank table, whatever the character
+        // declared: a character whose `propose_min_rank` is above the builtin one had its
+        // `!propose` stimulus performed by a rank that may not propose.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = opts(tmp.path());
+        let chars = tmp.path().join("characters");
+        copy_package(
+            &opts.characters_root.join("malakor"),
+            &chars.join("malakor"),
+        );
+        let manifest = chars.join("malakor/character.toml");
+        let text = std::fs::read_to_string(&manifest).unwrap();
+        let edited = text.replacen(
+            "[ranks]
+",
+            "[ranks]
+propose_min_rank = \"dread_council\"
+",
+            1,
+        );
+        assert_ne!(edited, text);
+        std::fs::write(&manifest, edited).unwrap();
+        // A proposal that names no rank: only the room's table says who may perform it.
+        let situations = chars.join("malakor/situations.json");
+        let text = std::fs::read_to_string(&situations).unwrap();
+        let edited = text.replacen(
+            "a Dread Council member uses !propose",
+            "a member uses !propose",
+            1,
+        );
+        assert_ne!(edited, text);
+        std::fs::write(&situations, edited).unwrap();
+        opts.characters_root = chars;
+
+        let run = sandbox_run(tmp.path(), 10, 600);
+        let (_stop_tx, stop) = watch::channel(false);
+        let out = session(run, Arc::new(HostEngine::new()), &opts, no_sink(), stop).await;
+        let room: SandboxRoom = read_json(&out.dir.join(ROOM_FILE)).unwrap();
+        let bank =
+            SituationBank::load(&opts.characters_root.join("malakor/situations.json")).unwrap();
+        let min = shadowrunr_types::Rank::DreadCouncil;
+        let mut performed = 0;
+        for inj in &room.injections {
+            let Some(sit) = bank.get(&inj.situation_id) else {
+                continue;
+            };
+            if sit.proposer_rank(min).is_none() {
+                continue;
+            }
+            let Some(msg_id) = &inj.performed_msg_id else {
+                continue;
+            };
+            let viewer = out
+                .events
+                .iter()
+                .find_map(|e| match e {
+                    StreamEvent::Chat { msg, .. } if &msg.id == msg_id => Some(&msg.viewer),
+                    _ => None,
+                })
+                .expect("a performed stimulus is in the transcript");
+            assert!(
+                viewer.rank >= min,
+                "{} performed by {:?}, below {min:?}",
+                inj.situation_id,
+                viewer.rank
+            );
+            performed += 1;
+        }
+        assert!(performed > 0, "the session performed a proposal stimulus");
     }
 
     #[tokio::test(start_paused = true)]
