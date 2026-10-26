@@ -1,0 +1,22 @@
+{
+  "brain_spoke": true,
+  "closed_votes": [],
+  "end_reason": "sim_complete",
+  "event_kinds": [
+    "chat",
+    "op",
+    "say",
+    "segment_end",
+    "segment_start",
+    "stream_end",
+    "stream_start"
+  ],
+  "handovers": [],
+  "polls_opened": 0,
+  "scenes_played": 0,
+  "segment": "SEG-01",
+  "segments_in_order": [
+    "SEG-01"
+  ],
+  "tick_errors": 0
+}

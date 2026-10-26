@@ -1,0 +1,31 @@
+{
+  "brain_spoke": true,
+  "closed_votes": [
+    {
+      "options": 3,
+      "poll_id": "scene-ballot-1",
+      "winner": "One Star"
+    }
+  ],
+  "end_reason": "sim_complete",
+  "event_kinds": [
+    "chat",
+    "op",
+    "say",
+    "scene_end",
+    "scene_start",
+    "segment_end",
+    "segment_start",
+    "stream_end",
+    "stream_start",
+    "vote"
+  ],
+  "handovers": [],
+  "polls_opened": 1,
+  "scenes_played": 1,
+  "segment": "SEG-03",
+  "segments_in_order": [
+    "SEG-03"
+  ],
+  "tick_errors": 0
+}
