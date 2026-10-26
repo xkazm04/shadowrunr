@@ -67,6 +67,15 @@ pub const CASE_NOTE: &str = "(No chat to answer this beat: make the case move ab
 /// a gift, was the one trimmed (unhinged-roastmaster.sonnet.SEG-02A.a3.s1 L190-L195).
 pub const CASE_WITH_CHAT: &str = "Answer the picked message below first, in its own short line, \
 by what they said; then speak the case move.";
+/// What makes a case move's line a beat of the show, not a status report. Every case directive
+/// asked for "one short line" and nothing else, and the model gave exactly that: 23 of the 38
+/// humor_landed misses in rebalance-check-34188c4a83 (inst 0eb64819) and 45 of 112 on d3ad7663
+/// were dispatch, reveal or string lines with no joke ("The clerks ride to
+/// lunarstake-help.example, a site the regulator's warning list names.", SEG-02A.a3.s1 L195;
+/// the judge: "the procedural dispatch lines (L437, L724, L845) with no joke",
+/// tuning-ee4dca5b/after SEG-02A.a300.s1).
+const CASE_JOKE: &str = "make that line a joke in your tone: one jab at the card, its \
+paperwork or the scheme, never at a person, and no fact the record does not give";
 /// The ops a case move may use: a segment offers the loop only with one of them on its menu
 /// and the case's cards in its context.
 const CASE_OPS: &[&str] = &["dispatch_research", "reveal_hex", "pin_link", "show_screen"];
@@ -190,8 +199,8 @@ impl CaseMove {
         let n = |id: &str| names.tagged(id);
         match self {
             CaseMove::Dispatch { hex, label, why } => format!(
-                "{head} send research to {}, {}. Say so in one short line, by name, then put \
-                 this action on its own line, exactly:\n{}",
+                "{head} send research to {}, {}. Say so in one short line, by name, and \
+                 {CASE_JOKE}; then put this action on its own line, exactly:\n{}",
                 n(hex),
                 match why {
                     Why::Lead => "the lead chat hinted most",
@@ -206,8 +215,8 @@ impl CaseMove {
             ),
             CaseMove::Reveal { hex, grade, record } => format!(
                 "{head} the research on {} came back ({}, {}). Turn the card face up at that \
-                 grade and say what the record shows in one short line{}; then put this action \
-                 on its own line, exactly:\n{}",
+                 grade and say what the record shows in one short line{}, and {CASE_JOKE}; then \
+                 put this action on its own line, exactly:\n{}",
                 n(hex),
                 n(record),
                 grade_name(*grade),
@@ -228,7 +237,7 @@ impl CaseMove {
             } => format!(
                 "{head} {} is face up with {} on file and no string. Pin a string between that \
                  card and the face-up card the record connects it to (one of: {}), citing only \
-                 what the record says, and name the link in one short line. The string reads \
+                 what the record says, and name the link in one short line, and {CASE_JOKE}. The string reads \
                  as a sentence, from -> rel -> to: \"from\" is the card that acts (the regulator, \
                  the payer, the owner, the promoter), \"to\" the card it acts on. Put the action on \
                  its own line, filled in with the cards' ids:\nOP: \
@@ -245,8 +254,8 @@ impl CaseMove {
                 })
             ),
             CaseMove::Show { record } => format!(
-                "{head} put {} up on the browser and read from it in one short line; put this \
-                 action on its own line, exactly:\n{}",
+                "{head} put {} up on the browser and read from it in one short line, and \
+                 {CASE_JOKE}; put this action on its own line, exactly:\n{}",
                 n(record),
                 op_line(&Op::ShowScreen {
                     screen: shadowrunr_types::ScreenId::Browser,
@@ -1031,5 +1040,50 @@ mod tests {
             d.next_move(&c, 30_000 + CASE_BEAT_MS).unwrap().tag(),
             "dispatch HEX-03"
         );
+    }
+
+    #[test]
+    fn every_case_move_line_is_asked_to_be_a_joke_in_the_tone() {
+        // The judged procedural misses: "The bone-clerks ride for Ashpetal Holdings Ltd."
+        // (tuning-e3bd3bae/after SEG-02A.a300.s1 L75), "The clerks ride to lunarstake-help.example,
+        // a site the regulator's warning list names." (rebalance-check-34188c4a83 SEG-02A.a3.s1
+        // L195): the directive asked for one short line by name and nothing else.
+        let names = CaseNames::default();
+        let moves = [
+            CaseMove::Dispatch {
+                hex: "HEX-03".into(),
+                label: "Ashpetal Holdings Ltd".into(),
+                why: Why::Next,
+            },
+            CaseMove::Reveal {
+                hex: "HEX-02".into(),
+                grade: EvidenceGrade::Clm,
+                record: "CLM-01".into(),
+            },
+            CaseMove::Pin {
+                from: "HEX-02".into(),
+                record: "CLM-01".into(),
+                face_up: vec!["HEX-01".into()],
+            },
+            CaseMove::Show {
+                record: "DOC-01".into(),
+            },
+        ];
+        for mv in &moves {
+            let line = mv.directive("case-1", &names);
+            assert!(line.contains("a joke in your tone"), "{}: {line}", mv.tag());
+            assert!(line.contains("never at a person"), "{}: {line}", mv.tag());
+            assert!(
+                line.contains("no fact the record does not give"),
+                "{}: {line}",
+                mv.tag()
+            );
+            // The op line stays last, exactly as before.
+            assert!(line.lines().last().unwrap().starts_with("OP: "), "{line}");
+        }
+        // A reveal below DOC still says alleged.
+        assert!(moves[1]
+            .directive("case-1", &names)
+            .contains("(below DOC: say alleged)"));
     }
 }
