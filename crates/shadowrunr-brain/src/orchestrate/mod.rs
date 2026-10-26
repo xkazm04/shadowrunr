@@ -808,9 +808,12 @@ impl Orchestrator {
             .collect()
     }
 
-    /// Stop carrying a viewer's messages (they were removed from chat).
+    /// Remove everything held about a viewer (they were removed from chat): their carried
+    /// messages and the asks answered or owed to them.
     pub fn forget_viewer(&mut self, viewer_id: &str) {
         self.carried.retain(|k| k.cand.msg.viewer.id != viewer_id);
+        self.asked.retain(|(v, _)| v != viewer_id);
+        self.asked_at.retain(|(v, _), _| v != viewer_id);
     }
 
     /// Track a raid outside a scene: this beat's first contacts join the window's, and once

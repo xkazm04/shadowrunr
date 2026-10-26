@@ -354,7 +354,8 @@ proptest! {
     }
 
     /// Forgetting a viewer: once `forget_viewer` ran and the next beat was screened, none of
-    /// that viewer's messages is carried any more (`carried_ages` names none of them).
+    /// that viewer's messages is carried any more (`carried_ages` names none of them), and
+    /// the viewer has been asked nothing (`has_asked` is false for every ask).
     #[test]
     fn a_forgotten_viewer_is_not_carried_into_the_next_beat(
         seed in any::<u64>(),
@@ -366,6 +367,9 @@ proptest! {
             s.play(beat, false);
         }
         s.o.forget_viewer(VIEWERS[who]);
+        for ask in ASKS {
+            prop_assert!(!s.o.has_asked(VIEWERS[who], *ask), "{ask:?} still held");
+        }
         let mut ev = Vec::new();
         s.o.screen(s.now, Vec::new(), &mut ev);
         for id in s.o.carried_ages(s.now).keys() {

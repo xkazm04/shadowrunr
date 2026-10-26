@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 6b29f20a060e1e0adb5c62e0b4b277c1309ba00d0cb217fdd85be84c2be5aada # shrinks to seed = 0, warmup = [Beat { step_ms: 0, state: 0, with_prep: false, speech_ahead_ms: None, closing: false, msgs: [(1, 2, false)] }], who = 1
