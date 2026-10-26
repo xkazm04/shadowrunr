@@ -394,7 +394,7 @@
     {
       "id": "brigade-call",
       "category": "brigade",
-      "pattern": "(?i)\\b(?:review[- ]?bomb(?:ing)?|mass[- ]?report(?:ing)?|brigad(?:e|ing)|dox(?:x)?(?:ing|ed)?|go\\s+(?:raid|spam|harass|flood)\\s+(?:them|him|her|their|his)|everyone\\s+(?:report|spam|dm|call)\\s+(?:them|him|her))\\b",
+      "pattern": "(?i)\\b(?:review[- ]?bomb(?:ing)?|mass[- ]?report(?:ing)?|brigad(?:e|ing)|dox+\\s+(?:him|her|them|his|their|this|that|the|these|those|every(?:one|body)|@\\w+)|dox+(?:ed|ing)\\s+(?:him|her|them|his|their|@\\w+)|(?:let['’]?s|go|gonna|should|must|pls|please|time\\s+to|deserves?\\s+to|needs?\\s+to|everyone|everybody|y['’]?all|chat)\\s+(?:\\w+\\s+)?dox+(?:ed|ing)?|go\\s+(?:raid|spam|harass|flood)\\s+(?:them|him|her|their|his)|everyone\\s+(?:report|spam|dm|call)\\s+(?:them|him|her))\\b",
       "platforms": [
         "twitch",
         "youtube",

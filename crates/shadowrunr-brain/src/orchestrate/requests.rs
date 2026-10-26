@@ -360,6 +360,11 @@ pub enum Ask {
     /// A viewer who is sincerely sad (a loss, a bad day): never a self-harm disclosure, which the
     /// safety rail owns.
     Sad,
+    /// A sincere report that the viewer's own details were posted ("i got doxxed", "someone
+    /// posted my address"), or a warning that someone in chat is doing it ([`doxx_report`]).
+    /// Never a call to do it to someone, which is a brigade call. Answered with care like
+    /// [`Ask::Sad`] ([`Ask::is_care`]), and its message is never shown to the model.
+    Doxxed,
     /// A newcomer (a first contact or a Thrall) asks what the stream is: never a text pattern
     /// alone, see `orchestrate::ask_of`. Its note is the composer's newcomer note.
     WhatIsThis,
@@ -390,6 +395,12 @@ impl Ask {
         )
     }
 
+    /// A care ask: answered first, alone (host only), kindly, with no roast material in the beat
+    /// and no showmanship beside it.
+    pub fn is_care(self) -> bool {
+        matches!(self, Ask::Sad | Ask::Doxxed)
+    }
+
     /// A short label for the `beat_plan` reason and the agenda.
     pub fn label(self) -> &'static str {
         match self {
@@ -404,6 +415,7 @@ impl Ask {
             Ask::IsItReal => "is-it-real question",
             Ask::StereotypeJoke => "stereotype-joke bait",
             Ask::Sad => "sincere sadness",
+            Ask::Doxxed => "doxx report",
             Ask::WhatIsThis => "newcomer's what-is-this question",
             Ask::Proposal => "proposal",
             Ask::ClaimAsFact => "claim-as-fact demand",
@@ -425,18 +437,20 @@ impl Ask {
             Ask::IsItReal => "whether the board is real",
             Ask::StereotypeJoke => "the bait (never tell it)",
             Ask::Sad => "their sadness, kindly",
+            Ask::Doxxed => "their report, carefully (the moderators)",
             Ask::WhatIsThis => "what this stream is",
             Ask::Proposal => "their proposal",
             Ask::ClaimAsFact => "the claim (at its evidence grade, never as fact)",
         }
     }
 
-    /// Which owed ask the picker takes first: sincere sadness (0) goes ahead of every other
-    /// kind (1), so a grieving regular is answered in time even in a raid
-    /// (sbx-20261022-093002-10m L494: raid mentions took both picks and the message was lost).
+    /// Which owed ask the picker takes first: a care ask, sincere sadness or a doxx report (0),
+    /// goes ahead of every other kind (1), so a grieving regular is answered in time even in a
+    /// raid (sbx-20261022-093002-10m L494: raid mentions took both picks and the message was
+    /// lost).
     pub fn priority(self) -> u8 {
         match self {
-            Ask::Sad => 0,
+            Ask::Sad | Ask::Doxxed => 0,
             _ => 1,
         }
     }
@@ -470,6 +484,17 @@ impl Ask {
                 " <is sincerely sad (a loss, a bad day): answer them first, by name and their rank, \
                  {rank_title}, as a spoken title, with a short, sincere in-character kindness: no roast, no joke \
                  at their expense, no lecture; then carry the show on around them>"
+            }
+            // Its message is not shown (`compose::chat_body`), so the note carries nothing of
+            // it, and it never names the act: the output gate replaces a line that reads as a
+            // call to do it.
+            Ask::Doxxed => {
+                " <reports that someone posted their personal details, or warns chat that someone \
+                 is exposing people's details; what they wrote is not shown to you. Answer them \
+                 first, seriously and briefly, in character but no joke, no roast, no bit. Never \
+                 repeat or guess any detail (no address, name, handle, place) and never name the \
+                 act; tell them to take it to the moderators, who can remove it, and to share \
+                 nothing more here; then carry the show on>"
             }
             // A proposal's note comes from its rank (the composer's propose note), a newcomer's
             // question's from the composer's newcomer note.
@@ -640,15 +665,46 @@ pub fn claim_as_fact(text: &str) -> bool {
     claim.is_match(text) && cue.is_match(text) && !graded.is_match(text)
 }
 
+/// A sincere report that the writer's own details were posted, or a warning that someone in
+/// chat is exposing people's details: "i got doxxed", "i'm being doxxed", "someone posted my
+/// address", "heads up, someone is trying to dox people in here". Never a brigade call ("dox
+/// him", "let's doxx her"): that is checked first, so a call is never mistaken for a report.
+/// The policy's `brigade-call` rule blocked every one of these at input until 2026-10-26
+/// (ask b874d952, "Narrow the pattern"), so the brain never saw them.
+pub fn doxx_report(text: &str) -> bool {
+    static RES: OnceLock<[Regex; 5]> = OnceLock::new();
+    const DETAILS: &str = r"(?:address|addy|phone(?:\s+number)?|number|real\s+name|name|info|details|location|workplace|job|school|family|socials|face|pics?|photos?)";
+    let res = RES.get_or_init(|| {
+        [
+            // First person, passive: "i got doxxed", "i'm being doxed", "i think we got doxxed".
+            r"\b(?:i|we|i'?m|i’m|im|we'?re|we’re)(?:\s+\w+){0,3}?\s+(?:got|get|gotten|getting|been|being|was|were|am|are)\s+(?:\w+\s+)?dox+ed\b".to_string(),
+            // "someone doxxed me", "they're trying to dox us".
+            r"\bdox+(?:ed|ing)\s+(?:me|us)\b|\b(?:trying|tryna|threaten\w*|want\w*)\s+to\s+dox+\s+(?:me|us)\b".to_string(),
+            // "someone posted my address", "my real name got leaked".
+            format!(r"\b(?:posted|leaked|shared|dropped|published|posting|leaking|sharing|spreading|spread|found|dox+ed)\s+(?:my|our)\s+(?:\w+\s+){{0,2}}?{DETAILS}\b|\b(?:my|our)\s+(?:\w+\s+){{0,2}}?{DETAILS}\s+(?:\w+\s+){{0,2}}?(?:posted|leaked|shared|exposed|dox+ed|out\s+there|got\s+out)\b"),
+            // A warning: "someone is trying to dox people in here", "there's a doxxer in chat".
+            r"\b(?:some(?:one|body)|people|they|a\s+\w+|this\s+\w+|there'?s\s+(?:a|someone|somebody))\b[^.!?]{0,30}?\b(?:dox+ing|dox+ers?|(?:trying|tryna|out)\s+to\s+dox+)\b".to_string(),
+            r"\b(?:heads\s+up|careful|watch\s+out|warning|psa|beware|fyi)\b[^.!?]{0,60}\bdox".to_string(),
+        ]
+        .map(|p| Regex::new(&format!("(?i){p}")).expect("doxx report pattern compiles"))
+    });
+    res.iter().any(|r| r.is_match(text)) && !crate::moderation::is_brigade_call(text, None)
+}
+
 /// The situational ask in a message, if any (the first that matches, in a fixed order).
 pub fn situational_ask(text: &str) -> Option<Ask> {
     situational_asks(text).into_iter().next()
 }
 
 /// Every situational ask in a message, in the fixed order, each once: sincere sadness first,
-/// then the patterns in order, then a claim-as-fact demand, then stereotype bait.
+/// then the patterns in order, then a claim-as-fact demand, then stereotype bait. A doxx report
+/// is the only ask of its message: its text is never shown, so no other note could answer it
+/// (and "someone posted my home address" is no address request).
 pub fn situational_asks(text: &str) -> Vec<Ask> {
     static RES: OnceLock<Vec<(Ask, Regex)>> = OnceLock::new();
+    if doxx_report(text) {
+        return vec![Ask::Doxxed];
+    }
     let grief = grieving(text);
     let mut out: Vec<Ask> = if grief { vec![Ask::Sad] } else { Vec::new() };
     for (k, r) in RES.get_or_init(|| {

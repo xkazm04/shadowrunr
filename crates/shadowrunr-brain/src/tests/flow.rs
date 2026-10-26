@@ -916,6 +916,84 @@ async fn a_tagged_brigade_call_beside_an_owed_ask_is_refused_on_air_once() {
     );
 }
 
+/// Ask b874d952 (standup 2026-10-26, "Narrow the pattern"): a viewer's own doxx report was
+/// dropped at input by the policy's `brigade-call` rule. Now it is the beat's care pick: the
+/// model sees a note in place of its text, so the reply can repeat none of its details, and the
+/// reply points at the moderators and airs as written. A call to dox, beside it, is still
+/// dropped. Simulated chat, written for this test.
+#[tokio::test]
+async fn a_doxx_report_gets_a_careful_reply_with_none_of_its_details() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    // The repo's rules, as the sim and the daemon load them.
+    let rules = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../policy/platform-rules.json");
+    let t = BrainTuning {
+        policy: PolicySource::File(rules),
+        ..unpaced()
+    };
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "f4-doxx", t).await;
+    let c = mixer_ctx();
+    let rust = viewer("sim-v0159", "rust_spoon", Rank::Warlock);
+    let moth = viewer("sim-v0168", "MothTurnip_167", Rank::Cultist);
+    b.tick(1_000, vec![msg("hi", 900, &rust, "evening all")], &c)
+        .await
+        .unwrap();
+    const REPORT: &str = "someone posted my address and my real name, Edda Grimwater, in the \
+        other chat, from the account hexmonger_9. i'm being doxxed, what do i do";
+    let reply = "[deadpan 0.3 slow] I'm sorry you got doxxed. Take it to the moderators now: \
+        they can pull it down, and share nothing more here.";
+    engine.push(Role::CoreThread, Ok(reply));
+    let ev = b
+        .tick(
+            6_000,
+            vec![
+                msg("rep", 5_800, &rust, REPORT),
+                msg("call", 5_900, &moth, "chat, dox him, it's hexmonger_9"),
+            ],
+            &c,
+        )
+        .await
+        .unwrap();
+    // The call is dropped at input; the report is not.
+    let input = mods(&ev, ModStage::Input);
+    assert!(
+        input.contains(&(
+            "term:brigade-call".into(),
+            Some("call".into()),
+            "dropped".into()
+        )),
+        "{input:?}"
+    );
+    assert!(
+        !input.iter().any(|(_, m, _)| m.as_deref() == Some("rep")),
+        "{input:?}"
+    );
+    assert_eq!(picked(&ev), ["rep"], "{}", plan_of(&ev).1);
+    // The model sees the care note, never the message.
+    let prompt = last_core_prompt(&engine);
+    let line = chat_line_of(&prompt, "rep");
+    assert!(line.contains("moderators"), "{line}");
+    assert!(!line.to_lowercase().contains("dox"), "{line}");
+    for detail in ["Grimwater", "Edda", "hexmonger"] {
+        assert!(!prompt.contains(detail), "{detail} in {prompt}");
+    }
+    // The reply airs as written: it names the moderators, carries no detail, and the gate
+    // does not swap it for the brigade refusal.
+    let said = says(&ev);
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].contains("moderators"), "{said:?}");
+    for detail in ["Grimwater", "Edda", "hexmonger", "address"] {
+        assert!(!said[0].contains(detail), "{said:?}");
+    }
+    assert_ne!(said[0], b.cfg.character.lines.brigade_refused);
+    assert!(
+        mods(&ev, ModStage::Output).is_empty(),
+        "{:?}",
+        mods(&ev, ModStage::Output)
+    );
+    assert_eq!(replies(&ev), ["rep"]);
+}
+
 #[tokio::test]
 async fn a_brigade_call_about_the_case_is_never_topic_nor_folded_in() {
     // unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L853-L871: picked as `topic+carried`, folded

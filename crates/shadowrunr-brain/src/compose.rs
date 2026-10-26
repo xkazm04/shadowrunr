@@ -621,7 +621,7 @@ pub fn beat_effect_tags(
     if asks.iter().any(|a| a.contains(&Ask::MinorFlirt)) {
         return None;
     }
-    if care_note.is_some() || asks.iter().any(|a| a.contains(&Ask::Sad)) {
+    if care_note.is_some() || asks.iter().any(|a| a.iter().any(|k| k.is_care())) {
         return Some(vec!["care"]);
     }
     beat_situations_with(
@@ -682,7 +682,7 @@ pub fn beat_situations_with(
     for c in picked {
         let text = &c.msg.text;
         let asks = situational_asks(text);
-        if asks.contains(&Ask::MinorFlirt) || asks.contains(&Ask::Sad) {
+        if asks.contains(&Ask::MinorFlirt) || asks.iter().any(|k| k.is_care()) {
             return None;
         }
         if c.count > 1 {
@@ -864,6 +864,10 @@ fn chat_body(c: &Candidate, t: &TurnInputs<'_>) -> String {
         format!("{}{}", injection_hint(&c.msg.text, p), ask_note(c, t))
     } else if c.count > 1 && c.safety.is_none() {
         format!("{}{}", wave_text(c), ask_note(c, t))
+    } else if situational_asks(&c.msg.text).contains(&Ask::Doxxed) {
+        // A doxx report is never shown: it may carry the very details that were posted, and a
+        // reply can only repeat what the model saw. The note says what it is.
+        ask_note(c, t).trim_start().to_string()
     } else if claims_authority(&c.msg.text, p) {
         format!(
             "{}{}{}",

@@ -579,6 +579,12 @@ pub const BRIGADE_CALL_RULE: &str = "brigade-call";
 /// ([`crate::orchestrate::Orchestrator::brigade_refusal`]).
 pub const BRIGADE_REFUSED: &str = "refused";
 
+/// A call to dox someone: "dox him", "doxxing their family", "let's doxx her", "go dox the
+/// streamer", "he deserves to get doxxed". The `brigade-call` rule of `policy/platform-rules.json`
+/// carries the same alternatives in place of the bare word it matched before, which dropped a
+/// viewer's own "i got doxxed" at input.
+pub const DOXX_CALL_PATTERN: &str = r"\bdox+\s+(?:him|her|them|his|their|this|that|the|these|those|every(?:one|body)|@\w+)\b|\bdox+(?:ed|ing)\s+(?:him|her|them|his|their|@\w+)\b|\b(?:let['’]?s|go|gonna|should|must|pls|please|time\s+to|deserves?\s+to|needs?\s+to|everyone|everybody|y['’]?all|chat)\s+(?:\w+\s+)?dox+(?:ed|ing)?\b";
+
 /// A call for chat to act on someone outside the stream: raid, brigade or spam them, leave
 /// reviews, go to their socials, report or DM them, send everyone over. The built-in half of
 /// the `brigade-call` rule: unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L853 ("everybody go leave
@@ -594,6 +600,11 @@ const BRIGADE_CALL_PATTERNS: &[&str] = &[
     r"\b(?:spam|flood|raid|brigade|harass|swarm)\s+(?:his|her|their|the|that|this|them)?\s*(?:chat|channel|stream|streamer|comments?|socials?|page|dms?|inbox|mentions|discord|server)\b",
     r"\b(?:send|bring|take)\s+(?:everyone|everybody|all\s+of\s+(?:you|chat|us)|chat|the\s+chat|the\s+(?:thralls|minions|room|raid))\s+(?:over|there|to)\b",
     r"\b(?:go|let'?s|everyone|everybody|y'?all|chat|thralls|minions|guys|all\s+of\s+you)\b[^.!?]{0,25}\b(?:report|dm|message|email|contact|tag|ratio)\s+(?:them|him|her|their\s+(?:account|channel|page|socials?)|that\s+(?:account|channel|guy|streamer))\b",
+    // Dox someone: the act aimed at a person, or called for. Never the word alone, so a viewer's
+    // "i got doxxed" or a warning reaches the brain as a care ask
+    // ([`crate::orchestrate::requests::doxx_report`]); the policy's `brigade-call` rule carries
+    // the same alternatives (ask b874d952, 2026-10-26: "Narrow the pattern").
+    DOXX_CALL_PATTERN,
     // A real channel's address beside a call to act on it.
     r"(?:twitch\.tv|youtube\.com|youtu\.be|kick\.com|tiktok\.com|x\.com|twitter\.com|instagram\.com)/\S+[^.!?]{0,80}\b(?:spam|raid|flood|send|go|report|harass)\b",
     r"\b(?:spam|raid|flood|send|go|report|harass)\b[^.!?]{0,80}(?:twitch\.tv|youtube\.com|youtu\.be|kick\.com|tiktok\.com|x\.com|twitter\.com|instagram\.com)/\S+",
@@ -2707,6 +2718,96 @@ mod tests {
         assert_eq!(out, policy.persona.lines.blocked);
         let plain = "The bone-clerks ride for the wallet record now.";
         assert_eq!(gate_text(plain, &policy, &[]).0, plain);
+    }
+
+    /// Ask b874d952 (standup 2026-10-26, "Narrow the pattern"): the `brigade-call` rule matched
+    /// the bare word, so a viewer's own "i got doxxed" was dropped at input and the brain never
+    /// saw it. A call to do it stays blocked or tagged, and refused on air; a sincere report or
+    /// warning reaches the brain as a care ask. Simulated lines, written for this test.
+    #[test]
+    fn a_call_to_dox_stays_blocked_and_a_doxx_report_reaches_the_brain_as_care() {
+        use crate::orchestrate::requests::{situational_asks, Ask};
+        let empty = tempfile::tempdir().unwrap();
+        let p = repo_policy();
+        assert!(p.is_file(), "the repo's rules are what this pins");
+        let policy = Policy::from_file_with_local(&p, empty.path()).expect("compiles");
+        let calls = [
+            "dox him",
+            "let's doxx her, she earned it",
+            "everyone report him",
+            "go raid them, thralls",
+            "mass report his channel tonight",
+            "chat, review-bomb the mixer",
+            "time to brigade their discord",
+            "go dox the streamer who beat us",
+            "doxxing their family would be hilarious",
+            "honestly he deserves to get doxxed",
+        ];
+        let reports = [
+            "I got doxxed",
+            "i'm being doxxed, what do i even do",
+            "someone posted my address in the other chat",
+            "heads up, someone is trying to dox people in here",
+            "my real name got leaked on a forum",
+            "they doxxed me last week, still shaken",
+        ];
+        let mut f = filter();
+        let inbox = calls
+            .iter()
+            .enumerate()
+            .map(|(i, t)| msg(&format!("c{i}"), 900, &format!("caller{i}"), t))
+            .chain(
+                reports
+                    .iter()
+                    .enumerate()
+                    .map(|(i, t)| msg(&format!("r{i}"), 900, &format!("victim{i}"), t)),
+            )
+            .collect();
+        let (c, ev) = f.filter(1_000, inbox, &policy);
+        let brigade = |id: &str| {
+            ev.iter().any(|e| {
+                matches!(e, StreamEvent::Moderation { rule, msg_id: Some(m), .. }
+                    if rule == "term:brigade-call" && m == id)
+            })
+        };
+        for (i, t) in calls.iter().enumerate() {
+            let id = format!("c{i}");
+            assert!(is_brigade_call(t, Some(&policy)), "{t}");
+            assert!(brigade(&id), "{t}: {ev:?}");
+            // Blocked (dropped) or tagged: never a plain candidate, never a care ask.
+            let cand = c.iter().find(|c| c.msg.id == id);
+            assert!(cand.is_none_or(|c| c.injection), "{t}");
+            assert!(!situational_asks(t).contains(&Ask::Doxxed), "{t}");
+            // On air it is refused, never aired.
+            let (out, _) = gate_text(&format!("Thralls, {t}."), &policy, &[]);
+            assert_eq!(out, policy.persona.lines.brigade_refused, "{t}");
+        }
+        for (i, t) in reports.iter().enumerate() {
+            let id = format!("r{i}");
+            assert!(!is_brigade_call(t, Some(&policy)), "{t}");
+            assert!(!brigade(&id), "{t}: {ev:?}");
+            let cand = c.iter().find(|c| c.msg.id == id);
+            assert!(cand.is_some_and(|c| !c.injection), "{t}: {ev:?}");
+            assert_eq!(situational_asks(t), [Ask::Doxxed], "{t}");
+            assert!(Ask::Doxxed.is_care() && !Ask::Doxxed.is_bait());
+        }
+        // Talk about the word is plain chat: neither dropped nor a care ask.
+        for t in [
+            "nobody's getting doxxed, it's a bit",
+            "malakor doesn't do addresses, the budget says audit",
+        ] {
+            assert!(!is_brigade_call(t, Some(&policy)), "{t}");
+            assert!(situational_asks(t).is_empty(), "{t}");
+        }
+        // The care reply survives the output gate, even one that says what happened.
+        for line in [
+            "Take that to the moderators at once: they can pull it down. Share nothing more here.",
+            "Sorry you got doxxed. The moderators can remove it; tell them, and keep the rest to yourself.",
+        ] {
+            let (out, fired) = gate_text(line, &policy, &[]);
+            assert_eq!(out, line);
+            assert!(fired.is_empty(), "{fired:?}");
+        }
     }
 
     #[test]

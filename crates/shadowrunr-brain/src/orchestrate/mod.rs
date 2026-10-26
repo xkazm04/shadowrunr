@@ -74,7 +74,7 @@
 //! ballot's result, its tie) has been announced. The scene gives way at a line boundary (the
 //! next beat that is not a speech hold), then resumes where it stopped:
 //! - to a **care beat**: a safety pick (as anywhere), or a sincerely sad viewer's owned request
-//!   ([`Ask::Sad`]), answered alone (host only). It resumes rather than ends: the care rules
+//!   ([`Ask::Sad`], or a doxx report, [`Ask::Doxxed`]), answered alone (host only). It resumes rather than ends: the care rules
 //!   ([`crate::care`]) forbid joking about the viewer and what they shared, not comedy, and the
 //!   scene's lines never touch chat (its live slots were written at its start, with no chat);
 //! - to **one short aside** for a room event: a raid seen during the scene (sticky across the
@@ -884,7 +884,7 @@ impl Orchestrator {
         if cands.iter().any(|c| {
             c.safety.is_none()
                 && !self.answered.contains(&c.msg.id)
-                && self.owns(c) == Some(Ask::Sad)
+                && self.owns(c).is_some_and(Ask::is_care)
         }) {
             return None;
         }
@@ -1285,7 +1285,8 @@ impl Orchestrator {
                             }
                             Offer::Chat => !is_filler(c),
                             Offer::Care => {
-                                !self.answered.contains(&c.msg.id) && self.owns(c) == Some(Ask::Sad)
+                                !self.answered.contains(&c.msg.id)
+                                    && self.owns(c).is_some_and(Ask::is_care)
                             }
                             Offer::Aside { raid } => {
                                 !self.answered.contains(&c.msg.id)
@@ -1824,7 +1825,7 @@ impl Orchestrator {
         let sad = b
             .cands
             .iter()
-            .any(|c| !self.answered.contains(&c.msg.id) && self.owns(c) == Some(Ask::Sad));
+            .any(|c| !self.answered.contains(&c.msg.id) && self.owns(c).is_some_and(Ask::is_care));
         let events = self.room.take(!sad);
         if !events.is_empty() {
             let labels: Vec<&str> = events.iter().map(|e| e.label.as_str()).collect();
@@ -2216,7 +2217,7 @@ impl Orchestrator {
         if b.cands
             .iter()
             .filter(open)
-            .any(|c| self.owns(c) == Some(Ask::Sad))
+            .any(|c| self.owns(c).is_some_and(Ask::is_care))
         {
             let mut p = Plan::new(
                 BeatMode::React,

@@ -1386,7 +1386,7 @@ impl Brain {
         let host_only = guest_on.is_some()
             && (plan.host_only
                 || pick.chosen.iter().any(|c| {
-                    c.safety.is_some() || situational_asks(&c.msg.text).contains(&Ask::Sad)
+                    c.safety.is_some() || situational_asks(&c.msg.text).iter().any(|a| a.is_care())
                 }));
         // What the beat plan says about its lines, before `plan` is reused below.
         let (aside, lead_cue) = (plan.aside, plan.lead_cue);
@@ -1961,11 +1961,11 @@ impl Brain {
         }
 
         // A brigade call the picks left unanswered is refused on air, in one fixed line after the
-        // beat's own (never in a crisis, a sincerely sad viewer's beat, an aside or the goodbye).
+        // beat's own (never in a crisis, a care ask's beat ([`Ask::is_care`]), an aside or the goodbye).
         let sad = pick
             .chosen
             .iter()
-            .any(|c| situational_asks(&c.msg.text).contains(&Ask::Sad));
+            .any(|c| situational_asks(&c.msg.text).iter().any(|a| a.is_care()));
         let refusal = if crisis || sad || aside.is_some() || closing {
             None
         } else {
