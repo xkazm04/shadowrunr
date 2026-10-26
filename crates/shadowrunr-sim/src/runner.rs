@@ -505,10 +505,14 @@ pub(crate) fn table_read_for_run(
 fn filter_config(opts: &SimOptions, propose_min_rank: Option<Rank>) -> FilterConfig {
     FilterConfig {
         rate_cap_exemptions: opts.rate_cap_exemptions,
-        propose_min_rank: propose_min_rank
-            .unwrap_or(SegmentConfig::default().ranks.propose_min_rank),
+        propose_min_rank: propose_min_rank_of(propose_min_rank),
         ..FilterConfig::default()
     }
+}
+
+/// The segment rank table's `propose_min_rank`: the manifest's, else the builtin table's.
+fn propose_min_rank_of(manifest: Option<Rank>) -> Rank {
+    manifest.unwrap_or(SegmentConfig::default().ranks.propose_min_rank)
 }
 
 /// The package's manifest, persona and tuning. A manifest that cannot be read gives the
@@ -691,7 +695,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         spec.seed,
         opts.hooks.rank,
     )?;
-    let mut room = ChatRoom::new(
+    let mut room = ChatRoom::with_propose_min_rank(
         pop,
         RoomConfig {
             cal: &prep.cal,
@@ -708,6 +712,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
             // A sim run has no closing window.
             closing_s: 0,
         },
+        propose_min_rank_of(prep.manifest.ranks.propose_min_rank),
     );
     let transcript_path = prep.run_dir.join("transcript.jsonl");
     let mut w = TranscriptWriter::create(&transcript_path)?

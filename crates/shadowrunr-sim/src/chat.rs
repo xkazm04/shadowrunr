@@ -17,9 +17,9 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use shadowrunr_brain::moderation::CRISIS_BAN_RULE;
-use shadowrunr_segments::segment_table;
+use shadowrunr_segments::{segment_table, SegmentConfig};
 use shadowrunr_types::character::Persona;
-use shadowrunr_types::{ChatMsg, EngineRequest, Op, Role, SegmentId, StreamEvent, TsMs};
+use shadowrunr_types::{ChatMsg, EngineRequest, Op, Rank, Role, SegmentId, StreamEvent, TsMs};
 
 use crate::calibration::Calibration;
 use crate::population::{ArchetypeKind, Population, SimViewer, STAYS};
@@ -263,6 +263,8 @@ pub struct ChatRoom {
     authors: HashMap<String, String>,
     /// Viewers removed from chat (`crisis_chat_ban` / `banned:stream`): `(id, name)`.
     banned: Vec<(String, String)>,
+    /// Lowest rank a valid `!propose` stimulus is performed by.
+    propose_min_rank: Rank,
     pub stats: ChatStats,
 }
 
@@ -298,7 +300,19 @@ fn remap(at: u32, window: u32, from: u32, to: u32) -> u32 {
 }
 
 impl ChatRoom {
-    pub fn new(mut pop: Population, cfg: RoomConfig<'_>) -> Self {
+    /// A room whose proposals are gated at the builtin rank table's `propose_min_rank`.
+    pub fn new(pop: Population, cfg: RoomConfig<'_>) -> Self {
+        let min = SegmentConfig::default().ranks.propose_min_rank;
+        Self::with_propose_min_rank(pop, cfg, min)
+    }
+
+    /// A room whose valid `!propose` stimuli are performed by a chatter holding at least
+    /// `propose_min_rank` (the segment rank table's).
+    pub fn with_propose_min_rank(
+        mut pop: Population,
+        cfg: RoomConfig<'_>,
+        propose_min_rank: Rank,
+    ) -> Self {
         let mut rng = Rng::derive(cfg.seed, "chat");
         let featured = select_featured(&mut pop, cfg.bank, cfg.max_featured, &mut rng);
         let featured_kinds: Vec<(String, ArchetypeKind)> = featured
@@ -308,6 +322,14 @@ impl ChatRoom {
         // The closing guard: stimuli are laid out on the run short of its closing window.
         let end = cfg.duration_s.saturating_sub(cfg.closing_s).max(1);
         let mut injections = schedule(cfg.bank, cfg.segment, end, &featured_kinds, cfg.seed);
+        seat_proposers(
+            &mut pop,
+            &mut injections,
+            cfg.bank,
+            &featured,
+            propose_min_rank,
+            cfg.hooks.rank,
+        );
         let window = cold_open_window_s(cfg.segment, cfg.duration_s);
         clear_cold_open(
             &mut pop,
@@ -353,6 +375,7 @@ impl ChatRoom {
             system_prompt: String::new(),
             authors: HashMap::new(),
             banned: Vec::new(),
+            propose_min_rank,
             stats: ChatStats::default(),
         };
         room.system_prompt = room.build_system_prompt();
@@ -463,10 +486,9 @@ impl ChatRoom {
             {
                 continue;
             }
-            let want = self
-                .bank
-                .get(&inj.situation_id)
-                .map(|s| ArchetypeKind::of(&s.archetype));
+            let sit = self.bank.get(&inj.situation_id);
+            let want = sit.map(|s| ArchetypeKind::of(&s.archetype));
+            let rank = sit.and_then(|s| s.proposer_rank(self.propose_min_rank));
             let pending = |id: &String| {
                 self.injections
                     .iter()
@@ -478,16 +500,46 @@ impl ChatRoom {
                 .iter()
                 .filter(|id| !self.is_banned(id))
                 .collect();
+            // A proposal stays with a chatter whose rank may propose: one who holds it, else
+            // the usual pick, promoted to it.
+            let ranked = |id: &&String| {
+                rank.is_none_or(|r| self.pop.get(id).is_some_and(|v| v.viewer.rank >= r))
+            };
             let fits =
                 |id: &&String| want.is_some_and(|k| self.pop.get(id).is_some_and(|v| v.kind == k));
             let to = present
                 .iter()
                 .copied()
-                .filter(fits)
+                .filter(|id| fits(id) && ranked(id))
                 .min_by_key(|id| pending(id))
+                .or_else(|| {
+                    present
+                        .iter()
+                        .copied()
+                        .filter(ranked)
+                        .min_by_key(|id| pending(id))
+                })
+                .or_else(|| {
+                    present
+                        .iter()
+                        .copied()
+                        .filter(fits)
+                        .min_by_key(|id| pending(id))
+                })
                 .or_else(|| present.iter().copied().min_by_key(|id| pending(id)))
                 .cloned();
             let Some(to) = to else { continue };
+            if let Some(r) = rank {
+                let rank_fn = self.hooks.rank;
+                if let Some(v) = self
+                    .pop
+                    .viewers
+                    .iter_mut()
+                    .find(|v| v.viewer.id == to && v.viewer.rank < r)
+                {
+                    promote(&mut v.viewer, r, rank_fn);
+                }
+            }
             let inj = &mut self.injections[i];
             inj.chatter_id = Some(to);
             inj.note = Some(format!("reassigned from {from}: removed from chat"));
@@ -1363,6 +1415,74 @@ fn clear_cold_open(
     }
 }
 
+/// Give every valid `!propose` stimulus a performer whose rank may propose
+/// ([`Situation::proposer_rank`]): the scheduled chatter when their rank is enough, else the
+/// first featured chatter of the situation's archetype (any featured chatter when none has it)
+/// who holds the rank, else the first of those, promoted to the rank. The candidates keep the
+/// seeded order of `featured`, so the seat is deterministic in the seed.
+fn seat_proposers(
+    pop: &mut Population,
+    injections: &mut [Injection],
+    bank: &SituationBank,
+    featured: &[String],
+    propose_min_rank: Rank,
+    rank_fn: fn(Option<u8>, u32, u32) -> Rank,
+) {
+    for inj in injections.iter_mut() {
+        let Some(sit) = bank.get(&inj.situation_id) else {
+            continue;
+        };
+        let (Some(rank), Some(current)) = (sit.proposer_rank(propose_min_rank), &inj.chatter_id)
+        else {
+            continue;
+        };
+        let holds = |pop: &Population, id: &str| pop.get(id).is_some_and(|v| v.viewer.rank >= rank);
+        if holds(pop, current) {
+            continue;
+        }
+        let want = ArchetypeKind::of(&sit.archetype);
+        let of_kind: Vec<&String> = featured
+            .iter()
+            .filter(|id| pop.get(id).is_some_and(|v| v.kind == want))
+            .collect();
+        let candidates: Vec<&String> = if of_kind.is_empty() {
+            featured.iter().collect()
+        } else {
+            of_kind
+        };
+        let Some(&first) = candidates.first() else {
+            continue;
+        };
+        let seat = match candidates.iter().find(|id| holds(pop, id)) {
+            Some(&id) => id.clone(),
+            None => {
+                if let Some(v) = pop.viewers.iter_mut().find(|v| &v.viewer.id == first) {
+                    promote(&mut v.viewer, rank, rank_fn);
+                }
+                first.clone()
+            }
+        };
+        inj.chatter_id = Some(seat);
+    }
+}
+
+/// Raise `viewer` to `rank`: the lowest subscription (tier, then months) the rank hook maps to
+/// it, so the viewer's fields agree with their rank; the rank alone when no subscription does.
+fn promote(
+    viewer: &mut shadowrunr_types::Viewer,
+    rank: Rank,
+    rank_fn: fn(Option<u8>, u32, u32) -> Rank,
+) {
+    let sub = (1u8..=3)
+        .flat_map(|t| [1u32, 3, 6, 12, 24, 36].map(|m| (t, m)))
+        .find(|&(t, m)| rank_fn(Some(t), m.max(viewer.months), viewer.gifted) == rank);
+    if let Some((t, m)) = sub {
+        viewer.sub_tier = Some(t);
+        viewer.months = m.max(viewer.months);
+    }
+    viewer.rank = rank;
+}
+
 /// Pick up to `max` featured chatters: first one per archetype a situation needs, then the
 /// most talkative others. Featured chatters arrive with the opening crowd (by the end of the
 /// room's fill ramp) and stay for the whole run.
@@ -1601,6 +1721,58 @@ mod tests {
                 assert!(room.pop.copypasta_at_s.iter().all(|&at| at < 240));
             }
         }
+    }
+
+    #[test]
+    fn every_proposal_stimulus_is_performed_by_a_rank_that_may_propose() {
+        // roastmaster-vs-theatrical-5e1b849be4 #450 and #296, weary-0dd890a1ad #276: an Acolyte
+        // performed "a Dread Council member uses !propose", and the judge failed the answer
+        // against the Dread Council rule.
+        let bank = bank();
+        let min = SegmentConfig::default().ranks.propose_min_rank;
+        let proposal = bank.get("dread-council-proposal").unwrap();
+        assert!(proposal.proposer_rank(min).is_some_and(|r| r >= min));
+        // An attempt by a rank that cannot propose is its own situation, left alone.
+        assert_eq!(
+            bank.get("thrall-propose-attempt")
+                .unwrap()
+                .proposer_rank(min),
+            None
+        );
+        let mut seated = 0;
+        for (population, size) in [
+            ("small_new_channel", 3),
+            ("growing_channel", 30),
+            ("raid_moment", 300),
+        ] {
+            for seed in [1, 2, 3, 7, 11, 42] {
+                let room = room_of(population, size, seed);
+                for inj in &room.injections {
+                    let Some(rank) = bank.get(&inj.situation_id).unwrap().proposer_rank(min) else {
+                        continue;
+                    };
+                    let id = inj
+                        .chatter_id
+                        .as_deref()
+                        .expect("a proposal has a performer");
+                    let v = room.pop.get(id).unwrap();
+                    assert!(v.featured, "{population} seed {seed}: {id} is featured");
+                    assert!(
+                        v.viewer.rank >= rank && v.viewer.rank >= min,
+                        "{population} seed {seed}: {id} is {:?}, needs {rank:?}",
+                        v.viewer.rank
+                    );
+                    seated += 1;
+                }
+                // The same seed seats the same performer.
+                let again = room_of(population, size, seed);
+                let ids = |r: &ChatRoom| -> Vec<Option<String>> {
+                    r.injections.iter().map(|i| i.chatter_id.clone()).collect()
+                };
+                assert_eq!(ids(&room), ids(&again), "{population} seed {seed}");
+            }
+        }
+        assert_eq!(seated, 18, "one proposal per room");
     }
 
     fn planted(id: &str, kind: StimulusKind, at_s: u32) -> Injection {

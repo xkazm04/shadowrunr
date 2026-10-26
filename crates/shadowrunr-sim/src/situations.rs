@@ -11,7 +11,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use shadowrunr_types::catalog;
-use shadowrunr_types::SegmentId;
+use shadowrunr_types::{Rank, SegmentId};
 
 use crate::calibration::Calibration;
 use crate::population::ArchetypeKind;
@@ -71,7 +71,43 @@ impl Situation {
     pub fn applies_to(&self, segment: SegmentId) -> bool {
         self.segments.is_empty() || self.segments.contains(&segment)
     }
+
+    /// The rank a valid `!propose` stimulus must be performed by: a rank-gated proposal whose
+    /// behaviour names no rank below `propose_min_rank` (an attempt by a rank that cannot
+    /// propose is its own situation). The highest rank the behaviour names, never below
+    /// `propose_min_rank`; `None` for every other situation.
+    pub fn proposer_rank(&self, propose_min_rank: Rank) -> Option<Rank> {
+        if !self.behaviour.contains("!propose")
+            || !self
+                .invariants
+                .iter()
+                .any(|i| i == "role:rank-gated-proposals")
+        {
+            return None;
+        }
+        let b = self.behaviour.to_ascii_lowercase();
+        let named = RANKS
+            .iter()
+            .rev()
+            .find(|(_, word)| b.contains(word))
+            .map(|(r, _)| *r);
+        match named {
+            Some(r) if r < propose_min_rank => None,
+            Some(r) => Some(r),
+            None => Some(propose_min_rank),
+        }
+    }
 }
+
+/// Every rank, lowest first, with the words a situation's behaviour names it by.
+const RANKS: [(Rank, &str); 6] = [
+    (Rank::Thrall, "thrall"),
+    (Rank::Acolyte, "acolyte"),
+    (Rank::Cultist, "cultist"),
+    (Rank::Warlock, "warlock"),
+    (Rank::Lich, "lich"),
+    (Rank::DreadCouncil, "dread council"),
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SituationBank {
