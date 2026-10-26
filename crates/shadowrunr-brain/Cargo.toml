@@ -19,5 +19,6 @@ rusqlite = { version = "0.38", features = ["bundled"] }
 tokio-util = "0.7"
 
 [dev-dependencies]
+proptest = { version = "1.12", default-features = false, features = ["std"] }
 tempfile = "3"
 tokio = { workspace = true, features = ["test-util"] }
