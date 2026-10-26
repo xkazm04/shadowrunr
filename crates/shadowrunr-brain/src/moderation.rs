@@ -804,12 +804,53 @@ fn filter_regexes() -> &'static FilterRegexes {
 /// A gift or sub announcement in chat text ("gifted 5 subs", "just subscribed").
 const GIFT_PATTERN: &str = r"\b(?:gift(?:ed|ing|s)?\s+(?:\d{1,4}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|twenty|fifty|a\s+hundred)\s+(?:tier\s*[123]\s+)?sub(?:s|scriptions?)?\b|just\s+(?:re)?sub(?:bed|scribed)\b|(?:re)?subscribed\s+(?:for|with|at)\s+(?:tier|prime|\d)|resub(?:bed)?\b)";
 
-/// Whether a message announces a gift or a sub ([`GIFT_PATTERN`]): it is tribute, thanked by
-/// name and rank, and carried like a first contact when a beat cannot answer it.
+/// Chat that matches [`GIFT_PATTERN`] but is not the speaker's own gift: a bystander's question
+/// or remark ("wait who gifted 5 subs??", "did someone just gift 5 subs?"), what gifting does,
+/// an ask that someone else gift ("somebody gift a sub to the new guy"), a pledge on a condition
+/// in the same sentence ("gifting 5 subs if 03 wins", "recount or i gift 5 subs"), a `!propose`.
+/// Mined in runs/sim/tuning-4ae84b1b/mining.txt: tuning-ee4dca5b/after
+/// unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L472, a question carried as a gift for 51.6 s.
+const NOT_GIFT_PATTERN: &str = concat!(
+    r"\b(?:who|someone|somebody|anyone)\s+(?:just\s+)?gifted\b",
+    r"|\bdid\s+(?:someone|somebody|anyone)\s+(?:just\s+)?gift\b",
+    r"|\b(?:someone|somebody|anyone|you)\s+gift\b",
+    r"|\bwhat\s+(?:does|do|is)\s+gifting\b",
+    r"|\bif\b[^.!?\n]*\bgift",
+    r"|\bgift(?:ed|ing|s)?\s[^.!?\n]*\bif\b",
+    r"|\bor\s+i\s+gift\b",
+    r"|\band\s+i'?ll\s+gift\b",
+    r"|^\s*!propose\b",
+);
+
+/// A question about a named viewer's gift ("wait moth just gifted 5 subs??"): the name is
+/// group 1, and it is the speaker's own gift when the name is one of [`GIFTER_SELF`].
+const NAMED_GIFT_QUESTION: &str =
+    r"\b(?:wait|did|so|ok|omg|wow|yo)\s+([\w']+)\s+(?:just\s+)?gift(?:ed)?\b[^.!?\n]*\?";
+
+/// The words before "gifted" that make it the speaker's gift ("wait i just gifted 5 subs??").
+const GIFTER_SELF: &[&str] = &["i", "we", "ive", "i've", "just", "me"];
+
+/// Whether a message announces a gift or a sub ([`GIFT_PATTERN`]) by the speaker, not a
+/// question or remark about one ([`NOT_GIFT_PATTERN`], [`NAMED_GIFT_QUESTION`]): it is tribute,
+/// thanked by name and rank, and carried like a first contact when a beat cannot answer it.
 pub fn is_gift_or_sub(text: &str) -> bool {
-    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    RE.get_or_init(|| ci(GIFT_PATTERN).expect("gift pattern compiles"))
-        .is_match(text)
+    struct GiftRegexes {
+        gift: Regex,
+        not_gift: Regex,
+        named_question: Regex,
+    }
+    static RE: std::sync::OnceLock<GiftRegexes> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| GiftRegexes {
+        gift: ci(GIFT_PATTERN).expect("gift pattern compiles"),
+        not_gift: ci(NOT_GIFT_PATTERN).expect("not-gift pattern compiles"),
+        named_question: ci(NAMED_GIFT_QUESTION).expect("named gift question compiles"),
+    });
+    re.gift.is_match(text)
+        && !re.not_gift.is_match(text)
+        && !re
+            .named_question
+            .captures_iter(text)
+            .any(|c| !GIFTER_SELF.contains(&c[1].to_lowercase().as_str()))
 }
 
 /// Second-person words that make a question direct.
@@ -865,7 +906,6 @@ pub fn is_addressed(text: &str, names: &[String]) -> bool {
 pub struct InputFilter {
     cfg: FilterConfig,
     injection: InjectionDetector,
-    gift: Regex,
     rate: HashMap<String, VecDeque<TsMs>>,
     pastas: VecDeque<(TsMs, String)>,
     /// Lowercase names the character answers to (for sincere direct questions).
@@ -918,7 +958,6 @@ impl InputFilter {
         Self {
             cfg,
             injection: InjectionDetector::default(),
-            gift: ci(GIFT_PATTERN).expect("gift pattern compiles"),
             rate: HashMap::new(),
             pastas: VecDeque::new(),
             names: Vec::new(),
@@ -1002,7 +1041,7 @@ impl InputFilter {
         let first_question = self.cfg.rate_cap_exemptions
             && real_question(&msg.text).is_some()
             && self.asked.insert(msg.viewer.id.clone());
-        if self.gift.is_match(&msg.text) {
+        if is_gift_or_sub(&msg.text) {
             return Some("gift_or_sub");
         }
         if first {
@@ -2601,6 +2640,57 @@ mod tests {
         assert!(c.iter().any(|c| c.msg.id == "gift"));
         assert!(!dropped(&ev, "gift"));
         assert!(dropped(&ev, "plain"), "the neighbour stays capped");
+    }
+
+    #[test]
+    fn a_question_or_remark_about_a_gift_is_not_a_gift_but_every_gift_shape_still_is() {
+        // Simulated lines, generated for this test in the shapes mined in
+        // runs/sim/tuning-4ae84b1b/mining.txt (the first is tuning-ee4dca5b/after
+        // unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L472's shape).
+        let not_gifts = [
+            // A bystander's question about someone else's gift.
+            "wait who gifted 5 subs?? does that unlock something or is it just a vibe lol",
+            "wait who just gifted 5 subs lol what does that do",
+            "wait someone just gifted 5 subs?? is that like a tip thing lol",
+            "wait someone gifted 5 subs? is that good lol",
+            "wait did someone just gift 5 subs? what does that do lol",
+            "wait toadkettle just gifted 5 subs?? is that how you rank up here",
+            "wait beetle gifted 5 subs?? what does that do lol",
+            "wait what does gifting a sub do exactly? sorry new here",
+            // An ask that someone else gift.
+            "somebody gift a sub to the new guy, we need bodies for the next vote",
+            "now hints, and someone gift a sub to the minion who stopped the moth lol",
+            "bone, tribute means you gift a sub to the Ninth Dark, it's like tithing",
+            // A pledge on a condition, and a proposal.
+            "!vote 3 and i'm gifting 5 subs to the crypt if the burial wins",
+            "if the ledger doesn't reopen i'm gifting 5 subs to the sell side out of spite",
+            "recount or i gift 5 subs to the foil side out of pure spite",
+            "make the title a poll and i'll gift a sub to whoever votes first",
+            "!propose gift five subs to the thralls who typed the hex right",
+        ];
+        for t in not_gifts {
+            assert!(!is_gift_or_sub(t), "read as a gift: {t}");
+        }
+        let gifts = [
+            "gifting 5 subs to the room, the council eats tonight. no thanks needed lol",
+            "gifted 5 subs to the room, for my dog",
+            "just gifted 5 subs to the room lol. is that how u get a rank from malakor??",
+            "ok i just gifted 5 subs to the room?? is that like a minion thing now lol",
+            "wait i just gifted 5 subs to the whole room?? idk if thats how it works lol",
+            "wait did i just gift 5 subs to the whole room?? i panicked and clicked it lol",
+            "gifted 5 subs and still no warlock title?? malakor pls",
+            "gifting 5 subs to whoever votes HEX-11 before the clock dies",
+            "gifted 5 subs to the swamp folk. the ferns had their chance. recount if the clock lies",
+            "!vote HEX-07 and i gift 5 subs to the thralls who stuck around",
+            "gifted 4 subs to the realm. !propose the coin prophet gets a permanent seat",
+            "also rune_turnip gifted 5 subs to the raid gang, don't say i never do anything",
+            "the council gifts five subs to the clerks before the bell",
+            "just subscribed with prime, hi chat",
+            "resubbed for 6 months, the fog is home",
+        ];
+        for t in gifts {
+            assert!(is_gift_or_sub(t), "not read as a gift: {t}");
+        }
     }
 
     /// unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L853, verbatim.

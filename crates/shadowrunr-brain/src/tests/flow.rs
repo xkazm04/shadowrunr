@@ -1346,6 +1346,114 @@ async fn a_gift_outbid_by_an_owed_request_goes_before_the_fresher_ones_and_never
 }
 
 #[tokio::test]
+async fn a_question_about_a_gift_beside_an_owed_request_is_not_queued_or_thanked_as_a_gift() {
+    // tuning-ee4dca5b/after unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L472: "wait who gifted 5
+    // subs?? does that unlock something", a bystander's question, read as a gift, carried 51.6 s
+    // across 2 request beats to L723. Since 47feec6 a carried gift joins the owed queue beside
+    // owed requests, so the question took a gift beat ahead of fresher owed requests.
+    // Simulated lines, generated for this test.
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    engine.default_reply(Role::CoreThread, "The bone-clerks file it in the Ledger.");
+    let mut b = brain_with(
+        dir.path(),
+        Arc::new(engine.clone()),
+        "f4-gift-question",
+        unpaced(),
+    )
+    .await;
+    let c = ctx(&[]);
+    let kettle = viewer("sim-v0148", "RuneKettle", Rank::Thrall);
+    let asks = [
+        (
+            "toad",
+            "tomb_toad",
+            "is this a real person talking or ai? the voice is kinda too smooth lol",
+        ),
+        (
+            "wraith",
+            "WraithCandle",
+            "@Malakor roast me hard, i lost yesterday's vote by ONE vote",
+        ),
+        (
+            "bone",
+            "BoneCandle",
+            "is the hex board real or is it all made up lol",
+        ),
+        (
+            "moth",
+            "MothSpoon99",
+            "bone daddy, roast me hard, no mercy, my cat already did",
+        ),
+    ];
+    let mut t = 1_000;
+    for (id, name, _) in std::iter::once(("sim-v0148", "RuneKettle", "")).chain(asks) {
+        let v = if id == "sim-v0148" {
+            kettle.clone()
+        } else {
+            viewer(id, name, Rank::Thrall)
+        };
+        b.tick(
+            t,
+            vec![msg(&format!("hi-{id}"), t - 100, &v, "evening")],
+            &c,
+        )
+        .await
+        .unwrap();
+        t += 5_000;
+    }
+    for _ in 0..4 {
+        b.tick(t, Vec::new(), &c).await.unwrap();
+        t += 5_000;
+    }
+    // The question arrives beside an owed request: the request takes that beat.
+    let question = "wait who gifted 5 subs?? does that unlock something or is it just a vibe lol";
+    let (id, name, text) = asks[0];
+    let ev = b
+        .tick(
+            t,
+            vec![
+                msg("q", t - 300, &kettle, question),
+                msg(id, t - 200, &viewer(id, name, Rank::Thrall), text),
+            ],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), [id], "{}", plan_of(&ev).1);
+    // A fresh owed request every beat after it: each owed request is answered in turn, and the
+    // question never takes a gift beat ahead of one (on the base it went second, as a gift).
+    let mut order = vec![id.to_string()];
+    for ask in asks[1..].iter().copied().map(Some).chain([None; 4]) {
+        t += 5_000;
+        let fresh = ask.map_or_else(Vec::new, |(id, name, text)| {
+            vec![msg(id, t - 200, &viewer(id, name, Rank::Thrall), text)]
+        });
+        let ev = b.tick(t, fresh, &c).await.unwrap();
+        if picked(&ev).contains(&"q".to_string()) {
+            let plan = plan_of(&ev).1;
+            assert!(!plan.contains("gift"), "{plan}");
+        }
+        order.extend(picked(&ev));
+    }
+    let owed: Vec<&String> = order.iter().filter(|p| *p != "q").collect();
+    assert_eq!(owed, asks.map(|a| a.0), "{order:?}");
+    assert!(
+        order.iter().position(|p| p == "q") != Some(1),
+        "the question took the owed queue's next beat as a gift: {order:?}"
+    );
+    // The thread is never told to thank the asker for tribute.
+    for r in engine.requests(Role::CoreThread) {
+        assert!(
+            !r.prompt
+                .contains("<tribute: thank them by their handle, RuneKettle"),
+            "{}",
+            r.prompt
+        );
+    }
+}
+
+#[tokio::test]
 async fn a_rank_read_out_in_brackets_airs_as_a_spoken_title_and_keeps_its_cue() {
     // sbx-20261024-205313-10m: "WraithKettle (Thrall), yes, I am an AI character".
     let dir = tempfile::tempdir().unwrap();
