@@ -18,35 +18,35 @@
       }
     },
     "door.result": {
-      "js": 173189,
+      "js": 180776,
       "css": 0,
       "chunks": {
-        "../../packages/contract/src/generated/results/ReviewSession.js": 173189
+        "../../packages/contract/src/generated/results/ReviewSession.js": 180776
       }
     },
     "agent": {
-      "js": 40411,
+      "js": 40484,
       "css": 0,
       "chunks": {
-        "src/app/agent/catalog.ts": 40411
+        "src/app/agent/catalog.ts": 40484
       }
     },
     "door": {
-      "js": 135062,
+      "js": 142630,
       "css": 0,
       "chunks": {
-        "src/data/contractDoor.ts": 135062
+        "src/data/contractDoor.ts": 142630
       }
     },
     "brain.l1": {
-      "js": 29278,
+      "js": 29458,
       "css": 13574,
       "chunks": {
         "_LetterboxBands.js": 1103,
         "_PosterFrame.js": 1475,
         "_Section.js": 1084,
         "_VisuallyHidden.js": 108,
-        "_events.js": 3495,
+        "_events.js": 3675,
         "_kit.js": 131,
         "_preflightModel.js": 6780,
         "_remPx.js": 2721,
@@ -54,7 +54,7 @@
       }
     },
     "brain.l2": {
-      "js": 85940,
+      "js": 86120,
       "css": 17778,
       "chunks": {
         "_Button.js": 480,
@@ -63,7 +63,7 @@
         "_Section.js": 1084,
         "_StatBand.js": 541,
         "_VirtualList.js": 35831,
-        "_events.js": 3495,
+        "_events.js": 3675,
         "_kit.js": 131,
         "_openExternal.js": 301,
         "_preflightModel.js": 6780,
@@ -72,36 +72,36 @@
       }
     },
     "characters.l1": {
-      "js": 29082,
+      "js": 30966,
       "css": 11380,
       "chunks": {
         "_Avatar.js": 7802,
-        "_FoilArt.js": 10212,
+        "_FoilArt.js": 11916,
         "_PosterFrame.js": 1475,
         "_VisuallyHidden.js": 108,
         "_cellCounts.js": 381,
-        "_events.js": 3495,
+        "_events.js": 3675,
         "src/pages/characters/Layer1.tsx": 5609
       }
     },
     "characters.l2": {
-      "js": 139789,
+      "js": 141945,
       "css": 31195,
       "chunks": {
         "_Avatar.js": 7802,
         "_Button.js": 480,
-        "_Directions.js": 2417,
+        "_Directions.js": 2426,
         "_FilterTable.js": 5502,
-        "_FoilArt.js": 10212,
+        "_FoilArt.js": 11916,
         "_Section.js": 1084,
         "_Switch.js": 631,
         "_VirtualList.js": 35831,
         "_VisuallyHidden.js": 108,
         "_cellCounts.js": 381,
-        "_events.js": 3495,
+        "_events.js": 3675,
         "_kit.js": 131,
         "_remPx.js": 2721,
-        "src/pages/characters/Layer2.tsx": 68994
+        "src/pages/characters/Layer2.tsx": 69257
       }
     },
     "characters.moderation": {
@@ -122,19 +122,19 @@
       }
     },
     "onair.l1": {
-      "js": 55502,
-      "css": 24946,
+      "js": 58248,
+      "css": 25011,
       "chunks": {
-        "_FoilArt.js": 10212,
+        "_FoilArt.js": 11916,
         "_PosterFrame.js": 1475,
         "_VisuallyHidden.js": 108,
-        "_feed.js": 20554,
-        "src/pages/onair/Layer1.tsx": 23153
+        "_feed.js": 21411,
+        "src/pages/onair/Layer1.tsx": 23338
       }
     },
     "onair.l2": {
-      "js": 106340,
-      "css": 22094,
+      "js": 107406,
+      "css": 22202,
       "chunks": {
         "_Button.js": 480,
         "_FilterTable.js": 5502,
@@ -142,12 +142,12 @@
         "_Section.js": 1084,
         "_StatBand.js": 541,
         "_VirtualList.js": 35831,
-        "_events.js": 3495,
-        "_feed.js": 20554,
+        "_events.js": 3675,
+        "_feed.js": 21411,
         "_kit.js": 131,
         "_openExternal.js": 301,
         "_remPx.js": 2721,
-        "src/pages/onair/Layer2.tsx": 35044
+        "src/pages/onair/Layer2.tsx": 35073
       }
     },
     "reconcile.l1": {
@@ -160,7 +160,7 @@
       }
     },
     "reconcile.l2": {
-      "js": 87526,
+      "js": 87715,
       "css": 26698,
       "chunks": {
         "_Button.js": 480,
@@ -170,30 +170,30 @@
         "_Section.js": 1084,
         "_StatBand.js": 541,
         "_VirtualList.js": 35831,
-        "_events.js": 3495,
+        "_events.js": 3675,
         "_kit.js": 131,
         "_remPx.js": 2721,
-        "src/pages/reconcile/Layer2.tsx": 35574
+        "src/pages/reconcile/Layer2.tsx": 35583
       }
     },
     "review.l1": {
-      "js": 56673,
+      "js": 56701,
       "css": 11880,
       "chunks": {
         "_PosterFrame.js": 1475,
         "_VirtualList.js": 35831,
         "_VisuallyHidden.js": 108,
-        "_names.js": 10092,
+        "_names.js": 10120,
         "_remPx.js": 2721,
         "src/pages/review/Layer1.tsx": 6446
       }
     },
     "review.l2": {
-      "js": 110836,
-      "css": 36425,
+      "js": 111009,
+      "css": 36481,
       "chunks": {
         "_Button.js": 480,
-        "_Directions.js": 2417,
+        "_Directions.js": 2426,
         "_Drawer.js": 2275,
         "_RateBar.js": 782,
         "_Section.js": 1084,
@@ -201,9 +201,9 @@
         "_Switch.js": 631,
         "_VirtualList.js": 35831,
         "_VisuallyHidden.js": 108,
-        "_names.js": 10092,
+        "_names.js": 10120,
         "_remPx.js": 2721,
-        "src/pages/review/Layer2.tsx": 53874
+        "src/pages/review/Layer2.tsx": 54010
       }
     },
     "segments.l1": {
@@ -217,11 +217,11 @@
       }
     },
     "segments.l2": {
-      "js": 82243,
+      "js": 82252,
       "css": 24004,
       "chunks": {
         "_Button.js": 480,
-        "_Directions.js": 2417,
+        "_Directions.js": 2426,
         "_FilterTable.js": 5502,
         "_RankEngagement.js": 1385,
         "_RateBar.js": 782,
@@ -234,14 +234,14 @@
       }
     },
     "simulator.l1": {
-      "js": 19566,
+      "js": 19746,
       "css": 11494,
       "chunks": {
         "_LetterboxBands.js": 1103,
         "_PosterFrame.js": 1475,
         "_Section.js": 1084,
         "_VisuallyHidden.js": 108,
-        "_events.js": 3495,
+        "_events.js": 3675,
         "_kit.js": 131,
         "_ramp.js": 1987,
         "_remPx.js": 2721,
@@ -249,7 +249,7 @@
       }
     },
     "simulator.l2": {
-      "js": 81202,
+      "js": 81382,
       "css": 15911,
       "chunks": {
         "_FilterTable.js": 5502,
@@ -258,7 +258,7 @@
         "_StatBand.js": 541,
         "_VirtualList.js": 35831,
         "_cellCounts.js": 381,
-        "_events.js": 3495,
+        "_events.js": 3675,
         "_kit.js": 131,
         "_ramp.js": 1987,
         "_remPx.js": 2721,
@@ -266,10 +266,10 @@
       }
     },
     "goto": {
-      "js": 7293,
+      "js": 7473,
       "css": 1879,
       "chunks": {
-        "_events.js": 3495,
+        "_events.js": 3675,
         "src/shell/GoToPalette.tsx": 3798
       }
     }
