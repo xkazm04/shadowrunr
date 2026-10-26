@@ -1828,6 +1828,7 @@ Do name the target.
             Ask::IsItReal,
             Ask::StereotypeJoke,
             Ask::Sad,
+            Ask::ClaimAsFact,
         ] {
             texts.push((format!("{a:?}"), a.note(&p)));
         }
