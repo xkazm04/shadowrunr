@@ -385,7 +385,6 @@ proptest! {
     /// positive `line_pause_ms` overflows: a panic in a debug build, a wrapped negative time in
     /// a release one (`PaceConfig { speech_cps: 1e-300, line_pause_ms: 250, .. }`, text "x").
     #[test]
-    #[ignore = "violation: tiny positive speech_cps overflows paced_speech_ms (see result.json)"]
     fn speech_ms_survives_a_tiny_positive_rate(
         cps in f64::MIN_POSITIVE..1e-16,
         pause in 1i64..2_000,

@@ -114,15 +114,20 @@ impl PaceConfig {
     }
 
     /// [`Self::speech_ms`] for a line cued at `pace`: its characters at `speech_cps` times
-    /// [`pace_factor`].
+    /// [`pace_factor`]. Never negative and never panics: a rate that is not finite or not above
+    /// zero falls back to the default, the speech time is clamped to `0..=i64::MAX` and the
+    /// pause is added saturating.
     pub fn paced_speech_ms(&self, text: &str, pace: Option<Pace>) -> i64 {
         let chars = text.chars().count() as f64;
-        let cps = if self.speech_cps > 0.0 {
+        let cps = if self.speech_cps.is_finite() && self.speech_cps > 0.0 {
             self.speech_cps
         } else {
             PaceConfig::default().speech_cps
         };
-        (chars / (cps * pace_factor(pace)) * 1000.0).round() as i64 + self.line_pause_ms.max(0)
+        let speech = (chars / (cps * pace_factor(pace)) * 1000.0)
+            .round()
+            .clamp(0.0, i64::MAX as f64) as i64;
+        speech.saturating_add(self.line_pause_ms.max(0))
     }
 }
 
@@ -275,6 +280,18 @@ pub fn over_budget(lens: &[usize], budget: usize) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tiny_positive_rate_saturates_instead_of_overflowing() {
+        for cps in [1e-300, f64::MIN_POSITIVE, 5e-324, f64::INFINITY] {
+            let cfg = PaceConfig {
+                speech_cps: cps,
+                line_pause_ms: 250,
+                ..PaceConfig::default()
+            };
+            assert!(cfg.speech_ms("x") >= 0, "cps {cps}");
+        }
+    }
 
     #[test]
     fn the_clock_advances_by_text_length_and_queues_lines_back_to_back() {
