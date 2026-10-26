@@ -1484,8 +1484,8 @@ impl Brain {
             })
             .collect();
 
-        // A case beat that also answers chat (its pin line is held by the pace gate below).
-        let case_with_chat = plan.case.is_some() && !pick.chosen.is_empty();
+        // A beat that answers chat (its pin line is held by the pace gate below).
+        let with_chat = !pick.chosen.is_empty();
         // Core thread, covered in character when it runs long on a live host.
         let plan = self.cover_plan(now_ms);
         let cover_texts: Vec<String> = plan
@@ -1639,7 +1639,11 @@ impl Brain {
             // A case beat with chat speaks the answer first and the case move second
             // (`CASE_WITH_CHAT`), so trimming the last line cut the string's own line and the
             // pin went up unspoken (tuning-2dd18c17/after SEG-02A.a300.s1 L1125-L1129). A beat
-            // whose reply pins a string keeps both lines; the lines past them still go.
+            // whose reply pins a string keeps both lines; the lines past them still go. A pin
+            // the model makes on its own on a beat with chat is spoken the same way, the answer
+            // first and the string second, before the op or after it (tuning-4ae84b1b/after
+            // SEG-02A.a300.s1 L871-L875, tuning-7bc8556c/after SEG-02A.a30.s1 L519-L523); a
+            // solo beat names the string in its first line, so it keeps the one-line hold.
             let pins = lines.iter().any(|l| {
                 matches!(
                     l,
@@ -1649,7 +1653,7 @@ impl Brain {
                     }
                 )
             });
-            let held = if case_with_chat && pins { 2 } else { 1 };
+            let held = if with_chat && pins { 2 } else { 1 };
             over = pace::over_budget_holding(&lens, paced_budget, held)
                 .into_iter()
                 .map(|k| spoken_at[k])

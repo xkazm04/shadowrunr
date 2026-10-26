@@ -425,3 +425,73 @@ async fn a_pin_beat_with_chat_keeps_its_string_line_and_trims_only_past_it() {
     );
     assert_eq!(says(&ev), [one]);
 }
+
+/// tuning-4ae84b1b/after unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L871-L875: the model pinned
+/// a string on its own, on a beat that was no case beat ("segment+off-topic: mockable"), and the
+/// reply put the answer first and the string line second ("Lanternwick Partners, promoter, ...
+/// so we pin it to the syndicate, alleged."). Over budget, the trim dropped the string line and
+/// the pin went up unspoken. Mined (runs/sim/tuning-d158a069/mining.txt): all 3 unprompted pins
+/// that lost their line sat on a beat with chat as line 2, before the op (0eb64819 a300 L821) or
+/// after it (tuning-7bc8556c/after SEG-02A.a30.s1 L519-L523); on solo beats line 1 names it.
+#[tokio::test]
+async fn an_unprompted_pin_on_a_beat_with_chat_keeps_its_string_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut c = ctx(&["pin_link"]);
+    c.segment = SegmentId::Seg02aHexmap;
+    c.state = "investigating".into();
+    c.state_summary = "case file (planted FICTIONAL demo records): no open leads.".into();
+    c.hexes = vec![
+        hex(
+            "HEX-06",
+            "Lanternwick Partners (promoter)",
+            Some(shadowrunr_types::EvidenceGrade::Rep),
+        ),
+        hex(
+            "HEX-01",
+            "Glimmerquay Yield Syndicate",
+            Some(shadowrunr_types::EvidenceGrade::Doc),
+        ),
+    ];
+    let pin = r#"OP: {"op":"pin_link","from":"HEX-06","to":"HEX-01","rel":"promoted","record_id":"REP-03"}"#;
+    let bob = viewer("b1", "Bob", Rank::Cultist);
+    // The answer, the string line and the op, then the op between them (both mined orders).
+    for (k, order) in ["string-op", "op-string"].into_iter().enumerate() {
+        let mut b = brain_with(dir.path(), Arc::new(engine.clone()), order, tuning()).await;
+        let answer = line_of(&format!("answer{k}"), 150);
+        let string = line_of(&format!("string{k}"), 150);
+        let extra = line_of(&format!("extra{k}"), 60);
+        let reply = match order {
+            "string-op" => format!("{answer}\n{string}\n{pin}\n{extra}"),
+            _ => format!("{answer}\n{pin}\n{string}\n{extra}"),
+        };
+        engine.push(Role::CoreThread, Ok(&reply));
+        let ev = b
+            .tick(
+                1_000,
+                vec![msg("t1", 900, &bob, "who is your private gentleman?")],
+                &c,
+            )
+            .await
+            .unwrap();
+        let (_, reason) = plan_of(&ev);
+        assert!(!reason.contains("case:"), "{order}: {reason}");
+        assert_eq!(picked(&ev), ["t1"], "{order}");
+        // 360 characters against the theatrical tone's 250: the answer and the string line stay
+        // together, and only the line past them goes.
+        assert_eq!(says(&ev), [answer, string], "{order}");
+        assert_eq!(
+            mods(&ev, ModStage::Output),
+            vec![(PACE_RULE.into(), None, TRIMMED.into())],
+            "{order}"
+        );
+    }
+
+    // A solo beat speaks the string first: its pin keeps only line 1, as before.
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "solo", tuning()).await;
+    let (one, two) = (line_of("one", 150), line_of("two", 150));
+    engine.push(Role::CoreThread, Ok(&format!("{one}\n{pin}\n{two}")));
+    let ev = b.tick(1_000, Vec::new(), &c).await.unwrap();
+    assert!(picked(&ev).is_empty());
+    assert_eq!(says(&ev), [one]);
+}
