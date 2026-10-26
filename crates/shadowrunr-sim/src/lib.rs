@@ -177,8 +177,10 @@ pub struct SimOptions {
     pub brief: BriefSource,
     /// `<data>`, read by [`BriefSource::Current`].
     pub data_dir: PathBuf,
-    /// Reconcile opt-5 experiment: rate-cap exemptions for grief, first questions and ranked
-    /// proposals, and a looser cap below 10 chatters (`FilterConfig::rate_cap_exemptions`).
+    /// Reconcile opt-5 experiment: rate-cap exemptions for grief and first questions, flood
+    /// clustering skipped for ranked proposals, and a looser cap below 10 chatters
+    /// (`FilterConfig::rate_cap_exemptions`). A leading `!propose` from a rank that may propose
+    /// skips the rate cap whatever this flag says.
     /// Off by default; on, it joins the instrument hash as `experiment/rate_cap_exemptions`.
     pub rate_cap_exemptions: bool,
     /// A staged real SEG-02A case to audit, by id, from `<data>/cases/` (matrix `case = "<id>"`).
