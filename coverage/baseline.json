@@ -11,5 +11,9 @@
     "shadowrunr-segments": 94.33,
     "shadowrunr-sim": 95.54,
     "shadowrunr-types": 98.83
+  },
+  "shellCommand": "cargo llvm-cov --manifest-path apps/console/src-tauri/Cargo.toml --json --summary-only",
+  "shells": {
+    "console-src-tauri": 83.54
   }
 }

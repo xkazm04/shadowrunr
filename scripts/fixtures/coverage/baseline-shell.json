@@ -1,0 +1,13 @@
+{
+  "command": "cargo llvm-cov --workspace --json --summary-only",
+  "toolchain": "fixture",
+  "tolerance": 0.1,
+  "crates": {
+    "alpha": 80,
+    "beta": 90
+  },
+  "shellCommand": "cargo llvm-cov --manifest-path apps/console/src-tauri/Cargo.toml --json --summary-only",
+  "shells": {
+    "console-src-tauri": 80
+  }
+}

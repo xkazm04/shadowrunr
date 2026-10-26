@@ -1,0 +1,20 @@
+{
+  "type": "llvm.coverage.json.export",
+  "version": "2.0.1",
+  "data": [
+    {
+      "files": [
+        {
+          "filename": "/work/apps/console/src-tauri/src/a.rs",
+          "summary": {
+            "lines": {
+              "count": 100,
+              "covered": 70,
+              "percent": 70.0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

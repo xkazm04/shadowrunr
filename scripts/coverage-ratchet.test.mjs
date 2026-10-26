@@ -76,3 +76,37 @@ test("--write round-trips: the written baseline equals the fixture and passes --
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+const shellBase = join(fx, "baseline-shell.json");
+const checkShell = (shellReport) =>
+  run(["--check", join(fx, "report-ok.json"), "--baseline", shellBase, "--shell-report", shellReport]);
+
+test("src-tauri shell: passes at its baseline and counts the shell", () => {
+  const r = checkShell(join(fx, "report-shell-ok.json"));
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out, /2 crates checked, 1 shells checked, 0 problems/);
+});
+
+test("src-tauri shell: fails when lowered below its baseline", () => {
+  const r = checkShell(join(fx, "report-shell-low.json"));
+  assert.equal(r.code, 1);
+  assert.match(r.err, /below baseline: console-src-tauri 70% < 80%/);
+});
+
+test("src-tauri shell: fails on a missing report file", () => {
+  const r = checkShell(join(fx, "no-such-report.json"));
+  assert.equal(r.code, 1);
+  assert.match(r.err, /shell report missing/);
+});
+
+test("src-tauri shell: fails on a report with zero lines", () => {
+  const r = checkShell(join(fx, "report-shell-empty.json"));
+  assert.equal(r.code, 1);
+  assert.match(r.err, /zero lines: console-src-tauri/);
+});
+
+test("src-tauri shell: fails when no shell report is given", () => {
+  const r = run(["--check", join(fx, "report-ok.json"), "--baseline", shellBase]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /no --shell-report/);
+});
