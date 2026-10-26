@@ -1145,6 +1145,123 @@ async fn a_rank_read_out_in_brackets_airs_as_a_spoken_title_and_keeps_its_cue() 
     assert_eq!(replies(&ev), ["m00066-9"]);
 }
 
+/// `situation:raid-wave`: the prompt never said a raid had arrived, and the chat instruction
+/// mocks a call to raid, so the raiders' chant read as one ("Nobody raids anyone", weary-0dd890a1ad
+/// weary-middle-manager.haiku.SEG-01.a30.s1 L520 -> L531; "Two minions pasted one question",
+/// rebalance-check-34188c4a83 unhinged-roastmaster.sonnet.SEG-01.a30.s1 L500 -> L527). The
+/// arrival that greets the raid is framed as an incoming raid, once; a regulars' wave is not.
+/// Simulated chat.
+#[tokio::test]
+async fn the_raid_greeting_is_framed_as_an_incoming_raid_never_a_call_to_raid() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "f7-raid", tuning()).await;
+    let c = ctx(&[]);
+    let regulars = [
+        viewer("sim-v0001", "grim_otter", Rank::Cultist),
+        viewer("sim-v0002", "AshenLantern", Rank::Thrall),
+    ];
+    // The regulars speak first, then paste a chant of their own: a wave, but no raid.
+    engine.push(Role::CoreThread, Ok("The circle hums."));
+    b.tick(
+        1_000,
+        vec![
+            msg("m-r1", 900, &regulars[0], "evening lich"),
+            msg("m-r2", 900, &regulars[1], "hi malakor"),
+        ],
+        &c,
+    )
+    .await
+    .unwrap();
+    engine.push(
+        Role::CoreThread,
+        Ok("Chant all you like, the Ledger stays shut."),
+    );
+    b.tick(
+        60_000,
+        vec![
+            msg("m-c1", 59_900, &regulars[0], "LEDGER RAID LEDGER RAID"),
+            msg("m-c2", 59_900, &regulars[1], "LEDGER RAID LEDGER RAID"),
+        ],
+        &c,
+    )
+    .await
+    .unwrap();
+    assert!(
+        !last_core_prompt(&engine).contains("a raid just arrived"),
+        "a regulars' wave is no raid"
+    );
+    // The raid: six first contacts in one beat, its channel's chant pasted by three.
+    let texts = [
+        "GRAVEYARDSHIFT RAID GRAVEYARDSHIFT RAID",
+        "GRAVEYARDSHIFT RAID GRAVEYARDSHIFT RAID",
+        "GRAVEYARDSHIFT RAID GRAVEYARDSHIFT RAID",
+        "raid gang reporting for minion duty",
+        "our streamer said you audit scammers?? based",
+        "who is this skeleton",
+    ];
+    let raiders: Vec<ChatMsg> = texts
+        .iter()
+        .enumerate()
+        .map(|(i, text)| {
+            let v = viewer(
+                &format!("sim-w09-00{i}"),
+                &format!("Raider_{i}"),
+                Rank::Thrall,
+            );
+            msg(&format!("m-raid-{i}"), 119_900, &v, text)
+        })
+        .collect();
+    let ids: Vec<String> = raiders.iter().map(|m| m.id.clone()).collect();
+    engine.push(
+        Role::CoreThread,
+        Ok("Welcome, conscripts: this is the Lord's throne room."),
+    );
+    let ev = b.tick(120_000, raiders, &c).await.unwrap();
+    let greeted: Vec<String> = picked(&ev)
+        .into_iter()
+        .filter(|i| ids.contains(i))
+        .collect();
+    assert!(!greeted.is_empty(), "the raid is greeted: {ev:?}");
+    let prompt = last_core_prompt(&engine);
+    let framed: Vec<&str> = prompt
+        .lines()
+        .filter(|l| l.contains("a raid just arrived"))
+        .collect();
+    assert_eq!(framed.len(), 1, "one greeting framed: {prompt}");
+    assert!(
+        ids.iter()
+            .any(|i| framed[0].starts_with(&format!("[{i}] "))),
+        "the note sits on a raider's line: {}",
+        framed[0]
+    );
+    assert!(
+        framed[0].contains("never a call to raid anyone")
+            && framed[0].contains("welcome the horde as conscripts"),
+        "{}",
+        framed[0]
+    );
+    // Once greeted, the raid is not framed again.
+    let late = viewer("sim-w09-003", "Raider_3", Rank::Thrall);
+    engine.push(Role::CoreThread, Ok("Duty is sitting still, conscript."));
+    b.tick(
+        180_000,
+        vec![msg(
+            "m-late",
+            179_900,
+            &late,
+            "@Malakor so what do minions do here",
+        )],
+        &c,
+    )
+    .await
+    .unwrap();
+    assert!(
+        !last_core_prompt(&engine).contains("a raid just arrived"),
+        "one greeting serves the raid"
+    );
+}
+
 /// SEG-01 near its handover: `state` and its summary.
 fn seg01_ctx(state: &str, summary: &str) -> SegmentContext {
     SegmentContext {

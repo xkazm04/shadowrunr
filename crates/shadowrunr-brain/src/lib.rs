@@ -1448,6 +1448,7 @@ impl Brain {
             repeat_ai: &repeat_ai,
             ai_answered,
             question_waves: &waves_now,
+            raid_greeting: pctx.greet.as_deref(),
             guest_turns: guest_on.is_some() && !host_only,
         });
         self.last_prompt = Some(prompt.clone());
