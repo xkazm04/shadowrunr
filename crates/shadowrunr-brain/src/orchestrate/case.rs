@@ -82,6 +82,17 @@ const CASE_OPS: &[&str] = &["dispatch_research", "reveal_hex", "pin_link", "show
 /// The relations a string may state (`LinkRel`), for the pin directive.
 const RELATIONS: &str =
     "paid|owns|controls|promoted|processed|regulates|claims|supports|contradicts";
+/// What a relation needs from its record, for the pin directive. The judged misses read owns or
+/// controls into a freeze notice that only "names treasury wallet demo-0001 as holding Glimmerquay
+/// Yield Syndicate (fictional) deposits" (DOC-03), with the regulator that issued it face up:
+/// HEX-04 -controls-> HEX-01 (tuning-4c06c218/after SEG-02A.a30.s1 L524), HEX-01 -owns-> HEX-04
+/// (rebalance-check-34188c4a83 SEG-02A.a300.s1 L784); 8 of 162 mined pins, all this shape
+/// (runs/sim/tuning-2670ef95/mining.txt).
+const PIN_RELATION: &str = "The relation is one the record states, never one it only suggests: \
+owns or controls only when the record names the owner or who runs the card, paid only when it \
+says money went from one card to the other, regulates for a regulator's order, notice or list. \
+A record that only says a card holds, names or ties to another states no owns or controls: \
+string the card that issued the record, if it is face up.";
 
 /// The next investigative move.
 #[derive(Debug, Clone, PartialEq)]
@@ -237,7 +248,8 @@ impl CaseMove {
             } => format!(
                 "{head} {} is face up with {} on file and no string. Pin a string between that \
                  card and the face-up card the record connects it to (one of: {}), citing only \
-                 what the record says, and name the link in one short line, and {CASE_JOKE}. The string reads \
+                 what the record says, and name the link in one short line, and {CASE_JOKE}. \
+                 {PIN_RELATION} The string reads \
                  as a sentence, from -> rel -> to: \"from\" is the card that acts (the regulator, \
                  the payer, the owner, the promoter), \"to\" the card it acts on. Put the action on \
                  its own line, filled in with the cards' ids:\nOP: \
@@ -1085,5 +1097,32 @@ mod tests {
         assert!(moves[1]
             .directive("case-1", &names)
             .contains("(below DOC: say alleged)"));
+    }
+
+    #[test]
+    fn the_pin_directive_asks_for_a_relation_the_record_states() {
+        // The judged misses: a freeze notice that "names treasury wallet demo-0001 as holding
+        // Glimmerquay Yield Syndicate (fictional) deposits" (DOC-03) pinned as HEX-04 -controls->
+        // HEX-01 (tuning-4c06c218/after SEG-02A.a30.s1 L524) and HEX-01 -owns-> HEX-04
+        // (rebalance-check-34188c4a83 SEG-02A.a300.s1 L784), with the regulator that issued it
+        // face up: 8 of 162 mined pins, all this shape (runs/sim/tuning-2670ef95/mining.txt).
+        let names = CaseNames::default();
+        let pin = CaseMove::Pin {
+            from: "HEX-04".into(),
+            record: "DOC-03".into(),
+            face_up: vec!["HEX-01".into(), "HEX-13".into()],
+        };
+        let line = pin.directive("case-1", &names);
+        assert!(line.contains("one the record states"), "{line}");
+        assert!(
+            line.contains("owns or controls only when the record names"),
+            "{line}"
+        );
+        assert!(line.contains("holds, names or ties to"), "{line}");
+        assert!(line.contains("the card that issued the record"), "{line}");
+        // The menu, the op shape and the fallback stay.
+        assert!(line.contains(RELATIONS), "{line}");
+        assert!(line.contains("\"record_id\":\"DOC-03\""), "{line}");
+        assert!(line.lines().last().unwrap().starts_with("OP: "), "{line}");
     }
 }
