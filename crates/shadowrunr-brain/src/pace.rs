@@ -266,10 +266,16 @@ pub fn closing_budget(budget_chars: usize) -> usize {
 /// whole lines, the last first, until the rest fits. The first line is always kept, so a beat
 /// that answered something always says something. Returns the indices dropped.
 pub fn over_budget(lens: &[usize], budget: usize) -> Vec<usize> {
+    over_budget_holding(lens, budget, 1)
+}
+
+/// [`over_budget`], with the first `held` lines (at least one) never dropped.
+pub fn over_budget_holding(lens: &[usize], budget: usize, held: usize) -> Vec<usize> {
+    let held = held.max(1);
     let mut total: usize = lens.iter().sum();
     let mut dropped = Vec::new();
     let mut i = lens.len();
-    while total > budget && i > 1 {
+    while total > budget && i > held {
         i -= 1;
         total -= lens[i];
         dropped.push(i);
@@ -339,6 +345,22 @@ mod tests {
         );
         assert!(over_budget(&[400], 260).is_empty());
         assert!(over_budget(&[], 260).is_empty());
+    }
+
+    #[test]
+    fn held_lines_are_never_dropped_and_the_rest_go_last_first() {
+        assert_eq!(
+            over_budget_holding(&[150, 150], 240, 2),
+            Vec::<usize>::new()
+        );
+        assert_eq!(over_budget_holding(&[150, 150, 60], 240, 2), vec![2]);
+        assert_eq!(over_budget_holding(&[150, 150], 240, 1), vec![1]);
+        assert_eq!(
+            over_budget_holding(&[150, 150], 240, 0),
+            vec![1],
+            "one at least"
+        );
+        assert!(over_budget_holding(&[150], 240, 2).is_empty());
     }
 
     #[test]

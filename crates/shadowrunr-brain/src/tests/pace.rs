@@ -337,3 +337,91 @@ async fn an_owed_newcomer_s_two_asks_both_air_whole_and_plain_chat_is_still_pace
         vec![(PACE_RULE.into(), None, TRIMMED.into())]
     );
 }
+
+/// tuning-2dd18c17/after unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L1125-L1129: a case pin
+/// beat with chat ("case: pin HEX-09 by CLM-04 with chat (topic)") was over budget, the trim
+/// dropped its last line, and `CASE_WITH_CHAT` puts the case line last: the answer aired alone
+/// ("The freeze notice is already face up ...") and the string went up unspoken. In the mined
+/// runs, every judged pin line that named neither card sat on a trimmed beat (33 of 33).
+#[tokio::test]
+async fn a_pin_beat_with_chat_keeps_its_string_line_and_trims_only_past_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "pin", tuning()).await;
+    let mut c = ctx(&["highlight", "reveal_hex", "pin_link", "show_screen"]);
+    c.segment = SegmentId::Seg02aHexmap;
+    c.state = "investigating".into();
+    c.state_summary = "case file (planted FICTIONAL demo records): HEX-04 CLM-04 CLM: community \
+                       trace\nBoard: 2 cards face up, 0 strings. Open leads: HEX-04 (wallet) has \
+                       a returned record and no string."
+        .into();
+    c.hexes = vec![
+        hex(
+            "HEX-04",
+            "Treasury wallet demo-0001",
+            Some(shadowrunr_types::EvidenceGrade::Clm),
+        ),
+        hex(
+            "HEX-09",
+            "Mixer hop wallet demo-0002",
+            Some(shadowrunr_types::EvidenceGrade::Clm),
+        ),
+    ];
+    let answer = line_of("answer", 150);
+    let string = line_of("string", 150);
+    let extra = line_of("extra", 60);
+    let pin =
+        r#"OP: {"op":"pin_link","from":"HEX-04","to":"HEX-09","rel":"paid","record_id":"CLM-04"}"#;
+    engine.push(
+        Role::CoreThread,
+        Ok(&format!("{answer}\n{string}\n{pin}\n{extra}")),
+    );
+    let bob = viewer("b1", "Bob", Rank::Cultist);
+    let ev = b
+        .tick(
+            1_000,
+            vec![msg("t1", 900, &bob, "that mixer wallet looks dodgy")],
+            &c,
+        )
+        .await
+        .unwrap();
+    let (_, reason) = plan_of(&ev);
+    assert!(
+        reason.starts_with("case: pin HEX-04 by CLM-04 with chat"),
+        "{reason}"
+    );
+    assert_eq!(picked(&ev), ["t1"]);
+    // 360 characters against the theatrical tone's 250: the answer and the string line stay
+    // together, and only the line past them goes.
+    assert_eq!(says(&ev), [answer, string]);
+    assert_eq!(
+        mods(&ev, ModStage::Output),
+        vec![(PACE_RULE.into(), None, TRIMMED.into())]
+    );
+    assert!(ev.iter().any(|e| matches!(
+        e,
+        StreamEvent::Op {
+            op: Op::PinLink { .. },
+            ..
+        }
+    )));
+
+    // A case beat with chat that pins nothing is trimmed as before.
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "nopin", tuning()).await;
+    let (one, two) = (line_of("one", 150), line_of("two", 150));
+    engine.push(Role::CoreThread, Ok(&format!("{one}\n{two}")));
+    let ev = b
+        .tick(
+            1_000,
+            vec![msg("t2", 900, &bob, "that mixer wallet looks dodgy")],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert!(
+        plan_of(&ev).1.starts_with("case: pin"),
+        "{}",
+        plan_of(&ev).1
+    );
+    assert_eq!(says(&ev), [one]);
+}
