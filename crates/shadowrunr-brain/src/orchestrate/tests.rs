@@ -1984,6 +1984,18 @@ fn a_newcomer_s_what_is_this_beside_an_answered_ai_question_is_still_owed() {
 }
 
 #[test]
+fn only_a_line_naming_a_raid_marks_one_never_a_copypasta_or_a_call_to_raid() {
+    assert!(names_raid("GRAVEYARDSHIFT RAID GRAVEYARDSHIFT RAID o7"));
+    assert!(names_raid("@Malakor raid gang reporting for minion duty"));
+    assert!(names_raid("raiders in the house"));
+    assert!(!names_raid(
+        "I AM BUT A HUMBLE THRALL. MY BONES ARE YOURS. MY SUBS ARE YOURS."
+    ));
+    assert!(!names_raid("who is this skeleton"));
+    assert!(!names_raid("everyone go raid his channel"));
+}
+
+#[test]
 fn a_raid_wave_an_owned_request_outbid_is_greeted_next_beat() {
     // unhinged-roastmaster.sonnet.SEG-01.a300.s1, 320 s: a raid arrived beside an owed request,
     // the request took the beat's one slot, and the raid wave (never carried) was dropped.

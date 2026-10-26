@@ -1247,6 +1247,9 @@ impl Brain {
         // Before the commit records this beat's asks: an "are you an AI" from a viewer already
         // answered is a repeat (a deflection, not the disclosure again).
         let ai_answered = self.orch.ai_answered();
+        // Before the commit clears the raid: its greeting is framed only when one of its
+        // arrivals named it a raid, never for a newcomers' copypasta wave.
+        let raid_note = pctx.greet.clone().filter(|_| self.orch.raid_named());
         let repeat_ai: HashSet<String> = pick
             .chosen
             .iter()
@@ -1448,7 +1451,7 @@ impl Brain {
             repeat_ai: &repeat_ai,
             ai_answered,
             question_waves: &waves_now,
-            raid_greeting: pctx.greet.as_deref(),
+            raid_greeting: raid_note.as_deref(),
             guest_turns: guest_on.is_some() && !host_only,
         });
         self.last_prompt = Some(prompt.clone());

@@ -1262,6 +1262,81 @@ async fn the_raid_greeting_is_framed_as_an_incoming_raid_never_a_call_to_raid() 
     );
 }
 
+/// tuning-661c32c2/after unhinged-roastmaster.sonnet.SEG-02A.a30.s1 L70-L95 (simulated chat):
+/// five brand-new viewers early in the stream, four pasting one copypasta and one "LUL", read as
+/// a raid (five first contacts inside RAID_WINDOW_MS). The greeting got RAID_NOTE and aired "a
+/// raid pours in behind you", with no raid anywhere near. The note waits for a raid named by one
+/// of its arrivals; the newcomers' wave is still greeted, once, as a wave.
+#[tokio::test]
+async fn a_newcomers_copypasta_wave_is_greeted_as_a_wave_never_framed_as_a_raid() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "f7-pasta", tuning()).await;
+    let c = ctx(&[]);
+    let regular = viewer("sim-v0001", "grim_otter", Rank::Cultist);
+    engine.push(Role::CoreThread, Ok("The circle hums."));
+    b.tick(1_000, vec![msg("m-r1", 900, &regular, "evening lich")], &c)
+        .await
+        .unwrap();
+    // The wave: five first contacts in one beat, four pasting one line, one lone emote.
+    let pasta = "I AM BUT A HUMBLE THRALL. MY BONES ARE YOURS. MY SUBS ARE YOURS. LET THE DEFICIT \
+                 BE RECORDED.";
+    let wave: Vec<ChatMsg> = (0..5)
+        .map(|i| {
+            let v = viewer(
+                &format!("sim-w03-00{i}"),
+                &format!("Paster_{i}"),
+                Rank::Thrall,
+            );
+            let text = if i == 4 { "LUL" } else { pasta };
+            msg(&format!("m-pasta-{i}"), 59_900, &v, text)
+        })
+        .collect();
+    let ids: Vec<String> = wave.iter().map(|m| m.id.clone()).collect();
+    engine.push(Role::CoreThread, Ok("Four of you, one confession: noted."));
+    let ev = b.tick(60_000, wave, &c).await.unwrap();
+    assert!(
+        picked(&ev).iter().any(|i| ids.contains(i)),
+        "the wave is greeted: {ev:?}"
+    );
+    let prompt = last_core_prompt(&engine);
+    assert!(
+        !prompt.contains("a raid just arrived"),
+        "a newcomers' copypasta wave is no raid: {prompt}"
+    );
+    // A raid later in the same stream, its channel's chant among the arrivals: still framed.
+    let texts = [
+        "GRAVEYARDSHIFT RAID GRAVEYARDSHIFT RAID",
+        "our streamer said you audit scammers?? based",
+        "who is this skeleton",
+        "who is this skeleton",
+        "PogChamp PogChamp PogChamp",
+    ];
+    let raiders: Vec<ChatMsg> = texts
+        .iter()
+        .enumerate()
+        .map(|(i, text)| {
+            let v = viewer(
+                &format!("sim-w09-00{i}"),
+                &format!("Raider_{i}"),
+                Rank::Thrall,
+            );
+            msg(&format!("m-raid-{i}"), 179_900, &v, text)
+        })
+        .collect();
+    engine.push(Role::CoreThread, Ok("Welcome, conscripts."));
+    b.tick(180_000, raiders, &c).await.unwrap();
+    let prompt = last_core_prompt(&engine);
+    assert_eq!(
+        prompt
+            .lines()
+            .filter(|l| l.contains("a raid just arrived"))
+            .count(),
+        1,
+        "the raid is framed once: {prompt}"
+    );
+}
+
 /// SEG-01 near its handover: `state` and its summary.
 fn seg01_ctx(state: &str, summary: &str) -> SegmentContext {
     SegmentContext {

@@ -478,6 +478,8 @@ pub struct Orchestrator {
     seen_viewers: HashSet<String>,
     /// Message ids that are first contacts this beat.
     first: HashSet<String>,
+    /// Whether one of this beat's first contacts names a raid ([`names_raid`]).
+    first_names_raid: bool,
     /// Normalised texts of waves already answered this stream.
     acked_waves: Vec<String>,
     used_bits: HashSet<String>,
@@ -562,11 +564,15 @@ pub struct Orchestrator {
     /// First contacts that arrived during the scene, by beat, inside [`RAID_WINDOW_MS`].
     scene_arrivals: VecDeque<(TsMs, usize)>,
     /// First contacts outside a scene, by beat, inside [`RAID_WINDOW_MS`]: their ids.
-    arrivals: VecDeque<(TsMs, Vec<String>)>,
+    /// Each beat also keeps whether one of them named a raid ([`names_raid`]).
+    arrivals: VecDeque<(TsMs, Vec<String>, bool)>,
     /// A raid outside a scene still owed its greeting: its arrivals' ids, to when they came.
     /// Cleared once one of them is answered (one greeting serves the raid); an arrival older
     /// than [`REQUEST_MAX_MS`] lapses.
     raid_waiting: HashMap<String, TsMs>,
+    /// Whether the raid in [`Self::raid_waiting`] was named a raid by one of its arrivals: only
+    /// then is its greeting framed as an incoming raid ([`Self::raid_named`]).
+    raid_named: bool,
     /// Viewers whose brigade call was refused this stream ([`Self::brigade_refusal`]): a later
     /// call of theirs is plain bait, owed nothing.
     brigade_refused: HashSet<String>,
@@ -674,6 +680,13 @@ fn worth(c: &Candidate, first: bool, s: Seg<'_>, owed: bool) -> Option<(&'static
 
 /// Bait: an injection or a brigade call (tagged at input), or a request for what he never does
 /// ([`Ask::is_bait`]). Off-topic (`mockable`) wherever it points, and never owed.
+/// Whether a viewer's line names a raid ("GRAVEYARDSHIFT RAID", "raid gang reporting"), the
+/// only sign of one in chat; a call to raid someone ([`moderation::is_brigade_call`]) is not.
+fn names_raid(text: &str) -> bool {
+    !moderation::is_brigade_call(text, None)
+        && normalize(text).split(' ').any(|w| w.starts_with("raid"))
+}
+
 fn is_bait(c: &Candidate) -> bool {
     c.injection || situational_asks(&c.msg.text).iter().any(|a| a.is_bait())
 }
@@ -781,9 +794,11 @@ impl Orchestrator {
     /// Note this beat's raw inbox, before the pre-filter: which messages are first contacts.
     pub fn observe_inbox(&mut self, inbox: &[ChatMsg]) {
         self.first.clear();
+        self.first_names_raid = false;
         for m in inbox {
             if self.seen_viewers.insert(m.viewer.id.clone()) {
                 self.first.insert(m.id.clone());
+                self.first_names_raid |= names_raid(&m.text);
             }
         }
     }
@@ -823,25 +838,41 @@ impl Orchestrator {
         if !self.first.is_empty() {
             let mut ids: Vec<String> = self.first.iter().cloned().collect();
             ids.sort();
-            self.arrivals.push_back((now, ids));
+            self.arrivals.push_back((now, ids, self.first_names_raid));
         }
         while self
             .arrivals
             .front()
-            .is_some_and(|(t, _)| now.saturating_sub(*t) > RAID_WINDOW_MS)
+            .is_some_and(|(t, _, _)| now.saturating_sub(*t) > RAID_WINDOW_MS)
         {
             self.arrivals.pop_front();
         }
-        let arrived: usize = self.arrivals.iter().map(|(_, ids)| ids.len()).sum();
+        let arrived: usize = self.arrivals.iter().map(|(_, ids, _)| ids.len()).sum();
         if raid || arrived >= RAID_FIRST_CONTACTS {
-            for (t, ids) in self.arrivals.drain(..) {
+            for (t, ids, named) in self.arrivals.drain(..) {
+                self.raid_named |= named;
                 for id in ids {
                     self.raid_waiting.entry(id).or_insert(t);
                 }
             }
+        } else if !self.raid_waiting.is_empty() {
+            // A raid's chant can land a beat after its first five (tuning-44d20a3e/after
+            // SEG-01.a30.s1: five at 315 s, "GRAVEYARDSHIFT RAID" at L552, greeted at L558).
+            self.raid_named |= self.first_names_raid;
         }
         self.raid_waiting
             .retain(|_, t| now.saturating_sub(*t) <= REQUEST_MAX_MS);
+        if self.raid_waiting.is_empty() {
+            self.raid_named = false;
+        }
+    }
+
+    /// Whether the raid still owed its greeting was named a raid by one of its arrivals. Five
+    /// first contacts in the window are not proof by themselves: early in a stream, brand-new
+    /// pasters of one copypasta cross the count too (tuning-661c32c2/after SEG-02A.a30.s1 L70-L95,
+    /// greeted as "a raid pours in behind you"). Their greeting stays a wave's.
+    pub fn raid_named(&self) -> bool {
+        self.raid_named && !self.raid_waiting.is_empty()
     }
 
     /// The arrival that greets a raid still waiting for its greeting, among `cands`: its largest
@@ -2494,6 +2525,7 @@ impl Orchestrator {
         }
         if chosen.iter().any(|id| self.raid_waiting.contains_key(*id)) {
             self.raid_waiting.clear();
+            self.raid_named = false;
         }
         self.answered.extend(chosen.iter().map(|s| s.to_string()));
         for id in &chosen {
