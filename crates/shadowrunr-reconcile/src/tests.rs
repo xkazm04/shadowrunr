@@ -1261,3 +1261,38 @@ async fn the_dispatch_prompt_fences_the_report_and_refuses_an_echo() {
     assert!(plan.lord_dispatch.contains("forbidden"));
     assert!(rec.next_plan().unwrap().is_some());
 }
+
+#[test]
+fn session_event_reads_its_timestamp_and_renders_one_line() {
+    use shadowrunr_types::{SessionEventKind, StreamEvent};
+
+    let opened = StreamEvent::Session {
+        ts_ms: 4_200,
+        kind: SessionEventKind::OpenFailed,
+        detail: Some("core call unavailable".into()),
+    };
+    assert_eq!(runs::ts(&opened), 4_200);
+    assert_eq!(
+        runs::body(&opened),
+        "session open_failed: core call unavailable"
+    );
+
+    let died = StreamEvent::Session {
+        ts_ms: 9,
+        kind: SessionEventKind::Died,
+        detail: None,
+    };
+    assert_eq!(runs::ts(&died), 9);
+    assert_eq!(runs::body(&died), "session died");
+
+    // A long detail is clipped to 160 chars plus an ellipsis, as the Health arm does.
+    let long = StreamEvent::Session {
+        ts_ms: 1,
+        kind: SessionEventKind::Died,
+        detail: Some("x".repeat(400)),
+    };
+    assert_eq!(
+        runs::body(&long),
+        format!("session died: {}…", "x".repeat(160))
+    );
+}
