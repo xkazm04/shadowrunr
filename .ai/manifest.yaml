@@ -30,7 +30,8 @@ skills:
 capabilities:
   build: "cargo build --workspace && cargo build --manifest-path apps/console/src-tauri/Cargo.toml && pnpm -r run build"
   test: "node scripts/min-tests.mjs --min 1000 -- cargo test --workspace && node scripts/min-tests.mjs --min 5 -- cargo test --manifest-path apps/console/src-tauri/Cargo.toml && pnpm -r run test"
-  lint: "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --manifest-path apps/console/src-tauri/Cargo.toml --all -- --check && cargo clippy --manifest-path apps/console/src-tauri/Cargo.toml --all-targets -- -D warnings && pnpm -r run lint"
+  # The trailing ledger-bar check fails a kept tuning-ledger row whose bar count disagrees with the [[red_lines]] tables in sim/rubric.toml.
+  lint: "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --manifest-path apps/console/src-tauri/Cargo.toml --all -- --check && cargo clippy --manifest-path apps/console/src-tauri/Cargo.toml --all-targets -- -D warnings && pnpm -r run lint && node scripts/ledger-bar.mjs --check"
   typecheck: "pnpm -r run typecheck"
   # Rust line coverage per crate of the root workspace, plus apps/console/src-tauri (its own cargo
   # workspace, measured with its default features as CI tests it), ratcheted against

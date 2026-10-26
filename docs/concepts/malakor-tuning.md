@@ -69,7 +69,8 @@ candidate to move into data, and the move is its own commit.
    line fails. A fix that worsens the measured outcome is reverted and written up, not tuned further.
 6. **Record** one row in `docs/tuning/LEDGER.md`: date, gap, mechanism, knob or file, before and after with
    run ids, kept or reverted. Batches of rows are what the owner reads at standup, to decide when
-   tournaments return.
+   tournaments return. A kept row states each cited cell's bar count as **a/N**, with N parsed from
+   `sim/rubric.toml` (every `[[red_lines]]` table), and `scripts/ledger-bar.mjs` enforces it.
 
 ## Hard rules
 
