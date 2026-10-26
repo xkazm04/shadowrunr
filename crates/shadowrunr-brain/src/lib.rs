@@ -50,6 +50,8 @@ pub mod util;
 pub mod working;
 
 #[cfg(test)]
+mod session_events_tests;
+#[cfg(test)]
 mod tests;
 
 use std::collections::{HashSet, VecDeque};
@@ -60,8 +62,8 @@ use shadowrunr_types::character::Tuning;
 use shadowrunr_types::scene::{Scene, SceneSpeaker};
 use shadowrunr_types::{
     Case, ChatMsg, Engine, EngineError, EngineKind, EngineReply, EngineRequest, EpisodeKind,
-    FactScope, FleetHealth, ModelTier, Op, Role, SegmentContext, Speaker, StreamEvent, TsMs,
-    WarmSession,
+    FactScope, FleetHealth, ModelTier, Op, Role, SegmentContext, SessionEventKind, Speaker,
+    StreamEvent, TsMs, WarmSession,
 };
 
 pub use character::{
@@ -294,6 +296,8 @@ pub struct Brain {
     /// No warm open before this beat: the last one failed. Engines report "no sessions" and
     /// "all accounts cooling" alike (`Unavailable`), so a failure backs off, never disables.
     session_retry_tick: u64,
+    /// Warm-session failures `call_core` met, drained into the beat as `session` events.
+    session_notes: Vec<(SessionEventKind, String)>,
     /// Where cover lines go while a slow core call is still running ([`Brain::set_cover`]).
     cover: Option<tokio::sync::mpsc::UnboundedSender<StreamEvent>>,
     /// The approved stream prep the orchestrator voices ([`Brain::set_prep`]).
@@ -382,6 +386,7 @@ impl Brain {
             session: None,
             session_turns: 0,
             session_retry_tick: 0,
+            session_notes: Vec::new(),
             cover: None,
             prep: None,
             table_read: None,
@@ -764,7 +769,11 @@ impl Brain {
             if self.session.is_none() && self.ticks >= self.session_retry_tick {
                 match self.engine.open_session(self.core_template()).await {
                     Ok(s) => self.session = Some(s),
-                    Err(_) => self.session_retry_tick = self.ticks + SESSION_RETRY_BEATS,
+                    Err(e) => {
+                        self.session_retry_tick = self.ticks + SESSION_RETRY_BEATS;
+                        self.session_notes
+                            .push((SessionEventKind::OpenFailed, failure_detail(&e).to_string()));
+                    }
                 }
             }
             if let Some(session) = self.session.as_mut() {
@@ -780,8 +789,10 @@ impl Brain {
                         }
                         return Ok(r);
                     }
-                    Err(_) => {
+                    Err(e) => {
                         // The warm process died: fall back to a cold call, reopen next beat.
+                        self.session_notes
+                            .push((SessionEventKind::Died, failure_detail(&e).to_string()));
                         self.session = None;
                         self.session_turns = 0;
                     }
@@ -1482,6 +1493,13 @@ impl Brain {
         let live = plan.is_some();
         let called = std::time::Instant::now();
         let (result, covered) = stall::cover_call(self.call_core(prompt), plan).await;
+        for (kind, detail) in std::mem::take(&mut self.session_notes) {
+            ev.push(StreamEvent::Session {
+                ts_ms: now_ms,
+                kind,
+                detail: Some(detail),
+            });
+        }
         if live && result.is_ok() {
             self.latency
                 .record(i64::try_from(called.elapsed().as_millis()).unwrap_or(i64::MAX));

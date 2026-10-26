@@ -89,6 +89,8 @@ export function eventText(ev: StreamEvent): string {
       return `${ev.mode.replace(/_/g, " ")}${ev.bit_id ? ` · ${ev.bit_id}` : ""} · ${ev.picks} picked · ${ev.reason}`;
     case "health":
       return `engine ${ev.state}${ev.detail ? ` · ${ev.detail}` : ""}`;
+    case "session":
+      return `warm session ${ev.kind.replace(/_/g, " ")}${ev.detail ? ` · ${ev.detail}` : ""}`;
     case "stream_end":
       return ev.reason;
   }

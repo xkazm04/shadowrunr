@@ -35,4 +35,5 @@
 {"type":"chat","ts_ms":133800,"msg":{"id":"s0009","ts_ms":133800,"viewer":{"id":"v-mossy","name":"MossyTombstone","platform":"sim","rank":"thrall","months":1,"gifted":0,"is_mod":false},"text":"!vote 1","command":{"cmd":"vote","option":"1"}}}
 {"type":"chat","ts_ms":134600,"msg":{"id":"s0010","ts_ms":134600,"viewer":{"id":"v-lich","name":"lich_please","platform":"sim","rank":"lich","months":1,"gifted":0,"is_mod":false},"text":"!vote 2","command":{"cmd":"vote","option":"2"}}}
 {"type":"vote","ts_ms":136000,"poll_id":"scene-ballot-2","tallies":[{"option":"The Critic","voters":1,"weight":1.0},{"option":"The Commission","voters":2,"weight":3.6}],"closed":false}
+{"type":"session","ts_ms":140000,"kind":"died","detail":"core call i/o error"}
 {"type":"stream_end","ts_ms":150000,"reason":"sim_complete"}

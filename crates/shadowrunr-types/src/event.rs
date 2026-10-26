@@ -293,10 +293,28 @@ pub enum StreamEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
     },
+    /// The core's warm session failed: it did not open, or it died mid-call and the beat fell
+    /// back to a cold call. `detail` is the engine's error text, never a prompt or chat.
+    Session {
+        ts_ms: TsMs,
+        kind: SessionEventKind,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
     StreamEnd {
         ts_ms: TsMs,
         reason: EndReason,
     },
+}
+
+/// What happened to the warm session, as recorded by [`StreamEvent::Session`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionEventKind {
+    /// Opening the warm session failed; the next open waits a few beats.
+    OpenFailed,
+    /// The warm process died on a send; the beat went cold and the next one reopens.
+    Died,
 }
 
 /// The brain's fleet mode as recorded by [`StreamEvent::Health`].
@@ -306,4 +324,33 @@ pub enum FleetHealth {
     Healthy,
     Degraded,
     Down,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_event_round_trips_and_old_lines_still_parse() {
+        let ev = StreamEvent::Session {
+            ts_ms: 7,
+            kind: SessionEventKind::OpenFailed,
+            detail: Some("core call unavailable".into()),
+        };
+        let line = serde_json::to_string(&ev).unwrap();
+        assert!(line.contains(r#""kind":"open_failed""#), "{line}");
+        let back: StreamEvent = serde_json::from_str(&line).unwrap();
+        assert_eq!(serde_json::to_string(&back).unwrap(), line);
+        let bare = r#"{"type":"session","ts_ms":9,"kind":"died"}"#;
+        assert!(matches!(
+            serde_json::from_str::<StreamEvent>(bare).unwrap(),
+            StreamEvent::Session { detail: None, .. }
+        ));
+        // A transcript written before the variant existed has no `session` line and parses.
+        let old = r#"{"type":"health","ts_ms":1,"state":"healthy"}"#;
+        assert!(matches!(
+            serde_json::from_str::<StreamEvent>(old).unwrap(),
+            StreamEvent::Health { .. }
+        ));
+    }
 }

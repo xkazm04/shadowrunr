@@ -49,8 +49,13 @@ impl TranscriptWriter {
         })
     }
 
-    /// Append one event; returns its 1-based line number.
+    /// Append one event; returns its 1-based line number. A `session` event is operations
+    /// telemetry, not show: it never enters a sim transcript (the judge reads every line of it),
+    /// and the line returned is the last one written.
     pub fn push(&mut self, ev: StreamEvent) -> Result<usize, SimError> {
+        if matches!(ev, StreamEvent::Session { .. }) {
+            return Ok(self.events.len());
+        }
         let line = serde_json::to_string(&ev).map_err(|e| SimError::Io(e.to_string()))?;
         writeln!(self.out, "{line}")
             .map_err(|e| SimError::Io(format!("{}: {e}", self.path.display())))?;
@@ -129,6 +134,7 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::Handover { ts_ms, .. }
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
+        | StreamEvent::Session { ts_ms, .. }
         | StreamEvent::BeatPlan { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms,
     }
@@ -153,6 +159,7 @@ pub fn set_ts(ev: &mut StreamEvent, ts: TsMs) {
         | StreamEvent::Handover { ts_ms, .. }
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
+        | StreamEvent::Session { ts_ms, .. }
         | StreamEvent::BeatPlan { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms = ts,
         StreamEvent::Chat { ts_ms, msg } => {
@@ -274,6 +281,14 @@ pub fn body(ev: &StreamEvent) -> String {
         StreamEvent::Health { state, detail, .. } => format!(
             "health {}{}",
             wire(state),
+            detail
+                .as_deref()
+                .map(|d| format!(": {d}"))
+                .unwrap_or_default()
+        ),
+        StreamEvent::Session { kind, detail, .. } => format!(
+            "session {}{}",
+            wire(kind),
             detail
                 .as_deref()
                 .map(|d| format!(": {d}"))

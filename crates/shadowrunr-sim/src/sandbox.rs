@@ -461,6 +461,10 @@ struct Log {
 
 impl Log {
     fn push(&mut self, mut ev: StreamEvent) -> Result<(), SimError> {
+        // Operations telemetry stays out of the judged transcript ([`TranscriptWriter::push`]).
+        if matches!(ev, StreamEvent::Session { .. }) {
+            return Ok(());
+        }
         let ts = transcript::ts(&ev);
         if ts < self.last_ts {
             transcript::set_ts(&mut ev, self.last_ts);

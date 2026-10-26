@@ -522,6 +522,12 @@ export type StreamEvent =
       type: "health";
     }
   | {
+      detail?: string;
+      kind: SessionEventKind;
+      ts_ms: number;
+      type: "session";
+    }
+  | {
       reason: EndReason;
       ts_ms: number;
       type: "stream_end";
@@ -702,6 +708,13 @@ export type BeatMode = "cold_open" | "react" | "bit" | "bridge" | "mixed" | "hol
  * via the `definition` "FleetHealth".
  */
 export type FleetHealth = "healthy" | "degraded" | "down";
+/**
+ * What happened to the warm session, as recorded by [`StreamEvent::Session`].
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "SessionEventKind".
+ */
+export type SessionEventKind = "open_failed" | "died";
 /**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "EndReason".

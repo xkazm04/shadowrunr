@@ -8568,6 +8568,21 @@
       ],
       "description": "Anything `/events` may push: an enveloped event (after a `since` subscribe), an error frame, or a bare StreamEvent (legacy mode)."
     },
+    "SessionEventKind": {
+      "description": "What happened to the warm session, as recorded by [`StreamEvent::Session`].",
+      "oneOf": [
+        {
+          "const": "open_failed",
+          "description": "Opening the warm session failed; the next open waits a few beats.",
+          "type": "string"
+        },
+        {
+          "const": "died",
+          "description": "The warm process died on a send; the beat went cold and the next one reopens.",
+          "type": "string"
+        }
+      ]
+    },
     "SessionTags": {
       "description": "`tags.json`: one tagger pass over a session's Malakor lines.",
       "properties": {
@@ -9497,6 +9512,31 @@
             "type",
             "ts_ms",
             "state"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The core's warm session failed: it did not open, or it died mid-call and the beat fell\nback to a cold call. `detail` is the engine's error text, never a prompt or chat.",
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/SessionEventKind"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "session",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms",
+            "kind"
           ],
           "type": "object"
         },
