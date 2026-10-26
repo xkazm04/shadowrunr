@@ -1028,21 +1028,53 @@ impl Orchestrator {
         }
     }
 
-    /// The owned requests among this beat's candidates, the most urgent kind first (sincere
-    /// sadness before the rest, [`Ask::priority`]), then oldest first (by when each first reached
-    /// a beat): the picker takes one a beat ahead of bait and fresh chat.
+    /// The owed queue among this beat's candidates: the owned requests, the most urgent kind first
+    /// (sincere sadness before the rest, [`Ask::priority`]), then oldest first (by when each first
+    /// reached a beat): the picker takes one a beat ahead of bait and fresh chat.
+    ///
+    /// While a request is owed, a gift or sub an earlier beat left waiting queues with the
+    /// requests by when it first reached a beat (a request first on a tie, a care ask always
+    /// first): it is carried only [`CARRY_MS`] and a request until answered, so a run of fresher
+    /// requests outbid it until it expired (tuning-2dd18c17/after
+    /// unhinged-roastmaster.sonnet.SEG-02A.a30.s1 L340 -> L384: three request beats in a row).
     pub fn owed(&self, cands: &[Candidate], now_ms: TsMs) -> Vec<String> {
-        let mut v: Vec<(u8, TsMs, &str)> = cands
-            .iter()
-            .filter(|c| !self.answered.contains(&c.msg.id))
-            .filter_map(|c| {
-                let ask = self.owns(c)?;
-                let since = self.carried_in.get(&c.msg.id).map_or(now_ms, |k| k.since);
-                Some((ask.priority(), since, c.msg.id.as_str()))
-            })
-            .collect();
-        v.sort();
-        v.into_iter().map(|(_, _, id)| id.to_string()).collect()
+        self.owed_queue(cands, now_ms)
+            .into_iter()
+            .map(|(id, _)| id.to_string())
+            .collect()
+    }
+
+    /// [`Self::owed`], each id with whether it is an owned request (else a waiting gift).
+    fn owed_queue<'c>(
+        &self,
+        cands: impl IntoIterator<Item = &'c Candidate>,
+        now_ms: TsMs,
+    ) -> Vec<(&'c str, bool)> {
+        let since = |c: &Candidate| self.carried_in.get(&c.msg.id).map_or(now_ms, |k| k.since);
+        let mut asks: Vec<(u8, TsMs, bool, &str)> = Vec::new();
+        let mut gifts = Vec::new();
+        for c in cands {
+            if self.answered.contains(&c.msg.id) {
+                continue;
+            }
+            match self.owns(c) {
+                Some(ask) => asks.push((ask.priority(), since(c), false, c.msg.id.as_str())),
+                None if c.safety.is_none()
+                    && self.carried_in.contains_key(&c.msg.id)
+                    && moderation::is_gift_or_sub(&c.msg.text) =>
+                {
+                    gifts.push((1, since(c), true, c.msg.id.as_str()));
+                }
+                None => {}
+            }
+        }
+        if !asks.is_empty() {
+            asks.extend(gifts);
+        }
+        asks.sort();
+        asks.into_iter()
+            .map(|(_, _, gift, id)| (id, !gift))
+            .collect()
     }
 
     /// Note this beat's brigade calls (tagged at input: a call for chat to act on someone outside
@@ -1729,7 +1761,11 @@ impl Orchestrator {
         };
         let offer = if !required.is_empty() {
             ChatOffer {
-                owed: required.iter().any(|(c, _)| self.owns(c).is_some()),
+                // A waiting gift ahead of the requests ([`Self::owed`]) is thanked on a gift beat.
+                owed: self
+                    .owed_queue(required.iter().map(|(c, _)| *c), now)
+                    .first()
+                    .is_some_and(|(_, owned)| *owned),
                 ..class_offer(&required, false)
             }
         } else if !on_topic.is_empty() {

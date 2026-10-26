@@ -1226,6 +1226,126 @@ async fn a_gift_whose_thanks_was_trimmed_is_thanked_on_the_next_beat_with_care()
 }
 
 #[tokio::test]
+async fn a_gift_outbid_by_an_owed_request_goes_before_the_fresher_ones_and_never_expires() {
+    // tuning-2dd18c17/after unhinged-roastmaster.sonnet.SEG-02A.a30.s1 L340 -> L384: rune_turnip's
+    // five gifted subs lost the 280 s beat to an owed question (L342 "deferred: m00280-107"), then
+    // the 295 s and 305 s beats to fresher owed requests (L364, L375: "request+gift: the request
+    // takes the beat"), and expired unthanked at 315 s.
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    engine.default_reply(Role::CoreThread, "The bone-clerks file it in the Ledger.");
+    let mut b = brain_with(
+        dir.path(),
+        Arc::new(engine.clone()),
+        "f4-gift-outbid",
+        unpaced(),
+    )
+    .await;
+    let c = ctx(&[]);
+    let rune = viewer("sim-v0016", "rune_turnip", Rank::DreadCouncil);
+    // The askers, each with a different owed request, all met before the gift.
+    let asks = [
+        (
+            "toad",
+            "tomb_toad",
+            "is this a real person talking or ai? the voice is kinda too smooth lol",
+        ),
+        (
+            "wraith",
+            "WraithCandle",
+            "@Malakor roast me hard, i lost yesterday's vote by ONE vote",
+        ),
+        (
+            "bone",
+            "BoneCandle",
+            "is the hex board real or is it all made up lol",
+        ),
+        (
+            "moth",
+            "MothSpoon99",
+            "bone daddy, roast me hard, no mercy, my cat already did",
+        ),
+        (
+            "ash",
+            "ashen_raven",
+            "roast me hard lich, i fell asleep in the last vote",
+        ),
+        (
+            "grim",
+            "grim_otter",
+            "ok be honest, is malakor a real person or an ai? not trying to be weird",
+        ),
+    ];
+    let mut t = 1_000;
+    for (id, name, _) in std::iter::once(("sim-v0016", "rune_turnip", "")).chain(asks) {
+        let v = if id == "sim-v0016" {
+            rune.clone()
+        } else {
+            viewer(id, name, Rank::Thrall)
+        };
+        b.tick(
+            t,
+            vec![msg(&format!("hi-{id}"), t - 100, &v, "evening")],
+            &c,
+        )
+        .await
+        .unwrap();
+        t += 5_000;
+    }
+    for _ in 0..4 {
+        b.tick(t, Vec::new(), &c).await.unwrap();
+        t += 5_000;
+    }
+    // The gift arrives beside an owed request: the request takes that beat.
+    let gift = "gifting 5 subs to the room, the council eats tonight. no thanks needed lol";
+    let (id, name, text) = asks[0];
+    let ev = b
+        .tick(
+            t,
+            vec![
+                msg("gift", t - 300, &rune, gift),
+                msg(id, t - 200, &viewer(id, name, Rank::Thrall), text),
+            ],
+            &c,
+        )
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), [id], "{}", plan_of(&ev).1);
+    assert!(
+        plan_of(&ev).1.contains("deferred: gift"),
+        "{}",
+        plan_of(&ev).1
+    );
+    // A fresh owed request every beat after it: the gift, waiting longest, goes first.
+    let mut order = vec![id.to_string()];
+    let mut expired = Vec::new();
+    for ask in asks[1..].iter().copied().map(Some).chain([None; 6]) {
+        t += 5_000;
+        let fresh = ask.map_or_else(Vec::new, |(id, name, text)| {
+            vec![msg(id, t - 200, &viewer(id, name, Rank::Thrall), text)]
+        });
+        let ev = b.tick(t, fresh, &c).await.unwrap();
+        if picked(&ev) == ["gift"] {
+            let plan = plan_of(&ev).1;
+            assert!(!plan.contains("the request takes the beat"), "{plan}");
+        }
+        order.extend(picked(&ev));
+        expired.extend(
+            input_mods(&ev, crate::orchestrate::CARRY_RULE)
+                .into_iter()
+                .filter(|(_, a)| a == "expired")
+                .filter_map(|(m, _)| m),
+        );
+    }
+    assert!(expired.is_empty(), "{expired:?}, picked {order:?}");
+    assert_eq!(order[1], "gift", "{order:?}");
+    // Every owed request is still answered, in turn.
+    let mut want: Vec<&str> = asks.iter().map(|a| a.0).collect();
+    want.insert(1, "gift");
+    assert_eq!(order, want);
+}
+
+#[tokio::test]
 async fn a_rank_read_out_in_brackets_airs_as_a_spoken_title_and_keeps_its_cue() {
     // sbx-20261024-205313-10m: "WraithKettle (Thrall), yes, I am an AI character".
     let dir = tempfile::tempdir().unwrap();
