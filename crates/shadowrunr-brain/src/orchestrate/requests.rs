@@ -251,9 +251,19 @@ pub fn mentions_loss(text: &str) -> bool {
             .is_match(text)
 }
 
-/// The note for a `!propose` from a rank that may propose: its verdict is owed.
-pub const PROPOSAL_NOTE: &str = " <a proposal from a rank that may propose: answer this proposal \
-itself in this beat, as a real idea for the segment, good or bad: your verdict and why>";
+/// The note for a `!propose` from a rank that may propose (a template: fill it with
+/// [`proposal_note`]): its verdict is owed, given as a council motion with the ceremony the rank
+/// earns. A verdict alone failed the Dread Council rule (tuning-661c32c2/after unhinged-
+/// roastmaster.sonnet.SEG-02A.a30.s1 L333 -> L344, SEG-01.a30.s1 L779 -> L783: denied in
+/// passing, no rank, no motion).
+pub const PROPOSAL_NOTE: &str = " <a proposal from their rank, {rank_title}, which may propose: \
+put it to the minions as a council motion, with the ceremony that rank earns, then answer this \
+proposal itself in this beat, as a real idea for the segment, good or bad: your verdict and why>";
+
+/// The proposal note for a viewer of rank `rank_title` (see [`PROPOSAL_NOTE`]).
+pub fn proposal_note(rank_title: &str) -> String {
+    with_rank(PROPOSAL_NOTE, rank_title)
+}
 
 /// The appended note for a `!propose` from a rank below the proposing rank (`min` is that
 /// rank's title).

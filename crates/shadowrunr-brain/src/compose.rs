@@ -38,9 +38,9 @@ use crate::moderation::is_gift_or_sub;
 use crate::moderation::Candidate;
 use crate::orchestrate::case::CASE_HEADING;
 use crate::orchestrate::requests::{
-    asks_what_this_is, claims_authority, gift_note, injection_hint, mentions_loss,
+    asks_what_this_is, claims_authority, gift_note, injection_hint, mentions_loss, proposal_note,
     propose_below_rank_note, several_asks_note, situational_asks, speaks_of_patron, with_rank, Ask,
-    AI_REPEAT_NOTE, AUTHORITY_NOTE, NEWCOMER_NOTE, PATRON_NOTE, PROPOSAL_NOTE,
+    AI_REPEAT_NOTE, AUTHORITY_NOTE, NEWCOMER_NOTE, PATRON_NOTE,
 };
 use crate::util::one_line;
 use crate::working::{fitted_window, WindowItem, EPISODE_BUDGET_CHARS};
@@ -834,8 +834,8 @@ fn situation_notes(c: &Candidate, t: &TurnInputs<'_>) -> String {
         } else {
             // An allowed rank's proposal is owed its verdict (unhinged-roastmaster.sonnet.
             // SEG-01.a300.s1 L1072: a Warlock's !propose was picked beside a landed result, and
-            // the beat spoke of the result instead).
-            s.push_str(PROPOSAL_NOTE);
+            // the beat spoke of the result instead), as a motion in its rank's ceremony.
+            s.push_str(&proposal_note(&t.pkg.rank_titles.title(c.msg.viewer.rank)));
         }
     }
     if speaks_of_patron(&c.msg.text, p) {
@@ -1442,7 +1442,7 @@ mod tests {
         // A Warlock may propose: the proposal is owed its verdict (2026-10-24 check run L1072:
         // it had no note, and the beat answered something else).
         assert!(
-            chat_line(&turn, "warlock").ends_with(PROPOSAL_NOTE),
+            chat_line(&turn, "warlock").ends_with(&proposal_note("Warlock")),
             "{turn}"
         );
         assert!(

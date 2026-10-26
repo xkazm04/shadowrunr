@@ -1031,9 +1031,55 @@ async fn a_proposal_from_a_rank_that_may_propose_takes_the_beat() {
     let prompt = last_core_prompt(&engine);
     assert!(!prompt.contains("# Through-line"), "{prompt}");
     assert!(
-        chat_line_of(&prompt, "p").ends_with(crate::orchestrate::requests::PROPOSAL_NOTE),
+        chat_line_of(&prompt, "p")
+            .ends_with(&crate::orchestrate::requests::proposal_note("Warlock")),
         "{prompt}"
     );
+}
+
+#[tokio::test]
+async fn a_dread_council_proposal_is_put_as_a_council_motion_with_its_ceremony() {
+    // tuning-661c32c2/after unhinged-roastmaster.sonnet.SEG-02A.a30.s1 L333 -> L344 and
+    // SEG-01.a30.s1 L779 -> L783: a Dread Council !propose took the request beat, and the verdict
+    // came in passing ("no swamp card exists, so the Mixer hop wallet gets the murk"), with no
+    // rank and no motion. The judge failed both against the Dread Council rule.
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(
+        dir.path(),
+        Arc::new(engine.clone()),
+        "f4-council",
+        unpaced(),
+    )
+    .await;
+    let c = ctx(&[]);
+    let wraith = viewer("sim-v0001", "WraithCandle", Rank::DreadCouncil);
+    engine.push(
+        Role::CoreThread,
+        Ok("The bone-clerks file the evening's ledger."),
+    );
+    b.tick(1_000, vec![msg("hi", 900, &wraith, "evening all")], &c)
+        .await
+        .unwrap();
+    let text = "!propose annex the swamp hex tonight. the fern already signed the paperwork";
+    let mut m = msg("p", 30_900, &wraith, text);
+    m.command = Some(Command::Propose {
+        text: text.trim_start_matches("!propose ").into(),
+    });
+    let ev = b.tick(31_000, vec![m], &c).await.unwrap();
+    assert_eq!(picked(&ev), ["p"]);
+    let (_, plan) = plan_of(&ev);
+    assert!(plan.contains("the request takes the beat"), "{plan}");
+    let prompt = last_core_prompt(&engine);
+    let line = chat_line_of(&prompt, "p");
+    assert!(
+        line.contains("<a proposal from their rank, Dread Council, which may propose"),
+        "{line}"
+    );
+    assert!(line.contains("as a council motion"), "{line}");
+    assert!(line.contains("with the ceremony that rank earns"), "{line}");
+    assert!(line.contains("your verdict and why>"), "{line}");
+    assert!(!line.contains('{'), "every placeholder filled: {line}");
 }
 
 /// unhinged-roastmaster.sonnet.SEG-02A.a3.s1 L190, verbatim.
