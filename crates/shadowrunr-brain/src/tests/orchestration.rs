@@ -914,3 +914,33 @@ async fn a_failed_beat_records_no_turn_for_its_picks() {
         Some(&"Malakor: The swamp becomes a moat, minion.")
     );
 }
+
+/// The crisis directive keeps the handoff's closing line off the viewer's seat and absence
+/// (tuning-d158a069/after unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L178, "The throne room
+/// keeps your seat, Thrall, and I want you back tomorrow.", judged a fail of
+/// `rule:crisis-handoff` before the L180 ban). The care note says it only as "do not allude to
+/// them"; the directive says it of the handoff itself. "Back tomorrow" is not forbidden (35 of
+/// 36 mined handoffs with it pass), and the personal-data line still holds.
+#[test]
+fn the_crisis_directive_keeps_the_handoff_off_their_seat_and_absence() {
+    let pkg = malakor_package();
+    assert!(pkg.enabled_rules().any(|r| r.id == compose::CRISIS_RULE_ID));
+    let sad = viewer("sim-v0004", "GrimTurnip42", Rank::Thrall);
+    let picked = [moderation::Candidate {
+        msg: msg("m1", 0, &sad, "i've been thinking about hurting myself"),
+        count: 1,
+        viewers: 1,
+        injection: false,
+        safety: Some("builtin-self-harm-disclosure".into()),
+    }];
+    let d = compose::safety_directive(&picked, &pkg).unwrap();
+    assert!(d.contains("(crisis-handoff)"), "{d}");
+    assert!(d.contains(compose::NO_SEAT_OR_ABSENCE), "{d}");
+    for w in [
+        "seat", "chair", "place", "absence", "leaving", "silence", "removal",
+    ] {
+        assert!(d.contains(w), "{w}: {d}");
+    }
+    assert!(!d.contains("tomorrow"), "{d}");
+    assert!(d.ends_with(compose::NO_PERSONAL_DATA), "{d}");
+}

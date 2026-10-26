@@ -506,6 +506,13 @@ pub const CRISIS_BAN_RULE_ID: &str = "crisis-chat-ban";
 pub const NO_PERSONAL_DATA: &str =
     "Never ask them where they are or for any detail about them, not even to help.";
 
+/// The handoff's closing line stays off the viewer's seat and absence, as the care note keeps
+/// every later line off them: tuning-d158a069/after (SEG-02A.a300.s1 L178) closed with "The
+/// throne room keeps your seat, Thrall, and I want you back tomorrow." right before the ban,
+/// and the judge failed `rule:crisis-handoff` on it. The warmth stays, "back tomorrow" too.
+pub const NO_SEAT_OR_ABSENCE: &str = "Keep the warmth, but say no word about their seat, \
+    chair or place being kept, or about their absence, leaving, silence or removal from chat.";
+
 /// The care directive for a package with no enabled crisis rule (never reachable by override
 /// when the rule is a rail). It still carries [`NO_PERSONAL_DATA`].
 pub const NEUTRAL_DISTRESS_DIRECTIVE: &str = "A viewer may be in distress; respond with care. \
@@ -527,7 +534,8 @@ pub fn safety_directive(picked: &[Candidate], pkg: &CharacterPackage) -> Option<
         Some(r) => format!(
             "SAFETY FIRST: {who} may be a viewer in distress (possible self-harm). Your enabled \
              rule \"{}\" ({CRISIS_RULE_ID}) applies now: answer this before anything else, as \
-             that rule says. Never mock it and never make it part of a bit. {NO_PERSONAL_DATA}",
+             that rule says. Never mock it and never make it part of a bit. {NO_SEAT_OR_ABSENCE} \
+             {NO_PERSONAL_DATA}",
             r.title.trim()
         ),
         None => format!("SAFETY FIRST ({who}): {NEUTRAL_DISTRESS_DIRECTIVE}"),
