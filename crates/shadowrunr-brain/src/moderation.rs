@@ -677,13 +677,15 @@ pub struct FilterConfig {
     /// A room with at most this many distinct chatters in the last minute is small: there a
     /// message addressed to the character gets the lenient cap ([`rate_cap_for`]).
     pub small_room_max: usize,
-    /// Reconcile opt-5 experiment, off by default: a grief message ([`is_grief`]), a viewer's
-    /// first real question of the stream and a `!propose` from a rank allowed to propose also
-    /// skip the rate cap, and a room below `loose_room_below` chatters gets the loose cap
-    /// ([`rate_cap_for`]). Off, the filter behaves exactly as without these fields.
+    /// Reconcile opt-5 experiment, off by default: a grief message ([`is_grief`]) and a
+    /// viewer's first real question of the stream also skip the rate cap, a `!propose` from a
+    /// rank allowed to propose also skips flood clustering, and a room below
+    /// `loose_room_below` chatters gets the loose cap ([`rate_cap_for`]). Off, the filter
+    /// behaves exactly as without these fields. (A leading `!propose` from a rank allowed to
+    /// propose skips the rate cap either way.)
     pub rate_cap_exemptions: bool,
-    /// Lowest rank allowed to `!propose` (the segment rank table's `propose_min_rank`); read
-    /// only by the experiment.
+    /// Lowest rank allowed to `!propose` (the segment rank table's `propose_min_rank`): a
+    /// leading `!propose` from this rank or above skips the rate cap.
     pub propose_min_rank: Rank,
     /// With the experiment on, a room with fewer distinct chatters than this gets the loose
     /// cap.
@@ -1017,9 +1019,7 @@ impl InputFilter {
             return Some("situational_ask");
         }
         if self.cfg.rate_cap_exemptions {
-            if matches!(msg.command, Some(Command::Propose { .. }))
-                && msg.viewer.rank >= self.cfg.propose_min_rank
-            {
+            if self.ranked_proposal(msg) {
                 return Some("proposal");
             }
             if !once.contains(&msg.viewer.id) && is_grief(&msg.text) {
@@ -1031,6 +1031,13 @@ impl InputFilter {
             }
         }
         None
+    }
+
+    /// A `!propose` from a rank allowed to propose. Only a leading `!propose` parses to
+    /// [`Command::Propose`] (`parse_command`), so a mid-line one never counts.
+    fn ranked_proposal(&self, msg: &ChatMsg) -> bool {
+        matches!(msg.command, Some(Command::Propose { .. }))
+            && msg.viewer.rank >= self.cfg.propose_min_rank
     }
 
     /// Filter one tick's inbox. Returns the surviving candidates (clusters collapsed into a
@@ -1176,10 +1183,13 @@ impl InputFilter {
 
             // 2. Per-viewer rate cap (rolling minute on message time), scaled to the room
             //    ([`rate_cap_for`]). Gifts and subs, a viewer's first message and a sincere
-            //    question from a viewer not answered lately are exempt; with the opt-5
-            //    experiment also grief, a first question and a proposal from a rank that may
-            //    propose.
+            //    question from a viewer not answered lately are exempt, and so is a leading
+            //    `!propose` from a rank that may propose (theatrical.sonnet.SEG-01.a30.s3
+            //    L1069: a Lich's proposal, dropped); with the opt-5 experiment also grief and a
+            //    first question. The proposal skips only the cap here: flood clustering below
+            //    reads `exempt`, which holds it only with the experiment on, as before.
             let exempt = self.exemption(&msg, &mut once);
+            let cap_exempt = exempt.or(self.ranked_proposal(&msg).then_some("proposal"));
             if !msg.viewer.is_mod {
                 let cap = rate_cap_for(
                     &self.cfg,
@@ -1191,7 +1201,7 @@ impl InputFilter {
                     q.pop_front();
                 }
                 if q.len() >= cap {
-                    match exempt {
+                    match cap_exempt {
                         Some(why) => events.push(mod_event(
                             now_ms,
                             ModStage::Input,
@@ -2938,17 +2948,13 @@ mod tests {
                 assert!(rate_cap_for(&on, a, addressed) >= rate_cap_for(&off, a, addressed));
             }
         }
-        // Grief, a first question and a Warlock proposal from capped viewers stay capped.
+        // Grief and a first question from capped viewers stay capped. (A ranked proposal
+        // skips the cap either way: `a_ranked_leading_proposal_skips_the_rate_cap_with_opt5_off`.)
         let mut f = filter();
         busy_room(&mut f);
-        for v in ["sad", "newq", "lock"] {
+        for v in ["sad", "newq"] {
             saturate(&mut f, v);
         }
-        let mut prop = msg("p1", 13, "lock", "!propose annex the swamp hex tonight");
-        prop.viewer.rank = Rank::Warlock;
-        prop.command = Some(Command::Propose {
-            text: "annex the swamp hex tonight".into(),
-        });
         let (c, ev) = f.filter(
             20,
             vec![
@@ -2959,14 +2965,116 @@ mod tests {
                     "my old dog died today, just here to be distracted",
                 ),
                 msg("q1", 12, "newq", "what is this stream, what's going on?"),
-                prop,
             ],
             &Policy::builtin(),
         );
         assert!(c.is_empty(), "{c:?}");
-        for id in ["g1", "q1", "p1"] {
+        for id in ["g1", "q1"] {
             assert!(dropped(&ev, id), "{id}");
         }
+    }
+
+    /// A `!propose` as `parse_command` reads it: leading only.
+    fn proposal(id: &str, ts: i64, v: &str, rank: Rank, text: &str) -> ChatMsg {
+        let mut m = msg(id, ts, v, text);
+        m.viewer.rank = rank;
+        m.command = text
+            .strip_prefix("!propose ")
+            .map(|t| Command::Propose { text: t.into() });
+        m
+    }
+
+    // Simulated chat, shaped like roastmaster-vs-theatrical-5e1b849be4
+    // theatrical.sonnet.SEG-01.a30.s3 L1069 (a Lich's `!propose`, `rate_cap` dropped).
+    #[test]
+    fn a_ranked_leading_proposal_skips_the_rate_cap_with_opt5_off() {
+        let mut f = filter();
+        assert!(!f.cfg.rate_cap_exemptions);
+        busy_room(&mut f);
+        for v in ["lock", "lich", "council"] {
+            saturate(&mut f, v);
+        }
+        let (c, ev) = f.filter(
+            20,
+            vec![
+                proposal(
+                    "p1",
+                    11,
+                    "lock",
+                    Rank::Warlock,
+                    "!propose annex the swamp hex tonight",
+                ),
+                proposal(
+                    "p2",
+                    12,
+                    "lich",
+                    Rank::Lich,
+                    "!propose the fog gets a seat on the council",
+                ),
+                proposal(
+                    "p3",
+                    13,
+                    "council",
+                    Rank::DreadCouncil,
+                    "!propose audit the moat tolls",
+                ),
+            ],
+            &Policy::builtin(),
+        );
+        let ids: Vec<&str> = c.iter().map(|c| c.msg.id.as_str()).collect();
+        assert_eq!(ids, ["p1", "p2", "p3"], "{ev:?}");
+        for id in ids {
+            assert!(exempt(&ev, id, "proposal"), "{id}");
+        }
+    }
+
+    #[test]
+    fn a_proposal_below_the_propose_rank_stays_capped_with_opt5_off() {
+        let mut f = filter();
+        busy_room(&mut f);
+        for v in ["thrall", "cultist"] {
+            saturate(&mut f, v);
+        }
+        let (c, ev) = f.filter(
+            20,
+            vec![
+                proposal(
+                    "p1",
+                    11,
+                    "thrall",
+                    Rank::Thrall,
+                    "!propose crown me tonight please",
+                ),
+                proposal(
+                    "p2",
+                    12,
+                    "cultist",
+                    Rank::Cultist,
+                    "!propose annex the swamp hex tonight",
+                ),
+            ],
+            &Policy::builtin(),
+        );
+        assert!(c.is_empty(), "{c:?}");
+        assert!(dropped(&ev, "p1") && dropped(&ev, "p2"), "{ev:?}");
+    }
+
+    #[test]
+    fn a_mid_line_proposal_stays_capped_with_opt5_off() {
+        let mut f = filter();
+        busy_room(&mut f);
+        saturate(&mut f, "lich");
+        let mid = proposal(
+            "p1",
+            11,
+            "lich",
+            Rank::Lich,
+            "evening all. @Malakor !propose annex the swamp hex tonight",
+        );
+        assert!(mid.command.is_none(), "commands are leading-only");
+        let (c, ev) = f.filter(20, vec![mid], &Policy::builtin());
+        assert!(c.is_empty(), "{c:?}");
+        assert!(dropped(&ev, "p1"), "{ev:?}");
     }
 
     #[test]
