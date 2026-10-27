@@ -4758,7 +4758,11 @@
           "revision": 4,
           "changedAt": "2026-09-01",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/fidelity/run.mjs:7 This context holds only quality instruments: a style-contract fidelity gate that renders console pages against a prototype, plus bundle, DOM and perf-count budgets. It runs no multi-phase media production, renders no assets or disposables, starts no long generation jobs and aggregates no phase progress. A case-insensitive grep of budgets/, fidelity/ and src/perf/ for graduat, phase, narration, storyboard and background_job returned nothing. Other terms only hit unrelated senses: 'worst' means the worst DOM scene, 'progress' is the onair-progress selector, and 'promot' is the UI contest promotion steps.",
+          "evaluatedAt": "2026-10-27",
+          "evaluatedAgainst": "sha256-b2:f1762f69eb77b8d3",
+          "evaluatedRevision": 5
         }
       ],
       "governance": "governed"

@@ -5600,6 +5600,16 @@
           "evidence": "tools/voice/shadowrunr_voice/engine.py:154 The only lexicon is the engine's stock US-English file, passed through when it exists. There is no versioned per-world lexicon, and no script revision whose blast radius would need computing."
         }
       ]
+    },
+    "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/production-pipeline-phasing": {
+      "context": "console-quality-gates",
+      "subject": "production-pipeline-phasing",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-27",
+      "evaluatedTs": "2026-10-27T22:11:31.341Z",
+      "worker": "3138a986-de4b-4d6f-afe6-f9add26a53da",
+      "techniques": []
     }
   }
 }
