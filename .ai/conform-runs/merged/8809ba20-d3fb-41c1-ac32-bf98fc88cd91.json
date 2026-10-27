@@ -1,0 +1,64 @@
+{
+ "schema": "conform-run/1",
+ "worker": "8809ba20-d3fb-41c1-ac32-bf98fc88cd91",
+ "subject": "read-serving-replicas",
+ "evaluatedAt": "2026-10-27T22:23:00.634545+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-data-layer",
+   "subject": "read-serving-replicas",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/data/config.ts:5 The console talks to one daemon on loopback (the desktop shell, a query param or env picks a single URL). There is no single-leader service with standby replicas serving reads, which is this subject's precondition. A case-insensitive search of apps/console/src/data for replica, leader, follower, standby, forward and applied found none of them (only TypeScript `readonly`), and the daemon crate has no replica or leader-election concept either.",
+   "techniques": [
+    {
+     "technique": "client-carried-index",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/rpc.ts:57 The RPC request carries only method and params, with no echoed position. With one authority and no lagging replica there is no read-your-writes gap for an index to close."
+    },
+    {
+     "technique": "committed-write-invalidation-hook",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/cache.ts:1 This is a client-side query cache, invalidated by pushed daemon events and its own mutations, with a 5-minute TTL backstop. It is not a replica's derivation fed by a committed-write stream, so the hook rule does not govern it."
+    },
+    {
+     "technique": "evict-not-update-on-commit",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/cache.ts:137 It marks entries stale and refetches rather than writing values in, and aborts an in-flight fill on refetch. But there is no replica apply or concurrency against a log, so the technique's precondition does not hold."
+    },
+    {
+     "technique": "forward-on-storage-error",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/data/rpc.ts:54 Every call goes to the one daemon base URL. There is no replica that could refuse a write and forward the request."
+    }
+   ],
+   "absenceTerms": [
+    "replica",
+    "leader",
+    "standby"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-27T22:23:00.634545+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "read-serving-replicas"
+   ],
+   "techniques": [
+    "client-carried-index",
+    "committed-write-invalidation-hook",
+    "evict-not-update-on-commit",
+    "forward-on-storage-error"
+   ],
+   "deviations": 0,
+   "context": "console-data-layer",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

@@ -1561,7 +1561,11 @@
           "revision": 2,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/data/config.ts:5 The console talks to one daemon on loopback (the desktop shell, a query param or env picks a single URL). There is no single-leader service with standby replicas serving reads, which is this subject's precondition. A case-insensitive search of apps/console/src/data for replica, leader, follower, standby, forward and applied found none of them (only TypeScript `readonly`), and the daemon crate has no replica or leader-election concept either.",
+          "evaluatedAt": "2026-10-27",
+          "evaluatedAgainst": "sha256-b2:1c92d27744edd729",
+          "evaluatedRevision": 2
         },
         {
           "subject": "sql-console",

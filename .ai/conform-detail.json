@@ -5620,6 +5620,37 @@
       "evaluatedTs": "2026-10-27T22:18:58.446Z",
       "worker": "fa66f627-2f32-4358-9ac5-cc99bcbfc84f",
       "techniques": []
+    },
+    "9b2fb27b-e4c5-4300-a214-7f5518a08b44/read-serving-replicas": {
+      "context": "console-data-layer",
+      "subject": "read-serving-replicas",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-27",
+      "evaluatedTs": "2026-10-27T22:23:00.634Z",
+      "worker": "8809ba20-d3fb-41c1-ac32-bf98fc88cd91",
+      "techniques": [
+        {
+          "technique": "client-carried-index",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/rpc.ts:57 The RPC request carries only method and params, with no echoed position. With one authority and no lagging replica there is no read-your-writes gap for an index to close."
+        },
+        {
+          "technique": "committed-write-invalidation-hook",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/cache.ts:1 This is a client-side query cache, invalidated by pushed daemon events and its own mutations, with a 5-minute TTL backstop. It is not a replica's derivation fed by a committed-write stream, so the hook rule does not govern it."
+        },
+        {
+          "technique": "evict-not-update-on-commit",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/cache.ts:137 It marks entries stale and refetches rather than writing values in, and aborts an in-flight fill on refetch. But there is no replica apply or concurrency against a log, so the technique's precondition does not hold."
+        },
+        {
+          "technique": "forward-on-storage-error",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/rpc.ts:54 Every call goes to the one daemon base URL. There is no replica that could refuse a write and forward the request."
+        }
+      ]
     }
   }
 }
