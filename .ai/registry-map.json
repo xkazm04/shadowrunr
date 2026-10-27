@@ -2038,7 +2038,11 @@
           "revision": 7,
           "changedAt": "2026-09-18",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/PlanPage.tsx:5 The only 'plan' in this context is the reconciler's NextStreamPlan/PlanOption, meaning the show's running order and the directives the operator chooses; a grep of every file in apps/console/src/pages/reconcile/ found 0 hits for entitlement, subscription, pricing, paywall, billing, tier or upgrade, and apps/console/package.json has no billing or payment dependency, so this context has no paid tier, capability gate or lifecycle handler for the subject to govern.",
+          "evaluatedAt": "2026-10-27",
+          "evaluatedAgainst": "sha256-b2:66961f93b3ce02ba",
+          "evaluatedRevision": 8
         },
         {
           "subject": "test-harness",

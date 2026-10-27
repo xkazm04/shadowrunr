@@ -5610,6 +5610,16 @@
       "evaluatedTs": "2026-10-27T22:11:31.341Z",
       "worker": "3138a986-de4b-4d6f-afe6-f9add26a53da",
       "techniques": []
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/plan-entitlements": {
+      "context": "console-reconcile-page",
+      "subject": "plan-entitlements",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-27",
+      "evaluatedTs": "2026-10-27T22:18:58.446Z",
+      "worker": "fa66f627-2f32-4358-9ac5-cc99bcbfc84f",
+      "techniques": []
     }
   }
 }
