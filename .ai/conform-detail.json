@@ -5865,6 +5865,62 @@
         }
       ],
       "registryProposal": "The TS analogue of a trusted leaf could be named: a type guard declared in a .d.ts (`data is T`) over a generated `@ts-nocheck` body, where T comes from a different generator reading the same schema. The outside test that matters there is agreement between the two generators (values accepted by the validator inhabit T, and values the source language serializes are accepted), not just example accept/reject cases. The technique currently reads as prover-specific."
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/video-assembly": {
+      "context": "console-review-page",
+      "subject": "video-assembly",
+      "bundle": "media-generation",
+      "state": "unknown",
+      "evaluatedAt": "2026-10-28",
+      "evaluatedTs": "2026-10-28T22:55:37.202Z",
+      "techniques": [
+        {
+          "technique": "gap-and-refusal-honesty",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/review/Judge.tsx:44 'Not judged' is a separate state from 'No rule failed' (Judge.tsx:60). The same holds for 'no recording' (WatchPane.tsx:24), untagged lines (Layer2.tsx:145) and unsaved marks, which are listed by line with a Retry that actually resends them (PlayerParts.tsx:80). Missing and unmeasured are never folded into success."
+        },
+        {
+          "technique": "derived-turn-markers",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/review/PlayerParts.tsx:47 The segment label for a line is looked up from the session record's segments at the line's time (derive.ts:99), not typed in. When no segment matches, no label is drawn ('seg ? ... : \"\"'), so absence stays absence."
+        },
+        {
+          "technique": "multitrack-timeline-discipline",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/review/PlayerParts.tsx:65 The player's strip of lines places every tick at t/lengthS on the session's one clock (tabkit.tsx:56), and its marked/current state is re-derived from feedback on every render. The hard-coded TICKS in Face.tsx:7 are an aria-hidden poster motif, not a working timeline. The main Timeline.tsx tab is not in this context's file list and was not judged."
+        },
+        {
+          "technique": "drift-correction",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/WatchPane.tsx:50 The context only reports the recording's measured A/V offset, as a number in ms. It has no sync-adjustment control and no clip to slide, so the technique's correction precondition does not hold."
+        },
+        {
+          "technique": "alignment-names-its-text",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/WatchPane.tsx:49 Line positions come from playout 'heard' events or the transcript time, not from a synthesiser's character alignment. The line does name which time source it used, in the spirit of the technique."
+        },
+        {
+          "technique": "generated-shot-sourcing",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/WatchPane.tsx:1 The only video here is the captured session recording. No generated shots are briefed or accepted in this context."
+        },
+        {
+          "technique": "seek-stable-composition-authoring",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/WatchPane.tsx:47 Seeking happens on an encoded file in an HTML video element. No composition is compiled frame by frame, so frame-index purity does not apply."
+        },
+        {
+          "technique": "silent-defects-get-a-code-or-an-error",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/WatchPane.tsx:24 This context renders nothing from source, so the technique does not apply. A missing recording is still reported by name rather than shown as a blank player. Residual gap: the <video> element has no onError handler, so a media route that fails after the RPC succeeds would show an empty player."
+        }
+      ],
+      "withdrawn": {
+        "worker": "eba57a8b-18e9-4e45-8085-188419b17d75",
+        "state": "conformant",
+        "at": "2026-10-28T22:55:59.962078+00:00",
+        "reason": "reviewer (sonnet): The line-level claims hold for the files I opened (Judge.tsx:44 and :60 show 'not judged' versus 'No rule failed', and Layer2.tsx:145 shows the untagged caution), but three of the four technique anchors, and the claims about unsaved-mark Retry, segment lookup, tick placement and the A/V offset, sit "
+      }
     }
   }
 }
