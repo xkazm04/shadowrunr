@@ -5734,6 +5734,27 @@
         }
       ],
       "registryProposal": "backoff-design treats a ladder with no exhaustion rule as an unbounded retry 'wearing a schedule', and says long-lived streams should end when the ladder exhausts. A single-operator UI's reconnect to its own local control daemon is arguably meant to retry forever, with a visible 'retry in N s', and ending the stream would just force a manual reload. The technique could state when indefinite reconnect is the honest choice: interactive, visible to the user, one client, bounded by session lifetime."
+    },
+    "20f1e644-e83b-481d-864f-cb15b9124d7e/subprocess-lifecycle": {
+      "context": "console-characters-page",
+      "subject": "subprocess-lifecycle",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-28",
+      "evaluatedTs": "2026-10-28T22:18:38.857Z",
+      "worker": "8aeb8642-f013-42a6-b64a-c2ff00052a3f",
+      "techniques": [
+        {
+          "technique": "spawn-contract",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/RulesTab.tsx:25 Data comes from an RPC call, not a spawned child, so there is no argv/env/cwd contract to judge."
+        },
+        {
+          "technique": "termination-and-reaping",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/RulesTab.tsx:9 The page's only I/O imports are RPC data hooks, so there are no child processes to reap."
+        }
+      ]
     }
   }
 }

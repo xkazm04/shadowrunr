@@ -1401,7 +1401,11 @@
           "revision": 14,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/RulesTab.tsx:28 This context is a browser React page that reads and toggles character rules only through console RPC hooks (useRpc / useMutation) and never starts an OS process; a case-insensitive grep of apps/console/src/pages/characters/ (subdirectories included) for child_process, spawn, subprocess, SIGTERM and SIGKILL found nothing, so the subject's precondition (a long-lived host that spawns and supervises child processes) does not hold here.",
+          "evaluatedAt": "2026-10-28",
+          "evaluatedAgainst": "sha256-b2:204503a49b5c115b",
+          "evaluatedRevision": 16
         },
         {
           "subject": "cinematic-language",
