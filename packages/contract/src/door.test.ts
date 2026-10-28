@@ -122,6 +122,39 @@ describe("parseEvent", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe("invalid");
   });
+
+  describe("session (the warm session failed)", () => {
+    const opened = { type: "session", ts_ms: 40, kind: "open_failed", detail: "spawn failed" };
+
+    it("accepts both kinds, bare, enveloped, and with the detail left out", () => {
+      for (const kind of ["open_failed", "died"] as const) {
+        const e = { type: "session", ts_ms: 40, kind };
+        expect(parseEvent(e)).toEqual({ ok: true, value: { kind: "event", event: e } });
+        expect(parseEvent({ seq: 3, run_id: "r1", event: e })).toEqual({
+          ok: true,
+          value: { kind: "event", event: e, seq: 3, runId: "r1" },
+        });
+      }
+      expect(parseEvent(opened)).toEqual({ ok: true, value: { kind: "event", event: opened } });
+    });
+
+    it("is accepted inside a run transcript", async () => {
+      const r = await parseRpcResult("run.transcript", { result: [start, opened] });
+      expect(r.ok).toBe(true);
+    });
+
+    it("rejects a kind outside open_failed and died, and names the kind's path", () => {
+      const r = parseEvent({ ...opened, kind: "crashed" });
+      expect(r.ok).toBe(false);
+      if (!r.ok && r.error.kind === "invalid") expect(r.error.path).toBe("/kind");
+    });
+
+    it("rejects a session event without its kind or timestamp", () => {
+      expect(parseEvent({ type: "session", ts_ms: 1 }).ok).toBe(false);
+      expect(parseEvent({ type: "session", kind: "died" }).ok).toBe(false);
+      expect(parseEvent({ ...opened, detail: 7 }).ok).toBe(false);
+    });
+  });
 });
 
 describe("tournament.results", () => {
