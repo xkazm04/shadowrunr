@@ -5516,8 +5516,12 @@
           "revision": 5,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 2
+          "state": "not-applicable",
+          "priorNotApplicable": 2,
+          "evidence": "apps/stage/src/avatar/variants.ts:9 This context only renders the live host's face (glow, cut, depth, relit and lich3d face renderers); it makes no narration-free data video, so the subject's precondition does not hold. A case-insensitive grep of apps/stage/src/avatar for chart, thumbnail, statreel, leaderboard, 'bar race' and 'data video' returned zero files, and so did a grep of apps/ and packages/ for bar race, statreel and data video.",
+          "evaluatedAt": "2026-10-28",
+          "evaluatedAgainst": "sha256-b2:9e140bec9e8eb951",
+          "evaluatedRevision": 8
         },
         {
           "subject": "visual-style-locking",

@@ -5967,6 +5967,32 @@
           "evidence": "apps/console/src/pages/simulator/data.ts:1 There is no loopback browser surface to scope."
         }
       ]
+    },
+    "7bbc93eb-a921-49ea-a5b3-128e66bd5e64/data-video-art-direction": {
+      "context": "stage-avatar-renderer",
+      "subject": "data-video-art-direction",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-28",
+      "evaluatedTs": "2026-10-28T23:04:47.797Z",
+      "worker": "0e746dc8-ae9c-48f4-9216-617250d9ccca",
+      "techniques": [
+        {
+          "technique": "evidence-card-popup",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/avatar/depth/geom.ts:223 In this context 'card' means a mesh quad for one rig part. It is not a dated evidence card at an event beat."
+        },
+        {
+          "technique": "legibility-floor",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/avatar/Avatar.tsx:29 The output is a square face canvas with no story text and no vertical-frame safe box, so the 26 px floor and the tilt rules have nothing to apply to."
+        },
+        {
+          "technique": "case-native-chart-form",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/avatar/Avatar.tsx:1 The module draws a character face. No chart form is chosen here."
+        }
+      ]
     }
   }
 }

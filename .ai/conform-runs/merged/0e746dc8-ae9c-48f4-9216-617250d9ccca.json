@@ -1,0 +1,60 @@
+{
+ "schema": "conform-run/1",
+ "worker": "0e746dc8-ae9c-48f4-9216-617250d9ccca",
+ "subject": "data-video-art-direction",
+ "evaluatedAt": "2026-10-28T23:04:47.797336+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-avatar-renderer",
+   "subject": "data-video-art-direction",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/stage/src/avatar/variants.ts:9 This context only renders the live host's face (glow, cut, depth, relit and lich3d face renderers); it makes no narration-free data video, so the subject's precondition does not hold. A case-insensitive grep of apps/stage/src/avatar for chart, thumbnail, statreel, leaderboard, 'bar race' and 'data video' returned zero files, and so did a grep of apps/ and packages/ for bar race, statreel and data video.",
+   "techniques": [
+    {
+     "technique": "evidence-card-popup",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/depth/geom.ts:223 In this context 'card' means a mesh quad for one rig part. It is not a dated evidence card at an event beat."
+    },
+    {
+     "technique": "legibility-floor",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/Avatar.tsx:29 The output is a square face canvas with no story text and no vertical-frame safe box, so the 26 px floor and the tilt rules have nothing to apply to."
+    },
+    {
+     "technique": "case-native-chart-form",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/Avatar.tsx:1 The module draws a character face. No chart form is chosen here."
+    }
+   ],
+   "absenceTerms": [
+    "chart",
+    "thumbnail",
+    "statreel",
+    "leaderboard",
+    "bar race"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-28T23:04:47.797336+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "data-video-art-direction"
+   ],
+   "techniques": [
+    "case-native-chart-form",
+    "evidence-card-popup",
+    "legibility-floor"
+   ],
+   "deviations": 0,
+   "context": "stage-avatar-renderer",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
