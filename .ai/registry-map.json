@@ -1621,7 +1621,11 @@
           "revision": 14,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/data/paged.ts:16 usePaged/usePagedMany follow the server cursor chain to effectively every page by default and concatenate the pages into one client-held list. That puts the console in the all-client regime with no stated bound on dataset growth: 10,000 pages is labelled a loop guard, not a size bet, and the `more` flag only fires at that cap.",
+          "evaluatedAt": "2026-10-28",
+          "evaluatedAgainst": "sha256-b2:c587a204413d5373",
+          "evaluatedRevision": 14
         },
         {
           "subject": "retry-backoff",

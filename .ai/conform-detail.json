@@ -5755,6 +5755,43 @@
           "evidence": "apps/console/src/pages/characters/RulesTab.tsx:9 The page's only I/O imports are RPC data hooks, so there are no child processes to reap."
         }
       ]
+    },
+    "9b2fb27b-e4c5-4300-a214-7f5518a08b44/table": {
+      "context": "console-data-layer",
+      "subject": "table",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-28",
+      "evaluatedTs": "2026-10-28T22:21:27.805Z",
+      "worker": "aa599b07-427c-40fe-8930-ec5d070b97b6",
+      "techniques": [
+        {
+          "technique": "client-server-split",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/data/paged.ts:16 The default chain fetches the whole set (the comment at line 15 reads 'effectively every page (a cursor loop guard)'). The technique requires the all-client growth bet to be written down as an upper bound with a guard that warns or flips; the simulator callers (Runs, Tournaments, Verdicts, Heatmap) rely on this default."
+        },
+        {
+          "technique": "pagination",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/data/paged.ts:162 Keyset-style continuation: the client only replays the server's opaque next_cursor string and never fabricates a position. A changed base (filter or limit) produces a new key set and a fresh chain, so a cursor is never reused under a different predicate."
+        },
+        {
+          "technique": "loading-and-empty-states",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/data/paged.ts:223 Loaded rows win over a later error. Status is 'error' only when no page exists, and 'loading' until the first page settles; data stays undefined until then, so empty is only asserted after settling."
+        },
+        {
+          "technique": "performance",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/data/cache.ts:231 An identical refetch keeps the same object reference, and paged.ts:121 keeps the folded list for the same reason, so refreshes do not re-render memoized rows."
+        },
+        {
+          "technique": "filtering",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/data/cache.ts:228 Latest wins: replies are keyed by method+params, a superseded fetch is aborted (line 221), and a late reply is dropped. Rows from an old predicate therefore cannot land under a new one. The entered-vs-applied split belongs to the page UI, not to this layer."
+        }
+      ],
+      "registryProposal": "The table subject could say how a shared data layer that feeds many tables should state the all-client growth bet. One layer-wide default page cap ('effectively every page') hides the per-table bound the technique asks for, so the bound probably belongs at each call site with the layer providing a guard or warning."
     }
   }
 }
