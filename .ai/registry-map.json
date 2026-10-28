@@ -5529,7 +5529,11 @@
           "revision": 8,
           "changedAt": "2026-09-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/stage/src/avatar/Avatar.tsx:12 This context draws a pre-made layer rig (or a procedural placeholder) with WebGL and never calls a generative image or motion model, so there is no style block, reference sheet or proofing lifecycle for the subject to govern here; a grep of apps/stage/src/avatar for prompt, styleBlock, negativePrompt, proofing and 'reference sheet' found nothing, and the 'look' modules are about gaze direction, not visual style.",
+          "evaluatedAt": "2026-10-28",
+          "evaluatedAgainst": "sha256-b2:281e1e4a619b1b07",
+          "evaluatedRevision": 8
         }
       ],
       "governance": "governed"

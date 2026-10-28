@@ -5921,6 +5921,16 @@
         "at": "2026-10-28T22:55:59.962078+00:00",
         "reason": "reviewer (sonnet): The line-level claims hold for the files I opened (Judge.tsx:44 and :60 show 'not judged' versus 'No rule failed', and Layer2.tsx:145 shows the untagged caution), but three of the four technique anchors, and the claims about unsaved-mark Retry, segment lookup, tick placement and the A/V offset, sit "
       }
+    },
+    "7bbc93eb-a921-49ea-a5b3-128e66bd5e64/visual-style-locking": {
+      "context": "stage-avatar-renderer",
+      "subject": "visual-style-locking",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-28",
+      "evaluatedTs": "2026-10-28T22:57:46.742Z",
+      "worker": "63b98277-8030-4981-9dc4-5a0428fb9f4c",
+      "techniques": []
     }
   }
 }
