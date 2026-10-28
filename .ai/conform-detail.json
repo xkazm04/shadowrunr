@@ -5677,6 +5677,63 @@
           "evidence": "apps/console/src/pages/segments/model.ts:3 Pure derivation from three RPC payloads; no matchers or lanes to fuse."
         }
       ]
+    },
+    "9b2fb27b-e4c5-4300-a214-7f5518a08b44/retry-backoff": {
+      "context": "console-data-layer",
+      "subject": "retry-backoff",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-10-28",
+      "evaluatedTs": "2026-10-28T22:07:19.867Z",
+      "worker": "38df8b6f-2542-4dbe-b378-199d5129791e",
+      "techniques": [
+        {
+          "technique": "backoff-design",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/data/socket.ts:113 Exponential, capped (30 s) and equal-jittered (socket.ts:41), and the ladder is per-connection state, which is correct. But the reset happens on handshake with no minimum-stability window, and there is no exhaustion rule: onclose always reschedules (socket.ts:154), so this is an unbounded retry wearing a schedule."
+        },
+        {
+          "technique": "error-classification-for-retry",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/data/socket.ts:147 Every socket close is retried the same way. The handler does not read the CloseEvent at all, so no transient, permanent or rate-limited class decides whether to reconnect. The RPC side does have one taxonomy (errors.ts ERROR_CODES), and rpc.ts tags timeout, offline and aborted at the boundary, but no retry policy reads those classes."
+        },
+        {
+          "technique": "storm-control",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/data/cache.ts:159 When the feed reopens, layer.ts:126 calls revalidateWatched, which fires every watched query at once against the daemon that just came back. Release is not paced or jittered, which is the correlated-wake-up stampede shape. The scale is small: one browser tab, a local daemon. On the plus side, the RPC layer adds no retry ladder (no amplification), idle cache entries are capped at 256, and event refetches are coalesced over a 250 ms window."
+        },
+        {
+          "technique": "retry-observability",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/data/connection.ts:10 The connection store shows the stream status (reconnecting) and the time to the next attempt, and the shell chrome renders it as 'retry in N s', so 'why is nothing happening' gets a visible answer. The attempt number passed to onStatus is dropped at layer.ts:123, and there is no attempts-per-success figure."
+        },
+        {
+          "technique": "circuit-breakers",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/rpc.ts:69 One operator console talks to one local daemon. Reachability is recorded for display, and no fan-in of independent callers exists that a breaker would protect. RPC calls fire only on watch, event, mutation or a 5-minute backstop, never from a retry loop."
+        },
+        {
+          "technique": "client-retry-and-redirect-conventions",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/config.ts:5 The server is a single local daemon: not replicated, no redirects, no consistency index. The technique's precondition (a client library for a replicated or redirecting server) does not hold."
+        },
+        {
+          "technique": "durable-retries",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/socket.ts:82 The only retry is a session-scoped live-stream reconnect that correctly dies with the page. RPC calls and mutations are never auto-retried, so there is no pending work to persist."
+        },
+        {
+          "technique": "jittered-revocation-with-irrevocable-terminal",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/rpc.ts:56 The console issues and revokes no leased credentials; RPC calls carry no credential at all."
+        },
+        {
+          "technique": "suspension-is-not-failure",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/data/socket.ts:154 The precondition (a ladder that runs out of retries while blocked) does not hold, because the reconnect ladder never runs out. The one real precondition gate, waiting for the contract door (socket.ts:97), spends no attempt. There is no visibility-based resume predicate, but with no budget nothing is wasted."
+        }
+      ],
+      "registryProposal": "backoff-design treats a ladder with no exhaustion rule as an unbounded retry 'wearing a schedule', and says long-lived streams should end when the ladder exhausts. A single-operator UI's reconnect to its own local control daemon is arguably meant to retry forever, with a visible 'retry in N s', and ending the stream would just force a manual reload. The technique could state when indefinite reconnect is the honest choice: interactive, visible to the user, one client, bounded by session lifetime."
     }
   }
 }

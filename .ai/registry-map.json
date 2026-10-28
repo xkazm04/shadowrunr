@@ -1633,7 +1633,11 @@
           "revision": 13,
           "changedAt": "2026-09-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/data/socket.ts:113 The /events reconnect ladder resets to rung zero on the bare WebSocket handshake (ws.onopen), which is the 'reset on first contact' trap backoff-design names: a daemon that accepts then drops the socket is reconnected at the shortest delay every cycle, and socket.test.ts:97 ('resets the backoff once a connection opens') enshrines the behaviour.",
+          "evaluatedAt": "2026-10-28",
+          "evaluatedAgainst": "sha256-b2:0ff53fb3a87ad13c",
+          "evaluatedRevision": 14
         },
         {
           "subject": "data-video-virality",
