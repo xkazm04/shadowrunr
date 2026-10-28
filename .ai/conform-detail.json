@@ -5792,6 +5792,27 @@
         }
       ],
       "registryProposal": "The table subject could say how a shared data layer that feeds many tables should state the all-client growth bet. One layer-wide default page cap ('effectively every page') hides the per-table bound the technique asks for, so the bound probably belongs at each call site with the layer providing a guard or warning."
+    },
+    "6be461ec-15e2-4963-b858-4712c7c675e8/transactions-over-a-replicated-log": {
+      "context": "console-app-bootstrap",
+      "subject": "transactions-over-a-replicated-log",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-28",
+      "evaluatedTs": "2026-10-28T22:25:35.916Z",
+      "worker": "f908d1a3-59db-40e2-88c0-73bad3193b05",
+      "techniques": [
+        {
+          "technique": "snapshot-read-plus-verify-log",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/app/compose.ts:18 Client-side data layer over a remote daemon. There is no single-writer engine and no commit entry."
+        },
+        {
+          "technique": "no-writes-no-log",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/app/main.tsx:12 Bootstrap only builds the client data layer. No transaction commit path exists in this context."
+        }
+      ]
     }
   }
 }

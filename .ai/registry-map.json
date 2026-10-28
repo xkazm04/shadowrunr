@@ -816,7 +816,11 @@
           "revision": 2,
           "changedAt": "2026-09-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/app/compose.ts:18 This context is the browser console's composition root, keymap and UI kit. It only connects a client data layer to a daemon URL over HTTP/WebSocket. Searching apps/console/src/app, keys and kit for consensus, replicat, quorum and transaction found nothing, so no store here writes through a consensus log and the subject's precondition does not hold.",
+          "evaluatedAt": "2026-10-28",
+          "evaluatedAgainst": "sha256-b2:10473b2ddfd2ef20",
+          "evaluatedRevision": 3
         },
         {
           "subject": "test-harness",

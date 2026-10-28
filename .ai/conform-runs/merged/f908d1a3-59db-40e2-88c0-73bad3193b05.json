@@ -1,0 +1,53 @@
+{
+ "schema": "conform-run/1",
+ "worker": "f908d1a3-59db-40e2-88c0-73bad3193b05",
+ "subject": "transactions-over-a-replicated-log",
+ "evaluatedAt": "2026-10-28T22:25:35.916282+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-app-bootstrap",
+   "subject": "transactions-over-a-replicated-log",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/app/compose.ts:18 This context is the browser console's composition root, keymap and UI kit. It only connects a client data layer to a daemon URL over HTTP/WebSocket. Searching apps/console/src/app, keys and kit for consensus, replicat, quorum and transaction found nothing, so no store here writes through a consensus log and the subject's precondition does not hold.",
+   "techniques": [
+    {
+     "technique": "snapshot-read-plus-verify-log",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/app/compose.ts:18 Client-side data layer over a remote daemon. There is no single-writer engine and no commit entry."
+    },
+    {
+     "technique": "no-writes-no-log",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/app/main.tsx:12 Bootstrap only builds the client data layer. No transaction commit path exists in this context."
+    }
+   ],
+   "absenceTerms": [
+    "consensus",
+    "replicat",
+    "quorum",
+    "transaction"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-28T22:25:35.916282+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "transactions-over-a-replicated-log"
+   ],
+   "techniques": [
+    "no-writes-no-log",
+    "snapshot-read-plus-verify-log"
+   ],
+   "deviations": 0,
+   "context": "console-app-bootstrap",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
