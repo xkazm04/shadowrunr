@@ -2199,7 +2199,11 @@
           "revision": 19,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/hooks.ts:7 The page only reads fixed, compiled-in tables over RPC (segments.tables, ranks.table, reconcile.report) and derives views from them in pure functions; I searched the context for embedding/retriev/rerank/cosine/nearest and found nothing (the one 'vector' hit is a CSS vector-effect), so there is no query, corpus, lane or ranked slice for this subject to govern.",
+          "evaluatedAt": "2026-10-28",
+          "evaluatedAgainst": "sha256-b2:a49d27f889212d3f",
+          "evaluatedRevision": 19
         },
         {
           "subject": "show-segment-format-design",

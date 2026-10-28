@@ -1,0 +1,60 @@
+{
+ "schema": "conform-run/1",
+ "worker": "76b8dcd9-ca56-4d77-b01d-c29bf309b965",
+ "subject": "retrieval",
+ "evaluatedAt": "2026-10-28T22:01:39.227330+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-segments-page",
+   "subject": "retrieval",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/segments/hooks.ts:7 The page only reads fixed, compiled-in tables over RPC (segments.tables, ranks.table, reconcile.report) and derives views from them in pure functions; I searched the context for embedding/retriev/rerank/cosine/nearest and found nothing (the one 'vector' hit is a CSS vector-effect), so there is no query, corpus, lane or ranked slice for this subject to govern.",
+   "techniques": [
+    {
+     "technique": "retrieval-triggering",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/hooks.ts:7 Fixed table fetch with an empty argument; nothing decides whether to consult a corpus."
+    },
+    {
+     "technique": "ranking-budgets",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/model.ts:46 'Rank' here means the viewer hierarchy, not relevance ranking; no candidates compete for a budget."
+    },
+    {
+     "technique": "hybrid-lane-fusion",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/model.ts:3 Pure derivation from three RPC payloads; no matchers or lanes to fuse."
+    }
+   ],
+   "absenceTerms": [
+    "embedding",
+    "retriev",
+    "rerank",
+    "cosine",
+    "nearest"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-28T22:01:39.227330+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "retrieval"
+   ],
+   "techniques": [
+    "hybrid-lane-fusion",
+    "ranking-budgets",
+    "retrieval-triggering"
+   ],
+   "deviations": 0,
+   "context": "console-segments-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

@@ -5651,6 +5651,32 @@
           "evidence": "apps/console/src/data/rpc.ts:54 Every call goes to the one daemon base URL. There is no replica that could refuse a write and forward the request."
         }
       ]
+    },
+    "6dce940f-74f8-426d-8a02-ed09e53724ef/retrieval": {
+      "context": "console-segments-page",
+      "subject": "retrieval",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-28",
+      "evaluatedTs": "2026-10-28T22:01:39.227Z",
+      "worker": "76b8dcd9-ca56-4d77-b01d-c29bf309b965",
+      "techniques": [
+        {
+          "technique": "retrieval-triggering",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/hooks.ts:7 Fixed table fetch with an empty argument; nothing decides whether to consult a corpus."
+        },
+        {
+          "technique": "ranking-budgets",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/model.ts:46 'Rank' here means the viewer hierarchy, not relevance ranking; no candidates compete for a budget."
+        },
+        {
+          "technique": "hybrid-lane-fusion",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/model.ts:3 Pure derivation from three RPC payloads; no matchers or lanes to fuse."
+        }
+      ]
     }
   }
 }
