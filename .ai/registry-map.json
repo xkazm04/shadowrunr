@@ -2560,8 +2560,12 @@
           "revision": 3,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "not-applicable",
+          "priorNotApplicable": 5,
+          "evidence": "apps/console/src/pages/simulator/data.ts:1 This context is a React console page that draws tournament grids and verdicts from the project's engine daemon RPCs. I searched its directory for playwright, puppeteer, chromium, webdriver, cdp, headless and browser and got zero hits, so no agent-driven browser tool or browser daemon lives here and none of the five techniques has its precondition.",
+          "evaluatedAt": "2026-10-28",
+          "evaluatedAgainst": "sha256-b2:a5e059a866a49108",
+          "evaluatedRevision": 5
         },
         {
           "subject": "document-text-extraction",

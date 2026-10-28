@@ -5931,6 +5931,42 @@
       "evaluatedTs": "2026-10-28T22:57:46.742Z",
       "worker": "63b98277-8030-4981-9dc4-5a0428fb9f4c",
       "techniques": []
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/agent-browser-control": {
+      "context": "console-simulator-page",
+      "subject": "agent-browser-control",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-10-28",
+      "evaluatedTs": "2026-10-28T23:01:28.874Z",
+      "worker": "1e6fe972-f162-45bc-aca7-fdd4778fbba0",
+      "techniques": [
+        {
+          "technique": "agent-actionable-errors",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:1 No browser commands are sent to an agent, so there are no browser failure messages to map."
+        },
+        {
+          "technique": "effect-classed-commands",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:1 No browser command surface exists here."
+        },
+        {
+          "technique": "persistent-browser-daemon",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:8 'daemon' here means the project's engine RPC daemon, not a browser process."
+        },
+        {
+          "technique": "references-over-selectors",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:1 querySelector appears only in jsdom tests written by people, never as an agent addressing elements."
+        },
+        {
+          "technique": "socket-scoped-surface",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:1 There is no loopback browser surface to scope."
+        }
+      ]
     }
   }
 }

@@ -1,0 +1,72 @@
+{
+ "schema": "conform-run/1",
+ "worker": "1e6fe972-f162-45bc-aca7-fdd4778fbba0",
+ "subject": "agent-browser-control",
+ "evaluatedAt": "2026-10-28T23:01:28.874046+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-simulator-page",
+   "subject": "agent-browser-control",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/simulator/data.ts:1 This context is a React console page that draws tournament grids and verdicts from the project's engine daemon RPCs. I searched its directory for playwright, puppeteer, chromium, webdriver, cdp, headless and browser and got zero hits, so no agent-driven browser tool or browser daemon lives here and none of the five techniques has its precondition.",
+   "techniques": [
+    {
+     "technique": "agent-actionable-errors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/data.ts:1 No browser commands are sent to an agent, so there are no browser failure messages to map."
+    },
+    {
+     "technique": "effect-classed-commands",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/data.ts:1 No browser command surface exists here."
+    },
+    {
+     "technique": "persistent-browser-daemon",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/data.ts:8 'daemon' here means the project's engine RPC daemon, not a browser process."
+    },
+    {
+     "technique": "references-over-selectors",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/data.ts:1 querySelector appears only in jsdom tests written by people, never as an agent addressing elements."
+    },
+    {
+     "technique": "socket-scoped-surface",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/data.ts:1 There is no loopback browser surface to scope."
+    }
+   ],
+   "absenceTerms": [
+    "playwright",
+    "puppeteer",
+    "chromium",
+    "webdriver",
+    "headless"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-28T23:01:28.874046+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-browser-control"
+   ],
+   "techniques": [
+    "agent-actionable-errors",
+    "effect-classed-commands",
+    "persistent-browser-daemon",
+    "references-over-selectors",
+    "socket-scoped-surface"
+   ],
+   "deviations": 0,
+   "context": "console-simulator-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
