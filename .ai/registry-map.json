@@ -2851,7 +2851,11 @@
           "revision": 5,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/contract/scripts/codegen.mjs:157 The generator emits 1 eager and 62 lazy validator bodies that tsc does not check (`// @ts-nocheck`). Each sits behind a declared type guard `data is T.<Def>` that the type checker believes, but the outside evidence is a set of hand-picked examples covering about 7 methods plus one Rust-produced event transcript. No input is generated, and nothing compares a guard's accepted set with the TS type that a second tool (json-schema-to-typescript) builds from the same schema.",
+          "evaluatedAt": "2026-10-28",
+          "evaluatedAgainst": "sha256-b2:0fd52192b37a88e4",
+          "evaluatedRevision": 6
         },
         {
           "subject": "quality-gates",

@@ -1,0 +1,84 @@
+{
+ "schema": "conform-run/1",
+ "worker": "50508cea-62d3-4388-b11a-b32efcfbee17",
+ "subject": "trust-base",
+ "evaluatedAt": "2026-10-28T22:34:35.938816+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "contract-package",
+   "subject": "trust-base",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "packages/contract/scripts/codegen.mjs:157 The generator emits 1 eager and 62 lazy validator bodies that tsc does not check (`// @ts-nocheck`). Each sits behind a declared type guard `data is T.<Def>` that the type checker believes, but the outside evidence is a set of hand-picked examples covering about 7 methods plus one Rust-produced event transcript. No input is generated, and nothing compares a guard's accepted set with the TS type that a second tool (json-schema-to-typescript) builds from the same schema.",
+   "techniques": [
+    {
+     "technique": "trusted-leaf-gets-an-outside-test",
+     "verdict": "deviation",
+     "evidence": "packages/contract/src/door.test.ts:89 The only witness from an independent mechanism (Rust serde output) covers /events frames. The result guards (62 modules) get hand-written accept/reject examples for a handful of methods, with no generated input, so most trusted guard bodies have no outside test at all. The tests do run in the ordinary vitest lane, and a mutated validator could fail them, so they are not tautologies."
+    },
+    {
+     "technique": "soundness-argument-names-its-dependencies",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/codegen.mjs:95 The discriminator rewrite says why it is sound and what it rests on: distinct, required string-const tags. That dependency is turned into an assertion in unionTag (line 87 checks `new Set(values).size === values.length`). The type:'object' addition at line 100 likewise names its isTaggable dependency."
+    },
+    {
+     "technique": "census-counts-unmarked-members",
+     "verdict": "conformant",
+     "evidence": "packages/contract/src/door.ts:57 JSON.parse's unchecked `any` is narrowed to `unknown` at once and reaches typed code only through a validator guard. This is the technique's prescribed cure, so the decoder adds no unspelled `any` members. The one remaining explicit assertion is `e.params as {...}` at line 71, over ajv's Record<string, any>."
+    },
+    {
+     "technique": "leaf-spec-states-what-callers-read",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/src/generated/validators.d.ts:8 The contract the checker consumes is a total type guard. TS `number` does not encode width, so `validateFormats: false` (codegen.mjs:119) does not make the guard over-claim. Still, schema readers are not told that uint32/int64 bounds go unchecked, because no omission line exists beside the contract."
+    },
+    {
+     "technique": "assumptions-are-build-errors",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/scripts/codegen.mjs:28 No proof rests on a platform fact. The only environmental fact, line endings, is normalised rather than assumed, so the drift gate's byte comparison does not depend on the platform."
+    },
+    {
+     "technique": "verifier-footprint-stays-contained",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/package.json:3 Nothing is published and no prover is involved. The generated validators have no runtime ajv import (grep found 0 require/import in validators.js and results/*.js). The generator tooling (json-schema-to-typescript) is dev-only, and ajv is pinned in exactly one package.json."
+    },
+    {
+     "technique": "verdict-pins-its-checker",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/scripts/check.mjs:45 The drift gate's verdict is an exit code read once by the run that produced it. Nothing stores a verdict for later comparison, and the gate regenerates with the current generator every time."
+    },
+    {
+     "technique": "marker-impl-names-its-exclusion",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/src/door.ts:100 The one piece of module-level shared state lives on a single-threaded JS event loop, and the language has no hand-written thread-transfer or sharing assertion to review."
+    }
+   ],
+   "registryProposal": "The TS analogue of a trusted leaf could be named: a type guard declared in a .d.ts (`data is T`) over a generated `@ts-nocheck` body, where T comes from a different generator reading the same schema. The outside test that matters there is agreement between the two generators (values accepted by the validator inhabit T, and values the source language serializes are accepted), not just example accept/reject cases. The technique currently reads as prover-specific."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-10-28T22:34:35.938816+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "trust-base"
+   ],
+   "techniques": [
+    "assumptions-are-build-errors",
+    "census-counts-unmarked-members",
+    "leaf-spec-states-what-callers-read",
+    "marker-impl-names-its-exclusion",
+    "soundness-argument-names-its-dependencies",
+    "trusted-leaf-gets-an-outside-test",
+    "verdict-pins-its-checker",
+    "verifier-footprint-stays-contained"
+   ],
+   "deviations": 1,
+   "context": "contract-package",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
