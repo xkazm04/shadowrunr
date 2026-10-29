@@ -99,7 +99,7 @@ description = "Provoked by every link_pinned line: a string pinned on the eviden
 
 [[quality]]
 id = "humor_landed"
-question = "Is this turn actually funny or witty for an adult audience (a joke, a comic contrast, a sharp roast), not just loud or random?"
+question = "Only when the turn is not the host refusing a harassment or brigade call (that refusal should be firm, not funny): is this turn actually funny or witty for an adult audience (a joke, a comic contrast, a sharp roast), not just loud or random?"
 
 [[quality]]
 id = "in_character"
