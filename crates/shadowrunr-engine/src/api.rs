@@ -140,6 +140,60 @@ pub struct Turn {
     pub text: String,
 }
 
+/// Constraints the API's structured output refuses (400 "properties maximum, minimum are not
+/// supported"). `minItems` is kept only at 0 or 1.
+const UNSUPPORTED_CONSTRAINTS: [&str; 8] = [
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "multipleOf",
+    "minLength",
+    "maxLength",
+    "maxItems",
+];
+
+/// The schema as the Messages API accepts it. The CLI's `--json-schema` takes the role schemas
+/// as written; the API answers 400 on two things they use, which left the judge and featured
+/// chatters unavailable on an API-only fleet:
+/// - every object schema must state `additionalProperties: false`;
+/// - numeric, length and item-count constraints are refused. They are dropped from the schema
+///   and restated in the node's `description`, so the model still reads them; the role parsers
+///   stay the validators.
+pub fn strict_schema(schema: &Value) -> Value {
+    match schema {
+        Value::Object(map) => {
+            let mut out = serde_json::Map::with_capacity(map.len() + 1);
+            let mut moved: Vec<String> = Vec::new();
+            for (k, v) in map {
+                let refused = UNSUPPORTED_CONSTRAINTS.contains(&k.as_str())
+                    || (k == "minItems" && v.as_u64().is_some_and(|n| n > 1));
+                if refused && !v.is_object() {
+                    moved.push(format!("{k} {v}"));
+                    continue;
+                }
+                out.insert(k.clone(), strict_schema(v));
+            }
+            if !moved.is_empty() {
+                let note = format!("Constraint: {}.", moved.join(", "));
+                let desc = match out.get("description").and_then(Value::as_str) {
+                    Some(d) => format!("{d} {note}"),
+                    None => note,
+                };
+                out.insert("description".into(), Value::String(desc));
+            }
+            let is_object = map.get("type").and_then(Value::as_str) == Some("object")
+                || map.get("properties").is_some_and(Value::is_object);
+            if is_object && !out.contains_key("additionalProperties") {
+                out.insert("additionalProperties".into(), Value::Bool(false));
+            }
+            Value::Object(out)
+        }
+        Value::Array(items) => Value::Array(items.iter().map(strict_schema).collect()),
+        other => other.clone(),
+    }
+}
+
 /// Build the Messages API body. `history` holds earlier turns of a warm API session; the
 /// new prompt is appended as the last user message.
 pub fn build_body(req: &EngineRequest, history: &[Turn]) -> Value {
@@ -150,7 +204,7 @@ pub fn build_body(req: &EngineRequest, history: &[Turn]) -> Value {
     messages.push(json!({"role": "user", "content": req.prompt}));
     let mut output_config = json!({"effort": effort_str(req.effort)});
     if let Some(schema) = &req.json_schema {
-        output_config["format"] = json!({"type": "json_schema", "schema": schema});
+        output_config["format"] = json!({"type": "json_schema", "schema": strict_schema(schema)});
     }
     let mut body = json!({
         "model": model_id(req.tier),
@@ -377,10 +431,71 @@ pub(crate) mod tests {
         let b = build_body(&r, &hist);
         assert_eq!(
             b["output_config"]["format"],
-            json!({"type": "json_schema", "schema": {"type": "object"}})
+            json!({"type": "json_schema", "schema": {"type": "object", "additionalProperties": false}})
         );
         assert_eq!(b["messages"].as_array().unwrap().len(), 3);
         assert_eq!(b["messages"][1]["role"], "assistant");
+    }
+
+    #[test]
+    fn strict_schema_closes_every_object_and_keeps_an_explicit_choice() {
+        let s = json!({
+            "type": "object",
+            "properties": {
+                "items": {"type": "array", "items": {"type": "object", "properties": {"a": {"type": "string"}}}},
+                "pick": {"anyOf": [{"type": "object", "properties": {}}, {"type": "null"}]},
+                "open": {"type": "object", "additionalProperties": false},
+                "type": {"type": "string"}
+            },
+            "$defs": {"d": {"properties": {"x": {"type": "integer"}}}}
+        });
+        let out = strict_schema(&s);
+        assert_eq!(out["additionalProperties"], false);
+        assert_eq!(
+            out["properties"]["items"]["items"]["additionalProperties"],
+            false
+        );
+        assert_eq!(
+            out["properties"]["pick"]["anyOf"][0]["additionalProperties"],
+            false
+        );
+        assert!(out["properties"]["pick"]["anyOf"][1]
+            .get("additionalProperties")
+            .is_none());
+        assert_eq!(out["properties"]["open"]["additionalProperties"], false);
+        assert!(out["properties"]["type"]
+            .get("additionalProperties")
+            .is_none());
+        assert_eq!(out["$defs"]["d"]["additionalProperties"], false);
+        // the properties map itself is not a schema and gains nothing
+        assert!(out["properties"].get("additionalProperties").is_none());
+    }
+
+    #[test]
+    fn strict_schema_moves_refused_constraints_into_the_description() {
+        let s = json!({
+            "type": "object",
+            "properties": {
+                "score": {"type": "integer", "minimum": 0, "maximum": 10, "description": "Laugh score."},
+                "tags": {"type": "array", "items": {"type": "string", "maxLength": 40}, "minItems": 2, "maxItems": 5},
+                "one": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                "maximum": {"type": "string"}
+            }
+        });
+        let out = strict_schema(&s);
+        let score = &out["properties"]["score"];
+        assert!(score.get("minimum").is_none() && score.get("maximum").is_none());
+        assert_eq!(
+            score["description"],
+            "Laugh score. Constraint: maximum 10, minimum 0."
+        );
+        let tags = &out["properties"]["tags"];
+        assert!(tags.get("minItems").is_none() && tags.get("maxItems").is_none());
+        assert_eq!(tags["description"], "Constraint: maxItems 5, minItems 2.");
+        assert!(tags["items"].get("maxLength").is_none());
+        assert_eq!(out["properties"]["one"]["minItems"], 1);
+        // a property that happens to be named like a constraint is a schema, not a constraint
+        assert_eq!(out["properties"]["maximum"]["type"], "string");
     }
 
     #[test]
