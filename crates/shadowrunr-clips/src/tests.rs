@@ -874,13 +874,60 @@ fn tone_wav(path: &Path, secs: u32, switch_s: u32, quiet: f64, loud: f64) {
     std::fs::write(path, b).unwrap();
 }
 
-fn ffmpeg_on_path() -> bool {
-    std::process::Command::new("ffmpeg")
-        .arg("-version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+/// What a stand-in ffmpeg does when run.
+#[derive(Clone, Copy)]
+pub(crate) enum FakeFfmpeg {
+    /// Prints an `astats` RMS line to stderr: -10 dB when the call seeks a window (`-ss`),
+    /// -30 dB for the whole file. Exits 0.
+    Levels,
+    /// Exits 0 and prints nothing (a cut that worked).
+    Silent,
+    /// Prints a line to stderr and exits 3.
+    Fails,
+}
+
+/// A stand-in `ffmpeg` executable written into `dir`, so the code that shells out to ffmpeg is
+/// measured on a machine without media tools (CI has none). Returns the path to pass as the
+/// ffmpeg command. It reads no media: tests that need real decoding stay gated on a real ffmpeg.
+pub(crate) fn fake_ffmpeg(dir: &Path, how: FakeFfmpeg) -> String {
+    #[cfg(windows)]
+    let (name, body) = (
+        "fake-ffmpeg.cmd",
+        match how {
+            FakeFfmpeg::Levels => concat!(
+                "@echo off\r\n",
+                "set L=-30.0\r\n",
+                "for %%a in (%*) do if \"%%a\"==\"-ss\" set L=-10.0\r\n",
+                "echo [Parsed_astats_0] RMS level dB: %L% 1>&2\r\n",
+                "exit /b 0\r\n"
+            ),
+            FakeFfmpeg::Silent => "@echo off\r\nexit /b 0\r\n",
+            FakeFfmpeg::Fails => "@echo off\r\necho fake ffmpeg: boom 1>&2\r\nexit /b 3\r\n",
+        },
+    );
+    #[cfg(not(windows))]
+    let (name, body) = (
+        "fake-ffmpeg.sh",
+        match how {
+            FakeFfmpeg::Levels => concat!(
+                "#!/bin/sh\n",
+                "for a in \"$@\"; do\n",
+                "  if [ \"$a\" = \"-ss\" ]; then echo '[Parsed_astats_0] RMS level dB: -10.0' >&2; exit 0; fi\n",
+                "done\n",
+                "echo '[Parsed_astats_0] RMS level dB: -30.0' >&2\n"
+            ),
+            FakeFfmpeg::Silent => "#!/bin/sh\nexit 0\n",
+            FakeFfmpeg::Fails => "#!/bin/sh\necho 'fake ffmpeg: boom' >&2\nexit 3\n",
+        },
+    );
+    let path = dir.join(name);
+    std::fs::write(&path, body).unwrap();
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    path.to_string_lossy().into_owned()
 }
 
 #[tokio::test]
@@ -906,8 +953,10 @@ async fn a_voice_logged_recorded_run_is_cut_on_real_timing_with_its_loudness() {
     heard.push((seq_of("rented throne", 300_000), 303_500, 3_200));
     std::fs::write(run.dir.join("voice.jsonl"), voice_log(&heard)).unwrap();
 
-    let ffmpeg = ffmpeg_on_path();
-    if ffmpeg {
+    // A stand-in ffmpeg reads -10 dB for a window and -30 dB for the whole recording, so the
+    // loudness half runs on every machine.
+    let fake = fake_ffmpeg(tmp.path(), FakeFfmpeg::Levels);
+    {
         // A recording of stream 200-400 s, louder from 290 s on.
         let wav = run.dir.join("programme.wav");
         tone_wav(&wav, 200, 90, 0.05, 0.4);
@@ -924,7 +973,7 @@ async fn a_voice_logged_recorded_run_is_cut_on_real_timing_with_its_loudness() {
         hook: false,
         policy: policy(),
         care_window_ms: 1_800_000,
-        ffmpeg: Some("ffmpeg".into()),
+        ffmpeg: Some(fake),
     };
     let report = scan::scan(&store, std::slice::from_ref(&run), None, &opts)
         .await
@@ -962,7 +1011,7 @@ async fn a_voice_logged_recorded_run_is_cut_on_real_timing_with_its_loudness() {
         .find(|c| c.unvoiced)
         .expect("an unheard line in the cut");
     assert_eq!(unheard.start_ms, 300_000 - w.spoken_start_ms);
-    if ffmpeg {
+    {
         let s = &best.signals;
         let a = s.audio.expect("audio measured");
         assert!(a > 0.5, "the loud stretch reads above the stream: {s:?}");
@@ -978,9 +1027,6 @@ async fn a_voice_logged_recorded_run_is_cut_on_real_timing_with_its_loudness() {
         let rec = best.recording.as_ref().unwrap();
         assert_eq!(rec.av_offset_ms, crate::footage::AV_OFFSET_MS);
         assert_eq!(rec.stream_offset_ms, 200_000);
-    } else {
-        eprintln!("ffmpeg is not on PATH: the loudness half of this test did not run");
-        assert!(best.signals.unmeasured.contains_key("audio"));
     }
 
     // Watched feedback is kept on the clip, changes nothing else, and survives a rescan.

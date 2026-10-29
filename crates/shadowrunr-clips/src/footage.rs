@@ -752,4 +752,91 @@ mod tests {
         let g = rms_db("ffmpeg", &gap, None).unwrap();
         assert!(((l - g) - 3.01).abs() < 0.1, "loud {l} half silent {g}");
     }
+
+    use crate::tests::{fake_ffmpeg, FakeFfmpeg};
+
+    #[test]
+    fn the_level_read_takes_a_window_and_reports_a_failed_or_missing_ffmpeg() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("programme.wav");
+        std::fs::write(&file, b"not media: the stand-in never reads it").unwrap();
+        let levels = fake_ffmpeg(dir.path(), FakeFfmpeg::Levels);
+        // The stand-in reads -30 dB for the whole file and -10 dB for any seeked window.
+        assert_eq!(rms_db(&levels, &file, None), Ok(-30.0));
+        assert_eq!(rms_db(&levels, &file, Some((1_000, 2_000))), Ok(-10.0));
+        assert_eq!(rms_db(&levels, &file, Some((-500, 0))), Ok(-10.0));
+        // An ffmpeg that exits non-zero names its last lines.
+        let fails = fake_ffmpeg(dir.path(), FakeFfmpeg::Fails);
+        let e = rms_db(&fails, &file, None).unwrap_err();
+        assert!(
+            e.contains("ffmpeg astats failed") && e.contains("boom"),
+            "{e}"
+        );
+        // One that succeeds without an RMS line has no audio to measure.
+        let silent = fake_ffmpeg(dir.path(), FakeFfmpeg::Silent);
+        let e = rms_db(&silent, &file, None).unwrap_err();
+        assert!(e.contains("no RMS level"), "{e}");
+        // One that is not there cannot start.
+        let e = rms_db("no-such-ffmpeg-binary", &file, None).unwrap_err();
+        assert!(e.starts_with("ffmpeg: "), "{e}");
+    }
+
+    #[test]
+    fn a_cut_runs_ffmpeg_in_the_run_directory_and_reports_its_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let span = Span {
+            in_ms: 12_000,
+            dur_ms: 30_400,
+            shift_ms: 0,
+        };
+        let rf = reframe_for(SegmentId::Seg01ImprovisedRoom);
+        let ok = fake_ffmpeg(dir.path(), FakeFfmpeg::Silent);
+        assert_eq!(cut_landscape(&ok, dir.path(), &rec(), span, None), Ok(()));
+        assert_eq!(
+            cut_landscape(&ok, dir.path(), &rec(), span, Some("captions.ass")),
+            Ok(())
+        );
+        assert_eq!(
+            cut_vertical(&ok, dir.path(), &rec(), span, &rf, "captions-9x16.ass"),
+            Ok(())
+        );
+        let bad = fake_ffmpeg(dir.path(), FakeFfmpeg::Fails);
+        let e = cut_landscape(&bad, dir.path(), &rec(), span, None).unwrap_err();
+        assert!(e.contains("ffmpeg failed") && e.contains("boom"), "{e}");
+        let e = cut_vertical(&bad, dir.path(), &rec(), span, &rf, "captions-9x16.ass").unwrap_err();
+        assert!(e.contains("ffmpeg failed"), "{e}");
+        let e = cut_landscape("no-such-ffmpeg-binary", dir.path(), &rec(), span, None).unwrap_err();
+        assert!(e.starts_with("could not start ffmpeg"), "{e}");
+    }
+
+    #[test]
+    fn the_recording_is_found_beside_the_run_or_where_the_json_points() {
+        let dir = tempfile::tempdir().unwrap();
+        // No recording.json, or one that does not parse: no recording.
+        assert!(read_recording(dir.path()).is_none());
+        std::fs::write(dir.path().join("recording.json"), "{ torn").unwrap();
+        assert!(read_recording(dir.path()).is_none());
+        // It names a file that is not there, and none sits beside it.
+        let elsewhere = dir.path().join("elsewhere.mkv");
+        let json = |file: &Path| {
+            serde_json::json!({"file": file.to_string_lossy(), "stream_offset_ms": 1_500,
+                "width": 1920, "height": 1080, "fps": 30})
+            .to_string()
+        };
+        std::fs::write(dir.path().join("recording.json"), json(&elsewhere)).unwrap();
+        assert!(read_recording(dir.path()).is_none());
+        // The recorded path, once the file exists.
+        std::fs::write(&elsewhere, b"x").unwrap();
+        let r = read_recording(dir.path()).unwrap();
+        assert_eq!(Path::new(&r.file), elsewhere);
+        assert_eq!(
+            (r.stream_offset_ms, r.width, r.height, r.fps),
+            (1_500, 1920, 1080, 30)
+        );
+        assert_eq!(r.av_offset_ms, AV_OFFSET_MS);
+        // The run directory's own recording wins over the recorded path.
+        let own = dir.path().join("recording.mp4");
+        std::fs::write(&own, b"x").unwrap();
+        assert_eq!(Path::new(&read_recording(dir.path()).unwrap().file), own);
+    }
 }
