@@ -16,6 +16,7 @@ reqwest = { version = "0.12.28", default-features = false, features = ["json", "
 
 [dev-dependencies]
 tempfile = "3.27.0"
+proptest = { version = "1.12", default-features = false, features = ["std"] }
 
 # Test double for the `claude` CLI: replays recorded stream-json fixtures so the real
 # process-spawning code path is exercised without spending quota. Never shipped.
