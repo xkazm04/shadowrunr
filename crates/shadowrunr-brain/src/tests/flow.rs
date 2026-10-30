@@ -1160,6 +1160,85 @@ async fn a_dread_council_proposal_is_put_as_a_council_motion_with_its_ceremony()
     assert!(!line.contains('{'), "every placeholder filled: {line}");
 }
 
+#[tokio::test]
+async fn a_mid_line_dread_council_proposal_is_owed_and_put_as_a_council_motion() {
+    // tuning-4c06c218/after unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L415 (also
+    // tuning-44d20a3e/after SEG-02A.a30.s1 L345, tuning-2dd18c17/after SEG-01.a30.s1 L765): a
+    // Dread Council `!propose` after a greeting parsed to no command, so it was never owed, never
+    // given the motion note and never answered. The judge failed role:rank-gated-proposals.
+    // Simulated chat in the same shape; `command` is None, as `parse_command` leaves it.
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(
+        dir.path(),
+        Arc::new(engine.clone()),
+        "f4-mid-propose",
+        unpaced(),
+    )
+    .await;
+    let c = ctx(&[]);
+    let rust = viewer("sim-v0159", "rust_spoon", Rank::DreadCouncil);
+    engine.push(
+        Role::CoreThread,
+        Ok("The bone-clerks file the evening's ledger."),
+    );
+    b.tick(1_000, vec![msg("hi", 900, &rust, "evening all")], &c)
+        .await
+        .unwrap();
+    let text = "evening again, bone daddy. ok the council is bored: !propose annex the swamp hex \
+                tonight, before the clerks wake up";
+    let ev = b
+        .tick(31_000, vec![msg("p", 30_900, &rust, text)], &c)
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["p"]);
+    let (_, plan) = plan_of(&ev);
+    assert!(plan.contains("the request takes the beat"), "{plan}");
+    let prompt = last_core_prompt(&engine);
+    let line = chat_line_of(&prompt, "p");
+    assert!(
+        line.ends_with(&crate::orchestrate::requests::proposal_note(
+            "Dread Council"
+        )),
+        "{line}"
+    );
+}
+
+#[tokio::test]
+async fn a_mid_line_proposal_below_the_propose_rank_is_not_taken_as_a_motion() {
+    // The other side of the fix above: below the rank that may propose (Warlock), a `!propose`
+    // after other words stays plain chat, as before. It is never put as an accepted motion.
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(
+        dir.path(),
+        Arc::new(engine.clone()),
+        "f4-mid-low",
+        unpaced(),
+    )
+    .await;
+    let c = ctx(&[]);
+    let toad = viewer("sim-v0042", "tomb_toad", Rank::Cultist);
+    engine.push(
+        Role::CoreThread,
+        Ok("The bone-clerks file the evening's ledger."),
+    );
+    b.tick(1_000, vec![msg("hi", 900, &toad, "evening all")], &c)
+        .await
+        .unwrap();
+    let text = "ok the cult is bored: !propose annex the swamp hex tonight";
+    let ev = b
+        .tick(31_000, vec![msg("p", 30_900, &toad, text)], &c)
+        .await
+        .unwrap();
+    let (_, plan) = plan_of(&ev);
+    assert!(!plan.contains("the request takes the beat"), "{plan}");
+    for r in engine.requests(Role::CoreThread) {
+        assert!(!r.prompt.contains("which may propose"), "{}", r.prompt);
+        assert!(!r.prompt.contains("as a council motion"), "{}", r.prompt);
+    }
+}
+
 /// unhinged-roastmaster.sonnet.SEG-02A.a3.s1 L190, verbatim.
 const L190: &str =
     "gifted 5 subs to the room, for my dog. he would have hated the spooky voice but loved the snacks";

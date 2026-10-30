@@ -1083,8 +1083,9 @@ impl InputFilter {
         None
     }
 
-    /// A `!propose` from a rank allowed to propose. Only a leading `!propose` parses to
-    /// [`Command::Propose`] (`parse_command`), so a mid-line one never counts.
+    /// A `!propose` from a rank allowed to propose: a leading one, as `parse_command` reads it,
+    /// or a mid-line one from that rank, which [`Self::filter`] gives the same command first
+    /// ([`mid_line_proposal`]).
     fn ranked_proposal(&self, msg: &ChatMsg) -> bool {
         matches!(msg.command, Some(Command::Propose { .. }))
             && msg.viewer.rank >= self.cfg.propose_min_rank
@@ -1131,6 +1132,19 @@ impl InputFilter {
                     "dropped",
                 ));
                 continue;
+            }
+
+            // A `!propose` after other words, from a rank that may propose, is that rank's
+            // proposal, as a leading one is: the same command, so it is owed, gets the motion
+            // note and skips the rate cap. `parse_command` reads only a leading `!` (the segment
+            // runtime's votes rely on that), so the brain reads this one itself (tuning-4c06c218/
+            // after unhinged-roastmaster.sonnet.SEG-02A.a300.s1 L415, tuning-44d20a3e/after
+            // SEG-02A.a30.s1 L345: a Dread Council "evening ... !propose annex the swamp hex",
+            // never answered). Below that rank it stays chat, as before.
+            if msg.command.is_none() && msg.viewer.rank >= self.cfg.propose_min_rank {
+                if let Some(text) = mid_line_proposal(&msg.text) {
+                    msg.command = Some(Command::Propose { text });
+                }
             }
 
             // 0. Safety-critical input: a self-harm disclosure is never dropped by the
@@ -1233,8 +1247,8 @@ impl InputFilter {
 
             // 2. Per-viewer rate cap (rolling minute on message time), scaled to the room
             //    ([`rate_cap_for`]). Gifts and subs, a viewer's first message and a sincere
-            //    question from a viewer not answered lately are exempt, and so is a leading
-            //    `!propose` from a rank that may propose (theatrical.sonnet.SEG-01.a30.s3
+            //    question from a viewer not answered lately are exempt, and so is a `!propose`
+            //    from a rank that may propose (leading, or mid-line as read above) (theatrical.sonnet.SEG-01.a30.s3
             //    L1069: a Lich's proposal, dropped); with the opt-5 experiment also grief and a
             //    first question. The proposal skips only the cap here: flood clustering below
             //    reads `exempt`, which holds it only with the experiment on, as before.
@@ -2350,6 +2364,37 @@ fn cut_vocatives(sentence: &str, spans: &[(usize, usize)]) -> Option<String> {
     Some(out)
 }
 
+/// The longest proposal text kept, as the segments crate caps a command's text.
+const MAX_PROPOSAL_CHARS: usize = 280;
+
+/// Words right after a mid-line `!propose` that talk about the command instead of using it:
+/// "what does !propose do", "my !propose still stands", "!propose is how you pitch a scheme"
+/// (tuning-2dd18c17/after SEG-01.a30.s1 L365, tuning-addf4e7b/after SEG-01.a30.s1 L321).
+const ABOUT_THE_COMMAND: &[&str] = &[
+    "is", "do", "does", "did", "still", "thing", "command", "actually", "even", "works", "only",
+];
+
+/// The scheme of a `!propose <text>` that is not at the start of the message, or `None`. A
+/// leading one is `parse_command`'s; a `!propose` followed by nothing or by talk about the
+/// command ([`ABOUT_THE_COMMAND`]) is no proposal.
+fn mid_line_proposal(text: &str) -> Option<String> {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let at = words
+        .iter()
+        .skip(1)
+        .position(|w| w.eq_ignore_ascii_case("!propose"))?
+        + 1;
+    let rest = &words[at + 1..];
+    let first = rest
+        .first()?
+        .trim_matches(|c: char| !c.is_alphanumeric())
+        .to_lowercase();
+    if ABOUT_THE_COMMAND.contains(&first.as_str()) {
+        return None;
+    }
+    Some(rest.join(" ").chars().take(MAX_PROPOSAL_CHARS).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3165,6 +3210,14 @@ mod tests {
         }
     }
 
+    /// The scheme of the message's `!propose` command, if it has one.
+    fn proposed(m: &ChatMsg) -> Option<&str> {
+        match &m.command {
+            Some(Command::Propose { text }) => Some(text),
+            _ => None,
+        }
+    }
+
     /// A `!propose` as `parse_command` reads it: leading only.
     fn proposal(id: &str, ts: i64, v: &str, rank: Rank, text: &str) -> ChatMsg {
         let mut m = msg(id, ts, v, text);
@@ -3250,8 +3303,10 @@ mod tests {
         assert!(dropped(&ev, "p1") && dropped(&ev, "p2"), "{ev:?}");
     }
 
+    // Simulated chat, shaped like tuning-4c06c218/after unhinged-roastmaster.sonnet.SEG-02A.a300.s1
+    // L415 (a Dread Council `!propose` after a greeting, parsed to no command and never answered).
     #[test]
-    fn a_mid_line_proposal_stays_capped_with_opt5_off() {
+    fn a_ranked_mid_line_proposal_is_a_proposal_and_skips_the_cap_with_opt5_off() {
         let mut f = filter();
         busy_room(&mut f);
         saturate(&mut f, "lich");
@@ -3262,10 +3317,94 @@ mod tests {
             Rank::Lich,
             "evening all. @Malakor !propose annex the swamp hex tonight",
         );
-        assert!(mid.command.is_none(), "commands are leading-only");
+        assert!(mid.command.is_none(), "parse_command is leading-only");
+        let (c, ev) = f.filter(20, vec![mid], &Policy::builtin());
+        let ids: Vec<&str> = c.iter().map(|c| c.msg.id.as_str()).collect();
+        assert_eq!(ids, ["p1"], "{ev:?}");
+        assert!(exempt(&ev, "p1", "proposal"), "{ev:?}");
+        assert_eq!(proposed(&c[0].msg), Some("annex the swamp hex tonight"));
+    }
+
+    #[test]
+    fn a_mid_line_proposal_below_the_propose_rank_stays_chat_and_capped_with_opt5_off() {
+        let mut f = filter();
+        busy_room(&mut f);
+        saturate(&mut f, "cultist");
+        let mid = proposal(
+            "p1",
+            11,
+            "cultist",
+            Rank::Cultist,
+            "evening all. @Malakor !propose annex the swamp hex tonight",
+        );
         let (c, ev) = f.filter(20, vec![mid], &Policy::builtin());
         assert!(c.is_empty(), "{c:?}");
         assert!(dropped(&ev, "p1"), "{ev:?}");
+        let mut f = filter();
+        let mid = proposal(
+            "p2",
+            11,
+            "cultist",
+            Rank::Cultist,
+            "ok the cult is bored: !propose annex the swamp hex tonight",
+        );
+        let (c, _) = f.filter(20, vec![mid], &Policy::builtin());
+        assert_eq!(c.len(), 1);
+        assert!(c[0].msg.command.is_none(), "below the rank it stays chat");
+    }
+
+    #[test]
+    fn a_leading_proposal_keeps_its_parsed_command_at_any_rank() {
+        let mut f = filter();
+        let (c, _) = f.filter(
+            20,
+            vec![
+                proposal(
+                    "p1",
+                    11,
+                    "council",
+                    Rank::DreadCouncil,
+                    "!propose the fog gets a seat. later !propose audit the moat",
+                ),
+                proposal(
+                    "p2",
+                    12,
+                    "thrall",
+                    Rank::Thrall,
+                    "!propose crown me tonight, then !propose a moat",
+                ),
+            ],
+            &Policy::builtin(),
+        );
+        let got: Vec<_> = c.iter().map(|c| proposed(&c.msg)).collect();
+        assert_eq!(
+            got,
+            [
+                Some("the fog gets a seat. later !propose audit the moat"),
+                Some("crown me tonight, then !propose a moat"),
+            ]
+        );
+    }
+
+    #[test]
+    fn talk_about_the_command_is_no_proposal() {
+        let mut f = filter();
+        let texts = [
+            "wait what does !propose do lol",
+            "my !propose still stands, the lich reads the ledger",
+            "@tomb_toad !propose is how you pitch a scheme",
+            "the !propose",
+        ];
+        let inbox: Vec<ChatMsg> = texts
+            .iter()
+            .enumerate()
+            .map(|(i, t)| proposal(&format!("p{i}"), i as i64, "council", Rank::DreadCouncil, t))
+            .collect();
+        let (c, _) = f.filter(20, inbox, &Policy::builtin());
+        assert_eq!(c.len(), texts.len());
+        for c in &c {
+            assert!(c.msg.command.is_none(), "{}", c.msg.text);
+        }
     }
 
     #[test]
