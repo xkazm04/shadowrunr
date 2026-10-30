@@ -240,3 +240,314 @@ impl Rounds {
 pub fn foil_name(id: &str) -> String {
     id.replace(['-', '_'], " ")
 }
+
+/// Property tests for the scene rounds. Each property names the invariant it holds the code
+/// to, taken from the code and its doc comments. Inputs are generated and simulated (made-up
+/// scene titles); no real chat. `Rounds` is `pub(crate)`, so these live in the crate, which is
+/// why `tests/segment_props.rs` does not cover it.
+///
+/// Reshaped from the brief, because the code does not promise it: `cue` does NOT take the
+/// scene out of `left` (`ended` does: "it leaves the ballot"), so the property is that `up`
+/// names the scene and `left` is untouched, and the accounting is `played` plus `left`, the
+/// scene up still being in `left`. `choose` on a tie whose options name no scene left returns
+/// `None`; the runtime only ever offers titles from `left`, so that arm is generated from
+/// titles of the scenes (left or played), and only the "never outside `left`" half is held
+/// for it.
+///
+/// Proven red on a seeded fault (each fault seeded locally in non-test code, the one test run,
+/// the source restored; property -> function: fault -> observed failure):
+/// - `choose_never_returns_a_scene_outside_left` -> `choose`: the `by_title` search ran over
+///   `0..self.scenes.len()` instead of `self.left` -> `Winner("Scene 0") chose 0, left []` (a
+///   played scene put up again).
+/// - `choose_follows_the_documented_rule` -> `choose`: `.rev()` added before the tie arm's
+///   `find` -> the last tied scene came back, not the first in ballot order.
+/// - `cue_puts_the_scene_up_and_leaves_the_ballot_to_ended` -> `cue`: `up` took the last scene
+///   left instead of `i` -> the test panicked (`up` named another scene, `ended` refused the
+///   cued id).
+/// - `ended_accepts_only_the_scene_up_and_only_once` -> `ended`: the `scene_id` comparison
+///   dropped -> `id 0 ended while 1 is up`.
+/// - `ended_accepts_only_the_scene_up_and_only_once` -> `ended`: `self.played.push(i)` doubled
+///   -> the scene was in `played` twice (the exactly-once count failed).
+/// - `played_plus_left_accounts_for_every_scene_once` -> `ended`: `self.left.retain(..)`
+///   dropped -> `played [0, 0, 0, 0, 0] left [0]`.
+/// - `the_round_counter_names_the_round_in_progress` -> `round`: `open` forced to 0 ->
+///   `round 1/2, played 1 up Some((1, ..))`.
+/// - NOT red: the upper bound of `round`'s `clamp(1, scenes.len())`. With `.max(1)` instead,
+///   every property stayed green: `played` plus the one scene up never exceeds the scene count
+///   (the one up is still unplayed), so the bound is unreachable through `cue` / `ended`; the
+///   exact model in `the_round_counter_names_the_round_in_progress` holds the counter within
+///   `1..=total` anyway.
+#[cfg(test)]
+mod props {
+    use super::*;
+    use proptest::prelude::*;
+    use shadowrunr_types::scene::SceneStatus;
+
+    fn config() -> ProptestConfig {
+        ProptestConfig {
+            cases: 96,
+            failure_persistence: None,
+            ..ProptestConfig::default()
+        }
+    }
+
+    /// A table read of `n` simulated scenes with distinct ids and titles.
+    fn table(n: usize) -> TableRead {
+        TableRead {
+            guest: "simulated-guest".into(),
+            scenes: (0..n)
+                .map(|k| Scene {
+                    id: format!("scene-{k}"),
+                    title: format!("Scene {k}"),
+                    pitch: format!("A simulated pitch {k}."),
+                    guest: "simulated-guest".into(),
+                    status: SceneStatus::Approved,
+                    notes: Vec::new(),
+                    lines: Vec::new(),
+                    fictional: true,
+                })
+                .collect(),
+        }
+    }
+
+    fn times() -> impl Strategy<Value = RoundTimes> {
+        (
+            1u32..600,
+            1u32..600,
+            1u32..600,
+            0u32..3_000,
+            0u32..3_000,
+            1u32..900,
+        )
+            .prop_map(
+                |(intro_s, ballot_secs, talk_s, floor_s, extra, scene_max_s)| RoundTimes {
+                    intro_s,
+                    ballot_secs,
+                    talk_s,
+                    floor_s,
+                    ceiling_s: floor_s + extra,
+                    scene_max_s,
+                },
+            )
+    }
+
+    /// A simulated rounds state: 1-5 scenes (a table read holds 1-3; more is a wider net).
+    fn rounds() -> impl Strategy<Value = Rounds> {
+        (1usize..=5, prop_oneof![Just(RoundTimes::DEFAULT), times()])
+            .prop_map(|(n, t)| Rounds::new(&table(n), t))
+    }
+
+    /// A ballot outcome over the titles of `n` scenes (the winner may also be an unknown
+    /// title), tied options being a non-empty list of the known titles.
+    fn outcome(n: usize) -> impl Strategy<Value = PollOutcome> {
+        prop_oneof![
+            Just(PollOutcome::NoVotes),
+            (0..=n).prop_map(|k| PollOutcome::Winner(format!("Scene {k}"))),
+            (proptest::collection::vec(0..n, 1..=n), 1u32..20).prop_map(|(ix, voters)| {
+                PollOutcome::Tie {
+                    options: ix.iter().map(|k| format!("Scene {k}")).collect(),
+                    voters,
+                }
+            }),
+        ]
+    }
+
+    /// A rounds state and enough outcomes to play every scene.
+    fn game() -> impl Strategy<Value = (Rounds, Vec<PollOutcome>)> {
+        rounds().prop_flat_map(|r| {
+            let n = r.scenes.len();
+            (Just(r), proptest::collection::vec(outcome(n), 5))
+        })
+    }
+
+    fn ballot() -> Cue {
+        Cue::Ballot {
+            poll_id: "simulated-poll".into(),
+            outcome: PollOutcome::NoVotes,
+        }
+    }
+
+    /// Plays the rounds out (ballot, cue, end), calling `each` on the state after every step.
+    fn play(r: &mut Rounds, outcomes: &[PollOutcome], mut each: impl FnMut(&Rounds)) {
+        each(r);
+        for (step, o) in outcomes.iter().enumerate() {
+            if r.left.is_empty() {
+                break;
+            }
+            // A tie over only played scenes is never offered; fall back to the first scene left.
+            let i = r
+                .choose(o)
+                .or_else(|| r.left.first().copied())
+                .expect("scenes are left");
+            let now = step as TsMs * 1_000;
+            r.cue(i, now, ballot());
+            each(r);
+            let id = r.scenes[i].id.clone();
+            assert!(r.ended(&id, now + 500));
+            each(r);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(config())]
+
+        /// `choose` never returns a scene that is not in `left`, whatever the outcome names
+        /// (a played scene, an unknown title, a tie over played scenes) and however many
+        /// scenes were played; it is `None` only when no scene is left or a tie names none
+        /// left.
+        #[test]
+        fn choose_never_returns_a_scene_outside_left((mut r, outcomes) in game(), probe in 0usize..5) {
+            let n = r.scenes.len();
+            let probes = [
+                PollOutcome::NoVotes,
+                PollOutcome::Winner(format!("Scene {probe}")),
+                PollOutcome::Winner("not a scene".into()),
+                PollOutcome::Tie { options: (0..n).map(|k| format!("Scene {k}")).collect(), voters: 1 },
+            ];
+            let mut bad = None;
+            play(&mut r, &outcomes, |r| {
+                for p in &probes {
+                    match r.choose(p) {
+                        Some(i) if !r.left.contains(&i) => {
+                            bad = Some(format!("{p:?} chose {i}, left {:?}", r.left));
+                        }
+                        None if !r.left.is_empty() && !matches!(p, PollOutcome::Tie { .. }) => {
+                            bad = Some(format!("{p:?} chose none, left {:?}", r.left));
+                        }
+                        _ => {}
+                    }
+                }
+            });
+            prop_assert!(bad.is_none(), "{:?}", bad);
+        }
+
+        /// The documented rule: the winner when it is left, else the first scene left; a tie
+        /// puts up the tied scene first in ballot order; no votes the first scene left.
+        #[test]
+        fn choose_follows_the_documented_rule((mut r, outcomes) in game(), o in 0usize..5) {
+            let n = r.scenes.len();
+            // Play a prefix so `left` is a proper, ordered subset.
+            play(&mut r, &outcomes[..o % n], |_| {});
+            let first = r.left.first().copied();
+            prop_assert_eq!(r.choose(&PollOutcome::NoVotes), first);
+            for &i in &r.left {
+                let title = r.scenes[i].title.clone();
+                prop_assert_eq!(r.choose(&PollOutcome::Winner(title)), Some(i));
+            }
+            prop_assert_eq!(r.choose(&PollOutcome::Winner("not a scene".into())), first);
+            // Every non-empty subset of the titles left, offered in reverse order.
+            let titles = r.left_titles();
+            for mask in 1u32..(1 << titles.len()) {
+                let mut options: Vec<String> = titles
+                    .iter()
+                    .enumerate()
+                    .filter(|(k, _)| mask >> k & 1 == 1)
+                    .map(|(_, t)| t.clone())
+                    .collect();
+                options.reverse();
+                let tie = PollOutcome::Tie { options: options.clone(), voters: 1 };
+                let want = r.left.iter().copied().find(|&i| options.contains(&r.scenes[i].title));
+                prop_assert_eq!(r.choose(&tie), want);
+            }
+        }
+
+        /// After `cue(i, ..)` the scene up is `i` with the cue time and how, free talk is not
+        /// running, and `left` is untouched: the scene leaves the ballot only when it ends.
+        #[test]
+        fn cue_puts_the_scene_up_and_leaves_the_ballot_to_ended(
+            (mut r, outcomes) in game(), pick in 0usize..5, now in 0i64..1_000_000,
+        ) {
+            play(&mut r, &outcomes[..pick % 3], |_| {});
+            if r.left.is_empty() {
+                return Ok(());
+            }
+            r.talk_since = Some(7);
+            let i = r.left[pick % r.left.len()];
+            let (left, played) = (r.left.clone(), r.played.clone());
+            r.cue(i, now, Cue::Unvoted);
+            prop_assert_eq!(r.up.clone(), Some((i, now, Cue::Unvoted)));
+            prop_assert_eq!(r.talk_since, None);
+            prop_assert_eq!(&r.left, &left);
+            prop_assert_eq!(&r.played, &played);
+        }
+
+        /// `ended` is true only for the scene up (false with none up, false for any other
+        /// id, state untouched), and moves that scene to `played` exactly once: a second call
+        /// with the same id is false and changes nothing.
+        #[test]
+        fn ended_accepts_only_the_scene_up_and_only_once(
+            (mut r, outcomes) in game(), pick in 0usize..5, now in 0i64..1_000_000,
+        ) {
+            play(&mut r, &outcomes[..pick % 3], |_| {});
+            if r.left.is_empty() {
+                return Ok(());
+            }
+            let mut ids: Vec<String> = r.scenes.iter().map(|s| s.id.clone()).collect();
+            ids.push(String::new());
+            ids.push("unknown".into());
+            // Nothing up: no id ends anything.
+            let before = (r.left.clone(), r.played.clone(), r.talk_since);
+            for id in &ids {
+                prop_assert!(!r.ended(id, now));
+            }
+            prop_assert_eq!(&(r.left.clone(), r.played.clone(), r.talk_since), &before);
+
+            let i = r.left[pick % r.left.len()];
+            r.cue(i, 1, Cue::Unvoted);
+            for (k, id) in ids.iter().enumerate().filter(|(k, _)| *k != i) {
+                prop_assert!(!r.ended(id, now), "id {k} ended while {i} is up");
+            }
+            prop_assert_eq!(r.up.as_ref().map(|u| u.0), Some(i));
+            prop_assert_eq!(&r.played, &before.1);
+
+            prop_assert!(r.ended(&ids[i], now));
+            prop_assert!(r.up.is_none());
+            prop_assert_eq!(r.talk_since, Some(now));
+            prop_assert_eq!(r.played.iter().filter(|&&k| k == i).count(), 1);
+            prop_assert!(!r.left.contains(&i));
+            let after = (r.left.clone(), r.played.clone());
+            prop_assert!(!r.ended(&ids[i], now + 1));
+            prop_assert_eq!(&(r.left.clone(), r.played.clone()), &after);
+            prop_assert_eq!(r.talk_since, Some(now));
+        }
+
+        /// Through any play-out, `played` plus `left` name every scene exactly once (the
+        /// scene up is still in `left`), `up` is always a scene left, and when all are played
+        /// nothing is left.
+        #[test]
+        fn played_plus_left_accounts_for_every_scene_once((mut r, outcomes) in game()) {
+            let n = r.scenes.len();
+            let mut bad = None;
+            play(&mut r, &outcomes, |r| {
+                let mut all: Vec<usize> = r.played.iter().chain(&r.left).copied().collect();
+                all.sort_unstable();
+                if all != (0..n).collect::<Vec<_>>() {
+                    bad = Some(format!("played {:?} left {:?}", r.played, r.left));
+                }
+                if let Some((i, _, _)) = &r.up {
+                    if !r.left.contains(i) {
+                        bad = Some(format!("up {i} not in left {:?}", r.left));
+                    }
+                }
+            });
+            prop_assert!(bad.is_none(), "{:?}", bad);
+            prop_assert!(r.left.is_empty() && r.played.len() == n);
+        }
+
+        /// `round()` reports the scene count as the total, and the round in progress: the
+        /// number played plus the one up, at least 1, never past the total.
+        #[test]
+        fn the_round_counter_names_the_round_in_progress((mut r, outcomes) in game()) {
+            let n = r.scenes.len();
+            let mut bad = None;
+            play(&mut r, &outcomes, |r| {
+                let (round, total) = r.round();
+                let want = if r.up.is_some() { r.played.len() + 1 } else { r.played.len().max(1) };
+                if total != n || round != want || !(1..=total).contains(&round) {
+                    bad = Some(format!("round {round}/{total}, played {} up {:?}", r.played.len(), r.up));
+                }
+            });
+            prop_assert!(bad.is_none(), "{:?}", bad);
+        }
+    }
+}

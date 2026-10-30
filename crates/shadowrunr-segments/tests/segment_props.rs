@@ -5,7 +5,8 @@
 //! simulated; no real chat.
 //!
 //! The scene rounds (`rounds::Rounds`: `choose`, `cue`, `ended`, `round`) are `pub(crate)`, so
-//! no integration test can reach them; they are not covered here (see the commit message).
+//! no integration test can reach them; their properties are in the `props` module at the
+//! bottom of `src/rounds.rs`.
 //!
 //! Proven red on a seeded fault (each fault seeded locally in `src/`, the one test run, the
 //! source restored; property -> function: fault -> observed failure):
