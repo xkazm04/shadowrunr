@@ -1,6 +1,48 @@
 //! Property tests for the chat picker's public API ([`shadowrunr_brain::picker`]). Each property
 //! names the invariant it holds the code to, taken from the code and its doc comments. Every
 //! message here is generated and simulated; no real chat.
+//!
+//! Proven red on a seeded fault (each fault seeded locally in `src/picker.rs`, the one test run,
+//! the source restored; property -> function: fault -> observed failure):
+//! - `equal_pickers_fed_equal_beats_pick_alike` -> `Picker::ranked`: the ranking reversed on
+//!   every other call (a static counter; the clock was too coarse on Windows to differ) -> the
+//!   two pickers' ids differed.
+//! - `picks_are_distinct_candidates` -> `constrain`: the `chosen.contains` and viewer skips of
+//!   the score loop dropped -> a message picked twice.
+//! - `no_candidates_pick_nothing` -> `Picker::owed`: `filter_map(position)` became
+//!   `map(position.unwrap_or(0))` -> an index-out-of-bounds panic at `picker.rs:430` on an
+//!   owed id with no candidates.
+//! - `every_safety_candidate_is_picked_first_in_inbox_order` -> `constrain`: the safety loop ran
+//!   `.rev()` -> the safety ids were out of inbox order.
+//! - `the_beat_cap_bounds_every_non_safety_pick` -> `constrain`: `chosen.len() >= max` became
+//!   `> max` in the score loop -> `1 > 0`.
+//! - `a_vote_is_never_picked` -> `constrain`: `is_vote(c)` dropped from the score-loop skip ->
+//!   a non-safety vote was picked.
+//! - `one_pick_per_viewer_per_beat` -> `constrain`: the `viewers.contains` skip dropped from the
+//!   score loop -> a viewer picked twice.
+//! - `at_most_one_injection_per_beat` -> `constrain`: the `injection && injection_taken` skip
+//!   dropped from the score loop -> two injections in a beat.
+//! - `the_raid_greeting_is_picked_when_it_can_be` -> `constrain`: the greeting's slot test
+//!   `len < max` became `len + 1 < max` -> the greeting was not in the first free slot.
+//! - `the_oldest_owed_request_goes_first` -> `constrain`: `for &i in owed` became
+//!   `owed.iter().rev()` -> the last owed request went first. NOT red at first: with
+//!   `OWED_PER_BEAT` = 1 only a beat with two real owed candidates tells, and the generated
+//!   room rarely had them, so the property now draws its owed ids from the candidates.
+//! - `pick_ids_are_the_chosen_ids` -> `Pick::ids`: `.rev()` added -> ids out of pick order.
+//! - `a_question_mark_makes_a_question` -> `is_question`: `contains('?')` became
+//!   `ends_with('?')` -> head = "", tail = " " was no question.
+//! - `an_asking_first_word_makes_a_question` -> `is_question`: first word became last word ->
+//!   lead = "", word = "who", rest = " a" was no question.
+//! - `a_name_in_the_text_is_a_mention` -> `mentions`: the `!n.is_empty()` guard dropped ->
+//!   `!mentions(&text, &[String::new()])` failed.
+//! - `a_line_without_letters_or_digits_is_a_bare_emote` -> `is_bare_emote`: the empty-line
+//!   `return true` became `false` -> text = "" was no bare emote.
+//! - `up_to_three_emote_words_are_a_bare_emote` -> `is_bare_emote`: `words.len() <= 3` became
+//!   `<= 2` -> three emote words were content.
+//! - `content_is_never_a_bare_emote` -> `is_bare_emote`: `all` became `any` -> an emote run
+//!   with one content word was a bare emote.
+//! - `is_vote_is_exactly_a_vote_command` -> `is_vote`: the `Vote` match became
+//!   `command.is_some()` -> a non-vote command counted as a vote.
 
 use std::collections::{HashMap, HashSet};
 
@@ -351,8 +393,13 @@ proptest! {
         cfg in picker_config(),
         cands in candidates(12),
         mut r in room_spec(),
+        owed_at in prop::collection::vec(any::<prop::sample::Index>(), 2..5),
     ) {
         r.greet = None;
+        // Several owed requests that are really candidates, so which of them goes first matters.
+        if !cands.is_empty() {
+            r.owed = owed_at.iter().map(|ix| ix.index(cands.len())).collect();
+        }
         let max = cfg.max_picks;
         let mut p = Picker::new(cfg);
         let ctx = room(&r);

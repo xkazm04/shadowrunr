@@ -1,6 +1,50 @@
 //! Property tests for the pace module's public API ([`shadowrunr_brain::pace`]). Each property
 //! names the invariant it holds the code to, taken from the code and its doc comments. Inputs
 //! are generated and simulated; no real chat.
+//!
+//! Proven red on a seeded fault (each fault seeded locally in `src/pace.rs`, the one test run,
+//! the source restored; property -> function: fault -> observed failure):
+//! - `speech_ms_is_never_negative` -> `paced_speech_ms`: `line_pause_ms.max(0)` became
+//!   `line_pause_ms` -> `speech_ms(&text) >= 0` failed on a negative pause.
+//! - `speech_ms_is_non_decreasing_in_text_length` -> `paced_speech_ms`: the character count
+//!   became `count % 100` -> `speech_ms(&head) <= speech_ms(&longer)` failed.
+//! - `speech_ms_depends_only_on_the_character_count` -> `paced_speech_ms`: `chars().count()`
+//!   became `len()` (bytes) -> the ascii and the two-byte line took different times.
+//! - `a_slower_cue_never_speaks_quicker` -> `PACE_FACTOR_SLOW` 0.72 became 1.2 -> `slow 833 <
+//!   normal 1000`.
+//! - `the_pace_factor_is_positive` -> `PACE_FACTOR_FAST` 1.04 became 0.0 -> `pace_factor(p) > 0.0`
+//!   failed for `Some(Fast)`.
+//! - `the_speech_clock_stays_consistent_after_any_says` -> `say_paced`: `u.max(at)` became
+//!   `u.min(at)` -> `until >= start + paced_speech_ms` failed.
+//! - `a_fresh_clock_queues_nothing` -> `free_at`: `map_or(now, ..)` became `map_or(0, ..)` ->
+//!   `free_at(now) == now` failed, now = 1.
+//! - `the_latency_median_is_one_of_the_last_samples` -> `CoreLatency::median`: `v[len / 2]`
+//!   became `v[0]` -> the below/above half-count bound failed.
+//! - `the_lookahead_lead_stays_within_its_bounds` -> `lookahead_lead`: the clamp floor
+//!   `speech_lead_ms` became 0 -> `lead >= speech_lead_ms` failed.
+//! - `the_lookahead_lead_is_non_decreasing_in_core_latency` -> `lookahead_lead`: `c + render_lag`
+//!   became `render_lag - c` -> `lead(lo) <= lead(hi)` failed.
+//! - `the_lookahead_budget_stays_between_a_third_and_the_budget` -> `lookahead_budget`:
+//!   `clamp(budget / 3, budget)` became `min(budget)` -> `0 < 1` (below a third).
+//! - `the_lookahead_budget_is_non_increasing_in_queued_speech` -> `lookahead_budget`: the start
+//!   `queued - core` became `core - queued` -> `budget(hi) <= budget(lo)` failed.
+//! - `over_lag_drops_a_tail_of_in_range_indices_never_the_first` -> `over_lag`: `i > 0 &&`
+//!   dropped -> the late list was `[0]`.
+//! - `over_lag_drops_nothing_that_starts_within_the_ceiling` -> `over_lag`: the test became the
+//!   line's end, not its start, past the ceiling -> a non-empty list inside the ceiling.
+//! - `over_budget_drops_the_fewest_last_lines_never_the_first` -> `over_budget_holding`:
+//!   `i > held` became `i >= held` -> the dropped list was `[0]`.
+//! - `the_closing_budget_never_exceeds_the_budget` -> `closing_budget`: `/ 2` became `/ 2 + 1`
+//!   -> `c <= b` failed, b = 0.
+//! - `closing_now_is_always_closing` -> `is_closing`: the prefix became `CLOSING:` -> a
+//!   `CLOSING NOW` line was not closing.
+//! - `a_closing_line_anywhere_opens_the_window` -> `is_closing`: `trim_start()` dropped ->
+//!   `is_closing` failed on an indented line (indent = tab).
+//! - `a_state_without_the_prefix_is_not_closing` -> `is_closing`: matched case-insensitively
+//!   (`to_uppercase()`) -> `!is_closing(&text)` failed. NOT red at first: the lower-case state
+//!   never held the word `closing`, so the generator now mixes in lower-case `closing` lines.
+//! - `speech_ms_survives_a_tiny_positive_rate` -> `paced_speech_ms`: `saturating_add` became
+//!   `+` -> `attempt to add with overflow` panic at `pace.rs:130`.
 
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
@@ -366,9 +410,20 @@ proptest! {
         }
     }
 
-    /// A state with no uppercase letters carries no closing line (the prefix is uppercase).
+    /// A state with no uppercase letters carries no closing line (the prefix is uppercase), even
+    /// when a line says `closing` in lower case.
     #[test]
-    fn a_state_without_the_prefix_is_not_closing(text in "[a-z0-9 :.\n]{0,120}") {
+    fn a_state_without_the_prefix_is_not_closing(
+        lines in prop::collection::vec(
+            prop_oneof![
+                3 => "[a-z0-9 :.]{0,30}",
+                1 => Just("closing: the stream ends soon".to_string()),
+                1 => Just("  closing now: say goodbye".to_string()),
+            ],
+            0..6,
+        ),
+    ) {
+        let text = lines.join("\n");
         prop_assert!(!is_closing(&text));
         prop_assert!(!is_closing_now(&text));
     }
@@ -380,8 +435,8 @@ proptest! {
     /// `speech_ms` is never negative and never panics for any positive `speech_cps`, however
     /// small (a character's `[tuning] speech_cps` is configuration).
     ///
-    /// Ignored, a real violation: a positive rate below about 1e-16 makes the speech time
-    /// infinite or past `i64::MAX`, the `as i64` cast saturates to `i64::MAX`, and adding a
+    /// A real violation once, fixed in `paced_speech_ms`: a positive rate below about 1e-16
+    /// makes the speech time infinite or past `i64::MAX`, the `as i64` cast saturates to `i64::MAX`, and adding a
     /// positive `line_pause_ms` overflows: a panic in a debug build, a wrapped negative time in
     /// a release one (`PaceConfig { speech_cps: 1e-300, line_pause_ms: 250, .. }`, text "x").
     #[test]

@@ -1,6 +1,21 @@
 //! Property tests for the orchestrator's public API ([`shadowrunr_brain::orchestrate`]). Each
 //! property names the invariant it holds the code to, taken from the code and its doc comments.
 //! Every viewer, message and beat here is generated and simulated; no real chat.
+//!
+//! Proven red on a seeded fault (each fault seeded locally in `src/orchestrate/mod.rs`, the one
+//! test run, the source restored; property -> function: fault -> observed failure):
+//! - `same_seed_same_inputs_give_identical_plans_and_commits` -> `next_bit`: a per-call counter
+//!   mixed into the bit deck's hash sort key -> the two streams' outcomes differed (seed = 0).
+//! - `rollback_restores_the_state_from_before_the_beat` -> `rollback`: `mem::replace(self,
+//!   *txn.before)` became `self.clone()` (nothing restored) -> the before and after states
+//!   differed.
+//! - `offered_is_a_subsequence_of_the_candidates` -> `offered`: the candidates walked `.rev()`
+//!   -> `offered sim-m1 is not among the candidates, in order`.
+//! - `a_forgotten_viewer_is_not_carried_into_the_next_beat` -> `forget_viewer`: the
+//!   `carried.retain` line dropped -> a forgotten viewer's message still carried
+//!   (`prop_assert_ne` failed).
+//! - `plan_and_commit_never_panic` -> `fold_question_waves`: `qs[i]` became `qs[i + 1]` -> an
+//!   index-out-of-bounds panic at `mod.rs:1030`.
 
 use std::collections::HashMap;
 
