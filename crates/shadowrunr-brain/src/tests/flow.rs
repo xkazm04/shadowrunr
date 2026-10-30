@@ -1205,6 +1205,65 @@ async fn a_mid_line_dread_council_proposal_is_owed_and_put_as_a_council_motion()
 }
 
 #[tokio::test]
+async fn a_dread_council_viewer_s_next_mid_line_motion_is_owed_once_the_reask_gap_has_passed() {
+    // tuning-808c3484/after unhinged-roastmaster.sonnet.SEG-02A.a30.s1: after rune_turnip's
+    // first proposal was answered (L552), none of their next six was owed or answered. Through
+    // the input filter's mid-line path (48e823c): the first motion is answered, a second one
+    // inside PROPOSAL_REASK_MS is owed nothing, and one after it takes the beat as a motion.
+    // Simulated chat; `command` is None, as `parse_command` leaves a mid-line `!propose`.
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(
+        dir.path(),
+        Arc::new(engine.clone()),
+        "f4-mid-repropose",
+        unpaced(),
+    )
+    .await;
+    let c = ctx(&[]);
+    let rust = viewer("sim-v0159", "rust_spoon", Rank::DreadCouncil);
+    for _ in 0..4 {
+        engine.push(
+            Role::CoreThread,
+            Ok("The bone-clerks file the evening's ledger."),
+        );
+    }
+    b.tick(1_000, vec![msg("hi", 900, &rust, "evening all")], &c)
+        .await
+        .unwrap();
+    let first = "ok the council is bored: !propose annex the swamp hex tonight";
+    let ev = b
+        .tick(31_000, vec![msg("p1", 30_900, &rust, first)], &c)
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["p1"]);
+    let soon = "and another thing: !propose the clerks audit the audit, fair is fair";
+    let ev = b
+        .tick(36_000, vec![msg("p2", 35_900, &rust, soon)], &c)
+        .await
+        .unwrap();
+    let (_, plan) = plan_of(&ev);
+    assert!(!plan.contains("the request takes the beat"), "{plan}");
+    let t = 31_000 + crate::orchestrate::PROPOSAL_REASK_MS + 5_000;
+    let later = "the council has more: !propose the hat inspector keeps the hat";
+    let ev = b
+        .tick(t, vec![msg("p3", t - 100, &rust, later)], &c)
+        .await
+        .unwrap();
+    assert_eq!(picked(&ev), ["p3"]);
+    let (_, plan) = plan_of(&ev);
+    assert!(plan.contains("the request takes the beat"), "{plan}");
+    let prompt = last_core_prompt(&engine);
+    let line = chat_line_of(&prompt, "p3");
+    assert!(
+        line.ends_with(&crate::orchestrate::requests::proposal_note(
+            "Dread Council"
+        )),
+        "{line}"
+    );
+}
+
+#[tokio::test]
 async fn a_mid_line_proposal_below_the_propose_rank_is_not_taken_as_a_motion() {
     // The other side of the fix above: below the rank that may propose (Warlock), a `!propose`
     // after other words stays plain chat, as before. It is never put as an accepted motion.

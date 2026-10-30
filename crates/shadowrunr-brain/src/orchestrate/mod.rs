@@ -190,6 +190,17 @@ pub const SMALL_ROOM_WINDOW_MS: i64 = 180_000;
 /// what is this stream, whats going on lol" at 344.0 s (78 s later) became a repeat and expired.
 /// The director asked for 120 s; that would not have reached this line, so 60 s (assumption).
 pub const WHAT_IS_THIS_REASK_MS: i64 = 60_000;
+/// A proposal from a viewer whose last proposal was answered this long ago is owed its verdict
+/// again. Owed once a stream, a proposer's every later motion was plain chat that the carry's one
+/// message a viewer superseded with their next: 67 of the 68 ranked proposals superseded in
+/// runs/sim/* and runs/sandbox/* came after the same viewer's answered one, and none was ever
+/// answered (tuning-1549c3f3/mining.txt; tuning-808c3484/after
+/// unhinged-roastmaster.sonnet.SEG-02A.a30.s1: rune_turnip's L541 answered at L552, then L568,
+/// L576, L591, L626, L638 and L691 never, and the judge failed role:rank-gated-proposals).
+/// Not sooner, so one proposer (rune_turnip sent 23 in about 5 min, tuning-addf4e7b/after
+/// SEG-01.a30.s1) cannot take every other beat: one verdict in 30 s, as [`OFF_TOPIC_ANSWER_MS`]
+/// (assumption).
+pub const PROPOSAL_REASK_MS: i64 = 30_000;
 /// Questions this close in time that ask the same thing are one question wave (assumption).
 pub const QUESTION_WAVE_MS: i64 = 60_000;
 /// Token overlap (Jaccard of normalised words) from which two questions ask the same thing.
@@ -616,6 +627,16 @@ fn asks_of(c: &Candidate, first: bool) -> Vec<Ask> {
     asks
 }
 
+/// How long after an answer the same viewer's ask of this kind is owed again, if ever: a
+/// newcomer's "what is this" ([`WHAT_IS_THIS_REASK_MS`]) and a proposal ([`PROPOSAL_REASK_MS`]).
+fn reask_ms(a: Ask) -> Option<i64> {
+    match a {
+        Ask::WhatIsThis => Some(WHAT_IS_THIS_REASK_MS),
+        Ask::Proposal => Some(PROPOSAL_REASK_MS),
+        _ => None,
+    }
+}
+
 /// What the live segment is about and how big the room is: the context [`worth`] classifies in.
 #[derive(Clone, Copy)]
 struct Seg<'a> {
@@ -916,11 +937,12 @@ impl Orchestrator {
                 let k = (c.msg.viewer.id.clone(), *a);
                 !self.asked.contains(&k)
                     // A newcomer still asking what this is after the answer: it did not land.
-                    || (*a == Ask::WhatIsThis
-                        && self
-                            .asked_at
+                    // A proposer's next motion is owed its own verdict.
+                    || reask_ms(*a).is_some_and(|gap| {
+                        self.asked_at
                             .get(&k)
-                            .is_some_and(|t| self.now_ms.saturating_sub(*t) >= WHAT_IS_THIS_REASK_MS))
+                            .is_some_and(|t| self.now_ms.saturating_sub(*t) >= gap)
+                    })
             })
     }
 
@@ -2584,6 +2606,24 @@ impl Orchestrator {
             .into_iter()
             .filter(|k| !chosen.contains(k.cand.msg.id.as_str()) && (k.held || now_ms < k.expires))
             .collect();
+        // One owed proposal a viewer: their oldest. An owned request takes no slot of the cap, so
+        // a proposer's every motion would otherwise be carried while one waits.
+        let mut motion_of: HashMap<String, (TsMs, TsMs, String)> = HashMap::new();
+        for k in carry.iter().filter(|k| k.owned == Some(Ask::Proposal)) {
+            let key = (k.since, k.cand.msg.ts_ms, k.cand.msg.id.clone());
+            let e = motion_of
+                .entry(k.cand.msg.viewer.id.clone())
+                .or_insert_with(|| key.clone());
+            if key < *e {
+                *e = key;
+            }
+        }
+        let motions: Vec<String> = carry
+            .iter()
+            .filter(|k| k.owned == Some(Ask::Proposal))
+            .filter(|k| motion_of[&k.cand.msg.viewer.id].2 != k.cand.msg.id)
+            .map(|k| k.cand.msg.id.clone())
+            .collect();
         // One carried message a viewer besides an owned request, a first contact and a gift: their
         // oldest question or bait, else their newest. A repeater cannot fill the carry.
         let deduped = |k: &Carried| {
@@ -2606,6 +2646,7 @@ impl Orchestrator {
             .filter(|k| deduped(k))
             .filter(|k| keep_of[&k.cand.msg.viewer.id].2 != k.cand.msg.id)
             .map(|k| k.cand.msg.id.clone())
+            .chain(motions)
             .collect();
         carry.retain(|k| !self.superseded.contains(&k.cand.msg.id));
         // Owned requests go first and are never capped. While held (the cold open, a scene),

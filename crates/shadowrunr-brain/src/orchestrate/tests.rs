@@ -2330,3 +2330,172 @@ fn a_demand_to_state_a_claim_as_fact_is_owned_and_outlives_its_viewer_s_newer_he
         "{ev:?}"
     );
 }
+
+/// A `!propose` from a viewer of `rank`, with the command the input filter leaves on it.
+/// Simulated text, written for these tests.
+fn motion(id: &str, viewer: &str, rank: Rank, text: &str) -> Candidate {
+    let mut m = msg(id, viewer, &format!("!propose {text}"));
+    m.viewer.rank = rank;
+    m.command = Some(Command::Propose { text: text.into() });
+    cand(&m)
+}
+
+/// A beat with one new candidate in the opening; returns the plan, the picks, the record and the
+/// carry records.
+fn beat_with(
+    room: &mut Room,
+    now: TsMs,
+    c: Option<&Candidate>,
+) -> (Plan, Vec<String>, StreamEvent, Vec<(String, String)>) {
+    let inbox: Vec<ChatMsg> = c.iter().map(|c| c.msg.clone()).collect();
+    let cands: Vec<Candidate> = c.into_iter().cloned().collect();
+    let (p, ids, e, ev) = room.beat_in(now, &ctx("opening"), None, inbox, cands);
+    (p, ids, e, carry_records(&ev))
+}
+
+#[test]
+fn a_proposer_s_next_motion_is_owed_again_once_the_reask_gap_has_passed() {
+    // tuning-808c3484/after unhinged-roastmaster.sonnet.SEG-02A.a30.s1: rune_turnip's proposal
+    // L541 was answered at L552 (535 s). Their next ones (L568, L576, L591, ...) were owed
+    // nothing, since a viewer's proposal was owed once a stream: each was plain chat, deferred in
+    // a speech hold and superseded in the carry by their next (L587, L603, L631, ...), and none
+    // was ever answered. The judge failed role:rank-gated-proposals. Now a proposal is owed again
+    // PROPOSAL_REASK_MS after the viewer's last answered one, one owed proposal a viewer.
+    let mut room = Room::new();
+    regulars(&mut room, 10);
+    regular(&mut room, "rune");
+    let p1 = motion(
+        "p1",
+        "rune",
+        Rank::DreadCouncil,
+        "every hex gets its own audit thread",
+    );
+    let (_, ids, _, _) = beat_with(&mut room, 5_000, Some(&p1));
+    assert_eq!(ids, ["p1"]);
+    room.speaking_until = Some(60_000);
+    // Inside the gap: owed nothing, and the carry keeps one of their messages, as before.
+    let p2 = motion(
+        "p2",
+        "rune",
+        Rank::DreadCouncil,
+        "the crypt holds a standing vote",
+    );
+    let (_, _, e, _) = beat_with(&mut room, 10_000, Some(&p2));
+    assert_eq!(room.o.owns(&p2), None, "{}", reason(&e));
+    let p3 = motion(
+        "p3",
+        "rune",
+        Rank::DreadCouncil,
+        "the hat inspector audits the veto",
+    );
+    let (_, _, _, rec) = beat_with(&mut room, 15_000, Some(&p3));
+    assert!(rec.contains(&("p2".into(), SUPERSEDED.into())), "{rec:?}");
+    // The gap has passed: their carried motion is owed its verdict, and their newer remark no
+    // longer supersedes it.
+    let t = 5_000 + PROPOSAL_REASK_MS;
+    let remark = cand(&{
+        let mut m = msg("r1", "rune", "the hat inspector is clearly the best title");
+        m.viewer.rank = Rank::DreadCouncil;
+        m
+    });
+    let (_, _, _, rec) = beat_with(&mut room, t, Some(&remark));
+    assert_eq!(room.o.owns(&p3), Some(Ask::Proposal));
+    assert!(!rec.iter().any(|(id, _)| id == "p3"), "{rec:?}");
+    assert!(room.o.carried.iter().any(|k| k.cand.msg.id == "p3"));
+    // A newer motion while that one waits is superseded: one owed proposal a viewer.
+    let p4 = motion(
+        "p4",
+        "rune",
+        Rank::DreadCouncil,
+        "the grudge clerk files every veto",
+    );
+    let (_, _, _, rec) = beat_with(&mut room, t + 5_000, Some(&p4));
+    assert!(rec.contains(&("p4".into(), SUPERSEDED.into())), "{rec:?}");
+    let owed: Vec<&str> = room
+        .o
+        .carried
+        .iter()
+        .filter(|k| k.owned == Some(Ask::Proposal))
+        .map(|k| k.cand.msg.id.as_str())
+        .collect();
+    assert_eq!(owed, ["p3"]);
+    // Answered as owed when the speech drains.
+    let mut answered = None;
+    for t in (t + 10_000..=90_000).step_by(5_000) {
+        let (_, ids, e, _) = beat_with(&mut room, t, None);
+        if ids.contains(&"p3".to_string()) {
+            answered = Some(reason(&e));
+            break;
+        }
+    }
+    let r = answered.expect("p3 answered");
+    assert!(r.contains("owed: p3"), "{r}");
+    // Right after that verdict their next motion is owed nothing again: a proposer cannot take
+    // every beat.
+    let p5 = motion(
+        "p5",
+        "rune",
+        Rank::DreadCouncil,
+        "the veto gets filed under lost paperwork",
+    );
+    assert_eq!(room.o.owns(&p5), None);
+}
+
+#[test]
+fn a_proposer_s_motions_waiting_together_keep_one_owed_the_oldest() {
+    // Before any verdict every proposal of a viewer is owed, and an owned request takes no slot
+    // of the carry cap: three motions in one speech hold were all carried past the cap. The
+    // oldest now stands for the proposer and each newer one is recorded as superseded.
+    let mut room = Room::new();
+    regulars(&mut room, 10);
+    regular(&mut room, "rune");
+    room.speaking_until = Some(60_000);
+    let mut rec = Vec::new();
+    for (k, t) in [(1, 5_000), (2, 10_000), (3, 15_000)] {
+        let p = motion(
+            &format!("p{k}"),
+            "rune",
+            Rank::DreadCouncil,
+            "audit the swamp hex",
+        );
+        rec.extend(beat_with(&mut room, t, Some(&p)).3);
+    }
+    let carried: Vec<&str> = room
+        .o
+        .carried
+        .iter()
+        .map(|k| k.cand.msg.id.as_str())
+        .collect();
+    assert_eq!(carried, ["p1"], "{rec:?}");
+    assert!(rec.contains(&("p2".into(), SUPERSEDED.into())), "{rec:?}");
+    assert!(rec.contains(&("p3".into(), SUPERSEDED.into())), "{rec:?}");
+}
+
+#[test]
+fn a_mid_line_propose_below_the_rank_stays_chat_after_the_reask_gap() {
+    // Unchanged: below the rank that may propose, a mid-line `!propose` reaches the orchestrator
+    // with no command (the input filter leaves it so). An earlier answered proposal of that
+    // viewer does not make it owed when the gap has passed; the carry keeps one of their
+    // messages, the newest, as before.
+    let mut room = Room::new();
+    regulars(&mut room, 10);
+    regular(&mut room, "toad");
+    let p1 = motion("p1", "toad", Rank::Cultist, "annex the swamp hex");
+    let (_, ids, _, _) = beat_with(&mut room, 5_000, Some(&p1));
+    assert_eq!(ids, ["p1"]);
+    room.speaking_until = Some(80_000);
+    let t = 5_000 + PROPOSAL_REASK_MS;
+    let mut mid = msg(
+        "m1",
+        "toad",
+        "ok the cult is bored: !propose annex the swamp hex again",
+    );
+    mid.viewer.rank = Rank::Cultist;
+    let mid = cand(&mid);
+    beat_with(&mut room, t, Some(&mid));
+    assert_eq!(room.o.owns(&mid), None);
+    let mut later = msg("m2", "toad", "the swamp hex is the best hex anyway");
+    later.viewer.rank = Rank::Cultist;
+    let (_, _, _, rec) = beat_with(&mut room, t + 5_000, Some(&cand(&later)));
+    assert!(rec.contains(&("m1".into(), SUPERSEDED.into())), "{rec:?}");
+}
