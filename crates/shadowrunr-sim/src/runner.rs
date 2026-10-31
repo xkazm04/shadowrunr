@@ -1788,6 +1788,148 @@ pub(crate) mod tests {
         assert!(out.join("smoke/ledger.jsonl").is_file());
     }
 
+    /// The raid window replay (registry raid-group-greeting, step 4): the real brain, the
+    /// scripted engine, the sim's `raid_moment` room at two sizes (300 lands in one beat, 40 is
+    /// spread over a few) and a raid-free `growing_channel` room, 8 seeds each. One `ROW` per
+    /// run: the pick slots in the minute after the raid, and how many went to the room rather
+    /// than to raiders; then the next two minutes; then a hash of every pick before the raid
+    /// and of the whole run, which two arms must share wherever the change cannot reach.
+    /// `cargo test -p shadowrunr-sim --lib -- --ignored raid_window_replay --nocapture`
+    #[tokio::test]
+    #[ignore = "an A/B instrument, not a test: prints one row per run"]
+    async fn raid_window_replay() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::collections::{HashMap, HashSet};
+        use std::hash::{Hash, Hasher};
+        let tmp = tempfile::tempdir().unwrap();
+        let mut opts = test_opts(&tmp.path().join("sim"));
+        opts.judge = false;
+        let mut raid_slots = 0usize;
+        // Why each raider pick in a raid's first minute won its slot, tag by tag.
+        let mut why: std::collections::BTreeMap<String, usize> = Default::default();
+        let only_raids = std::env::var_os("RAID_REPLAY_ONLY_RAIDS").is_some();
+        for (population, size) in [
+            ("raid_moment", 300u32),
+            ("raid_moment", 40),
+            ("growing_channel", 30),
+        ] {
+            if only_raids && population != "raid_moment" {
+                continue;
+            }
+            for seed in 1..=8u64 {
+                let run_id = format!("rw-{population}-{size}-{seed}");
+                let mut s = spec(&run_id, ModelTier::Haiku, size, 900);
+                s.population = population.into();
+                s.seed = seed;
+                let prep = prepare(
+                    &s,
+                    &tmp.path().join("prep"),
+                    Arc::new(shadowrunr_engine::ScriptedEngine),
+                    &opts,
+                )
+                .unwrap();
+                let pop = crate::population::generate(
+                    &prep.cal,
+                    population,
+                    size,
+                    900,
+                    seed,
+                    opts.hooks.rank,
+                )
+                .unwrap();
+                let raiders: HashSet<String> = pop
+                    .viewers
+                    .iter()
+                    .filter(|v| v.kind == crate::population::ArchetypeKind::RaiderWave)
+                    .map(|v| v.viewer.id.clone())
+                    .collect();
+                let res = run_one_with(
+                    s,
+                    tmp.path().join("out"),
+                    Arc::new(shadowrunr_engine::ScriptedEngine),
+                    &opts,
+                )
+                .await
+                .expect("run completes");
+                let events = transcript::read(&res.transcript).unwrap();
+                let by_id: HashMap<String, String> = events
+                    .iter()
+                    .filter_map(|e| match e {
+                        StreamEvent::Chat { msg, .. } => {
+                            Some((msg.id.clone(), msg.viewer.id.clone()))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                // The room moves the raid past its guards, so the clock is the first raider's line.
+                let raid_ms = events
+                    .iter()
+                    .filter_map(|e| match e {
+                        StreamEvent::Chat { ts_ms, msg } if raiders.contains(&msg.viewer.id) => {
+                            Some(*ts_ms)
+                        }
+                        _ => None,
+                    })
+                    .min();
+                let (mut w, mut w_room, mut p, mut p_room, mut unknown) = (0, 0, 0, 0, 0);
+                let (mut pre, mut full) = (DefaultHasher::new(), DefaultHasher::new());
+                for e in &events {
+                    let StreamEvent::Picked {
+                        ts_ms,
+                        msg_ids,
+                        reason,
+                    } = e
+                    else {
+                        continue;
+                    };
+                    unknown += msg_ids.iter().filter(|id| !by_id.contains_key(*id)).count();
+                    (ts_ms, msg_ids).hash(&mut full);
+                    let Some(r) = raid_ms else { continue };
+                    if *ts_ms < r {
+                        (ts_ms, msg_ids).hash(&mut pre);
+                        continue;
+                    }
+                    let room = msg_ids
+                        .iter()
+                        .filter(|id| by_id.get(*id).is_some_and(|v| !raiders.contains(v)))
+                        .count();
+                    if *ts_ms < r + 60_000 {
+                        for id in msg_ids {
+                            if by_id.get(id).is_some_and(|v| raiders.contains(v)) {
+                                let tags = reason
+                                    .split("; ")
+                                    .find_map(|p| p.split_once(&format!("{id} ")))
+                                    .and_then(|(_, rest)| rest.split(' ').next())
+                                    .unwrap_or("llm-or-unparsed");
+                                for t in tags.split('+') {
+                                    *why.entry(t.to_string()).or_default() += 1;
+                                }
+                                *why.entry("(raider picks)".into()).or_default() += 1;
+                            }
+                        }
+                        w += msg_ids.len();
+                        w_room += room;
+                    } else if *ts_ms < r + 180_000 {
+                        p += msg_ids.len();
+                        p_room += room;
+                    }
+                }
+                raid_slots += w;
+                println!(
+                    "ROW {population} {size} {seed} raid_at_ms={:?} raiders={} min1={w_room}/{w} min2-3={p_room}/{p} unknown={unknown} pre={:016x} full={:016x}",
+                    raid_ms,
+                    raiders.len(),
+                    pre.finish(),
+                    full.finish()
+                );
+            }
+        }
+        for (t, n) in &why {
+            println!("WHY {t} {n}");
+        }
+        assert!(raid_slots > 0, "the replay saw no pick in any raid window");
+    }
+
     /// A live sink observes the run and changes nothing in it: the same spec and seed write
     /// the same transcript bytes and the same instrument with or without one, and the sink
     /// hears every transcript line once, numbered by line.
