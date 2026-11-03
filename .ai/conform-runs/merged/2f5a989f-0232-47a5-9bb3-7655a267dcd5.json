@@ -1,0 +1,185 @@
+{
+ "schema": "conform-run/1",
+ "worker": "2f5a989f-0232-47a5-9bb3-7655a267dcd5",
+ "subject": "on-stream-overlay-delivery",
+ "evaluatedAt": "2026-11-03T22:50:15.684649+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-kit-overlays",
+   "subject": "on-stream-overlay-delivery",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "packages/stage-kit/src/ui/VotePanel.tsx:19 The on-stream vote panel works out its own bars from a Poll object that carries per-viewer ballots seen in chat. It does not just draw a share/count snapshot computed by the tool, which is the 'page computes its own aggregate from raw records' failure that aggregate-only-payloads names.",
+   "techniques": [
+    {
+     "technique": "aggregate-only-payloads",
+     "verdict": "deviation",
+     "evidence": "packages/stage-kit/src/ui/VotePanel.tsx:19 Bars (weight, %, rank bands) are computed in the page from the poll, including chat-observed ballots. The page is not handed closed aggregate fields."
+    },
+    {
+     "technique": "full-replacement-snapshots",
+     "verdict": "deviation",
+     "evidence": "packages/stage-kit/src/ui/ChatLane.tsx:55 The chat lane runs the runtime's ballot rule again for each viewer on the page so it can label vote chips. The page becomes a second state machine that has to track the tool's rule exactly, which is the failure the technique names."
+    }
+   ],
+   "registryProposal": "The standard's aggregate-only rule forbids joining a visible name to how that person voted on stream. But a chat lane drawing a viewer's own public '!vote 2' line, with a 'VOTE 2 \u00b7 <option>' chip (ChatLane.tsx:125/133), repeats something the viewer already said in public chat. The technique should say whether a public chat-command echo counts as the viewer's own consenting act, or whether it is still the forbidden join."
+  },
+  {
+   "context": "console-characters-page",
+   "subject": "on-stream-overlay-delivery",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/characters/routes.ts:3 This is an authenticated operator console page for character packages (constitution, rules, bible, tones, voice). It is not a browser-source overlay, and a search of the context directory for overlay, browser source, EventSource, WebSocket and broadcast found nothing.",
+   "techniques": [
+    {
+     "technique": "consented-data-only-packages",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/routes.ts:3 These 'packages' are character definitions browsed in the operator console. They are not design packages an overlay renders."
+    }
+   ],
+   "absenceTerms": [
+    "overlay",
+    "browser source",
+    "EventSource",
+    "WebSocket",
+    "broadcast"
+   ]
+  },
+  {
+   "context": "stage-kit-scene-engine",
+   "subject": "on-stream-overlay-delivery",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "packages/stage-kit/src/sceneModel.ts:145 The scene the broadcast page builds keeps a viewer-id \u2192 option book of individual ballots, built from raw chat events in the page. So the overlay's data holds who voted for what, which aggregate-only payloads keeps out of the overlay's data entirely.",
+   "techniques": [
+    {
+     "technique": "aggregate-only-payloads",
+     "verdict": "deviation",
+     "evidence": "packages/stage-kit/src/sceneModel.ts:145 The overlay page's state holds individual ballots keyed by viewer id. The feed is raw chat events with viewer ids, names and ranks."
+    },
+    {
+     "technique": "full-replacement-snapshots",
+     "verdict": "deviation",
+     "evidence": "packages/stage-kit/src/tallies.ts:63 Until an authoritative tally arrives, the page's own count from folded chat events sets the bar weight. That is a second counter that re-implements the runtime rule (scene.ts:195 builds voters from msg.viewer.id). It is not a full snapshot from the tool."
+    }
+   ]
+  },
+  {
+   "context": "console-onair-page",
+   "subject": "on-stream-overlay-delivery",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/onair/Screen.tsx:2 The On Air screen is a preview on the operator console with clickable route hotspots, which the standard puts outside overlay delivery ('a private operator view... is not an overlay'). A search of the context for EventSource, Content-Security-Policy, browser source and ?broadcast found nothing.",
+   "techniques": [
+    {
+     "technique": "read-only-overlay-origin",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/Screen.tsx:2 This is a console control surface with navigation, not a page pasted into broadcasting software."
+    }
+   ],
+   "absenceTerms": [
+    "EventSource",
+    "Content-Security-Policy",
+    "browser source",
+    "?broadcast"
+   ]
+  },
+  {
+   "context": "tokens-package",
+   "subject": "on-stream-overlay-delivery",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "packages/tokens/scripts/generate.mjs:2 Design tokens are generated at build time into CSS/TS bundled with the app, so the overlay's look is fixed in the tool's own release. There is no package boundary, feed or origin, and a search for EventSource, WebSocket, browser source and reconnect found nothing in the package.",
+   "techniques": [
+    {
+     "technique": "consented-data-only-packages",
+     "verdict": "not-applicable",
+     "evidence": "packages/tokens/scripts/generate.mjs:2 The look is compiled into the bundle, which the technique's 'when not to use it' excludes."
+    }
+   ],
+   "absenceTerms": [
+    "EventSource",
+    "WebSocket",
+    "browser source",
+    "reconnect"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-03T22:50:15.684649+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "on-stream-overlay-delivery"
+   ],
+   "techniques": [
+    "aggregate-only-payloads",
+    "full-replacement-snapshots"
+   ],
+   "deviations": 1,
+   "context": "stage-kit-overlays",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T22:50:15.684649+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "on-stream-overlay-delivery"
+   ],
+   "techniques": [
+    "consented-data-only-packages"
+   ],
+   "deviations": 0,
+   "context": "console-characters-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T22:50:15.684649+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "on-stream-overlay-delivery"
+   ],
+   "techniques": [
+    "aggregate-only-payloads",
+    "full-replacement-snapshots"
+   ],
+   "deviations": 1,
+   "context": "stage-kit-scene-engine",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T22:50:15.684649+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "on-stream-overlay-delivery"
+   ],
+   "techniques": [
+    "read-only-overlay-origin"
+   ],
+   "deviations": 0,
+   "context": "console-onair-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T22:50:15.684649+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "on-stream-overlay-delivery"
+   ],
+   "techniques": [
+    "consented-data-only-packages"
+   ],
+   "deviations": 0,
+   "context": "tokens-package",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

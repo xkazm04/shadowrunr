@@ -1497,7 +1497,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/routes.ts:3 This is an authenticated operator console page for character packages (constitution, rules, bible, tones, voice). It is not a browser-source overlay, and a search of the context directory for overlay, browser source, EventSource, WebSocket and broadcast found nothing.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:6650d0214c15ff60",
+          "evaluatedRevision": 2
         },
         {
           "subject": "agent-browser-control",
@@ -1999,7 +2003,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:2 The On Air screen is a preview on the operator console with clickable route hotspots, which the standard puts outside overlay delivery ('a private operator view... is not an overlay'). A search of the context for EventSource, Content-Security-Policy, browser source and ?broadcast found nothing.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:6650d0214c15ff60",
+          "evaluatedRevision": 2
         },
         {
           "subject": "agent-browser-control",
@@ -4354,7 +4362,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/stage-kit/src/ui/VotePanel.tsx:19 The on-stream vote panel works out its own bars from a Poll object that carries per-viewer ballots seen in chat. It does not just draw a share/count snapshot computed by the tool, which is the 'page computes its own aggregate from raw records' failure that aggregate-only-payloads names.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:6650d0214c15ff60",
+          "evaluatedRevision": 2
         },
         {
           "subject": "overlay-composition-and-safe-area",
@@ -4593,7 +4605,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/stage-kit/src/sceneModel.ts:145 The scene the broadcast page builds keeps a viewer-id → option book of individual ballots, built from raw chat events in the page. So the overlay's data holds who voted for what, which aggregate-only payloads keeps out of the overlay's data entirely.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:6650d0214c15ff60",
+          "evaluatedRevision": 2
         }
       ],
       "governance": "governed"
@@ -4683,7 +4699,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "packages/tokens/scripts/generate.mjs:2 Design tokens are generated at build time into CSS/TS bundled with the app, so the overlay's look is fixed in the tool's own release. There is no package boundary, feed or origin, and a search for EventSource, WebSocket, browser source and reconnect found nothing in the package.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:6650d0214c15ff60",
+          "evaluatedRevision": 2
         }
       ],
       "governance": "governed"

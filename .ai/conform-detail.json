@@ -6375,6 +6375,97 @@
           "evidence": "apps/console/src/pages/characters/Avatar.tsx:156 The tile is a still illustration and no mirror of the stage's face signal. A voice preview is 'a different face' by the technique's own terms, and it draws none."
         }
       ]
+    },
+    "e0fa3d2a-a070-4dbd-9551-517f0c58b0b8/on-stream-overlay-delivery": {
+      "context": "stage-kit-overlays",
+      "subject": "on-stream-overlay-delivery",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T22:50:15.684Z",
+      "worker": "2f5a989f-0232-47a5-9bb3-7655a267dcd5",
+      "techniques": [
+        {
+          "technique": "aggregate-only-payloads",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/ui/VotePanel.tsx:19 Bars (weight, %, rank bands) are computed in the page from the poll, including chat-observed ballots. The page is not handed closed aggregate fields."
+        },
+        {
+          "technique": "full-replacement-snapshots",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/ui/ChatLane.tsx:55 The chat lane runs the runtime's ballot rule again for each viewer on the page so it can label vote chips. The page becomes a second state machine that has to track the tool's rule exactly, which is the failure the technique names."
+        }
+      ],
+      "registryProposal": "The standard's aggregate-only rule forbids joining a visible name to how that person voted on stream. But a chat lane drawing a viewer's own public '!vote 2' line, with a 'VOTE 2 · <option>' chip (ChatLane.tsx:125/133), repeats something the viewer already said in public chat. The technique should say whether a public chat-command echo counts as the viewer's own consenting act, or whether it is still the forbidden join."
+    },
+    "20f1e644-e83b-481d-864f-cb15b9124d7e/on-stream-overlay-delivery": {
+      "context": "console-characters-page",
+      "subject": "on-stream-overlay-delivery",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T22:50:15.684Z",
+      "worker": "2f5a989f-0232-47a5-9bb3-7655a267dcd5",
+      "techniques": [
+        {
+          "technique": "consented-data-only-packages",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/routes.ts:3 These 'packages' are character definitions browsed in the operator console. They are not design packages an overlay renders."
+        }
+      ]
+    },
+    "fc878bef-2e53-416c-83f0-0b62db46a8b4/on-stream-overlay-delivery": {
+      "context": "stage-kit-scene-engine",
+      "subject": "on-stream-overlay-delivery",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T22:50:15.684Z",
+      "worker": "2f5a989f-0232-47a5-9bb3-7655a267dcd5",
+      "techniques": [
+        {
+          "technique": "aggregate-only-payloads",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/sceneModel.ts:145 The overlay page's state holds individual ballots keyed by viewer id. The feed is raw chat events with viewer ids, names and ranks."
+        },
+        {
+          "technique": "full-replacement-snapshots",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/tallies.ts:63 Until an authoritative tally arrives, the page's own count from folded chat events sets the bar weight. That is a second counter that re-implements the runtime rule (scene.ts:195 builds voters from msg.viewer.id). It is not a full snapshot from the tool."
+        }
+      ]
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/on-stream-overlay-delivery": {
+      "context": "console-onair-page",
+      "subject": "on-stream-overlay-delivery",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T22:50:15.684Z",
+      "worker": "2f5a989f-0232-47a5-9bb3-7655a267dcd5",
+      "techniques": [
+        {
+          "technique": "read-only-overlay-origin",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:2 This is a console control surface with navigation, not a page pasted into broadcasting software."
+        }
+      ]
+    },
+    "df38dcc3-a71c-4397-abb5-4fe4681cfccb/on-stream-overlay-delivery": {
+      "context": "tokens-package",
+      "subject": "on-stream-overlay-delivery",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T22:50:15.684Z",
+      "worker": "2f5a989f-0232-47a5-9bb3-7655a267dcd5",
+      "techniques": [
+        {
+          "technique": "consented-data-only-packages",
+          "verdict": "not-applicable",
+          "evidence": "packages/tokens/scripts/generate.mjs:2 The look is compiled into the bundle, which the technique's 'when not to use it' excludes."
+        }
+      ]
     }
   }
 }
