@@ -607,12 +607,11 @@
           "changedAt": "2026-10-25",
           "confidence": "strong",
           "state": "deviation",
-          "evidence": "crates/shadowrunr-brain/src/memory/consolidate.rs:148 Consolidation selects the newest capped window and advances its checkpoint to the cycle time, leaving older overflow episodes outside subsequent windows.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:4f054116d66a9495",
-          "evaluatedRevision": 51,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "crates/shadowrunr-brain/src/memory/store.rs:920 Decay sweeps only live facts. Procedurals (\"When X, do Y\" habits) are written every sleep cycle and the newest five are injected into every beat by top_procedurals(5), yet nothing ever decays, supersedes or retires them, so the always-on behaviour tier is the one tier that is never governed.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:6c06fb6d8d6c900f",
+          "evaluatedRevision": 52,
+          "revisionsBehind": 1
         },
         {
           "subject": "companion-identity",
@@ -3796,12 +3795,11 @@
           "changedAt": "2026-10-25",
           "confidence": "probable",
           "state": "deviation",
-          "evidence": "crates/shadowrunr-reconcile/src/directives.rs:45 An existing empty directives file is treated as an empty store, allowing subsequent writes to replace unreadable durable state.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:4f054116d66a9495",
-          "evaluatedRevision": 51,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "crates/shadowrunr-reconcile/src/lib.rs:707 lord_chat's duplicate check covers active and pending directives but not proposals the owner already dropped. A rejected standing-rule proposal can therefore be proposed again on the next chat, and it lives as a flag in the same array as active rules.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:6c06fb6d8d6c900f",
+          "evaluatedRevision": 52,
+          "revisionsBehind": 1
         },
         {
           "subject": "voice-io",
@@ -4531,12 +4529,11 @@
           "changedAt": "2026-10-25",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "packages/stage-kit/src/sceneModel.ts:250 The stage kit's only 'memory' is ChatMemory, a capped cache of chat lines kept for the screen. It forgets the oldest lines that nothing on screen pins, and no model ever reads it. A search of packages/stage-kit for recall, belief, embedding, consolidat and episod found nothing, so the subject's pipeline of capture, distill and recall into an agent's context is absent here.",
-          "evaluatedAt": "2026-10-24",
-          "evaluatedAgainst": "sha256-b2:4f054116d66a9495",
-          "evaluatedRevision": 51,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "packages/stage-kit/src/sceneModel.ts:289 The stage kit's only memory is ChatMemory, a capped display cache of chat lines that forgets the oldest unpinned lines and is never read by a model. A search of packages/stage-kit for recall, belief, embedding, consolidat and episod found no hits, so the capture, distill and recall pipeline is absent.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:6c06fb6d8d6c900f",
+          "evaluatedRevision": 52,
+          "revisionsBehind": 1
         },
         {
           "subject": "live-response-latency-budgeting",
@@ -5730,12 +5727,11 @@
           "changedAt": "2026-10-25",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:49 The Review page only renders the daemon's session record and forwards operator marks to the daemon, so no store an agent recalls from is held here; a search of apps/console/src/pages/review for recall, belief, embedding, episod and provenance found nothing, and the only memory or consolidat hit is names.ts mapping the consolidator role to the display label \"Memory\".",
-          "evaluatedAt": "2026-10-24",
-          "evaluatedAgainst": "sha256-b2:4f054116d66a9495",
-          "evaluatedRevision": 51,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:49 The Review page renders the daemon's session record and forwards operator feedback marks to the daemon, so it holds no store an agent recalls from. Searches of apps/console/src/pages/review found no hits for recall, belief, embedding or episod. The only memory or consolidat hit is names.ts mapping the consolidator role to the display label \"Memory\".",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:6c06fb6d8d6c900f",
+          "evaluatedRevision": 52,
+          "revisionsBehind": 1
         },
         {
           "subject": "fleet-orchestration",

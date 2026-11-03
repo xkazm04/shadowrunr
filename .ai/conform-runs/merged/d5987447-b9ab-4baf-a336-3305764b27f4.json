@@ -1,0 +1,218 @@
+{
+ "schema": "conform-run/1",
+ "worker": "d5987447-b9ab-4baf-a336-3305764b27f4",
+ "subject": "agent-memory",
+ "evaluatedAt": "2026-11-03T10:14:21.707592+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "brain-composition-memory",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-brain/src/memory/store.rs:920 Decay sweeps only live facts. Procedurals (\"When X, do Y\" habits) are written every sleep cycle and the newest five are injected into every beat by top_procedurals(5), yet nothing ever decays, supersedes or retires them, so the always-on behaviour tier is the one tier that is never governed.",
+   "techniques": [
+    {
+     "technique": "decay-and-forgetting",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/memory/store.rs:920 The sweep iterates facts only. mem_procedural has no retire, decay or supersede path anywhere in the tree (checked with grep), which is the technique's \"tier nothing ever calls\" failure on the always-injected lane. Facts themselves get conformant demote-then-age-out into _history/."
+    },
+    {
+     "technique": "memory-value-model",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/memory/store.rs:601 Cap eviction ranks by importance and last recall. The always tier (top_facts, store.rs:710) ranks by importance, confidence and updated time, and decay uses idle time. That is three orderings, not one shared value model. The top-3-per-scope facts are also stamped recalled on every beat (lib.rs:1336), so their idle clock resets forever: an unbounded retrieval reprieve."
+    },
+    {
+     "technique": "consolidation",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-brain/src/memory/consolidate.rs:224 Re-judged the stale verdict. Overflow skipped by the caps is now recorded as a gap in the cycle stats and read first by the next cycle, and the tests every_episode_reaches_a_cycle and pressure_counts_the_unread_gap pin it. The trigger is volume with a 6 h floor and a 72 h staleness valve, and a failed cycle does not advance (last_completed_cycle filters on completed)."
+    },
+    {
+     "technique": "loss-site-inventory",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/memory/consolidate.rs:280 The distiller is shown the first 40 live facts, ordered alphabetically by scope and key, under the heading \"Known live facts\". Nothing tells it the list is partial (up to 500 per scope exist), so it cannot see or supersede the rest. The cycle report does mark its own drops, which makes this unmarked cut stand out."
+    },
+    {
+     "technique": "observation-clock",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/memory/consolidate.rs:275 Each episode is printed with its raw ts, but the prompt never states now and never tells the pass to resolve relative references against the episode instant. This is the inverse failure the technique names."
+    },
+    {
+     "technique": "memory-governance",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/memory/consolidate.rs:480 Behaviour rules distilled from viewer-chat episodes are auto-committed with no review lane and injected every beat as \"Habits you have learned\". Standing rules are meant to be human-gated. The operator forget_fact and tombstone path is a correct override."
+    },
+    {
+     "technique": "rollup-compaction",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/memory/store.rs:805 Every procedural gets a fresh id with no duplicate check, the consolidator is never shown the existing procedurals, and no rollup pass exists. Up to 6 near-duplicate habits can accrete per cycle without bound."
+    },
+    {
+     "technique": "episodic-capture",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/lib.rs:1280 Stream episodes close every 5 ticks or at a size limit (record_turn), and the body is the raw joined lines. The boundaries come from the clock and size, not from meaningful events, and there is no distilled body."
+    },
+    {
+     "technique": "recall-injection",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-brain/src/lib.rs:1325 Tiers have separate budgets: the always tier takes 3 per scope, relevance takes BM25 search_facts(8), viewer briefs take 5, and recency takes recent_episodes. Recalled material is labelled as memory inside a nonce fence (compose.rs:1032)."
+    },
+    {
+     "technique": "durable-store-failure-posture",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/lib.rs:1302 Recall propagates every store error with ? and fails the beat. It does not return a degraded \"memory unavailable\" note, so the read path fails hard on a broken index."
+    },
+    {
+     "technique": "lane-reconciliation",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-brain/src/memory/store.rs:1413 Markdown is the record and SQLite FTS is a rebuildable lane. A read-only verify reports nodes missing, extra or changed against the markdown hashes, and rebuild_index is the explicit repair."
+    },
+    {
+     "technique": "filter-at-the-id-door",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-brain/src/memory/store.rs:876 search_facts loads each hit by id and re-checks Live status at the loader. Superseded facts are also removed from FTS (index_fact sets no body)."
+    },
+    {
+     "technique": "read-set-bounded-links",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-brain/src/memory/store.rs:503 Sources are bounded to the evidence read set (consolidate.rs:404), but a model-named supersedes id is only checked to exist and be live. It is not checked against the 40 facts the pass was actually shown, so it can retire a fact the pass never read."
+    }
+   ]
+  },
+  {
+   "context": "console-review-page",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:49 The Review page renders the daemon's session record and forwards operator feedback marks to the daemon, so it holds no store an agent recalls from. Searches of apps/console/src/pages/review found no hits for recall, belief, embedding or episod. The only memory or consolidat hit is names.ts mapping the consolidator role to the display label \"Memory\".",
+   "techniques": [],
+   "absenceTerms": [
+    "recall",
+    "belief",
+    "embedding",
+    "episod"
+   ]
+  },
+  {
+   "context": "reconcile-engine",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-reconcile/src/lib.rs:707 lord_chat's duplicate check covers active and pending directives but not proposals the owner already dropped. A rejected standing-rule proposal can therefore be proposed again on the next chat, and it lives as a flag in the same array as active rules.",
+   "techniques": [
+    {
+     "technique": "pending-beliefs-live-apart",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-reconcile/src/directives.rs:118 Proposals are a status flag on the same directives.json array that active() filters (d.active && !d.proposed), rather than a separate store. The proposer also does not check deactivated (rejected) proposals before re-proposing (lib.rs:707)."
+    },
+    {
+     "technique": "memory-governance",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-reconcile/src/directives.rs:12 Standing directives injected into every stream are human-gated. A model reply can only create inactive proposals, and the owner activates them by exact content."
+    },
+    {
+     "technique": "durable-store-failure-posture",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-reconcile/src/lib.rs:651 The write path refuses a corrupt file (directives.rs:46 maps a parse error to an error before add or propose can overwrite), which is correct. The read path into the Reconciler's model call fails hard on the same error instead of degrading with an \"unavailable\" note. The earlier line-45 claim (a whitespace-only file reads as empty) is low-consequence because writes are atomic (tmp plus sync_all plus rename) and a zero-byte file holds nothing recoverable."
+    },
+    {
+     "technique": "rejected-revision-leaves-its-evidence",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-reconcile/src/directives.rs:130 A dropped proposal stays on disk with its text and scope, so the evidence survives the rejection. That the proposer ignores it is recorded under pending-beliefs-live-apart."
+    }
+   ]
+  },
+  {
+   "context": "stage-kit-scene-engine",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "packages/stage-kit/src/sceneModel.ts:289 The stage kit's only memory is ChatMemory, a capped display cache of chat lines that forgets the oldest unpinned lines and is never read by a model. A search of packages/stage-kit for recall, belief, embedding, consolidat and episod found no hits, so the capture, distill and recall pipeline is absent.",
+   "techniques": [],
+   "absenceTerms": [
+    "recall",
+    "belief",
+    "embedding",
+    "consolidat",
+    "episod"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "agent-memory",
+   "context": "clips-pipeline",
+   "reason": "absence contradicted: crates/shadowrunr-daemon/src/cli.rs:1127 contains 'episod' (11 hit(s) in the context's directories)"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-03T10:14:21.707592+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [
+    "consolidation",
+    "decay-and-forgetting",
+    "durable-store-failure-posture",
+    "episodic-capture",
+    "filter-at-the-id-door",
+    "lane-reconciliation",
+    "loss-site-inventory",
+    "memory-governance",
+    "memory-value-model",
+    "observation-clock",
+    "read-set-bounded-links",
+    "recall-injection",
+    "rollup-compaction"
+   ],
+   "deviations": 1,
+   "context": "brain-composition-memory",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T10:14:21.707592+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-review-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T10:14:21.707592+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [
+    "durable-store-failure-posture",
+    "memory-governance",
+    "pending-beliefs-live-apart",
+    "rejected-revision-leaves-its-evidence"
+   ],
+   "deviations": 1,
+   "context": "reconcile-engine",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T10:14:21.707592+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "stage-kit-scene-engine",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
