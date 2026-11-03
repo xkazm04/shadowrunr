@@ -1745,7 +1745,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/data/rpc.test.ts:99 The name claims an unknown method is refused before any fetch, but rpc.ts always POSTs first (line 54) and the door returns method_not_found only after the reply (line 79). The test never checks fetch.calls, so the overstated name passes and tells a searcher the guard exists.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "table",
@@ -3975,7 +3979,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/table.rs:780 The test claims every segment has a table but loops over a hand-written list of five SegmentId values. A new variant with no table compiles once segment_name is extended, segment_is_descoped silently treats it as descoped (map_or(true, ...)), and nothing goes red.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "agent-runtime-assembly",
@@ -5134,7 +5142,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/fidelity/run.mjs:42 When contest data, style-contract.py or Playwright is missing, the fidelity gate prints a named skip but exits 0 unless FIDELITY_REQUIRED=1 is set, so a run that checked no page reads as a pass to anything reading the exit code.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "adaptive-fidelity-tiers",

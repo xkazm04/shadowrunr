@@ -1,0 +1,156 @@
+{
+ "schema": "conform-run/1",
+ "worker": "2c9df45c-9a5e-47b4-bc45-1d3c92db46b7",
+ "subject": "test-harness",
+ "evaluatedAt": "2026-11-03T23:25:41.711984+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-quality-gates",
+   "subject": "test-harness",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/fidelity/run.mjs:42 When contest data, style-contract.py or Playwright is missing, the fidelity gate prints a named skip but exits 0 unless FIDELITY_REQUIRED=1 is set, so a run that checked no page reads as a pass to anything reading the exit code.",
+   "techniques": [
+    {
+     "technique": "platform-quirk-absorption",
+     "verdict": "deviation",
+     "evidence": "apps/console/fidelity/run.mjs:42 The missing-prerequisite diagnosis is named, but a run that checks nothing exits 0 by default, and failing needs an opt-in env var (a guard that must be configured)."
+    },
+    {
+     "technique": "negative-control-tests",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/perf/dom.test.tsx:64 The DOM gate is shown going red against a deliberately low line (100) for onair.l1."
+    },
+    {
+     "technique": "assert-the-schedule-not-the-stopwatch",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/perf/dom.test.tsx:47 The gate checks counts, not timings, and proves the count is unchanged with every reply delayed 40 ms."
+    },
+    {
+     "technique": "gate-scope-is-not-report-scope",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/perf/dom.test.tsx:3 The measured population comes from the registered page set (PAGE_IDS), not from a hand list."
+    },
+    {
+     "technique": "unreached-decisions-pin-nothing",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/perf/commits.test.tsx:54 An upper-bound commit count would also pass at zero, so the test also asserts the event actually reached the screen."
+    },
+    {
+     "technique": "approval-snapshots-with-guarded-update",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/fidelity/run.mjs:5 Contracts are recorded from the winning prototype, not from the port under test, so record mode cannot rubber-stamp the thing being checked."
+    }
+   ]
+  },
+  {
+   "context": "segments-runtime",
+   "subject": "test-harness",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-segments/src/table.rs:780 The test claims every segment has a table but loops over a hand-written list of five SegmentId values. A new variant with no table compiles once segment_name is extended, segment_is_descoped silently treats it as descoped (map_or(true, ...)), and nothing goes red.",
+   "techniques": [
+    {
+     "technique": "gate-scope-is-not-report-scope",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/src/table.rs:780 A uniformity claim over a closed enum is checked against a hand-written member list rather than one derived from the type."
+    },
+    {
+     "technique": "isolation-lanes",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-segments/src/cases.rs:761 Case-store tests each get a private tempdir that is dropped whole."
+    }
+   ]
+  },
+  {
+   "context": "console-data-layer",
+   "subject": "test-harness",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/data/rpc.test.ts:99 The name claims an unknown method is refused before any fetch, but rpc.ts always POSTs first (line 54) and the door returns method_not_found only after the reply (line 79). The test never checks fetch.calls, so the overstated name passes and tells a searcher the guard exists.",
+   "techniques": [
+    {
+     "technique": "unreached-decisions-pin-nothing",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/data/rpc.test.ts:99 The name claims a stronger guard than the assertions make; the 'before the network' decision does not exist in rpc.ts."
+    },
+    {
+     "technique": "assert-the-schedule-not-the-stopwatch",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/data/cache.test.ts:106 The coalescing window and the backstop are proven on manual timers, one millisecond either side, never on wall time."
+    },
+    {
+     "technique": "gate-scope-is-not-report-scope",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/data/rpc.test.ts:39 The every-error-code mapping test enumerates the taxonomy from its source constant, not a hand list."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "test-harness",
+   "context": "voice-sidecar",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "test-harness",
+   "context": "console-build-and-desktop-shell",
+   "reason": "evidence leans on src/perf/timings.test.tsx, which is not a tracked file"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-03T23:25:41.711984+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-harness"
+   ],
+   "techniques": [
+    "approval-snapshots-with-guarded-update",
+    "assert-the-schedule-not-the-stopwatch",
+    "gate-scope-is-not-report-scope",
+    "negative-control-tests",
+    "platform-quirk-absorption",
+    "unreached-decisions-pin-nothing"
+   ],
+   "deviations": 1,
+   "context": "console-quality-gates",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T23:25:41.711984+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-harness"
+   ],
+   "techniques": [
+    "gate-scope-is-not-report-scope",
+    "isolation-lanes"
+   ],
+   "deviations": 1,
+   "context": "segments-runtime",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T23:25:41.711984+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-harness"
+   ],
+   "techniques": [
+    "assert-the-schedule-not-the-stopwatch",
+    "gate-scope-is-not-report-scope",
+    "unreached-decisions-pin-nothing"
+   ],
+   "deviations": 1,
+   "context": "console-data-layer",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
