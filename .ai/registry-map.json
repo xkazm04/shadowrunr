@@ -2595,8 +2595,8 @@
           "revision": 3,
           "changedAt": "2026-10-29",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 4
+          "priorNotApplicable": 4,
+          "state": "unknown"
         },
         {
           "subject": "mcp-tools",
@@ -4024,12 +4024,11 @@
           "changedAt": "2026-10-29",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/Cargo.toml:3 Searches found no narration or narrator references in this context; the crate implements broadcast segment behavior and fictional case data rather than producing software demonstration films.",
-          "evaluatedAt": "2026-10-21",
-          "evaluatedAgainst": "sha256-b2:ef4fc3b78116e73b",
-          "evaluatedRevision": 2,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:3 The crate is show segment logic: commands, ranks, votes and a fictional demo case used as show data. A search found no narrator/narration/voiceover/screencast/'demo film' terms. The only 'narrated' hit is a runtime.rs comment about the character narrating polls, not film narration. So no demo-film production exists here.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:e3bb8c209c3765f1",
+          "evaluatedRevision": 3,
+          "revisionsBehind": 1
         },
         {
           "subject": "mcp-tools",
@@ -4161,12 +4160,11 @@
           "changedAt": "2026-10-29",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "apps/stage/package.json:5 Searches found no narration or narrator references in this context; the implementation replays a fictional broadcast and renders derivative clips rather than producing a film demonstrating software behavior.",
-          "evaluatedAt": "2026-10-21",
-          "evaluatedAgainst": "sha256-b2:ef4fc3b78116e73b",
-          "evaluatedRevision": 2,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "apps/stage/scripts/record-clip.mjs:2 The stage's only recorder steps clip mode frame by frame to render vertical show-highlight clips (fictional case captions) for the clip factory, and make-demo.mjs writes a fictional stream fixture for replay. Neither is a narrated film demonstrating the software, and a search found no narrator/narration/voiceover/screencast/'demo film' terms, so the precondition does not hold.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:e3bb8c209c3765f1",
+          "evaluatedRevision": 3,
+          "revisionsBehind": 1
         },
         {
           "subject": "voice-io",
@@ -5917,12 +5915,11 @@
           "changedAt": "2026-10-29",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "apps/stage/src/avatar/Avatar.tsx:84 Searches found no narration or narrator references in this context; it starts a signal-driven face renderer rather than a software demonstration film pipeline.",
-          "evaluatedAt": "2026-10-21",
-          "evaluatedAgainst": "sha256-b2:ef4fc3b78116e73b",
-          "evaluatedRevision": 2,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "apps/stage/src/avatar/demo.ts:1 The only 'demo' in this context is a dev-only scripted face signal used to view and screenshot the renderer, and a search of apps/stage for narrator/narration/voiceover/screencast/'demo film' found nothing, so the context makes no narrated film of a software system and none of the subject's techniques apply.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:e3bb8c209c3765f1",
+          "evaluatedRevision": 3,
+          "revisionsBehind": 1
         },
         {
           "subject": "video-assembly",
@@ -6138,12 +6135,11 @@
           "changedAt": "2026-10-29",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "apps/stage/src/voice/toggle.ts:39 Searches found no narration or narrator references in this context; its live-only voice client plays the ongoing broadcast rather than building narrated software demonstration films.",
-          "evaluatedAt": "2026-10-21",
-          "evaluatedAgainst": "sha256-b2:ef4fc3b78116e73b",
-          "evaluatedRevision": 2,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "apps/stage/src/voice/toggle.ts:4 This voice client only plays live show utterances and is explicitly silenced for replays and headless recorders, so it never produces or paces film narration. A search found no narrator/narration/voiceover/screencast/'demo film' terms.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:e3bb8c209c3765f1",
+          "evaluatedRevision": 3,
+          "revisionsBehind": 1
         },
         {
           "subject": "character-voice-design",

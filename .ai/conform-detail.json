@@ -2464,44 +2464,61 @@
       "subject": "live-system-demo-film",
       "bundle": "media-generation",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T23:20:34.634Z",
-      "worker": "d11ee777-78dc-4e56-8686-064964f309d1",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T17:10:15.030Z",
+      "worker": "4ce04cf2-acc4-4dd8-96a9-e26a0ff56664",
       "techniques": [
         {
           "technique": "audio-first-beat-pacing",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/scripts/record-clip.mjs:94 This recorder captures silent clip pictures, not beats paced against synthesized demo narration."
+          "evidence": "apps/stage/scripts/record-clip.mjs:94 This recorder captures silent clip pictures, not beats paced against synthesized demo narration.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "recorder-owned-overlay",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/OnAir.tsx:6 The explanatory card describes the broadcast product's commands; it is not chrome added for a software demonstration film."
+          "evidence": "apps/stage/src/OnAir.tsx:6 The explanatory card describes the broadcast product's commands; it is not chrome added for a software demonstration film.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "recording-that-asserts-its-claims",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/scripts/record-clip.mjs:2 The capture re-renders a clip candidate rather than driving software actions to substantiate a demo film's claims."
+          "evidence": "apps/stage/scripts/record-clip.mjs:2 The capture re-renders a clip candidate rather than driving software actions to substantiate a demo film's claims.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "retake-without-an-edit-session",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/DESIGN.md:424 This is a derivative clip renderer, not a narration-and-retake production pipeline."
+          "evidence": "apps/stage/DESIGN.md:424 This is a derivative clip renderer, not a narration-and-retake production pipeline.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "script-as-single-source",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/scripts/make-demo.mjs:1 The authored artifact is a fictional show transcript, not a script explaining software behavior."
+          "evidence": "apps/stage/scripts/make-demo.mjs:1 The authored artifact is a fictional show transcript, not a script explaining software behavior.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "seeded-stage-with-a-declared-boundary",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/fixtures/demo-case.json:5 The fixture supplies the show's fictional investigation rather than an environment for a software demonstration film."
+          "evidence": "apps/stage/fixtures/demo-case.json:5 The fixture supplies the show's fictional investigation rather than an environment for a software demonstration film.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "summary-rendered-from-the-run",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/Stage.tsx:234 The outro belongs to the broadcast scene, not a recap of demo-film assertions."
+          "evidence": "apps/stage/src/Stage.tsx:234 The outro belongs to the broadcast scene, not a recap of demo-film assertions.",
+          "carriedFrom": "2026-10-21"
+        }
+      ],
+      "registryProposal": "A frame-stepped headless capture of a product's own render surface (record-clip.mjs) has the same mechanics as a driven demo capture. The golden path could say outright that capturing a system's content output (highlight clips) is out of scope, as opposed to capturing a demonstration of the system, so that seats do not misapply it.",
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "apps/stage/package.json:5 Searches found no narration or narrator references in this context; the implementation replays a fictional broadcast and renders derivative clips rather than producing a film demonstrating software behavior.",
+          "evaluatedAt": "2026-10-21T23:20:34.634Z",
+          "worker": "d11ee777-78dc-4e56-8686-064964f309d1",
+          "reason": "replaced by 4ce04cf2-acc4-4dd8-96a9-e26a0ff56664"
         }
       ]
     },
@@ -2510,44 +2527,60 @@
       "subject": "live-system-demo-film",
       "bundle": "media-generation",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T23:20:34.634Z",
-      "worker": "d11ee777-78dc-4e56-8686-064964f309d1",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T17:10:15.030Z",
+      "worker": "4ce04cf2-acc4-4dd8-96a9-e26a0ff56664",
       "techniques": [
         {
           "technique": "audio-first-beat-pacing",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/voice/session.ts:168 Utterances arrive during the live session; this client does not pace a captured demo against previously synthesized narration."
+          "evidence": "apps/stage/src/voice/session.ts:168 Utterances arrive during the live session; this client does not pace a captured demo against previously synthesized narration.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "recorder-owned-overlay",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/voice/names.ts:13 This is the product's voice disclosure, not recorder-injected demo chrome."
+          "evidence": "apps/stage/src/voice/names.ts:13 This is the product's voice disclosure, not recorder-injected demo chrome.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "recording-that-asserts-its-claims",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/voice/session.ts:74 The session reports live playback timing rather than recording and asserting a demo film."
+          "evidence": "apps/stage/src/voice/session.ts:74 The session reports live playback timing rather than recording and asserting a demo film.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "retake-without-an-edit-session",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/voice/webaudio.ts:19 This context owns browser playback, not narration synthesis, retakes or film assembly."
+          "evidence": "apps/stage/src/voice/webaudio.ts:19 This context owns browser playback, not narration synthesis, retakes or film assembly.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "script-as-single-source",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/voice/captions.ts:22 Caption inputs are live feed lines rather than authored demo-film beats."
+          "evidence": "apps/stage/src/voice/captions.ts:22 Caption inputs are live feed lines rather than authored demo-film beats.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "seeded-stage-with-a-declared-boundary",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/voice/session.ts:27 The client follows a running broadcast; it does not choose or seed a demo-film environment."
+          "evidence": "apps/stage/src/voice/session.ts:27 The client follows a running broadcast; it does not choose or seed a demo-film environment.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "summary-rendered-from-the-run",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/voice/report.ts:24 This produces playback telemetry, not a film recap or end plate."
+          "evidence": "apps/stage/src/voice/report.ts:24 This produces playback telemetry, not a film recap or end plate.",
+          "carriedFrom": "2026-10-21"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "apps/stage/src/voice/toggle.ts:39 Searches found no narration or narrator references in this context; its live-only voice client plays the ongoing broadcast rather than building narrated software demonstration films.",
+          "evaluatedAt": "2026-10-21T23:20:34.634Z",
+          "worker": "d11ee777-78dc-4e56-8686-064964f309d1",
+          "reason": "replaced by 4ce04cf2-acc4-4dd8-96a9-e26a0ff56664"
         }
       ]
     },
@@ -2556,44 +2589,60 @@
       "subject": "live-system-demo-film",
       "bundle": "media-generation",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T23:20:34.634Z",
-      "worker": "d11ee777-78dc-4e56-8686-064964f309d1",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T17:10:15.030Z",
+      "worker": "4ce04cf2-acc4-4dd8-96a9-e26a0ff56664",
       "techniques": [
         {
           "technique": "audio-first-beat-pacing",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/avatar/demo.ts:9 The development demo uses invented viseme timing, not synthesized narration for captured film beats."
+          "evidence": "apps/stage/src/avatar/demo.ts:9 The development demo uses invented viseme timing, not synthesized narration for captured film beats.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "recorder-owned-overlay",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/avatar/Avatar.tsx:114 The canvas is the product's avatar surface, not explanatory chrome added by a recorder."
+          "evidence": "apps/stage/src/avatar/Avatar.tsx:114 The canvas is the product's avatar surface, not explanatory chrome added by a recorder.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "recording-that-asserts-its-claims",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/avatar/Avatar.tsx:70 The callback reports the displayed face form; it is not a demo-film recorder asserting narrated behavior."
+          "evidence": "apps/stage/src/avatar/Avatar.tsx:70 The callback reports the displayed face form; it is not a demo-film recorder asserting narrated behavior.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "retake-without-an-edit-session",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/avatar/cut/index.ts:105 The operation constructs an interactive renderer rather than rebuilding a captured film."
+          "evidence": "apps/stage/src/avatar/cut/index.ts:105 The operation constructs an interactive renderer rather than rebuilding a captured film.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "script-as-single-source",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/avatar/demo.ts:49 The development script emits face signals, not narration, system actions, captions and film estimates."
+          "evidence": "apps/stage/src/avatar/demo.ts:49 The development script emits face signals, not narration, system actions, captions and film estimates.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "seeded-stage-with-a-declared-boundary",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/avatar/cut/index.ts:81 The seed controls procedural face motion rather than a demo film's system environment."
+          "evidence": "apps/stage/src/avatar/cut/index.ts:81 The seed controls procedural face motion rather than a demo film's system environment.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "summary-rendered-from-the-run",
           "verdict": "not-applicable",
-          "evidence": "apps/stage/src/avatar/depth/index.ts:109 The renderer draws a pose and gaze rather than a recap of a captured demonstration."
+          "evidence": "apps/stage/src/avatar/depth/index.ts:109 The renderer draws a pose and gaze rather than a recap of a captured demonstration.",
+          "carriedFrom": "2026-10-21"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "apps/stage/src/avatar/Avatar.tsx:84 Searches found no narration or narrator references in this context; it starts a signal-driven face renderer rather than a software demonstration film pipeline.",
+          "evaluatedAt": "2026-10-21T23:20:34.634Z",
+          "worker": "d11ee777-78dc-4e56-8686-064964f309d1",
+          "reason": "replaced by 4ce04cf2-acc4-4dd8-96a9-e26a0ff56664"
         }
       ]
     },
@@ -2602,29 +2651,42 @@
       "subject": "live-system-demo-film",
       "bundle": "media-generation",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T23:20:34.634Z",
-      "worker": "d11ee777-78dc-4e56-8686-064964f309d1",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T17:10:15.030Z",
+      "worker": "4ce04cf2-acc4-4dd8-96a9-e26a0ff56664",
       "techniques": [
         {
           "technique": "audio-first-beat-pacing",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:60 The clock governs a live show's cold open and handover, not captured pictures paced to narration."
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:60 The clock governs a live show's cold open and handover, not captured pictures paced to narration.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "recorder-owned-overlay",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:25 These are the product's permitted show screens, not recorder-owned explanatory surfaces."
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:25 These are the product's permitted show screens, not recorder-owned explanatory surfaces.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "script-as-single-source",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:27 This is live host direction, not a machine-readable script for demonstrating software behavior."
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:27 This is live host direction, not a machine-readable script for demonstrating software behavior.",
+          "carriedFrom": "2026-10-21"
         },
         {
           "technique": "seeded-stage-with-a-declared-boundary",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/data/demo-case-records.json:4 The declared fiction supplies investigation content for the show rather than a software demonstration film's environment."
+          "evidence": "crates/shadowrunr-segments/data/demo-case-records.json:4 The declared fiction supplies investigation content for the show rather than a software demonstration film's environment.",
+          "carriedFrom": "2026-10-21"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:3 Searches found no narration or narrator references in this context; the crate implements broadcast segment behavior and fictional case data rather than producing software demonstration films.",
+          "evaluatedAt": "2026-10-21T23:20:34.634Z",
+          "worker": "d11ee777-78dc-4e56-8686-064964f309d1",
+          "reason": "replaced by 4ce04cf2-acc4-4dd8-96a9-e26a0ff56664"
         }
       ]
     },
@@ -6226,6 +6288,21 @@
       "evaluatedTs": "2026-11-03T14:46:22.383Z",
       "worker": "6e9c54ee-b934-43fb-ac44-d5021d693862",
       "techniques": []
+    },
+    "4acf582d-5403-4f36-b24c-fe00bacb3683/live-system-demo-film": {
+      "context": "console-shell-router",
+      "subject": "live-system-demo-film",
+      "bundle": "media-generation",
+      "state": "unknown",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T17:10:15.030Z",
+      "techniques": [],
+      "withdrawn": {
+        "worker": "4ce04cf2-acc4-4dd8-96a9-e26a0ff56664",
+        "state": "not-applicable",
+        "at": "2026-11-03T17:10:34.591748+00:00",
+        "reason": "reviewer (sonnet): The anchor route.ts:7 is a comment about the hash URL contract. It says nothing about film or narration being absent. The claim that Intro is only an in-app poster animation rests on Intro.tsx, which the anchor does not cite, and I did not confirm it."
+      }
     }
   }
 }

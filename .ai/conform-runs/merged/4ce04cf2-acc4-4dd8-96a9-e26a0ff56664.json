@@ -1,0 +1,136 @@
+{
+  "schema": "conform-run/1",
+  "worker": "4ce04cf2-acc4-4dd8-96a9-e26a0ff56664",
+  "subject": "live-system-demo-film",
+  "evaluatedAt": "2026-11-03T17:10:15.030558+00:00",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "pairs": [
+    {
+      "context": "stage-avatar-renderer",
+      "subject": "live-system-demo-film",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evidence": "apps/stage/src/avatar/demo.ts:1 The only 'demo' in this context is a dev-only scripted face signal used to view and screenshot the renderer, and a search of apps/stage for narrator/narration/voiceover/screencast/'demo film' found nothing, so the context makes no narrated film of a software system and none of the subject's techniques apply.",
+      "techniques": [],
+      "absenceTerms": [
+        "narrator",
+        "narration",
+        "voiceover",
+        "screencast"
+      ]
+    },
+    {
+      "context": "stage-app",
+      "subject": "live-system-demo-film",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evidence": "apps/stage/scripts/record-clip.mjs:2 The stage's only recorder steps clip mode frame by frame to render vertical show-highlight clips (fictional case captions) for the clip factory, and make-demo.mjs writes a fictional stream fixture for replay. Neither is a narrated film demonstrating the software, and a search found no narrator/narration/voiceover/screencast/'demo film' terms, so the precondition does not hold.",
+      "techniques": [],
+      "absenceTerms": [
+        "narrator",
+        "narration",
+        "voiceover",
+        "screencast"
+      ],
+      "registryProposal": "A frame-stepped headless capture of a product's own render surface (record-clip.mjs) has the same mechanics as a driven demo capture. The golden path could say outright that capturing a system's content output (highlight clips) is out of scope, as opposed to capturing a demonstration of the system, so that seats do not misapply it."
+    },
+    {
+      "context": "stage-voice-client",
+      "subject": "live-system-demo-film",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evidence": "apps/stage/src/voice/toggle.ts:4 This voice client only plays live show utterances and is explicitly silenced for replays and headless recorders, so it never produces or paces film narration. A search found no narrator/narration/voiceover/screencast/'demo film' terms.",
+      "techniques": [],
+      "absenceTerms": [
+        "narrator",
+        "narration",
+        "voiceover",
+        "screencast"
+      ]
+    },
+    {
+      "context": "segments-runtime",
+      "subject": "live-system-demo-film",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evidence": "crates/shadowrunr-segments/Cargo.toml:3 The crate is show segment logic: commands, ranks, votes and a fictional demo case used as show data. A search found no narrator/narration/voiceover/screencast/'demo film' terms. The only 'narrated' hit is a runtime.rs comment about the character narrating polls, not film narration. So no demo-film production exists here.",
+      "techniques": [],
+      "absenceTerms": [
+        "narrator",
+        "narration",
+        "voiceover",
+        "screencast"
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "live-system-demo-film",
+      "context": "console-shell-router",
+      "reason": "withdrawn after review: reviewer (sonnet): The anchor route.ts:7 is a comment about the hash URL contract. It says nothing about film or narration being absent. The claim that Intro is only an in-app poster animation rests on Intro.tsx, which the anchor does not cite, and I did not confirm it."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-11-03T17:10:15.030558+00:00",
+      "bundle": "media-generation",
+      "subjects": [
+        "live-system-demo-film"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "stage-avatar-renderer",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-11-03T17:10:15.030558+00:00",
+      "bundle": "media-generation",
+      "subjects": [
+        "live-system-demo-film"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "stage-app",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-11-03T17:10:15.030558+00:00",
+      "bundle": "media-generation",
+      "subjects": [
+        "live-system-demo-film"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "stage-voice-client",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-11-03T17:10:15.030558+00:00",
+      "bundle": "media-generation",
+      "subjects": [
+        "live-system-demo-film"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "segments-runtime",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-11-03T17:10:15.030558+00:00",
+      "bundle": "media-generation",
+      "subjects": [
+        "live-system-demo-film"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "console-shell-router",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    }
+  ]
+}
