@@ -6372,12 +6372,11 @@
           "changedAt": "2026-10-21",
           "confidence": "strong",
           "state": "deviation",
-          "evidence": "crates/shadowrunr-clips/src/render.rs:127 Poster wrapping counts characters instead of measuring rendered width, allowing an unbroken transcript token to overflow without an error or coded finding.",
-          "evaluatedAt": "2026-10-21",
-          "evaluatedAgainst": "sha256-b2:6bb352204d334af5",
-          "evaluatedRevision": 19,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "crates/shadowrunr-clips/src/render.rs:127 The poster's text wrap decides where lines break by counting characters, not by measuring the rendered width at the font size, so a long unbroken token or a run of wide glyphs can overflow the 1080 px poster with no error and no coded finding.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:5f548f222df2e692",
+          "evaluatedRevision": 20,
+          "revisionsBehind": 1
         },
         {
           "subject": "voice-io",

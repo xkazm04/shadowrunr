@@ -1,0 +1,98 @@
+{
+ "schema": "conform-run/1",
+ "worker": "ab921f2d-8b76-46da-9353-60def549b687",
+ "subject": "video-assembly",
+ "evaluatedAt": "2026-11-03T16:09:01.837543+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "clips-pipeline",
+   "subject": "video-assembly",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-clips/src/render.rs:127 The poster's text wrap decides where lines break by counting characters, not by measuring the rendered width at the font size, so a long unbroken token or a run of wide glyphs can overflow the 1080 px poster with no error and no coded finding.",
+   "techniques": [
+    {
+     "technique": "silent-defects-get-a-code-or-an-error",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-clips/src/render.rs:127 The rule says: when text is drawn, measure the widest line on the canvas and shrink to fit it; never rely on a character count. This wrap relies on a character count."
+    },
+    {
+     "technique": "gap-and-refusal-honesty",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/footage.rs:398 Lines that were never voiced are burnt in with their own 'Unheard' style, and a missing tool or recording leaves a poster plus a fallback_reason instead of a faked video."
+    },
+    {
+     "technique": "alignment-names-its-text",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/render.rs:37 The manifest says where caption timing came from: an estimate is labelled as having no TTS alignment, and CAPTION_SOURCE_VOICE names the real playback timing when that was used."
+    },
+    {
+     "technique": "cut-compiled-from-source",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/render.rs:4 A re-drawn cut is compiled from a declarative clip.json (captions, events, header) that the stage replays, not edited as pixels."
+    },
+    {
+     "technique": "derived-turn-markers",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/window.rs:15 The cut's edges are derived from heard line timing and segment bands, never typed in; a payoff that cannot fit is flagged for re-authoring (window.rs:11)."
+    },
+    {
+     "technique": "verify-cheapest-artifact-first",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/render.rs:596 The tools are probed before the recorder runs, and every output is checked with ffprobe for size, codec and duration (render.rs:750) before it counts."
+    },
+    {
+     "technique": "generated-shot-sourcing",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/render.rs:42 Footage is either cut from the show recording or re-drawn from the stage; no generative video model is briefed for shots."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "video-assembly",
+   "context": "stage-avatar-renderer",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "video-assembly",
+   "context": "console-onair-page",
+   "reason": "pair anchor refused: placeholder evidence at apps/console/src/pages/onair/ClipFeedback.tsx:36"
+  },
+  {
+   "subject": "video-assembly",
+   "context": "console-review-page",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "video-assembly",
+   "context": "stage-voice-client",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-03T16:09:01.837543+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "video-assembly"
+   ],
+   "techniques": [
+    "alignment-names-its-text",
+    "cut-compiled-from-source",
+    "derived-turn-markers",
+    "gap-and-refusal-honesty",
+    "generated-shot-sourcing",
+    "silent-defects-get-a-code-or-an-error",
+    "verify-cheapest-artifact-first"
+   ],
+   "deviations": 1,
+   "context": "clips-pipeline",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

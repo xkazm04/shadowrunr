@@ -2356,44 +2356,59 @@
       "subject": "video-assembly",
       "bundle": "media-generation",
       "state": "deviation",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T22:56:14.127Z",
-      "worker": "c55c6ae8-112e-4999-8eca-be47694565a3",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T16:09:01.837Z",
+      "worker": "ab921f2d-8b76-46da-9353-60def549b687",
       "techniques": [
         {
-          "technique": "alignment-names-its-text",
-          "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-clips/src/render.rs:37 This timing path explicitly uses a caption estimate rather than a synthesiser-returned text alignment."
-        },
-        {
-          "technique": "cut-compiled-from-source",
-          "verdict": "conformant",
-          "evidence": "crates/shadowrunr-clips/src/render.rs:389 The persisted ClipInput contains timed captions, scene events, styling and headers; rendering consumes that source."
-        },
-        {
-          "technique": "derived-turn-markers",
-          "verdict": "conformant",
-          "evidence": "crates/shadowrunr-clips/src/window.rs:53 Cut entrances derive from the selected line's spoken start and the preceding heard line's end."
+          "technique": "silent-defects-get-a-code-or-an-error",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/render.rs:127 The rule says: when text is drawn, measure the widest line on the canvas and shrink to fit it; never rely on a character count. This wrap relies on a character count."
         },
         {
           "technique": "gap-and-refusal-honesty",
           "verdict": "conformant",
-          "evidence": "crates/shadowrunr-clips/src/render.rs:893 A failed recording cut becomes a poster draft carrying the failure reason rather than a claimed successful video."
+          "evidence": "crates/shadowrunr-clips/src/footage.rs:398 Lines that were never voiced are burnt in with their own 'Unheard' style, and a missing tool or recording leaves a poster plus a fallback_reason instead of a faked video."
+        },
+        {
+          "technique": "alignment-names-its-text",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/render.rs:37 The manifest says where caption timing came from: an estimate is labelled as having no TTS alignment, and CAPTION_SOURCE_VOICE names the real playback timing when that was used."
+        },
+        {
+          "technique": "cut-compiled-from-source",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/render.rs:4 A re-drawn cut is compiled from a declarative clip.json (captions, events, header) that the stage replays, not edited as pixels."
+        },
+        {
+          "technique": "derived-turn-markers",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/window.rs:15 The cut's edges are derived from heard line timing and segment bands, never typed in; a payoff that cannot fit is flagged for re-authoring (window.rs:11)."
+        },
+        {
+          "technique": "verify-cheapest-artifact-first",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/render.rs:596 The tools are probed before the recorder runs, and every output is checked with ffprobe for size, codec and duration (render.rs:750) before it counts."
+        },
+        {
+          "technique": "generated-shot-sourcing",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/render.rs:42 Footage is either cut from the show recording or re-drawn from the stage; no generative video model is briefed for shots."
         },
         {
           "technique": "pinned-frame-notes",
           "verdict": "deviation",
-          "evidence": "crates/shadowrunr-clips/src/store.rs:357 Watched feedback persists tags, prose and a save timestamp, without a media moment, spatial pin, marked frame, completion flag or render revision."
-        },
+          "evidence": "crates/shadowrunr-clips/src/store.rs:357 Watched feedback persists tags, prose and a save timestamp, without a media moment, spatial pin, marked frame, completion flag or render revision.",
+          "carriedFrom": "2026-10-21"
+        }
+      ],
+      "superseded": [
         {
-          "technique": "silent-defects-get-a-code-or-an-error",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-clips/src/render.rs:127 Character-based wrapping leaves an oversized single word intact; the fixed-size SVG text is not measured or shrunk to fit."
-        },
-        {
-          "technique": "verify-cheapest-artifact-first",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-clips/src/render.rs:899 After checking tool availability, the redraw path starts the full export without a preceding visual preflight; the recorder captures its poster during encoding."
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/render.rs:127 Poster wrapping counts characters instead of measuring rendered width, allowing an unbroken transcript token to overflow without an error or coded finding.",
+          "evaluatedAt": "2026-10-21T22:56:14.127Z",
+          "worker": "c55c6ae8-112e-4999-8eca-be47694565a3",
+          "reason": "replaced by ab921f2d-8b76-46da-9353-60def549b687"
         }
       ]
     },
