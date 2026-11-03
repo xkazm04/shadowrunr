@@ -2311,30 +2311,33 @@
       "subject": "talking-avatar",
       "bundle": "software-engineering",
       "state": "deviation",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T00:23:15.259Z",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T22:27:51.572Z",
+      "worker": "fabfdd1b-b23d-4f4d-bcca-9a2fd73d0522",
       "techniques": [
         {
           "technique": "per-sentence-face-sidecar",
           "verdict": "deviation",
-          "evidence": "apps/stage/src/voice/frame.ts:64 The audio is refused because of a face artifact. Span order is also never checked, although visemeAt's binary search assumes sorted spans."
+          "evidence": "apps/stage/src/voice/frame.ts:64 The technique says a timeline that fails its checks is dropped and the sentence still plays. Here a bad timeline drops the audio too, and frame.test.ts pins this ('an unknown viseme' -> refused). The earlier verdict's anchor (line 60) was off by four lines."
         },
         {
           "technique": "face-signal-across-surfaces",
           "verdict": "conformant",
-          "evidence": "apps/stage/src/voice/player.ts:206 The player that owns the audio clock produces the signal, at heard time (after output latency). The face keeps speaking until the scheduled buffer has played, and subscribe hands a new subscriber the last signal."
+          "evidence": "apps/stage/src/voice/player.ts:4 One producer sits on the AudioContext heard clock. Speaking lasts while the heard time is inside a queued buffer, not until a pipeline event. emit() dedupes the signal, a new subscriber gets the last signal (player.ts:236), and session and player are lazy-imported (useVoice.ts:3)."
         },
         {
           "technique": "viseme-drive",
           "verdict": "conformant",
-          "evidence": "apps/stage/src/voice/player.ts:205 The renderer owns a 35 ms lead over the heard position; the producer reports true times."
+          "evidence": "apps/stage/src/voice/player.ts:39 The shape is looked up at the heard time (output latency removed) plus a lead of about one frame, on the consumer side. A voice with no visemes says 'the mouth follows loudness' in its status (session.ts:192)."
         },
         {
           "technique": "rig-parameter-contract",
           "verdict": "conformant",
-          "evidence": "apps/stage/src/voice/frame.ts:111 No timeline gives null (the mouth follows the level), not a zeroed shape."
+          "evidence": "apps/stage/src/voice/frame.ts:111 No timeline gives null (the mouth follows the level), not a zeroed shape.",
+          "carriedFrom": "2026-10-24"
         }
       ],
+      "registryProposal": "per-sentence-face-sidecar states 'a timeline that fails its checks is dropped and the sentence still plays' for the voice/sidecar side only. When the mouth timeline rides inside the same wire frame as the audio, the consumer's frame validator is the usual place this leaks, so viseme-drive or face-signal-across-surfaces should name it: validate the face fields separately from the audio fields, and on failure strip the timeline, count it, and play the audio.",
       "superseded": [
         {
           "state": "deviation",
@@ -2342,14 +2345,15 @@
           "evaluatedAt": "2026-10-21T21:59:13.931Z",
           "worker": "e76cc439-98be-40c3-91d1-edd797c29b60",
           "reason": "replaced by 13f6ea67-4be8-48ed-ad28-24908a0e78fb"
+        },
+        {
+          "state": "deviation",
+          "evidence": "apps/stage/src/voice/frame.ts:60 Malformed optional visemes reject the entire utterance and prevent its PCM from playing, contrary to discarding the face timeline while preserving audio.",
+          "evaluatedAt": "2026-10-21",
+          "worker": null,
+          "reason": "replaced by fabfdd1b-b23d-4f4d-bcca-9a2fd73d0522"
         }
-      ],
-      "withdrawn": {
-        "worker": "13f6ea67-4be8-48ed-ad28-24908a0e78fb",
-        "state": "deviation",
-        "at": "2026-10-24T00:23:55.996966+00:00",
-        "reason": "reviewer (sonnet): The frame.ts:64 deviation holds, but the technique note at player.ts:205 says the renderer owns the 35 ms lead and the producer reports true times, while player.ts:35 and :205 show the player itself adds VISEME_LEAD_MS in signalAt."
-      }
+      ]
     },
     "12e5be0b-9811-4c5b-a7ec-8a57e204d016/video-assembly": {
       "context": "clips-pipeline",
@@ -4052,42 +4056,42 @@
       "context": "avatar-rig-tools",
       "subject": "talking-avatar",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T00:23:15.259Z",
+      "state": "conformant",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T22:27:51.572Z",
+      "worker": "fabfdd1b-b23d-4f4d-bcca-9a2fd73d0522",
       "techniques": [
         {
           "technique": "single-image-layer-decomposition",
           "verdict": "conformant",
-          "evidence": "tools/rig/shadowrunr_rig/split.py:180 Light-on-black variant, with a hand region spec refined by luminance ('lit'). The face-sized head and torso use a 'ground' fill rather than LaMa in the M8 spec, so no pale band. Rest-frame error and extremes are reviewed before promote."
+          "evidence": "tools/rig/shadowrunr_rig/split.py:178 Luminous parts are clamped additive deltas over the fill. Solids carry soft coverage, and an 'uncover'/covered mask grounds the hidden pixels (split.py:214-217). The README has extremes.png review and promote refuses a regression."
         },
         {
           "technique": "motion-route-selection",
           "verdict": "conformant",
-          "evidence": "tools/avatar/learned_depth.py:17 Licences are audited per component: CC-BY-NC variants are excluded, and the models are operator-installed rather than bundled (LaMa is handled the same way, lama.py:2)."
+          "evidence": "tools/avatar/learned_depth.py:17 Licences are audited per component: only the Apache-2.0 Small depth model is used, pinned by sha256 and user-installed rather than bundled. LaMa is also operator-installed (README:12)."
         },
         {
           "technique": "viseme-drive",
           "verdict": "conformant",
-          "evidence": "tools/rig/README.md:97 The speaking element is drawn procedurally by the renderer, not from generated mouth frames."
-        },
-        {
-          "technique": "paced-realtime-measurement",
-          "verdict": "not-applicable",
-          "evidence": "tools/avatar/depth_map.py:23 Offline prep; pacing does not apply."
+          "evidence": "tools/rig/README.md:97 The speaking element (the mouth light) is drawn procedurally by the renderer, not taken from generated mouth frames. The jaw is a hinged cut with a painted interior and an uncover strip."
         },
         {
           "technique": "neural-motion-retargeting",
           "verdict": "not-applicable",
-          "evidence": "tools/avatar/learned_depth.py:2 The only learned model here is a depth model, not a motion model."
+          "evidence": "tools/avatar/learned_depth.py:2 The only learned model here estimates depth, not motion."
+        },
+        {
+          "technique": "paced-realtime-measurement",
+          "verdict": "not-applicable",
+          "evidence": "tools/avatar/depth_map.py:2 These are offline prep tools, where pacing is irrelevant."
+        },
+        {
+          "technique": "per-sentence-face-sidecar",
+          "verdict": "not-applicable",
+          "evidence": "tools/rig/README.md:1 No per-sentence runtime process lives in this context."
         }
-      ],
-      "withdrawn": {
-        "worker": "13f6ea67-4be8-48ed-ad28-24908a0e78fb",
-        "state": "conformant",
-        "at": "2026-10-24T00:23:56.016490+00:00",
-        "reason": "reviewer (sonnet): split.py:180 shows only the light-mode clamped delta; I found no 'ground' fill for the face-sized head and torso or 'M8 spec' in the context files, and nothing at the anchor shows layers.json recording head geometry or a promote review, so the conformant claims rest on unconfirmed evidence."
-      }
+      ]
     },
     "68cf95a7-438b-4ed9-930d-c19201eb0610/mcp-tools": {
       "context": "voice-sidecar",
@@ -6355,6 +6359,22 @@
         }
       ],
       "registryProposal": "alignment-names-its-text could say whether a live caption reveal that is bounded to sentence-sized parts (whose start and length are measured) counts as a 'delivered cut' or as a tolerable estimate. Right now the only exemption is a beat held for the whole line."
+    },
+    "20f1e644-e83b-481d-864f-cb15b9124d7e/talking-avatar": {
+      "context": "console-characters-page",
+      "subject": "talking-avatar",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T22:27:51.572Z",
+      "worker": "fabfdd1b-b23d-4f4d-bcca-9a2fd73d0522",
+      "techniques": [
+        {
+          "technique": "face-signal-across-surfaces",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/Avatar.tsx:156 The tile is a still illustration and no mirror of the stage's face signal. A voice preview is 'a different face' by the technique's own terms, and it draws none."
+        }
+      ]
     }
   }
 }

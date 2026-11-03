@@ -1460,7 +1460,11 @@
           "revision": 4,
           "changedAt": "2026-10-22",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/Avatar.tsx:156 The Characters page draws Malakor as a static stage-kit SVG (plus CSS eye-flick and breathe loops) and other characters as static portraits or SVGs, with no face that moves with a voice. A search of apps/console/src/pages/characters/ for FaceSignal, FaceSource, webgl and requestAnimationFrame found nothing; the VoiceLab preview only reports whether a line has mouth shapes.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:72517c45ca8e4198",
+          "evaluatedRevision": 4
         },
         {
           "subject": "voice-io",
@@ -6165,9 +6169,10 @@
           "changedAt": "2026-10-22",
           "confidence": "probable",
           "state": "deviation",
-          "evidence": "apps/stage/src/voice/frame.ts:60 Malformed optional visemes reject the entire utterance and prevent its PCM from playing, contrary to discarding the face timeline while preserving audio.",
-          "evaluatedAt": "2026-10-21",
-          "stale": true
+          "evidence": "apps/stage/src/voice/frame.ts:64 An utterance whose optional viseme list fails its checks (for example an unknown shape) is refused whole: session.ts reports it as a bad frame and never hands it to the player, so the sentence's PCM is never played, where the face timeline should have been dropped and the audio kept.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:72517c45ca8e4198",
+          "evaluatedRevision": 4
         },
         {
           "subject": "prompt-assembly",
@@ -6901,7 +6906,11 @@
           "revision": 4,
           "changedAt": "2026-10-22",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "conformant",
+          "evidence": "tools/rig/shadowrunr_rig/split.py:178 The offline splitter lifts a hand-authored region spec front to back with fills behind each part, decomposes the glow art as additive light deltas (the light-on-black variant), grounds what a solid always covers so no ghost copy stays behind, and runs as a reproducible command with a report and an extremes review.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:72517c45ca8e4198",
+          "evaluatedRevision": 4
         },
         {
           "subject": "mcp-tools",

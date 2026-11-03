@@ -1,0 +1,152 @@
+{
+ "schema": "conform-run/1",
+ "worker": "fabfdd1b-b23d-4f4d-bcca-9a2fd73d0522",
+ "subject": "talking-avatar",
+ "evaluatedAt": "2026-11-03T22:27:51.572241+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-voice-client",
+   "subject": "talking-avatar",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/voice/frame.ts:64 An utterance whose optional viseme list fails its checks (for example an unknown shape) is refused whole: session.ts reports it as a bad frame and never hands it to the player, so the sentence's PCM is never played, where the face timeline should have been dropped and the audio kept.",
+   "techniques": [
+    {
+     "technique": "per-sentence-face-sidecar",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/voice/frame.ts:64 The technique says a timeline that fails its checks is dropped and the sentence still plays. Here a bad timeline drops the audio too, and frame.test.ts pins this ('an unknown viseme' -> refused). The earlier verdict's anchor (line 60) was off by four lines."
+    },
+    {
+     "technique": "face-signal-across-surfaces",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/voice/player.ts:4 One producer sits on the AudioContext heard clock. Speaking lasts while the heard time is inside a queued buffer, not until a pipeline event. emit() dedupes the signal, a new subscriber gets the last signal (player.ts:236), and session and player are lazy-imported (useVoice.ts:3)."
+    },
+    {
+     "technique": "viseme-drive",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/voice/player.ts:39 The shape is looked up at the heard time (output latency removed) plus a lead of about one frame, on the consumer side. A voice with no visemes says 'the mouth follows loudness' in its status (session.ts:192)."
+    }
+   ],
+   "registryProposal": "per-sentence-face-sidecar states 'a timeline that fails its checks is dropped and the sentence still plays' for the voice/sidecar side only. When the mouth timeline rides inside the same wire frame as the audio, the consumer's frame validator is the usual place this leaks, so viseme-drive or face-signal-across-surfaces should name it: validate the face fields separately from the audio fields, and on failure strip the timeline, count it, and play the audio."
+  },
+  {
+   "context": "avatar-rig-tools",
+   "subject": "talking-avatar",
+   "bundle": "software-engineering",
+   "state": "conformant",
+   "evidence": "tools/rig/shadowrunr_rig/split.py:178 The offline splitter lifts a hand-authored region spec front to back with fills behind each part, decomposes the glow art as additive light deltas (the light-on-black variant), grounds what a solid always covers so no ghost copy stays behind, and runs as a reproducible command with a report and an extremes review.",
+   "techniques": [
+    {
+     "technique": "single-image-layer-decomposition",
+     "verdict": "conformant",
+     "evidence": "tools/rig/shadowrunr_rig/split.py:178 Luminous parts are clamped additive deltas over the fill. Solids carry soft coverage, and an 'uncover'/covered mask grounds the hidden pixels (split.py:214-217). The README has extremes.png review and promote refuses a regression."
+    },
+    {
+     "technique": "motion-route-selection",
+     "verdict": "conformant",
+     "evidence": "tools/avatar/learned_depth.py:17 Licences are audited per component: only the Apache-2.0 Small depth model is used, pinned by sha256 and user-installed rather than bundled. LaMa is also operator-installed (README:12)."
+    },
+    {
+     "technique": "viseme-drive",
+     "verdict": "conformant",
+     "evidence": "tools/rig/README.md:97 The speaking element (the mouth light) is drawn procedurally by the renderer, not taken from generated mouth frames. The jaw is a hinged cut with a painted interior and an uncover strip."
+    },
+    {
+     "technique": "neural-motion-retargeting",
+     "verdict": "not-applicable",
+     "evidence": "tools/avatar/learned_depth.py:2 The only learned model here estimates depth, not motion."
+    },
+    {
+     "technique": "paced-realtime-measurement",
+     "verdict": "not-applicable",
+     "evidence": "tools/avatar/depth_map.py:2 These are offline prep tools, where pacing is irrelevant."
+    },
+    {
+     "technique": "per-sentence-face-sidecar",
+     "verdict": "not-applicable",
+     "evidence": "tools/rig/README.md:1 No per-sentence runtime process lives in this context."
+    }
+   ]
+  },
+  {
+   "context": "console-characters-page",
+   "subject": "talking-avatar",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/characters/Avatar.tsx:156 The Characters page draws Malakor as a static stage-kit SVG (plus CSS eye-flick and breathe loops) and other characters as static portraits or SVGs, with no face that moves with a voice. A search of apps/console/src/pages/characters/ for FaceSignal, FaceSource, webgl and requestAnimationFrame found nothing; the VoiceLab preview only reports whether a line has mouth shapes.",
+   "techniques": [
+    {
+     "technique": "face-signal-across-surfaces",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/Avatar.tsx:156 The tile is a still illustration and no mirror of the stage's face signal. A voice preview is 'a different face' by the technique's own terms, and it draws none."
+    }
+   ],
+   "absenceTerms": [
+    "FaceSignal",
+    "FaceSource",
+    "webgl",
+    "requestAnimationFrame"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "talking-avatar",
+   "context": "stage-avatar-renderer",
+   "reason": "evidence leans on cut/index.ts, which is not a tracked file"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-03T22:27:51.572241+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "talking-avatar"
+   ],
+   "techniques": [
+    "face-signal-across-surfaces",
+    "per-sentence-face-sidecar",
+    "viseme-drive"
+   ],
+   "deviations": 1,
+   "context": "stage-voice-client",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T22:27:51.572241+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "talking-avatar"
+   ],
+   "techniques": [
+    "motion-route-selection",
+    "neural-motion-retargeting",
+    "paced-realtime-measurement",
+    "per-sentence-face-sidecar",
+    "single-image-layer-decomposition",
+    "viseme-drive"
+   ],
+   "deviations": 0,
+   "context": "avatar-rig-tools",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T22:27:51.572241+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "talking-avatar"
+   ],
+   "techniques": [
+    "face-signal-across-surfaces"
+   ],
+   "deviations": 0,
+   "context": "console-characters-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
