@@ -2979,7 +2979,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/ui/index.ts:2 The barrel exports only presentational primitives (chips, tables, pills, states, buttons, drawers). Searching apps/console/src/ui for quality gate, waiver, pre-commit, exit code, severity and allowlist found nothing. The single 'baseline' hit is CSS align-items. The context has no checker, refusal or gate.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "deployment-contract",
@@ -3746,7 +3750,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:220 When no character directory resolves (characters_root unset, no character id on the runs, or the directory missing), the hunk-applies-to-the-current-file check is skipped silently: the proposal is kept with no dropped entry and no summary note, so a diff the gate could not verify reads exactly like one it verified.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "measurement-honesty",

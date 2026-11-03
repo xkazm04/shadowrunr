@@ -6125,6 +6125,92 @@
           "evidence": "apps/stage/src/avatar/Avatar.tsx:1 The module draws a character face. No chart form is chosen here."
         }
       ]
+    },
+    "ce601bf6-a98a-465f-8f19-3143e6483f8d/quality-gates": {
+      "context": "reconcile-engine",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T14:46:22.383Z",
+      "worker": "6e9c54ee-b934-43fb-ac44-d5021d693862",
+      "techniques": [
+        {
+          "technique": "unmeasurable-criteria",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:220 The gate can't see the file here, which is a hole in its own view, and it reads as compliance. The skip isn't announced or counted. lib.rs:223-228 returns None in several cases."
+        },
+        {
+          "technique": "policy-projection",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-reconcile/src/synth.rs:360 The brief given to the Reconciler is a hand-written projection of the diff policy and states only the path rule. verify.rs also refuses deletions (l.200), renames (l.213), creating a file that already exists (l.224) and hunk-less diffs, and the brief never mentions them. The surface understates what blocks."
+        },
+        {
+          "technique": "unparseable-form-is-a-finding",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:163 A diff the parser cannot read is refused, not passed. Any stray line naming constitution.md is also refused (l.178-179), so rename-form evasions fail too."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:191 If zero file patches parse, that is an error, not an empty pass. Tests feed known-bad inputs (l.262-276, including \"just prose\")."
+        },
+        {
+          "technique": "self-reported-gate-inputs",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:30 The model writes its own evidence refs. Each ref is resolved against the real transcripts, never taken on the model's word, and every unresolved ref is recorded as dropped."
+        },
+        {
+          "technique": "renameable-detector-keys",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:203 Uses an allowlist (bible.md, tones/*.md) rather than a denylist, after the path is normalised (l.72-86), and refuses renames (l.211). Renaming or path-escaping can't reach the immutable file."
+        },
+        {
+          "technique": "match-the-resolved-artifact",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:236 When the file is readable, each hunk's old side is matched against the file's current content, not only against the diff text."
+        },
+        {
+          "technique": "refusal-names-a-reachable-remedy",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:205 The refusal names the permitted targets, which are inside the same package."
+        },
+        {
+          "technique": "oracle-frozen-during-repair",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/verify.rs:196 The repairer (the Reconciler LLM improving the character) cannot write to the immutable constitution. The freeze is enforced by the verifier, not just requested in the prompt."
+        },
+        {
+          "technique": "severity-by-construction",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-reconcile/src/lib.rs:400 A rejected diff actually removes the option (continue at l.401) and records the reason. The finding does more than print."
+        }
+      ]
+    },
+    "7bbc93eb-a921-49ea-a5b3-128e66bd5e64/quality-gates": {
+      "context": "stage-avatar-renderer",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T14:46:22.383Z",
+      "techniques": [],
+      "withdrawn": {
+        "worker": "6e9c54ee-b934-43fb-ac44-d5021d693862",
+        "state": "not-applicable",
+        "at": "2026-11-03T14:47:19.702456+00:00",
+        "reason": "reviewer (sonnet): The anchor Avatar.tsx:1 is a file header that does not show the absence, and the claim that the only refusals are in tests is contradicted by production code: checkSpec in layers.ts refuses a rig spec, and the depth geom code refuses a map for another rig."
+      }
+    },
+    "435472ca-7ef4-4956-80d8-3dc82f215665/quality-gates": {
+      "context": "console-ui-primitives",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T14:46:22.383Z",
+      "worker": "6e9c54ee-b934-43fb-ac44-d5021d693862",
+      "techniques": []
     }
   }
 }
