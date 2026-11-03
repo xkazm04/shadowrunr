@@ -1,0 +1,122 @@
+{
+ "schema": "conform-run/1",
+ "worker": "f7c074b9-9f06-426d-9c8e-640676d2eb71",
+ "subject": "video-assembly",
+ "evaluatedAt": "2026-11-03T22:07:41.091424+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-onair-page",
+   "subject": "video-assembly",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/onair/ClipFeedback.tsx:22 Feedback on a rendered, pausable clip is saved as tags plus prose only, with no frame or seconds, no fractional spot and no marked frame, so the editor has to find the moment again from text that even asks 'Where should the cut open or close?'.",
+   "techniques": [
+    {
+     "technique": "pinned-frame-notes",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/onair/ClipFeedback.tsx:22 The cut is a seekable <video>, so the live-broadcast exemption does not apply. No moment, spot or marked frame is captured, and the prompt at line 36 asks the reviewer to describe where in words."
+    },
+    {
+     "technique": "gap-and-refusal-honesty",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:48 A missing render is drawn with its reason. Lines that were never voiced carry a 'never heard' chip (clipModel.ts:117)."
+    },
+    {
+     "technique": "alignment-names-its-text",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:65 When there is no measured voice timing, line positions are labelled as estimates."
+    },
+    {
+     "technique": "drift-correction",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:66 The A/V offset is measured in ms and absorbed once at the source (pre-roll) instead of nudging each clip."
+    }
+   ]
+  },
+  {
+   "context": "stage-voice-client",
+   "subject": "video-assembly",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "apps/stage/src/voice/captions.ts:66 Within each synthesised part, the caption reveals words using a text-only estimate, not the synthesiser's own timing (Kokoro phoneme durations, ElevenLabs character alignment), and the view still marks the line voiced:true, so an estimated mid-clip cue position is never labelled as an estimate.",
+   "techniques": [
+    {
+     "technique": "alignment-names-its-text",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/voice/captions.ts:66 The voice lane is synthesised and the engines return timing, but captions estimate word positions from the text. This is a documented tradeoff ('within a word or two', captions.ts:4-5), yet the estimate is not marked as one (captions.ts:140 sets voiced: true)."
+    },
+    {
+     "technique": "multitrack-timeline-discipline",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/voice/player.ts:4 There is one time authority: mouth, captions and scheduling all read the AudioContext clock, never wall or frame time."
+    },
+    {
+     "technique": "gap-and-refusal-honesty",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/voice/report.ts:33 The placeholder face is reported as silhouette, never as the real rig. Lines the stage drops are reported too (report.ts:24 stage_cap)."
+    },
+    {
+     "technique": "drift-correction",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/voice/player.ts:91 Each part's lateness against its scheduled start is measured as a number. Device output latency is subtracted once at the clock (player.ts:6), not corrected per clip."
+    }
+   ],
+   "registryProposal": "alignment-names-its-text could say whether a live caption reveal that is bounded to sentence-sized parts (whose start and length are measured) counts as a 'delivered cut' or as a tolerable estimate. Right now the only exemption is a beat held for the whole line."
+  }
+ ],
+ "declined": [
+  {
+   "subject": "video-assembly",
+   "context": "stage-avatar-renderer",
+   "reason": "evidence leans on cut/renderer.ts, which is not a tracked file"
+  },
+  {
+   "subject": "video-assembly",
+   "context": "console-review-page",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "video-assembly",
+   "context": "daemon-voice-service",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-03T22:07:41.091424+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "video-assembly"
+   ],
+   "techniques": [
+    "alignment-names-its-text",
+    "drift-correction",
+    "gap-and-refusal-honesty",
+    "pinned-frame-notes"
+   ],
+   "deviations": 1,
+   "context": "console-onair-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-03T22:07:41.091424+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "video-assembly"
+   ],
+   "techniques": [
+    "alignment-names-its-text",
+    "drift-correction",
+    "gap-and-refusal-honesty",
+    "multitrack-timeline-discipline"
+   ],
+   "deviations": 1,
+   "context": "stage-voice-client",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

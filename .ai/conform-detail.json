@@ -2438,24 +2438,44 @@
       "subject": "video-assembly",
       "bundle": "media-generation",
       "state": "deviation",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T22:56:14.127Z",
-      "worker": "c55c6ae8-112e-4999-8eca-be47694565a3",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T22:07:41.091Z",
+      "worker": "f7c074b9-9f06-426d-9c8e-640676d2eb71",
       "techniques": [
         {
-          "technique": "derived-turn-markers",
-          "verdict": "conformant",
-          "evidence": "apps/console/src/pages/onair/Layer1.tsx:97 Segment bands derive from current transcript events; the inspected helper uses segment starts and handovers rather than typed timeline positions."
+          "technique": "pinned-frame-notes",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/onair/ClipFeedback.tsx:22 The cut is a seekable <video>, so the live-broadcast exemption does not apply. No moment, spot or marked frame is captured, and the prompt at line 36 asks the reviewer to describe where in words."
         },
         {
           "technique": "gap-and-refusal-honesty",
           "verdict": "conformant",
-          "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:48 The player explicitly displays missing video and its recorded fallback reason."
+          "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:48 A missing render is drawn with its reason. Lines that were never voiced carry a 'never heard' chip (clipModel.ts:117)."
         },
         {
-          "technique": "pinned-frame-notes",
-          "verdict": "deviation",
-          "evidence": "apps/console/src/pages/onair/ClipFeedback.tsx:22 Feedback includes visual defects such as face and caption errors, but captures no frame/time, normalized position, marked image, completion flag or render revision."
+          "technique": "alignment-names-its-text",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:65 When there is no measured voice timing, line positions are labelled as estimates."
+        },
+        {
+          "technique": "drift-correction",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:66 The A/V offset is measured in ms and absorbed once at the source (pre-roll) instead of nudging each clip."
+        },
+        {
+          "technique": "derived-turn-markers",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/onair/Layer1.tsx:97 Segment bands derive from current transcript events; the inspected helper uses segment starts and handovers rather than typed timeline positions.",
+          "carriedFrom": "2026-10-21"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/onair/ClipFeedback.tsx:22 Visual clip feedback saves only tags and prose, leaving an editor to rediscover the reviewed moment and screen location.",
+          "evaluatedAt": "2026-10-21T22:56:14.127Z",
+          "worker": "c55c6ae8-112e-4999-8eca-be47694565a3",
+          "reason": "replaced by f7c074b9-9f06-426d-9c8e-640676d2eb71"
         }
       ]
     },
@@ -6303,6 +6323,38 @@
         "at": "2026-11-03T17:10:34.591748+00:00",
         "reason": "reviewer (sonnet): The anchor route.ts:7 is a comment about the hash URL contract. It says nothing about film or narration being absent. The claim that Intro is only an in-app poster animation rests on Intro.tsx, which the anchor does not cite, and I did not confirm it."
       }
+    },
+    "b2009d98-3f59-4c44-97e1-b3b93b65264c/video-assembly": {
+      "context": "stage-voice-client",
+      "subject": "video-assembly",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T22:07:41.091Z",
+      "worker": "f7c074b9-9f06-426d-9c8e-640676d2eb71",
+      "techniques": [
+        {
+          "technique": "alignment-names-its-text",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/voice/captions.ts:66 The voice lane is synthesised and the engines return timing, but captions estimate word positions from the text. This is a documented tradeoff ('within a word or two', captions.ts:4-5), yet the estimate is not marked as one (captions.ts:140 sets voiced: true)."
+        },
+        {
+          "technique": "multitrack-timeline-discipline",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/player.ts:4 There is one time authority: mouth, captions and scheduling all read the AudioContext clock, never wall or frame time."
+        },
+        {
+          "technique": "gap-and-refusal-honesty",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/report.ts:33 The placeholder face is reported as silhouette, never as the real rig. Lines the stage drops are reported too (report.ts:24 stage_cap)."
+        },
+        {
+          "technique": "drift-correction",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/player.ts:91 Each part's lateness against its scheduled start is measured as a number. Device output latency is subtracted once at the clock (player.ts:6), not corrected per clip."
+        }
+      ],
+      "registryProposal": "alignment-names-its-text could say whether a live caption reveal that is bounded to sentence-sized parts (whose start and length are measured) counts as a 'delivered cut' or as a tolerable estimate. Right now the only exemption is a beat held for the whole line."
     }
   }
 }
