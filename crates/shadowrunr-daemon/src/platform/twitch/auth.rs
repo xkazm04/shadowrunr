@@ -62,6 +62,33 @@ pub(super) fn twitch_message(body: &str) -> String {
         .unwrap_or_else(|| body.chars().take(200).collect())
 }
 
+/// The longest a device poll waits after polls that got no answer, in seconds.
+const MAX_UNANSWERED_WAIT: u64 = 60;
+
+/// The next wait after a poll that got no answer: doubled, bounded, never under the pace
+/// Twitch asked for.
+fn unanswered_wait(wait: u64, interval: u64) -> u64 {
+    wait.saturating_mul(2)
+        .min(MAX_UNANSWERED_WAIT)
+        .max(interval)
+}
+
+/// Hosts the operator may be sent to for the device code.
+const VERIFICATION_HOSTS: [&str; 2] = ["www.twitch.tv", "twitch.tv"];
+
+/// The operator signs in to Twitch behind the verification address, and the console opens it
+/// as given, so it must be a plain `https` address on Twitch's own host.
+pub(super) fn verification_uri_ok(uri: &str) -> bool {
+    reqwest::Url::parse(uri).is_ok_and(|u| {
+        u.scheme() == "https"
+            && u.username().is_empty()
+            && u.password().is_none()
+            && u.port().is_none()
+            && u.host_str()
+                .is_some_and(|h| VERIFICATION_HOSTS.contains(&h))
+    })
+}
+
 /// The text the operator sees when the login cannot be renewed.
 pub(super) const RELOGIN: &str =
     "the Twitch login expired or was revoked; run twitch.connect again";
@@ -91,8 +118,14 @@ impl TwitchPlatform {
                 twitch_message(&body)
             )));
         }
-        serde_json::from_str(&body)
-            .map_err(|_| PlatformError("twitch: device login: unreadable response".into()))
+        let device: DeviceCode = serde_json::from_str(&body)
+            .map_err(|_| PlatformError("twitch: device login: unreadable response".into()))?;
+        if !verification_uri_ok(&device.verification_uri) {
+            return Err(PlatformError(
+                "twitch: device login: the verification address is not on twitch.tv".into(),
+            ));
+        }
+        Ok(device)
     }
 
     /// Polls `/oauth2/token` until the operator enters the code, it expires, or it is denied.
@@ -100,9 +133,15 @@ impl TwitchPlatform {
     pub(super) async fn poll_device_login(self: std::sync::Arc<Self>, device: DeviceCode) {
         let unit = self.ep.time_unit;
         let deadline = Instant::now() + unit * device.expires_in;
+        // `interval` is the pace Twitch asked for (raised by slow_down); `wait` is the next
+        // sleep, which a poll that got no answer lengthens (RFC 8628 3.5: a client MUST reduce
+        // its polling frequency after a connection timeout) and an answer resets.
         let mut interval = device.interval.max(1);
+        let mut wait = interval;
         loop {
-            tokio::time::sleep(unit * interval as u32).await;
+            // Never sleep past the code's deadline: an expired code is reported when it expires.
+            let nap = (unit * wait as u32).min(deadline.saturating_duration_since(Instant::now()));
+            tokio::time::sleep(nap).await;
             if Instant::now() >= deadline {
                 self.set_live(
                     PlatformState::Error,
@@ -123,14 +162,23 @@ impl TwitchPlatform {
                 .await;
             let resp = match sent {
                 Ok(r) => r,
-                // A network blip: try again at the next interval.
+                // No answer (a timeout, a refused connection): slow down, keep polling.
                 Err(e) => {
                     eprintln!("twitch: device login poll: {e}");
+                    wait = unanswered_wait(wait, interval);
                     continue;
                 }
             };
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+            // A rate limit or a gateway error neither approves nor denies the code: slow
+            // down and keep polling to the code's deadline instead of ending the login.
+            if status.as_u16() == 429 || status.is_server_error() {
+                eprintln!("twitch: device login poll: HTTP {}", status.as_u16());
+                wait = unanswered_wait(wait, interval);
+                continue;
+            }
+            wait = interval;
             if status.is_success() {
                 let Ok(grant) = serde_json::from_str::<TokenGrant>(&body) else {
                     self.set_live(
@@ -157,7 +205,10 @@ impl TwitchPlatform {
             let message = twitch_message(&body);
             match message.as_str() {
                 "authorization_pending" => {}
-                "slow_down" => interval += 5,
+                "slow_down" => {
+                    interval += 5;
+                    wait = interval;
+                }
                 _ => {
                     self.set_live(
                         PlatformState::Error,

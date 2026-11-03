@@ -4,7 +4,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::body::Bytes;
 use axum::extract::State;
@@ -20,6 +20,7 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
+use super::auth::verification_uri_ok;
 use super::store::{Credential, CredentialStore, MemoryStore, Secret};
 use super::{ChatPlatform, Endpoints, TwitchConfig, TwitchPlatform, SCOPES};
 
@@ -37,6 +38,7 @@ struct Call {
     query: Vec<(String, String)>,
     body: String,
     auth: String,
+    at: Instant,
 }
 
 impl Call {
@@ -52,6 +54,11 @@ impl Call {
 struct Mock {
     calls: Mutex<Vec<Call>>,
     device_polls: AtomicU32,
+    /// Statuses the device-code poll answers with, in order, before it answers at all
+    /// (a 429, a gateway page): replies that neither approve nor deny the code.
+    device_unanswered: Mutex<Vec<u16>>,
+    /// Overrides the device response's `verification_uri`.
+    device_uri: Mutex<Option<String>>,
     /// Helix answers 401 to this bearer token.
     reject: Mutex<Option<String>>,
     /// Helix answers 429 with a reset 30 s out.
@@ -141,6 +148,7 @@ async fn handle(
         query: pairs(uri.query().unwrap_or("")),
         body: String::from_utf8_lossy(&body).into_owned(),
         auth: header("authorization"),
+        at: Instant::now(),
     };
     if let Ok(mut c) = m.calls.lock() {
         c.push(call.clone());
@@ -154,12 +162,22 @@ async fn handle(
                 "expires_in": 1800,
                 "interval": 1,
                 "user_code": "WXYZ1234",
-                "verification_uri": "https://www.twitch.tv/activate?public=true&device-code=WXYZ1234",
+                "verification_uri": m.device_uri.lock().ok().and_then(|u| u.clone()).unwrap_or_else(
+                    || "https://www.twitch.tv/activate?public=true&device-code=WXYZ1234".into()
+                ),
             }),
         ),
         ("POST", "/oauth2/token") => match get(&form, "grant_type") {
             Some("urn:ietf:params:oauth:grant-type:device_code") => {
-                if m.device_polls.fetch_add(1, Ordering::SeqCst) == 0 {
+                let unanswered = m
+                    .device_unanswered
+                    .lock()
+                    .ok()
+                    .and_then(|mut v| (!v.is_empty()).then(|| v.remove(0)));
+                if let Some(status) = unanswered {
+                    let code = StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY);
+                    (code, "<html><body>upstream unavailable</body></html>").into_response()
+                } else if m.device_polls.fetch_add(1, Ordering::SeqCst) == 0 {
                     reply(
                         400,
                         json!({"status": 400, "message": "authorization_pending"}),
@@ -494,6 +512,92 @@ async fn device_login_polls_through_pending_and_stores_the_token() {
     let saved = h.store.load().expect("load").expect("entry");
     assert_eq!(saved.login, "modbot");
     assert_eq!(saved.user_id, BOT_ID);
+}
+
+#[tokio::test]
+async fn device_login_rides_out_a_rate_limit_and_a_gateway_page_slowing_down() {
+    let h = harness().await;
+    if let Ok(mut v) = h.mock.device_unanswered.lock() {
+        *v = vec![429, 502];
+    }
+    let p = h.platform();
+    let (tx, _rx) = mpsc::channel(16);
+    p.start(tx);
+    p.begin_device_login().await.expect("device login");
+
+    // Neither reply approves or denies the code, so the login survives both.
+    let store = h.store.clone();
+    until("token stored", move || store.raw().is_some()).await;
+    let polls = h.mock.calls_to("POST", "/oauth2/token");
+    assert!(
+        polls.len() >= 4,
+        "429, 502, pending, granted: {}",
+        polls.len()
+    );
+    // RFC 8628 3.5: a poll that got no answer lowers the polling frequency. Interval 1 (10 ms
+    // here): the poll after the 429 waits 2 units, the one after the 502 waits 4, and the
+    // pending answer puts the pace back to 1.
+    let gap = |i: usize| polls[i + 1].at.duration_since(polls[i].at);
+    assert!(
+        gap(0) >= Duration::from_millis(20),
+        "after 429: {:?}",
+        gap(0)
+    );
+    assert!(
+        gap(1) >= Duration::from_millis(40),
+        "after 502: {:?}",
+        gap(1)
+    );
+}
+
+#[tokio::test]
+async fn device_login_refuses_a_verification_address_off_twitch() {
+    let h = harness().await;
+    if let Ok(mut u) = h.mock.device_uri.lock() {
+        *u = Some("https://www.twitch.tv.example.net/activate?device-code=WXYZ1234".into());
+    }
+    let p = h.platform();
+    let (tx, _rx) = mpsc::channel(16);
+    p.start(tx);
+    let err = p
+        .begin_device_login()
+        .await
+        .expect_err("an address off twitch.tv");
+    assert!(err.0.contains("not on twitch.tv"), "{}", err.0);
+    assert!(
+        !err.0.contains("example.net"),
+        "the address is not echoed: {}",
+        err.0
+    );
+    assert_ne!(p.status().state, PlatformState::Connecting);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(
+        h.mock.calls_to("POST", "/oauth2/token").is_empty(),
+        "no poll started"
+    );
+}
+
+#[test]
+fn verification_address_must_be_https_on_twitch() {
+    for ok in [
+        "https://www.twitch.tv/activate",
+        "https://www.twitch.tv/activate?public=true&device-code=WXYZ1234",
+        "https://twitch.tv/activate",
+    ] {
+        assert!(verification_uri_ok(ok), "{ok}");
+    }
+    for bad in [
+        "http://www.twitch.tv/activate",
+        "https://www.twitch.tv.example.net/activate",
+        "https://www.twitch.tv@example.net/activate",
+        "https://user:pw@www.twitch.tv/activate",
+        "https://www.twitch.tv:8443/activate",
+        "https://id.twitch.tv/activate",
+        "javascript:alert(1)",
+        "",
+    ] {
+        assert!(!verification_uri_ok(bad), "{bad}");
+    }
 }
 
 // ---- (a) EventSub -----------------------------------------------------------------------------
