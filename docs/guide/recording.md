@@ -53,6 +53,23 @@ On first start, Windows may ask whether OBS may accept network connections. obs-
 listens on every interface; the recorder only talks to `127.0.0.1`, which works whatever you
 answer. Denying the prompt keeps the port closed to the network.
 
+### Its own profile and scene collection
+
+Everything the recorder sets is saved by OBS in the current profile (the 1920x1080 canvas at
+30 fps, the record directory) or the current scene collection (the scene, the browser source,
+the muted desktop and mic inputs). OBS reopens whatever profile and collection were open last,
+and on a machine where you or another tool also use OBS, those are not the recorder's. So a
+recorded run first makes the profile and scene collection `Shadowrunr` current, creating each
+once, and writes only into them; nobody else's profile or collection is edited or removed. It
+switches only while OBS is not streaming or recording (it refuses otherwise), and reads the
+switch back before going on. OBS stays on `Shadowrunr` afterwards: switch back in OBS's
+Profile and Scene Collection menus, or start OBS for recording with
+`--profile Shadowrunr --collection Shadowrunr`. `shadowrunr record check` shows which profile
+and collection are current.
+
+Recorders before 2026-11-03 wrote into whatever was current, usually `Untitled`; a scene
+`Shadowrunr Stage` left there is safe to delete by hand.
+
 ### The password
 
 The recorder reads it from the environment variable `[record] obs_password_env` names

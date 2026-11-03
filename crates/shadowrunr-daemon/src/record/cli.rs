@@ -18,8 +18,9 @@ use clap::Subcommand;
 
 use super::obs::ObsError;
 use super::{
-    check_stage_base, connect, move_into, password, prepare, recording_active, scene_present,
-    stage_url, start, stop, wait_for_voice, RecordConfig, Recording, SCENE, STAGE_WARMUP, TAIL,
+    check_stage_base, connect, containers, move_into, password, prepare, recording_active,
+    scene_present, stage_url, start, stop, wait_for_voice, RecordConfig, Recording, COLLECTION,
+    PROFILE, SCENE, STAGE_WARMUP, TAIL,
 };
 use crate::config::Config;
 
@@ -84,6 +85,16 @@ async fn check_cmd(cfg: &RecordConfig) -> u8 {
             println!("version        {e}");
             code = 1;
         }
+    }
+    match containers(&mut obs).await {
+        Ok((p, c)) if p == PROFILE && c == COLLECTION => {
+            println!("containers     profile and scene collection {PROFILE:?}")
+        }
+        Ok((p, c)) => println!(
+            "containers     profile {p:?}, scene collection {c:?} (a recorded run switches to \
+             {PROFILE:?}, creating it once, and never writes into these)"
+        ),
+        Err(e) => println!("containers     {e}"),
     }
     match scene_present(&mut obs).await {
         Ok(true) => println!("scene          {SCENE:?} present"),

@@ -38,6 +38,13 @@ pub const SCENE: &str = "Shadowrunr Stage";
 /// The browser source in it. OBS names are unique across scenes and inputs, so it cannot share
 /// the scene's name.
 pub const INPUT: &str = "Shadowrunr Stage Browser";
+/// The OBS profile the recorder works in. OBS saves the canvas and the record directory in the
+/// current profile, so the recorder sets them only in its own.
+pub const PROFILE: &str = "Shadowrunr";
+/// The OBS scene collection the recorder works in. OBS saves scenes, inputs and the global
+/// audio inputs (their mute state too) in the current collection, so the recorder writes only
+/// into its own.
+pub const COLLECTION: &str = "Shadowrunr";
 pub const WIDTH: u32 = 1920;
 pub const HEIGHT: u32 = 1080;
 pub const FPS: u32 = 30;
@@ -205,7 +212,80 @@ fn allow(r: Result<Value, ObsError>, ok_code: i64) -> Result<Value, ObsError> {
     }
 }
 
-/// Set OBS up to record the stage at `url`. Refused while OBS is already recording.
+/// OBS's current profile and scene collection.
+pub async fn containers(obs: &mut Obs) -> Result<(String, String), ObsError> {
+    let p = obs.request("GetProfileList", Value::Null).await?;
+    let c = obs.request("GetSceneCollectionList", Value::Null).await?;
+    let name = |v: &Value, k: &str| v[k].as_str().unwrap_or("").to_string();
+    Ok((
+        name(&p, "currentProfileName"),
+        name(&c, "currentSceneCollectionName"),
+    ))
+}
+
+/// Switch to the profile or collection `own`, creating it when it does not exist yet.
+async fn switch_to(
+    obs: &mut Obs,
+    existing: &Value,
+    own: &str,
+    (set, create, field): (&str, &str, &str),
+) -> Result<(), ObsError> {
+    let exists = existing
+        .as_array()
+        .is_some_and(|a| a.iter().any(|n| n.as_str() == Some(own)));
+    let request = if exists { set } else { create };
+    obs.request(request, json!({ field: own })).await?;
+    Ok(())
+}
+
+/// Make the recorder's own profile and scene collection current ([`PROFILE`], [`COLLECTION`]),
+/// creating them on first use. Everything [`prepare`] and [`start`] write is saved in the
+/// current profile or collection, and on a machine where a person or another tool uses OBS too,
+/// the current ones are theirs (OBS reopens whatever was open last). Switching is refused while
+/// OBS is streaming, since it would change what is on air; each switch is read back, not taken
+/// on OBS's word. The recorder never removes or edits anyone else's profile or collection.
+pub async fn ensure_own_containers(obs: &mut Obs) -> Result<(), ObsError> {
+    let profiles = obs.request("GetProfileList", Value::Null).await?;
+    let collections = obs.request("GetSceneCollectionList", Value::Null).await?;
+    let own_profile = profiles["currentProfileName"].as_str() == Some(PROFILE);
+    let own_collection = collections["currentSceneCollectionName"].as_str() == Some(COLLECTION);
+    if own_profile && own_collection {
+        return Ok(());
+    }
+    let stream = obs.request("GetStreamStatus", Value::Null).await?;
+    if stream["outputActive"].as_bool() != Some(false) {
+        return Err(ObsError::Request {
+            request: "SetCurrentSceneCollection".into(),
+            code: code::OUTPUT_RUNNING,
+            comment: format!(
+                "OBS is streaming; the recorder switches to its own profile and scene \
+                 collection {PROFILE:?} only while nothing is on air"
+            ),
+        });
+    }
+    if !own_profile {
+        let ops = ("SetCurrentProfile", "CreateProfile", "profileName");
+        switch_to(obs, &profiles["profiles"], PROFILE, ops).await?;
+    }
+    if !own_collection {
+        let ops = (
+            "SetCurrentSceneCollection",
+            "CreateSceneCollection",
+            "sceneCollectionName",
+        );
+        switch_to(obs, &collections["sceneCollections"], COLLECTION, ops).await?;
+    }
+    let (p, c) = containers(obs).await?;
+    if p != PROFILE || c != COLLECTION {
+        return Err(ObsError::Protocol(format!(
+            "OBS did not switch to the profile and scene collection {PROFILE:?}"
+        )));
+    }
+    Ok(())
+}
+
+/// Set OBS up to record the stage at `url`, in the recorder's own profile and scene collection
+/// ([`ensure_own_containers`]). Refused while OBS is already recording.
 pub async fn prepare(obs: &mut Obs, url: &str) -> Result<(), ObsError> {
     if recording_active(obs).await? {
         return Err(ObsError::Request {
@@ -214,6 +294,7 @@ pub async fn prepare(obs: &mut Obs, url: &str) -> Result<(), ObsError> {
             comment: "OBS is already recording; stop it first".into(),
         });
     }
+    ensure_own_containers(obs).await?;
     obs.request(
         "SetVideoSettings",
         json!({
@@ -782,6 +863,16 @@ mod tests {
     async fn prepare_sets_up_the_scene_and_tolerates_what_exists() {
         let (url, server) = serve(None, |ty, _| match ty {
             "GetRecordStatus" => (obs::code::SUCCESS, json!({"outputActive": false}), vec![]),
+            "GetProfileList" => (
+                obs::code::SUCCESS,
+                json!({"currentProfileName": PROFILE, "profiles": [PROFILE]}),
+                vec![],
+            ),
+            "GetSceneCollectionList" => (
+                obs::code::SUCCESS,
+                json!({"currentSceneCollectionName": COLLECTION, "sceneCollections": [COLLECTION]}),
+                vec![],
+            ),
             "CreateScene" | "CreateInput" => {
                 (obs::code::RESOURCE_ALREADY_EXISTS, Value::Null, vec![])
             }
@@ -809,6 +900,8 @@ mod tests {
             kinds,
             [
                 "GetRecordStatus",
+                "GetProfileList",
+                "GetSceneCollectionList",
                 "SetVideoSettings",
                 "CreateScene",
                 "CreateInput",
@@ -822,19 +915,19 @@ mod tests {
                 "SetInputMute",
             ]
         );
-        let video = &seen.requests[1]["requestData"];
+        let video = &seen.requests[3]["requestData"];
         assert_eq!(
             (video["baseWidth"].as_u64(), video["outputHeight"].as_u64()),
             (Some(1920), Some(1080))
         );
         assert_eq!(video["fpsNumerator"], 30);
-        let input = &seen.requests[3]["requestData"];
+        let input = &seen.requests[5]["requestData"];
         assert_eq!(input["inputKind"], "browser_source");
         assert_eq!(input["inputSettings"]["reroute_audio"], true);
         assert_eq!(input["inputSettings"]["restart_when_active"], true);
         assert_eq!(input["inputSettings"]["width"], 1920);
         assert_eq!(
-            seen.requests[4]["requestData"]["inputSettings"]["url"],
+            seen.requests[6]["requestData"]["inputSettings"]["url"],
             "http://localhost:5178/?run=live"
         );
     }
@@ -851,6 +944,156 @@ mod tests {
         assert!(err.to_string().contains("already recording"), "{err}");
         o.close().await;
         assert_eq!(server.await.unwrap().requests.len(), 1);
+    }
+
+    /// What a [`containers_peer`] holds: OBS's current profile and scene collection, the ones
+    /// that exist, and every request that wrote into a profile or collection the recorder does
+    /// not own.
+    #[derive(Debug, Default)]
+    struct Containers {
+        profile: String,
+        profiles: Vec<String>,
+        collection: String,
+        collections: Vec<String>,
+        streaming: bool,
+        foreign_writes: Vec<String>,
+    }
+
+    /// A fake OBS that saves what `prepare` writes where OBS saves it: canvas and record
+    /// directory in the current profile, scenes, inputs and global audio mutes in the current
+    /// scene collection.
+    fn containers_peer(
+        state: std::sync::Arc<std::sync::Mutex<Containers>>,
+    ) -> impl Fn(&str, &Value) -> (i64, Value, Vec<Value>) + Send + 'static {
+        const OWN: &str = "Shadowrunr";
+        move |ty, data| {
+            let mut s = state.lock().unwrap();
+            let in_profile = matches!(ty, "SetVideoSettings" | "SetRecordDirectory");
+            let in_collection = matches!(
+                ty,
+                "CreateScene"
+                    | "CreateInput"
+                    | "SetInputSettings"
+                    | "CreateSceneItem"
+                    | "SetCurrentProgramScene"
+                    | "SetInputMute"
+            );
+            if (in_profile && s.profile != OWN) || (in_collection && s.collection != OWN) {
+                s.foreign_writes.push(ty.to_string());
+            }
+            let name = |k: &str| data[k].as_str().unwrap_or("").to_string();
+            let ok = |v: Value| (obs::code::SUCCESS, v, vec![]);
+            match ty {
+                "GetRecordStatus" => ok(json!({"outputActive": false})),
+                "GetStreamStatus" => ok(json!({"outputActive": s.streaming})),
+                "GetProfileList" => {
+                    ok(json!({"currentProfileName": s.profile, "profiles": s.profiles}))
+                }
+                "GetSceneCollectionList" => ok(json!({
+                    "currentSceneCollectionName": s.collection,
+                    "sceneCollections": s.collections,
+                })),
+                "SetCurrentProfile" | "CreateProfile" => {
+                    let n = name("profileName");
+                    let exists = s.profiles.contains(&n);
+                    if exists == (ty == "CreateProfile") {
+                        let c = if exists {
+                            obs::code::RESOURCE_ALREADY_EXISTS
+                        } else {
+                            obs::code::RESOURCE_NOT_FOUND
+                        };
+                        return (c, Value::Null, vec![]);
+                    }
+                    if !exists {
+                        s.profiles.push(n.clone());
+                    }
+                    s.profile = n;
+                    ok(Value::Null)
+                }
+                "SetCurrentSceneCollection" | "CreateSceneCollection" => {
+                    let n = name("sceneCollectionName");
+                    let exists = s.collections.contains(&n);
+                    if exists == (ty == "CreateSceneCollection") {
+                        let c = if exists {
+                            obs::code::RESOURCE_ALREADY_EXISTS
+                        } else {
+                            obs::code::RESOURCE_NOT_FOUND
+                        };
+                        return (c, Value::Null, vec![]);
+                    }
+                    if !exists {
+                        s.collections.push(n.clone());
+                    }
+                    s.collection = n;
+                    ok(Value::Null)
+                }
+                "GetSpecialInputs" => ok(json!({"desktop1": "Desktop Audio", "mic1": "Mic/Aux"})),
+                _ => ok(Value::Null),
+            }
+        }
+    }
+
+    fn someone_elses_obs(streaming: bool) -> std::sync::Arc<std::sync::Mutex<Containers>> {
+        // Another tool's film setup is current; the recorder's collection exists from an
+        // earlier run, its profile does not.
+        std::sync::Arc::new(std::sync::Mutex::new(Containers {
+            profile: "CastleControl-Film".into(),
+            profiles: vec!["Untitled".into(), "CastleControl-Film".into()],
+            collection: "CastleControl-Film".into(),
+            collections: vec![
+                "Untitled".into(),
+                "CastleControl-Film".into(),
+                "Shadowrunr".into(),
+            ],
+            streaming,
+            ..Containers::default()
+        }))
+    }
+
+    #[tokio::test]
+    async fn prepare_writes_only_into_the_recorders_own_profile_and_collection() {
+        let state = someone_elses_obs(false);
+        let (url, server) = serve(None, containers_peer(state.clone())).await;
+        let mut o = Obs::connect(&url, None, 0).await.unwrap();
+        prepare(&mut o, "http://localhost:5178/?run=live")
+            .await
+            .unwrap();
+        o.close().await;
+        server.await.unwrap();
+        let s = state.lock().unwrap();
+        assert!(
+            s.foreign_writes.is_empty(),
+            "wrote into a profile or collection the recorder does not own: {:?}",
+            s.foreign_writes
+        );
+        assert_eq!(
+            (s.profile.as_str(), s.collection.as_str()),
+            (PROFILE, COLLECTION)
+        );
+        assert!(s.profiles.iter().any(|p| p == "CastleControl-Film"));
+        assert_eq!(
+            s.collections.len(),
+            3,
+            "an existing collection is switched to, not made twice"
+        );
+    }
+
+    #[tokio::test]
+    async fn prepare_refuses_to_switch_containers_while_obs_is_streaming() {
+        let state = someone_elses_obs(true);
+        let (url, server) = serve(None, containers_peer(state.clone())).await;
+        let mut o = Obs::connect(&url, None, 0).await.unwrap();
+        let err = prepare(&mut o, "u").await.map(|_| ()).unwrap_err();
+        assert!(err.to_string().contains("streaming"), "{err}");
+        o.close().await;
+        let seen = server.await.unwrap();
+        let s = state.lock().unwrap();
+        assert!(s.foreign_writes.is_empty(), "{:?}", s.foreign_writes);
+        assert_eq!(s.profile, "CastleControl-Film");
+        assert!(!seen.requests.iter().any(|r| {
+            let t = r["requestType"].as_str().unwrap_or("");
+            t.starts_with("SetCurrent") || t.starts_with("Create")
+        }));
     }
 
     #[tokio::test]
