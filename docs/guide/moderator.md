@@ -102,8 +102,11 @@ Restart the daemon. Until `client_id` is set, `moderator.status` reports Twitch 
    "waiting for the code at <uri>".
 2. Open the URI in a browser **signed in as the bot account** (a private window is the easy
    way). Enter the code if Twitch asks for it, then approve.
-3. The daemon polls Twitch at the interval Twitch asks for. Once you approve, the daemon stores
-   the tokens, checks who the bot is, finds the channel, opens EventSub, and goes to
+3. The daemon polls Twitch at the interval Twitch asks for. A poll that is rate limited, gets a
+   gateway error or gets no answer neither approves nor denies the code: the daemon doubles its
+   wait (up to a minute) and keeps polling until the code expires. A `verification_uri` that is
+   not an `https` address on `twitch.tv` is refused before it is shown. Once you approve, the
+   daemon stores the tokens, checks who the bot is, finds the channel, opens EventSub, and goes to
    `connected` with `bot_login` set. The code expires after `expires_s` seconds (Twitch gives
    30 minutes). After that, run `twitch_connect` again.
 
