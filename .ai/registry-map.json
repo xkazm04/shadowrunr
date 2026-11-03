@@ -1184,7 +1184,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/scripts/check-token-refs.mjs:17 The token-reference gate only recognises the literal `var(--sr-name)` form, so a computed reference such as `var(${s.ink})` (live at apps/console/src/pages/segments/Face.tsx:58) is neither checked nor reported, and the gate exits clean over a reference it never read.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "deployment-contract",
@@ -4273,7 +4277,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/overflowAudit.ts:37 The element-overflow audit writes its findings to a DOM attribute and a window global that nothing in the repo reads (searched including hidden dirs), so the DESIGN.md rule that no element overflows its box rests on a one-off manual run and a regression passes every gate.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "review-iteration-loops",

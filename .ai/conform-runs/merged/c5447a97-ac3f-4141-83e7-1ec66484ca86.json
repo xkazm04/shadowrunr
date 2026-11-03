@@ -1,0 +1,175 @@
+{
+  "schema": "conform-run/1",
+  "worker": "c5447a97-ac3f-4141-83e7-1ec66484ca86",
+  "subject": "quality-gates",
+  "evaluatedAt": "2026-11-03T23:42:40.001119+00:00",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "pairs": [
+    {
+      "context": "console-build-and-desktop-shell",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "apps/console/scripts/check-token-refs.mjs:17 The token-reference gate only recognises the literal `var(--sr-name)` form, so a computed reference such as `var(${s.ink})` (live at apps/console/src/pages/segments/Face.tsx:58) is neither checked nor reported, and the gate exits clean over a reference it never read.",
+      "techniques": [
+        {
+          "technique": "unparseable-form-is-a-finding",
+          "verdict": "deviation",
+          "evidence": "apps/console/scripts/check-token-refs.mjs:17 Own tree, so the precondition holds. A `var(${...})` escape form is silently skipped instead of being reported as unrecognised; Face.tsx:58 already uses it with rank tokens."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-size.mjs:32 An empty walk exits 2, separate from pass (0) and fail (1). check-bundle (missing manifest) and check-token-refs (no tokens defined, no refs) do the same."
+        },
+        {
+          "technique": "severity-by-construction",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-size.mjs:36 The exit code depends directly on the finding count, with no advisory level in between."
+        },
+        {
+          "technique": "blocking-by-input-determinism",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-bundle.mjs:2 The blocking verdict depends only on the built tree. The baseline file is explicitly report-only."
+        },
+        {
+          "technique": "renameable-detector-keys",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-bundle.mjs:14 Route keys are matched in both directions, so renaming a route turns the check red (unbudgeted plus orphan budget) instead of making the finding disappear."
+        },
+        {
+          "technique": "waiver-names-its-finding",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/scripts/check-size.mjs:4 The check has no escape hatch, so there is no waiver to scope."
+        },
+        {
+          "technique": "refusal-names-a-reachable-remedy",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-bundle.mjs:37 The could-not-run message names a remedy the reader can run from the app directory. The size and token messages only name the violation."
+        },
+        {
+          "technique": "instrument-answers-only-its-own-question",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-token-refs.mjs:4 States which question this instrument answers and which other check owns the neighbouring one."
+        },
+        {
+          "technique": "match-the-resolved-artifact",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-token-refs.mjs:14 The defined-token set is read from the artifact the module resolver actually returns, and an empty definition set is fatal (line 20). Raw-text matching of refs over-detects comments, which is the safe direction, but nothing beside the regex says so."
+        },
+        {
+          "technique": "prose-rule-drift",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-size.mjs:2 The file-growth invariant is mechanised as a whole-tree length read, not left as prose or a per-edit check."
+        }
+      ]
+    },
+    {
+      "context": "stage-app",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "apps/stage/src/overflowAudit.ts:37 The element-overflow audit writes its findings to a DOM attribute and a window global that nothing in the repo reads (searched including hidden dirs), so the DESIGN.md rule that no element overflows its box rests on a one-off manual run and a regression passes every gate.",
+      "techniques": [
+        {
+          "technique": "prose-rule-drift",
+          "verdict": "deviation",
+          "evidence": "apps/stage/DESIGN.md:429 The overflow rule is evidenced by a past manual audit run, not by any mechanism that refuses a regression. Only the region-in-canvas half is tested (stage.test.ts)."
+        },
+        {
+          "technique": "severity-by-construction",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/overflowAudit.ts:36 Findings go to a sink no exit code depends on: output, not a gate. Note that DESIGN.md cites this audit as the evidence for the overflow rule."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "conformant",
+          "evidence": "apps/stage/package.json:13 The lint rung runs a test that proves the ESLint gate goes red on seeded violations, inside the same script that gates."
+        }
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "quality-gates",
+      "context": "segments-runtime",
+      "reason": "the seat returned unknown"
+    },
+    {
+      "subject": "quality-gates",
+      "context": "stage-avatar-renderer",
+      "reason": "withdrawn after review: reviewer (sonnet): Avatar.tsx:3 is a header comment, so the anchor is incidental and does not show that no gate precondition exists; the context also holds unit tests (look.test.ts, plan.test.ts, geom.test.ts) that can fail a change, which contradicts 'no check that can refuse a change'."
+    },
+    {
+      "subject": "quality-gates",
+      "context": "stage-voice-client",
+      "reason": "withdrawn after review: reviewer (sonnet): report.ts:4 is a header comment, so the anchor is incidental and does not show the precondition is absent; the context has tests (frame.test.ts, player.test.ts, session.test.ts and others) that can refuse a change, and a grep for process.exit, max-warnings, baseline and waiver cannot prove that abse"
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-11-03T23:42:40.001119+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "quality-gates"
+      ],
+      "techniques": [
+        "blocking-by-input-determinism",
+        "gate-liveness",
+        "instrument-answers-only-its-own-question",
+        "match-the-resolved-artifact",
+        "prose-rule-drift",
+        "refusal-names-a-reachable-remedy",
+        "renameable-detector-keys",
+        "severity-by-construction",
+        "unparseable-form-is-a-finding",
+        "waiver-names-its-finding"
+      ],
+      "deviations": 1,
+      "context": "console-build-and-desktop-shell",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-11-03T23:42:40.001119+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "quality-gates"
+      ],
+      "techniques": [
+        "gate-liveness",
+        "prose-rule-drift",
+        "severity-by-construction"
+      ],
+      "deviations": 1,
+      "context": "stage-app",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-11-03T23:42:40.001119+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "quality-gates"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "stage-avatar-renderer",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-11-03T23:42:40.001119+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "quality-gates"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "stage-voice-client",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    }
+  ]
+}

@@ -6294,13 +6294,13 @@
       "bundle": "software-engineering",
       "state": "unknown",
       "evaluatedAt": "2026-11-03",
-      "evaluatedTs": "2026-11-03T14:46:22.383Z",
+      "evaluatedTs": "2026-11-03T23:42:40.001Z",
       "techniques": [],
       "withdrawn": {
-        "worker": "6e9c54ee-b934-43fb-ac44-d5021d693862",
+        "worker": "c5447a97-ac3f-4141-83e7-1ec66484ca86",
         "state": "not-applicable",
-        "at": "2026-11-03T14:47:19.702456+00:00",
-        "reason": "reviewer (sonnet): The anchor Avatar.tsx:1 is a file header that does not show the absence, and the claim that the only refusals are in tests is contradicted by production code: checkSpec in layers.ts refuses a rig spec, and the depth geom code refuses a map for another rig."
+        "at": "2026-11-03T23:43:27.081383+00:00",
+        "reason": "reviewer (sonnet): Avatar.tsx:3 is a header comment, so the anchor is incidental and does not show that no gate precondition exists; the context also holds unit tests (look.test.ts, plan.test.ts, geom.test.ts) that can fail a change, which contradicts 'no check that can refuse a change'."
       }
     },
     "435472ca-7ef4-4956-80d8-3dc82f215665/quality-gates": {
@@ -6554,6 +6554,108 @@
           "evidence": "apps/console/src/data/rpc.test.ts:39 The every-error-code mapping test enumerates the taxonomy from its source constant, not a hand list."
         }
       ]
+    },
+    "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa/quality-gates": {
+      "context": "console-build-and-desktop-shell",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T23:42:40.001Z",
+      "worker": "c5447a97-ac3f-4141-83e7-1ec66484ca86",
+      "techniques": [
+        {
+          "technique": "unparseable-form-is-a-finding",
+          "verdict": "deviation",
+          "evidence": "apps/console/scripts/check-token-refs.mjs:17 Own tree, so the precondition holds. A `var(${...})` escape form is silently skipped instead of being reported as unrecognised; Face.tsx:58 already uses it with rank tokens."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-size.mjs:32 An empty walk exits 2, separate from pass (0) and fail (1). check-bundle (missing manifest) and check-token-refs (no tokens defined, no refs) do the same."
+        },
+        {
+          "technique": "severity-by-construction",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-size.mjs:36 The exit code depends directly on the finding count, with no advisory level in between."
+        },
+        {
+          "technique": "blocking-by-input-determinism",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-bundle.mjs:2 The blocking verdict depends only on the built tree. The baseline file is explicitly report-only."
+        },
+        {
+          "technique": "renameable-detector-keys",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-bundle.mjs:14 Route keys are matched in both directions, so renaming a route turns the check red (unbudgeted plus orphan budget) instead of making the finding disappear."
+        },
+        {
+          "technique": "waiver-names-its-finding",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/scripts/check-size.mjs:4 The check has no escape hatch, so there is no waiver to scope."
+        },
+        {
+          "technique": "refusal-names-a-reachable-remedy",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-bundle.mjs:37 The could-not-run message names a remedy the reader can run from the app directory. The size and token messages only name the violation."
+        },
+        {
+          "technique": "instrument-answers-only-its-own-question",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-token-refs.mjs:4 States which question this instrument answers and which other check owns the neighbouring one."
+        },
+        {
+          "technique": "match-the-resolved-artifact",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-token-refs.mjs:14 The defined-token set is read from the artifact the module resolver actually returns, and an empty definition set is fatal (line 20). Raw-text matching of refs over-detects comments, which is the safe direction, but nothing beside the regex says so."
+        },
+        {
+          "technique": "prose-rule-drift",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-size.mjs:2 The file-growth invariant is mechanised as a whole-tree length read, not left as prose or a per-edit check."
+        }
+      ]
+    },
+    "e0e277e4-0b4e-4d04-8c33-29f0d59d2a67/quality-gates": {
+      "context": "stage-app",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T23:42:40.001Z",
+      "worker": "c5447a97-ac3f-4141-83e7-1ec66484ca86",
+      "techniques": [
+        {
+          "technique": "prose-rule-drift",
+          "verdict": "deviation",
+          "evidence": "apps/stage/DESIGN.md:429 The overflow rule is evidenced by a past manual audit run, not by any mechanism that refuses a regression. Only the region-in-canvas half is tested (stage.test.ts)."
+        },
+        {
+          "technique": "severity-by-construction",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/overflowAudit.ts:36 Findings go to a sink no exit code depends on: output, not a gate. Note that DESIGN.md cites this audit as the evidence for the overflow rule."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "conformant",
+          "evidence": "apps/stage/package.json:13 The lint rung runs a test that proves the ESLint gate goes red on seeded violations, inside the same script that gates."
+        }
+      ]
+    },
+    "b2009d98-3f59-4c44-97e1-b3b93b65264c/quality-gates": {
+      "context": "stage-voice-client",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-11-03",
+      "evaluatedTs": "2026-11-03T23:42:40.001Z",
+      "techniques": [],
+      "withdrawn": {
+        "worker": "c5447a97-ac3f-4141-83e7-1ec66484ca86",
+        "state": "not-applicable",
+        "at": "2026-11-03T23:43:27.148682+00:00",
+        "reason": "reviewer (sonnet): report.ts:4 is a header comment, so the anchor is incidental and does not show the precondition is absent; the context has tests (frame.test.ts, player.test.ts, session.test.ts and others) that can refuse a change, and a grep for process.exit, max-warnings, baseline and waiver cannot prove that abse"
+      }
     }
   }
 }
