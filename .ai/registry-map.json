@@ -1157,12 +1157,11 @@
           "changedAt": "2026-10-22",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "apps/console/src/pages/brain/Layer2.tsx:48 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; Brain renders application diagnostics and transcripts rather than an agent browser-control surface.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:0d439bfcafe8cabd",
-          "evaluatedRevision": 3,
-          "revisionsBehind": 2,
-          "stale": true
+          "evidence": "apps/console/src/pages/brain/index.ts:1 I searched the brain directory for playwright, puppeteer, ariaSnapshot, chromium and headless and found nothing; the page draws brain diagnostics from daemon queries and exposes no browser daemon or command surface to an agent.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:a5e059a866a49108",
+          "evaluatedRevision": 5,
+          "revisionsBehind": 2
         }
       ],
       "governance": "governed"
@@ -1525,12 +1524,11 @@
           "changedAt": "2026-10-22",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "apps/console/src/pages/characters/PackagePage.tsx:30 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; the package browser renders character data rather than controlling a browser for an agent.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:0d439bfcafe8cabd",
-          "evaluatedRevision": 3,
-          "revisionsBehind": 2,
-          "stale": true
+          "evidence": "apps/console/src/pages/characters/index.ts:1 I searched the characters directory for playwright, puppeteer, ariaSnapshot, chromium and headless and found nothing (the only 'browser' hit is a voiceAudio.ts comment about the browser's autoplay rules); this page renders character packages and controls no browser for an agent.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:a5e059a866a49108",
+          "evaluatedRevision": 5,
+          "revisionsBehind": 2
         },
         {
           "subject": "cinematic-language",
@@ -2029,12 +2027,11 @@
           "changedAt": "2026-10-22",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/RunDetail.tsx:94 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; the screen and replay consume recorded application events rather than drive a browser for an agent.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:0d439bfcafe8cabd",
-          "evaluatedRevision": 3,
-          "revisionsBehind": 2,
-          "stale": true
+          "evidence": "apps/console/src/pages/onair/index.ts:1 I searched the onair directory for playwright, puppeteer, ariaSnapshot, chromium and headless and found nothing (the 'snapshot' hits are the feed's own FeedSnapshot state); this page plays back recorded show events and drives no browser on an agent's behalf.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:a5e059a866a49108",
+          "evaluatedRevision": 5,
+          "revisionsBehind": 2
         },
         {
           "subject": "stream-moment-capture",
@@ -2321,13 +2318,12 @@
           "changedAt": "2026-10-22",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "apps/console/src/pages/reconcile/Layer2.tsx:36 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; reconciliation reports and chat are application views without an agent browser-control surface.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:0d439bfcafe8cabd",
-          "evaluatedRevision": 3,
+          "evidence": "apps/console/src/pages/reconcile/index.ts:1 I searched the reconcile directory for playwright, puppeteer, ariaSnapshot, chromium and headless and found nothing; the report, plan and chat views are application UI with no command surface for an agent to drive a browser.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:a5e059a866a49108",
+          "evaluatedRevision": 5,
           "source": "retained",
-          "revisionsBehind": 2,
-          "stale": true
+          "revisionsBehind": 2
         },
         {
           "subject": "bounded-enumeration",
@@ -2409,12 +2405,11 @@
           "changedAt": "2026-10-22",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "apps/console/src/pages/segments/Layer2.tsx:29 Context searches found no playwright, puppeteer, agent-browser or ariaSnapshot matches; this module renders application tabs rather than an agent browser-control surface.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:0d439bfcafe8cabd",
-          "evaluatedRevision": 3,
-          "revisionsBehind": 2,
-          "stale": true
+          "evidence": "apps/console/src/pages/segments/index.ts:1 I searched the segments directory for playwright, puppeteer, ariaSnapshot, chromium and headless and found nothing; this is a lazily loaded console page module, not a browser surface an agent controls, so none of the five techniques has a precondition here.",
+          "evaluatedAt": "2026-11-03",
+          "evaluatedAgainst": "sha256-b2:a5e059a866a49108",
+          "evaluatedRevision": 5,
+          "revisionsBehind": 2
         },
         {
           "subject": "voice-io",
