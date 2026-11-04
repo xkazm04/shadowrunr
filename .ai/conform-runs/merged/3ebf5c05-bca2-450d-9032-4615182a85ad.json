@@ -1,0 +1,110 @@
+{
+  "schema": "conform-run/1",
+  "worker": "3ebf5c05-bca2-450d-9032-4615182a85ad",
+  "subject": "quality-gates",
+  "evaluatedAt": "2026-11-04T00:02:56.305323+00:00",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "pairs": [
+    {
+      "context": "segments-runtime",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "crates/shadowrunr-segments/src/case.rs:40 validate_case, which runs from CaseStore::load and stage, never requires hexes to start fogged and ungraded. A case file whose hex is already face-up at DOC with no primary source passes every check, because the DOC rule only fires on the reveal op. The owner's content-hash approval is the only remaining check.",
+      "techniques": [
+        {
+          "technique": "self-reported-gate-inputs",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:1943 The DOC rule judges only grades set through the sanctioned reveal op. A grade written straight into case.json is never judged: an inert branch. The daemon's casework writes fog: true, but nothing fences the record."
+        },
+        {
+          "technique": "unmeasurable-criteria",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:3360 A face-up hex with no grade gets no ALLEGED marker, so a missing grade reads like DOC (stated as fact). Reachable only through a case file with fog false and no grade."
+        },
+        {
+          "technique": "match-the-resolved-artifact",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-segments/src/evidence.rs:216 Matches the parsed host, not a substring. Userinfo, query and path occurrences of sec.gov do not count."
+        },
+        {
+          "technique": "unparseable-form-is-a-finding",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-segments/src/evidence.rs:82 A URL the parser cannot read is never a primary source: it fails closed instead of passing."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-segments/src/evidence.rs:150 An empty research allowlist is a load error, not an empty rule set. Tests also feed known-bad URLs (e.g. evidence.rs:270)."
+        },
+        {
+          "technique": "refusal-names-a-reachable-remedy",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-segments/src/cases.rs:453 The refusal names remedies that exist in the same store: CaseStore::retract, or a new id."
+        },
+        {
+          "technique": "waiver-names-its-finding",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-segments/src/cases.rs:204 The owner's approval for live use is bound to the exact content hash, recomputed from disk. Any change to the content voids it."
+        }
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "quality-gates",
+      "context": "workspace-tooling-and-policy",
+      "reason": "evidence leans on packages/stage-kit/src/zz.ts, which is not a tracked file"
+    },
+    {
+      "subject": "quality-gates",
+      "context": "contract-package",
+      "reason": "the seat returned unknown"
+    },
+    {
+      "subject": "quality-gates",
+      "context": "stage-voice-client",
+      "reason": "the seat returned unknown"
+    },
+    {
+      "subject": "quality-gates",
+      "context": "stage-avatar-renderer",
+      "reason": "withdrawn after review: reviewer (sonnet): The not-applicable anchor Avatar.tsx:3 is a descriptive comment about the component. It does not show that a quality gate is absent, and the claim rests on a keyword search whose terms (eslint-disable, waiver, allowlist, baseline, suppress) are narrow for a quality-gates subject."
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-11-04T00:02:56.305323+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "quality-gates"
+      ],
+      "techniques": [
+        "gate-liveness",
+        "match-the-resolved-artifact",
+        "refusal-names-a-reachable-remedy",
+        "self-reported-gate-inputs",
+        "unmeasurable-criteria",
+        "unparseable-form-is-a-finding",
+        "waiver-names-its-finding"
+      ],
+      "deviations": 1,
+      "context": "segments-runtime",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-11-04T00:02:56.305323+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "quality-gates"
+      ],
+      "techniques": [],
+      "deviations": 0,
+      "context": "stage-avatar-renderer",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    }
+  ]
+}

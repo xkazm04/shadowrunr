@@ -3929,7 +3929,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/case.rs:40 validate_case, which runs from CaseStore::load and stage, never requires hexes to start fogged and ungraded. A case file whose hex is already face-up at DOC with no primary source passes every check, because the DOC rule only fires on the reveal op. The owner's content-hash approval is the only remaining check.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "data-video-art-direction",
