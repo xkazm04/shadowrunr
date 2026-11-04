@@ -1,0 +1,83 @@
+{
+ "schema": "conform-run/1",
+ "worker": "0d42748f-d93c-4051-b869-14431154d8e9",
+ "subject": "demo-data-plane",
+ "evaluatedAt": "2026-11-04T01:41:51.847591+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "segments-runtime",
+   "subject": "demo-data-plane",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-segments/src/runtime.rs:691 A missing case config silently picks the fictional demo case. StreamKind defaults to Live and the owner gate below only checks real cases, so absence acts as an implicit demo selector on a live stream.",
+   "techniques": [
+    {
+     "technique": "runtime-dispatch-not-build-flag",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/src/runtime.rs:691 The plane is chosen at runtime from config (not a build flag), but it is derived from the absence of a value rather than an explicit act. The technique names this as a failure."
+    },
+    {
+     "technique": "fake-surface-honesty-contract",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-segments/src/runtime.rs:64 Breaks 'never auto-entered'. The disclosure clauses are partly met: the host prompt says THIS CASE IS FICTIONAL DEMO DATA (line 2873) and records sit on *.example domains."
+    },
+    {
+     "technique": "one-interface-many-planes",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-segments/src/runtime.rs:705 Fictional and real cases share one Case/CaseFile type and one validation door; the runtime cannot tell them apart except by the fictional flag on the value."
+    },
+    {
+     "technique": "fixture-self-consistency",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-segments/src/research.rs:175 The records file is validated against the root case: same id, same fictional flag, every record on a hex of the case."
+    },
+    {
+     "technique": "mixed-plane-coexistence",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/src/research.rs:156 Mixing is refused by construction: planted records never sit beside a real case, and public records never sit beside a fictional one."
+    },
+    {
+     "technique": "seeded-determinism",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/src/case.rs:16 The demo world is hand-written compiled-in JSON with no generated variation. Grep for rand/seed in src found only test names."
+    },
+    {
+     "technique": "replay-clock-pinning",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/src/runtime.rs:88 The runtime takes injected now_ms and does not replay a recorded moment, so there is nothing to pin."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "demo-data-plane",
+   "context": "stage-app",
+   "reason": "evidence leans on scripts/make-demo.mjs, which is not a tracked file"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-04T01:41:51.847591+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "demo-data-plane"
+   ],
+   "techniques": [
+    "fake-surface-honesty-contract",
+    "fixture-self-consistency",
+    "mixed-plane-coexistence",
+    "one-interface-many-planes",
+    "replay-clock-pinning",
+    "runtime-dispatch-not-build-flag",
+    "seeded-determinism"
+   ],
+   "deviations": 1,
+   "context": "segments-runtime",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

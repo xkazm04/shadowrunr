@@ -3899,12 +3899,11 @@
           "changedAt": "2026-10-27",
           "confidence": "probable",
           "state": "deviation",
-          "evidence": "crates/shadowrunr-segments/src/runtime.rs:427 Missing case configuration selects fictional demo data even for a live stream, making absence an implicit demo selector.",
-          "evaluatedAt": "2026-10-20",
-          "evaluatedAgainst": "sha256-b2:952fe6652c22027d",
-          "evaluatedRevision": 4,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:691 A missing case config silently picks the fictional demo case. StreamKind defaults to Live and the owner gate below only checks real cases, so absence acts as an implicit demo selector on a live stream.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:8b6581bd5537bf1b",
+          "evaluatedRevision": 5,
+          "revisionsBehind": 1
         },
         {
           "subject": "show-segment-format-design",

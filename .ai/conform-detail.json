@@ -2021,39 +2021,59 @@
       "subject": "demo-data-plane",
       "bundle": "software-engineering",
       "state": "deviation",
-      "evaluatedAt": "2026-10-20",
-      "evaluatedTs": "2026-10-20T00:10:30.072Z",
-      "worker": "3fd498c0-62d5-43cc-ad7c-015ce3207468",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T01:41:51.847Z",
+      "worker": "0d42748f-d93c-4051-b869-14431154d8e9",
       "techniques": [
-        {
-          "technique": "fake-surface-honesty-contract",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-segments/src/runtime.rs:437 Absent case and record configuration automatically installs planted demo records; fictional labels and provenance validation do not replace explicit entry."
-        },
-        {
-          "technique": "fixture-self-consistency",
-          "verdict": "deviation",
-          "evidence": "crates/shadowrunr-segments/data/demo-case.json:6 Demo entity identifiers lack the required fabricated affix: HEX-01 uses the same canonical namespace accepted for real-case hexes, despite the containing case being labelled fictional."
-        },
-        {
-          "technique": "network-faithful-mocks",
-          "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/research.rs:14 Both planted and real research records are read locally from staged case files; this runtime does not replace a live network client with a mock."
-        },
-        {
-          "technique": "one-interface-many-planes",
-          "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/research.rs:385 Real and fictional case files are inputs to the same report/runtime implementation, rather than separate client implementations requiring operation parity."
-        },
         {
           "technique": "runtime-dispatch-not-build-flag",
           "verdict": "deviation",
-          "evidence": "crates/shadowrunr-segments/src/runtime.rs:427 The constructor chooses demo data from missing configuration instead of an explicitly declared demo plane."
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:691 The plane is chosen at runtime from config (not a build flag), but it is derived from the absence of a value rather than an explicit act. The technique names this as a failure."
+        },
+        {
+          "technique": "fake-surface-honesty-contract",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:64 Breaks 'never auto-entered'. The disclosure clauses are partly met: the host prompt says THIS CASE IS FICTIONAL DEMO DATA (line 2873) and records sit on *.example domains."
+        },
+        {
+          "technique": "one-interface-many-planes",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:705 Fictional and real cases share one Case/CaseFile type and one validation door; the runtime cannot tell them apart except by the fictional flag on the value."
+        },
+        {
+          "technique": "fixture-self-consistency",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-segments/src/research.rs:175 The records file is validated against the root case: same id, same fictional flag, every record on a hex of the case."
+        },
+        {
+          "technique": "mixed-plane-coexistence",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/src/research.rs:156 Mixing is refused by construction: planted records never sit beside a real case, and public records never sit beside a fictional one."
         },
         {
           "technique": "seeded-determinism",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/case.rs:15 The demo world is hand-authored JSON parsed directly; there is no generated fixture-variation stream to seed, and runtime time is supplied through arguments."
+          "evidence": "crates/shadowrunr-segments/src/case.rs:16 The demo world is hand-written compiled-in JSON with no generated variation. Grep for rand/seed in src found only test names."
+        },
+        {
+          "technique": "replay-clock-pinning",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:88 The runtime takes injected now_ms and does not replay a recorded moment, so there is nothing to pin."
+        },
+        {
+          "technique": "network-faithful-mocks",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/src/research.rs:14 Both planted and real research records are read locally from staged case files; this runtime does not replace a live network client with a mock.",
+          "carriedFrom": "2026-10-20"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:427 Missing case configuration selects fictional demo data even for a live stream, making absence an implicit demo selector.",
+          "evaluatedAt": "2026-10-20T00:10:30.072Z",
+          "worker": "3fd498c0-62d5-43cc-ad7c-015ce3207468",
+          "reason": "replaced by 0d42748f-d93c-4051-b869-14431154d8e9"
         }
       ]
     },
