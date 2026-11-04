@@ -5572,29 +5572,45 @@
       "subject": "deployment-contract",
       "bundle": "software-engineering",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T23:53:36.887Z",
-      "worker": "e422ae1a-52d6-4efb-8c9c-379111b16e6d",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T02:57:49.788Z",
+      "worker": "55f198ea-4970-4222-91e7-96ad25587b75",
       "techniques": [
         {
           "technique": "platform-build-parity",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src-tauri/tauri.conf.json:9 The only second builder is the Tauri CLI, and it runs the package's own `pnpm build` task. No hosted builder exists that could resolve differently."
+          "evidence": "apps/console/src-tauri/tauri.conf.json:9 The build runs locally inside `tauri build` from the project's own script. No hosted builder exists to drift from it."
         },
         {
           "technique": "cache-immutability-licensing",
           "verdict": "not-applicable",
-          "evidence": "apps/console/vite.config.ts:10 Vite emits hashed assets, but they are served from the embedded app bundle. No host sends cache-lifetime headers to clients."
+          "evidence": "apps/console/vite.config.ts:10 Vite emits hashed assets, but they ship inside the desktop bundle. No HTTP host sends cache directives for them."
+        },
+        {
+          "technique": "public-build-inert-by-mode",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src-tauri/tauri.conf.json:25 There is no public demonstration deployment. The app only talks to a localhost daemon."
         },
         {
           "technique": "environment-promotion",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src-tauri/tauri.conf.json:8 There is a local dev server and nothing else: no preview or production environment ladder for the console."
+          "evidence": "apps/console/src-tauri/tauri.conf.json:8 There is a local dev server and nothing else: no preview or production environment ladder for the console.",
+          "carriedFrom": "2026-10-24"
         },
         {
           "technique": "deploy-gate-coupling",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src-tauri/Cargo.toml:8 Nothing deploys the console on push, so there is no deploy/verify race to couple."
+          "evidence": "apps/console/src-tauri/Cargo.toml:8 Nothing deploys the console on push, so there is no deploy/verify race to couple.",
+          "carriedFrom": "2026-10-24"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "apps/console/src-tauri/tauri.conf.json:10 The console's web build is put into a local Tauri desktop bundle and talks only to a localhost daemon, so no hosting platform builds or serves it; I searched apps/console (gitignore-respecting) for vercel, netlify, wrangler, Cache-Control and deploy and found nothing, so the subject's precondition (deploying through a hosting platform) does not hold.",
+          "evaluatedAt": "2026-10-24T23:53:36.887Z",
+          "worker": "e422ae1a-52d6-4efb-8c9c-379111b16e6d",
+          "reason": "replaced by 55f198ea-4970-4222-91e7-96ad25587b75"
         }
       ]
     },
@@ -7272,6 +7288,21 @@
       "evaluatedTs": "2026-11-04T02:33:03.020Z",
       "worker": "ab62cc30-cb5c-42c8-b940-7653d142e82d",
       "techniques": []
+    },
+    "435472ca-7ef4-4956-80d8-3dc82f215665/deployment-contract": {
+      "context": "console-ui-primitives",
+      "subject": "deployment-contract",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T02:57:49.788Z",
+      "techniques": [],
+      "withdrawn": {
+        "worker": "55f198ea-4970-4222-91e7-96ad25587b75",
+        "state": "not-applicable",
+        "at": "2026-11-04T02:58:38.656148+00:00",
+        "reason": "reviewer (sonnet): The anchor, Button.tsx:22, is a presentational component line that does not show a deploy surface is absent. The not-applicable rests only on a grep, so the anchor is incidental."
+      }
     }
   }
 }
