@@ -4085,20 +4085,40 @@
       "context": "sim-instruments",
       "subject": "audience-absorption-at-scale",
       "bundle": "media-generation",
-      "state": "deviation",
-      "evaluatedAt": "2026-10-22",
-      "evaluatedTs": "2026-10-22T21:47:05.703Z",
-      "worker": "04c9241e-672d-4578-aaa6-d7365de73b90",
+      "state": "conformant",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T04:27:25.175Z",
+      "worker": "b684fa8e-0a36-4113-b291-d85d730ed4a7",
       "techniques": [
         {
-          "technique": "first-contact-exemptions",
-          "verdict": "deviation",
-          "evidence": "sim/matrices/rate-cap-exemptions.toml:6 The enabled treatment adds a rank-gated proposal bypass; moderation.rs:958-962 confirms it has no per-batch or answered-state guard, unlike the bounded exemption list."
+          "technique": "size-tiered-picking-mode",
+          "verdict": "conformant",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:33 Matrices validate at 3, 30 and 300 with a population per size (line 26). The technique says to validate thresholds with a simulated audience at each size. calibration.json:265 (chatting_share 0.34 for the 3-viewer room) treats the chatter-to-viewer ratio as a sourced calibration input, as the golden path asks."
         },
         {
           "technique": "room-scaled-rate-caps",
-          "verdict": "deviation",
-          "evidence": "sim/matrices/rate-cap-exemptions.toml:7 The enabled experiment's rate_cap_for implementation doubles the allowance for unaddressed chatter below ten chatters and drops it from 12 to 6 at ten, violating addressed-only leniency and continuity."
+          "verdict": "conformant",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:12 The cap change ships with its measurement: a treatment/control pair compared run for run, including rate_cap drop counts. The technique asks for this instead of a cap that 'felt fair'. The treatment's unaddressed 2xB small-room leniency is a deviation in crates/shadowrunr-brain/src/moderation.rs:750, which is a different context. Here it is only an A/B arm."
+        },
+        {
+          "technique": "wave-collapse-to-crowd-voice",
+          "verdict": "conformant",
+          "evidence": "sim/calibration.json:686 The calibration includes a copypasta-payload attack that tests the clean-representative guard (step 4), and a copypasta_wave archetype. So the simulated audience produces the waves that collapse must handle."
+        },
+        {
+          "technique": "first-contact-exemptions",
+          "verdict": "conformant",
+          "evidence": "sim/calibration.json:362 The newcomer archetype models the retention value of first contact that the exemption is built on. The treatment's added first-question exemption (matrix line 6) is first-only, so it lapses."
+        }
+      ],
+      "registryProposal": "The standard says to judge picker changes 'under a simulated audience at several room sizes'. It does not say how to treat an A/B treatment arm that trials a variant a technique names as a failure, such as cap leniency for unaddressed chatter. State that a measured, flag-gated experiment with a control arm is evidence-gathering and not a deviation, and that the deviation belongs to whichever arm ships as default. Also consider a raid-specific acceptance check: a flood rubric that passes 'lets it pass unanswered' cannot detect a missing group greeting.",
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:27 The treatment enables repeatable rank-gated proposal exemptions and loosens caps for unaddressed chatter, violating the standard's bounded exemptions and addressed-only leniency.",
+          "evaluatedAt": "2026-10-22T21:47:05.703Z",
+          "worker": "04c9241e-672d-4578-aaa6-d7365de73b90",
+          "reason": "replaced by b684fa8e-0a36-4113-b291-d85d730ed4a7"
         }
       ]
     },

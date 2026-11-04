@@ -5668,13 +5668,12 @@
           "revision": 4,
           "changedAt": "2026-10-31",
           "confidence": "probable",
-          "state": "deviation",
-          "evidence": "sim/matrices/rate-cap-exemptions.toml:27 The treatment enables repeatable rank-gated proposal exemptions and loosens caps for unaddressed chatter, violating the standard's bounded exemptions and addressed-only leniency.",
-          "evaluatedAt": "2026-10-22",
-          "evaluatedAgainst": "sha256-b2:10c4a251c835d294",
-          "evaluatedRevision": 3,
-          "revisionsBehind": 1,
-          "stale": true
+          "state": "conformant",
+          "evidence": "sim/matrices/rate-cap-exemptions.toml:33 The instruments run every picker/cap variant under a simulated audience at three room sizes (with per-size chatting shares and raid/copypasta populations) and compare treatment against a same-day control arm, which is the measurement side this subject asks for. The picking, capping and collapse behaviour itself lives in the brain crate, not in this context.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:55e3a17cf46f7d7f",
+          "evaluatedRevision": 4,
+          "revisionsBehind": 1
         },
         {
           "subject": "prompt-assembly",

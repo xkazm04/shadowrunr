@@ -1,0 +1,60 @@
+{
+ "schema": "conform-run/1",
+ "worker": "b684fa8e-0a36-4113-b291-d85d730ed4a7",
+ "subject": "audience-absorption-at-scale",
+ "evaluatedAt": "2026-11-04T04:27:25.175286+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "sim-instruments",
+   "subject": "audience-absorption-at-scale",
+   "bundle": "media-generation",
+   "state": "conformant",
+   "evidence": "sim/matrices/rate-cap-exemptions.toml:33 The instruments run every picker/cap variant under a simulated audience at three room sizes (with per-size chatting shares and raid/copypasta populations) and compare treatment against a same-day control arm, which is the measurement side this subject asks for. The picking, capping and collapse behaviour itself lives in the brain crate, not in this context.",
+   "techniques": [
+    {
+     "technique": "size-tiered-picking-mode",
+     "verdict": "conformant",
+     "evidence": "sim/matrices/rate-cap-exemptions.toml:33 Matrices validate at 3, 30 and 300 with a population per size (line 26). The technique says to validate thresholds with a simulated audience at each size. calibration.json:265 (chatting_share 0.34 for the 3-viewer room) treats the chatter-to-viewer ratio as a sourced calibration input, as the golden path asks."
+    },
+    {
+     "technique": "room-scaled-rate-caps",
+     "verdict": "conformant",
+     "evidence": "sim/matrices/rate-cap-exemptions.toml:12 The cap change ships with its measurement: a treatment/control pair compared run for run, including rate_cap drop counts. The technique asks for this instead of a cap that 'felt fair'. The treatment's unaddressed 2xB small-room leniency is a deviation in crates/shadowrunr-brain/src/moderation.rs:750, which is a different context. Here it is only an A/B arm."
+    },
+    {
+     "technique": "wave-collapse-to-crowd-voice",
+     "verdict": "conformant",
+     "evidence": "sim/calibration.json:686 The calibration includes a copypasta-payload attack that tests the clean-representative guard (step 4), and a copypasta_wave archetype. So the simulated audience produces the waves that collapse must handle."
+    },
+    {
+     "technique": "first-contact-exemptions",
+     "verdict": "conformant",
+     "evidence": "sim/calibration.json:362 The newcomer archetype models the retention value of first contact that the exemption is built on. The treatment's added first-question exemption (matrix line 6) is first-only, so it lapses."
+    }
+   ],
+   "registryProposal": "The standard says to judge picker changes 'under a simulated audience at several room sizes'. It does not say how to treat an A/B treatment arm that trials a variant a technique names as a failure, such as cap leniency for unaddressed chatter. State that a measured, flag-gated experiment with a control arm is evidence-gathering and not a deviation, and that the deviation belongs to whichever arm ships as default. Also consider a raid-specific acceptance check: a flood rubric that passes 'lets it pass unanswered' cannot detect a missing group greeting."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-04T04:27:25.175286+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "audience-absorption-at-scale"
+   ],
+   "techniques": [
+    "first-contact-exemptions",
+    "room-scaled-rate-caps",
+    "size-tiered-picking-mode",
+    "wave-collapse-to-crowd-voice"
+   ],
+   "deviations": 0,
+   "context": "sim-instruments",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
