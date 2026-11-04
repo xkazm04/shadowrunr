@@ -4054,44 +4054,56 @@
       "subject": "trust-base",
       "bundle": "software-engineering",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-22",
-      "evaluatedTs": "2026-10-22T21:21:37.992Z",
-      "worker": "63733f2d-4ae7-4684-8c3b-1f06fcc9606c",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T05:29:18.910Z",
+      "worker": "5a868e2a-4f3a-4a6f-beb8-fb307186e731",
       "techniques": [
         {
-          "technique": "assumptions-are-build-errors",
+          "technique": "verifier-footprint-stays-contained",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-types/src/lib.rs:41 Fixed-width integers use a language guarantee; searches found no proof-dependent platform premise requiring a corresponding build assertion."
+          "evidence": "crates/shadowrunr-types/Cargo.toml:13 The only crate-local dependency is a schema generator. No prover or spec library is in the published graph."
         },
         {
           "technique": "census-counts-unmarked-members",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-types/Cargo.toml:5 The inherited edition is 2021, but searches across the entire crate found no set_var, remove_var or before_exec calls to add as unmarked members."
+          "evidence": "crates/shadowrunr-types/examples/export-schema.rs:9 The crate is pinned to edition 2021 through the workspace, so the precondition holds. But the only environment use is reading argv here plus compile-time env!(CARGO_MANIFEST_DIR). Searching set_var/remove_var counted B=0, and searching for unsafe counted marker sites A=0. With no marked blocks, the text stand-in cannot miscount."
         },
         {
-          "technique": "leaf-spec-states-what-callers-read",
+          "technique": "assumptions-are-build-errors",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-types/src/schema.rs:52 The schema visitor has an ordinary checked Rust body; no trusted-body annotation or proof-consumed leaf specification was found."
+          "evidence": "crates/shadowrunr-types/Cargo.toml:5 No proof is run, so there is no platform assumption. Searching for target_pointer_width, repr( and static asserts found nothing."
         },
         {
           "technique": "marker-impl-names-its-exclusion",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-types/src/engine.rs:163 These are compiler-enforced trait bounds; searches found no manual unsafe Send/Sync implementation or interior-mutability override."
+          "evidence": "crates/shadowrunr-types/src/engine.rs:159 The traits rely on async_trait's inferred Send bounds. Searching for 'Send for' or 'Sync for' found no hand-written impl."
+        },
+        {
+          "technique": "leaf-spec-states-what-callers-read",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/schema.rs:52 The schema visitor has an ordinary checked Rust body; no trusted-body annotation or proof-consumed leaf specification was found.",
+          "carriedFrom": "2026-10-22"
         },
         {
           "technique": "soundness-argument-names-its-dependencies",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-types/src/schema.rs:188 The inspected schema code enforces its name-clash condition directly; searches found no unsafe cast, raw-pointer operation or trusted escape requiring remote soundness dependencies."
+          "evidence": "crates/shadowrunr-types/src/schema.rs:188 The inspected schema code enforces its name-clash condition directly; searches found no unsafe cast, raw-pointer operation or trusted escape requiring remote soundness dependencies.",
+          "carriedFrom": "2026-10-22"
         },
         {
           "technique": "trusted-leaf-gets-an-outside-test",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-types/tests/schema_drift.rs:16 This tests schema drift, and no trusted executable leaf with a proof-consumed contract was found."
-        },
+          "evidence": "crates/shadowrunr-types/tests/schema_drift.rs:16 This tests schema drift, and no trusted executable leaf with a proof-consumed contract was found.",
+          "carriedFrom": "2026-10-22"
+        }
+      ],
+      "superseded": [
         {
-          "technique": "verifier-footprint-stays-contained",
-          "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-types/Cargo.toml:12 The complete dependency list contains serialization, errors, async-trait and schemars, with no verification library, ghost-erasure macro or verifier-coupled pin."
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-types/Cargo.toml:13 Context-wide searches found no unsafe, external_body, verus, set_var or remove_var matches, and the inspected manifest declares schema tooling without a prover integration or identified compiler override.",
+          "evaluatedAt": "2026-10-22T21:21:37.992Z",
+          "worker": "63733f2d-4ae7-4684-8c3b-1f06fcc9606c",
+          "reason": "replaced by 5a868e2a-4f3a-4a6f-beb8-fb307186e731"
         }
       ]
     },

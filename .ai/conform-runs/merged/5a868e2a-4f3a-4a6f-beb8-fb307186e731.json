@@ -1,0 +1,66 @@
+{
+ "schema": "conform-run/1",
+ "worker": "5a868e2a-4f3a-4a6f-beb8-fb307186e731",
+ "subject": "trust-base",
+ "evaluatedAt": "2026-11-04T05:29:18.910777+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "types-crate",
+   "subject": "trust-base",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-types/Cargo.toml:13 The crate's only dependencies are serde, serde_json, thiserror, async-trait and schemars, with no prover or specification library. A case-insensitive search of crates/shadowrunr-types for unsafe, set_var, remove_var, external_body, verus, kani, prusti and creusot found no hits, so there is no escape-marked site, no trusted body, no manual Send/Sync impl and no unmarked environment write for a trust base to hold.",
+   "techniques": [
+    {
+     "technique": "verifier-footprint-stays-contained",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/Cargo.toml:13 The only crate-local dependency is a schema generator. No prover or spec library is in the published graph."
+    },
+    {
+     "technique": "census-counts-unmarked-members",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/examples/export-schema.rs:9 The crate is pinned to edition 2021 through the workspace, so the precondition holds. But the only environment use is reading argv here plus compile-time env!(CARGO_MANIFEST_DIR). Searching set_var/remove_var counted B=0, and searching for unsafe counted marker sites A=0. With no marked blocks, the text stand-in cannot miscount."
+    },
+    {
+     "technique": "assumptions-are-build-errors",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/Cargo.toml:5 No proof is run, so there is no platform assumption. Searching for target_pointer_width, repr( and static asserts found nothing."
+    },
+    {
+     "technique": "marker-impl-names-its-exclusion",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/engine.rs:159 The traits rely on async_trait's inferred Send bounds. Searching for 'Send for' or 'Sync for' found no hand-written impl."
+    }
+   ],
+   "absenceTerms": [
+    "unsafe",
+    "set_var",
+    "remove_var",
+    "external_body",
+    "verus"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-04T05:29:18.910777+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "trust-base"
+   ],
+   "techniques": [
+    "assumptions-are-build-errors",
+    "census-counts-unmarked-members",
+    "marker-impl-names-its-exclusion",
+    "verifier-footprint-stays-contained"
+   ],
+   "deviations": 0,
+   "context": "types-crate",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
