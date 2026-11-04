@@ -1,0 +1,122 @@
+{
+ "schema": "conform-run/1",
+ "worker": "1ddff955-764b-47b6-8344-0e582439ded5",
+ "subject": "platform-extension-release-ladder",
+ "evaluatedAt": "2026-11-04T05:05:03.768901+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-review-page",
+   "subject": "platform-extension-release-ladder",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/review/Layer1.tsx:1 The review page is an operator-only session review surface in the desktop console that reads the local daemon's session record, not a viewer extension running in the streaming platform's player. A case-insensitive search of apps/console for Twitch.ext, onAuthorized, pubsub and extension_jwt found no hits, so the ladder's precondition does not hold here.",
+   "techniques": [
+    {
+     "technique": "viewer-content-needs-identity-and-approval",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/review/Moderation.tsx:1 This is the operator's moderation review of past sessions, not a queue where a streamer approves content viewers submitted through an extension."
+    }
+   ],
+   "absenceTerms": [
+    "Twitch.ext",
+    "onAuthorized",
+    "pubsub",
+    "extension_jwt"
+   ]
+  },
+  {
+   "context": "console-shell-router",
+   "subject": "platform-extension-release-ladder",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/shell/Shell.tsx:1 This 'shell' is the operator console's page chrome and client router. It is not a reviewed extension shell that renders a design document in viewers' players. A search of apps/console for Twitch.ext, onAuthorized, pubsub and extension_jwt found nothing, so the subject was matched on the token 'shell' alone.",
+   "techniques": [
+    {
+     "technique": "data-driven-shell",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/shell/Shell.tsx:2 Pages plug in through a code-level PageRegistry for a desktop operator app. There is no viewer-facing design document and no platform review to work around."
+    }
+   ],
+   "absenceTerms": [
+    "Twitch.ext",
+    "onAuthorized",
+    "pubsub",
+    "extension_jwt"
+   ]
+  },
+  {
+   "context": "console-build-and-desktop-shell",
+   "subject": "platform-extension-release-ladder",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src-tauri/tauri.conf.json:25 The build packages a Tauri desktop app whose only declared hosts are the local daemon at 127.0.0.1:7717. It builds no platform extension bundle for submission and review. A search of apps/console for Twitch.ext, onAuthorized, pubsub and extension_jwt found no hits.",
+   "techniques": [
+    {
+     "technique": "bundled-static-code-only",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/package.json:8 This bundle check is a desktop app size budget. No platform reviewer reads this bundle."
+    },
+    {
+     "technique": "per-version-host-allowlist",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src-tauri/tauri.conf.json:5 The CSP host list belongs to a desktop webview reaching a localhost daemon, not a per-version extension allowlist submitted for platform review."
+    }
+   ],
+   "absenceTerms": [
+    "Twitch.ext",
+    "onAuthorized",
+    "pubsub",
+    "extension_jwt"
+   ],
+   "registryProposal": "Matching on the tokens 'shell', 'build', 'bundle', 'review' and 'panel' pulls this subject onto any web app with a build step or a review page. The subject's use_when could require platform-extension vocabulary before a context matches."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-04T05:05:03.768901+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "platform-extension-release-ladder"
+   ],
+   "techniques": [
+    "viewer-content-needs-identity-and-approval"
+   ],
+   "deviations": 0,
+   "context": "console-review-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T05:05:03.768901+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "platform-extension-release-ladder"
+   ],
+   "techniques": [
+    "data-driven-shell"
+   ],
+   "deviations": 0,
+   "context": "console-shell-router",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T05:05:03.768901+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "platform-extension-release-ladder"
+   ],
+   "techniques": [
+    "bundled-static-code-only",
+    "per-version-host-allowlist"
+   ],
+   "deviations": 0,
+   "context": "console-build-and-desktop-shell",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

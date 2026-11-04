@@ -1356,7 +1356,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src-tauri/tauri.conf.json:25 The build packages a Tauri desktop app whose only declared hosts are the local daemon at 127.0.0.1:7717. It builds no platform extension bundle for submission and review. A search of apps/console for Twitch.ext, onAuthorized, pubsub and extension_jwt found no hits.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:3846f4921c299992",
+          "evaluatedRevision": 2
         },
         {
           "subject": "release-pipeline",
@@ -2673,7 +2677,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/shell/Shell.tsx:1 This 'shell' is the operator console's page chrome and client router. It is not a reviewed extension shell that renders a design document in viewers' players. A search of apps/console for Twitch.ext, onAuthorized, pubsub and extension_jwt found nothing, so the subject was matched on the token 'shell' alone.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:3846f4921c299992",
+          "evaluatedRevision": 2
         },
         {
           "subject": "multi-provider-gateway-plane",
@@ -5842,7 +5850,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Layer1.tsx:1 The review page is an operator-only session review surface in the desktop console that reads the local daemon's session record, not a viewer extension running in the streaming platform's player. A case-insensitive search of apps/console for Twitch.ext, onAuthorized, pubsub and extension_jwt found no hits, so the ladder's precondition does not hold here.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:3846f4921c299992",
+          "evaluatedRevision": 2
         },
         {
           "subject": "agent-memory",
