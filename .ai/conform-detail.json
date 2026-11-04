@@ -7248,6 +7248,16 @@
           "evidence": "crates/shadowrunr-clips/src/voice.rs:3 Pre-rendered media is aligned offline, which is the technique's own 'when not to use' case."
         }
       ]
+    },
+    "1f8d2348-1a2f-4c72-8dc0-e281a35b78d4/agent-cli-transport": {
+      "context": "daemon-core-rpc",
+      "subject": "agent-cli-transport",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T02:33:03.020Z",
+      "worker": "ab62cc30-cb5c-42c8-b940-7653d142e82d",
+      "techniques": []
     }
   }
 }

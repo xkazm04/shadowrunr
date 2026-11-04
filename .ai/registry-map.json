@@ -3448,7 +3448,11 @@
           "revision": 10,
           "changedAt": "2026-10-27",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/engine.rs:26 The daemon core gets the agent-CLI transport ready-made from shadowrunr-engine and only picks fleet or scripted engine. A search of crates/shadowrunr-daemon for permission-prompts, allowedTools, STRIPPED_ENV, CLAUDE_CONFIG_DIR, env_remove and --resume found 0 hits, so no spawn, env, argv or envelope handling for an agent CLI lives here.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:75415727a875a42a",
+          "evaluatedRevision": 10
         },
         {
           "subject": "multi-provider-gateway-plane",
