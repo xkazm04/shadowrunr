@@ -1,0 +1,151 @@
+{
+ "schema": "conform-run/1",
+ "worker": "2206d6de-330e-4860-ad91-52860c57ab74",
+ "subject": "test-harness",
+ "evaluatedAt": "2026-11-04T04:06:53.868351+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-ui-primitives",
+   "subject": "test-harness",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/ui/ui.test.tsx:293 A structural pin uses a needle that prose can write: a comment containing `counts: \"given\"` satisfies it even if the code no longer passes that prop. The negative pin two lines above (`/\\bcount\\b\\s*[:,}]/` over seven hardcoded page files) also matches comments, so a doc edit can turn the suite red.",
+   "techniques": [
+    {
+     "technique": "pin-the-call-not-the-name",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/ui/ui.test.tsx:293 Positive pin with a prose-spellable needle fails toward green. The sibling negative pin at :291 over-matches comments, and its population is a hand-kept list of 7 files."
+    },
+    {
+     "technique": "assert-the-schedule-not-the-stopwatch",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/ui/drawer.test.tsx:69 The drawer's exit cutoff is proved on a fake clock at DRAWER_EXIT_MS-1 and then +1, not with a wall-time bound."
+    },
+    {
+     "technique": "unreached-decisions-pin-nothing",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/ui/ui.test.tsx:239 The given counts (412/400/12) cannot come from the 5 local rows, so the asserted value names its producer (the daemon's totals) even after a query change."
+    }
+   ]
+  },
+  {
+   "context": "workspace-tooling-and-policy",
+   "subject": "test-harness",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": ".github/workflows/ci.yml:162 No vitest config sets coverage.include, and vitest 5.0.5 defaults to 'only files covered by tests are included'. The JS ratchet's denominator is therefore the set of files a test already imports, so a new untested file or directory never appears and cannot lower the ratchet.",
+   "techniques": [
+    {
+     "technique": "gate-scope-is-not-report-scope",
+     "verdict": "deviation",
+     "evidence": ".github/workflows/ci.yml:162 Same for stage, contract, stage-kit and tokens (lines 164-170). Only packages/contract/vitest.config.ts has a coverage block, and it sets exclude but no include."
+    },
+    {
+     "technique": "derived-selection-must-be-measured",
+     "verdict": "conformant",
+     "evidence": ".github/workflows/ci.yml:78 The cargo lane declares a floor on tests selected, so a lane that selects zero tests fails instead of passing."
+    },
+    {
+     "technique": "suite-partitioning",
+     "verdict": "conformant",
+     "evidence": ".github/workflows/ci.yml:147 The lane set is derived from the workspace and every gate script must be scheduled. Jobs are separated by machine and timeout."
+    },
+    {
+     "technique": "out-of-graph-artifacts",
+     "verdict": "conformant",
+     "evidence": ".github/workflows/ci.yml:84 The detached second Cargo workspace (the Tauri shell) is gated explicitly with its own test floor."
+    },
+    {
+     "technique": "platform-quirk-absorption",
+     "verdict": "conformant",
+     "evidence": "pnpm-workspace.yaml:12 The worktree junction quirk that made the JS gate check nothing is absorbed once in config, with its incident story kept in lines 6-11."
+    },
+    {
+     "technique": "isolation-lanes",
+     "verdict": "conformant",
+     "evidence": ".github/workflows/ci.yml:2 CI inherits no local stores, secrets or live engine (lines 8-10)."
+    },
+    {
+     "technique": "assert-through-the-reader",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/config.rs:513 The shipped example config is asserted by running the daemon's own TOML reader over it, not by checking its text."
+    }
+   ],
+   "registryProposal": "gate-scope-is-not-report-scope could name the tool default explicitly: vitest \u22654 with no coverage.include reports only test-loaded files, so the report-scope failure happens with no include list written at all."
+  },
+  {
+   "context": "character-package",
+   "subject": "test-harness",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "characters/malakor/character.toml:1 The package is content (markdown, TOML, JSON) with no test machinery. A case-insensitive recursive grep of characters/malakor for #[test], vitest, describe(, expect( and assert found 0 files. Its files are consumed as inputs by tests elsewhere (e.g. crates/shadowrunr-sim/src/runner/table_read_tests.rs:80 reads prep.sample.json), and that harness belongs to those contexts.",
+   "techniques": [],
+   "absenceTerms": [
+    "#[test]",
+    "vitest",
+    "describe(",
+    "expect(",
+    "assert"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "test-harness",
+   "context": "console-reconcile-page",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-04T04:06:53.868351+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-harness"
+   ],
+   "techniques": [
+    "assert-the-schedule-not-the-stopwatch",
+    "pin-the-call-not-the-name",
+    "unreached-decisions-pin-nothing"
+   ],
+   "deviations": 1,
+   "context": "console-ui-primitives",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T04:06:53.868351+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-harness"
+   ],
+   "techniques": [
+    "assert-through-the-reader",
+    "derived-selection-must-be-measured",
+    "gate-scope-is-not-report-scope",
+    "isolation-lanes",
+    "out-of-graph-artifacts",
+    "platform-quirk-absorption",
+    "suite-partitioning"
+   ],
+   "deviations": 1,
+   "context": "workspace-tooling-and-policy",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T04:06:53.868351+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "test-harness"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "character-package",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

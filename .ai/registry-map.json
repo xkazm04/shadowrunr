@@ -3076,7 +3076,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/ui/ui.test.tsx:293 A structural pin uses a needle that prose can write: a comment containing `counts: \"given\"` satisfies it even if the code no longer passes that prop. The negative pin two lines above (`/\\bcount\\b\\s*[:,}]/` over seven hardcoded page files) also matches comments, so a doc edit can turn the suite red.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "sql-console",
@@ -5142,7 +5146,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": ".github/workflows/ci.yml:162 No vitest config sets coverage.include, and vitest 5.0.5 defaults to 'only files covered by tests are included'. The JS ratchet's denominator is therefore the set of files a test already imports, so a new untested file or directory never appears and cannot lower the ratchet.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         }
       ],
       "governance": "governed"
@@ -5556,7 +5564,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "characters/malakor/character.toml:1 The package is content (markdown, TOML, JSON) with no test machinery. A case-insensitive recursive grep of characters/malakor for #[test], vitest, describe(, expect( and assert found 0 files. Its files are consumed as inputs by tests elsewhere (e.g. crates/shadowrunr-sim/src/runner/table_read_tests.rs:80 reads prep.sample.json), and that harness belongs to those contexts.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "invariant-placement",

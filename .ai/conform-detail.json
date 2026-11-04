@@ -7418,6 +7418,89 @@
       "evaluatedTs": "2026-11-04T03:33:24.137Z",
       "worker": "7af24b15-86a8-4b73-be37-fa8800ebb07e",
       "techniques": []
+    },
+    "435472ca-7ef4-4956-80d8-3dc82f215665/test-harness": {
+      "context": "console-ui-primitives",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T04:06:53.868Z",
+      "worker": "2206d6de-330e-4860-ad91-52860c57ab74",
+      "techniques": [
+        {
+          "technique": "pin-the-call-not-the-name",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/ui/ui.test.tsx:293 Positive pin with a prose-spellable needle fails toward green. The sibling negative pin at :291 over-matches comments, and its population is a hand-kept list of 7 files."
+        },
+        {
+          "technique": "assert-the-schedule-not-the-stopwatch",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/ui/drawer.test.tsx:69 The drawer's exit cutoff is proved on a fake clock at DRAWER_EXIT_MS-1 and then +1, not with a wall-time bound."
+        },
+        {
+          "technique": "unreached-decisions-pin-nothing",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/ui/ui.test.tsx:239 The given counts (412/400/12) cannot come from the 5 local rows, so the asserted value names its producer (the daemon's totals) even after a query change."
+        }
+      ]
+    },
+    "70f40362-0fe0-4f05-90cf-b95538e20c74/test-harness": {
+      "context": "workspace-tooling-and-policy",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T04:06:53.868Z",
+      "worker": "2206d6de-330e-4860-ad91-52860c57ab74",
+      "techniques": [
+        {
+          "technique": "gate-scope-is-not-report-scope",
+          "verdict": "deviation",
+          "evidence": ".github/workflows/ci.yml:162 Same for stage, contract, stage-kit and tokens (lines 164-170). Only packages/contract/vitest.config.ts has a coverage block, and it sets exclude but no include."
+        },
+        {
+          "technique": "derived-selection-must-be-measured",
+          "verdict": "conformant",
+          "evidence": ".github/workflows/ci.yml:78 The cargo lane declares a floor on tests selected, so a lane that selects zero tests fails instead of passing."
+        },
+        {
+          "technique": "suite-partitioning",
+          "verdict": "conformant",
+          "evidence": ".github/workflows/ci.yml:147 The lane set is derived from the workspace and every gate script must be scheduled. Jobs are separated by machine and timeout."
+        },
+        {
+          "technique": "out-of-graph-artifacts",
+          "verdict": "conformant",
+          "evidence": ".github/workflows/ci.yml:84 The detached second Cargo workspace (the Tauri shell) is gated explicitly with its own test floor."
+        },
+        {
+          "technique": "platform-quirk-absorption",
+          "verdict": "conformant",
+          "evidence": "pnpm-workspace.yaml:12 The worktree junction quirk that made the JS gate check nothing is absorbed once in config, with its incident story kept in lines 6-11."
+        },
+        {
+          "technique": "isolation-lanes",
+          "verdict": "conformant",
+          "evidence": ".github/workflows/ci.yml:2 CI inherits no local stores, secrets or live engine (lines 8-10)."
+        },
+        {
+          "technique": "assert-through-the-reader",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/config.rs:513 The shipped example config is asserted by running the daemon's own TOML reader over it, not by checking its text."
+        }
+      ],
+      "registryProposal": "gate-scope-is-not-report-scope could name the tool default explicitly: vitest ≥4 with no coverage.include reports only test-loaded files, so the report-scope failure happens with no include list written at all."
+    },
+    "382c68f3-bc20-4cc7-8220-18aa850f7087/test-harness": {
+      "context": "character-package",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T04:06:53.868Z",
+      "worker": "2206d6de-330e-4860-ad91-52860c57ab74",
+      "techniques": []
     }
   }
 }
