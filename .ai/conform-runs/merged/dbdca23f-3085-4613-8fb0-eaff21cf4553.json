@@ -1,0 +1,117 @@
+{
+ "schema": "conform-run/1",
+ "worker": "dbdca23f-3085-4613-8fb0-eaff21cf4553",
+ "subject": "app-shell",
+ "evaluatedAt": "2026-11-04T01:08:27.331901+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-shell-router",
+   "subject": "app-shell",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/shell/Poster.tsx:132 Each page's lazily imported Layer1 sits under a Suspense with no error boundary or retry anywhere in apps/console/src (a search for ErrorBoundary/componentDidCatch/getDerivedStateFromError/preloadError found nothing), so a chunk that fails to load, for example after a deploy, throws to the root and unmounts the whole frame instead of showing a failure with a retry in the viewport.",
+   "techniques": [
+    {
+     "technique": "lazy-section-loading",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/shell/Poster.tsx:132 Pages are split per section (pages/*/index.ts lazy Layer1/Layer2), but there is no chunk-failure boundary, no retry and no version-skew refresh. The Layer2 fallback at Shell.tsx:158 also renders a loading StatePanel with no warm-path delay, and nothing is prefetched on hover or intent."
+    },
+    {
+     "technique": "navigation-model",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/router/route.ts:7 One closed vocabulary. There is a single encoder and decoder, and one navigate door in store.ts. Unknown or non-canonical hashes fall back to the wall through replaceState, never a push. The on-air highlight is derived from the route."
+    },
+    {
+     "technique": "nav-hierarchy",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/shell/Shell.tsx:128 Bus compaction is worked out from the location layer and a width floor, not set by nav handlers. The shell stops at the page and its Layer2; deeper depth belongs to the page through `sub`. There is no user collapse toggle, so posture persistence does not come up."
+    },
+    {
+     "technique": "shell-hosted-services",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/shell/Shell.tsx:76 There is a single keymap resident, and installKeymap returns its own remover as the effect cleanup. Go to is a shell-level global surface loaded on first open. Caveat: no resident is isolated by an error boundary; that shared root cause is recorded under lazy-section-loading."
+    },
+    {
+     "technique": "badge-and-attention",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/shell/MixerBus.tsx:24 The nav's only marker is the on-air tally (the active state). A search of shell/app/kit for badge, unread and attention found no count badges."
+    },
+    {
+     "technique": "entitlement-gating",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/router/route.ts:68 This is a single-operator console: every known page id is reachable without a gate. A search for entitle, locked, permission and feature flag in shell/router/app found nothing."
+    },
+    {
+     "technique": "screen-contributed-second-level",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/shell/types.ts:13 There is no persistent sidebar for screens to contribute to. The nested page renders in the shell's Spread from the page registry. A search for createPortal, slot and inert found no sidebar slot."
+    }
+   ]
+  },
+  {
+   "context": "console-app-bootstrap",
+   "subject": "app-shell",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/app/App.tsx:10 The root composition mounts the shell and its code-split page registry with no error boundary above or around it, so a failed page chunk or a crashing resident unmounts the whole app to a blank document with no stated failure or refresh offer.",
+   "techniques": [
+    {
+     "technique": "lazy-section-loading",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/app/App.tsx:10 No root or section boundary exists to catch a lazy chunk rejection. The standard requires a retry, then a stated failure with a cure, never a blank."
+    },
+    {
+     "technique": "navigation-model",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/app/pages.ts:11 There is one page registry, typed as Record<PageId, PageModule>, so the type checker forces it to match the router's PAGE_IDS vocabulary."
+    },
+    {
+     "technique": "shell-hosted-services",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/app/main.tsx:13 The composition root sets the start order in one place (router, then data, then agent, then render). The agent catalog is a dynamic chunk, so it does not block first paint. Minor: the disposer startAgent returns is thrown away, which is acceptable at process lifetime with no sign-out class."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-04T01:08:27.331901+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "app-shell"
+   ],
+   "techniques": [
+    "badge-and-attention",
+    "entitlement-gating",
+    "lazy-section-loading",
+    "nav-hierarchy",
+    "navigation-model",
+    "screen-contributed-second-level",
+    "shell-hosted-services"
+   ],
+   "deviations": 1,
+   "context": "console-shell-router",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T01:08:27.331901+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "app-shell"
+   ],
+   "techniques": [
+    "lazy-section-loading",
+    "navigation-model",
+    "shell-hosted-services"
+   ],
+   "deviations": 1,
+   "context": "console-app-bootstrap",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

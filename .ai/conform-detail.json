@@ -1413,29 +1413,53 @@
       "subject": "app-shell",
       "bundle": "software-engineering",
       "state": "deviation",
-      "evaluatedAt": "2026-10-19",
-      "evaluatedTs": "2026-10-19T23:05:26.111Z",
-      "worker": "06517c5f-84b1-4f4f-b95e-f258b5709fe3",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T01:08:27.331Z",
+      "worker": "dbdca23f-3085-4613-8fb0-eaff21cf4553",
       "techniques": [
         {
           "technique": "lazy-section-loading",
           "verdict": "deviation",
-          "evidence": "apps/console/src/shell/Shell.tsx:142 The layer-2 Suspense fallback lacks a warm-path delay and the shell provides no ErrorBoundary or retry mechanism to catch chunk load failures."
+          "evidence": "apps/console/src/shell/Poster.tsx:132 Pages are split per section (pages/*/index.ts lazy Layer1/Layer2), but there is no chunk-failure boundary, no retry and no version-skew refresh. The Layer2 fallback at Shell.tsx:158 also renders a loading StatePanel with no warm-path delay, and nothing is prefetched on hover or intent."
         },
         {
           "technique": "navigation-model",
           "verdict": "conformant",
-          "evidence": "apps/console/src/shell/MixerBus.tsx:35 Active state is derived directly from the current route without storing duplicate active flags on navigation entries."
+          "evidence": "apps/console/src/router/route.ts:7 One closed vocabulary. There is a single encoder and decoder, and one navigate door in store.ts. Unknown or non-canonical hashes fall back to the wall through replaceState, never a push. The on-air highlight is derived from the route."
         },
         {
           "technique": "nav-hierarchy",
           "verdict": "conformant",
-          "evidence": "apps/console/src/shell/Shell.tsx:143 The shell constrains navigation depth to two levels by hosting nested layer-2 pages in a section-scoped spread and delegating deeper sub-paths to the page."
+          "evidence": "apps/console/src/shell/Shell.tsx:128 Bus compaction is worked out from the location layer and a width floor, not set by nav handlers. The shell stops at the page and its Layer2; deeper depth belongs to the page through `sub`. There is no user collapse toggle, so posture persistence does not come up."
         },
         {
           "technique": "shell-hosted-services",
           "verdict": "conformant",
-          "evidence": "apps/console/src/shell/Chrome.tsx:12 The shell chrome hosts persistent connection monitoring above the content viewport across all page navigations."
+          "evidence": "apps/console/src/shell/Shell.tsx:76 There is a single keymap resident, and installKeymap returns its own remover as the effect cleanup. Go to is a shell-level global surface loaded on first open. Caveat: no resident is isolated by an error boundary; that shared root cause is recorded under lazy-section-loading."
+        },
+        {
+          "technique": "badge-and-attention",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/MixerBus.tsx:24 The nav's only marker is the on-air tally (the active state). A search of shell/app/kit for badge, unread and attention found no count badges."
+        },
+        {
+          "technique": "entitlement-gating",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/router/route.ts:68 This is a single-operator console: every known page id is reachable without a gate. A search for entitle, locked, permission and feature flag in shell/router/app found nothing."
+        },
+        {
+          "technique": "screen-contributed-second-level",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/types.ts:13 There is no persistent sidebar for screens to contribute to. The nested page renders in the shell's Spread from the page registry. A search for createPortal, slot and inert found no sidebar slot."
+        }
+      ],
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "apps/console/src/shell/Poster.tsx:131 The shell wraps lazy-loaded section components in a Suspense boundary with a null fallback and no error boundary or retry wrapper, causing chunk load failures to crash the entire application into a blank screen.",
+          "evaluatedAt": "2026-10-19T23:05:26.111Z",
+          "worker": "06517c5f-84b1-4f4f-b95e-f258b5709fe3",
+          "reason": "replaced by dbdca23f-3085-4613-8fb0-eaff21cf4553"
         }
       ]
     },
@@ -1444,24 +1468,39 @@
       "subject": "app-shell",
       "bundle": "software-engineering",
       "state": "deviation",
-      "evaluatedAt": "2026-10-19",
-      "evaluatedTs": "2026-10-19T23:05:26.111Z",
-      "worker": "06517c5f-84b1-4f4f-b95e-f258b5709fe3",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T01:08:27.331Z",
+      "worker": "dbdca23f-3085-4613-8fb0-eaff21cf4553",
       "techniques": [
         {
           "technique": "lazy-section-loading",
           "verdict": "deviation",
-          "evidence": "apps/console/src/app/pages.ts:10 The bootstrap registry defines pages using lazy-loaded chunks but provides no chunk retry wrapper or error recovery boundary at the app level."
+          "evidence": "apps/console/src/app/App.tsx:10 No root or section boundary exists to catch a lazy chunk rejection. The standard requires a retry, then a stated failure with a cure, never a blank."
+        },
+        {
+          "technique": "navigation-model",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/app/pages.ts:11 There is one page registry, typed as Record<PageId, PageModule>, so the type checker forces it to match the router's PAGE_IDS vocabulary."
         },
         {
           "technique": "shell-hosted-services",
           "verdict": "conformant",
-          "evidence": "apps/console/src/app/App.tsx:8 Session-lifetime singleton services (router and data layer) are mounted at the root above the shell where they survive all navigations."
+          "evidence": "apps/console/src/app/main.tsx:13 The composition root sets the start order in one place (router, then data, then agent, then render). The agent catalog is a dynamic chunk, so it does not block first paint. Minor: the disposer startAgent returns is thrown away, which is acceptable at process lifetime with no sign-out class."
         },
         {
           "technique": "nav-hierarchy",
           "verdict": "conformant",
-          "evidence": "apps/console/src/keys/keymap.ts:52 The global keyboard map enforces navigation hierarchy traversal by binding Escape to climb from layer 2 to layer 1 and stopping at the wall."
+          "evidence": "apps/console/src/keys/keymap.ts:52 The global keyboard map enforces navigation hierarchy traversal by binding Escape to climb from layer 2 to layer 1 and stopping at the wall.",
+          "carriedFrom": "2026-10-19"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "apps/console/src/app/App.tsx:10 The root application composition mounts the shell and its code-split page registry without an error boundary or chunk retry handler, causing chunk loading failures to unmount the entire application.",
+          "evaluatedAt": "2026-10-19T23:05:26.111Z",
+          "worker": "06517c5f-84b1-4f4f-b95e-f258b5709fe3",
+          "reason": "replaced by dbdca23f-3085-4613-8fb0-eaff21cf4553"
         }
       ]
     },

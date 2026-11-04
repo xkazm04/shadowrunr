@@ -870,12 +870,11 @@
           "changedAt": "2026-10-27",
           "confidence": "probable",
           "state": "deviation",
-          "evidence": "apps/console/src/app/App.tsx:10 The root application composition mounts the shell and its code-split page registry without an error boundary or chunk retry handler, causing chunk loading failures to unmount the entire application.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:62a9a7fc993ea8b5",
-          "evaluatedRevision": 6,
-          "revisionsBehind": 2,
-          "stale": true
+          "evidence": "apps/console/src/app/App.tsx:10 The root composition mounts the shell and its code-split page registry with no error boundary above or around it, so a failed page chunk or a crashing resident unmounts the whole app to a blank document with no stated failure or refresh offer.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:b55c5172e3d9fac0",
+          "evaluatedRevision": 8,
+          "revisionsBehind": 2
         },
         {
           "subject": "keyboard-shortcuts",
@@ -2599,12 +2598,11 @@
           "changedAt": "2026-10-27",
           "confidence": "probable",
           "state": "deviation",
-          "evidence": "apps/console/src/shell/Poster.tsx:131 The shell wraps lazy-loaded section components in a Suspense boundary with a null fallback and no error boundary or retry wrapper, causing chunk load failures to crash the entire application into a blank screen.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:62a9a7fc993ea8b5",
-          "evaluatedRevision": 6,
-          "revisionsBehind": 2,
-          "stale": true
+          "evidence": "apps/console/src/shell/Poster.tsx:132 Each page's lazily imported Layer1 sits under a Suspense with no error boundary or retry anywhere in apps/console/src (a search for ErrorBoundary/componentDidCatch/getDerivedStateFromError/preloadError found nothing), so a chunk that fails to load, for example after a deploy, throws to the root and unmounts the whole frame instead of showing a failure with a retry in the viewport.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:b55c5172e3d9fac0",
+          "evaluatedRevision": 8,
+          "revisionsBehind": 2
         },
         {
           "subject": "live-system-demo-film",
