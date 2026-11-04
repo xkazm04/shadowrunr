@@ -1955,12 +1955,11 @@
           "changedAt": "2026-10-22",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/feed.ts:85 The preview plays interactive-show transcripts rather than a data-video composition, and context and repository searches found no StatReel, bar_race or timing_plan matches.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:5007da65e6caab0e",
-          "evaluatedRevision": 5,
-          "revisionsBehind": 3,
-          "stale": true
+          "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:1 The page's clips are vertical or 16:9 trims of recorded broadcast footage, and its Screen is a preview of the live stage, not a rendered data-race composition; a case-insensitive search of apps/console/src/pages/onair for StatReel, bar_race, timing_plan, chart and thumbnail returned no hits, so the subject's precondition does not hold.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:9e140bec9e8eb951",
+          "evaluatedRevision": 8,
+          "revisionsBehind": 3
         },
         {
           "subject": "evidence-bound-visuals",
@@ -3963,12 +3962,11 @@
           "changedAt": "2026-10-22",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/Cargo.toml:3 This crate runs interactive show segments rather than data-video compositions, and context and repository searches found no StatReel, bar_race or timing_plan matches.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:5007da65e6caab0e",
-          "evaluatedRevision": 5,
-          "revisionsBehind": 3,
-          "stale": true
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:3 This crate defines live-show segments, chat commands, ranks and evidence grades for spoken claims, not a narration-free chart-driven data video; a case-insensitive search of crates/shadowrunr-segments for StatReel, bar_race, timing_plan, chart and thumbnail returned no hits, so the subject's precondition does not hold.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:9e140bec9e8eb951",
+          "evaluatedRevision": 8,
+          "revisionsBehind": 3
         },
         {
           "subject": "supply-chain",

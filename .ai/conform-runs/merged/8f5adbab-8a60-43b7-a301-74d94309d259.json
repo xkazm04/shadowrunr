@@ -1,0 +1,65 @@
+{
+ "schema": "conform-run/1",
+ "worker": "8f5adbab-8a60-43b7-a301-74d94309d259",
+ "subject": "data-video-art-direction",
+ "evaluatedAt": "2026-11-04T01:23:36.922289+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "segments-runtime",
+   "subject": "data-video-art-direction",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-segments/Cargo.toml:3 This crate defines live-show segments, chat commands, ranks and evidence grades for spoken claims, not a narration-free chart-driven data video; a case-insensitive search of crates/shadowrunr-segments for StatReel, bar_race, timing_plan, chart and thumbnail returned no hits, so the subject's precondition does not hold.",
+   "techniques": [],
+   "absenceTerms": [
+    "StatReel",
+    "bar_race",
+    "chart",
+    "thumbnail"
+   ]
+  },
+  {
+   "context": "console-onair-page",
+   "subject": "data-video-art-direction",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:1 The page's clips are vertical or 16:9 trims of recorded broadcast footage, and its Screen is a preview of the live stage, not a rendered data-race composition; a case-insensitive search of apps/console/src/pages/onair for StatReel, bar_race, timing_plan, chart and thumbnail returned no hits, so the subject's precondition does not hold.",
+   "techniques": [],
+   "absenceTerms": [
+    "StatReel",
+    "bar_race",
+    "chart",
+    "thumbnail"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-04T01:23:36.922289+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "data-video-art-direction"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "segments-runtime",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T01:23:36.922289+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "data-video-art-direction"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-onair-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

@@ -1771,79 +1771,102 @@
       "subject": "data-video-art-direction",
       "bundle": "media-generation",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-19",
-      "evaluatedTs": "2026-10-19T23:57:31.242Z",
-      "worker": "e98f126c-7b88-4d83-b6f3-6428989df0e2",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T01:23:36.922Z",
+      "worker": "8f5adbab-8a60-43b7-a301-74d94309d259",
       "techniques": [
         {
           "technique": "case-native-chart-form",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:25 The configured form is an interactive investigation map; this context does not choose a data-video chart."
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-02a.toml:25 The configured form is an interactive investigation map; this context does not choose a data-video chart.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "champion-split-wipe",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/data/ranks.toml:11 Ranks represent viewer subscription qualifications, not a succession of video champions."
+          "evidence": "crates/shadowrunr-segments/data/ranks.toml:11 Ranks represent viewer subscription qualifications, not a succession of video champions.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "concept-landing-proposals",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/command.rs:43 Proposals are audience chat commands, not prototype-still or image-triage proposals."
+          "evidence": "crates/shadowrunr-segments/src/command.rs:43 Proposals are audience chat commands, not prototype-still or image-triage proposals.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "curiosity-title-thumbnail",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/data/demo-case.json:3 This names an investigation case rather than a data-video hook or thumbnail."
+          "evidence": "crates/shadowrunr-segments/data/demo-case.json:3 This names an investigation case rather than a data-video hook or thumbnail.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "ending-sequence",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/runtime.rs:719 The ending recaps an investigation dossier; it does not reveal a data-video winner."
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:719 The ending recaps an investigation dossier; it does not reveal a data-video winner.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "event-card-stack",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/runtime.rs:693 These cards announce live investigation acts, outside the technique's data-video event timeline."
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:693 These cards announce live investigation acts, outside the technique's data-video event timeline.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "evidence-card-popup",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/evidence.rs:96 Evidence handling grades investigation hexes; this context does not design a data-video evidence beat."
+          "evidence": "crates/shadowrunr-segments/src/evidence.rs:96 Evidence handling grades investigation hexes; this context does not design a data-video evidence beat.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "leader-adaptive-theme",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/portfolio.rs:39 Flagship status is a portfolio lifecycle transition, not a visual leader controlling a video's palette."
+          "evidence": "crates/shadowrunr-segments/src/portfolio.rs:39 Flagship status is a portfolio lifecycle transition, not a visual leader controlling a video's palette.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "legibility-floor",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:25 This context directs the interactive host and does not lay out a vertical data-video frame."
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:25 This context directs the interactive host and does not lay out a vertical data-video frame.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "motion-cue-budget",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/table.rs:67 The runtime interprets audience commands; frame-level motion composition is outside its scope."
+          "evidence": "crates/shadowrunr-segments/src/table.rs:67 The runtime interprets audience commands; frame-level motion composition is outside its scope.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "photo-rights-ledger",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/evidence.rs:93 The allowlist validates source hosts for factual grades, not photos selected for a data-video render."
+          "evidence": "crates/shadowrunr-segments/src/evidence.rs:93 The allowlist validates source hosts for factual grades, not photos selected for a data-video render.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "photo-to-poster-portrait",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:27 The configured guests are fictional archetypes rather than real people requiring photographic portraits."
+          "evidence": "crates/shadowrunr-segments/data/segments/seg-01.toml:27 The configured guests are fictional archetypes rather than real people requiring photographic portraits.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "timing-plan-first",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/src/runtime.rs:156 Timing schedules live investigation reveals, not a rendered historical data timeline."
+          "evidence": "crates/shadowrunr-segments/src/runtime.rs:156 Timing schedules live investigation reveals, not a rendered historical data timeline.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "top-n-with-logos",
           "verdict": "not-applicable",
-          "evidence": "crates/shadowrunr-segments/data/ranks.toml:8 The ranked entities are audience membership tiers, not branded competitors in a race visualization."
+          "evidence": "crates/shadowrunr-segments/data/ranks.toml:8 The ranked entities are audience membership tiers, not branded competitors in a race visualization.",
+          "carriedFrom": "2026-10-19"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:3 This crate runs interactive show segments rather than data-video compositions, and context and repository searches found no StatReel, bar_race or timing_plan matches.",
+          "evaluatedAt": "2026-10-19T23:57:31.242Z",
+          "worker": "e98f126c-7b88-4d83-b6f3-6428989df0e2",
+          "reason": "replaced by 8f5adbab-8a60-43b7-a301-74d94309d259"
         }
       ]
     },
@@ -1852,79 +1875,102 @@
       "subject": "data-video-art-direction",
       "bundle": "media-generation",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-19",
-      "evaluatedTs": "2026-10-19T23:57:31.242Z",
-      "worker": "e98f126c-7b88-4d83-b6f3-6428989df0e2",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T01:23:36.922Z",
+      "worker": "8f5adbab-8a60-43b7-a301-74d94309d259",
       "techniques": [
         {
           "technique": "case-native-chart-form",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/Screen.tsx:115 The screen displays investigation hexes and evidence grades, not a data-video chart-selection workflow."
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:115 The screen displays investigation hexes and evidence grades, not a data-video chart-selection workflow.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "champion-split-wipe",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/view.test.ts:12 The illustrated contest chooses a guest foil, not a champion succession in a data video."
+          "evidence": "apps/console/src/pages/onair/view.test.ts:12 The illustrated contest chooses a guest foil, not a champion succession in a data video.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "concept-landing-proposals",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/Dispatch.tsx:71 These are next-stream planning options from a reconcile report, not image-triage seats."
+          "evidence": "apps/console/src/pages/onair/Dispatch.tsx:71 These are next-stream planning options from a reconcile report, not image-triage seats.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "curiosity-title-thumbnail",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/Motif.tsx:27 The poster identifies a console replay destination, not a data-video hook or thumbnail."
+          "evidence": "apps/console/src/pages/onair/Motif.tsx:27 The poster identifies a console replay destination, not a data-video hook or thumbnail.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "ending-sequence",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/view.ts:199 The ending is a stream/replay slate, outside a data video's winner-and-sign-off sequence."
+          "evidence": "apps/console/src/pages/onair/view.ts:199 The ending is a stream/replay slate, outside a data video's winner-and-sign-off sequence.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "event-card-stack",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/view.ts:167 This reads the show's current overlay card; the subject's data-video event timeline is absent."
+          "evidence": "apps/console/src/pages/onair/view.ts:167 This reads the show's current overlay card; the subject's data-video event timeline is absent.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "evidence-card-popup",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/Screen.tsx:130 This renders a show-operation text card, outside the data-video event-beat precondition."
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:130 This renders a show-operation text card, outside the data-video event-beat precondition.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "leader-adaptive-theme",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/ScreenParts.tsx:78 The background is the fictional show's set rather than the world of a leading data-series entity."
+          "evidence": "apps/console/src/pages/onair/ScreenParts.tsx:78 The background is the fictional show's set rather than the world of a leading data-series entity.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "legibility-floor",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/Screen.module.css:16 The preview is a landscape console screen, not the technique's vertical data-video composition."
+          "evidence": "apps/console/src/pages/onair/Screen.module.css:16 The preview is a landscape console screen, not the technique's vertical data-video composition.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "motion-cue-budget",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/ScreenParts.tsx:53 Motion presents character dialogue in a show replay, outside the data-video frame precondition."
+          "evidence": "apps/console/src/pages/onair/ScreenParts.tsx:53 Motion presents character dialogue in a show replay, outside the data-video frame precondition.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "photo-rights-ledger",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/ScreenParts.tsx:83 The inspected set uses code-drawn SVG geometry rather than photographic evidence assets."
+          "evidence": "apps/console/src/pages/onair/ScreenParts.tsx:83 The inspected set uses code-drawn SVG geometry rather than photographic evidence assets.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "photo-to-poster-portrait",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/Screen.tsx:93 The screen depicts its fictional host, not a real title-holder requiring a licensed photographic likeness."
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:93 The screen depicts its fictional host, not a real title-holder requiring a licensed photographic likeness.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "timing-plan-first",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/player.ts:121 The clock replays transcript timestamps at a chosen speed rather than rendering a historical data series."
+          "evidence": "apps/console/src/pages/onair/player.ts:121 The clock replays transcript timestamps at a chosen speed rather than rendering a historical data series.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "top-n-with-logos",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/onair/ScreenParts.tsx:37 The bars display audience poll options, not a top-N race of branded entities."
+          "evidence": "apps/console/src/pages/onair/ScreenParts.tsx:37 The bars display audience poll options, not a top-N race of branded entities.",
+          "carriedFrom": "2026-10-19"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/feed.ts:85 The preview plays interactive-show transcripts rather than a data-video composition, and context and repository searches found no StatReel, bar_race or timing_plan matches.",
+          "evaluatedAt": "2026-10-19T23:57:31.242Z",
+          "worker": "e98f126c-7b88-4d83-b6f3-6428989df0e2",
+          "reason": "replaced by 8f5adbab-8a60-43b7-a301-74d94309d259"
         }
       ]
     },
