@@ -1,0 +1,71 @@
+{
+ "schema": "conform-run/1",
+ "worker": "2fc2fcc8-030a-4377-8c89-4b4f5a55a1fe",
+ "subject": "talking-avatar",
+ "evaluatedAt": "2026-11-04T05:21:38.904981+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-avatar-renderer",
+   "subject": "talking-avatar",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/avatar/driver.ts:239 Head yaw, pitch and roll drift is built from two incommensurate sines per axis (lines 239-241, and the file header says so at line 7), not from the layered low-frequency noise the technique requires, so the idle drift repeats in a way viewers can see.",
+   "techniques": [
+    {
+     "technique": "procedural-presence-motion",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/avatar/driver.ts:239 The drift is a stack of sines, which the technique names as the failure. Other parts conform: blinks close in 75 ms, hold and open in 170 ms (line 194), double blinks happen, saccades jump and hold, roll is used, the motion scale is set per character (0.7), and it settles at rest."
+    },
+    {
+     "technique": "viseme-drive",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/avatar/driver.ts:265 Timing comes from the voice's viseme under the playback position, the shape from an Oculus-15 opening table, and loudness scales the opening. PP closures dip (visemes.ts:39). With no timeline it falls back to an opening driven by loudness alone (line 267)."
+    },
+    {
+     "technique": "single-image-layer-decomposition",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/avatar/cut/plan.ts:106 On the render side, every head-bound layer turns through one shared field at its own depth: the rig's recorded depth where it has one, otherwise one derived from the skull or the crown ring. So layers separate only by their depth difference. The offline decomposition step itself is outside this context."
+    },
+    {
+     "technique": "face-signal-across-surfaces",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/avatar/Avatar.tsx:90 The renderer is a lazy chunk, so the first paint shows an empty box. If WebGL2 is missing or loading fails, the box stays empty and the reason is logged once. One shared frame clock stops when settled, hidden, off-screen or under reduced motion (motion.ts, runtime.ts). The single producer and the mirror live in the voice player, outside this context."
+    },
+    {
+     "technique": "rig-parameter-contract",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/avatar/driver.ts:24 The Pose vector has stated units and signs (line 27) but no version and no validator at the seam. The brow and eye light travel in a separate PerformancePose (performance.ts:54) instead of an optional, versioned group in the one vector."
+    },
+    {
+     "technique": "neural-motion-retargeting",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/avatar/driver.ts:14 No learned motion source exists to retarget."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-04T05:21:38.904981+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "talking-avatar"
+   ],
+   "techniques": [
+    "face-signal-across-surfaces",
+    "neural-motion-retargeting",
+    "procedural-presence-motion",
+    "rig-parameter-contract",
+    "single-image-layer-decomposition",
+    "viseme-drive"
+   ],
+   "deviations": 1,
+   "context": "stage-avatar-renderer",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

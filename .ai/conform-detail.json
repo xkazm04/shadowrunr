@@ -2352,34 +2352,48 @@
       "subject": "talking-avatar",
       "bundle": "software-engineering",
       "state": "deviation",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T21:59:13.931Z",
-      "worker": "e76cc439-98be-40c3-91d1-edd797c29b60",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T05:21:38.904Z",
+      "worker": "2fc2fcc8-030a-4377-8c89-4b4f5a55a1fe",
       "techniques": [
-        {
-          "technique": "face-signal-across-surfaces",
-          "verdict": "conformant",
-          "evidence": "apps/stage/src/avatar/variants.ts:41 Drawing-side obligations are implemented: lazy renderer loading, the shared frame clock, settling, visibility handling, capability fallback and disposal."
-        },
-        {
-          "technique": "neural-motion-retargeting",
-          "verdict": "not-applicable",
-          "evidence": "apps/stage/src/avatar/driver.ts:14 The driver has no learned motion to retarget."
-        },
         {
           "technique": "procedural-presence-motion",
           "verdict": "deviation",
-          "evidence": "apps/stage/src/avatar/driver.ts:239 Head drift is a stack of sines; the standard explicitly requires low-frequency noise instead."
-        },
-        {
-          "technique": "rig-parameter-contract",
-          "verdict": "deviation",
-          "evidence": "apps/stage/src/avatar/driver.ts:265 With a viseme present, the driver ignores signal.open and derives opening from shape, violating opening's required authority."
+          "evidence": "apps/stage/src/avatar/driver.ts:239 The drift is a stack of sines, which the technique names as the failure. Other parts conform: blinks close in 75 ms, hold and open in 170 ms (line 194), double blinks happen, saccades jump and hold, roll is used, the motion scale is set per character (0.7), and it settles at rest."
         },
         {
           "technique": "viseme-drive",
           "verdict": "conformant",
-          "evidence": "apps/stage/src/avatar/visemes.ts:39 The renderer maps timed shapes to loudness-scaled opening, preserves closure dips and falls back to level-driven opening without a viseme."
+          "evidence": "apps/stage/src/avatar/driver.ts:265 Timing comes from the voice's viseme under the playback position, the shape from an Oculus-15 opening table, and loudness scales the opening. PP closures dip (visemes.ts:39). With no timeline it falls back to an opening driven by loudness alone (line 267)."
+        },
+        {
+          "technique": "single-image-layer-decomposition",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/avatar/cut/plan.ts:106 On the render side, every head-bound layer turns through one shared field at its own depth: the rig's recorded depth where it has one, otherwise one derived from the skull or the crown ring. So layers separate only by their depth difference. The offline decomposition step itself is outside this context."
+        },
+        {
+          "technique": "face-signal-across-surfaces",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/avatar/Avatar.tsx:90 The renderer is a lazy chunk, so the first paint shows an empty box. If WebGL2 is missing or loading fails, the box stays empty and the reason is logged once. One shared frame clock stops when settled, hidden, off-screen or under reduced motion (motion.ts, runtime.ts). The single producer and the mirror live in the voice player, outside this context."
+        },
+        {
+          "technique": "rig-parameter-contract",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/avatar/driver.ts:24 The Pose vector has stated units and signs (line 27) but no version and no validator at the seam. The brow and eye light travel in a separate PerformancePose (performance.ts:54) instead of an optional, versioned group in the one vector."
+        },
+        {
+          "technique": "neural-motion-retargeting",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/avatar/driver.ts:14 No learned motion source exists to retarget."
+        }
+      ],
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "apps/stage/src/avatar/driver.ts:239 The procedural head drift uses summed sine waves, contrary to the technique's requirement for layered low-frequency noise.",
+          "evaluatedAt": "2026-10-21T21:59:13.931Z",
+          "worker": "e76cc439-98be-40c3-91d1-edd797c29b60",
+          "reason": "replaced by 2fc2fcc8-030a-4377-8c89-4b4f5a55a1fe"
         }
       ]
     },

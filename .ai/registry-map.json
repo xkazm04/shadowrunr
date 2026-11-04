@@ -5999,12 +5999,11 @@
           "changedAt": "2026-10-22",
           "confidence": "strong",
           "state": "deviation",
-          "evidence": "apps/stage/src/avatar/driver.ts:239 The procedural head drift uses summed sine waves, contrary to the technique's requirement for layered low-frequency noise.",
-          "evaluatedAt": "2026-10-21",
-          "evaluatedAgainst": "sha256-b2:f96c1d7ea0398677",
-          "evaluatedRevision": 3,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "apps/stage/src/avatar/driver.ts:239 Head yaw, pitch and roll drift is built from two incommensurate sines per axis (lines 239-241, and the file header says so at line 7), not from the layered low-frequency noise the technique requires, so the idle drift repeats in a way viewers can see.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:72517c45ca8e4198",
+          "evaluatedRevision": 4,
+          "revisionsBehind": 1
         },
         {
           "subject": "live-system-demo-film",
