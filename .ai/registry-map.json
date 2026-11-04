@@ -993,8 +993,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "not-applicable",
+          "priorNotApplicable": 5,
+          "evidence": "apps/console/src/pages/brain/Viewer.tsx:80 A case-insensitive substring grep of the context directory for audio, speech, microphone, getUserMedia and viseme found 0 hits. Spoken 'say' events are shown only as styled text, and the engine instruments track LLM calls, not voice engines.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "companion-runtime",
@@ -2157,8 +2161,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "not-applicable",
+          "priorNotApplicable": 5,
+          "evidence": "apps/console/src/pages/reconcile/ReportPage.tsx:59 A case-insensitive substring grep of the context directory for audio, speech, tts, microphone and getUserMedia found 0 hits. 'voice' appears only as a CSS typography class for written report text, so the page neither speaks nor listens.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "docs-sync",
@@ -3867,8 +3875,8 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "priorNotApplicable": 5,
+          "state": "unknown"
         },
         {
           "subject": "conformance-checking",

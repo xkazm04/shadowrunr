@@ -7781,6 +7781,41 @@
           "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:19 This is a live analogue rather than a cut: dropped lines are recorded as distinct skipped states (late, queue_full, error) in voice.jsonl and never papered over. The technique governs working cut surfaces, which do not exist here."
         }
       ]
+    },
+    "ce601bf6-a98a-465f-8f19-3143e6483f8d/voice-io": {
+      "context": "reconcile-engine",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "unknown",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T22:19:12.129Z",
+      "techniques": [],
+      "withdrawn": {
+        "worker": "b45571fd-4693-482d-8724-421f348f2481",
+        "state": "not-applicable",
+        "at": "2026-11-04T22:19:41.988269+00:00",
+        "reason": "reviewer (sonnet): The anchor Cargo.toml:3 is only the crate description ('between-streams analysis, plan options and the Lord's directives'), which doesn't show that audio or speech is absent. My grep of the crate did find no audio, speech, TTS, microphone or viseme terms, but the cited line is incidental, so the pai"
+      }
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/voice-io": {
+      "context": "console-reconcile-page",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T22:19:12.129Z",
+      "worker": "b45571fd-4693-482d-8724-421f348f2481",
+      "techniques": []
+    },
+    "c2325be4-a41e-48f5-9050-bb31c09bb12a/voice-io": {
+      "context": "console-brain-page",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T22:19:12.129Z",
+      "worker": "b45571fd-4693-482d-8724-421f348f2481",
+      "techniques": []
     }
   }
 }
