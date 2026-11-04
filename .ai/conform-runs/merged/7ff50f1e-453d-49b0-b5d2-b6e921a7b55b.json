@@ -1,0 +1,102 @@
+{
+ "schema": "conform-run/1",
+ "worker": "7ff50f1e-453d-49b0-b5d2-b6e921a7b55b",
+ "subject": "review-iteration-loops",
+ "evaluatedAt": "2026-11-04T05:16:33.872913+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "clips-pipeline",
+   "subject": "review-iteration-loops",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-clips/src/scan.rs:869 A rescan deletes the whole directory of every candidate without an approval, rejection or recut. Watched feedback is not counted as an owner act, so a human's notes on a clip vanish with its media whenever the new scan does not redraft the exact same line range. That window shift can happen whenever the engine's hook read or the ranking changes.",
+   "techniques": [
+    {
+     "technique": "gate-record-outlives-the-media",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-clips/src/scan.rs:871 Feedback lives in candidate.json inside the clip dir and is culled with the media; it survives a rescan only if the same id is redrafted (scan.rs:879). This is the 'vanished verdict' failure. Rejections keep their full render dir with no cull either."
+    },
+    {
+     "technique": "follow-up-that-can-kill-a-fact",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-clips/src/upload.rs:288 The publish path checks only status == approved_for_upload (act_block). It never re-runs corrections_check, so a corrections.jsonl entry with blocks_clip_publishing appended after approval does not void the stale gate verdict before publish."
+    },
+    {
+     "technique": "note-taxonomy-focus-scope-order",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-clips/src/store.rs:355 The closed tag set (cut_too_early/late, flat, caption_wrong...) is stored inert. No kind maps to its minimal operation, e.g. the recut --open/--close edge, and cut_too_early does not say which edge. The technique calls this free text with a label."
+    },
+    {
+     "technique": "edit-plan-over-regeneration",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/scan.rs:951 Recut is a small closed operation (move edges by whole lines) that yields a new candidate, leaves the parent untouched and re-gates from the first check; owner-acted candidates are kept across rescans."
+    },
+    {
+     "technique": "refusal-as-valid-outcome",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/store.rs:270 Refuse-before-apply with an override receipt: an unmeasured check needs a reason, recorded with the hold reasons it overrode (ClipApproval.overridden). A recut is refused with nothing written when it would drop the payoff or setup."
+    },
+    {
+     "technique": "scope-vs-preference-signals",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-clips/src/store.rs:332 A preference note cannot move gate state or status; failed exclusions cannot be overridden by the owner (gate.rs header)."
+    },
+    {
+     "technique": "critique-carries-its-fix",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/gate.rs:27 Gate findings go to a human approver, not an automated next stage, so the demotion rule does not apply. Findings are anchored to timecodes, and unmeasured is non-blocking only with a signed override."
+    },
+    {
+     "technique": "attribution-share-accounting",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/gate.rs:399 Only 'does each claim trace to a source' is asked (the declaration discipline is enforced); there is no runtime-share ledger feeding budgets, so the splitting is not needed."
+    },
+    {
+     "technique": "partial-regeneration-seams",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/scan.rs:948 Clips are re-cut from the symbolic source (transcript line range) and re-rendered whole; there is no spliced partial regeneration with seams."
+    },
+    {
+     "technique": "anchored-variation-slate",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/scan.rs:1 The five drafts are ranked picks of different moments, not a divergence slate for a reviewer without vocabulary."
+    }
+   ],
+   "registryProposal": "gate-record-outlives-the-media covers gate verdicts but is silent on non-decision human judgement (watched feedback/marks) attached to undecided items that a regeneration pass culls. The technique says 'undecided work keeps its media', yet re-drafting unreviewed candidates is legitimate per edit-plan-over-regeneration. The standard should say that any human annotation turns an item into reviewed work for cull purposes."
+  }
+ ],
+ "declined": [
+  {
+   "subject": "review-iteration-loops",
+   "context": "console-review-page",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-04T05:16:33.872913+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "review-iteration-loops"
+   ],
+   "techniques": [
+    "anchored-variation-slate",
+    "attribution-share-accounting",
+    "critique-carries-its-fix",
+    "edit-plan-over-regeneration",
+    "follow-up-that-can-kill-a-fact",
+    "gate-record-outlives-the-media",
+    "note-taxonomy-focus-scope-order",
+    "partial-regeneration-seams",
+    "refusal-as-valid-outcome",
+    "scope-vs-preference-signals"
+   ],
+   "deviations": 1,
+   "context": "clips-pipeline",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

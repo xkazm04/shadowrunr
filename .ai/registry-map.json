@@ -6647,7 +6647,11 @@
           "revision": 11,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/scan.rs:869 A rescan deletes the whole directory of every candidate without an approval, rejection or recut. Watched feedback is not counted as an owner act, so a human's notes on a clip vanish with its media whenever the new scan does not redraft the exact same line range. That window shift can happen whenever the engine's hook read or the ranking changes.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:a3bbc2c5b531b8d5",
+          "evaluatedRevision": 11
         },
         {
           "subject": "prompt-assembly",
