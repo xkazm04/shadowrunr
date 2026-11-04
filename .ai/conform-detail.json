@@ -7517,6 +7517,80 @@
       "evaluatedTs": "2026-11-04T04:06:53.868Z",
       "worker": "2206d6de-330e-4860-ad91-52860c57ab74",
       "techniques": []
+    },
+    "68cf95a7-438b-4ed9-930d-c19201eb0610/character-voice-design": {
+      "context": "voice-sidecar",
+      "subject": "character-voice-design",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T04:38:06.927Z",
+      "worker": "c63375a7-4bcb-45f0-bc4c-c3ea49ff38cc",
+      "techniques": [
+        {
+          "technique": "finishing-effect-layer",
+          "verdict": "deviation",
+          "evidence": "tools/voice/shadowrunr_voice/bench.py:204 The chain is otherwise well placed: one PRESETS definition in fx.py that both the bench and the sidecar read, applied per sentence at playback (sidecar --fx). But the board crosses light and heavy as separate candidate letters and never offers each candidate's clean take as a toggle, so neither the clean judgement nor clean acceptance listening happens."
+        },
+        {
+          "technique": "audition-line-set",
+          "verdict": "deviation",
+          "evidence": "tools/voice/shadowrunr_voice/bench.py:43 Three lines chosen as 'short, a question, long' (line 44), not one per register. There is no tender/quiet line and no high-intensity or arc-extreme line, so those registers go untested. Hard tokens (viewer handles, numbers) are present."
+        },
+        {
+          "technique": "casting-slate-spread",
+          "verdict": "deviation",
+          "evidence": "tools/voice/recipes/malakor.toml:15 The slate is two blends (malakor-a, malakor-b). b changes three ingredient weights at once instead of moving one named axis from a canonical control, so it is far smaller than the 8-10 axis-variant first slate the technique describes."
+        },
+        {
+          "technique": "design-to-read-parameter-lock",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/blend.py:7 Design inputs (recipe, sid, displaced speaker, sha256 of stock/recipe/output) are recorded beside the voice, so it can be rebuilt. The bench renders candidates through a real warm worker, which is the shipping path."
+        },
+        {
+          "technique": "voice-description-composition",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/blend.py:2 The voice is built by weighted mixing of stock Kokoro style vectors, not from a prose description given to a text-to-voice designer."
+        }
+      ],
+      "registryProposal": "The standard assumes a text-to-voice designer driven by prose. This repo designs an original voice by weighted blending of stock speaker style vectors (with per-emotion blends and a pitch correction). voice-description-composition does not fit that route, while slate spread maps naturally onto 'one weight axis moved per variant'. A technique or application covering vector-blend voice design would help."
+    },
+    "7496ad34-8f7b-4407-8b8a-a60c44c91d85/character-voice-design": {
+      "context": "daemon-voice-service",
+      "subject": "character-voice-design",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T04:38:06.927Z",
+      "worker": "c63375a7-4bcb-45f0-bc4c-c3ea49ff38cc",
+      "techniques": [
+        {
+          "technique": "design-to-read-parameter-lock",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/voice/elevenlabs.rs:422 Stability is defaulted, not chosen by a consistency test and recorded. No seed is sent. ElevenSpec (line 98) has no field for either. The Kokoro side does lock voice/sid/voices_file/fx in VoiceConfig."
+        },
+        {
+          "technique": "finishing-effect-layer",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/voice/mod.rs:79 The daemon chooses a named preset for the sidecar's single chain definition, applied at render time over the clean Kokoro voice (Kokoro path only)."
+        }
+      ]
+    },
+    "b2009d98-3f59-4c44-97e1-b3b93b65264c/character-voice-design": {
+      "context": "stage-voice-client",
+      "subject": "character-voice-design",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T04:38:06.927Z",
+      "worker": "c63375a7-4bcb-45f0-bc4c-c3ea49ff38cc",
+      "techniques": [
+        {
+          "technique": "finishing-effect-layer",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/voice/webaudio.ts:23 No effect nodes at playback. The treatment is applied upstream in the sidecar."
+        }
+      ]
     }
   }
 }

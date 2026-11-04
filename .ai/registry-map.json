@@ -6244,7 +6244,11 @@
           "revision": 2,
           "changedAt": "2026-10-28",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/stage/src/voice/webaudio.ts:23 The stage only plays already-rendered PCM through a buffer source and an analyser straight to the speakers, with no voice authoring, auditioning or effect treatment. A search of apps/stage/src/voice for fx, biquad, convolver, audition, stability and voice design found nothing.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:2e68940ae64367b7",
+          "evaluatedRevision": 2
         },
         {
           "subject": "talking-avatar",
@@ -6719,7 +6723,11 @@
           "revision": 2,
           "changedAt": "2026-10-28",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/voice/elevenlabs.rs:422 The ElevenLabs read sends only speed in voice_settings, and ElevenSpec holds just voice_id/model/speed, so stability and seed are left to provider defaults and are not part of a recorded render key.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:2e68940ae64367b7",
+          "evaluatedRevision": 2
         },
         {
           "subject": "agent-instruction-files",
@@ -6835,7 +6843,11 @@
           "revision": 2,
           "changedAt": "2026-10-28",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "tools/voice/shadowrunr_voice/bench.py:204 The blind casting bench writes each lettered candidate only through the lich chain (light or heavy), so no blend is ever heard clean on the board, and the audition lines are picked by length rather than by register.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:2e68940ae64367b7",
+          "evaluatedRevision": 2
         },
         {
           "subject": "talking-avatar",

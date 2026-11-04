@@ -1,0 +1,134 @@
+{
+ "schema": "conform-run/1",
+ "worker": "c63375a7-4bcb-45f0-bc4c-c3ea49ff38cc",
+ "subject": "character-voice-design",
+ "evaluatedAt": "2026-11-04T04:38:06.927205+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "voice-sidecar",
+   "subject": "character-voice-design",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "tools/voice/shadowrunr_voice/bench.py:204 The blind casting bench writes each lettered candidate only through the lich chain (light or heavy), so no blend is ever heard clean on the board, and the audition lines are picked by length rather than by register.",
+   "techniques": [
+    {
+     "technique": "finishing-effect-layer",
+     "verdict": "deviation",
+     "evidence": "tools/voice/shadowrunr_voice/bench.py:204 The chain is otherwise well placed: one PRESETS definition in fx.py that both the bench and the sidecar read, applied per sentence at playback (sidecar --fx). But the board crosses light and heavy as separate candidate letters and never offers each candidate's clean take as a toggle, so neither the clean judgement nor clean acceptance listening happens."
+    },
+    {
+     "technique": "audition-line-set",
+     "verdict": "deviation",
+     "evidence": "tools/voice/shadowrunr_voice/bench.py:43 Three lines chosen as 'short, a question, long' (line 44), not one per register. There is no tender/quiet line and no high-intensity or arc-extreme line, so those registers go untested. Hard tokens (viewer handles, numbers) are present."
+    },
+    {
+     "technique": "casting-slate-spread",
+     "verdict": "deviation",
+     "evidence": "tools/voice/recipes/malakor.toml:15 The slate is two blends (malakor-a, malakor-b). b changes three ingredient weights at once instead of moving one named axis from a canonical control, so it is far smaller than the 8-10 axis-variant first slate the technique describes."
+    },
+    {
+     "technique": "design-to-read-parameter-lock",
+     "verdict": "conformant",
+     "evidence": "tools/voice/shadowrunr_voice/blend.py:7 Design inputs (recipe, sid, displaced speaker, sha256 of stock/recipe/output) are recorded beside the voice, so it can be rebuilt. The bench renders candidates through a real warm worker, which is the shipping path."
+    },
+    {
+     "technique": "voice-description-composition",
+     "verdict": "not-applicable",
+     "evidence": "tools/voice/shadowrunr_voice/blend.py:2 The voice is built by weighted mixing of stock Kokoro style vectors, not from a prose description given to a text-to-voice designer."
+    }
+   ],
+   "registryProposal": "The standard assumes a text-to-voice designer driven by prose. This repo designs an original voice by weighted blending of stock speaker style vectors (with per-emotion blends and a pitch correction). voice-description-composition does not fit that route, while slate spread maps naturally onto 'one weight axis moved per variant'. A technique or application covering vector-blend voice design would help."
+  },
+  {
+   "context": "daemon-voice-service",
+   "subject": "character-voice-design",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-daemon/src/voice/elevenlabs.rs:422 The ElevenLabs read sends only speed in voice_settings, and ElevenSpec holds just voice_id/model/speed, so stability and seed are left to provider defaults and are not part of a recorded render key.",
+   "techniques": [
+    {
+     "technique": "design-to-read-parameter-lock",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/voice/elevenlabs.rs:422 Stability is defaulted, not chosen by a consistency test and recorded. No seed is sent. ElevenSpec (line 98) has no field for either. The Kokoro side does lock voice/sid/voices_file/fx in VoiceConfig."
+    },
+    {
+     "technique": "finishing-effect-layer",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/voice/mod.rs:79 The daemon chooses a named preset for the sidecar's single chain definition, applied at render time over the clean Kokoro voice (Kokoro path only)."
+    }
+   ]
+  },
+  {
+   "context": "stage-voice-client",
+   "subject": "character-voice-design",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/stage/src/voice/webaudio.ts:23 The stage only plays already-rendered PCM through a buffer source and an analyser straight to the speakers, with no voice authoring, auditioning or effect treatment. A search of apps/stage/src/voice for fx, biquad, convolver, audition, stability and voice design found nothing.",
+   "techniques": [
+    {
+     "technique": "finishing-effect-layer",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/webaudio.ts:23 No effect nodes at playback. The treatment is applied upstream in the sidecar."
+    }
+   ],
+   "absenceTerms": [
+    "biquad",
+    "convolver",
+    "audition",
+    "stability"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-04T04:38:06.927205+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "character-voice-design"
+   ],
+   "techniques": [
+    "audition-line-set",
+    "casting-slate-spread",
+    "design-to-read-parameter-lock",
+    "finishing-effect-layer",
+    "voice-description-composition"
+   ],
+   "deviations": 1,
+   "context": "voice-sidecar",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T04:38:06.927205+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "character-voice-design"
+   ],
+   "techniques": [
+    "design-to-read-parameter-lock",
+    "finishing-effect-layer"
+   ],
+   "deviations": 1,
+   "context": "daemon-voice-service",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T04:38:06.927205+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "character-voice-design"
+   ],
+   "techniques": [
+    "finishing-effect-layer"
+   ],
+   "deviations": 0,
+   "context": "stage-voice-client",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
