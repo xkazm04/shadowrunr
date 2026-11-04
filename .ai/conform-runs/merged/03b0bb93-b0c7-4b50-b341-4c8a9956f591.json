@@ -1,0 +1,93 @@
+{
+ "schema": "conform-run/1",
+ "worker": "03b0bb93-b0c7-4b50-b341-4c8a9956f591",
+ "subject": "docs-sync",
+ "evaluatedAt": "2026-11-04T04:57:27.078637+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-review-page",
+   "subject": "docs-sync",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "docs/spec/contract.md:1320 Two hand-written surfaces make claims about this page's behaviour: this contract appendix and docs/guide/cli.md:706 'Session review'. No declared coupling (no map, no gate, no scan) ties apps/console/src/pages/review to either one, so a change to the page owes them nothing that any tool can see.",
+   "techniques": [
+    {
+     "technique": "source-doc-mapping",
+     "verdict": "deviation",
+     "evidence": "docs/spec/contract.md:1348 A claim about what the review page code computes. I searched the repo and found no coupling map or code that references docs/spec or docs/guide, so this area is unmapped by construction."
+    },
+    {
+     "technique": "coupled-surface-inventory",
+     "verdict": "deviation",
+     "evidence": "docs/guide/cli.md:706 A second prose surface describes the same page, and athena.md's review tools are a third. Nothing lists which surfaces a Review page change owes, and nothing checks any of them."
+    },
+    {
+     "technique": "named-duplication-points",
+     "verdict": "deviation",
+     "evidence": "docs/spec/contract.md:1338 This is a literal copy of the FeedbackTag vocabulary that FeedbackPanel renders through names.ts FEEDBACK. It matches today, but no mechanical assertion compares the two, even though the technique asks for one on literal copies."
+    }
+   ]
+  },
+  {
+   "context": "console-app-bootstrap",
+   "subject": "docs-sync",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/app/compose.ts:15 The ?daemon= override read here is documented as a pairing step in docs/guide/athena.md:26 ('`?daemon=http://127.0.0.1:<port>` when the daemon is not on 7717'). Nothing declares that coupling, so renaming or removing the parameter would leave the guide's step wrong with no signal.",
+   "techniques": [
+    {
+     "technique": "source-doc-mapping",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/app/compose.ts:14 Source behaviour that a guide documents, with no coupling entry. I searched and found no doc map, no CI doc step and no hook anywhere."
+    },
+    {
+     "technique": "coupled-surface-inventory",
+     "verdict": "deviation",
+     "evidence": "docs/guide/athena.md:26 The guide's pairing steps are a coupled surface of compose.ts. They are not enumerated or checked anywhere."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "docs-sync",
+   "context": "console-reconcile-page",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-04T04:57:27.078637+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "docs-sync"
+   ],
+   "techniques": [
+    "coupled-surface-inventory",
+    "named-duplication-points",
+    "source-doc-mapping"
+   ],
+   "deviations": 1,
+   "context": "console-review-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T04:57:27.078637+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "docs-sync"
+   ],
+   "techniques": [
+    "coupled-surface-inventory",
+    "source-doc-mapping"
+   ],
+   "deviations": 1,
+   "context": "console-app-bootstrap",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

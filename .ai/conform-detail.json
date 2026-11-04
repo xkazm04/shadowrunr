@@ -4577,22 +4577,28 @@
       "context": "console-app-bootstrap",
       "subject": "docs-sync",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T02:41:41.121Z",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T04:57:27.078Z",
+      "worker": "03b0bb93-b0c7-4b50-b341-4c8a9956f591",
       "techniques": [
+        {
+          "technique": "source-doc-mapping",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/app/compose.ts:14 Source behaviour that a guide documents, with no coupling entry. I searched and found no doc map, no CI doc step and no hook anywhere."
+        },
+        {
+          "technique": "coupled-surface-inventory",
+          "verdict": "deviation",
+          "evidence": "docs/guide/athena.md:26 The guide's pairing steps are a coupled surface of compose.ts. They are not enumerated or checked anywhere."
+        },
         {
           "technique": "doc-rot-detection",
           "verdict": "deviation",
-          "evidence": "docs/concepts/leftovers.md:86 The claim went stale when athena.md gained the console start command. No scan exists to flag it."
+          "evidence": "docs/concepts/leftovers.md:86 The claim went stale when athena.md gained the console start command. No scan exists to flag it.",
+          "carriedFrom": "2026-10-24"
         }
-      ],
-      "withdrawn": {
-        "worker": "758b2de9-2cef-41fe-8c2c-37af31358a9f",
-        "state": "deviation",
-        "at": "2026-10-24T02:42:02.893420+00:00",
-        "reason": "reviewer (sonnet): The cited leftovers.md:86 is a docs file outside this context's code. It already says the console start is 'in owner-review-loop.md now', so it doesn't plainly read as open debt. I couldn't check the commits 937eb1b and 918a54b or the same-day timing, because git was off-limits."
-      }
+      ]
     },
     "6dce940f-74f8-426d-8a02-ed09e53724ef/docs-sync": {
       "context": "console-segments-page",
@@ -7589,6 +7595,32 @@
           "technique": "finishing-effect-layer",
           "verdict": "not-applicable",
           "evidence": "apps/stage/src/voice/webaudio.ts:23 No effect nodes at playback. The treatment is applied upstream in the sidecar."
+        }
+      ]
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/docs-sync": {
+      "context": "console-review-page",
+      "subject": "docs-sync",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T04:57:27.078Z",
+      "worker": "03b0bb93-b0c7-4b50-b341-4c8a9956f591",
+      "techniques": [
+        {
+          "technique": "source-doc-mapping",
+          "verdict": "deviation",
+          "evidence": "docs/spec/contract.md:1348 A claim about what the review page code computes. I searched the repo and found no coupling map or code that references docs/spec or docs/guide, so this area is unmapped by construction."
+        },
+        {
+          "technique": "coupled-surface-inventory",
+          "verdict": "deviation",
+          "evidence": "docs/guide/cli.md:706 A second prose surface describes the same page, and athena.md's review tools are a third. Nothing lists which surfaces a Review page change owes, and nothing checks any of them."
+        },
+        {
+          "technique": "named-duplication-points",
+          "verdict": "deviation",
+          "evidence": "docs/spec/contract.md:1338 This is a literal copy of the FeedbackTag vocabulary that FeedbackPanel renders through names.ts FEEDBACK. It matches today, but no mechanical assertion compares the two, even though the technique asks for one on literal copies."
         }
       ]
     }

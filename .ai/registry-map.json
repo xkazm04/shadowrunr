@@ -832,7 +832,11 @@
           "revision": 14,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/app/compose.ts:15 The ?daemon= override read here is documented as a pairing step in docs/guide/athena.md:26 ('`?daemon=http://127.0.0.1:<port>` when the daemon is not on 7717'). Nothing declares that coupling, so renaming or removing the parameter would leave the guide's step wrong with no signal.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:fd96220db75846a1",
+          "evaluatedRevision": 14
         },
         {
           "subject": "settings",
@@ -5818,7 +5822,11 @@
           "revision": 14,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "docs/spec/contract.md:1320 Two hand-written surfaces make claims about this page's behaviour: this contract appendix and docs/guide/cli.md:706 'Session review'. No declared coupling (no map, no gate, no scan) ties apps/console/src/pages/review to either one, so a change to the page owes them nothing that any tool can see.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:fd96220db75846a1",
+          "evaluatedRevision": 14
         },
         {
           "subject": "platform-extension-release-ladder",
