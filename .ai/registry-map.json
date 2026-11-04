@@ -4838,7 +4838,11 @@
           "revision": 28,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-types/src/sandbox.rs:81 The sandbox session status vocabulary is Running, Closing, Judging, Done, Failed and Stopped. There is no indeterminate status, so a consumer that finds an interrupted session can only call it Failed (which the daemon does).",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:45b3f952560a4cbc",
+          "evaluatedRevision": 28
         },
         {
           "subject": "structured-output",
@@ -7132,7 +7136,11 @@
           "revision": 28,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/sandbox.rs:721 A sandbox session from an earlier daemon process that has no session.json is reported as Failed. A session killed mid-run looks exactly like that, and so does a session that really failed (which leaves error.json, a file this code never reads), so an outcome nobody knows is recorded as a known failure.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:45b3f952560a4cbc",
+          "evaluatedRevision": 28
         },
         {
           "subject": "agent-memory",
