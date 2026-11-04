@@ -1140,10 +1140,21 @@
       "context": "console-brain-page",
       "subject": "companion-identity",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T06:16:30.771Z",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T22:05:35.884Z",
+      "worker": "3d1d8373-6543-491f-b151-d0ff5c0d68d2",
       "techniques": [
+        {
+          "technique": "disk-truth-db-index",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/brainModel.ts:135 It only counts memory events in a transcript. It stores no identity and reads none from disk or an index."
+        },
+        {
+          "technique": "constitution-self-model-split",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Layer1.tsx:2 The page has no law or self-model documents and no path to them."
+        },
         {
           "technique": "anchored-identity-diffs",
           "verdict": "not-applicable",
@@ -1163,18 +1174,6 @@
           "carriedFrom": "2026-10-19"
         },
         {
-          "technique": "constitution-self-model-split",
-          "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/brain/Layer1.tsx:134 The page visualizes simulation activity rather than authoring identity documents.",
-          "carriedFrom": "2026-10-19"
-        },
-        {
-          "technique": "disk-truth-db-index",
-          "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/brain/brainModel.ts:237 The local model derives display metrics; it does not persist a durable self.",
-          "carriedFrom": "2026-10-19"
-        },
-        {
           "technique": "one-mind-many-mouths",
           "verdict": "not-applicable",
           "evidence": "apps/console/src/pages/brain/Viewer.tsx:116 Selecting a run for inspection does not create another conversational channel or partition companion memory.",
@@ -1186,13 +1185,7 @@
           "evidence": "apps/console/src/pages/brain/brainModel.ts:183 These are operational funnel counts, not inferred operator traits.",
           "carriedFrom": "2026-10-19"
         }
-      ],
-      "withdrawn": {
-        "worker": "0fec1128-b3a8-41a2-8da4-39ebb80c939f",
-        "state": "not-applicable",
-        "at": "2026-10-24T06:16:46.981911+00:00",
-        "reason": "reviewer (sonnet): The anchor (brainModel.ts:135) is the doc comment on memoryCurve, so it sits in the context but doesn't show that identity documents are absent. The grep claim does hold for the listed terms (constitution, self-model, consent, bible, profile and identity matched nothing), but the verdict rests on th"
-      }
+      ]
     },
     "382c68f3-bc20-4cc7-8220-18aa850f7087/companion-identity": {
       "context": "character-package",

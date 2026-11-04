@@ -1,0 +1,59 @@
+{
+ "schema": "conform-run/1",
+ "worker": "3d1d8373-6543-491f-b151-d0ff5c0d68d2",
+ "subject": "companion-identity",
+ "evaluatedAt": "2026-11-04T22:05:35.884295+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-brain-page",
+   "subject": "companion-identity",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/brain/Layer1.tsx:2 The page draws telemetry for tournament runs: pulse lanes, a count of memory moments kept, latency gauges, role lamps and a call ledger. A grep of apps/console/src/pages/brain for constitution, self_model/selfModel, bible, consent, profile and identity found nothing, so the subject's identity documents, self-edit diffs, adoption consent and profile synthesis never reach this context.",
+   "techniques": [
+    {
+     "technique": "disk-truth-db-index",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/brainModel.ts:135 It only counts memory events in a transcript. It stores no identity and reads none from disk or an index."
+    },
+    {
+     "technique": "constitution-self-model-split",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Layer1.tsx:2 The page has no law or self-model documents and no path to them."
+    }
+   ],
+   "absenceTerms": [
+    "constitution",
+    "bible",
+    "consent",
+    "profile"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "companion-identity",
+   "context": "character-package",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-04T22:05:35.884295+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "companion-identity"
+   ],
+   "techniques": [
+    "constitution-self-model-split",
+    "disk-truth-db-index"
+   ],
+   "deviations": 0,
+   "context": "console-brain-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

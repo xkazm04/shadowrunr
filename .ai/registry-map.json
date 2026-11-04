@@ -973,7 +973,11 @@
           "revision": 7,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Layer1.tsx:2 The page draws telemetry for tournament runs: pulse lanes, a count of memory moments kept, latency gauges, role lamps and a call ledger. A grep of apps/console/src/pages/brain for constitution, self_model/selfModel, bible, consent, profile and identity found nothing, so the subject's identity documents, self-edit diffs, adoption consent and profile synthesis never reach this context.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:ff529a6dc44bf233",
+          "evaluatedRevision": 7
         },
         {
           "subject": "voice-io",
