@@ -6334,57 +6334,59 @@
       "context": "console-review-page",
       "subject": "video-assembly",
       "bundle": "media-generation",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-28",
-      "evaluatedTs": "2026-10-28T22:55:37.202Z",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T05:37:57.155Z",
+      "worker": "5f78a3c4-80f1-4a46-928d-7ba8cf8e2084",
       "techniques": [
+        {
+          "technique": "multitrack-timeline-discipline",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Layer2.tsx:139 The session figures come from the daemon's record (computed, not typed), but no multitrack cut is laid out here. There is one stream of lines and no picture, voice or music lanes."
+        },
         {
           "technique": "gap-and-refusal-honesty",
           "verdict": "conformant",
-          "evidence": "apps/console/src/pages/review/Judge.tsx:44 'Not judged' is a separate state from 'No rule failed' (Judge.tsx:60). The same holds for 'no recording' (WatchPane.tsx:24), untagged lines (Layer2.tsx:145) and unsaved marks, which are listed by line with a Retry that actually resends them (PlayerParts.tsx:80). Missing and unmeasured are never folded into success."
+          "evidence": "apps/console/src/pages/review/Judge.tsx:44 'Not judged' is a separate state from 'No rule failed' (Judge.tsx:60). The same holds for 'no recording' (WatchPane.tsx:24), untagged lines (Layer2.tsx:145) and unsaved marks, which are listed by line with a Retry that actually resends them (PlayerParts.tsx:80). Missing and unmeasured are never folded into success.",
+          "carriedFrom": "2026-10-28"
         },
         {
           "technique": "derived-turn-markers",
           "verdict": "conformant",
-          "evidence": "apps/console/src/pages/review/PlayerParts.tsx:47 The segment label for a line is looked up from the session record's segments at the line's time (derive.ts:99), not typed in. When no segment matches, no label is drawn ('seg ? ... : \"\"'), so absence stays absence."
-        },
-        {
-          "technique": "multitrack-timeline-discipline",
-          "verdict": "conformant",
-          "evidence": "apps/console/src/pages/review/PlayerParts.tsx:65 The player's strip of lines places every tick at t/lengthS on the session's one clock (tabkit.tsx:56), and its marked/current state is re-derived from feedback on every render. The hard-coded TICKS in Face.tsx:7 are an aria-hidden poster motif, not a working timeline. The main Timeline.tsx tab is not in this context's file list and was not judged."
+          "evidence": "apps/console/src/pages/review/PlayerParts.tsx:47 The segment label for a line is looked up from the session record's segments at the line's time (derive.ts:99), not typed in. When no segment matches, no label is drawn ('seg ? ... : \"\"'), so absence stays absence.",
+          "carriedFrom": "2026-10-28"
         },
         {
           "technique": "drift-correction",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/review/WatchPane.tsx:50 The context only reports the recording's measured A/V offset, as a number in ms. It has no sync-adjustment control and no clip to slide, so the technique's correction precondition does not hold."
+          "evidence": "apps/console/src/pages/review/WatchPane.tsx:50 The context only reports the recording's measured A/V offset, as a number in ms. It has no sync-adjustment control and no clip to slide, so the technique's correction precondition does not hold.",
+          "carriedFrom": "2026-10-28"
         },
         {
           "technique": "alignment-names-its-text",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/review/WatchPane.tsx:49 Line positions come from playout 'heard' events or the transcript time, not from a synthesiser's character alignment. The line does name which time source it used, in the spirit of the technique."
+          "evidence": "apps/console/src/pages/review/WatchPane.tsx:49 Line positions come from playout 'heard' events or the transcript time, not from a synthesiser's character alignment. The line does name which time source it used, in the spirit of the technique.",
+          "carriedFrom": "2026-10-28"
         },
         {
           "technique": "generated-shot-sourcing",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/review/WatchPane.tsx:1 The only video here is the captured session recording. No generated shots are briefed or accepted in this context."
+          "evidence": "apps/console/src/pages/review/WatchPane.tsx:1 The only video here is the captured session recording. No generated shots are briefed or accepted in this context.",
+          "carriedFrom": "2026-10-28"
         },
         {
           "technique": "seek-stable-composition-authoring",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/review/WatchPane.tsx:47 Seeking happens on an encoded file in an HTML video element. No composition is compiled frame by frame, so frame-index purity does not apply."
+          "evidence": "apps/console/src/pages/review/WatchPane.tsx:47 Seeking happens on an encoded file in an HTML video element. No composition is compiled frame by frame, so frame-index purity does not apply.",
+          "carriedFrom": "2026-10-28"
         },
         {
           "technique": "silent-defects-get-a-code-or-an-error",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/pages/review/WatchPane.tsx:24 This context renders nothing from source, so the technique does not apply. A missing recording is still reported by name rather than shown as a blank player. Residual gap: the <video> element has no onError handler, so a media route that fails after the RPC succeeds would show an empty player."
+          "evidence": "apps/console/src/pages/review/WatchPane.tsx:24 This context renders nothing from source, so the technique does not apply. A missing recording is still reported by name rather than shown as a blank player. Residual gap: the <video> element has no onError handler, so a media route that fails after the RPC succeeds would show an empty player.",
+          "carriedFrom": "2026-10-28"
         }
-      ],
-      "withdrawn": {
-        "worker": "eba57a8b-18e9-4e45-8085-188419b17d75",
-        "state": "conformant",
-        "at": "2026-10-28T22:55:59.962078+00:00",
-        "reason": "reviewer (sonnet): The line-level claims hold for the files I opened (Judge.tsx:44 and :60 show 'not judged' versus 'No rule failed', and Layer2.tsx:145 shows the untagged caution), but three of the four technique anchors, and the claims about unsaved-mark Retry, segment lookup, tick placement and the A/V offset, sit "
-      }
+      ]
     },
     "7bbc93eb-a921-49ea-a5b3-128e66bd5e64/visual-style-locking": {
       "context": "stage-avatar-renderer",
@@ -7765,6 +7767,27 @@
         }
       ],
       "registryProposal": "gate-record-outlives-the-media covers gate verdicts but is silent on non-decision human judgement (watched feedback/marks) attached to undecided items that a regeneration pass culls. The technique says 'undecided work keeps its media', yet re-drafting unreviewed candidates is legitimate per edit-plan-over-regeneration. The standard should say that any human annotation turns an item into reviewed work for cull purposes."
+    },
+    "7496ad34-8f7b-4407-8b8a-a60c44c91d85/video-assembly": {
+      "context": "daemon-voice-service",
+      "subject": "video-assembly",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T05:37:57.155Z",
+      "worker": "5f78a3c4-80f1-4a46-928d-7ba8cf8e2084",
+      "techniques": [
+        {
+          "technique": "alignment-names-its-text",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/elevenlabs.rs:13 The provider's character alignment only sets a timings-source label (Provider/None) and no cue or caption is positioned from it, so the index-space question does not arise. The source of the timing is still recorded beside each part."
+        },
+        {
+          "technique": "gap-and-refusal-honesty",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:19 This is a live analogue rather than a cut: dropped lines are recorded as distinct skipped states (late, queue_full, error) in voice.jsonl and never papered over. The technique governs working cut surfaces, which do not exist here."
+        }
+      ]
     }
   }
 }

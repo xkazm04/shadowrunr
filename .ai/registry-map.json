@@ -5792,7 +5792,11 @@
           "revision": 20,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Layer2.tsx:36 The Review page's 'timeline' is a row-by-row transcript review of a recorded live session, used to mark the character's lines, not a surface where picture, voice and music are assembled into a cut; a search of apps/console/src/pages/review for music, drift, subtitle, ffmpeg and storyboard found no hits, so there is no cut, music lane, sync correction or render pipeline for the subject to govern.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:5f548f222df2e692",
+          "evaluatedRevision": 20
         },
         {
           "subject": "quality-gates",
@@ -6786,7 +6790,11 @@
           "revision": 20,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:1 The daemon voice hub queues and voices live 'say' lines in real time with lag and queue bounds; it never assembles material into a cut on a shared clock. A search of crates/shadowrunr-daemon/src/voice for music, drift, subtitle, ffmpeg and storyboard found nothing, so no lane, spotting, drift or render technique has a target here.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:5f548f222df2e692",
+          "evaluatedRevision": 20
         },
         {
           "subject": "creator-voice-and-tone",
