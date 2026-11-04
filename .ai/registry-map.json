@@ -2215,7 +2215,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/model.ts:103 The page re-implements the daemon's constitution refusal with its own narrower predicate. The daemon's verify.rs:90 uses a lowercased contains('constitution.md') over headers and body lines, while the console uses an anchored regex over header paths only. So the surface that refuses an option ('Cannot be chosen') is a hand-walked subset of the enforced policy, not a projection of the daemon's verdict.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "background-jobs",
@@ -5031,7 +5035,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": ".github/workflows/ci.yml:1 The workflow calls itself the merge rung, but nothing in the repository reads back or records which of its check names the merge decision requires; a tracked-file search for protection, required-check, ruleset and gh-api readback found nothing, so a renamed job (for example 'web (tokens, contract, packages, stage, console)') could stop binding merges with no gate going red.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "model-composed-workspace",

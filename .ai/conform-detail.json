@@ -6702,6 +6702,105 @@
           "evidence": "crates/shadowrunr-segments/src/cases.rs:204 The owner's approval for live use is bound to the exact content hash, recomputed from disk. Any change to the content voids it."
         }
       ]
+    },
+    "70f40362-0fe0-4f05-90cf-b95538e20c74/quality-gates": {
+      "context": "workspace-tooling-and-policy",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T00:18:14.123Z",
+      "worker": "3c7da2fe-cd61-4481-b2ec-d81f28772646",
+      "techniques": [
+        {
+          "technique": "enforcement-binding",
+          "verdict": "deviation",
+          "evidence": ".github/workflows/ci.yml:1 No readback of required checks and no committed expected-binding text. The join is by job name, and the workflow also runs on push to main, where it reports after the fact rather than refusing."
+        },
+        {
+          "technique": "policy-projection",
+          "verdict": "deviation",
+          "evidence": "README.md:56 This hand-written projection understates the enforced set. `node scripts/ci-lanes.mjs --check` today prints '22 lanes derived, 22 covered', and ci.yml runs a 4th Python suite (avatar3d, line 238) that README lines 49-51 omit."
+        },
+        {
+          "technique": "unparseable-form-is-a-finding",
+          "verdict": "deviation",
+          "evidence": "eslint.config.js:54 The keyboard-listener ban only matches a literal first argument. addEventListener(evt, f) with a variable, or JSON reached via an alias or via globalThis.JSON.parse, evades the rule silently instead of the unrecognised form being refused, although the repo owns the tree."
+        },
+        {
+          "technique": "severity-by-construction",
+          "verdict": "conformant",
+          "evidence": ".github/workflows/ci.yml:75 Warnings are promoted to errors in the invocation itself, so the exit code carries them."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "conformant",
+          "evidence": ".github/workflows/ci.yml:77 A zero-test floor turns an emptied lane into a failure instead of a green."
+        },
+        {
+          "technique": "blocking-by-input-determinism",
+          "verdict": "conformant",
+          "evidence": ".github/workflows/ci.yml:42 The toolchain and actions are pinned, so blocking verdicts are a function of the commit. No external-feed audit step blocks."
+        },
+        {
+          "technique": "self-reported-gate-inputs",
+          "verdict": "conformant",
+          "evidence": ".github/workflows/ci.yml:14 The gate population is derived from pnpm-workspace and package scripts, not a hand list, and the check fails on uncovered or stale lanes."
+        },
+        {
+          "technique": "gate-laddering",
+          "verdict": "conformant",
+          "evidence": "README.md:39 Every local gate also exists on the clean-room rung. The fidelity gate is explicitly local-only (ci.yml:10), which makes it a courtesy, not a gate."
+        },
+        {
+          "technique": "prose-rule-drift",
+          "verdict": "conformant",
+          "evidence": ".github/workflows/ci.yml:209 The size cap and token rules are mechanised and run at merge, not left as prose."
+        },
+        {
+          "technique": "instrument-answers-only-its-own-question",
+          "verdict": "conformant",
+          "evidence": "eslint.config.js:11 The partition (lint without types; types owned by the tsc typecheck lanes) is written down, not hidden."
+        },
+        {
+          "technique": "refusal-names-a-reachable-remedy",
+          "verdict": "conformant",
+          "evidence": "eslint.config.js:33 Verified that apps/console/src/keys/keymap.ts exists, and that the JSON.parse remedy (parseRpcResult/parseEvent) is exported by packages/contract/src/index.ts."
+        },
+        {
+          "technique": "waiver-names-its-finding",
+          "verdict": "conformant",
+          "evidence": "eslint.config.js:9 Each suppression is keyed to a file and rule id with a count, not a blanket waiver."
+        },
+        {
+          "technique": "false-positive-economics",
+          "verdict": "conformant",
+          "evidence": "eslint.config.js:149 A detector that misfires on correct code is narrowed with its reason stated, not bypassed ad hoc."
+        }
+      ],
+      "registryProposal": "unparseable-form-is-a-finding is framed around matchers without a parser, but AST-selector bans (eslint no-restricted-syntax keyed on a literal argument or an identifier name) share the same open escape set (non-literal argument, aliasing, globalThis.X). The technique could name AST-selector rules as an in-scope middle case."
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/quality-gates": {
+      "context": "console-reconcile-page",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T00:18:14.123Z",
+      "worker": "3c7da2fe-cd61-4481-b2ec-d81f28772646",
+      "techniques": [
+        {
+          "technique": "policy-projection",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/model.ts:103 This is a second authority for the immutable-constitution rule. It diverges from crates/shadowrunr-reconcile/src/verify.rs:90/195 instead of rendering a flag the verifier emits."
+        },
+        {
+          "technique": "unmeasurable-criteria",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/model.ts:72 Rates below the sample floor are counted and announced, and 'unmeasured' is its own verdict label (line 157), not a zero."
+        }
+      ],
+      "registryProposal": "policy-projection could name the client-side duplicate of a server-side refusal predicate (a defence-in-depth UI block) as a projection class: the fix is to carry the enforcer's verdict to the surface, not to re-derive it."
     }
   }
 }
