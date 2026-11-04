@@ -1,0 +1,102 @@
+{
+ "schema": "conform-run/1",
+ "worker": "a274c9c1-7def-46f4-abc3-777afb5e8fcb",
+ "subject": "agent-cli-transport",
+ "evaluatedAt": "2026-11-04T02:46:32.447100+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "engine-llm-sessions",
+   "subject": "agent-cli-transport",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:200 The one spawn door gives every claude child the full host environment minus a named denylist. That same door serves the Researcher role, whose child runs WebFetch over scraped public-record pages, and for a child reading untrusted content the standard requires an environment built from an allowlist, not inherited.",
+   "techniques": [
+    {
+     "technique": "subscription-auth-selection",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:200 The billing strip itself conforms: it is mandatory at the single door, runs before CLAUDE_CONFIG_DIR is set, and a test pins it from the child's side. But the env is still inherited minus a denylist even for a child over untrusted web content. The technique calls that a finding 'whatever the child is'. Risk is lowered because --tools limits that child to WebFetch, with no shell tool to read env."
+    },
+    {
+     "technique": "availability-probe",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-engine/src/health.rs:128 The auth check is zero-token, uses `auth status --json`, and goes through the same cli.command door and per-account env as real calls. The version is parsed separately from login. A present credentials file only yields Amber 'auth status unavailable', never a confident 'authorized'."
+    },
+    {
+     "technique": "child-observed-posture",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-engine/src/bin/fake_claude.rs:40 The fake child records the argv and env it actually received. Tests then assert, from the child's side, that the key and plugin dirs are absent and the restricting flags are present (fake_cli.rs:120-136)."
+    },
+    {
+     "technique": "dated-capability-matrix",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-engine/src/alt_cli.rs:7 Capability claims carry their tool version, date and method (help text, or a live run for --system-prompt-file and interrupt). Preflight turns Amber when the CLI version differs from VERIFIED_CLI_VERSION (health.rs:19). agy's own --print-timeout is set explicitly. This is a documentation-grade matrix (code plus comments), not a data table."
+    },
+    {
+     "technique": "output-normalization",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-engine/src/stream.rs:197 The stream-json events are folded up to the result line. The error is read from inside the envelope (is_error, subtype, api_error_status), so success is not judged from the exit code. Classification is table-driven in limits.rs, and a missing result line is a typed Transient failure."
+    },
+    {
+     "technique": "permission-stance-enforcement",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:119 Every run uses generate-shaped flags: an exact --tools set, the allowlist pre-approved, any other prompt denied, no settings sources, strict MCP, and an isolated work dir. Skip-permissions is never passed. The alt CLIs run codex in a read-only sandbox and agy in plan mode with its sandbox."
+    },
+    {
+     "technique": "fallback-ladder",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-engine/src/fleet.rs:620 The ladder runs accounts, then the API, then the alt CLIs, and each rung is labelled by EngineKind. The descent reasons travel on the reply and into the ledger. The scripted engine is a separate, labelled kind."
+    },
+    {
+     "technique": "thread-custody-across-resume",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-engine/src/session.rs:381 After a crash, a timeout or an idle reap, the session respawns with --resume and the same id. The id is cleared only on account rotation, where the thread lives in another CLAUDE_CONFIG_DIR. That re-thread is recorded as 'session moved, context reset' (session.rs:475). The only production caller rebuilds full context every tick (brain lib.rs:148-150), so under rule 2 the reseed exists by construction."
+    },
+    {
+     "technique": "host-routed-approval-round-trip",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:118 All runs are unattended. No person is reachable inside the child's turn, so prompts are denied rather than routed."
+    },
+    {
+     "technique": "derived-bash-allowlist",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-engine/src/claude_cli.rs:109 There is no edit seam. Tools come only from the caller's allowlist, and no Bash grant appears anywhere in the engine src."
+    }
+   ],
+   "registryProposal": "thread-custody-across-resume rule 1 lists a rate limit as non-unbinding, but it does not cover a multi-account fleet. There the rate limit rotates to another account whose thread store cannot reach the old id, so unbinding is forced. The rule should name account rotation and point to rule 2's by-construction branch. Separately, subscription-auth-selection's untrusted-content allowlist could say whether a child with no env-reading tool (only a domain-scoped fetch) changes the severity."
+  }
+ ],
+ "declined": [
+  {
+   "subject": "agent-cli-transport",
+   "context": "daemon-show-prep-and-review",
+   "reason": "evidence leans on review/mod.rs, which is not a tracked file"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-04T02:46:32.447100+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-cli-transport"
+   ],
+   "techniques": [
+    "availability-probe",
+    "child-observed-posture",
+    "dated-capability-matrix",
+    "derived-bash-allowlist",
+    "fallback-ladder",
+    "host-routed-approval-round-trip",
+    "output-normalization",
+    "permission-stance-enforcement",
+    "subscription-auth-selection",
+    "thread-custody-across-resume"
+   ],
+   "deviations": 1,
+   "context": "engine-llm-sessions",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
