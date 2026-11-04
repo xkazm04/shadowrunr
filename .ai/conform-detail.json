@@ -6801,6 +6801,150 @@
         }
       ],
       "registryProposal": "policy-projection could name the client-side duplicate of a server-side refusal predicate (a defence-in-depth UI block) as a projection class: the fix is to carry the enforcer's verdict to the surface, not to re-derive it."
+    },
+    "68cf95a7-438b-4ed9-930d-c19201eb0610/test-harness": {
+      "context": "voice-sidecar",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T00:33:45.551Z",
+      "worker": "d7ff2f2a-55e7-4f19-879d-3df0676f21c7",
+      "techniques": [
+        {
+          "technique": "suite-partitioning",
+          "verdict": "deviation",
+          "evidence": "tools/voice/tests/test_smoke.py:22 Lane membership comes from an env flag inside one shared discovery, not from a separate config or location."
+        },
+        {
+          "technique": "assert-the-schedule-not-the-stopwatch",
+          "verdict": "conformant",
+          "evidence": "tools/voice/tests/test_pool.py:79 Overlap and ordering are proved with test-controlled gates and recorded start/end spans, not wall time. Minor residue: test_protocol.py still uses `time.sleep(0.5) # the slow render is running` as a stand-in for an event."
+        },
+        {
+          "technique": "constraint-injection-for-unreachable-tiers",
+          "verdict": "conformant",
+          "evidence": "tools/voice/tests/test_warm.py:124 The degraded no-package path is reached by intercepting the capability probe instead of needing a machine that lacks the package."
+        },
+        {
+          "technique": "isolation-lanes",
+          "verdict": "conformant",
+          "evidence": "tools/voice/tests/test_pool.py:23 Each test builds its own temp engine dir, log, spans and gates, and tearDown reaps them along with the env knobs."
+        },
+        {
+          "technique": "fixture-economics",
+          "verdict": "conformant",
+          "evidence": "tools/voice/tests/test_engine.py:43 Cheap fixture that says honestly which invariants it carries (paths only, no model)."
+        },
+        {
+          "technique": "live-app-harness",
+          "verdict": "conformant",
+          "evidence": "tools/voice/tests/test_smoke.py:31 An on-demand lane drives the real engine through the sidecar's own hello/feed protocol. No schedule was found for it."
+        },
+        {
+          "technique": "recorded-interaction-fixtures",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/tests/fake_engine.py:2 The dependency is a local binary replaced by a scripted fake, not a remote service with recorded traffic."
+        }
+      ]
+    },
+    "3ed75e96-efb2-4cbc-bfc9-a82ad1fe98fa/test-harness": {
+      "context": "console-build-and-desktop-shell",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T00:33:45.551Z",
+      "worker": "d7ff2f2a-55e7-4f19-879d-3df0676f21c7",
+      "techniques": [
+        {
+          "technique": "suite-partitioning",
+          "verdict": "deviation",
+          "evidence": "apps/console/vite.config.ts:12 The heavyweight simulated environment is the default for every file in one shared config. The perf lane is a mode flag in that config, not its own file."
+        },
+        {
+          "technique": "derived-selection-must-be-measured",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-size.mjs:31 The size gate declares a floor and exits 2 when it selected nothing, rather than passing green on zero files."
+        },
+        {
+          "technique": "gate-scope-is-not-report-scope",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-size.mjs:4 The gate's population is the whole src tree with no scoped include list."
+        },
+        {
+          "technique": "pin-the-call-not-the-name",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-token-refs.mjs:47 The source-text walk declares a floor, and the needle is a construct (`var(--sr-…)`) rather than a bare name."
+        },
+        {
+          "technique": "assert-the-schedule-not-the-stopwatch",
+          "verdict": "conformant",
+          "evidence": "apps/console/scripts/check-bundle.mjs:2 The budget gate asserts deterministic bytes, never wall time."
+        },
+        {
+          "technique": "out-of-graph-artifacts",
+          "verdict": "conformant",
+          "evidence": ".github/workflows/ci.yml:84 The src-tauri crate is deliberately its own Cargo workspace (Cargo.toml:10) and is gated as a separate root with a test floor."
+        }
+      ]
+    },
+    "4acf582d-5403-4f36-b24c-fe00bacb3683/test-harness": {
+      "context": "console-shell-router",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T00:33:45.551Z",
+      "worker": "d7ff2f2a-55e7-4f19-879d-3df0676f21c7",
+      "techniques": [
+        {
+          "technique": "suite-partitioning",
+          "verdict": "deviation",
+          "evidence": "apps/console/package.json:16 A mode flag flips the lane on inside one config, which the technique names as the drift machine."
+        },
+        {
+          "technique": "pin-the-call-not-the-name",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/shell/layout.test.ts:81 The structural CSS pin uses the whole computed formula as its needle, which prose cannot spell."
+        },
+        {
+          "technique": "isolation-lanes",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/router/store.test.ts:5 Each router test gets its own fake location/history host instead of inheriting the global window."
+        }
+      ]
+    },
+    "6be461ec-15e2-4963-b858-4712c7c675e8/test-harness": {
+      "context": "console-app-bootstrap",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T00:33:45.551Z",
+      "worker": "d7ff2f2a-55e7-4f19-879d-3df0676f21c7",
+      "techniques": [
+        {
+          "technique": "pin-the-call-not-the-name",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/keys/keymap.test.ts:183 The walk has no floor. Line 160 also pins the absence of a bare string (`PAGE_COUNT = 7`) that any reformatting would evade."
+        },
+        {
+          "technique": "negative-control-tests",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/keys/keymap.test.ts:28 The conflict checker is shown to go red on a seeded bad keymap before its green result is trusted."
+        },
+        {
+          "technique": "assert-the-schedule-not-the-stopwatch",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/app/shell.dom.test.tsx:2 The shell test gates deterministic DOM counts and injects manual timers."
+        },
+        {
+          "technique": "recorded-interaction-fixtures",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/app/shell.dom.test.tsx:43 The data layer is driven by scripted fakes; no recorded third-party traffic is involved."
+        }
+      ]
     }
   }
 }

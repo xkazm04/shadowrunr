@@ -928,7 +928,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/keys/keymap.test.ts:183 The \"one typing rule\" structural pin walks src/pages and expects an empty match list but declares no floor on the files it walked, so a moved or emptied directory makes it pass vacuously.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         }
       ],
       "governance": "governed"
@@ -1226,7 +1230,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/vite.config.ts:12 One vitest config applies the jsdom environment to every included file, including pure-logic and script tests, and the perf/timings lane is picked out of that same config with `--mode perf`, so the cost tiers have no per-suite config or environment boundary.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "prompt-assembly",
@@ -2646,7 +2654,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/package.json:16 The perf timing lane is the default vitest config re-run with a mode flag (its tests skip themselves unless MODE is perf), so membership in the lane is a flag inside one shared config rather than a suite with its own file and budget.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "platform-extension-release-ladder",
@@ -6904,7 +6916,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "tools/voice/tests/test_smoke.py:22 The real-engine rung lives in the same `unittest discover -s tests` population as the fake-engine unit tests and is switched on by an environment variable, so the live rung has no configuration, budget or schedule of its own and in every default run it shows up only as a skip.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:c96e1ee699a88119",
+          "evaluatedRevision": 27
         },
         {
           "subject": "video-assembly",
