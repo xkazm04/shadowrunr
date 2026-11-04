@@ -4488,16 +4488,11 @@
       "context": "console-review-page",
       "subject": "voice-io",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T02:22:53.809Z",
-      "techniques": [],
-      "withdrawn": {
-        "worker": "82f57343-6e05-40e2-a9ab-617d52882406",
-        "state": "not-applicable",
-        "at": "2026-10-24T02:23:10.025850+00:00",
-        "reason": "reviewer (sonnet): The anchor is only a header comment in Player.tsx, and the page does play recorded speech: WatchPane.tsx:47 renders a `<video controls>` on the session recording, and the line text at WatchPane.tsx:50 refers to when speech is heard, with an A/V offset. The searched terms (AudioContext, speechSynthes"
-      }
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T02:18:31.400Z",
+      "worker": "422ae5b7-a903-48f4-bce2-2975d9598035",
+      "techniques": []
     },
     "20f1e644-e83b-481d-864f-cb15b9124d7e/docs-sync": {
       "context": "console-characters-page",
@@ -7077,6 +7072,180 @@
           "technique": "recorded-interaction-fixtures",
           "verdict": "not-applicable",
           "evidence": "apps/console/src/app/shell.dom.test.tsx:43 The data layer is driven by scripted fakes; no recorded third-party traffic is involved."
+        }
+      ]
+    },
+    "b2009d98-3f59-4c44-97e1-b3b93b65264c/voice-io": {
+      "context": "stage-voice-client",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T02:18:31.400Z",
+      "worker": "422ae5b7-a903-48f4-bce2-2975d9598035",
+      "techniques": [
+        {
+          "technique": "tts-pipeline",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/voice/session.ts:200 The queue is bounded (player.ts:289), every source is stopped on reset or dispose, and the session stops on unmount (useVoice.ts:189). But a failed middle segment is skipped silently instead of ending the utterance honestly."
+        },
+        {
+          "technique": "voice-ux-integration",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/useVoice.ts:109 When the browser refuses audio without a gesture, the stage shows a visible unlock action and one honest sentence instead of passing silence off as success. The Voice toggle is off by default (toggle.ts:40)."
+        },
+        {
+          "technique": "speech-timing-timeline",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/player.ts:39 The renderer picks its own lead and reads mouth shapes off the heard audio clock (context time minus output latency). With no timeline it falls back to loudness (session.ts:192)."
+        },
+        {
+          "technique": "engine-abstraction",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/player.ts:164 The surface plays engine-agnostic PCM16 frames and never names an engine."
+        },
+        {
+          "technique": "bounded-playback-wait",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/voice/session.ts:4 No caller waits for playback to finish."
+        },
+        {
+          "technique": "stt-pipeline",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/voice/webaudio.ts:23 Output only. There is no capture path; a search for microphone or getUserMedia found nothing."
+        }
+      ]
+    },
+    "68cf95a7-438b-4ed9-930d-c19201eb0610/voice-io": {
+      "context": "voice-sidecar",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T02:18:31.400Z",
+      "worker": "422ae5b7-a903-48f4-bce2-2975d9598035",
+      "techniques": [
+        {
+          "technique": "render-acceptance",
+          "verdict": "deviation",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:698 A successful render is accepted as is. There is no silent or wrong-length gate and no bounded retry before the audio is sent."
+        },
+        {
+          "technique": "tts-pipeline",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:21 Output is strictly ordered, cancel kills renders in flight, and a failed part ends the line."
+        },
+        {
+          "technique": "engine-abstraction",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/engine.py:127 A missing engine is named file by file and kept apart from an EngineError (engine broken). The warm and process engines sit behind one protocol (warm.py:80)."
+        },
+        {
+          "technique": "real-time-synthesis-budget",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:114 RTF is measured on the owner's host. The warm pool exists because a process per sentence pays a model load each time, which treats the process boundary as part of the rate."
+        },
+        {
+          "technique": "on-device-vs-cloud",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:34 Local Kokoro on the operator's install. A dead voice says why and never falls back silently."
+        },
+        {
+          "technique": "speech-ready-text",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/text.py:40 Chunk boundary rules cover abbreviations, decimals and closers, with a fold-under size and the first-chunk comma cut (text.py:89). The markup door sits upstream in the brain (grammar.rs), outside this context."
+        },
+        {
+          "technique": "speech-timing-timeline",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/visemes.py:176 Timings come from the model's own durations, with a tiling check, a pause time map and a measured LEAD_S offset. A timeline that fails verification is dropped and the audio still ships (visemes.py:424)."
+        },
+        {
+          "technique": "authored-voice-identity",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/blend.py:2 The voice is authored from a stored recipe plus sha256 provenance, with no clone. blend.py is not in the context's listed files but lives in its package."
+        },
+        {
+          "technique": "stt-pipeline",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:7 The protocol takes say and cancel only. There is no capture."
+        },
+        {
+          "technique": "bounded-playback-wait",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/engine.py:2 The sidecar never opens an audio device."
+        }
+      ]
+    },
+    "7496ad34-8f7b-4407-8b8a-a60c44c91d85/voice-io": {
+      "context": "daemon-voice-service",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T02:18:31.400Z",
+      "worker": "422ae5b7-a903-48f4-bce2-2975d9598035",
+      "techniques": [
+        {
+          "technique": "render-acceptance",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:1086 No acceptance stage sits immediately behind the Renderer seam. The ElevenLabs adapter only checks !audio_base64.is_empty()."
+        },
+        {
+          "technique": "engine-abstraction",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/voice/renderer.rs:67 One output seam with a scripted test fake. Missing files are degraded by name, not crash-looped (probe.rs:5)."
+        },
+        {
+          "technique": "tts-pipeline",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:681 The queue is bounded and drops the oldest line as queue_full. A failed part skips the rest of the line honestly (service.rs:1120), and lag and render timeouts are bounded."
+        },
+        {
+          "technique": "on-device-vs-cloud",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:31 No silent fallback to cloud. The status names the provider."
+        },
+        {
+          "technique": "voice-ux-integration",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/voice/mod.rs:18 Voice is off by default, its absence carries a reason, and the stream never waits on it."
+        },
+        {
+          "technique": "speech-timing-timeline",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:478 Records which source produced each part's timing (none or durations) instead of fabricating one."
+        },
+        {
+          "technique": "unattended-caller-attribution",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:2 Only hosted live-run says are voiced. /voice clients follow; they cannot request speech."
+        },
+        {
+          "technique": "bounded-playback-wait",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:6 Nothing waits on playback finishing."
+        },
+        {
+          "technique": "stt-pipeline",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/voice/renderer.rs:72 The seam speaks only. A search for microphone or getUserMedia found nothing."
+        }
+      ]
+    },
+    "12e5be0b-9811-4c5b-a7ec-8a57e204d016/voice-io": {
+      "context": "clips-pipeline",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T02:18:31.400Z",
+      "worker": "422ae5b7-a903-48f4-bce2-2975d9598035",
+      "techniques": [
+        {
+          "technique": "speech-timing-timeline",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/voice.rs:3 Pre-rendered media is aligned offline, which is the technique's own 'when not to use' case."
         }
       ]
     }

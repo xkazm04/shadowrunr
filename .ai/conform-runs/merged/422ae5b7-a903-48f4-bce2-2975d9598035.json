@@ -1,0 +1,289 @@
+{
+ "schema": "conform-run/1",
+ "worker": "422ae5b7-a903-48f4-bce2-2975d9598035",
+ "subject": "voice-io",
+ "evaluatedAt": "2026-11-04T02:18:31.400983+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-voice-client",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/stage/src/voice/session.ts:200 The session throws away accept()'s result. If a middle part of a line fails to decode, the player returns \"bad\" and still schedules the line's later parts, so a sentence is skipped silently: no health event, no report to the daemon, no stop on the line.",
+   "techniques": [
+    {
+     "technique": "tts-pipeline",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/voice/session.ts:200 The queue is bounded (player.ts:289), every source is stopped on reset or dispose, and the session stops on unmount (useVoice.ts:189). But a failed middle segment is skipped silently instead of ending the utterance honestly."
+    },
+    {
+     "technique": "voice-ux-integration",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/voice/useVoice.ts:109 When the browser refuses audio without a gesture, the stage shows a visible unlock action and one honest sentence instead of passing silence off as success. The Voice toggle is off by default (toggle.ts:40)."
+    },
+    {
+     "technique": "speech-timing-timeline",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/voice/player.ts:39 The renderer picks its own lead and reads mouth shapes off the heard audio clock (context time minus output latency). With no timeline it falls back to loudness (session.ts:192)."
+    },
+    {
+     "technique": "engine-abstraction",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/voice/player.ts:164 The surface plays engine-agnostic PCM16 frames and never names an engine."
+    },
+    {
+     "technique": "bounded-playback-wait",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/session.ts:4 No caller waits for playback to finish."
+    },
+    {
+     "technique": "stt-pipeline",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/voice/webaudio.ts:23 Output only. There is no capture path; a search for microphone or getUserMedia found nothing."
+    }
+   ]
+  },
+  {
+   "context": "voice-sidecar",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "tools/voice/shadowrunr_voice/sidecar.py:721 Every rendered sentence goes out to the live stream with only a format check (read_pcm checks channels, width and rate). Nothing checks for silent or wrong-length output, which is the acceptance signature the technique names for duration-fixed engines like Kokoro.",
+   "techniques": [
+    {
+     "technique": "render-acceptance",
+     "verdict": "deviation",
+     "evidence": "tools/voice/shadowrunr_voice/sidecar.py:698 A successful render is accepted as is. There is no silent or wrong-length gate and no bounded retry before the audio is sent."
+    },
+    {
+     "technique": "tts-pipeline",
+     "verdict": "conformant",
+     "evidence": "tools/voice/shadowrunr_voice/sidecar.py:21 Output is strictly ordered, cancel kills renders in flight, and a failed part ends the line."
+    },
+    {
+     "technique": "engine-abstraction",
+     "verdict": "conformant",
+     "evidence": "tools/voice/shadowrunr_voice/engine.py:127 A missing engine is named file by file and kept apart from an EngineError (engine broken). The warm and process engines sit behind one protocol (warm.py:80)."
+    },
+    {
+     "technique": "real-time-synthesis-budget",
+     "verdict": "conformant",
+     "evidence": "tools/voice/shadowrunr_voice/sidecar.py:114 RTF is measured on the owner's host. The warm pool exists because a process per sentence pays a model load each time, which treats the process boundary as part of the rate."
+    },
+    {
+     "technique": "on-device-vs-cloud",
+     "verdict": "conformant",
+     "evidence": "tools/voice/shadowrunr_voice/sidecar.py:34 Local Kokoro on the operator's install. A dead voice says why and never falls back silently."
+    },
+    {
+     "technique": "speech-ready-text",
+     "verdict": "conformant",
+     "evidence": "tools/voice/shadowrunr_voice/text.py:40 Chunk boundary rules cover abbreviations, decimals and closers, with a fold-under size and the first-chunk comma cut (text.py:89). The markup door sits upstream in the brain (grammar.rs), outside this context."
+    },
+    {
+     "technique": "speech-timing-timeline",
+     "verdict": "conformant",
+     "evidence": "tools/voice/shadowrunr_voice/visemes.py:176 Timings come from the model's own durations, with a tiling check, a pause time map and a measured LEAD_S offset. A timeline that fails verification is dropped and the audio still ships (visemes.py:424)."
+    },
+    {
+     "technique": "authored-voice-identity",
+     "verdict": "conformant",
+     "evidence": "tools/voice/shadowrunr_voice/blend.py:2 The voice is authored from a stored recipe plus sha256 provenance, with no clone. blend.py is not in the context's listed files but lives in its package."
+    },
+    {
+     "technique": "stt-pipeline",
+     "verdict": "not-applicable",
+     "evidence": "tools/voice/shadowrunr_voice/sidecar.py:7 The protocol takes say and cancel only. There is no capture."
+    },
+    {
+     "technique": "bounded-playback-wait",
+     "verdict": "not-applicable",
+     "evidence": "tools/voice/shadowrunr_voice/engine.py:2 The sidecar never opens an audio device."
+    }
+   ]
+  },
+  {
+   "context": "daemon-voice-service",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:1086 The hub sends each rendered part to the stage without an acceptance check, and the cloud renderer in the same module only rejects empty audio (elevenlabs.rs:486). A generative cloud render that is degenerate can therefore reach an unattended live audience with every status green.",
+   "techniques": [
+    {
+     "technique": "render-acceptance",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:1086 No acceptance stage sits immediately behind the Renderer seam. The ElevenLabs adapter only checks !audio_base64.is_empty()."
+    },
+    {
+     "technique": "engine-abstraction",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/voice/renderer.rs:67 One output seam with a scripted test fake. Missing files are degraded by name, not crash-looped (probe.rs:5)."
+    },
+    {
+     "technique": "tts-pipeline",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:681 The queue is bounded and drops the oldest line as queue_full. A failed part skips the rest of the line honestly (service.rs:1120), and lag and render timeouts are bounded."
+    },
+    {
+     "technique": "on-device-vs-cloud",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:31 No silent fallback to cloud. The status names the provider."
+    },
+    {
+     "technique": "voice-ux-integration",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/voice/mod.rs:18 Voice is off by default, its absence carries a reason, and the stream never waits on it."
+    },
+    {
+     "technique": "speech-timing-timeline",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/voice/sidecar.rs:478 Records which source produced each part's timing (none or durations) instead of fabricating one."
+    },
+    {
+     "technique": "unattended-caller-attribution",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:2 Only hosted live-run says are voiced. /voice clients follow; they cannot request speech."
+    },
+    {
+     "technique": "bounded-playback-wait",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:6 Nothing waits on playback finishing."
+    },
+    {
+     "technique": "stt-pipeline",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/voice/renderer.rs:72 The seam speaks only. A search for microphone or getUserMedia found nothing."
+    }
+   ]
+  },
+  {
+   "context": "clips-pipeline",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-clips/src/voice.rs:3 The clip factory only reads the voice log after the fact to time captions on recorded media. It neither captures nor synthesizes nor plays speech: a search of crates/shadowrunr-clips and crates/shadowrunr-daemon/src for microphone, getUserMedia, speechSynthesis and AudioContext found no hits.",
+   "techniques": [
+    {
+     "technique": "speech-timing-timeline",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-clips/src/voice.rs:3 Pre-rendered media is aligned offline, which is the technique's own 'when not to use' case."
+    }
+   ],
+   "absenceTerms": [
+    "microphone",
+    "getUserMedia",
+    "speechSynthesis",
+    "AudioContext"
+   ]
+  },
+  {
+   "context": "console-review-page",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/review/Player.tsx:2 The review 'player' steps through transcript lines and seeks a session recording. It has no speech capture, synthesis or playback pipeline: a search of apps/console/src/pages/review for microphone, getUserMedia, speechSynthesis and AudioContext found no hits.",
+   "techniques": [],
+   "absenceTerms": [
+    "microphone",
+    "getUserMedia",
+    "speechSynthesis",
+    "AudioContext"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-04T02:18:31.400983+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "bounded-playback-wait",
+    "engine-abstraction",
+    "speech-timing-timeline",
+    "stt-pipeline",
+    "tts-pipeline",
+    "voice-ux-integration"
+   ],
+   "deviations": 1,
+   "context": "stage-voice-client",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T02:18:31.400983+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "authored-voice-identity",
+    "bounded-playback-wait",
+    "engine-abstraction",
+    "on-device-vs-cloud",
+    "real-time-synthesis-budget",
+    "render-acceptance",
+    "speech-ready-text",
+    "speech-timing-timeline",
+    "stt-pipeline",
+    "tts-pipeline"
+   ],
+   "deviations": 1,
+   "context": "voice-sidecar",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T02:18:31.400983+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "bounded-playback-wait",
+    "engine-abstraction",
+    "on-device-vs-cloud",
+    "render-acceptance",
+    "speech-timing-timeline",
+    "stt-pipeline",
+    "tts-pipeline",
+    "unattended-caller-attribution",
+    "voice-ux-integration"
+   ],
+   "deviations": 1,
+   "context": "daemon-voice-service",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T02:18:31.400983+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "speech-timing-timeline"
+   ],
+   "deviations": 0,
+   "context": "clips-pipeline",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T02:18:31.400983+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-review-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

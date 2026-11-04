@@ -5868,8 +5868,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "not-applicable",
+          "priorNotApplicable": 5,
+          "evidence": "apps/console/src/pages/review/Player.tsx:2 The review 'player' steps through transcript lines and seeks a session recording. It has no speech capture, synthesis or playback pipeline: a search of apps/console/src/pages/review for microphone, getUserMedia, speechSynthesis and AudioContext found no hits.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "mcp-tools",
@@ -6174,8 +6178,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "deviation",
+          "priorNotApplicable": 5,
+          "evidence": "apps/stage/src/voice/session.ts:200 The session throws away accept()'s result. If a middle part of a line fails to decode, the player returns \"bad\" and still schedules the line's later parts, so a sentence is skipped silently: no health event, no report to the daemon, no stop on the line.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "live-system-demo-film",
@@ -6449,8 +6457,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "not-applicable",
+          "priorNotApplicable": 5,
+          "evidence": "crates/shadowrunr-clips/src/voice.rs:3 The clip factory only reads the voice log after the fact to time captions on recorded media. It neither captures nor synthesizes nor plays speech: a search of crates/shadowrunr-clips and crates/shadowrunr-daemon/src for microphone, getUserMedia, speechSynthesis and AudioContext found no hits.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "stream-moment-capture",
@@ -6642,8 +6654,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "deviation",
+          "priorNotApplicable": 5,
+          "evidence": "crates/shadowrunr-daemon/src/voice/service.rs:1086 The hub sends each rendered part to the stage without an acceptance check, and the cloud renderer in the same module only rejects empty audio (elevenlabs.rs:486). A generative cloud render that is degenerate can therefore reach an unattended live audience with every status green.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "talking-avatar",
@@ -6775,8 +6791,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "strong",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "deviation",
+          "priorNotApplicable": 5,
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:721 Every rendered sentence goes out to the live stream with only a format check (read_pcm checks channels, width and rate). Nothing checks for silent or wrong-length output, which is the acceptance signature the technique names for duration-fixed engines like Kokoro.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "character-voice-design",
