@@ -1,0 +1,64 @@
+{
+ "schema": "conform-run/1",
+ "worker": "af840dab-f17a-4b08-a0ff-fdf4f7cf349f",
+ "subject": "video-assembly",
+ "evaluatedAt": "2026-11-04T01:59:04.874257+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-avatar-renderer",
+   "subject": "video-assembly",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "apps/stage/src/avatar/layers.ts:177 When a rig's layers.json loads but one of the PNGs it names returns 404, fetchRig builds an error that names the file, but loadForm's 404 filter drops it without a log and draws the placeholder, so a broken rig looks the same as having no rig at all.",
+   "techniques": [
+    {
+     "technique": "silent-defects-get-a-code-or-an-error",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/avatar/layers.ts:177 The 404 exemption is meant for 'no rig', but it also matches '<file>.png: HTTP 404' from line 156, so a missing named input ends in a quiet default with no named error."
+    },
+    {
+     "technique": "gap-and-refusal-honesty",
+     "verdict": "conformant",
+     "evidence": "apps/stage/src/avatar/layers.ts:156 The loader never assembles a partial rig: any missing layer file rejects the whole form, so no gap is papered over inside the picture. The defect is only that the rejection is then hidden (line 177)."
+    }
+   ],
+   "registryProposal": "silent-defects-get-a-code-or-an-error is written for compiled compositions, but it applies directly to live real-time renderers that swap in a fallback asset. It could say that an exemption meant for legitimate absence ('no asset configured') must not catch partial absence ('the asset is half there')."
+  }
+ ],
+ "declined": [
+  {
+   "subject": "video-assembly",
+   "context": "console-review-page",
+   "reason": "conformant below the evidence floor: 7 distinct anchors for 15 techniques, 8 needed"
+  },
+  {
+   "subject": "video-assembly",
+   "context": "daemon-voice-service",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "video-assembly",
+   "context": "voice-sidecar",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-04T01:59:04.874257+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "video-assembly"
+   ],
+   "techniques": [
+    "gap-and-refusal-honesty",
+    "silent-defects-get-a-code-or-an-error"
+   ],
+   "deviations": 1,
+   "context": "stage-avatar-renderer",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

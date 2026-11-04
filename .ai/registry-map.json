@@ -5994,12 +5994,11 @@
           "changedAt": "2026-10-21",
           "confidence": "probable",
           "state": "deviation",
-          "evidence": "apps/stage/src/avatar/cut/renderer.ts:127 A requested layer with no uploaded texture is silently omitted, allowing a partial avatar to render without a named layer error.",
-          "evaluatedAt": "2026-10-21",
-          "evaluatedAgainst": "sha256-b2:6bb352204d334af5",
-          "evaluatedRevision": 19,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "apps/stage/src/avatar/layers.ts:177 When a rig's layers.json loads but one of the PNGs it names returns 404, fetchRig builds an error that names the file, but loadForm's 404 filter drops it without a log and draws the placeholder, so a broken rig looks the same as having no rig at all.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:5f548f222df2e692",
+          "evaluatedRevision": 20,
+          "revisionsBehind": 1
         },
         {
           "subject": "test-harness",

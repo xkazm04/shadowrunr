@@ -2526,19 +2526,35 @@
       "subject": "video-assembly",
       "bundle": "media-generation",
       "state": "deviation",
-      "evaluatedAt": "2026-10-21",
-      "evaluatedTs": "2026-10-21T22:56:14.127Z",
-      "worker": "c55c6ae8-112e-4999-8eca-be47694565a3",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T01:59:04.874Z",
+      "worker": "af840dab-f17a-4b08-a0ff-fdf4f7cf349f",
       "techniques": [
-        {
-          "technique": "seek-stable-composition-authoring",
-          "verdict": "not-applicable",
-          "evidence": "apps/stage/src/avatar/driver.ts:203 This driver deliberately advances a live trajectory from prior state, which the technique explicitly distinguishes from a seekable composition."
-        },
         {
           "technique": "silent-defects-get-a-code-or-an-error",
           "verdict": "deviation",
-          "evidence": "apps/stage/src/avatar/cut/renderer.ts:127 uploadLayerTextures omits entries when createTexture returns null; this consumer silently skips the corresponding requested layer."
+          "evidence": "apps/stage/src/avatar/layers.ts:177 The 404 exemption is meant for 'no rig', but it also matches '<file>.png: HTTP 404' from line 156, so a missing named input ends in a quiet default with no named error."
+        },
+        {
+          "technique": "gap-and-refusal-honesty",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/avatar/layers.ts:156 The loader never assembles a partial rig: any missing layer file rejects the whole form, so no gap is papered over inside the picture. The defect is only that the rejection is then hidden (line 177)."
+        },
+        {
+          "technique": "seek-stable-composition-authoring",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/avatar/driver.ts:203 This driver deliberately advances a live trajectory from prior state, which the technique explicitly distinguishes from a seekable composition.",
+          "carriedFrom": "2026-10-21"
+        }
+      ],
+      "registryProposal": "silent-defects-get-a-code-or-an-error is written for compiled compositions, but it applies directly to live real-time renderers that swap in a fallback asset. It could say that an exemption meant for legitimate absence ('no asset configured') must not catch partial absence ('the asset is half there').",
+      "superseded": [
+        {
+          "state": "deviation",
+          "evidence": "apps/stage/src/avatar/cut/renderer.ts:127 A requested layer with no uploaded texture is silently omitted, allowing a partial avatar to render without a named layer error.",
+          "evaluatedAt": "2026-10-21T22:56:14.127Z",
+          "worker": "c55c6ae8-112e-4999-8eca-be47694565a3",
+          "reason": "replaced by af840dab-f17a-4b08-a0ff-fdf4f7cf349f"
         }
       ]
     },
