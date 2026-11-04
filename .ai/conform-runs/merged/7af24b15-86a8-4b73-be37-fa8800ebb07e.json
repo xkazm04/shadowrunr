@@ -1,0 +1,103 @@
+{
+ "schema": "conform-run/1",
+ "worker": "7af24b15-86a8-4b73-be37-fa8800ebb07e",
+ "subject": "agent-memory",
+ "evaluatedAt": "2026-11-04T03:33:24.137591+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "clips-pipeline",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-clips/src/lib.rs:8 The clip factory makes one stateless hook-rating call per run over a finished transcript, and its store (crates/shadowrunr-clips/src/store.rs) holds clip candidates and the owner's transitions, not anything an agent recalls; a case-insensitive search of crates/shadowrunr-clips and the whole crates/shadowrunr-daemon crate for belief, embedding, supersed and consolidat found no hits, so the earlier not-applicable verdict still holds.",
+   "techniques": [],
+   "absenceTerms": [
+    "belief",
+    "embedding",
+    "supersed",
+    "consolidat"
+   ]
+  },
+  {
+   "context": "daemon-show-prep-and-review",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-daemon/src/prep/planner.rs:31 The prep planner is fed the owner-authored character bible and the reconcile plan, not the agent's episode or fact store, and it is told not to lean on earlier streams (checks.rs rejects 'last time'/'remember when' callbacks). The review feedback log is an append-only operator record that only the tone inbox, in another context, reads. A case-insensitive search of the whole daemon crate for belief, embedding, supersed and consolidat found no hits; this context has no agent-memory pipeline to judge.",
+   "techniques": [],
+   "absenceTerms": [
+    "belief",
+    "embedding",
+    "supersed",
+    "consolidat"
+   ]
+  },
+  {
+   "context": "engine-llm-sessions",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-engine/src/config.rs:20 The engine only routes the sleep-cycle consolidator's model calls (tier, effort, timeout) like any other role, and its warm-session --resume is CLI transcript continuation, not agent memory. It holds no episodes, facts or recall path: a case-insensitive search of crates/shadowrunr-engine (src, tests and fixtures) for belief, embedding, episode, recall and supersed found no hits.",
+   "techniques": [],
+   "absenceTerms": [
+    "belief",
+    "embedding",
+    "episode",
+    "recall",
+    "supersed"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "agent-memory",
+   "context": "types-crate",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "agent-memory",
+   "context": "sim-runner-judging",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-04T03:33:24.137591+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "clips-pipeline",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T03:33:24.137591+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "daemon-show-prep-and-review",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-04T03:33:24.137591+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "engine-llm-sessions",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

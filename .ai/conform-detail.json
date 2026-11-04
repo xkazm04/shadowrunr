@@ -4477,26 +4477,30 @@
       "context": "engine-llm-sessions",
       "subject": "agent-memory",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T01:43:46.156Z",
-      "techniques": [],
-      "withdrawn": {
-        "worker": "c8db7dfc-003c-4c5b-b52b-b69ae730bbb7",
-        "state": "not-applicable",
-        "at": "2026-10-24T01:44:26.408899+00:00",
-        "reason": "reviewer (sonnet): The anchor at session.rs:560 shows a capped 200-turn history that is replayed into the model on the API fallback, and the warm session also carries `--resume` context. That is the precondition (session state fed back into a model's context), so it does not show the precondition absent. I also could "
-      }
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T03:33:24.137Z",
+      "worker": "7af24b15-86a8-4b73-be37-fa8800ebb07e",
+      "techniques": []
     },
     "12e5be0b-9811-4c5b-a7ec-8a57e204d016/agent-memory": {
       "context": "clips-pipeline",
       "subject": "agent-memory",
       "bundle": "software-engineering",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T01:43:46.156Z",
-      "worker": "c8db7dfc-003c-4c5b-b52b-b69ae730bbb7",
-      "techniques": []
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T03:33:24.137Z",
+      "worker": "7af24b15-86a8-4b73-be37-fa8800ebb07e",
+      "techniques": [],
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/lib.rs:8 The clip factory scores a finished transcript with a single stateless model call per run, plus signals that are measured mechanically. It keeps no agent memory: its store holds clip drafts and owner verdicts, not things an agent recalls. A search of crates/shadowrunr-clips and the daemon clips glue for belief, embedding and consolidat found nothing, and the clips crate has no memory or recall hits either.",
+          "evaluatedAt": "2026-10-24T01:43:46.156Z",
+          "worker": "c8db7dfc-003c-4c5b-b52b-b69ae730bbb7",
+          "reason": "replaced by 7af24b15-86a8-4b73-be37-fa8800ebb07e"
+        }
+      ]
     },
     "4738011e-a676-4dff-baef-d4f35c4f5ef1/voice-io": {
       "context": "console-review-page",
@@ -7384,6 +7388,16 @@
           "evidence": "packages/contract/src/door.test.ts:36 The ajv layer runs without useDefaults or coerceTypes, and tests show its rules failing. Only the width formats are skipped (validateFormats: false), and uint8 keeps an explicit maximum."
         }
       ]
+    },
+    "cba93863-0123-4867-be4e-770e6d0516b4/agent-memory": {
+      "context": "daemon-show-prep-and-review",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T03:33:24.137Z",
+      "worker": "7af24b15-86a8-4b73-be37-fa8800ebb07e",
+      "techniques": []
     }
   }
 }

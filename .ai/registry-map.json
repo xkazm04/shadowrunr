@@ -3637,8 +3637,12 @@
           "revision": 52,
           "changedAt": "2026-10-25",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "not-applicable",
+          "priorNotApplicable": 3,
+          "evidence": "crates/shadowrunr-engine/src/config.rs:20 The engine only routes the sleep-cycle consolidator's model calls (tier, effort, timeout) like any other role, and its warm-session --resume is CLI transcript continuation, not agent memory. It holds no episodes, facts or recall path: a case-insensitive search of crates/shadowrunr-engine (src, tests and fixtures) for belief, embedding, episode, recall and supersed found no hits.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:6c06fb6d8d6c900f",
+          "evaluatedRevision": 52
         },
         {
           "subject": "prompt-assembly",
@@ -6585,12 +6589,11 @@
           "changedAt": "2026-10-25",
           "confidence": "probable",
           "state": "not-applicable",
-          "evidence": "crates/shadowrunr-clips/src/lib.rs:8 The clip factory scores a finished transcript with a single stateless model call per run, plus signals that are measured mechanically. It keeps no agent memory: its store holds clip drafts and owner verdicts, not things an agent recalls. A search of crates/shadowrunr-clips and the daemon clips glue for belief, embedding and consolidat found nothing, and the clips crate has no memory or recall hits either.",
-          "evaluatedAt": "2026-10-24",
-          "evaluatedAgainst": "sha256-b2:4f054116d66a9495",
-          "evaluatedRevision": 51,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "crates/shadowrunr-clips/src/lib.rs:8 The clip factory makes one stateless hook-rating call per run over a finished transcript, and its store (crates/shadowrunr-clips/src/store.rs) holds clip candidates and the owner's transitions, not anything an agent recalls; a case-insensitive search of crates/shadowrunr-clips and the whole crates/shadowrunr-daemon crate for belief, embedding, supersed and consolidat found no hits, so the earlier not-applicable verdict still holds.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:6c06fb6d8d6c900f",
+          "evaluatedRevision": 52,
+          "revisionsBehind": 1
         },
         {
           "subject": "review-iteration-loops",
@@ -7134,8 +7137,12 @@
           "revision": 52,
           "changedAt": "2026-10-25",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "not-applicable",
+          "priorNotApplicable": 3,
+          "evidence": "crates/shadowrunr-daemon/src/prep/planner.rs:31 The prep planner is fed the owner-authored character bible and the reconcile plan, not the agent's episode or fact store, and it is told not to lean on earlier streams (checks.rs rejects 'last time'/'remember when' callbacks). The review feedback log is an append-only operator record that only the tone inbox, in another context, reads. A case-insensitive search of the whole daemon crate for belief, embedding, supersed and consolidat found no hits; this context has no agent-memory pipeline to judge.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:6c06fb6d8d6c900f",
+          "evaluatedRevision": 52
         },
         {
           "subject": "agent-cli-transport",
