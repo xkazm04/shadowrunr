@@ -3257,7 +3257,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "conformant",
+          "evidence": "packages/contract/scripts/check.mjs:35 The package's drift gate regenerates the schema and the whole generated tree from the Rust types and compares them as an inventory (changed, missing and extra files), so the gate checks its real target rather than a diff of committed text.",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:0d8378dd13155e59",
+          "evaluatedRevision": 54
         },
         {
           "subject": "mcp-tools",

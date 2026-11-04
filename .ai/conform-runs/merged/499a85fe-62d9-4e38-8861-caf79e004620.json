@@ -1,0 +1,140 @@
+{
+ "schema": "conform-run/1",
+ "worker": "499a85fe-62d9-4e38-8861-caf79e004620",
+ "subject": "quality-gates",
+ "evaluatedAt": "2026-11-04T03:18:55.473888+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "contract-package",
+   "subject": "quality-gates",
+   "bundle": "software-engineering",
+   "state": "conformant",
+   "evidence": "packages/contract/scripts/check.mjs:35 The package's drift gate regenerates the schema and the whole generated tree from the Rust types and compares them as an inventory (changed, missing and extra files), so the gate checks its real target rather than a diff of committed text.",
+   "techniques": [
+    {
+     "technique": "severity-by-construction",
+     "verdict": "conformant",
+     "evidence": "packages/contract/package.json:14 Lint is invoked with --max-warnings 0, so any warning-level finding exits non-zero: the severity holds by construction, not just by label."
+    },
+    {
+     "technique": "gate-liveness",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/codegen.test.mjs:75 The drift comparison is shown going red on seeded violations (a deleted file, a stray file, an edited file). Also, generate() reads the fresh schema and throws if it is missing, so a failed export cannot report green."
+    },
+    {
+     "technique": "refusal-names-a-reachable-remedy",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/check.mjs:44 The refusal names a remedy that ships with the package: package.json declares a \"generate\" script."
+    },
+    {
+     "technique": "match-the-resolved-artifact",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/check.mjs:26 The gate re-exports the schema from the Rust crate instead of string-matching the committed files, so it compares against the resolved source of truth."
+    },
+    {
+     "technique": "self-reported-gate-inputs",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/check.mjs:30 The gate rebuilds its comparison artifact into a temp dir instead of trusting the generated tree the author committed."
+    },
+    {
+     "technique": "false-positive-economics",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/check.mjs:20 Line endings are normalised so a Windows checkout of correct content is not reported as drift (codegen.test.mjs pins this behaviour too)."
+    },
+    {
+     "technique": "blocking-by-input-determinism",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/codegen.test.mjs:51 The verdict depends only on the tree (Rust types plus committed output), and a test asserts the generator is deterministic, so blocking on it is legitimate."
+    },
+    {
+     "technique": "unmeasurable-criteria",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/check.mjs:21 An unreadable committed file becomes a sentinel that never equals real content, so it fails closed as drift. The fresh side cannot hit the same sentinel because generate() throws first."
+    },
+    {
+     "technique": "gate-laddering",
+     "verdict": "conformant",
+     "evidence": "packages/contract/package.json:11 One script serves as both the local command and the CI step (repo-level ci.yml runs `pnpm -C packages/contract check`), so the remote run confirms the same check."
+    },
+    {
+     "technique": "chokepoint-tag-registry",
+     "verdict": "conformant",
+     "evidence": "packages/contract/src/door.test.ts:338 The loader table is tested for exact set-equality against RPC_METHODS, a two-way check between the registry and the door. The negative-space half (JSON.parse confined to the door) is in the root eslint config, outside this context."
+    },
+    {
+     "technique": "prose-rule-drift",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/codegen.mjs:168 The prose bound on the error taxonomy is mechanised as a generator refusal, and door.test.ts asserts it again."
+    },
+    {
+     "technique": "decidable-in-a-window",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/check.mjs:31 \"Committed contract equals the Rust types\" cannot be decided from a window of text. The gate correctly leaves the source layer and regenerates instead of pattern-matching."
+    },
+    {
+     "technique": "renameable-detector-keys",
+     "verdict": "conformant",
+     "evidence": "packages/contract/scripts/check.mjs:40 Both directions of the file inventory are checked, so renaming or moving a generated file shows up as missing plus extra. The author cannot rename their way past the gate."
+    },
+    {
+     "technique": "vacuous-by-evaluation",
+     "verdict": "conformant",
+     "evidence": "packages/contract/src/door.test.ts:36 The ajv layer runs without useDefaults or coerceTypes, and tests show its rules failing. Only the width formats are skipped (validateFormats: false), and uint8 keeps an explicit maximum."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "quality-gates",
+   "context": "stage-voice-client",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "quality-gates",
+   "context": "stage-kit-overlays",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "quality-gates",
+   "context": "stage-avatar-renderer",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "quality-gates",
+   "context": "character-package",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-04T03:18:55.473888+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "quality-gates"
+   ],
+   "techniques": [
+    "blocking-by-input-determinism",
+    "chokepoint-tag-registry",
+    "decidable-in-a-window",
+    "false-positive-economics",
+    "gate-laddering",
+    "gate-liveness",
+    "match-the-resolved-artifact",
+    "prose-rule-drift",
+    "refusal-names-a-reachable-remedy",
+    "renameable-detector-keys",
+    "self-reported-gate-inputs",
+    "severity-by-construction",
+    "unmeasurable-criteria",
+    "vacuous-by-evaluation"
+   ],
+   "deviations": 0,
+   "context": "contract-package",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
