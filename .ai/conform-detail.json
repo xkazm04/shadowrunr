@@ -4492,35 +4492,48 @@
       "subject": "self-describing-model-packages",
       "bundle": "software-engineering",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T03:07:51.456Z",
-      "worker": "12305c6c-1bc2-4c4e-9a73-b1a982e53c4e",
-      "techniques": []
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T00:49:10.528Z",
+      "worker": "b68e12a0-dbfe-44a2-987c-56aba3c080e5",
+      "techniques": [],
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "packages/contract/package.json:17 The package's only runtime dependency is a JSON-Schema validator for the daemon wire format; a search of packages/contract for onnx, safetensors, torchscript, checkpoint and tensor found nothing, so no trained-model package is authored, exported or validated here.",
+          "evaluatedAt": "2026-10-24T03:07:51.456Z",
+          "worker": "12305c6c-1bc2-4c4e-9a73-b1a982e53c4e",
+          "reason": "replaced by b68e12a0-dbfe-44a2-987c-56aba3c080e5"
+        }
+      ]
     },
     "fc878bef-2e53-416c-83f0-0b62db46a8b4/self-describing-model-packages": {
       "context": "stage-kit-scene-engine",
       "subject": "self-describing-model-packages",
       "bundle": "software-engineering",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T03:07:51.456Z",
-      "worker": "12305c6c-1bc2-4c4e-9a73-b1a982e53c4e",
-      "techniques": []
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T00:49:10.528Z",
+      "worker": "b68e12a0-dbfe-44a2-987c-56aba3c080e5",
+      "techniques": [],
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "packages/stage-kit/package.json:18 Stage-kit depends only on the workspace contract and tokens packages plus React, and a search of packages/stage-kit for onnx, safetensors, torchscript, checkpoint and tensor found nothing; its 'scene model' is a UI state model, not a trained model package.",
+          "evaluatedAt": "2026-10-24T03:07:51.456Z",
+          "worker": "12305c6c-1bc2-4c4e-9a73-b1a982e53c4e",
+          "reason": "replaced by b68e12a0-dbfe-44a2-987c-56aba3c080e5"
+        }
+      ]
     },
     "df38dcc3-a71c-4397-abb5-4fe4681cfccb/self-describing-model-packages": {
       "context": "tokens-package",
       "subject": "self-describing-model-packages",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T03:07:51.456Z",
-      "techniques": [],
-      "withdrawn": {
-        "worker": "12305c6c-1bc2-4c4e-9a73-b1a982e53c4e",
-        "state": "not-applicable",
-        "at": "2026-10-24T03:08:13.279028+00:00",
-        "reason": "reviewer (sonnet): The anchor packages/tokens/package.json:12 is the \"generate\" script line, not a dependency declaration. It does not show the precondition is absent, so the anchor is incidental."
-      }
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T00:49:10.528Z",
+      "worker": "b68e12a0-dbfe-44a2-987c-56aba3c080e5",
+      "techniques": []
     },
     "9ae45cd9-d46e-4bd1-a018-b134dcd33f03/sql-console": {
       "context": "console-quality-gates",
