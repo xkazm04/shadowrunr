@@ -2559,12 +2559,11 @@
           "changedAt": "2026-10-23",
           "confidence": "strong",
           "state": "not-applicable",
-          "evidence": "apps/console/src/shell/Shell.tsx:117 This shell renders document-local navigation and surfaces, and searches found no native input-synthesis, topmost-window, or accessibility-query APIs in its files.",
-          "evaluatedAt": "2026-10-19",
-          "evaluatedAgainst": "sha256-b2:0ab230f2977430e7",
-          "evaluatedRevision": 4,
-          "revisionsBehind": 1,
-          "stale": true
+          "evidence": "apps/console/package.json:24 The console's only native runtime dependency is the URL opener, and the shell and router run entirely in the document (hash routing, a window keydown keymap); searching shell/, router/ and package.json found no global-shortcut, always-on-top, cursor-ignore, input-synthesis or stream-ownership code, so this context holds none of the capabilities the subject is about (it falls under app-shell instead).",
+          "evaluatedAt": "2026-11-04",
+          "evaluatedAgainst": "sha256-b2:9034ad02704d9c88",
+          "evaluatedRevision": 5,
+          "revisionsBehind": 1
         },
         {
           "subject": "repository-landing-document",

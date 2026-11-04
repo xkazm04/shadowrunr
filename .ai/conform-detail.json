@@ -1225,54 +1225,74 @@
       "subject": "native-shell-integration",
       "bundle": "software-engineering",
       "state": "not-applicable",
-      "evaluatedAt": "2026-10-19",
-      "evaluatedTs": "2026-10-19T22:34:14.818Z",
-      "worker": "7f623404-b181-4f8f-87fd-b592e1ccbf86",
+      "evaluatedAt": "2026-11-04",
+      "evaluatedTs": "2026-11-04T03:43:40.961Z",
+      "worker": "d908d07a-500d-4807-ae9c-11536fbfd578",
       "techniques": [
         {
-          "technique": "capability-presence-contract",
+          "technique": "host-forwarded-key-contract",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/router/store.ts:80 The router changes document location hashes; it exposes no platform-dependent native capability."
+          "evidence": "apps/console/src/shell/Shell.tsx:83 Keys come from the document's own keydown on window; no native wrapper forwards hardware or remote keys into the page."
         },
         {
           "technique": "layout-resolved-input-synthesis",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/shell/keyActions.ts:33 Keyboard actions produce internal navigation effects rather than synthesized input into another application."
+          "evidence": "apps/console/src/shell/keyActions.ts:7 Key chords are read inside the console's own document; nothing synthesizes input into a foreign application."
         },
         {
           "technique": "native-owned-stream",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/shell/Chrome.tsx:12 Chrome consumes connection state; this context does not create or own the network stream."
+          "evidence": "apps/console/src/router/store.ts:61 The router subscribes only to in-document hashchange; the context owns no long-lived network stream."
+        },
+        {
+          "technique": "capability-presence-contract",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/package.json:24 No shell or router feature depends on a capability that some host lacks."
         },
         {
           "technique": "native-side-owns-the-target-set",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/router/react.tsx:51 Route links pass routes and DOM geometry, not filesystem targets or shell commands."
+          "evidence": "apps/console/src/router/react.tsx:51 Route links pass routes and DOM geometry, not filesystem targets or shell commands.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "non-stealing-overlay",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/shell/Intro.tsx:9 The intro is an interactive DOM element inside the console, not a native surface over another application."
+          "evidence": "apps/console/src/shell/Intro.tsx:9 The intro is an interactive DOM element inside the console, not a native surface over another application.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "observer-perturbation",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/shell/Wall.tsx:87 Pointer inspection resolves the console's own poster elements, not foreign application structure."
+          "evidence": "apps/console/src/shell/Wall.tsx:87 Pointer inspection resolves the console's own poster elements, not foreign application structure.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "permission-gate-vector",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/shell/keyActions.ts:25 Keyboard mode depends on intro and route state; no separately granted host capabilities gate these actions."
+          "evidence": "apps/console/src/shell/keyActions.ts:25 Keyboard mode depends on intro and route state; no separately granted host capabilities gate these actions.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "query-transparent-overlay",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/shell/Spread.tsx:34 The spread measures its own DOM bounds for animation and performs no query through a native overlay."
+          "evidence": "apps/console/src/shell/Spread.tsx:34 The spread measures its own DOM bounds for animation and performs no query through a native overlay.",
+          "carriedFrom": "2026-10-19"
         },
         {
           "technique": "unexported-capability-ladder",
           "verdict": "not-applicable",
-          "evidence": "apps/console/src/shell/useViewport.ts:39 Viewport integration uses ordinary document APIs; no private native entry-point resolution was found."
+          "evidence": "apps/console/src/shell/useViewport.ts:39 Viewport integration uses ordinary document APIs; no private native entry-point resolution was found.",
+          "carriedFrom": "2026-10-19"
+        }
+      ],
+      "superseded": [
+        {
+          "state": "not-applicable",
+          "evidence": "apps/console/src/shell/Shell.tsx:117 This shell renders document-local navigation and surfaces, and searches found no native input-synthesis, topmost-window, or accessibility-query APIs in its files.",
+          "evaluatedAt": "2026-10-19T22:34:14.818Z",
+          "worker": "7f623404-b181-4f8f-87fd-b592e1ccbf86",
+          "reason": "replaced by d908d07a-500d-4807-ae9c-11536fbfd578"
         }
       ]
     },
