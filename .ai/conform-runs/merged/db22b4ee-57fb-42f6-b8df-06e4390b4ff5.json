@@ -1,0 +1,95 @@
+{
+ "schema": "conform-run/1",
+ "worker": "db22b4ee-57fb-42f6-b8df-06e4390b4ff5",
+ "subject": "on-stream-overlay-delivery",
+ "evaluatedAt": "2026-11-05T23:15:20.826903+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-simulator-page",
+   "subject": "on-stream-overlay-delivery",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:97 This page is a private operator view: it reads raw run transcripts and verdicts over the daemon RPC and is never served as a browser source. A search of its directory for EventSource, browser source/browserSource, text/event-stream, Content-Security-Policy, obs-websocket and snapshot found no hits, so the precondition for overlay delivery does not hold here.",
+   "techniques": [
+    {
+     "technique": "aggregate-only-payloads",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:97 The technique's 'when not to use it' clause excludes a private operator console that needs individual records. This page reads a full transcript and is not an overlay feed."
+    },
+    {
+     "technique": "full-replacement-snapshots",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/data.ts:32 The data is paged RPC reads for an operator grid. There is no overlay feed of deltas or snapshots."
+    }
+   ],
+   "absenceTerms": [
+    "EventSource",
+    "browserSource",
+    "text/event-stream",
+    "Content-Security-Policy",
+    "obs-websocket"
+   ]
+  },
+  {
+   "context": "console-segments-page",
+   "subject": "on-stream-overlay-delivery",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/segments/Ranks.tsx:101 This page's only vote surface is a local, illustrative calculator that sends nothing. The page reads segment and rank tables over operator RPC, and a search of its directory for EventSource, browser source/browserSource, text/event-stream, Content-Security-Policy, obs-websocket and snapshot found no hits. No overlay page or feed exists here.",
+   "techniques": [
+    {
+     "technique": "aggregate-only-payloads",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/Ranks.tsx:101 The vote tally is computed in the operator console for illustration only and is never sent to a broadcast page."
+    },
+    {
+     "technique": "no-source-url-without-a-valid-read",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/segments/hooks.ts:7 The page only reads compiled-in tables. It hands out no browser-source address."
+    }
+   ],
+   "absenceTerms": [
+    "EventSource",
+    "browserSource",
+    "text/event-stream",
+    "Content-Security-Policy",
+    "obs-websocket"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-05T23:15:20.826903+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "on-stream-overlay-delivery"
+   ],
+   "techniques": [
+    "aggregate-only-payloads",
+    "full-replacement-snapshots"
+   ],
+   "deviations": 0,
+   "context": "console-simulator-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-05T23:15:20.826903+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "on-stream-overlay-delivery"
+   ],
+   "techniques": [
+    "aggregate-only-payloads",
+    "no-source-url-without-a-valid-read"
+   ],
+   "deviations": 0,
+   "context": "console-segments-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

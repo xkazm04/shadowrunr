@@ -2522,7 +2522,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/segments/Ranks.tsx:101 This page's only vote surface is a local, illustrative calculator that sends nothing. The page reads segment and rank tables over operator RPC, and a search of its directory for EventSource, browser source/browserSource, text/event-stream, Content-Security-Policy, obs-websocket and snapshot found no hits. No overlay page or feed exists here.",
+          "evaluatedAt": "2026-11-05",
+          "evaluatedAgainst": "sha256-b2:6650d0214c15ff60",
+          "evaluatedRevision": 2
         },
         {
           "subject": "docs-sync",
@@ -2927,7 +2931,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:97 This page is a private operator view: it reads raw run transcripts and verdicts over the daemon RPC and is never served as a browser source. A search of its directory for EventSource, browser source/browserSource, text/event-stream, Content-Security-Policy, obs-websocket and snapshot found no hits, so the precondition for overlay delivery does not hold here.",
+          "evaluatedAt": "2026-11-05",
+          "evaluatedAgainst": "sha256-b2:6650d0214c15ff60",
+          "evaluatedRevision": 2
         },
         {
           "subject": "document-text-extraction",
