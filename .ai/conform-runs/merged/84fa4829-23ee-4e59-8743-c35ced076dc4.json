@@ -1,0 +1,120 @@
+{
+ "schema": "conform-run/1",
+ "worker": "84fa4829-23ee-4e59-8743-c35ced076dc4",
+ "subject": "eval-harness",
+ "evaluatedAt": "2026-11-05T22:00:15.490713+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "sim-runner-judging",
+   "subject": "eval-harness",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-sim/src/judge.rs:404 The only guard on judge independence is that the judge tier differs from the core tier, but ModelTier is Haiku/Sonnet/Opus, so the judge is always from the same family as the candidate. There is also no anchor-set re-score or repeatability lane to measure judge drift, which judge-stability requires.",
+   "techniques": [
+    {
+     "technique": "judge-stability",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-sim/src/judge.rs:404 Only a different tier of the same family is enforced, which the standard calls a conflict of interest. The pin is a tier alias (instrument.rs:150 `judge/<tier>`); the resolved model is only stamped on the ledger (ledger.rs:30). A search for anchor-set, drift and repeatability checks found nothing."
+    },
+    {
+     "technique": "metric-role-contract",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/decision.rs:4 Hard rules and coverage are declared thresholds, quality is the one optimized metric, and cost only breaks ties."
+    },
+    {
+     "technique": "resolution-precondition",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/decision.rs:13 Cells within the per-run noise of the best are reported as a tie, not ordered."
+    },
+    {
+     "technique": "outcome-conditioned-cost",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/decision.rs:14 Cost is divided by usable runs (judged runs with no hard fail), not by all attempts."
+    },
+    {
+     "technique": "assertion-vs-judgment",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/judge.rs:4 Mechanical checks of provocation, line and quote surround the judge, and a quote that does not verify becomes not_evaluable."
+    },
+    {
+     "technique": "probe-the-decision-not-the-artifact",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/judge.rs:5 Whether a rule was provoked is decided from recorded stimulus events, not inferred from the judge's prose."
+    },
+    {
+     "technique": "scenario-design",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/situations.rs:4 Situations are a versioned bank, scheduled and recorded per run; the bank hashes into the instrument."
+    },
+    {
+     "technique": "comparison-modes",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/summary.rs:2 A matrix cell's identity includes its instrument hash, so results from different instruments are never merged."
+    },
+    {
+     "technique": "measurement-revision",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/instrument.rs:40 A change to the logic bumps the version, which joins the hash and starts a new series instead of splicing it onto the old one."
+    },
+    {
+     "technique": "selection-over-noise",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/tournament.rs:13 Only engine failures are retried; a content void is kept rather than redrawn for a better result."
+    },
+    {
+     "technique": "eval-economics",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/tournament.rs:1 Fan-out cap, a resumable per-run record, quota pauses, judge-window cache (judge.rs:26) and injectable seams for tests (lib.rs:77)."
+    },
+    {
+     "technique": "failure-signatures-beside-the-pass-rate",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/summary.rs:52 Each rule tally keeps the evidence refs of its failures beside the counts, so the failures can be read and not just counted."
+    },
+    {
+     "technique": "monitor-inside-the-loop",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/judge.rs:802 The judge treats candidate output as fenced untrusted data that has no authority over the verdict."
+    }
+   ],
+   "registryProposal": "judge-stability treats a different tier within the same family as non-independent. Harnesses whose engine roster is a single-vendor tier enum can only satisfy 'judge differs' at the tier level. The technique could name the 'different tier, same family' compromise explicitly and say what extra evidence (cross-family spot checks) makes it acceptable."
+  }
+ ],
+ "declined": [
+  {
+   "subject": "eval-harness",
+   "context": "console-simulator-page",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-05T22:00:15.490713+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "eval-harness"
+   ],
+   "techniques": [
+    "assertion-vs-judgment",
+    "comparison-modes",
+    "eval-economics",
+    "failure-signatures-beside-the-pass-rate",
+    "judge-stability",
+    "measurement-revision",
+    "metric-role-contract",
+    "monitor-inside-the-loop",
+    "outcome-conditioned-cost",
+    "probe-the-decision-not-the-artifact",
+    "resolution-precondition",
+    "scenario-design",
+    "selection-over-noise"
+   ],
+   "deviations": 1,
+   "context": "sim-runner-judging",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

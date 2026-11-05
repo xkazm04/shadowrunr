@@ -4172,7 +4172,11 @@
           "revision": 37,
           "changedAt": "2026-09-29",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/judge.rs:404 The only guard on judge independence is that the judge tier differs from the core tier, but ModelTier is Haiku/Sonnet/Opus, so the judge is always from the same family as the candidate. There is also no anchor-set re-score or repeatability lane to measure judge drift, which judge-stability requires.",
+          "evaluatedAt": "2026-11-05",
+          "evaluatedAgainst": "sha256-b2:7ccead00b7f92aba",
+          "evaluatedRevision": 37
         },
         {
           "subject": "agent-memory",
