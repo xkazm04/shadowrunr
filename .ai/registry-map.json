@@ -3462,7 +3462,11 @@
           "revision": 1,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/events.rs:13 The /events wire frame (`{seq, run_id, event}`) is deliberately identical for a run in flight and a run replayed from disk (events.rs:302 `otherwise replay from disk`), and a simulated sim.start run is published under the name \"live\". No consumer can derive live / replayed / simulated from state, which is why the stage labels by URL mode.",
+          "evaluatedAt": "2026-11-05",
+          "evaluatedAgainst": "sha256-b2:e1845248677cbb6c",
+          "evaluatedRevision": 1
         },
         {
           "subject": "agent-cli-transport",
@@ -4316,7 +4320,11 @@
           "revision": 1,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/App.tsx:386 The on-air source pill (stage-kit TopBar, drawn in the OBS broadcast view) is chosen from the URL mode `const live = params.run !== null` (App.tsx:69), not from state: the daemon replays a finished run from disk on the same `?run=<id>` subscribe (events.rs:302), so a stored replay of a simulated run (viewers with platform \"sim\") is stamped LIVE, and there is no simulated or unknown word for it.",
+          "evaluatedAt": "2026-11-05",
+          "evaluatedAgainst": "sha256-b2:e1845248677cbb6c",
+          "evaluatedRevision": 1
         },
         {
           "subject": "quality-gates",

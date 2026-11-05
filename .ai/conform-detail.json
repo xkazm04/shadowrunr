@@ -7852,6 +7852,54 @@
       "evaluatedTs": "2026-11-04T22:19:12.129Z",
       "worker": "b45571fd-4693-482d-8724-421f348f2481",
       "techniques": []
+    },
+    "e0e277e4-0b4e-4d04-8c33-29f0d59d2a67/live-test-consent-and-evidence": {
+      "context": "stage-app",
+      "subject": "live-test-consent-and-evidence",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-05",
+      "evaluatedTs": "2026-11-05T22:15:51.906Z",
+      "worker": "b7a995fb-f85e-46e5-8dad-18734e9d2b9d",
+      "techniques": [
+        {
+          "technique": "provenance-labels-derived-from-state",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/App.tsx:386 The label comes from the session mode (params.run, App.tsx:69 `const live = params.run !== null;`). There are only two hard-coded words, with no 'simulated' and no 'unknown'. Stage.tsx/TopBar take the label as a free `sourceTag: string` the caller passes in. That is exactly the 'a mode is not state' and 'no caller passes a label in' failure."
+        },
+        {
+          "technique": "live-tests-behind-an-exact-flag",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/source.ts:8 The stage's only network peer is the team's own local daemon WebSocket, and connectDaemon takes an injectable socket for tests. No stage test reaches a streaming platform, and the technique excludes calls to the team's own services."
+        },
+        {
+          "technique": "owned-test-accounts-only",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/scripts/make-demo.mjs:45 Every viewer in the stage fixtures is generated with platform \"sim\". No test here acts on a real account or channel."
+        }
+      ]
+    },
+    "1f8d2348-1a2f-4c72-8dc0-e281a35b78d4/live-test-consent-and-evidence": {
+      "context": "daemon-core-rpc",
+      "subject": "live-test-consent-and-evidence",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-05",
+      "evaluatedTs": "2026-11-05T22:15:51.906Z",
+      "worker": "b7a995fb-f85e-46e5-8dad-18734e9d2b9d",
+      "techniques": [
+        {
+          "technique": "provenance-labels-derived-from-state",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-daemon/src/events.rs:13 The state that would decide the label (in-flight LiveRun vs disk replay, sim source) never reaches the frame as a typed field. The technique holds that provenance belongs as a typed field on the state; without it every consumer has to infer it from its own mode."
+        },
+        {
+          "technique": "live-tests-behind-an-exact-flag",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/e2e/mod.rs:1 This context's e2e and CLI tests are hermetic (scripted engine on loopback). None of them calls twitch.connect or any platform endpoint, so there is no live test to gate."
+        }
+      ],
+      "registryProposal": "The subject frames 'live' as observed on the real streaming platform, but repos like this one use 'live' for an in-flight local simulation (`subscribe: \"live\"`, `Live sim.start runs`). The provenance-labels technique could add a rule that internal transport names ('live' = in flight) must not leak into viewer-facing labels without the platform/simulated axis being derived separately."
     }
   }
 }

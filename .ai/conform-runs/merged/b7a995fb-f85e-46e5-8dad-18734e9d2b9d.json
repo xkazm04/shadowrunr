@@ -1,0 +1,88 @@
+{
+ "schema": "conform-run/1",
+ "worker": "b7a995fb-f85e-46e5-8dad-18734e9d2b9d",
+ "subject": "live-test-consent-and-evidence",
+ "evaluatedAt": "2026-11-05T22:15:51.906998+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-app",
+   "subject": "live-test-consent-and-evidence",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "apps/stage/src/App.tsx:386 The on-air source pill (stage-kit TopBar, drawn in the OBS broadcast view) is chosen from the URL mode `const live = params.run !== null` (App.tsx:69), not from state: the daemon replays a finished run from disk on the same `?run=<id>` subscribe (events.rs:302), so a stored replay of a simulated run (viewers with platform \"sim\") is stamped LIVE, and there is no simulated or unknown word for it.",
+   "techniques": [
+    {
+     "technique": "provenance-labels-derived-from-state",
+     "verdict": "deviation",
+     "evidence": "apps/stage/src/App.tsx:386 The label comes from the session mode (params.run, App.tsx:69 `const live = params.run !== null;`). There are only two hard-coded words, with no 'simulated' and no 'unknown'. Stage.tsx/TopBar take the label as a free `sourceTag: string` the caller passes in. That is exactly the 'a mode is not state' and 'no caller passes a label in' failure."
+    },
+    {
+     "technique": "live-tests-behind-an-exact-flag",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/src/source.ts:8 The stage's only network peer is the team's own local daemon WebSocket, and connectDaemon takes an injectable socket for tests. No stage test reaches a streaming platform, and the technique excludes calls to the team's own services."
+    },
+    {
+     "technique": "owned-test-accounts-only",
+     "verdict": "not-applicable",
+     "evidence": "apps/stage/scripts/make-demo.mjs:45 Every viewer in the stage fixtures is generated with platform \"sim\". No test here acts on a real account or channel."
+    }
+   ]
+  },
+  {
+   "context": "daemon-core-rpc",
+   "subject": "live-test-consent-and-evidence",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-daemon/src/events.rs:13 The /events wire frame (`{seq, run_id, event}`) is deliberately identical for a run in flight and a run replayed from disk (events.rs:302 `otherwise replay from disk`), and a simulated sim.start run is published under the name \"live\". No consumer can derive live / replayed / simulated from state, which is why the stage labels by URL mode.",
+   "techniques": [
+    {
+     "technique": "provenance-labels-derived-from-state",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/events.rs:13 The state that would decide the label (in-flight LiveRun vs disk replay, sim source) never reaches the frame as a typed field. The technique holds that provenance belongs as a typed field on the state; without it every consumer has to infer it from its own mode."
+    },
+    {
+     "technique": "live-tests-behind-an-exact-flag",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/e2e/mod.rs:1 This context's e2e and CLI tests are hermetic (scripted engine on loopback). None of them calls twitch.connect or any platform endpoint, so there is no live test to gate."
+    }
+   ],
+   "registryProposal": "The subject frames 'live' as observed on the real streaming platform, but repos like this one use 'live' for an in-flight local simulation (`subscribe: \"live\"`, `Live sim.start runs`). The provenance-labels technique could add a rule that internal transport names ('live' = in flight) must not leak into viewer-facing labels without the platform/simulated axis being derived separately."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-05T22:15:51.906998+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "live-test-consent-and-evidence"
+   ],
+   "techniques": [
+    "live-tests-behind-an-exact-flag",
+    "owned-test-accounts-only",
+    "provenance-labels-derived-from-state"
+   ],
+   "deviations": 1,
+   "context": "stage-app",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-05T22:15:51.906998+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "live-test-consent-and-evidence"
+   ],
+   "techniques": [
+    "live-tests-behind-an-exact-flag",
+    "provenance-labels-derived-from-state"
+   ],
+   "deviations": 1,
+   "context": "daemon-core-rpc",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
