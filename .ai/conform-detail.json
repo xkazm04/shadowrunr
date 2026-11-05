@@ -7822,16 +7822,11 @@
       "context": "reconcile-engine",
       "subject": "voice-io",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-11-04",
-      "evaluatedTs": "2026-11-04T22:19:12.129Z",
-      "techniques": [],
-      "withdrawn": {
-        "worker": "b45571fd-4693-482d-8724-421f348f2481",
-        "state": "not-applicable",
-        "at": "2026-11-04T22:19:41.988269+00:00",
-        "reason": "reviewer (sonnet): The anchor Cargo.toml:3 is only the crate description ('between-streams analysis, plan options and the Lord's directives'), which doesn't show that audio or speech is absent. My grep of the crate did find no audio, speech, TTS, microphone or viseme terms, but the cited line is incidental, so the pai"
-      }
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-05",
+      "evaluatedTs": "2026-11-05T23:40:34.622Z",
+      "worker": "662704ef-08eb-458d-b2ca-d915563538b3",
+      "techniques": []
     },
     "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/voice-io": {
       "context": "console-reconcile-page",
@@ -7966,6 +7961,47 @@
           "technique": "no-source-url-without-a-valid-read",
           "verdict": "not-applicable",
           "evidence": "apps/console/src/pages/segments/hooks.ts:7 The page only reads compiled-in tables. It hands out no browser-source address."
+        }
+      ]
+    },
+    "20f1e644-e83b-481d-864f-cb15b9124d7e/voice-io": {
+      "context": "console-characters-page",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-05",
+      "evaluatedTs": "2026-11-05T23:40:34.622Z",
+      "worker": "662704ef-08eb-458d-b2ca-d915563538b3",
+      "techniques": [
+        {
+          "technique": "tts-pipeline",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/characters/VoiceLab.tsx:132 No unmount cleanup anywhere (no useEffect / stopPcm on unmount in VoiceLab, VoiceTab or voiceAudio). The technique names 'audio that keeps playing after its surface is gone' as the defining leak."
+        },
+        {
+          "technique": "bounded-playback-wait",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/characters/voiceAudio.ts:45 playPcm resolves only on onended. c.resume() is not awaited and there is no deadline derived from samples/sampleRate, yet the bench queue awaits it before starting the next line. A suspended context or a dead device leaves 'Playing…' stuck until a human presses Stop."
+        },
+        {
+          "technique": "engine-abstraction",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/characters/names.ts:48 Hand-maintained second engine list in a display map. The form also branches on engine identity (VoiceTab.tsx:119 provider === \"kokoro\"). The Record<VoiceProvider,…> name map is compile-checked but this array is not, so a new provider would be silently missing from the picker."
+        },
+        {
+          "technique": "voice-ux-integration",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/characters/voiceAudio.ts:33 No audio output gives one honest sentence (shown as audioError), never a dead button. A single `current` source means one line plays at a time."
+        },
+        {
+          "technique": "speech-timing-timeline",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/characters/VoiceLab.tsx:117 The preview reports whether the render carried a timeline or the face falls back to amplitude, so the timing source is recorded rather than hidden."
+        },
+        {
+          "technique": "stt-pipeline",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/voiceAudio.ts:1 Output-only surface. No capture (no getUserMedia) here or anywhere in the product's source."
         }
       ]
     }

@@ -1506,8 +1506,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "deviation",
+          "priorNotApplicable": 5,
+          "evidence": "apps/console/src/pages/characters/VoiceLab.tsx:132 The bench's Play all loop only exits when Stop or a new play bumps the run counter, and voiceAudio's AudioContext lives at module level, so leaving the Voice tab mid-bench leaves the current line sounding and the loop starts the next lines after the surface is gone.",
+          "evaluatedAt": "2026-11-05",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "on-stream-overlay-delivery",
@@ -3892,7 +3896,11 @@
           "changedAt": "2026-10-18",
           "confidence": "probable",
           "priorNotApplicable": 5,
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-reconcile/Cargo.toml:3 Reconcile is a between-streams text analysis crate: its 'synthesis' is an LLM synthesis prompt and its 'transcripts' are text sim transcripts. Substring searches of the whole crate for microphone, tts, viseme, audio, speech and playback found zero files; the only 'voice' hits are prose about a character's or patron's voice.",
+          "evaluatedAt": "2026-11-05",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "conformance-checking",
