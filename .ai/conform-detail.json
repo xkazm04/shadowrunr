@@ -7900,6 +7900,32 @@
         }
       ],
       "registryProposal": "The subject frames 'live' as observed on the real streaming platform, but repos like this one use 'live' for an in-flight local simulation (`subscribe: \"live\"`, `Live sim.start runs`). The provenance-labels technique could add a rule that internal transport names ('live' = in flight) must not leak into viewer-facing labels without the platform/simulated axis being derived separately."
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/model-composed-workspace": {
+      "context": "console-onair-page",
+      "subject": "model-composed-workspace",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-05",
+      "evaluatedTs": "2026-11-05T22:35:48.947Z",
+      "worker": "bd01c348-ca7b-4a56-be6d-a973267bd40e",
+      "techniques": [
+        {
+          "technique": "reversible-screen-ops",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/beats.ts:5 The model's closed op vocabulary drives the audience broadcast stage. This page only lists those ops as rundown beats after the fact and does not apply them to the operator's screen."
+        },
+        {
+          "technique": "composition-region",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:2 The screen is a fixed replica of the broadcast whose hotspots are route links. There is no model-owned region inside the console's layout."
+        },
+        {
+          "technique": "arrangement-memory",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/player.ts:1 Playback is a deterministic transcript replay. There is no recomposition per turn that could discard what a user arranged."
+        }
+      ]
     }
   }
 }

@@ -1936,7 +1936,11 @@
           "revision": 3,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Layer1.tsx:3 On Air is an operator monitor that replays or follows a recorded broadcast transcript through stage-kit. No assistant composes views into the operator's own workspace from a conversation, so the subject's precondition does not hold; a search of the onair directory found no hits for workspace, pinned, arrangement or recompos.",
+          "evaluatedAt": "2026-11-05",
+          "evaluatedAgainst": "sha256-b2:7c6aa8f4a4d53a56",
+          "evaluatedRevision": 3
         },
         {
           "subject": "live-system-demo-film",
