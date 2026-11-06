@@ -1,0 +1,64 @@
+{
+ "schema": "conform-run/1",
+ "worker": "15424b05-133d-46c1-b8fc-e94ad5bef139",
+ "subject": "voice-io",
+ "evaluatedAt": "2026-11-06T01:36:08.646354+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-simulator-page",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:36 The Simulator page shows tournament grids, runs and judge verdicts over text transcripts (event logs, not speech recognition). A search of apps/console/src/pages/simulator found no microphone capture, audio context, speech synthesis, TTS or viseme code; the only voice word is the poster note 'v0.2 \u00b7 voiced and recorded'.",
+   "techniques": [
+    {
+     "technique": "stt-pipeline",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:35 Here 'transcript' means the simulated stream's text log, not a speech transcription."
+    }
+   ],
+   "absenceTerms": [
+    "getUserMedia",
+    "AudioContext",
+    "speechSynthesis",
+    "viseme",
+    "tts"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "voice-io",
+   "context": "stage-avatar-renderer",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "voice-io",
+   "context": "console-onair-page",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "voice-io",
+   "context": "character-package",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-06T01:36:08.646354+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "stt-pipeline"
+   ],
+   "deviations": 0,
+   "context": "console-simulator-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

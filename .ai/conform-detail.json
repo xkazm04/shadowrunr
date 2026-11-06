@@ -8317,6 +8317,22 @@
           "evidence": "apps/console/src/pages/simulator/data.ts:5 UI reading daemon data. No model call from this page."
         }
       ]
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/voice-io": {
+      "context": "console-simulator-page",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T01:36:08.646Z",
+      "worker": "15424b05-133d-46c1-b8fc-e94ad5bef139",
+      "techniques": [
+        {
+          "technique": "stt-pipeline",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:35 Here 'transcript' means the simulated stream's text log, not a speech transcription."
+        }
+      ]
     }
   }
 }

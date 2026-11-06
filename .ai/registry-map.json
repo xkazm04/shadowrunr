@@ -2897,8 +2897,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "not-applicable",
+          "priorNotApplicable": 5,
+          "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:36 The Simulator page shows tournament grids, runs and judge verdicts over text transcripts (event logs, not speech recognition). A search of apps/console/src/pages/simulator found no microphone capture, audio context, speech synthesis, TTS or viseme code; the only voice word is the poster note 'v0.2 · voiced and recorded'.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "verifiable-giveaway-draws",
