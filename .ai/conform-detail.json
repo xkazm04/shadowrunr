@@ -8528,6 +8528,37 @@
         }
       ],
       "registryProposal": "The golden path scopes itself to a human streamer ('not a generated host'), but every mechanic it covers also shows up in this AI-hosted show: chat ballots, one per viewer, an overlay that can count on its own, and ties. The scope line should say whether generated-host shows are covered. The tie technique should also say whether a host's discretionary break, announced as a break, counts as a 'streamer call' or as a missing tie rule."
+    },
+    "6be461ec-15e2-4963-b858-4712c7c675e8/keyboard-shortcuts": {
+      "context": "console-app-bootstrap",
+      "subject": "keyboard-shortcuts",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T04:12:03.407Z",
+      "worker": "8005ab0d-85fd-45d8-82c7-ae4d638f95e7",
+      "techniques": [
+        {
+          "technique": "declared-keymap-authority",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/keys/keymap.ts:83 There is one plain-data table of chord, modes, action, label and scope. The listener resolves through it, and conflictReport runs as a test. Readers outside this context (Player.tsx kbd hints, Chrome.tsx aria-keyshortcuts) restate keys by hand, and no reference page renders the labels. See notes."
+        },
+        {
+          "technique": "layered-key-dispatch",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/keys/keymap.ts:151 One dispatch point resolves the innermost data-key-scope first and the global bindings second. An unowned binding does not resolve, so it is never prevented. Shell.tsx reads handler context through a ref, so the listener is installed once. Widgets that handle a key preventDefault it, and the listener skips those events."
+        },
+        {
+          "technique": "repeat-composition-and-odd-events",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/keys/keymap.ts:126 The listener has no repeat filter, no composition skip and no check that the key is a string. A keydown with no key, such as an autofill event, throws inside the window listener. Bindings have no repeatable flag, so every action repeats while its key is held."
+        },
+        {
+          "technique": "shortcut-collision-rules",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/keys/keymap.ts:95 The typing guard exists (isTypingTarget). But the bare letters m and r and the bare digits 1-9 are screen-wide accelerators with no off switch, no remap and no focus scoping, which the character-key criterion forbids. A focused type-ahead composite also takes these keys."
+        }
+      ]
     }
   }
 }

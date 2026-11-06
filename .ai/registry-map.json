@@ -898,7 +898,11 @@
           "revision": 3,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/keys/listener.ts:40 The console's only keydown listener checks just defaultPrevented and modifier-only keys. It never looks at e.repeat or e.isComposing, so holding Enter in the review player runs the non-idempotent 'Save and next' over and over, and keys an input method is composing reach the resolver.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:0b8a02a351fac8a0",
+          "evaluatedRevision": 3
         },
         {
           "subject": "transactions-over-a-replicated-log",
