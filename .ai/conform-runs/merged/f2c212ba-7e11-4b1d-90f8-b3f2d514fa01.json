@@ -1,0 +1,59 @@
+{
+ "schema": "conform-run/1",
+ "worker": "f2c212ba-7e11-4b1d-90f8-b3f2d514fa01",
+ "subject": "repository-landing-document",
+ "evaluatedAt": "2026-11-06T00:28:50.184359+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-shell-router",
+   "subject": "repository-landing-document",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/package.json:3 The console shell/router is in-app React UI inside a private, unpublished workspace package with no README or other front-page document; git grep over apps/console for README/readme, shields.io, \"homepage\" and \"keywords\" found nothing, so there is no landing document here to compose, route, badge or caption.",
+   "techniques": [
+    {
+     "technique": "multi-surface-degradation",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/package.json:3 Private package: it is never published to a registry or marketplace that would strip a front page, and no README exists to degrade."
+    },
+    {
+     "technique": "host-metadata-is-a-second-document",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/package.json:2 This is a workspace package, not a repository; host description/topics belong to the repo root and are outside this context."
+    },
+    {
+     "technique": "landing-document-as-router",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/shell/intro.dom.test.tsx:1 'Landing' here means the in-app intro animation's end route, not a repository front page; the client router routes between pages of the app, not readers to docs."
+    }
+   ],
+   "absenceTerms": [
+    "README",
+    "shields.io",
+    "\"homepage\"",
+    "\"keywords\""
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-06T00:28:50.184359+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "repository-landing-document"
+   ],
+   "techniques": [
+    "host-metadata-is-a-second-document",
+    "landing-document-as-router",
+    "multi-surface-degradation"
+   ],
+   "deviations": 0,
+   "context": "console-shell-router",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

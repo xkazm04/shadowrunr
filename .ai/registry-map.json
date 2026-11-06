@@ -2615,7 +2615,11 @@
           "revision": 5,
           "changedAt": "2026-10-31",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/package.json:3 The console shell/router is in-app React UI inside a private, unpublished workspace package with no README or other front-page document; git grep over apps/console for README/readme, shields.io, \"homepage\" and \"keywords\" found nothing, so there is no landing document here to compose, route, badge or caption.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:21e7be3c68f38a9a",
+          "evaluatedRevision": 5
         },
         {
           "subject": "app-shell",
