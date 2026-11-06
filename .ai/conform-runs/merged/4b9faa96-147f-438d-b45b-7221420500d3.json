@@ -1,0 +1,59 @@
+{
+ "schema": "conform-run/1",
+ "worker": "4b9faa96-147f-438d-b45b-7221420500d3",
+ "subject": "multi-provider-gateway-plane",
+ "evaluatedAt": "2026-11-06T04:46:50.597221+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "daemon-core-rpc",
+   "subject": "multi-provider-gateway-plane",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-daemon/src/engine.rs:26 The daemon does not pick between upstreams itself: it gets a ready-made fleet from shadowrunr_engine::build_fleet, keeps one Arc<dyn Engine>, and serves its first-party console over RPC/websocket, so the tree of candidates, failover and failure attribution this subject governs are not in this context; a search of crates/shadowrunr-daemon for failover, strategy, loadbalanc and fallback_chain found no hits, and account picking with a tried-list (pick_account) is in crates/shadowrunr-engine/src/fleet.rs.",
+   "techniques": [
+    {
+     "technique": "router-versus-candidate-failure",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/engine.rs:14 The daemon holds one engine trait object and runs no candidate loop of its own, so there is no sweep for a router-failure marker to stop here; the account fallback loop is in the engine crate."
+    },
+    {
+     "technique": "strategy-tree-with-inherited-policy",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/config.rs:11 The routing/account config type is owned by the engine crate; the daemon only loads it and passes it on."
+    },
+    {
+     "technique": "upstream-identity-before-inventory",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/config.rs:417 Accounts are operator-declared (label + config_dir), and the daemon only resolves their paths; it discovers no endpoints on a shared protocol and has no identities to probe."
+    }
+   ],
+   "absenceTerms": [
+    "failover",
+    "strategy",
+    "loadbalanc",
+    "fallback_chain"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-06T04:46:50.597221+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "multi-provider-gateway-plane"
+   ],
+   "techniques": [
+    "router-versus-candidate-failure",
+    "strategy-tree-with-inherited-policy",
+    "upstream-identity-before-inventory"
+   ],
+   "deviations": 0,
+   "context": "daemon-core-rpc",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

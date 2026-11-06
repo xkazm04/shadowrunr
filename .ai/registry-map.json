@@ -3558,7 +3558,11 @@
           "revision": 9,
           "changedAt": "2026-09-09",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/engine.rs:26 The daemon does not pick between upstreams itself: it gets a ready-made fleet from shadowrunr_engine::build_fleet, keeps one Arc<dyn Engine>, and serves its first-party console over RPC/websocket, so the tree of candidates, failover and failure attribution this subject governs are not in this context; a search of crates/shadowrunr-daemon for failover, strategy, loadbalanc and fallback_chain found no hits, and account picking with a tried-list (pick_account) is in crates/shadowrunr-engine/src/fleet.rs.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:f268193750c0a517",
+          "evaluatedRevision": 9
         },
         {
           "subject": "conformance-checking",

@@ -8590,6 +8590,32 @@
           "evidence": "crates/shadowrunr-clips/src/render.rs:706 This is a single blocking record-then-verify call with no transport verbs or playback state machine. The recorder's .output() has no deadline, but that is a subprocess-lifecycle concern, not a playback-transition watchdog."
         }
       ]
+    },
+    "1f8d2348-1a2f-4c72-8dc0-e281a35b78d4/multi-provider-gateway-plane": {
+      "context": "daemon-core-rpc",
+      "subject": "multi-provider-gateway-plane",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T04:46:50.597Z",
+      "worker": "4b9faa96-147f-438d-b45b-7221420500d3",
+      "techniques": [
+        {
+          "technique": "router-versus-candidate-failure",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/engine.rs:14 The daemon holds one engine trait object and runs no candidate loop of its own, so there is no sweep for a router-failure marker to stop here; the account fallback loop is in the engine crate."
+        },
+        {
+          "technique": "strategy-tree-with-inherited-policy",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/config.rs:11 The routing/account config type is owned by the engine crate; the daemon only loads it and passes it on."
+        },
+        {
+          "technique": "upstream-identity-before-inventory",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-daemon/src/config.rs:417 Accounts are operator-declared (label + config_dir), and the daemon only resolves their paths; it discovers no endpoints on a shared protocol and has no identities to probe."
+        }
+      ]
     }
   }
 }
