@@ -4591,7 +4591,11 @@
           "revision": 3,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "packages/stage-kit/src/ui/index.ts:2 These React components are the page that OBS renders inside a browser source, not a client that drives OBS. A search of packages/stage-kit for obs-websocket, inputUuid/input_uuid, sceneItemId, CreateInput and RemoveInput found nothing. The only OBS control code in the repo is crates/shadowrunr-daemon/src/record/mod.rs, so none of the subject's create, remove, ledger, reconnect or credential concerns can arise in this context.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:a1b7eb09c11f92e6",
+          "evaluatedRevision": 3
         },
         {
           "subject": "quality-gates",

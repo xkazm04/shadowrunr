@@ -1,0 +1,78 @@
+{
+ "schema": "conform-run/1",
+ "worker": "1d198188-baf9-49cc-a4a7-3ce5e7e3b015",
+ "subject": "broadcast-software-control",
+ "evaluatedAt": "2026-11-06T02:50:14.268738+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-kit-overlays",
+   "subject": "broadcast-software-control",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "packages/stage-kit/src/ui/index.ts:2 These React components are the page that OBS renders inside a browser source, not a client that drives OBS. A search of packages/stage-kit for obs-websocket, inputUuid/input_uuid, sceneItemId, CreateInput and RemoveInput found nothing. The only OBS control code in the repo is crates/shadowrunr-daemon/src/record/mod.rs, so none of the subject's create, remove, ledger, reconnect or credential concerns can arise in this context.",
+   "techniques": [
+    {
+     "technique": "owned-source-ledger-by-identity",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/index.ts:2 These components are content shown inside OBS. They create no OBS sources or scenes, so they have nothing to record in a ledger."
+    },
+    {
+     "technique": "credential-custody-for-the-control-socket",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/Browser.tsx:2 These components open no control socket, so no password is held here. A grep for password and ws:// in src/ui found nothing."
+    },
+    {
+     "technique": "claim-only-what-you-created",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/index.ts:2 No code here creates, adopts or cleans up OBS objects. That logic lives in the daemon's record module."
+    },
+    {
+     "technique": "no-mutation-replay-on-reconnect",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/Browser.tsx:2 There is no OBS connection here, so there is no reconnect path."
+    },
+    {
+     "technique": "read-the-peer-not-the-ledger",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/index.ts:2 The components read the show's scene model, not OBS state, so they never check whether an OBS scene or source exists."
+    },
+    {
+     "technique": "verify-absence-not-acknowledgement",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/Browser.tsx:2 No removal requests are sent from here, so there is nothing to verify."
+    }
+   ],
+   "absenceTerms": [
+    "obs-websocket",
+    "inputUuid",
+    "sceneItemId",
+    "CreateInput",
+    "RemoveInput"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-06T02:50:14.268738+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "broadcast-software-control"
+   ],
+   "techniques": [
+    "claim-only-what-you-created",
+    "credential-custody-for-the-control-socket",
+    "no-mutation-replay-on-reconnect",
+    "owned-source-ledger-by-identity",
+    "read-the-peer-not-the-ledger",
+    "verify-absence-not-acknowledgement"
+   ],
+   "deviations": 0,
+   "context": "stage-kit-overlays",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

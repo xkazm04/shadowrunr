@@ -8437,6 +8437,47 @@
           "evidence": "docs/guide/recording.md:5 There is a single recording on one clock, which is the technique's own 'when not to use it' case."
         }
       ]
+    },
+    "e0fa3d2a-a070-4dbd-9551-517f0c58b0b8/broadcast-software-control": {
+      "context": "stage-kit-overlays",
+      "subject": "broadcast-software-control",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T02:50:14.268Z",
+      "worker": "1d198188-baf9-49cc-a4a7-3ce5e7e3b015",
+      "techniques": [
+        {
+          "technique": "owned-source-ledger-by-identity",
+          "verdict": "not-applicable",
+          "evidence": "packages/stage-kit/src/ui/index.ts:2 These components are content shown inside OBS. They create no OBS sources or scenes, so they have nothing to record in a ledger."
+        },
+        {
+          "technique": "credential-custody-for-the-control-socket",
+          "verdict": "not-applicable",
+          "evidence": "packages/stage-kit/src/ui/Browser.tsx:2 These components open no control socket, so no password is held here. A grep for password and ws:// in src/ui found nothing."
+        },
+        {
+          "technique": "claim-only-what-you-created",
+          "verdict": "not-applicable",
+          "evidence": "packages/stage-kit/src/ui/index.ts:2 No code here creates, adopts or cleans up OBS objects. That logic lives in the daemon's record module."
+        },
+        {
+          "technique": "no-mutation-replay-on-reconnect",
+          "verdict": "not-applicable",
+          "evidence": "packages/stage-kit/src/ui/Browser.tsx:2 There is no OBS connection here, so there is no reconnect path."
+        },
+        {
+          "technique": "read-the-peer-not-the-ledger",
+          "verdict": "not-applicable",
+          "evidence": "packages/stage-kit/src/ui/index.ts:2 The components read the show's scene model, not OBS state, so they never check whether an OBS scene or source exists."
+        },
+        {
+          "technique": "verify-absence-not-acknowledgement",
+          "verdict": "not-applicable",
+          "evidence": "packages/stage-kit/src/ui/Browser.tsx:2 No removal requests are sent from here, so there is nothing to verify."
+        }
+      ]
     }
   }
 }
