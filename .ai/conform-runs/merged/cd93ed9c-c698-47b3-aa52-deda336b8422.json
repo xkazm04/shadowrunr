@@ -1,0 +1,17 @@
+{
+ "schema": "conform-run/1",
+ "worker": "cd93ed9c-c698-47b3-aa52-deda336b8422",
+ "subject": "native-shell-integration",
+ "evaluatedAt": "2026-11-06T05:09:41.396626+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "native-shell-integration",
+   "context": "console-app-bootstrap",
+   "reason": "evidence leans on src-tauri/capabilities/default.json, which is not a tracked file"
+  }
+ ],
+ "consults": []
+}
