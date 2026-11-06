@@ -8616,6 +8616,22 @@
           "evidence": "crates/shadowrunr-daemon/src/config.rs:417 Accounts are operator-declared (label + config_dir), and the daemon only resolves their paths; it discovers no endpoints on a shared protocol and has no identities to probe."
         }
       ]
+    },
+    "d6365504-acc7-4901-b7cf-569781f6644c/model-routing": {
+      "context": "sim-instruments",
+      "subject": "model-routing",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T04:56:08.003Z",
+      "worker": "957f890e-fb53-4b90-9ced-600f2ee6ee15",
+      "techniques": [
+        {
+          "technique": "effort-calibration",
+          "verdict": "deviation",
+          "evidence": "sim/matrices/heavy.toml:11 The rule is to default the dial to the middle and move it only on evidence. Matrix.core_effort is a scalar (crates/shadowrunr-sim/src/matrix.rs:52), not an axis. All 9 matrices in the context pin it to low, so no tournament can measure effort. Tier calibration itself is done by measurement: core_tiers is an axis in pilot, night and heavy."
+        }
+      ]
     }
   }
 }

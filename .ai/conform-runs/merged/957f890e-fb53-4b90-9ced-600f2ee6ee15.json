@@ -1,0 +1,41 @@
+{
+ "schema": "conform-run/1",
+ "worker": "957f890e-fb53-4b90-9ced-600f2ee6ee15",
+ "subject": "model-routing",
+ "evaluatedAt": "2026-11-06T04:56:08.003134+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "sim-instruments",
+   "subject": "model-routing",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "sim/matrices/heavy.toml:11 The heavy matrix, described as \"the full calibration grid\", varies the core tier (haiku/sonnet/opus) as an axis but fixes effort as one scalar at Low, the lowest of the five Effort values; every other matrix does the same, so the effort half of the core_thread route is never measured and stays at an extreme with no evidence behind it.",
+   "techniques": [
+    {
+     "technique": "effort-calibration",
+     "verdict": "deviation",
+     "evidence": "sim/matrices/heavy.toml:11 The rule is to default the dial to the middle and move it only on evidence. Matrix.core_effort is a scalar (crates/shadowrunr-sim/src/matrix.rs:52), not an axis. All 9 matrices in the context pin it to low, so no tournament can measure effort. Tier calibration itself is done by measurement: core_tiers is an axis in pilot, night and heavy."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-06T04:56:08.003134+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "model-routing"
+   ],
+   "techniques": [
+    "effort-calibration"
+   ],
+   "deviations": 1,
+   "context": "sim-instruments",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

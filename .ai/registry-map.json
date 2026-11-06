@@ -5849,7 +5849,11 @@
           "revision": 21,
           "changedAt": "2026-09-29",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "sim/matrices/heavy.toml:11 The heavy matrix, described as \"the full calibration grid\", varies the core tier (haiku/sonnet/opus) as an axis but fixes effort as one scalar at Low, the lowest of the five Effort values; every other matrix does the same, so the effort half of the core_thread route is never measured and stays at an extreme with no evidence behind it.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:5484901d8df95b15",
+          "evaluatedRevision": 21
         }
       ],
       "governance": "governed"
