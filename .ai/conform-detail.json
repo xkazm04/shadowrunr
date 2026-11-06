@@ -1227,27 +1227,28 @@
       "context": "character-package",
       "subject": "companion-identity",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-19",
-      "evaluatedTs": "2026-10-19T22:27:02.397Z",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T03:13:14.714Z",
+      "worker": "13e9c20d-fe09-42a6-bbb6-1e84f46fad36",
       "techniques": [
         {
           "technique": "constitution-self-model-split",
           "verdict": "deviation",
-          "evidence": "characters/malakor/bible.md:174 The mutable bible restates constitutional safety rules instead of only referencing their immutable authority."
+          "evidence": "characters/malakor/bible.md:219 The partition itself is realized: constitution.md:3 says the file is immutable and only the operator changes it, and the precedence is stated inside both documents (constitution.md:80, bible.md:3). But bible.md:207-220 restates every red line, and line 219 repeats red line 8 from constitution.md:72 nearly word for word, then adds new law. The technique's one-authority rule says the mutable document may reference the constitution but must not restate it, and that a rule-shaped line in the mutable document is a constitutional edit."
+        },
+        {
+          "technique": "capability-exercise-ledger",
+          "verdict": "deviation",
+          "evidence": "characters/malakor/bible.md:144 'His tools' (bible.md:126-145) is a hand-written description of capabilities: polls, the evidence board, bone-clerk research dispatch, chat commands. Nothing in the package derives it from the list of permitted actions, and no ledger records each tool as working, broken or unexercised. A grep for unexercised/exercise-ledger vocabulary found no such ledger. Today the listed commands do match the segment tomls (seg-01: summon/propose/vote; seg-02a: hint/grade/propose/vote), so no phantom capability was found. The gap is the missing derivation and exercise record, not a wrong entry."
         },
         {
           "technique": "operator-profile-synthesis",
           "verdict": "not-applicable",
-          "evidence": "characters/malakor/constitution.md:22 The package defines an audience-facing fictional character, not a behavioral profile of its operator."
+          "evidence": "characters/malakor/bible.md:120 The package's model of people is a memory of many viewers on a public stream. It is not a synthesized profile of one operator, and the technique excludes agents with multiple users."
         }
       ],
-      "withdrawn": {
-        "worker": "df9a740c-b1f1-4cd2-b16d-a634bda4edf9",
-        "state": "deviation",
-        "at": "2026-10-19T22:27:38.472832+00:00",
-        "reason": "reviewer (sonnet): I could not confirm that bible.md is 'agent-proposable' or sits behind a mutable proposal path. The constitution says changes come only from the operator via a reviewed commit, and I found no code that lets an agent write the bible. The restated doxxing rule at bible.md:177 is real, but the 'second "
-      }
+      "registryProposal": "The subject assumes a personal companion with a self-model it writes itself. Here the closest thing to that is an operator-authored canon document (the bible) that a separate reconcile planner proposes diffs against, and the persona serves a public audience rather than one person. The golden path could say how constitution-self-model-split and anchored-identity-diffs apply when the proposer is a sibling pipeline rather than the persona itself, and when a canon file legitimately renders the law as in-fiction habits. As written, that rendering counts as a forbidden restatement, even though it is the mechanism that lets the persona refuse in character."
     },
     "4acf582d-5403-4f36-b24c-fe00bacb3683/native-shell-integration": {
       "context": "console-shell-router",

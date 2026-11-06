@@ -5634,7 +5634,11 @@
           "revision": 7,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "characters/malakor/bible.md:219 The package does split an immutable constitution from a mutable bible, but the bible's 'Hard limits as in-world habits' table restates the constitution's red lines and, at line 219, extends red line 8 (that he may joke about being an AI). That puts a second copy of the law in the document reconcile diffs are allowed to edit, so the two copies can drift apart and an approved bible change can amend the law.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:ff529a6dc44bf233",
+          "evaluatedRevision": 7
         },
         {
           "subject": "quality-gates",
