@@ -1,0 +1,91 @@
+{
+ "schema": "conform-run/1",
+ "worker": "28c7bc76-25c2-4fb8-b1eb-5a69a02656d7",
+ "subject": "mcp-tools",
+ "evaluatedAt": "2026-11-06T01:07:58.076617+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "tokens-package",
+   "subject": "mcp-tools",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "packages/tokens/package.json:2 The package only generates design-token CSS and TS from tokens.source.json. A case-insensitive grep of packages/tokens for mcp, modelContext, registerTool, inputSchema and tools/call found nothing, so it neither serves nor consumes a tool protocol.",
+   "techniques": [],
+   "absenceTerms": [
+    "mcp",
+    "modelContext",
+    "registerTool",
+    "inputSchema",
+    "tools/call"
+   ]
+  },
+  {
+   "context": "segments-runtime",
+   "subject": "mcp-tools",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "crates/shadowrunr-segments/Cargo.toml:3 The crate holds segment tables and an audience chat-command parser (`!hint`, `!vote`) that no model calls as tools. A case-insensitive grep of crates/shadowrunr-segments for mcp, modelContext, registerTool, inputSchema and tools/call found nothing. The research allowlist only restricts a host built-in web fetch, which the golden path places outside this subject.",
+   "techniques": [
+    {
+     "technique": "egress-argument-gating",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-segments/data/research-allowlist.toml:4 This is a domain allowlist for the model's own built-in fetch and the pipeline's fetcher, not for a tool-protocol server, and it is enforced outside this context."
+    }
+   ],
+   "absenceTerms": [
+    "mcp",
+    "modelContext",
+    "registerTool",
+    "inputSchema",
+    "tools/call"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "mcp-tools",
+   "context": "daemon-core-rpc",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "mcp-tools",
+   "context": "types-crate",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "mcp-tools",
+   "context": "console-shell-router",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-06T01:07:58.076617+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "mcp-tools"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "tokens-package",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-06T01:07:58.076617+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "mcp-tools"
+   ],
+   "techniques": [
+    "egress-argument-gating"
+   ],
+   "deviations": 0,
+   "context": "segments-runtime",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

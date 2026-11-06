@@ -8156,6 +8156,32 @@
       "evaluatedTs": "2026-11-06T00:53:16.304Z",
       "worker": "be2ec349-5033-41f3-8834-69e5cb4d15d9",
       "techniques": []
+    },
+    "df38dcc3-a71c-4397-abb5-4fe4681cfccb/mcp-tools": {
+      "context": "tokens-package",
+      "subject": "mcp-tools",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T01:07:58.076Z",
+      "worker": "28c7bc76-25c2-4fb8-b1eb-5a69a02656d7",
+      "techniques": []
+    },
+    "5ca16ac4-6263-4c09-80d5-f32a969b16b6/mcp-tools": {
+      "context": "segments-runtime",
+      "subject": "mcp-tools",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T01:07:58.076Z",
+      "worker": "28c7bc76-25c2-4fb8-b1eb-5a69a02656d7",
+      "techniques": [
+        {
+          "technique": "egress-argument-gating",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/data/research-allowlist.toml:4 This is a domain allowlist for the model's own built-in fetch and the pipeline's fetcher, not for a tool-protocol server, and it is enforced outside this context."
+        }
+      ]
     }
   }
 }

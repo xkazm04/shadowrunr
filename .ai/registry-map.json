@@ -4152,8 +4152,12 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 4
+          "state": "not-applicable",
+          "priorNotApplicable": 4,
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:3 The crate holds segment tables and an audience chat-command parser (`!hint`, `!vote`) that no model calls as tools. A case-insensitive grep of crates/shadowrunr-segments for mcp, modelContext, registerTool, inputSchema and tools/call found nothing. The research allowlist only restricts a host built-in web fetch, which the golden path places outside this subject.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:ed8e615f51454325",
+          "evaluatedRevision": 34
         }
       ],
       "governance": "governed"
@@ -4808,8 +4812,12 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 4
+          "state": "not-applicable",
+          "priorNotApplicable": 4,
+          "evidence": "packages/tokens/package.json:2 The package only generates design-token CSS and TS from tokens.source.json. A case-insensitive grep of packages/tokens for mcp, modelContext, registerTool, inputSchema and tools/call found nothing, so it neither serves nor consumes a tool protocol.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:ed8e615f51454325",
+          "evaluatedRevision": 34
         },
         {
           "subject": "on-stream-overlay-delivery",
