@@ -2471,8 +2471,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "not-applicable",
+          "priorNotApplicable": 5,
+          "evidence": "apps/console/src/pages/segments/Commands.tsx:19 A case-insensitive grep of apps/console/src/pages/segments for voice, audio, speech, viseme, microphone, transcri, speak and tts found no hits. The page's 'commands' are typed chat commands, not parsed speech, and 'Face' is a poster motif SVG, so neither pipeline of the subject exists here.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "show-segment-format-design",
@@ -4897,8 +4901,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "deviation",
+          "priorNotApplicable": 5,
+          "evidence": "crates/shadowrunr-types/src/voice.rs:59 The wire state `VoiceState::Degraded` puts an absent engine (engine missing) and a broken one (sidecar exited, renders failing) in one state, told apart only by a free-text reason, so no client can choose between 'offer setup' and 'show the failure, offer repair' without parsing that text.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:29f8b158c4d44054",
+          "evaluatedRevision": 23
         },
         {
           "subject": "agent-runtime-assembly",

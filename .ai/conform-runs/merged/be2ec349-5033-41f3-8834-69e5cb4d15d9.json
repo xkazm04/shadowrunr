@@ -1,0 +1,109 @@
+{
+ "schema": "conform-run/1",
+ "worker": "be2ec349-5033-41f3-8834-69e5cb4d15d9",
+ "subject": "voice-io",
+ "evaluatedAt": "2026-11-06T00:53:16.304289+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "types-crate",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-types/src/voice.rs:59 The wire state `VoiceState::Degraded` puts an absent engine (engine missing) and a broken one (sidecar exited, renders failing) in one state, told apart only by a free-text reason, so no client can choose between 'offer setup' and 'show the failure, offer repair' without parsing that text.",
+   "techniques": [
+    {
+     "technique": "engine-abstraction",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-types/src/voice.rs:59 The technique requires absent, broken and ready to be three states a client can tell apart. Here absent and broken share one Degraded variant, and only a free-text reason separates them."
+    },
+    {
+     "technique": "speech-timing-timeline",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/voice.rs:109 With no timeline it sends nothing, not guessed spans, and the consumer falls back to amplitude. Spans are measured on the utterance's own audio (line 42) and travel in the same frame as the PCM. The timing source is recorded in VoiceTimings (line 276)."
+    },
+    {
+     "technique": "tts-pipeline",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/voice.rs:68 The queue has a depth bound and drops the oldest entries by policy. Each utterance carries an identity, `<run_id>:<seq>:<part>` (line 94). Late lines are skipped rather than queued (line 67)."
+    },
+    {
+     "technique": "on-device-vs-cloud",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/voice_choice.rs:6 There is no silent fall-through from local Kokoro to cloud ElevenLabs. A failure leaves the voice degraded and states the reason."
+    },
+    {
+     "technique": "voice-ux-integration",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/voice.rs:7 Voice is a channel over a show that still runs without it. The status frame names the rung (off or degraded) and gives a reason."
+    }
+   ],
+   "registryProposal": "speech-timing-timeline asks for one timing event per sentence, sent ahead of that sentence's first audio chunk, with times as sample offsets. This contract puts the per-sentence viseme spans inside the frame that carries the sentence's PCM, in ms relative to that sentence's audio. That meets the intent (audio clock, ordered with the audio, no wall-clock drift) by a route the technique does not list. It is worth naming as an accepted variant: whole-sentence frames that bundle audio and timeline, with ms as the unit when sample_rate travels alongside."
+  },
+  {
+   "context": "console-segments-page",
+   "subject": "voice-io",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/segments/Commands.tsx:19 A case-insensitive grep of apps/console/src/pages/segments for voice, audio, speech, viseme, microphone, transcri, speak and tts found no hits. The page's 'commands' are typed chat commands, not parsed speech, and 'Face' is a poster motif SVG, so neither pipeline of the subject exists here.",
+   "techniques": [],
+   "absenceTerms": [
+    "voice",
+    "audio",
+    "speech",
+    "viseme",
+    "microphone"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "voice-io",
+   "context": "stage-avatar-renderer",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "voice-io",
+   "context": "console-onair-page",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "voice-io",
+   "context": "character-package",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-06T00:53:16.304289+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [
+    "engine-abstraction",
+    "on-device-vs-cloud",
+    "speech-timing-timeline",
+    "tts-pipeline",
+    "voice-ux-integration"
+   ],
+   "deviations": 1,
+   "context": "types-crate",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-06T00:53:16.304289+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "voice-io"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-segments-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
