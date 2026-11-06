@@ -1,0 +1,40 @@
+{
+ "schema": "conform-run/1",
+ "worker": "e296cf3d-b0de-4f22-af0e-5d4a9894f096",
+ "subject": "deployment-contract",
+ "evaluatedAt": "2026-11-06T03:24:12.788107+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-ui-primitives",
+   "subject": "deployment-contract",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/ui/index.ts:2 The context is a barrel of presentational React components and CSS modules (Chip, Section, VirtualList, FilterTable, ...); a grep of apps/console/src/ui/ for deploy, vercel, netlify, cache-control, hosting, upload, preview and promot found no hits, so this context has no hosting platform, build trigger, environment, cache directive or deploy config for the subject to govern.",
+   "techniques": [],
+   "absenceTerms": [
+    "deploy",
+    "vercel",
+    "netlify",
+    "cache-control",
+    "hosting"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-06T03:24:12.788107+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "deployment-contract"
+   ],
+   "techniques": [],
+   "deviations": 0,
+   "context": "console-ui-primitives",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

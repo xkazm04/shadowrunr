@@ -3087,7 +3087,11 @@
           "revision": 5,
           "changedAt": "2026-10-27",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/ui/index.ts:2 The context is a barrel of presentational React components and CSS modules (Chip, Section, VirtualList, FilterTable, ...); a grep of apps/console/src/ui/ for deploy, vercel, netlify, cache-control, hosting, upload, preview and promot found no hits, so this context has no hosting platform, build trigger, environment, cache directive or deploy config for the subject to govern.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:dc1097a08c9022d9",
+          "evaluatedRevision": 5
         },
         {
           "subject": "status-vocabulary",

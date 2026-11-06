@@ -7397,16 +7397,11 @@
       "context": "console-ui-primitives",
       "subject": "deployment-contract",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-11-04",
-      "evaluatedTs": "2026-11-04T02:57:49.788Z",
-      "techniques": [],
-      "withdrawn": {
-        "worker": "55f198ea-4970-4222-91e7-96ad25587b75",
-        "state": "not-applicable",
-        "at": "2026-11-04T02:58:38.656148+00:00",
-        "reason": "reviewer (sonnet): The anchor, Button.tsx:22, is a presentational component line that does not show a deploy surface is absent. The not-applicable rests only on a grep, so the anchor is incidental."
-      }
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T03:24:12.788Z",
+      "worker": "e296cf3d-b0de-4f22-af0e-5d4a9894f096",
+      "techniques": []
     },
     "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0/quality-gates": {
       "context": "contract-package",
