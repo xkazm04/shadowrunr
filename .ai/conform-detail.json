@@ -8004,6 +8004,26 @@
           "evidence": "apps/console/src/pages/characters/voiceAudio.ts:1 Output-only surface. No capture (no getUserMedia) here or anywhere in the product's source."
         }
       ]
+    },
+    "438f47d8-694c-4986-92b2-bbba5af4a1c1/mcp-tools": {
+      "context": "brain-composition-memory",
+      "subject": "mcp-tools",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T00:03:08.591Z",
+      "worker": "afb881c8-69f4-4203-b37e-2efed2c9d8ad",
+      "techniques": []
+    },
+    "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0/mcp-tools": {
+      "context": "contract-package",
+      "subject": "mcp-tools",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T00:03:08.591Z",
+      "worker": "afb881c8-69f4-4203-b37e-2efed2c9d8ad",
+      "techniques": []
     }
   }
 }

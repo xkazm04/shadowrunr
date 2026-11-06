@@ -655,8 +655,12 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 4
+          "state": "not-applicable",
+          "priorNotApplicable": 4,
+          "evidence": "crates/shadowrunr-brain/src/pool.rs:113 The brain neither serves nor consumes a tool protocol. Its only tools are host built-ins allow-listed on the spawned Claude CLI request (the model's own function-calling surface, which the golden path puts outside this subject), and a grep of crates/shadowrunr-brain for mcp, inputSchema, tools/call and modelcontextprotocol found nothing.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:ed8e615f51454325",
+          "evaluatedRevision": 34
         },
         {
           "subject": "companion-runtime",
@@ -3320,8 +3324,12 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 4
+          "state": "not-applicable",
+          "priorNotApplicable": 4,
+          "evidence": "packages/contract/src/door.ts:1 The package is the console/stage parser and codegen for the daemon's private /rpc and /events wire format, which no model reads as a tool surface. A grep of packages/contract for mcp, inputSchema, tools/call and modelcontextprotocol found nothing. The MCP server cuts its schemas from the Rust types crate, not from this package, even though contract.schema.json mirrors the same schema.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:ed8e615f51454325",
+          "evaluatedRevision": 34
         },
         {
           "subject": "dependency-declaration",
