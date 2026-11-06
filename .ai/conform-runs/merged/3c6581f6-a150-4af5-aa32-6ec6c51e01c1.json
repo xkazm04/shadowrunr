@@ -1,0 +1,82 @@
+{
+ "schema": "conform-run/1",
+ "worker": "3c6581f6-a150-4af5-aa32-6ec6c51e01c1",
+ "subject": "agent-memory",
+ "evaluatedAt": "2026-11-06T02:01:56.316146+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "types-crate",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-types/src/reconcile.rs:386 Directives the agent proposed but the owner has not confirmed are stored as a `proposed`/`active: false` flag on the same `Directive` record as live standing rules, so every reader (the StreamBrief builder, list views) has to remember to filter them out. pending-beliefs-live-apart names exactly that status-column design as the failure direction that can recall an unconfirmed rule as settled.",
+   "techniques": [
+    {
+     "technique": "pending-beliefs-live-apart",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-types/src/reconcile.rs:386 Pending lives as a status flag on the live Directive type, not in a separate shape. Safety depends on each reader filtering on `active`."
+    },
+    {
+     "technique": "memory-governance",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/reconcile.rs:446 Standing rules the Reconciler proposes from experience take effect only after explicit owner approval (human-gated)."
+    },
+    {
+     "technique": "consolidation",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/memory.rs:53 Fact carries confidence, scope, sources back to episodes, and supersedes. The distilled-at time is not on the wire type, but the brain store has created_ms."
+    },
+    {
+     "technique": "observation-clock",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/memory.rs:24 Type level only: each Episode carries its own observation instant. Whether the distiller grounds against it lives in shadowrunr-brain, outside this context."
+    },
+    {
+     "technique": "exposure-is-not-credit",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/reconcile.rs:425 Outcome credit is counted per directive from its own judge check, not copied from a whole-run verdict. An unmeasured directive is marked Unmeasured (n=0)."
+    }
+   ],
+   "registryProposal": "pending-beliefs-live-apart argues from read-site counts (27-56 queries). Here the live Directive list has a single named builder (StreamBrief, 'the one builder'), and the technique does not say whether a single-builder chokepoint weakens the separate-table requirement. It should say whether the rule holds regardless of read-site count."
+  }
+ ],
+ "declined": [
+  {
+   "subject": "agent-memory",
+   "context": "sim-runner-judging",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "agent-memory",
+   "context": "character-package",
+   "reason": "the seat returned unknown"
+  },
+  {
+   "subject": "agent-memory",
+   "context": "console-reconcile-page",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-06T02:01:56.316146+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [
+    "consolidation",
+    "exposure-is-not-credit",
+    "memory-governance",
+    "observation-clock",
+    "pending-beliefs-live-apart"
+   ],
+   "deviations": 1,
+   "context": "types-crate",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

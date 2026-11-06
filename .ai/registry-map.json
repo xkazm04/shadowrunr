@@ -4900,8 +4900,12 @@
           "revision": 52,
           "changedAt": "2026-10-25",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "deviation",
+          "priorNotApplicable": 3,
+          "evidence": "crates/shadowrunr-types/src/reconcile.rs:386 Directives the agent proposed but the owner has not confirmed are stored as a `proposed`/`active: false` flag on the same `Directive` record as live standing rules, so every reader (the StreamBrief builder, list views) has to remember to filter them out. pending-beliefs-live-apart names exactly that status-column design as the failure direction that can recall an unconfirmed rule as settled.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:6c06fb6d8d6c900f",
+          "evaluatedRevision": 52
         },
         {
           "subject": "voice-io",
