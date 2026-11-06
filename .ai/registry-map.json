@@ -4489,7 +4489,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/stage-kit/src/ui/Overlays.tsx:59 The overlay's only provenance slot is a free-form string from the host (App.tsx sets only \"LIVE\" or \"REPLAY\"), yet the stage plays simulation runs whose chat comes from simulated chatters (apps/stage/DESIGN.md:5, daemon runs.rs indexes <runs>/sim/...), so a simulated crowd airs as \"N minions\" with no \"simulated\" badge taken from the record.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:25a04c6960ccf450",
+          "evaluatedRevision": 2
         },
         {
           "subject": "chat-vote-duels",
@@ -4695,7 +4699,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/stage-kit/src/scene.ts:284 The scene record copies the audience size from stream_start but holds no session mode or audience provenance (no platform, sim or demo field anywhere in sceneModel.ts, scene.ts or parse.ts), so no overlay can take a 'simulated' badge from state, even though the stage replays simulation runs.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:25a04c6960ccf450",
+          "evaluatedRevision": 2
         },
         {
           "subject": "on-stream-overlay-delivery",

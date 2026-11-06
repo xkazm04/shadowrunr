@@ -8024,6 +8024,64 @@
       "evaluatedTs": "2026-11-06T00:03:08.591Z",
       "worker": "afb881c8-69f4-4203-b37e-2efed2c9d8ad",
       "techniques": []
+    },
+    "e0fa3d2a-a070-4dbd-9551-517f0c58b0b8/overlay-composition-and-safe-area": {
+      "context": "stage-kit-overlays",
+      "subject": "overlay-composition-and-safe-area",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T00:18:37.514Z",
+      "worker": "133dde7c-e906-495d-a2dd-75eb7f25a580",
+      "techniques": [
+        {
+          "technique": "provenance-badge-opposite-corner",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/ui/Overlays.tsx:59 A badge slot exists, but its text is a free string set by the host with no closed vocabulary. Only LIVE/REPLAY exist, so simulated chat (Platform \"sim\", EndReason \"sim_complete\") is never labelled while it airs; the only sim mention is the outro's end reason."
+        },
+        {
+          "technique": "provisioning-follows-domain-lifecycle",
+          "verdict": "conformant",
+          "evidence": "packages/stage-kit/src/ui/VotePanel.tsx:10 In this tool-owns-the-picture page, the vote panel exists only while a poll is active and leaves POLL_LINGER_MS after it closes (onScreen.ts). Outro, EndCard, SealToast and Intro are gated the same way, each on its own domain event."
+        },
+        {
+          "technique": "designed-for-the-stream-background",
+          "verdict": "conformant",
+          "evidence": "packages/stage-kit/src/ui/JobTicker.tsx:29 Partial: the empty state that airs is designed rather than left blank. Panel contrast lives in the host's apps/stage styles.css (off-context, index.ts:1-2). No background-matrix or phone-scale review is visible here."
+        }
+      ],
+      "registryProposal": "provenance-badge-opposite-corner assumes one badge per overlay, anchored by that overlay. When the tool owns the whole canvas as one page, the natural slot is a single canvas-level badge (here the top bar). The technique should say how 'opposite corner' maps in that case, as placement-declared-at-provisioning already does with its 'When the tool owns the whole picture' section."
+    },
+    "fc878bef-2e53-416c-83f0-0b62db46a8b4/overlay-composition-and-safe-area": {
+      "context": "stage-kit-scene-engine",
+      "subject": "overlay-composition-and-safe-area",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T00:18:37.514Z",
+      "worker": "133dde7c-e906-495d-a2dd-75eb7f25a580",
+      "techniques": [
+        {
+          "technique": "provenance-badge-opposite-corner",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/scene.ts:284 Procedure step 1 says the badge text comes from the record of where the data came from. StreamMeta has no mode field. The root cause is upstream: the contract's stream_start event carries no sim flag either."
+        },
+        {
+          "technique": "envelope-fit-scale-cap",
+          "verdict": "conformant",
+          "evidence": "packages/stage-kit/src/hexgrid.ts:170 The map fit is exactly min(requested cap, area ratios) as one uniform scale (MAP_ZOOM_MAX caps zoom). The whole canvas fits the same way at playback.ts:96, letterboxing the 1920x1080 envelope."
+        },
+        {
+          "technique": "placement-declared-at-provisioning",
+          "verdict": "conformant",
+          "evidence": "packages/stage-kit/src/screens.test.ts:29 Collisions are checked by computing boxes: fitMap keeps every hex box clear of what stands over the map and inside its area, and tests assert this for 1 to 37 hexes. The bound is the area the host passes, not a player safe area."
+        },
+        {
+          "technique": "provisioning-follows-domain-lifecycle",
+          "verdict": "conformant",
+          "evidence": "packages/stage-kit/src/scene.ts:452 The poll comes into the scene on its open_poll event and nowhere else. A backward seek rebuilds from initialScene (playback.ts:39), so nothing carries over across a reset."
+        }
+      ]
     }
   }
 }
