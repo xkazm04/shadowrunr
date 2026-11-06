@@ -2876,8 +2876,12 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 8
+          "state": "not-applicable",
+          "priorNotApplicable": 8,
+          "evidence": "apps/console/src/pages/simulator/data.ts:5 The simulator page only reads tournament and run rows from the daemon through paged data hooks and draws them; a search of apps/console/src/pages/simulator for prompt, systemPrompt, system_prompt, anthropic and compaction found no hits, so it assembles no model prompt.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "voice-io",
@@ -5780,8 +5784,12 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 8
+          "state": "deviation",
+          "priorNotApplicable": 8,
+          "evidence": "sim/rubric.toml:38 The judge prompt's transcript budget is set in characters, with no token estimator and no stated derivation, so this allocation is audited in a unit the provider does not enforce.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "model-routing",
@@ -6753,8 +6761,12 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 8
+          "state": "deviation",
+          "priorNotApplicable": 8,
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:61 The hook-read assembler adds every pre-selected window's caption lines with no token budget, no total check and no omission notice; the prompt's size is limited only by the scoring caps (PRE_CANDIDATES = 8 windows and the segment cut bands), which were set for clip selection, not for the prompt.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         }
       ],
       "governance": "governed"
@@ -7180,8 +7192,12 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 8
+          "state": "not-applicable",
+          "priorNotApplicable": 8,
+          "evidence": "tools/rig/pyproject.toml:14 The rig and depth tools are offline image processing that depends only on numpy, pillow and optional torch for LaMa, and a case-insensitive search of tools/avatar and tools/rig for prompt, llm, anthropic, openai, claude and system_prompt found no hits, so these tools never build a model prompt.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         }
       ],
       "governance": "governed"

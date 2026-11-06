@@ -8182,6 +8182,141 @@
           "evidence": "crates/shadowrunr-segments/data/research-allowlist.toml:4 This is a domain allowlist for the model's own built-in fetch and the pipeline's fetcher, not for a tool-protocol server, and it is enforced outside this context."
         }
       ]
+    },
+    "db707156-0bf7-4d53-8185-d054a78c0502/prompt-assembly": {
+      "context": "avatar-rig-tools",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T01:22:02.559Z",
+      "worker": "cfb4def3-5209-4573-8778-b6ee4dc88ff3",
+      "techniques": [
+        {
+          "technique": "layered-composition",
+          "verdict": "not-applicable",
+          "evidence": "tools/rig/pyproject.toml:14 No LLM client or prompt assembler. LaMa is an inpainting network, not a language model."
+        }
+      ]
+    },
+    "12e5be0b-9811-4c5b-a7ec-8a57e204d016/prompt-assembly": {
+      "context": "clips-pipeline",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T01:22:02.559Z",
+      "worker": "cfb4def3-5209-4573-8778-b6ee4dc88ff3",
+      "techniques": [
+        {
+          "technique": "context-budgeting",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:65 Every window and every line goes in verbatim. No budget in tokens, no degradation ladder, nothing owns the total. The 8-window limit comes from scan.rs PRE_CANDIDATES, a selection cap."
+        },
+        {
+          "technique": "layered-composition",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:148 One assembler module for the hook family. The stable SYSTEM layer (identity, policy, task rules) is split from the per-run prompt that carries the window data, so the stable part leads. Call sites pass typed HookWindow inputs, not pre-rendered text."
+        },
+        {
+          "technique": "variable-interpolation",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:14 The untrusted window text goes in only at the fenced point in the task layer, and fence-closing lines are neutralised (tested in tests.rs). The {host} variable comes from ClipHost, which defaults to \"Host\", and a test checks it. Weak spot: there is no declared variable set, and {host} sits outside the shared placeholder key list in docs/spec/contract.md."
+        },
+        {
+          "technique": "task-envelope",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:25 Opens with what the call does, not an expertise claim. Gives a machine-checkable done shape (JSON, one entry per excerpt, a 0-1 range), backed by json_schema and a strict parse. No explicit self-check step."
+        },
+        {
+          "technique": "consumer-coupled-decoration",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:66 The one per-item decoration is the window id header, and it has a named consumer: parse() matches reply ids against the windows it asked about (hook.rs:115)."
+        },
+        {
+          "technique": "capability-documentation",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:150 The hook call gets no tools, so there is no capability layer."
+        },
+        {
+          "technique": "pinned-prompt-clock",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:58 The only interpolated value in the standing layer is the host name. No date or time enters the prompt."
+        },
+        {
+          "technique": "fingerprinting-and-cache-keys",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:133 One-shot request per run. No session is resumed, so there is no staleness gate to have."
+        },
+        {
+          "technique": "history-compaction",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:1 Single call with no turn history. The rest of the compaction/history family has the same precondition missing."
+        },
+        {
+          "technique": "tiered-history-projection",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:1 No conversation history."
+        },
+        {
+          "technique": "continuation-prompts",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/hook.rs:1 A failed call leaves the hook unmeasured. Nothing resumes."
+        }
+      ],
+      "registryProposal": "context-budgeting could state when an explicit token budget earns its keep for a one-shot call whose input is already limited by a small item-count cap. Here the bound exists, but it comes from selection logic, not the assembler, and the technique does not say whether a structural bound like that satisfies the 'total needs an owner' rule."
+    },
+    "d6365504-acc7-4901-b7cf-569781f6644c/prompt-assembly": {
+      "context": "sim-instruments",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T01:22:02.559Z",
+      "worker": "cfb4def3-5209-4573-8778-b6ee4dc88ff3",
+      "techniques": [
+        {
+          "technique": "context-budgeting",
+          "verdict": "deviation",
+          "evidence": "sim/rubric.toml:38 Budget in characters, with no estimator or error stated and no derivation. The comment on line 37 says background chat is sampled to fit; the sampling and omission notice live in shadowrunr-sim, outside this context."
+        },
+        {
+          "technique": "fingerprinting-and-cache-keys",
+          "verdict": "conformant",
+          "evidence": "sim/rubric.toml:5 The rubric's content is part of the instrument hash, and results from different rubrics are never merged. The fingerprint works as a version stamp."
+        },
+        {
+          "technique": "context-reachability",
+          "verdict": "conformant",
+          "evidence": "sim/rubric.toml:4 The judge cannot reach the character's constitution, so the rubric restates each rule inline: unreachable material treated as floor content."
+        },
+        {
+          "technique": "layered-composition",
+          "verdict": "conformant",
+          "evidence": "sim/rubric.toml:3 The judge prompt has two declared sources: the rubric (its policy layer) and the transcript (its context layer)."
+        },
+        {
+          "technique": "task-envelope",
+          "verdict": "conformant",
+          "evidence": "sim/rubric.toml:83 Each rule states its own provocation, fail and pass criteria: a concrete done criterion for the judge."
+        }
+      ]
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/prompt-assembly": {
+      "context": "console-simulator-page",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T01:22:02.559Z",
+      "worker": "cfb4def3-5209-4573-8778-b6ee4dc88ff3",
+      "techniques": [
+        {
+          "technique": "layered-composition",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/data.ts:5 UI reading daemon data. No model call from this page."
+        }
+      ]
     }
   }
 }
