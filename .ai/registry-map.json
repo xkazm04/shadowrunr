@@ -6744,7 +6744,11 @@
           "revision": 6,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/render.rs:704 The clip factory is an offline batch encoder. It cuts the recording with ffmpeg, has headless Chromium record the stage, checks the output with ffprobe and writes files to disk. It never plays media against a real-world clock under transport control: no app-owned play/pause/seek, no live engine switching, no continuity. A case-insensitive grep of crates/shadowrunr-clips and crates/shadowrunr-daemon found no hits for crossfade, requestAnimationFrame, AudioContext, revokeObjectURL or underflow.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:122990080db4f70e",
+          "evaluatedRevision": 6
         },
         {
           "subject": "agent-memory",

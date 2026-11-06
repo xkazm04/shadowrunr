@@ -8559,6 +8559,37 @@
           "evidence": "apps/console/src/keys/keymap.ts:95 The typing guard exists (isTypingTarget). But the bare letters m and r and the bare digits 1-9 are screen-wide accelerators with no off switch, no remap and no focus scoping, which the character-key criterion forbids. A focused type-ahead composite also takes these keys."
         }
       ]
+    },
+    "12e5be0b-9811-4c5b-a7ec-8a57e204d016/media-playback": {
+      "context": "clips-pipeline",
+      "subject": "media-playback",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T04:25:54.113Z",
+      "worker": "8b78ff43-0569-4898-8080-1f4b9bb75e1d",
+      "techniques": [
+        {
+          "technique": "playback-clock",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/footage.rs:5 The 'clock' here is a fixed offset from stream time into a recorded file, used to choose cut points. It is not a live playhead that consumers sample."
+        },
+        {
+          "technique": "timeline-scheduling",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/render.rs:5 This crate only serializes scene events on the clip's clock. Scheduling them against a clock happens in apps/stage, which is outside this context."
+        },
+        {
+          "technique": "engine-adapters",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/footage.rs:425 ffmpeg runs as a one-shot batch transcoder. It is not a playback engine behind a transport contract with capabilities."
+        },
+        {
+          "technique": "transport-contract",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-clips/src/render.rs:706 This is a single blocking record-then-verify call with no transport verbs or playback state machine. The recorder's .output() has no deadline, but that is a subprocess-lifecycle concern, not a playback-transition watchdog."
+        }
+      ]
     }
   }
 }
