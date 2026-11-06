@@ -8632,6 +8632,42 @@
           "evidence": "sim/matrices/heavy.toml:11 The rule is to default the dial to the middle and move it only on evidence. Matrix.core_effort is a scalar (crates/shadowrunr-sim/src/matrix.rs:52), not an axis. All 9 matrices in the context pin it to low, so no tournament can measure effort. Tier calibration itself is done by measurement: core_tiers is an axis in pilot, night and heavy."
         }
       ]
+    },
+    "6be461ec-15e2-4963-b858-4712c7c675e8/node-boot-and-declarative-bootstrap": {
+      "context": "console-app-bootstrap",
+      "subject": "node-boot-and-declarative-bootstrap",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T05:18:46.647Z",
+      "worker": "054fc2cb-6efc-4db3-ae91-f6d42f831ca1",
+      "techniques": [
+        {
+          "technique": "ordered-boot-dag",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/app/compose.ts:1 Client composition root with no storage-open, unseal or listener-bind step. The technique's own exclusion covers graphs without an unseal-shaped step."
+        },
+        {
+          "technique": "once-only-bootstrap-with-marker",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/app/compose.ts:15 Config is read from the URL, env and shell daemon on every page load. No first-start privileged sequence and no root credential exist here."
+        },
+        {
+          "technique": "reload-partition",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/app/main.tsx:12 A browser reload is a full restart with no in-flight node state, which is the technique's own exclusion."
+        },
+        {
+          "technique": "config-objects-are-api-immutable",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/app/compose.ts:18 No device can be created both from config and through an API in this context. The console is only a client of the daemon."
+        },
+        {
+          "technique": "seal-before-storage-plugins",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/app/compose.ts:10 No seal or pluggable key-unwrapping provider. The client's only dependencies are a socket and timers."
+        }
+      ]
     }
   }
 }

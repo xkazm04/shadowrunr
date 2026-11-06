@@ -1,0 +1,71 @@
+{
+ "schema": "conform-run/1",
+ "worker": "054fc2cb-6efc-4db3-ae91-f6d42f831ca1",
+ "subject": "node-boot-and-declarative-bootstrap",
+ "evaluatedAt": "2026-11-06T05:18:46.647872+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-app-bootstrap",
+   "subject": "node-boot-and-declarative-bootstrap",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/app/main.tsx:17 This context's entry point is a browser SPA. It composes a hash router and a daemon-client data layer (compose.ts) and mounts React, so it holds no durable state, no seal boundary, no reload signal and no first-start privileged bootstrap. A search of apps/console/src/app, keys and kit for unseal, SIGHUP, reloadable and restartRequired returned nothing; the one hit for 'bootstrap' is the context's own name in a keymap.test.ts comment.",
+   "techniques": [
+    {
+     "technique": "ordered-boot-dag",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/app/compose.ts:1 Client composition root with no storage-open, unseal or listener-bind step. The technique's own exclusion covers graphs without an unseal-shaped step."
+    },
+    {
+     "technique": "once-only-bootstrap-with-marker",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/app/compose.ts:15 Config is read from the URL, env and shell daemon on every page load. No first-start privileged sequence and no root credential exist here."
+    },
+    {
+     "technique": "reload-partition",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/app/main.tsx:12 A browser reload is a full restart with no in-flight node state, which is the technique's own exclusion."
+    },
+    {
+     "technique": "config-objects-are-api-immutable",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/app/compose.ts:18 No device can be created both from config and through an API in this context. The console is only a client of the daemon."
+    },
+    {
+     "technique": "seal-before-storage-plugins",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/app/compose.ts:10 No seal or pluggable key-unwrapping provider. The client's only dependencies are a socket and timers."
+    }
+   ],
+   "absenceTerms": [
+    "unseal",
+    "SIGHUP",
+    "reloadable",
+    "restartRequired"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-06T05:18:46.647872+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "node-boot-and-declarative-bootstrap"
+   ],
+   "techniques": [
+    "config-objects-are-api-immutable",
+    "once-only-bootstrap-with-marker",
+    "ordered-boot-dag",
+    "reload-partition",
+    "seal-before-storage-plugins"
+   ],
+   "deviations": 0,
+   "context": "console-app-bootstrap",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

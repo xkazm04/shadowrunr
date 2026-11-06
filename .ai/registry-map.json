@@ -762,7 +762,11 @@
           "revision": 3,
           "changedAt": "2026-09-26",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/app/main.tsx:17 This context's entry point is a browser SPA. It composes a hash router and a daemon-client data layer (compose.ts) and mounts React, so it holds no durable state, no seal boundary, no reload signal and no first-start privileged bootstrap. A search of apps/console/src/app, keys and kit for unseal, SIGHUP, reloadable and restartRequired returned nothing; the one hit for 'bootstrap' is the context's own name in a keymap.test.ts comment.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:1c83f54ea0028875",
+          "evaluatedRevision": 3
         },
         {
           "subject": "voice-io",
