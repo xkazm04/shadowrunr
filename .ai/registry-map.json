@@ -4549,7 +4549,11 @@
           "revision": 1,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "docs/guide/recording.md:5 The repo records only OBS's own program output of the stage (one picture, one clock) and has no showcase film that captures a tool window, broadcast output and platform player together, and a search of packages/stage-kit for showcase, player.twitch, end marker, latency, probe and getDisplayMedia found nothing, so this context's overlay components are the product being aired, not a chain-capture driver.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:ec789c3b80d214e8",
+          "evaluatedRevision": 1
         },
         {
           "subject": "live-response-latency-budgeting",

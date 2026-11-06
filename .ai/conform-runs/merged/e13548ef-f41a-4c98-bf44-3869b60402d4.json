@@ -1,0 +1,72 @@
+{
+ "schema": "conform-run/1",
+ "worker": "e13548ef-f41a-4c98-bf44-3869b60402d4",
+ "subject": "broadcast-chain-showcase-capture",
+ "evaluatedAt": "2026-11-06T02:38:09.803936+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-kit-overlays",
+   "subject": "broadcast-chain-showcase-capture",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "docs/guide/recording.md:5 The repo records only OBS's own program output of the stage (one picture, one clock) and has no showcase film that captures a tool window, broadcast output and platform player together, and a search of packages/stage-kit for showcase, player.twitch, end marker, latency, probe and getDisplayMedia found nothing, so this context's overlay components are the product being aired, not a chain-capture driver.",
+   "techniques": [
+    {
+     "technique": "one-overlay-per-shot",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/index.ts:2 These are the product's own broadcast overlays, styled as the OBS canvas skin. There is no showcase director here that picks which overlay a shot is about."
+    },
+    {
+     "technique": "platform-latency-measured",
+     "verdict": "not-applicable",
+     "evidence": "docs/guide/recording.md:5 No platform player is ever recorded, so there is no platform delay to measure."
+    },
+    {
+     "technique": "player-page-and-window-ownership",
+     "verdict": "not-applicable",
+     "evidence": "docs/guide/recording.md:3 The only recording is OBS rendering its own browser source. Nothing is captured from the desktop, so there are no windows to own."
+    },
+    {
+     "technique": "probe-before-take",
+     "verdict": "not-applicable",
+     "evidence": "docs/guide/recording.md:5 No take runs through the platform chain, so the precondition does not hold."
+    },
+    {
+     "technique": "shared-marker-per-recording",
+     "verdict": "not-applicable",
+     "evidence": "docs/guide/recording.md:5 There is a single recording on one clock, which is the technique's own 'when not to use it' case."
+    }
+   ],
+   "absenceTerms": [
+    "showcase",
+    "player.twitch",
+    "end marker",
+    "latency",
+    "getDisplayMedia"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-06T02:38:09.803936+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "broadcast-chain-showcase-capture"
+   ],
+   "techniques": [
+    "one-overlay-per-shot",
+    "platform-latency-measured",
+    "player-page-and-window-ownership",
+    "probe-before-take",
+    "shared-marker-per-recording"
+   ],
+   "deviations": 0,
+   "context": "stage-kit-overlays",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

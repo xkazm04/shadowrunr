@@ -8401,6 +8401,42 @@
           "evidence": "apps/console/src/pages/reconcile/Layer1.tsx:48 The page only reads data. It keeps the last good reply on screen and labels it, but it owns no loop whose first tick could gate readiness."
         }
       ]
+    },
+    "e0fa3d2a-a070-4dbd-9551-517f0c58b0b8/broadcast-chain-showcase-capture": {
+      "context": "stage-kit-overlays",
+      "subject": "broadcast-chain-showcase-capture",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T02:38:09.803Z",
+      "worker": "e13548ef-f41a-4c98-bf44-3869b60402d4",
+      "techniques": [
+        {
+          "technique": "one-overlay-per-shot",
+          "verdict": "not-applicable",
+          "evidence": "packages/stage-kit/src/ui/index.ts:2 These are the product's own broadcast overlays, styled as the OBS canvas skin. There is no showcase director here that picks which overlay a shot is about."
+        },
+        {
+          "technique": "platform-latency-measured",
+          "verdict": "not-applicable",
+          "evidence": "docs/guide/recording.md:5 No platform player is ever recorded, so there is no platform delay to measure."
+        },
+        {
+          "technique": "player-page-and-window-ownership",
+          "verdict": "not-applicable",
+          "evidence": "docs/guide/recording.md:3 The only recording is OBS rendering its own browser source. Nothing is captured from the desktop, so there are no windows to own."
+        },
+        {
+          "technique": "probe-before-take",
+          "verdict": "not-applicable",
+          "evidence": "docs/guide/recording.md:5 No take runs through the platform chain, so the precondition does not hold."
+        },
+        {
+          "technique": "shared-marker-per-recording",
+          "verdict": "not-applicable",
+          "evidence": "docs/guide/recording.md:5 There is a single recording on one clock, which is the technique's own 'when not to use it' case."
+        }
+      ]
     }
   }
 }
