@@ -1,0 +1,17 @@
+{
+ "schema": "conform-run/1",
+ "worker": "f73d41a5-382f-47ec-b938-b24fd8981b9b",
+ "subject": "invariant-placement",
+ "evaluatedAt": "2026-11-06T04:00:57.065366+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "invariant-placement",
+   "context": "character-package",
+   "reason": "evidence leans on e2e/catalog.rs, which is not a tracked file"
+  }
+ ],
+ "consults": []
+}
