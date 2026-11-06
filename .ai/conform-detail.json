@@ -991,37 +991,59 @@
       "context": "console-simulator-page",
       "subject": "eval-harness",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-10-24",
-      "evaluatedTs": "2026-10-24T03:49:10.289Z",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T03:50:28.912Z",
+      "worker": "ca3233db-8c3c-40c4-a0d3-1f168a975647",
       "techniques": [
         {
-          "technique": "resolution-precondition",
+          "technique": "judge-stability",
           "verdict": "deviation",
-          "evidence": "apps/console/src/pages/simulator/Heatmap.tsx:75 The sortable mean column has no SE or tie mark. grep finds no tier_decisions or tie_set in apps/console/src, though the contract carries them."
+          "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:133 The judge is shown only as a tier alias (the technique: a tier name is an alias with a local spelling), and no resolved model id or packet version is shown. Line 137 presents cross-tier, same-family judging (sonnet over haiku in the contract fixtures) as independence."
         },
         {
           "technique": "assertion-vs-judgment",
           "verdict": "conformant",
-          "evidence": "apps/console/src/pages/simulator/quote.ts:1 The operator's own mechanical check that each judge citation appears on its cited line."
+          "evidence": "apps/console/src/pages/simulator/quote.ts:23 A judge's quote is checked mechanically against the transcript line it cites, ±2 lines. Deterministic assertions sit outside the judgment."
+        },
+        {
+          "technique": "monitor-inside-the-loop",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:87 The judge's account (its quotes) is checked against the artifact (the transcript), and the operator gets a second check independent of the daemon's (quote.ts:3-4)."
         },
         {
           "technique": "failure-signatures-beside-the-pass-rate",
           "verdict": "conformant",
-          "evidence": "apps/console/src/pages/simulator/Heatmap.tsx:74 Not-provoked and not-evaluable counts sit beside rule fails, so an unmeasured check is never shown as a pass."
+          "evidence": "apps/console/src/pages/simulator/Heatmap.tsx:182 Per-rule fail counts show their own denominator of runs that could have tripped them. Not-provoked and not-evaluable counts are shown in their own columns (Heatmap.tsx:73-74), so a detector that cannot fire does not read as a clean zero."
+        },
+        {
+          "technique": "failure-attribution",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/simulator/Heatmap.tsx:172 Void-judge and failed runs are counted apart from rule fails (instrument and harness failure kept out of the candidate's score). Failing rules list transcript refs for manual drill-down."
+        },
+        {
+          "technique": "scenario-design",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:133 Instrument identity (hash) is shown and results from different hashes are never merged. compareCellKey also orders by instrument_hash first."
         },
         {
           "technique": "comparison-modes",
           "verdict": "conformant",
-          "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:133 Cells carry their instrument identity, and the page warns before a comparison across instruments."
+          "evidence": "apps/console/src/pages/simulator/Heatmap.tsx:143 Matrix mode shows every cell, worst first, beside a tone×tier by segment×audience map. No headline winner hides the losing cells."
+        },
+        {
+          "technique": "pairing-schedule",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:35 Despite the name, a tournament is a full factorial matrix, not a pairwise arena, so there is no pairing schedule to check."
+        },
+        {
+          "technique": "resolution-precondition",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/simulator/Heatmap.tsx:75 The sortable mean column has no SE or tie mark. grep finds no tier_decisions or tie_set in apps/console/src, though the contract carries them.",
+          "carriedFrom": "2026-10-24"
         }
       ],
-      "withdrawn": {
-        "worker": "29ec1313-c7e5-4e1b-93a5-1779d8ecb29c",
-        "state": "deviation",
-        "at": "2026-10-24T03:51:25.614198+00:00",
-        "reason": "reviewer (sonnet): The claim that the heatmap shows mean quality with no n or noise beside it is contradicted: Heatmap.tsx has Runs and Judged columns plus a 'thin' chip for fewer than THIN_N judged runs, and the cell detail shows bounds on its RateBars. Only the absence of tier_decisions in apps/console/src held up."
-      }
+      "registryProposal": "judge-stability could say outright that a judge one capability tier above or below the candidate, within the same vendor family, is still an own-family judge. Projects use a 'never the same tier' rule as their independence guard, and the technique's own-family section does not name that substitute."
     },
     "435472ca-7ef4-4956-80d8-3dc82f215665/table": {
       "context": "console-ui-primitives",

@@ -2843,7 +2843,11 @@
           "revision": 37,
           "changedAt": "2026-09-29",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/simulator/Verdicts.tsx:137 The verdict page names the judge only by a tier alias (`judge · ${v.judge_tier}`; the JudgeVerdict contract carries no resolved dated model id or rubric/packet version) and offers a different tier as the guard against bias, but a sonnet judge scoring a haiku candidate is the same model family, which judge-stability calls a conflict of interest, and an unstamped alias cannot tie a drift to any instrument.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:7ccead00b7f92aba",
+          "evaluatedRevision": 37
         },
         {
           "subject": "narrative-scroll-surface",
