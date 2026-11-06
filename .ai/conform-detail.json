@@ -8370,6 +8370,37 @@
         }
       ],
       "registryProposal": "pending-beliefs-live-apart argues from read-site counts (27-56 queries). Here the live Directive list has a single named builder (StreamBrief, 'the one builder'), and the technique does not say whether a single-builder chokepoint weakens the separate-table requirement. It should say whether the rule holds regardless of read-site count."
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/background-jobs": {
+      "context": "console-reconcile-page",
+      "subject": "background-jobs",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T02:26:31.617Z",
+      "worker": "362b7b8d-466b-48fe-be3b-b51aeb0c1d4f",
+      "techniques": [
+        {
+          "technique": "job-progress-and-cancellation",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/NoReport.tsx:68 A job of up to 10 minutes has no cancel request and no cancelling/cancelled states. The in-flight run is found by method kind (line 23, run.running[0]), not by a job id. The positives: progress is honestly indeterminate with a start time (line 74), and the run outlives the tab that started it (inflight.test.tsx)."
+        },
+        {
+          "technique": "adaptive-cadence",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/hooks.ts:19 Reads go through the shared useRpc hook. The context runs no polling loop whose cadence it could adapt."
+        },
+        {
+          "technique": "loop-supervision",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/CountUp.tsx:34 The only repeating callback here is a one-shot count-up animation, and its effect cleanup reaps it. It is not a recurring background loop."
+        },
+        {
+          "technique": "first-tick-gates-readiness",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/Layer1.tsx:48 The page only reads data. It keeps the last good reply on screen and labels it, but it owns no loop whose first tick could gate readiness."
+        }
+      ]
     }
   }
 }

@@ -2272,7 +2272,11 @@
           "revision": 6,
           "changedAt": "2026-10-27",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/NoReport.tsx:68 reconcile.run is a job of up to ten minutes (NoReport.tsx:52-53). While it runs, the page shows only a disabled 'Reconciling…' button and a start time, with no cancel control and no job id, so the cancellation and identity clauses of the job contract are not realized. The re-attach clause is realized: the run survives remounts.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:e3e7a428140a2fbb",
+          "evaluatedRevision": 6
         },
         {
           "subject": "prompt-assembly",
