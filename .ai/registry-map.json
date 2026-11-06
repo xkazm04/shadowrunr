@@ -5819,7 +5819,11 @@
           "revision": 11,
           "changedAt": "2026-10-15",
           "confidence": "strong",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Layer1.tsx:54 The page reviews sandbox sessions only after they have ended and has no path that revises, edits or regenerates the reviewed transcript (a search of apps/console/src/pages/review, tests included, for regenerat/revision/editPlan/edit_plan/attribution found nothing); operator marks go to review.feedback.set and the daemon's tone inbox, where they become bank candidates and direction suggestions for future runs, so the subject's precondition — answering notes on reviewed work with a revision — does not hold here.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:a3bbc2c5b531b8d5",
+          "evaluatedRevision": 11
         },
         {
           "subject": "prompt-assembly",

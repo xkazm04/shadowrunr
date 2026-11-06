@@ -1,0 +1,60 @@
+{
+ "schema": "conform-run/1",
+ "worker": "4ca26a5a-7aa3-40d1-b8db-bbb46bcd419a",
+ "subject": "review-iteration-loops",
+ "evaluatedAt": "2026-11-06T00:40:41.212041+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-review-page",
+   "subject": "review-iteration-loops",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/review/Layer1.tsx:54 The page reviews sandbox sessions only after they have ended and has no path that revises, edits or regenerates the reviewed transcript (a search of apps/console/src/pages/review, tests included, for regenerat/revision/editPlan/edit_plan/attribution found nothing); operator marks go to review.feedback.set and the daemon's tone inbox, where they become bank candidates and direction suggestions for future runs, so the subject's precondition \u2014 answering notes on reviewed work with a revision \u2014 does not hold here.",
+   "techniques": [
+    {
+     "technique": "edit-plan-over-regeneration",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/review/Layer1.tsx:54 Sessions are reviewed after they end and are never revised, so there is no revision path that could edit or regenerate."
+    },
+    {
+     "technique": "note-taxonomy-focus-scope-order",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:57 The closed mark set (landed/flat/too_mean/off_tone/...) labels the quality of an aired line for tone learning. Marks are not focus/scope/order requests against a revisable piece, so there are no minimal edit operations to map them to."
+    },
+    {
+     "technique": "critique-carries-its-fix",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/review/Judge.tsx:58 Judge findings are rendered for a human operator who decides, not for an automated stage that acts. The technique's own boundary says not to demote such findings by fixability."
+    }
+   ],
+   "absenceTerms": [
+    "regenerat",
+    "revision",
+    "editPlan",
+    "attribution"
+   ],
+   "registryProposal": "The registry map matched this subject to the context with 'strong' confidence on the tokens review/feedback/panel. But the subject presumes the reviewed artifact will be revised. A post-hoc review surface whose marks only train future generations (eval labels feeding a tone or bank inbox) is a different loop, and nothing in this subject governs it. Consider a use_when exclusion, or a technique for 'review labels that feed learning rather than revision'."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-06T00:40:41.212041+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "review-iteration-loops"
+   ],
+   "techniques": [
+    "critique-carries-its-fix",
+    "edit-plan-over-regeneration",
+    "note-taxonomy-focus-scope-order"
+   ],
+   "deviations": 0,
+   "context": "console-review-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

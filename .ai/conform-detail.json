@@ -8082,6 +8082,33 @@
           "evidence": "packages/stage-kit/src/scene.ts:452 The poll comes into the scene on its open_poll event and nowhere else. A backward seek rebuilds from initialScene (playback.ts:39), so nothing carries over across a reset."
         }
       ]
+    },
+    "4738011e-a676-4dff-baef-d4f35c4f5ef1/review-iteration-loops": {
+      "context": "console-review-page",
+      "subject": "review-iteration-loops",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T00:40:41.212Z",
+      "worker": "4ca26a5a-7aa3-40d1-b8db-bbb46bcd419a",
+      "techniques": [
+        {
+          "technique": "edit-plan-over-regeneration",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Layer1.tsx:54 Sessions are reviewed after they end and are never revised, so there is no revision path that could edit or regenerate."
+        },
+        {
+          "technique": "note-taxonomy-focus-scope-order",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/FeedbackPanel.tsx:57 The closed mark set (landed/flat/too_mean/off_tone/...) labels the quality of an aired line for tone learning. Marks are not focus/scope/order requests against a revisable piece, so there are no minimal edit operations to map them to."
+        },
+        {
+          "technique": "critique-carries-its-fix",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/review/Judge.tsx:58 Judge findings are rendered for a human operator who decides, not for an automated stage that acts. The technique's own boundary says not to demote such findings by fixability."
+        }
+      ],
+      "registryProposal": "The registry map matched this subject to the context with 'strong' confidence on the tokens review/feedback/panel. But the subject presumes the reviewed artifact will be revised. A post-hoc review surface whose marks only train future generations (eval labels feeding a tone or bank inbox) is a different loop, and nothing in this subject governs it. Consider a use_when exclusion, or a technique for 'review labels that feed learning rather than revision'."
     }
   }
 }
