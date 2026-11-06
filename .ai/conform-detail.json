@@ -8478,6 +8478,38 @@
           "evidence": "packages/stage-kit/src/ui/Browser.tsx:2 No removal requests are sent from here, so there is nothing to verify."
         }
       ]
+    },
+    "e0fa3d2a-a070-4dbd-9551-517f0c58b0b8/chat-vote-duels": {
+      "context": "stage-kit-overlays",
+      "subject": "chat-vote-duels",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-06",
+      "evaluatedTs": "2026-11-06T03:01:34.726Z",
+      "worker": "3cbb1623-5654-41b9-88c7-1b04fd47a9fe",
+      "techniques": [
+        {
+          "technique": "core-owns-the-count",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/ui/ChatLane.tsx:55 The face re-derives ballots from chat instead of subscribing to the core's per-line result. Also, VotePanel's pollBars (tallies.ts:63, outside this context) draws the screen's own observed weights whenever the authoritative tallies are still zero. The vectors pin the copy to the runtime but do not remove the second counter."
+        },
+        {
+          "technique": "ballot-status-taxonomy",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/ui/ChatLane.tsx:56 Each line is judged on its own, so a viewer's earlier ballot that a later one replaced still shows as 'counted'. The VoteOutcome set (counted / not_an_option / below_rank / no_open_poll) has no repeat/replaced status and no early/late split. A purged line shows as 'purged' instead of withheld-for-a-side. The statuses are also shown on stream, not on an operator panel."
+        },
+        {
+          "technique": "deterministic-tie-break-said-aloud",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/ui/VotePanel.tsx:41 A tied close correctly crowns no winner. But the panel never shows a tie rule while the poll is open, and it does not label the sealed result as a tie or as a tie-break. Off-context check: the host is told to 'break the tie yourself' (brain room.rs:85), so the rule is a discretionary call, not a deterministic rule fixed in advance."
+        },
+        {
+          "technique": "ballot-grammar-one-per-viewer",
+          "verdict": "conformant",
+          "evidence": "packages/stage-kit/src/ui/VotePanel.tsx:73 The overlay prints the accepted ballot form and each option's 1-based key (line 26) while the poll is open. The pinned rule matches the whole trimmed token, never a search inside the line (ballots.ts:35), and is keyed on viewer.id, not on display name."
+        }
+      ],
+      "registryProposal": "The golden path scopes itself to a human streamer ('not a generated host'), but every mechanic it covers also shows up in this AI-hosted show: chat ballots, one per viewer, an overlay that can count on its own, and ties. The scope line should say whether generated-host shows are covered. The tie technique should also say whether a host's discretionary break, announced as a break, counts as a 'streamer call' or as a missing tie rule."
     }
   }
 }

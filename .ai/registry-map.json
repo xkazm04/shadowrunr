@@ -4533,7 +4533,11 @@
           "revision": 2,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/stage-kit/src/ui/ChatLane.tsx:55 The on-stream chat lane decides each `!vote` line's status itself, using a screen-side copy of the runtime's ballot rule (ballots.ts, which declares two accepted BALLOT_DEVIATIONS). It does not read a status the core assigned, so the overlay is a second counter of the same chat, which is the failure core-owns-the-count names.",
+          "evaluatedAt": "2026-11-06",
+          "evaluatedAgainst": "sha256-b2:f3de262a76e9fb14",
+          "evaluatedRevision": 2
         },
         {
           "subject": "broadcast-chain-showcase-capture",
